@@ -15,9 +15,11 @@ a synchronous call to itself.
 """.
 
 -include("quod_proof_limits.hrl").
+-include("quod_ledger.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/4, attest_plan/3, bind_group_effects/3, submit_plan/4,
+         seal/4, attest_plan/3, bind_group_effects/3,
+         bind_operation_effect/7, submit_plan/4,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0, principal/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
@@ -373,6 +375,105 @@ bind_group_effects(Rows, GroupRef, TimeoutMs)
 bind_group_effects(_Rows, _GroupRef, _TimeoutMs) ->
     {error, {protocol_error, session_binding}}.
 
+-doc "Persist one sealed prepared effect under an exact dormant source claim.".
+-spec bind_operation_effect(handle(), term(), #transaction{}, term(),
+                            <<_:256>>, <<_:256>>, non_neg_integer()) ->
+          {ok, binary()} | {error, term()}.
+bind_operation_effect(Handle, ClaimRef, Claim, TargetRef, CancelToken,
+                      PlanDigest,
+                      TimeoutMs)
+  when is_record(Claim, transaction), is_binary(CancelToken),
+       byte_size(CancelToken) =:= 32, is_binary(PlanDigest),
+       byte_size(PlanDigest) =:= 32,
+       is_integer(TimeoutMs), TimeoutMs >= 0 ->
+    ClaimBlob = term_to_binary(Claim, [deterministic]),
+    case byte_size(ClaimBlob) =< ?QUOD_MAX_DTX_BODY_BYTES of
+        false -> {error, {too_large, dtx_body}};
+        true -> bind_operation_effect_handle(
+                  Handle, ClaimRef, ClaimBlob, TargetRef, CancelToken,
+                  PlanDigest, TimeoutMs)
+    end;
+bind_operation_effect(_Handle, _ClaimRef, _Claim, _TargetRef, _CancelToken,
+                      _PlanDigest, _TimeoutMs) ->
+    {error, {protocol_error, session_binding}}.
+
+bind_operation_effect_handle(
+  {local_scope, _ScopeId, Ns, Anchor, _Height, Session},
+  ClaimRef, ClaimBlob, TargetRef, CancelToken, PlanDigest, _TimeoutMs) ->
+    bind_session_operation_effect(
+      Session, {Ns, Anchor}, ClaimRef, ClaimBlob,
+      TargetRef, CancelToken, PlanDigest);
+bind_operation_effect_handle(
+  {quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
+   _Ns, _Anchor} = Handle,
+  ClaimRef, ClaimBlob, TargetRef, CancelToken, PlanDigest, TimeoutMs) ->
+    RequestRef = make_ref(),
+    Pid ! {scope_bind_operation_effect, self(), ProofId, SessionRef,
+           RequestRef, ClaimRef, ClaimBlob, TargetRef, CancelToken,
+           PlanDigest},
+    MRef = monitor(process, Pid),
+    try
+        receive
+            {scope_reply, Pid, ProofId, SessionRef, RequestRef,
+             {operation_effect_bound, Result}} -> Result;
+            {'DOWN', MRef, process, Pid, Reason} ->
+                {error, failure_reason(Handle, Reason)}
+        after TimeoutMs ->
+            {Ns, _} = identity(Handle),
+            {error, {proof_limit_exceeded, Ns}}
+        end
+    after
+        demonitor(MRef, [flush])
+    end;
+bind_operation_effect_handle(
+  {remote_scope, _, _, _, _} = Handle,
+  ClaimRef, ClaimBlob, TargetRef, CancelToken, PlanDigest, TimeoutMs) ->
+    case bind_remote_router(Handle) of
+        {ok, Router, MRef} ->
+            case quod_ask_router:command(
+                   Handle, TimeoutMs,
+                   {bind_operation_effect, ClaimRef, TargetRef,
+                    CancelToken, PlanDigest, ClaimBlob}) of
+                {ok, RequestId} ->
+                    await_remote_operation_effect(
+                      Handle, RequestId, Router, MRef, TimeoutMs);
+                {sent, _RequestId} ->
+                    demonitor(MRef, [flush]),
+                    {error, {protocol_error, request_binding}};
+                {error, _} = Error ->
+                    demonitor(MRef, [flush]),
+                    Error
+            end;
+        {error, _} = Error -> Error
+    end;
+bind_operation_effect_handle(_Handle, _ClaimRef, _ClaimBlob,
+                             _TargetRef, _CancelToken,
+                             _PlanDigest, _TimeoutMs) ->
+    {error, {protocol_error, session_binding}}.
+
+await_remote_operation_effect(Handle, RequestId, Router, MRef, TimeoutMs) ->
+    try
+        receive
+            {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+             {operation_effect_bound, EffectId}} ->
+                {ok, EffectId};
+            {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+             {scope_error, Reason}} ->
+                {error, Reason};
+            {quod_scope_down, Handle, Reason} ->
+                {error, failure_reason(Handle, Reason)};
+            {'DOWN', MRef, process, Router, _Reason} ->
+                {error, failure_reason(Handle, unavailable)}
+        after TimeoutMs ->
+            {Ns, _Anchor} = identity(Handle),
+            remote_timeout(
+              Handle, RequestId,
+              {error, {proof_limit_exceeded, Ns}})
+        end
+    after
+        demonitor(MRef, [flush])
+    end.
+
 is_local_group_effect_row(
   {{local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session},
    <<_:256>>}) -> true;
@@ -518,6 +619,54 @@ bind_sealed_group_effect(Session, Target, Plan, GroupRef, PlanDigest) ->
         _ ->
             {error, invalid_group_effect}
     end.
+
+bind_session_operation_effect(
+  Session, Target, ClaimRef, ClaimBlob, TargetRef, CancelToken, PlanDigest) ->
+    case {quod_proof_session:sealed_plan(Session),
+          decode_operation_claim(ClaimBlob)} of
+        {{ok, Plan}, {ok, Claim}} ->
+            bind_sealed_operation_effect(
+              Session, Target, Plan, ClaimRef, Claim,
+              TargetRef, CancelToken, PlanDigest);
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error
+    end.
+
+bind_sealed_operation_effect(
+  Session, Target, Plan, ClaimRef, Claim, TargetRef,
+  CancelToken, PlanDigest) ->
+    case {quod_dtx:digest(Plan) =:= PlanDigest,
+          quod_dtx:target(Plan) =:= Target,
+          quod_dtx:material(Plan)} of
+        {true, true, {ok, #{effects := [Effect]} = Material}} ->
+            case {quod_effect:validate_plan(Plan, Material),
+                  quod_proof_session:prepared_effect(Session, Effect)} of
+                {true, {ok, PreparedEffect}} ->
+                    quod_effect_journal:bind_operation(
+                      Plan, ClaimRef, Claim, TargetRef, Target,
+                      CancelToken, PlanDigest, PreparedEffect);
+                {true, error} ->
+                    {error, missing_effect_preparation};
+                {false, _} ->
+                    {error, invalid_operation_effect}
+            end;
+        _ ->
+            {error, invalid_operation_effect}
+    end.
+
+decode_operation_claim(ClaimBlob)
+  when is_binary(ClaimBlob),
+       byte_size(ClaimBlob) =< ?QUOD_MAX_DTX_BODY_BYTES ->
+    case quod_safe_term:decode(ClaimBlob, ?QUOD_MAX_DTX_BODY_BYTES) of
+        {ok, #transaction{role = {remote_claim, _, _, _}} = Claim} ->
+            case term_to_binary(Claim, [deterministic]) =:= ClaimBlob of
+                true -> {ok, Claim};
+                false -> {error, {protocol_error, bad_payload}}
+            end;
+        _ -> {error, {protocol_error, bad_payload}}
+    end;
+decode_operation_claim(_) ->
+    {error, {protocol_error, bad_payload}}.
 
 -doc """
 Submit a sealed plan to a REMOTE target validator through its open scope.
@@ -853,6 +1002,21 @@ dispatch_message({scope_bind_group_effects, Origin, ProofId, Ref,
             Result = bind_session_group_effect(
                        Session, {Ns, Anchor}, GroupRef, PlanDigest),
             send_reply(RequestRef, {group_effects_bound, Result}),
+            handled;
+        false ->
+            handled
+    end;
+dispatch_message({scope_bind_operation_effect, Origin, ProofId, Ref,
+                  RequestRef, ClaimRef, ClaimBlob,
+                  TargetRef, CancelToken, PlanDigest}) ->
+    case valid_command(Origin, ProofId, Ref) of
+        true ->
+            #runtime{namespace = Ns, anchor = Anchor,
+                     session = Session} = runtime(),
+            Result = bind_session_operation_effect(
+                       Session, {Ns, Anchor}, ClaimRef, ClaimBlob,
+                       TargetRef, CancelToken, PlanDigest),
+            send_reply(RequestRef, {operation_effect_bound, Result}),
             handled;
         false ->
             handled

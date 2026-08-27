@@ -72,6 +72,7 @@ Two collection paths:
 | `quod_ontology_owner_terminal_total` / `quod_node_owner_terminal_total` | counter | `component`, `phase`, `result` | rows explicitly retired by a live owner, using only fixed labels |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
+| `quod_remote_operation_stage_seconds{namespace,stage,result}` | histogram | | fixed stages of a signed one-target foreign operation; values never become labels |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
 | `quod_link_send_drops_total` | counter | `peer`, `channel`, `reason` | frames discarded at the QUIC send gate instead of transmitted; channel is the bounded `log`, `ingress`, or `other` class |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
@@ -92,6 +93,7 @@ Two collection paths:
          observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2,
          count_dtx_validation/2, count_dtx_submit_fanout/3,
          observe_dtx_admission_wait/2,
+         observe_remote_operation_stage/4,
          observe_runtime_reaction/3,
          observe_ontology_owner_terminal/5,
          observe_node_owner_terminal/4]).
@@ -129,6 +131,9 @@ Two collection paths:
 -define(OWNER_DURATION_BUCKETS,
         [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5,
          5, 10, 30, 60, 300, 600]).
+-define(REMOTE_OPERATION_STAGE_BUCKETS,
+        [0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01,
+         0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -394,6 +399,12 @@ declare(NodeId) ->
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
           ?SIG_BUCKETS),
+    _ = prometheus_histogram:declare(
+          [{name, quod_remote_operation_stage_seconds},
+           {help, "Time spent in one fixed stage of a signed one-target foreign operation. Stage and result use a closed vocabulary; ontology identities, operation ids, goals, and failure payloads are never labels."},
+           {labels, [namespace, stage, result]},
+           {buckets, ?REMOTE_OPERATION_STAGE_BUCKETS},
+           {constant_labels, CL}]),
     _ = H(quod_consensus_signing_journal_vote_sync_seconds,
           "How long this node took to make one support, commit, or skip vote crash-durable before sending its signature. Every new vote waits for this small disk sync; sustained high values directly delay block finality.",
           ?VOTE_SYNC_BUCKETS),
@@ -960,6 +971,46 @@ observe_runtime_reaction(Ns, Result, ElapsedUs)
             catch _:_ -> ok
             end
     end.
+
+-doc "Observe one fixed stage of a signed one-target foreign operation.".
+-spec observe_remote_operation_stage(
+        binary(), atom(), atom(), non_neg_integer()) -> ok.
+observe_remote_operation_stage(Ns, Stage, Result, DurationNative)
+  when is_binary(Ns), is_integer(DurationNative), DurationNative >= 0 ->
+    case {remote_operation_stage(Stage), remote_operation_result(Result),
+          whereis(?MODULE)} of
+        {{ok, StageLabel}, {ok, ResultLabel}, Pid} when is_pid(Pid) ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_remote_operation_stage_seconds,
+                      [label(Ns), StageLabel, ResultLabel], DurationNative),
+                ok
+            catch _:_ -> ok
+            end;
+        _ -> ok
+    end;
+observe_remote_operation_stage(_Ns, _Stage, _Result, _DurationNative) ->
+    ok.
+
+remote_operation_stage(gateway_verification) ->
+    {ok, <<"gateway_verification">>};
+remote_operation_stage(identity_certificate) ->
+    {ok, <<"identity_certificate">>};
+remote_operation_stage(proof_seal) -> {ok, <<"proof_seal">>};
+remote_operation_stage(source_claim) -> {ok, <<"source_claim">>};
+remote_operation_stage(claim_verification) ->
+    {ok, <<"claim_verification">>};
+remote_operation_stage(target_application) ->
+    {ok, <<"target_application">>};
+remote_operation_stage(response_flush) -> {ok, <<"response_flush">>};
+remote_operation_stage(completion) -> {ok, <<"completion">>};
+remote_operation_stage(_) -> error.
+
+remote_operation_result(ok) -> {ok, <<"ok">>};
+remote_operation_result(rejected) -> {ok, <<"rejected">>};
+remote_operation_result(uncertain) -> {ok, <<"uncertain">>};
+remote_operation_result(failed) -> {ok, <<"failed">>};
+remote_operation_result(_) -> error.
 
 -doc "Record one row explicitly retired by a live hosted-ontology owner.".
 -spec observe_ontology_owner_terminal(binary(), atom(), atom(), atom(),

@@ -20,7 +20,8 @@ liveness observations while preserving the one existing authorization path
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([new/5, outcomes/1, content/4, dtx/4, prepared_material/4]).
+-export([new/5, outcomes/1, content/4, dtx/4, prepared_material/4,
+         remote_application/2]).
 -export_type([context/0, mode/0]).
 
 -record(context, {
@@ -125,6 +126,53 @@ validate_content_transactions(
   [], _Network, _BlockTimestamp, _Mode, _Seen, Context) ->
     {ok, valid, Context};
 validate_content_transactions(
+  [#transaction{role = {remote_application, _, _, _}} = Change | Rest],
+  Network, BlockTimestamp, Mode, Seen, Context0) ->
+    case remote_application(Change, Context0) of
+        {apply, _EventContext, _Material} ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen, Context0);
+        {reject, _Reason} ->
+            %% A valid durable claim must receive one durable B outcome even
+            %% when current target policy or OCC refuses it.
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen, Context0);
+        {invalid, Reason} ->
+            {ok, {invalid, Reason}, Context0};
+        abstain when Mode =:= check ->
+            {ok, abstain, Context0};
+        abstain ->
+            {ok, {unavailable, remote_application, future_parent}, Context0}
+    end;
+validate_content_transactions(
+  [#transaction{role = {remote_complete, OperationRef,
+                        RequestDigest, TargetRef}} | Rest],
+  Network, BlockTimestamp, Mode, Seen,
+  Context0 = #context{outcomes = Outcomes0}) ->
+    Transition = case Mode of
+                     check -> quod_outcome:check_completion(
+                                Outcomes0, OperationRef,
+                                RequestDigest, TargetRef);
+                     {claim, Slot} -> quod_outcome:complete_operation(
+                                       Outcomes0, Slot, OperationRef,
+                                       RequestDigest, TargetRef)
+                 end,
+    case Transition of
+        {new, Outcomes1} ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen,
+              Context0#context{outcomes = Outcomes1});
+        {replay, Outcomes1} when Mode =/= check ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen,
+              Context0#context{outcomes = Outcomes1});
+        {replay, Outcomes1} ->
+            {ok, {invalid, duplicate_operation_completion},
+             Context0#context{outcomes = Outcomes1}};
+        {error, Reason} ->
+            {outcome_error, Reason}
+    end;
+validate_content_transactions(
   [#transaction{} = Change | Rest], Network, BlockTimestamp,
   Mode, Seen, Context0 = #context{target = Target}) ->
     case quod_transaction:validate_request(
@@ -134,7 +182,13 @@ validate_content_transactions(
               Change, Rest, Network, BlockTimestamp,
               Mode, Seen, Context0);
         {ok, RequestEvidence} ->
-            case validate_signed_request(
+            Validator = case Change#transaction.role of
+                            {remote_claim, _, _, _} ->
+                                fun validate_signed_begin_request/5;
+                            application ->
+                                fun validate_signed_request/5
+                        end,
+            case Validator(
                    RequestEvidence, transaction_outcome_ref(Target, Change),
                    Mode, Seen, Context0) of
                 {ok, Seen1, Context1} ->
@@ -265,8 +319,88 @@ operation_projection_transition({claim, Slot}, Outcomes, Claim, OutcomeRef) ->
     end.
 
 transaction_outcome_ref(
+  {_Ns, _Anchor},
+  #transaction{role = {remote_claim, _Manifest, _Bundle,
+                       <<_:256>> = TargetTxId}} = Change) ->
+    {TargetNs, TargetAnchor} = remote_claim_target(Change),
+    {transaction, TargetNs, TargetAnchor, TargetTxId};
+transaction_outcome_ref(
   {Ns, Anchor}, #transaction{tx_id = <<_:256>> = TxId}) ->
     {transaction, Ns, Anchor, TxId}.
+
+remote_claim_target(
+  #transaction{role = {remote_claim, _Manifest,
+                       {{Ns, <<_:256>> = Anchor}, _Digest,
+                        _PlanBlob, _Attestation}, _TargetTxId}})
+  when is_binary(Ns) -> {Ns, Anchor}.
+
+-doc "Evaluate one certified remote application at the target parent.".
+-spec remote_application(#transaction{}, context()) ->
+          {apply, map(), map()} | {reject, term()} |
+          {invalid, term()} | abstain.
+remote_application(
+  Change = #transaction{
+             role = {remote_application, ClaimRef, _OperationRef, _Digest},
+             evidence = {CertifiedRef,
+                         #transaction{
+                           role = {remote_claim, Manifest,
+                                   {_Target, PlanDigest, PlanBlob,
+                                    _Attestation}, _Predicted}} = Claim}},
+  Context = #context{}) ->
+    Expected = try quod_transaction:remote_application(ClaimRef, Claim)
+               catch _:_ -> invalid
+               end,
+    case Expected of
+        #transaction{tx_id = TxId}
+          when TxId =:= Change#transaction.tx_id ->
+            case quod_dtx:certified_ref_binding(CertifiedRef) of
+                {ok, _ClaimIdentity, _Slot, ClaimTxId}
+                  when ClaimTxId =:= Claim#transaction.tx_id ->
+                    case quod_transaction:valid_id(
+                           Context#context.target, Change) of
+                        true ->
+                            classify_remote_prepared(
+                              prepared_application(
+                                Manifest, PlanDigest, PlanBlob, Context),
+                              Manifest, PlanDigest, PlanBlob, Context);
+                        false ->
+                            {invalid, remote_application_target}
+                    end;
+                _ -> {invalid, foreign_claim_binding}
+            end;
+        _ ->
+            {invalid, remote_application_binding}
+    end;
+remote_application(_Change, _Context) ->
+    {invalid, malformed_remote_application}.
+
+prepared_application(Manifest, PlanDigest, PlanBlob, Context) ->
+    case prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
+        ok -> prepared_material(Manifest, PlanDigest, PlanBlob, Context);
+        {error, _} = Error -> Error
+    end.
+
+classify_remote_prepared(
+  {ok, EventContext, Material}, _Manifest, _Digest, _Blob, _Context) ->
+    {apply, EventContext, Material};
+classify_remote_prepared({error, future_base_height},
+                         _Manifest, _Digest, _Blob, _Context) ->
+    abstain;
+classify_remote_prepared({error, Reason},
+                         _Manifest, _Digest, _Blob, _Context) ->
+    case remote_rejection_reason(Reason) of
+        {true, PublicReason} -> {reject, PublicReason};
+        false -> {invalid, Reason}
+    end.
+
+remote_rejection_reason(signer_not_admitted) -> {true, signer_not_admitted};
+remote_rejection_reason(conflict_retry) -> {true, conflict_retry};
+remote_rejection_reason(policy_self_seal_forbidden) ->
+    {true, policy_self_seal_forbidden};
+remote_rejection_reason(invalid_membership) -> {true, invalid_membership};
+remote_rejection_reason(invalid_authorization_transcript) ->
+    {true, not_authorized};
+remote_rejection_reason(_) -> false.
 
 dtx_request_verdict(Control, BlockTimestamp, Mode, Context) ->
     case quod_dtx:control_kind(Control) of

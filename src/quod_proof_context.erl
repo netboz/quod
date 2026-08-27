@@ -177,17 +177,29 @@ ensure_scope_authentication() ->
         {#{}, Certificate} when Certificate =/= none ->
             {ok, scope_authentication()};
         {Evidence = #{}, none} ->
-            case quod_ask_router:identity(
-                   Evidence, Ctx0#ctx.proof_id, remaining_ms()) of
-                {ok, Certificate} ->
-                    install_agent_identity(Certificate);
-                {pending, Router, Generation, Ref} ->
-                    await_agent_identity(
-                      Router, Generation, Ref,
-                      element(1, Ctx0#ctx.origin_identity));
-                {error, _} = Error -> Error
-            end
+            Started = erlang:monotonic_time(),
+            Result = case quod_ask_router:identity(
+                            Evidence, Ctx0#ctx.proof_id, remaining_ms()) of
+                         {ok, Certificate} ->
+                             install_agent_identity(Certificate);
+                         {pending, Router, Generation, Ref} ->
+                             await_agent_identity(
+                               Router, Generation, Ref,
+                               element(1, Ctx0#ctx.origin_identity));
+                         {error, _} = Error -> Error
+                     end,
+            ok = quod_metrics:observe_remote_operation_stage(
+                   element(1, Ctx0#ctx.origin_identity),
+                   identity_certificate, metric_result(Result),
+                   erlang:monotonic_time() - Started),
+            Result
     end.
+
+metric_result({ok, _}) -> ok;
+metric_result({error, timeout}) -> uncertain;
+metric_result({error, unavailable}) -> uncertain;
+metric_result({error, retry}) -> uncertain;
+metric_result({error, _}) -> failed.
 
 await_agent_identity(Router, Generation, Ref, OriginNs) ->
     case bind_router(Router, Generation, OriginNs) of

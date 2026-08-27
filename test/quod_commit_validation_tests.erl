@@ -1,6 +1,42 @@
 -module(quod_commit_validation_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
+
+remote_application_uses_one_target_evaluator_for_apply_reject_and_invalid_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Application = maps:get(application, Fixture),
+    Plan = maps:get(plan, Fixture),
+    {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
+    Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
+    [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
+      _ReadDigest, _Tag}] = quod_dtx:transcript(Plan),
+    {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
+    {ok, Principal} = quod_agent_ref:materialize_principal(
+                        quod_dtx:principal(Plan)),
+    CallerNamespaces = [Ns || {Ns, _Anchor} <- tl(FullChain)],
+    Policy = {can_invoke, Goal, Principal, CallerNamespaces, TargetNs},
+    Member = {peer_admitted, Signer, "validator", 14567, Signer},
+    with_context(
+      TargetNs, TargetAnchor, [Policy, Member],
+      fun(Context) ->
+          ?assertMatch(
+             {apply, _EventContext, #{diff := [_ | _]}},
+             quod_commit_validation:remote_application(Application, Context)),
+          ?assertMatch(
+             {invalid, _},
+             quod_commit_validation:remote_application(
+               Application#transaction{tx_id = <<0:256>>}, Context))
+      end),
+    %% The claim is authentic, but current target policy refuses it.  That is a
+    %% durable rejection, not a malformed record which could strand the claim.
+    with_context(
+      TargetNs, TargetAnchor, [Member],
+      fun(Context) ->
+          ?assertEqual(
+             {reject, not_authorized},
+             quod_commit_validation:remote_application(Application, Context))
+      end).
 
 content_check_and_committed_claim_share_one_validator_test() ->
     with_signed_fixture(

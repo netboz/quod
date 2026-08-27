@@ -40,14 +40,14 @@ mark_ready_acknowledges_from_the_handling_engine_test() ->
         receive {'$gen_cast', rebuild} -> ok
         after 1000 -> error(no_rebuild_request) end,
         receive
-            {'$gen_cast', {prolog_ready, _, _}} = Early ->
+            {'$gen_cast', {prolog_ready, _, _, _}} = Early ->
                 error({early_ready_ack, Early})
         after 0 ->
             ok
         end,
         ok = quod_prolog:mark_ready(Ns),
         receive
-            {'$gen_cast', {prolog_ready, Pid, 0}} -> ok
+            {'$gen_cast', {prolog_ready, Pid, 0, []}} -> ok
         after 1000 ->
             error(no_ready_ack)
         end,

@@ -214,14 +214,17 @@ identity. The receiving node verifies it, rechecks session validity, derives
 the engine-owned subject, and enters the existing proof path with the exact
 goal. It does not map the request through a hard-coded predicate catalogue.
 Several signed distributed writes from one agent ontology may prove
-concurrently. Their sealed Begins then wait FIFO at the existing pre-signing
-boundary, while consensus still runs one active group per source ontology.
-This waiting is neither a retry nor a second executor.
+concurrently. A one-target foreign write becomes a batchable source claim and
+a batchable ordinary target application, so requests may share both content
+blocks. Only a real group with two or more material/read-dependent targets
+uses the existing one-active-group admission boundary. This is neither a retry
+nor a second executor.
 
-The sealed plan binds that subject and signed request digest. An ordinary
-transaction carries the complete signed request; a distributed transaction
-carries it once in the certified origin Begin while participant records bind
-its digest. The existing node signature continues to attest consensus
+The sealed plan binds that subject and signed request digest. A local ordinary
+transaction carries the complete signed request. A one-target foreign write
+carries it once in the certified source `remote_claim`; its target application
+binds that claim. A real distributed transaction carries it once in the
+certified origin Begin while participant records bind its digest. The existing node signature continues to attest consensus
 authorship; it does not replace the user's signature. `outcome_unknown` is
 resolved by its exact anchored operation or transaction outcome reference,
 never by submitting the goal request again.

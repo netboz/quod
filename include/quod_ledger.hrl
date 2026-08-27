@@ -47,6 +47,15 @@
 %% names the proof's origin ontology, `proof_id` the distributed proof, and
 %% `plan_digest` the canonical unsigned plan bytes — `none` only for genesis.
 -record(transaction, {tx_id      :: binary(),            %% target-bound digest of the complete semantic write
+                 role = application :: application |
+                                       {remote_application, term(), term(), binary()} |
+                                       {remote_claim, term(), term(), binary()} |
+                                       {remote_complete, term(), binary(), term()},
+                                                        %% one canonical content family: Prolog application or
+                                                        %% operation metadata; certificates are never stored here
+                 evidence = none :: none | {term(), tuple()},
+                                                        %% exact referenced record + certified ledger ref;
+                                                        %% signed but excluded from semantic identity
                  origin       :: {binary(), binary()},%% proof origin identity {OriginNs, OriginAnchor}; genesis = {Ns, <<0:256>>}
                  proof_id = none :: binary() | none,  %% 32-byte distributed-proof id; none only for genesis
                  plan_digest = none :: binary() | none, %% SHA-256 of the sealed plan's canonical bytes; none only for genesis

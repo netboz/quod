@@ -243,6 +243,19 @@ terminal_slot(_) -> error({outcome_index_conflict, bad_status}).
 
 apply_new_transaction(#transaction{diff = Diff} = Change, Index, Prior,
                       Projection = #projection{est = Est}) ->
+    case Change#transaction.role of
+        {remote_application, _, _, _} ->
+            apply_remote_application(Change, Index, Prior, Projection);
+        {remote_claim, _, _, _} ->
+            commit_transaction(Change, Index, Prior, [], [], Projection);
+        {remote_complete, _, _, _} ->
+            commit_transaction(Change, Index, Prior, [], [], Projection);
+        application ->
+            apply_application_transaction(
+              Change, Diff, Index, Prior, Projection, Est)
+    end.
+
+apply_application_transaction(Change, Diff, Index, Prior, Projection, Est) ->
     case membership_change(Change) of
         true ->
             {ok, Est1, AppliedOps} = quod_diff:apply_ops_report(Est, Diff),
@@ -250,6 +263,23 @@ apply_new_transaction(#transaction{diff = Diff} = Change, Index, Prior,
                                Projection#projection{est = Est1});
         false ->
             apply_ordinary_transaction(Change, Index, Prior, Projection)
+    end.
+
+apply_remote_application(Change, Index, Prior, Projection) ->
+    case quod_commit_validation:remote_application(
+           Change, validation_context(Projection)) of
+        {apply, _EventContext, #{diff := Diff}} ->
+            {ok, Est1, AppliedOps} = quod_diff:apply_ops_report(
+                                       Projection#projection.est, Diff),
+            commit_transaction(
+              Change, Index, Prior, Diff, AppliedOps,
+              Projection#projection{est = Est1});
+        {reject, Reason} when is_atom(Reason) ->
+            reject_transaction(Change, Index, Prior, Reason, Projection);
+        {invalid, Reason} ->
+            {error, {invalid_remote_application, Index, Reason}};
+        abstain ->
+            {error, {invalid_remote_application, Index, future_parent}}
     end.
 
 apply_ordinary_transaction(

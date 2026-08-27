@@ -67,8 +67,12 @@ all_response_shapes_roundtrip_and_correlate_test() ->
            participant_slots => participant_slots()},
          #{status => rejected, reason => coordinator_retired,
            ref => GroupRef},
-         #{status => claimed, height => 14, ref => operation_ref(),
-           request_digest => digest(13), outcome_ref => TxRef}],
+         #{status => claimed, operation_state => unresolved, height => 14,
+           ref => operation_ref(), request_digest => digest(13),
+           outcome_ref => TxRef},
+         #{status => claimed, operation_state => terminal, height => 14,
+           ref => operation_ref(), request_digest => digest(13),
+           outcome_ref => target_transaction_ref()}],
     Pairs =
         [{{submit, id(1), record_blob()},
           {accepted, id(1), record_blob_digest(), accepted_ref()}},
@@ -120,15 +124,20 @@ all_response_shapes_roundtrip_and_correlate_test() ->
           ?assert(quod_dtx_endpoint:correlates(Request, Response))
       end, [busy, not_ready, not_found, invalid_request]).
 
-one_participant_terminal_response_roundtrips_test() ->
-    Ns = <<"quod:endpoint">>,
-    Request = {outcome, id(70), group_ref(), digest(7), 11},
-    Response =
-        {outcome, id(70), outcome_target(), digest(7), 12,
-         #{status => committed, height => 12, ref => group_ref(),
-           bindings => [], participant_slots => [hd(participant_slots())]}},
-    {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response),
-    ?assertEqual({ok, Response}, quod_dtx_endpoint:decode_response(Ns, Frame)),
+certified_remote_application_response_correlates_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    {ok, ClaimEvidence} = quod_transaction:encode_evidence(
+                            maps:get(certified_claim_ref, Fixture),
+                            maps:get(claim, Fixture)),
+    {ok, TargetEvidence} = quod_transaction:encode_evidence(
+                             maps:get(certified_target_ref, Fixture),
+                             maps:get(application, Fixture)),
+    Request = {apply_claim, id(63), ClaimEvidence},
+    Response = {application, id(63), committed, TargetEvidence},
+    TargetNs = element(1, maps:get(participant_target, Fixture)),
+    ?assertMatch({ok, _}, quod_dtx_endpoint:encode_request(TargetNs, Request)),
+    ?assertMatch({ok, _},
+                 quod_dtx_endpoint:encode_response(TargetNs, Response)),
     ?assert(quod_dtx_endpoint:correlates(Request, Response)).
 
 direction_namespace_and_exact_correlation_are_enforced_test() ->
@@ -218,7 +227,7 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
     Ns = <<"quod:endpoint">>,
     Good = {phase, id(1), digest(2), 'begin'},
     GoodInner = term_to_binary(Good, [deterministic]),
-    WrongVersion = outer(Ns, 2, GoodInner),
+    WrongVersion = outer(Ns, 1, GoodInner),
     WrongDomain = term_to_binary(
                     {quod_dtx_endpoint_old, 1, Ns, GoodInner},
                     [deterministic]),
@@ -271,7 +280,7 @@ unknown_atoms_are_not_created_test() ->
               109, 0, 0, 0, 16, (id(1))/binary,
               109, 0, 0, 0, 32, (digest(2))/binary,
               118, (byte_size(AtomName)):16, AtomName/binary>>,
-    Frame = outer(Ns, 1, Inner),
+    Frame = outer(Ns, 3, Inner),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -334,8 +343,12 @@ invalid_fixed_shapes_are_rejected_test() ->
           #{status => committed, height => 1, ref => GroupRef,
             bindings => [{<<"X">>, ok}], participant_slots => []}},
          {outcome, id(1), outcome_target(), digest(7), 12,
-          #{status => claimed, height => 1, ref => operation_ref(),
+         #{status => claimed, height => 1, ref => operation_ref(),
             request_digest => <<1:248>>, outcome_ref => transaction_ref()}},
+         {outcome, id(1), outcome_target(), digest(7), 12,
+          #{status => claimed, operation_state => corrupt, height => 1,
+            ref => operation_ref(), request_digest => digest(13),
+            outcome_ref => transaction_ref()}},
          {outcome, id(1), {<<>>, digest(1)}, digest(7), 12, not_found},
          {outcome, id(1), outcome_target(), <<1:248>>, 12, not_found},
          {outcome, id(1), outcome_target(), digest(7), -1, not_found},
@@ -378,6 +391,9 @@ group_ref() ->
 
 transaction_ref() ->
     {transaction, <<"quod:origin">>, digest(1), digest(4)}.
+
+target_transaction_ref() ->
+    {transaction, <<"quod:target">>, digest(5), digest(14)}.
 
 operation_ref() ->
     {operation, <<"quod:origin">>, digest(1),

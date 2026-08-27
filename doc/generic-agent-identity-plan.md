@@ -188,31 +188,32 @@ operation-claim rules.
 
 ### 5.2 Remote or multi-ontology write
 
-A signed write with material outside A uses the existing group protocol, even
-when there is only one foreign material participant. The DTX Begin committed
-in A carries the complete signed request and stable operation claim. It no
-longer carries an A-side authorization transcript for a direct remote
-selector.
+A signed write with exactly one foreign material target uses the batchable
+remote-operation path. A commits `remote_claim`, containing the complete
+signed request, stable operation claim, exact sealed target plan, and predicted
+target transaction reference. B then commits one ordinary
+`remote_application`; A records `remote_complete` asynchronously. Two or more
+material/read-dependent targets still use the atomic DTX group protocol.
 
-A's Begin validators verify:
+A's claim validators verify:
 
 - request signature and exact agent identity;
 - current active key; and
 - stable operation claim.
 
-Each participant's Prepare keeps its existing target-owned authorization
-transcript. Participant validators re-prove that target's `can_invoke/4`
-against its exact parent. They can do so from the certified Begin and sealed
-plan without contacting A.
+For the singleton path, B's ordinary application keeps the target-owned
+authorization transcript. B validators verify A's certified claim and re-prove
+B's `can_invoke/4` against B's exact parent without a live call to A. For a
+real group, each participant's Prepare performs the same target-owned check.
 
-Once an ordinary transaction or DTX Begin is durably accepted, later key
+Once an ordinary transaction, remote claim, or DTX Begin is durably accepted, later key
 rotation does not cancel recovery. The accepted operation finishes or exposes
 its anchored outcome; it is never re-proved or automatically resubmitted.
 
-A remains an operation participant even if the direct remote selector creates
-no material change in A. This is not duplicate authorization: it is the one
-durable custody record needed to answer whether the signed operation was
-accepted after a lost response.
+A remains the operation owner even if the direct remote selector creates no
+fact change in A. Its claim is metadata, not a DTX participant and not duplicate
+authorization: it is the one durable custody record needed to answer whether
+the signed operation was accepted after a lost response.
 
 Generic DTX support for arbitrary durable effects remains a separate protocol
 issue. `create_ontology` happens to execute in Root, so Root owns that
@@ -317,10 +318,11 @@ Before activation, tests must prove:
    request digest, agent reference, key, committee, domain, or expiry fail;
 7. no API signs caller-selected bytes and no malformed list causes unbounded
    cryptographic work;
-8. ordinary local write and signed foreign-singleton/multi-participant groups
-   keep one stable operation claim and publish each target once;
-9. DTX Begin recovery survives key rotation and participant Prepare validation
-   does not contact A;
+8. ordinary local writes, signed foreign singleton operations, and
+   multi-participant groups keep one stable operation claim and publish each
+   target once;
+9. remote-claim and DTX Begin recovery survive key rotation; target application
+   and participant Prepare validation do not contact A;
 10. browser and Erlang request bytes agree, Explorer renders the new identity,
     and no `{user, Key}`, `quod_user`, old domain, decoder, or forwarding shim
     remains;

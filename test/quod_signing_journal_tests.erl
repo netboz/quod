@@ -522,17 +522,17 @@ effect_custody_is_durable_idempotent_and_admission_scoped_test() ->
           TxId = T1#transaction.tx_id,
           {ok, J0} = quod_signing_journal:initialize(
                        Ns, domain(1), Dir),
-          {ok, J1} = quod_signing_journal:record_effect(
-                       J0, T1, Submission1),
+          {ok, J1} = quod_signing_journal:record_transaction(
+                       J0, T1, Submission1, ready),
           Path = journal_path(Ns, Dir),
           Size1 = filelib:file_size(Path),
           ?assertMatch(
              #{TxId := #{admission := Admission1, sequence := 1}},
-             quod_signing_journal:pending_effects(J1)),
+             quod_signing_journal:pending_transactions(J1)),
 
           %% Exact custody retry is a read: no duplicate durable frame.
-          {ok, J2} = quod_signing_journal:record_effect(
-                       J1, T1, Submission1),
+          {ok, J2} = quod_signing_journal:record_transaction(
+                       J1, T1, Submission1, ready),
           ?assertEqual(Size1, filelib:file_size(Path)),
 
           %% Effect custody is globally ordered by author sequence. Only the
@@ -541,14 +541,16 @@ effect_custody_is_durable_idempotent_and_admission_scoped_test() ->
           {T2, Submission2} = signed_effect(
                                 Ns, Anchor, Admission1, 2, Base, Signer),
           ?assertError(
-             {effect_signing_conflict, TxId},
-             quod_signing_journal:record_effect(J2, T2, Submission2)),
+             {transaction_signing_conflict, TxId},
+             quod_signing_journal:record_transaction(
+               J2, T2, Submission2, ready)),
           {T3, Submission3} = signed_effect(
                                 Ns, Anchor, Admission2, 3, Base, Signer),
           {ok, BeforeConflict} = file:read_file(Path),
           ?assertError(
-             {effect_signing_conflict, TxId},
-             quod_signing_journal:record_effect(J2, T3, Submission3)),
+             {transaction_signing_conflict, TxId},
+             quod_signing_journal:record_transaction(
+               J2, T3, Submission3, ready)),
           ?assertEqual({ok, BeforeConflict}, file:read_file(Path)),
           ok = quod_signing_journal:close(J2),
 
@@ -556,13 +558,13 @@ effect_custody_is_durable_idempotent_and_admission_scoped_test() ->
                        Ns, domain(1), Dir),
           ?assertMatch(
              #{TxId := #{admission := Admission1, sequence := 1}},
-             quod_signing_journal:pending_effects(J4)),
-          {ok, J5} = quod_signing_journal:retire_effect(J4, TxId),
-          ?assertEqual(#{}, quod_signing_journal:pending_effects(J5)),
+             quod_signing_journal:pending_transactions(J4)),
+          {ok, J5} = quod_signing_journal:retire_transaction(J4, TxId),
+          ?assertEqual(#{}, quod_signing_journal:pending_transactions(J5)),
           ok = quod_signing_journal:close(J5),
           {ok, J6} = quod_signing_journal:recover(
                        Ns, domain(1), Dir),
-          ?assertEqual(#{}, quod_signing_journal:pending_effects(J6)),
+          ?assertEqual(#{}, quod_signing_journal:pending_transactions(J6)),
           ok = quod_signing_journal:close(J6)
       end).
 

@@ -4,7 +4,8 @@
 and `transaction/1` foundation landed in
 Quod 0.7.58. Step 2's shared proof context and recursive co-hosted scopes landed
 in Quod 0.7.60. Step 3's hard-break shared scope transport landed in Quod
-0.7.61. Step 4 now includes both the one-participant fast path and the complete
+0.7.61. Step 4 now includes the ordinary local path, the source-claimed
+foreign-singleton path, and the complete
 Begin/Prepare/Decision/Finalize/Complete multi-ontology path, durable recovery,
 certified-current outcome/application corroboration, and the indexed anchored
 outcome contract. Step 6 is the recurring release/hardware acceptance
@@ -244,12 +245,14 @@ Ontology create/join operations use the same `execute` proof and `action/3`
 relation as every other durable goal. Their staging bridge prepares one typed
 effect in the proof overlay; it never performs IO during the proof. The
 root transaction controls creation and the node transaction controls join.
-The effect request is committed through the normal one-participant transaction
-or, when the same proof has another material ontology, through the same
-Begin/Prepare/Decision/Finalize/Complete group as the other plans. The one
-node-wide journal owns custody in both cases, invokes the typed helper only
-after the local commit is applied, then verifies the real desired state. This
-is the D/P/E boundary made explicit, not a second executor or a claim that
+An effect local to the proof origin is committed through the ordinary local
+content path. A signed effect for one foreign ontology uses the same
+`remote_claim` -> ordinary `remote_application` -> `remote_complete` path as
+every other one-target foreign write. Only a proof with two or more material
+ontologies uses the Begin/Prepare/Decision/Finalize/Complete group. The one
+node-wide journal owns custody in every case, invokes the typed helper only
+after its controlling commit is applied, then verifies the real desired state.
+This is the D/P/E boundary made explicit, not a second executor or a claim that
 external IO is rollback-capable.
 
 ## 4. One proof context, one scope per ontology
@@ -682,7 +685,7 @@ collapsed into logical failure. `prove_ro`, which cannot hand off a durable writ
 definite `{error, {ontology_unavailable, Ns}}` if its engine dies. The two
 durable paths deliberately order their checkpoints differently:
 
-- An ordinary one-participant proof computes its exact `OutcomeRef` before
+- An ordinary local one-target proof computes its exact `OutcomeRef` before
   enqueueing its submission and sends that call-correlated checkpoint to the
   wrapper **strictly before** `gen_statem:send_request/2` hands work to Simplex.
   It does not add a synchronous acceptance round trip to the hot write path.
@@ -943,16 +946,18 @@ As built:
   witnessed for its OWN `{Ns, Anchor}` at a base at-or-below its applied
   head. A read-only proof with no writes returns directly and seals no plan.
   An admitted signed execute/Accept seals its origin plan even when the
-  requested mutation is already present, so the existing transaction/DTX
-  record can carry its durable operation claim with an empty diff. For a
+  requested mutation is already present, so the existing transaction,
+  remote claim, or DTX Begin can carry its durable operation claim with an
+  empty diff. For a
   writing proof, single-participant routing counts every plan whose signed
   diff is non-empty, whose signed read set is non-empty, which carries one
   direct effect, or which carries that origin operation claim. A direct effect
   and a diff may not coexist in the same plan; separate participant plans may
   contain either. It submits the
-  sole participant's plan engine-direct
-  (local/co-hosted) or over the scope's
-  `submit_plan` frame (remote — outcome only crosses back:
+  sole local participant's plan engine-direct. A signed foreign singleton
+  commits a batchable `remote_claim` in the agent ontology, submits the
+  certified claim as an ordinary `remote_application` to the selected scope,
+  and later records `remote_complete` asynchronously. Outcome only crosses back:
   `{committed, Slot, TxId} | {rejected, Reason} |
   {outcome_unknown, OutcomeRef}` from a closed vocabulary),
   and returns `{ok, [Bindings], {transaction, Ns, Anchor, TxId}}` for a
@@ -1030,7 +1035,8 @@ This is a deliberate ledger and signature-format break. There is no old-format
 decoder or migration path.
 
 Make the break fail-fast at storage and every changed wire/signature boundary.
-The already-landed single-participant slice is ledger V3; the shared tagged
+In that historical generation, the already-landed single-participant slice was
+ledger V3; the shared tagged
 block payload specified in §12.2 therefore advances the ledger frame to V4 and
 explicitly rejects V1/V2/V3 before replay. The renamed signing journal starts under its own
 new magic and explicitly rejects every recognized superseded vote-journal
@@ -1962,11 +1968,19 @@ poisons the proof.
 
 ### 12.2 Step 4 completion: implementation contract
 
-This atomic multi-ontology slice replaces the former temporary group-refusal
-branch: proving, backtracking, savepoints, scope
-reuse, failure reasons, and the one-participant fast path remain single shared
-implementations. Every item below is implemented as one hard-break group path;
-Step 6 decides release activation, not whether a second semantic mode is kept.
+> **Historical implementation note.** The detailed Step-4 construction below
+> records the group protocol as it originally landed. Its former signed
+> one-participant use was removed by the later remote-operation hard break.
+> Current single-target behavior is the source claim -> ordinary target
+> application -> asynchronous source completion described above; the five DTX
+> controls below apply only to real groups with at least two participants.
+
+This atomic multi-ontology slice replaced the former temporary group-refusal
+branch. At that milestone, proving, backtracking, savepoints, scope reuse,
+failure reasons, and the then-current one-participant group path remained
+shared implementations. The later remote-operation hard break described above
+removed that one-participant group path; it did not add a second proof path.
+Every item below records the group implementation as one hard break.
 
 1. **Use one tagged block/ledger payload.** Hard-break `#block.payload` and
    `#entry.data` onto the same representation:
@@ -2059,8 +2073,8 @@ Step 6 decides release activation, not whether a second semantic mode is kept.
    sealed scope verifies its plan digest, then latches the first
    `ManifestDigest` it attests: an exact retry returns the cached signature and
    a different digest is rejected. Invoke/savepoint commands cannot alter a
-   sealed scope; only attestation, the existing exactly-once terminal
-   `submit_plan` hand-off for a one-participant proof, and close remain. Once
+   sealed scope; only attestation, the then-existing exactly-once terminal
+   `submit_plan` hand-off, and close remained. Once
    all attestations fix the semantic Begin body, the origin worker hands that
    bounded immutable body and its already-computable group reference to its
    owning Prolog engine. The
@@ -2559,7 +2573,7 @@ Step 6 decides release activation, not whether a second semantic mode is kept.
     Prolog-only crash, a pre-sync Simplex crash becomes exact-coordinator
    `not_found`, and a post-sync crash re-drives from the journal while the
    outside `prove/2` caller retains `outcome_unknown(GroupRef)`. Kill the engine
-   for an ordinary one-participant durable submission after its `OutcomeRef`
+   for an ordinary local one-target durable submission after its `OutcomeRef`
    recovery checkpoint **and after the asynchronous request enters Simplex's
    mailbox but before its reply**, and prove the public caller receives
    `outcome_unknown(OutcomeRef)`, not `fail` or `ontology_unavailable`; kill a

@@ -103,10 +103,50 @@ one_operation_projection_arbitrates_transaction_and_begin_test() ->
     ?assertEqual(
        {ok, #{status => claimed, ref => OperationRef,
               request_digest => maps:get(digest, TransactionClaim),
-              outcome_ref => TransactionRef, height => 2}},
+              outcome_ref => TransactionRef, height => 2,
+              operation_state => terminal}},
        quod_outcome:public(Existing)),
     ?assertEqual(Target, maps:get(target, TransactionClaim)),
     ok = quod_outcome:close(Index3).
+
+remote_claim_and_completion_form_one_durable_operation_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    {Ns, Anchor} = maps:get(origin, Fixture),
+    Claim = maps:get(claim, Fixture),
+    TargetRef = maps:get(target_ref, Fixture),
+    {ok, ClaimData} = quod_transaction:request_claim(Claim),
+    OperationRef = maps:get(operation_ref, ClaimData),
+    Digest = maps:get(digest, ClaimData),
+    {ok, Index0} = quod_outcome:open(
+                     Ns, Anchor, #{outcome_backend => memory}),
+    {new, Index1} = quod_outcome:claim_operation(
+                      Index0, 2, ClaimData, TargetRef),
+    {ok, Index1a} = quod_outcome:flush(Index1),
+    {Unresolved, Index2} = quod_outcome:unresolved_operations(Index1a),
+    ?assertMatch([#{ref := OperationRef, outcome_ref := TargetRef,
+                    state := unresolved}], Unresolved),
+    {new, Index3} = quod_outcome:check_completion(
+                      Index2, OperationRef, Digest, TargetRef),
+    {new, Index4} = quod_outcome:complete_operation(
+                      Index3, 4, OperationRef, Digest, TargetRef),
+    {ok, Index4a} = quod_outcome:flush(Index4),
+    {[], Index5} = quod_outcome:unresolved_operations(Index4a),
+    {{ok, Stored}, Index6} = quod_outcome:lookup_ref(Index5, OperationRef),
+    ?assertEqual(
+       {ok, #{status => claimed, operation_state => terminal,
+              ref => OperationRef, request_digest => Digest,
+              outcome_ref => TargetRef, height => 2}},
+       quod_outcome:public(Stored)),
+    ?assertMatch(
+       {replay, _},
+       quod_outcome:claim_operation(Index6, 2, ClaimData, TargetRef)),
+    ?assertMatch({replay, _}, quod_outcome:check_completion(
+                               Index6, OperationRef, Digest, TargetRef)),
+    ?assertMatch({error, outcome_index_conflict},
+                 quod_outcome:check_completion(
+                   Index6, OperationRef, Digest,
+                   setelement(4, TargetRef, <<0:256>>))),
+    ok = quod_outcome:close(Index6).
 
 same_operation_id_conflicts_across_transaction_and_begin_after_reopen_test() ->
     First = quod_ct:signed_dtx_begin_fixture(#{}),
@@ -476,24 +516,6 @@ commit_result_and_participant_slots_are_published_from_complete_test() ->
                        maps:get(participant_slots, Public)),
           ok = quod_outcome:close(I7)
       end).
-
-one_participant_terminal_outcome_is_public_test() ->
-    Ref = {group, <<"quod:one-target">>, <<1:256>>, <<2:256>>,
-           <<3:256>>, <<4:256>>},
-    {ok, Result} = quod_durable_term:encode_result(#{<<"X">> => linked}),
-    Slot = {{<<"quod:target">>, <<5:256>>}, 7, 1},
-    ?assertEqual(
-       {ok, #{status => committed, height => 8, ref => Ref,
-              bindings => [{<<"X">>, linked}],
-              participant_slots => [Slot]}},
-       quod_outcome:public(
-         #{type => group, ref => Ref,
-           status => {committed, 8, Result, [Slot]}})),
-    ?assertEqual(
-       {error, outcome_index_corrupt},
-       quod_outcome:public(
-         #{type => group, ref => Ref,
-           status => {committed, 8, Result, []}})).
 
 prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
     with_group_identity(

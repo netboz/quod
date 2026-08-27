@@ -8,8 +8,8 @@ Plain language on purpose; the technical anchors are in the boxed notes and file
 Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil's-advocate
 review against the actual code. Implementation status: naming/parser, multi-ontology nodes,
 default link following, recursive reusable proof scopes, cross-scope transactions, the
-hard-break scope transport, and both one-participant and atomic multi-participant durable
-submission are implemented. The network ontology directory contract and its
+hard-break scope transport, the source-claimed remote-singleton path, and atomic
+multi-participant durable submission are implemented. The network ontology directory contract and its
 system/private route slices are also implemented (§10). This is the current
 protocol specification, not a record of one deployment. Release activation and
 hardware gates belong to the release procedure; any future incompatible format
@@ -175,8 +175,10 @@ view, whether the scope is local, co-hosted, or remote.
    caller merges it before its `::` goal fails, so ordinary Prolog alternatives may inspect and
    recover. Infrastructure or authorization failures are typed errors, poison the whole
    pre-commit proof, and are never retried as another proof after the target may have executed.
-   A writing proof seals every material scope. One material target submits its target-authored
-   plan through that ontology's ordinary consensus path and returns an anchored outcome
+   A writing proof seals every material scope. One material target uses that target's ordinary
+   consensus path. For a signed foreign write, the agent ontology first commits a batchable
+   operation claim, the target commits the ordinary application, and the agent ontology records
+   the completion asynchronously; the caller returns with the target's anchored outcome
    reference. Two or more material/read-dependent targets enter one atomic
    Begin/Prepare/Decision/Finalize/Complete group and return its anchored group reference if the
    caller can no longer wait. The caller resolves either reference instead of re-proving.
@@ -478,10 +480,12 @@ the target fixture supplies one. Put `__QUOD_REQUEST_ID__` in such a goal to
 give every attempt a distinct operation id; the driver never retries an
 uncertain write.
 
-Concurrent durable requests use that exact same signed path. Sealed group
-proofs wait FIFO before Begin signing when another group owns the source
-ontology; they are not sent through a benchmark-only executor and are not
-re-proved. The source still admits only one active DTX group. A promoted plan
+Concurrent durable requests use that exact same signed path. Foreign
+single-target claims and target applications use the ordinary content batch,
+so independent requests may share one source block and one target block.
+Only real multi-target groups wait before Begin signing when another group
+owns the source ontology; they are not sent through a benchmark-only executor
+and are not re-proved. The source still admits only one active DTX group. A promoted plan
 whose OCC reads became stale aborts normally and consumes its operation id; an
 intentional application retry must use a newly signed id.
 
@@ -553,8 +557,10 @@ removes the directory route.
 
 Cross-ontology asks still happen while a question **runs**, on the node running it
 (prove-before-broadcast); apply never re-asks anything. A read-only proof creates no ledger
-record, and one material participant keeps the ordinary target-authored transaction path. Two
-or more material/read-dependent participants use explicit singleton DTX barriers in their
+record. One signed foreign material participant commits a metadata claim in the
+agent ontology, then an ordinary target-authored application, followed by an
+asynchronous metadata completion in the agent ontology. Two or more
+material/read-dependent participants use explicit DTX control barriers in their
 existing per-ontology Simplex logs. Validators verify sealed plans, authorization transcripts,
 OCC tokens, certified foreign references, and phase rules; they do not re-run the arbitrary
 derivation.

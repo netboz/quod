@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 5).
+-define(VERSION, 7).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -62,6 +62,8 @@ renew the scope lifetime.
         {scope_open, authentication()} | scope_close | scope_seal |
         {scope_attest, binary()} |
         {bind_group_effects, term(), <<_:256>>} |
+        {bind_operation_effect, term(), term(), <<_:256>>, <<_:256>>,
+         binary()} |
         {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
@@ -82,7 +84,7 @@ renew the scope lifetime.
         {scope_opened, non_neg_integer()} | scope_closed |
         {plan_sealed, binary()} | plan_not_material |
         {plan_attested, binary()} |
-        group_effects_bound |
+        group_effects_bound | {operation_effect_bound, <<_:256>>} |
         {plan_submitted, {committed, pos_integer(), binary()} |
                          {rejected, atom()} |
                          {outcome_unknown,
@@ -432,6 +434,17 @@ validate_command_operation(
   {bind_group_effects, GroupRef, <<_:256>>}) ->
     validate_group_ref(GroupRef);
 validate_command_operation(
+  {bind_operation_effect, ClaimRef, TargetRef, <<_:256>> = CancelToken,
+   <<_:256>>, ClaimBlob}) ->
+    case {valid_transaction_ref(ClaimRef), valid_transaction_ref(TargetRef),
+          byte_size(CancelToken) =:= 32,
+          is_binary(ClaimBlob),
+          is_binary(ClaimBlob) andalso
+              byte_size(ClaimBlob) =< ?QUOD_MAX_DTX_BODY_BYTES} of
+        {true, true, true, true, true} -> ok;
+        _ -> protocol_error(bad_payload)
+    end;
+validate_command_operation(
   {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier}) ->
     %% These three payloads remain opaque until the authenticated command has
     %% passed its exact scope binding, sequence, deadline, readiness and quota
@@ -512,6 +525,7 @@ validate_event_operation(plan_not_material) -> ok;
 validate_event_operation({plan_attested, Blob}) ->
     validate_blob(attestation, Blob);
 validate_event_operation(group_effects_bound) -> ok;
+validate_event_operation({operation_effect_bound, <<_:256>>}) -> ok;
 validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
     case valid_sequence(Slot) andalso is_binary(TxId)
          andalso byte_size(TxId) =:= 32 of
@@ -628,6 +642,11 @@ validate_group_ref(
     ok;
 validate_group_ref(_) ->
     protocol_error(bad_shape).
+
+valid_transaction_ref(
+  {transaction, Ns, <<_:256>>, <<_:256>>})
+  when is_binary(Ns), byte_size(Ns) > 0 -> true;
+valid_transaction_ref(_) -> false.
 
 validate_authentication(Authentication) ->
     case authentication_digest(Authentication) of

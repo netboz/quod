@@ -183,7 +183,7 @@ selects and rotates sources inside this owner. Both forms use the same cache,
 history fold, certificate checks, and resource accounting.
 """.
 -spec verify(<<_:256>>, term(), quod_dtx:certified_ref(),
-             'begin' | prepare | decision | finalize | complete,
+             transaction | 'begin' | prepare | decision | finalize | complete,
              pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify(PeerKey, Endpoint, Ref, ExpectedPhase, TimeoutMs)
@@ -210,7 +210,7 @@ bootstrap candidates are transport hints only.  The existing history verifier
 still proves the exact anchor, phase, certificate chain, and serving committee.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       'begin' | prepare | decision | finalize | complete,
+                       transaction | 'begin' | prepare | decision | finalize | complete,
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
@@ -288,7 +288,7 @@ claim is needed.  Returned generation, committee, committee id, and validator
 routes are those immediately after the referenced slot, never current state.
 """.
 -spec verify_local(file:filename_all(), quod_dtx:certified_ref(),
-                   'begin' | prepare | decision | finalize | complete,
+                   transaction | 'begin' | prepare | decision | finalize | complete,
                    pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
@@ -1350,6 +1350,7 @@ drop_first(Predicate, [Item | Rest]) ->
     end.
 
 valid_phase('begin') -> true;
+valid_phase(transaction) -> true;
 valid_phase(prepare) -> true;
 valid_phase(decision) -> true;
 valid_phase(finalize) -> true;
@@ -3277,6 +3278,9 @@ verify_exact_reference(Store, Ref, ExpectedPhase, Projection) ->
     case quod_ledger_store:read_at(Store, Slot) of
         {ok, #entry{data = Data} = Entry} ->
             case quod_ledger:classify(Data) of
+                {content, Transactions} when ExpectedPhase =:= transaction ->
+                    verify_exact_transaction_reference(
+                      Ref, Entry, Transactions, Projection);
                 {ExpectedPhase, Control} ->
                     Identity = ref_identity(Ref),
                     case quod_dtx:certified_entry_ref(
@@ -3310,6 +3314,35 @@ verify_exact_reference(Store, Ref, ExpectedPhase, Projection) ->
             end;
         not_found ->
             {error, retry}
+    end.
+
+verify_exact_transaction_reference(Ref, Entry, Transactions, Projection) ->
+    Identity = ref_identity(Ref),
+    Digest = ref_record_digest(Ref),
+    case [T || #transaction{tx_id = TxId} = T <- Transactions,
+               TxId =:= Digest] of
+        [Transaction] ->
+            case quod_dtx:certified_entry_ref(
+                   Identity, Entry, Transaction) of
+                {ok, Ref} ->
+                    DtxProjection = maps:get(dtx, Projection),
+                    #{generation := Generation} = DtxProjection,
+                    {ok, #{identity => Identity,
+                           slot => ref_slot(Ref),
+                           block_hash => ref_block_hash(Ref),
+                           record_digest => Digest,
+                           phase => transaction,
+                           generation => Generation,
+                           transaction => Transaction,
+                           committee => quod_simplex:history_committee(
+                                          Projection),
+                           committee_id => maps:get(committee_id, Projection),
+                           routes => quod_simplex:history_validator_routes(
+                                       Projection)}};
+                _ -> {error, invalid_foreign_reference}
+            end;
+        _ ->
+            {error, invalid_foreign_reference}
     end.
 
 verify_reference_source(Peer, {ok, #{committee := Committee}} = Result,

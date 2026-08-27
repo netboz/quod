@@ -18,7 +18,9 @@ ordered endpoints sequentially without creating another vote or request id.
 
 -include("quod_proof_limits.hrl").
 
--export([verify_applied/4, verify_applied_many/3, lookup_outcome/4]).
+-export([submit_operation/4, submit_claim_application/5,
+         submit_operation_to/5,
+         verify_applied/4, verify_applied_many/3, lookup_outcome/4]).
 -export_type([source/0, claim/0]).
 
 -ifdef(TEST).
@@ -42,6 +44,187 @@ ordered endpoints sequentially without creating another vote or request id.
 -type result() :: {ok, map()} | {error, retry | invalid_request}.
 -type outcome_result() ::
         {ok, map()} | {error, retry | not_found | invalid_request}.
+
+-doc """
+Submit one correlated durable-operation request to an exact ontology.
+
+The co-hosted and remote cases deliberately share this owner.  Route hints
+remain transport hints: the endpoint response must still correlate with the
+exact request, and the target transaction's foreign evidence is verified by
+the ordinary consensus path independently on every validator.
+""".
+-spec submit_operation(binary(), identity(), quod_dtx_endpoint:request(),
+                       pos_integer()) ->
+          {ok, quod_dtx_endpoint:response()} |
+          {error, busy | not_ready | invalid_request | timeout}.
+submit_operation(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
+                 Request, TimeoutMs)
+  when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
+       is_binary(TargetNs), byte_size(TargetNs) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    BoundedTimeout = min(
+                       TimeoutMs,
+                       ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
+    case quod_dtx_endpoint:encode_request(TargetNs, Request) of
+        {ok, _} ->
+            submit_operation_target(
+              OwnerNs, Target, Anchor, Request,
+              quod_time:mono_ms() + BoundedTimeout);
+        {error, _} ->
+            {error, invalid_request}
+    end;
+submit_operation(_OwnerNs, _Target, _Request, _TimeoutMs) ->
+    {error, invalid_request}.
+
+-doc "Submit a claimed application through the route implied by its effect custody.".
+-spec submit_claim_application(binary(), identity(), tuple(),
+                               quod_dtx_endpoint:request(), pos_integer()) ->
+          {ok, quod_dtx_endpoint:response()} |
+          {error, busy | not_ready | invalid_request | timeout}.
+submit_claim_application(OwnerNs, Target, Claim,
+                         {apply_claim, _, _} = Request, TimeoutMs) ->
+    case quod_transaction:remote_claim_route(Claim) of
+        shared ->
+            submit_operation(OwnerNs, Target, Request, TimeoutMs);
+        {private, TargetNode} ->
+            submit_operation_to(
+              OwnerNs, Target, TargetNode, Request, TimeoutMs);
+        error ->
+            {error, invalid_request}
+    end;
+submit_claim_application(_OwnerNs, _Target, _Claim, _Request, _TimeoutMs) ->
+    {error, invalid_request}.
+
+-doc "Submit to one exact authenticated target node, for private custody recovery.".
+-spec submit_operation_to(binary(), identity(), <<_:256>>,
+                          quod_dtx_endpoint:request(), pos_integer()) ->
+          {ok, quod_dtx_endpoint:response()} |
+          {error, busy | not_ready | invalid_request | timeout}.
+submit_operation_to(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
+                    <<_:256>> = TargetNode, Request, TimeoutMs)
+  when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
+       is_binary(TargetNs), byte_size(TargetNs) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    BoundedTimeout = min(TimeoutMs, ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
+    case quod_dtx_endpoint:encode_request(TargetNs, Request) of
+        {ok, _} ->
+            submit_operation_exact_target(
+              OwnerNs, Target, Anchor, TargetNode, Request,
+              quod_time:mono_ms() + BoundedTimeout);
+        {error, _} ->
+            {error, invalid_request}
+    end;
+submit_operation_to(_OwnerNs, _Target, _TargetNode, _Request, _TimeoutMs) ->
+    {error, invalid_request}.
+
+submit_operation_exact_target(
+  OwnerNs, {TargetNs, _} = Target, Anchor, TargetNode, Request, Deadline) ->
+    case {TargetNode =:= node_key(), quod_reg:where({quod_simplex, TargetNs})} of
+        {true, Pid} when is_pid(Pid) ->
+            case quod_simplex:genesis_hash(TargetNs) of
+                Anchor ->
+                    operation_response(
+                      Request,
+                      quod_simplex:dtx_endpoint_local(
+                        TargetNs, Request, remaining_positive(Deadline)));
+                _ ->
+                    submit_operation_exact_routes(
+                      OwnerNs, Target, TargetNode, Request, Deadline)
+            end;
+        _ ->
+            submit_operation_exact_routes(
+              OwnerNs, Target, TargetNode, Request, Deadline)
+    end.
+
+submit_operation_exact_routes(
+  OwnerNs, {TargetNs, _} = Target, TargetNode, Request, Deadline) ->
+    case quod_foreign_log:route_hints(Target, []) of
+        {ok, Routes} ->
+            case lists:keyfind(TargetNode, 1, Routes) of
+                {TargetNode, Endpoints} ->
+                    submit_operation_endpoints(
+                      OwnerNs, TargetNs, TargetNode, Endpoints,
+                      Request, Deadline, not_ready);
+                false ->
+                    {error, not_ready}
+            end;
+        {error, _} ->
+            {error, not_ready}
+    end.
+
+submit_operation_target(OwnerNs, {TargetNs, _} = Target, Anchor,
+                        Request, Deadline) ->
+    case quod_reg:where({quod_simplex, TargetNs}) of
+        Pid when is_pid(Pid) ->
+            case quod_simplex:genesis_hash(TargetNs) of
+                Anchor ->
+                    operation_response(
+                      Request,
+                      quod_simplex:dtx_endpoint_local(
+                        TargetNs, Request, remaining_positive(Deadline)));
+                _ ->
+                    submit_operation_routes(
+                      OwnerNs, Target, Request, Deadline)
+            end;
+        undefined ->
+            submit_operation_routes(OwnerNs, Target, Request, Deadline)
+    end.
+
+submit_operation_routes(OwnerNs, {TargetNs, _} = Target,
+                        Request, Deadline) ->
+    case quod_foreign_log:route_hints(Target, []) of
+        {ok, Routes} ->
+            submit_operation_route_rows(
+              OwnerNs, TargetNs, Routes, Request, Deadline, not_ready);
+        {error, _} ->
+            {error, not_ready}
+    end.
+
+submit_operation_route_rows(_OwnerNs, _TargetNs, [], _Request,
+                            _Deadline, Last) ->
+    {error, Last};
+submit_operation_route_rows(OwnerNs, TargetNs,
+                            [{PeerKey, Endpoints} | Rest], Request,
+                            Deadline, Last) ->
+    case submit_operation_endpoints(
+           OwnerNs, TargetNs, PeerKey, Endpoints,
+           Request, Deadline, Last) of
+        {ok, _} = Ok -> Ok;
+        {error, Reason} ->
+            submit_operation_route_rows(
+              OwnerNs, TargetNs, Rest, Request, Deadline, Reason)
+    end.
+
+submit_operation_endpoints(_OwnerNs, _TargetNs, _PeerKey, [],
+                           _Request, _Deadline, Last) ->
+    {error, Last};
+submit_operation_endpoints(OwnerNs, TargetNs, PeerKey,
+                           [Endpoint | Rest], Request, Deadline, Last) ->
+    case remaining(Deadline) of
+        0 -> {error, Last};
+        Remaining ->
+            Result = quod_simplex:dtx_endpoint_request(
+                       OwnerNs, TargetNs, PeerKey, Endpoint,
+                       Request, Remaining),
+            case operation_response(Request, Result) of
+                {ok, _} = Ok -> Ok;
+                {error, Reason} ->
+                    submit_operation_endpoints(
+                      OwnerNs, TargetNs, PeerKey, Rest,
+                      Request, Deadline, Reason)
+            end
+    end.
+
+operation_response(Request, {ok, Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true -> {ok, Response};
+        false -> {error, invalid_request}
+    end;
+operation_response(_Request, {error, Reason}) ->
+    {error, Reason}.
+
+remaining_positive(Deadline) ->
+    max(1, remaining(Deadline)).
 
 -doc """
 Verify one exact participant-applied claim against a certified current view.

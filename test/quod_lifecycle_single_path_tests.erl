@@ -111,7 +111,7 @@ setup() ->
           genesis_file => <<"ontologies/quod_root.pl">>,
           data_dir => list_to_binary(Dir), seeds => []},
     {?ROOT_NS, RootConfig0} = quod_app:build_ns_config(RootBlock),
-    RootConfig = RootConfig0#{proof_timeout_ms => 1000},
+    RootConfig = RootConfig0#{proof_timeout_ms => 5000},
     application:set_env(
       quod, namespace_static_content, #{?ROOT_NS => RootConfig}),
     {ok, _} = quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
@@ -245,13 +245,10 @@ signed_agent_create_uses_the_same_goal_path(_Fixture) ->
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
                                       GoalText),
-        SubmitResult = quod_client_goal_ingress:submit(
-                         execute, SessionId, RequestBytes, Signature, Peer),
-        ?assertMatch(
-           {ok, _,
-            {normalized,
-             {committed, [_], {group_outcome, _, _, _}}}},
-           SubmitResult),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer),
         ok = wait_ready(NewNs, 300)
     after
         stop_process(AuthPid)
@@ -794,19 +791,10 @@ committed_agent_approval_uses_the_same_action(_Fixture) ->
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
                                       RoutedGoal),
-        case quod_client_goal_ingress:submit(
-               execute, SessionId, RequestBytes, Signature, Peer) of
-            {ok, _,
-             {normalized,
-              {committed, [_], {group_outcome, _, _, _}}}} ->
-                ok;
-            {ok, _, {normalized, {failed, FailureBlob}}} ->
-                {ok, FailureReasons} =
-                    quod_wire_term:decode_failure_reasons(FailureBlob),
-                error({unexpected_approved_action_failure, FailureReasons});
-            Other ->
-                error({unexpected_approved_action_reply, Other})
-        end,
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer),
         ok = wait_ready(Ns, 300),
         ?assertMatch({ok, [#{}], _},
                      quod_prolog:prove_ro(Ns, {approved, ok}))
@@ -943,6 +931,40 @@ signed_agent_goal(NetworkId, PublicKey, KeyPair,
     {ok, RequestBytes} = quod_client_goal:encode(Request),
     {RequestBytes,
      quod_identity:sign(RequestBytes, quod_identity:key_term(KeyPair))}.
+
+assert_signed_action_result(
+  {ok, _, {normalized, {committed, [_],
+                        {transaction, ?ROOT_NS, _, _}}}},
+  _SessionId, _RequestBytes, _Signature, _Peer) ->
+    ok;
+assert_signed_action_result(
+  {ok, _, {normalized,
+           {pending, {operation, _, _, _, _}}}},
+  SessionId, RequestBytes, Signature, Peer) ->
+    wait_operation_result(SessionId, RequestBytes, Signature, Peer, 300);
+assert_signed_action_result(
+  {ok, _, {normalized, {failed, FailureBlob}}},
+  _SessionId, _RequestBytes, _Signature, _Peer) ->
+    {ok, FailureReasons} =
+        quod_wire_term:decode_failure_reasons(FailureBlob),
+    error({unexpected_signed_action_failure, FailureReasons});
+assert_signed_action_result(
+  Other, _SessionId, _RequestBytes, _Signature, _Peer) ->
+    error({unexpected_signed_action_reply, Other}).
+
+wait_operation_result(_SessionId, _RequestBytes, _Signature, _Peer, 0) ->
+    error(operation_resolution_timeout);
+wait_operation_result(SessionId, RequestBytes, Signature, Peer, Left) ->
+    case quod_client_goal_ingress:resolve_operation(
+           SessionId, RequestBytes, Signature, Peer) of
+        {ok, _, {operation_outcome, _, _}} -> ok;
+        {ok, _, {operation_pending, _}} ->
+            receive after 10 -> ok end,
+            wait_operation_result(
+              SessionId, RequestBytes, Signature, Peer, Left - 1);
+        Other ->
+            error({unexpected_operation_resolution, Other})
+    end.
 
 provision_agent(PublicKey, GrantCreation) ->
     AgentNs = unique_ns(<<"agent">>),

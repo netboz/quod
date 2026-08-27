@@ -26,10 +26,20 @@ warning/error/critical log entry after the tests.
 Durable writes are still too slow for interactive use: 10/10 sequential remote
 writes measured p50 2,643 ms and 0.38/s; 12/12 at concurrency four serialize at
 0.37/s and p50 10,820 ms. The exact ledger timestamps show consensus commit is
-only a few milliseconds. The remaining common-path cost is the five durable
-blocks plus repeated independent verification of the target's newly committed
-Prepare and Finalize. This is the measured input for Slice 4, not a solved
-latency claim.
+only a few milliseconds. Aggregate hardware metrics over 22 writes attribute
+about 17 ms per Begin, 462 ms per Prepare, 88 ms per Decision, 389 ms per
+Finalize, and 350 ms per Complete. The catch-up servers themselves average
+only about 1--3 ms per request. The remaining common-path cost is therefore not
+consensus computation or disk serving: it is repeated orchestration and
+certified-history/current-view verification around the five durable blocks,
+plus the deliberate one-active-group queue at a source ontology. This is the
+measured input for Slice 4, not a solved latency claim.
+The Slice-4 architecture below passed adversarial plan review and is implemented
+in the current working tree. The transaction roles, shared foreign-reference
+verification, one operation-recovery owner, effect hand-off, Explorer rendering,
+fixed-stage metrics, and singleton-group deletion have landed together. It is
+not a release claim until the full local/distributed gates, coordinated clean
+re-found, and hardware concurrency benchmarks below pass.
 The node-local policy work is deliberately gated on the existing physical-node
 identity plan rather than inventing a temporary configuration authority.
 
@@ -222,9 +232,10 @@ under the widened decoder. No ledger purge belongs to this change.
 
 If A has a real diff, OCC read, or effect, A remains a participant.
 
-### 4.2 Keep Begin, Decision, participant Finalize, and Complete
+### 4.2 Keep the full group protocol only for genuinely distributed atomic work
 
-Under the current contract these records are not removable:
+Under the current contract these records are necessary when two or more
+material/read-dependent ontologies must choose one atomic outcome:
 
 - Begin freezes the exact operation and participant plans before any target
   locks.
@@ -234,7 +245,13 @@ Under the current contract these records are not removable:
 - Complete proves to any later reader that every participant applied the same
   decision, clears the origin role, and stores a transferable terminal result.
 
-Returning success at Decision could remove latency only by changing
+They are not evidence that a single material target needs a group. A singleton
+has no second participant with which it can disagree, and its target's ordinary
+transaction already provides the durable apply-or-reject outcome. Slice 4
+therefore removes signed foreign singletons from this protocol while retaining
+all five records for real groups.
+
+Returning success for a real group at Decision could remove latency only by changing
 `committed` to mean "chosen but perhaps not visible at the targets." That is a
 different API and is not part of this plan.
 
@@ -1430,36 +1447,484 @@ defect.
 - do not special-case Finalize concurrency outside the planner-owned
   dependency model.
 
-### Slice 4 -- measure before deeper protocol work
+### Slice 4 -- restore the ordinary singleton path
 
-- profile a one-target write and A->B->C->D read/write goals;
-- measure identity certificate, scope execution, sealing, attestation, each
-  consensus phase, apply wait, Complete verification, and response flush;
-- add only bounded labels (`phase`, `result`), never identities, goals, or
-  payloads; and
-- add/update Explorer/operations dashboard panels for every new stable metric,
-  after metric names and buckets survive the implementation reviews; and
-- decide from evidence whether origin-phase fusion is worth its format change.
+Slice 4 must meet a real interactive-write gate without weakening the existing
+protocol: a warm signed foreign-only write, with its real agent signature,
+identity check, target `can_invoke/4`, consensus, durable apply, and resolvable
+outcome, must complete with p99 below 500 ms. The primary concurrent gate is
+four writes from the same agent ontology to the same target, matching the live
+failure that measured about 11 seconds. Concurrency 1, 2, 4, and 8 must all be
+reported. Cold first contact is reported separately because transferring and
+verifying missing history cannot honestly have a history-size-independent
+latency promise.
+
+#### Slice 4.0 -- architecture conclusion
+
+The five-phase foreign-singleton path is not merely an implementation that
+needs faster evidence. It is the wrong protocol class. The normative
+`inter-ontology.md` contract already says one material target uses that
+target's ordinary transaction path; only two or more material/read-dependent
+targets require DTX. Signed-client operation recovery later overrode that rule
+by forcing every signed foreign write through DTX so the agent ontology could
+claim the operation first. That preserved exactly-once recovery, but coupled an
+operation journal requirement to distributed atomic commit.
+
+The guarantees must be separated:
+
+1. the agent ontology A remains the sole durable owner of
+   `{AgentReference, OperationId}`;
+2. the actual target B remains the sole owner of its ACL, OCC decision, data
+   change, and transaction outcome;
+3. A must claim the exact B transaction before B may expose the change;
+4. after that claim, any current A recovery owner may safely submit the same B
+   transaction without re-proving the goal;
+5. a later durable receipt in A stops recovery and makes replay proportional to
+   unresolved work rather than all historical operations; and
+6. two or more material/read-dependent ontologies still use the existing DTX
+   atomic protocol.
+
+The selected singleton path is therefore:
+
+```text
+proof and seal
+    -> batchable operation claim in A
+    -> ordinary batchable transaction in B
+    -> asynchronous batchable completion receipt in A
+```
+
+The client returns after B's durable applied-or-rejected outcome. It does not
+wait for the bookkeeping receipt: the stable operation reference in A already
+resolves to B's deterministic transaction reference. The receipt is still
+required so restart/replay redrives only unresolved claims.
+
+| Artifact | D/P/E meaning |
+|---|---|
+| A `remote_claim` | D ledger metadata; P operation index becomes unresolved; no ontology fact or event |
+| B `application` | D ordinary transaction; P applies facts or records rejection; existing applied operations/effects produce E normally |
+| A `remote_complete` | D ledger metadata; P operation index becomes terminal; no ontology fact or event |
+
+The claim and receipt never appear as asserted Prolog facts and do not enlarge
+A's knowledge base. They remain visible as ledger records in Explorer.
+
+At concurrency four, the four A claims may share one ordinary content block
+and the four B transactions may share one ordinary content block. They no
+longer become four serialized groups. No parallel-active-group exception and no
+predicate-specific fast path is introduced.
+
+#### Slice 4.1 -- one batchable transaction family
+
+Do not add a separate consensus queue or a second ledger executor. Extend the
+existing canonical transaction record with one explicit role and its bounded
+role data:
+
+- `application`: today's ordinary Prolog transaction;
+- `remote_claim`: source metadata, with no ontology-fact or event mutation; and
+- `remote_complete`: source terminal metadata, with no ontology-fact or event
+  mutation.
+
+All three use the same author signature, admission generation, sequence lane,
+micro-batch, consensus, ordered projection, replay, catch-up, outcome index,
+and Explorer classification. The two metadata roles never execute a goal or
+invent an ACL. They are the batchable equivalents of the operation-claim and
+terminal-custody parts currently embedded in DTX Begin and Complete.
+
+`remote_claim` stores exactly:
+
+- the unchanged signed request and stable operation identity owned by A;
+- the proof/result binding;
+- the one exact target identity B;
+- B's signed sealed plan and target authorization transcript; and
+- the deterministic B transaction reference.
+
+A validators use the existing signed-request/active-key verifier and operation
+projection transition. They do not run B's ACL. B's target transaction uses the
+existing prepared-plan validator, target `can_invoke/4`, OCC reducer, and
+ordinary transaction outcome. A malformed signature, claim binding, plan, or
+foreign certificate makes a candidate invalid; a well-formed claimed
+operation whose B policy/OCC state changed commits one ordinary rejected
+outcome with the existing bounded failure-reason vocabulary. Thus a durable A
+claim can never become an unresolvable promise merely because B changed after
+the proof.
+
+Refactor the pure target evaluator once to return one of
+`apply(Material) | reject(FailureReasons) | invalid(ProtocolReason)`. Candidate
+support and ordered projection call that same function at the same parent.
+`invalid` is reserved for forged/malformed/unverifiable records and receives no
+ledger position; `reject` is the durable result of a valid claimed operation
+that B's ordinary policy or OCC state refuses. Local application transactions
+keep their current admission semantics. There is no second ACL and no
+check-versus-apply copy.
+
+The discriminator is exact: failure of the author signature, C/T binding,
+claim certificate, canonical decoding, or immutable record shape is `invalid`;
+an authentic correctly bound claim whose existing authorization transcript
+re-proof, current target policy, or OCC check fails is `reject` with the
+existing bounded reasons. No caller maps these classes a second time.
+
+`remote_complete` binds the operation identity, exact B transaction reference,
+and B's certified applied-or-rejected result. It changes only A's existing
+operation/outcome projection from unresolved to terminal. Duplicate exact
+receipts are idempotent; a different target, result, or request digest is a
+consensus-invalid conflict.
+
+This is a coordinated format break. Change transaction construction, canonical
+bytes, safe decode, ledger classification, Simplex batch validation,
+commit-validation, projection, Explorer rendering, fixtures, and docs together.
+Do not retain an old transaction decoder, forwarding shim, or dormant DTX
+singleton branch. Activation uses the already-planned clean re-found.
+
+#### Slice 4.2 -- remove the certificate/identity cycle without weakening it
+
+The B transaction identity must be known before A's claim commits, while the
+certificate proving that claim exists only afterwards. Resolve this without a
+hash cycle:
+
+1. Derive A's claim transaction id `C` from the stable operation/request plus
+   B's exact target identity, sealed plan/material, goal/result, and target
+   transcript. `C` does not include a later block certificate or a redundant B
+   transaction id.
+2. Derive B's semantic transaction id `T` from its ordinary application fields
+   plus the stable source reference `{transaction, A, AAnchor, C}`.
+3. Store and re-check the derived `T` in A's claim. The public operation row
+   maps to `{transaction, B, BAnchor, T}`.
+4. Once C commits, carry its exact certified entry as acceleration evidence.
+   The certificate proves the already-fixed C; it changes neither C nor T.
+
+Every B validator verifies that the certified A claim contains the same
+operation, request digest, target identity, plan digest, and predicted B
+transaction reference. It then runs the one existing target plan/transcript/OCC
+validator. The stable C reference is part of B's semantic transaction; the
+certificate bytes themselves are evidence and may not alter its id. A second
+valid proof of the same C therefore converges on T, while evidence for any
+other claim cannot authorize T. Replay can resolve C by its anchored
+transaction reference even if the live sidecar is gone.
+
+Use the existing `quod_foreign_log` plus `quod_catchup:verify_forward` owner for
+the claim and completion references. Generalize Simplex's current DTX foreign
+reference seam so content transactions and DTX controls feed the same required
+reference extractor, asynchronous verifier, cache, and deterministic
+commit-validation context. Do not copy DTX's verifier into the transaction
+module.
+
+The successful source submission carries the exact certified claim entry to
+the B admission node as an acceleration sidecar. That node offers it to its one
+foreign verifier. The other B validators do not trust or depend on that
+admission node: when the transaction reaches them through ordinary consensus,
+each advances its own shared per-node foreign cache to C. Claims sharing one A
+content block therefore cost one contiguous A-block advance per B validator,
+amortized across every claim in that block, rather than one history transfer
+per transaction. Slice 4.5 measures the per-validator foreign-advance time and
+sidecar hit rate; the plan does not claim that an endpoint sidecar is somehow
+broadcast to the whole committee.
+
+A contiguous cached parent makes validation local; a missing prefix or cold
+cache falls back to the existing certified-history follow. Invalid sidecars
+merely lose the acceleration and never become evidence. Cache advancement
+wakes exact waiters by message; deadlines remain failure safeguards, never
+progress polling.
+
+#### Slice 4.3 -- one durable recovery owner
+
+Refactor the existing DTX origin recovery owner into the ontology's durable
+operation recovery owner; do not add a singleton dispatcher beside it. It owns
+two pure transition families:
+
+- an unresolved singleton claim submits or resolves its exact B transaction,
+  then proposes the exact completion receipt; and
+- a real multi-target Begin continues through the existing Prepare, Decision,
+  Finalize, and Complete transitions.
+
+Live handoff and restart/replay enter the same owner with the same durable
+record. The owner never re-proves, changes the participant set, allocates a new
+operation id, or invents a new transaction. Multiple A validators may race to
+submit the same semantic B transaction; B's existing transaction id and
+outcome projection converge them on one result.
+
+Duplicate-T admission is part of that contract, not an error shortcut. The
+existing custody/outcome admission seam returns the stored terminal outcome
+when T already committed or rejected, correlates with the existing pending T
+when it is still in custody, and accepts one new T only when absent. Different
+validator-author envelopes for the same canonical semantic T converge there;
+different semantic material claiming the same T is invalid. A recovery
+resubmission never creates another ledger result and never reports `duplicate`
+as the operation outcome.
+
+Normal progress is event-driven: claim apply, route availability, verified
+foreign-cache advancement, target apply, and completion apply send correlated
+messages to the owner. A timer only bounds a silent peer or dead connection.
+There is no periodic outcome polling and no compiled worker/count limit added
+by this slice. Pending work remains durable rather than one Erlang process or
+one retained heap per historical claim.
+
+The operation owner also follows the registered name of the one node-wide
+foreign-history verifier. If that verifier restarts, the unregister message
+invalidates the old follow reference and the replacement-registration message
+reattaches the exact target immediately. The operation adds no verifier,
+restart timer, or polling loop.
+
+Remote direct effects use this same singleton path and the existing DTX
+handoff ordering. The source first registers the exact C claim in its durable
+Simplex custody as dormant. Only then may the target scope persist the private
+prepared effect under the predicted C/T binding. After every required target
+binding acknowledges, the source activates that exact dormant C for consensus.
+There is therefore no target journal row whose source operation exists only in
+a dead proof worker.
+
+The signed `not_after_ms` is not used as a false absence proof: it limits the
+claim block timestamp, but a valid already-proposed claim could commit later.
+An abandoned effect row retires only through the exact source dormant-intent
+cancel/terminal transition, never because a wall timer guessed that C cannot
+exist. Source crash recovery owns the retained C; explicit cancellation binds
+the same C and retires the target row. B's ordinary transaction alone releases
+the effect for execution or retires it on rejection.
+
+Refactor the current DTX-only dormant-effect binding to this common durable
+operation handoff and delete the group-only duplicate. If the existing custody
+owner cannot prove register-before-bind, exact cancel, crash recovery, and
+at-most-once release, implementation stops for review; silently keeping
+effect-bearing singletons on DTX is not an accepted leftover.
+
+#### Slice 4.4 -- planner rule and deletion map
+
+The proof, scope, and sealing pipeline stays unchanged. Once sealed, one rule
+selects the protocol from actual dependencies:
+
+| Sealed result | Durable path |
+|---|---|
+| no participating plan | read result, no ledger record |
+| one plan, target is signed origin | ordinary target transaction |
+| one plan, foreign signed origin | remote claim -> ordinary target transaction -> async receipt |
+| one plan, unsigned trusted in-VM origin | existing ordinary target transaction |
+| two or more material/read-dependent plans | existing DTX group |
+
+Keep: `quod_transaction` canonical application transaction, target
+`can_invoke/4`, `quod_commit_validation` as the pure check/apply authority,
+ordinary Simplex batching, `quod_foreign_log`/`quod_catchup`, the operation
+reference and browser journal, the outcome projection, and the multi-target DTX
+reducer.
+
+Refactor: transaction roles and request evidence, foreign-reference validation,
+the origin recovery owner, target plan validation, and effect-journal binding.
+Each refactor has one exported owner and one check/apply implementation.
+
+Exact module ownership for implementation review:
+
+| Owner | Keep/refactor/delete |
+|---|---|
+| `quod_prolog` | keep proof/scope/seal; replace only the post-seal singleton dispatch and record construction |
+| `quod_transaction` + `quod_ledger.hrl` | own the three canonical roles, semantic id normalization, signed bytes, and safe decode |
+| `quod_ledger` + `quod_simplex` | keep one content micro-batch/consensus lane; generalize its item validation and one foreign-reference wait |
+| `quod_commit_validation` | remain the sole pure check/apply authority; reuse prepared-plan and transcript validation for remote application |
+| `quod_committed_projection` + `quod_outcome` | apply D/P/E only for application; project claim/receipt metadata and the one operation state machine |
+| `quod_foreign_log` + `quod_catchup` | remain the sole certified foreign-history verifier/cache for content and DTX references |
+| `quod_dtx_recovery` / `quod_dtx_coordinator` | extract/rename one durable-operation owner; keep group transitions, add singleton transitions, delete singleton group use |
+| `quod_effect_journal` | generalize dormant custody from a group-only binding to the stable operation/target-transaction binding |
+| `quod_client_goal` / `quod_client_result` | keep request and operation reference; remove the singleton `group_outcome`/one-slot result shape and resolve claim -> B transaction -> receipt after the hard break |
+| Explorer server/UI | render claim, target application/rejection, and receipt; remove the misleading singleton group presentation |
+
+Delete: `signed_foreign_singleton/1`; the rule forcing one foreign signed plan
+into `submit_group`; one-participant DTX admission/result compatibility added
+only for that rule; singleton Begin/Prepare/Decision/Finalize/Complete fixtures;
+the one-active-group admission wait from the singleton metrics/docs; and every
+accepted-then-refetch helper superseded by carried certified evidence. DTX's
+one-participant decoder is narrowed back to two actual participants unless a
+separately identified non-client protocol use proves it is still required.
+
+In the same closure pass, update `inter-ontology.md`,
+`signed-client-goals-plan.md`, `generic-agent-identity-plan.md`,
+`distributed-proof-plan.md`, `durable-lifecycle-effects-plan.md`, client/auth
+plans, README/operator guidance, Explorer help, comments, metrics text, and
+fixtures. The final sweep must find no statement that a signed foreign
+singleton is a group, no active one-participant group decoder, and no old
+five-phase latency claim. Historical release notes may retain the old behavior
+only when explicitly labelled historical.
+The browser operation journal is updated in the same cut: unresolved entries
+continue to store the signed request and A operation reference, but result
+normalization follows the foreign B transaction outcome and never expects a
+one-participant group result.
+
+#### Slice 4.5 -- measurements and stop rule
+
+Before implementation, finish the missing fixed-stage spans so one operation
+separates gateway verification, active-key certificate, proof/scopes/seal,
+source claim consensus/apply, claim verification at B, target
+consensus/apply, response flush, and asynchronous completion. Labels are only
+fixed `stage`, `phase`, and `result`; arbitrary identities, targets, operation
+ids, goals, and reasons never become labels.
+
+After each implementation sub-slice, run warm concurrency 1, 2, 4, and 8
+against one source/target, the same work spread over source ontologies, a
+remote read control, an A->B->C->D read/write, and a real remote direct effect.
+Report end-to-end and stage p50/p90/p99, throughput, admission wait, foreign
+cache work, admission-side sidecar hit rate, per-validator vote-time foreign
+advance time, process/mailbox/heap/scheduler data, every ledger outcome, and
+all warning/error/critical logs. A silently ignored sidecar must fail the
+performance evidence even when correctness falls back successfully. The
+release gate is zero lost/duplicate writes,
+warm same-source concurrency-four p99 below 500 ms, no material mailbox or
+worker growth after quiescence, and every completion eventually durable.
+
+Only after the singleton gate passes should measurements decide whether the
+remaining real multi-target DTX needs carried-entry or post-Finalize-certificate
+optimization. Those are DTX refinements, not the singleton architecture.
+
+#### Slice 4.6 -- implementation order
+
+Implement as one reviewed release arc, not independent production features:
+
+1. pin the stage metrics and pure C/T derivation fixtures;
+2. add the canonical transaction roles, shared pure evaluator, and operation
+   projection transitions with no public cutover yet;
+3. generalize the existing foreign-reference verifier and recovery owner;
+4. cut the planner, target submission, outcome resolver, and browser result to
+   the new singleton path in one hard change;
+5. generalize effect custody, update Explorer/assets/docs, and delete every old
+   singleton-group seam; then run the complete stale-path sweep; and
+6. pass all local/distributed/crash/performance gates, commit, clean re-found,
+   and repeat the live gates before making a latency claim.
+
+No intermediate commit is deployable merely because it compiles. Public signed
+write ingress remains on the old release until steps 1--5 are complete and the
+closure review finds one active path.
+
+#### Slice 4.7 -- optimize genuine groups without changing their semantics
+
+The full pipeline review does not assume the singleton cutover solves
+A->B->C->D or any goal with two material/read-dependent ontologies. For those
+real groups, retain the five logical records but remove their measured
+verification/orchestration waste through the same owners:
+
+1. Every accepted DTX phase response may carry its exact committed entry beside
+   the existing certified reference. The coordinator offers it to its shared
+   foreign-log/catch-up verifier. This alone does not accelerate the other
+   validators: each still verifies the prerequisite through its own shared
+   per-node foreign cache, coalescing concurrent requests for the same ledger
+   advance. Warm contiguous history verifies locally, while gaps use the
+   ordinary certified follow. Do not claim committee-wide sidecar acceleration
+   unless a later reviewed Simplex proposal-evidence transport distributes the
+   untrusted bytes to voters without changing the block's semantic hash or
+   adding another verifier.
+2. After exact Finalize apply, the existing endpoint worker collects the
+   reviewed current-committee post-apply evidence once. Complete stores that
+   evidence, and source validators verify it locally instead of each starting a
+   fresh target current-view fan-out. The proof must bind network, exact target,
+   Finalize-era committee, group, Finalize reference, generation, verdict, and
+   applied floor, and remain valid across a later ordered committee change.
+3. Accepted/apply/cache progress wakes exact owners by message. Delete the
+   accepted-then-refetch path, applied polling requests, retry ladders, and any
+   timer whose normal expiry means "try again". Retain only silent-peer/link
+   failure deadlines.
+4. Measure a warm A->B->C->D read/write at concurrency 1, 2, and 4, including
+   each ledger phase and source admission wait. The initial target is p99 below
+   500 ms at concurrency one; concurrent results must be reported rather than
+   hidden.
+
+If the remaining group latency is source/target lock waiting rather than
+verification, stop before changing concurrency. The only acceptable next
+design is a reviewed batch of independently identified DTX controls whose pure
+projection proves their lock/read-write sets can advance in deterministic
+order. Do not bolt parallel active groups onto the existing singleton `active`
+field, and do not infer independence from predicate names. A conservative
+conflict is slower but correct; an exception that lets overlapping groups run
+is not.
+
+#### Rejected architectures and shortcuts
+
+- **Make B own the operation claim:** loses the stable A operation lookup when
+  the proof discovers B only after the request was signed, and cannot represent
+  two possible participant sets under one operation id.
+- **Keep five phases and only carry evidence faster:** removes repeated fetches
+  but cannot remove the one-active-group queue; it cannot meet concurrent
+  same-source latency unless each complete group becomes unrealistically tiny.
+- **Allow parallel active groups:** breaks the namespace lock/OCC invariant and
+  creates overlapping recovery state.
+- **Create a special movement/write endpoint:** duplicates the executor and ACL
+  and is forbidden.
+- **Have the client submit directly after proof:** a lost gateway response still
+  leaves no authoritative A claim, and two gateways can discover different
+  target sets for the same operation.
+- **Reuse an identity certificate across requests:** its statement binds one
+  request digest and ProofId; reuse after a key change would authorize a new
+  request with old evidence.
+- **Reduce `N-f` identity attestation to `f+1`:** two `f+1` sets may intersect
+  only in Byzantine members and certify conflicting current keys.
+- **Add fixed worker/count limits as a latency fix:** it replaces queueing with
+  refusal. Any future resource policy belongs to the node ontology and a
+  separately reviewed byte/work owner, not this protocol.
 
 ## 10. Required adversarial and performance tests
 
-- A foreign-only write produces exactly Begin/target Prepare/Decision/target
-  Finalize/Complete; A has no Prepare or Finalize.
-- Lost replies at every phase recover to the same operation outcome without
-  resubmission.
-- Key rotation after Begin does not cancel accepted recovery; a stale key
-  before Begin is rejected.
-- Target ACL denial and OCC conflict happen before target Prepare commits.
-- One-participant commit, abort-before-Prepare, abort-after-Prepare, replay,
-  coordinator crash, and Prolog restart converge.
+- A signed foreign singleton produces one `remote_claim` in A, one ordinary
+  target transaction in B, and one asynchronous `remote_complete` in A. It
+  produces no Begin, Prepare, Decision, Finalize, Complete, target-side
+  operation claim, or invented A authorization transcript.
+- Four concurrent claims from one A and their four ordinary B transactions are
+  eligible for their respective existing micro-batches and never enter the
+  one-active-group gate. Every operation retains its own request digest,
+  target transaction id, ACL/OCC result, failure reasons, and public operation
+  reference.
+- The predicted B transaction id is identical before and after attaching its A
+  claim certificate. Duplicate valid evidence, a different certificate
+  encoding for the exact claim, and submissions authored by different current
+  B validators converge on that id. A wrong operation, request digest, target,
+  plan, transcript, or predicted transaction reference is rejected before
+  application.
+- Lost connection/reply and process/node death before claim commit, after claim
+  commit, during B submission, after B apply/reject, and before/after receipt
+  commit recover to the same operation outcome without re-proof or mutation of
+  the target transaction. Only pre-claim work may be abandoned.
+- Key rotation before the A claim rejects the request. Rotation after the
+  certified claim neither cancels nor re-authorizes it; B validates the
+  accepted claim and still applies its current target ACL/OCC rules.
+- A B policy change, stale target-plan signer, immutable-policy violation, and
+  OCC conflict after the A claim each produce one durable bounded rejected B
+  outcome and an A receipt. Framework failures populate the existing failure
+  reasons; no claimed operation remains permanently unresolvable.
+- Exact duplicate operation id/digest returns the first B outcome; the same id
+  with another digest is invalid in proposal preview, vote validation, ordered
+  apply, replay, and catch-up. A claim racing an existing local operation is
+  arbitrated by the one origin operation projection.
+- Replay with thousands of terminal operations schedules none of them. It
+  schedules exactly the claims without a valid completion receipt. A duplicate
+  exact receipt is idempotent; a conflicting receipt cannot change a terminal
+  operation.
+- A foreign singleton direct effect uses the same claim/ordinary-target/receipt
+  path. Crash at every prepare, claim, transaction, apply, and journal-release
+  seam yields at most one external effect, one target outcome, and one receipt;
+  abandoned pre-claim staging is retired. Kill the proof before source dormant
+  registration (no target row), after source dormant registration, after target
+  binding, during exact cancel, and after claim activation; each leaves either
+  one recoverable C or one certified cancellation, never a timer-retired claim
+  that can later commit. No DTX-only effect binding remains.
+- A genuine two-target write still runs Begin, both Prepares, one Decision,
+  both Finalizes, and Complete atomically. A one-target group is rejected by
+  every active decoder/admission seam after the hard break.
 - A local signed no-change operation retains its ACL-checked operation claim.
 - A remote no-op is authorized by B and never by an invented A transcript.
-- Wrong/malformed applied wakeups are inert; exact wakeup answers once.
+- A valid carried A claim or B result advances the existing foreign cache
+  exactly once and satisfies the exact reference without a network pull. A
+  duplicate is idempotent. A malformed entry, wrong identity/anchor/slot/hash,
+  wrong role, invalid certificate, non-contiguous parent, or omitted
+  membership-changing predecessor never supplies evidence; the ordinary
+  certified pull either fills the gap or returns the existing retry result.
+- Live and recovery submissions use the same carried-entry ingestion seam.
+  Killing the recovery owner, one receiving validator, or the reply link at every
+  handoff leaves no sidecar owner or waiter behind and recovery converges from
+  the durable records without trusting transient evidence.
 - Timeout, caller death, link death, and namespace restart reclaim parked
   requests through the same finish function; every secondary index is empty.
 - A maximum supported committee can obtain its required distinct replies; no
   eight-worker deadlock remains, and two concurrent maximum request sets do
   not collide on one hosted ontology's cross-operation correlation ceiling.
+- Warm hardware runs report concurrency 1, 2, 4, and 8 against one source and
+  target, the same load spread across source ontologies, and A->B->C->D reads
+  and writes. The release gate is zero failed writes, warm same-source
+  concurrency-four p99 below 500 ms, correct ledgers/outcomes after quiescence,
+  zero unexpected restart or warning/error/critical log, and no leaked owner
+  row, worker, monitor, or material mailbox growth. Every asynchronous receipt
+  must be durable before the run is called quiescent. Cold-history latency and
+  bytes are reported separately rather than mixed into the warm percentile.
 - More than 32 simultaneous certified-history pulls, more than four requests
   from one authenticated peer, and overlapping different phase/reference
   claims for the same ontology identity make progress through the one
@@ -1588,8 +2053,10 @@ defect.
 - A Byzantine responder cannot make Complete valid, and an unready Complete
   cannot starve ordinary origin traffic.
 - Multi-target Finalizes overlap in time while Prepares remain ordered.
-- All five one-participant validation seams accept one and still reject zero,
-  malformed, duplicate, or over-limit participant sets.
+- After Slice 4's hard break, every active DTX validation seam rejects a
+  one-participant group; the same signed foreign operation succeeds only
+  through the batchable claim/ordinary-target/receipt path. Genuine groups
+  still reject zero, malformed, duplicate, or over-limit participant sets.
 - Live one-target and A->B->C->D benchmarks report phase counts and latency,
   while all node logs remain free of warnings/errors/crashes.
 
@@ -1619,23 +2086,39 @@ catch-up server workers (32 per hosted ontology today). Sweep code, tests, metri
 configuration, comments, generated client assets, and all architecture
 documents for removed fields and semantics.
 
-Deployment closure states explicitly: Slice 0 is behavior-compatible and may
-roll independently. Slice 1's endpoint fix must be deployed and pass the live
-maximum-committee gate before Slice 2. The one-participant Slice 2 then needs
-one coordinated restart of the fleet but no re-found and no ledger deletion.
-No final release/no-hard-limit claim is made until Slices 0.10a--f are closed.
+Deployment closure states explicitly: Slice 0 was behavior-compatible; Slice
+1's endpoint fix and Slice 2's historical one-participant widening were already
+deployed and measured. Slice 4 replaces that temporary singleton group shape,
+changes the canonical transaction/ledger format, and activates only through the
+coordinated clean re-found already required by the agent-identity release. It
+has no rolling mixed-version decoder and no ledger migration path. No final
+release/no-hard-limit claim is made until Slices 0.10a--f are closed.
 The separately classified consensus `MAX_OUTBOX = 1024` remains a transport
 review item and prevents any broader claim that *all* operational limits in
 Quod have been resolved; this DTX plan neither silently removes nor ignores it.
 
 ## 11. Expected result
 
-For the common signed foreign-only write, the plan removes two of seven
-consensus blocks and the normal 100 ms apply-retry step. It also removes
-serial work across independent targets. The measured 692 ms result should fall
-materially, but the implementation must report actual hardware numbers rather
-than promise a synthetic threshold.
+For the common signed foreign-only write, Slice 4 replaces five serialized DTX
+blocks with two latency-critical ordinary batchable blocks: A's durable claim
+and B's normal transaction. A's completion receipt is also batchable and runs
+asynchronously after the client-visible target outcome. Same-source operations
+can therefore share blocks instead of waiting for earlier groups to finish.
+The explicit hardware gate is warm p99 below 500 ms at concurrency four from
+one source to one target, with the concurrency curve and every stage shown
+alongside it. No result may be inferred from consensus microbenchmarks or from
+load spread across different source ontologies.
 
-Most importantly, the faster path remains the existing path: one Prolog proof,
-one target ACL, one plan/verifier family, one DTX reducer, one recovery owner,
-and one terminal outcome.
+For genuine groups, the protocol remains atomic. Each node coalesces phase
+verification through its one foreign-history owner; the coordinator reuses the
+exact entry it received, without pretending that this sidecar reached every
+validator. Complete verifies one reviewed post-apply certificate rather than
+launching a fresh fan-out per source validator. Its independent warm
+A->B->C->D gate is p99 below 500 ms at concurrency one before any concurrency
+redesign is considered.
+
+Most importantly, the faster path restores the architecture rather than adding
+a fast lane: one Prolog proof, one target ACL, one plan/check-and-apply family,
+one ordinary transaction batcher, one certified-history verifier, one durable
+operation recovery owner, and one terminal outcome. DTX remains exactly where
+distributed atomic agreement is actually required.

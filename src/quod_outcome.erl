@@ -40,6 +40,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          admit/2, discard_unsubmitted/2,
          classify/2, terminal/4, flush/1,
          check_operation/3, claim_operation/4,
+         check_completion/4, complete_operation/5, unresolved_operations/1,
          ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
          project_pending_begin/2, dtx_state/1,
          lookup_group/2, group_history/2,
@@ -47,7 +48,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
 
 -export_type([index/0, outcome/0]).
 
--define(FORMAT, 5).
+-define(FORMAT, 6).
 -define(CACHE_LIMIT, 4096).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -78,7 +79,8 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
         #{type := operation,
           ref := {operation, binary(), <<_:256>>, binary(), <<_:256>>},
           request_digest := <<_:256>>,
-          outcome_ref := term(), first_slot := pos_integer()}.
+          outcome_ref := term(), first_slot := pos_integer(),
+          state := unresolved | {terminal, pos_integer()}}.
 -type pending_begin() ::
         #{lane := {<<_:256>>, <<_:256>>}, sequence := pos_integer(),
           group_id := <<_:256>>}.
@@ -583,7 +585,7 @@ capture_terminal(CompleteRef, DecisionRef, FinalizeRows, History, Row) ->
 participant_slots(Rows) ->
     participant_slots(Rows, none, 0, []).
 
-participant_slots([], _Previous, Count, Acc) when Count >= 1 ->
+participant_slots([], _Previous, Count, Acc) when Count >= 2 ->
     {ok, lists:reverse(Acc)};
 participant_slots([{Identity, Ref, Generation} | Rest], Previous, Count, Acc)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
@@ -909,8 +911,11 @@ claim_operation(Index, Slot, Claim, OutcomeRef)
                     {new, cache_put(Key, Row, Index2)};
                 {{ok, Row}, Index1} ->
                     {replay, Index1};
-                {{ok, _Other}, _Index1} ->
-                    {error, outcome_index_conflict};
+                {{ok, Existing}, Index1} ->
+                    case completed_operation_claim_replay(Existing, Row) of
+                        true -> {replay, Index1};
+                        false -> {error, outcome_index_conflict}
+                    end;
                 {{error, Reason}, _Index1} ->
                     {error, Reason}
             end;
@@ -919,6 +924,21 @@ claim_operation(Index, Slot, Claim, OutcomeRef)
     end;
 claim_operation(_Index, _Slot, _Claim, _OutcomeRef) ->
     {error, outcome_index_bad_operation}.
+
+%% A restart opens the durable outcome index before replaying its ledger.
+%% The persisted row may therefore already include the later completion when
+%% replay reaches the earlier claim.  Its immutable claim fields must still
+%% match exactly; only the monotonic unresolved -> terminal state may differ.
+completed_operation_claim_replay(
+  #{type := operation, ref := Ref, request_digest := RequestDigest,
+    outcome_ref := OutcomeRef, first_slot := FirstSlot,
+    state := {terminal, TerminalSlot}},
+  #{type := operation, ref := Ref, request_digest := RequestDigest,
+    outcome_ref := OutcomeRef, first_slot := FirstSlot,
+    state := unresolved}) ->
+    is_integer(TerminalSlot) andalso TerminalSlot > FirstSlot;
+completed_operation_claim_replay(_Existing, _Claim) ->
+    false.
 
 operation_candidate(
   #index{ns = Ns, anchor = Anchor} = Index,
@@ -929,25 +949,106 @@ operation_candidate(
       {operation, Ns, Anchor, AgentRef, OperationId} = OperationRef},
   OutcomeRef, Slot) ->
     case quod_agent_ref:valid_principal({agent, AgentRef}) andalso
-         operation_outcome_ref(OutcomeRef, {Ns, Anchor}) of
+         operation_outcome_ref(OutcomeRef) of
         true ->
             Key = operation_key(Index, AgentRef, OperationId),
+            State = case quod_outcome:ref_identity(OutcomeRef) of
+                        {ok, {Ns, Anchor}} -> {terminal, Slot};
+                        {ok, _Foreign} -> unresolved
+                    end,
             {ok, Key,
              #{type => operation, ref => OperationRef,
                request_digest => Digest, outcome_ref => OutcomeRef,
-               first_slot => Slot}};
+               first_slot => Slot, state => State}};
         false ->
             error
     end;
 operation_candidate(_Index, _Claim, _OutcomeRef, _Slot) ->
     error.
 
+operation_outcome_ref({transaction, Ns, <<_:256>>, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0;
 operation_outcome_ref(
-  {transaction, Ns, Anchor, <<_:256>>}, {Ns, Anchor}) -> true;
-operation_outcome_ref(
-  {group, Ns, Anchor, <<_:256>>, <<_:256>>, <<_:256>>},
-  {Ns, Anchor}) -> true;
-operation_outcome_ref(_Ref, _Target) -> false.
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0;
+operation_outcome_ref(_Ref) -> false.
+
+-doc "Mark one exact foreign operation target as durably observed.".
+-spec check_completion(index(), term(), <<_:256>>, term()) ->
+          {new, index()} | {replay, index()} | {error, index_error()}.
+check_completion(Index,
+                 {operation, Ns, Anchor, AgentRef, OperationId} = OperationRef,
+                 <<_:256>> = Digest, OutcomeRef) ->
+    case {Ns =:= Index#index.ns, Anchor =:= Index#index.anchor,
+          operation_outcome_ref(OutcomeRef)} of
+        {true, true, true} ->
+            Key = operation_key(Index, AgentRef, OperationId),
+            case lookup_operation(Index, Key) of
+                {{ok, #{ref := OperationRef, request_digest := Digest,
+                        outcome_ref := OutcomeRef, state := unresolved}},
+                 Index1} -> {new, Index1};
+                {{ok, #{ref := OperationRef, request_digest := Digest,
+                        outcome_ref := OutcomeRef,
+                        state := {terminal, _}}}, Index1} -> {replay, Index1};
+                {{ok, _}, _Index1} -> {error, outcome_index_conflict};
+                {not_found, _Index1} -> {error, outcome_index_bad_operation};
+                {{error, Reason}, _Index1} -> {error, Reason}
+            end;
+        _ -> {error, outcome_index_bad_operation}
+    end;
+check_completion(_Index, _OperationRef, _Digest, _OutcomeRef) ->
+    {error, outcome_index_bad_operation}.
+
+-doc "Mark one exact foreign operation target as durably observed.".
+-spec complete_operation(index(), pos_integer(), term(), <<_:256>>, term()) ->
+          {new | replay, index()} | {error, index_error()}.
+complete_operation(Index, Slot,
+                   {operation, Ns, Anchor, AgentRef, OperationId} = OperationRef,
+                   <<_:256>> = Digest, OutcomeRef)
+  when is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
+    case {Ns =:= Index#index.ns, Anchor =:= Index#index.anchor,
+          operation_outcome_ref(OutcomeRef)} of
+        {true, true, true} ->
+            Key = operation_key(Index, AgentRef, OperationId),
+            case lookup_operation(Index, Key) of
+                {{ok, #{ref := OperationRef, request_digest := Digest,
+                        outcome_ref := OutcomeRef, state := unresolved} = Row},
+                 Index1} ->
+                    Row1 = Row#{state := {terminal, Slot}},
+                    Index2 = stage_row(Key, Row1, Index1),
+                    {new, cache_put(Key, Row1, Index2)};
+                {{ok, #{ref := OperationRef, request_digest := Digest,
+                        outcome_ref := OutcomeRef,
+                        state := {terminal, Existing}}}, Index1}
+                  when Existing =:= Slot ->
+                    {replay, Index1};
+                {{ok, _Conflict}, _Index1} ->
+                    {error, outcome_index_conflict};
+                {not_found, _Index1} ->
+                    {error, outcome_index_bad_operation};
+                {{error, Reason}, _Index1} ->
+                    {error, Reason}
+            end;
+        _ ->
+            {error, outcome_index_bad_operation}
+    end;
+complete_operation(_Index, _Slot, _OperationRef, _Digest, _OutcomeRef) ->
+    {error, outcome_index_bad_operation}.
+
+-doc "Return durable foreign claims that still require target/receipt recovery.".
+-spec unresolved_operations(index()) -> {[map()], index()}.
+unresolved_operations(Index = #index{backend = {memory, Map}}) ->
+    Rows = [Row || {_Key, #{type := operation, state := unresolved} = Row}
+                       <- maps:to_list(Map)],
+    {Rows, Index};
+unresolved_operations(Index = #index{backend = {dets, Name}}) ->
+    Pattern = {{operation, Index#index.anchor, '_', '_'},
+               #{type => operation, ref => '_', request_digest => '_',
+                 outcome_ref => '_', first_slot => '_', state => unresolved}},
+    Rows = try [Row || {_Key, Row} <- dets:match_object(Name, Pattern)]
+           catch _:_ -> []
+           end,
+    {Rows, Index}.
 
 lookup_operation(Index, Key) ->
     case cache_get(Key, Index) of
@@ -1125,10 +1226,14 @@ public(#{type := group,
 public(#{type := operation,
          ref := {operation, Ns, <<_:256>>, AgentRef, <<_:256>>} = Ref,
          request_digest := <<_:256>> = RequestDigest,
-         outcome_ref := OutcomeRef, first_slot := Slot})
+         outcome_ref := OutcomeRef, first_slot := Slot, state := State})
   when is_binary(Ns), byte_size(Ns) > 0, is_binary(AgentRef),
        is_integer(Slot), Slot > 0 ->
-    {ok, #{status => claimed, ref => Ref,
+    PublicState = case State of
+                      unresolved -> unresolved;
+                      {terminal, _} -> terminal
+                  end,
+    {ok, #{status => claimed, operation_state => PublicState, ref => Ref,
            request_digest => RequestDigest,
            outcome_ref => OutcomeRef, height => Slot}};
 public(_Other) ->
@@ -1222,15 +1327,15 @@ valid_stored(
   #{type := operation,
     ref := {operation, Ns, Anchor, AgentRef, OperationId},
     request_digest := <<_:256>>,
-    outcome_ref := OutcomeRef, first_slot := Slot} = Row)
-  when map_size(Row) =:= 5,
+    outcome_ref := OutcomeRef, first_slot := Slot, state := State} = Row)
+  when map_size(Row) =:= 6,
        is_binary(Ns), byte_size(Ns) > 0,
        is_binary(Anchor), byte_size(Anchor) =:= 32,
        is_binary(AgentRef),
        is_binary(OperationId), byte_size(OperationId) =:= 32,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
     quod_agent_ref:valid_principal({agent, AgentRef}) andalso
-        operation_outcome_ref(OutcomeRef, {Ns, Anchor});
+        operation_outcome_ref(OutcomeRef) andalso valid_operation_state(State);
 valid_stored(_Key, _Value) ->
     false.
 
@@ -1239,6 +1344,11 @@ valid_status({committed, Slot}) -> is_integer(Slot) andalso Slot > 0;
 valid_status({rejected, Reason, Slot}) ->
     is_atom(Reason) andalso is_integer(Slot) andalso Slot > 0;
 valid_status(_Status) -> false.
+
+valid_operation_state(unresolved) -> true;
+valid_operation_state({terminal, Slot}) ->
+    is_integer(Slot) andalso Slot > 0 andalso Slot =< ?MAX_UINT64;
+valid_operation_state(_) -> false.
 
 valid_dtx_state(
   #{pending_begin := Pending, projection := Projection,
@@ -1344,7 +1454,7 @@ row_relations(_) -> false.
 valid_participant_slots(Slots) ->
     valid_participant_slots(Slots, none, 0).
 
-valid_participant_slots([], _Previous, Count) -> Count >= 1;
+valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
        (Previous =:= none orelse Previous < Identity),

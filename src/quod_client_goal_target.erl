@@ -22,18 +22,26 @@ does not classify predicates or authorize goals.
 -spec verify_request(binary(), binary()) ->
           {ok, quod_client_goal:evidence()} | {error, term()}.
 verify_request(RequestBytes, Signature) ->
+    Started = erlang:monotonic_time(),
     case quod_client_goal:decode(RequestBytes) of
         {ok, #{agent_namespace := Ns,
                agent_genesis_anchor := Anchor}} ->
-            case network_identity() of
-                {ok, Network} ->
-                    quod_client_goal:verify_for(
-                      RequestBytes, Signature, Network, {Ns, Anchor},
-                      quod_time:now_ms());
-                {error, _} = Error -> Error
-            end;
+            Result = case network_identity() of
+                         {ok, Network} ->
+                             quod_client_goal:verify_for(
+                               RequestBytes, Signature, Network, {Ns, Anchor},
+                               quod_time:now_ms());
+                         {error, _} = Error -> Error
+                     end,
+            ok = quod_metrics:observe_remote_operation_stage(
+                   Ns, gateway_verification, metric_result(Result),
+                   erlang:monotonic_time() - Started),
+            Result;
         {error, _} = Error -> Error
     end.
+
+metric_result({ok, _}) -> ok;
+metric_result({error, _}) -> failed.
 
 -doc "Require an exact ready local validator for the signed target.".
 -spec available({binary(), <<_:256>>}) -> ok | {error, term()}.

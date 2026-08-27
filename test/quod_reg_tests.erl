@@ -22,6 +22,7 @@ gproc_test_() ->
      [{"publish reaches a subscriber",        fun pubsub_delivers/0},
       {"unsubscribe stops delivery",          fun unsubscribe_stops/0},
       {"where/1 finds a registered name",     fun where_finds/0},
+      {"follow monitor sees owner replacement", fun follows_replacement/0},
       {"publish with no subscribers is safe", fun publish_to_nobody/0},
       {"every subscriber receives",           fun fanout/0}]}.
 
@@ -45,6 +46,44 @@ where_finds() ->
     true = quod_reg:reg(K),
     ?assertEqual(Self, quod_reg:where(K)),
     true = gproc:unreg({n, l, K}).
+
+follows_replacement() ->
+    K = {replacement, make_ref()},
+    Name = quod_reg:name(K),
+    Ref = quod_reg:monitor_name(K, follow),
+    receive
+        {gproc, unreg, Ref, Name} -> ok
+    after 1000 -> erlang:error(missing_initial_unregistered)
+    end,
+    First = replacement_owner(K),
+    receive
+        {gproc, registered, Ref, Name} -> ok
+    after 1000 -> erlang:error(missing_first_registration)
+    end,
+    First ! stop,
+    receive
+        {gproc, unreg, Ref, Name} -> ok
+    after 1000 -> erlang:error(missing_owner_exit)
+    end,
+    Second = replacement_owner(K),
+    receive
+        {gproc, registered, Ref, Name} -> ok
+    after 1000 -> erlang:error(missing_replacement_registration)
+    end,
+    ok = quod_reg:demonitor_name(K, Ref),
+    Second ! stop.
+
+replacement_owner(K) ->
+    Parent = self(),
+    Pid = spawn(fun() ->
+                        true = quod_reg:reg(K),
+                        Parent ! {registered, self()},
+                        receive stop -> ok end
+                end),
+    receive
+        {registered, Pid} -> Pid
+    after 1000 -> erlang:error(owner_did_not_register)
+    end.
 
 publish_to_nobody() ->
     %% no registrants -> must not crash; gproc:send returns the event

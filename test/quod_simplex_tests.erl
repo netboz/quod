@@ -223,20 +223,20 @@ proof_gate_requires_exact_ready_ack_test() ->
               %% A forged owner PID and a stale height are both inert.
               WrongOwner = result_state(
                              quod_simplex:running(
-                               cast, {prolog_ready, self(), 0}, S0)),
+                               cast, {prolog_ready, self(), 0, []}, S0)),
               ?assertEqual(false,
                            maps:get(prolog_ready,
                                     quod_simplex:stats_map(WrongOwner))),
               WrongHeight = result_state(
                               quod_simplex:running(
-                                cast, {prolog_ready, Owner, 1}, S0)),
+                                cast, {prolog_ready, Owner, 1, []}, S0)),
               ?assertEqual(false,
                            maps:get(prolog_ready,
                                     quod_simplex:stats_map(WrongHeight))),
 
               Ready = result_state(
                         quod_simplex:running(
-                          cast, {prolog_ready, Owner, 0}, S0)),
+                          cast, {prolog_ready, Owner, 0, []}, S0)),
               ?assertEqual(true,
                            maps:get(prolog_ready,
                                     quod_simplex:stats_map(Ready))),
@@ -3427,8 +3427,8 @@ restart_restores_exact_effect_custody_test() ->
     try
         {ok, Journal0} = quod_signing_journal:initialize(
                            Ns, ?DOMAIN, Dir),
-        {ok, Journal1} = quod_signing_journal:record_effect(
-                           Journal0, Signed, Submission),
+        {ok, Journal1} = quod_signing_journal:record_transaction(
+                           Journal0, Signed, Submission, ready),
         ok = quod_signing_journal:close(Journal1),
 
         {ok, Journal2} = quod_signing_journal:recover(
@@ -3444,7 +3444,7 @@ restart_restores_exact_effect_custody_test() ->
         ?assertEqual(Submission, RestoredSubmission),
         ?assertMatch(
            #{TxId := #{admission := Admission, sequence := 1}},
-           quod_signing_journal:pending_effects(
+           quod_signing_journal:pending_transactions(
              quod_simplex:test_signing_journal(Restarted))),
 
         %% Live commit retirement is keyed by semantic TxId, not by the
@@ -3454,7 +3454,7 @@ restart_restores_exact_effect_custody_test() ->
                       {batch, [Signed]}, 2, Restarted),
         ?assertEqual(
            #{},
-           quod_signing_journal:pending_effects(
+           quod_signing_journal:pending_transactions(
              quod_simplex:test_signing_journal(Committed))),
         ok = quod_signing_journal:close(
                quod_simplex:test_signing_journal(Committed))
@@ -3486,8 +3486,8 @@ catchup_commit_retires_effect_signing_custody_test() ->
     try
         {ok, Journal0} = quod_signing_journal:initialize(
                            Ns, ?DOMAIN, Dir),
-        {ok, Journal1} = quod_signing_journal:record_effect(
-                           Journal0, Signed, Submission),
+        {ok, Journal1} = quod_signing_journal:record_transaction(
+                           Journal0, Signed, Submission, ready),
         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
         Restored = quod_simplex:restore_signing_state(
                      st(#{ns => Ns, genesis_hash => Anchor,
@@ -3497,14 +3497,14 @@ catchup_commit_retires_effect_signing_custody_test() ->
                           signing_journal => Journal1,
                           store => Store0, slot => 0, sync => ready})),
         ?assertMatch(#{TxId := #{}},
-                     quod_signing_journal:pending_effects(
+                     quod_signing_journal:pending_transactions(
                        quod_simplex:test_signing_journal(Restored))),
         {Recovered, ok} = quod_simplex:test_apply_catchup_window(
                             recovery, [Entry], Projection, Restored),
         ?assertEqual([], quod_simplex:test_custody(Recovered)),
         ?assertEqual(
            #{},
-           quod_signing_journal:pending_effects(
+           quod_signing_journal:pending_transactions(
              quod_simplex:test_signing_journal(Recovered))),
         ok = quod_signing_journal:close(
                quod_simplex:test_signing_journal(Recovered)),
@@ -3538,16 +3538,16 @@ effect_custody_does_not_saturate_after_live_commits_test() ->
                   {Signed, Submission} = effect_submission_fixture(
                                            Ns, Anchor, Admission,
                                            Sequence, Author, Identity),
-                  {ok, Journal1} = quod_signing_journal:record_effect(
+                  {ok, Journal1} = quod_signing_journal:record_transaction(
                                      quod_simplex:test_signing_journal(S),
-                                     Signed, Submission),
+                                     Signed, Submission, ready),
                   S1 = quod_simplex:test_state_set(
                          signing_journal, Journal1, S),
                   S2 = quod_simplex:test_resolve_committed_submissions(
                          {batch, [Signed]}, Sequence + 1, S1),
                   ?assertEqual(
                      #{},
-                     quod_signing_journal:pending_effects(
+                     quod_signing_journal:pending_transactions(
                        quod_simplex:test_signing_journal(S2))),
                   S2
               end,
@@ -3990,17 +3990,62 @@ batch_caps_reject_oversized_and_park_test() ->
     {1, _, Authors, [{local, SmallId, _}]} = quod_simplex:test_ingress(SParked),
     ?assertEqual(#{Me => 1}, Authors),
     ?assertEqual(0, maps:get(r_busy, quod_simplex:stats_map(SParked))),
-    %% a change whose tx_id is already in the collecting batch is rejected (no double-apply of one write)
+    %% Two locally authored envelopes for the same semantic transaction
+    %% coalesce. The second custody record is not replied to early; both are
+    %% released by the one committed tx_id.
+    FirstRef = make_ref(),
+    SecondRef = make_ref(),
+    FirstFrom = {self(), FirstRef},
+    SecondFrom = {self(), SecondRef},
     {keep_state, S1, _} =
         quod_simplex:running(
-          {call, From}, {append, Small, otel_ctx:new()}, st(Base)),   %% collect Small
+          {call, FirstFrom}, {append, Small, otel_ctx:new()}, st(Base)),
     {keep_state, S2, A3} =
         quod_simplex:running(
-          {call, From}, {append, Small, otel_ctx:new()}, S1),         %% same tx_id
-    ?assert(lists:member({reply, From, {error, bad_change}}, A3)),
-    %% The rejected second signing attempt cannot leave a dead custody record.
-    [{_SubmissionId, 1, _Submission, {local, 4}, _Deadline, 1}] =
-        quod_simplex:test_custody(S2).
+          {call, SecondFrom}, {append, Small, otel_ctx:new()}, S1),
+    ?assertEqual([], [R || {reply, _, _} = R <- A3]),
+    ?assertEqual(2, length(quod_simplex:test_custody(S2))),
+    [{_FirstSubmissionId, 1, FirstSubmission,
+      _FirstPlacement, _FirstDeadline, _FirstAttempts}] =
+        quod_simplex:test_custody(S1),
+    {ok, SignedFirst} = decode_submission(<<"t">>, FirstSubmission),
+    Settled = quod_simplex:test_resolve_committed_submissions(
+                {batch, [SignedFirst]}, 4, S2),
+    receive {FirstRef, {ok, 4}} -> ok after 0 -> ?assert(false) end,
+    receive {SecondRef, {ok, 4}} -> ok after 0 -> ?assert(false) end,
+    ?assertEqual([], quod_simplex:test_custody(Settled)).
+
+different_validator_envelopes_for_same_transaction_converge_test() ->
+    Ns = <<"t">>,
+    {FirstAuthor, FirstIdentity} = id(),
+    {SecondAuthor, SecondIdentity} = id(),
+    Base = bind_test_id(
+             #transaction{tx_id = <<>>, origin = {Ns, <<0:256>>},
+                          proof_id = <<91:256>>, plan_digest = <<92:256>>,
+                          goal = durable_goal({same, semantic, transaction}),
+                          result = durable_result(), read_check = #{},
+                          diff = [{assert, {{same_semantic, value}, true}}],
+                          author = SecondAuthor, author_seq = 0, sig = none}),
+    FirstUnsigned = Base#transaction{author = FirstAuthor, author_seq = 1},
+    {ok, First} = quod_transaction:sign(
+                    test_binding(Ns, FirstAuthor),
+                    FirstUnsigned, FirstIdentity),
+    Ref = make_ref(),
+    From = {self(), Ref},
+    S0 = st(#{self => SecondAuthor, id => SecondIdentity,
+              validators => [SecondAuthor], sync => ready,
+              slot => 3, approved => 3,
+              eng => quod_simplex:eng_with_certs(3, [])}),
+    {S1, _Actions} = quod_simplex:test_append(From, Base, S0),
+    [{_SubmissionId, 1, SecondSubmission, _Placement, _Deadline, _Attempts}] =
+        quod_simplex:test_custody(S1),
+    {ok, Second} = decode_submission(Ns, SecondSubmission),
+    ?assertNotEqual(First#transaction.author, Second#transaction.author),
+    ?assertEqual(First#transaction.tx_id, Second#transaction.tx_id),
+    Settled = quod_simplex:test_resolve_committed_submissions(
+                {batch, [First]}, 4, S1),
+    receive {Ref, {ok, 4}} -> ok after 0 -> ?assert(false) end,
+    ?assertEqual([], quod_simplex:test_custody(Settled)).
 
 batch_rejects_duplicate_author_sequence_without_mutation_test() ->
     Ns = <<"t">>,

@@ -131,12 +131,18 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -export_type([history_projection/0]).
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
--export([start_link/2, rebuild/1, prolog_ready/3, finalize_applied/4,
+-export([start_link/2, rebuild/1, prolog_ready/4, operation_projection/3,
+         finalize_applied/4,
          handoff_effect/3,
+         register_transaction_custody/3,
+         activate_transaction_custody/2,
+         cancel_transaction_custody/2,
          dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
          cancel_dtx_begin/3, dtx_group_barrier/3,
          dtx_endpoint_request/6, dtx_endpoint_local/3,
-         history_source/1, dtx_local_evidence/3, dtx_applied_source/2,
+         history_source/1, transaction_evidence/3,
+         operation_claim_evidence/3,
+         dtx_local_evidence/3, dtx_applied_source/2,
          dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
          acquire_proof_access/1, check_proof_access/1,
@@ -991,6 +997,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                 invalid_reason = none :: none | term(),
                 validating = none :: none | binary(),
                 validation = none :: none | content |
+                    {content_foreign, pid(), reference()} |
                     {dtx, term(), pid(), reference()} |
                     {dtx_foreign, term(), pid(), reference(),
                      quod_dtx:group_history()},
@@ -1110,6 +1117,20 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     retry_at = 0 :: integer()
 }).
 
+%% One volatile driver per still-unresolved durable singleton claim.  The map
+%% is rebuilt from Prolog's operation projection; no recovery state lives only
+%% here and completed historical operations retain no process.
+-record(operation_recovery_owner, {
+    operation_ref :: term(),
+    claim_slot :: pos_integer(),
+    claim_tx_id = none :: none | <<_:256>>,
+    target_ref :: term(),
+    request_digest :: <<_:256>>,
+    status = pending :: pending | running | blocked | settling,
+    pid = none :: none | pid(),
+    monitor = none :: none | reference()
+}).
+
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
 -record(head_progress, {slot :: slot(),
                         phase :: progress_phase(),
@@ -1141,7 +1162,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 %% relay attempts. A destination relay never creates custody and can never
 %% retarget.
 -type custody_placement() ::
-        ready
+        dormant
+      | ready
       | {local, slot(), binary()}
       | {relay, binary(), node_id(), slot(), binary()}.
 -record(custody, {waiter :: #waiter{},
@@ -1250,6 +1272,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             owner_byte_peaks = #{} :: #{atom() => non_neg_integer()},
             dtx_coordinator = none
               :: none | #dtx_coordinator_owner{},
+            operation_recoveries = #{} ::
+              #{term() => #operation_recovery_owner{}},
             history_head = none :: none | {slot(), <<_:256>>},
             next_author_seq = 1 :: pos_integer(),
             prolog_ready = false :: boolean(),
@@ -1988,6 +2012,50 @@ handoff_effect(Ns, <<_:256>> = Admission, #transaction{} = Change)
 handoff_effect(_Ns, _Admission, _Change) ->
     {error, bad_change}.
 
+-doc "Persist one exact signed transaction in dormant consensus custody.".
+-spec register_transaction_custody(binary(), <<_:256>>, #transaction{}) ->
+          {ok, <<_:256>>} |
+          {error, busy | bad_change | not_in_charge | unavailable}.
+register_transaction_custody(Ns, <<_:256>> = Admission,
+                             #transaction{} = Change)
+  when is_binary(Ns) ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {register_transaction_custody, Admission, Change}, 8000)
+    catch
+        exit:{noproc, _} -> {error, unavailable};
+        exit:_ -> {error, unavailable}
+    end;
+register_transaction_custody(_Ns, _Admission, _Change) ->
+    {error, bad_change}.
+
+-doc "Activate an exact dormant transaction after every prerequisite is durable.".
+-spec activate_transaction_custody(binary(), <<_:256>>) ->
+          {ok, pos_integer()} |
+          {error, not_found | already_active | unavailable | outcome_unknown}.
+activate_transaction_custody(Ns, <<_:256>> = TxId) when is_binary(Ns) ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {activate_transaction_custody, TxId}, 8000)
+    catch
+        exit:{timeout, _} -> {error, outcome_unknown};
+        exit:_ -> {error, unavailable}
+    end;
+activate_transaction_custody(_Ns, _TxId) ->
+    {error, not_found}.
+
+-doc "Cancel an exact transaction only while it is still dormant.".
+-spec cancel_transaction_custody(binary(), <<_:256>>) ->
+          ok | {error, not_found | already_active | unavailable}.
+cancel_transaction_custody(Ns, <<_:256>> = TxId) when is_binary(Ns) ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {cancel_transaction_custody, TxId}, 8000)
+    catch exit:_ -> {error, unavailable}
+    end;
+cancel_transaction_custody(_Ns, _TxId) ->
+    {error, not_found}.
+
 -ifdef(TEST).
 -doc """
 Submit a change. Blocks until the block commits (`{ok, Slot}`); at N=1 that is its own fsync. A change
@@ -2039,16 +2107,26 @@ unknown_append_outcome(OutcomeRef) ->
 -spec rebuild(binary()) -> ok.
 rebuild(Ns) -> gen_statem:cast(quod_reg:via({quod_simplex, Ns}), rebuild).
 
--doc "Acknowledge that the current Prolog owner processed its ready marker at `Height`.".
--spec prolog_ready(binary(), pid(), non_neg_integer()) -> ok.
-prolog_ready(Ns, PrologPid, Height)
+-doc "Acknowledge Prolog readiness with its exact unresolved-operation projection.".
+-spec prolog_ready(binary(), pid(), non_neg_integer(), [map()]) -> ok.
+prolog_ready(Ns, PrologPid, Height, Unresolved)
   when is_binary(Ns), is_pid(PrologPid),
-       is_integer(Height), Height >= 0 ->
+       is_integer(Height), Height >= 0, is_list(Unresolved) ->
     case quod_reg:where({quod_simplex, Ns}) of
         undefined -> ok;
         SimplexPid ->
-            gen_statem:cast(SimplexPid, {prolog_ready, PrologPid, Height})
+            gen_statem:cast(
+              SimplexPid,
+              {prolog_ready, PrologPid, Height, Unresolved})
     end.
+
+-doc "Project one committed singleton claim/completion into recovery custody.".
+-spec operation_projection(binary(), pos_integer(), #transaction{}) -> ok.
+operation_projection(Ns, Slot, #transaction{} = Change)
+  when is_binary(Ns), is_integer(Slot), Slot > 0 ->
+    gen_statem:cast(
+      quod_reg:via({quod_simplex, Ns}),
+      {operation_projection, Slot, Change}).
 
 -doc "Open a pending apply fence after the exact finalized plan is durably visible.".
 -spec finalize_applied(binary(), <<_:256>>, pos_integer(), non_neg_integer()) -> ok.
@@ -2201,6 +2279,109 @@ history_source({Ns, <<_:256>>} = Identity) when is_binary(Ns), byte_size(Ns) > 0
 history_source(_Identity) ->
     {error, invalid_identity}.
 
+-doc "Return the exact signed transaction and certified reference at a known slot.".
+-spec transaction_evidence(binary(), pos_integer(), <<_:256>>) ->
+          {ok, quod_dtx:certified_ref(), #transaction{}} |
+          {error, not_ready | not_found | invalid_request}.
+transaction_evidence(Ns, Slot, <<_:256>> = TxId)
+  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Slot), Slot > 0 ->
+    case genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            Identity = {Ns, Anchor},
+            case history_source(Identity) of
+                {ok, Root} ->
+                    transaction_evidence_at(
+                      Ns, Root, Identity, Slot, TxId);
+                {error, _} = Error -> Error
+            end;
+        _ -> {error, not_ready}
+    end;
+transaction_evidence(_Ns, _Slot, _TxId) ->
+    {error, invalid_request}.
+
+-doc "Return the exact certified claim at its projected first slot.".
+-spec operation_claim_evidence(binary(), pos_integer(), term()) ->
+          {ok, quod_dtx:certified_ref(), #transaction{}} |
+          {error, not_ready | not_found | invalid_request}.
+operation_claim_evidence(Ns, Slot, OperationRef)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(Slot), Slot > 0 ->
+    case genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            Identity = {Ns, Anchor},
+            case history_source(Identity) of
+                {ok, Root} ->
+                    operation_claim_evidence_at(
+                      Ns, Root, Identity, Slot, OperationRef);
+                {error, _} = Error -> Error
+            end;
+        _ ->
+            {error, not_ready}
+    end;
+operation_claim_evidence(_Ns, _Slot, _OperationRef) ->
+    {error, invalid_request}.
+
+operation_claim_evidence_at(Ns, Root, Identity, Slot, OperationRef) ->
+    case quod_ledger_store:open_ro(Ns, Root) of
+        {ok, Store} ->
+            try
+                case quod_ledger_store:read_at(Store, Slot) of
+                    {ok, #entry{data = {batch, Transactions}} = Entry} ->
+                        operation_claim_in_entry(
+                          Identity, Entry, Transactions, OperationRef);
+                    _ ->
+                        {error, not_found}
+                end
+            after quod_ledger_store:close(Store)
+            end;
+        _ ->
+            {error, not_ready}
+    end.
+
+operation_claim_in_entry(Identity, Entry, Transactions, OperationRef) ->
+    Matches =
+        [Claim || #transaction{role = {remote_claim, _, _, _}} = Claim
+                      <- Transactions,
+                  operation_ref_matches(Claim, OperationRef)],
+    case Matches of
+        [Claim] ->
+            case quod_dtx:certified_entry_ref(Identity, Entry, Claim) of
+                {ok, Ref} -> {ok, Ref, Claim};
+                _ -> {error, invalid_request}
+            end;
+        _ ->
+            {error, not_found}
+    end.
+
+operation_ref_matches(Claim, OperationRef) ->
+    case quod_transaction:request_claim(Claim) of
+        {ok, #{operation_ref := OperationRef}} -> true;
+        _ -> false
+    end.
+
+transaction_evidence_at(Ns, Root, Identity, Slot, TxId) ->
+    case quod_ledger_store:open_ro(Ns, Root) of
+        {ok, Store} ->
+            try
+                case quod_ledger_store:read_at(Store, Slot) of
+                    {ok, #entry{data = {batch, Transactions}} = Entry} ->
+                        case [T || #transaction{tx_id = Id} = T <- Transactions,
+                                   Id =:= TxId] of
+                            [Transaction] ->
+                                case quod_dtx:certified_entry_ref(
+                                       Identity, Entry, Transaction) of
+                                    {ok, Ref} -> {ok, Ref, Transaction};
+                                    _ -> {error, invalid_request}
+                                end;
+                            _ -> {error, not_found}
+                        end;
+                    _ -> {error, not_found}
+                end
+            after quod_ledger_store:close(Store)
+            end;
+        _ -> {error, not_ready}
+    end.
+
 dtx_outcome_result(_OutcomeRef, {ok, Status}) when is_map(Status) ->
     {ok, Status};
 dtx_outcome_result(
@@ -2209,9 +2390,10 @@ dtx_outcome_result(
 dtx_outcome_result(OutcomeRef, {error, _}) ->
     {error, {outcome_unknown, OutcomeRef}}.
 
--doc "Verify one exact certified DTX reference in the owning local ledger.".
+-doc "Verify one exact certified ledger reference in the owning local ledger.".
 -spec dtx_local_evidence(binary(), quod_dtx:certified_ref(),
-                         'begin' | prepare | decision | finalize | complete) ->
+                         transaction | 'begin' | prepare | decision |
+                         finalize | complete) ->
           {ok, map()} |
           {error, not_ready | not_found | invalid_request}.
 dtx_local_evidence(Ns, Ref, ExpectedPhase)
@@ -2499,26 +2681,26 @@ init_store(Ns, Cfg, Id) ->
     end.
 
 restore_signing_state(S = #s{signing_journal = Journal}) ->
-    restore_pending_effects(
+    restore_pending_transactions(
       restore_pending_dtx(
         S#s{rounds = signing_rounds(Journal)}, Journal), Journal).
 
 -ifdef(TEST).
-restore_pending_effects(S, memory) -> S;
-restore_pending_effects(S, Journal) ->
-    restore_pending_effects_journal(S, Journal).
+restore_pending_transactions(S, memory) -> S;
+restore_pending_transactions(S, Journal) ->
+    restore_pending_transactions_journal(S, Journal).
 -else.
-restore_pending_effects(S, Journal) ->
-    restore_pending_effects_journal(S, Journal).
+restore_pending_transactions(S, Journal) ->
+    restore_pending_transactions_journal(S, Journal).
 -endif.
 
-restore_pending_effects_journal(S0, Journal) ->
+restore_pending_transactions_journal(S0, Journal) ->
     maps:fold(
-      fun(TxId, Row, S) -> restore_pending_effect(TxId, Row, S) end,
-      S0, quod_signing_journal:pending_effects(Journal)).
+      fun(TxId, Row, S) -> restore_pending_transaction(TxId, Row, S) end,
+      S0, quod_signing_journal:pending_transactions(Journal)).
 
-restore_pending_effect(
-  TxId, #{sequence := Sequence, envelope := Envelope},
+restore_pending_transaction(
+  TxId, #{sequence := Sequence, state := State, envelope := Envelope},
   S = #s{self = Self, custody = Custody,
          custody_ready = Ready, custody_deadlines = Deadlines,
          custody_bytes = Bytes0}) ->
@@ -2527,30 +2709,60 @@ restore_pending_effect(
         {ok, TargetBinding} ->
             case quod_transaction:decode_verified_submission(
                    TargetBinding, Submission) of
-                {ok, #transaction{tx_id = TxId, author_seq = Sequence,
-                                  effects = [_]} = Change} ->
+                {ok, #transaction{tx_id = TxId,
+                                  author_seq = Sequence} = Change} ->
                     SubmissionId = quod_transaction:submission_id(Submission),
                     Bytes = byte_size(Envelope),
                     Deadline = ?MAX_SLOT,
-                    Waiter = #waiter{reply_to = {effect_custody, TxId},
+                    Waiter = #waiter{
+                               reply_to = {transaction_custody, TxId},
                                      submission_id = SubmissionId,
                                      trace_ctx = otel_ctx:new(),
                                      trace_span = undefined},
+                    Placement = case State of
+                                    dormant -> dormant;
+                                    %% A fsynced bound row proves target
+                                    %% preparation completed. Recovery may
+                                    %% therefore resume consensus directly.
+                                    bound -> ready;
+                                    ready -> ready
+                                end,
                     Record = #custody{waiter = Waiter, change = Change,
                                       submission = Submission,
                                       original_arrival = quod_time:mono_ms(),
-                                      deadline = Deadline, bytes = Bytes},
+                                      deadline = Deadline,
+                                      placement = Placement,
+                                      bytes = Bytes},
+                    ok = maybe_start_dormant_operation_recovery(
+                           State, S#s.ns, Change, Submission),
                     S#s{custody = Custody#{SubmissionId => Record},
-                        custody_ready = gb_sets:add_element(
-                                          {Sequence, SubmissionId}, Ready),
+                        custody_ready = case Placement of
+                            ready ->
+                                gb_sets:add_element(
+                                       {Sequence, SubmissionId}, Ready);
+                            dormant -> Ready
+                        end,
                         custody_deadlines = gb_sets:add_element(
                                               {Deadline, SubmissionId},
                                               Deadlines),
                         custody_bytes = Bytes0 + Bytes};
-                _ -> error({signing_journal_bad_effect, TxId})
+                _ -> error({signing_journal_bad_transaction, TxId})
             end;
-        error -> error({signing_journal_effect_not_in_charge, TxId})
+        error -> error({signing_journal_transaction_not_in_charge, TxId})
     end.
+
+maybe_start_dormant_operation_recovery(
+  dormant, Ns, #transaction{} = Change, Submission) ->
+    case quod_dtx_coordinator:start_dormant_operation_monitor(
+           self(), Ns, Change, custody_cancel_token(Submission)) of
+        {ok, _Pid} -> ok;
+        %% Older/direct custody rows are not operation claims and need no
+        %% remote cancellation owner.
+        {error, invalid_operation_claim} -> ok;
+        {error, Reason} -> error({dormant_operation_recovery, Reason})
+    end;
+maybe_start_dormant_operation_recovery(_State, _Ns, _Change, _Submission) ->
+    ok.
 
 -ifdef(TEST).
 signing_rounds(memory) -> #{};
@@ -2656,8 +2868,9 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
     {ok, PhaseIndex} = quod_dtx_phase_index:open(ScratchRoot, Ns),
     Projection0 = seed_pending_begin(
                     Journal0, history_projection(Binding)),
-    PendingEffects0 = quod_signing_journal:pending_effects(Journal0),
-    {Projection, UncommittedEffects} =
+    PendingTransactions0 =
+        quod_signing_journal:pending_transactions(Journal0),
+    {Projection, UncommittedTransactions} =
         try
             quod_ledger_store:fold(
               Store, 1, Last,
@@ -2666,16 +2879,16 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
                          Binding, E, Acc, PhaseIndex),
                        remove_committed_effect_ids(Data, PendingEffects)}
               end,
-              {Projection0, PendingEffects0})
+              {Projection0, PendingTransactions0})
         after
             _ = quod_dtx_phase_index:close(PhaseIndex)
         end,
     S1 = install_projection(Projection, S0#s{slot = Last}),
     {ok, Journal1} = reconcile_signing_journal(
                        Last, Projection, Journal0),
-    Journal2 = retire_recovered_effects(
-                 PendingEffects0, UncommittedEffects, Journal1),
-    S2 = reconcile_effect_signing_custody(
+    Journal2 = retire_recovered_transactions(
+                 PendingTransactions0, UncommittedTransactions, Journal1),
+    S2 = reconcile_transaction_signing_custody(
            S1#s{signing_journal = Journal2}),
     finalize_restored_storage(S2, Anchor, S2#s.signing_journal).
 
@@ -2683,21 +2896,22 @@ remove_committed_effect_ids(Data, Pending) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             lists:foldl(
-              fun(#transaction{tx_id = TxId, effects = [_]}, Acc) ->
+              fun(#transaction{tx_id = TxId}, Acc) ->
                       maps:remove(TxId, Acc);
                  (_, Acc) -> Acc
               end, Pending, Transactions);
         _ -> Pending
     end.
 
-retire_recovered_effects(Before, After, Journal0) ->
+retire_recovered_transactions(Before, After, Journal0) ->
     maps:fold(
       fun(TxId, _Row, Journal) ->
               case maps:is_key(TxId, After) of
                   true -> Journal;
                   false ->
                       {ok, Journal1} =
-                          quod_signing_journal:retire_effect(Journal, TxId),
+                          quod_signing_journal:retire_transaction(
+                            Journal, TxId),
                       Journal1
               end
       end, Journal0, Before).
@@ -3029,6 +3243,31 @@ running_impl({call, From}, {handoff_effect, Admission, Change}, S0) ->
     end;
 running_impl(
   {call, From},
+  {register_transaction_custody, Admission, Change}, S0) ->
+    case register_dormant_transaction(Admission, Change, S0) of
+        {ok, CancelToken, S1} ->
+            keep_progress(S0, S1, [{reply, From, {ok, CancelToken}}]);
+        {error, Reason, S1} ->
+            {keep_state, S1, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  {call, From}, {activate_transaction_custody, TxId}, S0) ->
+    case activate_dormant_transaction(TxId, From, S0) of
+        {ok, S1} ->
+            keep_progress(S0, S1, []);
+        {error, Reason, S1} ->
+            {keep_state, S1, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  {call, From}, {cancel_transaction_custody, TxId}, S0) ->
+    case cancel_dormant_transaction(TxId, S0) of
+        {ok, S1} ->
+            {keep_state, S1, [{reply, From, ok}]};
+        {error, Reason, S1} ->
+            {keep_state, S1, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  {call, From},
   {dtx_endpoint_request, TargetNs, PeerKey, Endpoint, Request, TimeoutMs},
   S0) ->
     case start_dtx_endpoint_request(
@@ -3101,19 +3340,25 @@ running_impl(cast, rebuild, S0) ->
 %% and only at the exact committed height it actually consumed.  A stale
 %% owner or an acknowledgement overtaken by a newer commit is inert.
 running_impl(
-  cast, {prolog_ready, PrologPid, Height},
+  cast, {prolog_ready, PrologPid, Height, Unresolved},
   S0 = #s{ns = Ns, slot = Height, last_applied = Height,
           sync = ready, prolog_ready = false})
-  when is_pid(PrologPid), is_integer(Height), Height >= 0 ->
+  when is_pid(PrologPid), is_integer(Height), Height >= 0,
+       is_list(Unresolved) ->
     case quod_reg:where({quod_prolog, Ns}) of
         PrologPid ->
-            S1 = refresh_proof_gate(S0, S0#s{prolog_ready = true}),
+            SProjected = install_operation_snapshot(Unresolved, S0),
+            S1 = refresh_proof_gate(
+                   S0, SProjected#s{prolog_ready = true}),
             keep_progress(S0, S1, []);
         _Other ->
             {keep_state, S0}
     end;
-running_impl(cast, {prolog_ready, _PrologPid, _Height}, S) ->
+running_impl(cast, {prolog_ready, _PrologPid, _Height, _Unresolved}, S) ->
     {keep_state, S};
+running_impl(cast, {operation_projection, Slot, Change}, S0) ->
+    S1 = apply_operation_projection(Slot, Change, S0),
+    keep_progress(S0, S1, []);
 %% Prolog emits this only after the finalized plan's outcome index has been
 %% flushed and its MVCC revision published.  Stale and duplicate exact events
 %% leave both state and the protected row untouched.
@@ -3216,6 +3461,24 @@ running_impl(
            Pid, GroupId, BeginRef, Result, S0),
     keep_progress(S0, S1, []);
 running_impl(
+  info,
+  {dtx_coordinator, Pid,
+   {operation, _, _, _, _} = OperationRef, {done, OperationRef}},
+  S0) ->
+    case settle_operation_recovery(Pid, OperationRef, S0) of
+        {true, S1} -> keep_progress(S0, S1, []);
+        false -> {keep_state, S0}
+    end;
+running_impl(
+  info,
+  {dtx_coordinator, Pid,
+   {operation, _, _, _, _} = OperationRef, {error, Reason}},
+  S0) ->
+    case block_operation_recovery(Pid, OperationRef, Reason, S0) of
+        {true, S1} -> keep_progress(S0, S1, []);
+        false -> {keep_state, S0}
+    end;
+running_impl(
   info, {dtx_coordinator, Pid, GroupId, {progress, Phase}},
   S = #s{dtx_coordinator =
            #dtx_coordinator_owner{
@@ -3266,6 +3529,11 @@ running_impl(
     keep_progress(S0, S1, []);
 running_impl(
   info,
+  {content_foreign_verdict, {Sl, BH}, WorkerPid, Verdict}, S0) ->
+    S1 = on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict, S0),
+    keep_progress(S0, S1, []);
+running_impl(
+  info,
   {dtx_foreign_verdict, {Sl, BH, ParentToken}, WorkerPid, Verdict}, S0) ->
     S1 = on_dtx_foreign_verdict(
            Sl, BH, ParentToken, WorkerPid, Verdict, S0),
@@ -3295,21 +3563,30 @@ running_impl(
 running_impl(info, {'DOWN', _Ref, process, Pid, _Reason}, S0 = #s{sync = {pulling, Pid}}) ->
     keep_progress(S0, recovery_failed(S0), []);
 running_impl(info, {'DOWN', Ref, process, Pid, Reason}, S0) ->
-    case drop_dtx_coordinator_owner(Ref, Pid, Reason, S0) of
+    case drop_operation_recovery_owner(Ref, Pid, Reason, S0) of
         {true, S1} ->
             keep_progress(S0, S1, []);
         false ->
-            case drop_dtx_endpoint_owner(Ref, Pid, worker_down, S0) of
-                {true, S1, Actions} ->
-                    keep_progress(S0, S1, Actions);
+            case drop_dtx_coordinator_owner(Ref, Pid, Reason, S0) of
+                {true, S1} ->
+                    keep_progress(S0, S1, []);
                 false ->
-                    case drop_dtx_admission_monitor(Ref, Pid, S0) of
-                        {true, S1} -> keep_progress(S0, S1, []);
+                    case drop_dtx_endpoint_owner(
+                           Ref, Pid, worker_down, S0) of
+                        {true, S1, Actions} ->
+                            keep_progress(S0, S1, Actions);
                         false ->
-                            case drop_dtx_validation_monitor(Ref, Pid, S0) of
+                            case drop_dtx_admission_monitor(Ref, Pid, S0) of
                                 {true, S1} -> keep_progress(S0, S1, []);
                                 false ->
-                                    keep_progress(S0, drop_link(Pid, S0), [])
+                                    case drop_dtx_validation_monitor(
+                                           Ref, Pid, S0) of
+                                        {true, S1} ->
+                                            keep_progress(S0, S1, []);
+                                        false ->
+                                            keep_progress(
+                                              S0, drop_link(Pid, S0), [])
+                                    end
                             end
                     end
             end
@@ -3699,6 +3976,207 @@ drop_dtx_admission_monitor(
     {true, S#s{dtx_admission = none}};
 drop_dtx_admission_monitor(_Ref, _Pid, _S) ->
     false.
+
+apply_operation_projection(
+  Slot,
+  #transaction{tx_id = ClaimTxId,
+               role = {remote_claim, _Manifest,
+                       {{TargetNs, <<_:256>> = TargetAnchor}, _PlanDigest,
+                        _PlanBlob, _Attestation},
+                       <<_:256>> = TargetTxId}} = Claim,
+  S = #s{ns = Ns, operation_recoveries = Recoveries}) ->
+    case quod_transaction:request_claim(Claim) of
+        {ok, #{operation_ref := OperationRef,
+               digest := <<_:256>> = Digest}} ->
+            TargetRef = {transaction, TargetNs, TargetAnchor, TargetTxId},
+            Owner = #operation_recovery_owner{
+                       operation_ref = OperationRef,
+                       claim_slot = Slot, claim_tx_id = ClaimTxId,
+                       target_ref = TargetRef, request_digest = Digest},
+            case maps:get(OperationRef, Recoveries, undefined) of
+                undefined ->
+                    S#s{operation_recoveries = Recoveries#{
+                          OperationRef => Owner}};
+                #operation_recovery_owner{
+                   claim_slot = Slot, claim_tx_id = ClaimTxId,
+                   target_ref = TargetRef, request_digest = Digest} ->
+                    S;
+                _Conflict ->
+                    error({operation_recovery_conflict, Ns, OperationRef})
+            end;
+        _ ->
+            error({invalid_operation_projection, Ns, Slot})
+    end;
+apply_operation_projection(
+  _Slot,
+  #transaction{role = {remote_complete, OperationRef, _, _}},
+  S = #s{operation_recoveries = Recoveries}) ->
+    case maps:take(OperationRef, Recoveries) of
+        {Owner, Rest} ->
+            stop_operation_recovery_process(Owner),
+            S#s{operation_recoveries = Rest};
+        error ->
+            S
+    end;
+apply_operation_projection(_Slot, #transaction{}, S) ->
+    S.
+
+install_operation_snapshot(Rows, S = #s{ns = Ns}) ->
+    Desired = lists:foldl(
+                fun(Row, Acc) ->
+                    Owner = operation_owner_from_row(Ns, Row),
+                    OperationRef = Owner#operation_recovery_owner.operation_ref,
+                    Acc#{OperationRef => Owner}
+                end, #{}, Rows),
+    install_operation_desired(Desired, S).
+
+operation_owner_from_row(
+  Ns,
+  #{type := operation,
+    ref := {operation, Ns, <<_:256>>, _AgentRef, <<_:256>>} = OperationRef,
+    request_digest := <<_:256>> = Digest,
+    outcome_ref := {transaction, _TargetNs, <<_:256>>, <<_:256>>} = TargetRef,
+    first_slot := Slot, state := unresolved})
+  when is_integer(Slot), Slot > 0 ->
+    #operation_recovery_owner{
+       operation_ref = OperationRef, claim_slot = Slot,
+       target_ref = TargetRef, request_digest = Digest};
+operation_owner_from_row(Ns, Row) ->
+    error({invalid_unresolved_operation_projection, Ns, Row}).
+
+install_operation_desired(
+  Desired0, S = #s{operation_recoveries = Existing}) ->
+    Desired = maps:map(
+                fun(OperationRef, Owner) ->
+                    case maps:get(OperationRef, Existing, undefined) of
+                        #operation_recovery_owner{
+                           claim_slot = Slot, target_ref = TargetRef,
+                           request_digest = Digest} = Current
+                          when Slot =:= Owner#operation_recovery_owner.claim_slot,
+                               TargetRef =:= Owner#operation_recovery_owner.target_ref,
+                               Digest =:= Owner#operation_recovery_owner.request_digest ->
+                            Current;
+                        undefined ->
+                            Owner;
+                        _ ->
+                            error({operation_recovery_snapshot_conflict,
+                                   OperationRef})
+                    end
+                end, Desired0),
+    maps:foreach(
+      fun(OperationRef, Owner) ->
+          case maps:is_key(OperationRef, Desired) of
+              true -> ok;
+              false -> stop_operation_recovery_process(Owner)
+          end
+      end, Existing),
+    S#s{operation_recoveries = Desired}.
+
+reconcile_operation_recoveries(
+  S = #s{sync = ready, prolog_ready = true,
+         operation_recoveries = Recoveries}) ->
+    Recoveries1 = maps:map(
+                    fun(_Ref, Owner) ->
+                        start_operation_recovery(Owner, S)
+                    end, Recoveries),
+    S#s{operation_recoveries = Recoveries1};
+reconcile_operation_recoveries(S) ->
+    S.
+
+start_operation_recovery(
+  Owner = #operation_recovery_owner{
+            status = pending, claim_slot = ClaimSlot,
+            operation_ref = OperationRef},
+  #s{ns = Ns}) ->
+    case quod_dtx_coordinator:start_operation_monitor(
+           self(), Ns, ClaimSlot, OperationRef, #{}) of
+        {ok, Pid, Monitor} ->
+            Owner#operation_recovery_owner{
+              status = running, pid = Pid, monitor = Monitor};
+        {error, Reason} ->
+            logger:error(
+              "quod[~s]: operation recovery start failed for ~p: ~p",
+              [Ns, OperationRef, Reason]),
+            Owner#operation_recovery_owner{status = blocked}
+    end;
+start_operation_recovery(Owner, _S) ->
+    Owner.
+
+settle_operation_recovery(
+  Pid, OperationRef,
+  S = #s{operation_recoveries = Recoveries}) ->
+    case maps:get(OperationRef, Recoveries, undefined) of
+        Owner = #operation_recovery_owner{
+                  status = running, pid = Pid, monitor = Monitor} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            {true,
+             S#s{operation_recoveries = Recoveries#{
+                   OperationRef => Owner#operation_recovery_owner{
+                     status = settling, pid = none, monitor = none}}}};
+        _ -> false
+    end.
+
+block_operation_recovery(
+  Pid, OperationRef, Reason,
+  S = #s{ns = Ns, operation_recoveries = Recoveries}) ->
+    case maps:get(OperationRef, Recoveries, undefined) of
+        Owner = #operation_recovery_owner{
+                  status = running, pid = Pid, monitor = Monitor} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            logger:error(
+              "quod[~ts]: durable remote operation ~p blocked: ~p",
+              [Ns, OperationRef, Reason]),
+            {true,
+             S#s{operation_recoveries = Recoveries#{
+                   OperationRef => Owner#operation_recovery_owner{
+                     status = blocked, pid = none, monitor = none}}}};
+        _ -> false
+    end.
+
+drop_operation_recovery_owner(
+  Monitor, Pid, Reason,
+  S = #s{operation_recoveries = Recoveries}) ->
+    Matches =
+        [{OperationRef, Owner}
+         || {OperationRef,
+             #operation_recovery_owner{pid = OwnerPid,
+                                       monitor = OwnerMonitor} = Owner}
+                <- maps:to_list(Recoveries),
+            OwnerPid =:= Pid, OwnerMonitor =:= Monitor],
+    case Matches of
+        [{OperationRef, Owner}] ->
+            Status = case Reason of normal -> settling; _ -> blocked end,
+            {true,
+             S#s{operation_recoveries = Recoveries#{
+                   OperationRef => Owner#operation_recovery_owner{
+                     status = Status, pid = none, monitor = none}}}};
+        [] -> false
+    end.
+
+wake_operation_recoveries(
+  S = #s{operation_recoveries = Recoveries}) ->
+    Recoveries1 = maps:map(
+                    fun(OperationRef,
+                        Owner = #operation_recovery_owner{
+                                  status = running, pid = Pid}) ->
+                            Pid ! {operation_wake, OperationRef},
+                            Owner;
+                       (_OperationRef,
+                        Owner = #operation_recovery_owner{status = blocked}) ->
+                            Owner#operation_recovery_owner{status = pending};
+                       (_OperationRef, Owner) ->
+                            Owner
+                    end, Recoveries),
+    S#s{operation_recoveries = Recoveries1}.
+
+stop_operation_recovery_process(
+  #operation_recovery_owner{pid = Pid, monitor = Monitor})
+  when is_pid(Pid), is_reference(Monitor) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    exit(Pid, shutdown),
+    ok;
+stop_operation_recovery_process(_Owner) ->
+    ok.
 
 %% Recovery coordination is volatile but its source is not: before Begin
 %% commits the signing journal owns the exact semantic record, and afterwards
@@ -4231,8 +4709,24 @@ start_dtx_endpoint_operation(Peer, Destination,
     start_dtx_submit_owner(
       Peer, Destination, Request, TimeoutMs, S);
 start_dtx_endpoint_operation(Peer, Destination, Request, TimeoutMs, S) ->
+    ok = observe_operation_source_candidate(
+           Request, Peer, target_identity(S)),
     {ok, start_dtx_server_worker(
            Peer, Destination, Request, TimeoutMs, S)}.
+
+observe_operation_source_candidate(
+  {apply_claim, _RequestId, EvidenceBlob},
+  {<<_:256>> = Peer, Endpoint}, TargetIdentity) ->
+    case quod_transaction:decode_evidence(EvidenceBlob) of
+        {ok, _Ref, #transaction{origin = Identity,
+                                role = {remote_claim, _, _, _}}}
+          when Identity =/= TargetIdentity ->
+            quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint});
+        _ ->
+            ok
+    end;
+observe_operation_source_candidate(_Request, _Peer, _TargetIdentity) ->
+    ok.
 
 %% Decode and retain a submit in the owning statem turn.  The helper process
 %% owns only the caller deadline; it never calls back into Simplex.
@@ -4300,7 +4794,7 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     {Pid, Monitor} = spawn_monitor(
                        fun() ->
                            run_dtx_endpoint_worker(
-                             Parent, Ns, Request,
+                             Parent, Ns, Peer, Request,
                              quod_time:mono_ms() + TimeoutMs)
                        end),
     Worker = #dtx_server_worker{
@@ -4310,15 +4804,16 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
                started_at = quod_time:mono_ms()},
     S#s{dtx_workers = Workers#{Pid => Worker}}.
 
-run_dtx_endpoint_worker(Parent, Ns, Request, Deadline) ->
+run_dtx_endpoint_worker(Parent, Ns, Peer, Request, Deadline) ->
     Remaining = max(1, Deadline - quod_time:mono_ms()),
-    Result = execute_dtx_endpoint_request(Ns, Request, Remaining),
+    Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining),
     case waiting_applied_key(Request, Result) of
         {wait, Key} ->
             Remaining1 = max(0, Deadline - quod_time:mono_ms()),
             receive
                 {dtx_finalize_applied, Key} ->
-                    run_dtx_endpoint_worker(Parent, Ns, Request, Deadline)
+                    run_dtx_endpoint_worker(
+                      Parent, Ns, Peer, Request, Deadline)
             after Remaining1 ->
                 Parent ! {dtx_endpoint_worker_result,
                           self(), {error, timeout}}
@@ -4443,6 +4938,10 @@ endpoint_read_ready(_S) ->
 
 dtx_endpoint_operation_ready({submit, _, _}, S) ->
     endpoint_write_ready(S);
+dtx_endpoint_operation_ready({apply_claim, _, _}, S) ->
+    endpoint_write_ready(S);
+dtx_endpoint_operation_ready({cancel_operation_effect, _, _, _, _}, S) ->
+    endpoint_read_ready(S);
 dtx_endpoint_operation_ready({phase, _, _, _}, S) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready({outcome, _, _, _, _}, S) ->
@@ -4455,21 +4954,34 @@ dtx_endpoint_operation_ready(_, _S) ->
     false.
 
 execute_dtx_endpoint_request(
-  Ns, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs) ->
+  Ns, _Peer, {apply_claim, _RequestId, EvidenceBlob}, TimeoutMs) ->
+    execute_claimed_application(Ns, EvidenceBlob, TimeoutMs);
+execute_dtx_endpoint_request(
+  _Ns, _Peer,
+  {cancel_operation_effect, _RequestId, ClaimRef, TargetRef, CancelToken},
+  _TimeoutMs) ->
+    case quod_effect_journal:cancel_operation(
+           ClaimRef, TargetRef, CancelToken) of
+        cancelled -> {operation_effect_cancelled, cancelled};
+        not_found -> {operation_effect_cancelled, not_found};
+        {error, _} -> {error, invalid_request}
+    end;
+execute_dtx_endpoint_request(
+  Ns, _Peer, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs) ->
     case quod_prolog:dtx_group_state(Ns, GroupId) of
         {ok, State} -> {phase_state, State};
         {error, _} -> {error, not_ready}
     end;
 execute_dtx_endpoint_request(
-  Ns, {outcome, _RequestId, OutcomeRef, _CommitteeId,
+  Ns, _Peer, {outcome, _RequestId, OutcomeRef, _CommitteeId,
        _MinimumSlot}, _TimeoutMs) ->
     execute_outcome_snapshot(Ns, OutcomeRef);
 execute_dtx_endpoint_request(
-  Ns, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
+  Ns, _Peer, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
        _MinimumSlot}, _TimeoutMs) ->
     execute_outcome_snapshot(Ns, GroupRef);
 execute_dtx_endpoint_request(
-  Ns, {applied, _RequestId, GroupId, FinalizeRef,
+  Ns, _Peer, {applied, _RequestId, GroupId, FinalizeRef,
        _Generation, _Verdict}, _TimeoutMs) ->
     case dtx_local_evidence(Ns, FinalizeRef, finalize) of
         {ok, Evidence} ->
@@ -4482,6 +4994,145 @@ execute_dtx_endpoint_request(
         {error, not_found} ->
             {error, not_found};
         {error, not_ready} ->
+            {error, not_ready}
+    end.
+
+execute_claimed_application(Ns, EvidenceBlob, TimeoutMs) ->
+    Started = erlang:monotonic_time(),
+    case quod_transaction:decode_evidence(EvidenceBlob) of
+        {ok, CertifiedClaimRef,
+         #transaction{role = {remote_claim, _, _, _}} = Claim} ->
+            try
+                ClaimRef = quod_transaction:stable_ref(CertifiedClaimRef),
+                {transaction, _, _, _} = ClaimRef,
+                Application0 = quod_transaction:remote_application(
+                                 ClaimRef, Claim),
+                Application = quod_transaction:attach_evidence(
+                                Application0, CertifiedClaimRef, Claim),
+                ok = quod_metrics:observe_remote_operation_stage(
+                       Ns, claim_verification, ok,
+                       erlang:monotonic_time() - Started),
+                claimed_application_result(
+                  Ns, ClaimRef, Claim, Application, TimeoutMs)
+            catch _:_ ->
+                ok = quod_metrics:observe_remote_operation_stage(
+                       Ns, claim_verification, failed,
+                       erlang:monotonic_time() - Started),
+                {error, invalid_request}
+            end;
+        _ ->
+            ok = quod_metrics:observe_remote_operation_stage(
+                   Ns, claim_verification, failed,
+                   erlang:monotonic_time() - Started),
+            {error, invalid_request}
+    end.
+
+claimed_application_result(
+  Ns, _ClaimRef, _Claim,
+  #transaction{tx_id = TxId, effects = []} = Application, TimeoutMs) ->
+    case genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            TargetRef = {transaction, Ns, Anchor, TxId},
+            Submission = quod_prolog:submit_role(
+                           Ns, Application, [], TimeoutMs),
+            claimed_application_outcome(
+              Ns, TargetRef, TxId, Submission);
+        _ ->
+            {error, not_ready}
+    end;
+claimed_application_result(
+  Ns, ClaimRef, Claim,
+  Application0 = #transaction{tx_id = TxId, effects = [Effect]}, TimeoutMs) ->
+    case {genesis_hash(Ns), current_application_signer(Ns, Claim)} of
+        {<<_:256>> = Anchor, {ok, Self, _Admission}} ->
+            case Self =:= quod_effect:executor(Effect) of
+                true ->
+                    TargetRef = {transaction, Ns, Anchor, TxId},
+                    Application = Application0#transaction{
+                                    author = Self,
+                                    submitted_at = quod_time:now_ms()},
+                    case quod_effect_journal:bind_operation_transaction(
+                           ClaimRef, TargetRef, Application) of
+                        {ok, EffectId} ->
+                            claimed_effect_application(
+                              Ns, TargetRef, TxId, EffectId, TimeoutMs);
+                        {error, Reason} ->
+                            logger:warning(
+                              "quod[~ts]: operation effect binding failed: ~p",
+                              [Ns, Reason]),
+                            {error, not_ready}
+                    end;
+                false ->
+                    {error, not_ready}
+            end;
+        _ ->
+            %% Only the node that sealed the target plan owns its prepared
+            %% private effect. Route walking will try that exact validator.
+            {error, not_ready}
+    end;
+claimed_application_result(_Ns, _ClaimRef, _Claim, _Application, _TimeoutMs) ->
+    {error, invalid_request}.
+
+current_application_signer(
+  Ns,
+  #transaction{role = {remote_claim, _Manifest,
+                       {_Target, _PlanDigest, PlanBlob, _Attestation},
+                       _TargetTxId}}) ->
+    case {quod_dtx:decode(PlanBlob), dtx_binding(Ns)} of
+        {{ok, Plan}, {ok, {Ns, _Anchor, Self, Admission}}} ->
+            case quod_dtx:signer(Plan) of
+                Self -> {ok, Self, Admission};
+                _ -> error
+            end;
+        _ -> error
+    end.
+
+claimed_effect_application(
+  Ns, TargetRef, TxId, EffectId, TimeoutMs) ->
+    case quod_effect_journal:handoff(EffectId) of
+        ok ->
+            Await = quod_effect_journal:await(EffectId, TimeoutMs),
+            claimed_application_outcome(
+              Ns, TargetRef, TxId,
+              case Await of
+                  ok -> {error, committed_outcome_lookup};
+                  {error, Reason} -> {error, Reason}
+              end);
+        {error, not_in_charge} ->
+            {error, not_ready};
+        {error, _} ->
+            %% The durable row remains recoverable by the journal. A caller
+            %% timeout is uncertainty, never permission to resubmit a new T.
+            {error, not_ready}
+    end.
+
+claimed_application_outcome(
+  Ns, _TargetRef, TxId, {ok, _Bindings, Slot, TxId}) ->
+    claimed_application_evidence(Ns, Slot, TxId, committed);
+claimed_application_outcome(Ns, TargetRef, TxId, {error, _Reason}) ->
+    case quod_prolog:local_outcome(Ns, TargetRef) of
+        {ok, #{status := committed, height := Slot}} ->
+            claimed_application_evidence(Ns, Slot, TxId, committed);
+        {ok, #{status := rejected, reason := Reason, height := Slot}}
+          when is_atom(Reason) ->
+            claimed_application_evidence(
+              Ns, Slot, TxId, {rejected, Reason});
+        _ ->
+            {error, not_ready}
+    end;
+claimed_application_outcome(_Ns, _TargetRef, _TxId, _Other) ->
+    {error, not_ready}.
+
+claimed_application_evidence(Ns, Slot, TxId, Result) ->
+    case transaction_evidence(Ns, Slot, TxId) of
+        {ok, Ref, Transaction} ->
+            case quod_transaction:encode_evidence(Ref, Transaction) of
+                {ok, EvidenceBlob} ->
+                    {application_result, Result, EvidenceBlob};
+                {error, _} ->
+                    {error, not_ready}
+            end;
+        {error, _} ->
             {error, not_ready}
     end.
 
@@ -4514,10 +5165,29 @@ finish_dtx_server_worker(
             observe_simplex_owner_terminal(
               S, dtx_endpoint, inbound,
               dtx_worker_terminal_result(Result, Response), StartedAt),
-            deliver_dtx_endpoint_response(Destination, Response, S1);
+            FlushStarted = erlang:monotonic_time(),
+            Delivered = deliver_dtx_endpoint_response(
+                          Destination, Response, S1),
+            ok = observe_operation_response_flush(
+                   Request, Response, S1#s.ns, FlushStarted),
+            Delivered;
         error ->
             {S, []}
     end.
+
+observe_operation_response_flush(
+  {apply_claim, _, _}, {application, _, committed, _}, Ns, Started) ->
+    quod_metrics:observe_remote_operation_stage(
+      Ns, response_flush, ok, erlang:monotonic_time() - Started);
+observe_operation_response_flush(
+  {apply_claim, _, _}, {application, _, {rejected, _}, _}, Ns, Started) ->
+    quod_metrics:observe_remote_operation_stage(
+      Ns, response_flush, rejected, erlang:monotonic_time() - Started);
+observe_operation_response_flush(
+  {apply_claim, _, _}, _Response, Ns, Started) ->
+    quod_metrics:observe_remote_operation_stage(
+      Ns, response_flush, failed, erlang:monotonic_time() - Started);
+observe_operation_response_flush(_Request, _Response, _Ns, _Started) -> ok.
 
 dtx_endpoint_result_response(
   {submit, RequestId, RecordBlob}, {submit_result, Digest, Result}, S) ->
@@ -4546,6 +5216,14 @@ dtx_endpoint_result_response(
         {error, _} ->
             {error, RequestId, not_ready}
     end;
+dtx_endpoint_result_response(
+  {apply_claim, RequestId, _ClaimEvidence},
+  {application_result, Result, TargetEvidence}, _S) ->
+    {application, RequestId, Result, TargetEvidence};
+dtx_endpoint_result_response(
+  {cancel_operation_effect, RequestId, _ClaimRef, _TargetRef, _Token},
+  {operation_effect_cancelled, Status}, _S) ->
+    {operation_effect_cancelled, RequestId, Status};
 dtx_endpoint_result_response(
   {phase, RequestId, GroupId, Kind}, {phase_state, State}, S) ->
     phase_endpoint_response(RequestId, GroupId, Kind, State, S);
@@ -5564,6 +6242,138 @@ proposal_visible(Next, S = #s{eng = #eng{tree = Tree}}) ->
 %% custody-owned before the proof worker is allowed to continue.  This is one
 %% idempotent hand-off: an exact retained semantic transaction is success, and
 %% a different continuous admission can never re-sign it.
+register_dormant_transaction(
+  <<_:256>> = ExpectedAdmission,
+  #transaction{tx_id = <<_:256>> = TxId,
+               author_seq = 0, sig = none} = Change,
+  S = #s{self = Self, custody = Custody,
+         custody_bytes = CustodyBytes}) ->
+    case {current_dtx_binding(S),
+          find_transaction_custody(TxId, Change, Custody)} of
+        {{ok, {_Ns, _Anchor, Self, ExpectedAdmission}},
+         {ok, SubmissionId}} ->
+            {ok, custody_cancel_token(
+                   maps:get(SubmissionId, Custody)), S};
+        {{ok, {_Ns, _Anchor, Self, ExpectedAdmission}}, not_found} ->
+            case local_change_acceptable(Change, S) andalso
+                 map_size(Custody) < ?MAX_CUSTODY andalso
+                 CustodyBytes + ?MAX_BLOCK_BYTES + 1024 =<
+                     ?MAX_CUSTODY_BYTES of
+                false -> {error, busy, S};
+                true -> sign_and_retain_dormant(Change, S)
+            end;
+        {{ok, {_Ns, _Anchor, Self, _OtherAdmission}}, _} ->
+            {error, not_in_charge, S};
+        _ ->
+            {error, not_in_charge, S}
+    end;
+register_dormant_transaction(_Admission, _Change, S) ->
+    {error, bad_change, S}.
+
+sign_and_retain_dormant(Change, S0) ->
+    case sign_local_change(Change, S0) of
+        {ok, Signed, Submission, S1} ->
+            {ok, Journal1} = quod_signing_journal:record_transaction(
+                               S1#s.signing_journal,
+                               Signed, Submission, dormant),
+            SubmissionId = quod_transaction:submission_id(Submission),
+            Envelope = term_to_binary(Submission, [deterministic]),
+            Bytes = byte_size(Envelope),
+            TxId = Signed#transaction.tx_id,
+            Waiter = #waiter{
+                       reply_to = {transaction_custody, TxId},
+                       submission_id = SubmissionId,
+                       trace_ctx = otel_ctx:new(), trace_span = undefined},
+            Record = #custody{
+                       waiter = Waiter, change = Signed,
+                       submission = Submission,
+                       original_arrival = quod_time:mono_ms(),
+                       deadline = ?MAX_SLOT, placement = dormant,
+                       bytes = Bytes},
+            {ok, custody_cancel_token(Submission),
+             S1#s{signing_journal = Journal1,
+                  custody = (S1#s.custody)#{SubmissionId => Record},
+                  custody_deadlines = gb_sets:add_element(
+                                        {?MAX_SLOT, SubmissionId},
+                                        S1#s.custody_deadlines),
+                  custody_bytes = S1#s.custody_bytes + Bytes}};
+        {error, _} ->
+            {error, bad_change, S0}
+    end.
+
+custody_cancel_token(#custody{submission = Submission}) ->
+    custody_cancel_token(Submission);
+custody_cancel_token({submit, _Author, Signature, _Body})
+  when is_binary(Signature), byte_size(Signature) =:= 64 ->
+    crypto:hash(sha256, <<"quod.operation.cancel.v1", Signature/binary>>).
+
+activate_dormant_transaction(
+  TxId, From, S = #s{custody = Custody,
+               custody_ready = Ready,
+               signing_journal = Journal0}) ->
+    case transaction_custody_by_id(TxId, Custody) of
+        {ok, SubmissionId,
+         Record = #custody{placement = dormant, change = Change,
+                           waiter = Waiter0}} ->
+            %% `bound` is fsynced before activation. A crash between these
+            %% two records restores the exact transaction into the ready
+            %% queue; it can never forget that the target prerequisite was
+            %% durable and can never activate a merely registered intent.
+            {ok, JournalBound} = quod_signing_journal:bind_transaction(
+                                   Journal0, TxId),
+            {ok, Journal1} = quod_signing_journal:activate_transaction(
+                               JournalBound, TxId),
+            ReadyKey = {Change#transaction.author_seq, SubmissionId},
+            Waiter = Waiter0#waiter{reply_to = From},
+            {ok,
+             S#s{signing_journal = Journal1,
+                 custody = Custody#{SubmissionId =>
+                    Record#custody{placement = ready, waiter = Waiter}},
+                 custody_ready = gb_sets:add_element(ReadyKey, Ready)}};
+        {ok, _SubmissionId, #custody{placement = ready}} ->
+            {error, already_active, S};
+        {ok, _SubmissionId, #custody{}} ->
+            {error, already_active, S};
+        not_found ->
+            {error, not_found, S}
+    end.
+
+cancel_dormant_transaction(
+  TxId, S = #s{custody = Custody, signing_journal = Journal0}) ->
+    case transaction_custody_by_id(TxId, Custody) of
+        {ok, SubmissionId, #custody{placement = dormant}} ->
+            S1 = complete_custody(
+                   SubmissionId, {error, cancelled}, S),
+            {ok, Journal1} = quod_signing_journal:retire_transaction(
+                               Journal0, TxId),
+            {ok, S1#s{signing_journal = Journal1}};
+        {ok, _SubmissionId, #custody{}} ->
+            {error, already_active, S};
+        not_found ->
+            {error, not_found, S}
+    end.
+
+transaction_custody_by_id(TxId, Custody) ->
+    case [{SubmissionId, Record}
+          || {SubmissionId,
+              #custody{change = #transaction{tx_id = RowTxId}} = Record}
+                 <- maps:to_list(Custody),
+             RowTxId =:= TxId] of
+        [{SubmissionId, Record}] -> {ok, SubmissionId, Record};
+        [] -> not_found;
+        _ -> error({transaction_custody_conflict, TxId})
+    end.
+
+find_transaction_custody(TxId, Expected, Custody) ->
+    case transaction_custody_by_id(TxId, Custody) of
+        {ok, SubmissionId, #custody{change = Change}} ->
+            case unsigned_envelope(Change) =:= Expected of
+                true -> {ok, SubmissionId};
+                false -> error(transaction_custody_conflict)
+            end;
+        not_found -> not_found
+    end.
+
 handoff_effect_change(
   <<_:256>> = ExpectedAdmission,
   #transaction{tx_id = <<_:256>> = TxId, effects = [_],
@@ -5661,8 +6471,9 @@ sign_local_change(#transaction{author = Self, sig = none} = Change,
                              S#s{next_author_seq = Seq + 1}};
                         [_Effect] ->
                             {ok, Journal1} =
-                                quod_signing_journal:record_effect(
-                                  S#s.signing_journal, Signed, Submission),
+                                quod_signing_journal:record_transaction(
+                                  S#s.signing_journal, Signed, Submission,
+                                  ready),
                             {ok, Signed, Submission,
                              S#s{next_author_seq = Seq + 1,
                                  signing_journal = Journal1}}
@@ -6411,7 +7222,7 @@ collect_append(From, Change, _Membership, Slot,
     case {maps:is_key(TxId, TxIds),
           classify_operation_claim(Change, OperationClaims)} of
         {true, _} ->
-            reject_append(From, bad_change, S);
+            retain_transaction_alias(From, S);
         {false, error} ->
             reject_append(From, bad_change, S);
         {false, {conflict, _OperationRef}} ->
@@ -6487,6 +7298,19 @@ retain_operation_alias(
     reply_now(Waiter, {error, not_in_charge, none}, S);
 retain_operation_alias(From, OperationRef, S) ->
     reply_now(From, {error, {outcome_unknown, OperationRef}}, S).
+
+%% A semantic transaction id excludes the validator author envelope. If two
+%% target validators submit the same T, the first envelope is the sole ledger
+%% item and every other validator keeps its own durable custody until that T is
+%% observed in committed history. No validator is selected as a special owner.
+retain_transaction_alias(
+  #waiter{reply_to = {custody, _SubmissionId}}, S) ->
+    {S, []};
+retain_transaction_alias(
+  #waiter{reply_to = {relay, #relay_ref{}}}, S) ->
+    {S, []};
+retain_transaction_alias(From, S) ->
+    reject_append(From, bad_change, S).
 
 advance_transaction_sequence(
   #transaction{author = Author, author_seq = Seq},
@@ -6833,25 +7657,38 @@ persist_entry(Store, Entry, Slot, S) ->
 
 resolve_committed_submissions(Payload, Slot, S) ->
     Included = payload_submission_ids(Payload),
+    TransactionIds = payload_transaction_ids(Payload),
     OperationClaims = payload_operation_claims(Payload),
-    retire_committed_effect_custody(
-      payload_effect_transaction_ids(Payload),
+    retire_committed_transaction_custody(
+      TransactionIds,
       resolve_committed_relays(
       Included, Slot,
       resolve_committed_custody(
-        Included, OperationClaims, Slot, S))).
+        Included, TransactionIds, OperationClaims, Slot, S))).
 
-retire_committed_effect_custody(Included,
+-ifdef(TEST).
+retire_committed_transaction_custody(_Included,
+                                     S = #s{signing_journal = memory}) ->
+    S;
+retire_committed_transaction_custody(Included,
                                 S = #s{signing_journal = Journal}) ->
+    retire_committed_transaction_custody_journal(Included, Journal, S).
+-else.
+retire_committed_transaction_custody(Included,
+                                S = #s{signing_journal = Journal}) ->
+    retire_committed_transaction_custody_journal(Included, Journal, S).
+-endif.
+
+retire_committed_transaction_custody_journal(Included, Journal, S) ->
     Journal1 = maps:fold(
                  fun(TxId, _Present, AccJournal) ->
                      case maps:is_key(
                             TxId,
-                            quod_signing_journal:pending_effects(
+                            quod_signing_journal:pending_transactions(
                               AccJournal)) of
                          true ->
                              {ok, Next} =
-                                 quod_signing_journal:retire_effect(
+                                 quod_signing_journal:retire_transaction(
                                    AccJournal, TxId),
                              Next;
                          false -> AccJournal
@@ -6859,23 +7696,24 @@ retire_committed_effect_custody(Included,
                  end, Journal, Included),
     S#s{signing_journal = Journal1}.
 
-payload_effect_transaction_ids(Data) ->
+payload_transaction_ids(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             maps:from_keys(
-              [TxId
-               || #transaction{tx_id = <<_:256>> = TxId,
-                               effects = [_]} <- Transactions],
+              [TxId || #transaction{tx_id = <<_:256>> = TxId}
+                           <- Transactions],
               true);
         _ ->
             #{}
     end.
 
 resolve_committed_custody(
-  _Included, _OperationClaims, _Slot, S = #s{custody = Custody})
+  _Included, _TransactionIds, _OperationClaims, _Slot,
+  S = #s{custody = Custody})
   when map_size(Custody) =:= 0 ->
     S;
-resolve_committed_custody(Included, OperationClaims, Slot, S0) ->
+resolve_committed_custody(
+  Included, TransactionIds, OperationClaims, Slot, S0) ->
     S1 = maps:fold(
       fun(SubmissionId, _Present, Acc) ->
               complete_custody(
@@ -6883,13 +7721,19 @@ resolve_committed_custody(Included, OperationClaims, Slot, S0) ->
       end, S0, Included),
     maps:fold(
       fun(SubmissionId, #custody{change = Change}, Acc) ->
-              case committed_operation_alias(Change, OperationClaims) of
-                  {ok, OperationRef} ->
-                      complete_custody(
-                        SubmissionId,
-                        {error, {outcome_unknown, OperationRef}}, Acc);
+              case maps:is_key(Change#transaction.tx_id, TransactionIds) of
+                  true ->
+                      complete_custody(SubmissionId, {ok, Slot}, Acc);
                   false ->
-                      Acc
+                      case committed_operation_alias(
+                             Change, OperationClaims) of
+                          {ok, OperationRef} ->
+                              complete_custody(
+                                SubmissionId,
+                                {error, {outcome_unknown, OperationRef}}, Acc);
+                          false ->
+                              Acc
+                      end
               end
       end, S1, S1#s.custody).
 
@@ -7208,6 +8052,8 @@ reply_waiter(
     complete_custody(SubmissionId, Reply, S);
 reply_waiter(#waiter{reply_to = {effect_custody, _TxId}}, _Reply, S) ->
     S;
+reply_waiter(#waiter{reply_to = {transaction_custody, _TxId}}, _Reply, S) ->
+    S;
 reply_waiter(Waiter = #waiter{reply_to = ReplyTo}, Reply, S) ->
     finish_waiter_trace(Waiter, Reply),
     reply_waiter(ReplyTo, Reply, S);
@@ -7283,6 +8129,8 @@ retire_custody_placement(
                     {Lane, false} -> Lane
                 end},
     case Placement of
+        dormant ->
+            S1;
         {local, _Slot, _CommitteeId} ->
             S1;
         {relay, AttemptId, _Target, _Slot, _CommitteeId} ->
@@ -7377,19 +8225,20 @@ reconcile_signing_state_journal(
     %% definitive rather than outcome-unknown.
     ok = project_reconciled_pending_begin(Ns, Transition),
     {refresh_retained_dtx_signatures(
-       reconcile_effect_signing_custody(
+       reconcile_transaction_signing_custody(
          S#s{signing_journal = Journal1})), Transition}.
 
-reconcile_effect_signing_custody(
+reconcile_transaction_signing_custody(
   S0 = #s{signing_journal = Journal0}) ->
     ExpectedAdmission = current_effect_admission(S0),
     maps:fold(
       fun(TxId, #{admission := Admission}, S) ->
               case ExpectedAdmission of
                   Admission -> S;
-                  _ -> retire_effect_signing_custody(TxId, S)
+                  _ -> retire_transaction_signing_custody(TxId, S)
               end
-      end, S0, quod_signing_journal:pending_effects(Journal0)).
+      end, S0,
+      quod_signing_journal:pending_transactions(Journal0)).
 
 current_effect_admission(S = #s{self = Self,
                                 author_admissions = Admissions}) ->
@@ -7398,7 +8247,7 @@ current_effect_admission(S = #s{self = Self,
         _ -> none
     end.
 
-retire_effect_signing_custody(
+retire_transaction_signing_custody(
   TxId, S0 = #s{signing_journal = Journal0, custody = Custody}) ->
     SubmissionIds =
         [SubmissionId
@@ -7410,7 +8259,7 @@ retire_effect_signing_custody(
                    complete_custody(
                      SubmissionId, {error, not_in_charge, unavailable}, S)
            end, S0, SubmissionIds),
-    {ok, Journal1} = quod_signing_journal:retire_effect(
+    {ok, Journal1} = quod_signing_journal:retire_transaction(
                        Journal0, TxId),
     quod_effect_journal:retire_transaction(TxId, not_in_charge),
     S1#s{signing_journal = Journal1}.
@@ -7896,15 +8745,139 @@ support_or_validate_content(
                 false ->
                     case Round#round.validating of
                         BH -> S;
-                        _ -> _ = quod_prolog:request_content_verdict(
-                                   S#s.ns, Transactions, BlockTimestamp,
-                                   Sl, self(), {Sl, BH}),
-                             put_round(
-                               Sl,
-                               Round#round{validating = BH,
-                                           validation = content}, S)
+                        _ -> start_content_validation(
+                               Transactions, BlockTimestamp, Sl, BH, S)
                     end
             end
+    end.
+
+start_content_validation(Transactions, BlockTimestamp, Sl, BH,
+                         S = #s{ledger_root = LedgerRoot}) ->
+    case content_required_references(Transactions) of
+        {ok, []} ->
+            request_content_validation(
+              Transactions, BlockTimestamp, Sl, BH, S);
+        {ok, _References} ->
+            Owner = self(),
+            LocalIdentity = target_identity(S),
+            Worker = spawn(
+                       fun() ->
+                           Verdict = verify_content_foreign_references(
+                                       Transactions, LocalIdentity,
+                                       LedgerRoot),
+                           Owner ! {content_foreign_verdict,
+                                    {Sl, BH}, self(), Verdict}
+                       end),
+            Monitor = erlang:monitor(process, Worker),
+            Round = round_state(Sl, S),
+            put_round(
+              Sl, Round#round{validating = BH,
+                              validation = {content_foreign,
+                                            Worker, Monitor}}, S);
+        {error, _} ->
+            reject_content_candidate(Sl, BH, malformed_foreign_references, S)
+    end.
+
+request_content_validation(Transactions, BlockTimestamp, Sl, BH, S) ->
+    _ = quod_prolog:request_content_verdict(
+          S#s.ns, Transactions, BlockTimestamp, Sl, self(), {Sl, BH}),
+    Round = round_state(Sl, S),
+    put_round(Sl, Round#round{validating = BH, validation = content}, S).
+
+on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict,
+                           S = #s{approved = Approved})
+  when Sl =:= Approved + 1 ->
+    Round = round_state(Sl, S),
+    case {Round#round.validating, Round#round.validation,
+          block_for(BH, S#s.eng)} of
+        {BH, {content_foreign, WorkerPid, Monitor},
+         #block{timestamp = Timestamp,
+                payload = {batch, Transactions}}} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            S1 = put_round(
+                   Sl, Round#round{validating = none,
+                                   validation = none}, S),
+            case Verdict of
+                valid -> request_content_validation(
+                           Transactions, Timestamp, Sl, BH, S1);
+                {invalid, Reason} ->
+                    reject_content_candidate(Sl, BH, Reason, S1);
+                abstain -> S1
+            end;
+        _ -> S
+    end;
+on_content_foreign_verdict(_Sl, _BH, _WorkerPid, _Verdict, S) -> S.
+
+reject_content_candidate(Sl, BH, _Reason, S) ->
+    Round = round_state(Sl, S),
+    S1 = put_round(
+           Sl, Round#round{validating = none, validation = none,
+                           invalid = BH}, S),
+    choose_final_vote(Sl, rejected, S1).
+
+content_required_references(Transactions) when is_list(Transactions) ->
+    lists:foldl(
+      fun(_Transaction, {error, _} = Error) -> Error;
+         (Transaction, {ok, Acc}) ->
+              case quod_transaction:required_references(Transaction) of
+                  References when is_list(References) ->
+                      {ok, Acc ++ References};
+                  error -> {error, malformed_foreign_references}
+              end
+      end, {ok, []}, Transactions).
+
+verify_content_foreign_references(Transactions, LocalIdentity, LedgerRoot) ->
+    verify_content_foreign_references(
+      Transactions, LocalIdentity, LedgerRoot, #{}).
+
+verify_content_foreign_references([], _LocalIdentity, _LedgerRoot, _Seen) ->
+    valid;
+verify_content_foreign_references(
+  [#transaction{} = Transaction | Rest], LocalIdentity, LedgerRoot, Seen0) ->
+    case quod_transaction:required_references(Transaction) of
+        [] -> verify_content_foreign_references(
+                Rest, LocalIdentity, LedgerRoot, Seen0);
+        [Ref] ->
+            case maps:find(Ref, Seen0) of
+                {ok, Referenced} ->
+                    verify_content_reference_binding(
+                      Transaction, Referenced, Rest,
+                      LocalIdentity, LedgerRoot, Seen0);
+                error ->
+                    case verify_content_reference(
+                           Ref, LocalIdentity, LedgerRoot) of
+                        {valid, #{transaction := Referenced}} ->
+                            verify_content_reference_binding(
+                              Transaction, Referenced, Rest,
+                              LocalIdentity, LedgerRoot,
+                              Seen0#{Ref => Referenced});
+                        {valid, _Malformed} ->
+                            {invalid, foreign_reference};
+                        Other -> Other
+                    end
+            end;
+        _ -> {invalid, malformed_foreign_references}
+    end;
+verify_content_foreign_references(_, _LocalIdentity, _LedgerRoot, _Seen) ->
+    {invalid, malformed_foreign_references}.
+
+verify_content_reference_binding(Transaction, Referenced, Rest,
+                                 LocalIdentity, LedgerRoot, Seen) ->
+    case quod_transaction:evidence(Transaction) of
+        {_Ref, Referenced} ->
+            verify_content_foreign_references(
+              Rest, LocalIdentity, LedgerRoot, Seen);
+        _ -> {invalid, foreign_reference_binding}
+    end.
+
+verify_content_reference(Ref, LocalIdentity, LedgerRoot) ->
+    case quod_dtx:certified_ref_binding(Ref) of
+        {ok, LocalIdentity, _Slot, _Digest} ->
+            verify_local_dtx_reference(
+              Ref, transaction, LocalIdentity, LedgerRoot);
+        {ok, ForeignIdentity, _Slot, _Digest} ->
+            verify_remote_dtx_reference(Ref, transaction, ForeignIdentity);
+        error -> {invalid, malformed_foreign_reference}
     end.
 
 support_or_validate_dtx(Control, Block, Sl, BH, S) ->
@@ -8241,6 +9214,7 @@ local_history_source(
     end.
 
 valid_dtx_phase('begin') -> true;
+valid_dtx_phase(transaction) -> true;
 valid_dtx_phase(prepare) -> true;
 valid_dtx_phase(decision) -> true;
 valid_dtx_phase(finalize) -> true;
@@ -8253,6 +9227,25 @@ read_local_dtx_evidence(Store, Ref, ExpectedPhase, Identity) ->
             case quod_ledger_store:read_at(Store, Slot) of
                 {ok, #entry{data = Payload} = Entry} ->
                     case quod_ledger:classify(Payload) of
+                        {content, Transactions}
+                          when ExpectedPhase =:= transaction ->
+                            case [T || #transaction{tx_id = TxId} = T
+                                           <- Transactions,
+                                       TxId =:= Digest] of
+                                [Transaction] ->
+                                    case quod_dtx:certified_entry_ref(
+                                           Identity, Entry, Transaction) of
+                                        {ok, Ref} ->
+                                            {ok, #{identity => Identity,
+                                                   slot => Slot,
+                                                   record_digest => Digest,
+                                                   phase => transaction,
+                                                   transaction => Transaction,
+                                                   ref => Ref}};
+                                        _ -> {error, invalid_reference}
+                                    end;
+                                _ -> {error, invalid_reference}
+                            end;
                         {ExpectedPhase, Control} ->
                             case quod_dtx:certified_entry_ref(
                                    Identity, Entry, Control) of
@@ -8284,6 +9277,9 @@ verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}) ->
             verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor);
         _LocalSimplex ->
             case dtx_local_evidence(Ns, Ref, Phase) of
+                {ok, #{transaction := _Transaction} = Evidence}
+                  when Phase =:= transaction ->
+                    {valid, Evidence};
                 {ok, #{control := _Control} = Evidence} ->
                     {valid, Evidence};
                 {ok, _MalformedEvidence} ->
@@ -8311,6 +9307,8 @@ verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor) ->
 
 verify_remote_dtx_reference_result(Result) ->
     case Result of
+        {ok, #{transaction := _Transaction} = Evidence} ->
+            {valid, Evidence};
         {ok, #{control := _Control} = Evidence} ->
             {valid, Evidence};
         {ok, _MalformedEvidence} ->
@@ -8435,6 +9433,9 @@ release_dtx_validation_round(Round) ->
                 dtx_parent = none}.
 
 release_validation_monitor(
+  #round{validation = {content_foreign, _Pid, Monitor}}) ->
+    erlang:demonitor(Monitor, [flush]);
+release_validation_monitor(
   #round{validation = {dtx, _Token, _Pid, Monitor}}) ->
     erlang:demonitor(Monitor, [flush]);
 release_validation_monitor(
@@ -8485,6 +9486,9 @@ drop_dtx_validation_monitor(Ref, Pid, S = #s{rounds = Rounds}) ->
     end.
 
 dtx_validation_monitor(#round{validation = {dtx, _Token, Pid, Ref}}) ->
+    {Pid, Ref};
+dtx_validation_monitor(
+  #round{validation = {content_foreign, Pid, Ref}}) ->
     {Pid, Ref};
 dtx_validation_monitor(
   #round{validation = {dtx_foreign, _Token, Pid, Ref, _History}}) ->
@@ -8665,16 +9669,25 @@ keep_progress(S0, S1, Actions) ->
 keep_progress(S0, S1, Actions, TimerMode) ->
     ActionsRev0 = lists:reverse(Actions),
     BeforeIngress = (refresh_ingress_view(S0))#s.ingress,
-    SReady = timed_step(S1, readiness,
-                        fun() -> settle_readiness(S0, maybe_mark_ready(S1)) end),
+    SWoken = case S1#s.slot > S0#s.slot of
+                 true -> wake_operation_recoveries(S1);
+                 false -> S1
+             end,
+    SReady = timed_step(SWoken, readiness,
+                        fun() -> settle_readiness(
+                                   S0, maybe_mark_ready(SWoken)) end),
     SRecovered = timed_step(SReady, reconcile,
                             fun() -> reconcile_block_requests(SReady) end),
     SCoordinated = timed_step(
                      SRecovered, dtx_coordinator,
                      fun() -> reconcile_dtx_coordinator(SRecovered) end),
+    SOperations = timed_step(
+                    SCoordinated, operation_recovery,
+                    fun() -> reconcile_operation_recoveries(
+                               SCoordinated) end),
     SClassified = timed_step(
-                    SCoordinated, dtx_reclassify,
-                    fun() -> refresh_retained_readiness(SCoordinated) end),
+                    SOperations, dtx_reclassify,
+                    fun() -> refresh_retained_readiness(SOperations) end),
     SDtx = timed_step(SClassified, dtx_drive,
                       fun() -> drive_retained_dtx(SClassified) end),
     {SAdmitted, ActionsRevAdmission} =
@@ -11412,7 +12425,7 @@ apply_catchup_window(
             %% the same semantic-TxId path.  Otherwise a later restart can
             %% restore and re-drive an effect transaction already present in
             %% this certified window.
-            Recovered3 = retire_committed_effect_custody(
+            Recovered3 = retire_committed_transaction_custody(
                            entry_effect_transaction_ids(Es), Recovered2),
             Recovered =
                 settle_recovery_relays(Slot, Included, Recovered3),
@@ -11454,7 +12467,7 @@ committed_submission_slots(Entries) ->
 entry_effect_transaction_ids(Entries) ->
     lists:foldl(
       fun(#entry{data = Data}, Acc) ->
-              maps:merge(Acc, payload_effect_transaction_ids(Data))
+              maps:merge(Acc, payload_transaction_ids(Data))
       end, #{}, Entries).
 
 settle_recovery_dtx(Entries, S) ->

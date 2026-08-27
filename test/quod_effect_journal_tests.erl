@@ -636,7 +636,7 @@ fixture(State) ->
                                  sig = none}),
     TxId = Transaction#transaction.tx_id,
     Ref = {transaction, ?ROOT_NS, Anchor, TxId},
-    Row = {quod_effect_row, 3, quod_effect:effect_id(Effect), Effect,
+    Row = {quod_effect_row, 4, quod_effect:effect_id(Effect), Effect,
            ActionBytes, DesiredBytes, PreparedBytes,
            term_to_binary(Transaction, [deterministic]), Ref, Admission,
            State, 0, none},
@@ -693,7 +693,7 @@ write_snapshot(Dir, Row) ->
     Path = filename:join(Dir, "direct_effects.qej"),
     ok = filelib:ensure_dir(Path),
     Payload = term_to_binary(
-                {quod_effect_journal, 4, 64, Rows}, [deterministic]),
+                {quod_effect_journal, 5, 64, Rows}, [deterministic]),
     Digest = crypto:hash(sha256, Payload),
     Bytes = <<?MAGIC:32/unsigned-big,
               (byte_size(Payload)):32/unsigned-big,

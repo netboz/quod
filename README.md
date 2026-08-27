@@ -73,6 +73,11 @@ authors but never replace target `can_invoke/4` authorization. Signed goals use
 the deployed generic anchored agent principal: the canonical
 `agent_instance_ref/3` identifies the actor, and its containing ontology proves
 the active signing key.
+For a signed write with one foreign material target, the agent ontology first
+commits a batchable operation claim, the target commits one ordinary
+application under its normal ACL/OCC path, and the agent ontology records the
+completion asynchronously. Only two or more material/read-dependent targets
+use the five-record atomic DTX protocol.
 The canonical consensus signature contract is
 [`doc/consensus-signatures.md`](doc/consensus-signatures.md).
 
@@ -143,7 +148,7 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.86
+TAG=0.7.96
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
@@ -240,8 +245,9 @@ anchored rolling update.
   ontologies, engine-local external-predicate ownership, explicit durable
   ontology subscriptions, shared certified foreign projections, local and
   subscribed `react_on/3` dispatch, explicit `trigger_event/1`, durable effects
-  in ordinary and multi-ontology transactions, metrics, and durable
+  in ordinary and multi-ontology transactions, the source-claimed batchable
+  remote-singleton transaction path, metrics, and durable
   Docker/Nomad deployment.
-- **Next:** continue the reviewed transaction-latency and security-chain work
-  in `doc/dtx-latency-optimization-plan.md`. Physical-node identity Slices 2--4
+- **Next:** measure and optimize only the remaining genuine multi-target DTX
+  work in `doc/dtx-latency-optimization-plan.md`. Physical-node identity Slices 2--4
   and ontology-backed hosted-agent/FIPA delivery remain planned work.

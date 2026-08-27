@@ -24,8 +24,6 @@ all_normalized_results_roundtrip_test() ->
          {committed, [BindingBlob], TxRef},
          {committed, [BindingBlob],
           {group_outcome, GroupRef, 9, Slots}},
-         {committed, [BindingBlob],
-          {group_outcome, GroupRef, 9, [hd(Slots)]}},
          {pending, TxRef}, {pending, GroupRef}, {pending, OperationRef},
          {error, read_only}, {error, target_unavailable},
          {error, ontology_rebuilding}, {error, ontology_busy},

@@ -23,6 +23,13 @@ incompatible generation has no compatibility decoder; any fleet still carrying
 an older generation must activate it through the documented clean re-found
 procedure.
 
+The current coordinated generation extends that same projection with
+batchable `remote_claim` and `remote_complete` metadata. A signed write with
+one foreign material target is no longer a one-participant DTX group: it is a
+source claim followed by the target's ordinary application. The historical
+Slice-3 one-participant wording below is retained only where explicitly
+labelled.
+
 > **Architecture correction.** This document records the implemented signed
 > request whose principal was labelled `{user, Key}`. That retired label is
 > retained below only where the earlier delivery history is being described.
@@ -471,15 +478,16 @@ material can become visible:
 - a read creates no durable claim;
 - a write whose sole material participant is the origin uses its ordinary
   transaction as the claim;
-- any write with foreign material uses a DTX Begin on the origin, even when
-  there is only one material participant and that participant is foreign;
-- the DTX participant lower bound therefore becomes one for signed requests;
-- the existing direct foreign-only ordinary submission is not used for signed
-  writes, because it would leave no authoritative origin claim.
+- a write with exactly one foreign material target commits a batchable
+  `remote_claim` in the origin, then one ordinary `remote_application` in the
+  target; a batchable `remote_complete` in the origin later marks the claim
+  terminal; and
+- two or more material/read-dependent targets use a DTX Begin and the atomic
+  group protocol.
 
-That foreign-only case deliberately adds the origin Begin round trip. It is the
-cost of recording the agent's operation before a foreign diff can become
-visible, and must not later be removed as a performance optimization.
+The claim fixes the exact target transaction before any foreign diff can
+become visible. It preserves the authoritative origin operation record without
+misclassifying a one-target write as a distributed atomic group.
 
 This is not an ontology fact and does not accumulate user data in the origin
 KB. It is ledger/control metadata, like the existing transaction and DTX
@@ -647,7 +655,9 @@ The deployed 0.7.71 protocol uses transaction V7, semantic transaction ID V3,
 plan V4, scope wire V3, and DTX V1 records. Signed writes are a separate future
 hard break. They are not part of the already-deployed lifecycle-effects break.
 
-Implementation uses one coordinated protocol generation:
+The following list records the **historical Slice-3 format break**, not the
+current accepted format. That implementation used one coordinated protocol
+generation:
 
 - transaction V7 becomes V8 and semantic ID V3 becomes V4; the fixed V8 tuple
   grows from arity 16 to arity 18 and carries both `request_auth` and the
@@ -658,8 +668,10 @@ Implementation uses one coordinated protocol generation:
 - DTX Manifest V1 becomes V2, all DTX records and controls become V2, and Begin
   carries the one full `request_auth` plus the one top-level authorization
   entry; the Manifest and plans carry the request digest;
-- signed DTX groups permit one participant so a foreign-only write still has
-  an authoritative Begin on the origin;
+- signed DTX groups temporarily permitted one participant so a foreign-only
+  write still had an authoritative Begin on the origin; the current generation
+  replaces that temporary shape with `remote_claim`, `remote_application`, and
+  `remote_complete`, and restores the DTX minimum to two participants;
 - scope wire V3 becomes V4 and binds the principal plus authentication-context
   digest;
 - the origin operation projection and operation outcome reference land in the
@@ -736,7 +748,7 @@ An internet-facing client listener should explicitly configure a
 is unauthenticated. On a trusted network, the bounded challenge and session
 tables are the default capacity protection.
 
-### Slice 3: durable request and operation binding
+### Historical Slice 3: durable request and operation binding
 
 - Land the coordinated format break described above.
 - Verify request evidence independently during proposal validation, ordered
@@ -746,7 +758,8 @@ tables are the default capacity protection.
 - Add the shared origin operation projection for ordinary transactions and DTX
   Begins, with exact first-claim, alias, conflict, pending, and uncertain rules.
 - Route a signed foreign-only write through an origin Begin with one DTX
-  participant rather than the existing direct foreign ordinary optimization.
+  participant rather than the then-existing direct foreign ordinary
+  optimization. This historical route is deleted in the current generation.
 - Render user request identity, signature, operation reference, and first
   outcome in Explorer.
 - Test two gateways racing the same request; ordinary-versus-Begin races; a
@@ -816,13 +829,14 @@ it never fell through to the old node-principal behavior.
 - Persist the signed request and operation ID until its anchored outcome is
   definite; a lost response must not depend on browser memory.
 
-Current closure uses the one scope V5 path for local, co-hosted, and remote
+Current closure uses the one scope path for local, co-hosted, and remote
 targets. Scope-open authentication contains the exact signed request, stable
 agent principal, and proof-scoped identity certificate. Each target verifies
 identity and then runs its own ordinary `can_invoke/4` proof. Every sealed plan
-binds the same request digest, while the origin Begin carries the complete
-request and operation claim once. A foreign-only material write uses the same
-origin-Begin protocol even when it has one participant.
+binds the same request digest. A foreign-only material write commits the
+complete request and operation claim once as `remote_claim` in the origin,
+then uses the target's ordinary `remote_application`; two or more targets carry
+the request once in the origin Begin.
 
 Root-network identity unavailability is one typed retry result shared by live
 preview, replay, catch-up, and foreign-history verification. It is not a

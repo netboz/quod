@@ -63,6 +63,7 @@ const asHistory = (t: LedgerRow): LiveLedgerRow => {
   plan_digest: null,
   signature: null,
   signature_status: 'unknown',
+  evidence_ref: null,
   ...t,
   status: 'history',
   cert: null,
@@ -120,7 +121,12 @@ function addBlock(ns: string, block: Block) {
   const fresh: LiveLedgerRow[] = block.kind === 'content'
     ? block.txs
         .filter((t) => !have.has(t.row_id))
-        .map((t): LiveTx => ({ ...t, status: 'pending', cert: block.cert, live: true }))
+        .map((t): LiveTx => ({
+          ...t,
+          status: t.role === 'remote_claim' || t.role === 'remote_complete' ? 'history' : 'pending',
+          cert: block.cert,
+          live: true,
+        }))
     : block.control && isDtxPhase(block.kind)
       ? [{
           row_type: 'control',

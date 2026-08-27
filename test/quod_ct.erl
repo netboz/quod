@@ -22,6 +22,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
+         remote_operation_fixture/1,
          signed_agent_facts/1,
          with_network_identity/2,
          wait_until/1, wait_until/2]).
@@ -189,9 +190,9 @@ with_network_identity(<<_:256>> = Network, Fun) when is_function(Fun, 0) ->
         end
     end.
 
-%% A one-participant signed Begin built through the real proof/plan/manifest
-%% constructors.  Consumers can therefore test the foreign-only group shape
-%% without forging protocol tuples or opening the disabled public write path.
+%% A signed Begin built through the real proof/plan/manifest constructors.
+%% Real multi-participant DTX tests reuse it; remote-operation tests derive the
+%% one sealed target plan before the planner selects the ordinary claim path.
 signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
     Request = signed_goal_fixture(Overrides),
     Origin = {Ns, Anchor} = maps:get(target, Request),
@@ -261,6 +262,7 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
             Request#{node_identity => NodeIdentity, admission => Admission,
                      participant_target => Target, proof_id => ProofId,
                      plan => Plan, plan_blob => PlanBlob,
+                     attestation => Attestation,
                      manifest => Manifest,
                      'begin' => Begin,
                      begin_control => Control},
@@ -286,6 +288,51 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
     after
         quod_proof_session:stop(Session)
     end.
+
+%% One complete source-claim/target-application/source-receipt family.  The
+%% certified references are structurally valid test evidence; tests of actual
+%% certificate verification build committed entries through Simplex instead.
+remote_operation_fixture(Overrides) when is_map(Overrides) ->
+    Origin = maps:get(target, Overrides,
+                      {<<"quod:remote-origin">>, <<211:256>>}),
+    Target = maps:get(participant_target, Overrides,
+                      {<<"quod:remote-target">>, <<212:256>>}),
+    Fixture = signed_dtx_begin_fixture(
+                Overrides#{target => Origin, participant_target => Target}),
+    Plan = maps:get(plan, Fixture),
+    Bundle = {Target, quod_dtx:digest(Plan), maps:get(plan_blob, Fixture),
+              maps:get(attestation, Fixture)},
+    Claim = quod_transaction:remote_claim(
+              Origin, maps:get(manifest, Fixture), Bundle,
+              maps:get(auth, Fixture)),
+    {OriginNs, OriginAnchor} = Origin,
+    ClaimRef = {transaction, OriginNs, OriginAnchor,
+                Claim#transaction.tx_id},
+    {ok, CertifiedClaimRef} = quod_dtx:certified_ref(
+                                OriginNs, OriginAnchor, 2, <<213:256>>,
+                                Claim#transaction.tx_id, <<"claim-qc">>),
+    Application0 = quod_transaction:remote_application(ClaimRef, Claim),
+    Application = quod_transaction:attach_evidence(
+                    Application0, CertifiedClaimRef, Claim),
+    {TargetNs, TargetAnchor} = Target,
+    TargetRef = {transaction, TargetNs, TargetAnchor,
+                 Application#transaction.tx_id},
+    {ok, CertifiedTargetRef} = quod_dtx:certified_ref(
+                                 TargetNs, TargetAnchor, 3, <<214:256>>,
+                                 Application#transaction.tx_id, <<"target-qc">>),
+    {ok, ClaimData} = quod_transaction:request_claim(Claim),
+    Completion0 = quod_transaction:remote_complete(
+                    Origin, maps:get(operation_ref, ClaimData),
+                    maps:get(digest, ClaimData), TargetRef),
+    Completion = quod_transaction:attach_evidence(
+                   Completion0, CertifiedTargetRef, Application),
+    Fixture#{origin => Origin, participant_target => Target,
+             claim => Claim, claim_ref => ClaimRef,
+             certified_claim_ref => CertifiedClaimRef,
+             application => Application,
+             target_ref => TargetRef,
+             certified_target_ref => CertifiedTargetRef,
+             completion => Completion}.
 
 dtx_fixture_plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
     Session =

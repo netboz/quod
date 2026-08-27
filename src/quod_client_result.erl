@@ -267,7 +267,7 @@ valid_operation_ref(_) -> false.
 valid_participant_slots(Slots) ->
     valid_participant_slots(Slots, none, 0).
 
-valid_participant_slots([], _Previous, Count) -> Count >= 1;
+valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots(
   [{{Ns, <<_:256>>} = Identity, Slot, Generation} | Rest], Previous, Count)
   when is_binary(Ns), byte_size(Ns) > 0,

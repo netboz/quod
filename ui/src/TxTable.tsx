@@ -68,6 +68,29 @@ export function TxTable({
             </div>
           )
         }
+        if (row.role !== 'application') {
+          const target = row.role_details && 'target_transaction' in row.role_details
+            ? row.role_details.target_transaction.ns
+            : row.role_details && 'source_claim' in row.role_details
+              ? row.ns
+              : 'invalid target'
+          const label = {
+            remote_claim: 'remote operation claim',
+            remote_application: 'remote application',
+            remote_complete: 'remote operation completed',
+          }[row.role]
+          return (
+            <div className="max-w-[26rem]">
+              <span className="block truncate font-mono text-[13px] text-teal">{label}</span>
+              <span className="mt-0.5 block font-mono text-[11px] text-gray">
+                {target}
+              </span>
+              {row.role === 'remote_application' && row.goal && (
+                <span className="mt-0.5 block truncate font-mono text-[11px] text-gray">{row.goal}</span>
+              )}
+            </div>
+          )
+        }
         return (
           <div className="max-w-[26rem]">
             <span className="block truncate font-mono text-[13px] text-teal">

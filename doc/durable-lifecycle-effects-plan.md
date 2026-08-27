@@ -356,12 +356,17 @@ The exact `TransactionRef` is checkpointed before submission. From then on an
 engine crash or timeout returns `{outcome_unknown, TransactionRef}`; it never
 prepares a new effect or re-proves the request automatically.
 
-### 6.3 Signed-submission and DTX custody
+### 6.3 Signed-submission, remote-operation, and DTX custody
 
-The local effect journal owns preparation. On the ordinary one-participant
-path, Simplex must durably own every signed byte it exposes. The existing
-signing journal therefore holds the pending effect transaction keyed by
-`TxId`; it applies no duplicate effect-specific count. One row contains:
+The local effect journal owns preparation. On a local ordinary path, Simplex
+must durably own every signed byte it exposes. On a signed one-target foreign
+path, the source first registers the exact `remote_claim` as dormant custody,
+then the target journal binds its private effect to that predicted claim and
+application transaction; only after the binding acknowledges may the source
+activate the claim. A real multi-target write keeps the equivalent existing
+DTX register-before-bind hand-off. These are roles of the same signing and
+effect journals, not separate executors or effect counts. One Simplex custody
+row contains:
 
 ```text
 continuous AuthorAdmission

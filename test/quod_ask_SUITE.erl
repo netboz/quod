@@ -401,16 +401,18 @@ remote_signed_gateway_read_execute_cursor(Config) ->
                                          maps:get(expires_ms, Session),
                                          execute,
                                          <<"\"animals\"::", ExecuteText/binary>>),
-    ?assertMatch(
-       {ok, _,
-        {normalized,
-         {committed, [_], {group_outcome, {group, ?ASKER_NS,
-                                            AgentAnchor, _, _, _},
-                                           _, [_]}}}},
-       peer:call(
-         Asker, quod_client_goal_ingress, submit,
-         [execute, maps:get(session_id, Session), ExecuteBytes,
-          ExecuteSignature, Peer], 60000)),
+    {ok, ExecuteEvidence,
+     {normalized,
+      {committed, [_],
+       {transaction, ?NS, TargetAnchor, _} = ExecuteTargetRef}}} =
+        peer:call(
+          Asker, quod_client_goal_ingress, submit,
+          [execute, maps:get(session_id, Session), ExecuteBytes,
+           ExecuteSignature, Peer], 60000),
+    ?assertEqual(
+       ExecuteTargetRef,
+       completed_remote_operation(
+         Asker, maps:get(operation_ref, ExecuteEvidence), 600)),
     assert_fact_once(Target, ?NS, gateway_mark, Tag),
 
     CursorText =
@@ -435,15 +437,17 @@ remote_signed_gateway_read_execute_cursor(Config) ->
           [maps:get(session_id, Session), CursorId, next, Peer], 60000),
     ?assertEqual({ok, [{<<"D">>, meat}]},
                  quod_durable_term:decode_result(SecondBlob)),
-    ?assertMatch(
-       {ok, CursorEvidence,
-        {normalized,
-         {committed, [_], {group_outcome, {group, ?ASKER_NS,
-                                            AgentAnchor, _, _, _},
-                                           _, [_]}}}},
-       peer:call(
-         Asker, quod_client_goal_ingress, cursor_command,
-         [maps:get(session_id, Session), CursorId, accept, Peer], 60000)),
+    {ok, CursorEvidence,
+     {normalized,
+      {committed, [_],
+       {transaction, ?NS, TargetAnchor, _} = CursorTargetRef}}} =
+        peer:call(
+          Asker, quod_client_goal_ingress, cursor_command,
+          [maps:get(session_id, Session), CursorId, accept, Peer], 60000),
+    ?assertEqual(
+       CursorTargetRef,
+       completed_remote_operation(
+         Asker, maps:get(operation_ref, CursorEvidence), 600)),
     assert_fact_once(Target, ?NS, gateway_choice, meat),
 
     {StopBytes, StopSignature} = signed_goal_request(
@@ -534,9 +538,15 @@ remote_signed_two_gateway_race(Config) ->
           ?assertEqual(RequestBytes, maps:get(request_bytes, Ev)),
           ?assertEqual(Signature, maps:get(signature, Ev))
       end, Evidences),
-    {_Claim, #{status := committed, participant_slots := [OnlySlot]}} =
-        wait_operation_claim(Asker, OperationRef, 600),
-    ?assertMatch({{?NS, _}, _, _}, OnlySlot),
+    {transaction, ?NS, TargetAnchor, _} =
+        completed_remote_operation(Asker, OperationRef, 600),
+    ?assertEqual(
+       TargetAnchor,
+       peer:call(Target, quod_simplex, genesis_hash, [?NS])),
+    ?assertMatch(
+       {ok, #{status := claimed, operation_state := terminal,
+              outcome_ref := {transaction, ?NS, TargetAnchor, _}}},
+       peer:call(Third, quod_prolog, outcome, [OperationRef])),
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
@@ -1227,6 +1237,26 @@ wait_operation_claim(Target, OperationRef, Remaining) ->
             wait_operation_claim(Target, OperationRef, Remaining - 1);
         Other ->
             ct:fail({unexpected_operation_claim, Other})
+    end.
+
+completed_remote_operation(Target, OperationRef, 0) ->
+    ct:fail(
+      {operation_completion_timeout, OperationRef,
+       peer:call(Target, quod_simplex, stats, [?ASKER_NS])});
+completed_remote_operation(Target, OperationRef, Remaining) ->
+    case peer:call(Target, quod_prolog, outcome, [OperationRef]) of
+        {ok, #{status := claimed, operation_state := terminal,
+               outcome_ref := OutcomeRef}} ->
+            case peer:call(Target, quod_prolog, outcome, [OutcomeRef]) of
+                {ok, #{status := committed, ref := OutcomeRef}} -> OutcomeRef;
+                _ ->
+                    timer:sleep(50),
+                    completed_remote_operation(
+                      Target, OperationRef, Remaining - 1)
+            end;
+        _ ->
+            timer:sleep(50),
+            completed_remote_operation(Target, OperationRef, Remaining - 1)
     end.
 
 wait_operation_terminal(_Target, OperationRef, 0) ->

@@ -459,7 +459,7 @@ digest(Plan) -> crypto:hash(sha256, plan_bytes(core(Plan))).
 -spec diff_ops(plan()) -> non_neg_integer().
 diff_ops(Plan) -> maps:get(diff_ops, core(Plan)).
 
--doc "Whether a plan is valid participant material, including legacy origin claims.".
+-doc "Whether a plan contributes material or the origin's operation claim.".
 -spec participates(plan()) -> boolean().
 participates(Plan) ->
     material_participant(Plan) orelse
@@ -923,7 +923,8 @@ certified_ref(_, _, _, _, _, _) ->
     {error, invalid_certified_ref}.
 
 -doc """
-Build the certified DTX reference for one exact committed entry.
+Build the certified reference for one exact committed DTX control or content
+transaction.
 
 The entry must carry a commit certificate for its own slot and reconstructed
 block hash. The reference embeds the canonical certificate bytes as finality
@@ -931,8 +932,36 @@ evidence and binds the semantic control digest. This is the single pure seam
 used by consensus history and ordered Prolog apply; neither consumer rebuilds
 or encodes the certificate independently.
 """.
--spec certified_entry_ref({binary(), <<_:256>>}, #entry{}, control()) ->
+-spec certified_entry_ref({binary(), <<_:256>>}, #entry{},
+                          control() | #transaction{}) ->
           {ok, certified_ref()} | {error, invalid_certified_entry}.
+certified_entry_ref(
+  {Ns, <<_:256>> = Anchor},
+  #entry{index = Slot, data = {batch, Transactions},
+         cert = #cert{kind = commit, slot = Slot,
+                      block_hash = BlockHash} = Cert} = Entry,
+  #transaction{tx_id = <<_:256>> = TxId} = Transaction)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_binary(BlockHash), byte_size(BlockHash) =:= 32,
+       is_list(Transactions) ->
+    case {quod_simplex:block_from_entry(Entry),
+          [T || #transaction{tx_id = CandidateId} = T <- Transactions,
+                CandidateId =:= TxId]} of
+        {{ok, Block}, [Transaction]} ->
+            case quod_simplex:block_hash(Block) =:= BlockHash of
+                true ->
+                    case certified_ref(
+                           Ns, Anchor, Slot, BlockHash, TxId,
+                           term_to_binary(Cert, [deterministic])) of
+                        {ok, Ref} -> {ok, Ref};
+                        {error, _} -> {error, invalid_certified_entry}
+                    end;
+                false ->
+                    {error, invalid_certified_entry}
+            end;
+        _ ->
+            {error, invalid_certified_entry}
+    end;
 certified_entry_ref(
   {Ns, <<_:256>> = Anchor},
   #entry{index = Slot,

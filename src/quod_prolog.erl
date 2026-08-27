@@ -51,7 +51,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([start_link/2, prove/2, prove_ro/2,
          execute/2, execute_signed/3,
          open_cursor/5, cancel_cursor/3,
-         submit_plan/4, outcome/1,
+         submit_plan/4, submit_role/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
          effect_resolution/3,
          project_pending_begin/2,
@@ -190,6 +190,15 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                        pending = false :: boolean(),
                        terminating = false :: boolean()}).
 
+-record(parked_write, {
+          waiters = [] :: [{term(), [map()]}],
+          height :: log_index(),
+          timer :: reference(),
+          request_id = none :: term(),
+          span_ctx :: quod_trace:span_ctx(),
+          started :: integer()
+         }).
+
 %% One target-owned remote scope.  All wire authority is fixed at scope_open:
 %% the authenticated peer, exact request link, both anchored identities, mode,
 %% proof/session ids, and the return link.  Goal payloads are decoded only after
@@ -286,11 +295,9 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% the attached quod_runtime: {Pid, Monitor, Floor}. The floor joins oldest_snapshot/2
             %% so MVCC history >= floor survives for the runtime's queued work; DOWN clears it.
             runtime_pin = none :: none | {pid(), reference(), log_index()},
-            %% tx_id => {From, Bindings, HeightRead, TimerRef,
-            %%           AsyncRequestId | none, TransactionSpan, SubmittedMonoMs}
-            parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(),
-                                               reference(), term(), quod_trace:span_ctx(),
-                                               integer()}},
+            %% One semantic transaction owns one consensus submission and may
+            %% retain several exactly-correlated endpoint callers.
+            parked    = #{} :: #{binary() => #parked_write{}},
             outcomes :: quod_outcome:index(),
             requests  :: term(),                 %% gen_statem async-request collection, labelled by tx_id
             %% Consensus verdicts parked until the KB reaches the proposal's
@@ -574,6 +581,37 @@ submit_plan(TargetNs, Plan, Goal, Bindings) when is_map(Bindings) ->
             end;
         {error, _} = Error ->
             Error
+    end.
+
+-doc "Submit one canonical non-application role through ordinary target custody.".
+-spec submit_role(binary(), #transaction{}, [map()], pos_integer()) ->
+          {ok, [map()], log_index(), binary()} | {error, term()}.
+submit_role(TargetNs, Change = #transaction{}, ReplyBindings, TimeoutMs)
+  when is_binary(TargetNs), byte_size(TargetNs) > 0,
+       is_list(ReplyBindings), is_integer(TimeoutMs), TimeoutMs > 0 ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, {ontology_unreachable, TargetNs}};
+        Pid ->
+            try gen_server:call(
+                  Pid,
+                  {submit_role, Change, ReplyBindings,
+                   quod_trace:context()}, TimeoutMs)
+            catch
+                exit:_ ->
+                    role_submission_unknown(
+                      TargetNs, Change#transaction.tx_id)
+            end
+    end;
+submit_role(_TargetNs, _Change, _ReplyBindings, _TimeoutMs) ->
+    {error, bad_transaction_role}.
+
+role_submission_unknown(TargetNs, TxId) ->
+    case quod_simplex:genesis_hash(TargetNs) of
+        <<_:256>> = Anchor ->
+            {error, {outcome_unknown,
+                     {transaction, TargetNs, Anchor, TxId}}};
+        _ ->
+            {error, {ontology_unreachable, TargetNs}}
     end.
 
 -doc "Resolve one anchored transaction or distributed-group outcome without re-proving.".
@@ -1066,6 +1104,10 @@ handle_call(
       From, Plan, GoalBlob, ResultBlob, RequestAuth,
       ReplyBindings, TraceCtx, S);
 handle_call(
+  {submit_role, Change, ReplyBindings, TraceCtx}, From, S) ->
+    accept_role_submission(
+      From, Change, ReplyBindings, TraceCtx, S);
+handle_call(
   {submit_bound_effect_plan, Plan, Change, GoalBlob, ResultBlob,
    ReplyBindings, TraceCtx}, From, S) ->
     accept_bound_effect_submission(
@@ -1383,8 +1425,11 @@ handle_cast(_Msg, S)       -> {noreply, S}.
 %% Emit readiness from the handled edge, not from the caller that queued it.
 %% Simplex also pins this process and height before opening its protected gate.
 acknowledge_ready(S = #s{ns = Ns, applied = Height}) ->
-    ok = quod_simplex:prolog_ready(Ns, self(), Height),
-    {noreply, S}.
+    {Unresolved, Outcomes1} =
+        quod_outcome:unresolved_operations(S#s.outcomes),
+    ok = quod_simplex:prolog_ready(
+           Ns, self(), Height, Unresolved),
+    {noreply, S#s{outcomes = Outcomes1}}.
 
 %% A proof worker finished (normal: it already replied / handed off) or crashed
 %% (abnormal: the caller still waits — reply the distinct error here). MUST come
@@ -1505,11 +1550,12 @@ handle_info(Message = {proof_tx_request, _, _, _, _, _, _}, S) ->
 %% resubmitting a possibly non-idempotent operation.
 handle_info({park_timeout, Tx}, S = #s{ns = Ns, parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, _B, _H, _TRef, ReqId, SpanCtx, _T0}, P1} ->
+        {#parked_write{waiters = Waiters, request_id = ReqId,
+                       span_ctx = SpanCtx}, P1} ->
             Ref = {transaction, Ns, target_anchor(Ns), Tx},
             Outcome = {error, {outcome_unknown, Ref}},
             quod_trace:finish_span(SpanCtx, Outcome),
-            reply_parked(From, Outcome),
+            reply_parked_waiters(Waiters, Outcome),
             {noreply, S#s{parked = P1,
                           requests = abandon_request(ReqId, S#s.requests),
                           park_timeouts = S#s.park_timeouts + 1}};
@@ -2291,11 +2337,13 @@ execute_routed_scope_command(
 
 scope_command_route(active, {scope_attest, _ManifestBlob}) -> error;
 scope_command_route(active, {bind_group_effects, _, _}) -> error;
+scope_command_route(active, {bind_operation_effect, _, _, _, _, _}) -> error;
 scope_command_route(active, {submit_plan, _, _, _, _}) -> error;
 scope_command_route(active, _Operation) -> active;
 scope_command_route(sealed, scope_close) -> sealed;
 scope_command_route(sealed, {scope_attest, _ManifestBlob}) -> sealed;
 scope_command_route(sealed, {bind_group_effects, _, _}) -> sealed;
+scope_command_route(sealed, {bind_operation_effect, _, _, _, _, _}) -> sealed;
 scope_command_route(sealed, {submit_plan, _, _, _, _}) -> sealed;
 scope_command_route(submitting, scope_close) -> sealed;
 scope_command_route(submitted, scope_close) -> sealed;
@@ -2350,10 +2398,32 @@ execute_sealed_scope_command(
               {bind_group_effects, RequestId, CommandSeq}, S)
     end;
 execute_sealed_scope_command(
+  {bind_operation_effect, ClaimRef, TargetRef, CancelToken,
+   PlanDigest, ClaimBlob},
+  RequestId, CommandSeq, Binding,
+  #remote_scope{
+     handle = {quod_scope_session, Pid, _SessionScopeId,
+               SessionProofId, SessionRef, _Ns, _Anchor},
+     pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq,
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            InternalRef = make_ref(),
+            Pid ! {scope_bind_operation_effect, self(), SessionProofId,
+                   SessionRef, InternalRef, ClaimRef, ClaimBlob,
+                   TargetRef, CancelToken, PlanDigest},
+            add_remote_pending(
+              Binding, InternalRef,
+              {bind_operation_effect, RequestId, CommandSeq}, S)
+    end;
+execute_sealed_scope_command(
   {submit_plan, _, _, _, _} = Operation,
   RequestId, CommandSeq, Binding, Scope, S) ->
-    %% The existing one-participant path hands its already-sealed plan to the
-    %% target consensus engine exactly once. Move out of `sealed` before the
+    %% An ordinary single-target plan is handed to the target consensus
+    %% engine exactly once. Move out of `sealed` before the
     %% asynchronous hand-off so a duplicate cannot start a second submission.
     S1 = update_remote_scope(
            Binding,
@@ -2875,6 +2945,20 @@ handle_bound_scope_reply(
   Binding, _Scope,
   {bind_group_effects, RequestId, CommandSeq},
   {group_effects_bound, {error, Reason}}, S) ->
+    poison_remote_scope(
+      Binding, RequestId, CommandSeq,
+      public_scope_reason(Reason, target_namespace(Binding)), S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {bind_operation_effect, RequestId, CommandSeq},
+  {operation_effect_bound, {ok, EffectId}}, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq,
+      {operation_effect_bound, EffectId}, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {bind_operation_effect, RequestId, CommandSeq},
+  {operation_effect_bound, {error, Reason}}, S) ->
     poison_remote_scope(
       Binding, RequestId, CommandSeq,
       public_scope_reason(Reason, target_namespace(Binding)), S);
@@ -4133,16 +4217,18 @@ run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
 %% Read-only proof kinds and failed proofs pass through; failed proofs close
 %% without sealing.
 finish_pinned_proof(prove, Origin, Goal, {ok, Bindings, _Diff, ReadSet}) ->
+    SealStarted = erlang:monotonic_time(),
     case quod_proof_context:seal_plans() of
         {ok, Plans} ->
-            submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans);
+            submit_sealed_plans(
+              Origin, Goal, Bindings, ReadSet, Plans, SealStarted);
         {error, _} = Error ->
             Error
     end;
 finish_pinned_proof(_Kind, _Origin, _Goal, Result) ->
     Result.
 
-submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
+submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
     Participants = lists:sort(
                      [Identity || {Identity, Plan} <- maps:to_list(Plans),
                                   quod_dtx:participates(Plan)]),
@@ -4153,28 +4239,322 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
     EffectParticipants =
         [Identity || {Identity, Plan} <- maps:to_list(Plans),
                      quod_dtx:effects_count(Plan) > 0],
-    case {Participants, EffectParticipants,
-          signed_foreign_singleton(Participants)} of
-        {[], _, _} ->
+    OriginIdentity = quod_proof_context:origin_identity(),
+    SignedForeign =
+        case MaterialParticipants of
+            [OnlyTarget] ->
+                quod_proof_context:request_auth() =/= none andalso
+                    OnlyTarget =/= OriginIdentity andalso
+                    lists:all(
+                      fun(Identity) ->
+                          Identity =:= OnlyTarget orelse
+                              Identity =:= OriginIdentity
+                      end, Participants);
+            _ -> false
+        end,
+    ok = observe_remote_seal(
+           Origin, SignedForeign, SealStarted),
+    case {Participants, MaterialParticipants,
+          EffectParticipants, SignedForeign} of
+        {[], [], _, _} ->
             %% Nothing staged anywhere: the ordinary read result. Sealed
             %% read-only plans stay in the context for the group protocol.
             {ok, Bindings, [], ReadSet};
-        {[Target], [], false} ->
+        {_Participants, [Target], [], true} ->
+            submit_remote_claim(
+              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
+        {_Participants, [Target], [Target], true} ->
+            submit_remote_claim(
+              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
+        {[Target], _Material, [], false} ->
             submit_single_plan(
               Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {[Target], [_], false} ->
+        {[Target], _Material, [Target], false} ->
             submit_single_plan(
               Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {_Participants, _, _} ->
+        {_Participants, _, _, _} ->
             submit_group(
               Origin, Goal, Bindings, Plans, MaterialParticipants)
     end.
 
-signed_foreign_singleton([Target]) ->
-    quod_proof_context:request_auth() =/= none andalso
-        Target =/= quod_proof_context:origin_identity();
-signed_foreign_singleton(_Participants) ->
-    false.
+observe_remote_seal(
+  #pinned_origin{namespace = Ns}, true, SealStarted) ->
+    quod_metrics:observe_remote_operation_stage(
+      Ns, proof_seal, ok, erlang:monotonic_time() - SealStarted);
+observe_remote_seal(_Origin, false, _SealStarted) -> ok.
+
+submit_remote_claim(
+  #pinned_origin{namespace = OriginNs, anchor = OriginAnchor,
+                 proof_id = ProofId} = Origin,
+  Target, Plan, Goal, Bindings) ->
+    RequestAuth = quod_proof_context:request_auth(),
+    RequestBinding = quod_proof_context:request_binding(),
+    case {encode_proof_submission(Goal, Bindings),
+          quod_simplex:dtx_binding(OriginNs),
+          quod_proof_context:scope_handle(Target),
+          quod_dtx:encode(Plan)} of
+        {{ok, GoalBlob, ResultBlob},
+         {ok, {OriginNs, OriginAnchor, _Coordinator, _Admission}
+                = Coordinator},
+         {ok, Handle}, {ok, PlanBlob}} ->
+            ManifestInput =
+                #{proof_id => ProofId,
+                  coordinator => Coordinator,
+                  nonce => crypto:strong_rand_bytes(32),
+                  principal => quod_dtx:principal(Plan),
+                  goal => GoalBlob, result => ResultBlob,
+                  request_binding => RequestBinding,
+                  participants => [{Target, quod_dtx:digest(Plan)}]},
+            submit_signed_foreign_manifest(
+              Origin, Target, Plan, PlanBlob, Handle,
+              ManifestInput, RequestAuth, Bindings);
+        {{error, _} = Error, _, _, _} -> Error;
+        {_, {error, _} = Error, _, _} -> Error;
+        {_, _, error, _} -> {error, {protocol_error, session_binding}};
+        {_, _, _, {error, _} = Error} -> Error;
+        _ -> {error, {protocol_error, remote_claim}}
+    end.
+
+submit_signed_foreign_manifest(
+  #pinned_origin{namespace = OriginNs, anchor = OriginAnchor} = Origin,
+  Target, Plan, PlanBlob, Handle, ManifestInput, RequestAuth, Bindings) ->
+    case quod_dtx:new_manifest(ManifestInput) of
+        {ok, Manifest} ->
+            case quod_scope_session:attest_plan(Handle, Plan, Manifest) of
+                {ok, Attestation} ->
+                    Bundle = {Target, quod_dtx:digest(Plan),
+                              PlanBlob, Attestation},
+                    try quod_transaction:remote_claim(
+                          {OriginNs, OriginAnchor}, Manifest,
+                          Bundle, RequestAuth) of
+                        Claim ->
+                            submit_signed_foreign_claim(
+                              Origin, Target, Plan, Handle,
+                              Claim, Bindings)
+                    catch _:_ ->
+                        {error, {protocol_error, remote_claim}}
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+submit_signed_foreign_claim(
+  Origin, Target, Plan, Handle, Claim, Bindings) ->
+    case quod_dtx:effects_count(Plan) of
+        0 ->
+            submit_unbound_foreign_claim(
+              Origin, Target, Claim, Bindings);
+        1 ->
+            submit_effect_foreign_claim(
+              Origin, Target, Plan, Handle, Claim, Bindings);
+        _ ->
+            {error, invalid_direct_effect}
+    end.
+
+submit_unbound_foreign_claim(
+  #pinned_origin{namespace = OriginNs} = Origin,
+  Target, Claim = #transaction{tx_id = ClaimTxId}, Bindings) ->
+    case quod_transaction:request_claim(Claim) of
+        {ok, #{operation_ref := OperationRef}} ->
+            ok = checkpoint_and_release_origin_snapshot(Origin, OperationRef),
+            Started = erlang:monotonic_time(),
+            Submission = quod_prolog:submit_role(
+                           OriginNs, Claim, [],
+                           max(1, quod_proof_context:remaining_ms())),
+            ok = quod_metrics:observe_remote_operation_stage(
+                   OriginNs, source_claim,
+                   remote_submission_metric_result(Submission),
+                   erlang:monotonic_time() - Started),
+            case Submission of
+                {ok, _Ignored, ClaimSlot, ClaimTxId} ->
+                    submit_certified_foreign_application(
+                      OriginNs, Target, ClaimSlot, ClaimTxId,
+                      OperationRef, Bindings);
+                {error, _} = Error -> Error
+            end;
+        _ ->
+            {error, {protocol_error, remote_claim}}
+    end.
+
+submit_effect_foreign_claim(
+  #pinned_origin{namespace = OriginNs,
+                 anchor = OriginAnchor} = Origin,
+  Target = {TargetNs, TargetAnchor}, Plan, Handle,
+  Claim = #transaction{tx_id = ClaimTxId,
+                       role = {remote_claim, _, _, TargetTxId}},
+  Bindings) ->
+    ClaimRef = {transaction, OriginNs, OriginAnchor, ClaimTxId},
+    TargetRef = {transaction, TargetNs, TargetAnchor, TargetTxId},
+    case {quod_transaction:request_claim(Claim),
+          quod_simplex:dtx_binding(OriginNs)} of
+        {{ok, #{operation_ref := OperationRef}},
+         {ok, {OriginNs, OriginAnchor, Signer,
+               <<_:256>> = Admission}}} ->
+            CustodyClaim = Claim#transaction{
+                             author = Signer,
+                             submitted_at = quod_time:now_ms()},
+            case quod_simplex:register_transaction_custody(
+                   OriginNs, Admission, CustodyClaim) of
+                {ok, CancelToken} ->
+                    bind_and_activate_effect_claim(
+                      Origin, Target, Plan, Handle, CustodyClaim,
+                      ClaimRef, TargetRef, CancelToken,
+                      OperationRef, Bindings);
+                {error, _} = Error -> Error
+            end;
+        _ ->
+            {error, {protocol_error, remote_claim}}
+    end.
+
+bind_and_activate_effect_claim(
+  #pinned_origin{namespace = OriginNs} = Origin,
+  Target, Plan, Handle, Claim = #transaction{tx_id = ClaimTxId},
+  ClaimRef, TargetRef, CancelToken, OperationRef, Bindings) ->
+    case quod_scope_session:bind_operation_effect(
+           Handle, ClaimRef, Claim, TargetRef, CancelToken,
+           quod_dtx:digest(Plan),
+           max(1, quod_proof_context:remaining_ms())) of
+        {ok, _EffectId} ->
+            case checkpoint_and_release_origin_snapshot(
+                   Origin, OperationRef) of
+                ok ->
+                    Started = erlang:monotonic_time(),
+                    Activation = quod_simplex:activate_transaction_custody(
+                                   OriginNs, ClaimTxId),
+                    ok = quod_metrics:observe_remote_operation_stage(
+                           OriginNs, source_claim,
+                           remote_activation_metric_result(Activation),
+                           erlang:monotonic_time() - Started),
+                    case Activation of
+                        {ok, ClaimSlot} ->
+                            %% The dormant custody registration began before
+                            %% target effect binding; activation is the source
+                            %% claim stage for the effect-bearing variant.
+                            submit_certified_foreign_application(
+                              OriginNs, Target, ClaimSlot, ClaimTxId,
+                              OperationRef, Bindings);
+                        {error, Reason} ->
+                            logger:warning(
+                              "quod[~ts]: claimed application did not finish: ~p",
+                              [OriginNs, Reason]),
+                            {error, {outcome_unknown, OperationRef}}
+                    end;
+                _ ->
+                    {error, {outcome_unknown, OperationRef}}
+            end;
+        {error, _} ->
+            %% The bind reply may have been lost after the target fsynced its
+            %% private row. Keep C dormant and let the one exact cancellation
+            %% owner settle both journals; absence is never guessed here.
+            case quod_reg:where({quod_simplex, OriginNs}) of
+                Owner when is_pid(Owner) ->
+                    case quod_dtx_coordinator:
+                           start_dormant_operation_monitor(
+                             Owner, OriginNs, Claim, CancelToken) of
+                        {ok, _Pid} -> ok;
+                        {error, Reason} ->
+                            logger:error(
+                              "quod[~ts]: dormant operation recovery did not start: ~p",
+                              [OriginNs, Reason])
+                    end;
+                undefined -> ok
+            end,
+            {error, {outcome_unknown, OperationRef}}
+    end.
+
+submit_certified_foreign_application(
+  OriginNs, Target, ClaimSlot, ClaimTxId, OperationRef, Bindings) ->
+    case quod_simplex:transaction_evidence(
+           OriginNs, ClaimSlot, ClaimTxId) of
+        {ok, ClaimRef, Claim} ->
+            case quod_transaction:encode_evidence(ClaimRef, Claim) of
+                {ok, ClaimEvidence} ->
+                    Request = {apply_claim, crypto:strong_rand_bytes(16),
+                               ClaimEvidence},
+                    Started = erlang:monotonic_time(),
+                    Submission = quod_dtx_current_view:submit_claim_application(
+                                   OriginNs, Target, Claim, Request,
+                                   max(1, quod_proof_context:remaining_ms())),
+                    ok = quod_metrics:observe_remote_operation_stage(
+                           element(1, Target), target_application,
+                           remote_application_metric_result(Submission),
+                           erlang:monotonic_time() - Started),
+                    case Submission of
+                        {ok, Response} ->
+                            claimed_application_reply(
+                              Request, Response, OperationRef, Bindings);
+                        {error, _} ->
+                            {error, {outcome_unknown, OperationRef}}
+                    end;
+                {error, Reason} ->
+                    logger:warning(
+                      "quod[~ts]: claim evidence encoding failed: ~p",
+                      [OriginNs, Reason]),
+                    {error, {outcome_unknown, OperationRef}}
+            end;
+        {error, Reason} ->
+            logger:warning(
+              "quod[~ts]: committed claim evidence unavailable: ~p",
+              [OriginNs, Reason]),
+            {error, {outcome_unknown, OperationRef}}
+    end.
+
+claimed_application_reply(
+  Request,
+  {application, _RequestId, Result, TargetEvidence} = Response,
+  OperationRef, Bindings) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true ->
+            case quod_transaction:decode_evidence(TargetEvidence) of
+                {ok, TargetCertifiedRef,
+                 #transaction{tx_id = TargetTxId,
+                              role = {remote_application, _, _, _}}} ->
+                    TargetRef = certified_transaction_ref(
+                                  TargetCertifiedRef, TargetTxId),
+                    case {TargetRef, Result} of
+                        {{ok, StableRef}, committed} ->
+                            {committed, Bindings, StableRef};
+                        {{ok, _StableRef}, {rejected, Reason}} ->
+                            {error, Reason};
+                        _ ->
+                            logger:warning(
+                              "claimed application returned an invalid target reference or result"),
+                            {error, {outcome_unknown, OperationRef}}
+                    end;
+                _ ->
+                    logger:warning(
+                      "claimed application returned invalid target evidence"),
+                    {error, {outcome_unknown, OperationRef}}
+            end;
+        false ->
+            logger:warning("claimed application response did not correlate"),
+            {error, {outcome_unknown, OperationRef}}
+    end;
+claimed_application_reply(_Request, _Response, OperationRef, _Bindings) ->
+    logger:warning("claimed application returned a malformed response"),
+    {error, {outcome_unknown, OperationRef}}.
+
+remote_submission_metric_result({ok, _, _, _}) -> ok;
+remote_submission_metric_result({error, {outcome_unknown, _}}) -> uncertain;
+remote_submission_metric_result({error, _}) -> failed.
+
+remote_activation_metric_result({ok, _}) -> ok;
+remote_activation_metric_result({error, _}) -> uncertain.
+
+remote_application_metric_result(
+  {ok, {application, _, committed, _}}) -> ok;
+remote_application_metric_result(
+  {ok, {application, _, {rejected, _}, _}}) -> rejected;
+remote_application_metric_result({error, _}) -> uncertain;
+remote_application_metric_result(_) -> failed.
+
+certified_transaction_ref(Ref, TxId) ->
+    case quod_transaction:stable_ref(Ref) of
+        {transaction, _Ns, _Anchor, TxId} = StableRef ->
+            {ok, StableRef};
+        _ -> error
+    end.
 
 checkpoint_and_release_origin_snapshot(
   #pinned_origin{engine = Engine, worker_ref = WorkerRef}, OutcomeRef) ->
@@ -5159,6 +5539,30 @@ accept_plan_submission(
             outcome_admission_error(Reason, S)
     end.
 
+accept_role_submission(_From, _Change, _ReplyBindings, _TraceCtx,
+                       S = #s{ready = false, ns = Ns}) ->
+    {reply, {error, {ontology_rebuilding, Ns}}, S};
+accept_role_submission(
+  From, Change0 = #transaction{author = none, author_seq = 0, sig = none},
+  ReplyBindings, TraceCtx,
+  S = #s{ns = Ns, self = Self, outcomes = Outcomes0, parked = Parked}) ->
+    Target = {Ns, target_anchor(Ns)},
+    Change = Change0#transaction{author = Self,
+                                 submitted_at = quod_time:now_ms()},
+    case quod_transaction:valid_id(Target, Change) andalso
+         quod_transaction:role(Change) =/= application of
+        true ->
+            Ref = {transaction, Ns, target_anchor(Ns),
+                   Change#transaction.tx_id},
+            admit_bound_plan(
+              From, Change, ReplyBindings, Change#transaction.diff,
+              TraceCtx, Ref, Outcomes0, Parked, S);
+        false ->
+            {reply, {error, bad_transaction_role}, S}
+    end;
+accept_role_submission(_From, _Change, _ReplyBindings, _TraceCtx, S) ->
+    {reply, {error, bad_transaction_role}, S}.
+
 accept_bound_effect_submission(
   _From, _Plan, _Change, _GoalBlob, _ResultBlob,
   _ReplyBindings, _TraceCtx, S = #s{ready = false, ns = Ns}) ->
@@ -5201,9 +5605,14 @@ admit_bound_effect_plan(From, Change, ReplyBindings, TraceCtx, Ref,
             {reply, terminal_submission_reply(Stored, ReplyBindings),
              S#s{outcomes = Outcomes1}};
         {pending, Outcomes1} when is_map_key(Tx, Parked) ->
-            {reply, {error, {outcome_unknown, Ref}},
-             S#s{outcomes = Outcomes1}};
-        {Status, Outcomes1} when Status =:= pending; Status =:= new ->
+            {noreply, add_parked_waiter(
+                        Tx, From, ReplyBindings,
+                        S#s{outcomes = Outcomes1})};
+        {pending, Outcomes1} ->
+            park_existing_plan(
+              From, Change, ReplyBindings, [], TraceCtx,
+              S#s{outcomes = Outcomes1});
+        {new, Outcomes1} ->
             handoff_and_park_effect(
               From, Change, ReplyBindings, TraceCtx,
               S#s{outcomes = Outcomes1});
@@ -5247,8 +5656,10 @@ park_handed_off_effect(
     TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
     T0 = quod_time:mono_ms(),
     Parked1 = (S#s.parked)#{Tx =>
-                 {From, ReplyBindings, S#s.applied, TRef, none,
-                  SpanCtx, T0}},
+                 #parked_write{waiters = [{From, ReplyBindings}],
+                               height = S#s.applied, timer = TRef,
+                               request_id = none, span_ctx = SpanCtx,
+                               started = T0}},
     {noreply, S#s{parked = Parked1}}.
 
 outcome_admission_error(Reason, S) ->
@@ -5320,12 +5731,13 @@ admit_bound_plan(From, Change, ReplyBindings, Diff, TraceCtx, Ref,
             {reply, terminal_submission_reply(Stored, ReplyBindings),
              S#s{outcomes = Outcomes1}};
         {pending, Outcomes1} when is_map_key(Tx, Parked) ->
-            {reply, {error, {outcome_unknown, Ref}},
-             S#s{outcomes = Outcomes1}};
+            {noreply, add_parked_waiter(
+                        Tx, From, ReplyBindings,
+                        S#s{outcomes = Outcomes1})};
         {pending, Outcomes1} ->
-            submit_new_plan(
-              From, Change, ReplyBindings, Diff,
-              TraceCtx, S#s{outcomes = Outcomes1});
+            park_existing_plan(
+              From, Change, ReplyBindings, Diff, TraceCtx,
+              S#s{outcomes = Outcomes1});
         {new, Outcomes1} ->
             submit_new_plan(
               From, Change, ReplyBindings, Diff,
@@ -5447,6 +5859,29 @@ worker_operations(Operations) ->
        || Operation <- Operations]).
 -endif.
 
+park_existing_plan(From, Change, ReplyBindings, Diff, TraceCtx,
+                   S = #s{ns = Ns}) ->
+    Tx = Change#transaction.tx_id,
+    {_TransactionCtx, SpanCtx} = quod_trace:start_span(
+                                   TraceCtx, <<"quod.transaction">>, internal,
+                                   #{'quod.namespace' => Ns,
+                                     'quod.tx.id' => quod_trace:tx_id(Tx),
+                                     'quod.kb.read_height' => S#s.applied,
+                                     'quod.diff.operations' => length(Diff)}),
+    TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
+    Row = #parked_write{waiters = [{From, ReplyBindings}],
+                        height = S#s.applied, timer = TRef,
+                        span_ctx = SpanCtx, started = quod_time:mono_ms()},
+    {noreply, S#s{parked = (S#s.parked)#{Tx => Row}}}.
+
+add_parked_waiter(Tx, From, ReplyBindings, S = #s{parked = Parked}) ->
+    case maps:get(Tx, Parked) of
+        Row = #parked_write{waiters = Waiters} ->
+            S#s{parked = Parked#{Tx =>
+                    Row#parked_write{
+                      waiters = [{From, ReplyBindings} | Waiters]}}}
+    end.
+
 submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
                 S = #s{ns = Ns}) ->
     Tx = Change#transaction.tx_id,
@@ -5467,8 +5902,11 @@ submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
             %% as the observation in release/4 — never a cross-node wall-clock delta.
             T0 = quod_time:mono_ms(),
             S1 = S#s{parked = (S#s.parked)#{Tx =>
-                       {From, ReplyBindings, S#s.applied, TRef, ReqId,
-                        SpanCtx, T0}},
+                       #parked_write{
+                         waiters = [{From, ReplyBindings}],
+                         height = S#s.applied, timer = TRef,
+                         request_id = ReqId, span_ctx = SpanCtx,
+                         started = T0}},
                      requests = Requests1},
             {noreply, S1}
     catch
@@ -5524,6 +5962,10 @@ reply_parked({remote_submit, _Binding, _RequestId, _CommandSeq} = From,
 reply_parked(From, Reply) ->
     gen_server:reply(From, Reply).
 
+reply_parked_waiters(Waiters, Reply) ->
+    lists:foreach(fun({From, _Bindings}) -> reply_parked(From, Reply) end,
+                  Waiters).
+
 append_result(Tx, {ok, Slot}, S) ->
     request_completed(Tx, mark_consensus_reply(Tx, Slot, S));
 append_result(Tx, {error, not_in_charge, unavailable}, S) ->
@@ -5552,16 +5994,16 @@ append_result(Tx, Other, S) ->
 
 request_completed(Tx, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked, undefined) of
-        {From, Bindings, Height, TRef, _ReqId, SpanCtx, T0} ->
+        Row = #parked_write{} ->
             S#s{parked = Parked#{Tx =>
-                   {From, Bindings, Height, TRef, none, SpanCtx, T0}}};
+                   Row#parked_write{request_id = none}}};
         undefined ->
             S
     end.
 
 mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked, undefined) of
-        {_From, _Bindings, _Height, _TRef, _ReqId, SpanCtx, _T0} ->
+        #parked_write{span_ctx = SpanCtx} ->
             _ = quod_trace:set_attributes(SpanCtx, #{'quod.consensus.slot' => Slot}),
             S;
         undefined ->
@@ -5681,12 +6123,14 @@ content_post_apply(
     applied_ops := AppliedOps},
   Index, Origin, S) ->
     #transaction{tx_id = Tx} = Change,
+    notify_operation_projection(S#s.ns, Height, Change),
     {outcome_applied(Change, AppliedOps, Index, Origin, S),
      {committed, Tx, Height}};
 content_post_apply(
   #{status := rejected, change := Change, reason := Reason,
     height := Height}, Index, Origin, S) ->
     #transaction{tx_id = Tx} = Change,
+    notify_operation_projection(S#s.ns, Height, Change),
     {outcome_rejected(Change, Index, Origin, S),
      {rejected, Tx, Reason, Height}};
 content_post_apply(
@@ -5697,6 +6141,15 @@ content_post_apply(
   #{status := duplicate_rejected, change := #transaction{tx_id = Tx},
     reason := Reason}, _Index, _Origin, _S) ->
     {none, {rejected, Tx, Reason}}.
+
+notify_operation_projection(
+  Ns, Height, #transaction{role = {remote_claim, _, _, _}} = Change) ->
+    quod_simplex:operation_projection(Ns, Height, Change);
+notify_operation_projection(
+  Ns, Height, #transaction{role = {remote_complete, _, _, _}} = Change) ->
+    quod_simplex:operation_projection(Ns, Height, Change);
+notify_operation_projection(_Ns, _Height, #transaction{}) ->
+    ok.
 
 add_projection_stats(
   #{applies := Applies, rejects := Rejects, conflicts := Conflicts},
@@ -5917,6 +6370,11 @@ note_origin(_Origin, true, _Before, S) -> S.   %% replay while already replaying
 %% a reaction occurrence.
 outcome_applied(#transaction{plan_digest = none}, _AppliedOps,
                 _Index, _Origin, _S) -> none;
+outcome_applied(#transaction{role = Role}, _AppliedOps,
+                _Index, _Origin, _S)
+  when element(1, Role) =:= remote_claim;
+       element(1, Role) =:= remote_complete ->
+    none;
 outcome_applied(#transaction{tx_id = Tx, diff = Diff, effects = Effects},
                 AppliedOps, Index, live, #s{ns = Ns}) ->
     {applied, #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
@@ -5927,6 +6385,10 @@ outcome_applied(_Change, _AppliedOps, _Index, replay, _S) -> none.
 %% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors
 %% `outcome_applied` so every live tx in a block yields exactly one outcome event (applied or
 %% rejected); D is unchanged, so the envelope carries no diff/result.
+outcome_rejected(#transaction{role = Role}, _Index, _Origin, _S)
+  when element(1, Role) =:= remote_claim;
+       element(1, Role) =:= remote_complete ->
+    none;
 outcome_rejected(#transaction{tx_id = Tx, effects = Effects},
                  Index, live, #s{ns = Ns}) ->
     {rejected, #{ns => Ns, height => Index, tx_id => Tx,
@@ -6019,7 +6481,9 @@ clear_runtime_pin(S) -> S.
 %% derived from block timestamps compares two machines' wall clocks.
 release(Tx, Outcome, ReplyFun, S = #s{ns = Ns, parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, B, H, TRef, ReqId, SpanCtx, T0}, P1} ->
+        {#parked_write{waiters = Waiters, height = H, timer = TRef,
+                       request_id = ReqId, span_ctx = SpanCtx,
+                       started = T0}, P1} ->
             _ = erlang:cancel_timer(TRef),
             _ = case Outcome of
                     {ok, {applied, _}} ->
@@ -6029,7 +6493,8 @@ release(Tx, Outcome, ReplyFun, S = #s{ns = Ns, parked = P}) ->
                 end,
             _ = set_final_trace_attributes(SpanCtx, Outcome),
             quod_trace:finish_span(SpanCtx, Outcome),
-            ReplyFun(From, B, H),
+            lists:foreach(
+              fun({From, B}) -> ReplyFun(From, B, H) end, Waiters),
             S#s{parked = P1,
                 requests = abandon_request(ReqId, S#s.requests)};
         error -> S

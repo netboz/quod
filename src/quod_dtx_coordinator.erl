@@ -14,9 +14,11 @@ only delay recovery.  Every network wait and every retry interval is bounded;
 owner death terminates the worker.
 """.
 
+-include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_monitor/5]).
+-export([start_monitor/5, start_operation_monitor/5,
+         start_dormant_operation_monitor/4]).
 
 -ifdef(TEST).
 -export([test_options/1, test_put_evidence/2,
@@ -109,13 +111,423 @@ start_monitor(Owner, OwnerNs, Begin, BeginEvidence, Options)
 start_monitor(_Owner, _OwnerNs, _Begin, _BeginEvidence, _Options) ->
     {error, invalid_coordinator_start}.
 
+-doc """
+Start recovery for one already-committed foreign singleton claim.
+
+The worker owns no durable state.  It reconstructs the exact target
+transaction from certified local claim evidence, submits that deterministic
+transaction through the shared endpoint owner, and appends the deterministic
+completion receipt.  Temporary target unavailability is driven by the shared
+foreign-history follower's messages; source progress is supplied by the
+owning Simplex.  No retry polling loop is created here.
+""".
+-spec start_operation_monitor(pid(), binary(), pos_integer(), term(), map()) ->
+          {ok, pid(), reference()} | {error, term()}.
+start_operation_monitor(Owner, OwnerNs, ClaimSlot, OperationRef, Options)
+  when is_pid(Owner), Owner =:= self(),
+       is_binary(OwnerNs), byte_size(OwnerNs) > 0,
+       is_integer(ClaimSlot), ClaimSlot > 0,
+       is_map(Options), map_size(Options) =:= 0 ->
+    case valid_operation_ref(OwnerNs, OperationRef) of
+        true ->
+            {Pid, Monitor} = spawn_monitor(
+                               fun() ->
+                                   operation_init(
+                                     Owner, OwnerNs, ClaimSlot,
+                                     OperationRef)
+                               end),
+            {ok, Pid, Monitor};
+        false ->
+            {error, invalid_operation_start}
+    end;
+start_operation_monitor(_Owner, _OwnerNs, _ClaimSlot, _OperationRef,
+                        _Options) ->
+    {error, invalid_operation_start}.
+
+-doc "Cancel an unactivated source claim and its exact private target binding.".
+-spec start_dormant_operation_monitor(
+        pid(), binary(), #transaction{}, <<_:256>>) ->
+          {ok, pid()} | {error, term()}.
+start_dormant_operation_monitor(
+  Owner, OwnerNs, Claim = #transaction{}, <<_:256>> = CancelToken)
+  when is_pid(Owner), is_binary(OwnerNs), byte_size(OwnerNs) > 0 ->
+    case dormant_operation_context(OwnerNs, Claim, CancelToken) of
+        {ok, Context} ->
+            {ok, spawn(fun() ->
+                               dormant_operation_init(Owner, Context)
+                       end)};
+        {error, _} = Error ->
+            Error
+    end;
+start_dormant_operation_monitor(_Owner, _OwnerNs, _Claim, _CancelToken) ->
+    {error, invalid_operation_start}.
+
+dormant_operation_context(
+  OwnerNs,
+  #transaction{origin = {OwnerNs, <<_:256>> = OriginAnchor},
+               tx_id = <<_:256>> = ClaimTxId,
+               role = {remote_claim, _Manifest,
+                       {{TargetNs, <<_:256>> = TargetAnchor} = Target,
+                        _PlanDigest, PlanBlob, _Attestation},
+                       <<_:256>> = TargetTxId}},
+  CancelToken) ->
+    case quod_dtx:decode(PlanBlob) of
+        {ok, Plan} ->
+            case quod_dtx:signer(Plan) of
+                <<_:256>> = TargetNode ->
+                    {ok, #{owner_ns => OwnerNs,
+                           claim_tx_id => ClaimTxId,
+                           claim_ref => {transaction, OwnerNs, OriginAnchor,
+                                         ClaimTxId},
+                           target => Target, target_node => TargetNode,
+                           target_ref => {transaction, TargetNs,
+                                          TargetAnchor, TargetTxId},
+                           cancel_token => CancelToken,
+                           follow => none,
+                           foreign_monitor => none}};
+                _ -> {error, invalid_operation_claim}
+            end;
+        {error, _} -> {error, invalid_operation_claim}
+    end;
+dormant_operation_context(_OwnerNs, _Claim, _CancelToken) ->
+    {error, invalid_operation_claim}.
+
+dormant_operation_init(Owner, Context) ->
+    OwnerMonitor = erlang:monitor(process, Owner),
+    dormant_operation_cancel(Owner, OwnerMonitor, Context).
+
+dormant_operation_cancel(
+  Owner, OwnerMonitor,
+  #{owner_ns := OwnerNs, target := Target, target_node := TargetNode,
+    claim_ref := ClaimRef, target_ref := TargetRef,
+    cancel_token := CancelToken} = Context) ->
+    RequestId = crypto:strong_rand_bytes(
+                  ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8),
+    Request = {cancel_operation_effect, RequestId, ClaimRef, TargetRef,
+               CancelToken},
+    case quod_dtx_current_view:submit_operation_to(
+           OwnerNs, Target, TargetNode, Request,
+           ?DEFAULT_REQUEST_TIMEOUT_MS) of
+        {ok, Response} ->
+            case quod_dtx_endpoint:correlates(Request, Response) of
+                true -> dormant_operation_finish(Owner, Context);
+                false -> dormant_operation_wait(
+                           Owner, OwnerMonitor, Context)
+            end;
+        {error, _} ->
+            dormant_operation_wait(Owner, OwnerMonitor, Context)
+    end.
+
+dormant_operation_finish(
+  _Owner, #{owner_ns := OwnerNs, claim_tx_id := ClaimTxId}) ->
+    _ = quod_simplex:cancel_transaction_custody(OwnerNs, ClaimTxId),
+    ok.
+
+dormant_operation_wait(Owner, OwnerMonitor,
+                       Context = #{target := Target}) ->
+    Waiting = operation_attach_follow(Context, Target),
+    FollowRef = map_get(follow, Waiting),
+    ForeignMonitor = map_get(foreign_monitor, Waiting),
+    receive
+        {'DOWN', OwnerMonitor, process, Owner, _Reason} ->
+            operation_cleanup_wait(Waiting);
+        {gproc, unreg, ForeignMonitor, _Key}
+          when is_reference(ForeignMonitor) ->
+            dormant_operation_wait(
+              Owner, OwnerMonitor, Waiting#{follow => none});
+        {gproc, registered, ForeignMonitor, _Key}
+          when is_reference(ForeignMonitor) ->
+            dormant_operation_wait(Owner, OwnerMonitor, Waiting);
+        {quod_foreign_follow, FollowRef, NoticeRef, _Identity, _Notice}
+          when is_reference(FollowRef) ->
+            ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+            dormant_operation_cancel(
+              Owner, OwnerMonitor, operation_clear_follow(Waiting));
+        _Other ->
+            dormant_operation_wait(Owner, OwnerMonitor, Waiting)
+    end.
+
+valid_operation_ref(
+  Ns, {operation, Ns, <<_:256>>, AgentRef, <<_:256>>}) ->
+    quod_agent_ref:valid_principal({agent, AgentRef});
+valid_operation_ref(_Ns, _OperationRef) ->
+    false.
+
+operation_init(Owner, OwnerNs, ClaimSlot, OperationRef) ->
+    OwnerMonitor = erlang:monitor(process, Owner),
+    operation_load_claim(
+      Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef).
+
+operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef) ->
+    case quod_simplex:operation_claim_evidence(
+           OwnerNs, ClaimSlot, OperationRef) of
+        {ok, ClaimRef, Claim} ->
+            case operation_context(OwnerNs, OperationRef, ClaimRef, Claim) of
+                {ok, Context} ->
+                    operation_drive(
+                      Owner, OwnerMonitor, Context#{claim_ref => ClaimRef,
+                                                   claim => Claim});
+                {error, Reason} ->
+                    operation_stop(Owner, OperationRef, Reason)
+            end;
+        {error, Reason} ->
+            operation_stop(Owner, OperationRef, Reason)
+    end.
+
+operation_context(
+  OwnerNs, OperationRef,
+  ClaimRef,
+  #transaction{origin = {OwnerNs, <<_:256>>} = Origin,
+               role = {remote_claim, _Manifest,
+                       {{TargetNs, <<_:256>> = TargetAnchor} = Target,
+                        _PlanDigest, _PlanBlob, _Attestation},
+                       <<_:256>> = TargetTxId}} = Claim)
+  when is_binary(TargetNs), byte_size(TargetNs) > 0 ->
+    case {quod_dtx:certified_ref_binding(ClaimRef),
+          quod_transaction:request_claim(Claim)} of
+        {{ok, Origin, _Slot, ClaimTxId},
+         {ok, #{operation_ref := OperationRef,
+                digest := <<_:256>> = RequestDigest}}}
+          when ClaimTxId =:= Claim#transaction.tx_id ->
+            case quod_transaction:remote_claim_route(Claim) of
+                Route when Route =:= shared; element(1, Route) =:= private ->
+                    {ok, #{owner_ns => OwnerNs, origin => Origin,
+                           operation_ref => OperationRef,
+                           request_digest => RequestDigest,
+                           target => Target,
+                           target_ref => {transaction, TargetNs,
+                                          TargetAnchor, TargetTxId},
+                           follow => none, foreign_monitor => none,
+                           state => target}};
+                error ->
+                    {error, invalid_operation_claim}
+            end;
+        _ ->
+            {error, invalid_operation_claim}
+    end;
+operation_context(_OwnerNs, _OperationRef, _ClaimRef, _Claim) ->
+    {error, invalid_operation_claim}.
+
+operation_drive(Owner, OwnerMonitor,
+                #{state := target, owner_ns := OwnerNs,
+                  operation_ref := OperationRef, target := Target,
+                  claim_ref := ClaimRef, claim := Claim} = Context) ->
+    RequestId = crypto:strong_rand_bytes(
+                  ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8),
+    case quod_transaction:encode_evidence(ClaimRef, Claim) of
+        {ok, ClaimEvidence} ->
+            Request = {apply_claim, RequestId, ClaimEvidence},
+            Started = erlang:monotonic_time(),
+            Submission = quod_dtx_current_view:submit_claim_application(
+                           OwnerNs, Target, Claim, Request,
+                           ?DEFAULT_REQUEST_TIMEOUT_MS),
+            ok = quod_metrics:observe_remote_operation_stage(
+                   element(1, Target), target_application,
+                   operation_target_metric_result(Submission),
+                   erlang:monotonic_time() - Started),
+            case Submission of
+                {ok, Response} ->
+                    operation_target_response(
+                      Owner, OwnerMonitor, Request, Response, Context);
+                {error, invalid_request} ->
+                    operation_stop(
+                      Owner, OperationRef, invalid_operation_claim);
+                {error, _Temporary} ->
+                    operation_wait_target(Owner, OwnerMonitor, Context)
+            end;
+        {error, _} ->
+            operation_stop(Owner, OperationRef, invalid_operation_claim)
+    end;
+operation_drive(Owner, OwnerMonitor,
+                #{state := source} = Context) ->
+    operation_submit_complete(Owner, OwnerMonitor, Context).
+
+operation_target_response(
+  Owner, OwnerMonitor, Request,
+  {application, _RequestId, committed, EvidenceBlob} = Response,
+  Context) ->
+    operation_target_result(
+      Owner, OwnerMonitor, Request, Response,
+      committed, EvidenceBlob, Context);
+operation_target_response(
+  Owner, OwnerMonitor, Request,
+  {application, _RequestId, {rejected, Reason}, EvidenceBlob} = Response,
+  Context) when is_atom(Reason) ->
+    operation_target_result(
+      Owner, OwnerMonitor, Request, Response,
+      {rejected, Reason}, EvidenceBlob, Context);
+operation_target_response(
+  Owner, _OwnerMonitor, _Request, _Response,
+  #{operation_ref := OperationRef}) ->
+    operation_stop(Owner, OperationRef, invalid_target_response).
+
+operation_target_result(
+  Owner, OwnerMonitor, Request, Response, _Result, EvidenceBlob,
+  Context = #{operation_ref := OperationRef,
+              target_ref := TargetRef}) ->
+    case {quod_dtx_endpoint:correlates(Request, Response),
+          quod_transaction:decode_evidence(EvidenceBlob)} of
+        {true, {ok, TargetCertifiedRef,
+                #transaction{tx_id = TargetTxId,
+                             role = {remote_application, _, _, _}}
+                  = TargetTransaction}} ->
+            case stable_transaction_ref(TargetCertifiedRef, TargetTxId) of
+                TargetRef ->
+                    operation_drive(
+                      Owner, OwnerMonitor,
+                      Context#{state => source,
+                               target_certified_ref => TargetCertifiedRef,
+                               target_transaction => TargetTransaction});
+                _ ->
+                    operation_stop(
+                      Owner, OperationRef, invalid_target_evidence)
+            end;
+        _ ->
+            operation_stop(Owner, OperationRef, invalid_target_evidence)
+    end.
+
+stable_transaction_ref(Ref, TxId) ->
+    case quod_transaction:stable_ref(Ref) of
+        {transaction, _Ns, _Anchor, TxId} = StableRef -> StableRef;
+        _ -> invalid
+    end.
+
+operation_submit_complete(
+  Owner, OwnerMonitor,
+  #{owner_ns := OwnerNs, origin := Origin,
+    operation_ref := OperationRef, request_digest := RequestDigest,
+    target_ref := TargetRef, target_certified_ref := TargetCertifiedRef,
+    target_transaction := TargetTransaction} = Context) ->
+    try
+        Complete0 = quod_transaction:remote_complete(
+                      Origin, OperationRef, RequestDigest, TargetRef),
+        Complete = quod_transaction:attach_evidence(
+                     Complete0, TargetCertifiedRef, TargetTransaction),
+        Started = erlang:monotonic_time(),
+        Submission = quod_prolog:submit_role(
+                       OwnerNs, Complete, [], ?DEFAULT_REQUEST_TIMEOUT_MS),
+        ok = quod_metrics:observe_remote_operation_stage(
+               OwnerNs, completion,
+               operation_completion_metric_result(Submission),
+               erlang:monotonic_time() - Started),
+        case Submission of
+            {ok, _Bindings, _Slot, _TxId} ->
+                operation_stop(Owner, OperationRef, done);
+            {error, {outcome_unknown, _}} ->
+                operation_wait_source(Owner, OwnerMonitor, Context);
+            {error, _Temporary} ->
+                operation_wait_source(Owner, OwnerMonitor, Context)
+        end
+    catch _:_ ->
+        operation_stop(Owner, OperationRef, invalid_completion)
+    end.
+
+operation_target_metric_result(
+  {ok, {application, _, committed, _}}) -> ok;
+operation_target_metric_result(
+  {ok, {application, _, {rejected, _}, _}}) -> rejected;
+operation_target_metric_result({error, _}) -> uncertain;
+operation_target_metric_result(_) -> failed.
+
+operation_completion_metric_result({ok, _, _, _}) -> ok;
+operation_completion_metric_result({error, {outcome_unknown, _}}) -> uncertain;
+operation_completion_metric_result({error, _}) -> uncertain.
+
+operation_wait_target(Owner, OwnerMonitor,
+                      Context = #{target := Target}) ->
+    operation_wait(
+      Owner, OwnerMonitor,
+      operation_attach_follow(Context#{state => target}, Target)).
+
+operation_wait_source(Owner, OwnerMonitor, Context) ->
+    operation_wait(Owner, OwnerMonitor, Context#{state => source}).
+
+operation_wait(Owner, OwnerMonitor,
+               Context = #{operation_ref := OperationRef,
+                           follow := FollowRef,
+                           foreign_monitor := ForeignMonitor}) ->
+    receive
+        {'DOWN', OwnerMonitor, process, Owner, _Reason} ->
+            operation_cleanup_wait(Context);
+        {gproc, unreg, ForeignMonitor, _Key}
+          when is_reference(ForeignMonitor) ->
+            operation_wait(
+              Owner, OwnerMonitor, Context#{follow => none});
+        {gproc, registered, ForeignMonitor, _Key}
+          when is_reference(ForeignMonitor),
+               map_get(state, Context) =:= target ->
+            operation_wait_target(Owner, OwnerMonitor, Context);
+        {operation_wake, OperationRef}
+          when map_get(state, Context) =:= source ->
+            operation_drive(
+              Owner, OwnerMonitor, operation_clear_follow(Context));
+        {operation_wake, OperationRef} ->
+            operation_wait(Owner, OwnerMonitor, Context);
+        {quod_foreign_follow, FollowRef, NoticeRef, _Identity, _Notice}
+          when is_reference(FollowRef) ->
+            ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+            operation_drive(
+              Owner, OwnerMonitor, operation_clear_follow(Context));
+        _Other ->
+            operation_wait(Owner, OwnerMonitor, Context)
+    end.
+
+operation_attach_follow(Context0, Target) ->
+    Context = operation_ensure_foreign_monitor(Context0),
+    case map_get(follow, Context) of
+        FollowRef when is_reference(FollowRef) ->
+            Context;
+        none ->
+            case quod_foreign_log:follow(Target) of
+                {ok, FollowRef} ->
+                    ok = quod_foreign_log:refresh(FollowRef),
+                    Context#{follow => FollowRef};
+                {error, _} ->
+                    %% The gproc follow monitor wakes this process as soon as
+                    %% the one shared verifier registers again.
+                    Context
+            end
+    end.
+
+operation_ensure_foreign_monitor(
+  Context = #{foreign_monitor := ForeignMonitor})
+  when is_reference(ForeignMonitor) ->
+    Context;
+operation_ensure_foreign_monitor(Context) ->
+    ForeignMonitor = quod_reg:monitor_name({foreign_log, node}, follow),
+    Context#{foreign_monitor => ForeignMonitor}.
+
+operation_clear_follow(Context = #{follow := none}) -> Context;
+operation_clear_follow(Context = #{follow := FollowRef}) ->
+    operation_cleanup_follow(FollowRef),
+    Context#{follow => none}.
+
+operation_cleanup_follow(none) -> ok;
+operation_cleanup_follow(FollowRef) ->
+    quod_foreign_log:unfollow(FollowRef).
+
+operation_cleanup_wait(Context) ->
+    operation_cleanup_follow(map_get(follow, Context)),
+    case map_get(foreign_monitor, Context) of
+        none -> ok;
+        ForeignMonitor ->
+            quod_reg:demonitor_name({foreign_log, node}, ForeignMonitor)
+    end.
+
+operation_stop(Owner, OperationRef, done) ->
+    Owner ! {dtx_coordinator, self(), OperationRef, {done, OperationRef}},
+    ok;
+operation_stop(Owner, OperationRef, Reason) ->
+    Owner ! {dtx_coordinator, self(), OperationRef, {error, Reason}},
+    ok.
+
 initial_state(Owner, OwnerNs, Begin, BeginEvidence, Options) ->
     case {options(Options), quod_dtx:begin_recovery_rows(Begin),
           quod_dtx:begin_group_ref(Begin)} of
         {{ok, Config},
          {ok, {OwnerNs, <<_:256>>} = Origin, <<_:256>> = GroupId, Rows},
          {ok, {group, OwnerNs, _Anchor, _Coordinator, _Admission, GroupId}}}
-          when length(Rows) >= 1,
+          when length(Rows) >= 2,
                length(Rows) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
             seed_begin_evidence(
               BeginEvidence,

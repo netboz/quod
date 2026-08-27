@@ -380,6 +380,9 @@ outcome_json(#{status := Status,
       maps:with([height, reason], Outcome)).
 
 durable_submission_json(
+  #transaction{role = {remote_complete, _, _, _}}) ->
+    {ok, null, null};
+durable_submission_json(
   #transaction{goal = GoalBlob, result = ResultBlob}) ->
     case {quod_durable_term:decode_goal(GoalBlob),
           quod_durable_term:decode_result(ResultBlob)} of
@@ -427,13 +430,15 @@ entry_rows(Store, Ns, #entry{data = Data} = E) ->
 
 -doc "The list-row rendering of one transaction inside its committed entry.".
 tx_json(Ns, #transaction{tx_id = Id,
+                     role = Role,
                      goal = G, author = A,
                      author_seq = AuthorSeq, submitted_at = Sub,
                      diff = Diff, effects = Effects},
         #entry{index = Slot, timestamp = Ts}) ->
-    tx_json_decoded(
+    (tx_json_decoded(
       Ns, Id, durable_goal_text(G), A, AuthorSeq, Sub,
-      Diff, Effects, Slot, Ts).
+      Diff, Effects, Slot, Ts))#{role => role_name(Role),
+                                 role_details => role_details(Role)}.
 
 tx_json_decoded(Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
                 Diff, Effects, Slot, Timestamp) ->
@@ -463,7 +468,12 @@ tx_json_full_decoded(
   GoalJson, ResultJson) ->
     (tx_json_decoded(
        Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
-       Diff, Effects, Slot, Timestamp))#{result => ResultJson,
+       Diff, Effects, Slot, Timestamp))#{
+                     role => role_name(T#transaction.role),
+                     role_details => role_details(T#transaction.role),
+                     evidence_ref => evidence_ref_json(
+                                       quod_transaction:evidence(T)),
+                     result => ResultJson,
                      diff => [op_json(Op) || Op <- Diff],
                      root_facts_changed => fact_op_count(Diff) > 0,
                      effects => [effect_json(Effect) || Effect <- Effects],
@@ -477,6 +487,42 @@ tx_json_full_decoded(
                                   transaction_ref(Origin, Id)),
                      signature => signature_json(Sig),
                      signature_status => signature_status(T, E)}.
+
+role_name(application) -> application;
+role_name({remote_claim, _, _, _}) -> remote_claim;
+role_name({remote_application, _, _, _}) -> remote_application;
+role_name({remote_complete, _, _, _}) -> remote_complete.
+
+role_details(application) -> null;
+role_details(
+  {remote_claim, _Manifest,
+   {Target = {TargetNs, <<_:256>> = TargetAnchor}, PlanDigest,
+    _PlanBlob, _Attestation}, <<_:256>> = TargetTxId})
+  when is_binary(TargetNs) ->
+    #{target => origin_json(Target),
+      target_transaction => anchored_outcome_ref_json(
+                              {transaction, TargetNs, TargetAnchor,
+                               TargetTxId}),
+      plan_digest => digest_json(PlanDigest)};
+role_details(
+  {remote_application, ClaimRef, OperationRef, RequestDigest}) ->
+    #{source_claim => anchored_outcome_ref_json(ClaimRef),
+      operation_ref => operation_ref_json(OperationRef),
+      request_digest => digest_json(RequestDigest)};
+role_details(
+  {remote_complete, OperationRef, RequestDigest, TargetRef}) ->
+    #{operation_ref => operation_ref_json(OperationRef),
+      request_digest => digest_json(RequestDigest),
+      target_transaction => anchored_outcome_ref_json(TargetRef)}.
+
+evidence_ref_json(none) -> null;
+evidence_ref_json({CertifiedRef, _Transaction}) ->
+    case quod_dtx:certified_ref_binding(CertifiedRef) of
+        {ok, {Ns, Anchor}, Slot, TxId} ->
+            (anchored_outcome_ref_json(
+               {transaction, Ns, Anchor, TxId}))#{height => Slot};
+        error -> null
+    end.
 
 transaction_ref({Ns, <<_:256>> = Anchor}, <<_:256>> = TxId)
   when is_binary(Ns) ->
@@ -557,6 +603,7 @@ local_effect_status(EffectId, Executor) ->
 local_effect_state(transaction_bound) -> pending;
 local_effect_state(transaction_ready) -> pending;
 local_effect_state(transaction_submitted) -> pending;
+local_effect_state(operation_pending) -> pending;
 local_effect_state(group_pending) -> pending;
 local_effect_state(released) -> pending;
 local_effect_state(State) -> State.

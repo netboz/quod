@@ -291,6 +291,61 @@ same_agent_request_has_one_semantic_transaction_across_validator_authors_test() 
               {Ns, Anchor, Admission}, Second)),
     ?assertEqual(Target, maps:get(target, Claim)).
 
+remote_operation_ids_are_acyclic_and_evidence_independent_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Origin = maps:get(origin, Fixture),
+    Target = maps:get(participant_target, Fixture),
+    Claim = maps:get(claim, Fixture),
+    ClaimRef = maps:get(claim_ref, Fixture),
+    Application = maps:get(application, Fixture),
+    TargetRef = maps:get(target_ref, Fixture),
+    Completion = maps:get(completion, Fixture),
+    ?assert(quod_transaction:valid_id(Origin, Claim)),
+    ?assert(quod_transaction:valid_id(Target, Application)),
+    ?assert(quod_transaction:valid_id(Origin, Completion)),
+    ?assertEqual({ok, true},
+                 quod_durable_term:decode_goal(
+                   Completion#transaction.goal)),
+    ?assertEqual({ok, []},
+                 quod_durable_term:decode_result(
+                   Completion#transaction.result)),
+    ?assertEqual(
+       Application#transaction.tx_id,
+       (quod_transaction:remote_application(ClaimRef, Claim))#transaction.tx_id),
+    {TargetNs, TargetAnchor} = Target,
+    ?assertEqual({transaction, TargetNs, TargetAnchor,
+                  Application#transaction.tx_id}, TargetRef),
+    %% Certified block/proof bytes accelerate verification but are not semantic
+    %% input: replacing only the proof leaves the target transaction id fixed.
+    {OriginNs, OriginAnchor} = Origin,
+    {ok, OtherCertifiedClaimRef} = quod_dtx:certified_ref(
+                                      OriginNs, OriginAnchor, 9, <<215:256>>,
+                                      Claim#transaction.tx_id, <<"other-qc">>),
+    OtherEvidence = quod_transaction:attach_evidence(
+                      quod_transaction:remote_application(ClaimRef, Claim),
+                      OtherCertifiedClaimRef, Claim),
+    ?assertEqual(Application#transaction.tx_id,
+                 OtherEvidence#transaction.tx_id),
+    ?assertNotEqual(Application#transaction.evidence,
+                    OtherEvidence#transaction.evidence).
+
+remote_operation_role_and_evidence_roundtrip_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Claim = maps:get(claim, Fixture),
+    Application = maps:get(application, Fixture),
+    Completion = maps:get(completion, Fixture),
+    ?assertEqual(shared, quod_transaction:remote_claim_route(Claim)),
+    ?assertMatch([_], quod_transaction:required_references(Application)),
+    ?assertMatch([_], quod_transaction:required_references(Completion)),
+    ?assertEqual([], quod_transaction:required_references(Claim)),
+    {CertifiedClaimRef, StoredClaim} = Application#transaction.evidence,
+    {ok, EvidenceBlob} = quod_transaction:encode_evidence(
+                           CertifiedClaimRef, StoredClaim),
+    ?assertEqual({ok, CertifiedClaimRef, StoredClaim},
+                 quod_transaction:decode_evidence(EvidenceBlob)),
+    ?assertEqual({error, bad_remote_evidence},
+                 quod_transaction:decode_evidence(flip_first(EvidenceBlob))).
+
 network_identity_requirement_is_total_and_fail_closed_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     Signed = maps:get(transaction, Fixture),
@@ -324,11 +379,12 @@ relay_submission_roundtrip_test() ->
 
 superseded_v9_transaction_is_explicitly_rejected_test() ->
     {Tx, Identity} = signed(),
-    {ok, V10Bytes} = quod_transaction:bytes(?BINDING, Tx),
-    {quod_transaction, 10, Ns, Anchor, Admission,
+    {ok, V11Bytes} = quod_transaction:bytes(?BINDING, Tx),
+    {quod_transaction, 11, Ns, Anchor, Admission,
      TxId, Origin, ProofId, PlanDigest, Goal, Result,
-     MaterialWire, EffectsWire, RequestAuth, AuthorizationTranscript,
-     Author, AuthorSeq, SubmittedAt} = binary_to_term(V10Bytes),
+     MaterialWire, EffectsWire, _Role, _Evidence,
+     RequestAuth, AuthorizationTranscript,
+     Author, AuthorSeq, SubmittedAt} = binary_to_term(V11Bytes),
     V9Bytes = term_to_binary(
                 {quod_transaction, 9, Ns, Anchor, Admission,
                  TxId, Origin, ProofId, PlanDigest, Goal, Result,
@@ -455,10 +511,10 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 10, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 11, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
            <<>>, <<>>, MaterialWire, CanonicalEffects,
-           none, none, Author, 1, 0},
+           application, none, none, none, Author, 1, 0},
           [deterministic]),
     Signature = quod_identity:sign(Canonical, Identity),
     Submission = {submit, Author, Signature, Canonical},

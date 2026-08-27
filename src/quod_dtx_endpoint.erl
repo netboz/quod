@@ -1,6 +1,6 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v1 wire boundary for durable distributed-transaction recovery traffic.
+Pure v2 wire boundary for durable operation recovery traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
@@ -15,11 +15,12 @@ One bidirectional channel is derived from the target namespace. Frames carry a
 second copy of that namespace in a hard-break envelope, and callers normally
 use the direction-aware `decode_request/2` or `decode_response/2` form to bind
 it to the channel they subscribed to. Semantic DTX record bytes stay opaque to
-this module, but submit admission delegates their exact shape, canonical bytes,
-and bounds to the authoritative `quod_dtx` record codec. The target engine then
-applies target identity, history, policy, signing, and consensus semantics.
+this module. A singleton application carries one canonical certified claim
+owned by `quod_transaction`; the target reconstructs its deterministic
+application. Both enter the existing target signing and consensus machinery.
 """.
 
+-include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_transport_limits.hrl").
 
@@ -32,7 +33,7 @@ applies target identity, history, policy, signing, and consensus semantics.
 -export_type([request/0, response/0, public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 1).
+-define(VERSION, 3).
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -53,6 +54,9 @@ applies target identity, history, policy, signing, and consensus semantics.
 -type verdict() :: commit | abort.
 -type request() ::
         {submit, request_id(), binary()} |
+        {apply_claim, request_id(), binary()} |
+        {cancel_operation_effect, request_id(), transaction_ref(),
+         transaction_ref(), <<_:256>>} |
         {phase, request_id(), <<_:256>>, phase_kind()} |
         {outcome, request_id(), outcome_ref(), <<_:256>>, pos_integer()} |
         {outcome_barrier, request_id(), group_ref(), <<_:256>>,
@@ -64,6 +68,8 @@ applies target identity, history, policy, signing, and consensus semantics.
 -type barrier_status() :: not_found | pending_begin | coordinator_retired.
 -type response() ::
         {accepted, request_id(), <<_:256>>, quod_dtx:certified_ref()} |
+        {application, request_id(), committed | {rejected, atom()}, binary()} |
+        {operation_effect_cancelled, request_id(), cancelled | not_found} |
         {refused, request_id(), identity(), <<_:256>>, non_neg_integer(),
          binary()} |
         {phase, request_id(), non_neg_integer(),
@@ -214,7 +220,7 @@ validate_direction(Term, request) -> validate_request(Term);
 validate_direction(Term, response) -> validate_response(Term).
 
 %% ------------------------------------------------------------------
-%% Fixed v1 operation algebra
+%% Fixed v2 operation algebra
 %% ------------------------------------------------------------------
 
 validate_request({submit, RequestId, RecordBlob}) ->
@@ -222,9 +228,19 @@ validate_request({submit, RequestId, RecordBlob}) ->
         false -> protocol_error(bad_request_id);
         true -> validate_record_blob(RecordBlob)
     end;
+validate_request({apply_claim, RequestId, EvidenceBlob}) ->
+    validate_request_fields(
+      RequestId, valid_claim_evidence(EvidenceBlob));
 validate_request({phase, RequestId, GroupId, Kind}) ->
     validate_request_fields(
       RequestId, valid_digest(GroupId) andalso valid_phase_kind(Kind));
+validate_request(
+  {cancel_operation_effect, RequestId, ClaimRef, TargetRef,
+   <<_:256>>}) ->
+    validate_request_fields(
+      RequestId,
+      valid_transaction_ref(ClaimRef) andalso
+          valid_transaction_ref(TargetRef));
 validate_request(
   {outcome, RequestId, OutcomeRef, CommitteeId, MinimumSlot}) ->
     validate_request_fields(
@@ -265,6 +281,15 @@ validate_response({accepted, RequestId, SemanticDigest, CertifiedRef}) ->
       RequestId,
       valid_digest(SemanticDigest) andalso
           certified_ref_digest(CertifiedRef) =:= SemanticDigest);
+validate_response({application, RequestId, Result, EvidenceBlob}) ->
+    validate_response_fields(
+      RequestId,
+      valid_application_result(Result) andalso
+          valid_application_evidence(EvidenceBlob));
+validate_response(
+  {operation_effect_cancelled, RequestId, Status}) ->
+    validate_response_fields(
+      RequestId, Status =:= cancelled orelse Status =:= not_found);
 validate_response(
   {refused, RequestId, TargetIdentity, SemanticDigest, Generation,
    ReasonsBlob}) ->
@@ -363,15 +388,19 @@ valid_public_outcome_status(
     valid_group_ref(GroupRef);
 valid_public_outcome_status(
   #{status := claimed, height := Height, ref := OperationRef,
-    request_digest := RequestDigest, outcome_ref := OutcomeRef} = Status)
-  when map_size(Status) =:= 5 ->
+    request_digest := RequestDigest, outcome_ref := OutcomeRef,
+    operation_state := OperationState} = Status)
+  when map_size(Status) =:= 6 ->
     valid_slot(Height) andalso valid_operation_ref(OperationRef) andalso
         is_binary(RequestDigest) andalso byte_size(RequestDigest) =:= 32 andalso
-        valid_outcome_ref(OutcomeRef) andalso
-        quod_outcome:ref_identity(OperationRef) =:=
-            quod_outcome:ref_identity(OutcomeRef);
+        valid_operation_state(OperationState) andalso
+        valid_outcome_ref(OutcomeRef);
 valid_public_outcome_status(_) ->
     false.
+
+valid_operation_state(unresolved) -> true;
+valid_operation_state(terminal) -> true;
+valid_operation_state(_) -> false.
 
 valid_pending_phase(pending_begin) -> true;
 valid_pending_phase(begun) -> true;
@@ -395,7 +424,7 @@ valid_binding_names(_, _) -> false.
 valid_participant_slots(Slots) ->
     valid_participant_slots(Slots, none, 0).
 
-valid_participant_slots([], _Previous, Count) -> Count >= 1;
+valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
        (Previous =:= none orelse Previous < Identity),
@@ -412,6 +441,9 @@ valid_participant_slots(_, _, _) -> false.
 
 -spec request_id(term()) -> request_id() | error.
 request_id({submit, RequestId, _}) -> valid_id_or_error(RequestId);
+request_id({apply_claim, RequestId, _}) -> valid_id_or_error(RequestId);
+request_id({cancel_operation_effect, RequestId, _, _, _}) ->
+    valid_id_or_error(RequestId);
 request_id({phase, RequestId, _, _}) -> valid_id_or_error(RequestId);
 request_id({outcome, RequestId, _, _, _}) -> valid_id_or_error(RequestId);
 request_id({outcome_barrier, RequestId, _, _, _}) ->
@@ -421,6 +453,9 @@ request_id(_) -> error.
 
 -spec response_id(term()) -> request_id() | error.
 response_id({accepted, RequestId, _, _}) -> valid_id_or_error(RequestId);
+response_id({application, RequestId, _, _}) -> valid_id_or_error(RequestId);
+response_id({operation_effect_cancelled, RequestId, _}) ->
+    valid_id_or_error(RequestId);
 response_id({refused, RequestId, _, _, _, _}) ->
     valid_id_or_error(RequestId);
 response_id({phase, RequestId, _, _}) -> valid_id_or_error(RequestId);
@@ -451,6 +486,15 @@ correlates({submit, RequestId, RecordBlob} = Request,
            {refused, RequestId, _, SemanticDigest, _, _} = Response) ->
     valid_pair(Request, Response) andalso
         prepare_blob_digest(RecordBlob) =:= SemanticDigest;
+correlates(
+  {apply_claim, RequestId, ClaimEvidence} = Request,
+  {application, RequestId, _Result, TargetEvidence} = Response) ->
+    valid_pair(Request, Response) andalso
+        application_response_matches(ClaimEvidence, TargetEvidence);
+correlates(
+  {cancel_operation_effect, RequestId, _, _, _} = Request,
+  {operation_effect_cancelled, RequestId, _} = Response) ->
+    valid_pair(Request, Response);
 correlates({phase, RequestId, _, _} = Request,
            {phase, RequestId, _, _} = Response) ->
     valid_pair(Request, Response);
@@ -495,6 +539,52 @@ prepare_blob_digest(RecordBlob) ->
             quod_dtx:record_digest(Record);
         _ ->
             error
+    end.
+
+valid_claim_evidence(Blob) ->
+    case quod_transaction:decode_evidence(Blob) of
+        {ok, ClaimRef,
+         #transaction{role = {remote_claim, _, _, _}} = Claim} ->
+            case quod_transaction:stable_ref(ClaimRef) of
+                {transaction, _, _, _} = StableRef ->
+                    try quod_transaction:remote_application(
+                          StableRef, Claim) of
+                        #transaction{} -> true
+                    catch _:_ -> false
+                    end;
+                invalid -> false
+            end;
+        _ -> false
+    end.
+
+valid_application_evidence(Blob) ->
+    case quod_transaction:decode_evidence(Blob) of
+        {ok, _Ref, #transaction{role = {remote_application, _, _, _}}} ->
+            true;
+        _ -> false
+    end.
+
+valid_application_result(committed) -> true;
+valid_application_result({rejected, Reason}) when is_atom(Reason) -> true;
+valid_application_result(_) -> false.
+
+application_response_matches(ClaimBlob, TargetBlob) ->
+    case {quod_transaction:decode_evidence(ClaimBlob),
+          quod_transaction:decode_evidence(TargetBlob)} of
+        {{ok, ClaimRef, #transaction{} = Claim},
+         {ok, _TargetRef, #transaction{} = TargetTx}} ->
+            case quod_transaction:stable_ref(ClaimRef) of
+                {transaction, _, _, _} = StableRef ->
+                    try quod_transaction:remote_application(
+                          StableRef, Claim) of
+                        Expected ->
+                            Expected#transaction.tx_id =:=
+                                TargetTx#transaction.tx_id
+                    catch _:_ -> false
+                    end;
+                invalid -> false
+            end;
+        _ -> false
     end.
 
 %% ------------------------------------------------------------------

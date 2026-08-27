@@ -42,7 +42,8 @@ quod_reg:publish({channel, Ns}, {quod_message, {Peer, self()}, Ns, Payload}).
 """.
 
 -export([name/1, prop/1, via/1, where/1]).
--export([reg/1, publish/2, subscribe/1, unsubscribe/1]).
+-export([reg/1, publish/2, subscribe/1, unsubscribe/1,
+         monitor_name/2, demonitor_name/2]).
 
 -export_type([key/0]).
 -type key() :: {Type :: atom(), Id :: term()}.
@@ -85,3 +86,11 @@ subscribe(Key) -> gproc:reg({p, l, Key}).
 -doc "The **current** process stops receiving `Key`'s events.".
 -spec unsubscribe(key()) -> true.
 unsubscribe(Key) -> gproc:unreg({p, l, Key}).
+
+-doc "Monitor a unique local name, optionally following owner replacement.".
+-spec monitor_name(key(), info | follow | standby) -> reference().
+monitor_name(Key, Type) -> gproc:monitor(name(Key), Type).
+
+-doc "Remove a unique-name monitor created by monitor_name/2.".
+-spec demonitor_name(key(), reference()) -> ok.
+demonitor_name(Key, Ref) -> gproc:demonitor(name(Key), Ref).

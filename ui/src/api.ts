@@ -8,6 +8,22 @@ import type { AgentReference } from '../../client/src/signed-client.js'
 export type PeerId = { id: string; pubkey: string | null }
 export type Origin = { ns: string; anchor: string } | null
 
+export type TransactionRef = {
+  kind: 'transaction'
+  ns: string
+  anchor: string
+  tx_id: string
+  height?: number
+}
+
+export type TxRole = 'application' | 'remote_claim' | 'remote_application' | 'remote_complete'
+
+export type TxRoleDetails =
+  | null
+  | { target: NonNullable<Origin>; target_transaction: TransactionRef; plan_digest: string }
+  | { source_claim: TransactionRef; operation_ref: SignedRequest['operation_ref']; request_digest: string }
+  | { operation_ref: SignedRequest['operation_ref']; request_digest: string; target_transaction: TransactionRef }
+
 export type TxRow = {
   row_type: 'transaction'
   row_id: string
@@ -23,6 +39,8 @@ export type TxRow = {
   fact_ops: number
   effect_count: number
   effect_operations: string[]
+  role: TxRole
+  role_details: TxRoleDetails
 }
 
 // A DTX phase is a committed ledger record too. It has no #transaction{} body,
@@ -53,7 +71,7 @@ export type Effect = {
   request_digest: string
   prepared_digest: string
   local_execution: 'pending' | 'applied' | 'retired' | 'operator_error' | 'unavailable' | 'not_this_node'
-  local_custody_state?: 'transaction_bound' | 'transaction_ready' | 'transaction_submitted' | 'group_pending' | 'released' | 'applied' | 'retired' | 'operator_error'
+  local_custody_state?: 'transaction_bound' | 'transaction_ready' | 'transaction_submitted' | 'operation_pending' | 'group_pending' | 'released' | 'applied' | 'retired' | 'operator_error'
   local_execution_height?: number
   local_execution_result?: string | null
 }
@@ -70,6 +88,7 @@ export type TxFull = TxRow & {
   request?: SignedRequest | null
   signature: string | null
   signature_status: 'verified' | 'genesis' | 'unsigned' | 'invalid' | 'unknown'
+  evidence_ref: TransactionRef | null
 }
 
 export type SignedRequest = {

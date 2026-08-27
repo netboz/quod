@@ -103,6 +103,37 @@ reaction_latency_uses_only_bounded_result_labels_test() ->
         Placeholder ! stop
     end.
 
+remote_operation_latency_uses_only_fixed_stage_and_result_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"operation:metrics:",
+           (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    ok = quod_metrics:observe_remote_operation_stage(
+           Ns, source_claim, ok, 7),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        OneSecond = erlang:convert_time_unit(1, second, native),
+        ok = quod_metrics:observe_remote_operation_stage(
+               Ns, source_claim, ok, OneSecond),
+        ok = quod_metrics:observe_remote_operation_stage(
+               Ns, attacker_stage, ok, OneSecond),
+        ok = quod_metrics:observe_remote_operation_stage(
+               Ns, source_claim, attacker_result, OneSecond),
+        {_, Sum} = prometheus_histogram:value(
+                     quod_remote_operation_stage_seconds,
+                     [Ns, <<"source_claim">>, <<"ok">>]),
+        ?assertEqual(1.0, Sum),
+        ?assertEqual(
+           undefined,
+           prometheus_histogram:value(
+             quod_remote_operation_stage_seconds,
+             [Ns, <<"attacker_stage">>, <<"ok">>]))
+    after
+        Placeholder ! stop
+    end.
+
 owner_lifetimes_use_only_fixed_component_phase_and_result_labels_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     Ns = <<"owner:metrics:",

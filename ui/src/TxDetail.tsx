@@ -49,8 +49,14 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
         <Dt>Status</Dt>
         <dd>
           <StatusBadge status={full.status} />
-          <span className="ml-2 text-xs text-gray">{statusText[full.status]}</span>
+          <span className="ml-2 text-xs text-gray">
+            {full.status === 'history' && (full.role === 'remote_claim' || full.role === 'remote_complete')
+              ? 'committed operation metadata'
+              : statusText[full.status]}
+          </span>
         </dd>
+        <Dt>Role</Dt>
+        <dd className="font-mono">{full.role.replaceAll('_', ' ')}</dd>
         <Dt>Ontology</Dt>
         <dd className="font-mono">{full.ns}</dd>
         {full.origin && (
@@ -110,11 +116,52 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
 
       {full.request && <SignedRequestSection request={full.request} />}
 
-      <Section title="Goal">
-        <pre className="rounded-lg bg-cream p-3 font-mono text-[13px] break-all whitespace-pre-wrap text-teal">
-          {full.goal ?? 'genesis'}
-        </pre>
-      </Section>
+      {full.role !== 'application' && (
+        <Section title="Remote operation">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            {full.role_details && 'source_claim' in full.role_details && (
+              <>
+                <Dt>Source claim</Dt>
+                <dd className="font-mono break-all text-gray">{transactionRefText(full.role_details.source_claim)}</dd>
+              </>
+            )}
+            {full.role_details && 'target_transaction' in full.role_details && (
+              <>
+                <Dt>Target transaction</Dt>
+                <dd className="font-mono break-all text-gray">{transactionRefText(full.role_details.target_transaction)}</dd>
+              </>
+            )}
+            {full.role_details && 'operation_ref' in full.role_details && full.role_details.operation_ref && (
+              <>
+                <Dt>Operation</Dt>
+                <dd className="font-mono break-all text-gray">
+                  {full.role_details.operation_ref.ns}:{full.role_details.operation_ref.operation_id}
+                </dd>
+              </>
+            )}
+            {full.role_details && 'request_digest' in full.role_details && (
+              <>
+                <Dt>Request digest</Dt>
+                <dd className="font-mono break-all text-gray">{full.role_details.request_digest}</dd>
+              </>
+            )}
+            {full.evidence_ref && (
+              <>
+                <Dt>Certified evidence</Dt>
+                <dd className="font-mono break-all text-gray">{transactionRefText(full.evidence_ref)}</dd>
+              </>
+            )}
+          </dl>
+        </Section>
+      )}
+
+      {full.role !== 'remote_complete' && (
+        <Section title="Goal">
+          <pre className="rounded-lg bg-cream p-3 font-mono text-[13px] break-all whitespace-pre-wrap text-teal">
+            {full.goal ?? 'genesis'}
+          </pre>
+        </Section>
+      )}
 
       {full.result != null && (
         <Section title="Result">
@@ -129,6 +176,10 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
       <CertSection cert={full.cert} />
     </aside>
   )
+}
+
+function transactionRefText(ref: { ns: string; anchor: string; tx_id: string; height?: number }) {
+  return `${ref.ns}:${shortHex(ref.tx_id, 20)}${ref.height == null ? '' : ` at #${ref.height}`}`
 }
 
 function SignedRequestSection({ request }: { request: SignedRequest }) {

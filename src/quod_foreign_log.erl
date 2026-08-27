@@ -2601,7 +2601,7 @@ open_cache(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot) ->
                                     Projection0 = quod_simplex:history_projection(
                                                     {Ns, Anchor}),
                                     case replay_cache(
-                                           Store, Ns, Anchor, Height,
+                                           Root, CacheNs, Ns, Anchor, Height,
                                            Projection0, PhaseIndex,
                                            TargetSlot) of
                                         {ok, Projection, TargetProjection}
@@ -2651,16 +2651,16 @@ open_cache(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot) ->
             {error, cache_corrupt}
     end.
 
-replay_cache(_Store, _Ns, _Anchor, 0, Projection, _PhaseIndex,
+replay_cache(_Root, _CacheNs, _Ns, _Anchor, 0, Projection, _PhaseIndex,
              _TargetSlot) ->
     {ok, Projection, undefined};
-replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex,
+replay_cache(Root, CacheNs, Ns, Anchor, Height, Projection0, PhaseIndex,
              TargetSlot) ->
-    replay_cache(Store, Ns, Anchor, 1, Height, Projection0, PhaseIndex,
-                 TargetSlot, undefined).
+    replay_cache(Root, CacheNs, Ns, Anchor, 1, Height, Projection0,
+                 PhaseIndex, TargetSlot, undefined).
 
-replay_cache(_Store, Ns, Anchor, From, Height, Projection, _PhaseIndex,
-             TargetSlot, TargetProjection)
+replay_cache(_Root, _CacheNs, Ns, Anchor, From, Height, Projection,
+             _PhaseIndex, TargetSlot, TargetProjection)
   when From > Height ->
     TargetOk = case TargetSlot of
                    none -> true;
@@ -2672,7 +2672,7 @@ replay_cache(_Store, Ns, Anchor, From, Height, Projection, _PhaseIndex,
         true -> {ok, Projection, TargetProjection};
         false -> {error, cache_corrupt}
     end;
-replay_cache(Store, Ns, Anchor, From, Height, Projection0, PhaseIndex,
+replay_cache(Root, CacheNs, Ns, Anchor, From, Height, Projection0, PhaseIndex,
              TargetSlot, TargetProjection0) ->
     WindowTo = min(Height, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
     %% End one replay window exactly at the requested reference slot so the
@@ -2683,10 +2683,18 @@ replay_cache(Store, Ns, Anchor, From, Height, Projection0, PhaseIndex,
              true -> TargetSlot;
              false -> WindowTo
          end,
-    try quod_ledger_store:read_range(Store, From, To) of
-        {ok, Entries} ->
+    %% The network owner originally persisted this history in pages bounded by
+    %% both entry count and encoded bytes. Reopening must use that same page
+    %% owner: a count-bounded range can still exceed the byte ceiling when it
+    %% contains many large, individually valid entries. `serve_blocks/4`
+    %% returns the longest safe prefix, so replay advances by the actual page
+    %% length and never mistakes a valid cache for corruption.
+    try quod_catchup:serve_blocks(CacheNs, Root, From, To) of
+        {ok, Entries, Height} ->
             case quod_catchup:page_stats(Entries) of
-                {ok, Count, _Bytes} when Count =:= To - From + 1 ->
+                {ok, Count, _Bytes}
+                  when Count > 0, Count =< To - From + 1 ->
+                    PageTo = From + Count - 1,
                     case quod_catchup:verify_forward(
                            Ns, Anchor, Projection0, From, Entries,
                            PhaseIndex) of
@@ -2697,14 +2705,14 @@ replay_cache(Store, Ns, Anchor, From, Height, Projection0, PhaseIndex,
                                 true ->
                                     TargetProjection1 =
                                         case is_integer(TargetSlot) andalso
-                                                  To =:= TargetSlot of
+                                                  PageTo =:= TargetSlot of
                                             true -> Projection1;
                                             false -> TargetProjection0
                                         end,
                                     replay_cache(
-                                      Store, Ns, Anchor, To + 1, Height,
-                                      Projection1, PhaseIndex, TargetSlot,
-                                      TargetProjection1);
+                                      Root, CacheNs, Ns, Anchor, PageTo + 1,
+                                      Height, Projection1, PhaseIndex,
+                                      TargetSlot, TargetProjection1);
                                 false -> {error, cache_corrupt}
                             end;
                         {error, {unavailable, network_identity, _Reason}} ->

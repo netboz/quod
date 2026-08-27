@@ -173,6 +173,63 @@ inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+byte_large_verified_cache_reopens_through_canonical_pages_test() ->
+    Fixture = byte_large_foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31991},
+    Ref = maps:get(ref, Fixture),
+    SourceDir = temp_dir("byte-large-source"),
+    CacheDir = temp_dir("byte-large-cache"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(
+                     Store0, maps:get(chain, Fixture)),
+    ok = quod_ledger_store:close(Store1),
+    Fetch =
+        fun(_RoutePeer, _RouteEndpoint, RequestedNs, From, To)
+              when RequestedNs =:= Ns ->
+                quod_catchup:serve_blocks(Ns, SourceDir, From, To);
+           (_RoutePeer, _RouteEndpoint, _RequestedNs, _From, _To) ->
+                {error, wrong_namespace}
+        end,
+    Pid1 = start_owner(CacheDir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:current(
+             [{Peer, [Endpoint]}], Identity, 5000)),
+        %% A current-view request advances one certified page. The second call
+        %% appends the remaining valid page, making the durable cache larger
+        %% than either individual transport page.
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:current(
+             [{Peer, [Endpoint]}], Identity, 5000)),
+        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid1)
+    end,
+    %% The cache exceeds one certified page even though every source response
+    %% and every individual block is valid. Reopening must replay the same
+    %% byte-bounded page shape rather than treating a count-bounded read as one
+    %% oversized network page.
+    CacheNs = quod_foreign_log:cache_namespace(Identity),
+    CacheLog = filename:join(
+                 quod_ledger_store:ns_dir(CacheDir, CacheNs), "log.0001"),
+    ?assert(filelib:file_size(CacheLog) > ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+    NoFetch = fun(_, _, _, _, _) -> {error, network_used} end,
+    Pid2 = start_owner(CacheDir, NoFetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify_reference(Ref, finalize, 5000))
+    after
+        stop_owner(Pid2),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
 one_peer_can_introduce_many_dormant_bootstrap_identities_test() ->
     Dir = temp_dir("bootstrap-peer-identities"),
     Pid = start_owner(
@@ -1437,7 +1494,37 @@ foreign_fixture(Ns) ->
     Entry = control_entry(Ns, Anchor, Pub, Signer, 2, ControlBlob),
     {ok, Ref} = quod_dtx:certified_entry_ref(Binding, Entry, Control),
     #{ns => Ns, pub => Pub, signer => Signer, anchor => Anchor,
+      admission => Admission,
       chain => [Genesis, Entry], ref => Ref, control => Control}.
+
+byte_large_foreign_fixture(Ns) ->
+    Fixture = foreign_fixture(Ns),
+    Pub = maps:get(pub, Fixture),
+    Signer = maps:get(signer, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Binding = {Ns, Anchor},
+    Blob = binary:copy(<<16#aa>>, 48 * 1024),
+    Entries =
+        [begin
+             Tx0 = #transaction{
+                     origin = Binding,
+                     proof_id = key(300 + Sequence),
+                     plan_digest = key(400 + Sequence),
+                     goal = durable_goal({large_history, Sequence}),
+                     result = durable_result(),
+                     diff = [{assert,
+                              {{large_history, Sequence, Blob}, true}}],
+                     read_check = #{}, author = Pub,
+                     author_seq = Sequence,
+                     submitted_at = Sequence, sig = none},
+             Tx1 = quod_transaction:bind_id(Binding, Tx0),
+             {ok, Tx} = quod_transaction:sign(
+                          {Ns, Anchor, Admission}, Tx1, Signer),
+             content_entry(
+               Ns, Anchor, Pub, Signer, Sequence + 1, [Tx])
+         end || Sequence <- lists:seq(2, 22)],
+    Fixture#{chain := maps:get(chain, Fixture) ++ Entries}.
 
 signed_content_fixture(Ns) ->
     Base = fixture_base(Ns),

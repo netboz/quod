@@ -234,9 +234,8 @@ byte_large_verified_cache_reopens_through_canonical_pages_test() ->
            {ok, #{identity := Identity}},
            quod_foreign_log:current(
              [{Peer, [Endpoint]}], Identity, 5000)),
-        %% A current-view request advances one certified page. The second call
-        %% appends the remaining valid page, making the durable cache larger
-        %% than either individual transport page.
+        %% One current-view job advances every certified page to the captured
+        %% source height. A later call reuses that completed cache.
         ?assertMatch(
            {ok, #{identity := Identity}},
            quod_foreign_log:current(
@@ -320,6 +319,32 @@ verify_reference_uses_authenticated_candidate_and_route_failover_test() ->
         %% the temporary contacts instead of retaining stale guesses behind it.
         ?assertEqual(
            0, maps:get(bootstrap_candidates, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+verify_reference_uses_request_contact_without_pre_observation_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Dir = temp_dir("request-contact-verify"),
+    Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 19098},
+    Fetch = peer_chain_fetch(
+              maps:get(ns, Fixture), maps:get(chain, Fixture), [Peer]),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify_reference(
+             maps:get(ref, Fixture), finalize,
+             {Peer, Endpoint}, 5000)),
+        %% The request contact enabled the exact verification without first
+        %% becoming a bootstrap hint. Certified history is the only retained
+        %% result.
+        ?assertMatch(
+           #{histories := 1, bootstrap_candidates := 0},
+           quod_foreign_log:stats())
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -1121,21 +1146,25 @@ nonmember_route_cannot_corroborate_current_view_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-current_view_timeout_releases_verified_cache_and_remains_reusable_test() ->
+current_view_caller_timeout_detaches_without_killing_shared_work_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Peer = maps:get(pub, Fixture),
     Ref = maps:get(ref, Fixture),
     Routes = route_candidates([{Peer, {"127.0.0.1", 19000}}]),
-    Mode = atomics:new(1, []),
     TestPid = self(),
+    Gate = atomics:new(1, []),
     BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
     Fetch = fun(P, E, RequestedNs, From, To) ->
                     TestPid ! {current_fetch_from, From},
-                    case atomics:get(Mode, 1) of
-                        0 -> BaseFetch(P, E, RequestedNs, From, To);
-                        1 -> receive after 250 -> {error, delayed} end
-                    end
+                    case atomics:compare_exchange(Gate, 1, 1, 2) of
+                        ok ->
+                            TestPid ! {current_fetch_blocked, self()},
+                            receive release_current_fetch -> ok end;
+                        _ ->
+                            ok
+                    end,
+                    BaseFetch(P, E, RequestedNs, From, To)
             end,
     Dir = temp_dir("current-timeout"),
     Pid = start_owner(Dir, Fetch),
@@ -1145,21 +1174,126 @@ current_view_timeout_releases_verified_cache_and_remains_reusable_test() ->
            quod_foreign_log:verify(
              Peer, {"127.0.0.1", 19000}, Ref, finalize, 2000)),
         flush_fetches(),
-        ok = atomics:put(Mode, 1, 1),
-        Started = erlang:monotonic_time(millisecond),
+        ok = atomics:put(Gate, 1, 1),
+        First = gen_server:send_request(
+                  Pid, {verify_current, Routes, Ref, 100}),
+        Worker = receive
+                     {current_fetch_blocked, FetchWorker} -> FetchWorker
+                 after 2000 ->
+                     error(current_fetch_not_started)
+                 end,
         ?assertEqual(
-           {error, retry},
-           quod_foreign_log:verify_current(Routes, Ref, 100)),
-        ?assert(erlang:monotonic_time(millisecond) - Started < 1000),
-        ?assertEqual(0, maps:get(pending, quod_foreign_log:stats())),
+           {reply, {error, retry}},
+           gen_server:wait_response(First, 2000)),
+        %% The caller is gone, but the one cache writer remains active.
+        ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
-        ok = atomics:put(Mode, 1, 0),
+        Second = gen_server:send_request(
+                   Pid, {verify_current, Routes, Ref, 2000}),
+        ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
+        Worker ! release_current_fetch,
         ?assertMatch(
-           {ok, #{slot := 2}},
-           quod_foreign_log:verify_current(Routes, Ref, 2000)),
+           {reply, {ok, #{slot := 2}}},
+           gen_server:wait_response(Second, 3000)),
+        ?assertEqual(0, maps:get(pending, quod_foreign_log:stats())),
         Fetches = collect_fetches([]),
         ?assert(Fetches =/= []),
         ?assert(lists:all(fun(From) -> From =:= 3 end, Fetches))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+request_scoped_contact_is_preferred_and_not_retained_on_failure_test() ->
+    Identity = {unique_ns(), key(301)},
+    Peer = key(302),
+    Stale = {"127.0.0.1", 19301},
+    Live = {"127.0.0.1", 19302},
+    TestPid = self(),
+    Fetch = fun(P, Endpoint, _Ns, _From, _To) ->
+                    TestPid ! {request_contact_fetch, P, Endpoint},
+                    {error, unavailable}
+            end,
+    Dir = temp_dir("request-contact"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertEqual(
+           {error, retry},
+           quod_foreign_log:current(
+             route_candidates([{Peer, Stale}]), Identity,
+             {Peer, Live}, 1000)),
+        receive
+            {request_contact_fetch, Peer, Live} -> ok
+        after 2000 ->
+            error(request_contact_not_preferred)
+        end,
+        %% An unverifiable claim leaves neither a decoded history row nor a
+        %% persistent bootstrap address. No population cap is needed.
+        ?assertMatch(
+           #{histories := 0, bootstrap_candidates := 0},
+           quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+long_identity_convergence_survives_caller_timeout_test_() ->
+    {timeout, 30,
+     fun long_identity_convergence_survives_caller_timeout/0}.
+
+long_identity_convergence_survives_caller_timeout() ->
+    Fixture = long_identity_fixture(unique_ns(), 1025),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 19205},
+    Routes = route_candidates([{Peer, Endpoint}]),
+    TestPid = self(),
+    Gate = atomics:new(1, []),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch = fun(P, E, RequestedNs, From, To) ->
+                    TestPid ! {long_current_fetch, From},
+                    case From =:= 257 andalso
+                         atomics:compare_exchange(Gate, 1, 0, 1) =:= ok of
+                        true ->
+                            TestPid ! {long_current_blocked, self()},
+                            receive release_long_current -> ok end;
+                        false ->
+                            ok
+                    end,
+                    BaseFetch(P, E, RequestedNs, From, To)
+            end,
+    Dir = temp_dir("long-current-timeout"),
+    Pid = start_owner_opts(
+            Dir, Fetch, #{page_timeout_ms => 5000}),
+    try
+        First = gen_server:send_request(
+                  Pid, {current, Routes, Identity, none, 100}),
+        Worker = receive
+                     {long_current_blocked, FetchWorker} -> FetchWorker
+                 after 5000 ->
+                     error(long_current_second_page_not_reached)
+                 end,
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(First, 2000)),
+        ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
+        Second = gen_server:send_request(
+                   Pid, {current, Routes, Identity, none, 15000}),
+        ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
+        Worker ! release_long_current,
+        ?assertMatch(
+           {reply, {ok, #{slot := 1025}}},
+           gen_server:wait_response(Second, 15000)),
+        Fetches = collect_long_current_fetches([]),
+        %% Genesis is fetched once for discovery and once as the first page.
+        %% A restarted job would add another From=1 fetch.
+        ?assertEqual(2, length([ok || 1 <- Fetches])),
+        ?assert(lists:member(257, Fetches)),
+        ?assert(lists:member(513, Fetches)),
+        ?assert(lists:member(769, Fetches)),
+        ?assert(lists:member(1025, Fetches)),
+        ?assertEqual(0, maps:get(pending, quod_foreign_log:stats()))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -1192,7 +1326,7 @@ identical_current_identity_requests_share_one_verification_test() ->
     Pid = start_owner(Dir, Fetch),
     try
         FirstRequest = gen_server:send_request(
-                         Pid, {current, Routes, Identity, 2000}),
+                         Pid, {current, Routes, Identity, none, 2000}),
         Worker = receive
                      {shared_current_fetch, FetchWorker} -> FetchWorker
                  after 2000 ->
@@ -1200,7 +1334,7 @@ identical_current_identity_requests_share_one_verification_test() ->
                  end,
         SecondRequest = gen_server:send_request(
                           Pid, {current, RoutesWithAnotherHint,
-                                Identity, 100}),
+                                Identity, none, 100}),
         %% This stats call is sent after the second request by the same
         %% process, so it is a deterministic mailbox barrier, not a sleep.
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
@@ -1210,6 +1344,82 @@ identical_current_identity_requests_share_one_verification_test() ->
         {reply, {ok, SecondView}} =
             gen_server:wait_response(SecondRequest, 3000),
         ?assertEqual(FirstView, SecondView),
+        ?assertEqual(0, maps:get(pending, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+queued_identical_callers_expire_without_cancelling_the_job_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 19310},
+    Routes = route_candidates([{Peer, Endpoint}]),
+    TestPid = self(),
+    Gate = atomics:new(1, []),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch = fun(P, E, RequestedNs, From, To) ->
+                    case atomics:compare_exchange(Gate, 1, 0, 1) of
+                        ok ->
+                            TestPid ! {distinct_work_blocked, self()},
+                            receive release_distinct_work -> ok end;
+                        _ ->
+                            case From =:= 3 andalso
+                                 atomics:compare_exchange(
+                                   Gate, 1, 1, 2) =:= ok of
+                                true ->
+                                    TestPid ! {callerless_job_blocked, self()},
+                                    receive release_callerless_job -> ok end;
+                                false ->
+                                    ok
+                            end
+                    end,
+                    BaseFetch(P, E, RequestedNs, From, To)
+            end,
+    Dir = temp_dir("queued-shared-current"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        Active = gen_server:send_request(
+                   Pid, {verify, Peer, Endpoint, maps:get(ref, Fixture),
+                         finalize, 5000}),
+        ActiveWorker = receive
+                           {distinct_work_blocked, Worker} -> Worker
+                       after 2000 ->
+                           error(distinct_work_not_started)
+                       end,
+        First = gen_server:send_request(
+                  Pid, {current, Routes, Identity, none, 100}),
+        Second = gen_server:send_request(
+                   Pid, {current, Routes, Identity, none, 150}),
+        %% Both callers own one queued work item, not duplicate catch-up jobs.
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(First, 2000)),
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(Second, 2000)),
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        ActiveWorker ! release_distinct_work,
+        ?assertMatch(
+           {reply, {ok, _}}, gen_server:wait_response(Active, 3000)),
+        %% The now-callerless queued job still starts from the certified prefix
+        %% and finishes; caller expiry did not cancel shared history progress.
+        CallerlessWorker = receive
+            {callerless_job_blocked, Worker2} -> Worker2
+        after 3000 ->
+            error(callerless_queued_job_not_started)
+        end,
+        Third = gen_server:send_request(
+                  Pid, {current, Routes, Identity, none, 2000}),
+        ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
+        CallerlessWorker ! release_callerless_job,
+        ?assertMatch(
+           {reply, {ok, #{slot := 2}}},
+           gen_server:wait_response(Third, 3000)),
+        ?assertEqual(0, maps:get(queued, quod_foreign_log:stats())),
         ?assertEqual(0, maps:get(pending, quod_foreign_log:stats()))
     after
         stop_owner(Pid),
@@ -1561,6 +1771,34 @@ byte_large_foreign_fixture(Ns) ->
          end || Sequence <- lists:seq(2, 22)],
     Fixture#{chain := maps:get(chain, Fixture) ++ Entries}.
 
+long_identity_fixture(Ns, Height) when Height > 1 ->
+    Base = fixture_base(Ns),
+    Pub = maps:get(pub, Base),
+    Signer = maps:get(signer, Base),
+    Anchor = maps:get(anchor, Base),
+    Admission = maps:get(admission, Base),
+    Binding = {Ns, Anchor},
+    Entries =
+        [begin
+             Sequence = Slot - 1,
+             Tx0 = #transaction{
+                     origin = Binding,
+                     proof_id = key({long_proof, Slot}),
+                     plan_digest = key({long_plan, Slot}),
+                     goal = durable_goal({long_history, Slot}),
+                     result = durable_result(),
+                     diff = [{assert, {{long_history, Slot}, true}}],
+                     read_check = #{}, author = Pub,
+                     author_seq = Sequence,
+                     submitted_at = Sequence, sig = none},
+             Tx1 = quod_transaction:bind_id(Binding, Tx0),
+             {ok, Tx} = quod_transaction:sign(
+                          {Ns, Anchor, Admission}, Tx1, Signer),
+             content_entry(Ns, Anchor, Pub, Signer, Slot, [Tx])
+         end || Slot <- lists:seq(2, Height)],
+    Base#{ns => Ns,
+          chain => [maps:get(genesis, Base) | Entries]}.
+
 signed_content_fixture(Ns) ->
     Base = fixture_base(Ns),
     Pub = maps:get(pub, Base),
@@ -1813,6 +2051,14 @@ collect_bootstrap_route_fetches(Tag, Acc) ->
     receive
         {bootstrap_route_fetch, Tag, Peer, From} ->
             collect_bootstrap_route_fetches(Tag, [{Peer, From} | Acc])
+    after 50 ->
+        lists:reverse(Acc)
+    end.
+
+collect_long_current_fetches(Acc) ->
+    receive
+        {long_current_fetch, From} ->
+            collect_long_current_fetches([From | Acc])
     after 50 ->
         lists:reverse(Acc)
     end.

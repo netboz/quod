@@ -1936,13 +1936,30 @@ the removed timers with shorter intervals or move polling behind the property.
 
 ##### 4.7.5 Make first contact and cold history converge
 
+**Implementation status (current working tree, pending review):** implemented
+without a new route or verifier. Authenticated scope and DTX ingress keep the
+source contact in their existing request/work owner and supply it only to the
+ordinary authorization or foreign-reference verification attempt. Decode-only
+scope, claim, Prepare, and Finalize material stores nothing; a contact may
+enter the existing volatile route-hint state only after the corresponding
+check succeeds. `quod_foreign_log` keeps sole ownership of source selection,
+certified pages, phase-index deltas, and the current projection. Individual
+callers have independent wait deadlines; timing out no
+longer cancels active or queued history work. A current-view job advances to
+its captured remote height through certified page checkpoints, and identical
+later callers attach to that job. Continuous subscription following retains
+its existing bounded 256-entry target per turn; byte-bounded transport may use
+several shorter pages to reach that target.
+
 Transport authentication already proves the current hosting node key before
-agent authorization. At that seam, record the observed peer endpoint against
-the claimed source ontology in `quod_foreign_log` as a volatile bootstrap hint.
-The hint grants no ACL right and certifies no history: it only tells the
-existing verifier where to ask. The anchored genesis, signed history, current
-committee, agent instance, and active key must still verify normally. A forged
-or stale hint can only fail to fetch.
+agent authorization. Supply that observed endpoint directly to the one
+`quod_foreign_log` verification job as its freshest first-party contact. Do not
+store the claimed identity or contact before authorization: a failed request
+must leave neither behind. The contact grants no ACL right and certifies no
+history; it only tells the existing verifier where to ask. The anchored
+genesis, signed history, current committee, agent instance, and active key must
+still verify normally. After success the existing volatile contact mechanism
+may retain it for later work. A forged or stale contact can only fail to fetch.
 
 Separate a caller's wait from the certified catch-up job. One foreign-history
 owner per ontology continues page-by-page after an individual scope request
@@ -2054,7 +2071,7 @@ coordinator finishes remain explicit residuals for the 95% hardware gate.
 `result_handoff` begins when that waiter-resolution turn reaches the engine and
 includes outcome lookup, result shaping, and reply delivery; it is not merely
 the final message-send cost.
-Local verification on the exact tree is green: EUnit 1,363/0,
+Local verification on the exact tree is green: EUnit 1,368/0,
 `quod_ask_SUITE` 17/17, compile, xref, dialyzer, dashboard JSON, and diff-check.
 
 1. **Observability only.** Add one correlation id across proof/seal, dormant
@@ -2066,10 +2083,11 @@ Local verification on the exact tree is green: EUnit 1,363/0,
    changes. Do not begin the protocol refactor until the measured stages account
    for at least 95% of end-to-end wall time; any unexplained remainder is a
    bottleneck to trace, not an acceptable `other` bucket.
-2. **Liveness correctness.** Move authenticated current-contact observation to
-   the pre-authorization transport seam and make cold catch-up owner-lived and
-   resumable. Prove a stale-port, cold 1,000+ entry source eventually verifies
-   without manual route injection.
+2. **Liveness correctness.** Give the pre-authorization verifier its
+   authenticated current contact without storing an unapproved identity; only
+   successful authorization may retain the contact. Make cold catch-up
+   owner-lived and resumable. Prove a stale-port, cold 1,000+ entry source
+   eventually verifies without manual route injection.
 3. **Wave execution and evidence reuse.** Parallelize participant commands,
    carry accepted-entry hints through both source proposals and retained-control
    target relays, use `verify_applied_many/3`, install the one post-apply

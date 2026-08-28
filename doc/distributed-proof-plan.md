@@ -2379,12 +2379,22 @@ Every item below records the group implementation as one hard break.
    unreachable rejection/chunking protocol. A missing route/history is
    retry/abstain, never acceptance. Exact-reference checks, current-view
    checks, and continuous follows all select sources through this same owner:
-   certified directory/history routes plus bounded authenticated bootstrap
-   contacts. Selection is keyed by certified committee member, with at most one
+   certified directory/history routes plus authenticated request contacts.
+   A pre-authorization or pre-verification contact belongs only to the existing
+   scope or DTX work item and the exact certified-history job it starts.
+   Decode-only material and failed checks store neither the claimed identity
+   nor address. A contact may enter the existing volatile bootstrap state only
+   after scope authorization or DTX foreign-reference verification succeeds.
+   Selection is
+   keyed by certified committee member, with at most one
    first-party live endpoint and one certified historical fallback per key.
    Fallback reuses the same request id, worker, and deadline, so it cannot
    amplify quorum weight or correlation capacity. A contact proves only how to
-   reach its TLS key; replayed history still proves ontology authority. Local boot does not
+   reach its TLS key; replayed history still proves ontology authority. A
+   caller deadline detaches only that caller: the one per-identity cache writer
+   continues through page checkpoints, and an identical later request joins
+   it or resumes from the persisted prefix instead of restarting at genesis.
+   Local boot does not
    contact foreign peers: the local control-record QC proves that live voters
    completed the foreign check. Do not add a second history codec or verifier.
 

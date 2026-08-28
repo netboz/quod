@@ -969,6 +969,88 @@ dtx_prepare_contact_is_bound_to_its_certified_origin_test() ->
        quod_simplex:test_dtx_source_identity(
          maps:get('begin', Fixture), maps:get(target, Fixture))).
 
+%% A keyed peer may claim any origin inside decode-only DTX material. The
+%% authenticated endpoint is useful to the exact verification attempt, but it
+%% must not create a global foreign-history row before that attempt succeeds.
+dtx_unverified_endpoint_contacts_are_never_retained_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Dir = relay_store_dir("unverified_dtx_contact"),
+    case quod_reg:where({foreign_log, node}) of
+        Existing when is_pid(Existing) -> gen_server:stop(Existing);
+        undefined -> ok
+    end,
+    Fetch = fun(_Peer, _Endpoint, _Ns, _From, _To) ->
+                    {error, unavailable}
+            end,
+    {ok, ForeignLog} = quod_foreign_log:start_link(
+                         #{cache_dir => Dir, fetch_fun => Fetch,
+                           page_timeout_ms => 100}),
+    EndpointSink = spawn(fun registered_prolog_sink_loop/0),
+    {Peer, _PeerIdentity} = id(),
+    Endpoint = {"127.0.0.1", 15972},
+    PeerContact = {Peer, Endpoint},
+    try
+        Operation = quod_ct:remote_operation_fixture(#{}),
+        {ok, ClaimEvidence} = quod_transaction:encode_evidence(
+                                maps:get(certified_claim_ref, Operation),
+                                maps:get(claim, Operation)),
+        ApplyRequest = {apply_claim, <<72:128>>, ClaimEvidence},
+        {TargetNs, _} = Target = maps:get(participant_target, Operation),
+        ApplyState0 = ready_dtx_endpoint_state(
+                        Target, maps:get(node_identity, Operation),
+                        maps:get(admission, Operation)),
+        {ok, ApplyFrame} = quod_dtx_endpoint:encode_request(
+                             TargetNs, ApplyRequest),
+        {ApplyState, []} = quod_simplex:test_dtx_endpoint_frame(
+                             TargetNs, serve, PeerContact, EndpointSink,
+                             ApplyFrame, ApplyState0),
+        ?assertMatch(
+           #{histories := 0, bootstrap_candidates := 0},
+           quod_foreign_log:stats()),
+        ok = quod_simplex:test_close_dtx_endpoint(ApplyState),
+
+        PrepareFixture = quod_ct:dtx_prepare_fixture(),
+        {PrepareNs, _} = PrepareTarget = maps:get(target, PrepareFixture),
+        Prepare = maps:get(prepare, PrepareFixture),
+        SubmitRequest = {submit, <<73:128>>,
+                         maps:get(prepare_blob, PrepareFixture)},
+        SubmitState0 = ready_dtx_endpoint_state(
+                         PrepareTarget, maps:get(signer, PrepareFixture),
+                         maps:get(admission, PrepareFixture),
+                         %% Reject after decoding but before signing or
+                         %% retaining. The old path had already persisted the
+                         %% claimed source contact at this exact point.
+                         #{dtx_last_group => quod_dtx:group_id(Prepare)}),
+        {ok, SubmitFrame} = quod_dtx_endpoint:encode_request(
+                              PrepareNs, SubmitRequest),
+        {SubmitState, []} = quod_simplex:test_dtx_endpoint_frame(
+                              PrepareNs, serve, PeerContact, EndpointSink,
+                              SubmitFrame, SubmitState0),
+        ?assertMatch(
+           #{histories := 0, bootstrap_candidates := 0},
+           quod_foreign_log:stats()),
+        ok = quod_simplex:test_close_dtx_endpoint(SubmitState)
+    after
+        stop_registered_prolog_sink(EndpointSink),
+        gen_server:stop(ForeignLog),
+        _ = file:del_dir_r(Dir)
+    end.
+
+ready_dtx_endpoint_state(
+  {Ns, Anchor}, #{pubkey := _} = Identity, Admission) ->
+    ready_dtx_endpoint_state(
+      {Ns, Anchor}, Identity, Admission, #{}).
+
+ready_dtx_endpoint_state(
+  {Ns, Anchor}, #{pubkey := Self} = Identity, Admission, Extra) ->
+    st(maps:merge(
+         #{ns => Ns, genesis_hash => Anchor,
+           self => Self, id => Identity,
+           validators => [Self],
+           author_admissions => #{Self => Admission},
+           sync => ready, prolog_ready => true},
+         Extra)).
+
 dtx_validation_cleanup_retries_the_same_head_on_the_consensus_tick_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Fixture = quod_ct:dtx_prepare_fixture(),

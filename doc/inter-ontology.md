@@ -431,8 +431,15 @@ learning through their whole `quod_quic` → `quod_conn` → `quod_link` path, s
 addresses cannot contaminate consensus/feed dialing. Ordinary links retain auto-learning.
 
 An authenticated scope or DTX request may still provide a useful return
-contact for the requester's own anchored ontology. The receiver records that
-`{NodeKey, Endpoint}` only in `quod_foreign_log`'s volatile route-hint state.
+contact for the requester's own anchored ontology. Mutual transport
+authentication provides `{NodeKey, Endpoint}` only to the exact scope or DTX
+work item which received it, so a cold certified-history check can use the
+contact which carried that request. Decode-only scope, claim, Prepare, or
+Finalize material never creates a foreign-history or route-hint row. Only
+after the ordinary scope authorization or DTX foreign-reference verification
+succeeds may the receiver retain the contact in `quod_foreign_log`'s existing
+volatile route-hint state. A failed check stores neither the claimed identity
+nor its address. The contact remains only a place to ask.
 It grants no role or permission: exact reference verification and subscription
 following still replay certified history before using an answer. Public `::`
 target selection remains the directory's job; this contact continuity exists

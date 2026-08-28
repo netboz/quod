@@ -48,8 +48,9 @@ that projection can be reused in memory.
 
 -export([start_link/0, start_link/1,
          verify/5, verify_reference/3, verify_local/4,
+         verify_reference/4,
          verify_current/3, verify_local_current/3,
-         current/3, local_current/3,
+         current/3, current/4, local_current/3,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, refresh/1, ack/2, unfollow/1,
          required_references/1, stats/0]).
@@ -93,15 +94,14 @@ that projection can be reused in memory.
 
 -record(queued_request, {
           ref :: reference(),
-          from :: gen_server:from() |
+          from = none :: none |
                   {follow, {binary(), <<_:256>>}, reference()},
-          waiters = [] :: [gen_server:from()],
+          callers = #{} :: #{gen_server:from() => reference()},
           peer :: term(),
           identity :: {binary(), <<_:256>>},
           work :: term(),
           fetch_fun :: undefined | function(),
-          deadline :: integer(),
-          timer :: reference(),
+          work_timeout_ms :: pos_integer(),
           enqueued_native :: integer()
          }).
 
@@ -132,16 +132,15 @@ that projection can be reused in memory.
          }).
 
 -record(request, {
-          from :: gen_server:from() | {follow, {binary(), <<_:256>>}, reference()},
-          waiters = [] :: [gen_server:from()],
+          from = none :: none |
+                  {follow, {binary(), <<_:256>>}, reference()},
+          callers = #{} :: #{gen_server:from() => reference()},
           peer :: term(),
           identity :: {binary(), <<_:256>>},
           work :: term(),
-          deadline :: integer(),
           worker :: pid(),
           mref :: reference(),
-          timer :: reference(),
-          timed_out = false :: boolean()
+          timer = none :: none | reference()
          }).
 
 -record(pull, {
@@ -233,20 +232,41 @@ still proves the exact anchor, phase, certificate chain, and serving committee.
 -spec verify_reference(quod_dtx:certified_ref(),
                        transaction | 'begin' | prepare | decision | finalize | complete,
                        pos_integer()) -> {ok, map()} | {error, term()}.
-verify_reference(Ref, ExpectedPhase, TimeoutMs)
+verify_reference(Ref, ExpectedPhase, TimeoutMs) ->
+    verify_reference(Ref, ExpectedPhase, none, TimeoutMs).
+
+-doc """
+Verify one exact reference with an authenticated request-scoped contact.
+
+The contact is preferred only by this verification job. It is not inserted
+into bootstrap state; a caller may retain it separately only after this
+verification succeeds.
+""".
+-spec verify_reference(quod_dtx:certified_ref(),
+                       transaction | 'begin' | prepare | decision | finalize | complete,
+                       none | {<<_:256>>, term()}, pos_integer()) ->
+          {ok, map()} | {error, term()}.
+verify_reference(Ref, ExpectedPhase, Contact, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case quod_reg:where(?KEY) of
-        Pid when is_pid(Pid) ->
-            try gen_server:call(
-                  Pid, {verify_reference, Ref, ExpectedPhase, TimeoutMs},
-                  TimeoutMs + 1000)
-            catch exit:_ -> {error, retry}
+    case valid_request_contact(Contact) of
+        true ->
+            case quod_reg:where(?KEY) of
+                Pid when is_pid(Pid) ->
+                    try gen_server:call(
+                          Pid,
+                          {verify_reference, Ref, ExpectedPhase, Contact,
+                           TimeoutMs},
+                          TimeoutMs + 1000)
+                    catch exit:_ -> {error, retry}
+                    end;
+                undefined ->
+                    {error, retry}
             end;
-        undefined ->
-            {error, retry}
+        false ->
+            {error, bad_foreign_reference}
     end;
-verify_reference(_Ref, _ExpectedPhase, _TimeoutMs) ->
+verify_reference(_Ref, _ExpectedPhase, _Contact, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
 -doc """
@@ -413,15 +433,29 @@ of the certified historical endpoint for the same key. The returned view uses
 """.
 -spec current([{<<_:256>>, [term()]}], {binary(), <<_:256>>}, pos_integer()) ->
           {ok, map()} | {error, term()}.
-current(Routes0, Identity, TimeoutMs)
+current(Routes, Identity, TimeoutMs) ->
+    current(Routes, Identity, none, TimeoutMs).
+
+-doc """
+Return one certified current view using a request-scoped authenticated contact.
+
+`Contact` is the TLS peer and endpoint carrying the current request. It is
+preferred for this verification job but is not stored as a bootstrap hint.
+Only successfully verified history becomes reusable state.
+""".
+-spec current([{<<_:256>>, [term()]}], {binary(), <<_:256>>},
+              none | {<<_:256>>, term()}, pos_integer()) ->
+          {ok, map()} | {error, term()}.
+current(Routes0, Identity, Contact, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case {normalize_route_candidates(Routes0), valid_identity(Identity)} of
-        {{ok, [_ | _] = Routes}, true} ->
+    case {normalize_route_candidates(Routes0), valid_identity(Identity),
+          valid_request_contact(Contact)} of
+        {{ok, [_ | _] = Routes}, true, true} ->
             case quod_reg:where(?KEY) of
                 Pid when is_pid(Pid) ->
                     try gen_server:call(
-                          Pid, {current, Routes, Identity, TimeoutMs},
+                          Pid, {current, Routes, Identity, Contact, TimeoutMs},
                           TimeoutMs + 1000)
                     catch exit:_ -> {error, retry}
                     end;
@@ -431,7 +465,7 @@ current(Routes0, Identity, TimeoutMs)
         _ ->
             {error, bad_foreign_reference}
     end;
-current(_Routes, _Identity, _TimeoutMs) ->
+current(_Routes, _Identity, _Contact, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
 -doc """
@@ -744,25 +778,17 @@ handle_call(
             {reply, {error, Reason}, S0}
     end;
 handle_call(
-  {verify_reference, Ref, Phase, TimeoutMs}, From, S0) ->
+  {verify_reference, Ref, Phase, Contact, TimeoutMs}, From, S0) ->
     case validate_reference_request(Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            S1 = ensure_history(Identity, S0),
-            case selected_route_sources(Identity, [], S1) of
-                {ok, Sources} ->
-                    case flatten_route_candidates(route_candidates(Sources)) of
-                        [{ChargePeer, _} | _] = Routes ->
-                            begin_worker(
-                              ChargePeer, Identity, TimeoutMs,
-                              {exact_routes, Routes, Ref, Phase},
-                              S1#s.fetch_fun, From, S1);
-                        [] ->
-                            {reply, {error, retry},
-                             hibernate_history(Identity, S1)}
-                    end;
-                {error, anchor_conflict} ->
-                    {reply, {error, retry}, hibernate_history(Identity, S1)}
-            end;
+            begin_current_worker(
+              Identity, [], Contact, TimeoutMs,
+              fun(Sources) ->
+                  {exact_routes,
+                   flatten_route_candidates(route_candidates(Sources)),
+                   Ref, Phase}
+              end,
+              From, S0);
         {error, Reason} ->
             {reply, {error, Reason}, S0}
     end;
@@ -828,12 +854,12 @@ handle_call(
             {reply, {error, Reason}, S0}
     end;
 handle_call(
-  {current, Routes, Identity, TimeoutMs}, From, S0) ->
+  {current, Routes, Identity, Contact, TimeoutMs}, From, S0) ->
     case validate_current_identity_request(
            Routes, Identity, TimeoutMs) of
         ok ->
             begin_current_worker(
-              Identity, flatten_route_candidates(Routes), TimeoutMs,
+              Identity, flatten_route_candidates(Routes), Contact, TimeoutMs,
               fun(Sources) -> {current_identity, Sources, Identity} end,
               From, S0);
         {error, Reason} ->
@@ -911,9 +937,15 @@ begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
     end.
 
 begin_current_worker(Identity, Supplied, TimeoutMs, WorkFun, From, S0) ->
+    begin_current_worker(
+      Identity, Supplied, none, TimeoutMs, WorkFun, From, S0).
+
+begin_current_worker(
+  Identity, Supplied, Contact, TimeoutMs, WorkFun, From, S0) ->
     S1 = ensure_history(Identity, S0),
     case selected_route_sources(Identity, Supplied, S1) of
-        {ok, Sources} ->
+        {ok, Sources0} ->
+            Sources = add_request_contact(Contact, Sources0),
             case route_candidates(Sources) of
                 [{ChargePeer, _Endpoints} | _] ->
                     begin_worker(
@@ -927,41 +959,49 @@ begin_current_worker(Identity, Supplied, TimeoutMs, WorkFun, From, S0) ->
     end.
 
 start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
-    Deadline = quod_time:mono_ms() + TimeoutMs,
-    case join_identical_request(Identity, Work, From, Deadline, S0) of
+    case join_identical_request(Identity, Work, From, TimeoutMs, S0) of
         {joined, S1} ->
             {ok, S1};
         no ->
             start_distinct_worker(
-              Peer, Identity, TimeoutMs, Deadline, Work, FetchFun, From, S0)
+              Peer, Identity, TimeoutMs, Work, FetchFun, From, S0)
     end.
 
 start_distinct_worker(
-  Peer, Identity, TimeoutMs, Deadline, Work, FetchFun, From, S0) ->
+  Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
     S1 = ensure_history(Identity, S0),
+    WorkTimeout = verification_work_timeout(S1),
     case maps:get(Identity, S1#s.histories) of
         #history{active = none} ->
             RequestRef = make_ref(),
             {ok, launch_request(
-                   RequestRef, Peer, Identity, TimeoutMs, Deadline,
-                   Work, FetchFun, From, [], S1)};
+                   RequestRef, Peer, Identity, WorkTimeout,
+                   Work, FetchFun, From, TimeoutMs, S1)};
         #history{} = H0 ->
             RequestRef = make_ref(),
-            Timer = erlang:send_after(
-                      TimeoutMs, self(), {verification_queue_timeout,
-                                          RequestRef}),
+            {InternalFrom, Callers} = request_owners(
+                                        RequestRef, From, TimeoutMs),
             Queued = #queued_request{
-                        ref = RequestRef, from = From, peer = Peer,
+                        ref = RequestRef, from = InternalFrom,
+                        callers = Callers, peer = Peer,
                         identity = Identity, work = Work,
-                        fetch_fun = FetchFun, deadline = Deadline,
-                        timer = Timer,
+                        fetch_fun = FetchFun,
+                        work_timeout_ms = WorkTimeout,
                         enqueued_native = erlang:monotonic_time()},
             H1 = H0#history{waiting = queue:in(Queued, H0#history.waiting)},
             {ok, put_history(Identity, H1, S1)}
     end.
 
-launch_request(RequestRef, Peer, Identity, TimeoutMs, Deadline,
-               Work, FetchFun, From, Waiters, S0) ->
+launch_request(RequestRef, Peer, Identity, WorkTimeout,
+               Work, FetchFun, From, CallerTimeout, S0) ->
+    {InternalFrom, Callers} = request_owners(
+                                RequestRef, From, CallerTimeout),
+    launch_request_owned(
+      RequestRef, Peer, Identity, WorkTimeout, Work, FetchFun,
+      InternalFrom, Callers, S0).
+
+launch_request_owned(RequestRef, Peer, Identity, WorkTimeout,
+                     Work, FetchFun, InternalFrom, Callers, S0) ->
     Owner = self(),
     Root = S0#s.root,
     PageTimeout = S0#s.page_timeout_ms,
@@ -970,17 +1010,15 @@ launch_request(RequestRef, Peer, Identity, TimeoutMs, Deadline,
                fun() ->
                    verification_worker(
                      Owner, RequestRef, Work, Root, FetchFun, PageTimeout,
-                     TimeoutMs, Resident)
+                     WorkTimeout, Resident)
                end,
                [{max_heap_size,
                  #{size => foreign_worker_heap_words(),
                    kill => true, error_logger => true}}]),
     MRef = erlang:monitor(process, Worker),
-    Timer = erlang:send_after(
-              TimeoutMs, self(), {verification_timeout, RequestRef}),
-    Request = #request{from = From, waiters = Waiters, peer = Peer,
-                       identity = Identity, worker = Worker,
-                       work = Work, deadline = Deadline,
+    Timer = request_work_timer(InternalFrom, WorkTimeout, RequestRef),
+    Request = #request{from = InternalFrom, callers = Callers, peer = Peer,
+                       identity = Identity, worker = Worker, work = Work,
                        mref = MRef, timer = Timer},
     H0 = maps:get(Identity, S0#s.histories),
     %% The worker exclusively owns the suspended phase session until it
@@ -990,6 +1028,29 @@ launch_request(RequestRef, Peer, Identity, TimeoutMs, Deadline,
                     last_used = quod_time:mono_ms()},
     S0#s{pending = (S0#s.pending)#{RequestRef => Request},
          histories = (S0#s.histories)#{Identity => H1}}.
+
+verification_work_timeout(S) ->
+    %% Shared current/reference work outlives individual callers, so it uses
+    %% the foreign owner's existing follow-work bound rather than whichever
+    %% caller happened to start or join it first.
+    follow_request_timeout(S).
+
+request_owners(_RequestRef, {follow, _, _} = From, _TimeoutMs) ->
+    {From, #{}};
+request_owners(RequestRef, From, TimeoutMs) ->
+    {none, add_request_caller(RequestRef, From, TimeoutMs, #{})}.
+
+add_request_caller(RequestRef, From, TimeoutMs, Callers) ->
+    Timer = erlang:send_after(
+              TimeoutMs, self(),
+              {verification_caller_timeout, RequestRef, From}),
+    Callers#{From => Timer}.
+
+request_work_timer({follow, _, _}, WorkTimeout, RequestRef) ->
+    erlang:send_after(
+      WorkTimeout, self(), {verification_timeout, RequestRef});
+request_work_timer(none, _WorkTimeout, _RequestRef) ->
+    none.
 
 resident_cache(Identity, #s{histories = Histories}) ->
     case maps:get(Identity, Histories, undefined) of
@@ -1005,30 +1066,83 @@ resident_cache(Identity, #s{histories = Histories}) ->
 %% are transport hints, not part of that view, so they share one certified
 %% result. Distinct work waits in the owner's FIFO and starts from completion,
 %% never from polling. Every caller keeps its original final deadline.
-join_identical_request(Identity, Work, From, _Deadline,
+join_identical_request(Identity, Work, From, TimeoutMs,
                        S = #s{histories = Histories, pending = Pending}) ->
     case {normal_caller(From), maps:get(Identity, Histories, undefined)} of
-        {true, #history{active = RequestRef}} when is_reference(RequestRef) ->
-            case maps:get(RequestRef, Pending, undefined) of
-                Request = #request{from = Primary, waiters = Waiters,
-                                   work = ActiveWork,
-                                   timed_out = false} ->
-                    case normal_caller(Primary) andalso
-                         shareable_work(Work, ActiveWork, Identity) of
-                        true ->
-                            Pending1 = Pending#{
-                              RequestRef => Request#request{
-                                waiters = [From | Waiters]}},
-                            {joined, S#s{pending = Pending1}};
-                        false ->
-                            no
-                    end;
-                _ ->
+        {true, #history{active = RequestRef} = History}
+          when is_reference(RequestRef) ->
+            case join_active_request(
+                   RequestRef, Work, From, TimeoutMs, Identity, Pending) of
+                {joined, Pending1} ->
+                    {joined, S#s{pending = Pending1}};
+                no ->
+                    join_waiting_request(
+                      Work, From, TimeoutMs, Identity, History, S)
+            end;
+        {true, #history{} = History} ->
+            join_waiting_request(
+              Work, From, TimeoutMs, Identity, History, S);
+        _ ->
+            no
+    end.
+
+join_active_request(RequestRef, Work, From, TimeoutMs, Identity, Pending) ->
+    case maps:get(RequestRef, Pending, undefined) of
+        Request = #request{from = none, callers = Callers,
+                           work = ActiveWork} ->
+            case shareable_work(Work, ActiveWork, Identity) of
+                true ->
+                    {joined,
+                     Pending#{RequestRef => Request#request{
+                       callers = add_request_caller(
+                                   RequestRef, From, TimeoutMs, Callers)}}};
+                false ->
                     no
             end;
         _ ->
             no
     end.
+
+join_waiting_request(Work, From, TimeoutMs, Identity,
+                     #history{waiting = Waiting0} = History, S) ->
+    case join_waiting_item(
+           Work, From, TimeoutMs, Identity, queue:to_list(Waiting0)) of
+        {joined, Waiting1} ->
+            {joined,
+             put_history(
+               Identity,
+               History#history{waiting = queue:from_list(Waiting1)}, S)};
+        no ->
+            no
+    end.
+
+join_waiting_item(_Work, _From, _TimeoutMs, _Identity, []) ->
+    no;
+join_waiting_item(
+  Work, From, TimeoutMs, Identity,
+  [#queued_request{ref = RequestRef, from = none,
+                   callers = Callers, work = QueuedWork} = Queued | Rest]) ->
+    case shareable_work(Work, QueuedWork, Identity) of
+        true ->
+            {joined,
+             [Queued#queued_request{
+                callers = add_request_caller(
+                            RequestRef, From, TimeoutMs, Callers)} | Rest]};
+        false ->
+            prepend_join_waiting_item(
+              Queued,
+              join_waiting_item(
+                Work, From, TimeoutMs, Identity, Rest))
+    end;
+join_waiting_item(Work, From, TimeoutMs, Identity, [Queued | Rest]) ->
+    prepend_join_waiting_item(
+      Queued,
+      join_waiting_item(Work, From, TimeoutMs, Identity, Rest)).
+
+prepend_join_waiting_item(Queued, {joined, Rest}) ->
+    {joined, [Queued | Rest]};
+prepend_join_waiting_item(_Queued, no) ->
+    no.
 
 normal_caller({Pid, _Tag}) when is_pid(Pid) -> true;
 normal_caller(_) -> false.
@@ -1065,33 +1179,29 @@ handle_info(
     end;
 handle_info({foreign_worker_done, RequestRef, Result, Meta0}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
-        #request{timed_out = false} ->
+        #request{} ->
             Meta = resident_worker_meta(Result, Meta0),
             S1 = install_worker_meta(
                    RequestRef, Meta,
                    record_follow_progress(RequestRef, Meta, S0)),
             {noreply, finish_request(RequestRef, Result, S1)};
-        #request{timed_out = true} ->
-            {noreply, finish_request(RequestRef, {error, retry}, S0)};
         undefined ->
             {noreply, S0}
     end;
+handle_info({verification_caller_timeout, RequestRef, From}, S0) ->
+    {noreply, expire_request_caller(RequestRef, From, S0)};
 handle_info({verification_timeout, RequestRef}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
-        #request{worker = Worker} = Request ->
+        #request{worker = Worker} ->
             exit(Worker, kill),
             %% Keep this identity active until the monitor confirms that the
             %% cache worker is dead.  Releasing it here could admit a second
             %% writer against the same ledger/checkpoint between `exit/2` and
             %% the eventual DOWN message.
-            Pending1 = (S0#s.pending)#{
-                         RequestRef => Request#request{timed_out = true}},
-            {noreply, S0#s{pending = Pending1}};
+            {noreply, S0};
         undefined ->
             {noreply, S0}
     end;
-handle_info({verification_queue_timeout, RequestRef}, S0) ->
-    {noreply, expire_queued_request(RequestRef, S0)};
 handle_info({pull_timeout, ReqId}, S0) ->
     case maps:take(ReqId, S0#s.pulls) of
         {#pull{from = From}, Pulls1} ->
@@ -1235,6 +1345,13 @@ validate_current_identity(Identity, TimeoutMs)
 validate_current_identity(_Identity, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
+valid_request_contact(none) ->
+    true;
+valid_request_contact({<<_:256>>, Endpoint}) ->
+    quod_quic:valid_endpoint(Endpoint);
+valid_request_contact(_) ->
+    false.
+
 valid_identity({Ns, <<_:256>>})
   when is_binary(Ns), byte_size(Ns) > 0,
        byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
@@ -1312,20 +1429,29 @@ selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
                     #history{projection = P, bootstrap_hints = B} -> {P, B};
                     undefined -> {undefined, bootstrap_hints(Identity, S)}
                 end,
-            {ok, #{directory => Directory, supplied => Supplied,
+            {ok, #{live => Directory, supplied => Supplied,
                    bootstrap => Bootstrap, projection => Projection}}
     end.
 
-route_candidates(#{directory := Directory, supplied := Supplied,
+add_request_contact(none, Sources) ->
+    Sources;
+add_request_contact({Peer, Endpoint}, #{live := Live} = Sources) ->
+    %% The TLS-authenticated contact carrying this request is the freshest
+    %% first-party endpoint for its key. Keep it only in this work item: failed
+    %% ontology authentication must leave no remembered identity or address.
+    Sources#{live := [{Peer, Endpoint}
+                      | lists:keydelete(Peer, 1, Live)]}.
+
+route_candidates(#{live := Live, supplied := Supplied,
                    bootstrap := Bootstrap, projection := Projection} = Sources) ->
     case is_map(Projection) of
         true -> current_route_candidates(Sources, Projection);
-        false -> discovery_route_candidates(Directory, Supplied, Bootstrap)
+        false -> discovery_route_candidates(Live, Supplied, Bootstrap)
     end.
 
-discovery_route_candidates(Directory, Supplied, Bootstrap) ->
+discovery_route_candidates(Live, Supplied, Bootstrap) ->
     Routes = lists:sublist(
-               stable_unique_routes(Directory ++ Supplied ++ Bootstrap),
+               stable_unique_routes(Live ++ Supplied ++ Bootstrap),
                ?MAX_VALIDATORS),
     [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
 
@@ -1510,10 +1636,11 @@ request_by_monitor(MRef, Pending) ->
 
 finish_request(RequestRef, Reply, S0) ->
     case maps:take(RequestRef, S0#s.pending) of
-        {#request{from = From, waiters = Waiters,
+        {#request{from = From, callers = Callers,
                   identity = Identity,
                   mref = MRef, timer = Timer}, Pending1} ->
-            _ = erlang:cancel_timer(Timer),
+            cancel_optional_timer(Timer),
+            cancel_caller_timers(Callers),
             _ = erlang:demonitor(MRef, [flush]),
             Histories1 =
                 case maps:get(Identity, S0#s.histories, undefined) of
@@ -1529,8 +1656,8 @@ finish_request(RequestRef, Reply, S0) ->
             S3 = case From of
                 {follow, Identity, Token} ->
                     finish_follow_refresh(Identity, Token, Reply, S2);
-                _ ->
-                    reply_request_callers([From | Waiters], Reply),
+                none ->
+                    reply_request_callers(maps:keys(Callers), Reply),
                     S2
             end,
             start_next_request(Identity, S3);
@@ -1541,79 +1668,95 @@ finish_request(RequestRef, Reply, S0) ->
 reply_request_callers(Callers, Reply) ->
     lists:foreach(fun(Caller) -> gen_server:reply(Caller, Reply) end, Callers).
 
+cancel_optional_timer(none) -> ok;
+cancel_optional_timer(Timer) ->
+    _ = erlang:cancel_timer(Timer),
+    ok.
+
+cancel_caller_timers(Callers) ->
+    maps:foreach(
+      fun(_Caller, Timer) ->
+              _ = erlang:cancel_timer(Timer),
+              ok
+      end, Callers).
+
 start_next_request(Identity, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{active = none, waiting = Waiting0} = H0 ->
             case queue:out(Waiting0) of
                 {{value, Queued}, Waiting1} ->
-                    _ = erlang:cancel_timer(Queued#queued_request.timer),
                     H1 = H0#history{waiting = Waiting1},
                     S1 = put_history(Identity, H1, S0),
-                    Remaining = Queued#queued_request.deadline -
-                                    quod_time:mono_ms(),
-                    case Remaining > 0 of
-                        true ->
-                            observe_foreign_stage(
-                              queue_wait, ok,
-                              Queued#queued_request.enqueued_native),
-                            launch_request(
-                              Queued#queued_request.ref,
-                              Queued#queued_request.peer, Identity,
-                              Remaining, Queued#queued_request.deadline,
-                              Queued#queued_request.work,
-                              Queued#queued_request.fetch_fun,
-                              Queued#queued_request.from,
-                              Queued#queued_request.waiters, S1);
-                        false ->
-                            observe_foreign_stage(
-                              queue_wait, uncertain,
-                              Queued#queued_request.enqueued_native),
-                            finish_queued_reply(Queued, {error, retry}, S1)
-                    end;
+                    observe_foreign_stage(
+                      queue_wait, ok,
+                      Queued#queued_request.enqueued_native),
+                    launch_request_owned(
+                      Queued#queued_request.ref,
+                      Queued#queued_request.peer, Identity,
+                      Queued#queued_request.work_timeout_ms,
+                      Queued#queued_request.work,
+                      Queued#queued_request.fetch_fun,
+                      Queued#queued_request.from,
+                      Queued#queued_request.callers, S1);
                 {empty, _} ->
                     hibernate_history(Identity, S0)
             end;
         _ -> S0
     end.
 
-finish_queued_reply(
-  #queued_request{from = {follow, Identity, Token}}, Reply, S0) ->
-    start_next_request(
-      Identity, finish_follow_refresh(Identity, Token, Reply, S0));
-finish_queued_reply(
-  #queued_request{identity = Identity, from = From, waiters = Waiters},
-  Reply, S0) ->
-    reply_request_callers([From | Waiters], Reply),
-    start_next_request(Identity, S0).
-
-expire_queued_request(RequestRef, S0) ->
-    case take_queued_request(RequestRef, maps:to_list(S0#s.histories)) of
-        {ok, Queued, Identity, Waiting1} ->
-            observe_foreign_stage(
-              queue_wait, uncertain,
-              Queued#queued_request.enqueued_native),
-            H0 = maps:get(Identity, S0#s.histories),
-            S1 = put_history(Identity, H0#history{waiting = Waiting1}, S0),
-            finish_queued_reply(Queued, {error, retry}, S1);
-        error -> S0
+expire_request_caller(RequestRef, From, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{callers = Callers} = Request ->
+            case maps:take(From, Callers) of
+                {_Timer, Callers1} ->
+                    gen_server:reply(From, {error, retry}),
+                    Pending1 = (S0#s.pending)#{
+                                 RequestRef =>
+                                     Request#request{callers = Callers1}},
+                    S0#s{pending = Pending1};
+                error ->
+                    S0
+            end;
+        undefined ->
+            expire_queued_caller(RequestRef, From, S0)
     end.
 
-take_queued_request(_RequestRef, []) -> error;
-take_queued_request(RequestRef, [{Identity, H} | Rest]) ->
-    Items = queue:to_list(H#history.waiting),
-    case take_queued_item(RequestRef, Items, []) of
-        {ok, Queued, Kept} ->
-            {ok, Queued, Identity, queue:from_list(Kept)};
+expire_queued_caller(RequestRef, From, S0) ->
+    expire_queued_caller(
+      RequestRef, From, maps:to_list(S0#s.histories), S0).
+
+expire_queued_caller(_RequestRef, _From, [], S0) ->
+    S0;
+expire_queued_caller(RequestRef, From, [{Identity, H0} | Rest], S0) ->
+    Items0 = queue:to_list(H0#history.waiting),
+    case update_queued_caller(RequestRef, From, Items0) of
+        {updated, Items1} ->
+            gen_server:reply(From, {error, retry}),
+            put_history(
+              Identity,
+              H0#history{waiting = queue:from_list(Items1)}, S0);
+        found ->
+            S0;
+        not_found ->
+            expire_queued_caller(RequestRef, From, Rest, S0)
+    end.
+
+update_queued_caller(_RequestRef, _From, []) ->
+    not_found;
+update_queued_caller(
+  RequestRef, From,
+  [#queued_request{ref = RequestRef, callers = Callers} = Queued | Rest]) ->
+    case maps:take(From, Callers) of
+        {_Timer, Callers1} ->
+            {updated, [Queued#queued_request{callers = Callers1} | Rest]};
         error ->
-            take_queued_request(RequestRef, Rest)
+            found
+    end;
+update_queued_caller(RequestRef, From, [Queued | Rest]) ->
+    case update_queued_caller(RequestRef, From, Rest) of
+        {updated, Rest1} -> {updated, [Queued | Rest1]};
+        Other -> Other
     end.
-
-take_queued_item(_RequestRef, [], _Acc) -> error;
-take_queued_item(RequestRef,
-                 [#queued_request{ref = RequestRef} = Queued | Rest], Acc) ->
-    {ok, Queued, lists:reverse(Acc, Rest)};
-take_queued_item(RequestRef, [Queued | Rest], Acc) ->
-    take_queued_item(RequestRef, Rest, [Queued | Acc]).
 
 %%%===================================================================
 %%% Continuous certified follow lifecycle
@@ -2454,7 +2597,8 @@ follow_identity(Owner, RequestRef, Identity = {Ns, _Anchor}, Sources, Root,
                 [_ | _] ->
                     certified_current_snapshot(
                       Owner, RequestRef, Sources, Identity,
-                      Root, FetchFun, PageTimeout, RequestTimeout, Resident);
+                      Root, FetchFun, PageTimeout, RequestTimeout, Resident,
+                      one_page);
                 [] ->
                     {{error, {unreachable, unavailable}}, #{}}
             end
@@ -2484,13 +2628,13 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, LedgerRoot,
                                       Projection0, PhaseIndex, Root, Target,
                                       FetchFun, PageTimeout);
                                 false ->
-                                    {ok, Height0, Projection0}
+                                    {ok, Store0, Height0, Projection0}
                             end
                         after
                             _ = quod_ledger_store:close(Store0)
                         end,
                     case Outcome of
-                        {ok, Height1, Projection1} ->
+                        {ok, _Store1, Height1, Projection1} ->
                             PhaseSession = suspend_phase_session(PhaseIndex),
                             View = case Height1 >= Tip of
                                        true -> confirmed;
@@ -2664,8 +2808,15 @@ certified_current_snapshot(
       Root, FetchFun, PageTimeout, RequestTimeout, none).
 
 certified_current_snapshot(
-  Owner, RequestRef, Sources, Identity = {Ns, Anchor},
+  Owner, RequestRef, Sources, Identity,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident) ->
+    certified_current_snapshot(
+      Owner, RequestRef, Sources, Identity,
+      Root, FetchFun, PageTimeout, RequestTimeout, Resident, to_tip).
+
+certified_current_snapshot(
+  Owner, RequestRef, Sources, Identity = {Ns, Anchor},
+  Root, FetchFun, PageTimeout, RequestTimeout, Resident, AdvanceMode) ->
     case open_cache(Owner, RequestRef, Identity, Root, none, Resident) of
         {ok, Store0, Height0, Projection0, PhaseIndex, _RefProjection} ->
             Outcome =
@@ -2674,8 +2825,9 @@ certified_current_snapshot(
                     case advance_current_snapshot(
                            Owner, RequestRef, Hints, Identity, Store0,
                            Height0, Projection0, PhaseIndex, Root,
-                           FetchFun, PageTimeout, RequestTimeout) of
-                        {ok, Height1, Projection1} ->
+                           FetchFun, PageTimeout, RequestTimeout,
+                           AdvanceMode) of
+                        {ok, _Store1, Height1, Projection1} ->
                             ConfirmHints = current_route_candidates(
                                              Sources, Projection1),
                             case current_view_confirmed(
@@ -3144,11 +3296,11 @@ persist_verified_page(
     end.
 
 current_route_candidates(
-  #{directory := Directory, supplied := Supplied,
+  #{live := Live, supplied := Supplied,
     bootstrap := Bootstrap}, Projection) ->
     Committee = quod_simplex:history_committee(Projection),
     case Committee of
-        [] -> discovery_route_candidates(Directory, Supplied, Bootstrap);
+        [] -> discovery_route_candidates(Live, Supplied, Bootstrap);
         [_ | _] ->
             Certified = quod_simplex:history_validator_routes(Projection),
             CertifiedEndpoints = maps:from_keys(
@@ -3156,7 +3308,7 @@ current_route_candidates(
             lists:filtermap(
               fun(Peer) ->
                   Endpoints = current_peer_endpoints(
-                                Peer, Bootstrap, Directory, Supplied,
+                                Peer, Bootstrap, Live, Supplied,
                                 Certified, CertifiedEndpoints),
                   case Endpoints of
                       [] -> false;
@@ -3165,20 +3317,20 @@ current_route_candidates(
               end, Committee)
     end.
 
-current_peer_endpoints(Peer, Bootstrap, Directory, Supplied,
+current_peer_endpoints(Peer, Bootstrap, Live, Supplied,
                        Certified, CertifiedEndpoints) ->
     Historical = maps:get(Peer, Certified, none),
-    Live = first_live_endpoint(Peer, Bootstrap, Directory),
+    LiveEndpoint = first_live_endpoint(Peer, Bootstrap, Live),
     ThirdParty = permitted_supplied_endpoint(
                    Peer, Historical, Supplied, CertifiedEndpoints),
     lists:sublist(
       lists:uniq(
-        [Endpoint || Endpoint <- [Live, Historical, ThirdParty],
+        [Endpoint || Endpoint <- [LiveEndpoint, Historical, ThirdParty],
                      Endpoint =/= none]),
       2).
 
 empty_route_sources() ->
-    #{directory => [], supplied => [], bootstrap => [],
+    #{live => [], supplied => [], bootstrap => [],
       projection => undefined}.
 
 first_live_endpoint(Peer, Bootstrap, Directory) ->
@@ -3221,7 +3373,7 @@ flatten_route_candidates(Candidates) ->
 
 advance_current_snapshot(
   Owner, RequestRef, Hints, Identity, Store0, Height0, Projection0,
-  PhaseIndex, Root, FetchFun, PageTimeout, RequestTimeout) ->
+  PhaseIndex, Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode) ->
     case maps:size(quod_simplex:history_validator_routes(Projection0)) of
         0 ->
             bootstrap_snapshot_sources(
@@ -3231,7 +3383,7 @@ advance_current_snapshot(
               bootstrap_route_timeout(
                 PageTimeout, RequestTimeout,
                 length(flatten_route_candidates(Hints))),
-              PageTimeout);
+              PageTimeout, AdvanceMode);
         _ ->
             {Ns, _Anchor} = Identity,
             Results = probe_pages(
@@ -3239,7 +3391,7 @@ advance_current_snapshot(
                         FetchFun, PageTimeout),
             advance_snapshot(
               Owner, RequestRef, Identity, Store0, Height0, Projection0,
-              PhaseIndex, Root, Results, FetchFun, PageTimeout)
+              PhaseIndex, Root, Results, FetchFun, PageTimeout, AdvanceMode)
     end.
 
 bootstrap_route_timeout(PageTimeout, RequestTimeout, RouteCount) ->
@@ -3255,17 +3407,18 @@ bootstrap_route_timeout(PageTimeout, RequestTimeout, RouteCount) ->
 %% a page that passes the ordinary certificate/history fold before it wins.
 bootstrap_snapshot_sources(
   [], _Owner, _RequestRef, _Identity, _Store, _Height, _Projection,
-  _PhaseIndex, _Root, _FetchFun, _BootstrapTimeout, _PageTimeout) ->
+  _PhaseIndex, _Root, _FetchFun, _BootstrapTimeout, _PageTimeout,
+  _AdvanceMode) ->
     {error, invalid_history};
 bootstrap_snapshot_sources(
   [Source | Rest], Owner, RequestRef,
   Identity, Store0, Height0, Projection0, PhaseIndex,
-  Root, FetchFun, BootstrapTimeout, PageTimeout) ->
+  Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode) ->
     case bootstrap_snapshot_source(
            Source, Owner, RequestRef, Identity, Store0, Height0,
            Projection0, PhaseIndex, Root, FetchFun, BootstrapTimeout,
-           PageTimeout) of
-        {ok, _Height1, _Projection1} = Ok -> Ok;
+           PageTimeout, AdvanceMode) of
+        {ok, _Store1, _Height1, _Projection1} = Ok -> Ok;
         {error, {unavailable, network_identity, _}} = Global -> Global;
         {error, Reason} ->
             logger:debug(
@@ -3275,13 +3428,13 @@ bootstrap_snapshot_sources(
             bootstrap_snapshot_sources(
               Rest, Owner, RequestRef, Identity, Store0, Height0,
               Projection0, PhaseIndex, Root, FetchFun, BootstrapTimeout,
-              PageTimeout)
+              PageTimeout, AdvanceMode)
     end.
 
 bootstrap_snapshot_source(
   Source = {Peer, Endpoint}, Owner, RequestRef,
   Identity = {Ns, Anchor}, Store0, Height0, Projection0, PhaseIndex,
-  Root, FetchFun, BootstrapTimeout, PageTimeout) ->
+  Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode) ->
     ProbeTo = Height0 + 1,
     case fetch_page(
            Owner, RequestRef, Peer, Endpoint, Ns,
@@ -3291,15 +3444,11 @@ bootstrap_snapshot_source(
             case validate_page(
                    Entries, Height0 + 1, ProbeTo, RemoteHeight) of
                 {ok, _Count, _Bytes} ->
-                    Target = min(
-                               RemoteHeight,
-                               Height0 + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-                    case advance_snapshot_sources(
-                           [Source], Owner, RequestRef, Ns, Anchor, Identity,
-                           Store0, Height0, Projection0, PhaseIndex, Root,
-                           Target, FetchFun, PageTimeout) of
-                        Result -> Result
-                    end;
+                    advance_snapshot_to_height(
+                      [Source], Owner, RequestRef, Ns, Anchor, Identity,
+                      Store0, Height0, Projection0, PhaseIndex, Root,
+                      snapshot_target(AdvanceMode, Height0, RemoteHeight),
+                      FetchFun, PageTimeout);
                 {error, Reason} ->
                     {error, {bootstrap_page, Reason}}
             end;
@@ -3389,7 +3538,8 @@ stop_current_probes(Pending) ->
 
 advance_snapshot(
   Owner, RequestRef, Identity = {Ns, Anchor}, Store0, Height0,
-  Projection0, PhaseIndex, Root, Results, FetchFun, PageTimeout) ->
+  Projection0, PhaseIndex, Root, Results, FetchFun, PageTimeout,
+  AdvanceMode) ->
     ProbeTo = Height0 + 1,
     Candidates =
         [{RemoteHeight, Source}
@@ -3399,20 +3549,50 @@ advance_snapshot(
                 =/= {error, bad_page}],
     case Candidates of
         [] ->
-            {ok, Height0, Projection0};
+            {ok, Store0, Height0, Projection0};
         _ ->
             Advertised = lists:max([H || {H, _Source} <- Candidates]),
-            Target = min(
-                       Advertised,
-                       Height0 + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
             CandidateSources = [Source
                        || {_H, Source} <- lists:reverse(
                                              lists:keysort(1, Candidates))],
-            advance_snapshot_sources(
+            advance_snapshot_to_height(
               flatten_route_candidates(CandidateSources),
               Owner, RequestRef, Ns, Anchor, Identity,
-              Store0, Height0, Projection0, PhaseIndex, Root, Target,
+              Store0, Height0, Projection0, PhaseIndex, Root,
+              snapshot_target(AdvanceMode, Height0, Advertised),
               FetchFun, PageTimeout)
+    end.
+
+snapshot_target(one_page, Height, Advertised) ->
+    min(Advertised, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES);
+snapshot_target(to_tip, _Height, Advertised) ->
+    Advertised.
+
+advance_snapshot_to_height(
+  _Sources, _Owner, _RequestRef, _Ns, _Anchor, _Identity,
+  Store, Height, Projection, _PhaseIndex, _Root, Target,
+  _FetchFun, _PageTimeout) when Height >= Target ->
+    {ok, Store, Height, Projection};
+advance_snapshot_to_height(
+  Sources, Owner, RequestRef, Ns, Anchor, Identity,
+  Store0, Height0, Projection0, PhaseIndex, Root, Target,
+  FetchFun, PageTimeout) ->
+    PageTarget = min(
+                   Target,
+                   Height0 + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+    case advance_snapshot_sources(
+           Sources, Owner, RequestRef, Ns, Anchor, Identity,
+           Store0, Height0, Projection0, PhaseIndex, Root, PageTarget,
+           FetchFun, PageTimeout) of
+        {ok, Store1, Height1, Projection1} when Height1 > Height0 ->
+            advance_snapshot_to_height(
+              Sources, Owner, RequestRef, Ns, Anchor, Identity,
+              Store1, Height1, Projection1, PhaseIndex, Root, Target,
+              FetchFun, PageTimeout);
+        {ok, _Store1, _Height1, _Projection1} ->
+            {error, invalid_history};
+        {error, _} = Error ->
+            Error
     end.
 
 advance_snapshot_sources(
@@ -3436,8 +3616,8 @@ advance_snapshot_sources(
                     case persist_verified_page(
                            Owner, RequestRef, Identity, Store0, Height0,
                            PhaseIndex, Root, Prepared) of
-                        {ok, _Store1, Height1, Projection1} ->
-                            {ok, Height1, Projection1};
+                        {ok, Store1, Height1, Projection1} ->
+                            {ok, Store1, Height1, Projection1};
                         {error, _} = Error ->
                             Error
                     end;

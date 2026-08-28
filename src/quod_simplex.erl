@@ -230,6 +230,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_seed_dtx_worker/5,
          test_finish_dtx_worker/3,
          test_drop_dtx_endpoint_owner/3,
+         test_close_dtx_endpoint/1,
          test_seed_dtx_submission/3,
          test_seed_dtx_submission_at/4,
          test_oldest_eligible_dtx_submission/1,
@@ -1099,6 +1100,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     monitor :: reference(),
     owner_mref = none :: none | reference(),
     peer :: local | node_id(),
+    contact = none :: none | {node_id(), term()},
     request :: quod_dtx_endpoint:request(),
     destination :: {link, pid()} | {caller, term()},
     started_at = undefined :: undefined | integer()
@@ -1563,7 +1565,10 @@ test_release_dtx_validation_for_retry(
 test_retry_idle_dtx_validation(S) ->
     retry_idle_dtx_validation(S).
 test_dtx_source_identity(Record, TargetIdentity) ->
-    dtx_source_identity(Record, TargetIdentity).
+    case dtx_source_reference(Record, TargetIdentity) of
+        {ok, _Ref, Identity} -> {ok, Identity};
+        none -> none
+    end.
 test_consensus_barrier(S) -> consensus_barrier(S).
 test_dtx_consensus_barrier(Record, S) -> dtx_consensus_barrier(Record, S).
 test_dtx_slot_route(Slot, S) -> dtx_slot_route(Slot, S).
@@ -1604,17 +1609,22 @@ test_wake_dtx_applied_workers(Event, #s{dtx_workers = Workers}) ->
 test_seed_dtx_worker(Pid, Peer, Request, Destination,
                      S = #s{dtx_workers = Workers}) ->
     Monitor = erlang:monitor(process, Pid),
+    WorkerPeer = endpoint_peer(Peer),
     {Monitor,
      track_owner_peaks(
        S#s{dtx_workers = Workers#{
              Pid => #dtx_server_worker{
-                      pid = Pid, monitor = Monitor, peer = Peer,
+                      pid = Pid, monitor = Monitor, peer = WorkerPeer,
+                      contact = endpoint_contact(Peer),
                       request = Request, destination = Destination,
                       started_at = quod_time:mono_ms()}}})}.
 test_finish_dtx_worker(Pid, Result, S) ->
     finish_dtx_server_worker(Pid, Result, S).
 test_drop_dtx_endpoint_owner(Ref, Pid, S) ->
     drop_dtx_endpoint_owner(Ref, Pid, worker_down, S).
+test_close_dtx_endpoint(
+  #s{dtx_correlations = Correlations, dtx_workers = Workers}) ->
+    close_dtx_endpoint(Correlations, Workers).
 test_seed_dtx_submission(Control, Waiters, S) ->
     test_seed_dtx_submission_at(
       Control, Waiters, quod_time:mono_ms(), S).
@@ -4879,24 +4889,8 @@ start_dtx_endpoint_operation(Peer, Destination,
     start_dtx_submit_owner(
       Peer, Destination, Request, TimeoutMs, S);
 start_dtx_endpoint_operation(Peer, Destination, Request, TimeoutMs, S) ->
-    ok = observe_operation_source_candidate(
-           Request, Peer, target_identity(S)),
     {ok, start_dtx_server_worker(
            Peer, Destination, Request, TimeoutMs, S)}.
-
-observe_operation_source_candidate(
-  {apply_claim, _RequestId, EvidenceBlob},
-  {<<_:256>> = Peer, Endpoint}, TargetIdentity) ->
-    case quod_transaction:decode_evidence(EvidenceBlob) of
-        {ok, _Ref, #transaction{origin = Identity,
-                                role = {remote_claim, _, _, _}}}
-          when Identity =/= TargetIdentity ->
-            quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint});
-        _ ->
-            ok
-    end;
-observe_operation_source_candidate(_Request, _Peer, _TargetIdentity) ->
-    ok.
 
 %% Decode and retain a submit in the owning statem turn.  The helper process
 %% owns only the caller deadline; it never calls back into Simplex.
@@ -4909,8 +4903,6 @@ start_dtx_submit_owner(
     case quod_dtx:decode_record(RecordBlob) of
         {ok, Record} ->
             Peer = endpoint_peer(PeerIdentity),
-            ok = observe_dtx_source_candidate(
-                   Record, PeerIdentity, target_identity(S)),
             Digest = quod_dtx:record_digest(Record),
             Parent = self(),
             OwnerMRef = dtx_worker_owner_monitor(Destination),
@@ -4922,6 +4914,7 @@ start_dtx_submit_owner(
             Worker = #dtx_server_worker{
                        pid = Pid, monitor = Monitor,
                        owner_mref = OwnerMRef, peer = Peer,
+                       contact = endpoint_contact(PeerIdentity),
                        request = Request, destination = Destination,
                        started_at = quod_time:mono_ms()},
             S1 = S#s{dtx_workers = Workers#{Pid => Worker}},
@@ -4969,7 +4962,7 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
                        end),
     Worker = #dtx_server_worker{
                pid = Pid, monitor = Monitor, owner_mref = OwnerMRef,
-               peer = Peer,
+               peer = Peer, contact = endpoint_contact(PeerIdentity),
                request = Request, destination = Destination,
                started_at = quod_time:mono_ms()},
     S#s{dtx_workers = Workers#{Pid => Worker}}.
@@ -5061,35 +5054,95 @@ dtx_worker_pending(Peer, RequestId, Workers) ->
 endpoint_peer(local) -> local;
 endpoint_peer({<<_:256>> = Peer, _Endpoint}) -> Peer.
 
-observe_dtx_source_candidate(
-  Record, {<<_:256>> = Peer, Endpoint}, TargetIdentity) ->
-    case dtx_source_identity(Record, TargetIdentity) of
-        {ok, Identity} ->
-            quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint});
-        none ->
-            ok
-    end;
-observe_dtx_source_candidate(_Record, _NonRemoteSource, _TargetIdentity) ->
-    ok.
+endpoint_contact({<<_:256>> = Peer, Endpoint}) -> {Peer, Endpoint};
+endpoint_contact(local) -> none.
 
-dtx_source_identity(Record, TargetIdentity) ->
+dtx_source_reference(Record, TargetIdentity) ->
     case {quod_dtx:record_kind(Record),
           quod_foreign_log:required_references(Record)} of
         {prepare, {ok, [{'begin', Ref} | _]}} ->
-            foreign_ref_identity(Ref, TargetIdentity);
+            foreign_ref_source(Ref, TargetIdentity);
         {finalize, {ok, [{decision, Ref} | _]}} ->
-            foreign_ref_identity(Ref, TargetIdentity);
+            foreign_ref_source(Ref, TargetIdentity);
         _ ->
             none
     end.
 
-foreign_ref_identity(Ref, TargetIdentity) ->
+foreign_ref_source(Ref, TargetIdentity) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, Identity, _Slot, _Digest} when Identity =/= TargetIdentity ->
-            {ok, Identity};
+            {ok, Ref, Identity};
         _ ->
             none
     end.
+
+%% Transport contacts stay inside the endpoint workers that already own the
+%% corresponding request. They are selected only for the exact certified
+%% reference derived from that request and become reusable only after the
+%% ordinary foreign-reference verifier accepts the complete candidate.
+content_reference_contacts(Transactions, Workers, TargetIdentity) ->
+    TransactionIds = maps:from_keys(
+                       [TxId || #transaction{tx_id = <<_:256>> = TxId}
+                                    <- Transactions], true),
+    maps:fold(
+      fun(_Pid,
+          #dtx_server_worker{
+            contact = {<<_:256>>, _} = Contact,
+            request = {apply_claim, _RequestId, EvidenceBlob}}, Acc) ->
+              case decode_claimed_application(EvidenceBlob) of
+                  {ok, _ClaimRef,
+                   #transaction{origin = Identity},
+                   #transaction{tx_id = TxId} = Application}
+                    when Identity =/= TargetIdentity,
+                         is_map_key(TxId, TransactionIds) ->
+                      case quod_transaction:required_references(Application) of
+                          [Ref] -> Acc#{Ref => {Identity, Contact}};
+                          _ -> Acc
+                      end;
+                  _ ->
+                      Acc
+              end;
+         (_Pid, _Worker, Acc) ->
+              Acc
+      end, #{}, Workers).
+
+dtx_reference_contacts(Control, Workers, TargetIdentity) ->
+    Digest = quod_dtx:record_digest(Control),
+    maps:fold(
+      fun(_Pid,
+          #dtx_server_worker{
+            contact = {<<_:256>>, _} = Contact,
+            request = {submit, _RequestId, RecordBlob}}, Acc) ->
+              case quod_dtx:decode_record(RecordBlob) of
+                  {ok, Record} ->
+                      case {quod_dtx:record_digest(Record),
+                            dtx_source_reference(Record, TargetIdentity)} of
+                          {Digest, {ok, Ref, Identity}} ->
+                              Acc#{Ref => {Identity, Contact}};
+                          _ ->
+                              Acc
+                      end;
+                  {error, _} ->
+                      Acc
+              end;
+         (_Pid, _Worker, Acc) ->
+              Acc
+      end, #{}, Workers).
+
+reference_contact(Ref, Identity, Contacts) ->
+    case maps:get(Ref, Contacts, none) of
+        {Identity, Contact} -> Contact;
+        _ -> none
+    end.
+
+observe_verified_reference_contacts(valid, Contacts) ->
+    maps:foreach(
+      fun(_Ref, {Identity, Contact}) ->
+              quod_foreign_log:observe_candidate(Identity, Contact)
+      end, Contacts),
+    ok;
+observe_verified_reference_contacts(_Verdict, _Contacts) ->
+    ok.
 
 endpoint_write_ready(S = #s{sync = ready, prolog_ready = true}) ->
     case current_dtx_binding(S) of
@@ -5169,6 +5222,21 @@ execute_dtx_endpoint_request(
 
 execute_claimed_application(Ns, EvidenceBlob, TimeoutMs) ->
     Started = erlang:monotonic_time(),
+    case decode_claimed_application(EvidenceBlob) of
+        {ok, ClaimRef, Claim, Application} ->
+            ok = quod_metrics:observe_remote_operation_stage(
+                   Ns, claim_verification, ok,
+                   erlang:monotonic_time() - Started),
+            claimed_application_result(
+              Ns, ClaimRef, Claim, Application, TimeoutMs);
+        error ->
+            ok = quod_metrics:observe_remote_operation_stage(
+                   Ns, claim_verification, failed,
+                   erlang:monotonic_time() - Started),
+            {error, invalid_request}
+    end.
+
+decode_claimed_application(EvidenceBlob) ->
     case quod_transaction:decode_evidence(EvidenceBlob) of
         {ok, CertifiedClaimRef,
          #transaction{role = {remote_claim, _, _, _}} = Claim} ->
@@ -5179,22 +5247,12 @@ execute_claimed_application(Ns, EvidenceBlob, TimeoutMs) ->
                                  ClaimRef, Claim),
                 Application = quod_transaction:attach_evidence(
                                 Application0, CertifiedClaimRef, Claim),
-                ok = quod_metrics:observe_remote_operation_stage(
-                       Ns, claim_verification, ok,
-                       erlang:monotonic_time() - Started),
-                claimed_application_result(
-                  Ns, ClaimRef, Claim, Application, TimeoutMs)
+                {ok, ClaimRef, Claim, Application}
             catch _:_ ->
-                ok = quod_metrics:observe_remote_operation_stage(
-                       Ns, claim_verification, failed,
-                       erlang:monotonic_time() - Started),
-                {error, invalid_request}
+                error
             end;
         _ ->
-            ok = quod_metrics:observe_remote_operation_stage(
-                   Ns, claim_verification, failed,
-                   erlang:monotonic_time() - Started),
-            {error, invalid_request}
+            error
     end.
 
 claimed_application_result(
@@ -8922,7 +8980,8 @@ support_or_validate_content(
     end.
 
 start_content_validation(Transactions, BlockTimestamp, Sl, BH,
-                         S = #s{ledger_root = LedgerRoot}) ->
+                         S = #s{ledger_root = LedgerRoot,
+                                dtx_workers = DtxWorkers}) ->
     case content_required_references(Transactions) of
         {ok, []} ->
             request_content_validation(
@@ -8930,11 +8989,15 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
         {ok, _References} ->
             Owner = self(),
             LocalIdentity = target_identity(S),
+            Contacts = content_reference_contacts(
+                         Transactions, DtxWorkers, LocalIdentity),
             Worker = spawn(
                        fun() ->
                            Verdict = verify_content_foreign_references(
                                        Transactions, LocalIdentity,
-                                       LedgerRoot),
+                                       LedgerRoot, Contacts),
+                           ok = observe_verified_reference_contacts(
+                                  Verdict, Contacts),
                            Owner ! {content_foreign_verdict,
                                     {Sl, BH}, self(), Verdict}
                        end),
@@ -8996,30 +9059,33 @@ content_required_references(Transactions) when is_list(Transactions) ->
               end
       end, {ok, []}, Transactions).
 
-verify_content_foreign_references(Transactions, LocalIdentity, LedgerRoot) ->
+verify_content_foreign_references(
+  Transactions, LocalIdentity, LedgerRoot, Contacts) ->
     verify_content_foreign_references(
-      Transactions, LocalIdentity, LedgerRoot, #{}).
+      Transactions, LocalIdentity, LedgerRoot, Contacts, #{}).
 
-verify_content_foreign_references([], _LocalIdentity, _LedgerRoot, _Seen) ->
+verify_content_foreign_references(
+  [], _LocalIdentity, _LedgerRoot, _Contacts, _Seen) ->
     valid;
 verify_content_foreign_references(
-  [#transaction{} = Transaction | Rest], LocalIdentity, LedgerRoot, Seen0) ->
+  [#transaction{} = Transaction | Rest], LocalIdentity, LedgerRoot,
+  Contacts, Seen0) ->
     case quod_transaction:required_references(Transaction) of
         [] -> verify_content_foreign_references(
-                Rest, LocalIdentity, LedgerRoot, Seen0);
+                Rest, LocalIdentity, LedgerRoot, Contacts, Seen0);
         [Ref] ->
             case maps:find(Ref, Seen0) of
                 {ok, Referenced} ->
                     verify_content_reference_binding(
                       Transaction, Referenced, Rest,
-                      LocalIdentity, LedgerRoot, Seen0);
+                      LocalIdentity, LedgerRoot, Contacts, Seen0);
                 error ->
                     case verify_content_reference(
-                           Ref, LocalIdentity, LedgerRoot) of
+                           Ref, LocalIdentity, LedgerRoot, Contacts) of
                         {valid, #{transaction := Referenced}} ->
                             verify_content_reference_binding(
                               Transaction, Referenced, Rest,
-                              LocalIdentity, LedgerRoot,
+                              LocalIdentity, LedgerRoot, Contacts,
                               Seen0#{Ref => Referenced});
                         {valid, _Malformed} ->
                             {invalid, foreign_reference};
@@ -9028,25 +9094,28 @@ verify_content_foreign_references(
             end;
         _ -> {invalid, malformed_foreign_references}
     end;
-verify_content_foreign_references(_, _LocalIdentity, _LedgerRoot, _Seen) ->
+verify_content_foreign_references(
+  _, _LocalIdentity, _LedgerRoot, _Contacts, _Seen) ->
     {invalid, malformed_foreign_references}.
 
 verify_content_reference_binding(Transaction, Referenced, Rest,
-                                 LocalIdentity, LedgerRoot, Seen) ->
+                                 LocalIdentity, LedgerRoot, Contacts, Seen) ->
     case quod_transaction:evidence(Transaction) of
         {_Ref, Referenced} ->
             verify_content_foreign_references(
-              Rest, LocalIdentity, LedgerRoot, Seen);
+              Rest, LocalIdentity, LedgerRoot, Contacts, Seen);
         _ -> {invalid, foreign_reference_binding}
     end.
 
-verify_content_reference(Ref, LocalIdentity, LedgerRoot) ->
+verify_content_reference(Ref, LocalIdentity, LedgerRoot, Contacts) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, LocalIdentity, _Slot, _Digest} ->
             verify_local_dtx_reference(
               Ref, transaction, LocalIdentity, LedgerRoot);
         {ok, ForeignIdentity, _Slot, _Digest} ->
-            verify_remote_dtx_reference(Ref, transaction, ForeignIdentity);
+            verify_remote_dtx_reference(
+              Ref, transaction, ForeignIdentity,
+              reference_contact(Ref, ForeignIdentity, Contacts));
         error -> {invalid, malformed_foreign_reference}
     end.
 
@@ -9136,13 +9205,17 @@ continue_dtx_verdict(Verdict, Payload, Block, Sl, BH, ParentToken, S) ->
 
 start_dtx_foreign_validation(
   Control, History, Sl, BH, ParentToken,
-  S = #s{ledger_root = LedgerRoot}) ->
+  S = #s{ledger_root = LedgerRoot, dtx_workers = DtxWorkers}) ->
     Owner = self(),
     LocalIdentity = target_identity(S),
+    Contacts = dtx_reference_contacts(
+                 Control, DtxWorkers, LocalIdentity),
     Worker = spawn(
                fun() ->
                    Verdict = verify_dtx_foreign_references(
-                               Control, LocalIdentity, LedgerRoot),
+                               Control, LocalIdentity, LedgerRoot, Contacts),
+                   ok = observe_verified_reference_contacts(
+                          Verdict, Contacts),
                    Owner ! {dtx_foreign_verdict,
                             {Sl, BH, ParentToken}, self(), Verdict}
                end),
@@ -9190,17 +9263,18 @@ on_dtx_foreign_verdict(
     release_dtx_validation_for_retry(
       Sl, BH, ParentToken, WorkerPid, S).
 
-verify_dtx_foreign_references(Control, LocalIdentity, LedgerRoot) ->
+verify_dtx_foreign_references(
+  Control, LocalIdentity, LedgerRoot, Contacts) ->
     case quod_foreign_log:required_references(Control) of
         {ok, References} ->
             verify_dtx_reference_list(
-              References, Control, LocalIdentity, LedgerRoot, []);
+              References, Control, LocalIdentity, LedgerRoot, Contacts, []);
         {error, _} ->
             {invalid, malformed_foreign_references}
     end.
 
 verify_dtx_reference_list(
-  [], Control, LocalIdentity, LedgerRoot, EvidenceRev) ->
+  [], Control, LocalIdentity, LedgerRoot, _Contacts, EvidenceRev) ->
     Evidence = lists:reverse(EvidenceRev),
     Bindings = [{Phase, Ref, maps:get(control, Row)}
                 || {Phase, Ref, Row} <- Evidence],
@@ -9210,21 +9284,23 @@ verify_dtx_reference_list(
         {error, _} -> {invalid, foreign_reference_binding}
     end;
 verify_dtx_reference_list(
-  [{Phase, Ref} | Rest], Control, LocalIdentity, LedgerRoot, EvidenceRev) ->
+  [{Phase, Ref} | Rest], Control, LocalIdentity, LedgerRoot,
+  Contacts, EvidenceRev) ->
     Result = case quod_dtx:certified_ref_binding(Ref) of
                  {ok, LocalIdentity, _Slot, _Digest} ->
                      verify_local_dtx_reference(
                        Ref, Phase, LocalIdentity, LedgerRoot);
                  {ok, ForeignIdentity, _Slot, _Digest} ->
                      verify_remote_dtx_reference(
-                       Ref, Phase, ForeignIdentity);
+                       Ref, Phase, ForeignIdentity,
+                       reference_contact(Ref, ForeignIdentity, Contacts));
                  error ->
                      {invalid, malformed_foreign_reference}
              end,
     case Result of
         {valid, ReferencedEvidence} ->
             verify_dtx_reference_list(
-              Rest, Control, LocalIdentity, LedgerRoot,
+              Rest, Control, LocalIdentity, LedgerRoot, Contacts,
               [{Phase, Ref, ReferencedEvidence} | EvidenceRev]);
         {invalid, _} = Invalid ->
             Invalid;
@@ -9441,10 +9517,11 @@ read_local_dtx_evidence(Store, Ref, ExpectedPhase, Identity) ->
             {error, invalid_reference}
     end.
 
-verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}) ->
+verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}, Contact) ->
     case quod_reg:where({quod_simplex, Ns}) of
         undefined ->
-            verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor);
+            verify_remote_dtx_reference_routes(
+              Ref, Phase, Ns, Anchor, Contact);
         _LocalSimplex ->
             case dtx_local_evidence(Ns, Ref, Phase) of
                 {ok, #{transaction := _Transaction} = Evidence}
@@ -9461,16 +9538,16 @@ verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}) ->
                     %% preference.  A current pinned validator may still
                     %% provide the exact certified reference.
                     verify_remote_dtx_reference_routes(
-                      Ref, Phase, Ns, Anchor)
+                      Ref, Phase, Ns, Anchor, Contact)
             end
     end.
 
-verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor) ->
+verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor, Contact) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, {Ns, Anchor}, _Slot, _Digest} ->
             verify_remote_dtx_reference_result(
               quod_foreign_log:verify_reference(
-                Ref, Phase, ?DTX_FOREIGN_VERIFY_MS));
+                Ref, Phase, Contact, ?DTX_FOREIGN_VERIFY_MS));
         _ ->
             {invalid, foreign_reference}
     end.

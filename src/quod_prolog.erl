@@ -1223,7 +1223,7 @@ handle_call(
                            Authentication, OriginKey, OriginIdentity,
                            Principal, AuthenticationDigest, ProofId,
                            max(0, DeadlineMs - quod_time:mono_ms()),
-                           S#s.ns) of
+                           S#s.ns, none) of
                         {ok, RequestContext} ->
                             open_scope_session(
                               Origin, ScopeId, ProofId, Anchor, ReadOnly,
@@ -1925,7 +1925,8 @@ begin_remote_scope_authentication(
                                                    Authentication, OriginKey,
                                                    OriginIdentity, Principal,
                                                    AuthenticationDigest,
-                                                   ProofId, RemainingMs, Ns),
+                                                   ProofId, RemainingMs, Ns,
+                                                   {PeerKey, Endpoint}),
                                         _ = gen_server:call(
                                               Engine,
                                               {scope_authenticator_complete,
@@ -1964,6 +1965,9 @@ finish_scope_authenticator(
     RemainingMs = Deadline - quod_time:mono_ms(),
     case {Result, RemainingMs > 0} of
         {{ok, RequestContext}, true} ->
+            %% Only a certified, authorized origin becomes reusable route
+            %% state. Failed authentication used the contact request-locally
+            %% and leaves no remembered address or fabricated identity.
             observe_scope_origin_candidate(
               OriginIdentity, {target_namespace(Binding), Anchor},
               {PeerKey, Endpoint}),
@@ -2025,7 +2029,7 @@ open_authenticated_remote_scope(
 
 scope_authentication_reason(
   node, OriginKey, _OriginIdentity, {node, OriginKey},
-  AuthenticationDigest, _ProofId, _RemainingMs, _S) ->
+  AuthenticationDigest, _ProofId, _RemainingMs, _S, _Contact) ->
     case quod_scope_wire:authentication_digest(node) of
         {ok, AuthenticationDigest} ->
             {ok, #{request_binding => none, request_auth => none}};
@@ -2034,25 +2038,26 @@ scope_authentication_reason(
 scope_authentication_reason(
   {signed_goal, _RequestBytes, _Signature, _Certificate} = Authentication,
   _OriginKey, OriginIdentity, Principal = {agent, _}, AuthenticationDigest,
-  ProofId, RemainingMs, Ns) ->
+  ProofId, RemainingMs, Ns, Contact) ->
     scope_authentication_reason(
       Authentication, _OriginKey, OriginIdentity, Principal,
-      AuthenticationDigest, ProofId, RemainingMs, Ns,
-      fun local_or_foreign_agent_view/4);
+      AuthenticationDigest, ProofId, RemainingMs, Ns, Contact,
+      fun local_or_foreign_agent_view/5);
 scope_authentication_reason(
   _Authentication, _OriginKey, _OriginIdentity, _Principal,
-  _AuthenticationDigest, _ProofId, _RemainingMs, _Ns) ->
+  _AuthenticationDigest, _ProofId, _RemainingMs, _Ns, _Contact) ->
     {error, {protocol_error, request_binding}}.
 
 scope_authentication_reason(
   {signed_goal, RequestBytes, Signature, Certificate} = Authentication,
   _OriginKey, OriginIdentity, Principal = {agent, _}, AuthenticationDigest,
-  ProofId, RemainingMs, Ns, ViewFun) ->
+  ProofId, RemainingMs, Ns, Contact, ViewFun) ->
     case quod_scope_wire:authentication_digest(Authentication) of
         {ok, AuthenticationDigest} ->
             verify_scope_authentication(
               RequestBytes, Signature, Certificate,
-              OriginIdentity, Principal, ProofId, RemainingMs, Ns, ViewFun);
+              OriginIdentity, Principal, ProofId, RemainingMs, Ns,
+              Contact, ViewFun);
         _ ->
             {error, {protocol_error, request_binding}}
     end.
@@ -2060,7 +2065,7 @@ scope_authentication_reason(
 verify_scope_authentication(
   RequestBytes, Signature, Certificate,
   OriginIdentity, Principal, ProofId, RemainingMs, Ns,
-  ViewFun) ->
+  Contact, ViewFun) ->
     case quod_ontology:network_identity() of
         {ok, Network} ->
             case quod_client_goal:verify_for(
@@ -2070,7 +2075,7 @@ verify_scope_authentication(
                   when Principal =:= {agent, AgentRef} ->
                     case verify_scope_agent_identity(
                            Certificate, Evidence, ProofId,
-                           OriginIdentity, RemainingMs, ViewFun) of
+                           OriginIdentity, RemainingMs, Contact, ViewFun) of
                         ok ->
                             {ok, #{request_binding =>
                                        quod_client_goal:request_binding(Evidence),
@@ -2090,9 +2095,10 @@ verify_scope_authentication(
 
 verify_scope_agent_identity(
   Certificate, Evidence, ProofId, OriginIdentity = {OriginNs, _Anchor},
-  RemainingMs, ViewFun)
+  RemainingMs, Contact, ViewFun)
   when is_integer(RemainingMs), RemainingMs > 0 ->
-    case ViewFun(OriginNs, OriginIdentity, Certificate, RemainingMs) of
+    case ViewFun(
+           OriginNs, OriginIdentity, Certificate, Contact, RemainingMs) of
         {ok, View} ->
             quod_agent_identity:verify(
               Certificate, Evidence, ProofId, View, quod_time:now_ms());
@@ -2100,16 +2106,17 @@ verify_scope_agent_identity(
     end;
 verify_scope_agent_identity(
   _Certificate, _Evidence, _ProofId, _OriginIdentity, _RemainingMs,
-  _ViewFun) ->
+  _Contact, _ViewFun) ->
     {error, retry}.
 
-local_or_foreign_agent_view(OriginNs, OriginIdentity, Certificate, RemainingMs) ->
+local_or_foreign_agent_view(
+  OriginNs, OriginIdentity, Certificate, Contact, RemainingMs) ->
     case quod_simplex:identity_view(OriginNs) of
         {ok, #{identity := OriginIdentity} = View} -> {ok, View};
         _ ->
             quod_foreign_log:current(
               quod_agent_identity:route_hints(Certificate),
-              OriginIdentity, RemainingMs)
+              OriginIdentity, Contact, RemainingMs)
     end.
 
 scope_network_identity_unavailable(Ns) when is_binary(Ns) ->
@@ -2122,8 +2129,8 @@ test_scope_authentication_reason(
     scope_authentication_reason(
       Authentication, OriginKey, OriginIdentity, Principal,
       AuthenticationDigest, ProofId, 1000,
-      <<"quod:test-target">>,
-      fun(_OriginNs, _Identity, _Certificate, _RemainingMs) ->
+      <<"quod:test-target">>, none,
+      fun(_OriginNs, _Identity, _Certificate, _Contact, _RemainingMs) ->
           ViewResult
       end).
 -endif.

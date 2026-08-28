@@ -447,7 +447,7 @@ by each caller:
   Ed25519 signature is exactly 64 bytes and its digest exactly 32 bytes;
 - the complete transaction encoding, including `request_auth` and the
   top-level authorization entry, remains within
-  `quod_transaction`'s `?MAX_CANONICAL_BYTES` limit (256 KiB);
+  the shared `?QUOD_MAX_CANONICAL_TRANSACTION_BYTES` limit (256 KiB);
 - the encoded authorization entry remains within the existing
   `?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES` limit (12 KiB); the same codec and bound
   are used when it is sealed and when every validator decodes it;
@@ -645,8 +645,9 @@ re-found may expose both the specialized and signed write entrances.
 ## Historical signed-client protocol break and deployment
 
 This section records the generation introduced by the signed-client work. The
-current event-capable generation is transaction V9, semantic transaction ID
-V5, and signed DTX plan V6; `doc/transaction-signatures.md` and
+current generation is transaction V11, semantic transaction ID V7, and signed
+DTX plan V8; it retains the event support introduced in transaction V9.
+`doc/transaction-signatures.md` and
 `doc/event-reaction-refinement-plan.md` are authoritative for those current
 formats. The V8/V4/plan-V5 values below are retained only as the history of the
 earlier coordinated break, not as accepted formats.

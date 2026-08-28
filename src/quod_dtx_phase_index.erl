@@ -8,21 +8,22 @@ with the ledger.  This library keeps one canonical, bounded history row per
 group in a session-unique DETS file instead.  It owns no process and carries no
 authority beyond the already-verified ledger stream supplied by its caller.
 
-Catch-up validates a complete ledger window through `preview/5`.  Preview reads
-the durable scratch rows plus an opaque, bounded window delta but does not
-mutate DETS.  Only after the ledger sink succeeds does `commit_delta/2` install
-all changed rows with one DETS insert.  Startup replay may keep using `apply/4`,
-which factors through the same preview/commit path for one record.  The scratch
-file is never repaired or datasync'd. Its single owner may suspend and resume
-it between ordered verification workers; `close/1` deletes it. A namespace
-owner may call `cleanup/2` during startup to remove files abandoned by killed
-replay/catch-up workers.
+Catch-up validates a complete ledger window through `preview_batch/4`. Preview
+reads the durable scratch rows plus an opaque window delta but does not mutate
+DETS. Only after the ledger sink succeeds does `commit_delta/2` install every
+changed row with one DETS insert. Startup replay may use `apply_batch/3`;
+singleton controls use those same batch APIs rather than separate wrappers.
+The scratch file is never repaired or datasync'd. Its single owner may suspend
+and resume it between ordered verification workers; `close/1` deletes it. A
+namespace owner may call `cleanup/2` during startup to remove files abandoned
+by killed replay/catch-up workers.
 """.
 
 -include("quod_proof_limits.hrl").
 
 -export([open/2, suspend/1, resume/1, close/1, cleanup/2,
-         new_delta/0, preview/5, commit_delta/2, apply/4]).
+         new_delta/0, preview_batch/4, commit_delta/2,
+         apply_batch/3]).
 -export_type([index/0, delta/0]).
 
 -ifdef(TEST).
@@ -35,7 +36,6 @@ replay/catch-up workers.
 -define(TOKEN_HEX_BYTES, (?TOKEN_BYTES * 2)).
 -define(OPEN_ATTEMPTS, 4).
 -define(MAX_GROUP_RECORDS, 5).
--define(MAX_DELTA_GROUPS, ?MAX_BATCH_TXS).
 %% A history stores at most one certified reference for each fixed phase.  A
 %% reference combines a body-bounded finality proof with an identity whose
 %% namespace is itself bounded by the signed control envelope.  The fixed
@@ -44,7 +44,6 @@ replay/catch-up workers.
         (?MAX_GROUP_RECORDS *
            (?QUOD_MAX_DTX_BODY_BYTES + ?QUOD_MAX_DTX_CONTROL_BYTES + 512)
          + 4096)).
--define(MAX_DELTA_BYTES, (?MAX_DELTA_GROUPS * ?MAX_HISTORY_BYTES)).
 
 -record(index, {
           table :: term(),
@@ -64,7 +63,6 @@ replay/catch-up workers.
         bad_phase_index_argument |
         bad_phase_index_control |
         bad_phase_index_delta |
-        phase_index_delta_full |
         phase_index_corrupt |
         {phase_index_io, term()}.
 
@@ -204,42 +202,66 @@ lowercase_hex(_) -> false.
 -spec new_delta() -> delta().
 new_delta() -> #delta{}.
 
--doc """
-Preview one verified control against DETS plus earlier controls in this window.
-
-No DETS mutation occurs.  The caller may discard the returned delta after a
-failed ledger sink, or pass it to `commit_delta/2` after that sink succeeds.
-""".
--spec preview(index(), delta(), quod_dtx:control(),
-              quod_dtx:certified_ref(), quod_dtx:projection()) ->
+-doc "Preview one canonical same-phase control batch without mutating DETS.".
+-spec preview_batch(index(), delta(),
+                    [{quod_dtx:control(), quod_dtx:certified_ref()}],
+                    quod_dtx:projection()) ->
           {ok, delta(), quod_dtx:projection(), list()} |
           {error, term()}.
-preview(Index = #index{}, Delta = #delta{}, Control, Ref, Projection) ->
-    case control_group_id(Control) of
-        {ok, GroupId} ->
-            preview_group(Index, Delta, GroupId, Control, Ref, Projection);
+preview_batch(Index = #index{}, Delta = #delta{}, Controls, Projection)
+  when is_list(Controls) ->
+    case batch_group_ids(Controls, []) of
+        {ok, GroupIds} ->
+            case load_batch_histories(Index, Delta, GroupIds, #{}) of
+                {ok, Histories0} ->
+                    case quod_dtx:reduce_batch(
+                           Controls, Histories0, Projection) of
+                        {ok, Histories1, Projection1, Items} ->
+                            case stage_batch_histories(
+                                   Delta, GroupIds, Histories0, Histories1) of
+                                {ok, Delta1} ->
+                                    {ok, Delta1, Projection1, Items};
+                                {error, _} = Error -> Error
+                            end;
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end;
         error ->
             {error, bad_phase_index_control}
     end;
-preview(_Index, _Delta, _Control, _Ref, _Projection) ->
+preview_batch(_Index, _Delta, _Controls, _Projection) ->
     {error, bad_phase_index_delta}.
 
-preview_group(Index, Delta, GroupId, Control, Ref, Projection) ->
-    case delta_history(Index, Delta, GroupId) of
-        {ok, History0} ->
-            case quod_dtx:reduce(Control, Ref, History0, Projection) of
-                {ok, History1, Projection1, Effects} ->
-                    case stage_history(Delta, GroupId, History0, History1) of
-                        {ok, Delta1} ->
-                            {ok, Delta1, Projection1, Effects};
-                        {error, _} = Error ->
-                            Error
-                    end;
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, _} = Error ->
-            Error
+batch_group_ids([], Acc) -> {ok, lists:reverse(Acc)};
+batch_group_ids([{Control, _Ref} | Rest], Acc) ->
+    case control_group_id(Control) of
+        {ok, GroupId} -> batch_group_ids(Rest, [GroupId | Acc]);
+        error -> error
+    end;
+batch_group_ids(_, _Acc) -> error.
+
+load_batch_histories(_Index, _Delta, [], Histories) -> {ok, Histories};
+load_batch_histories(Index, Delta, [GroupId | Rest], Histories0) ->
+    case maps:is_key(GroupId, Histories0) of
+        true -> load_batch_histories(Index, Delta, Rest, Histories0);
+        false ->
+            case delta_history(Index, Delta, GroupId) of
+                {ok, History} ->
+                    load_batch_histories(
+                      Index, Delta, Rest, Histories0#{GroupId => History});
+                {error, _} = Error -> Error
+            end
+    end.
+
+stage_batch_histories(Delta, [], _Histories0, _Histories1) -> {ok, Delta};
+stage_batch_histories(Delta0, [GroupId | Rest], Histories0, Histories1) ->
+    case stage_history(
+           Delta0, GroupId, maps:get(GroupId, Histories0),
+           maps:get(GroupId, Histories1)) of
+        {ok, Delta1} ->
+            stage_batch_histories(Delta1, Rest, Histories0, Histories1);
+        {error, _} = Error -> Error
     end.
 
 delta_history(_Index, #delta{rows = Rows}, GroupId)
@@ -255,20 +277,18 @@ stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
               GroupId, _OldHistory, History) ->
     Blob = term_to_binary(History, [deterministic]),
     HistoryBytes = byte_size(Blob),
-    {OldBytes, NewCount} =
+    OldBytes =
         case maps:find(GroupId, Rows) of
-            {ok, {_Old, Size}} -> {Size, map_size(Rows)};
-            error -> {0, map_size(Rows) + 1}
+            {ok, {_Old, Size}} -> Size;
+            error -> 0
         end,
     NewBytes = Bytes - OldBytes + HistoryBytes,
-    case HistoryBytes =< ?MAX_HISTORY_BYTES andalso
-         NewCount =< ?MAX_DELTA_GROUPS andalso
-         NewBytes =< ?MAX_DELTA_BYTES of
+    case HistoryBytes =< ?MAX_HISTORY_BYTES of
         true ->
             {ok, Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
                              bytes = NewBytes}};
         false ->
-            {error, phase_index_delta_full}
+            {error, bad_phase_index_delta}
     end.
 
 -doc "Install one fully previewed window delta after its ledger sink succeeds.".
@@ -289,49 +309,42 @@ commit_delta(_Index, _Delta) ->
     {error, bad_phase_index_delta}.
 
 encode_delta(#delta{rows = Rows, bytes = ExpectedBytes})
-  when is_map(Rows), is_integer(ExpectedBytes), ExpectedBytes >= 0,
-       map_size(Rows) =< ?MAX_DELTA_GROUPS ->
-    encode_delta_rows(maps:to_list(Rows), 0, 0, ExpectedBytes, []);
+  when is_map(Rows), is_integer(ExpectedBytes), ExpectedBytes >= 0 ->
+    encode_delta_rows(maps:to_list(Rows), 0, ExpectedBytes, []);
 encode_delta(_Delta) ->
     {error, bad_phase_index_delta}.
 
-encode_delta_rows([], _Count, Bytes, Bytes, Acc) ->
+encode_delta_rows([], Bytes, Bytes, Acc) ->
     {ok, lists:reverse(Acc)};
 encode_delta_rows(
   [{<<_:256>> = GroupId, {History, StoredBytes}} | Rest],
-  Count, Bytes0, ExpectedBytes, Acc)
-  when Count < ?MAX_DELTA_GROUPS,
-       is_integer(StoredBytes), StoredBytes >= 0 ->
+  Bytes0, ExpectedBytes, Acc)
+  when is_integer(StoredBytes), StoredBytes >= 0 ->
     Blob = term_to_binary(History, [deterministic]),
     Bytes = byte_size(Blob),
     Total = Bytes0 + Bytes,
-    case Bytes =:= StoredBytes andalso Bytes =< ?MAX_HISTORY_BYTES andalso
-         Total =< ?MAX_DELTA_BYTES of
+    case Bytes =:= StoredBytes andalso Bytes =< ?MAX_HISTORY_BYTES of
         true ->
             Row = {{group, GroupId}, Blob},
             encode_delta_rows(
-              Rest, Count + 1, Total, ExpectedBytes, [Row | Acc]);
+              Rest, Total, ExpectedBytes, [Row | Acc]);
         false ->
             {error, bad_phase_index_delta}
     end;
-encode_delta_rows(_Malformed, _Count, _Bytes, _ExpectedBytes, _Acc) ->
+encode_delta_rows(_Malformed, _Bytes, _ExpectedBytes, _Acc) ->
     {error, bad_phase_index_delta}.
 
--doc """
-Apply one verified ledger control using its exact disk-backed history.
-
-The caller must complete outer-envelope, author-sequence and certified-reference
-validation first: a successful reduction is stored immediately.
-""".
--spec apply(index(), quod_dtx:control(), quod_dtx:certified_ref(),
-            quod_dtx:projection()) ->
+-doc "Apply one canonical same-phase control batch with one DETS commit.".
+-spec apply_batch(index(),
+                  [{quod_dtx:control(), quod_dtx:certified_ref()}],
+                  quod_dtx:projection()) ->
           {ok, quod_dtx:projection(), list()} |
           {error, term()}.
-apply(Index, Control, Ref, Projection) ->
-    case preview(Index, new_delta(), Control, Ref, Projection) of
-        {ok, Delta, Projection1, Effects} ->
+apply_batch(Index, Controls, Projection) ->
+    case preview_batch(Index, new_delta(), Controls, Projection) of
+        {ok, Delta, Projection1, Items} ->
             case commit_delta(Index, Delta) of
-                ok -> {ok, Projection1, Effects};
+                ok -> {ok, Projection1, Items};
                 {error, _} = Error -> Error
             end;
         {error, _} = Error ->

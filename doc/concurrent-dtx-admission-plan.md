@@ -1,7 +1,9 @@
 # Concurrent signed DTX admission plan
 
-**Status:** implemented, committed, deployed, and live-tested. The local and
-live acceptance gates described below passed before activation.
+**Status:** historical admission refactor, implemented and deployed before the
+later multi-group/control-wave hard break. Sections describing the old
+single-group gate are retained only as non-normative rationale. The current
+contract is summarized in §2 and the current-contract paragraphs of §3.3.
 
 ## 1. Problem confirmed on the deployed fleet
 
@@ -13,7 +15,8 @@ signed HTTP goal
   -> agent verification in its ontology
   -> ordinary Prolog proof and target ACL
   -> sealed participant plans
-  -> DTX Begin / Prepare / Decision / Finalize / Complete
+  -> one foreign target: remote_claim / application / remote_complete
+  -> two or more material ontologies: DTX control waves through Complete
 ```
 
 A direct signed request committed successfully on the source and target
@@ -38,9 +41,9 @@ transaction-format change.
 
 1. There remains one signed-goal path, one Prolog executor, one
    `can_invoke/4` path, and one DTX protocol.
-2. The DTX ledger still permits only one active distributed group per
-   ontology. That is its current namespace-lock correctness rule, not an
-   ingress quota. This plan does not weaken it.
+2. The DTX ledger permits multiple active distributed groups. Exact signed
+   conflict descriptors serialize only overlapping plans; deterministic
+   GroupId wait-die prevents cycles. There is no namespace-global group lock.
 3. Effect custody keeps the existing order:
    register an inactive Begin, durably bind every participant effect, then
    activate that exact Begin.
@@ -167,7 +170,7 @@ state:
 
 ```text
 current engine incarnation + monitor
-current accepted dormant intent: zero or one
+current dormant intents keyed by GroupId
 waiting registration calls: FIFO
 ```
 
@@ -185,11 +188,17 @@ Every waiting entry also carries the proof's existing absolute monotonic
 deadline. This is not another timeout: it is the same deadline needed to avoid
 promoting work that can no longer complete.
 
-The admission predicate has exactly three independently changing inputs:
+The historical single-group admission predicate had three independently
+changing inputs. It is not the current protocol contract:
 
-1. the DTX projection has `active := none`;
-2. `pending_begin_projection(SigningJournal) =:= none`; and
-3. the retained-DTX registry contains no Begin.
+1. the old DTX projection had no active group;
+2. the old signing journal had no pending Begin; and
+3. the retained-DTX registry contained no Begin.
+
+The current owner keeps per-GroupId pending Begin custody and derives readiness
+from the exact multi-group projection. Independent groups may progress in the
+same canonical phase wave; overlapping acquisitions obey the shared wait-die
+result.
 
 Put one admission-progress function at the end of the existing Simplex
 settling flow, after projection adoption, signing-journal reconciliation, and
@@ -221,12 +230,13 @@ The progress function uses no sleep, retry timer, or blocking call:
   oldest request parked;
 - if the oldest request's existing deadline has passed, it replies with the
   existing proof-limit failure, removes it, and examines the next request;
-- when the gate opens, it rechecks that request against the current binding,
-  marks it as the sole dormant intent, and replies `accepted`;
+- when the exact group's gate opens, it rechecks that request against the
+  current binding, retains that GroupId's dormant intent, and replies
+  `accepted`;
 - if a committee/admission change made it permanently invalid, it rejects that
   request and examines the next one; and
-- it never admits a second dormant intent while one is accepted or while an
-  active/pending group prevents admission.
+- it never admits a duplicate intent for the same GroupId; independent groups
+  are governed by the shared multi-group readiness/conflict projection.
 
 The progress function checks only the FIFO head. It does not sweep the queue.
 Every non-head entry remains owned by its existing proof worker, whose existing
@@ -317,7 +327,7 @@ After the FIFO change, DTX contention itself no longer produces either error.
 | Simplex replies | existing request-id collection and exact correlation | tag append and handoff owners in the same collection | special single-handoff response scanner |
 | pre-Begin custody | register -> bind effects -> activate -> cancel | allow several registration calls to wait FIFO | “second handoff returns busy” branch |
 | Simplex admission | current binding checks, journal check, active-group check | one bundled volatile current+waiting state and one progress function | single `dtx_intent = none | record` assumptions |
-| durable DTX | Begin through Complete, one active group, coordinator recovery | none | none |
+| durable DTX | Begin through Complete, per-GroupId recovery, exact conflicts and canonical same-phase waves | generalize admission onto the multi-group projection | singleton active-group gate and namespace lock |
 | ACL and identity | agent verification in A, target transcript and `can_invoke/4` | none | no compatibility or fallback validation |
 | storage and wire | ledger V4, DTX codecs, signing journal, outcomes | none | none |
 | effect custody | one effect journal and existing group reference reconciliation | none | none |
@@ -326,8 +336,8 @@ After the FIFO change, DTX contention itself no longer produces either error.
 
 | Situation | Required result |
 |---|---|
-| second request arrives while one dormant intent is binding effects | second request remains parked; no `busy`, signing, or ledger write |
-| second request arrives while a group is active | it remains parked until the group resolves |
+| second request arrives while another dormant intent is binding effects | its own GroupId is admitted when the shared readiness/conflict projection permits; otherwise it remains parked, with no `busy` or ledger write |
+| second request overlaps an active group | shared wait-die/readiness decides whether it waits or aborts; an independent group is not namespace-globally blocked |
 | queued proof reaches its existing deadline | remove only that proof and intent; return the existing pre-handoff failure |
 | queued caller disconnects | remove only that proof and intent; no durable outcome exists |
 | current dormant proof dies before activation | cancel it, then consider the next FIFO entry |
@@ -344,10 +354,10 @@ After the FIFO change, DTX contention itself no longer produces either error.
 
 ## 6. Performance and observability
 
-The change removes refusal under ordinary concurrency but does not pretend the
-one-active-group protocol is parallel. Distributed groups from one source
-ontology still enter consensus in order. Independent source ontologies remain
-independent.
+The change removes refusal under ordinary concurrency. Independent groups may
+advance together in canonical same-phase waves; overlapping plans remain
+serialized by the shared conflict projection rather than a namespace-global
+lock.
 
 The FIFO adds no process and no polling. Waiting workers keep their existing
 proof snapshot and deadline, so memory and MVCC retention remain charged to
@@ -360,7 +370,7 @@ queue limit or lifetime is compiled into the code.
 Add bounded-label metrics at the existing namespace metrics seam:
 
 - current waiting pre-Begin registrations;
-- whether one dormant intent is accepted; and
+- the number of distinct dormant GroupId intents retained; and
 - wait time before a registration is accepted.
 
 The dormant-intent gauge replaces the current Prolog `get_stats` boolean
@@ -444,13 +454,15 @@ Slice 2 is part of the same change set. It is not deferred cleanup.
 
 ### Unit and component tests
 
-1. Three handoffs registered together are granted FIFO, one dormant at a time.
+1. Three handoffs registered together preserve FIFO registration ownership;
+   independent GroupIds may become dormant together, while a duplicate or
+   conflicting group cannot bypass shared readiness.
 2. A later Simplex response cannot wake or alter the wrong proof worker.
 3. Cancelling the first, middle, or last waiter removes only that intent.
 4. Cancelling the dormant head promotes the next request when admission is
    open.
-5. Activation retains exactly one Begin and does not promote another while the
-   group is pending or active.
+5. Activation retains each exact Begin once; another independent GroupId may
+   progress, while duplicate or conflicting work cannot bypass readiness.
 6. Durable group resolution promotes the next request without polling on both
    live commit and the catch-up owner's final verified-ready path.
 7. Engine `DOWN` clears every volatile intent but not an activated submission.
@@ -549,8 +561,8 @@ Do not delete live, unrelated capacity behavior while doing that sweep:
 
 Update at least:
 
-- `doc/distributed-proof-plan.md`: distinguish many volatile waiting calls from
-  the still-single accepted/journaled Begin and still-single active group;
+- `doc/distributed-proof-plan.md`: distinguish volatile waiting calls from
+  per-GroupId accepted/journaled Begins and concurrent conflict-safe groups;
 - `doc/dtx-durable-effects-plan.md`: replace the documented retryable-busy
   contention contract with FIFO pre-handoff waiting and the terminal
   operation-id consequence after Begin;
@@ -560,9 +572,10 @@ Update at least:
   id for a deliberate application retry;
 - affected Erlang moduledocs/comments, metrics documentation, and dashboards.
 
-Do **not** change statements that correctly say the signing journal contains at
-most one pending Begin. Waiting registrations are volatile and have not crossed
-that boundary.
+That statement described the historical journal. The current hard break stores
+pending Begin custody by GroupId; no document may retain the former singleton
+as a current invariant. Waiting registrations are still volatile until they
+cross that boundary.
 
 The closure criterion is zero unreachable compatibility clauses, zero old
 single-slot ownership, zero duplicate response dispatch, and no document or
@@ -581,10 +594,10 @@ existing proof worker
   -> existing DTX consensus and outcome path
 ```
 
-The safe outcome is serialization without the current handoff-contention
-refusal. Existing proof-capacity, deadline, policy, OCC, and durable-outcome
-results still apply. This is **not** parallel DTX consensus, automatic retry, a
-second queue service, or a special signed-client executor.
+The safe outcome is admission without the old handoff-contention refusal.
+Existing proof-capacity, deadline, policy, OCC, conflict, and durable-outcome
+results still apply. This is not automatic retry, a second queue service, or a
+special signed-client executor.
 
 ## 12. Questions the architecture review must answer
 
@@ -592,9 +605,9 @@ second queue service, or a special signed-client executor.
    than merely moving duplicate state?
 2. Can the shared request-id collection correlate append and handoff replies
    without any remaining fallback response path?
-3. Does the Simplex FIFO retain exactly one dormant accepted intent and one
-   journal-pending Begin while permitting several purely volatile callers to
-   wait?
+3. Does the Simplex FIFO preserve caller ownership while retaining each
+   dormant GroupId exactly once and letting independent groups progress under
+   the one multi-group projection?
 4. Is a sealed plan that waits behind another group still governed entirely by
    its existing target attestation, ACL transcript, and OCC read set, with no
    need or permission to re-prove it?

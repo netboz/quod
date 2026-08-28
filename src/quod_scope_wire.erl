@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 7).
+-define(VERSION, 8).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -62,8 +62,7 @@ renew the scope lifetime.
         {scope_open, authentication()} | scope_close | scope_seal |
         {scope_attest, binary()} |
         {bind_group_effects, term(), <<_:256>>} |
-        {bind_operation_effect, term(), term(), <<_:256>>, <<_:256>>,
-         binary()} |
+        {bind_operation_effect, binary()} |
         {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
@@ -113,7 +112,7 @@ renew the scope lifetime.
          non_neg_integer(), boolean(), event_operation()}.
 -type payload_kind() ::
         goal | answer | failure_reasons | erlog_error | plan | manifest |
-        attestation | result.
+        attestation | result | operation_submission.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
         {error, {protocol_error, atom()}}.
@@ -418,6 +417,8 @@ payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
 payload_limit(manifest) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(attestation) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
+payload_limit(operation_submission) ->
+    {ok, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES};
 payload_limit(_) -> error.
 
 %% ------------------------------------------------------------------
@@ -434,16 +435,8 @@ validate_command_operation(
   {bind_group_effects, GroupRef, <<_:256>>}) ->
     validate_group_ref(GroupRef);
 validate_command_operation(
-  {bind_operation_effect, ClaimRef, TargetRef, <<_:256>> = CancelToken,
-   <<_:256>>, ClaimBlob}) ->
-    case {valid_transaction_ref(ClaimRef), valid_transaction_ref(TargetRef),
-          byte_size(CancelToken) =:= 32,
-          is_binary(ClaimBlob),
-          is_binary(ClaimBlob) andalso
-              byte_size(ClaimBlob) =< ?QUOD_MAX_DTX_BODY_BYTES} of
-        {true, true, true, true, true} -> ok;
-        _ -> protocol_error(bad_payload)
-    end;
+  {bind_operation_effect, SubmissionBlob}) ->
+    validate_blob(operation_submission, SubmissionBlob);
 validate_command_operation(
   {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier}) ->
     %% These three payloads remain opaque until the authenticated command has
@@ -642,11 +635,6 @@ validate_group_ref(
     ok;
 validate_group_ref(_) ->
     protocol_error(bad_shape).
-
-valid_transaction_ref(
-  {transaction, Ns, <<_:256>>, <<_:256>>})
-  when is_binary(Ns), byte_size(Ns) > 0 -> true;
-valid_transaction_ref(_) -> false.
 
 validate_authentication(Authentication) ->
     case authentication_digest(Authentication) of
@@ -850,7 +838,8 @@ valid_identity({Namespace, Anchor}) ->
 valid_identity(_) -> false.
 
 valid_namespace(Namespace) ->
-    is_binary(Namespace) andalso byte_size(Namespace) > 0.
+    is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
+        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES.
 
 valid_key(Binary) ->
     is_binary(Binary) andalso

@@ -6,6 +6,10 @@ subscribed reactions and explicit events are implemented and deployed;
 reliable push and hardware acceptance remain planned in
 `event-reaction-refinement-plan.md`. Explicit events change
 the transaction and DTX-plan grammar but add no new ledger record kind.
+The shared certified follower now also maintains volatile, authenticated
+height-wake registrations on the target's existing feed links; this working
+tree still requires review and hardware acceptance before that part is a
+deployment claim.
 
 This document is the authority for the subscription relation and certified
 foreign projection. `inter-ontology.md` remains authoritative for `::`, ACL,
@@ -92,8 +96,9 @@ and verifies the disk cache before reuse.
 Writing or removing `subscribes/2` is governed by the subscriber ontology's
 normal `can_invoke/4` path.
 
-When target cooperation is required for a follow, page push, or wake-up, the
-target evaluates that request through its existing `can_invoke/4` machinery.
+When target cooperation discloses facts, filtered publications, or page
+payloads beyond the existing certified catch-up surface, the target evaluates
+that request through its existing `can_invoke/4` machinery.
 The authenticated host supplies the exact subscriber identity and certified
 evidence that the subscription still exists. The target does not gain a new
 ACL language and does not copy any permission or durable row into its ledger.
@@ -101,11 +106,20 @@ Authorization is checked on establishment, after re-establishment, and after a
 committee change. Revocation stops future cooperation; it cannot erase history
 already disclosed.
 
+The implemented feed-recipient control is deliberately narrower. It sends
+only an authenticated node a correlated current-height wake; it sends no fact,
+event, page, subscription identity, or permission. Certified catch-up pages
+were already available to authenticated peers, so this transport-liveness hint
+does not add a second ACL or a second subscription protocol. The receiver must
+still fetch and verify the exact anchored history before anything changes. A
+future selective or payload-bearing push remains subject to the ordinary ACL
+rule above.
+
 The first reaction implementation sends no `react_on/3` patterns to the target
-and keeps no target-side pattern registry. The target authorizes the ontology
-follow, not an Erlang reimplementation of individual predicate policy.
-Publication filtering may be added later only as a measured optimization
-expressed by target-side Prolog policy around the same certified history.
+and keeps no target-side pattern registry. Publication filtering or selective
+payload delivery may be added later only as a measured optimization expressed
+by target-side Prolog policy around the same certified history, never as an
+Erlang reimplementation of predicate policy.
 
 The current certified-ledger transport is not selective confidentiality. A peer
 which may fetch a complete certified page sees that page. Per-fact confidential
@@ -121,7 +135,8 @@ disclosure would require a separate cryptographic format and trust review.
 | routes/private seeds | P | Existing local directory |
 | certified target history/cache | P | Node-wide `quod_foreign_log` |
 | materialized foreign facts and MVCC state | P | Shared active target projection |
-| consumer refs, retry state, freshness, revision | P | Runtime/foreign-log only |
+| consumer refs, coalesced wake state, freshness, revision | P | Runtime/foreign-log only |
+| feed recipient registration, correlation id, live link, pending height | P | Volatile source/target feed owners; rebuilt from current certified routes |
 | `state_handler/4` convergence | P | Existing ordered runtime tier |
 | verified height/digest wake-up | E | Freshness hint, never authority |
 | grounded `react_on/3` Handler | E | Live-only reaction tier after P |
@@ -245,8 +260,8 @@ broadcast raw detail automatically to every ancestor.
 | subscription is retracted | Runtime removes that consumer; shared target remains for other consumers |
 | subscriber node restarts | D rebuilds; reconciliation reattaches and rebuilds P; no old E |
 | target advances while subscriber is down | Certified catch-up rebuilds current P; no historical E |
-| target committee changes | Accept only certified transition and current routes; re-check the ordinary ACL if a cooperative push/wake-up is active |
-| target route disappears | Keep D and last certified P, mark unreachable, retry asynchronously |
+| target committee changes | Accept only the certified transition, replace height-wake links from the new current routes, and re-check the ordinary ACL only for any future payload-bearing cooperation |
+| target route disappears | Keep D and last certified P, mark unreachable, and park; an exact directory change reconnects the volatile feed registration, whose correlated registration response includes the target's current height and closes the missed-commit race |
 | wrong anchor/forged page/outsider/stale committee | Do not advance P or E |
 | projection worker dies | Drop its generation and rebuild from certified cache |
 | foreign-log owner dies | Consumers reattach; no old projection is trusted |
@@ -255,27 +270,44 @@ broadcast raw detail automatically to every ancestor.
 
 ## 11. Transport and performance
 
-Pulling remains bounded, asynchronous certified anti-entropy. An optional push
-uses the existing certified page format or a height/digest wake-up; a raw push
-is never authority. Reliable ordered streams carry pages and control. Existing
-lossy datagrams remain only for client/world cues and frames.
+Pulling remains bounded and certified. An optional push uses the existing
+certified page format or a height/digest wake-up; a raw push is never authority.
+Reliable ordered streams carry pages and control. Existing lossy datagrams
+remain only for client/world cues and frames. The local follower already
+recognizes authenticated feed frames as wakes. For every current certified
+target-validator route it opens the existing feed channel and installs one
+volatile recipient row per source node. The target sends its current height on
+registration and one ordered, acknowledged height wake after later commits;
+while one wake is unacknowledged it retains only the newest pending height.
+Exact peer, link, registration id, anchor, and height correlation rejects
+crossed or stale controls. Link loss, last `unfollow`, committee replacement,
+or owner shutdown removes the row; directory/certified-history progress
+rebuilds it. The wake remains only a prompt for the one certified follower.
 
 There is no process or connection per subscription fact. One active target has
-one shared verification/materialization owner, a coalesced refresh, and one
-current generation. Long rebuilds yield between existing page-sized turns so
-foreground DTX verification is not starved. Runtime network work stays outside
-the ordered P handler.
+one shared verification/materialization owner, one coalesced wake job, and one
+current generation. A runtime whose local foreign owner is absent parks all
+consumer attachments behind one existing gproc name-follow monitor; owner
+registration drains the complete catalogue through ordinary mailbox turns,
+with no polling timer or compiled batch cap. Long rebuilds yield between
+existing page-sized turns so foreground DTX verification is not starved.
+Runtime network work stays outside the ordered P handler.
 
 Metrics use bounded labels and cover active follows/consumers, building and
-unreachable targets, certified pages/entries/bytes, retries, coalescing,
+unreachable targets, certified pages/entries/bytes, wake signals, coalescing,
 rebuilds, source lag, reaction candidates/matches/failures, drops, and
-resnapshots. Namespace and event values are not labels. Default retry and queue
-budgets are operator-configurable; no semantic population ceiling is added.
+resnapshots. They also expose node-wide outbound height-wake registrations and
+per-hosted-namespace recipient counts; arbitrary target identities never
+become labels. Worker silence keeps
+its final deadline, but normal progress has no polling or retry ladder. No
+semantic population ceiling is added.
 
 ## 12. Format impact and implementation order
 
-The implemented subscription fact and continuous follow changed no durable or
-wire format. Local assert/retract reactions also need no format change.
+The implemented subscription fact and continuous follow changed no durable
+format. Local assert/retract reactions also need no durable format change. The
+height-wake work adds one versioned, volatile control family inside the
+existing feed envelope; it adds no ledger term and requires no re-found.
 
 The `{event, Term}` operation added by `trigger_event/1` changes the
 canonical transaction grammar and every exhaustive diff consumer. That one
@@ -291,9 +323,11 @@ compatibility paths are deleted together.
 4. **Implemented and deployed:** subscribed applied-op reactions through
    the same dispatcher;
    first attach/rebuild remains reaction-free.
-5. **Partly implemented:** pull-follow acknowledgement, coalescing, and
-   reaction-free resnapshot use the same follow lifecycle. Reliable page push
-   remains a later freshness optimization.
+5. **Implemented in the current working tree, pending hardware acceptance:** pull-follow acknowledgement, message-driven
+   coalescing, reaction-free resnapshot, and directory/feed wake consumption
+   use the same follow lifecycle. The same existing feed channel now owns
+   volatile correlated height-wake registration; reliable page push remains a
+   later freshness optimization.
 6. **Implemented and deployed:** `trigger_event/1` and its coordinated format
    break were activated by the clean re-found.
 7. **Planned:** hardware fan-out, churn, recovery, and chained-load acceptance.
@@ -321,9 +355,10 @@ before the next slice.
    explicit events each do.
 10. A dynamically asserted non-founding `react_on/3` never executes.
 11. An unresolvable/ambiguous Executor performs nothing and is counted.
-12. When target cooperation is added for push/wake-up, it is authorized through
-    the existing `can_invoke/4` path; denial retains no unauthorized delivery
-    state.
+12. Height-only freshness wakes disclose no facts and require no target-side
+    delivery ACL. Any future selective or payload-bearing target cooperation is
+    authorized through the existing `can_invoke/4` path; denial retains no
+    unauthorized delivery state.
 13. Slow consumers coalesce and resnapshot without unbounded mailbox, timer,
     worker, or retry growth.
 14. Direct, chained, circular, private-target, committee-change, and 10,000-fact

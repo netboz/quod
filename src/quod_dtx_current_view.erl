@@ -1,35 +1,45 @@
 -module(quod_dtx_current_view).
 -moduledoc """
-Bounded current-view corroboration for DTX recovery reads.
+Bounded committee corroboration for DTX recovery reads.
 
-Each operation first freezes one certificate-verified committee view for the
-exact `{Namespace, GenesisAnchor}` identity. It then asks distinct members of
-that frozen view for a response bound to its committee id and minimum certified
-slot. `f + 1` matching current-validator replies are required, so one Byzantine
-responder can never decide an applied claim or public outcome.
+Applied verification freezes the committee certified by the exact Finalize and
+asks distinct members of that committee for signed replies. `f + 1` replies
+form one portable certificate that source validators can verify locally. Public
+outcome lookup retains its separate certified-current-view rule. In both cases,
+one Byzantine responder can never decide a claim or outcome.
 
 Routes are identity-pinned transport hints, never committee evidence. There is
 no owner process, second history cache, or retained proof object: every call
 uses the shared `quod_foreign_log` cache and bounded temporary probes, and
 returns `retry` whenever history, routing, membership, application, or a reply
-is uncertain. One probe is created per validator key; that probe may try two
-ordered endpoints sequentially without creating another vote or request id.
+is uncertain. One probe is created per validator key; that probe tries the
+shared key resolver's current endpoint, the existing live candidates, and the
+exact Finalize-era fallback sequentially after deduplication. The transport
+still authenticates the expected key; no endpoint creates another vote or
+request id.
 """.
 
 -include("quod_proof_limits.hrl").
 
 -export([submit_operation/4, submit_claim_application/5,
          submit_operation_to/5,
-         verify_applied/4, verify_applied_many/3, lookup_outcome/4]).
--export_type([source/0, claim/0]).
+         certify_applied_many/3, lookup_outcome/4,
+         sign_applied_vote/8, verify_applied_certificate/3,
+         valid_applied_certificate_shape/1,
+         applied_certificate_binding/1]).
+-export_type([source/0, claim/0, applied_certificate/0]).
 
 -ifdef(TEST).
--export([test_verify_applied/5, test_verify_applied_many/4,
-         test_lookup_outcome/5, test_threshold/1]).
+-export([test_certify_applied/6, test_certify_applied_many/4,
+         test_lookup_outcome/5, test_threshold/1,
+         test_endpoint_failure_disposition/2,
+         test_submit_operation_candidates/2]).
 -endif.
 
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(PROBE_CLEANUP_MS, 1000).
+-define(APPLIED_CERTIFICATE_VERSION, 1).
+-define(APPLIED_VOTE_VERSION, 1).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type source() ::
@@ -41,9 +51,113 @@ ordered endpoints sequentially without creating another vote or request id.
           finalize_ref := quod_dtx:certified_ref(),
           generation := non_neg_integer(),
           verdict := commit | abort}.
--type result() :: {ok, map()} | {error, retry | invalid_request}.
+-type applied_certificate() ::
+        {quod_dtx_applied_certificate, 1, <<_:256>>, identity(), <<_:256>>,
+         <<_:256>>, quod_dtx:certified_ref(), non_neg_integer(),
+         commit | abort, [{<<_:256>>, <<_:512>>}]}.
+-type many_result() :: {verified, applied_certificate()} | retry.
 -type outcome_result() ::
         {ok, map()} | {error, retry | not_found | invalid_request}.
+
+-doc "Sign one exact Finalize-applied vote with a validator's node identity.".
+-spec sign_applied_vote(<<_:256>>, identity(), <<_:256>>, <<_:256>>,
+                        quod_dtx:certified_ref(), non_neg_integer(),
+                        commit | abort, quod_identity:signer()) ->
+          {ok, {<<_:256>>, <<_:512>>}} | error.
+sign_applied_vote(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+                  Generation, Verdict,
+                  #{pubkey := <<_:256>> = Signer, key := _} = Identity) ->
+    case applied_statement(
+           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           Generation, Verdict) of
+        {ok, Statement} ->
+            Signature = quod_identity:sign(
+                          applied_vote_bytes(Statement), Identity),
+            case Signature of
+                <<_:512>> -> {ok, {Signer, Signature}};
+                _ -> error
+            end;
+        error ->
+            error
+    end;
+sign_applied_vote(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
+                  _FinalizeRef, _Generation, _Verdict, _Identity) ->
+    error.
+
+-doc "Return the exact statement carried by a bounded applied certificate.".
+-spec applied_certificate_binding(applied_certificate()) -> {ok, map()} | error.
+applied_certificate_binding(
+  {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
+   <<_:256>> = NetworkIdentity, Target, <<_:256>> = CommitteeId,
+   <<_:256>> = GroupId, FinalizeRef, Generation, Verdict, Signatures}
+  = Certificate) ->
+    case applied_statement(
+           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           Generation, Verdict) of
+        {ok, Statement} ->
+            {ok, Target, AppliedThrough, _Digest} =
+                quod_dtx:certified_ref_binding(FinalizeRef),
+            case valid_applied_signatures(Signatures) andalso
+                 erlang:external_size(Certificate) =<
+                     ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+                true ->
+                    {ok, #{network_identity => NetworkIdentity,
+                           target => Target, committee_id => CommitteeId,
+                           group_id => GroupId, finalize_ref => FinalizeRef,
+                           applied_through => AppliedThrough,
+                           generation => Generation, verdict => Verdict,
+                           statement => Statement,
+                           signatures => Signatures}};
+                false -> error
+            end;
+        error -> error
+    end;
+applied_certificate_binding(_Certificate) ->
+    error.
+
+-doc "Cheap bounded shape check for an untrusted applied certificate.".
+-spec valid_applied_certificate_shape(term()) -> boolean().
+valid_applied_certificate_shape(Certificate) ->
+    case applied_certificate_binding(Certificate) of
+        {ok, _} -> true;
+        error -> false
+    end.
+
+-doc "Verify one certificate against the exact certified Finalize evidence.".
+-spec verify_applied_certificate(applied_certificate(), <<_:256>>, map()) ->
+          boolean().
+verify_applied_certificate(Certificate, NetworkIdentity,
+                           #{identity := Target,
+                             committee := Committee,
+                             committee_id := CommitteeId} = Evidence) ->
+    case {applied_certificate_binding(Certificate),
+          exact_finalize_binding(Evidence)} of
+        {{ok, #{network_identity := NetworkIdentity,
+                target := Target, committee_id := CommitteeId,
+                group_id := GroupId, finalize_ref := FinalizeRef,
+                generation := Generation, verdict := Verdict,
+                statement := Statement, signatures := Signatures}},
+         {ok, GroupId, FinalizeRef, Generation, Verdict}} ->
+            case quod_quorum:committee_size(Committee) of
+                {ok, N} when N > 0 ->
+                    Needed = applied_threshold(N),
+                    case length(Signatures) =:= Needed of
+                        true ->
+                            case quod_quorum:sanitize_at_least(
+                                   Committee, applied_vote_bytes(Statement),
+                                   Signatures, Needed) of
+                                {ok, Signatures} -> true;
+                                _ -> false
+                            end;
+                        false -> false
+                    end;
+                _ -> false
+            end;
+        _ ->
+            false
+    end;
+verify_applied_certificate(_Certificate, _NetworkIdentity, _Evidence) ->
+    false.
 
 -doc """
 Submit one correlated durable-operation request to an exact ontology.
@@ -56,7 +170,8 @@ the ordinary consensus path independently on every validator.
 -spec submit_operation(binary(), identity(), quod_dtx_endpoint:request(),
                        pos_integer()) ->
           {ok, quod_dtx_endpoint:response()} |
-          {error, busy | not_ready | invalid_request | timeout}.
+          {error, busy | not_ready | invalid_request | timeout |
+                  connection_lost}.
 submit_operation(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
                  Request, TimeoutMs)
   when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
@@ -65,7 +180,7 @@ submit_operation(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
     BoundedTimeout = min(
                        TimeoutMs,
                        ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
-    case quod_dtx_endpoint:encode_request(TargetNs, Request) of
+    case quod_dtx_endpoint:encode_request(TargetNs, Request, []) of
         {ok, _} ->
             submit_operation_target(
               OwnerNs, Target, Anchor, Request,
@@ -80,7 +195,8 @@ submit_operation(_OwnerNs, _Target, _Request, _TimeoutMs) ->
 -spec submit_claim_application(binary(), identity(), tuple(),
                                quod_dtx_endpoint:request(), pos_integer()) ->
           {ok, quod_dtx_endpoint:response()} |
-          {error, busy | not_ready | invalid_request | timeout}.
+          {error, busy | not_ready | invalid_request | timeout |
+                  connection_lost}.
 submit_claim_application(OwnerNs, Target, Claim,
                          {apply_claim, _, _} = Request, TimeoutMs) ->
     case quod_transaction:remote_claim_route(Claim) of
@@ -99,14 +215,15 @@ submit_claim_application(_OwnerNs, _Target, _Claim, _Request, _TimeoutMs) ->
 -spec submit_operation_to(binary(), identity(), <<_:256>>,
                           quod_dtx_endpoint:request(), pos_integer()) ->
           {ok, quod_dtx_endpoint:response()} |
-          {error, busy | not_ready | invalid_request | timeout}.
+          {error, busy | not_ready | invalid_request | timeout |
+                  connection_lost}.
 submit_operation_to(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
                     <<_:256>> = TargetNode, Request, TimeoutMs)
   when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
        is_binary(TargetNs), byte_size(TargetNs) > 0,
        is_integer(TimeoutMs), TimeoutMs > 0 ->
     BoundedTimeout = min(TimeoutMs, ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
-    case quod_dtx_endpoint:encode_request(TargetNs, Request) of
+    case quod_dtx_endpoint:encode_request(TargetNs, Request, []) of
         {ok, _} ->
             submit_operation_exact_target(
               OwnerNs, Target, Anchor, TargetNode, Request,
@@ -126,7 +243,7 @@ submit_operation_exact_target(
                     operation_response(
                       Request,
                       quod_simplex:dtx_endpoint_local(
-                        TargetNs, Request, remaining_positive(Deadline)));
+                        TargetNs, Request, [], remaining_positive(Deadline)));
                 _ ->
                     submit_operation_exact_routes(
                       OwnerNs, Target, TargetNode, Request, Deadline)
@@ -142,8 +259,9 @@ submit_operation_exact_routes(
         {ok, Routes} ->
             case lists:keyfind(TargetNode, 1, Routes) of
                 {TargetNode, Endpoints} ->
-                    submit_operation_endpoints(
-                      OwnerNs, TargetNs, TargetNode, Endpoints,
+                    submit_operation_candidates(
+                      OwnerNs, TargetNs,
+                      [{TargetNode, Endpoint} || Endpoint <- Endpoints],
                       Request, Deadline, not_ready);
                 false ->
                     {error, not_ready}
@@ -161,7 +279,7 @@ submit_operation_target(OwnerNs, {TargetNs, _} = Target, Anchor,
                     operation_response(
                       Request,
                       quod_simplex:dtx_endpoint_local(
-                        TargetNs, Request, remaining_positive(Deadline)));
+                        TargetNs, Request, [], remaining_positive(Deadline)));
                 _ ->
                     submit_operation_routes(
                       OwnerNs, Target, Request, Deadline)
@@ -174,48 +292,63 @@ submit_operation_routes(OwnerNs, {TargetNs, _} = Target,
                         Request, Deadline) ->
     case quod_foreign_log:route_hints(Target, []) of
         {ok, Routes} ->
-            submit_operation_route_rows(
-              OwnerNs, TargetNs, Routes, Request, Deadline, not_ready);
+            submit_operation_candidates(
+              OwnerNs, TargetNs,
+              [{PeerKey, Endpoint}
+               || {PeerKey, Endpoints} <- Routes,
+                  Endpoint <- Endpoints],
+              Request, Deadline, not_ready);
         {error, _} ->
             {error, not_ready}
     end.
 
-submit_operation_route_rows(_OwnerNs, _TargetNs, [], _Request,
+submit_operation_candidates(_OwnerNs, _TargetNs, [], _Request,
                             _Deadline, Last) ->
     {error, Last};
-submit_operation_route_rows(OwnerNs, TargetNs,
-                            [{PeerKey, Endpoints} | Rest], Request,
+submit_operation_candidates(OwnerNs, TargetNs, Candidates, Request,
                             Deadline, Last) ->
-    case submit_operation_endpoints(
-           OwnerNs, TargetNs, PeerKey, Endpoints,
-           Request, Deadline, Last) of
-        {ok, _} = Ok -> Ok;
-        {error, Reason} ->
-            submit_operation_route_rows(
-              OwnerNs, TargetNs, Rest, Request, Deadline, Reason)
-    end.
+    submit_operation_candidates(
+      OwnerNs, TargetNs, Candidates, Request, Deadline, Last,
+      fun(Key, Endpoint, Remaining) ->
+              quod_simplex:dtx_endpoint_request(
+                OwnerNs, TargetNs, Key, Endpoint, Request, [], Remaining)
+      end).
 
-submit_operation_endpoints(_OwnerNs, _TargetNs, _PeerKey, [],
-                           _Request, _Deadline, Last) ->
+submit_operation_candidates(_OwnerNs, _TargetNs, [], _Request,
+                            _Deadline, Last, _Attempt) ->
     {error, Last};
-submit_operation_endpoints(OwnerNs, TargetNs, PeerKey,
-                           [Endpoint | Rest], Request, Deadline, Last) ->
+submit_operation_candidates(OwnerNs, TargetNs,
+                            [{PeerKey, Endpoint} | Rest], Request,
+                            Deadline, Last, Attempt) ->
     case remaining(Deadline) of
         0 -> {error, Last};
         Remaining ->
-            Result = quod_simplex:dtx_endpoint_request(
-                       OwnerNs, TargetNs, PeerKey, Endpoint,
-                       Request, Remaining),
+            Result = Attempt(PeerKey, Endpoint, Remaining),
             case operation_response(Request, Result) of
                 {ok, _} = Ok -> Ok;
                 {error, Reason} ->
-                    submit_operation_endpoints(
-                      OwnerNs, TargetNs, PeerKey, Rest,
-                      Request, Deadline, Reason)
+                    case endpoint_failure_disposition(Request, Reason) of
+                        stop -> {error, Reason};
+                        next ->
+                            submit_operation_candidates(
+                              OwnerNs, TargetNs, Rest, Request,
+                              Deadline, Reason, Attempt)
+                    end
             end
     end.
 
-operation_response(Request, {ok, Response}) ->
+%% Cancellation mutates a node-private idempotent journal row. Once any exact
+%% endpoint attempt fails, its sole custody owner parks until the directory
+%% publishes a real route edge; walking stale alternatives here would turn a
+%% transport failure into an immediate semantic retry. A timeout or authenticated
+%% link loss is likewise uncertain for every write/read request and must return
+%% to its existing history/recovery owner instead of resubmitting automatically.
+endpoint_failure_disposition({cancel_operation_effect, _, _}, _Reason) -> stop;
+endpoint_failure_disposition(_Request, timeout) -> stop;
+endpoint_failure_disposition(_Request, connection_lost) -> stop;
+endpoint_failure_disposition(_Request, _Reason) -> next.
+
+operation_response(Request, {ok, Response, _ValidationSidecar}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true -> {ok, Response};
         false -> {error, invalid_request}
@@ -227,23 +360,18 @@ remaining_positive(Deadline) ->
     max(1, remaining(Deadline)).
 
 -doc """
-Verify one exact participant-applied claim against a certified current view.
+Build participant-applied certificates concurrently under one bounded deadline.
 
-`OwnerNs` is the namespace whose engine owns remote endpoint correlations.
-For a co-hosted target, `Source` names its ledger root; otherwise it carries
-the exact-anchor route hints used to establish the certified current view.
-`TimeoutMs` bounds the complete view-and-probe operation.
+Each request carries the exact Finalize evidence already verified by the
+coordinator. For valid input the returned list is aligned with `Requests`. An
+exact certificate is retained as `{verified, Certificate}` even when another
+participant is temporarily unavailable; only that participant's row is
+`retry`. A caller authorizing Complete must still require every row.
 """.
--spec verify_applied(binary(), source(), claim(), pos_integer()) -> result().
-verify_applied(OwnerNs, Source, Claim, TimeoutMs) ->
-    verify_applied_with(
-      OwnerNs, Source, Claim, TimeoutMs, production_dependencies()).
-
--doc "Verify every participant claim concurrently under one bounded deadline.".
--spec verify_applied_many(binary(), [{source(), claim()}], pos_integer()) ->
-          {ok, [map()]} | {error, retry | invalid_request}.
-verify_applied_many(OwnerNs, Requests, TimeoutMs) ->
-    verify_applied_many_with(
+-spec certify_applied_many(binary(), [{source(), claim(), map()}], pos_integer()) ->
+          {ok, [many_result()]} | {error, invalid_request}.
+certify_applied_many(OwnerNs, Requests, TimeoutMs) ->
+    certify_applied_many_with(
       OwnerNs, Requests, TimeoutMs, production_dependencies()).
 
 -doc """
@@ -281,12 +409,7 @@ lookup_outcome_with(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
 
 production_dependencies() ->
     #{view =>
-          fun({local, LedgerRoot}, {finalize, Ref}, Timeout) ->
-                  quod_foreign_log:verify_local_current(
-                    LedgerRoot, Ref, Timeout);
-             ({remote, Routes}, {finalize, Ref}, Timeout) ->
-                  quod_foreign_log:verify_current(Routes, Ref, Timeout);
-             ({local, LedgerRoot}, {identity, Identity}, Timeout) ->
+          fun({local, LedgerRoot}, {identity, Identity}, Timeout) ->
                   quod_foreign_log:local_current(
                     LedgerRoot, Identity, Timeout);
              ({remote, Routes}, {identity, Identity}, Timeout) ->
@@ -294,26 +417,29 @@ production_dependencies() ->
           end,
       local =>
           fun(TargetNs, Request, Timeout) ->
-                  quod_simplex:dtx_endpoint_local(TargetNs, Request, Timeout)
+                  quod_simplex:dtx_endpoint_local(
+                    TargetNs, Request, [], Timeout)
           end,
       remote =>
           fun(Owner, TargetNs, PeerKey, Endpoint, Request, Timeout) ->
                   quod_simplex:dtx_endpoint_request(
-                    Owner, TargetNs, PeerKey, Endpoint, Request, Timeout)
+                    Owner, TargetNs, PeerKey, Endpoint, Request, [], Timeout)
           end,
-      node_key => fun node_key/0}.
+      resolve => fun quod_quic:resolve/1,
+      node_key => fun node_key/0,
+      network_identity => fun quod_ontology:network_identity/0}.
 
-verify_applied_with(OwnerNs, Source, Claim, TimeoutMs, Dependencies) ->
+certify_applied_with(
+  OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
     case valid_request(OwnerNs, Source, Claim, TimeoutMs) of
         {ok, Target, GroupId, FinalizeRef, Generation, Verdict} ->
             Deadline = quod_time:mono_ms() + TimeoutMs,
-            case call_current_view(
-                   Source, {finalize, FinalizeRef}, Deadline,
-                   Dependencies) of
-                {ok, View} ->
+            case dependency_network_identity(Dependencies) of
+                {ok, NetworkIdentity} ->
                     verify_view(
-                      OwnerNs, Source, Target, GroupId, FinalizeRef,
-                      Generation, Verdict, View, Deadline, Dependencies);
+                      OwnerNs, Source, NetworkIdentity, Target,
+                      GroupId, FinalizeRef, Generation, Verdict,
+                      Evidence, Deadline, Dependencies);
                 {error, _} ->
                     {error, retry}
             end;
@@ -321,40 +447,44 @@ verify_applied_with(OwnerNs, Source, Claim, TimeoutMs, Dependencies) ->
             {error, invalid_request}
     end.
 
-verify_applied_many_with(OwnerNs, Requests, TimeoutMs, Dependencies)
+certify_applied_many_with(OwnerNs, Requests, TimeoutMs, Dependencies)
   when is_list(Requests), Requests =/= [],
        length(Requests) =< ?QUOD_MAX_DTX_PARTICIPANTS,
        is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
     case lists:all(
-           fun({Source, Claim}) ->
+           fun({Source, Claim, Evidence}) when is_map(Evidence) ->
                    case valid_request(
                           OwnerNs, Source, Claim, TimeoutMs) of
-                       {ok, _, _, _, _, _} -> true;
+                       {ok, Target, GroupId, FinalizeRef, Generation,
+                        Verdict} ->
+                           valid_finalize_evidence(
+                             Target, GroupId, FinalizeRef, Generation,
+                             Verdict, Evidence) =/= error;
                        error -> false
                    end;
               (_) -> false
            end, Requests) of
         true ->
-            verify_applied_many_requests(
+            certify_applied_many_requests(
               OwnerNs, Requests, TimeoutMs, Dependencies);
         false ->
             {error, invalid_request}
     end;
-verify_applied_many_with(_OwnerNs, _Requests, _TimeoutMs, _Dependencies) ->
+certify_applied_many_with(_OwnerNs, _Requests, _TimeoutMs, _Dependencies) ->
     {error, invalid_request}.
 
-verify_applied_many_requests(OwnerNs, Requests, TimeoutMs, Dependencies) ->
+certify_applied_many_requests(OwnerNs, Requests, TimeoutMs, Dependencies) ->
     Parent = self(),
     VerifyRef = make_ref(),
     Pending =
         lists:foldl(
-          fun({Index, {Source, Claim}}, Acc) ->
+          fun({Index, {Source, Claim, Evidence}}, Acc) ->
                   {Pid, Monitor} = spawn_opt(
                     fun() ->
-                        Result = verify_applied_with(
-                                   OwnerNs, Source, Claim, TimeoutMs,
-                                   Dependencies),
+                        Result = certify_applied_with(
+                                   OwnerNs, Source, Claim, Evidence,
+                                   TimeoutMs, Dependencies),
                         Parent ! {dtx_current_view_many, VerifyRef, self(),
                                   Index, Result}
                     end, [link, monitor]),
@@ -366,12 +496,12 @@ verify_applied_many_requests(OwnerNs, Requests, TimeoutMs, Dependencies) ->
 collect_many_results(VerifyRef, Pending, Results, _Deadline)
   when map_size(Pending) =:= 0 ->
     flush_worker_results(dtx_current_view_many, VerifyRef),
-    {ok, [View || {_Index, View} <- lists:keysort(1, maps:to_list(Results))]};
+    {ok, aligned_many_results(Results)};
 collect_many_results(VerifyRef, Pending, Results, Deadline) ->
     case remaining(Deadline) of
         0 ->
             stop_workers(dtx_current_view_many, VerifyRef, Pending),
-            {error, retry};
+            {ok, aligned_many_results(mark_pending_retry(Pending, Results))};
         Wait ->
             receive
                 {dtx_current_view_many, VerifyRef, Pid, Index, {ok, View}}
@@ -380,37 +510,57 @@ collect_many_results(VerifyRef, Pending, Results, Deadline) ->
                         {{Monitor, Index}, Rest} ->
                             _ = erlang:demonitor(Monitor, [flush]),
                             collect_many_results(
-                              VerifyRef, Rest, Results#{Index => View},
+                              VerifyRef, Rest,
+                              Results#{Index => {verified, View}},
                               Deadline);
-                        {{Monitor, _OtherIndex}, Rest} ->
+                        {{Monitor, ExpectedIndex}, Rest} ->
                             _ = erlang:demonitor(Monitor, [flush]),
-                            stop_workers(dtx_current_view_many, VerifyRef, Rest),
-                            {error, retry}
+                            collect_many_results(
+                              VerifyRef, Rest,
+                              Results#{ExpectedIndex => retry}, Deadline)
                     end;
-                {dtx_current_view_many, VerifyRef, Pid, _Index, {error, Reason}}
-                  when is_map_key(Pid, Pending),
-                       (Reason =:= retry orelse Reason =:= invalid_request) ->
-                    {{Monitor, _}, Rest} = maps:take(Pid, Pending),
+                {dtx_current_view_many, VerifyRef, Pid, _Index, {error, retry}}
+                  when is_map_key(Pid, Pending) ->
+                    {{Monitor, ExpectedIndex}, Rest} = maps:take(Pid, Pending),
+                    _ = erlang:demonitor(Monitor, [flush]),
+                    collect_many_results(
+                      VerifyRef, Rest, Results#{ExpectedIndex => retry},
+                      Deadline);
+                {dtx_current_view_many, VerifyRef, Pid, _Index,
+                 {error, invalid_request}}
+                  when is_map_key(Pid, Pending) ->
+                    {{Monitor, _ExpectedIndex}, Rest} =
+                        maps:take(Pid, Pending),
                     _ = erlang:demonitor(Monitor, [flush]),
                     stop_workers(dtx_current_view_many, VerifyRef, Rest),
-                    {error, Reason};
+                    {error, invalid_request};
                 {'DOWN', Monitor, process, Pid, _Reason}
                   when is_map_key(Pid, Pending) ->
                     case maps:get(Pid, Pending) of
-                        {Monitor, _Index} ->
+                        {Monitor, Index} ->
                             Rest = maps:remove(Pid, Pending),
-                            stop_workers(
-                              dtx_current_view_many, VerifyRef, Rest),
-                            {error, retry};
+                            collect_many_results(
+                              VerifyRef, Rest, Results#{Index => retry},
+                              Deadline);
                         _ ->
                             collect_many_results(
                               VerifyRef, Pending, Results, Deadline)
                     end
             after Wait ->
                 stop_workers(dtx_current_view_many, VerifyRef, Pending),
-                {error, retry}
+                {ok,
+                 aligned_many_results(mark_pending_retry(Pending, Results))}
             end
     end.
+
+mark_pending_retry(Pending, Results) ->
+    maps:fold(
+      fun(_Pid, {_Monitor, Index}, Acc) -> Acc#{Index => retry} end,
+      Results, Pending).
+
+aligned_many_results(Results) ->
+    [Result || {_Index, Result} <-
+                   lists:keysort(1, maps:to_list(Results))].
 
 valid_request(OwnerNs, Source,
               #{target := {TargetNs, <<_:256>> = Anchor} = Target,
@@ -533,22 +683,23 @@ call_current_view(Source, Basis, Deadline, Dependencies) ->
             end
     end.
 
-verify_view(OwnerNs, Source, Target, GroupId, FinalizeRef,
-            Generation, Verdict, View, Deadline, Dependencies) ->
-    case valid_current_view(Target, FinalizeRef, Generation, View) of
+verify_view(OwnerNs, Source, NetworkIdentity, Target, GroupId, FinalizeRef,
+            Generation, Verdict, Evidence, Deadline, Dependencies) ->
+    case valid_finalize_evidence(
+           Target, GroupId, FinalizeRef, Generation, Verdict, Evidence) of
         {ok, Committee, CommitteeId, Routes} ->
             Sources = probe_sources(
                         Source, Committee, Routes, Dependencies),
             Needed = threshold(length(Committee)),
             case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
                 true ->
-                    Claim = {Target, CommitteeId, GroupId, FinalizeRef,
-                             Generation, Verdict},
+                    Claim = {NetworkIdentity, Target, CommitteeId, GroupId,
+                             FinalizeRef, Generation, Verdict},
                     case collect_applied(
                            OwnerNs, Sources, Claim, Needed, Deadline,
                            Dependencies) of
-                        true -> {ok, View};
-                        false -> {error, retry}
+                        {ok, Certificate} -> {ok, Certificate};
+                        retry -> {error, retry}
                     end;
                 false ->
                     {error, retry}
@@ -557,20 +708,66 @@ verify_view(OwnerNs, Source, Target, GroupId, FinalizeRef,
             {error, retry}
     end.
 
-valid_current_view(Target, FinalizeRef, ClaimedGeneration,
-                   #{generation := Generation} = View)
-  when is_integer(Generation), Generation >= ClaimedGeneration,
-       Generation =< ?MAX_UINT64 ->
-    case {valid_identity_current_view(Target, View),
-          quod_dtx:certified_ref_binding(FinalizeRef)} of
-        {{ok, Committee, CommitteeId, Slot, Routes},
-         {ok, Target, RefSlot, _Digest}}
-          when Slot >= RefSlot ->
+valid_finalize_evidence(Target, GroupId, FinalizeRef, Generation, Verdict,
+                        Evidence) ->
+    case {exact_finalize_binding(Evidence),
+          finalize_committee_view(Target, Evidence)} of
+        {{ok, GroupId, FinalizeRef, Generation, Verdict},
+         {ok, Committee, CommitteeId, Routes}} ->
             {ok, Committee, CommitteeId, Routes};
         _ -> error
+    end.
+
+exact_finalize_binding(
+  #{identity := Target, phase := finalize, control := Control,
+    entry := Entry}) ->
+    case {quod_dtx:control_kind(Control),
+          quod_dtx:recovery_phase(quod_dtx:control_body(Control)),
+          quod_dtx:certified_entry_ref(Target, Entry, Control)} of
+        {finalize,
+         {ok, #{kind := finalize, group_id := <<_:256>> = GroupId,
+                generation := Generation, verdict := Verdict}},
+         {ok, FinalizeRef}}
+          when is_integer(Generation), Generation >= 0,
+               Generation =< ?MAX_UINT64,
+               (Verdict =:= commit orelse Verdict =:= abort) ->
+            {ok, GroupId, FinalizeRef, Generation, Verdict};
+        _ -> error
     end;
-valid_current_view(_Target, _FinalizeRef, _ClaimedGeneration, _View) ->
+exact_finalize_binding(_Evidence) ->
     error.
+
+finalize_committee_view(
+  Target,
+  #{identity := Target, committee := Committee,
+    committee_id := <<_:256>> = CommitteeId, routes := RouteMap})
+  when is_list(Committee), Committee =/= [],
+       length(Committee) =< ?MAX_VALIDATORS,
+       is_map(RouteMap), map_size(RouteMap) =< ?MAX_VALIDATORS ->
+    Routes = lists:keysort(
+               1,
+               [{Key, [Endpoint]}
+                || {Key, Endpoint} <- maps:to_list(RouteMap)]),
+    case Committee =:= lists:usort(Committee) andalso
+         lists:all(fun valid_key/1, Committee) andalso
+         valid_historical_routes(Routes, Committee) of
+        true -> {ok, Committee, CommitteeId, Routes};
+        false -> error
+    end;
+finalize_committee_view(_Target, _Evidence) ->
+    error.
+
+%% A co-hosted validator needs no transport route to attest. Historical
+%% routes are therefore an optional, authenticated reachability aid rather
+%% than a precondition for a valid Finalize-era committee.
+valid_historical_routes(Routes, Committee) ->
+    lists:all(
+      fun({Key, [Endpoint]}) ->
+              lists:member(Key, Committee) andalso
+                  quod_quic:valid_endpoint(Endpoint);
+         (_) ->
+              false
+      end, Routes).
 
 valid_identity_current_view(
   Target,
@@ -606,22 +803,82 @@ probe_sources(Source, Committee, Routes, Dependencies) ->
                    {local, _} -> dependency_node_key(Dependencies);
                    {remote, _} -> none
                end,
+    SourceRoutes = case Source of
+                       {remote, Candidates} -> Candidates;
+                       {local, _} -> []
+                   end,
     lists:filtermap(
       fun(Key) when Key =:= LocalKey, LocalKey =/= none ->
               {true, {Key, local}};
          (Key) ->
-              case lists:keyfind(Key, 1, Routes) of
-                  {Key, Endpoints} ->
+              case applied_probe_endpoints(
+                     Key, dependency_resolved_endpoint(Key, Dependencies),
+                     SourceRoutes, Routes) of
+                  [_ | _] = Endpoints ->
                       {true, {Key, {remote, Endpoints}}};
-                  false -> false
+                  [] -> false
               end
       end, Committee).
+
+%% The exact Finalize fixes who may attest; endpoints remain reachability
+%% only. Merge the shared key resolver's current endpoint before the caller's
+%% identity-pinned candidates and the historical Finalize fallback, so a retired
+%% holder remains reachable after moving. Transport still authenticates Key, and
+%% no route can add a signer outside Committee.
+applied_probe_endpoints(
+  Key, ResolvedEndpoint, SourceRoutes, HistoricalRoutes) ->
+    Resolved = case ResolvedEndpoint of
+                   {ok, Endpoint} -> [Endpoint];
+                   error -> []
+               end,
+    Live = case lists:keyfind(Key, 1, SourceRoutes) of
+               {Key, Endpoints0} -> Endpoints0;
+               false -> []
+           end,
+    Historical = case lists:keyfind(Key, 1, HistoricalRoutes) of
+                     {Key, Endpoints1} -> Endpoints1;
+                     false -> []
+                 end,
+    unique_endpoints(Resolved ++ Live ++ Historical, #{}, []).
+
+dependency_resolved_endpoint(Key, Dependencies) ->
+    Resolve = maps:get(resolve, Dependencies),
+    case Resolve(Key) of
+        {ok, Endpoint} ->
+            case quod_quic:valid_endpoint(Endpoint) of
+                true -> {ok, Endpoint};
+                false -> error
+            end;
+        _ ->
+            error
+    end.
+
+unique_endpoints([], _Seen, Acc) ->
+    lists:reverse(Acc);
+unique_endpoints([Endpoint | Rest], Seen, Acc) ->
+    case maps:is_key(Endpoint, Seen) of
+        true -> unique_endpoints(Rest, Seen, Acc);
+        false -> unique_endpoints(
+                   Rest, Seen#{Endpoint => true}, [Endpoint | Acc])
+    end.
 
 dependency_node_key(Dependencies) ->
     NodeKey = maps:get(node_key, Dependencies),
     case NodeKey() of
         <<_:256>> = Key -> Key;
         _ -> none
+    end.
+
+dependency_network_identity(Dependencies) ->
+    case maps:find(network_identity, Dependencies) of
+        {ok, NetworkIdentity} ->
+            try NetworkIdentity() of
+                {ok, <<_:256>> = Identity} -> {ok, Identity};
+                _ -> {error, unavailable}
+            catch _:_ -> {error, unavailable}
+            end;
+        error ->
+            {error, unavailable}
     end.
 
 node_key() ->
@@ -635,12 +892,18 @@ collect_applied(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
                     case probe_applied(
                            OwnerNs, Key, Source, Claim, Deadline,
                            Dependencies) of
-                        true -> {ok, applied};
-                        false -> ignore
+                        {ok, SignedRow} ->
+                            {signed, applied, SignedRow};
+                        ignore -> ignore
                     end
             end,
-    collect_quorum(dtx_applied_probe, Sources, Needed, Deadline, Probe)
-        =:= {ok, applied}.
+    case collect_quorum(
+           dtx_applied_probe, Sources, Needed, Deadline, Probe) of
+        {ok, {signed, applied, Signatures}} ->
+            applied_certificate(Claim, Signatures);
+        _ ->
+            retry
+    end.
 
 collect_outcomes(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
     Probe = fun(Key, Source) ->
@@ -721,6 +984,18 @@ count_match({ok, Value}, Needed, Counts) ->
     case Count >= Needed of
         true -> {reached, Value};
         false -> {continue, Counts#{Value => Count}}
+    end;
+count_match({signed, Value, {<<_:256>> = Signer, <<_:512>> = Signature}},
+            Needed, Counts) ->
+    Key = {signed, Value},
+    Signatures0 = maps:get(Key, Counts, #{}),
+    Signatures = Signatures0#{Signer => Signature},
+    case map_size(Signatures) >= Needed of
+        true ->
+            {reached,
+             {signed, Value, lists:keysort(1, maps:to_list(Signatures))}};
+        false ->
+            {continue, Counts#{Key => Signatures}}
     end;
 count_match(_Ignored, _Needed, Counts) ->
     {continue, Counts}.
@@ -895,32 +1170,36 @@ call_endpoint(OwnerNs, TargetNs, PeerKey, Source, Request,
         0 -> {error, timeout};
         Timeout ->
             try
-                case Source of
-                    local ->
-                        Local = maps:get(local, Dependencies),
-                        Local(TargetNs, Request, Timeout);
-                    {remote, Endpoint} ->
-                        Remote = maps:get(remote, Dependencies),
-                        Remote(OwnerNs, TargetNs, PeerKey, Endpoint,
-                               Request, Timeout)
+                Result = case Source of
+                             local ->
+                                 Local = maps:get(local, Dependencies),
+                                 Local(TargetNs, Request, Timeout);
+                             {remote, Endpoint} ->
+                                 Remote = maps:get(remote, Dependencies),
+                                 Remote(OwnerNs, TargetNs, PeerKey, Endpoint,
+                                        Request, Timeout)
+                         end,
+                case Result of
+                    {ok, Response, _ValidationSidecar} -> {ok, Response};
+                    Other -> Other
                 end
             catch exit:_ -> {error, not_ready}
             end
     end.
 
 probe_applied(OwnerNs, PeerKey, Source,
-              {{TargetNs, _Anchor} = Target, CommitteeId, GroupId,
-               FinalizeRef, Generation, Verdict},
+              {NetworkIdentity, {TargetNs, _Anchor} = Target, CommitteeId,
+               GroupId, FinalizeRef, Generation, Verdict},
               Deadline, Dependencies) ->
     Request = {applied, request_id(), GroupId, FinalizeRef,
                Generation, Verdict},
     probe_applied_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Target,
-      CommitteeId, Deadline, Dependencies).
+      NetworkIdentity, CommitteeId, Deadline, Dependencies).
 
 probe_applied_source(
   {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
-  Target, CommitteeId, Deadline, Dependencies) ->
+  Target, NetworkIdentity, CommitteeId, Deadline, Dependencies) ->
     walk_remote_candidates(
       Endpoints, Deadline,
       fun(Endpoint, AttemptDeadline) ->
@@ -929,27 +1208,93 @@ probe_applied_source(
             AttemptDeadline, Dependencies)
       end,
       fun(Result) ->
-          case applied_response_valid(
-                 Request, Target, CommitteeId, Result) of
-              true -> {done, true};
-              false -> continue
+          case applied_response_vote(
+                 Request, NetworkIdentity, Target, CommitteeId, PeerKey,
+                 Result) of
+              {ok, _} = Vote -> {done, Vote};
+              ignore -> continue
           end
       end,
-      false);
+      ignore);
 probe_applied_source(
   local, OwnerNs, TargetNs, PeerKey, Request,
-  Target, CommitteeId, Deadline, Dependencies) ->
+  Target, NetworkIdentity, CommitteeId, Deadline, Dependencies) ->
     Result = call_endpoint(
                OwnerNs, TargetNs, PeerKey, local, Request,
                Deadline, Dependencies),
-    applied_response_valid(Request, Target, CommitteeId, Result).
+    applied_response_vote(
+      Request, NetworkIdentity, Target, CommitteeId, PeerKey, Result).
 
-applied_response_valid(
-  Request, Target, CommitteeId,
-  {ok, {applied, _RequestId, Target, CommitteeId, _GroupId,
-         _FinalizeRef, _Generation, _Verdict} = Response}) ->
-    quod_dtx_endpoint:correlates(Request, Response);
-applied_response_valid(_Request, _Target, _CommitteeId, _Result) ->
+applied_response_vote(
+  Request, NetworkIdentity, Target, CommitteeId, ExpectedSigner,
+  {ok, {applied, _RequestId, Target, CommitteeId, GroupId,
+         FinalizeRef, Generation, Verdict, ExpectedSigner, Signature}
+       = Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) andalso
+         applied_vote_valid(
+           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           Generation, Verdict, ExpectedSigner, Signature) of
+        true -> {ok, {ExpectedSigner, Signature}};
+        false -> ignore
+    end;
+applied_response_vote(_Request, _NetworkIdentity, _Target, _CommitteeId,
+                      _ExpectedSigner, _Result) ->
+    ignore.
+
+applied_certificate(
+  {NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+   Generation, Verdict}, Signatures) ->
+    Certificate =
+        {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
+         NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+         Generation, Verdict, Signatures},
+    case valid_applied_certificate_shape(Certificate) of
+        true -> {ok, Certificate};
+        false -> retry
+    end.
+
+applied_statement(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+                  Generation, Verdict)
+  when is_binary(NetworkIdentity), byte_size(NetworkIdentity) =:= 32,
+       is_integer(Generation), Generation >= 0,
+       Generation =< ?MAX_UINT64,
+       (Verdict =:= commit orelse Verdict =:= abort) ->
+    case {valid_identity(Target), quod_dtx:certified_ref_binding(FinalizeRef)} of
+        {true, {ok, Target, _Slot, _Digest}}
+          when is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+               is_binary(GroupId), byte_size(GroupId) =:= 32 ->
+            {ok, {quod_dtx_applied_vote, ?APPLIED_VOTE_VERSION,
+                  NetworkIdentity, Target, CommitteeId, GroupId,
+                  FinalizeRef, Generation, Verdict}};
+        _ -> error
+    end;
+applied_statement(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
+                  _FinalizeRef, _Generation, _Verdict) ->
+    error.
+
+applied_vote_bytes(Statement) ->
+    term_to_binary(Statement, [deterministic]).
+
+applied_vote_valid(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+                   Generation, Verdict, Signer, Signature) ->
+    case applied_statement(
+           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           Generation, Verdict) of
+        {ok, Statement} ->
+            quod_identity:verify(
+              Signature, applied_vote_bytes(Statement), Signer);
+        error -> false
+    end.
+
+valid_applied_signatures([_ | _] = Signatures) ->
+    quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
+        Signatures =:= lists:ukeysort(1, Signatures);
+valid_applied_signatures(_) ->
+    false.
+
+valid_identity({Ns, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0;
+valid_identity(_) ->
     false.
 
 request_id() ->
@@ -957,6 +1302,9 @@ request_id() ->
 
 threshold(N) ->
     N - quod_simplex:quorum(N) + 1.
+
+applied_threshold(N) ->
+    threshold(N).
 
 remaining(Deadline) ->
     max(0, Deadline - quod_time:mono_ms()).
@@ -983,16 +1331,37 @@ walk_remote_candidates(
     end.
 
 -ifdef(TEST).
-test_verify_applied(OwnerNs, Source, Claim, TimeoutMs, Dependencies) ->
-    verify_applied_with(OwnerNs, Source, Claim, TimeoutMs, Dependencies).
+test_certify_applied(
+  OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
+    certify_applied_with(
+      OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies).
 
-test_verify_applied_many(OwnerNs, Requests, TimeoutMs, Dependencies) ->
-    verify_applied_many_with(
+test_certify_applied_many(OwnerNs, Requests, TimeoutMs, Dependencies) ->
+    certify_applied_many_with(
       OwnerNs, Requests, TimeoutMs, Dependencies).
 
 test_lookup_outcome(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
     lookup_outcome_with(
       OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies).
+
+test_endpoint_failure_disposition(Request, Reason) ->
+    endpoint_failure_disposition(Request, Reason).
+
+test_submit_operation_candidates(Request, Results) when is_list(Results) ->
+    Counter = atomics:new(1, []),
+    ResultTuple = list_to_tuple(Results),
+    Candidates =
+        [{<<N:256>>, {"127.0.0.1", 10000 + N}}
+         || N <- lists:seq(1, length(Results))],
+    Attempt =
+        fun(_PeerKey, _Endpoint, _Remaining) ->
+                Index = atomics:add_get(Counter, 1, 1),
+                element(Index, ResultTuple)
+        end,
+    Result = submit_operation_candidates(
+               <<"quod:test-owner">>, <<"quod:test-target">>, Candidates,
+               Request, quod_time:mono_ms() + 1000, not_ready, Attempt),
+    {Result, atomics:get(Counter, 1)}.
 
 test_threshold(N) when is_integer(N), N > 0, N =< ?MAX_VALIDATORS ->
     threshold(N).

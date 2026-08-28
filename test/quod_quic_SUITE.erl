@@ -10,6 +10,13 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
          channel_stream_reset_isolated/1,
+         ordered_send_waits_for_send_ready_fifo/1,
+         connection_death_resolves_pending_waiters/1,
+         inbound_channel_reset_is_scoped/1,
+         explicit_link_retires_with_last_owner/1,
+         pinned_leases_share_link_until_last_release/1,
+         pinned_lease_release_is_connection_exact/1,
+         late_released_link_cannot_consume_replacement_waiter/1,
          non_dialable_node_id/1, unacked_stream_no_link_up/1, dialer_presents_cert/1,
          mismatched_header_cannot_poison_cache/1,
          authenticated_coalesced_header_payload_delivered_once/1,
@@ -26,7 +33,15 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 -define(SELF, {"127.0.0.1", ?PORT}).
 
 all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
-          channel_stream_reset_isolated, non_dialable_node_id,
+          channel_stream_reset_isolated,
+          ordered_send_waits_for_send_ready_fifo,
+          connection_death_resolves_pending_waiters,
+          inbound_channel_reset_is_scoped,
+          explicit_link_retires_with_last_owner,
+          pinned_leases_share_link_until_last_release,
+          pinned_lease_release_is_connection_exact,
+          late_released_link_cannot_consume_replacement_waiter,
+          non_dialable_node_id,
           unacked_stream_no_link_up, dialer_presents_cert,
           mismatched_header_cannot_poison_cache,
           authenticated_coalesced_header_payload_delivered_once,
@@ -43,6 +58,12 @@ init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(gproc),
     {ok, _} = application:ensure_all_started(quic),
     application:load(quod),
+    %% Never inherit a developer/node effect journal through the user cache.
+    %% The suite owns an isolated CT-private directory, so app startup really
+    %% runs every transport case instead of failing before the suite begins.
+    EffectJournalDir =
+        filename:join(?config(priv_dir, Config), "effect-journal"),
+    application:set_env(quod, effect_journal_data_dir, EffectJournalDir),
     %% the node's per-node Ed25519 identity cert — the production transport cert that
     %% quod_quic presents and verifies under mutual TLS (verify => true).
     {Pub, _} = KP = quod_identity:generate(),
@@ -61,7 +82,8 @@ end_per_suite(_Config) ->
     %% this suite runs the app IN the CT node (not a peer), so unset the env it set
     %% to avoid leaking a stale cert/port into any later same-node suite.
     _ = [application:unset_env(quod, K)
-         || K <- [listen_port, node_addr, node_pubkey, identity_cert, identity_key]],
+         || K <- [listen_port, node_addr, node_pubkey, identity_cert, identity_key,
+                  effect_journal_data_dir]],
     ok.
 
 %% Opening a link to our own listener over loopback yields a usable link pid.
@@ -160,6 +182,416 @@ channel_stream_reset_isolated(_Config) ->
         {quod_message, {_, _}, LogChan, <<"after-reset">>} -> ok
     after 5000 ->
         ct:fail(consensus_stream_died_with_ingress)
+    end.
+
+%% A transient ordered-send refusal parks the exact stream FIFO. Nothing polls:
+%% the QUIC owner's send_ready event is routed by quod_conn to that link, which
+%% retries the head and then flushes its successor in order. A reliable send on
+%% the same path also reports local acceptance to its caller.
+ordered_send_waits_for_send_ready_fifo(_Config) ->
+    Channel = <<"send-ready-fifo">>,
+    true = quod_reg:subscribe({channel, Channel}),
+    try
+        ok = quod_quic:open_link(?SELF, Channel),
+        Link =
+            receive
+                {link_up, ?SELF, Channel, Pid} -> Pid
+            after 5000 ->
+                ct:fail(no_send_ready_link)
+            end,
+        {links, [ConnOwner]} = process_info(Link, links),
+        {ok, {Conn, Sid}} = quod_link:test_transport(Link),
+        %% The existing failure seam can also inject a *transient* refusal. It
+        %% is consumed by the next ordered attempt, which must park rather than
+        %% reset the stream.
+        ok = quod_link:test_fail_next_ordered(Link, send_queue_full),
+        ok = quod_link:send_ordered(Link, <<"first">>),
+        ok = quod_link:send_ordered(Link, <<"second">>),
+        receive
+            {quod_message, _, Channel, Unexpected} ->
+                ct:fail({sent_before_send_ready, Unexpected})
+        after 50 ->
+            ok
+        end,
+        ConnOwner ! {quic, Conn, {send_ready, Sid}},
+        receive
+            {quod_message, {_, _}, Channel, <<"first">>} -> ok
+        after 5000 ->
+            ct:fail(first_not_woken)
+        end,
+        receive
+            {quod_message, {_, _}, Channel, <<"second">>} -> ok
+        after 5000 ->
+            ct:fail(second_not_fifo)
+        end,
+        ok = quod_link:send_reliable(Link, <<"reliable">>, 1000),
+        receive
+            {quod_message, {_, _}, Channel, <<"reliable">>} -> ok
+        after 5000 ->
+            ct:fail(reliable_not_delivered)
+        end,
+        true = is_process_alive(Link)
+    after
+        true = quod_reg:unsubscribe({channel, Channel})
+    end.
+
+%% A connection can close before its opening streams emit their linked EXITs.
+%% Both accepted callers must still receive one correlated link_error directly
+%% from the connection ownership boundary; neither may remain parked forever.
+connection_death_resolves_pending_waiters(Config) ->
+    CertDer = ?config(cert_der, Config),
+    KeyTerm = ?config(key_term, Config),
+    Test = self(),
+    Handler =
+        fun(Conn) ->
+            Test ! {pending_waiter_server_conn, Conn},
+            {ok, spawn(fun Ignore() -> receive _ -> Ignore() end end)}
+        end,
+    Port = 14595,
+    Target = {"127.0.0.1", Port},
+    Channel = <<"pending-waiters-die-with-conn">>,
+    {ok, _} = quic:start_server(
+                pending_waiter_server, Port,
+                #{cert => CertDer, key => KeyTerm,
+                  alpn => [<<"quod">>], connection_handler => Handler}),
+    try
+        %% Establish the connection owner through the public authority, then add
+        %% two ref-correlated opens directly. The stats request is a mailbox
+        %% barrier from the same sender, proving both opens were accepted before
+        %% the server connection is closed.
+        ok = quod_quic:open_link(Target, Channel),
+        ServerConn =
+            receive
+                {pending_waiter_server_conn, C} -> C
+            after 5000 ->
+                ct:fail(no_pending_waiter_connection)
+            end,
+        Transport = quod_reg:where({transport, node}),
+        TransportState = sys:get_state(Transport),
+        Conns = element(tuple_size(TransportState), TransportState),
+        ConnOwner = maps:get(Target, Conns),
+        ConnOwnerRef = monitor(process, ConnOwner),
+        Ref1 = make_ref(),
+        Ref2 = make_ref(),
+        ok = quod_conn:open_link(ConnOwner, Channel, {self(), Ref1}),
+        ok = quod_conn:open_link(ConnOwner, Channel, {self(), Ref2}),
+        Barrier = make_ref(),
+        ConnOwner ! {transport_stats, self(), Barrier},
+        receive {Barrier, _} -> ok after 2000 -> ct:fail(no_conn_barrier) end,
+        ok = quic:close(ServerConn, normal),
+        receive
+            {link_error, Ref1, Target, Channel} -> ok
+        after 5000 ->
+            ct:fail(first_waiter_not_resolved)
+        end,
+        receive
+            {link_error, Ref2, Target, Channel} -> ok
+        after 5000 ->
+            ct:fail(second_waiter_not_resolved)
+        end,
+        receive
+            {link_error, Ref1, Target, Channel} ->
+                ct:fail(first_waiter_resolved_twice);
+            {link_error, Ref2, Target, Channel} ->
+                ct:fail(second_waiter_resolved_twice)
+        after 100 ->
+            ok
+        end,
+        receive
+            {'DOWN', ConnOwnerRef, process, ConnOwner, _} -> ok
+        after 2000 ->
+            ct:fail(terminal_connection_not_retired)
+        end,
+        %% Removal precedes the terminal ACK/exit. A later public open must
+        %% therefore create a different connection generation, never select
+        %% the dead pid that produced the two errors above.
+        ReplacementChannel = <<"replacement-after-terminal">>,
+        ok = quod_quic:open_link(Target, ReplacementChannel),
+        ReplacementServerConn =
+            receive
+                {pending_waiter_server_conn, C2} -> C2
+            after 5000 ->
+                ct:fail(no_replacement_connection)
+            end,
+        ReplacementState = sys:get_state(Transport),
+        ReplacementConns =
+            element(tuple_size(ReplacementState), ReplacementState),
+        ReplacementOwner = maps:get(Target, ReplacementConns),
+        true = ReplacementOwner =/= ConnOwner,
+        ok = quic:close(ReplacementServerConn, normal)
+    after
+        _ = quic:stop_server(pending_waiter_server)
+    end.
+
+%% Channel-owner restart is a transport-wide broadcast but a link-local
+%% decision: only a matching peer-opened stream resets. Outbound links ignore
+%% the command, and another inbound channel remains usable.
+inbound_channel_reset_is_scoped(_Config) ->
+    ResetChannel = <<"reset-inbound-exact">>,
+    OtherChannel = <<"reset-inbound-other">>,
+    true = quod_reg:subscribe({channel, ResetChannel}),
+    true = quod_reg:subscribe({channel, OtherChannel}),
+    try
+        ok = quod_quic:open_link(?SELF, ResetChannel),
+        ResetOut =
+            receive
+                {link_up, ?SELF, ResetChannel, Pid1} -> Pid1
+            after 5000 -> ct:fail(no_reset_outbound)
+            end,
+        ok = quod_quic:open_link(?SELF, OtherChannel),
+        OtherOut =
+            receive
+                {link_up, ?SELF, OtherChannel, Pid2} -> Pid2
+            after 5000 -> ct:fail(no_other_outbound)
+            end,
+        ok = quod_link:send(ResetOut, <<"find-reset-inbound">>),
+        ResetIn =
+            receive
+                {quod_message, {_, In1}, ResetChannel,
+                 <<"find-reset-inbound">>} -> In1
+            after 5000 -> ct:fail(no_reset_inbound)
+            end,
+        ok = quod_link:send(OtherOut, <<"find-other-inbound">>),
+        OtherIn =
+            receive
+                {quod_message, {_, In2}, OtherChannel,
+                 <<"find-other-inbound">>} -> In2
+            after 5000 -> ct:fail(no_other_inbound)
+            end,
+        %% Directly prove the two negative guards before exercising broadcast.
+        ResetOut ! {reset_inbound_channel, ResetChannel},
+        {ok, _} = quod_link:test_transport(ResetOut),
+        ResetIn ! {reset_inbound_channel, OtherChannel},
+        {ok, _} = quod_link:test_transport(ResetIn),
+        ResetInRef = monitor(process, ResetIn),
+        OtherInRef = monitor(process, OtherIn),
+        OtherOutRef = monitor(process, OtherOut),
+        ok = quod_conn:reset_inbound_channel(ResetChannel),
+        receive
+            {'DOWN', ResetInRef, process, ResetIn, normal} -> ok;
+            {'DOWN', ResetInRef, process, ResetIn, Reason} ->
+                ct:fail({bad_reset_reason, Reason})
+        after 5000 ->
+            ct:fail(matching_inbound_not_reset)
+        end,
+        receive
+            {'DOWN', OtherInRef, process, OtherIn, Reason2} ->
+                ct:fail({other_inbound_reset, Reason2});
+            {'DOWN', OtherOutRef, process, OtherOut, Reason3} ->
+                ct:fail({other_outbound_reset, Reason3})
+        after 100 ->
+            ok
+        end,
+        ok = quod_link:send(OtherOut, <<"other-still-live">>),
+        receive
+            {quod_message, {_, OtherIn}, OtherChannel,
+             <<"other-still-live">>} -> ok
+        after 5000 ->
+            ct:fail(other_channel_not_live)
+        end,
+        demonitor(OtherInRef, [flush]),
+        demonitor(OtherOutRef, [flush])
+    after
+        true = quod_reg:unsubscribe({channel, ResetChannel}),
+        true = quod_reg:unsubscribe({channel, OtherChannel})
+    end.
+
+%% An explicit opener is the owner of its returned link. Monitoring that owner
+%% closes the old is_process_alive/link_up race: even when it dies immediately
+%% after receiving link_up, the connection retires the waiter-only stream rather
+%% than caching an unowned link.
+explicit_link_retires_with_last_owner(_Config) ->
+    Channel = <<"explicit-link-owner">>,
+    Parent = self(),
+    {Opener, OpenerRef} =
+        spawn_monitor(fun() ->
+            ok = quod_quic:open_link(?SELF, Channel),
+            receive
+                {link_up, ?SELF, Channel, LinkPid} ->
+                    Parent ! {owned_link, self(), LinkPid},
+                    receive release_owner -> ok end
+            after 5000 ->
+                Parent ! {owned_link_failed, self()}
+            end
+        end),
+    Link =
+        receive
+            {owned_link, Opener, Pid} -> Pid;
+            {owned_link_failed, Opener} -> ct:fail(no_owned_link)
+        after 6000 ->
+            ct:fail(no_owned_link_result)
+        end,
+    LinkRef = monitor(process, Link),
+    Opener ! release_owner,
+    receive
+        {'DOWN', OpenerRef, process, Opener, normal} -> ok
+    after 1000 ->
+        ct:fail(opener_did_not_exit)
+    end,
+    receive
+        {'DOWN', LinkRef, process, Link, normal} -> ok;
+        {'DOWN', LinkRef, process, Link, Reason} ->
+            ct:fail({bad_owned_link_exit, Reason})
+    after 3000 ->
+        ct:fail(waiter_only_link_was_cached)
+    end.
+
+%% Two logical requests may deliberately reuse one pinned stream. Releasing
+%% one exact `{Pid,OpenRef}` lease must leave the shared link usable; releasing
+%% the final lease retires it.
+pinned_leases_share_link_until_last_release(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Channel = <<"pinned-shared-request-leases">>,
+    true = quod_reg:subscribe({channel, Channel}),
+    try
+        Ref1 = quod_quic:open_link_pinned_lease(Pub, ?SELF, Channel),
+        Link = receive
+                   {link_up, Ref1, Pub, Channel, Pid1} -> Pid1
+               after 5000 -> ct:fail(no_first_pinned_lease)
+               end,
+        Ref2 = quod_quic:open_link_pinned_lease(Pub, ?SELF, Channel),
+        Link = receive
+                   {link_up, Ref2, Pub, Channel, Pid2} -> Pid2
+               after 5000 -> ct:fail(no_shared_pinned_lease)
+               end,
+        LinkRef = monitor(process, Link),
+        ok = quod_quic:release_link_pinned(Pub, ?SELF, Channel, Ref1),
+        receive
+            {'DOWN', LinkRef, process, Link, Reason1} ->
+                ct:fail({shared_link_closed_on_first_release, Reason1})
+        after 100 ->
+            ok
+        end,
+        ok = quod_link:send(Link, <<"still-leased">>),
+        receive
+            {quod_message, {_, _}, Channel, <<"still-leased">>} -> ok
+        after 5000 ->
+            ct:fail(shared_link_not_usable_after_first_release)
+        end,
+        ok = quod_quic:release_link_pinned(Pub, ?SELF, Channel, Ref2),
+        receive
+            {'DOWN', LinkRef, process, Link, normal} -> ok;
+            {'DOWN', LinkRef, process, Link, Reason2} ->
+                ct:fail({bad_final_lease_exit, Reason2})
+        after 3000 ->
+            ct:fail(shared_link_survived_final_release)
+        end
+    after
+        true = quod_reg:unsubscribe({channel, Channel})
+    end.
+
+%% Pinned pool identity includes the endpoint. The same peer/channel on two
+%% endpoints therefore owns two connections and two links; releasing one lease
+%% must retire only that exact connection's link.
+pinned_lease_release_is_connection_exact(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Cert = ?config(cert_der, Config),
+    Key = ?config(key_term, Config),
+    Port = 14594,
+    OtherEndpoint = {"127.0.0.1", Port},
+    Channel = <<"pinned-endpoint-exact-lease">>,
+    Owner = spawn(fun second_conn_owner/0),
+    Handler =
+        fun(Conn) ->
+            {ok, quod_conn:start_inbound(
+                   Conn, {Pub, OtherEndpoint}, Owner)}
+        end,
+    {ok, _} = quic:start_server(
+                pinned_lease_second_endpoint, Port,
+                maps:merge(
+                  #{cert => Cert, key => Key, verify => true,
+                    alpn => [<<"quod">>], connection_handler => Handler},
+                  quod_quic:liveness_opts())),
+    true = quod_reg:subscribe({channel, Channel}),
+    try
+        Ref1 = quod_quic:open_link_pinned_lease(Pub, ?SELF, Channel),
+        Link1 = receive
+                    {link_up, Ref1, Pub, Channel, Pid1} -> Pid1
+                after 5000 -> ct:fail(no_primary_endpoint_lease)
+                end,
+        Ref2 = quod_quic:open_link_pinned_lease(
+                 Pub, OtherEndpoint, Channel),
+        Link2 = receive
+                    {link_up, Ref2, Pub, Channel, Pid2} -> Pid2
+                after 5000 -> ct:fail(no_secondary_endpoint_lease)
+                end,
+        true = Link1 =/= Link2,
+        Link1Ref = monitor(process, Link1),
+        Link2Ref = monitor(process, Link2),
+        ok = quod_quic:release_link_pinned(Pub, ?SELF, Channel, Ref1),
+        receive
+            {'DOWN', Link1Ref, process, Link1, normal} -> ok;
+            {'DOWN', Link1Ref, process, Link1, Reason1} ->
+                ct:fail({bad_primary_lease_exit, Reason1})
+        after 3000 ->
+            ct:fail(primary_endpoint_lease_not_released)
+        end,
+        true = is_process_alive(Link2),
+        ok = quod_link:send(Link2, <<"secondary-still-live">>),
+        receive
+            {quod_message, {_, _}, Channel,
+             <<"secondary-still-live">>} -> ok
+        after 5000 ->
+            ct:fail(secondary_endpoint_link_was_disturbed)
+        end,
+        ok = quod_quic:release_link_pinned(
+               Pub, OtherEndpoint, Channel, Ref2),
+        receive
+            {'DOWN', Link2Ref, process, Link2, normal} -> ok;
+            {'DOWN', Link2Ref, process, Link2, Reason2} ->
+                ct:fail({bad_secondary_lease_exit, Reason2})
+        after 3000 ->
+            ct:fail(secondary_endpoint_lease_not_released)
+        end
+    after
+        true = quod_reg:unsubscribe({channel, Channel}),
+        _ = quic:stop_server(pinned_lease_second_endpoint),
+        Owner ! stop
+    end.
+
+second_conn_owner() ->
+    receive
+        {conn_terminal, ConnPid, Ref} ->
+            ConnPid ! {conn_terminal_ack, self(), Ref},
+            second_conn_owner();
+        stop ->
+            ok;
+        _Other ->
+            second_conn_owner()
+    end.
+
+%% Releasing the last L1 lease can be immediately followed by a replacement L2
+%% open on the same connection/channel. If L1's already-queued link_up arrives
+%% first, it must not consume L2's exact waiter or become the cached link.
+late_released_link_cannot_consume_replacement_waiter(_Config) ->
+    Channel = <<"late-l1-before-replacement-l2">>,
+    Peer = crypto:strong_rand_bytes(32),
+    Parent = self(),
+    OldLink = spawn(fun() -> link_probe(Parent) end),
+    NewLink = spawn(fun() -> link_probe(Parent) end),
+    #{ref := Ref, pending_after_old := true,
+      pending_after_new := false, active := NewLink} =
+        quod_conn:test_late_link_up_generation(
+          Channel, Peer, OldLink, NewLink),
+    receive
+        {probe_closed, OldLink} -> ok
+    after 1000 ->
+        ct:fail(stale_generation_link_not_closed)
+    end,
+    receive
+        {link_up, Ref, Peer, Channel, NewLink} -> ok;
+        {link_up, Ref, Peer, Channel, OldLink} ->
+            ct:fail(stale_generation_consumed_replacement_waiter)
+    after 1000 ->
+        ct:fail(replacement_waiter_not_notified)
+    end,
+    NewLink ! stop.
+
+link_probe(Parent) ->
+    receive
+        close -> Parent ! {probe_closed, self()};
+        stop -> ok;
+        _Other -> link_probe(Parent)
     end.
 
 %% A peer that completes the QUIC handshake but never ACKs the opened stream must

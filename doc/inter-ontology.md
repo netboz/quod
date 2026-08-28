@@ -264,8 +264,10 @@ They remain proof-local while Prolog searches. Only the canonical terminal stack
 group abort is persisted, once, in `Decision(abort)`; intermediate or recovered reasons never
 enter consensus or the ledger.
 
-A durable group is terminal only after origin `Complete`; Decision or Finalize alone remains
-pending. Remote `outcome(Ref)` freezes one certified current view and accepts a status only from
+A group's durable public outcome is terminal only after origin `Complete`;
+Decision or Finalize alone remains pending there. The original live caller may
+already have received the certified pre-Complete result after every required
+participant application. Remote `outcome(Ref)` freezes one certified current view and accepts a status only from
 `f + 1` identical current-validator snapshots bound to that view and a minimum applied slot. An
 ordinary reference stays outcome-unknown even when that quorum reports absence. For a group,
 quorum absence may proceed only to the exact admission-bound coordinator barrier; it proves
@@ -366,7 +368,7 @@ automatic retry after the target may have executed.
 | retained invocations per scope | 64 | bounded refusal before allocation |
 | answers per invocation | 10 000 | `{too_many_answers, Ns}` |
 | encoded nested goal / answer | 8 KiB / 64 KiB | `{too_large, goal}` or `{too_large, answer}` |
-| scope envelope / outer transport frame | 128 KiB / 1 MiB | `{too_large, scope_envelope}` or frame rejection |
+| scope envelope / outer transport frame | derived 271,488 bytes / 1 MiB | `{too_large, scope_envelope}` or frame rejection |
 | complete reasons / one reason | 32 KiB / 4 KiB | bounded truncation |
 | retained distributed savepoint generations | 1 024 per proof | `{savepoint_limit_exceeded, 1024}` |
 | one scope worker heap | 64 MiB | `{proof_limit_exceeded, Ns}` |
@@ -490,9 +492,10 @@ uncertain write.
 Concurrent durable requests use that exact same signed path. Foreign
 single-target claims and target applications use the ordinary content batch,
 so independent requests may share one source block and one target block.
-Only real multi-target groups wait before Begin signing when another group
-owns the source ontology; they are not sent through a benchmark-only executor
-and are not re-proved. The source still admits only one active DTX group. A promoted plan
+Only real multi-target groups wait before Begin signing when a conflicting
+group owns one of the same source keys; they are not sent through a
+benchmark-only executor and are not re-proved. Non-conflicting groups share
+canonical same-phase waves through the one consensus owner. A promoted plan
 whose OCC reads became stale aborts normally and consumes its operation id; an
 intentional application retry must use a newly signed id.
 

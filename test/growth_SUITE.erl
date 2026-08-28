@@ -212,7 +212,7 @@ byzantine_on_grown_committee(Config) ->
     Block  = #block{slot = V, parent = H,
                     payload = {batch, [Evil]}, timestamp = Ts},
     Chan   = term_to_binary({log, ?NS}, [deterministic]),
-    Frame  = quod_simplex:encode(?NS, {propose, Block}),
+    Frame  = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fp, Chan, Frame]) || Fp <- Pubs, Fp =/= LeaderPub],
     [ ?assert(eventually(fun() -> slot(P) >= V end, 20000)) || P <- Peers ],   %% skipped (noop), never committed
     ?assertEqual(Before, committee(hd(Peers))),

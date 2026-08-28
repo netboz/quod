@@ -169,7 +169,7 @@ membership_validation_contract_is_owned_here_test() ->
 
 prepare_validation_and_materialization_are_owned_here_test() ->
     Fixture = valid_prepare_fixture(),
-    {TargetNs, TargetAnchor} = maps:get(target, Fixture),
+    {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
     Control = maps:get(prepare_control, Fixture),
     {ok, Manifest, PlanDigest, PlanBlob} =
@@ -194,7 +194,22 @@ prepare_validation_and_materialization_are_owned_here_test() ->
           ?assertMatch(
              {ok, _EventContext, #{diff := _}},
              quod_commit_validation:prepared_material(
-               Manifest, PlanDigest, PlanBlob, Context))
+               Manifest, PlanDigest, PlanBlob, Context)),
+          %% The successful event-context path owns signature and digest
+          %% authentication once. Rejections retain their established public
+          %% distinction even though they no longer share the hot path.
+          {quod_plan, Core, PlanSigner, _Signature} = Plan,
+          {ok, BadSignatureBlob} = quod_dtx:encode(
+                                     {quod_plan, Core, PlanSigner,
+                                      <<0:512>>}),
+          ?assertEqual(
+             {error, bad_plan_binding},
+             quod_commit_validation:prepared_material(
+               Manifest, PlanDigest, BadSignatureBlob, Context)),
+          ?assertEqual(
+             {error, bad_manifest_binding},
+             quod_commit_validation:prepared_material(
+               Manifest, <<0:256>>, PlanBlob, Context))
       end),
     with_context(
       TargetNs, TargetAnchor, [Policy],
@@ -221,7 +236,7 @@ dtx_prepare_cannot_change_external_predicate_manifest_test() ->
     Fixture = valid_prepare_fixture(
                 #{goal_text =>
                       <<"assertz(external_predicate_modules([])).">>}),
-    {TargetNs, TargetAnchor} = maps:get(target, Fixture),
+    {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
     Control = maps:get(prepare_control, Fixture),
     #{goal := FrozenGoal} = maps:get(evidence, Fixture),
@@ -263,7 +278,11 @@ signed_fixture() ->
                         maps:get(principal, Fixture)),
     ParentEst = quod_ct:committed_kb(
                   quod_ct:signed_agent_facts(Fixture) ++
-                  [{can_invoke, Goal, Principal, [], Ns}]),
+                  [{can_invoke, Goal, Principal, [], Ns},
+                   {peer_admitted,
+                    maps:get(pubkey, maps:get(node_identity, Fixture)),
+                    "validator", 14567,
+                    maps:get(pubkey, maps:get(node_identity, Fixture))}]),
     {ok, Outcomes} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),
     Context = quod_commit_validation:new(
@@ -294,16 +313,17 @@ valid_prepare_fixture() ->
     valid_prepare_fixture(#{}).
 
 valid_prepare_fixture(Overrides) ->
-    Target = {TargetNs, TargetAnchor} =
-        {<<"quod:commit-prepare">>, <<226:256>>},
+    Target = {<<"quod:commit-prepare">>, <<226:256>>},
+    Origin = {<<"quod:commit-origin">>, <<225:256>>},
     Fixture0 = quod_ct:signed_dtx_begin_fixture(
                  maps:merge(
-                   #{target => Target, network => <<227:256>>,
+                   #{target => Origin, participant_target => Target,
+                     network => <<227:256>>,
                      submitted_at => 1},
                    Overrides)),
     Begin = maps:get('begin', Fixture0),
     {ok, BeginRef} = quod_dtx:certified_ref(
-                       TargetNs, TargetAnchor, 1, <<228:256>>,
+                       element(1, Origin), element(2, Origin), 1, <<228:256>>,
                        quod_dtx:group_id(Begin), <<"qc">>),
     {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Target),
     {ok, PrepareControl} = quod_dtx:sign_control(

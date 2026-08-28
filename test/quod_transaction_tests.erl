@@ -346,6 +346,85 @@ remote_operation_role_and_evidence_roundtrip_test() ->
     ?assertEqual({error, bad_remote_evidence},
                  quod_transaction:decode_evidence(flip_first(EvidenceBlob))).
 
+operation_submission_is_one_verified_custody_artifact_test() ->
+    Fixture = quod_ct:signed_effect_operation_submission(),
+    Submission = maps:get(submission, Fixture),
+    {submit, SourceKey, Signature, _Canonical} = Submission,
+    {ok, Blob} = quod_transaction:encode_operation_submission(Submission),
+    ?assertMatch(
+       {ok,
+        #{submission := Submission, claim := #transaction{},
+          claim_ref := {transaction, _, <<_:256>>, <<_:256>>},
+          target := {_, <<_:256>>},
+          target_ref := {transaction, _, <<_:256>>, <<_:256>>},
+          plan := {quod_plan, _, _, _}, plan_digest := <<_:256>>,
+          manifest_digest := <<_:256>>,
+          effect := {quod_direct_effect, 2, _, _, _, _, _, _, _, _, _},
+          author := SourceKey, admission := <<_:256>>,
+          cancel_digest := <<_:256>>}},
+       quod_transaction:decode_operation_submission(Blob)),
+    {ok, Decoded} = quod_transaction:decode_operation_submission(Blob),
+    ?assertEqual(
+       crypto:hash(
+         sha256, <<"quod.operation.cancel.v1", Signature/binary>>),
+       maps:get(cancel_digest, Decoded)),
+    ?assertEqual(
+       quod_dtx:manifest_digest(maps:get(manifest, Fixture)),
+       maps:get(manifest_digest, Decoded)),
+    ?assertEqual(maps:get(effect, Fixture), maps:get(effect, Decoded)).
+
+operation_submission_rejects_before_inner_decode_test() ->
+    Fixture = quod_ct:signed_effect_operation_submission(),
+    {submit, Author, Signature, Canonical} = maps:get(submission, Fixture),
+    Tampered = {submit, Author, flip_first(Signature), Canonical},
+    TamperedBlob = term_to_binary(Tampered, [deterministic]),
+    ?assertEqual(
+       {error, invalid_operation_submission},
+       quod_transaction:decode_operation_submission(TamperedBlob)),
+    %% A valid outer signature under another key cannot detach the custody
+    %% artifact from the source author embedded in its signed transaction.
+    {OtherKey, OtherSeed} = quod_identity:generate(),
+    OtherIdentity =
+        #{pubkey => OtherKey,
+          key => quod_identity:key_term({OtherKey, OtherSeed})},
+    WrongAuthorSubmission =
+        {submit, OtherKey,
+         quod_identity:sign(Canonical, OtherIdentity), Canonical},
+    ?assert(quod_transaction:verify_submission(WrongAuthorSubmission)),
+    ?assertEqual(
+       {error, invalid_operation_submission},
+       quod_transaction:decode_operation_submission(
+         term_to_binary(WrongAuthorSubmission, [deterministic]))),
+    %% The manifest names the source node/admission that may claim this
+    %% attested plan. A different coordinator remains a well-signed claim but
+    %% cannot become an operation-custody capability.
+    CoordinatorMismatch =
+        quod_ct:signed_effect_operation_submission(
+          #{coordinator => mismatch}),
+    MismatchSubmission = maps:get(submission, CoordinatorMismatch),
+    ?assert(quod_transaction:verify_submission(MismatchSubmission)),
+    ?assertEqual(
+       {error, invalid_operation_submission},
+       quod_transaction:decode_operation_submission(
+         term_to_binary(MismatchSubmission, [deterministic]))),
+    %% A valid signed remote claim without an effect belongs to the ordinary
+    %% application path and can never authorize private-effect cancellation.
+    NoEffect = quod_ct:remote_operation_fixture(#{}),
+    Claim0 = maps:get(claim, NoEffect),
+    {OriginNs, OriginAnchor} = maps:get(origin, NoEffect),
+    SourceIdentity = maps:get(node_identity, NoEffect),
+    SourceKey = maps:get(pubkey, SourceIdentity),
+    Admission = maps:get(admission, NoEffect),
+    {ok, _SignedNoEffect, NoEffectSubmission} =
+        quod_transaction:sign_submission(
+          {OriginNs, OriginAnchor, Admission},
+          Claim0#transaction{author = SourceKey, author_seq = 1,
+                             submitted_at = 1},
+          SourceIdentity),
+    ?assertEqual(
+       {error, invalid_operation_submission},
+       quod_transaction:encode_operation_submission(NoEffectSubmission)).
+
 network_identity_requirement_is_total_and_fail_closed_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     Signed = maps:get(transaction, Fixture),

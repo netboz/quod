@@ -209,9 +209,9 @@ block_json_distinguishes_non_transaction_slots_test() ->
     ?assertEqual([], maps:get(txs, Invalid)),
     DtxEntry = #entry{index = 5, data = quod_ct:dtx_decision_payload()},
     Dtx = quod_explorer_http:block_json(<<"ont:test">>, DtxEntry),
-    ?assertEqual(decision, maps:get(kind, Dtx)),
+    ?assertEqual(dtx_batch, maps:get(kind, Dtx)),
     ?assertEqual([], maps:get(txs, Dtx)),
-    Control = maps:get(control, Dtx),
+    [Control] = maps:get(controls, Dtx),
     ?assertEqual(decision, maps:get(kind, Control)),
     ?assertEqual(abort, maps:get(verdict, Control)),
     ?assertEqual([<<"test_abort(dtx_fixture)">>], maps:get(reasons, Control)),
@@ -326,9 +326,11 @@ finalize_row_reuses_its_certified_prepare_plan_test() ->
           {ok, Store} = quod_ledger_store:append(
                           Store0,
                           [#entry{index = 1, timestamp = 1,
-                                  data = {dtx, PrepareBlob}, cert = none},
+                                  data = {batch, [{dtx, PrepareBlob}]},
+                                  cert = none},
                            #entry{index = 2, timestamp = 2,
-                                  data = {dtx, FinalizeBlob}, cert = none}]),
+                                  data = {batch, [{dtx, FinalizeBlob}]},
+                                  cert = none}]),
           #{txs := [FinalizeRow, _PrepareRow]} =
               quod_explorer_http:txs_page(Store, undefined, 10),
           FinalControl = maps:get(control, FinalizeRow),
@@ -518,12 +520,17 @@ signed_agent_intent_is_rendered_once_from_the_origin_begin_test() ->
     {ok, Blob} = quod_dtx:encode_control(Control),
     Json = quod_explorer_http:block_json(
              element(1, maps:get(target, Fixture)),
-             #entry{index = 2, timestamp = 2, data = {dtx, Blob}}),
-    RenderedControl = maps:get(control, Json),
+             #entry{index = 2, timestamp = 2,
+                    data = {batch, [{dtx, Blob}]}}),
+    [RenderedControl] = maps:get(controls, Json),
     Request = maps:get(request, RenderedControl),
     ?assertEqual('begin', maps:get(kind, RenderedControl)),
-    ?assertEqual(1, maps:get(participant_count, RenderedControl)),
-    [Participant] = maps:get(participants, RenderedControl),
+    ?assertEqual(2, maps:get(participant_count, RenderedControl)),
+    Participants = maps:get(participants, RenderedControl),
+    [Participant] =
+        [Row || Row <- Participants,
+                maps:get(ns, maps:get(target, Row)) =:=
+                    element(1, maps:get(target, Fixture))],
     ?assertMatch(
        #{status := bound, diff_ops := 1, effect_count := 0,
          signer := #{pubkey := _}}, Participant),
@@ -556,16 +563,30 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
              principal => Principal, request_binding => none,
              overlay_generation => 0, diff_ops => 0,
              read_functors => 0, effects_count => 1,
+             conflict_descriptor =>
+                 #{reads => [], writes => [],
+                   custody => [quod_effect:target(Effect)]},
              diff => explorer_wire_blob([]),
              read_check => explorer_wire_blob([]),
              effects => explorer_wire_blob([Effect]),
              live_bridges => explorer_wire_blob([]),
              transcript => explorer_wire_blob([])},
     PlanBytes = term_to_binary(
-                  {<<"quod.dtx.plan">>, 7, Core}, [deterministic]),
+                  {<<"quod.dtx.plan">>, 8, Core}, [deterministic]),
     Plan = {quod_plan, Core, Pub, quod_identity:sign(PlanBytes, Signer)},
     PlanDigest = quod_dtx:digest(Plan),
     {ok, PlanBlob} = quod_dtx:encode(Plan),
+    OtherTarget = {<<"ont:effect-origin">>, <<118:256>>},
+    OtherCore = Core#{target => OtherTarget, effects_count => 0,
+                      conflict_descriptor =>
+                          #{reads => [], writes => [], custody => []},
+                      effects => explorer_wire_blob([])},
+    OtherPlanBytes = term_to_binary(
+                       {<<"quod.dtx.plan">>, 8, OtherCore}, [deterministic]),
+    OtherPlan = {quod_plan, OtherCore, Pub,
+                 quod_identity:sign(OtherPlanBytes, Signer)},
+    OtherPlanDigest = quod_dtx:digest(OtherPlan),
+    {ok, OtherPlanBlob} = quod_dtx:encode(OtherPlan),
     {ok, GoalBlob} = quod_durable_term:encode_goal({create, visible}),
     {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
     {ok, Manifest} = quod_dtx:new_manifest(
@@ -576,20 +597,29 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
                          nonce => <<117:256>>, principal => Principal,
                          goal => GoalBlob, result => ResultBlob,
                          request_binding => none,
-                         participants => [{Target, PlanDigest}]}),
+                         participants =>
+                             [{Target, PlanDigest},
+                              {OtherTarget, OtherPlanDigest}]}),
     {ok, Attestation} = quod_dtx:attest_plan(
                           Target, Plan, Manifest, Signer),
+    {ok, OtherAttestation} = quod_dtx:attest_plan(
+                               OtherTarget, OtherPlan, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
                     Manifest, none,
-                    [{Target, PlanDigest, PlanBlob, Attestation}]),
+                    [{Target, PlanDigest, PlanBlob, Attestation},
+                     {OtherTarget, OtherPlanDigest, OtherPlanBlob,
+                      OtherAttestation}]),
     {ok, Control} = quod_dtx:sign_control(
                       Target, Begin, <<116:256>>, 1, 1, Signer),
     {ok, ControlBlob} = quod_dtx:encode_control(Control),
     Json = quod_explorer_http:block_json(
              element(1, Target),
              #entry{index = 1, timestamp = 1,
-                    data = {dtx, ControlBlob}}),
-    [Participant] = maps:get(participants, maps:get(control, Json)),
+                    data = {batch, [{dtx, ControlBlob}]}}),
+    [RenderedControl] = maps:get(controls, Json),
+    [Participant] =
+        [Row || Row <- maps:get(participants, RenderedControl),
+                maps:get(ns, maps:get(target, Row)) =:= element(1, Target)],
     ?assertMatch(
        #{status := bound, diff_ops := 0, effect_count := 1,
          target := #{ns := <<"ont:effect-participant">>}},

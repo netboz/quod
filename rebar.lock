@@ -31,7 +31,7 @@
  {<<"quantile_estimator">>,{pkg,<<"quantile_estimator">>,<<"0.2.1">>},1},
  {<<"quic">>,
   {git,"https://github.com/netboz/erlang_quic.git",
-       {ref,"dfd4402159b67ed7df73379c60d8d015556e135c"}},
+       {ref,"78212bbd705faffa88fce6b6fd69b664015ded1f"}},
   0},
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.8.0">>},1},
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.7">>},2},

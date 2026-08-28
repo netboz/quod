@@ -1171,7 +1171,7 @@ command_expects_event(scope_close) -> false;
 command_expects_event(scope_seal) -> true;
 command_expects_event({scope_attest, _}) -> true;
 command_expects_event({bind_group_effects, _, _}) -> true;
-command_expects_event({bind_operation_effect, _, _, _, _, _}) -> true;
+command_expects_event({bind_operation_effect, _}) -> true;
 command_expects_event({submit_plan, _, _, _, _}) -> true;
 command_expects_event({invoke_open, _, _, _, _}) -> true;
 command_expects_event({invoke_next, _, _}) -> true;

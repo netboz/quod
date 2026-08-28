@@ -22,3 +22,37 @@ committee_and_signature_bounds_are_shared_test() ->
     ?assertNot(
        quod_quorum:valid_signature_list(
          Rows ++ [{<<0:256>>, <<0:512>>}], ?MAX_VALIDATORS)).
+
+caller_selected_threshold_reuses_the_shared_signature_verifier_test() ->
+    Identities = [identity() || _ <- lists:seq(1, 4)],
+    Committee = lists:sort([Pub || {Pub, _} <- Identities]),
+    Bytes = <<"quod/test/custom-threshold">>,
+    Rows = lists:keysort(
+             1,
+             [{Pub, quod_identity:sign(Bytes, Identity)}
+              || {Pub, Identity} <- Identities]),
+    [A, B | _] = Rows,
+    ?assertEqual({ok, [A, B]},
+                 quod_quorum:sanitize_at_least(
+                   Committee, Bytes, [B, A], 2)),
+    ?assertEqual(error,
+                 quod_quorum:sanitize_at_least(
+                   Committee, Bytes, [A], 2)),
+    {Outsider, OutsiderIdentity} = identity(),
+    OutsiderRow = {Outsider, quod_identity:sign(Bytes, OutsiderIdentity)},
+    ?assertEqual(error,
+                 quod_quorum:sanitize_at_least(
+                   Committee, Bytes, [A, OutsiderRow], 2)),
+    ?assertEqual(error,
+                 quod_quorum:sanitize_at_least(
+                   Committee, Bytes, [A, A], 2)),
+    ?assertEqual(error,
+                 quod_quorum:sanitize_at_least(
+                   Committee, Bytes, [A, setelement(2, B, <<0:512>>)], 2)),
+    ?assertEqual(error,
+                 quod_quorum:sanitize_at_least(
+                   Committee, Bytes, Rows, 5)).
+
+identity() ->
+    {Pub, Seed} = quod_identity:generate(),
+    {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}.

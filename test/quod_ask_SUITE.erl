@@ -69,6 +69,7 @@ init_per_suite(Config) ->
             "via_third_failure :- third::third_blocked.\n",
             "dtx_write_chain(X) :- assertz(dtx_animals_mark(X)), "
             "third::dtx_write(X).\n",
+            dtx_disjoint_target_rules(),
             "conflict_version(0).\n"
             "dtx_conflicting_write(X) :- conflict_version(_), "
             "retract(conflict_version(0)), assertz(conflict_version(X)), "
@@ -82,9 +83,10 @@ init_per_suite(Config) ->
     ThirdGenesis = filename:join(?config(priv_dir, Config), "remote_third.pl"),
     ok = file:write_file(
            ThirdGenesis,
-           "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
-           "third_blocked :- fail_with_reason(third_declined).\n"
-           "dtx_write(X) :- assertz(dtx_third_mark(X)).\n"),
+           ["can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
+            "third_blocked :- fail_with_reason(third_declined).\n"
+            "dtx_write(X) :- assertz(dtx_third_mark(X)).\n",
+            dtx_disjoint_third_rules()]),
     ThirdAllow = #{?ASKER_NS => [AskerPub],
                    ?NS => [TargetPub]},
     Third = start_node(third, ?THIRD_PORT, ThirdKey, ?THIRD_NS,
@@ -614,9 +616,10 @@ remote_signed_gateway_group(Config) ->
          [maps:get(operation_ref, GroupEvidence)])),
     ok.
 
-%% Eight independently signed A -> B -> C writes enter together.  The old
-%% single handoff slot rejected this shape as busy; the one Simplex admission
-%% owner must now serialize every sealed proof into the unchanged DTX path.
+%% Eight independently signed, non-conflicting A -> B -> C writes enter
+%% together. Each writes distinct predicate heads on B and C, so this exercises
+%% the conflict-safe batch path rather than the separate wait-die abort test
+%% below. The old single handoff slot rejected this shape as busy.
 remote_signed_concurrent_gateway_groups(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),
@@ -630,19 +633,24 @@ remote_signed_concurrent_gateway_groups(Config) ->
     retire_wrong_route(Asker, ?config(wrong_pub, Config),
                        ?config(target_addr, Config), 200),
 
+    PredicateRows = dtx_disjoint_predicates(),
     Requests =
         [begin
              Tag = erlang:unique_integer([positive]),
              GoalText = iolist_to_binary(
                           io_lib:format(
-                            "\"animals\"::dtx_write_chain(~B).", [Tag])),
+                            "\"animals\"::~s(~B).",
+                            [atom_to_list(ChainPredicate), Tag])),
              {RequestBytes, Signature} = signed_goal_request(
                                            NetworkId, AgentPub, AgentKey,
                                            ?ASKER_NS, AgentAnchor,
                                            maps:get(expires_ms, Session),
                                            execute, GoalText),
-             {Index, Tag, RequestBytes, Signature}
-         end || Index <- lists:seq(1, 8)],
+             {Index, Tag, LocalPredicate, RemotePredicate,
+              RequestBytes, Signature}
+         end || {Index, {ChainPredicate, LocalPredicate,
+                         _RemoteWriter, RemotePredicate}} <-
+                    lists:zip(lists:seq(1, 8), PredicateRows)],
     Parent = self(),
     ConcurrentRef = make_ref(),
     Writers =
@@ -655,7 +663,8 @@ remote_signed_concurrent_gateway_groups(Config) ->
                            RequestBytes, Signature, ClientPeer], 60000),
                Parent ! {ConcurrentRef, Index, Result}
            end)
-         || {Index, _Tag, RequestBytes, Signature} <- Requests],
+         || {Index, _Tag, _LocalPredicate, _RemotePredicate,
+             RequestBytes, Signature} <- Requests],
     lists:foreach(fun(Pid) -> Pid ! {ConcurrentRef, go} end, Writers),
     Results = collect_gateway_race(ConcurrentRef, length(Requests), []),
     EvidenceByIndex =
@@ -664,10 +673,12 @@ remote_signed_concurrent_gateway_groups(Config) ->
            || {Index, Result} <- Results]),
     OperationRefs =
         [maps:get(operation_ref, maps:get(Index, EvidenceByIndex))
-         || {Index, _Tag, _RequestBytes, _Signature} <- Requests],
+         || {Index, _Tag, _LocalPredicate, _RemotePredicate,
+             _RequestBytes, _Signature} <- Requests],
     ?assertEqual(length(Requests), length(lists:usort(OperationRefs))),
     lists:foreach(
-      fun({Index, Tag, _RequestBytes, _Signature}) ->
+      fun({Index, Tag, LocalPredicate, RemotePredicate,
+           _RequestBytes, _Signature}) ->
           OperationRef = maps:get(
                            operation_ref, maps:get(Index, EvidenceByIndex)),
           {#{status := claimed, outcome_ref := GroupRef},
@@ -676,8 +687,8 @@ remote_signed_concurrent_gateway_groups(Config) ->
           ?assertMatch(
              {group, ?ASKER_NS, AgentAnchor, _, _, _}, GroupRef),
           ?assertEqual(2, length(Slots)),
-          assert_fact_once(Target, ?NS, dtx_animals_mark, Tag),
-          assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag)
+          assert_fact_once(Target, ?NS, LocalPredicate, Tag),
+          assert_fact_once(Third, ?THIRD_NS, RemotePredicate, Tag)
       end, Requests),
     Stats = peer:call(Asker, quod_simplex, stats, [?ASKER_NS]),
     ?assertEqual(0, maps:get(dtx_admission_waiting, Stats)),
@@ -879,8 +890,6 @@ remote_group_recovers_after_origin_crash(Config) ->
        {ok, {hold, decided}},
        peer:call(Asker, application, get_env,
                  [quod, dtx_test_phase_barrier])),
-    true = peer:call(Asker, erlang, function_exported,
-                     [quod_dtx_coordinator, test_status, 1]),
     Parent = self(),
     ProofRef = make_ref(),
     _ProofCaller = spawn(
@@ -984,9 +993,6 @@ wait_decision_barrier(ProofRef, Config, Retries) ->
         {ok, {held, <<_:256>> = GroupId, decided, _BarrierRef}} ->
             %% This confirms that a live coordinator advanced to Decision;
             %% the gate itself is before its next planner drive.
-            ?assertMatch(
-               #{dtx_coordinator := #{group_id := GroupId}},
-               peer:call(Asker, quod_simplex, status, [?ASKER_NS])),
             GroupId;
         _ ->
             receive
@@ -1001,9 +1007,9 @@ wait_decision_barrier(ProofRef, Config, Retries) ->
 assert_finalize_absent(Peer, Ns, GroupId) ->
     Request = {phase, crypto:strong_rand_bytes(16), GroupId, finalize},
     ?assertMatch(
-       {ok, {phase, _, _, not_found}},
+       {ok, {phase, _, _, not_found}, []},
        peer:call(Peer, quod_simplex, dtx_endpoint_local,
-                 [Ns, Request, 1000])).
+                 [Ns, Request, [], 1000])).
 
 wait_remote_effect_state(_Peer, Ns, GroupRef, Expected, 0) ->
     ct:fail({effect_state_timeout, Ns, GroupRef, Expected});
@@ -1031,7 +1037,8 @@ dtx_diagnostics(Config) ->
                            {Third, ?THIRD_NS}]],
     GroupId =
         case proplists:get_value(?ASKER_NS, Statuses, #{}) of
-            #{dtx_coordinator := #{group_id := Id}} -> Id;
+            #{dtx_coordinators := Coordinators} ->
+                single_coordinator_id(Coordinators);
             _ -> undefined
         end,
     AskerInternal = dtx_internal_diagnostics(Asker, ?ASKER_NS),
@@ -1104,20 +1111,18 @@ dtx_internal_diagnostics(Peer, Ns) ->
             Counts = peer:call(Peer, quod_simplex,
                                test_dtx_endpoint_counts, [State]),
             #{coordinator => Coordinator,
-              coordinator_process => coordinator_process(Peer, Coordinator),
               endpoint_counts => Counts};
         Other ->
             #{state => Other}
     end.
 
-coordinator_process(Peer, #{pid := Pid}) when is_pid(Pid) ->
-    #{state => peer:call(Peer, quod_dtx_coordinator, test_status, [Pid]),
-      process =>
-          peer:call(Peer, erlang, process_info,
-                    [Pid, [status, current_function, current_stacktrace,
-                           message_queue_len, messages]])};
-coordinator_process(_Peer, _Coordinator) ->
-    unavailable.
+single_coordinator_id(Coordinators) when is_map(Coordinators) ->
+    case maps:keys(Coordinators) of
+        [GroupId] -> GroupId;
+        _ -> undefined
+    end;
+single_coordinator_id(_Malformed) ->
+    undefined.
 
 wait_restarted(_Peer, _Ns, _OldSimplex, 0) ->
     ct:fail(origin_namespace_did_not_restart);
@@ -1160,6 +1165,39 @@ assert_fact_absent(Peer, Ns, Predicate, Tag) ->
     ?assertMatch(
        {ok, [#{'Hits' := []}], _},
        peer:call(Peer, quod_prolog, prove, [Ns, Goal], 10000)).
+
+dtx_disjoint_predicates() ->
+    [{dtx_disjoint_write_chain_1, dtx_animals_mark_1,
+      dtx_third_write_1, dtx_third_mark_1},
+     {dtx_disjoint_write_chain_2, dtx_animals_mark_2,
+      dtx_third_write_2, dtx_third_mark_2},
+     {dtx_disjoint_write_chain_3, dtx_animals_mark_3,
+      dtx_third_write_3, dtx_third_mark_3},
+     {dtx_disjoint_write_chain_4, dtx_animals_mark_4,
+      dtx_third_write_4, dtx_third_mark_4},
+     {dtx_disjoint_write_chain_5, dtx_animals_mark_5,
+      dtx_third_write_5, dtx_third_mark_5},
+     {dtx_disjoint_write_chain_6, dtx_animals_mark_6,
+      dtx_third_write_6, dtx_third_mark_6},
+     {dtx_disjoint_write_chain_7, dtx_animals_mark_7,
+      dtx_third_write_7, dtx_third_mark_7},
+     {dtx_disjoint_write_chain_8, dtx_animals_mark_8,
+      dtx_third_write_8, dtx_third_mark_8}].
+
+dtx_disjoint_target_rules() ->
+    [io_lib:format(
+       "~s(X) :- assertz(~s(X)), third::~s(X).~n",
+       [atom_to_list(Chain), atom_to_list(Local),
+        atom_to_list(RemoteWriter)])
+     || {Chain, Local, RemoteWriter, _RemoteFact} <-
+            dtx_disjoint_predicates()].
+
+dtx_disjoint_third_rules() ->
+    [io_lib:format(
+       "~s(X) :- assertz(~s(X)).~n",
+       [atom_to_list(RemoteWriter), atom_to_list(RemoteFact)])
+     || {_Chain, _Local, RemoteWriter, RemoteFact} <-
+            dtx_disjoint_predicates()].
 
 collect_gateway_race(_Ref, 0, Results) -> lists:reverse(Results);
 collect_gateway_race(Ref, Remaining, Results) ->
@@ -1309,9 +1347,9 @@ assert_dtx_released(Peer, Ns) ->
     Status = peer:call(Peer, quod_simplex, status, [Ns]),
     Projection = maps:get(history_projection, Status),
     Dtx = maps:get(dtx, Projection),
-    ?assertEqual(none, maps:get(active, Dtx)),
-    ?assertEqual(open, maps:get(consensus_lock, Dtx)),
-    ?assertEqual(open, maps:get(proof_fence, Dtx)).
+    ?assertEqual(#{}, maps:get(groups, Dtx)),
+    ?assertEqual(#{}, maps:get(conflicts, Dtx)),
+    ?assertEqual(#{}, maps:get(apply_fences, Dtx)).
 
 run_scope_wave(Asker, Goal, Wave) ->
     %% `run_scope_proofs/3` owns a 10-second completion window. The peer call

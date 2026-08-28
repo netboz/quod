@@ -168,13 +168,15 @@ barrier_future_slot_and_capacity_truth_table_test() ->
        {park, awaiting_turn},
        route(
          entry, {relayed, ?CID, 6}, Signed, Future)),
-    FullBatch =
+    LargeCountBatch =
         with_view(
           B, [A, B],
           #{collecting => {4, 256, 100}}),
+    %% Item count is not an admission limit.  The single byte owner below is
+    %% what closes a physical block; independent small writes can keep joining.
     ?assertEqual(
-       {park, awaiting_turn},
-       route(entry, local, Local, FullBatch)),
+       {collect, 4},
+       route(entry, local, Local, LargeCountBatch)),
     Membership =
         request(<<"membership">>, B, 0, none, true),
     NonEmptyBatch =

@@ -26,6 +26,14 @@ renders_without_non_ascii_help_test() ->
        nomatch,
        binary:match(
          Bin, <<"# HELP quod_dtx_admission_wait_ms ">>)),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_foreign_feed_registrations ">>)),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_feed_recipients ">>)),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 
@@ -276,7 +284,6 @@ dtx_route_continuity_metrics_use_only_fixed_event_labels_test() ->
     try
         ok = quod_metrics:declare(<<"kp_testnode">>),
         ok = quod_metrics:count_dtx_validation(Ns, abstain),
-        ok = quod_metrics:count_dtx_validation(Ns, redrive),
         ok = quod_metrics:count_dtx_submit_fanout(Ns, attempted, 3),
         ok = quod_metrics:count_dtx_submit_fanout(Ns, accepted, 1),
         %% Unknown labels and negative counts cannot create a series.
@@ -288,8 +295,9 @@ dtx_route_continuity_metrics_use_only_fixed_event_labels_test() ->
            1, prometheus_counter:value(
                 quod_dtx_validation_events_total, [Ns, <<"abstain">>])),
         ?assertEqual(
-           1, prometheus_counter:value(
-                quod_dtx_validation_events_total, [Ns, <<"redrive">>])),
+           undefined, prometheus_counter:value(
+                        quod_dtx_validation_events_total,
+                        [Ns, <<"redrive">>])),
         ?assertEqual(
            3, prometheus_counter:value(
                 quod_dtx_submit_fanout_total, [Ns, <<"attempted">>])),

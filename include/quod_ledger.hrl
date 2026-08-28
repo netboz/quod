@@ -80,12 +80,12 @@
 -type slot() :: non_neg_integer().               %% 0 = origin sentinel (parent of slot 1); blocks are 1..N
                                                  %% (the founder's self-signed genesis BLOCK is slot 1)
 
-%% One proposed/committed block payload. Content is an explicitly tagged,
-%% non-empty transaction batch. Distributed-transaction control is one opaque,
-%% canonical blob decoded by `quod_dtx`; it is always a singleton consensus
-%% barrier and never joins a content batch.
+%% One proposed/committed block payload.  The single `{batch, Items}` family is
+%% homogeneous: either ordinary transactions, or canonical DTX-control blobs
+%% from one protocol phase.  The ledger classifier rejects empty, mixed,
+%% malformed, duplicate, and non-canonical batches.
 -type block_payload() :: {batch, nonempty_list(#transaction{})}
-                       | {dtx, binary()}.
+                       | {batch, nonempty_list({dtx, binary()})}.
 
 %% A proposed block for a slot. `payload` is one tagged `block_payload()` (a
 %% membership change remains an ordinary #transaction asserting/retracting

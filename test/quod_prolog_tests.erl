@@ -275,9 +275,9 @@ retired_pending_group_releases_exact_waiter_test() ->
                 sequence => 1, group_id => GroupId},
     {ok, Outcomes0} = quod_outcome:open(
                         Ns, Anchor, #{outcome_backend => memory}),
-    {ok, Outcomes1} = quod_outcome:project_pending_begin(
-                        Outcomes0, Pending),
-    {ok, Outcomes2} = quod_outcome:project_pending_begin(Outcomes1, none),
+    {ok, Outcomes1} = quod_outcome:project_pending_begins(
+                        Outcomes0, [Pending]),
+    {ok, Outcomes2} = quod_outcome:project_pending_begins(Outcomes1, []),
     {ok, Outcomes3} = quod_outcome:advance_applied(Outcomes2, 1),
     {ok, Outcomes4} = quod_outcome:flush(Outcomes3),
     Owner = self(),
@@ -330,31 +330,50 @@ prolog_test_() ->
       fun t_duplicate_plan_applies_once/1,
       fun t_same_block_read_after_write/1,
       fun t_submit_plan_validation/1,
-      fun t_pending_begin_projection_is_exact_and_clearable/1,
+      fun t_pending_begins_projection_is_atomic_and_clearable/1,
       fun t_worker_limit/1]}.
 
-t_pending_begin_projection_is_exact_and_clearable({Ns, _Pid}) ->
+t_pending_begins_projection_is_atomic_and_clearable({Ns, _Pid}) ->
     fun() ->
         Coordinator = <<71:256>>,
         Admission = <<72:256>>,
         GroupId = <<73:256>>,
+        OtherGroupId = <<74:256>>,
         GroupRef = {group, Ns, <<0:256>>, Coordinator, Admission, GroupId},
+        OtherGroupRef =
+            {group, Ns, <<0:256>>, Coordinator, Admission, OtherGroupId},
         Pending = #{lane => {Admission, Coordinator},
                     sequence => 1, group_id => GroupId},
-        ok = quod_prolog:project_pending_begin(Ns, Pending),
+        OtherPending = #{lane => {Admission, Coordinator},
+                         sequence => 2, group_id => OtherGroupId},
+        ok = quod_prolog:project_pending_begins(
+               Ns, [Pending, OtherPending]),
         ?assertEqual(
            {ok, #{applied_floor => 0,
                   outcome => #{status => pending, phase => pending_begin,
                                ref => GroupRef}}},
            quod_prolog:outcome_snapshot(Ns, GroupRef)),
+        ?assertMatch(
+           {ok, #{outcome := #{status := pending,
+                               phase := pending_begin,
+                               ref := OtherGroupRef}}},
+           quod_prolog:outcome_snapshot(Ns, OtherGroupRef)),
         ?assertEqual(
            {ok, #{history => none, applied => none,
                   applied_floor => 0, generation => 0}},
            quod_prolog:dtx_group_state(Ns, GroupId)),
-        ok = quod_prolog:project_pending_begin(Ns, none),
+        ok = quod_prolog:project_pending_begins(Ns, [OtherPending]),
         ?assertEqual(
            {ok, #{applied_floor => 0, outcome => not_found}},
-           quod_prolog:outcome_snapshot(Ns, GroupRef))
+           quod_prolog:outcome_snapshot(Ns, GroupRef)),
+        ?assertMatch(
+           {ok, #{outcome := #{status := pending,
+                               phase := pending_begin}}},
+           quod_prolog:outcome_snapshot(Ns, OtherGroupRef)),
+        ok = quod_prolog:project_pending_begins(Ns, []),
+        ?assertEqual(
+           {ok, #{applied_floor => 0, outcome => not_found}},
+           quod_prolog:outcome_snapshot(Ns, OtherGroupRef))
     end.
 
 %% The one submission primitive refuses anything that is not this node's own
@@ -847,7 +866,7 @@ membership_test_() ->
       fun t_signed_operation_uses_the_same_content_verdict_path/1,
       fun t_signed_operation_rechecks_the_parent_policy/1,
       fun t_committed_signed_operation_waits_for_network_identity/1,
-      fun t_signed_begin_checks_identity_not_origin_acl/1,
+      fun t_signed_begin_checks_identity_and_source_material_acl/1,
       fun t_lockstep/1]}.
 
 %% Slice 1 increment 2: the post-apply event layer (doc/agent-fipa-plan.md §7) — apply origin drives
@@ -1160,7 +1179,7 @@ content_verdict(Ns, Transactions, Timestamp, Slot, Tag) ->
 
 dtx_verdict(Ns, Control, Timestamp, Slot, Tag) ->
     ok = quod_prolog:request_dtx_verdict(
-           Ns, Control, Timestamp, Slot, self(), Tag),
+           Ns, [Control], Timestamp, Slot, self(), Tag),
     receive
         {dtx_verdict, Tag, Engine, Floor, Verdict}
           when is_pid(Engine), is_integer(Floor) ->
@@ -1352,6 +1371,7 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
         Content0 = maps:get(content, Desired0, #{}),
         Root = quod_ontology:root_ns(),
         SimplexKey = {quod_simplex, Ns},
+        RootSimplexKey = {quod_simplex, Root},
         ?assertEqual(undefined, quod_reg:where({quod_simplex, Root})),
         true = quod_reg:reg(SimplexKey),
         try
@@ -1373,6 +1393,9 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
               quod, namespace_desired,
               Desired0#{content =>
                             Content0#{Root => #{genesis_hash => Network}}}),
+            %% Root ownership is the exact dependency edge. Its registration
+            %% wakes the parked engine; no retry timer polls application state.
+            true = quod_reg:reg(RootSimplexKey),
             receive
                 {'$gen_cast', rebuild} -> ok
             after 1000 ->
@@ -1384,6 +1407,11 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
             ?assertMatch(
                {ok, [#{}], 2}, quod_prolog:prove(Ns, {saved, ok}))
         after
+            case quod_reg:where(RootSimplexKey) of
+                Owner when Owner =:= self() ->
+                    true = gproc:unreg(quod_reg:name(RootSimplexKey));
+                _ -> ok
+            end,
             true = gproc:unreg(quod_reg:name(SimplexKey)),
             case SavedDesired of
                 {ok, Desired} ->
@@ -1394,7 +1422,7 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
         end
     end.
 
-t_signed_begin_checks_identity_not_origin_acl({Ns, _}) ->
+t_signed_begin_checks_identity_and_source_material_acl({Ns, _}) ->
     fun() ->
         Network = <<82:256>>,
         quod_ct:with_network_identity(
@@ -1414,9 +1442,16 @@ t_signed_begin_checks_identity_not_origin_acl({Ns, _}) ->
                                                    [diff_for(Fact) || Fact <-
                                                         quod_ct:signed_agent_facts(
                                                           Fixture)]),
+              Signer = maps:get(
+                         pubkey, maps:get(node_identity, Fixture)),
+              [MemberAssert] = diff_for(
+                                 {peer_admitted, Signer,
+                                  "validator", 14567, Signer}),
               [RestrictiveAssert] = diff_for(RestrictivePolicy),
               ok = ab(Ns, 1,
-                      batch(change(Ns, [PolicyAssert, KeyAssert], #{}))),
+                      batch(change(
+                              Ns,
+                              [PolicyAssert, KeyAssert, MemberAssert], #{}))),
               ?assertMatch(
                  {1, {valid, _}},
                  dtx_verdict(
@@ -1428,8 +1463,11 @@ t_signed_begin_checks_identity_not_origin_acl({Ns, _}) ->
                              Ns,
                              [RestrictiveAssert,
                               {retract, PolicyClause}], #{}))),
+              %% Source fusion moved this material source plan's former
+              %% Prepare check into Begin. This is the source ontology's own
+              %% write ACL, not an outbound authorization of another target.
               ?assertMatch(
-                 {2, {valid, _}},
+                 {2, {invalid, [invalid_authorization_transcript]}},
                  dtx_verdict(
                    Ns, Control, maps:get(deadline, Fixture), 3,
                    changed_origin_policy)),

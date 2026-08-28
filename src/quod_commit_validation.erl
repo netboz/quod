@@ -90,14 +90,10 @@ dtx(Control, BlockTimestamp, Mode,
     end.
 
 prepared_plan(Manifest, PlanDigest, PlanBlob,
-              Context = #context{applied = Parent, est = Est}) ->
-    %% Authenticate the outer plan and its current target author before the
-    %% owner materializer is allowed to allocate any ontology symbols.
-    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
-        {ok, Plan, _EventContext} ->
-            validate_prepared_plan_header(Plan, Parent, Est, Context);
-        {error, Reason} ->
-            {error, Reason}
+              Context) ->
+    case prepared_application(Manifest, PlanDigest, PlanBlob, Context) of
+        {ok, _EventContext, _Material} -> ok;
+        {error, _} = Error -> Error
     end.
 
 -spec prepared_material(quod_dtx:manifest(), <<_:256>>, binary(), context()) ->
@@ -105,13 +101,9 @@ prepared_plan(Manifest, PlanDigest, PlanBlob,
 prepared_material(Manifest, PlanDigest, PlanBlob, Context) ->
     case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
         {ok, Plan, EventContext} ->
-            case quod_dtx:material(Plan) of
-                {ok, Material} ->
-                    case quod_effect:validate_plan(Plan, Material) of
-                        true -> {ok, EventContext, Material};
-                        false -> {error, invalid_direct_effect}
-                    end;
-                {error, Reason} -> {error, Reason}
+            case materialize_prepared_plan(Plan) of
+                {ok, Material} -> {ok, EventContext, Material};
+                {error, _} = Error -> Error
             end;
         {error, _} = Error ->
             Error
@@ -361,8 +353,7 @@ remote_application(
                         true ->
                             classify_remote_prepared(
                               prepared_application(
-                                Manifest, PlanDigest, PlanBlob, Context),
-                              Manifest, PlanDigest, PlanBlob, Context);
+                                Manifest, PlanDigest, PlanBlob, Context));
                         false ->
                             {invalid, remote_application_target}
                     end;
@@ -375,19 +366,25 @@ remote_application(_Change, _Context) ->
     {invalid, malformed_remote_application}.
 
 prepared_application(Manifest, PlanDigest, PlanBlob, Context) ->
-    case prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
-        ok -> prepared_material(Manifest, PlanDigest, PlanBlob, Context);
-        {error, _} = Error -> Error
+    %% Authenticate and bind the opaque plan before materializing its
+    %% target-owned symbols.  Return that exact material to the caller so the
+    %% validation and application classification cannot decode it twice.
+    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
+        {ok, Plan, EventContext} ->
+            case validate_prepared_plan_header(Plan, Context) of
+                {ok, Material} -> {ok, EventContext, Material};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error ->
+            Error
     end.
 
 classify_remote_prepared(
-  {ok, EventContext, Material}, _Manifest, _Digest, _Blob, _Context) ->
+  {ok, EventContext, Material}) ->
     {apply, EventContext, Material};
-classify_remote_prepared({error, future_base_height},
-                         _Manifest, _Digest, _Blob, _Context) ->
+classify_remote_prepared({error, future_base_height}) ->
     abstain;
-classify_remote_prepared({error, Reason},
-                         _Manifest, _Digest, _Blob, _Context) ->
+classify_remote_prepared({error, Reason}) ->
     case remote_rejection_reason(Reason) of
         {true, PublicReason} -> {reject, PublicReason};
         false -> {invalid, Reason}
@@ -467,40 +464,55 @@ dtx_policy_verdict(Control, History, Context) ->
                 error ->
                     {invalid, malformed_control}
             end;
-        'begin' -> {valid, History};
+        'begin' ->
+            case quod_dtx:begin_participant_payload(
+                   Control, Context#context.target) of
+                not_found ->
+                    {valid, History};
+                {ok, Manifest, PlanDigest, PlanBlob} ->
+                    case prepared_plan(
+                           Manifest, PlanDigest, PlanBlob, Context) of
+                        ok -> {valid, History};
+                        {error, Reason} -> {invalid, [Reason]}
+                    end;
+                error ->
+                    {invalid, malformed_control}
+            end;
         decision -> {valid, History};
         finalize -> {valid, History};
         complete -> {valid, History}
     end.
 
-decode_authenticated_target_plan(
-  PlanBlob, #context{target = Target}) ->
+decode_prepared_plan(
+  Manifest, PlanDigest, PlanBlob, #context{target = Target}) ->
     case quod_dtx:decode(PlanBlob) of
         {ok, Plan} ->
-            case quod_dtx:target(Plan) =:= Target andalso
-                 quod_dtx:verify(Plan) of
-                true -> {ok, Plan};
-                false -> {error, bad_plan_binding}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) ->
-    case decode_authenticated_target_plan(PlanBlob, Context) of
-        {ok, Plan} ->
-            case {quod_dtx:digest(Plan) =:= PlanDigest,
-                  quod_dtx:event_context(Manifest, Plan)} of
-                {true, {ok, EventContext}} ->
-                    {ok, Plan, EventContext};
-                _ ->
-                    {error, bad_manifest_binding}
+            case quod_dtx:target(Plan) =:= Target of
+                false ->
+                    {error, bad_plan_binding};
+                true ->
+                    %% event_context/2 is the one successful-path signature,
+                    %% digest, and manifest-binding owner.  The fallback
+                    %% verify is reached only on rejection, solely to preserve
+                    %% the existing bad-plan versus bad-manifest reason.
+                    case quod_dtx:event_context(Manifest, Plan) of
+                        {ok, #{plan_digest := PlanDigest} = EventContext} ->
+                            {ok, Plan, EventContext};
+                        {ok, _OtherDigest} ->
+                            {error, bad_manifest_binding};
+                        error ->
+                            case quod_dtx:verify(Plan) of
+                                true -> {error, bad_manifest_binding};
+                                false -> {error, bad_plan_binding}
+                            end
+                    end
             end;
         {error, _} = Error ->
             Error
     end.
 
-validate_prepared_plan_header(Plan, Parent, Est, Context) ->
+validate_prepared_plan_header(
+  Plan, Context = #context{applied = Parent, est = Est}) ->
     case prepared_signer_admitted(quod_dtx:signer(Plan), Context) of
         false ->
             {error, signer_not_admitted};
@@ -515,15 +527,24 @@ validate_prepared_plan_header(Plan, Parent, Est, Context) ->
     end.
 
 validate_prepared_plan_material(Plan, Est, Context) ->
-    case quod_dtx:material(Plan) of
+    case materialize_prepared_plan(Plan) of
         {ok, #{diff := Diff, read_check := ReadCheck,
                transcript := Transcript} = Material} ->
+            case validate_prepared_material(
+                   Plan, Diff, ReadCheck, Transcript, Est, Context) of
+                ok -> {ok, Material};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+materialize_prepared_plan(Plan) ->
+    case quod_dtx:material(Plan) of
+        {ok, Material} ->
             case quod_effect:validate_plan(Plan, Material) of
-                true ->
-                    validate_prepared_material(
-                      Plan, Diff, ReadCheck, Transcript, Est, Context);
-                false ->
-                    {error, invalid_direct_effect}
+                true -> {ok, Material};
+                false -> {error, invalid_direct_effect}
             end;
         {error, Reason} ->
             {error, Reason}

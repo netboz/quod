@@ -197,7 +197,7 @@ nondeterministic_transaction_id_is_rejected_test() ->
                  quod_outcome:admit(Index, T)),
     ok = quod_outcome:close(Index).
 
-pending_begin_reenvelope_advances_only_the_same_lane_and_group_test() ->
+pending_begins_projection_replaces_the_exact_group_snapshot_test() ->
     Ns = <<"quod:pending-reenvelope">>,
     Anchor = <<27:256>>,
     Lane = {<<28:256>>, <<29:256>>},
@@ -205,26 +205,17 @@ pending_begin_reenvelope_advances_only_the_same_lane_and_group_test() ->
     {ok, Index0} = quod_outcome:open(
                      Ns, Anchor, #{outcome_backend => memory}),
     Pending2 = #{lane => Lane, sequence => 2, group_id => GroupId},
-    {ok, Index1} = quod_outcome:project_pending_begin(Index0, Pending2),
-    {ok, Index1} = quod_outcome:project_pending_begin(Index1, Pending2),
+    {ok, Index1} = quod_outcome:project_pending_begins(Index0, [Pending2]),
+    {ok, Index1} = quod_outcome:project_pending_begins(Index1, [Pending2]),
     Pending4 = Pending2#{sequence := 4},
-    {ok, Index2} = quod_outcome:project_pending_begin(Index1, Pending4),
+    Other = Pending2#{group_id := <<31:256>>, sequence := 1},
+    {ok, Index2} = quod_outcome:project_pending_begins(Index1, [Pending4, Other]),
     ?assertEqual(
-       Pending4,
-       maps:get(pending_begin, quod_outcome:dtx_state(Index2))),
-    ?assertEqual(
-       {error, outcome_index_conflict},
-       quod_outcome:project_pending_begin(
-         Index2, Pending2#{sequence := 3})),
-    ?assertEqual(
-       {error, outcome_index_conflict},
-       quod_outcome:project_pending_begin(
-         Index2, Pending4#{group_id := <<31:256>>})),
-    ?assertEqual(
-       {error, outcome_index_conflict},
-       quod_outcome:project_pending_begin(
-         Index2, Pending4#{lane := {<<32:256>>, <<33:256>>}})),
-    ok = quod_outcome:close(Index2).
+       #{GroupId => Pending4, <<31:256>> => Other},
+       maps:get(pending_begins, quod_outcome:dtx_state(Index2))),
+    {ok, Index3} = quod_outcome:project_pending_begins(Index2, []),
+    ?assertEqual(#{}, maps:get(pending_begins, quod_outcome:dtx_state(Index3))),
+    ok = quod_outcome:close(Index3).
 
 anchored_lookup_rejects_another_founding_test() ->
     Ns = <<"quod:outcome-anchor">>,
@@ -367,7 +358,7 @@ pending_begin_and_abort_reasons_survive_the_ordered_disk_projection_test() ->
                           group_id => maps:get(group_id, F),
                           body => <<"kept-only-in-journal">>,
                           envelope => <<"kept-only-in-journal">>},
-              {ok, I1} = quod_outcome:project_pending_begin(I0, Pending),
+              {ok, I1} = quod_outcome:project_pending_begins(I0, [Pending]),
               Ref = maps:get(group_ref, F),
               {{ok, PendingOutcome}, I2} = quod_outcome:lookup_ref(I1, Ref),
               ?assertEqual(
@@ -380,15 +371,19 @@ pending_begin_and_abort_reasons_survive_the_ordered_disk_projection_test() ->
                                maps:get(begin_ref, F),
                                quod_dtx:initial_group_history(),
                                quod_dtx:initial_projection({Ns, Anchor}, 0)),
-              ?assertEqual(none, maps:get(
-                                   pending_begin,
-                                   quod_outcome:dtx_state(I3))),
+              ?assertEqual(#{}, maps:get(
+                                 pending_begins,
+                                 quod_outcome:dtx_state(I3))),
               {ok, I4a} = quod_outcome:advance_applied(I3, 1),
               {ok, I4} = quod_outcome:flush(I4a),
 
-              {I5, H2, P2} = apply_group_control(
-                               I4, 2, maps:get(decision_control, F),
-                               maps:get(decision_ref, F), H1, P1),
+              {I5, H2, P2, AbortAppliedAck} =
+                  apply_group_control_with_deferred_ack(
+                    I4, 2, maps:get(decision_control, F),
+                    maps:get(decision_ref, F), H1, P1),
+              ?assertEqual(
+                 {finalize_applied, maps:get(group_id, F), 2, 1},
+                 AbortAppliedAck),
               {ok, I6a} = quod_outcome:advance_applied(I5, 2),
               {ok, I6} = quod_outcome:flush(I6a),
               {{ok, Decided}, I7} = quod_outcome:lookup_ref(I6, Ref),
@@ -437,10 +432,13 @@ pending_begin_and_abort_reasons_survive_the_ordered_disk_projection_test() ->
                                           {Ns, Anchor}, 0)),
               {ok, Reopened3a} = quod_outcome:advance_applied(Reopened2, 1),
               {ok, Reopened3} = quod_outcome:flush(Reopened3a),
-              {Reopened4, RH2, RP2} = apply_group_control(
-                                        Reopened3, 2,
-                                        maps:get(decision_control, F),
-                                        maps:get(decision_ref, F), RH1, RP1),
+              {Reopened4, RH2, RP2, ReplayAbortAppliedAck} =
+                  apply_group_control_with_deferred_ack(
+                    Reopened3, 2, maps:get(decision_control, F),
+                    maps:get(decision_ref, F), RH1, RP1),
+              ?assertEqual(
+                 {finalize_applied, maps:get(group_id, F), 2, 1},
+                 ReplayAbortAppliedAck),
               {ok, Reopened5a} = quod_outcome:advance_applied(Reopened4, 2),
               {ok, Reopened5} = quod_outcome:flush(Reopened5a),
               {Reopened6, _RH3, _RP3} = apply_group_control(
@@ -486,22 +484,26 @@ commit_result_and_participant_slots_are_published_from_complete_test() ->
                        Ns, Anchor, #{outcome_backend => memory}),
           LocalPending = #{lane => {<<70:256>>, Pub}, sequence => 9,
                            group_id => <<71:256>>},
-          {ok, I0a} = quod_outcome:project_pending_begin(I0, LocalPending),
+          {ok, I0a} = quod_outcome:project_pending_begins(I0, [LocalPending]),
           {I1, H1, P1} = apply_group_control(
                            I0a, 1, maps:get(begin_control, F),
                            maps:get(begin_ref, F),
                            quod_dtx:initial_group_history(),
                            quod_dtx:initial_projection({Ns, Anchor}, 0)),
           ?assertEqual(LocalPending,
-                       maps:get(pending_begin,
-                                quod_outcome:dtx_state(I1))),
+                       maps:get(maps:get(group_id, LocalPending),
+                                maps:get(pending_begins,
+                                         quod_outcome:dtx_state(I1)))),
           {ok, I2a} = quod_outcome:advance_applied(I1, 1),
           {ok, I2} = quod_outcome:flush(I2a),
-          {I3, H2, P2} = apply_group_control(
-                           I2, 2, maps:get(decision_control, F),
-                           maps:get(decision_ref, F), H1, P1),
+          {I3, H2, P2a, {finalize_applied, _, 2, 2}} =
+              apply_group_control_with_deferred_ack(
+                I2, 2, maps:get(decision_control, F),
+                maps:get(decision_ref, F), H1, P1),
           {ok, I4a} = quod_outcome:advance_applied(I3, 2),
           {ok, I4} = quod_outcome:flush(I4a),
+          {ok, P2} = quod_dtx:acknowledge_finalize(
+                       maps:get(group_id, F), 2, 2, P2a),
           {I5, _H3, _P3} = apply_group_control(
                               I4, 3, maps:get(complete_control, F),
                               maps:get(complete_ref, F), H2, P2),
@@ -517,7 +519,7 @@ commit_result_and_participant_slots_are_published_from_complete_test() ->
           ok = quod_outcome:close(I7)
       end).
 
-prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
+source_fused_prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
     with_group_identity(
       fun(Pub, Signer) ->
           Ns = <<"quod:participant">>,
@@ -525,37 +527,25 @@ prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
           F = group_fixture(Ns, Anchor, Pub, Signer, commit),
           Target = {Ns, Anchor},
           GroupId = maps:get(group_id, F),
-          BeginRef = maps:get(begin_ref, F),
           PlanBlob = maps:get(plan_a_blob, F),
-          {ok, Prepare} = quod_dtx:new_prepare(
-                            maps:get(begin_record, F), BeginRef, Target),
-          PrepareControl = signed_control(
-                             Target, Prepare, maps:get(admission, F), 1,
-                             Signer),
-          PrepareRef = group_ref(Target, 1, Prepare),
           DecisionRef = maps:get(decision_ref, F),
-          {ok, Finalize} = quod_dtx:new_finalize(
-                             GroupId, DecisionRef, commit, PrepareRef, 2),
-          FinalizeControl = signed_control(
-                              Target, Finalize, maps:get(admission, F), 2,
-                              Signer),
-          FinalizeRef = group_ref(Target, 2, Finalize),
           {ok, I0} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),
           P0 = quod_dtx:initial_projection(Target, 0),
           {I1, H1, P1} = apply_group_control(
-                           I0, 1, PrepareControl, PrepareRef,
+                           I0, 1, maps:get(begin_control, F),
+                           maps:get(begin_ref, F),
                            quod_dtx:initial_group_history(), P0),
           PreparedProjection = maps:get(
                                  projection, quod_outcome:dtx_state(I1)),
           ?assertMatch(
-             #{active := #{participant := #{plan := PlanBlob}}},
-             PreparedProjection),
+             #{participant := #{plan := PlanBlob}},
+             maps:get(GroupId, maps:get(groups, PreparedProjection))),
           {ok, I2a} = quod_outcome:advance_applied(I1, 1),
           {ok, I2} = quod_outcome:flush(I2a),
           {I3, _H2, _P2, DeferredAck} =
               apply_group_control_with_deferred_ack(
-                I2, 2, FinalizeControl, FinalizeRef, H1, P1),
+                I2, 2, maps:get(decision_control, F), DecisionRef, H1, P1),
           {ok, I4a} = quod_outcome:advance_applied(I3, 2),
           {ok, I4} = quod_outcome:flush(I4a),
           %% The caller may send this token only after this flush and its
@@ -563,18 +553,30 @@ prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
           ?assertEqual({finalize_applied, GroupId, 2, 2}, DeferredAck),
           {{ok, AppliedRow}, I5} = quod_outcome:lookup_group(I4, GroupId),
           ?assertEqual(
-             #{verdict => commit, finalize_ref => FinalizeRef,
+             #{verdict => commit, finalize_ref => DecisionRef,
                slot => 2, generation => 2,
                group_ref => maps:get(group_ref, F),
-               plan_digest => maps:get(plan_a_digest, F)},
+               plan_digest => maps:get(plan_a_digest, F),
+               manifest_digest =>
+                   quod_dtx:manifest_digest(maps:get(manifest, F))},
              maps:get(applied, AppliedRow)),
           StoredProjection = maps:get(
                                projection, quod_outcome:dtx_state(I5)),
-          ?assertEqual(open, maps:get(proof_fence, StoredProjection)),
+          %% Ordered apply has removed the hidden participant plan.  Because
+          %% this ontology is also the origin, its exact applied marker stays
+          %% nonblocking until Complete consumes it; replay reconstructs the
+          %% same state without relying on an off-ledger acknowledgement.
+          ?assertMatch(
+             #{origin := #{phase := {decided, commit}}, participant := none},
+             maps:get(GroupId, maps:get(groups, StoredProjection))),
+          ?assertEqual(
+             #{GroupId => #{slot => 2, generation => 2,
+                            blocking => false}},
+             maps:get(apply_fences, StoredProjection)),
           ok = quod_outcome:close(I5)
       end).
 
-restart_preserves_transactions_and_reemits_prepared_finalize_effect_test() ->
+restart_reemits_fused_begin_and_decision_effects_test() ->
     with_group_identity(
       fun(Pub, Signer) ->
           Ns = <<"quod:restart-participant">>,
@@ -586,63 +588,44 @@ restart_preserves_transactions_and_reemits_prepared_finalize_effect_test() ->
           PlanBlob = maps:get(plan_a_blob, F),
           Manifest = maps:get(manifest, F),
           PlanDigest = maps:get(plan_a_digest, F),
-          {ok, Prepare} = quod_dtx:new_prepare(
-                            maps:get(begin_record, F), BeginRef, Target),
-          PrepareControl = signed_control(
-                             Target, Prepare, maps:get(admission, F), 1,
-                             Signer),
-          PrepareRef = group_ref(Target, 2, Prepare),
-          {ok, Finalize} = quod_dtx:new_finalize(
-                             GroupId, maps:get(decision_ref, F), commit,
-                             PrepareRef, 2),
-          FinalizeControl = signed_control(
-                              Target, Finalize, maps:get(admission, F), 2,
-                              Signer),
-          FinalizeRef = group_ref(Target, 3, Finalize),
-          Tx = transaction(Ns, Anchor, <<144:256>>),
-          TxRef = {transaction, Ns, Anchor, Tx#transaction.tx_id},
+          BeginControl = maps:get(begin_control, F),
+          DecisionControl = maps:get(decision_control, F),
+          DecisionRef = maps:get(decision_ref, F),
           Dir = outcome_dir("dtx-restart"),
           Config = #{data_dir => Dir, outcome_backend => disk},
           try
               {ok, I0} = quod_outcome:open(Ns, Anchor, Config),
-              {new, TxCandidate, I1} = quod_outcome:classify(I0, Tx),
-              {new, StoredTx, I2} = quod_outcome:terminal(
-                                      I1, 1, committed,
-                                      {new, TxCandidate}),
-              {ok, I3a} = quod_outcome:advance_applied(I2, 1),
-              {ok, I3} = quod_outcome:flush(I3a),
-
               H0 = quod_dtx:initial_group_history(),
               P0 = quod_dtx:initial_projection(Target, 0),
-              {ok, H1, P1, [{prepared, GroupId, PrepareRef, Manifest,
-                              PlanDigest, PlanBlob, 1}] = PrepareEffects} =
-                  quod_dtx:reduce(PrepareControl, PrepareRef, H0, P0),
+              {ok, H1, P1,
+               [{origin_started, GroupId, BeginRef},
+                {prepared, GroupId, BeginRef, Manifest,
+                 PlanDigest, PlanBlob, 1}] = PrepareEffects} =
+                  quod_dtx:reduce(BeginControl, BeginRef, H0, P0),
               {ok, I4, none} = quod_outcome:apply_dtx(
-                                  I3, 2, PrepareControl, H1, P1,
+                                  I0, 1, BeginControl, H1, P1,
                                   PrepareEffects),
-              {ok, I5a} = quod_outcome:advance_applied(I4, 2),
+              {ok, I5a} = quod_outcome:advance_applied(I4, 1),
               {ok, I5} = quod_outcome:flush(I5a),
               {ok, H2, P2,
-               [{apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
-                                 FinalizeRef, 2}] =
+               [{decided, GroupId, commit, DecisionRef},
+                {apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
+                                 DecisionRef, 2}] =
                    FinalizeEffects} =
                   quod_dtx:reduce(
-                    FinalizeControl, FinalizeRef, H1, P1),
+                    DecisionControl, DecisionRef, H1, P1),
               {ok, I6, DeferredAck} =
                   quod_outcome:apply_dtx(
-                    I5, 3, FinalizeControl, H2, P2, FinalizeEffects),
-              {ok, I7a} = quod_outcome:advance_applied(I6, 3),
+                    I5, 2, DecisionControl, H2, P2, FinalizeEffects),
+              {ok, I7a} = quod_outcome:advance_applied(I6, 2),
               {ok, I7} = quod_outcome:flush(I7a),
               ?assertEqual(
-                 {finalize_applied, GroupId, 3, 2}, DeferredAck),
+                 {finalize_applied, GroupId, 2, 2}, DeferredAck),
               ok = quod_outcome:close(I7),
 
               {ok, R0} = quod_outcome:open(Ns, Anchor, Config),
-              %% The ordinary row is preserved and still carries the exact
-              %% terminal slot used by its own replay path.
-              {{ok, StoredTx}, R1} = quod_outcome:lookup_ref(R0, TxRef),
-              ?assertEqual(0, quod_outcome:applied_floor(R1)),
-              {ResetHistory, R2} = quod_outcome:group_history(R1, GroupId),
+              ?assertEqual(0, quod_outcome:applied_floor(R0)),
+              {ResetHistory, R2} = quod_outcome:group_history(R0, GroupId),
               ?assertEqual(quod_dtx:initial_group_history(), ResetHistory),
               ?assertMatch({not_found, _},
                            quod_outcome:lookup_group(R2, GroupId)),
@@ -650,43 +633,43 @@ restart_preserves_transactions_and_reemits_prepared_finalize_effect_test() ->
                  quod_dtx:initial_projection(Target, 0),
                  maps:get(projection, quod_outcome:dtx_state(R2))),
 
-              %% Slot 1's ordinary replay advances the shared ordered floor;
-              %% the same DTX reducer can then replay from its empty prefix.
-              {ok, R3a} = quod_outcome:advance_applied(R2, 1),
-              {ok, R3} = quod_outcome:flush(R3a),
               {ok, RH1, RP1,
-               [{prepared, GroupId, PrepareRef, Manifest, PlanDigest,
+               [{origin_started, GroupId, BeginRef},
+                {prepared, GroupId, BeginRef, Manifest, PlanDigest,
                              PlanBlob, 1}] =
                    ReplayPrepareEffects} =
                   quod_dtx:reduce(
-                    PrepareControl, PrepareRef, ResetHistory,
+                    BeginControl, BeginRef, ResetHistory,
                     quod_dtx:initial_projection(Target, 0)),
               {ok, R4, none} = quod_outcome:apply_dtx(
-                                  R3, 2, PrepareControl, RH1, RP1,
+                                  R2, 1, BeginControl, RH1, RP1,
                                   ReplayPrepareEffects),
-              {ok, R5a} = quod_outcome:advance_applied(R4, 2),
+              {ok, R5a} = quod_outcome:advance_applied(R4, 1),
               {ok, R5} = quod_outcome:flush(R5a),
               {ok, RH2, RP2,
-               [{apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
-                                 FinalizeRef, 2}] =
+               [{decided, GroupId, commit, DecisionRef},
+                {apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
+                                 DecisionRef, 2}] =
                    ReplayFinalizeEffects} =
                   quod_dtx:reduce(
-                    FinalizeControl, FinalizeRef, RH1, RP1),
+                    DecisionControl, DecisionRef, RH1, RP1),
               {ok, R6, ReplayDeferredAck} =
                   quod_outcome:apply_dtx(
-                    R5, 3, FinalizeControl, RH2, RP2,
+                    R5, 2, DecisionControl, RH2, RP2,
                     ReplayFinalizeEffects),
-              {ok, R7a} = quod_outcome:advance_applied(R6, 3),
+              {ok, R7a} = quod_outcome:advance_applied(R6, 2),
               {ok, R7} = quod_outcome:flush(R7a),
               ?assertEqual(
-                 {finalize_applied, GroupId, 3, 2}, ReplayDeferredAck),
+                 {finalize_applied, GroupId, 2, 2}, ReplayDeferredAck),
               {{ok, RebuiltGroup}, R8} =
                   quod_outcome:lookup_group(R7, GroupId),
               ?assertEqual(
-                 #{verdict => commit, finalize_ref => FinalizeRef,
-                   slot => 3, generation => 2,
+                 #{verdict => commit, finalize_ref => DecisionRef,
+                   slot => 2, generation => 2,
                    group_ref => maps:get(group_ref, F),
-                   plan_digest => PlanDigest},
+                   plan_digest => PlanDigest,
+                   manifest_digest =>
+                       quod_dtx:manifest_digest(maps:get(manifest, F))},
                  maps:get(applied, RebuiltGroup)),
               ok = quod_outcome:close(R8)
           after
@@ -713,12 +696,14 @@ direct_abort_tombstone_is_an_exact_disk_phase_without_an_active_role_test() ->
           Config = #{data_dir => Dir, outcome_backend => disk},
           try
               {ok, I0} = quod_outcome:open(Ns, Anchor, Config),
-              {I1, History, Projection} = apply_group_control(
-                                            I0, 1, Control, Ref,
-                                            quod_dtx:initial_group_history(),
-                                            quod_dtx:initial_projection(
-                                              Target, 0)),
-              ?assertEqual(none, maps:get(active, Projection)),
+              {I1, History, Projection, DeferredAck} =
+                  apply_group_control_with_deferred_ack(
+                    I0, 1, Control, Ref,
+                    quod_dtx:initial_group_history(),
+                    quod_dtx:initial_projection(Target, 0)),
+              ?assertEqual(
+                 {finalize_applied, GroupId, 1, 0}, DeferredAck),
+              ?assertEqual(#{}, maps:get(groups, Projection)),
               ?assertEqual([finalize],
                            maps:keys(maps:get(records, History))),
               {ok, I2a} = quod_outcome:advance_applied(I1, 1),
@@ -728,10 +713,13 @@ direct_abort_tombstone_is_an_exact_disk_phase_without_an_active_role_test() ->
               {EmptyHistory, Reopened1} = quod_outcome:group_history(
                                             Reopened0, GroupId),
               ?assertEqual(quod_dtx:initial_group_history(), EmptyHistory),
-              {Replayed0, StoredHistory, _StoredProjection} =
-                  apply_group_control(
+              {Replayed0, StoredHistory, _StoredProjection,
+               ReplayDeferredAck} =
+                  apply_group_control_with_deferred_ack(
                     Reopened1, 1, Control, Ref, EmptyHistory,
                     quod_dtx:initial_projection(Target, 0)),
+              ?assertEqual(
+                 {finalize_applied, GroupId, 1, 0}, ReplayDeferredAck),
               ?assertEqual(History, StoredHistory),
               {ok, Replayed1a} = quod_outcome:advance_applied(Replayed0, 1),
               {ok, Replayed1} = quod_outcome:flush(Replayed1a),
@@ -752,28 +740,18 @@ origin_and_participant_roles_share_the_one_projection_slot_test() ->
           Anchor = <<59:256>>,
           Target = {Ns, Anchor},
           F = group_fixture(Ns, Anchor, Pub, Signer, commit),
-          {ok, Prepare} = quod_dtx:new_prepare(
-                            maps:get(begin_record, F), maps:get(begin_ref, F),
-                            Target),
-          PrepareControl = signed_control(
-                             Target, Prepare, maps:get(admission, F), 2,
-                             Signer),
-          PrepareRef = group_ref(Target, 2, Prepare),
           {ok, I0} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),
-          {I1, H1, P1} = apply_group_control(
+          {I1, _H1, _P1} = apply_group_control(
                            I0, 1, maps:get(begin_control, F),
                            maps:get(begin_ref, F),
                            quod_dtx:initial_group_history(),
                            quod_dtx:initial_projection(Target, 0)),
-          {I2, _H2, _P2} = apply_group_control(
-                              I1, 2, PrepareControl, PrepareRef, H1, P1),
-          Projection = maps:get(projection, quod_outcome:dtx_state(I2)),
-          Active = maps:get(active, Projection),
+          Projection = maps:get(projection, quod_outcome:dtx_state(I1)),
+          Active = maps:get(maps:get(group_id, F), maps:get(groups, Projection)),
           ?assertMatch(#{phase := begun}, maps:get(origin, Active)),
           ?assertMatch(#{phase := prepared}, maps:get(participant, Active)),
-          ?assertEqual(maps:get(group_id, F), maps:get(group_id, Active)),
-          ok = quod_outcome:close(I2)
+          ok = quod_outcome:close(I1)
       end).
 
 outcome_format_break_resets_the_whole_rebuildable_projection_test() ->
@@ -797,9 +775,9 @@ outcome_format_break_resets_the_whole_rebuildable_projection_test() ->
         ok = dets:close(Path),
         {ok, Reset} = quod_outcome:open(Ns, Anchor, Config),
         ?assertEqual(0, quod_outcome:applied_floor(Reset)),
-        ?assertEqual(none, maps:get(
-                             pending_begin,
-                             quod_outcome:dtx_state(Reset))),
+        ?assertEqual(#{}, maps:get(
+                           pending_begins,
+                           quod_outcome:dtx_state(Reset))),
         ok = quod_outcome:close(Reset)
     after
         _ = file:del_dir_r(Dir)
@@ -871,34 +849,31 @@ group_fixture(Ns, Anchor, Pub, Signer, Verdict) ->
     GroupId = quod_dtx:group_id(Begin),
     BeginControl = signed_control(Origin, Begin, Admission, 1, Signer),
     BeginRef = group_ref(Origin, 1, Begin),
-    PrepareRows =
-        [{Identity, synthetic_ref(Identity, Slot, <<(40 + Slot):256>>)}
-         || {Identity, Slot} <- lists:sort([{Origin, 7}, {Other, 8}])],
+    OtherPrepareRef = synthetic_ref(Other, 8, <<48:256>>),
+    PrepareRows = [{Origin, BeginRef}, {Other, OtherPrepareRef}],
     {DecisionInput, DecisionRows} =
         case Verdict of
             commit -> {commit, PrepareRows};
-            {abort, Reasons} -> {{abort, Reasons}, []}
+            {abort, Reasons} -> {{abort, Reasons}, [{Origin, BeginRef}]}
         end,
     {ok, Decision} = quod_dtx:new_decision(
                        GroupId, BeginRef, DecisionInput, DecisionRows),
     DecisionControl = signed_control(
                         Origin, Decision, Admission, 2, Signer),
     DecisionRef = group_ref(Origin, 2, Decision),
+    SourceGeneration = case Verdict of commit -> 2; {abort, _} -> 1 end,
     FinalizeRows =
-        [{Identity,
-          synthetic_ref(Identity, Slot, <<(60 + Slot):256>>),
-          Generation}
-         || {Identity, Slot, Generation} <-
-                lists:sort([{Origin, 10, 1}, {Other, 11, 2}])],
+        [{Origin, DecisionRef, SourceGeneration},
+         {Other, synthetic_ref(Other, 11, <<71:256>>), 2}],
     {ok, Complete} = quod_dtx:new_complete(
                        GroupId, DecisionRef, FinalizeRows),
     CompleteControl = signed_control(
                         Origin, Complete, Admission, 3, Signer),
     CompleteRef = group_ref(Origin, 3, Complete),
-    ParticipantSlots =
+    ParticipantSlots = lists:sort(
         [{Identity, Slot, Generation}
          || {Identity, Ref, Generation} <- FinalizeRows,
-            Slot <- [ref_slot(Ref)]],
+            Slot <- [ref_slot(Ref)]]),
     #{admission => Admission, group_id => GroupId,
       group_ref => {group, Ns, Anchor, Pub, Admission, GroupId},
       manifest => Manifest, begin_record => Begin,

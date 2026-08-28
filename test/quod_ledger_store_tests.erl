@@ -32,7 +32,7 @@ store_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_empty/1,
       fun t_append_read/1,
-      fun t_dtx_payload_roundtrip/1,
+      fun t_opaque_payload_roundtrip/1,
       fun t_reopen_persists/1,
       fun t_torn_tail_recovery/1,
       fun t_torn_tail_bad_crc_trims/1,
@@ -94,11 +94,11 @@ t_append_read({Dir, Ns}) ->
         ok = quod_ledger_store:close(S1)
     end.
 
-%% The store persists the canonical DTX blob unchanged; interpretation belongs
-%% solely to quod_ledger/quod_dtx, not the storage layer.
-t_dtx_payload_roundtrip({Dir, Ns}) ->
+%% The store persists an opaque payload unchanged; interpretation belongs to
+%% the ledger layer, not the append-only byte store.
+t_opaque_payload_roundtrip({Dir, Ns}) ->
     fun() ->
-        Data = {dtx, <<0, 1, 2, 255>>},
+        Data = {opaque_test_payload, <<0, 1, 2, 255>>},
         Entry = #entry{index = 1, data = Data},
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, [Entry]),

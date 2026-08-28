@@ -18,6 +18,7 @@ all_command_shapes_roundtrip_deterministically_test() ->
          scope_seal,
          {scope_attest, Manifest},
          {bind_group_effects, GroupRef, key(130)},
+         {bind_operation_effect, <<"signed operation submission">>},
          {invoke_open, id(1), selection(none, []), chain(2), Goal},
          {invoke_next, id(1), 1},
          {invoke_cancel, id(1)},
@@ -244,6 +245,41 @@ group_effect_binding_is_exact_and_bounded_test() ->
     {ok, AckEncoded} = quod_scope_wire:encode_event(Ack),
     ?assertEqual({ok, Ack}, quod_scope_wire:decode_response(AckEncoded)).
 
+operation_effect_submission_crosses_scope_at_shared_bound_test() ->
+    SubmissionBlob =
+        <<0:?QUOD_MAX_OPERATION_SUBMISSION_BYTES/unit:8>>,
+    Command = command({bind_operation_effect, SubmissionBlob}),
+    {ok, Encoded} = quod_scope_wire:encode_command(Command),
+    %% This is the regression: the old independent 128 KiB envelope rejected
+    %% an artifact accepted by the transaction codec before it reached the
+    %% authenticated target-side decoder.
+    ?assert(byte_size(Encoded) > (128 * 1024)),
+    ?assert(byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
+    ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Encoded)),
+    OversizedBlob = <<SubmissionBlob/binary, 0>>,
+    Oversized = command({bind_operation_effect, OversizedBlob}),
+    ?assertEqual(
+       {error, {too_large, operation_submission}},
+       quod_scope_wire:encode_command(Oversized)),
+    %% A peer cannot bypass the field owner by writing the ETF directly.
+    ?assertEqual(
+       {error, {too_large, operation_submission}},
+       quod_scope_wire:decode_request(raw_frame(Oversized))).
+
+scope_namespace_uses_directory_bound_test() ->
+    MaxNamespace =
+        binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
+    AtLimit = command_with_binding(
+                {scope_open, node}, binding_with_origin(MaxNamespace)),
+    ?assertMatch({ok, _}, quod_scope_wire:encode_command(AtLimit)),
+    OversizedNamespace = <<MaxNamespace/binary, "n">>,
+    TooLarge = command_with_binding(
+                 {scope_open, node},
+                 binding_with_origin(OversizedNamespace)),
+    ?assertEqual(
+       {error, {protocol_error, bad_identity}},
+       quod_scope_wire:encode_command(TooLarge)).
+
 submit_operations_round_trip_and_stay_bounded_test() ->
     {ok, GoalBlob} = quod_durable_term:encode_goal({goal, ok}),
     {ok, ResultBlob} = quod_durable_term:encode_result(#{'X' => ok}),
@@ -393,37 +429,21 @@ exact_failure_reason_payload_boundary() ->
          failure_reasons, payload(failure_reasons, []))).
 
 scope_envelope_byte_bound_is_exact_and_predecode_test() ->
-    Base = {scope_command, binding(), 1, id(1), 30000,
-            {scope_open, node}},
-    {ok, BaseEncoded} = quod_scope_wire:encode_command(Base),
-    Growth = ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES - byte_size(BaseEncoded),
-    {scope_command, Binding0, Seq, RequestId, Remaining, Operation} = Base,
-    {scope_binding, OriginKey, TargetKey, ProofId, SessionId,
-     {_OldOriginNs, OriginAnchor}, TargetIdentity, Mode,
-     Principal, AuthenticationDigest} = Binding0,
-    LongOriginNs = binary:copy(<<"n">>, byte_size(<<"quod:a">>) + Growth),
-    LongBinding = {scope_binding, OriginKey, TargetKey, ProofId, SessionId,
-                   {LongOriginNs, OriginAnchor}, TargetIdentity, Mode,
-                   Principal, AuthenticationDigest},
-    AtLimit = {scope_command, LongBinding, Seq, RequestId, Remaining, Operation},
-    {ok, AtLimitEncoded} = quod_scope_wire:encode_command(AtLimit),
-    ?assertEqual(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES,
-                 byte_size(AtLimitEncoded)),
-    TooLongBinding = setelement(
-                       6, LongBinding,
-                       {<<LongOriginNs/binary, "x">>, OriginAnchor}),
+    AtLimit = <<0:?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES/unit:8>>,
+    %% At the exact byte boundary decoding is attempted and rejects the bytes
+    %% as ETF. One byte more is rejected before any decode.
     ?assertEqual(
-       {error, {too_large, scope_envelope}},
-       quod_scope_wire:encode_command(
-         {scope_command, TooLongBinding, Seq, RequestId,
-          Remaining, Operation})),
+       {error, {protocol_error, bad_etf}},
+       quod_scope_wire:decode_request(AtLimit)),
     ?assertEqual(
        {error, {too_large, scope_envelope}},
        quod_scope_wire:decode_request(
-         <<0:(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES + 1)/unit:8>>)).
+         <<AtLimit/binary, 0>>)).
 
 outer_safe_etf_and_version_are_fail_closed_test() ->
-    Command = {scope_command, binding_with_origin(binary:copy(<<"x">>, 1000)),
+    Command = {scope_command,
+               binding_with_origin(
+                 binary:copy(<<"x">>, ?DIRECTORY_MAX_NAMESPACE_BYTES)),
                1, id(1), 30000, {scope_open, node}},
     {ok, Encoded} = quod_scope_wire:encode_command(Command),
     ?assertEqual(
@@ -437,7 +457,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
        quod_scope_wire:decode_request(Compressed)),
     {Domain, _Version, Frame} = Outer,
     %% Every superseded scope wire is an identifiable rejection: an old peer
-    %% is refused at the version boundary, never misparsed as V5.
+    %% is refused at the version boundary, never misparsed as the current wire.
     lists:foreach(
       fun(OldVersion) ->
           WrongVersion =
@@ -445,7 +465,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, [1, 2, 3, 4]),
+      end, lists:seq(1, 7)),
     WrongDomain = term_to_binary({<<"other.scope">>, 5, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
@@ -765,11 +785,14 @@ group_ref() ->
 command(Operation) ->
     {scope_command, binding(), 1, id(90), 30000, Operation}.
 
+command_with_binding(Operation, Binding) ->
+    {scope_command, Binding, 1, id(90), 30000, Operation}.
+
 event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 7, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 8, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

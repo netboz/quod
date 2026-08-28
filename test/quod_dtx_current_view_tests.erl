@@ -1,6 +1,7 @@
 -module(quod_dtx_current_view_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
 thresholds_are_f_plus_one_at_every_committee_boundary_test() ->
@@ -8,397 +9,391 @@ thresholds_are_f_plus_one_at_every_committee_boundary_test() ->
        [{1, 1}, {4, 2}, {7, 3}, {64, 22}],
        [{N, quod_dtx_current_view:test_threshold(N)} || N <- [1, 4, 7, 64]]).
 
-exact_threshold_of_distinct_current_validators_succeeds_test() ->
-    F = fixture(4),
-    [A, B, C, D] = maps:get(committee, F),
-    Successes = maps:from_keys([A, B], true),
-    Deps = dependencies(
-             maps:get(view, F),
-             fun(Key, Request, Target, CommitteeId) ->
-                     case maps:is_key(Key, Successes) of
-                         true -> applied_reply(Request, Target, CommitteeId);
-                         false -> {error, not_ready}
-                     end
-             end),
-    ?assertMatch(
-       {ok, #{committee := [A, B, C, D]}},
-       verify(F, Deps)).
-
-same_key_endpoint_fallback_reuses_one_request_id_test() ->
-    F0 = fixture(1),
-    [Key] = maps:get(committee, F0),
-    Old = {"127.0.0.1", 21001},
-    New = {"127.0.0.1", 21002},
-    View = (maps:get(view, F0))#{route_candidates => [{Key, [Old, New]}]},
-    F = F0#{view => View, source_routes => [{Key, [Old, New]}]},
-    TestPid = self(),
-    Target = maps:get(identity, View),
-    CommitteeId = maps:get(committee_id, View),
-    Deps = #{view => fun(_Source, _Ref, _Timeout) -> {ok, View} end,
-             local => fun(_Ns, _Request, _Timeout) -> {error, not_ready} end,
-             remote =>
-                 fun(_OwnerNs, _TargetNs, _PinnedKey,
-                     Endpoint, Request, _Timeout) ->
-                         TestPid ! {fallback_request, Endpoint, element(2, Request)},
-                         case Endpoint of
-                             Old -> {error, not_ready};
-                             New -> applied_reply(Request, Target, CommitteeId)
-                         end
-                 end,
-             node_key => fun() -> none end},
-    ?assertMatch({ok, _}, verify(F, Deps)),
-    RequestId = receive
-                    {fallback_request, Old, Id} -> Id
-                after 1000 -> error(no_old)
-                end,
-    receive {fallback_request, New, RequestId} -> ok after 1000 -> error(no_new) end,
-    receive {fallback_request, _, _} -> error(extra_correlation) after 0 -> ok end.
-
-one_below_threshold_is_retry_test() ->
-    F = fixture(7),
-    [Only | _] = maps:get(committee, F),
-    Deps = dependencies(
-             maps:get(view, F),
-             fun(Key, Request, Target, CommitteeId) ->
-                     case Key =:= Only of
-                         true -> applied_reply(Request, Target, CommitteeId);
-                         false -> {error, not_ready}
-                     end
-             end),
-    ?assertEqual({error, retry}, verify(F, Deps)).
-
-duplicate_committee_keys_are_rejected_and_route_hints_cannot_amplify_test() ->
-    F = fixture(4),
-    [A, B, C, _D] = maps:get(committee, F),
-    DuplicateView = (maps:get(view, F))#{committee => [A, A, B, C]},
-    Deps = dependencies(
-             DuplicateView,
-             fun(_Key, Request, Target, CommitteeId) ->
-                     applied_reply(Request, Target, CommitteeId)
-             end),
-    ?assertEqual({error, retry}, verify(F, Deps)),
-    GoodDeps = dependencies(
-                 maps:get(view, F),
-                 fun(_Key, Request, Target, CommitteeId) ->
-                         applied_reply(Request, Target, CommitteeId)
-                 end),
-    [Route | _] = maps:get(source_routes, F),
-    ?assertEqual(
-       {error, invalid_request},
-       quod_dtx_current_view:test_verify_applied(
-         maps:get(owner_ns, F), {remote, [Route, Route]},
-         maps:get(claim, F), 1000, GoodDeps)),
-    {RouteKey, [Endpoint]} = Route,
-    ?assertEqual(
-       {error, invalid_request},
-       quod_dtx_current_view:test_verify_applied(
-         maps:get(owner_ns, F),
-         {remote, [{RouteKey,
-                    [Endpoint, {"127.0.0.1", 29998},
-                     {"127.0.0.1", 29999}]}]},
-         maps:get(claim, F), 1000, GoodDeps)),
-    ?assertMatch(
-       {ok, _},
-       quod_dtx_current_view:test_verify_applied(
-         maps:get(owner_ns, F), {remote, [Route]},
-         maps:get(claim, F), 1000, GoodDeps)).
-
-malformed_view_and_reply_are_retryable_not_success_test() ->
-    F = fixture(1),
-    BadView = maps:remove(committee_id, maps:get(view, F)),
-    BadViewDeps = dependencies(
-                    BadView,
-                    fun(_Key, Request, Target, CommitteeId) ->
-                            applied_reply(Request, Target, CommitteeId)
-                    end),
-    ?assertEqual({error, retry}, verify(F, BadViewDeps)),
-    BadReplyDeps = dependencies(
-                     maps:get(view, F),
-                     fun(_Key, _Request, _Target, _CommitteeId) ->
-                             {ok, malformed}
-                     end),
-    ?assertEqual({error, retry}, verify(F, BadReplyDeps)).
-
-ipc_dependency_exit_is_retryable_test() ->
-    F = fixture(1),
-    ViewExit =
-        (dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))#{
-          view =>
-              fun(_Source, _Basis, _Timeout) ->
-                      exit(noproc)
-              end},
-    ?assertEqual({error, retry}, verify(F, ViewExit)),
-    EndpointExit =
-        (dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))#{
-          remote =>
-              fun(_OwnerNs, _TargetNs, _Key, _Endpoint,
-                  _Request, _Timeout) ->
-                      exit(noproc)
-              end},
-    ?assertEqual({error, retry}, verify(F, EndpointExit)).
-
-programmer_fault_in_view_dependency_is_visible_test() ->
-    F = fixture(1),
-    Deps =
-        (dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))#{
-          view =>
-              fun(_Source, _Basis, _Timeout) ->
-                      error(view_dependency_fault)
-              end},
-    ?assertError(view_dependency_fault, verify(F, Deps)).
-
-programmer_fault_in_probe_terminates_monitored_verifier_test() ->
-    F = fixture(1),
-    Deps =
-        (dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))#{
-          remote =>
-              fun(_OwnerNs, _TargetNs, _Key, _Endpoint,
-                  _Request, _Timeout) ->
-                      error(endpoint_dependency_fault)
-              end},
-    {Verifier, Monitor} = spawn_monitor(fun() -> verify(F, Deps) end),
-    receive
-        {'DOWN', Monitor, process, Verifier,
-         {endpoint_dependency_fault, [_ | _]}} ->
-            ok
-    after 2000 ->
-        error(verifier_fault_was_hidden)
-    end.
-
-programmer_fault_in_many_worker_terminates_monitored_verifier_test() ->
-    F = fixture(1),
-    Deps =
-        (dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))#{
-          view =>
-              fun(_Source, _Basis, _Timeout) ->
-                      error(many_view_dependency_fault)
-              end},
-    Requests = many_requests(F, 1),
-    OwnerNs = maps:get(owner_ns, F),
-    {Verifier, Monitor} = spawn_monitor(
-      fun() ->
-          quod_dtx_current_view:test_verify_applied_many(
-            OwnerNs, Requests, 1000, Deps)
-      end),
-    receive
-        {'DOWN', Monitor, process, Verifier,
-         {many_view_dependency_fault, [_ | _]}} ->
-            ok
-    after 2000 ->
-        error(many_worker_fault_was_hidden)
-    end.
-
-committee_rotation_mismatch_restarts_the_whole_check_test() ->
-    F = fixture(4),
-    OldCommitteeId = digest(240),
-    Deps = dependencies(
-             maps:get(view, F),
-             fun(_Key, Request, Target, _CurrentCommitteeId) ->
-                     applied_reply(Request, Target, OldCommitteeId)
-             end),
-    ?assertEqual({error, retry}, verify(F, Deps)).
-
-cohosted_current_view_uses_local_key_and_remote_current_peers_test() ->
-    F = fixture(4),
-    [LocalKey, RemoteKey | _] = maps:get(committee, F),
-    View = maps:get(view, F),
-    Target = maps:get(identity, View),
-    CommitteeId = maps:get(committee_id, View),
-    TestPid = self(),
-    Base = dependencies(View, fun(_, _, _, _) -> {error, unused} end),
-    Deps = Base#{
-      node_key => fun() -> LocalKey end,
-      local =>
-          fun(_Ns, Request, _Timeout) ->
-                  TestPid ! local_applied_probe,
-                  applied_reply(Request, Target, CommitteeId)
-          end,
-      remote =>
-          fun(_OwnerNs, _TargetNs, Key, _Endpoint, Request, _Timeout) ->
-                  case Key =:= RemoteKey of
-                      true ->
-                          TestPid ! remote_applied_probe,
-                          applied_reply(Request, Target, CommitteeId);
-                      false ->
-                          {error, not_ready}
-                  end
-          end},
-    ?assertMatch(
-       {ok, _},
-       quod_dtx_current_view:test_verify_applied(
-         maps:get(owner_ns, F), {local, <<"/unused/test/root">>},
-         maps:get(claim, F), 1000, Deps)),
-    receive local_applied_probe -> ok after 0 -> error(missing_local_probe) end,
-    receive remote_applied_probe -> ok after 0 -> error(missing_remote_probe) end.
-
-claim_correlation_is_exact_for_every_field_test() ->
-    F = fixture(1),
-    View = maps:get(view, F),
-    CommitteeId = maps:get(committee_id, View),
-    Cases =
-        [fun(Request, Target) ->
-             applied_reply(setelement(3, Request, digest(201)),
-                           Target, CommitteeId)
-         end,
-         fun(Request, Target) ->
-             applied_reply(setelement(5, Request, 999),
-                           Target, CommitteeId)
-         end,
-         fun(Request, Target) ->
-             applied_reply(setelement(6, Request, abort),
-                           Target, CommitteeId)
-         end,
-         fun(Request, _Target) ->
-             applied_reply(Request, {<<"quod:wrong">>, digest(202)},
-                           CommitteeId)
-         end],
+%% Cancellation has one event-driven retry owner: endpoint failure returns to
+%% that owner instead of walking another route immediately. For every other
+%% request, a silent timeout or authenticated-link loss is uncertain and must
+%% likewise return to existing recovery rather than resubmit the operation.
+endpoint_failure_never_immediately_resubmits_uncertain_work_test() ->
+    Cancellation =
+        {cancel_operation_effect, <<1:128>>, <<"signed-submission">>},
     lists:foreach(
-      fun(MakeReply) ->
-          Deps = dependencies(
-                   View,
-                   fun(_Key, Request, Target, _ExpectedCommitteeId) ->
-                           MakeReply(Request, Target)
-                   end),
-          ?assertEqual({error, retry}, verify(F, Deps))
+      fun(Reason) ->
+              ?assertEqual(
+                 stop,
+                 quod_dtx_current_view:test_endpoint_failure_disposition(
+                   Cancellation, Reason))
+      end, [not_ready, busy, timeout, connection_lost]),
+    Write = {submit, <<2:128>>, <<"signed-control">>},
+    ?assertEqual(
+       stop,
+       quod_dtx_current_view:test_endpoint_failure_disposition(
+         Write, timeout)),
+    ?assertEqual(
+       stop,
+       quod_dtx_current_view:test_endpoint_failure_disposition(
+         Write, connection_lost)),
+    ?assertEqual(
+       next,
+       quod_dtx_current_view:test_endpoint_failure_disposition(
+         Write, not_ready)),
+
+    %% Drive the real flattened candidate walker. A stop result must end the
+    %% whole route list, not merely the current peer's endpoint sub-list.
+    ?assertEqual(
+       {{error, not_ready}, 1},
+       quod_dtx_current_view:test_submit_operation_candidates(
+         Cancellation, [{error, not_ready}, {error, timeout}])),
+    ?assertEqual(
+       {{error, timeout}, 1},
+       quod_dtx_current_view:test_submit_operation_candidates(
+         Write, [{error, timeout}, {error, not_ready}])),
+    Phase = {phase, <<3:128>>, <<4:256>>, prepare},
+    PhaseReply = {phase, <<3:128>>, 1, pending},
+    ?assertEqual(
+       {{ok, PhaseReply}, 2},
+       quod_dtx_current_view:test_submit_operation_candidates(
+         Phase, [{error, not_ready}, {ok, PhaseReply, []}])).
+
+exact_f_plus_one_finalize_committee_certificate_succeeds_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    Certificate = certificate(F, [A, B], #{}),
+    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(Certificate)),
+    ?assert(quod_dtx_current_view:verify_applied_certificate(
+              Certificate, maps:get(network_identity, F),
+              maps:get(evidence, F))).
+
+insufficient_duplicate_nonmember_and_bad_signatures_fail_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    One = certificate(F, [A], #{}),
+    {quod_dtx_applied_certificate, 1, Network, Target, CommitteeId,
+     GroupId, FinalizeRef, Generation, Verdict, [{A, Signature}]} = One,
+    Duplicate = {quod_dtx_applied_certificate, 1, Network, Target, CommitteeId,
+                 GroupId, FinalizeRef, Generation, Verdict,
+                 [{A, Signature}, {A, Signature}]},
+    Outsider = signer(),
+    NonMember = certificate_with_signers(
+                  F, [Outsider, maps:get(B, maps:get(signers, F))], #{}),
+    BadSignature = {quod_dtx_applied_certificate, 1, Network, Target,
+                    CommitteeId, GroupId, FinalizeRef, Generation, Verdict,
+                    lists:keysort(1, [{A, <<0:512>>},
+                                      signed_row(F, B, #{})])},
+    lists:foreach(
+      fun(Certificate) ->
+          ?assertNot(quod_dtx_current_view:verify_applied_certificate(
+                       Certificate, Network, maps:get(evidence, F)))
+      end, [One, Duplicate, NonMember, BadSignature]).
+
+every_signed_statement_field_is_bound_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    Keys = [A, B],
+    Network = maps:get(network_identity, F),
+    Claim = maps:get(claim, F),
+    Target = maps:get(target, F),
+    WrongTarget = {<<"quod:wrong-target">>, digest(201)},
+    WrongRef = certified_ref(Target, 17, digest(202)),
+    WrongTargetRef = certified_ref(WrongTarget, 18, digest(203)),
+    Cases =
+        [{#{network_identity => digest(204)}, Network},
+         {#{target => WrongTarget, finalize_ref => WrongTargetRef}, Network},
+         {#{committee_id => digest(205)}, Network},
+         {#{group_id => digest(206)}, Network},
+         {#{finalize_ref => WrongRef}, Network},
+         {#{generation => maps:get(generation, Claim) + 1}, Network},
+         {#{verdict => abort}, Network}],
+    lists:foreach(
+      fun({Overrides, ExpectedNetwork}) ->
+          Certificate = certificate(F, Keys, Overrides),
+          ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+                    Certificate)),
+          ?assertNot(quod_dtx_current_view:verify_applied_certificate(
+                       Certificate, ExpectedNetwork, maps:get(evidence, F)))
       end, Cases).
 
-successful_early_quorum_kills_and_reaps_every_other_probe_test() ->
+certification_uses_exact_finalize_committee_without_current_view_lookup_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    Successes = maps:from_keys([A, B], true),
+    Deps0 = dependencies(
+              F,
+              fun(Key, Request) ->
+                  case maps:is_key(Key, Successes) of
+                      true -> applied_reply(F, Key, Request);
+                      false -> {error, not_ready}
+                  end
+              end),
+    %% A later current committee is irrelevant: this function must never ask
+    %% for one, because the exact certified Finalize freezes its signer set.
+    Deps = Deps0#{view => fun(_, _, _) -> error(stale_current_view_path) end},
+    {ok, Certificate} = certify(F, Deps),
+    ?assert(quod_dtx_current_view:verify_applied_certificate(
+              Certificate, maps:get(network_identity, F),
+              maps:get(evidence, F))).
+
+cohosted_certification_uses_the_local_member_without_a_route_test() ->
+    F0 = fixture(1),
+    [Key] = maps:get(committee, F0),
+    Evidence = (maps:get(evidence, F0))#{routes => #{}},
+    F = F0#{evidence => Evidence},
+    TestPid = self(),
+    Deps0 = dependencies(F, fun(_, _) -> {error, unused} end),
+    Deps = Deps0#{
+      node_key => fun() -> Key end,
+      local =>
+          fun(TargetNs, Request, _Timeout) ->
+              TestPid ! {local_applied_probe, TargetNs},
+              applied_reply(F, Key, Request)
+          end,
+      remote =>
+          fun(_, _, _, _, _, _) -> error(unexpected_remote_probe) end},
+    ?assertMatch(
+       {ok, {quod_dtx_applied_certificate, 1, _, _, _, _, _, _, _, _}},
+       quod_dtx_current_view:test_certify_applied(
+         maps:get(owner_ns, F), {local, <<"/tmp/cohosted">>},
+         maps:get(claim, F), Evidence, 1000, Deps)),
+    receive
+        {local_applied_probe, TargetNs} ->
+            ?assertEqual(element(1, maps:get(target, F)), TargetNs)
+    after 1000 ->
+        error(local_member_was_not_probed)
+    end.
+
+one_below_f_plus_one_is_retry_test() ->
+    F = fixture(7),
+    [A, B | _] = maps:get(committee, F),
+    Successes = maps:from_keys([A, B], true),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) ->
+                 case maps:is_key(Key, Successes) of
+                     true -> applied_reply(F, Key, Request);
+                     false -> {error, not_ready}
+                 end
+             end),
+    ?assertEqual({error, retry}, certify(F, Deps)).
+
+retired_finalize_member_uses_shared_resolver_after_endpoint_move_test() ->
+    F0 = fixture(1),
+    [OldKey] = maps:get(committee, F0),
+    CurrentSigner = signer(),
+    CurrentKey = maps:get(pubkey, CurrentSigner),
+    Stale = {"127.0.0.1", 21001},
+    Fresh = {"127.0.0.1", 21002},
+    CurrentEndpoint = {"127.0.0.1", 21003},
+    Evidence0 = maps:get(evidence, F0),
+    Evidence = Evidence0#{routes => #{OldKey => Stale}},
+    %% The ordinary current-route view has advanced past OldKey. Only the
+    %% shared key resolver knows where that retired holder moved; the endpoint
+    %% request remains pinned to OldKey at the transport boundary.
+    F = F0#{evidence => Evidence,
+            source_routes => [{CurrentKey, [CurrentEndpoint]}]},
+    TestPid = self(),
+    Deps0 = dependencies(F, fun(_, _) -> {error, unused} end),
+    Deps = Deps0#{
+      resolve =>
+          fun(Key) when Key =:= OldKey -> {ok, Fresh};
+             (Key) when Key =:= CurrentKey -> {ok, CurrentEndpoint};
+             (_) -> error
+          end,
+      remote =>
+          fun(_OwnerNs, _TargetNs, PinnedKey, Endpoint, Request, _Timeout) ->
+              TestPid ! {applied_request, PinnedKey, Endpoint,
+                         element(2, Request)},
+              case {PinnedKey, Endpoint} of
+                  {OldKey, Fresh} -> applied_reply(F, OldKey, Request);
+                  {OldKey, Stale} -> {error, not_ready};
+                  {CurrentKey, CurrentEndpoint} ->
+                      error(current_committee_key_was_probed)
+              end
+          end},
+    %% Before the resolver merge the exact old key has only Stale and retries.
+    %% The current committee key is reachable but must never become a signer.
+    ?assertMatch({ok, _}, certify(F, Deps)),
+    receive {applied_request, OldKey, Fresh, <<_:128>>} -> ok
+    after 1000 -> error(missing_resolved_retired_member_route)
+    end,
+    receive {applied_request, _, _, _} -> error(extra_probe)
+    after 0 -> ok
+    end.
+
+live_route_for_a_nonmember_is_never_probed_or_counted_test() ->
+    F0 = fixture(1),
+    [Member] = maps:get(committee, F0),
+    Outsider = signer(),
+    OutsiderKey = maps:get(pubkey, Outsider),
+    MemberEndpoint = {"127.0.0.1", 21101},
+    OutsiderEndpoint = {"127.0.0.1", 21102},
+    Evidence0 = maps:get(evidence, F0),
+    Evidence = Evidence0#{routes => #{Member => MemberEndpoint}},
+    SourceRoutes = lists:keysort(
+                     1, [{Member, [MemberEndpoint]},
+                         {OutsiderKey, [OutsiderEndpoint]}]),
+    F = F0#{evidence => Evidence, source_routes => SourceRoutes},
+    TestPid = self(),
+    Deps0 = dependencies(F, fun(_, _) -> {error, unused} end),
+    Deps = Deps0#{
+      remote =>
+          fun(_OwnerNs, _TargetNs, Key, Endpoint, Request, _Timeout) ->
+              case {Key, Endpoint} of
+                  {Member, MemberEndpoint} -> {error, not_ready};
+                  {OutsiderKey, OutsiderEndpoint} ->
+                      TestPid ! outsider_was_probed,
+                      applied_reply(F, Outsider, Request)
+              end
+          end},
+    %% The outsider could produce a well-formed signed response, but exact
+    %% Finalize membership—not route presence—decides who may attest.
+    ?assertEqual({error, retry}, certify(F, Deps)),
+    receive outsider_was_probed -> error(nonmember_route_was_used)
+    after 0 -> ok
+    end.
+
+malformed_finalize_evidence_and_reply_are_retryable_test() ->
+    F = fixture(1),
+    BadEvidence = maps:remove(committee_id, maps:get(evidence, F)),
+    ?assertEqual(
+       {error, retry},
+       quod_dtx_current_view:test_certify_applied(
+         maps:get(owner_ns, F), source(F), maps:get(claim, F), BadEvidence,
+         1000, dependencies(F, fun(_, _) -> {error, unused} end))),
+    BadReplyDeps = dependencies(F, fun(_Key, _Request) -> {ok, malformed} end),
+    ?assertEqual({error, retry}, certify(F, BadReplyDeps)).
+
+wrong_signer_or_bad_signature_reply_never_counts_test() ->
+    F = fixture(1),
+    [Key] = maps:get(committee, F),
+    Outsider = signer(),
+    WrongSignerDeps = dependencies(
+                        F,
+                        fun(_Expected, Request) ->
+                            applied_reply(F, Outsider, Request)
+                        end),
+    ?assertEqual({error, retry}, certify(F, WrongSignerDeps)),
+    BadSignatureDeps = dependencies(
+                         F,
+                         fun(_Expected, Request) ->
+                             {ok, Response, []} = applied_reply(F, Key, Request),
+                             {ok, setelement(10, Response, <<0:512>>), []}
+                         end),
+    ?assertEqual({error, retry}, certify(F, BadSignatureDeps)).
+
+programmer_fault_in_probe_terminates_monitored_certifier_test() ->
+    F = fixture(1),
+    Deps0 = dependencies(F, fun(_, _) -> {error, unused} end),
+    Deps = Deps0#{remote =>
+                   fun(_OwnerNs, _TargetNs, _Key, _Endpoint,
+                       _Request, _Timeout) ->
+                       error(endpoint_dependency_fault)
+                   end},
+    {Certifier, Monitor} = spawn_monitor(fun() -> certify(F, Deps) end),
+    receive
+        {'DOWN', Monitor, process, Certifier,
+         {endpoint_dependency_fault, [_ | _]}} -> ok
+    after 2000 ->
+        error(certifier_fault_was_hidden)
+    end.
+
+successful_early_certificate_reaps_other_probe_processes_test() ->
     F = fixture(4),
     TestPid = self(),
     [A, B | _] = maps:get(committee, F),
     Fast = maps:from_keys([A, B], true),
-    Reply = fun(Key, Request, Target, CommitteeId) ->
+    Reply = fun(Key, Request) ->
                     TestPid ! {probe_started, Key, self()},
                     case maps:is_key(Key, Fast) of
                         true ->
                             receive {release_probe, Key} -> ok end,
-                            applied_reply(Request, Target, CommitteeId);
+                            applied_reply(F, Key, Request);
                         false ->
                             receive never -> {error, impossible} end
                     end
             end,
-    Deps = dependencies(maps:get(view, F), Reply),
-    {Verifier, VerifierMonitor} = spawn_monitor(
-      fun() -> TestPid ! {verify_result, verify(F, Deps)} end),
+    Deps = dependencies(F, Reply),
+    {Certifier, CertifierMonitor} = spawn_monitor(
+      fun() -> TestPid ! {certify_result, certify(F, Deps)} end),
     Started = collect_started(4, #{}),
     ProbeMonitors = maps:map(
                       fun(_Key, Pid) -> erlang:monitor(process, Pid) end,
                       Started),
     maps:foreach(
       fun(Key, Pid) ->
-              case maps:is_key(Key, Fast) of
-                  true -> Pid ! {release_probe, Key};
-                  false -> ok
-              end
+          case maps:is_key(Key, Fast) of
+              true -> Pid ! {release_probe, Key};
+              false -> ok
+          end
       end, Started),
-    receive
-        {verify_result, {ok, _View}} -> ok
-    after 2000 ->
-        error(verifier_did_not_finish)
+    receive {certify_result, {ok, _}} -> ok
+    after 2000 -> error(certifier_did_not_finish)
     end,
-    receive
-        {'DOWN', VerifierMonitor, process, Verifier, normal} -> ok
-    after 2000 ->
-        error(verifier_process_survived)
+    receive {'DOWN', CertifierMonitor, process, Certifier, normal} -> ok
+    after 2000 -> error(certifier_process_survived)
     end,
     maps:foreach(
       fun(Key, Pid) ->
-              Monitor = maps:get(Key, ProbeMonitors),
-              receive
-                  {'DOWN', Monitor, process, Pid, _Reason} -> ok
-              after 2000 ->
-                  error({probe_process_survived, Key})
-              end
+          Monitor = maps:get(Key, ProbeMonitors),
+          receive {'DOWN', Monitor, process, Pid, _Reason} -> ok
+          after 2000 -> error({probe_process_survived, Key})
+          end
       end, Started).
 
-caller_death_immediately_reclaims_all_probe_processes_test() ->
-    F = fixture(4),
-    TestPid = self(),
-    Reply = fun(Key, _Request, _Target, _CommitteeId) ->
-                    TestPid ! {probe_started, Key, self()},
-                    receive never -> {error, impossible} end
-            end,
-    Deps = dependencies(maps:get(view, F), Reply),
-    {Verifier, VerifierMonitor} = spawn_monitor(
-      fun() -> _ = verify(F, Deps), ok end),
-    Started = collect_started(4, #{}),
-    ProbeMonitors = maps:map(
-                      fun(_Key, Pid) -> erlang:monitor(process, Pid) end,
-                      Started),
-    exit(Verifier, kill),
-    receive
-        {'DOWN', VerifierMonitor, process, Verifier, killed} -> ok
-    after 2000 ->
-        error(verifier_process_survived)
-    end,
-    maps:foreach(
-      fun(Key, Pid) ->
-              Monitor = maps:get(Key, ProbeMonitors),
-              receive
-                  {'DOWN', Monitor, process, Pid, killed} -> ok
-              after 2000 ->
-                  error({orphan_probe, Key})
+many_certification_preserves_aligned_successes_and_retries_test() ->
+    Good = fixture(1),
+    Retry = fixture(1),
+    GoodSource = source(Good),
+    RetrySource = source(Retry),
+    GoodRoute = hd(maps:get(source_routes, Good)),
+    RetryRoute = hd(maps:get(source_routes, Retry)),
+    Deps0 = dependencies(Good, fun(_, _) -> {error, unused} end),
+    Deps = Deps0#{
+      network_identity => fun() -> {ok, maps:get(network_identity, Good)} end,
+      remote =>
+          fun(_OwnerNs, _TargetNs, Key, Endpoint, Request, _Timeout) ->
+              case {Key, Endpoint} of
+                  {GoodKey, GoodEndpoint}
+                    when {GoodKey, [GoodEndpoint]} =:= GoodRoute ->
+                      applied_reply(Good, Key, Request);
+                  {RetryKey, RetryEndpoint}
+                    when {RetryKey, [RetryEndpoint]} =:= RetryRoute ->
+                      {error, not_ready}
               end
-      end, Started).
-
-every_participant_check_runs_concurrently_and_must_succeed_test() ->
-    F = fixture(1),
-    Deps = dependencies(
-             maps:get(view, F),
-             fun(_Key, Request, Target, CommitteeId) ->
-                     applied_reply(Request, Target, CommitteeId)
-             end),
-    Requests = many_requests(F, 2),
+          end},
+    Requests = [{GoodSource, maps:get(claim, Good), maps:get(evidence, Good)},
+                {RetrySource, maps:get(claim, Retry), maps:get(evidence, Retry)}],
     ?assertMatch(
-       {ok, [#{committee_id := _}, #{committee_id := _}]},
-       quod_dtx_current_view:test_verify_applied_many(
-         maps:get(owner_ns, F), Requests, 1000, Deps)),
-    RetryDeps = Deps#{remote =>
-                       fun(_OwnerNs, _TargetNs, _Key, _Endpoint,
-                           _Request, _Timeout) ->
-                               {error, not_ready}
-                       end},
-    ?assertEqual(
-       {error, retry},
-       quod_dtx_current_view:test_verify_applied_many(
-         maps:get(owner_ns, F), Requests, 1000, RetryDeps)).
+       {ok, [{verified, {quod_dtx_applied_certificate, 1, _, _, _, _, _, _, _, _}},
+             retry]},
+       quod_dtx_current_view:test_certify_applied_many(
+         maps:get(owner_ns, Good), Requests, 1000, Deps)).
 
-participant_verification_is_bounded_and_children_follow_caller_death_test() ->
+many_certification_children_follow_caller_death_test() ->
     F = fixture(1),
     Requests = many_requests(F, 2),
-    ?assertEqual(
-       {error, invalid_request},
-       quod_dtx_current_view:test_verify_applied_many(
-         maps:get(owner_ns, F), many_requests(F, 9), 1000,
-         dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))),
     TestPid = self(),
-    BlockedDeps =
-        (dependencies(maps:get(view, F), fun(_, _, _, _) -> false end))#{
-          view =>
-              fun(_Source, _Ref, _Timeout) ->
-                      TestPid ! {many_view_started, self()},
-                      receive never -> {error, impossible} end
-              end},
-    {Verifier, VerifierMonitor} = spawn_monitor(
+    Deps0 = dependencies(F, fun(_, _) -> {error, unused} end),
+    BlockedDeps = Deps0#{remote =>
+                          fun(_OwnerNs, _TargetNs, _Key, _Endpoint,
+                              _Request, _Timeout) ->
+                              TestPid ! {many_probe_started, self()},
+                              receive never -> {error, impossible} end
+                          end},
+    {Certifier, CertifierMonitor} = spawn_monitor(
       fun() ->
-          _ = quod_dtx_current_view:test_verify_applied_many(
+          _ = quod_dtx_current_view:test_certify_applied_many(
                 maps:get(owner_ns, F), Requests, 1000, BlockedDeps),
           ok
       end),
     Children = collect_many_children(2, []),
     ChildMonitors = [{Pid, erlang:monitor(process, Pid)} || Pid <- Children],
-    exit(Verifier, kill),
-    receive
-        {'DOWN', VerifierMonitor, process, Verifier, killed} -> ok
-    after 2000 ->
-        error(many_verifier_survived)
+    exit(Certifier, kill),
+    receive {'DOWN', CertifierMonitor, process, Certifier, killed} -> ok
+    after 2000 -> error(many_certifier_survived)
     end,
     lists:foreach(
       fun({Pid, Monitor}) ->
-          receive
-              {'DOWN', Monitor, process, Pid, killed} -> ok
-          after 2000 ->
-              error({many_child_survived, Pid})
+          receive {'DOWN', Monitor, process, Pid, killed} -> ok
+          after 2000 -> error({many_child_survived, Pid})
           end
       end, ChildMonitors).
 
@@ -611,11 +606,13 @@ pending_begin_is_not_a_validator_quorum_status_test() ->
     after 0 -> ok
     end.
 
-verify(F, Dependencies) ->
-    quod_dtx_current_view:test_verify_applied(
-      maps:get(owner_ns, F),
-      {remote, maps:get(source_routes, F)},
-      maps:get(claim, F), 1000, Dependencies).
+certify(F, Dependencies) ->
+    quod_dtx_current_view:test_certify_applied(
+      maps:get(owner_ns, F), source(F), maps:get(claim, F),
+      maps:get(evidence, F), 1000, Dependencies).
+
+source(F) ->
+    {remote, maps:get(source_routes, F)}.
 
 lookup(F, OutcomeRef, Dependencies) ->
     quod_dtx_current_view:test_lookup_outcome(
@@ -624,23 +621,25 @@ lookup(F, OutcomeRef, Dependencies) ->
       OutcomeRef, 1000, Dependencies).
 
 many_requests(F, Count) ->
-    Source = {remote, maps:get(source_routes, F)},
-    lists:duplicate(Count, {Source, maps:get(claim, F)}).
+    lists:duplicate(
+      Count, {source(F), maps:get(claim, F), maps:get(evidence, F)}).
 
-dependencies(View, Reply) ->
+dependencies(F, Reply) ->
+    View = maps:get(view, F),
     #{view => fun(_Source, _Ref, _Timeout) -> {ok, View} end,
       local =>
           fun(_Ns, Request, _Timeout) ->
                   [Key | _] = maps:get(committee, View),
-                  Reply(Key, Request, maps:get(identity, View),
-                        maps:get(committee_id, View))
+                  Reply(Key, Request)
           end,
       remote =>
           fun(_OwnerNs, _TargetNs, Key, _Endpoint, Request, _Timeout) ->
-                  Reply(Key, Request, maps:get(identity, View),
-                        maps:get(committee_id, View))
+                  Reply(Key, Request)
           end,
-      node_key => fun() -> none end}.
+      resolve => fun(_Key) -> error end,
+      node_key => fun() -> none end,
+      network_identity =>
+          fun() -> {ok, maps:get(network_identity, F)} end}.
 
 outcome_dependencies(View, Reply) ->
     #{view => fun(_Source, _Basis, _Timeout) -> {ok, View} end,
@@ -655,18 +654,19 @@ outcome_dependencies(View, Reply) ->
                   Reply(Key, Request, maps:get(identity, View),
                         maps:get(committee_id, View), maps:get(slot, View))
           end,
+      resolve => fun(_Key) -> error end,
       node_key => fun() -> none end}.
 
 outcome_reply(
   {outcome, RequestId, _OutcomeRef, _CommitteeId, _MinimumSlot},
   Target, CommitteeId, AppliedFloor, Outcome) ->
-    {ok, {outcome, RequestId, Target, CommitteeId, AppliedFloor, Outcome}}.
+    {ok, {outcome, RequestId, Target, CommitteeId, AppliedFloor, Outcome}, []}.
 
 barrier_reply(
   {outcome_barrier, RequestId, _GroupRef, _CommitteeId, _MinimumSlot},
   Target, CommitteeId, AppliedFloor, Status) ->
     {ok, {outcome_barrier, RequestId, Target, CommitteeId,
-          AppliedFloor, Status}}.
+          AppliedFloor, Status}, []}.
 
 outcome_transaction_ref(F) ->
     {TargetNs, Anchor} = maps:get(identity, maps:get(view, F)),
@@ -688,33 +688,129 @@ group_committed(Ref) ->
           [{{<<"quod:a">>, digest(230)}, 7, 1},
            {{<<"quod:b">>, digest(231)}, 8, 2}]}.
 
+applied_reply(F, Key, Request) when is_binary(Key) ->
+    applied_reply(F, maps:get(Key, maps:get(signers, F)), Request);
 applied_reply(
-  {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict},
-  Target, CommitteeId) ->
+  F, #{pubkey := Signer} = Identity,
+  {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict}) ->
+    Target = maps:get(target, F),
+    CommitteeId = maps:get(committee_id, F),
+    {ok, {Signer, Signature}} = quod_dtx_current_view:sign_applied_vote(
+                                 maps:get(network_identity, F), Target,
+                                 CommitteeId, GroupId, FinalizeRef,
+                                 Generation, Verdict, Identity),
     {ok, {applied, RequestId, Target, CommitteeId, GroupId, FinalizeRef,
-          Generation, Verdict}}.
+          Generation, Verdict, Signer, Signature}, []}.
 
 fixture(N) ->
     OwnerNs = <<"quod:owner">>,
     Target = {<<"quod:target">>, digest(1)},
-    Committee = lists:sort([digest(I) || I <- lists:seq(10, 9 + N)]),
+    SignerRows = [signer() || _ <- lists:seq(1, N)],
+    Signers = maps:from_list(
+                [{maps:get(pubkey, Signer), Signer} || Signer <- SignerRows]),
+    Committee = lists:sort(maps:keys(Signers)),
     CommitteeId = digest(2),
+    NetworkIdentity = digest(250),
     RouteMap = maps:from_list(
                [{Key, {"127.0.0.1", 20000 + I}}
                 || {Key, I} <- lists:zip(Committee, lists:seq(1, N))]),
     Routes = [{Key, [Endpoint]}
               || {Key, Endpoint} <- maps:to_list(RouteMap)],
-    {TargetNs, Anchor} = Target,
-    {ok, FinalizeRef} = quod_dtx:certified_ref(
-                          TargetNs, Anchor, 7, digest(3), digest(4), <<1>>),
-    Claim = #{target => Target, group_id => digest(5),
-              finalize_ref => FinalizeRef, generation => 9,
+    GroupId = digest(5),
+    Generation = 9,
+    Verdict = commit,
+    {Evidence, FinalizeRef} = finalize_evidence(
+                                Target, GroupId, Generation, Verdict,
+                                Committee, CommitteeId, RouteMap,
+                                hd(SignerRows)),
+    Claim = #{target => Target, group_id => GroupId,
+              finalize_ref => FinalizeRef, generation => Generation,
               verdict => commit},
     View = #{identity => Target, slot => 8, generation => 9,
              committee => Committee, committee_id => CommitteeId,
              route_candidates => Routes},
-    #{owner_ns => OwnerNs, claim => Claim, view => View,
-      committee => Committee, source_routes => Routes}.
+    #{owner_ns => OwnerNs, target => Target, claim => Claim,
+      evidence => Evidence, view => View, committee => Committee,
+      committee_id => CommitteeId, source_routes => Routes,
+      signers => Signers, network_identity => NetworkIdentity}.
+
+finalize_evidence(Target, GroupId, Generation, Verdict,
+                  Committee, CommitteeId, Routes, ControlSigner) ->
+    DecisionRef = certified_ref({<<"quod:origin">>, digest(6)}, 2, digest(7)),
+    PrepareRef = certified_ref(Target, 3, digest(8)),
+    {ok, Finalize} = quod_dtx:new_finalize(
+                       GroupId, DecisionRef, Verdict, PrepareRef, Generation),
+    {ok, Control} = quod_dtx:sign_control(
+                      Target, Finalize, digest(9), 1, 1, ControlSigner),
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    Slot = 7,
+    Payload = {batch, [{dtx, Blob}]},
+    Block = #block{slot = Slot, parent = Slot - 1,
+                   payload = Payload, timestamp = 0},
+    BlockHash = quod_simplex:block_hash(Block),
+    Entry = #entry{index = Slot, data = Payload,
+                   cert = #cert{kind = commit, slot = Slot,
+                                block_hash = BlockHash, sigs = []}},
+    {ok, FinalizeRef} = quod_dtx:certified_entry_ref(Target, Entry, Control),
+    {#{identity => Target, phase => finalize, control => Control,
+       entry => Entry, committee => Committee, committee_id => CommitteeId,
+       routes => Routes},
+     FinalizeRef}.
+
+certificate(F, Keys, Overrides) ->
+    Signers = maps:get(signers, F),
+    certificate_with_signers(
+      F, [maps:get(Key, Signers) || Key <- Keys], Overrides).
+
+certificate_with_signers(F, Signers, Overrides) ->
+    Binding = certificate_binding(F, Overrides),
+    Rows = lists:keysort(
+             1, [signed_row_with_signer(Binding, Signer)
+                 || Signer <- Signers]),
+    #{network_identity := NetworkIdentity, target := Target,
+      committee_id := CommitteeId, group_id := GroupId,
+      finalize_ref := FinalizeRef, generation := Generation,
+      verdict := Verdict} = Binding,
+    {quod_dtx_applied_certificate, 1, NetworkIdentity, Target, CommitteeId,
+     GroupId, FinalizeRef, Generation, Verdict, Rows}.
+
+certificate_binding(F, Overrides) ->
+    Claim = maps:get(claim, F),
+    maps:merge(
+      #{network_identity => maps:get(network_identity, F),
+        target => maps:get(target, F),
+        committee_id => maps:get(committee_id, F),
+        group_id => maps:get(group_id, Claim),
+        finalize_ref => maps:get(finalize_ref, Claim),
+        generation => maps:get(generation, Claim),
+        verdict => maps:get(verdict, Claim)},
+      Overrides).
+
+signed_row(F, Key, Overrides) ->
+    signed_row_with_signer(
+      certificate_binding(F, Overrides),
+      maps:get(Key, maps:get(signers, F))).
+
+signed_row_with_signer(
+  #{network_identity := NetworkIdentity, target := Target,
+    committee_id := CommitteeId, group_id := GroupId,
+    finalize_ref := FinalizeRef, generation := Generation,
+    verdict := Verdict},
+  Signer) ->
+    {ok, Row} = quod_dtx_current_view:sign_applied_vote(
+                  NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+                  Generation, Verdict, Signer),
+    Row.
+
+signer() ->
+    {Pub, Seed} = quod_identity:generate(),
+    #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}.
+
+certified_ref({Ns, Anchor}, Slot, Digest) ->
+    {ok, Ref} = quod_dtx:certified_ref(
+                  Ns, Anchor, Slot, digest(240), Digest,
+                  term_to_binary({qc, Slot}, [deterministic])),
+    Ref.
 
 collect_started(0, Acc) ->
     Acc;
@@ -730,7 +826,7 @@ collect_many_children(0, Acc) ->
     Acc;
 collect_many_children(Left, Acc) ->
     receive
-        {many_view_started, Pid} ->
+        {many_probe_started, Pid} ->
             collect_many_children(Left - 1, [Pid | Acc])
     after 2000 ->
         error({missing_many_children, Left})

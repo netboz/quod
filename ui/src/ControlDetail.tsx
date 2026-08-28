@@ -1,9 +1,9 @@
-import type { Block, Control } from './api'
+import type { Control } from './api'
 import { shortHex, timestamp } from './format'
+import type { LiveControl } from './store'
 
-export function ControlDetail({ ns, block, onClose }: { ns: string; block: Block; onClose: () => void }) {
-  const control = block.control
-  if (!control) return null
+export function ControlDetail({ row, onClose }: { row: LiveControl; onClose: () => void }) {
+  const control = row.control
   return (
     <aside className="flex h-full flex-col overflow-y-auto rounded-xl border border-gray/25 bg-white shadow-sm">
       <header className="flex items-center justify-between border-b border-gray/20 bg-teal px-4 py-3 text-cream">
@@ -16,9 +16,9 @@ export function ControlDetail({ ns, block, onClose }: { ns: string; block: Block
         </button>
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-4 py-3 text-sm">
-        <Dt>Ontology</Dt><dd className="font-mono">{ns}</dd>
-        <Dt>Height</Dt><dd className="font-mono text-teal-light">#{block.slot}</dd>
-        <Dt>Block time</Dt><dd>{timestamp(block.time)}</dd>
+        <Dt>Ontology</Dt><dd className="font-mono">{row.ns}</dd>
+        <Dt>Height</Dt><dd className="font-mono text-teal-light">#{row.height}</dd>
+        <Dt>Block time</Dt><dd>{timestamp(row.time)}</dd>
         <Dt>Group id</Dt><dd className="font-mono text-xs break-all">{control.group_id}</dd>
         <Dt>Record digest</Dt><dd className="font-mono text-xs break-all text-gray">{control.record_digest}</dd>
         <Dt>Target</Dt>

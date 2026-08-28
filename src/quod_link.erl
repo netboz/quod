@@ -37,14 +37,17 @@ dead, unreachable, or wrongly authenticated peer fail to come up.
 
 -ifdef(TEST).
 -export([header/3, parse_header/1, frame/1, parse/1,
-         test_fail_next_ordered/2]).
+         test_fail_next_ordered/2, test_transport/1]).
 -endif.
 
 -define(HEADER_TIMEOUT_MS, 5000).
 -define(ACK_TIMEOUT_MS, 5000).   %% opener waits this long for the peer's ACK before failing the link
--define(ORDERED_SEND_TIMEOUT_MS, 250).
-
--record(s, {conn, sid, channel, peer, buf = <<>>}).
+-record(s, {conn, sid, channel, peer, direction, buf = <<>>,
+            %% One mailbox-ordered send FIFO. An ordered/reliable frame at its
+            %% head parks until quod_conn forwards QUIC's exact send_ready for
+            %% this stream; successors cannot pass it.
+            sendq = {[], []},
+            send_wait = none}). %% none | {Token, TimerRef}
 
 -doc "Extract the authenticated key from either transport identity shape.".
 -spec peer_key(term()) -> <<_:256>> | undefined.
@@ -53,8 +56,8 @@ peer_key({<<_:256>> = PeerKey, _Endpoint}) -> PeerKey;
 peer_key(_Malformed) -> undefined.
 
 -ifdef(TEST).
--define(ORDERED_SEND_RESULT(Conn, Sid, Frame, Deadline),
-        test_ordered_send_result(Conn, Sid, Frame, Deadline)).
+-define(ORDERED_SEND_RESULT(Conn, Sid, Frame),
+        test_ordered_send_result(Conn, Sid, Frame)).
 -define(TEST_ORDERED_FAILURE_KEY,
         {?MODULE, test_ordered_failure}).
 -define(OTHER_LOOP_CLAUSES(S),
@@ -62,11 +65,14 @@ peer_key(_Malformed) -> undefined.
             _ = put(?TEST_ORDERED_FAILURE_KEY, Reason),
             From ! {Ref, armed},
             loop(S);
+        {test_transport, From, Ref} ->
+            From ! {Ref, {S#s.conn, S#s.sid}},
+            loop(S);
         _Other ->
             loop(S)).
 -else.
--define(ORDERED_SEND_RESULT(Conn, Sid, Frame, Deadline),
-        send_until_accepted(Conn, Sid, Frame, Deadline)).
+-define(ORDERED_SEND_RESULT(Conn, Sid, Frame),
+        send_once(Conn, Sid, Frame)).
 -define(OTHER_LOOP_CLAUSES(S),
         _Other ->
             loop(S)).
@@ -84,7 +90,9 @@ to the holder) — a write alone is never treated as liveness.
 start_outbound(Conn, Sid, Peer, Channel, Self, ConnProc, LearnHint) ->
     spawn(fun() ->
         _ = quic:send_data(Conn, Sid, header(Self, Channel, LearnHint), false),
-        await_ack(ConnProc, <<>>, #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer})
+        await_ack(ConnProc, <<>>,
+                  #s{conn = Conn, sid = Sid, channel = Channel,
+                     peer = Peer, direction = out})
     end).
 
 %% Wait for the peer's first frame (its ACK that it authenticated our header)
@@ -123,10 +131,11 @@ send(LinkPid, Payload) ->
 
 -doc """
 Queue a payload whose successors must never pass it if local QUIC backpressure
-refuses the frame. The link retries transient refusal in mailbox order; if the
-frame is still not accepted within the bound, the link exits so every queued
-successor is discarded and its owner can reconnect and reconstruct the ordered
-prefix from retained state.
+refuses the frame. The link retries transient refusal in mailbox order when
+QUIC reports progress. If the transport remains silent for its configured
+connection-idle bound, the link exits so every queued successor is discarded
+and its owner can reconnect and reconstruct the ordered prefix from retained
+state. The timer detects terminal silence; it never discovers normal progress.
 """.
 -spec send_ordered(pid(), iodata()) -> ok.
 send_ordered(LinkPid, Payload) ->
@@ -149,6 +158,18 @@ test_fail_next_ordered(LinkPid, Reason) ->
             {error, DownReason}
     after 1000 ->
         demonitor(MRef, [flush]),
+        {error, timeout}
+    end.
+
+%% Return the real QUIC connection and stream id so transport integration tests
+%% can inject the library's documented send_ready event at quod_conn and verify
+%% that it reaches this exact link. TEST-only: no runtime inspection API.
+test_transport(LinkPid) ->
+    Ref = make_ref(),
+    LinkPid ! {test_transport, self(), Ref},
+    receive
+        {Ref, Transport} -> {ok, Transport}
+    after 1000 ->
         {error, timeout}
     end.
 -endif.
@@ -210,7 +231,8 @@ await_header_auth(Conn, Sid, ConnProc, Ref, Peer, Channel, Rest) ->
     receive
         {link_authenticated, ConnProc, Ref} ->
             _ = quic:send_data(Conn, Sid, ack_frame(), false),
-            S = #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer},
+            S = #s{conn = Conn, sid = Sid, channel = Channel,
+                   peer = Peer, direction = in},
             loop(loop_msgs(Rest, S));
         close ->
             exit(normal)
@@ -223,76 +245,175 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
         {data, Bin, _Fin} ->
             loop(loop_msgs(Bin, S));
         {send, Payload} ->
-            %% Do not ACT on the return: it includes TRANSIENT backpressure
-            %% ({flow_control_blocked,_}, send_queue_full) that must NOT tear the link
-            %% down — doing so churns links under load. A genuinely dead stream/connection
-            %% kills this (linked) process via quod_conn, which is the real disconnect
-            %% signal. But COUNT every refusal: a dropped frame only exists again once
-            %% some layer's recovery timer repairs it, so the drop rate is the hidden
-            %% pacemaker of consensus latency and must be visible per receiving peer.
-            case quic:send_data(Conn, Sid, frame(Payload), false) of
-                ok              -> ok;
-                {error, Reason} ->
-                    quod_metrics:count_link_send_drop(
-                      S#s.peer, S#s.channel, Reason)
-            end,
-            loop(S);
+            loop(enqueue_send({best_effort, frame(Payload)}, S));
         {send_ordered, Payload} ->
-            Deadline =
-                erlang:monotonic_time(millisecond)
-                + ?ORDERED_SEND_TIMEOUT_MS,
-            case ?ORDERED_SEND_RESULT(
-                    Conn, Sid, frame(Payload), Deadline) of
-                ok ->
-                    loop(S);
-                {error, Reason} ->
-                    quod_metrics:count_link_send_drop(
-                      S#s.peer, S#s.channel, Reason),
-                    _ = catch quic:reset_stream(Conn, Sid, 0),
-                    exit({ordered_send_failed, Reason})
-            end;
+            loop(enqueue_send({ordered, frame(Payload)}, S));
         {send_reliable, From, Ref, Payload, Deadline} ->
-            Result = send_until_accepted(Conn, Sid, frame(Payload), Deadline),
-            From ! {Ref, Result},
+            loop(enqueue_send(
+                   {reliable, From, Ref, frame(Payload), Deadline}, S));
+        {send_ready, Sid} ->
+            loop(resume_sends(S));
+        {send_deadline, Token} ->
+            loop(send_deadline(Token, S));
+        {reset_inbound_channel, Channel}
+          when S#s.direction =:= in, S#s.channel =:= Channel ->
+            %% The runtime owner of this inbound channel restarted and lost
+            %% volatile peer registrations. Reset only this peer-opened stream;
+            %% its source observes DOWN and reconnects/re-registers.
+            _ = quic:reset_stream(Conn, Sid, 0),
+            reply_queued_reliable({error, channel_owner_restarted}, S),
+            cancel_send_timer(S),
+            exit(normal);
+        {reset_inbound_channel, _OtherChannel} ->
             loop(S);
         close ->
             _ = quic:reset_stream(Conn, Sid, 0),
+            reply_queued_reliable({error, closed}, S),
+            cancel_send_timer(S),
             exit(normal);
         ?OTHER_LOOP_CLAUSES(S)
     end.
 
 -ifdef(TEST).
-test_ordered_send_result(Conn, Sid, Frame, Deadline) ->
+test_ordered_send_result(Conn, Sid, Frame) ->
     case erase(?TEST_ORDERED_FAILURE_KEY) of
         undefined ->
-            send_until_accepted(Conn, Sid, Frame, Deadline);
+            send_once(Conn, Sid, Frame);
         Reason ->
             {error, Reason}
     end.
 -endif.
 
-send_until_accepted(Conn, Sid, Frame, Deadline) ->
-    case erlang:monotonic_time(millisecond) < Deadline of
-        false ->
-            {error, backpressure_timeout};
-        true ->
-            case catch quic:send_data(Conn, Sid, Frame, false) of
+enqueue_send(Item, S = #s{sendq = Q0}) ->
+    drain_sends(S#s{sendq = queue:in(Item, Q0)}).
+
+%% Try each accepted frame once. Transient QUIC refusal parks the FIFO head;
+%% progress resumes only from the transport's send_ready message. There is no
+%% retry loop and the link remains free to receive data, close, and DOWN events.
+drain_sends(S = #s{send_wait = {_Token, _TimerRef}}) ->
+    S;
+drain_sends(S = #s{sendq = Q0}) ->
+    case queue:peek(Q0) of
+        empty ->
+            S;
+        {value, Item} ->
+            case send_item(Item, S) of
                 ok ->
-                    ok;
-                {error, {flow_control_blocked, _}} ->
-                    retry_send(Conn, Sid, Frame, Deadline);
-                {error, send_queue_full} ->
-                    retry_send(Conn, Sid, Frame, Deadline);
-                {error, Reason} ->
-                    {error, Reason};
-                {'EXIT', Reason} ->
-                    {error, Reason}
+                    sent_item(Item),
+                    {{value, _}, Q1} = queue:out(Q0),
+                    drain_sends(S#s{sendq = Q1});
+                {blocked, best_effort, Reason} ->
+                    count_drop(Reason, S),
+                    {{value, _}, Q1} = queue:out(Q0),
+                    drain_sends(S#s{sendq = Q1});
+                {blocked, _Protected, _Reason} ->
+                    park_send(Item, S);
+                {error, ordered, Reason} ->
+                    ordered_send_failed(Reason, S);
+                {error, best_effort, Reason} ->
+                    count_drop(Reason, S),
+                    {{value, _}, Q1} = queue:out(Q0),
+                    drain_sends(S#s{sendq = Q1});
+                {error, reliable, Reason} ->
+                    reliable_result(Item, {error, Reason}),
+                    {{value, _}, Q1} = queue:out(Q0),
+                    drain_sends(S#s{sendq = Q1})
             end
     end.
 
-retry_send(Conn, Sid, Frame, Deadline) ->
-    timer:sleep(2),
-    send_until_accepted(Conn, Sid, Frame, Deadline).
+send_item({ordered, Frame}, #s{conn = Conn, sid = Sid}) ->
+    classify_send(ordered, ?ORDERED_SEND_RESULT(Conn, Sid, Frame));
+send_item({best_effort, Frame}, #s{conn = Conn, sid = Sid}) ->
+    classify_send(best_effort, send_once(Conn, Sid, Frame));
+send_item({reliable, _From, _Ref, Frame, Deadline},
+          #s{conn = Conn, sid = Sid}) ->
+    case erlang:monotonic_time(millisecond) < Deadline of
+        true -> classify_send(reliable, send_once(Conn, Sid, Frame));
+        false -> {error, reliable, backpressure_timeout}
+    end.
+
+send_once(Conn, Sid, Frame) ->
+    case catch quic:send_data(Conn, Sid, Frame, false) of
+        ok -> ok;
+        {error, Reason} -> {error, Reason};
+        {'EXIT', Reason} -> {error, Reason}
+    end.
+
+classify_send(_Kind, ok) ->
+    ok;
+classify_send(Kind, {error, {flow_control_blocked, _} = Reason}) ->
+    {blocked, Kind, Reason};
+classify_send(Kind, {error, send_queue_full}) ->
+    {blocked, Kind, send_queue_full};
+classify_send(Kind, {error, Reason}) ->
+    {error, Kind, Reason}.
+
+sent_item({reliable, From, Ref, _Frame, _Deadline}) ->
+    From ! {Ref, ok};
+sent_item(_Item) ->
+    ok.
+
+reliable_result({reliable, From, Ref, _Frame, _Deadline}, Result) ->
+    From ! {Ref, Result};
+reliable_result(_Item, _Result) ->
+    ok.
+
+park_send(Item, S) ->
+    Delay = send_silence_timeout(Item),
+    Token = make_ref(),
+    TimerRef = erlang:send_after(Delay, self(), {send_deadline, Token}),
+    S#s{send_wait = {Token, TimerRef}}.
+
+send_silence_timeout({ordered, _Frame}) ->
+    %% Reuse the operator-owned transport failure bound. Normal progress wakes
+    %% this link through send_ready; this is only the final silent-transport
+    %% safeguard and must not become a short polling/retry cadence.
+    maps:get(idle_timeout, quod_quic:liveness_opts());
+send_silence_timeout({reliable, _From, _Ref, _Frame, Deadline}) ->
+    max(0, Deadline - erlang:monotonic_time(millisecond)).
+
+resume_sends(S = #s{send_wait = none}) ->
+    S;
+resume_sends(S) ->
+    cancel_send_timer(S),
+    drain_sends(S#s{send_wait = none}).
+
+send_deadline(Token, S = #s{send_wait = {Token, _TimerRef}, sendq = Q0}) ->
+    case queue:peek(Q0) of
+        {value, {ordered, _Frame}} ->
+            ordered_send_failed(backpressure_timeout,
+                                S#s{send_wait = none});
+        {value, {reliable, _From, _Ref, _Frame, _Deadline} = Item} ->
+            reliable_result(Item, {error, backpressure_timeout}),
+            {{value, _}, Q1} = queue:out(Q0),
+            drain_sends(S#s{sendq = Q1, send_wait = none});
+        _ ->
+            S#s{send_wait = none}
+    end;
+send_deadline(_StaleToken, S) ->
+    S.
+
+ordered_send_failed(Reason, S = #s{conn = Conn, sid = Sid}) ->
+    count_drop(Reason, S),
+    reply_queued_reliable({error, {ordered_send_failed, Reason}}, S),
+    cancel_send_timer(S),
+    _ = catch quic:reset_stream(Conn, Sid, 0),
+    exit({ordered_send_failed, Reason}).
+
+reply_queued_reliable(Result, #s{sendq = Q}) ->
+    lists:foreach(
+      fun(Item) -> reliable_result(Item, Result) end,
+      queue:to_list(Q)),
+    ok.
+
+count_drop(Reason, #s{peer = Peer, channel = Channel}) ->
+    quod_metrics:count_link_send_drop(Peer, Channel, Reason).
+
+cancel_send_timer(#s{send_wait = {_Token, TimerRef}}) ->
+    _ = erlang:cancel_timer(TimerRef, [{async, false}, {info, false}]),
+    ok;
+cancel_send_timer(#s{send_wait = none}) ->
+    ok.
 
 %% append bytes, publish every complete payload frame, keep the remainder
 loop_msgs(Data, S = #s{buf = Buf, peer = Peer, channel = Ch}) ->

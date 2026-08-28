@@ -145,7 +145,7 @@ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
     Ns = <<"quod:scope-guard-reply">>,
     Table = 'quod_simplex_genesis_quod:scope-guard-reply',
     Tab = ets:new(Table, [named_table, protected, set]),
-    true = ets:insert(Tab, quod_ct:proof_gate_row(true, open, 7, none)),
+    true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     ScopeId = id(96),
     ProofId = key(97),
     Anchor = key(98),
@@ -172,7 +172,7 @@ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
         true = ets:insert(
                  Tab,
                  quod_ct:proof_gate_row(
-                   true, {pending, GroupId}, 7, GroupId)),
+                   true, 7, [{GroupId, 1, 7}])),
         {ok, NextRef} = quod_scope_session:invoke_next(
                           Handle, InvocationId, 1),
         ?assertEqual(

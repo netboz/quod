@@ -88,7 +88,7 @@ gap and declared the tree safe to commit.
 
 ## 2026-07-27 — retained custody implemented
 
-Ordinary content writes now enter bounded origin custody immediately after
+Ordinary content writes now enter origin custody immediately after
 signing. Slot exclusion retires only the placement: after the origin durably
 applies the finalized prefix and adopts any committee change, it places the
 same signed submission at the next earliest usable proposer. The caller sees
@@ -96,7 +96,7 @@ neither a slot-closure retry nor a newly signed transaction. Membership changes
 remain the deliberately terminal re-proof class.
 
 The source keeps one ordered author prefix outside the generic consensus
-outbox. Link-up and redrive reconstruct that full prefix in author-sequence
+outbox. Link-up and exact ownership changes reconstruct that full prefix in author-sequence
 order. Ordered link sends either enter their dedicated relay stream in mailbox
 order or reset it, so a later sequence cannot pass a locally dropped
 predecessor. Recovery resets only affected relay generations, removes
@@ -354,13 +354,13 @@ pre-positioning misses (frontier spread ≫ horizon 2) and why the busiest hosts
 registry+Tempo+3 allocs) lag most: a busy BEAM reads sockets slowly → flow-control
 pressure → more drops.
 
-**Direction (Yan to approve): transport reliability BEFORE any more consensus-layer work.**
-The link already has an unused bounded in-link retry (`send_until_accepted` in
-quod_link's `send_reliable`); consensus/relay frames need either that or backpressure
-signalling to the sender. Gossip-mempool (CometBFT-style tx flooding — researched, right
-long-term shape) fixes routing hops (~ms), NOT the seconds; it moves to second place.
-Sequence: fix frame loss → re-measure honest baseline → THEN judge mempool/tenure/pipeline
-against a floor that reflects the network instead of the timers.
+**Historical direction chosen:** transport reliability before more consensus-layer work.
+At that point the link still contained the bounded `send_until_accepted` retry helper.
+The 0.7.100 transport work deletes that timer-driven helper and wakes the ordered sender
+from QUIC flow-control readiness instead. Gossip-mempool (CometBFT-style tx flooding —
+researched, right long-term shape) fixes routing hops (~ms), not the seconds; it remains a
+separate follow-up to judge against a transport floor that reflects the network rather
+than retry timers.
 
 ---
 

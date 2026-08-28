@@ -260,6 +260,15 @@ ask_test_() ->
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),
     {Pub, Seed} = quod_identity:generate(),
+    PreviousDesired = application:get_env(quod, namespace_desired),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    Content0 = maps:get(content, Desired0, #{}),
+    NetworkIdentity = crypto:strong_rand_bytes(32),
+    application:set_env(
+      quod, namespace_desired,
+      Desired0#{content =>
+                    Content0#{quod_ontology:root_ns() =>
+                                  #{genesis_hash => NetworkIdentity}}}),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(quod, identity_key, quod_identity:key_term({Pub, Seed})),
     {ok, Router} = quod_ask_router:start_link(),
@@ -328,16 +337,23 @@ setup() ->
     _ = prove_ready(Private, {secret, 42}),
     _ = prove_ready(Slow, {ping, ok}),
     #{dir => Dir, router => Router, foreign_log => ForeignLog,
+      previous_desired => PreviousDesired,
       namespaces => Namespaces, animals => A, pets => P,
       private => Private, slow => Slow, chain_b => ChainB, chain_c => ChainC}.
 
 cleanup(#{dir := Dir, router := Router, foreign_log := ForeignLog,
-          namespaces := Namespaces}) ->
+          previous_desired := PreviousDesired, namespaces := Namespaces}) ->
     lists:foreach(fun stop_ns/1, Namespaces),
     _ = catch gen_server:stop(ForeignLog),
     _ = catch gen_server:stop(Router),
     application:unset_env(quod, node_pubkey),
     application:unset_env(quod, identity_key),
+    case PreviousDesired of
+        {ok, Desired} ->
+            application:set_env(quod, namespace_desired, Desired);
+        undefined ->
+            application:unset_env(quod, namespace_desired)
+    end,
     _ = file:del_dir_r(Dir),
     ok.
 
@@ -1028,8 +1044,8 @@ prove_group(Ns, Goal, Watched) ->
 
 group_diagnostic(Ns) ->
     Status = quod_simplex:status(Ns),
-    case maps:get(dtx_coordinator, Status, none) of
-        #{group_id := <<_:256>> = GroupId} ->
+    case maps:to_list(maps:get(dtx_coordinators, Status, #{})) of
+        [{GroupId, _}] when is_binary(GroupId), byte_size(GroupId) =:= 32 ->
             #{simplex => Status,
               prolog => quod_prolog:dtx_group_state(Ns, GroupId)};
         _ ->

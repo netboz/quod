@@ -516,7 +516,8 @@ otherwise the transaction is deterministically rejected as
 `policy_self_seal_forbidden`. This examines the final state, so one transaction
 may atomically replace its last policy clause. A distributed participant makes
 the same pure check against its pinned parent during Prepare, before recording
-the hidden plan; its namespace lock then preserves the result through Finalize.
+the hidden plan; its exact signed write/conflict descriptor then prevents an
+overlapping plan from intervening before Finalize.
 Replay/catch-up takes the same ordinary or distributed apply path. Retractions
 produced by `abolish/1` need no exception. The check is a small `quod_diff`
 helper over the already-built immutable state, not a Prolog proof or operator
@@ -608,23 +609,23 @@ codec seam:
 | one actively deriving step | existing configurable 30,000 ms |
 | one transport frame | existing 1 MiB |
 | one encoded nested goal / one answer | 8 KiB / 64 KiB |
-| one session command/reply envelope | 128 KiB |
+| one session command/reply envelope | derived from the largest exact signed operation submission plus bounded scope metadata (currently 271,488 bytes) |
 | one failure reason / complete reason stack / retained entries / diagnostic choice-point boundaries | existing 4 KiB / 32 KiB / 256 / 256 |
 | one scope invocation transcript | 12 KiB |
 | one signed local-plan envelope | 24 KiB |
 | top-level goal bytes / durable selected-result bytes | 8 KiB / 16 KiB |
 | complete Begin manifest, plans, goal and result | 224 KiB |
 | one Complete target/finalize-reference set | 224 KiB |
-| one Begin/Prepare/Decision/Finalize/Complete record and singleton block | existing 256 KiB |
+| one Begin/Prepare/Decision/Finalize/Complete record and its canonical control-wave block | existing 256 KiB block bound |
 | diff operations or read-set functors in one local plan | 1,024 each, also subject to the 24 KiB plan cap |
-| ledger-active distributed groups per ontology | 1 (namespace-exclusive first slice) |
+| ledger-active distributed groups per ontology | no compiled population cap; exact conflict descriptors and the block-byte bound govern admission |
 | volatile pre-Begin registrations waiting per local ontology/validator | existing configurable proof-worker capacity and deadline; no separate handoff quota |
-| accepted dormant Begin intent per local ontology/validator | 1 |
+| accepted dormant Begin intents per local ontology/validator | one exact row per group; no separate compiled population cap |
 | terminal group entries retained in memory | 4,096 |
 | pending foreign-log verifications global / per authenticated peer | 32 / 4 |
 | catch-up read workers per hosted ontology / entries per page / response bytes | 32 / 256 / 900 KiB |
-| pending exact group-phase lookups per ontology | 2, one per depth-one live pipeline slot |
-| outgoing DTX endpoint correlations / inbound endpoint workers per ontology | 512 (`8 participants * 64 validators`) / 8 |
+| pending exact group-phase lookups per ontology | governed by the shared foreign-history owner and caller deadlines; no DTX-specific count cap |
+| outgoing DTX endpoint correlations / inbound endpoint workers per ontology | no compiled population cap; each exact live request is owned by its caller deadline and monitored worker |
 | cached foreign ontology histories / total cache bytes | no protocol population ceiling; dormant disk caches reopen lazily and operator storage monitoring remains operational policy |
 | validators in one committee | 64 |
 
@@ -632,11 +633,11 @@ The same constants are used by schema, producer, decoder, validator, replay,
 and tests; there are no duplicated magic values. A potentially writable goal is
 charged to its transcript/plan budget before it runs, so a valid invocation
 cannot succeed and only then discover that its own goal was intrinsically
-unsealable. Several proof-owned registrations may wait before signing, but only
-one may become the accepted dormant intent. That accepted intent, its activated
-successor, and its journaled envelope are one lifecycle and are never counted
-as three entries. The maximum eight-row canonical Complete body plus its generic
-DTX author envelope must encode at or below the 256 KiB singleton-block ceiling;
+unsealable. Several proof-owned registrations may wait before signing, and
+accepted custody is keyed independently by `GroupId`. Each intent, its
+activated successor, and its journaled envelope remain one lifecycle. The
+maximum eight-row canonical Complete body plus its generic DTX author envelope
+must encode inside a canonical control wave at or below the 256 KiB block ceiling;
 the 224 KiB body cap leaves the fixed envelope margin, and boundary/boundary+1
 tests pin that inequality. Every transaction-entry and transaction-mode choice-point
 generation that has crossed an ontology boundary counts against the 1,024
@@ -791,8 +792,10 @@ signed read dependency is stale by construction and would be rejected against
 the next published parent anyway, so no batch splitting or payload-order rule
 exists and producers batch freely. Multiple blind writes may remain ordered in
 one batch, and a transaction may read what it writes itself (its own writes
-stage only after its validation). A singleton Prepare already has no same-block
-predecessor.
+stage only after its validation). Same-phase DTX controls may share a canonical
+wave; validation folds them in signed lane order through the same transition
+reducer, so each control sees the exact projection produced by its predecessors
+in that wave.
 
 Every hard-break signature binds the identity needed for its own lifetime.
 An ordinary transaction binds
@@ -864,7 +867,7 @@ As built in this Step-4 slice (`quod_dtx`), with the same binding properties:
   executes, but every participant can re-prove the exact decision whose result
   changed the caller's control flow against the absorbed policy read set.
 - The plan envelope is `{quod_plan, Core, Signer, Signature}` under the current
-  witness domain `quod.dtx.plan` V6; `Core`'s
+  witness domain `quod.dtx.plan` V8; `Core`'s
   diff/read-check/transcript values are
   nested deterministic ETF binaries, so the origin verifies the signature and
   outer shape without ever allocating another ontology's atoms.
@@ -887,9 +890,9 @@ All scopes whose reads influenced a writing proof participate, including a
 scope with an empty local diff. Otherwise a premise in B could change while A
 and C commit. If every diff is empty, the proof returns directly from its pinned
 views and creates no ledger entry or ordinary OCC pass, matching today's local
-frozen-read semantics. It still resolves the accumulated DTX visibility
-fence: every normal selected scope must remain certified-current at return; a
-pending proof fence or stale DTX generation returns
+frozen-read semantics. It still resolves the accumulated DTX visibility state:
+every normal selected scope must remain certified-current at return; an exact
+blocking apply fence or stale proof generation returns
 `transaction_pending(GroupId)` instead of a mixed result. Explicit `prove_ro`
 keeps its separately documented stale-snapshot behavior.
 
@@ -963,8 +966,10 @@ As built:
   and returns `{ok, [Bindings], {transaction, Ns, Anchor, TxId}}` for a
   foreign commit. Two or more participants build one canonical manifest and
   target-signed attestation set, then enter the durable group protocol; the
-  caller remains parked until Complete publishes the terminal result or gets
-  an `outcome_unknown(GroupRef)` recovery handle. Read-only
+  caller remains parked until every required participant application is
+  certified at the pre-Complete terminal boundary, or it gets an
+  `outcome_unknown(GroupRef)` recovery handle. The deterministic Complete then
+  records the durable terminal outcome asynchronously. Read-only
   participants are never discarded or committed unprotected. Isolated unit
   engines (no consensus identity) use the zero-anchor sentinel and never share
   plans across nodes. After sealing and before a potentially blocking submit,
@@ -1018,18 +1023,31 @@ Finalize(commit | abort)
 Complete
 ```
 
-Each ontology has one ledger-active group slot keyed by `GroupId`, with
-independent origin and participant role bits. One shared role transition rule
-governs every phase: Begin requires an empty slot and installs the origin role;
-Prepare either installs the participant role in an empty slot or adds it to an
-existing origin role for the **same** group; Decision and Complete require that
-same group's origin role; and a prepared Finalize requires and releases that
-same group's participant role. A different group can never overwrite or join
-the slot. Its local ingress parks and a proposal against that parent is invalid.
-A certified direct no-Prepare Finalize(abort) is the sole non-role transition:
-it writes only the exact terminal tombstone described in §7.4 and neither reads
-nor occupies the active slot. This rule permits an ontology to coordinate and
-participate in one group without permitting two active groups.
+Each ontology projects an ordered `GroupId => #{origin, participant}` map.
+Origin and participant roles remain independent, and one shared transition
+reducer governs every phase. Begin installs the source role and, when the
+source has material work, applies the exact Prepare policy/reducer there.
+Prepare installs the participant role at remote targets. Decision applies the
+source participant's exact Finalize reducer before advancing the origin role;
+remote Finalize remains unchanged. Complete releases the origin role.
+
+Every sealed material plan carries one signed, atom-safe conflict descriptor
+derived from its exact reads, fact mutations, and typed effect-custody target.
+Events do not conflict. A new participant may coexist with any number of
+independent groups. For an overlap, the deterministic GroupId wait-die rule
+either waits behind the older holder or refuses the younger contender, so
+concurrent Prepare waves cannot form a distributed lock cycle. There is no
+namespace-global group lock and no compiled active-group count cap.
+
+Committed material Finalize/Decision creates an exact per-GroupId apply row.
+Real fact mutations keep that row blocking until the same apply is
+acknowledged; prepared groups alone do not close proof access. A remote
+participant's acknowledgement removes its row. A source-fused Decision keeps
+the exact row as a nonblocking application marker until Complete consumes it,
+so live apply and certified replay use the same transition. Abort/discard
+releases only that group's participant state and does not advance the global
+proof generation. A certified direct no-Prepare Finalize(abort) remains
+metadata-only.
 
 This is a deliberate ledger and signature-format break. There is no old-format
 decoder or migration path.
@@ -1061,7 +1079,7 @@ tolerates; it is never silently folded as content or as the inert skip.
 
 ### 7.1 Begin
 
-The origin ontology commits one singleton barrier containing the exact manifest
+The origin ontology commits one Begin control containing the exact manifest
 and all target-signed local plan envelopes needed for recovery. This prevents a
 coordinator from changing participants or plans after any participant prepares.
 `GroupId` is the domain-separated SHA-256 hash of the canonical semantic Begin
@@ -1082,7 +1100,9 @@ certified origin Decision, never a volatile session clock.
 
 ### 7.2 Prepare
 
-Participants prepare in canonical ontology order. Each participant committee:
+Remote participants prepare concurrently in one canonical same-phase wave.
+Canonical signed-lane ordering makes the reducer result independent of message
+arrival order. Each participant committee:
 
 1. independently verifies the committed Begin witness from the origin's pinned
    genesis;
@@ -1090,56 +1110,40 @@ Participants prepare in canonical ontology order. Each participant committee:
 3. validates the target plan signature and manifest attestation, target author
    membership, every transcript `can_invoke/4` decision, structure, limits,
    membership rules, and local OCC read set against the exact parent state;
-4. applies the shared role rule above against the parent, verifies that the one
-   proof fence is open, then holds only the transient proposal barrier needed to
-   prevent a pipelined ordinary child before this Prepare is decided; a
-   validator-local pending Begin hand-off is independent and does not fail this
-   check;
-5. commits a singleton Prepare containing the complete local plan and Begin
+4. applies the shared role and exact conflict rule above against the parent;
+   independent groups remain ready, while an overlap takes the deterministic
+   wait-die result;
+5. commits a Prepare containing the complete local plan and Begin
    reference;
-6. atomically projects the durable namespace lock and proof-generation fence
-   in Simplex from that committed Prepare, and keeps the diff hidden and
-   unapplied.
+6. atomically installs that GroupId's participant role and conflict descriptor,
+   and keeps the diff hidden and unapplied.
 
-A transient control barrier first seals the current ordinary batch and forbids
-a pipelined child over an uncommitted Prepare; it is not durable lock state. At
-Prepare commit, Simplex's own history reducer makes the namespace lock and its
-protected-ETS proof fence
-effective before it handles another ingress item or proposal; it does not
-synchronously call or drain `quod_prolog`. The committed apply cast reaches
-Prolog in ledger order. A DTX verdict that needs the Prolog parent parks exactly
-like today's membership verdict until that parent is applied.
-Until Finalize commits, the consensus-admission lock refuses/parks **all**
-ordinary content and membership payloads. DTX admission is phase-aware rather
-than a blanket bypass: a same-group Decision may proceed while an origin is
-also a locked participant, and only that prepared participant's matching
-Finalize releases the lock; Complete becomes eligible only after Finalize has
-reopened admission. The same gate is enforced in append collection,
-retained custody/relay re-drive, proposal validation, committed replay, and
-catch-up, so no ingress route or Byzantine proposal can bypass it.
-The sole additional admissible control is a certified direct no-Prepare
-Finalize(abort) for another group: as specified in §7.4 it is an immediately
-applied metadata tombstone and touches no D state, hidden plan, active role,
-proof fence, or generation.
+A transient control barrier seals the current proposal while its wave is being
+decided; it is not durable lock state. At Prepare commit, Simplex's history
+reducer installs the exact group/conflict rows before another ingress item or
+proposal. Ordinary content uses the same exact conflict readiness and may
+continue when disjoint. Same-group legal phases remain ready. A conflicting
+new acquisition waits or is deterministically refused by GroupId order. The
+same rule governs collection, retained custody, proposal validation, replay,
+and catch-up.
 
-At Finalize commit, durable history reopens consensus admission, but the
-shared proof fence remains `transaction_pending(GroupId)` until Prolog has
-applied/published that Finalize and sends an asynchronous applied
-acknowledgment. Simplex handles that acknowledgment as an ordinary event; it
-never waits for the Prolog mailbox. Later committed-entry casts remain FIFO, so
-consensus can progress without exposing the pre-Finalize Prolog snapshot to a
-new proof.
+At committed Finalize, the reducer advances the global proof generation once
+for each applied committed plan. It installs that GroupId's exact blocking
+apply row only when assert/retract operations require publishing changed fact
+state; event-only plans create no blocking row. A source-fused Decision also
+retains its exact slot/generation as a nonblocking marker, including abort and
+event-only source plans. Prolog applies/publishes the snapshot and acknowledges
+the exact row asynchronously; Simplex never drains the Prolog mailbox. The
+source acknowledgement opens proof access but retains the marker until
+Complete. Other groups and independent content remain eligible.
 
 Every scope open, overlay read/mutation, and final return checks the current
-proof-fence state and generation even when its snapshot predates Prepare. Prepare
-invalidates every older scope for that ontology. A locked or stale access
-returns the typed definite `transaction_pending(GroupId)` immediately and
-poisons that pre-Begin proof; there is no hidden mailbox wait or ambiguous
-timeout. A caller may explicitly start a new proof later. This first slice
-deliberately gives up disjoint-functor concurrency for a small, auditable atomic
-contract; per-functor locks are not implemented or left as a half-path.
-They are only a possible measured future concurrency optimization, not deferred
-correctness or functionality.
+generation and exact blocking-fence set even when its snapshot predates Prepare.
+A changed generation invalidates the older scope. An exact blocking fence
+returns `transaction_pending(GroupId)` immediately; there is no hidden mailbox
+wait or ambiguous timeout. A caller may explicitly start a new proof later.
+Disjoint functor/custody descriptors remain concurrent; overlapping work is
+serialized by the one conflict rule rather than a namespace-wide exception.
 
 There is no participant-local timeout abort. Only the origin's certified
 decision can resolve a prepared participant.
@@ -1176,13 +1180,14 @@ and abort decisions for the same group from both becoming valid.
 
 ### 7.4 Finalize
 
-Each manifest participant independently verifies the origin Decision witness
-and commits one matching singleton Finalize:
+Each remote manifest participant independently verifies the origin Decision
+witness and commits one matching Finalize. A material source takes this exact
+reducer transition inside Decision and emits no source-local Finalize:
 
 - commit requires the matching Prepare and durably records the prepared outcome
   plus the certified origin Decision witness needed to reproduce it from this
   participant's own ledger;
-- abort accepts either a matching Prepare or no local Prepare. The former
+- abort accepts either a matching Prepare or no Prepare on that remote target. The former
   records that the hidden plan must be discarded; the latter records a no-op
   terminal tombstone. Both require the certified matching Decision(abort), and
   the tombstone makes every later Prepare for that group a phase reversal.
@@ -1191,45 +1196,49 @@ and commits one matching singleton Finalize:
   by that participant's ledger order: Prepare first is later discarded;
   Finalize(abort) first installs the tombstone and the later Prepare is invalid.
 
-A prepared participant's Finalize ends its consensus-admission lock at commit;
-its hidden plan is applied or discarded later in Prolog's ordered mailbox turn
-while the proof fence remains closed. A direct no-Prepare Finalize(abort) has no
+A prepared participant's Finalize releases its participant/conflict rows at
+commit; its hidden plan is applied or discarded later in Prolog's ordered
+mailbox turn while its exact material apply fence remains. A direct no-Prepare Finalize(abort) has no
 hidden plan or D-state work: its certified commit is itself the deterministic
 `applied_abort` no-op status, binds the unchanged parent `AppliedGeneration`,
-leaves the proof fence unchanged, and creates no active participant role. It is
-therefore admissible through an unrelated group's active lock or closed fence.
+creates no apply fence and no participant role. It is therefore independent of
+every unrelated group.
 This metadata-only rule prevents
 crossed aborts from deadlocking without allowing any content or prepared plan to
-bypass the lock. Simplex still sends its normal ordered outcome-projection cast
+bypass policy. Simplex still sends its normal ordered outcome-projection cast
 to Prolog, but neither waits for it nor makes the no-op status depend on it.
 
-OCC is not repeated at Finalize: Prepare validated it and the namespace lock
-prevented intervening changes. The committed Finalize deterministically fixes
-the namespace DTX generation in ledger history (advancing it for commit and
-retaining it for abort) before any later consensus transition is validated.
+OCC is not repeated at Finalize: Prepare validated it and the exact conflict
+rows prevented an overlapping intervening change. Every committed applied plan
+increments the global proof generation once; abort does not. Only actual fact
+mutations create a blocking apply fence.
 One `quod_prolog` mailbox turn then applies or discards the hidden diff,
 publishes the MVCC snapshot at that already-fixed generation, marks
 `finalize_applied_slot`, and sends Simplex an acknowledgment bound to the exact
-`{GroupId, FinalizeSlot, Generation}`. The acknowledgment only opens the proof
-fence; it never changes consensus-derived generation. A duplicate or stale
-acknowledgment is inert. Finalize(abort) uses the same exact acknowledgment
+`{GroupId, FinalizeSlot, GroupGeneration}`. A remote participant's
+acknowledgment removes only that row. A source-fused acknowledgment changes its
+exact row from blocking to nonblocking; Complete later consumes it. Neither
+operation changes global generation. A duplicate or stale acknowledgment is
+inert. Finalize(abort) uses the same exact acknowledgment
 after discarding a prepared hidden plan and publishing its local
 `applied_abort` status without changing D. For that
 prepared path, a Finalize QC proves only `finalize_committed_slot`; for the
 direct no-op path, the QC also proves `applied_abort`. A terminal group still
-requires an exact applied status from every manifest participant and a
-committed origin Complete. No off-ledger all-Finalize certificate set controls
+requires local source readiness, one portable certificate for every prepared
+remote Finalize, and a committed origin Complete. No off-ledger all-Finalize
+certificate set controls
 local visibility:
 for commit the certified Decision proves that every Prepare exists, while for
-abort the local Finalize itself fixes prepared-discard versus no-op. Prepare
-when present, Decision, and this local Finalize are sufficient for deterministic
+abort the target Finalize itself fixes prepared-discard versus no-op. Prepare
+when present, Decision, and this target Finalize are sufficient for deterministic
 participant replay without foreign network access.
 
 Participants may finish that final mailbox turn at different instants. A
 finished participant can serve new state. A prepared participant with no
-committed Finalize is still consensus-locked; one with a committed but unapplied
-Finalize admits later consensus records but remains proof-fenced and returns
-`transaction_pending`. Any old scope also fails its generation fence.
+committed Finalize retains only its exact group conflict rows; independent
+consensus and proofs continue. A committed but unapplied material Finalize
+holds that GroupId's exact apply fence and returns `transaction_pending` until
+the snapshot is published. Any old scope also fails its generation token.
 Consequently one normal distributed proof sees all old, all new, or a typed
 retry, never a new/old mixture. Explicit observer-backed `prove_ro` retains
 Quod's documented stale-read semantics and is not presented as a
@@ -1241,62 +1250,77 @@ unavailable intermediate cannot strand its children permanently.
 
 ### 7.5 Complete
 
-After every manifest participant's matching Finalize is committed and its exact
-apply/discard acknowledgment or certified direct-no-op status is available, a
-current origin validator submits one singleton Complete to the origin ledger. Its canonical
+After every manifest participant's matching Finalize is committed (or fused
+source Decision is committed) and its exact apply/discard status is available,
+a current origin validator submits one Complete control to the origin ledger. Its canonical
 body contains `GroupId`, the certified Decision reference, and the
 target-identity-ordered list of each participant's Finalize reference and
-`AppliedGeneration` (the proof-fence generation after that Finalize, not an
+group-scoped `AppliedGeneration` (not the global proof epoch or an
 author sequence). The reference already fixes the slot. Complete
 contains no responder-dependent route or signature
 choice.
 
-Before voting, every origin validator independently verifies those Finalize
-certificates. A direct-no-op certificate supplies its applied status directly.
-For a prepared participant, the validator derives
-`f = floor((N - 1) / 3)` from one certified current target committee view of
-size `N`, then requires identical canonical status replies over identity-pinned
-DTX links from exactly `f + 1` distinct current target NodeKeys. The shared
-64-validator cap is enforced at every current committee/history/certificate
-entrance; under that cap `f + 1 <= 22`. Duplicate keys and view
-mismatches are rejected before a body is retained. That set contains at least
-one honest target validator, so an all-Byzantine false application claim is
-insufficient. A committee-view change restarts the check. The fixed reply body is correlated to
-`{TargetIdentity, TargetCommitteeId, GroupId, FinalizeRef,
-AppliedGeneration, AppliedVerdict}`; mTLS link identity authenticates the
-responder, and no new portable signature format is introduced. These bounded
-asynchronous checks use the same
-nonblocking foreign-validation worker boundary as Prepare and Decision. The
-origin Complete QC is then transferable evidence that an origin quorum
-performed every live check. Replay and catch-up validate the canonical Complete
-body and its local origin QC; they do not re-run foreign certificate or status
-checks. Applied generation is derived deterministically from the target's
-committed ordered history, never from acknowledgment timing, so honest replicas
-return the same value. A participant that
-already applied its prepared Finalize re-serves the same canonical status
-after restart.
+Before proposing Complete, the coordinator collects one portable applied
+certificate for every prepared remote Finalize. It derives
+`f = floor((N - 1) / 3)` from the committee certified by that exact Finalize
+and collects signatures from exactly `f + 1` distinct members over one
+canonical statement:
+`{NetworkIdentity, TargetIdentity, FinalizeCommitteeId, GroupId,
+FinalizeRef, AppliedGeneration, AppliedVerdict}`. The endpoint signs only
+after its durable applied floor has crossed the slot fixed by `FinalizeRef`;
+there is no separate moving `AppliedFloor` field. The shared 64-validator
+protocol bound applies at committee and certificate decoding, so
+`f + 1 <= 22`. Duplicate members, outsiders, bad signatures, and any binding
+mismatch fail verification. A later committee change does not invalidate a
+certificate from the exact Finalize-era committee. Collection resolves each
+exact historical signer through the shared key resolver before trying the
+current identity-pinned candidates and its certified Finalize-era fallback;
+transport still authenticates that exact key, and moving or retiring a host
+never changes who may sign.
+
+The certificate is not part of Complete. It travels beside the deterministic
+Complete v3 record in the existing ephemeral proposal-validation sidecar,
+outside the semantic block hash. Before voting, every origin validator first
+verifies the referenced Decision and Finalizes through the existing
+`quod_foreign_log` path, then verifies each required certificate locally
+against that exact Finalize evidence. Validators do not contact target
+committees and do not trust a coordinator verdict. A missing, malformed, or
+wrong sidecar certificate makes the validator abstain; it cannot mark the
+unchanged block hash invalid, so the same block may be redriven with valid
+evidence.
+
+The source-fused row needs no certificate because its Decision also applies
+the source plan under the origin's own consensus. A remote direct abort with
+no Prepare is a durable no-op whose Finalize QC is sufficient. Remote commits
+and prepared aborts each require one applied certificate. The origin Complete
+QC is transferable evidence that an origin quorum performed these live checks.
+Replay and catch-up validate the canonical Complete body and origin QC without
+the ephemeral sidecar. Applied generation remains derived deterministically
+from target history, never from acknowledgment timing.
 
 Complete is the only `decided_* -> completed_*` consensus transition. Its commit
 clears the origin's ledger-active role, so a later Begin is valid identically
 live and on replay. Decision or Finalize alone never releases that origin role.
 The ordered Complete apply cast then makes the owning origin engine persist and
-flush the compact terminal outcome at `CompleteSlot`; only after that flush does
-it release a local caller waiter or serve a terminal outcome. An earlier
-certificate is parked by slot, and an engine deadline or crash remains
-`outcome_unknown`. Replay rebuilds and flushes that row before the ontology
-becomes ready. The Decision reference determines commit versus abort and the
+flush the compact terminal outcome at `CompleteSlot`. Live caller delivery is
+already safe at the independently certified pre-Complete boundary; durable
+outcome lookup remains pending until this flush. An engine deadline or crash
+before live delivery remains `outcome_unknown`. Replay rebuilds and flushes the
+Complete row before the ontology becomes ready. The Decision reference determines commit versus abort and the
 exact abort reason stack. Complete carries neither a duplicate verdict nor
 duplicate reasons. Exact duplicate Complete records are
 idempotent; a changed reference set or applied generation is rejected. Any
 current origin validator may reconstruct and redrive the same semantic Complete
 after restart.
 
-The caller returns either terminal group result only after Complete commits and
-the origin engine flushes that ordered terminal projection, returning bindings
-plus per-ontology slots on commit. From Decision commit until that local flush,
-the result is `outcome_unknown`, never a terminal result. Consensus may admit a
-later origin group as soon as Complete commits; public outcome visibility does
-not control that ledger transition.
+The live caller returns either terminal group result after all required
+participant applications have portable certificates, returning bindings plus
+per-ontology slots on commit. Complete remains mandatory and continues under
+the coordinator/recovery owner. Public `outcome(GroupRef)` stays pending until
+Complete commits and the origin engine flushes that ordered terminal
+projection. Consensus may admit a later non-conflicting origin group before
+that durable publication; public outcome visibility does not control the live
+pre-Complete handoff.
 
 ## 8. Foreign finality verification
 
@@ -1352,9 +1376,10 @@ Unavailable history causes abstain/retry, never acceptance. A verified
 missing or corrupt cache restarts from anchored slot 1. Cache eviction affects
 performance only, not correctness.
 
-The verifier owns one globally/per-peer bounded pending map; it rejects before
-spawning or allocating when the table limits are reached. Keep catch-up's
-progress-preserving first-entry rule. Before the distributed payload lands, a
+The verifier owns one per-identity queue whose exact requests coalesce or park
+under their callers' deadlines. It has no numeric identity, history, or pending
+request cap; inactive identities retain no worker or open ledger handle. Keep
+catch-up's progress-preserving first-entry rule. Before the distributed payload lands, a
 shared bound test must prove that the largest valid entry fits below the 900 KiB
 response budget. With the shared 64-validator cap, two `?MAX_BLOCK_BYTES =
 256 KiB` bounded payloads plus two 64-signer certificates at a conservative
@@ -1390,14 +1415,14 @@ receives a different id. The explorer's old bounded 5,000-slot backward scan is
 deleted; its detail path reads the compact outcome height without entering the
 ontology engine, then reads exactly that one ledger block for transaction detail.
 
-The multi-participant implementation extends this same index with one journal-derived
-validator-local pending-Begin reference and one independent ledger-rooted
-active-group slot. The latter records the Prolog-side projection of phase,
-manifest digest, local plan, locks, record slots, certified group records, and
-bounded authenticated applied statuses; Simplex and its protected ETS row own
-the live gates. Both fields may coexist, and the pending body/envelope remains
-only in the signing journal. No second live, durable, or authoritative outcome
-service/index is added.
+The multi-participant implementation reuses this outcome index and keeps its
+protocol state in the canonical per-ontology DTX projection, which can contain
+multiple active groups. That projection records the phase, manifest binding,
+local plan, locks, and certified phase references. The pending body/envelope
+remains only in the signing journal. Applied certificates are proposal-time
+validation evidence carried in the ephemeral sidecar; they are never written
+into this projection or the ledger. No second live, durable, or authoritative
+outcome service/index is added.
 
 The 4,096-row memory LRU is only an optimization. The disk-backed exact group
 row remains the authority for every old-phase/phase-reversal check. On the live
@@ -1485,24 +1510,22 @@ nor a set of Finalize QCs proves that every participant has applied or discarded
 its hidden plan.
 
 Certified ledger state establishes every public group phase. `{committed, ...}`
-and `{aborted, ...}` require a certified origin Complete, whose live voters
-verified an exact applied status for every manifest participant. A direct
-no-Prepare abort status is certified by its Finalize QC. For a prepared
-participant, each origin voter obtains identical canonical replies over pinned
-links from the `f + 1` distinct validators derived from one certified current
-target committee view in §7.5, bound to the Finalize slot and applied
-generation. An unavailable, rebuilding, view-changing, or not-yet-applied
-participant keeps the result pending and the
-public caller receives `outcome_unknown(OutcomeRef)`. A reset origin projection
-reconstructs either the terminal Complete directly or the decided active group
-whose recovery must reacquire those bounded status sets and submit it. It never
-infers application from Decision or Finalize alone.
+and `{aborted, ...}` require a certified origin Complete. Its live voters
+verified the exact Finalize chain and every required portable applied
+certificate as specified in §7.5. A direct no-Prepare abort needs no certificate
+because its Finalize QC certifies the no-op. An unavailable, rebuilding, or
+not-yet-applied prepared participant prevents certificate collection and keeps
+the durable lookup pending; a public lookup caller receives
+`outcome_unknown(OutcomeRef)`. A reset origin projection reconstructs either
+the terminal Complete directly or the decided active group whose recovery must
+recollect the volatile certificates and submit the same deterministic Complete.
+It never infers prepared application from Decision or Finalize alone.
 
 The certified Complete fixes the logical terminal phase, but the Prolog-owned
 API serves it only after its ordered outcome-index floor includes that Complete
 slot and the compact row is flushed. Before then, or while that projection is
-rebuilding, lookup is outcome-unknown. This publication delay never keeps the
-consensus active slot occupied.
+rebuilding, lookup is outcome-unknown. This publication delay never retains the
+group's consensus role.
 
 Begin wins if it precedes coordinator retirement in origin ledger order;
 otherwise that committed retirement alone proves
@@ -1530,8 +1553,9 @@ participant abort (unprepared): none -> applied_abort (at Finalize commit)
 ```
 
 The two `completed_*` states are reached only by the matching committed origin
-Complete record after its voters verify the complete manifest's applied-status
-evidence. These are consensus-history states; the Prolog outcome projection may
+Complete record after its voters verify local source readiness, every direct
+no-op Finalize, and all required prepared-target applied certificates. These
+are consensus-history states; the Prolog outcome projection may
 lag until its ordered Complete apply and flush, during which public lookup stays
 outcome-unknown.
 
@@ -1574,12 +1598,12 @@ Recovery rules are complete:
 - Prepare without Finalize restores its hidden plan and locks during replay,
   fetches the origin decision, and finalizes accordingly;
 - Decision redrives every missing participant Finalize and then the canonical
-  origin Complete after every exact applied status is available;
+  origin Complete after every required applied certificate is available;
 - a prepared committed Finalize without its matching `applied_commit` or
   `applied_abort` has already reopened consensus admission but retains the proof
   fence, verifies its ledger-carried Decision witness, then performs the one
   mailbox apply/publish or discard transition, sends the exact applied
-  acknowledgment, and can serve the canonical applied-status reply. A direct
+  acknowledgment, and can sign the canonical applied statement. A direct
   no-Prepare Finalize(abort) is already an applied no-op at commit and only
   reprojects its compact row asynchronously;
 - all-Prepare plus no Decision can only become an origin-certified commit or
@@ -1605,6 +1629,13 @@ either case. A temporary or permanent loss beyond the consensus bound may leave
 a prepared group safely blocked; this plan does not promise recovery that the
 underlying consensus cannot provide.
 
+Applied certification uses the exact Finalize-era committee. Removing a member
+from the current committee does not disable its hosted read/applied endpoint,
+so ordinary retirement preserves recovery. Decommissioning more than `f` of
+those key holders before Complete, after the volatile certificate was lost, is
+beyond the same fault bound; supporting that stronger migration guarantee
+would require a separately reviewed durable certificate handoff.
+
 The live post-Finalize mailbox application exposes the canonical reducer's
 ordered `applied_ops` once. Reactions later derive only from those operations.
 Begin, Prepare, Decision, Complete, a
@@ -1619,8 +1650,9 @@ digest-only substitute. It is emitted in that ontology's committed Finalize
 order after D and its MVCC publication are applied. The reaction slice carries
 the already-computed `applied_ops` beside the signed requested `Diff`, without
 another reducer or event envelope. `quod_runtime` then completes P before E;
-empty `applied_ops` emits no domain reaction. The caller's top-level result still waits for the certified
-origin Complete after all participant applied statuses. Replay reconstructs
+empty `applied_ops` emits no domain reaction. The caller's top-level result is
+released after all required applied certificates; Complete continues
+asynchronously and remains the durable public outcome boundary. Replay reconstructs
 D/P/group state but emits no E, matching the
 existing runtime contract. Ordinary one-ontology transactions keep the
 analogous `{transaction, TxId}` identity under the hard-break event union.
@@ -1638,7 +1670,7 @@ Keep the change factored rather than adding phase exceptions throughout
   functor presence check used by ordinary apply and distributed Prepare; no
   policy module or duplicate term scanner;
 - `quod_proof_scope`: the one shared origin/selected proof worker, invocation
-  continuations, consensus-lock/proof-fence/generation checks against Simplex's
+  continuations, generation/blocking-fence checks against Simplex's
   protected projection, overlay generations, sealing, limits, and cleanup;
 - `quod_scope_wire`: the sole bounded request/response scope-frame codec and
   direction-aware safe decode boundary;
@@ -1684,9 +1716,9 @@ Keep the change factored rather than adding phase exceptions throughout
 - `quod_ledger`: own `classify/1`, the single enumeration of committed
   entry-data kinds that every per-variant consumer dispatches on;
 - `quod_foreign_log`: lazy anchored foreign-history verification and cache;
-- `quod_simplex`: accept the explicit record union, singleton control barriers,
-  asynchronous validation hooks, the one FIFO register/activate admission owner
-  with exactly one accepted dormant Begin intent
+- `quod_simplex`: accept the explicit record union, canonical same-phase control
+  waves, asynchronous validation hooks, the one FIFO register/activate admission
+  owner with distinct dormant Begin intents keyed by GroupId
   and local status barrier, mutually exclusive bounded `genesis_diff` input for
   prepared runtime creation, linear generated/source diff assembly, and the V4
   assertion-only/policy-present genesis invariant, with no other protocol policy
@@ -1987,17 +2019,17 @@ Every item below records the group implementation as one hard break.
 
    ```text
    {batch, [#transaction{}]}
-   {dtx, CanonicalControlBlob}
+   {batch, [{dtx, CanonicalControlBlob}, ...]}
    noop                              % committed entry only
    ```
 
    `quod_ledger:classify/1` remains the sole decoder/enumerator and returns
-   `content`, `begin`, `prepare`, `decision`, `finalize`, `complete`, `noop`, or
-   `invalid`.
+   `content`, `controls`, `noop`, or `invalid`; `controls` contains a non-empty
+   canonical same-phase wave in signed author-lane order.
    Remove the raw-list-to-`{batch, ...}` conversion and its obsolete helpers;
-   do not retain an alias. Ordinary batches and singleton DTX barriers share
-   block hashing, voting, persistence, catch-up, and replay. Batch collection
-   remains content-specific; a control record is always a singleton barrier.
+   do not retain an alias. Ordinary content batches and DTX control waves share
+   block hashing, voting, persistence, catch-up, and replay. A top-level
+   `{dtx, Blob}` is invalid and has no compatibility decoder.
    Every per-kind consumer enumerates the six valid kinds plus `noop` and
    `invalid`, with no catch-all. This changes every block hash, QC, and implicit
    parent reconstruction; it is a consensus-format break that lands only with
@@ -2036,16 +2068,15 @@ Every item below records the group implementation as one hard break.
    manifest identity, with no duplicate, missing, or additional target. Each
    Finalize reference must match the GroupId, target identity, and Decision
    verdict; each status is bound to the slot already fixed by that reference.
-   Before signing or voting Complete, each origin validator independently
-   checks every certified Finalize reference and, for each prepared participant,
-   matching canonical replies from `f + 1` distinct NodeKeys, where `f` is
-   derived from that target's certified current committee view as in §7.5, over
-   identity-pinned links. The response bodies
-   use the fixed correlation from §7.5; responder identities are transient
-   verification input and are not copied into Complete. Replay and catch-up
-   validate only the
-   canonical Complete body and origin Complete QC; that local QC is the
-   transferable evidence that live voters completed the foreign checks.
+   Before submitting Complete, the coordinator collects the §7.5 portable
+   certificate for each prepared remote Finalize. The certificates travel in
+   the existing ephemeral proposal-validation sidecar; responder identities
+   and signatures are never copied into Complete. Each origin validator
+   independently checks every certified Finalize reference, then verifies the
+   corresponding `f + 1` signatures locally against that exact Finalize-era
+   committee evidence. It performs no target fan-out. Replay and catch-up
+   validate only the canonical Complete body and origin Complete QC; that QC is
+   the transferable evidence that live voters completed the foreign checks.
 
 3. **Transfer hand-off ownership before closing proof scopes.** Refactor the
    former `quod_vote_journal` into `quod_signing_journal`: one hard-break file/library,
@@ -2183,51 +2214,31 @@ Every item below records the group implementation as one hard break.
    `maybe_compact` check, so repeated state changes compact even when no ledger
    slot advances. The shared frame bound covers the maximum signed Begin
    submission plus the fixed journal wrapper, and is tested at boundary and
-   boundary+1. At most one pending Begin exists per local ontology's Simplex and
-   signing journal; this is not a committee-wide or ontology-wide uniqueness
-   claim.
+   boundary+1. Pending Begin custody is keyed by GroupId; no pending row may
+   overwrite another and there is no compiled group-count cap.
 
-4. **Extend the one outcome projection, not the number of services.** Bump the
-   rebuildable `quod_outcome` format with two distinct bounded fields: one
-   journal-derived local pending-Begin reference and one ledger-rooted active
-   group slot per ontology. They may coexist: this validator may have handed off
-   G1 while the ontology ledger is already resolving another validator's G2.
-   The pending field is only a rebuildable lookup/recovery projection; the
-   semantic body and latest exact envelope remain solely in
-   `quod_signing_journal`. The active slot stores role flags plus independent
-   monotonic origin and participant subphases, manifest digest, the exact local
-   hidden plan while prepared, certified record references, and participant
-   applied slots. This is required because the origin ontology may also be a
-   manifest participant: its one reducer must accept Begin -> local Prepare ->
-   Decision -> local Finalize without overwriting either side's recovery state.
-   Role acquisition is one total helper: Begin requires an empty active slot;
-   Prepare requires an empty slot or the same GroupId's origin-only slot; every
-   later role-bearing phase must match that GroupId. A different group never
-   overwrites or shares the slot. Direct no-Prepare abort tombstones bypass role
-   acquisition because they are terminal metadata rows, not active groups.
+4. **Extend the one outcome projection, not the number of services.** The
+   rebuildable `quod_outcome` projection carries a pending-Begin map and the
+   ledger-rooted multi-group projection. Pending rows remain lookup/recovery
+   views; the semantic body and latest exact envelope remain solely in
+   `quod_signing_journal`. Each active group stores independent origin and
+   participant subphases, manifest digest, hidden prepared plan, certified
+   references, and applied slots. The origin may also be a material participant:
+   Begin performs the Prepare transition and Decision the Finalize
+   transition without manufacturing source-local controls.
 
-   Replay of a Begin with the pending reference's `GroupId` and semantic body
-   clears that pending projection and records its authoritative ledger slot even
-   if another equivalent outer envelope won. A Begin for another group changes
-   only the ledger-rooted active slot and leaves the independent local hand-off
-   intact. Role release is ledger-deterministic. A participant role occupies the
-   slot from Prepare through Finalize commit; Finalize then moves its remaining
-   ordered apply/discard work into the already-separate proof fence, so later
-   consensus may progress while proofs stay closed. A direct no-Prepare
-   Finalize(abort) writes only its compact tombstone and never acquires a lock.
-   An origin role remains active from Begin through Decision and is released
-   only by committed Complete. If the origin is also a participant, local
-   Finalize ends only its participant subrole and Complete ends the origin
-   subrole. Thus every validator and replay accepts the next group at the same
-   ledger transition; a local acknowledgment never changes consensus validity.
-   Decision alone retains the origin slot and its one recovery worker. A reset
-   projection folds Complete when present, or recreates the decided active group
-   whose recovery reacquires applied statuses and redrives Complete. This admits
-   the next origin group without accumulating unresolved Finalize workers.
-   Terminal rows retain compact slots/status, and exact bindings are read from
-   the Begin at its recorded slot. Exact duplicates are idempotent; changed
-   digests, a second decision or Complete, phase reversal, or a second
-   **ledger-active** group fail before mutation.
+   Replay of a Begin clears only its matching pending row and records that
+   GroupId's authoritative origin role. Other groups and pending hand-offs are
+   unchanged. Remote Prepare occupies that group's participant role until
+   Finalize; committed material apply then moves only that group into an exact
+   apply fence. Direct no-Prepare abort writes only its compact tombstone.
+   Complete releases only its origin role. Decision retains the origin role and
+   its recovery worker; a reset reconstructs every active origin in canonical
+   GroupId order. Terminal rows retain compact slots/status, and exact bindings
+   are read from the Begin at its recorded slot. Exact duplicates are
+   idempotent; changed digests, a second decision or Complete, and phase reversal
+   fail before mutation. An independent second group is valid; an overlapping
+   acquisition is governed only by the shared conflict/wait-die rule.
    Ordinary transaction rows and the 4,096-entry compact cache remain the same
    path. Restart ordering changes deliberately. For an existing V4 ledger, the
    opened store exposes its structurally valid tail and Simplex independently
@@ -2290,58 +2301,41 @@ Every item below records the group implementation as one hard break.
    a signed Begin nor its consumed DTX sequence, and there is still only one
    anti-equivocation authority.
 
-5. **Project both gates from one committed-history reducer.** The same pure
-   `quod_dtx` reducer advances both Simplex history state and the Prolog/outcome
-   projection. Prepare first validates the target plan, transcript policy,
-   policy self-seal invariant, membership, exact OCC tokens, foreign Begin
-   witness, the shared same-GroupId role transition, and an open proof fence
-   against its parent. Only then may
-   its singleton block commit and make the plan hidden plus the namespace lock
-   durable. An old-group transition is decided through §9's generic exact phase
-   lookup; cache absence is never interpreted as group absence. Its reply is
-   usable only from the exact engine pid after its index's applied floor reaches
-   the candidate parent. Simplex blocks every ordinary ingress/proposal route
-   while locked. Its one `quod_dtx:proposal_readiness/2` rule admits the same
-   group's Decision when the ontology also owns the origin role and admits the
-   prepared participant's matching Finalize; Complete is admitted only after
-   Finalize has reopened the lock. The reducer classifies a
-   certified direct no-Prepare Finalize(abort) as an already-applied metadata
-   no-op, so it is independent of every group lock and changes none of these
-   gates. Extend Simplex's existing
-   per-namespace protected ETS genesis projection with one
-   consensus-lock/proof-fence/generation row. `quod_simplex:init/1` inserts
-   `{anchor, GenesisHash}` and an initial **closed** proof-gate row in one ETS
-   insert before it returns or exposes readiness. The lock-free accessor treats
-   a missing table, a missing/malformed row, or an owner restart as
-   fenced-closed; absence never means open. Proof sessions use that same
-   lock-free cross-process table pattern as `quod_simplex:genesis_hash/1`, but
-   not its current fail-open missing-row interpretation, and no second table or
-   table-name atom is created.
-   The local overlay adapter receives only a generic access guard, not DTX
-   policy, and checks one cheap token containing proof-fence state plus
-   generation once per overlay operation, not once per functor; final
-   answer/seal re-reads it as the correctness-critical check. A
-   pending fence or changed generation reports the retained GroupId as
-   `transaction_pending(GroupId)` and discards that old proof. The normal live
-   finalization and DTX paths never call `quod_prolog:sync/1`; the existing
-   streamed rebuild/catch-up barrier remains only as bounded mailbox
-   backpressure. Prepare blocks ordinary consensus admission and proof access
-   immediately from Simplex's own reducer, while Prolog
-   consumes Prepare, Finalize, and every later transaction cast in FIFO ledger
-   order. Finalize deterministically fixes the DTX generation and reopens
-   consensus admission, but its proof fence stays closed until Prolog
-   asynchronously acknowledges that the hidden diff and MVCC snapshot are
-   published at that generation. That acknowledgment carries the exact
-   `{GroupId, FinalizeSlot, Generation}`; Simplex opens the fence only when all
-   three match its current state, so an old mailbox message cannot unlock a new
-   group. It does not advance generation. Simplex, as the protected table's
-   sole writer, applies the accepted
-   acknowledgment to ETS; it never holds the consensus state machine on a
-   mailbox drain. Missing/restarting Prolog keeps the proof fence closed and
-   delays new proofs; a proposal whose deterministic verdict needs an unapplied
-   Prolog parent still parks through the existing asynchronous membership-style
-   mechanism. Replay reconstructs the fence closed and releases it only after
-   the replayed head is applied; it emits no live event.
+5. **Project groups, conflicts, and apply fences through one committed-history
+   reducer.** The same pure `quod_dtx` reducer advances Simplex history and the
+   Prolog/outcome projection. Its exact state is
+   `#{target, groups, conflicts, apply_fences, generation}`. `groups` owns every
+   origin/participant role; `conflicts` is derived exactly from the participant
+   plans; `apply_fences` is keyed by GroupId; and `generation` is the global
+   proof epoch.
+
+   Prepare validates the target plan, policy, membership, OCC tokens, foreign
+   Begin witness, role transition, and signed conflict descriptor. Independent
+   plans may prepare concurrently in one canonical wave. Overlapping plans use
+   deterministic GroupId wait-die, so every validator makes the same wait or
+   refuse decision and no distributed lock cycle can persist. Source material
+   takes this exact Prepare transition in Begin; no source-local Prepare exists.
+   Decision similarly applies the exact source Finalize transition, while
+   remote Finalize is unchanged.
+
+   Prepared state neither increments `generation` nor closes proofs. A commit
+   increments the global generation once per applied material plan and creates
+   an exact blocking apply row only for real fact mutations. Event-only and
+   abort/discard transitions create no blocking row. A source-fused Decision
+   retains an exact nonblocking application marker even for those cases.
+   Prolog acknowledges `{GroupId, FinalizeSlot, GroupGeneration}` after
+   publishing the snapshot; Simplex removes a remote participant row, or opens
+   a source row while retaining its exact marker for Complete. It never changes
+   the global generation during acknowledgement. Other groups and rows remain
+   untouched.
+
+   The protected ETS proof gate contains readiness, global generation, and the
+   exact sorted blocking-fence set. Missing or malformed state fails closed.
+   Proof access is blocked only by a material fence, not merely by prepared
+   groups. The local overlay adapter receives this generic access token, not
+   DTX policy. Replay reconstructs every group and apply row through the same
+   reducer. It needs no synthetic local acknowledgement: a certified Complete
+   consumes only its exact source application marker. It emits no live event.
 
 6. **Use one generic signed submission path.** Refactor Simplex's locally
    authored ingress around a small signed-record interface (target binding,
@@ -2351,12 +2345,12 @@ Every item below records the group implementation as one hard break.
    recovery, leader routing, relay verification, proposal sizing, and the
    definite/unknown outcome boundary once. Content retains batching, expiring
    retained custody, and its strict same-author ordering. DTX uses the signing
-   journal's non-expiring pending slot instead: a control needed to recover a
-   ledger-active group may pass this validator's unrelated pending Begin. If
+   journal's non-expiring per-GroupId pending map instead: custody for one group
+   does not overwrite another. If
    that later same-author control commits and stales the Begin envelope, the
    journal refreshes only its outer sequence/signature as specified above. DTX
-   records are idempotently redriven from their durable phase, remain singleton
-   barriers, and never enter a content batch. Do not add five phase-specific
+   records are redriven only after authoritative absence and enter canonical
+   same-phase control waves, never a content batch. Do not add five phase-specific
    append/relay stacks or duplicate the existing consensus engine.
 
 7. **Verify foreign finality through one owner.** Use the
@@ -2399,40 +2393,54 @@ Every item below records the group implementation as one hard break.
    completed the foreign check. Do not add a second history codec or verifier.
 
 8. **Keep recovery transport separate from proof scopes.** Proof scopes close
-   after Begin construction, so durable coordination uses one fixed, bounded,
+   after Begin construction, so durable coordination uses one fixed,
    identity-pinned DTX request/reply channel. A small
    `quod_dtx_endpoint` library, embedded in the existing namespace engine,
    owns only framed admission and request-correlation helpers; it adds no
    process and owns no durable phase state. The namespace engine owns
-   authenticated-peer checks, rate/correlation accounting, and monitored
-   workers using the library's shared limits.
+   authenticated-peer checks, exact request/link correlation, and monitored
+   workers. There is no endpoint rate quota or arbitrary worker-count gate.
    Submission of one canonical DTX control is delivered concurrently, under
    one deadline, to the bounded selected target-validator set. This is one
    semantic record, not one transaction per validator; existing digest
    coalescing and waiter ownership remain authoritative. Each reached voter can
    retain the authenticated submitter contact long enough to verify the exact
-   foreign phase after proof scopes close. A temporary verification abstention
-   releases its one validation worker/monitor, and the consensus tick re-enters
-   the ordinary validation path for the same current immutable candidate.
+   foreign phase after proof scopes close. An exact verification without a
+   usable route parks in the existing foreign-log queue and resumes on the
+   directory's identity-scoped route notification. Its deadline only produces
+   temporary abstention; ordinary consensus recovery may later redeliver the
+   same immutable candidate. No polling tick drives validation progress.
    The same channel serves the bounded transaction/group outcome query. It
    first corroborates a view-bound outcome snapshot from `f + 1` distinct keys
    in one certified current committee; only a subsequent group-only pre-Begin
    barrier is accepted from the connection pinned to the reference's exact
    `Coordinator`. No bare endpoint or different member can answer that
    local-journal question.
-   Endpoint version 1 uses the one bidirectional deterministic-ETF channel
+   Endpoint wire version 6 uses the one bidirectional deterministic-ETF channel
    `{quod_dtx, Namespace}` and outer frame
-   `{quod_dtx_endpoint, 1, Namespace, InnerBinary}`. `RequestId` is exactly 16
-   bytes. The fixed inner request algebra is:
+   `{quod_dtx_endpoint, 6, Namespace, InnerBinary}`. `InnerBinary` canonically
+   encodes `{Message, ValidationSidecar}`; the bounded sidecar carries optional
+   exact committed entries and proposal-time applied certificates, never
+   semantic state. `RequestId` is exactly 16 bytes. The fixed inner request
+   algebra is:
 
    ```text
    {submit, RequestId, RecordBlob}
+   {apply_claim, RequestId, EvidenceBlob}
+   {cancel_operation_effect, RequestId, SignedSourceSubmission}
    {phase, RequestId, GroupId, Kind}
    {outcome, RequestId, OutcomeRef, CommitteeId, MinimumCertifiedSlot}
    {outcome_barrier, RequestId, GroupRef, CommitteeId,
                      MinimumCertifiedSlot}
    {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict}
    ```
+
+   `SignedSourceSubmission` is the source node's exact signed transaction
+   submission. The target verifies it once through the ordinary transaction
+   codec and derives the claim, target application, effect, and cancellation
+   digest from those signed bytes. It is therefore both the authentication
+   proof and the exact cancellation identity; no unsigned token or separately
+   trusted reference tuple exists.
 
    `RecordBlob` is the exact output of the bounded canonical
    `quod_dtx:encode_record/1` semantic-record codec and endpoint admission uses
@@ -2443,6 +2451,8 @@ Every item below records the group implementation as one hard break.
 
    ```text
    {accepted, RequestId, SemanticDigest, CertifiedRef}
+   {application, RequestId, committed | {rejected, Reason}, TargetEvidence}
+   {operation_effect_cancelled, RequestId, cancelled | not_found}
    {refused, RequestId, TargetIdentity, SemanticDigest, Generation,
              ReasonsBlob}
    {phase, RequestId, Generation,
@@ -2452,9 +2462,14 @@ Every item below records the group implementation as one hard break.
    {outcome_barrier, RequestId, TargetIdentity, CommitteeId, AppliedFloor,
                      not_found | pending_begin | coordinator_retired}
    {applied, RequestId, TargetIdentity, CommitteeId, GroupId,
-             FinalizeRef, Generation, Verdict}
+             FinalizeRef, Generation, Verdict, SignerKey, Signature}
    {error, RequestId, busy | not_ready | not_found | invalid_request}
    ```
+
+   The applied response is one member's signature over the canonical applied
+   statement described in §7.5. The coordinator combines `f + 1` such replies
+   into the portable certificate placed in the Complete proposal's ephemeral
+   validation sidecar. It does not copy the replies into Complete.
 
    An accepted submit carries the exact certified reference that committed the
    semantic record. The consumer binds its digest to `SemanticDigest` and
@@ -2480,18 +2495,13 @@ Every item below records the group implementation as one hard break.
    phase decision. The consuming engine accepts a reply only from the expected
    authenticated peer and additionally matches its exact request fields. One
    envelope is at most the DTX-control bound plus 4 KiB and remains below the
-   transport frame cap. The current per-ontology correlation cap is
-   `8 participants * 64 validators = 512`, shared by every overlapping
-   operation; it can therefore refuse a second valid operation even though it
-   accommodates one worst-case request set. The target also admits only eight
-   inbound endpoint workers, so a ninth applied-state/current-view request gets
-   `busy` and Complete validation can prevent its own quorum. There is no
-   authenticated-DTX requests-per-second or burst limiter. These operational
-   caps are scheduled for removal in `dtx-latency-optimization-plan.md`; they
-   are not wire-safety bounds.
+   transport frame cap. There is no authenticated-DTX requests-per-second or
+   burst limiter. The former correlation and inbound-worker population caps
+   are removed by `dtx-latency-optimization-plan.md`; transport, decode, and
+   per-operation shape bounds remain wire-safety owners.
    The process-free `quod_dtx_recovery:next/2` planner takes the exact canonical
    Begin plus bounded, target-ordered verified phase evidence, target
-   generations, corroborated applied-status bodies, and at most one definite
+   generations, portable applied certificates, and at most one definite
    refusal represented exactly as
    `{TargetIdentity, SemanticDigest, Generation, ReasonsBlob}`. It rejects a
    refusal for a non-participant, a different Prepare digest or generation, an
@@ -2504,29 +2514,36 @@ Every item below records the group implementation as one hard break.
    `{TargetIdentity, Control, CertifiedRef}` triple returned after foreign-log
    verification, not a second durable record format.
    The namespace engine remains the owner of `quod_outcome`, and one monitored
-   worker per active group runs the pure `quod_dtx` recovery commands. The
+   worker per active group runs the pure `quod_dtx` recovery commands. Source
+   Begin substitutes for source Prepare and source Decision substitutes for
+   source Finalize, so recovery emits no source-local Prepare/Finalize command.
+   Remote Prepare and Finalize commands are independent same-phase waves. The
    worker:
 
    - submits/recovers Begin at the origin;
-   - prepares participants in canonical identity order;
+   - prepares remote participants concurrently in one canonical wave;
    - commits abort on a definite refusal, or commit only with every certified
      Prepare;
-   - sends the certified Decision to every participant and waits for each exact
-     applied status: the Finalize QC for a direct no-op abort, or the matching
-     authenticated reply set for a prepared participant;
-   - submits the canonical Complete to the origin and waits for its certificate.
+   - sends the certified Decision to every remote participant as one wave and
+     waits for each required application proof: no certificate for a direct
+     no-op abort, or one portable `f + 1` certificate for a prepared remote
+     Finalize;
+   - releases a live caller after the required participant applications are
+     certified, then submits the canonical Complete to the origin and waits for
+     its certificate inside the recovery owner.
 
-   A participant that already applied or discarded its Finalize re-serves the
-   same canonical status after worker or origin restart. Receipt of the final
-   required status makes Complete eligible but changes no consensus state.
-   Committed Complete advances the origin consensus state to
-   `completed_commit` or `completed_abort`, clears the one active slot, and ends
-   the consensus recovery worker. Its ordered apply cast then persists and
-   flushes the Prolog-owned compact terminal projection before releasing any
-   local caller waiter. Until Complete commits, Decision and Finalize
-   certificates remain `pending(finalizing_*)` and no second group is admitted
-   at the origin; after commit but before the projection flush, lookup remains
-   outcome-unknown rather than falsely terminal.
+   A participant that already applied or discarded its Finalize can sign the
+   same canonical applied statement after worker or origin restart. Receipt of
+   the final required certificate makes Complete eligible but changes no
+   consensus state.
+   Committed Complete advances that GroupId's origin state to
+   `completed_commit` or `completed_abort`, removes only that group, and ends
+   its consensus recovery worker. Its ordered apply cast then persists and
+   flushes the Prolog-owned compact terminal projection for durable lookup.
+   The live caller may already have received the certified pre-Complete result.
+   Until Complete commits, public lookup remains `pending(finalizing_*)`; other
+   independent groups remain admissible. After commit but before the projection
+   flush, lookup remains outcome-unknown rather than falsely terminal.
 
    Unavailability or a caller deadline after Begin never becomes logical
    failure: it returns `outcome_unknown({group, ...})` and recovery continues.
@@ -2541,19 +2558,21 @@ Every item below records the group implementation as one hard break.
    exact signed envelope; whichever equivalent envelope commits first is the
    same semantic group.
 
-9. **Finalize visibility in one mailbox turn.** A prepared Finalize commit ends
-   the consensus-admission lock while the proof fence remains closed.
+9. **Finalize visibility in one mailbox turn.** A prepared Finalize commit
+   releases that group's participant/conflict rows while its exact material
+   apply fence remains.
    `Finalize(abort)` discards the hidden plan and records abort without changing
    D. `Finalize(commit)` applies the already-validated hidden diff, commits the
    MVCC snapshot and local applied-status projection row, and emits the one live
    group event. It does not repeat OCC. That ordered Prolog turn sends the exact
-   applied acknowledgment; Simplex validates it and opens the proof fence. The
+   applied acknowledgment; Simplex validates it and removes only that fence. The
    participant consensus role was already released by the committed Finalize;
    the acknowledgment only completes its local visibility. A direct no-Prepare
    Finalize(abort) is instead an applied metadata tombstone at consensus commit:
-   it has no lock, fence, hidden plan, mailbox dependency, or domain event, and
+   it has no participant role, fence, hidden plan, mailbox dependency, or domain event, and
    its ordinary Prolog cast only updates the compact projection. The last
-   manifest applied status lets origin validators propose and validate Complete.
+   required applied certificate lets origin validators propose and validate
+   Complete.
    Committed Complete releases the origin role; its ordered Prolog apply flushes
    the terminal row and only then reports commit or abort, returning the
    persisted bindings and per-ontology slots on commit. A dual-role ontology
@@ -2614,9 +2633,9 @@ Every item below records the group implementation as one hard break.
 At minimum:
 
 1. Three genuinely distinct committees/nodes: A writes, calls B which writes
-   and calls C which retracts; one proof returns only after all three exact
-   applied statuses, the origin Complete certificate, and the ordered origin
-   terminal-row flush.
+   and calls C which retracts; one proof returns only after every required
+   prepared-target applied certificate, the origin Complete certificate, and
+   the ordered origin terminal-row flush.
 2. C failure is visible first only inside B. B recovery succeeds and A receives
    success; unrecovered B failure reaches A with the nested bounded reasons.
 3. Repeated `B::assertz(x), B::x` reads staged state and yields one B plan.
@@ -2640,51 +2659,51 @@ At minimum:
    exposes a diff. Race one late Prepare against that tombstone in both ledger
    orders: Prepare-first is discarded, while tombstone-first rejects Prepare as
    a phase reversal. Cross A-origin/B-origin aborts while both ontologies hold an
-   unrelated active lock: each direct no-Prepare tombstone commits as a metadata
-   no-op, changes only its own tombstone, and leaves the other group's lock,
-   fence, generation, active role, and D state byte-for-byte unchanged; both
-   groups reach Complete rather than deadlocking. Separately, hold G1 after a prepared Finalize has released
-   its role/lock but before its apply acknowledgment opens the fence; a direct
+   unrelated participant role: each direct no-Prepare tombstone commits as a metadata
+   no-op, changes only its own tombstone, and leaves the other group's roles,
+   fences, generation, and D state byte-for-byte unchanged; both groups reach
+   Complete rather than deadlocking. Separately, hold G1 after a prepared Finalize has released
+   its role but before its apply acknowledgment removes the fence; a direct
    no-Prepare abort for G2 still commits immediately, waits for no acknowledgment,
    and leaves G1's fence and generation byte-for-byte unchanged live and on
    replay, with the same canonical G2 Complete row in both paths. Then deliver
-   G1's acknowledgment normally. Once any
-   Prepare lock is committed, consensus ingress refuses even a disjoint ordinary
-   change until a prepared Finalize commits, while proofs return
-   `transaction_pending` until the exact applied acknowledgment opens its fence.
+   G1's acknowledgment normally. Once a Prepare is committed, a disjoint
+   ordinary change remains admissible; an overlapping change follows the same
+   conflict rule. Proofs return `transaction_pending` only for an exact blocking
+   apply fence until its acknowledgment removes that fence.
 9. A read-only participant whose premise controls another ontology's write is
    included and conflicts correctly.
 10. An abort Decision leaves both namespaces old. Under a commit Decision,
     pause after B's Finalize is committed, applied, and acknowledged, then after
     C's Finalize is committed but before C applies it. B serves new state and C
-    may continue consensus, but C remains proof-fenced: any normal proof that
+    may continue consensus, but C retains its exact apply fence: any normal proof that
     also selects C returns `transaction_pending` and can never succeed with
     B-new/C-old. C's ordered apply and exact acknowledgment then open its proof
-    fence; all exact applied-status evidence makes Complete eligible. A
+    fence; all required applied certificates make Complete eligible. A
     Decision alone, and every Finalize QC with one prepared application status
-    missing, remain `pending(finalizing_*)` and keep the origin active slot
-    occupied. Even the full status set changes no consensus state: G2 remains
-    rejected until the canonical Complete commits. That commit releases the slot
-    and consensus recovery worker and admits G2 identically live and on replay.
+    missing, remain `pending(finalizing_*)` and retain G1's origin role. Even
+    the full status set changes no consensus state for G1 until canonical
+    Complete commits. Independent G2 remains admissible throughout; an
+    overlapping G2 waits or is refused by the deterministic GroupId rule. G1's
+    Complete releases only G1's origin role and recovery worker, identically
+    live and on replay.
     Before the ordered Complete apply flushes the outcome row, lookup and the
     original caller still receive outcome-unknown; the flush then publishes the
     one terminal result. Abort follows the same completion rule.
-    On one ontology, Begin(G1) followed by Prepare(G1) sets both role bits in the
-    same slot; while G1 remains active, Begin(G2) and Prepare(G2) are rejected
-    without overwriting either role, and G2 becomes admissible only after G1
-    Complete releases the origin role. In the symmetric participant-G1/origin-G2
-    case, Begin(G2) is rejected until local Finalize releases G1's participant
-    role; it may then occupy the empty slot, while any Prepare still obeys the
-    independently closed proof fence.
+    On one ontology, Begin(G1) with source material sets both G1 role bits
+    through source fusion. Begin(G2) may coexist. A disjoint Prepare(G2) is
+    accepted; an overlapping one takes the same wait-die result without
+    overwriting either group. Reverse control order and exact acknowledgments
+    produce the same final projection.
 11. Before Begin commits, kill/restart the coordinator process and node with the
     same disk after journal datasync; the signing journal recovers the same
     semantic Begin and either the exact still-admissible envelope or a freshly
     journaled envelope with the same `GroupId`. A crash before journal sync
     leaves no durable group. From committed Begin onward, kill the origin and
     each participant after Begin, after each Prepare, after Decision, after one
-    Finalize, after the last applied status but before Complete, and after
+    Finalize, after the last applied certificate but before Complete, and after
     Complete. Committee-wide recovery reaches exactly one outcome, exactly
-    once, and releases every consensus-admission lock and proof fence under the
+    once, and releases every participant/conflict row and exact apply fence under the
     stated `<= f`, eventual-synchrony, durable-disk, surviving-holder fault
     model.
 12. Partition after Prepare and after Decision. The former stays safely
@@ -2693,8 +2712,11 @@ At minimum:
     and eventually commits Complete without re-proving.
 13. Tamper each session id, `ProofId`/origin binding, invocation sequence, plan,
     manifest, subject/chain, namespace, anchor, phase, record digest, DTX author
-    sequence, block, and certificate. Use an observer, a wrong TLS key, and a
-    removed old committee. Every case fails before voting or lock mutation. The
+    sequence, block, and certificate. Applied-certificate cases include too few
+    signatures, duplicates, outsiders, bad signatures, and wrong network,
+    target, Finalize-era committee, group, Finalize reference, generation, or
+    verdict bindings. Use an observer, a wrong TLS key, and a removed old
+    committee. Every case fails before voting or lock mutation. The
     same coordinator re-enveloping the same semantic Begin after a committed
     same-author DTX control overtakes its old sequence retains its `GroupId` and
     cannot create a second group; reusing target attestations under a different
@@ -2710,32 +2732,38 @@ At minimum:
     commit/abort reversal, Finalize(commit) without Prepare, and a claimed
     `GroupId` paired with a different semantic body are rejected. A direct
     Finalize(abort) requires the certified matching Decision, writes one no-op
-    tombstone, and makes every later Prepare a phase reversal. Duplicate or
-    changed Complete evidence is checked with the same strictness. With a fixed coordinator
+    tombstone, and makes every later Prepare a phase reversal. Missing or bad
+    ephemeral Complete sidecar evidence makes the validator abstain; redriving
+    the same block hash with valid evidence succeeds and cannot be poisoned by
+    the first sidecar. Two different valid `f + 1` signer subsets leave the
+    Complete bytes and block hash identical. With a fixed coordinator
     generation and nonce, permuting the same
     participant inputs builds byte-identical target-ordered manifest/Begin
     bodies; duplicate identities or a non-canonical participant bundle on the
     wire are rejected. A sealed scope's first manifest attestation is cached;
     exact retry returns the same bytes and a second digest is rejected.
-16. Restart and fresh catch-up reconstruct exact active consensus-admission
-    locks, the independent proof fence and generation, hidden plans, facts,
+16. Restart and fresh catch-up reconstruct exact groups, conflict rows, apply
+    fences, global generation, hidden plans, facts,
     committee projection, group status, and terminal index. For commit and a
-    prepared abort, a committed-but-unapplied Finalize has admission open and
-    the proof fence closed until the exact ordered apply/discard acknowledgment.
-    A direct no-Prepare abort is applied at Finalize commit. Replay
+    prepared abort, a committed-but-unapplied material Finalize retains its
+    exact fence until the ordered apply/discard acknowledgment.
+    A direct no-Prepare abort is applied at Finalize commit. Replay and fresh
+    catch-up require no proposal sidecar after the origin Complete QC commits.
+    Replay
     emits no reactions; live post-Finalize apply exposes its applied operations
     once. With a local pending
     G1 and ledger-active G2 both populated, outcome-index reset and restart
     reconstruct both independent fields without blocking G2 recovery or losing
     G1's journal hand-off. When the origin is itself a participant, replay of
-    Begin -> local Prepare -> Decision -> local Finalize preserves both its
-    origin and participant subphases and resumes the correct next command. A
+    fused Begin -> Decision preserves both its origin and participant subphases
+    and resumes the correct next command. A
     participant crash after applying Finalize but before delivering its
-    acknowledgment re-serves the same exact applied status after restart. The
-    origin neither serves a terminal result at the last status nor retains the
-    active slot after Complete commits. Kill the engine after that QC but before
-    its Complete apply: the caller gets outcome-unknown, replay flushes the row
-    before ready, and later lookup is terminal. Fresh replay of G1 Decision
+    acknowledgment can sign the same exact applied statement after restart. The
+    origin may serve the live terminal result at the last required applied
+    certificate but does not retain that GroupId after Complete commits. Kill
+    the engine after that live handoff but before Complete apply: durable lookup
+    remains outcome-unknown, replay flushes the row before ready, and later
+    lookup is terminal. Fresh replay of G1 Decision
     followed by Complete and G2 Begin accepts both in order; deleting Complete
     makes that same G2 history invalid. After more than 4,096 other terminal rows evict an abort tombstone
     from memory, a fresh-envelope Prepare for that old group is still rejected
@@ -2853,10 +2881,12 @@ At minimum:
     state. At most two exact group-phase
     lookups exist for one ontology, attached to the two live pipeline latches;
     competing exact redrives coalesce and verdict, parent retirement, timeout,
-    and Prolog death each reclaim the entry. For a 64-validator target, Complete
-    retains exactly 22 identical canonical status bodies from distinct pinned
-    NodeKeys; a duplicate key or committee-view change is rejected before body
-    retention, and the replies never enlarge the Complete ledger body. An
+    and Prolog death each reclaim the entry. For a 64-validator target, one
+    prepared-Finalize applied certificate carries exactly 22 sorted signatures
+    from distinct members of the exact Finalize-era committee. A duplicate,
+    outsider, wrong binding, or bad signature is rejected. The certificate
+    enlarges only the bounded ephemeral proposal-validation sidecar, never the
+    deterministic Complete ledger body. An
     over-rate frame's bounded
     `GoalBlob` is never decoded as a Prolog term.
 31. The same semantic plan content bound to two namespace/anchor identities

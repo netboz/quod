@@ -137,6 +137,29 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
                        GroupId, DecisionRef, abort, none, 0),
     {ok, Control} = quod_dtx:sign_control(
                       Target, Finalize, Admission, 1, 1, Signer),
+    GroupId2 = <<96:256>>,
+    {ok, DecisionRef2} = quod_dtx:certified_ref(
+                           <<"projection-origin-2">>, <<97:256>>, 1,
+                           <<98:256>>, <<99:256>>, <<"decision-qc-2">>),
+    {ok, Finalize2} = quod_dtx:new_finalize(
+                        GroupId2, DecisionRef2, abort, none, 0),
+    {ok, Control2} = quod_dtx:sign_control(
+                       Target, Finalize2, Admission, 2, 2, Signer),
+    Ops1 = [{assert, {{group_one_fact, one}, {[], false}}}],
+    Ops2 = [{event, {group_two_event, two}}],
+    Item1 = quod_committed_projection:test_publication_item(
+              Control, {group_applied, GroupId, one}, Ops1, none,
+              #{applies => 1, rejects => 0, conflicts => 0}),
+    Item2 = quod_committed_projection:test_publication_item(
+              Control2, {group_applied, GroupId2, two}, Ops2,
+              {finalize_applied, GroupId2, 2, 0},
+              #{applies => 1, rejects => 0, conflicts => 0}),
+    ?assertEqual(Ops1, maps:get(applied_ops, Item1)),
+    ?assertEqual([{group_one_fact, one}], maps:get(changed_heads, Item1)),
+    ?assertEqual(Ops2, maps:get(applied_ops, Item2)),
+    ?assertEqual([], maps:get(changed_heads, Item2)),
+    ?assertEqual(GroupId, maps:get(group_id, Item1)),
+    ?assertEqual(GroupId2, maps:get(group_id, Item2)),
     {ok, Outcomes} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),
     Projection0 = quod_committed_projection:new(
@@ -149,15 +172,21 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
            true,
            proves({peer_admitted, Pubkey, "127.0.0.1", 14567, Pubkey},
                   Projection1)),
-        Entry = dtx_entry(2, Control),
+        Entry = dtx_entry(2, [Control, Control2]),
         {ok, Projection2,
-         #{kind := dtx, group_id := GroupId, publication := none,
-           applied_ops := [],
-           deferred_ack := none}} =
+         #{kind := dtx_batch, controls := [Control, Control2], publications := [],
+           items := BatchItems, applied_ops := [],
+           deferred_acks :=
+             [{finalize_applied, GroupId, 2, 0},
+              {finalize_applied, GroupId2, 2, 0}]}} =
             quod_committed_projection:apply_entry(Entry, 2, Projection1),
+        ?assertEqual([GroupId, GroupId2],
+                     [maps:get(group_id, Item) || Item <- BatchItems]),
+        ?assertEqual([Control, Control2],
+                     [maps:get(control, Item) || Item <- BatchItems]),
         ?assertEqual(2, quod_committed_projection:applied(Projection2)),
-        ?assertEqual(open,
-                     maps:get(proof_fence,
+        ?assertEqual(#{},
+                     maps:get(apply_fences,
                               maps:get(projection,
                                        quod_outcome:dtx_state(
                                          quod_committed_projection:outcomes(
@@ -258,11 +287,12 @@ proves(Goal, Projection) ->
         fail -> false
     end.
 
-dtx_entry(Index, Control) ->
-    {ok, Blob} = quod_dtx:encode_control(Control),
+dtx_entry(Index, Controls) ->
+    Items = [{dtx, begin {ok, Blob} = quod_dtx:encode_control(Control), Blob end}
+             || Control <- Controls],
     EmptyCert = #cert{kind = commit, slot = Index,
                       block_hash = <<0:256>>, sigs = []},
-    Entry0 = #entry{index = Index, data = {dtx, Blob},
+    Entry0 = #entry{index = Index, data = {batch, Items},
                     timestamp = Index, cert = EmptyCert},
     {ok, Block} = quod_simplex:block_from_entry(Entry0),
     Hash = quod_simplex:block_hash(Block),

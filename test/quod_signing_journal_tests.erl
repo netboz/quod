@@ -4,7 +4,7 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--define(MAGIC, 16#51534A31). %% "QSJ1"
+-define(MAGIC, 16#51534A32). %% "QSJ2"
 -define(HDR_BYTES, 12).
 
 persists_votes_and_dtx_floor_test() ->
@@ -30,7 +30,7 @@ persists_votes_and_dtx_floor_test() ->
                          7 => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J3)),
           ?assertEqual(7, quod_signing_journal:dtx_floor(J3, Lane)),
-          ?assertEqual(none, quod_signing_journal:pending_begin(J3)),
+          ?assertEqual(#{}, quod_signing_journal:pending_begins(J3)),
           ok = quod_signing_journal:close(J3)
       end).
 
@@ -65,7 +65,7 @@ unused_header_is_replaceable_but_used_compacted_header_is_not_test() ->
           %% Reconcile removes the only live latch.  Compaction must still
           %% retain the sticky evidence that a signature once existed.
           {ok, J3} = quod_signing_journal:reconcile(
-                       J2, summary(1, #{}, none)),
+                       J2, summary(1, #{}, #{})),
           J4 = quod_signing_journal:compact(J3),
           ?assertEqual(#{}, quod_signing_journal:rounds(J4)),
           ok = quod_signing_journal:close(J4),
@@ -103,6 +103,19 @@ legacy_magics_fail_explicitly_without_mutation_test() ->
             [{1, 16#51564A31}, {2, 16#51564A32}, {3, 16#51564A33}])
       end).
 
+superseded_signing_magic_fails_explicitly_without_mutation_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          Path = journal_path(Ns, Dir),
+          ok = filelib:ensure_dir(Path),
+          Bytes = <<16#51534A31:32>>,
+          ok = file:write_file(Path, Bytes),
+          ?assertError(
+             {unsupported_signing_journal_format, 1, 0},
+             quod_signing_journal:recover(Ns, domain(1), Dir)),
+          ?assertEqual({ok, Bytes}, file:read_file(Path))
+      end).
+
 legacy_magic_in_tail_is_not_trimmed_test() ->
     with_dir(
       fun(Ns, Dir) ->
@@ -116,6 +129,23 @@ legacy_magic_in_tail_is_not_trimmed_test() ->
           HeaderSize = byte_size(Header),
           ?assertError(
              {unsupported_vote_journal_format, 3, HeaderSize},
+             quod_signing_journal:recover(Ns, domain(1), Dir)),
+          ?assertEqual({ok, Bytes}, file:read_file(Path))
+      end).
+
+superseded_signing_magic_in_tail_is_not_trimmed_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          ok = quod_signing_journal:close(J0),
+          Path = journal_path(Ns, Dir),
+          {ok, Header} = file:read_file(Path),
+          Legacy = <<16#51534A31:32>>,
+          ok = file:write_file(Path, Legacy, [append]),
+          Bytes = <<Header/binary, Legacy/binary>>,
+          HeaderSize = byte_size(Header),
+          ?assertError(
+             {unsupported_signing_journal_format, 1, HeaderSize},
              quod_signing_journal:recover(Ns, domain(1), Dir)),
           ?assertEqual({ok, Bytes}, file:read_file(Path))
       end).
@@ -195,7 +225,7 @@ reconcile_uses_only_the_validated_summary_test() ->
           Lane2 = {Admission2, maps:get(pubkey, Signer2)},
           {ok, J4, _} = quod_signing_journal:record_dtx(J3, Control2),
           {ok, J5} = quod_signing_journal:reconcile(
-                       J4, summary(5, #{Lane2 => 7}, none)),
+                       J4, summary(5, #{Lane2 => 7}, #{})),
           ?assertEqual(#{6 => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J5)),
           ?assertEqual(0, quod_signing_journal:dtx_floor(J5, Lane1)),
@@ -203,7 +233,7 @@ reconcile_uses_only_the_validated_summary_test() ->
           ?assertError(
              invalid_signing_journal_reconciliation,
              quod_signing_journal:reconcile(
-               J5, summary(999, #{malformed => 0}, none))),
+               J5, summary(999, #{malformed => 0}, #{}))),
           ok = quod_signing_journal:close(J5)
       end).
 
@@ -224,7 +254,7 @@ dtx_floors_are_scoped_by_author_admission_test() ->
           {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control1),
           {ok, J2, _} = quod_signing_journal:record_dtx(J1, Control2),
           {ok, J3} = quod_signing_journal:reconcile(
-                       J2, summary(0, #{Lane1 => 9, Lane2 => 0}, none)),
+                       J2, summary(0, #{Lane1 => 9, Lane2 => 0}, #{})),
           ?assertEqual(9, quod_signing_journal:dtx_floor(J3, Lane1)),
           ?assertEqual(1, quod_signing_journal:dtx_floor(J3, Lane2)),
           {ok, Control3} = quod_dtx:sign_control(
@@ -251,7 +281,7 @@ uncommitted_dtx_floor_survives_unrelated_reconciliation_test() ->
           %% so its durable allocation must remain the next-sequence floor.
           {ok, J2} = quod_signing_journal:reconcile(
                        J1, summary(
-                             1, #{}, #{Author => Admission}, none)),
+                             1, #{}, #{Author => Admission}, #{})),
           ?assertEqual(1, quod_signing_journal:dtx_floor(J2, Lane)),
           ?assertError(
              {dtx_sequence_conflict, Lane, 1, 1},
@@ -281,7 +311,7 @@ uncommitted_dtx_floor_is_pruned_by_admission_rotation_test() ->
           {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control),
           {ok, J2} = quod_signing_journal:reconcile(
                        J1, summary(
-                             1, #{}, #{Author => Admission2}, none)),
+                             1, #{}, #{Author => Admission2}, #{})),
           ?assertEqual(0, quod_signing_journal:dtx_floor(J2, Lane1)),
           ok = quod_signing_journal:close(J2)
       end).
@@ -296,7 +326,7 @@ committed_dtx_floor_survives_without_local_record_test() ->
           {ok, J1} = quod_signing_journal:reconcile(
                        J0, summary(
                              1, #{Lane => 5},
-                             #{Author => Admission}, none)),
+                             #{Author => Admission}, #{})),
           ?assertEqual(5, quod_signing_journal:dtx_floor(J1, Lane)),
           ok = quod_signing_journal:close(J1)
       end).
@@ -312,7 +342,7 @@ committed_dtx_floor_wins_over_lower_local_floor_test() ->
           {ok, J2} = quod_signing_journal:reconcile(
                        J1, summary(
                              1, #{Lane => 5},
-                             #{Author => Admission}, none)),
+                             #{Author => Admission}, #{})),
           ?assertEqual(5, quod_signing_journal:dtx_floor(J2, Lane)),
           ok = quod_signing_journal:close(J2)
       end).
@@ -324,12 +354,12 @@ malformed_current_admissions_rejects_reconciliation_test() ->
           ?assertError(
              invalid_signing_journal_reconciliation,
              quod_signing_journal:reconcile(
-               J0, summary(0, #{}, #{hash(1) => malformed}, none))),
+               J0, summary(0, #{}, #{hash(1) => malformed}, #{}))),
           ?assertError(
              invalid_signing_journal_reconciliation,
              quod_signing_journal:reconcile(
                J0, #{committed_slot => 0, live_dtx_lanes => #{},
-                     pending => none})),
+                     pending_begins => #{}})),
           ok = quod_signing_journal:close(J0)
       end).
 
@@ -351,7 +381,7 @@ invalid_dtx_control_cannot_mutate_the_journal_test() ->
           ok = quod_signing_journal:close(J0)
       end).
 
-pending_begin_is_one_durable_frame_test() ->
+each_pending_begin_is_one_durable_frame_test() ->
     with_dir(
       fun(Ns, Dir) ->
           Ctx = begin_context(1),
@@ -369,17 +399,19 @@ pending_begin_is_one_durable_frame_test() ->
           ?assertEqual(2, frame_count(Bytes)),
           ?assertEqual(Sequence, quod_signing_journal:dtx_floor(J1, Lane)),
           ?assertEqual(
-             #{lane => Lane, sequence => Sequence, group_id => GroupId,
-               body => Body, envelope => Envelope},
-             quod_signing_journal:pending_begin(J1)),
+             #{GroupId =>
+                   #{lane => Lane, sequence => Sequence,
+                     body => Body, envelope => Envelope}},
+             quod_signing_journal:pending_begins(J1)),
           ok = quod_signing_journal:close(J1),
 
           {ok, J2} = quod_signing_journal:recover(Ns, domain(1), Dir),
           ?assertEqual(Sequence, quod_signing_journal:dtx_floor(J2, Lane)),
           ?assertEqual(
-             #{lane => Lane, sequence => Sequence, group_id => GroupId,
-               body => Body, envelope => Envelope},
-             quod_signing_journal:pending_begin(J2)),
+             #{GroupId =>
+                   #{lane => Lane, sequence => Sequence,
+                     body => Body, envelope => Envelope}},
+             quod_signing_journal:pending_begins(J2)),
           ok = quod_signing_journal:close(J2)
       end).
 
@@ -395,8 +427,8 @@ pending_compaction_preserves_a_later_same_lane_floor_test() ->
           {ok, J1, _} = quod_signing_journal:record_dtx(J0, Begin),
           {ok, J2, _} = quod_signing_journal:record_dtx(J1, Later),
           ?assertEqual(5, quod_signing_journal:dtx_floor(J2, Lane)),
-          ?assertEqual(ExpectedPending,
-                       quod_signing_journal:pending_begin(J2)),
+          ?assertEqual(pending_map(ExpectedPending),
+                       quod_signing_journal:pending_begins(J2)),
           J3 = quod_signing_journal:compact(J2),
           Path = journal_path(Ns, Dir),
           {ok, Compacted} = file:read_file(Path),
@@ -405,12 +437,12 @@ pending_compaction_preserves_a_later_same_lane_floor_test() ->
 
           {ok, J4} = quod_signing_journal:recover(Ns, domain(1), Dir),
           ?assertEqual(5, quod_signing_journal:dtx_floor(J4, Lane)),
-          ?assertEqual(ExpectedPending,
-                       quod_signing_journal:pending_begin(J4)),
+          ?assertEqual(pending_map(ExpectedPending),
+                       quod_signing_journal:pending_begins(J4)),
           ok = quod_signing_journal:close(J4)
       end).
 
-pending_begin_allows_only_same_body_reenveloping_test() ->
+pending_begin_reenveloping_is_scoped_to_its_group_test() ->
     with_dir(
       fun(Ns, Dir) ->
           Ctx = begin_context(2),
@@ -434,57 +466,64 @@ pending_begin_allows_only_same_body_reenveloping_test() ->
               quod_signing_journal:record_dtx(J2, Control2),
           ?assertNotEqual(Envelope1, Envelope2),
           ?assertEqual(2, quod_signing_journal:dtx_floor(J3, Lane)),
-          ?assertMatch(#{lane := Lane, sequence := 2,
-                         group_id := Group1, envelope := Envelope2},
-                       quod_signing_journal:pending_begin(J3)),
+          ?assertMatch(#{Group1 := #{lane := Lane, sequence := 2,
+                                    envelope := Envelope2}},
+                       quod_signing_journal:pending_begins(J3)),
 
-          %% A higher validated committed floor makes that exact envelope
-          %% stale; only the same body at a new higher sequence may replace it.
+          %% A higher validated committed floor does not make already exposed
+          %% bytes equivocate. The exact envelope stays idempotent; only a new
+          %% envelope must allocate above the current floor.
           {ok, J4} = quod_signing_journal:reconcile(
-                       J3, summary(0, #{Lane => 5}, {Group1, Lane})),
+                       J3, summary(0, #{Lane => 5}, #{Group1 => Lane})),
           ?assertEqual(5, quod_signing_journal:dtx_floor(J4, Lane)),
-          ?assertError(
-             {pending_begin_conflict,
-              #{pending := {Group1, Lane, 2},
-                requested := {Group1, Lane, 2}, floor := 5}},
-             quod_signing_journal:record_dtx(J4, Control2)),
+          Size4 = filelib:file_size(Path),
+          {ok, J4a, Envelope2} =
+              quod_signing_journal:record_dtx(J4, Control2),
+          ?assertEqual(Size4, filelib:file_size(Path)),
           Control6 = sign_begin(Ctx, Record, 6),
-          {ok, J5, _Envelope6} =
-              quod_signing_journal:record_dtx(J4, Control6),
+          {ok, J5, Envelope6} =
+              quod_signing_journal:record_dtx(J4a, Control6),
 
           #{control := OtherControl} = Other = begin_control(Ctx, 2, 7),
           #{group_id := Group2} = pending_fixture(Other),
-          ?assertError(
-             {pending_begin_conflict,
-              #{pending := {Group1, Lane, 6},
-                requested := {Group2, Lane, 7}, floor := 6}},
-             quod_signing_journal:record_dtx(J5, OtherControl)),
-          ok = quod_signing_journal:close(J5)
+          {ok, J6, _} = quod_signing_journal:record_dtx(J5, OtherControl),
+          ?assertMatch(
+             #{Group1 := #{lane := Lane, sequence := 6},
+               Group2 := #{lane := Lane, sequence := 7}},
+             quod_signing_journal:pending_begins(J6)),
+
+          %% Exact bytes from the older group remain idempotently retrievable
+          %% after another group advanced the same lane.
+          BeforeRetry = filelib:file_size(Path),
+          {ok, J7, Envelope6} =
+              quod_signing_journal:record_dtx(J6, Control6),
+          ?assertEqual(BeforeRetry, filelib:file_size(Path)),
+          ok = quod_signing_journal:close(J7)
       end).
 
-scanner_rejects_a_conflicting_pending_begin_test() ->
+scanner_recovers_distinct_pending_groups_from_one_lane_test() ->
     with_dir(
       fun(Ns, Dir) ->
           Ctx = begin_context(3),
-          #{control := Control1} = begin_control(Ctx, 1, 1),
+          #{control := Control1} = Fixture1 = begin_control(Ctx, 1, 1),
           Fixture2 = begin_control(Ctx, 2, 2),
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
           {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control1),
           ok = quod_signing_journal:close(J1),
           Path = journal_path(Ns, Dir),
-          Offset = filelib:file_size(Path),
           PendingTerm = pending_term(Fixture2),
           Payload = term_to_binary(PendingTerm, [deterministic]),
           Frame = quod_signing_journal:test_frame(Payload),
           ok = file:write_file(Path, Frame, [append]),
-          {ok, Before} = file:read_file(Path),
-          ?assertError(
-             {signing_journal_pending_conflict, Offset},
-             quod_signing_journal:recover(Ns, domain(1), Dir)),
-          ?assertEqual({ok, Before}, file:read_file(Path))
+          {ok, J2} = quod_signing_journal:recover(Ns, domain(1), Dir),
+          ?assertEqual(
+             maps:merge(pending_map(pending_fixture(Fixture1)),
+                        pending_map(pending_fixture(Fixture2))),
+             quod_signing_journal:pending_begins(J2)),
+          ok = quod_signing_journal:close(J2)
       end).
 
-reconcile_retires_pending_before_accepting_another_group_test() ->
+reconcile_prunes_each_pending_group_independently_test() ->
     with_dir(
       fun(Ns, Dir) ->
           Ctx = begin_context(4),
@@ -492,19 +531,108 @@ reconcile_retires_pending_before_accepting_another_group_test() ->
           #{lane := Lane} = pending_fixture(Fixture1),
           #{control := Control2} = Fixture2 = begin_control(Ctx, 2, 2),
           Expected2 = pending_fixture(Fixture2),
+          #{group_id := Group1} = pending_fixture(Fixture1),
+          #{group_id := Group2} = Expected2,
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
           {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control1),
+          {ok, J1a, _} = quod_signing_journal:record_dtx(J1, Control2),
           {ok, J2} = quod_signing_journal:reconcile(
-                       J1, summary(0, #{Lane => 1}, none)),
-          ?assertEqual(none, quod_signing_journal:pending_begin(J2)),
-          ?assertEqual(1, quod_signing_journal:dtx_floor(J2, Lane)),
-          {ok, J3, _} = quod_signing_journal:record_dtx(J2, Control2),
-          ?assertEqual(Expected2, quod_signing_journal:pending_begin(J3)),
-          ok = quod_signing_journal:close(J3),
+                       J1a, summary(0, #{Lane => 2}, #{Group2 => Lane})),
+          ?assertEqual(#{Group2 => pending_row(Expected2)},
+                       quod_signing_journal:pending_begins(J2)),
+          ?assertEqual(2, quod_signing_journal:dtx_floor(J2, Lane)),
+          ?assertNot(maps:is_key(Group1,
+                                 quod_signing_journal:pending_begins(J2))),
+          ok = quod_signing_journal:close(J2),
 
-          {ok, J4} = quod_signing_journal:recover(Ns, domain(1), Dir),
-          ?assertEqual(Expected2, quod_signing_journal:pending_begin(J4)),
-          ok = quod_signing_journal:close(J4)
+          {ok, J3} = quod_signing_journal:recover(Ns, domain(1), Dir),
+          ?assertEqual(#{Group2 => pending_row(Expected2)},
+                       quod_signing_journal:pending_begins(J3)),
+          ok = quod_signing_journal:close(J3)
+      end).
+
+pending_begin_population_has_no_compiled_count_limit_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          Ctx = begin_context(40),
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          {J1, Expected} = lists:foldl(
+            fun(Variant, {Journal, Acc}) ->
+                    Fixture = begin_control(Ctx, Variant, Variant),
+                    #{control := Control} = Fixture,
+                    #{group_id := GroupId} = Pending =
+                        pending_fixture(Fixture),
+                    {ok, Journal1, _} =
+                        quod_signing_journal:record_dtx(Journal, Control),
+                    {Journal1, Acc#{GroupId => pending_row(Pending)}}
+            end, {J0, #{}}, lists:seq(1, 65)),
+          ?assertEqual(65,
+                       map_size(quod_signing_journal:pending_begins(J1))),
+          ?assertEqual(Expected,
+                       quod_signing_journal:pending_begins(J1)),
+          [{_GroupId, #{lane := Lane}} | _] = maps:to_list(Expected),
+          PendingRefs = maps:map(
+                          fun(_Id, #{lane := PendingLane}) -> PendingLane end,
+                          Expected),
+          {ok, J1a} = quod_signing_journal:reconcile(
+                        J1, summary(0, #{Lane => 65}, PendingRefs)),
+          ?assertEqual(Expected,
+                       quod_signing_journal:pending_begins(J1a)),
+          J2 = quod_signing_journal:compact(J1a),
+          ok = quod_signing_journal:close(J2),
+
+          {ok, J3} = quod_signing_journal:recover(Ns, domain(1), Dir),
+          ?assertEqual(Expected,
+                       quod_signing_journal:pending_begins(J3)),
+          ok = quod_signing_journal:close(J3)
+      end).
+
+compaction_orders_pending_groups_canonically_test() ->
+    with_dir(
+      fun(_Ns, Dir) ->
+          Ns1 = <<"journal:canonical:one">>,
+          Ns2 = <<"journal:canonical:two">>,
+          Domain = domain(44),
+          Fixture1 = begin_control(begin_context(41), 1, 1),
+          Fixture2 = begin_control(begin_context(42), 2, 1),
+          #{control := Control1} = Fixture1,
+          #{control := Control2} = Fixture2,
+
+          {ok, A0} = quod_signing_journal:initialize(Ns1, Domain, Dir),
+          {ok, A1, _} = quod_signing_journal:record_dtx(A0, Control1),
+          {ok, A2, _} = quod_signing_journal:record_dtx(A1, Control2),
+          A3 = quod_signing_journal:compact(A2),
+          ok = quod_signing_journal:close(A3),
+
+          {ok, B0} = quod_signing_journal:initialize(Ns2, Domain, Dir),
+          {ok, B1, _} = quod_signing_journal:record_dtx(B0, Control2),
+          {ok, B2, _} = quod_signing_journal:record_dtx(B1, Control1),
+          B3 = quod_signing_journal:compact(B2),
+          ok = quod_signing_journal:close(B3),
+
+          ?assertEqual(file:read_file(journal_path(Ns1, Dir)),
+                       file:read_file(journal_path(Ns2, Dir)))
+      end).
+
+superseded_record_version_is_not_accepted_under_qsj2_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          ok = quod_signing_journal:close(J0),
+          Path = journal_path(Ns, Dir),
+          Offset = filelib:file_size(Path),
+          Hash = hash(1),
+          Payload = term_to_binary(
+                      {quod_signing_vote, 1, support, 1, Hash},
+                      [deterministic]),
+          ok = file:write_file(
+                 Path, quod_signing_journal:test_frame(Payload), [append]),
+          {ok, Before} = file:read_file(Path),
+          ?assertError(
+             {signing_journal_bad_record,
+              {quod_signing_vote, 1, support, 1, Hash}, Offset},
+             quod_signing_journal:recover(Ns, domain(1), Dir)),
+          ?assertEqual({ok, Before}, file:read_file(Path))
       end).
 
 effect_custody_is_durable_idempotent_and_admission_scoped_test() ->
@@ -568,6 +696,88 @@ effect_custody_is_durable_idempotent_and_admission_scoped_test() ->
           ok = quod_signing_journal:close(J6)
       end).
 
+dormant_transaction_requires_durable_binding_before_activation_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Pub, Seed} = quod_identity:generate(),
+          Signer = #{pubkey => Pub,
+                     key => quod_identity:key_term({Pub, Seed})},
+          Anchor = hash(8251),
+          Admission = hash(8252),
+          Base = effect_transaction(Ns, Anchor, Pub),
+          {Transaction, Submission} = signed_effect(
+                                        Ns, Anchor, Admission, 1,
+                                        Base, Signer),
+          TxId = Transaction#transaction.tx_id,
+          {ok, J0} = quod_signing_journal:initialize(
+                       Ns, domain(1), Dir),
+          {ok, J1} = quod_signing_journal:record_transaction(
+                       J0, Transaction, Submission, dormant),
+          Path = journal_path(Ns, Dir),
+          SizeDormant = filelib:file_size(Path),
+
+          %% Neither the activation API nor a repeated ready registration may
+          %% bypass the fsynced target-prerequisite binding.
+          ?assertError(
+             {transaction_signing_not_bound, TxId},
+             quod_signing_journal:activate_transaction(J1, TxId)),
+          ?assertError(
+             {transaction_signing_not_bound, TxId},
+             quod_signing_journal:record_transaction(
+               J1, Transaction, Submission, ready)),
+          ?assertEqual(SizeDormant, filelib:file_size(Path)),
+          ?assertMatch(
+             #{TxId := #{state := dormant}},
+             quod_signing_journal:pending_transactions(J1)),
+
+          {ok, J2} = quod_signing_journal:bind_transaction(J1, TxId),
+          ?assertMatch(
+             #{TxId := #{state := bound}},
+             quod_signing_journal:pending_transactions(J2)),
+          {ok, J3} = quod_signing_journal:activate_transaction(J2, TxId),
+          ?assertMatch(
+             #{TxId := #{state := ready}},
+             quod_signing_journal:pending_transactions(J3)),
+          ok = quod_signing_journal:close(J3),
+
+          {ok, J4} = quod_signing_journal:recover(
+                       Ns, domain(1), Dir),
+          ?assertMatch(
+             #{TxId := #{state := ready}},
+             quod_signing_journal:pending_transactions(J4)),
+          ok = quod_signing_journal:close(J4)
+      end).
+
+dormant_transaction_activation_record_is_rejected_on_recovery_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Pub, Seed} = quod_identity:generate(),
+          Signer = #{pubkey => Pub,
+                     key => quod_identity:key_term({Pub, Seed})},
+          Anchor = hash(8261),
+          Admission = hash(8262),
+          Base = effect_transaction(Ns, Anchor, Pub),
+          {Transaction, Submission} = signed_effect(
+                                        Ns, Anchor, Admission, 1,
+                                        Base, Signer),
+          TxId = Transaction#transaction.tx_id,
+          {ok, J0} = quod_signing_journal:initialize(
+                       Ns, domain(1), Dir),
+          {ok, J1} = quod_signing_journal:record_transaction(
+                       J0, Transaction, Submission, dormant),
+          ok = quod_signing_journal:close(J1),
+          Path = journal_path(Ns, Dir),
+          Offset = filelib:file_size(Path),
+          Payload = term_to_binary(
+                      {quod_signing_transaction_activated, 2, TxId},
+                      [deterministic]),
+          ok = file:write_file(
+                 Path, quod_signing_journal:test_frame(Payload), [append]),
+          ?assertError(
+             {signing_journal_bad_transaction_activation, Offset},
+             quod_signing_journal:recover(Ns, domain(1), Dir))
+      end).
+
 compressed_record_is_rejected_without_mutation_test() ->
     with_dir(
       fun(Ns, Dir) ->
@@ -595,7 +805,7 @@ unknown_atom_record_is_rejected_without_atom_creation_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Canonical = term_to_binary(
-                        {quod_signing_vote, 1, support, 8, hash(8)},
+                        {quod_signing_vote, 2, support, 8, hash(8)},
                         [deterministic]),
           Unknown = binary:replace(Canonical, <<"support">>, <<"qzxqvjk">>),
           ?assertNotEqual(Canonical, Unknown),
@@ -613,7 +823,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Body = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
     Envelope = binary:copy(<<0>>, ?QUOD_MAX_DTX_CONTROL_BYTES),
     AtLimit = term_to_binary(
-                {quod_signing_pending_begin, 1, Fixed, Fixed,
+                {quod_signing_pending_begin, 2, Fixed, Fixed,
                  16#FFFFFFFFFFFFFFFF, Fixed, Body, Envelope},
                 [deterministic]),
     ?assertEqual(quod_signing_journal:test_max_frame_payload_bytes(),
@@ -621,7 +831,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Frame = quod_signing_journal:test_frame(AtLimit),
     ?assertEqual(byte_size(AtLimit) + ?HDR_BYTES, byte_size(Frame)),
     Over = term_to_binary(
-             {quod_signing_pending_begin, 1, Fixed, Fixed,
+             {quod_signing_pending_begin, 2, Fixed, Fixed,
               16#FFFFFFFFFFFFFFFF, Fixed, Body,
              <<Envelope/binary, 0>>},
              [deterministic]),
@@ -645,26 +855,27 @@ with_dir(Fun) ->
         _ = file:del_dir_r(Dir)
     end.
 
-summary(Slot, Live, Pending) ->
+summary(Slot, Live, PendingBegins) ->
     Admissions = maps:from_list(
                    [{Author, Admission}
                     || {{Admission, Author}, _Floor} <- maps:to_list(Live)]),
-    summary(Slot, Live, Admissions, Pending).
+    summary(Slot, Live, Admissions, PendingBegins).
 
-summary(Slot, Live, Admissions, Pending) ->
+summary(Slot, Live, Admissions, PendingBegins) ->
     #{committed_slot => Slot, live_dtx_lanes => Live,
-      current_admissions => Admissions, pending => Pending}.
+      current_admissions => Admissions,
+      pending_begins => PendingBegins}.
 
 finalize_control(N, Sequence) ->
     {Pub, Seed} = quod_identity:generate(),
     Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
     Admission = hash(1000 + N),
     Ns = <<"journal:target">>,
-    Anchor = hash(2000 + N),
-    Target = {Ns, Anchor},
+    Target = {Ns, hash(2000 + N)},
     GroupId = hash(3000 + N),
     {ok, DecisionRef} = quod_dtx:certified_ref(
-                          Ns, Anchor, 1, hash(4000 + N), hash(5000 + N),
+                          <<Ns/binary, ":origin">>, hash(1990 + N), 1,
+                          hash(4000 + N), hash(5000 + N),
                           <<"finality">>),
     {ok, Record} = quod_dtx:new_finalize(
                      GroupId, DecisionRef, abort, none, 0),
@@ -752,10 +963,11 @@ sign_begin(#{origin := Origin, admission := Admission,
                       Origin, Record, Admission, Sequence, 0, Signer),
     Control.
 
-same_lane_finalize(#{origin := {Ns, Anchor} = Target,
+same_lane_finalize(#{origin := {Ns, _Anchor} = Target,
                      admission := Admission, signer := Signer}, Sequence) ->
     {ok, DecisionRef} = quod_dtx:certified_ref(
-                          Ns, Anchor, 1, hash(7100), hash(7101), <<"qc">>),
+                          <<Ns/binary, ":origin">>, hash(7099), 1,
+                          hash(7100), hash(7101), <<"qc">>),
     {ok, Record} = quod_dtx:new_finalize(
                      hash(7102), DecisionRef, abort, none, 0),
     {ok, Control} = quod_dtx:sign_control(
@@ -795,11 +1007,19 @@ pending_fixture(#{control := Control}) ->
       body => maps:get(body_blob, Meta),
       envelope => element(2, quod_dtx:encode_control(Control))}.
 
+pending_map(#{group_id := GroupId} = Fixture) ->
+    #{GroupId => pending_row(Fixture)}.
+
+pending_row(#{lane := Lane, sequence := Sequence,
+              body := Body, envelope := Envelope}) ->
+    #{lane => Lane, sequence => Sequence,
+      body => Body, envelope => Envelope}.
+
 pending_term(Fixture) ->
     #{lane := {Admission, Author}, sequence := Sequence,
       group_id := GroupId, body := Body, envelope := Envelope} =
         pending_fixture(Fixture),
-    {quod_signing_pending_begin, 1, Admission, Author, Sequence,
+    {quod_signing_pending_begin, 2, Admission, Author, Sequence,
      GroupId, Body, Envelope}.
 
 frame_count(Bytes) -> frame_count(Bytes, 0).

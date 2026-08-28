@@ -4,9 +4,11 @@ Live event stream of the explorer (`m:quod_explorer`). One WebSocket per browser
 each pushes JSON frames built by `m:quod_explorer_http`'s shared renderers, fusing the
 two commit-side seams:
 
-- **`{committed, Ns}`** (pre-apply, from `quod_simplex:publish_feed/3`) — the full block
-  the instant it finalizes: every transaction with author, submit time, diff, result and
-  the quorum certificate. This paints the row immediately.
+- **`{committed, Ns}` full-entry messages** (pre-apply, from
+  `quod_simplex:publish_feed/3`) — the full block the instant it finalizes:
+  every transaction with author, submit time, diff, result and the quorum
+  certificate. This paints the row immediately. Height-only certified-head
+  wake messages on the same property are intentionally ignored.
 - **`{runtime, Ns}`** (post-apply, from `quod_prolog`) — the per-transaction apply outcome:
   `applied_live` when it changed the kb (flips the row to *applied*) and `rejected_live` when
   it committed but its OCC re-check failed at apply (flips the row to *rejected*). Every
@@ -14,7 +16,7 @@ two commit-side seams:
   rejection. The replay boundaries on the same property become an untagged `sync` nudge (they
   carry no namespace) telling the client to refetch `/api/summary`.
 
-Frames: `hello` (summary, on connect) · `block` (content or DTX phase) ·
+Frames: `hello` (summary, on connect) · `block` (content or DTX batch) ·
 `applied` · `rejected` · `sync`.
 
 The namespace manager publishes each validated local topology change. This
@@ -49,11 +51,7 @@ websocket_info({committed, Ns, _Slot, #entry{} = E}, State) ->
     Block = quod_explorer_http:block_json(Ns, E),
     case maps:get(kind, Block) of
         content -> committed_block_frame(Ns, Block, State);
-        'begin' -> committed_block_frame(Ns, Block, State);
-        prepare -> committed_block_frame(Ns, Block, State);
-        decision -> committed_block_frame(Ns, Block, State);
-        finalize -> committed_block_frame(Ns, Block, State);
-        complete -> committed_block_frame(Ns, Block, State);
+        dtx_batch -> committed_block_frame(Ns, Block, State);
         noop -> {ok, State};
         invalid -> {ok, State}
     end;

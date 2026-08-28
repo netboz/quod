@@ -87,6 +87,186 @@ validator_routes_fail_whole_on_anchor_conflict_test() ->
              quod_directory:validator_routes(Ns, Expected))
       end).
 
+route_availability_notification_is_exact_and_post_projection_test() ->
+    Ns = <<"quod:route-notify">>,
+    Anchor = anchor(Ns),
+    Identity = {Ns, Anchor},
+    OtherIdentity = {Ns, anchor(<<Ns/binary, ":other">>)},
+    Seed = {<<"private">>, 2041},
+    Key = key(43),
+    with_directory(
+      #{allowlist => #{Ns => [Key]}},
+      fun(_Pid) ->
+          true = quod_reg:subscribe({directory_route, Identity}),
+          true = quod_reg:subscribe({directory_route, OtherIdentity}),
+          try
+              %% A provisional contact and a rejected advertisement cannot
+              %% wake an exact-identity waiter.
+              ok = quod_directory:add_direct_seed(Ns, Seed),
+              assert_no_directory_route_event(),
+              ?assertEqual(
+                 {error, not_allowed},
+                 quod_directory:install_record(
+                   key(44), {<<"denied">>, 1044}, hosted(Ns), 1, 1)),
+              assert_no_directory_route_event(),
+
+              %% The event is sent only after the normal projection is usable,
+              %% and contains identity only -- never endpoint or route data.
+              ok = quod_directory:confirm_direct_seed(
+                     Ns, Seed, Key, Anchor, validator),
+              receive
+                  {directory_route_available, Identity} ->
+                      ?assertMatch(
+                         {ok, [#{node_key := Key}]},
+                         quod_directory:validator_routes(Ns, Anchor))
+              after 1000 ->
+                  erlang:error(missing_directory_route_event)
+              end,
+              assert_no_directory_route_event()
+          after
+              true = quod_reg:unsubscribe({directory_route, OtherIdentity}),
+              true = quod_reg:unsubscribe({directory_route, Identity})
+          end
+      end).
+
+private_route_reannounces_when_its_authenticated_node_returns_test() ->
+    PrivateNs = <<"quod:private-return">>,
+    RootNs = <<"quod:root">>,
+    PrivateAnchor = anchor(PrivateNs),
+    PrivateIdentity = {PrivateNs, PrivateAnchor},
+    RootAnchor = anchor(RootNs),
+    Seed = {<<"private-node">>, 2042},
+    Key = key(47),
+    with_directory(
+      #{allowlist => #{RootNs => [Key]}},
+      fun(_Pid) ->
+          true = quod_reg:subscribe({directory_route, PrivateIdentity}),
+          try
+              ok = quod_directory:add_direct_seed(PrivateNs, Seed),
+              ok = quod_directory:confirm_direct_seed(
+                     PrivateNs, Seed, Key, PrivateAnchor, validator),
+              await_directory_route_event(PrivateIdentity),
+
+              %% The private ontology is deliberately absent from the public
+              %% advertisement. A fresh signed record for the same physical
+              %% node is nevertheless the exact remote-liveness edge which
+              %% releases its pinned private route after restart/partition.
+              {ok, _} = quod_directory:install_record(
+                          Key, {<<"returned-node">>, 1047},
+                          [{RootNs, RootAnchor, validator}], 1, 1),
+              await_directory_route_event(PrivateIdentity),
+              ?assertMatch(
+                 {ok, [#{node_key := Key, endpoint := Seed}]},
+                 quod_directory:validator_routes(
+                   PrivateNs, PrivateAnchor)),
+
+              %% A stale/replayed record is not a fresh liveness edge.
+              ?assertEqual(
+                 {error, stale_record},
+                 quod_directory:install_record(
+                   Key, {<<"returned-node">>, 1047},
+                   [{RootNs, RootAnchor, validator}], 1, 1)),
+              assert_no_directory_route_event()
+          after
+              true = quod_reg:unsubscribe(
+                       {directory_route, PrivateIdentity})
+          end
+      end).
+
+route_notification_change_removal_and_unsubscribe_are_safe_test() ->
+    Ns = <<"quod:route-change">>,
+    FirstAnchor = anchor(<<Ns/binary, ":first">>),
+    SecondAnchor = anchor(<<Ns/binary, ":second">>),
+    FirstIdentity = {Ns, FirstAnchor},
+    SecondIdentity = {Ns, SecondAnchor},
+    Key = key(45),
+    ConflictKey = key(46),
+    with_directory(
+      #{allowlist => #{Ns => [Key, ConflictKey]}},
+      fun(_Pid) ->
+          true = quod_reg:subscribe({directory_route, FirstIdentity}),
+          true = quod_reg:subscribe({directory_route, SecondIdentity}),
+          try
+              {ok, _} = quod_directory:install_record(
+                          Key, {<<"first">>, 1045},
+                          [{Ns, FirstAnchor, validator}], 1, 1),
+              await_directory_route_event(FirstIdentity),
+
+              %% A conflicting anchor makes the exact lookup unusable and
+              %% cannot announce either identity. Withdrawing that conflict
+              %% safely announces the identity that becomes usable again.
+              {ok, _} = quod_directory:install_record(
+                          ConflictKey, {<<"conflict">>, 1046},
+                          [{Ns, SecondAnchor, validator}], 1, 1),
+              assert_no_directory_route_event(),
+              {ok, _} = quod_directory:install_record(
+                          ConflictKey, {<<"conflict">>, 1046}, [], 1, 2),
+              await_directory_route_event(FirstIdentity),
+
+              %% Replacing a route wakes only the identity usable in the
+              %% completed replacement; the removed identity is never sent.
+              {ok, _} = quod_directory:install_record(
+                          Key, {<<"second">>, 1047},
+                          [{Ns, SecondAnchor, validator}], 1, 2),
+              await_directory_route_event(SecondIdentity),
+              assert_no_directory_route_event(),
+
+              %% Withdrawal has no available identity to publish.
+              {ok, _} = quod_directory:install_record(
+                          Key, {<<"second">>, 1047}, [], 1, 3),
+              assert_no_directory_route_event(),
+
+              true = quod_reg:unsubscribe(
+                       {directory_route, SecondIdentity}),
+              {ok, _} = quod_directory:install_record(
+                          Key, {<<"second">>, 1048},
+                          [{Ns, SecondAnchor, validator}], 1, 4),
+              assert_no_directory_route_event()
+          after
+              _ = catch quod_reg:unsubscribe(
+                            {directory_route, SecondIdentity}),
+              true = quod_reg:unsubscribe({directory_route, FirstIdentity})
+          end
+      end).
+
+expired_anchor_conflict_publishes_the_identity_it_releases_test() ->
+    Ns = <<"quod:route-expiry">>,
+    DirectAnchor = anchor(<<Ns/binary, ":direct">>),
+    ExpiringAnchor = anchor(<<Ns/binary, ":expiring">>),
+    Identity = {Ns, DirectAnchor},
+    Seed = {<<"private">>, 2048},
+    DirectKey = key(48),
+    ExpiringKey = key(49),
+    with_directory(
+      #{allowlist => #{Ns => [ExpiringKey]}, ttl_ms => 10},
+      fun(_Pid) ->
+          true = quod_reg:subscribe({directory_route, Identity}),
+          try
+              ok = quod_directory:add_direct_seed(Ns, Seed),
+              ok = quod_directory:confirm_direct_seed(
+                     Ns, Seed, DirectKey, DirectAnchor, validator),
+              await_directory_route_event(Identity),
+              {ok, Expiry} = quod_directory:install_record(
+                               ExpiringKey, {<<"expiring">>, 1049},
+                               [{Ns, ExpiringAnchor, validator}], 1, 1),
+              ?assertEqual(
+                 {error, anchor_conflict},
+                 quod_directory:validator_routes(Ns, DirectAnchor)),
+              assert_no_directory_route_event(),
+
+              %% Once the conflicting system row expires, the persistent
+              %% direct identity becomes usable without any new install.
+              %% Expiry itself must therefore publish the exact route edge.
+              ok = quod_directory:expire(Expiry),
+              await_directory_route_event(Identity),
+              ?assertMatch(
+                 {ok, [#{node_key := DirectKey, endpoint := Seed}]},
+                 quod_directory:validator_routes(Ns, DirectAnchor))
+          after
+              true = quod_reg:unsubscribe({directory_route, Identity})
+          end
+      end).
+
 ambiguous_direct_seed_promotion_fails_without_owner_crash_test() ->
     Ns = <<"quod:agent">>,
     Seed = {<<"private">>, 2003},
@@ -343,3 +523,18 @@ host(Ns, Key, Host, Port) ->
 
 anchor(Ns) when is_binary(Ns) ->
     crypto:hash(sha256, Ns).
+
+await_directory_route_event(Identity) ->
+    receive
+        {directory_route_available, Identity} -> ok
+    after 1000 ->
+        erlang:error({missing_directory_route_event, Identity})
+    end.
+
+assert_no_directory_route_event() ->
+    receive
+        {directory_route_available, Identity} ->
+            erlang:error({unexpected_directory_route_event, Identity})
+    after 50 ->
+        ok
+    end.

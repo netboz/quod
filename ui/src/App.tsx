@@ -4,12 +4,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchBlock, fetchSummary, fetchTx, fetchTxs } from './api'
-import type { Block, NsSummary } from './api'
+import type { NsSummary } from './api'
 import { Console } from './Console'
 import { ControlDetail } from './ControlDetail'
 import { NamespacePicker } from './NamespacePicker'
-import { addHistory, mergeFull, replaceHistory, startWs, useExplorerStore } from './store'
-import type { LiveLedgerRow, LiveTx } from './store'
+import { addHistory, mergeBlock, replaceHistory, startWs, useExplorerStore } from './store'
+import type { LiveControl, LiveLedgerRow, LiveTx } from './store'
 import { TxDetail } from './TxDetail'
 import { TxTable } from './TxTable'
 import { SessionControls } from './Session'
@@ -23,7 +23,7 @@ export default function App() {
   const summary = useQuery({ queryKey: ['summary'], queryFn: fetchSummary })
   const [ns, setNs] = useState<string | null>(null)
   const [selected, setSelected] = useState<LiveTx | null>(null)
-  const [selectedControl, setSelectedControl] = useState<{ ns: string; block: Block } | null>(null)
+  const [selectedControl, setSelectedControl] = useState<LiveControl | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => startWs(), [])
@@ -91,9 +91,9 @@ export default function App() {
           setSelectedControl(null)
           setSelected(tx)
         }}
-        onControl={(block) => {
+        onControl={(control) => {
           setSelected(null)
-          setSelectedControl(current ? { ns: current, block } : null)
+          setSelectedControl(control)
         }}
         interactive={interactive}
       />
@@ -120,17 +120,7 @@ export default function App() {
                 setSelected(row)
               } else {
                 setSelected(null)
-                setSelectedControl({
-                  ns: row.ns,
-                  block: {
-                    slot: row.height,
-                    time: row.time,
-                    kind: row.phase,
-                    cert: row.cert,
-                    txs: [],
-                    control: row.control,
-                  },
-                })
+                setSelectedControl(row)
               }
             }}
             hasMore={nextBefore != null}
@@ -145,7 +135,7 @@ export default function App() {
         )}
         {selectedControl && (
           <div className="w-full lg:sticky lg:top-4 lg:w-[26rem] lg:shrink-0">
-            <ControlDetail ns={selectedControl.ns} block={selectedControl.block} onClose={() => setSelectedControl(null)} />
+            <ControlDetail row={selectedControl} onClose={() => setSelectedControl(null)} />
           </div>
         )}
       </main>
@@ -167,7 +157,7 @@ function Header({
   onNs: (ns: string) => void
   ws: 'connecting' | 'live' | 'down'
   onFound: (tx: LiveTx) => void
-  onControl: (block: Block) => void
+  onControl: (control: LiveControl) => void
   interactive: boolean
 }) {
   return (
@@ -198,7 +188,7 @@ function Header({
   )
 }
 
-function Search({ ns, onFound, onControl }: { ns: string; onFound: (tx: LiveTx) => void; onControl: (block: Block) => void }) {
+function Search({ ns, onFound, onControl }: { ns: string; onFound: (tx: LiveTx) => void; onControl: (control: LiveControl) => void }) {
   const [q, setQ] = useState('')
   const [state, setState] = useState<'idle' | 'busy' | 'miss' | 'empty' | 'pending'>('idle')
   const [pendingRef, setPendingRef] = useState<{ anchor: string; tx_id: string } | null>(null)
@@ -217,18 +207,17 @@ function Search({ ns, onFound, onControl }: { ns: string; onFound: (tx: LiveTx) 
     try {
       // All-digit AND short → a block height; a tx id hex is 24 chars (so an all-digit id isn't mistaken
       // for a height). A height loads the whole block: every tx is merged into the list (not just the
-      // first), and the first is opened. A DTX control opens its control detail; a skip reports 'empty'.
+      // first). A DTX batch merges every control and opens the first; a skip reports 'empty'.
       if (/^\d+$/.test(query) && query.length < 16) {
         const b = await fetchBlock(ns, Number(query))
         if (!('error' in b)) {
-          if (b.txs.length === 0) {
-            if (b.control) {
-              onControl(b)
-              return foundControl()
-            }
-            return setState('empty')
+          const blockRows = mergeBlock(ns, b)
+          const firstControl = blockRows.find((row): row is LiveControl => row.row_type === 'control')
+          if (firstControl) {
+            onControl(firstControl)
+            return foundControl()
           }
-          mergeFull(ns, b.txs, b.cert)
+          if (b.txs.length === 0) return setState('empty')
           return found({ ...b.txs[0], status: 'history', cert: b.cert, live: false })
         }
       } else {

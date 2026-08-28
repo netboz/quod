@@ -473,11 +473,7 @@ implicit_content(Data) ->
     case quod_ledger:classify(Data) of
         {content, _Transactions} ->
             quod_simplex:committee_delta(Data) =:= {[], []};
-        {'begin', _Control} -> false;
-        {prepare, _Control} -> false;
-        {decision, _Control} -> false;
-        {finalize, _Control} -> false;
-        {complete, _Control} -> false;
+        {controls, _Controls} -> false;
         noop -> false;
         invalid -> false
     end.
@@ -668,11 +664,7 @@ continue_catch_up(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
 
 window_has_dtx([#entry{data = Data} | Rest]) ->
     case quod_ledger:classify(Data) of
-        {'begin', _} -> true;
-        {prepare, _} -> true;
-        {decision, _} -> true;
-        {finalize, _} -> true;
-        {complete, _} -> true;
+        {controls, _Controls} -> true;
         {content, _} -> window_has_dtx(Rest);
         noop -> window_has_dtx(Rest);
         invalid -> window_has_dtx(Rest)

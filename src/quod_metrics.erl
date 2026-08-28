@@ -11,8 +11,10 @@ Two collection paths:
   * **Poll (5s).** Scalar gauges are refreshed from each subsystem's `stats/1`
     (`m:quod_brahms`, `m:quod_simplex`, `m:quod_prolog`, `m:quod_runtime`, `m:quod_feed`). Cumulative counts are exposed
     as gauges set to the running total (use `rate()`/`increase()` in Grafana).
-  * **Event.** The LIVE `{committed, Ns}` event carries its target namespace and drives finalized-transaction size and
-    author metrics (never replay — see `quod_simplex:publish_feed/3`). The submitting
+  * **Event.** The LIVE `{committed, Ns, Slot, Entry}` shape on the shared
+    `{committed, Ns}` property carries its target namespace and drives finalized-transaction size and
+    author metrics (never replay — see `quod_simplex:publish_feed/3`). Height-only
+    certified-head wakes on that property are ignored here. The submitting
     Prolog process records end-to-end latency and authoritative retry outcomes; the
     proposer records one batching sample per proposed block; completion of an
     origin-owned submission records how many internal retargets it needed.
@@ -46,6 +48,7 @@ Two collection paths:
 | `quod_runtime_reaction_seconds{namespace,result}` | histogram | | local and subscribed reaction matching, owner resolution, and handler time by bounded result |
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
+| `quod_foreign_feed_registrations` | gauge | | live target-validator height-wake registrations owned by the node-wide certified follower |
 | `quod_effect_custody_*` | gauge | | node-wide direct-effect rows (including the group-active subset), reservations, and the committed capacity policy projected from root |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
@@ -56,14 +59,15 @@ Two collection paths:
 | `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | running totals of blocks spread / received / pulled to fill gaps |
 | `quod_feed_dropped{namespace}` | gauge | `reason` | blocks thrown away, by reason (duplicate / gap / unverified / ...) |
 | `quod_feed_digests/fresh_digests{namespace}` | gauge | | nodes sending 'alive' heartbeats / of those, still fresh |
+| `quod_feed_recipients{namespace}` | gauge | | authenticated remote nodes currently registered for correlated height wakes from this hosted ontology |
 | `quod_tx_commit_latency_ms{namespace}` | histogram | | submit → committed-and-applied, measured on the SUBMITTING node with one monotonic clock (one sample per change, at its author) |
 | `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change, attributed to the target ontology |
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes in the target ontology, by its submitting node |
 | `quod_dtx_committed_total{namespace}` | counter | `phase` | committed distributed-control barriers, by protocol phase |
-| `quod_dtx_validation_events_total{namespace}` | counter | `event` | temporary DTX validation abstentions and normal-path redrives |
+| `quod_dtx_validation_events_total{namespace}` | counter | `event` | DTX validation attempts that reached their final abstention safeguard |
 | `quod_dtx_submit_fanout_total{namespace}` | counter | `result` | bounded target-validator DTX delivery attempts and outcomes |
-| `quod_dtx_admission_waiting/dormant{namespace}` | gauge | | sealed distributed writes waiting before Begin, and whether one Begin currently owns the dormant registration slot |
-| `quod_dtx_admission_wait_ms{namespace}` | histogram | | time a sealed distributed write waited before becoming the sole dormant Begin |
+| `quod_dtx_admission_waiting/dormant{namespace}` | gauge | | sealed distributed writes queued before Begin, and distinct groups retained as inactive Begin intents |
+| `quod_dtx_admission_wait_ms{namespace}` | histogram | | time a sealed distributed write waited before its group became an inactive Begin intent |
 | `quod_ontology_owner_current/peak{namespace,component,state}` | gauge | | current and owner-lifetime peak rows in the existing ontology-local DTX and catch-up owners |
 | `quod_ontology_owner_bytes_current/peak{namespace,component}` | gauge | | current and owner-lifetime peak encoded bytes retained by ontology-local owners that retain encoded data |
 | `quod_node_owner_current/peak{component,state}` | gauge | | current and owner-lifetime peak rows in the existing node-wide foreign-history, signed-goal, and scope routers |
@@ -259,11 +263,10 @@ declare(NodeId) ->
     _ = G(quod_consensus_ingress_forwarded, "Total locally queued requests sent to the proposer of their exact target slot when the queue became dispatchable (only ever goes up)."),
     _ = G(quod_consensus_custody_depth, "Origin-owned signed content submissions this node is retaining until its local durable log proves inclusion or exclusion."),
     _ = G(quod_consensus_custody_ready, "Retained origin-owned submissions eligible for placement in the next usable consensus slot."),
-    _ = G(quod_consensus_custody_bytes, "Encoded bytes held by this node's origin-owned submission custody. It is bounded independently of the ordinary ingress queue."),
+    _ = G(quod_consensus_custody_bytes, "Encoded bytes held by this node's origin-owned submission custody."),
     _ = G(quod_consensus_ingress_retargets, "Total times this node placed the same retained signed submission again after its local durable log excluded an earlier placement (only ever goes up)."),
-    _ = G(quod_consensus_relay_accepted, "Total relayed requests whose destination acknowledged that it was holding or processing them. Once acknowledged, the sender stops its fast retry loop (only ever goes up)."),
-    _ = G(quod_consensus_relay_redrives, "Total relay request retries. Before a destination acknowledges receipt they recover dropped sends quickly; after acknowledgement they run slowly only to recover a lost result hint (only ever goes up)."),
-    _ = G(quod_consensus_relay_duplicates, "Total duplicate relay submissions received while the original request was already being processed. This should stay low; a high rate means retries are adding avoidable consensus-mailbox work (only ever goes up)."),
+    _ = G(quod_consensus_relay_accepted, "Total relayed requests whose destination acknowledged that it was holding or processing them (only ever goes up)."),
+    _ = G(quod_consensus_relay_duplicates, "Total exact duplicate relay submissions received while the original request was already being processed. This should stay low; a high rate means reconnect replay or duplicate callers are adding avoidable consensus-mailbox work (only ever goes up)."),
     _ = G(quod_consensus_append_redirect, "Total change requests refused because the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed. This should stay near zero (only ever goes up)."),
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),
     _ = G(quod_consensus_append_stale,    "Total otherwise-valid requests whose author sequence had already been superseded by newer approved history. This is a locally confirmed rejection, so the caller can safely re-prove with a fresh sequence (only ever goes up)."),
@@ -284,7 +287,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
     _ = G(quod_dtx_admission_waiting, "Sealed distributed writes waiting before the existing Begin signing admission opens."),
-    _ = G(quod_dtx_admission_dormant, "Whether one sealed distributed write currently owns the sole dormant Begin registration slot (0 or 1)."),
+    _ = G(quod_dtx_admission_dormant, "Distinct distributed-write groups currently retained as inactive Begin intents."),
     _ = OG(quod_ontology_owner_current,
            "Current rows in internal work owners attached to one locally hosted ontology. Component and state are fixed labels; no remote identity or payload is exposed."),
     _ = OG(quod_ontology_owner_peak,
@@ -312,7 +315,7 @@ declare(NodeId) ->
     _ = RH(quod_runtime_reaction_seconds, "Time spent matching, resolving and running one reaction candidate, split by its bounded result.", ?REACTION_BUCKETS),
     _ = G(quod_runtime_source_targets_active, "How many distinct anchored remote ontologies have at least one active source-qualified reaction interest."),
     _ = G(quod_runtime_source_interests_active, "How many active source-qualified react_on/3 interests are compiled across all targets."),
-    _ = G(quod_runtime_source_views_active, "How many durable subscription targets this namespace runtime is currently following or retrying."),
+    _ = G(quod_runtime_source_views_active, "How many durable subscription targets this namespace runtime currently tracks; unavailable targets remain parked until an owner or route/feed wake."),
     _ = G(quod_runtime_source_views_ready, "How many subscribed foreign projections are currently certified and materialized for this namespace."),
     _ = G(quod_runtime_source_views_building, "How many subscribed foreign projections are currently rebuilding from certified history."),
     _ = G(quod_runtime_source_views_unreachable, "How many durable subscription targets this runtime cannot currently certify or reach."),
@@ -338,15 +341,15 @@ declare(NodeId) ->
     _ = N(quod_foreign_projection_bytes, "MVCC memory bytes held by foreign fact projections currently active on this node."),
     _ = N(quod_foreign_follow_building, "Followed targets whose certified fact projection is rebuilding."),
     _ = N(quod_foreign_follow_unreachable, "Followed targets currently unreachable or not certifiable."),
-    _ = N(quod_foreign_follow_polls, "Total certified-follow refresh attempts started (only ever goes up)."),
-    _ = N(quod_foreign_follow_pages, "Total certified history pages added by follow refreshes (only ever goes up)."),
-    _ = N(quod_foreign_follow_entries, "Total certified ledger entries added by follow refreshes (only ever goes up)."),
-    _ = N(quod_foreign_follow_bytes, "Total certified cache bytes added by follow refreshes (only ever goes up)."),
+    _ = N(quod_foreign_follow_wakes, "Total coalesced message-driven certified-follow wake jobs started (only ever goes up)."),
+    _ = N(quod_foreign_follow_pages, "Total certified history pages added by continuous follows (only ever goes up)."),
+    _ = N(quod_foreign_follow_entries, "Total certified ledger entries added by continuous follows (only ever goes up)."),
+    _ = N(quod_foreign_follow_bytes, "Total certified cache bytes added by continuous follows (only ever goes up)."),
     _ = N(quod_foreign_follow_coalesced, "Total source-view notices collapsed behind an unacknowledged notice (only ever goes up)."),
     _ = N(quod_foreign_follow_resnapshots, "Total state-only follow resnapshots delivered for initial attachment, rebuild, or lost occurrence continuity (only ever goes up)."),
-    _ = N(quod_foreign_follow_retries, "Total certified-follow retries scheduled after unavailable work (only ever goes up)."),
     _ = N(quod_foreign_projection_rebuilds, "Total foreign fact-projection generations started (only ever goes up)."),
     _ = N(quod_foreign_follow_max_lag, "Largest certified source height lag observed since this owner started."),
+    _ = N(quod_foreign_feed_registrations, "Live target-validator height-wake registrations owned by the node-wide certified follower."),
     _ = N(quod_foreign_bootstrap_candidates, "TLS-authenticated foreign route candidates retained separately from dormant verified histories."),
     _ = N(quod_foreign_bootstrap_accepted, "Total authenticated foreign route candidate observations accepted into the lazy history owner (only ever goes up)."),
     _ = N(quod_foreign_bootstrap_rejected, "Total authenticated foreign route candidate observations refused by validation (only ever goes up)."),
@@ -379,6 +382,7 @@ declare(NodeId) ->
     _ = G(quod_feed_pulled,   "Total times this node asked others to send it blocks it was missing (only ever goes up)."),
     _ = G(quod_feed_digests,       "How many other nodes this node is currently getting 'still alive' heartbeats from (used to judge whether a candidate is alive enough to add as a voting node)."),
     _ = G(quod_feed_fresh_digests, "How many of those nodes sent a heartbeat recently enough to still count as alive."),
+    _ = G(quod_feed_recipients, "How many authenticated remote nodes are currently registered for correlated height wakes from this hosted ontology."),
     _ = prometheus_gauge:declare([{name, quod_feed_dropped},
                                   {help, "Total blocks received from other nodes that this node threw away, grouped by why (only ever goes up). "
                                          "duplicate = already had it (harmless); gap = arrived out of order and fetched again later; "
@@ -398,7 +402,7 @@ declare(NodeId) ->
           "How many internal retargets each completed origin-owned submission needed. Zero means its first placement resolved; values above zero expose slot-boundary churn without turning it into a client retry.",
           ?RETARGET_HOPS_BUCKETS),
     _ = H(quod_dtx_admission_wait_ms,
-          "How long a sealed distributed write waited, in milliseconds, before it became the sole dormant Begin intent.",
+          "How long a sealed distributed write waited, in milliseconds, before its group became an inactive Begin intent.",
           ?DTX_ADMISSION_WAIT_BUCKETS),
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
@@ -464,7 +468,7 @@ declare(NodeId) ->
                                     {labels, [namespace, phase]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_dtx_validation_events_total},
-           {help, "Distributed-control validation attempts that temporarily abstained or were redriven through the normal validation path."},
+           {help, "Distributed-control validation attempts that reached their final abstention safeguard."},
            {labels, [namespace, event]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_dtx_submit_fanout_total},
@@ -507,7 +511,7 @@ declare(NodeId) ->
           "1 when the connection to this other node is recovering from data lost on the network, 0 otherwise."),
     _ = prometheus_counter:declare(
           [{name, quod_link_send_drops_total},
-           {help, "Total messages this node threw away instead of sending, grouped by destination, bounded channel class, and reason. channel='log' is consensus, channel='ingress' is retained relay traffic, and channel='other' covers every non-Simplex or malformed channel without creating arbitrary labels. 'flow_control' means that node was reading too slowly to accept more; 'queue_full' means this node's own outbound buffer was full. A thrown-away message is re-sent later by a timer, so a steady climb here quietly slows agreement down (only ever goes up)."},
+           {help, "Total messages this node threw away instead of sending, grouped by destination, bounded channel class, and reason. channel='log' is consensus, channel='ingress' is retained relay traffic, and channel='other' covers every non-Simplex or malformed channel without creating arbitrary labels. 'flow_control' means that node was reading too slowly to accept more; 'queue_full' means this node's own outbound buffer was full. Consensus watchdog recovery and retained-relay reconnect replay recover their own lost work; a steady climb still slows progress (only ever goes up)."},
            {labels, [peer, channel, reason]}, {constant_labels, CL}]),
     ok.
 
@@ -651,15 +655,15 @@ refresh_foreign_log() ->
     _ = Set(quod_foreign_projection_bytes, projection_bytes),
     _ = Set(quod_foreign_follow_building, follow_building),
     _ = Set(quod_foreign_follow_unreachable, follow_unreachable),
-    _ = Set(quod_foreign_follow_polls, follow_polls),
+    _ = Set(quod_foreign_follow_wakes, follow_wakes),
     _ = Set(quod_foreign_follow_pages, follow_pages),
     _ = Set(quod_foreign_follow_entries, follow_entries),
     _ = Set(quod_foreign_follow_bytes, follow_bytes),
     _ = Set(quod_foreign_follow_coalesced, follow_coalesced),
     _ = Set(quod_foreign_follow_resnapshots, follow_resnapshots),
-    _ = Set(quod_foreign_follow_retries, follow_retries),
     _ = Set(quod_foreign_projection_rebuilds, projection_rebuilds),
     _ = Set(quod_foreign_follow_max_lag, max_follow_lag),
+    _ = Set(quod_foreign_feed_registrations, feed_registrations),
     _ = Set(quod_foreign_bootstrap_candidates, bootstrap_candidates),
     _ = Set(quod_foreign_bootstrap_accepted, bootstrap_accepted),
     _ = Set(quod_foreign_bootstrap_rejected, bootstrap_rejected),
@@ -754,7 +758,7 @@ refresh_log_ns(Ns) ->
           owner_bytes_current := OwnerBytesCurrent,
           owner_bytes_peak := OwnerBytesPeak,
           ingress_retargets := IRT,
-          relay_accepted := RA, relay_redrives := RRD,
+          relay_accepted := RA,
           relay_duplicates := RDU,
           redrives := RV, progress_slot := PS, progress_phase_code := PP,
           progress_quorum_ready := PQ, progress_timeouts := PT,
@@ -802,7 +806,6 @@ refresh_log_ns(Ns) ->
                   end, OwnerBytesCurrent),
             _ = S(quod_consensus_ingress_retargets, IRT),
             _ = S(quod_consensus_relay_accepted, RA),
-            _ = S(quod_consensus_relay_redrives, RRD),
             _ = S(quod_consensus_relay_duplicates, RDU),
             _ = S(quod_consensus_append_redirect, RR),
             _ = S(quod_consensus_append_bad,      RD),
@@ -828,11 +831,11 @@ refresh_log_ns(Ns) ->
     end.
 
 %% Ask every live connection process for its QUIC transport stats and surface them
-%% per peer. The conn processes register on the `{conn_stats, local}` property; a
+%% per peer. The conn processes register on the `{connections, local}` property; a
 %% bounded selective receive per conn keeps a wedged connection from stalling the
 %% refresh. Stats RTTs arrive in MICROseconds (the lib's public contract) — convert.
 refresh_transport() ->
-    Pids = try gproc:lookup_pids(quod_reg:prop({conn_stats, local}))
+    Pids = try gproc:lookup_pids(quod_reg:prop({connections, local}))
            catch _:_ -> []
            end,
     lists:foreach(
@@ -896,13 +899,14 @@ refresh_prolog_ns(Ns) ->
 refresh_feed_ns(Ns) ->
     case quod_feed:stats(Ns) of
         #{pushed := PU, ingested := IN, pulled := PL, dropped := DR,
-          digests := DG, fresh_digests := FR} ->
+          digests := DG, fresh_digests := FR, recipients := RC} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_feed_pushed,   PU),
             _ = S(quod_feed_ingested, IN),
             _ = S(quod_feed_pulled,   PL),
             _ = S(quod_feed_digests,       DG),
             _ = S(quod_feed_fresh_digests, FR),
+            _ = S(quod_feed_recipients, RC),
             _ = maps:foreach(fun(Reason, C) ->
                                  prometheus_gauge:set(quod_feed_dropped, [label(Ns), atom_to_binary(Reason, utf8)], C)
                              end, DR),
@@ -912,9 +916,10 @@ refresh_feed_ns(Ns) ->
 
 %% --- live commit event ---------------------------------------------------
 
-%% Subscribe (once per namespace) to the LIVE {committed, Ns} event so the per-tx histograms/counter see
-%% each finalized transaction. Idempotent: only namespaces not already subscribed are registered, and the
-%% subscription lives on THIS process, so it survives a quod_simplex restart.
+%% Subscribe once per namespace to the shared `{committed, Ns}` property.  The
+%% full-entry clause above observes each live finalized transaction; height-only
+%% certified-head wakes deliberately fall through.  The subscription lives on
+%% this process, so it survives a quod_simplex restart.
 subscribe_commits(State = #{subs := Subs}) ->
     Subs1 = lists:foldl(fun(Ns, Acc) ->
                             case maps:is_key(Ns, Acc) of
@@ -934,11 +939,10 @@ observe_commit(Ns, #entry{data = Data}) ->
         {content, Transactions} ->
             lists:foreach(fun(T) -> observe_transaction(Ns, T) end,
                           Transactions);
-        {'begin', _Control} -> observe_dtx(Ns, 'begin');
-        {prepare, _Control} -> observe_dtx(Ns, prepare);
-        {decision, _Control} -> observe_dtx(Ns, decision);
-        {finalize, _Control} -> observe_dtx(Ns, finalize);
-        {complete, _Control} -> observe_dtx(Ns, complete);
+        {controls, Controls} ->
+            lists:foreach(
+              fun({Phase, _Control}) -> observe_dtx(Ns, Phase) end,
+              Controls);
         noop -> ok;
         invalid -> ok
     end.
@@ -1059,9 +1063,7 @@ dtx_group_stage(applied_wave) -> {ok, <<"applied_wave">>};
 dtx_group_stage(complete) -> {ok, <<"complete">>};
 dtx_group_stage(endpoint_wait) -> {ok, <<"endpoint_wait">>};
 dtx_group_stage(phase_verification) -> {ok, <<"phase_verification">>};
-dtx_group_stage(applied_verification) -> {ok, <<"applied_verification">>};
 dtx_group_stage(coordinator_mailbox) -> {ok, <<"coordinator_mailbox">>};
-dtx_group_stage(retry_wait) -> {ok, <<"retry_wait">>};
 dtx_group_stage(result_handoff) -> {ok, <<"result_handoff">>};
 dtx_group_stage(end_to_end) -> {ok, <<"end_to_end">>};
 dtx_group_stage(_) -> error.
@@ -1378,12 +1380,12 @@ count_tx_retry(Ns, Reason)
 count_tx_retry(_Ns, _Reason) ->
     ok.
 
--doc "Count one temporary DTX validation abstention or normal-path redrive.".
--spec count_dtx_validation(binary(), abstain | redrive) -> ok.
-count_dtx_validation(Ns, Event)
-  when is_binary(Ns), (Event =:= abstain orelse Event =:= redrive) ->
+-doc "Count one DTX validation attempt that reached final abstention.".
+-spec count_dtx_validation(binary(), abstain) -> ok.
+count_dtx_validation(Ns, abstain)
+  when is_binary(Ns) ->
     count_fixed_event(
-      quod_dtx_validation_events_total, Ns, Event, 1);
+      quod_dtx_validation_events_total, Ns, abstain, 1);
 count_dtx_validation(_Ns, _Event) ->
     ok.
 
@@ -1612,7 +1614,7 @@ consensus_stat_keys() ->
      custody_depth, custody_ready, custody_bytes, ingress_retargets,
      dtx_admission_waiting, dtx_admission_dormant,
      owner_current, owner_peak, owner_bytes_current, owner_bytes_peak,
-     relay_accepted, relay_redrives, relay_duplicates,
+     relay_accepted, relay_duplicates,
      redrives, progress_slot, progress_phase_code, progress_quorum_ready,
      progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,
      head_complaint_votes, head_complaint_signed, missing_certified_blocks,

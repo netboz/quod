@@ -397,29 +397,24 @@ terminal_outcome_json(Outcome, GoalJson, ResultJson) ->
 entry_txs(#entry{data = Data}) ->
     case quod_ledger:classify(Data) of
         {content, Txs} -> Txs;
-        {'begin', _Control} -> [];
-        {prepare, _Control} -> [];
-        {decision, _Control} -> [];
-        {finalize, _Control} -> [];
-        {complete, _Control} -> [];
+        {controls, _Controls} -> [];
         noop -> [];
         invalid -> []
     end.
 
-%% A ledger slot has either its ordinary committed transactions or one durable
-%% DTX control.  Keeping this projection beside block_json/2 makes the paged
-%% history and the live WebSocket describe the same committed ledger; controls
-%% must not disappear merely because they do not have a #transaction{} body.
+%% A ledger slot has either ordinary committed transactions or one canonical
+%% same-phase DTX-control batch. Keeping this projection beside block_json/2
+%% makes paged history and the live WebSocket describe the same committed
+%% ledger; every control gets its own row while sharing the committed slot.
 entry_rows(Ns, #entry{} = E) ->
     entry_rows(none, Ns, E).
 
 entry_rows(Store, Ns, #entry{data = Data} = E) ->
     case quod_ledger:classify(Data) of
         {content, Txs} -> [tx_json(Ns, T, E) || T <- Txs];
-        {Phase, Control}
-          when Phase =:= 'begin'; Phase =:= prepare; Phase =:= decision;
-               Phase =:= finalize; Phase =:= complete ->
-            [control_row(Store, Ns, Phase, Control, E)];
+        {controls, Controls} ->
+            [control_row(Store, Ns, Phase, Control, E)
+             || {Phase, Control} <- Controls];
         noop -> [];
         invalid -> []
     end.
@@ -636,18 +631,16 @@ block_json(Store, Ns, #entry{data = Data} = E) ->
         {content, Txs} ->
             (block_meta(content, E))#{
               txs => [tx_json_full(Ns, T, E) || T <- Txs]};
-        {'begin', Control} -> dtx_block_meta(Store, 'begin', Control, E);
-        {prepare, Control} -> dtx_block_meta(Store, prepare, Control, E);
-        {decision, Control} -> dtx_block_meta(Store, decision, Control, E);
-        {finalize, Control} -> dtx_block_meta(Store, finalize, Control, E);
-        {complete, Control} -> dtx_block_meta(Store, complete, Control, E);
+        {controls, Controls} -> dtx_block_meta(Store, Controls, E);
         noop -> (block_meta(noop, E))#{txs => []};
         invalid -> (block_meta(invalid, E))#{txs => []}
     end.
 
-dtx_block_meta(Store, Phase, Control, E) ->
-    (block_meta(Phase, E))#{txs => [],
-                             control => control_json(Store, Control)}.
+dtx_block_meta(Store, Controls, E) ->
+    (block_meta(dtx_batch, E))#{
+      txs => [],
+      controls => [control_json(Store, Control)
+                   || {_Phase, Control} <- Controls]}.
 
 control_row(Store, Ns, Phase, Control,
             #entry{index = Slot, timestamp = Timestamp}) ->
@@ -737,10 +730,14 @@ finalized_prepare_plan(Store, Target, PrepareRef) ->
             case quod_ledger_store:read_at(Store, Slot) of
                 {ok, #entry{data = Data}} ->
                     case quod_ledger:classify(Data) of
-                        {prepare, PrepareControl} ->
-                            case quod_dtx:record_digest(PrepareControl) =:= Digest of
-                                true -> prepare_plan_json(PrepareControl, Target);
-                                false -> error
+                        {controls, Controls} ->
+                            case [PrepareControl
+                                  || {prepare, PrepareControl} <- Controls,
+                                     quod_dtx:record_digest(PrepareControl) =:=
+                                         Digest] of
+                                [PrepareControl] ->
+                                    prepare_plan_json(PrepareControl, Target);
+                                _ -> error
                             end;
                         _ -> error
                     end;
@@ -873,11 +870,7 @@ block_meta(Kind, #entry{index = Slot, timestamp = Ts, cert = Cert}) ->
 entry_kind(#entry{data = Data}) ->
     case quod_ledger:classify(Data) of
         {content, _Txs} -> content;
-        {'begin', _Control} -> 'begin';
-        {prepare, _Control} -> prepare;
-        {decision, _Control} -> decision;
-        {finalize, _Control} -> finalize;
-        {complete, _Control} -> complete;
+        {controls, _Controls} -> dtx_batch;
         noop -> noop;
         invalid -> invalid
     end.

@@ -33,6 +33,8 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 -behaviour(gen_server).
 
 -export([start_link/0, open_link/2, open_link_pinned/3,
+         open_link_pinned_lease/3,
+         release_link_pinned/4,
          open_link_identified/2,
          send/3, send_pinned/4,
          learn/2, learn_if_absent/2, resolve/1, valid_endpoint/1,
@@ -87,6 +89,43 @@ open_link_pinned(NodeKey, Endpoint, Channel) ->
       quod_reg:via(?KEY),
       {open_link_pinned, NodeKey, Endpoint, Channel, {self(), Ref}}),
     Ref.
+
+-doc """
+Acquire a request-scoped pinned-link lease. It opens/reuses the same pinned
+connection and stream as `open_link_pinned/3`, but the returned reference must
+later be passed to `release_link_pinned/4`. This is for bounded operations whose
+owner process outlives an individual request.
+""".
+-spec open_link_pinned_lease(
+        binary(), {inet:hostname(), inet:port_number()}, binary()) -> reference().
+open_link_pinned_lease(NodeKey, Endpoint, Channel) ->
+    Ref = make_ref(),
+    gen_server:cast(
+      quod_reg:via(?KEY),
+      {open_link_pinned_lease, NodeKey, Endpoint, Channel, {self(), Ref}}),
+    Ref.
+
+-doc """
+Release the exact `{caller, Ref}` lease created by
+`open_link_pinned_lease/3`.
+This only consults the existing pinned connection; cleanup never dials or
+creates transport state. The channel stays open while another exact lease (or
+a connection-owned send) still uses it.
+""".
+-spec release_link_pinned(binary(), {inet:hostname(), inet:port_number()},
+                          binary(), reference()) -> ok.
+release_link_pinned(NodeKey, Endpoint, Channel, Ref)
+  when is_binary(NodeKey), is_binary(Channel), is_reference(Ref) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            gen_server:cast(
+              Pid,
+              {release_link_pinned, NodeKey, Endpoint, Channel,
+               {self(), Ref}});
+        _ ->
+            %% A stopped transport owns no surviving connections or leases.
+            ok
+    end.
 
 -doc """
 Open an identity-discovery link to `Endpoint`. The peer's TLS key is returned
@@ -290,6 +329,27 @@ handle_cast({open_link_pinned, NodeKey, Endpoint, Channel, ReplyTo}, State) ->
             directory_link_error(ReplyTo, NodeKey, Channel),
             {noreply, State}
     end;
+handle_cast(
+  {open_link_pinned_lease, NodeKey, Endpoint, Channel, Lease}, State) ->
+    case ensure_pinned_conn(NodeKey, Endpoint, State) of
+        {ok, ConnPid, State1} ->
+            quod_conn:open_link_lease(ConnPid, Channel, Lease),
+            {noreply, State1};
+        error ->
+            directory_link_error(Lease, NodeKey, Channel),
+            {noreply, State}
+    end;
+handle_cast(
+  {release_link_pinned, NodeKey, Endpoint, Channel, Lease},
+  State = #state{conns = Conns}) ->
+    ConnKey = {directory_pinned, NodeKey, Endpoint},
+    case {is_endpoint(Endpoint), maps:get(ConnKey, Conns, undefined)} of
+        {true, ConnPid} when is_pid(ConnPid) ->
+            quod_conn:release_link(ConnPid, Channel, Lease);
+        _ ->
+            ok
+    end,
+    {noreply, State};
 handle_cast({send_pinned, NodeKey, Endpoint, Channel, Frame}, State)
   when is_binary(Frame) ->
     case ensure_pinned_conn(NodeKey, Endpoint, State) of
@@ -343,6 +403,14 @@ handle_cast({send, Target, Channel, Frame}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({conn_terminal, Pid, Ref}, State = #state{conns = Conns})
+  when is_pid(Pid), is_reference(Ref) ->
+    %% Remove only mappings still owned by this exact connection generation.
+    %% ACK after removal; all earlier owner->conn opens are ordered before it,
+    %% while any later API call necessarily creates/selects the replacement.
+    Conns1 = maps:filter(fun(_, ConnPid) -> ConnPid =/= Pid end, Conns),
+    Pid ! {conn_terminal_ack, self(), Ref},
+    {noreply, State#state{conns = Conns1}};
 handle_info({'DOWN', _Ref, process, Pid, _Reason}, State = #state{conns = Conns}) ->
     {noreply, State#state{conns = maps:filter(fun(_, P) -> P =/= Pid end, Conns)}};
 handle_info(_Info, State) ->

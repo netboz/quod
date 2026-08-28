@@ -52,8 +52,11 @@ validation proves the active agent key and operation claim, while Prepare uses
 each target plan's ordinary authorization transcript. Abort Decisions bind one
 canonical bounded failure-reason
 stack; Complete refers to that Decision without copying the reasons. `reduce/4` is the pure
-fold used by live consensus and replay; local apply acknowledgements can open
-its proof fence but never change consensus-derived generation state.
+fold for already-certified history. `preview_batch/3` applies the same
+projection's readiness rule before a validator may support a prospective
+control wave. Local apply acknowledgements discharge only their exact live group
+fence; certified Complete consumes the matching reconstructed source fence on
+replay. Neither transition changes the global proof generation.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -67,11 +70,12 @@ its proof fence but never change consensus-derived generation state.
          principal/1, request_binding/1, overlay_generation/1, signer/1,
          valid_principal/1,
          participates/1, material_participant/1, diff_ops/1, effects_count/1,
+         conflict_descriptor/1,
          diff_bytes/1, read_check_bytes/1, effects_bytes/1,
          live_bridges_bytes/1,
          material/1, diff/1, read_check/1, effects/1, live_bridges/1,
          transcript/1,
-         new_manifest/1, manifest_digest/1,
+         new_manifest/1, manifest_digest/1, manifest_coordinator/1,
          manifest_group_ref/2,
          encode_manifest/1, decode_manifest/1,
          attest_plan/4, verify_plan_attestation/4,
@@ -82,7 +86,10 @@ its proof fence but never change consensus-derived generation state.
          encode_record/1, decode_record/1,
          sign_control/6, encode_control/1, decode_control/1,
          verify_control/2, control_kind/1, control_target/1,
-         control_body/1, control_metadata/1, prepare_payload/1,
+         control_body/1, control_metadata/1, control_order_key/1,
+         canonical_control_wave/1,
+         prepare_payload/1,
+         begin_participant_payload/2,
          request_auth/1,
          request_claim/1, validate_request/4, requires_network_identity/1,
          prepare_matches_begin/2, validate_references/2, event_context/2,
@@ -90,17 +97,19 @@ its proof fence but never change consensus-derived generation state.
          record_kind/1,
          begin_group_ref/1, begin_recovery_rows/1,
          certified_ref_binding/1, recovery_phase/1, history_phase/2,
-         initial_projection/2, valid_projection/1, origin_recovery/1,
+         initial_projection/2, valid_projection/1, origin_recoveries/1,
          proposal_readiness/2,
-         initial_group_history/0, preview/6, reduce/4,
+         content_readiness/2,
+         initial_group_history/0, preview_batch/3,
+         reduce/4, reduce_batch/3,
          acknowledge_finalize/4]).
 -export_type([plan/0, principal/0, transcript_entry/0,
               manifest/0, attestation/0, certified_ref/0,
               control_record/0, control/0, projection/0,
-              group_history/0]).
+              group_history/0, batch_item/0]).
 
 -define(PLAN_DOMAIN, <<"quod.dtx.plan">>).
--define(PLAN_VERSION, 7).
+-define(PLAN_VERSION, 8).
 
 -define(CONTROL_VERSION, 2).
 -define(MANIFEST_VERSION, 3).
@@ -156,6 +165,10 @@ its proof fence but never change consensus-derived generation state.
          pos_integer(), non_neg_integer(), <<_:512>>}.
 -type projection() :: map().
 -type group_history() :: map().
+-type batch_item() ::
+        #{control := control(), ref := certified_ref(),
+          history := group_history(), projection := projection(),
+          effects := [term()]}.
 
 -doc """
 Seal the calling worker's proof session into a signed local plan.
@@ -237,6 +250,9 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
                              diff_ops => length(Diff),
                              read_functors => map_size(ReadCheck),
                              effects_count => length(Effects),
+                             conflict_descriptor =>
+                                 build_conflict_descriptor(
+                                   Diff, ReadCheck, Effects),
                              diff => DiffBlob,
                              read_check => ReadCheckBlob,
                              effects => EffectsBlob,
@@ -373,10 +389,11 @@ valid_core(#{target := Target, base_height := BaseHeight,
              overlay_generation := Generation,
              diff_ops := DiffOps, read_functors := ReadFunctors,
              effects_count := EffectsCount,
+             conflict_descriptor := ConflictDescriptor,
              diff := Diff, read_check := ReadCheck, effects := Effects,
              live_bridges := Bridges,
              transcript := Transcript} = Core)
-  when map_size(Core) =:= 15,
+  when map_size(Core) =:= 16,
        is_integer(DiffOps), DiffOps >= 0,
        DiffOps =< ?QUOD_MAX_PLAN_DIFF_OPS,
        is_integer(ReadFunctors), ReadFunctors >= 0,
@@ -388,7 +405,9 @@ valid_core(#{target := Target, base_height := BaseHeight,
         is_binary(ProofId) andalso byte_size(ProofId) =:= 32 andalso
         valid_principal(Principal) andalso
         quod_client_goal:valid_request_binding(RequestBinding) andalso
+        valid_conflict_descriptor(ConflictDescriptor) andalso
         is_integer(Generation) andalso Generation >= 0 andalso
+        Generation =< ?MAX_UINT64 andalso
         is_binary(Diff) andalso
         byte_size(Diff) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
         is_binary(ReadCheck) andalso
@@ -579,7 +598,10 @@ materialize_decoded(Core, Decoded) ->
                          andalso valid_live_bridges(Bridges)
                          andalso seal_admissible(
                                    Diff, ReadCheck, Effects, Bridges) =:= ok
-                         andalso valid_transcript(Transcript, 0) of
+                         andalso valid_transcript(Transcript, 0)
+                         andalso build_conflict_descriptor(
+                                   Diff, ReadCheck, Effects) =:=
+                                     maps:get(conflict_descriptor, Core) of
                         true ->
                             {ok, #{diff => Diff, read_check => ReadCheck,
                                    effects => Effects,
@@ -596,6 +618,43 @@ materialize_decoded(Core, Decoded) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+-doc "Signed atom-safe read/write/effect conflict keys.".
+conflict_descriptor(Plan) -> maps:get(conflict_descriptor, core(Plan)).
+
+build_conflict_descriptor(Diff, ReadCheck, Effects) ->
+    Reads = lists:sort([conflict_functor(Key) || Key <- maps:keys(ReadCheck)]),
+    Writes = lists:usort(
+               [conflict_functor(erlog_int:functor(Head))
+                || {Operation, {Head, _Body}} <- Diff,
+                   Operation =:= assert orelse Operation =:= retract]),
+    Custody = lists:usort([quod_effect:target(Effect) || Effect <- Effects]),
+    #{reads => Reads, writes => Writes, custody => Custody}.
+
+conflict_functor({Name, Arity}) -> {atom_to_binary(Name, utf8), Arity}.
+
+valid_conflict_descriptor(
+  #{reads := Reads, writes := Writes, custody := Custody} = Descriptor)
+  when map_size(Descriptor) =:= 3 ->
+    valid_conflict_functors(Reads, none) andalso
+        valid_conflict_functors(Writes, none) andalso
+        valid_conflict_identities(Custody, none);
+valid_conflict_descriptor(_) -> false.
+
+valid_conflict_functors([], _Previous) -> true;
+valid_conflict_functors([{Name, Arity} = Key | Rest], Previous)
+  when is_binary(Name), byte_size(Name) > 0,
+       is_integer(Arity), Arity >= 0,
+       (Previous =:= none orelse Previous < Key) ->
+    valid_conflict_functors(Rest, Key);
+valid_conflict_functors(_, _) -> false.
+
+valid_conflict_identities([], _Previous) -> true;
+valid_conflict_identities([Identity | Rest], Previous)
+  when Previous =:= none; Previous < Identity ->
+    valid_identity(Identity) andalso
+        valid_conflict_identities(Rest, Identity);
+valid_conflict_identities(_, _) -> false.
 
 build_read_check([], Expected, Expected, Acc) ->
     {ok, Acc};
@@ -1043,7 +1102,8 @@ new_prepare(
             GroupId = record_digest_unchecked('begin', Begin),
             case validate_certified_ref(BeginRef) andalso
                  ref_record_digest(BeginRef) =:= GroupId andalso
-                 ref_identity(BeginRef) =:= manifest_origin(Manifest) of
+                 ref_identity(BeginRef) =:= manifest_origin(Manifest) andalso
+                 Target =/= manifest_origin(Manifest) of
                 true ->
                     case lists:keyfind(Target, 1, Bundles) of
                         {Target, <<_:256>> = PlanDigest, PlanBlob,
@@ -1337,6 +1397,35 @@ prepare_payload(
 prepare_payload(_) ->
     error.
 
+-doc "Return one exact participant payload carried by a validated Begin.".
+-spec begin_participant_payload(control() | control_record(), identity()) ->
+          {ok, manifest(), <<_:256>>, binary()} | not_found | error.
+begin_participant_payload(
+  {quod_dtx_control, ?CONTROL_VERSION, 'begin', Target, Begin,
+   _, _, _, _, _} = Control, Target) ->
+    case valid_control_shallow(Control) andalso
+         valid_control_record('begin', Target, Begin) of
+        true -> begin_participant_payload(Begin, Target);
+        false -> error
+    end;
+begin_participant_payload(
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+   Bundles} = Begin, Target) ->
+    case valid_record('begin', Begin) andalso valid_identity(Target) of
+        true ->
+            case lists:keyfind(Target, 1, Bundles) of
+                {Target, <<_:256>> = PlanDigest, PlanBlob, _Attestation}
+                  when is_binary(PlanBlob) ->
+                    {ok, Manifest, PlanDigest, PlanBlob};
+                false ->
+                    not_found
+            end;
+        false ->
+            error
+    end;
+begin_participant_payload(_, _) ->
+    error.
+
 prepare_payload_fields(
   {quod_dtx_prepare, ?RECORD_VERSION, _, _, Manifest,
    <<_:256>> = PlanDigest, PlanBlob}) ->
@@ -1446,12 +1535,12 @@ validate_reference_chain(
   {quod_dtx_complete, ?RECORD_VERSION, GroupId, DecisionRef, FinalizeRows},
   [{decision, DecisionRef, DecisionControl} | FinalizeEvidence]) ->
     case exact_evidence_record(decision, DecisionRef, DecisionControl) of
-        {ok, _DecisionTarget,
-         {quod_dtx_decision, ?RECORD_VERSION, GroupId, _BeginRef, Verdict,
+        {ok, DecisionTarget,
+         {quod_dtx_decision, ?RECORD_VERSION, GroupId, BeginRef, Verdict,
           PrepareRows, _Reasons}} ->
             complete_evidence_matches(
               FinalizeRows, FinalizeEvidence, GroupId, DecisionRef,
-              Verdict, PrepareRows) andalso
+              Verdict, PrepareRows, DecisionTarget, BeginRef) andalso
                 complete_participants_match(
                   Verdict, PrepareRows, FinalizeRows);
         _ ->
@@ -1498,6 +1587,17 @@ decision_participants_match(Verdict, PrepareRows, Manifest) ->
 
 prepare_evidence_matches([], [], _GroupId, _BeginRef, _BeginControl) ->
     true;
+prepare_evidence_matches(
+  [{Target, BeginRef} | RowRest], Evidence,
+  GroupId, BeginRef,
+  {quod_dtx_control, ?CONTROL_VERSION, 'begin', Target,
+   {quod_dtx_begin, ?RECORD_VERSION, _Manifest, _RequestAuth,
+    _Bundles} = Begin, _, _, _, _, _} = BeginControl) ->
+    group_id(Begin) =:= GroupId andalso
+        begin_participant_payload(Begin, Target) =/= not_found andalso
+        begin_participant_payload(Begin, Target) =/= error andalso
+        prepare_evidence_matches(
+          RowRest, Evidence, GroupId, BeginRef, BeginControl);
 prepare_evidence_matches(
   [{Target, PrepareRef} | RowRest],
   [{prepare, PrepareRef, PrepareControl} | EvidenceRest],
@@ -1547,12 +1647,23 @@ finalize_prepare_evidence_matches(
 finalize_prepare_evidence_matches(_, _, _, _, _, _, _) ->
     false.
 
-complete_evidence_matches([], [], _GroupId, _DecisionRef, _Verdict, _Rows) ->
+complete_evidence_matches(
+  [], [], _GroupId, _DecisionRef, _Verdict, _Rows, _DecisionTarget,
+  _BeginRef) ->
     true;
+complete_evidence_matches(
+  [{DecisionTarget, DecisionRef, Generation} | RowRest], Evidence,
+  GroupId, DecisionRef, Verdict, PrepareRows, DecisionTarget, BeginRef)
+  when is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64 ->
+    lists:keyfind(DecisionTarget, 1, PrepareRows) =:=
+        {DecisionTarget, BeginRef} andalso
+        complete_evidence_matches(
+          RowRest, Evidence, GroupId, DecisionRef, Verdict, PrepareRows,
+          DecisionTarget, BeginRef);
 complete_evidence_matches(
   [{Target, FinalizeRef, Generation} | RowRest],
   [{finalize, FinalizeRef, FinalizeControl} | EvidenceRest],
-  GroupId, DecisionRef, Verdict, PrepareRows) ->
+  GroupId, DecisionRef, Verdict, PrepareRows, DecisionTarget, BeginRef) ->
     case exact_evidence_record(finalize, FinalizeRef, FinalizeControl) of
         {ok, Target,
          {quod_dtx_finalize, ?RECORD_VERSION, GroupId, DecisionRef, Verdict,
@@ -1561,11 +1672,11 @@ complete_evidence_matches(
               Target, Verdict, PrepareRef, PrepareRows) andalso
                 complete_evidence_matches(
                   RowRest, EvidenceRest, GroupId, DecisionRef,
-                  Verdict, PrepareRows);
+                  Verdict, PrepareRows, DecisionTarget, BeginRef);
         _ ->
             false
     end;
-complete_evidence_matches(_, _, _, _, _, _) ->
+complete_evidence_matches(_, _, _, _, _, _, _, _) ->
     false.
 
 finalize_row_matches_decision(Target, _Verdict, PrepareRef, PrepareRows)
@@ -1620,6 +1731,14 @@ control_metadata(
     #{kind => Kind, target => Target, body_blob => deterministic(Record),
       author => Author, author_admission => Admission, sequence => Sequence,
       submitted_at => SubmittedAt}.
+
+-doc "One canonical signed-journal lane order for retained control batches.".
+-spec control_order_key(control()) ->
+          {{<<_:256>>, <<_:256>>}, pos_integer(), <<_:256>>, identity()}.
+control_order_key(Control) ->
+    Meta = control_metadata(Control),
+    {{maps:get(author_admission, Meta), maps:get(author, Meta)},
+     maps:get(sequence, Meta), group_id(Control), maps:get(target, Meta)}.
 
 -doc "Digest of the semantic record only; outer authors may change it safely.".
 -spec record_digest(control() | control_record()) -> <<_:256>>.
@@ -1758,7 +1877,10 @@ valid_begin_material(
   {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
    Bundles} = Begin) ->
     within_body_limit(Begin) andalso valid_manifest(Manifest) andalso
-        valid_bundles(Manifest, Bundles).
+        case bounded_length(Bundles, ?QUOD_MAX_DTX_PARTICIPANTS) of
+            {ok, Count} when Count >= 2 -> valid_bundles(Manifest, Bundles);
+            _ -> false
+        end.
 
 request_evidence_from_manifest(
   {agent_goal_v1, <<_:256>>, _Bytes, <<_:512>>} = RequestAuth,
@@ -2017,14 +2139,14 @@ bounded_manifest_shape(
         is_binary(Result) andalso
         byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES andalso
         case bounded_length(Participants, ?QUOD_MAX_DTX_PARTICIPANTS) of
-            {ok, Length} when Length >= 1 -> true;
+            {ok, Length} when Length >= 2 -> true;
             _ -> false
         end;
 bounded_manifest_shape(_) -> false.
 
 bounded_bundle_shape(Bundles) ->
     case bounded_length(Bundles, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 1 ->
+        {ok, Length} when Length >= 2 ->
             lists:all(
               fun({Target, <<_:256>>, PlanBlob,
                    {quod_dtx_attestation, ?ATTESTATION_VERSION, _, _, _,
@@ -2048,12 +2170,13 @@ phase_target_matches(
     ref_identity(BeginRef) =:= Target;
 phase_target_matches(
   finalize, Target,
-  {quod_dtx_finalize, ?RECORD_VERSION, _, _, _, none, _}) ->
-    valid_identity(Target);
+  {quod_dtx_finalize, ?RECORD_VERSION, _, DecisionRef, _, none, _}) ->
+    valid_identity(Target) andalso Target =/= ref_identity(DecisionRef);
 phase_target_matches(
   finalize, Target,
-  {quod_dtx_finalize, ?RECORD_VERSION, _, _, _, PrepareRef, _}) ->
-    ref_identity(PrepareRef) =:= Target;
+  {quod_dtx_finalize, ?RECORD_VERSION, _, DecisionRef, _, PrepareRef, _}) ->
+    ref_identity(PrepareRef) =:= Target andalso
+        Target =/= ref_identity(DecisionRef);
 phase_target_matches(
   complete, Target,
   {quod_dtx_complete, ?RECORD_VERSION, _, DecisionRef, _}) ->
@@ -2167,6 +2290,7 @@ valid_prepare_record(ExpectedTarget, Record, GroupId, BeginRef, Manifest,
             {ok, Plan} ->
                 Target = target(Plan),
                 (ExpectedTarget =:= any orelse ExpectedTarget =:= Target)
+                    andalso Target =/= manifest_origin(Manifest)
                     andalso digest(Plan) =:= PlanDigest
                     andalso valid_signed_plan(Plan)
                     andalso plan_matches_manifest(
@@ -2454,127 +2578,151 @@ initial_projection(Target, Generation)
   when is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->
     true = valid_identity(Target),
-    #{target => Target, active => none, consensus_lock => open,
-      proof_fence => open, generation => Generation}.
+    #{target => Target, groups => #{}, conflicts => #{},
+      apply_fences => #{}, generation => Generation}.
 
--doc "Return the exact active origin Begin reference needed to restart recovery.".
--spec origin_recovery(projection()) ->
-          none | {active, <<_:256>>, certified_ref()}.
-origin_recovery(Projection) ->
+-doc "Return every active origin Begin reference in canonical GroupId order.".
+-spec origin_recoveries(projection()) ->
+          [{<<_:256>>, certified_ref()}].
+origin_recoveries(Projection) ->
     case valid_projection(Projection) of
         true ->
-            case maps:get(active, Projection) of
-                #{group_id := GroupId,
-                  origin := #{begin_ref := BeginRef}} ->
-                    {active, GroupId, BeginRef};
-                _ ->
-                    none
-            end;
+            [{GroupId, BeginRef}
+             || {GroupId, #{origin := #{begin_ref := BeginRef}}} <-
+                    lists:sort(maps:to_list(maps:get(groups, Projection)))];
         false ->
-            none
+            []
     end.
 
 -doc "Classify one already-validated retained control against the current projection.".
 -spec proposal_readiness(control_record(), projection()) ->
-          ready | {blocked, active_group | apply} | stale.
+          ready | {blocked, active_group | apply} | {refused, conflict} | stale.
 proposal_readiness(Record, Projection) ->
     case valid_projection(Projection) of
         true -> proposal_readiness_valid(Record, Projection);
         false -> stale
     end.
 
+-doc "Classify ordinary content against exact active DTX participant intents.".
+-spec content_readiness(#transaction{}, projection()) ->
+          ready | {blocked, active_group} | stale.
+content_readiness(#transaction{diff = Diff, read_check = ReadCheck,
+                               effects = Effects}, Projection)
+  when is_list(Diff), is_map(ReadCheck), is_list(Effects) ->
+    case valid_projection(Projection) of
+        true ->
+            try
+                Descriptor = build_conflict_descriptor(Diff, ReadCheck, Effects),
+                case lists:any(
+                       fun({_GroupId, Other}) ->
+                           descriptors_conflict(Descriptor, Other)
+                       end,
+                       maps:to_list(maps:get(conflicts, Projection))) of
+                    true -> {blocked, active_group};
+                    false -> ready
+                end
+            catch _:_ -> stale
+            end;
+        false -> stale
+    end;
+content_readiness(_, _) -> stale.
+
 proposal_readiness_valid(
-  {quod_dtx_finalize, ?RECORD_VERSION, <<_:256>>, _, abort, none, _},
+  {quod_dtx_finalize, ?RECORD_VERSION, _GroupId, _, abort, none, _},
   _Projection) ->
-    %% A direct abort is a metadata-only tombstone. The reducer proves its
-    %% Decision binding and deliberately leaves any unrelated lock untouched.
     ready;
-proposal_readiness_valid(
-  {quod_dtx_begin, ?RECORD_VERSION, _, _, _},
-  #{active := none, consensus_lock := open, proof_fence := open}) ->
-    ready;
-proposal_readiness_valid(
-  {quod_dtx_begin, ?RECORD_VERSION, _, _, _},
-  #{active := none, consensus_lock := open,
-    proof_fence := {pending_apply, _, _, _}}) ->
-    {blocked, apply};
-proposal_readiness_valid(
-  {quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin,
-  #{active := #{group_id := ActiveGroup}}) ->
-    case group_id(Begin) of
-        ActiveGroup -> stale;
-        _FutureGroup -> {blocked, active_group}
-    end;
-proposal_readiness_valid(
-  {quod_dtx_begin, ?RECORD_VERSION, _, _, _}, _Projection) ->
-    stale;
-proposal_readiness_valid(
-  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>>, _, _, _, _},
-  #{active := none, consensus_lock := open, proof_fence := open}) ->
-    ready;
-proposal_readiness_valid(
-  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>>, _, _, _, _},
-  #{active := none, consensus_lock := open,
-    proof_fence := {pending_apply, _, _, _}}) ->
-    {blocked, apply};
-proposal_readiness_valid(
-  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, _, _, _, _},
-  #{active := #{group_id := GroupId, origin := Origin, participant := none},
-    consensus_lock := open, proof_fence := open})
-  when Origin =/= none ->
-    ready;
-proposal_readiness_valid(
-  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, _, _, _, _},
-  #{active := #{group_id := GroupId, origin := Origin, participant := none},
-    consensus_lock := open,
-    proof_fence := {pending_apply, _, _, _}})
-  when Origin =/= none ->
-    {blocked, apply};
-proposal_readiness_valid(
-  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, _, _, _, _},
-  #{active := #{group_id := ActiveGroup}})
-  when GroupId =/= ActiveGroup ->
-    {blocked, active_group};
-proposal_readiness_valid(
-  {quod_dtx_decision, ?RECORD_VERSION, <<_:256>> = GroupId,
-   _, _, _, _},
-  #{active := #{group_id := GroupId,
-                origin := #{phase := begun}},
-    consensus_lock := Lock})
-  when Lock =:= open; Lock =:= {locked, GroupId} ->
-    ready;
-proposal_readiness_valid(
-  {quod_dtx_finalize, ?RECORD_VERSION, <<_:256>> = GroupId,
-   _, _, _PrepareRef, _},
-  #{active := #{group_id := GroupId,
-                origin := Origin,
-                participant := #{phase := prepared}},
-    consensus_lock := {locked, GroupId},
-    proof_fence := {pending, GroupId}}) ->
-    case Origin of
+proposal_readiness_valid(Record, Projection) ->
+    Kind = record_kind(Record),
+    GroupId = case Kind of 'begin' -> group_id(Record); _ -> record_group_id(Record) end,
+    Groups = maps:get(groups, Projection),
+    Fences = maps:get(apply_fences, Projection),
+    Group = maps:get(GroupId, Groups, none),
+    Blocking =
+        case maps:get(GroupId, Fences, none) of
+            #{blocking := true} -> true;
+            _ -> false
+        end,
+    case {Kind, Group, Blocking} of
+        {'begin', none, _} -> readiness_for_new_participant(Record, Projection);
+        {'begin', _, _} -> stale;
+        {prepare, none, _} -> readiness_for_new_participant(Record, Projection);
+        {prepare, #{participant := none}, _} ->
+            readiness_for_new_participant(Record, Projection);
+        {prepare, _, _} -> stale;
+        {decision, #{origin := #{phase := begun}}, _} -> ready;
+        {finalize, #{participant := #{phase := prepared}, origin := Origin}, _} ->
+            case Origin of
+                none -> ready;
+                #{phase := {decided, _}} -> ready;
+                _ -> stale
+            end;
+        {complete, #{origin := #{phase := {decided, _}}, participant := none}, true} ->
+            {blocked, apply};
+        {complete, #{origin := #{phase := {decided, _}}, participant := none}, false} ->
+            ready;
+        _ -> stale
+    end.
+
+readiness_for_new_participant(Record, Projection) ->
+    case record_conflict_descriptor(Record, maps:get(target, Projection)) of
         none -> ready;
-        #{phase := {decided, _}} -> ready;
-        _ ->
-            %% A relayed copy may reach a leader whose committed prefix still
-            %% lacks this certified Decision. Do not propose Finalize early:
-            %% origin custody keeps the relay and retries at a caught-up leader.
-            stale
+        {ok, Descriptor} ->
+            GroupId = case record_kind(Record) of
+                          'begin' -> group_id(Record);
+                          _ -> record_group_id(Record)
+                      end,
+            case conflict_disposition(
+                   GroupId, Descriptor, maps:get(conflicts, Projection)) of
+                none -> ready;
+                wait -> {blocked, active_group};
+                refuse -> {refused, conflict}
+            end;
+        error -> stale
+    end.
+
+record_conflict_descriptor(
+  {quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin, Target) ->
+    case begin_participant_payload(Begin, Target) of
+        not_found -> none;
+        {ok, _Manifest, _Digest, Blob} -> plan_blob_descriptor(Blob);
+        error -> error
     end;
-proposal_readiness_valid(
-  {quod_dtx_complete, ?RECORD_VERSION, <<_:256>> = GroupId, _, _},
-  #{active := #{group_id := GroupId, participant := none,
-                origin := #{phase := {decided, _}}},
-    consensus_lock := open, proof_fence := open}) ->
-    ready;
-proposal_readiness_valid(
-  {quod_dtx_complete, ?RECORD_VERSION, <<_:256>> = GroupId, _, _},
-  #{active := #{group_id := GroupId, participant := none,
-                origin := #{phase := {decided, _}}},
-    consensus_lock := open,
-    proof_fence := {pending_apply, _, _, _}}) ->
-    {blocked, apply};
-proposal_readiness_valid(_Record, _Projection) ->
-    stale.
+record_conflict_descriptor(
+  {quod_dtx_prepare, ?RECORD_VERSION, _, _, _, _, Blob}, _Target) ->
+    plan_blob_descriptor(Blob);
+record_conflict_descriptor(_, _) -> none.
+
+plan_blob_descriptor(Blob) ->
+    case decode(Blob) of
+        {ok, Plan} -> {ok, conflict_descriptor(Plan)};
+        _ -> error
+    end.
+
+%% Wait-die uses the already consensus-bound GroupId as the one global order.
+%% An older contender may wait for younger holders; a younger contender is
+%% refused when any older holder conflicts. Therefore a wait edge always points
+%% from a smaller GroupId to a larger one and a distributed cycle is impossible.
+conflict_disposition(GroupId, Descriptor, Conflicts) ->
+    Holders = [HolderId || {HolderId, Other} <- maps:to_list(Conflicts),
+                           HolderId =/= GroupId,
+                           descriptors_conflict(Descriptor, Other)],
+    case Holders of
+        [] -> none;
+        _ ->
+            case lists:any(fun(HolderId) -> HolderId < GroupId end, Holders) of
+                true -> refuse;
+                false -> wait
+            end
+    end.
+
+descriptors_conflict(#{reads := Reads, writes := Writes, custody := Custody},
+                     #{reads := OtherReads, writes := OtherWrites,
+                       custody := OtherCustody}) ->
+    intersects(Writes, OtherWrites) orelse intersects(Writes, OtherReads) orelse
+        intersects(Reads, OtherWrites) orelse intersects(Custody, OtherCustody).
+
+intersects(A, B) ->
+    ordsets:intersection(A, B) =/= [].
 
 -doc "Empty exact history for one GroupId (at most five records).".
 -spec initial_group_history() -> group_history().
@@ -2596,39 +2744,6 @@ history_phase(Kind, History) ->
         false ->
             not_found
     end.
-
--doc """
-Dry-run one prospective control against an exact parent history and projection.
-
-The candidate has no commit certificate yet, so this function constructs the
-private prospective reference needed by the shared reducer from its exact
-target, slot, block hash, and semantic record digest.  It then returns
-`reduce/4`'s result unchanged.  The successful history and projection are
-validation-only: they contain that prospective reference and must never be
-persisted or installed.  Committed apply calls `reduce/4` again with the real
-certificate-derived reference.
-
-Outer control-signature, author-admission, sequence, and foreign-history checks
-remain the caller's responsibility, exactly as for `reduce/4`.
-""".
--spec preview(control(), identity(), pos_integer(), <<_:256>>,
-              group_history(), projection()) ->
-          {ok, group_history(), projection(), list()} | {error, term()}.
-preview(Control, {Ns, <<_:256>> = Anchor}, Slot,
-        <<_:256>> = BlockHash, History, Projection)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
-    case valid_control_shallow(Control) of
-        true ->
-            {ok, Ref} = certified_ref(
-                          Ns, Anchor, Slot, BlockHash,
-                          record_digest(Control), ?PREVIEW_PROOF),
-            reduce(Control, Ref, History, Projection);
-        false ->
-            {error, {invalid_transition, malformed_state}}
-    end;
-preview(_Control, _Target, _Slot, _BlockHash, _History, _Projection) ->
-    {error, {invalid_transition, malformed_state}}.
 
 -doc """
 Fold one already-certified control through the namespace's monotonic DTX state.
@@ -2663,6 +2778,106 @@ reduce(Control, Ref, History, Projection) ->
             Error
     end.
 
+-doc "Atomically fold one canonical same-phase control wave.".
+-spec reduce_batch([{control(), certified_ref()}],
+                   #{<<_:256>> => group_history()}, projection()) ->
+          {ok, #{<<_:256>> => group_history()}, projection(), [batch_item()]} |
+          {error, term()}.
+reduce_batch(Controls, Histories, Projection)
+  when is_list(Controls), is_map(Histories) ->
+    case canonical_batch(Controls) of
+        true -> reduce_batch_fold(Controls, Histories, Projection, []);
+        false -> {error, {invalid_transition, malformed_batch}}
+    end;
+reduce_batch(_, _, _) -> {error, {invalid_transition, malformed_batch}}.
+
+reduce_batch_fold([], Histories, Projection, Items) ->
+    {ok, Histories, Projection, lists:reverse(Items)};
+reduce_batch_fold([{Control, Ref} | Rest], Histories0, Projection0, Items0) ->
+    GroupId = group_id(Control),
+    History0 = maps:get(GroupId, Histories0, initial_group_history()),
+    case reduce(Control, Ref, History0, Projection0) of
+        {ok, History1, Projection1, Effects} ->
+            reduce_batch_fold(
+              Rest, Histories0#{GroupId => History1}, Projection1,
+              [#{control => Control, ref => Ref, history => History1,
+                 projection => Projection1, effects => Effects} | Items0]);
+        {error, _} = Error -> Error
+    end.
+
+canonical_batch([]) -> false;
+canonical_batch([_ | _] = Controls) ->
+    try
+        Wave = [Control || {Control, Ref} <- Controls,
+                           validate_certified_ref(Ref)],
+        length(Wave) =:= length(Controls) andalso canonical_control_wave(Wave)
+    catch _:_ -> false
+    end.
+
+-doc "Validate one same-phase wave in the canonical signed journal order.".
+canonical_control_wave([]) -> false;
+canonical_control_wave([First | _] = Controls) ->
+    try
+        Kind = control_kind(First),
+        Keys = [control_order_key(Control)
+                || Control <- Controls,
+                   valid_control_shallow(Control),
+                   control_kind(Control) =:= Kind],
+        length(Keys) =:= length(Controls) andalso
+            Keys =:= lists:usort(Keys) andalso unique_lane_sequences(Keys, none)
+    catch _:_ -> false
+    end;
+canonical_control_wave(_) -> false.
+
+unique_lane_sequences([], _Previous) -> true;
+unique_lane_sequences([{Lane, Sequence, _, _} | Rest], Previous) ->
+    LaneSequence = {Lane, Sequence},
+    LaneSequence =/= Previous andalso
+        unique_lane_sequences(Rest, LaneSequence).
+
+-doc "Build prospective references then use the exact batch reducer.".
+-spec preview_batch([{control(), identity(), pos_integer(), <<_:256>>}],
+                    #{<<_:256>> => group_history()}, projection()) ->
+          {ok, #{<<_:256>> => group_history()}, projection(), [batch_item()]} |
+          {error, term()}.
+preview_batch(Candidates, Histories, Projection) when is_list(Candidates) ->
+    try
+        CandidateControls = [Control || {Control, _, _, _} <- Candidates],
+        case prospective_readiness(CandidateControls, Projection) of
+            ready ->
+                Controls =
+                    [{Control,
+                      begin
+                          {Ns, Anchor} = Target,
+                          {ok, Ref} = certified_ref(
+                                        Ns, Anchor, Slot, BlockHash,
+                                        record_digest(Control),
+                                        ?PREVIEW_PROOF),
+                          Ref
+                      end}
+                     || {Control, Target, Slot, BlockHash} <- Candidates],
+                reduce_batch(Controls, Histories, Projection);
+            {error, _} = Error ->
+                Error
+        end
+    catch _:_ -> {error, {invalid_transition, malformed_batch}}
+    end;
+preview_batch(_, _, _) -> {error, {invalid_transition, malformed_batch}}.
+
+%% Prospective controls have no finality certificate yet.  Every validator
+%% applies the one committed-projection admission rule before the certified
+%% reducer is allowed to preview them.  Certified history uses reduce/4
+%% directly, so a terminal Complete can deterministically consume the exact
+%% source fence that its certificate proves was cleared before voting.
+prospective_readiness([], _Projection) -> ready;
+prospective_readiness([Control | Rest], Projection) ->
+    case proposal_readiness(control_body(Control), Projection) of
+        ready -> prospective_readiness(Rest, Projection);
+        {blocked, Reason} -> {error, {invalid_transition, Reason}};
+        {refused, Reason} -> {error, {invalid_transition, Reason}};
+        stale -> {error, {invalid_transition, stale}}
+    end.
+
 reduction_inputs(Control, Ref, History, Projection) ->
     case {valid_control_shallow(Control), validate_certified_ref(Ref),
           valid_group_history(History), valid_projection(Projection)} of
@@ -2693,9 +2908,7 @@ reduction_inputs(Control, Ref, History, Projection) ->
 reduce_new('begin', Record, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case map_size(Records) =:= 0 andalso
-         maps:get(active, Projection) =:= none andalso
-         maps:get(consensus_lock, Projection) =:= open andalso
-         metadata_fence_allowed(maps:get(proof_fence, Projection)) of
+         not maps:is_key(GroupId, maps:get(groups, Projection)) of
         true ->
             begin_transition(
               Record, GroupId, Digest, Ref, History, Projection);
@@ -2704,40 +2917,37 @@ reduce_new('begin', Record, GroupId, Digest, Ref,
     end;
 reduce_new(prepare, Record, GroupId, Digest, Ref,
            History, Records, Projection) ->
-    case maps:get(generation, Projection) =< ?MAX_UINT64 - 2 andalso
-         prepare_transition_allowed(Record, GroupId, Records, Projection) of
+    case prepare_transition_allowed(Record, GroupId, Records, Projection) of
         {ok, Active0} ->
             {quod_dtx_prepare, ?RECORD_VERSION, _, BeginRef,
              Manifest, PlanDigest, PlanBlob} = Record,
-            Generation = maps:get(generation, Projection) + 1,
-            Participant =
-                #{phase => prepared, begin_ref => BeginRef,
-                  prepare_ref => Ref, plan_digest => PlanDigest,
-                  manifest => Manifest, plan => PlanBlob},
-            Active = Active0#{participant := Participant},
-            Projection1 =
-                Projection#{active := Active,
-                            consensus_lock := {locked, GroupId},
-                            proof_fence := {pending, GroupId},
-                            generation := Generation},
-            finish_reduction(
-              prepare, Record, GroupId, Digest, Ref, History, Projection1,
-              [{prepared, GroupId, Ref, Manifest, PlanDigest, PlanBlob,
-                 Generation}]);
+            case install_prepared(
+                   prepare, GroupId, BeginRef, Ref, Manifest, PlanDigest,
+                   PlanBlob, Active0, Projection) of
+                {ok, Projection1, Effect} ->
+                    finish_reduction(
+                      prepare, Record, GroupId, Digest, Ref, History,
+                      Projection1, [Effect]);
+                {error, _} = Error -> Error
+            end;
         {error, _} = Error ->
-            Error;
-        false ->
-            {error, {invalid_transition, generation_exhausted}}
+            Error
     end;
 reduce_new(decision, Record, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case maps:is_key('begin', Records) andalso
          decision_transition(Record, GroupId, Ref, Projection) of
         {ok, Verdict, Active} ->
-            finish_reduction(
-              decision, Record, GroupId, Digest, Ref, History,
-              Projection#{active := Active},
-              [{decided, GroupId, Verdict, Ref}]);
+            Projection1 = put_group(GroupId, Active, Projection),
+            case finalize_source_in_decision(
+                   Record, GroupId, Ref, Records, Projection1) of
+                {ok, Projection2, SourceEffects} ->
+                    finish_reduction(
+                      decision, Record, GroupId, Digest, Ref, History,
+                      Projection2,
+                      [{decided, GroupId, Verdict, Ref} | SourceEffects]);
+                {error, _} = Error -> Error
+            end;
         {error, _} = Error -> Error;
         false -> {error, {invalid_transition, origin_phase}}
     end;
@@ -2772,11 +2982,62 @@ begin_transition(Record, GroupId, Digest, Ref, History, Projection) ->
         #{phase => begun, begin_ref => Ref,
           manifest_digest => manifest_digest_unchecked(Manifest),
           targets => participant_identities(Manifest)},
-    Active =
-        #{group_id => GroupId, origin => Origin, participant => none},
-    finish_reduction(
-      'begin', Record, GroupId, Digest, Ref, History,
-      Projection#{active := Active}, [{origin_started, GroupId, Ref}]).
+    Group0 = #{origin => Origin, participant => none},
+    Projection0 = put_group(GroupId, Group0, Projection),
+    case begin_participant_payload(Record, maps:get(target, Projection)) of
+        not_found ->
+            finish_reduction(
+              'begin', Record, GroupId, Digest, Ref, History, Projection0,
+              [{origin_started, GroupId, Ref}]);
+        {ok, Manifest, PlanDigest, PlanBlob} ->
+            case install_prepared(
+                   'begin', GroupId, Ref, Ref, Manifest, PlanDigest,
+                   PlanBlob, Group0, Projection0) of
+                {ok, Projection1, PreparedEffect} ->
+                    finish_reduction(
+                      'begin', Record, GroupId, Digest, Ref, History,
+                      Projection1,
+                      [{origin_started, GroupId, Ref}, PreparedEffect]);
+                {error, _} = Error -> Error
+            end;
+        error ->
+            {error, {invalid_transition, malformed_state}}
+    end.
+
+install_prepared(PrepareKind, GroupId, BeginRef, PrepareRef,
+                 Manifest, PlanDigest, PlanBlob, Group0, Projection) ->
+    case decode(PlanBlob) of
+        {ok, Plan} ->
+            Descriptor = conflict_descriptor(Plan),
+            OtherConflicts = maps:remove(
+                               GroupId, maps:get(conflicts, Projection)),
+            case conflict_disposition(GroupId, Descriptor, OtherConflicts) of
+                none ->
+            PreparedGeneration = overlay_generation(Plan),
+            Participant =
+                #{phase => prepared, prepare_kind => PrepareKind,
+                  begin_ref => BeginRef, prepare_ref => PrepareRef,
+                  plan_digest => PlanDigest, manifest => Manifest,
+                  plan => PlanBlob, descriptor => Descriptor,
+                  prepared_generation => PreparedGeneration},
+            Group = Group0#{participant := Participant},
+            Projection1 = put_group(GroupId, Group, Projection),
+            Conflicts = maps:get(conflicts, Projection1),
+            {ok,
+             Projection1#{conflicts := Conflicts#{GroupId => Descriptor}},
+             {prepared, GroupId, PrepareRef, Manifest, PlanDigest, PlanBlob,
+              PreparedGeneration}};
+                wait -> {error, {invalid_transition, active_group}};
+                refuse -> {error, {invalid_transition, conflict_refused}}
+            end;
+        _ -> {error, {invalid_transition, malformed_state}}
+    end.
+
+put_group(GroupId, #{origin := none, participant := none}, Projection) ->
+    Projection#{groups := maps:remove(GroupId, maps:get(groups, Projection))};
+put_group(GroupId, Group, Projection) ->
+    Groups = maps:get(groups, Projection),
+    Projection#{groups := Groups#{GroupId => Group}}.
 
 finish_reduction(Kind, Record, GroupId, Digest, Ref,
                  History, Projection, Effects) ->
@@ -2794,20 +3055,18 @@ history_entry(_Kind, _Record, GroupId, Digest, Ref) ->
 prepare_transition_allowed(
   {quod_dtx_prepare, ?RECORD_VERSION, GroupId, BeginRef, _, _, _},
   GroupId, Records, Projection) ->
+    Group = maps:get(GroupId, maps:get(groups, Projection), none),
     case {ref_record_digest(BeginRef) =:= GroupId,
           maps:is_key(finalize, Records), maps:is_key(complete, Records),
-          maps:get(consensus_lock, Projection),
-          maps:get(proof_fence, Projection), maps:get(active, Projection)} of
-        {true, false, false, open, open, none} ->
-            {ok, #{group_id => GroupId, origin => none, participant => none}};
-        {true, false, false, open, open,
-         #{group_id := GroupId, origin := Origin, participant := none} = Active}
+          Group} of
+        {true, false, false, none} ->
+            {ok, #{origin => none, participant => none}};
+        {true, false, false,
+         #{origin := Origin, participant := none} = Active}
           when Origin =/= none ->
             {ok, Active};
-        {true, false, false, _, _, #{group_id := GroupId}} ->
+        {true, false, false, _} ->
             {error, {invalid_transition, participant_active}};
-        {true, false, false, _, _, _} ->
-            {error, {invalid_transition, active_group}};
         _ ->
             {error, {invalid_transition, phase_reversal}}
     end.
@@ -2816,16 +3075,19 @@ decision_transition(
   {quod_dtx_decision, ?RECORD_VERSION, GroupId, BeginRef, Verdict, Rows,
    _ReasonsBlob},
   GroupId, Ref,
-  #{active :=
-      #{group_id := GroupId,
-        origin := #{phase := begun, begin_ref := BeginRef,
-                    targets := Targets} = Origin} = Active}) ->
+  Projection) ->
+    Active = maps:get(GroupId, maps:get(groups, Projection), none),
+    case Active of
+      #{origin := #{phase := begun, begin_ref := BeginRef,
+                    targets := Targets} = Origin} ->
     case decision_rows_match(Verdict, Rows, Targets) of
         true ->
             Origin1 = Origin#{phase := {decided, Verdict}, decision_ref => Ref},
             {ok, Verdict, Active#{origin := Origin1}};
         false ->
             {error, {invalid_transition, bad_participant_set}}
+    end;
+      _ -> {error, {invalid_transition, origin_phase}}
     end;
 decision_transition(_, _, _, _) ->
     {error, {invalid_transition, origin_phase}}.
@@ -2836,55 +3098,9 @@ decision_rows_match(abort, Rows, Targets) ->
     ordered_subset(reference_row_identities(Rows), Targets).
 
 finalize_transition(
-  {quod_dtx_finalize, ?RECORD_VERSION, GroupId, DecisionRef, Verdict,
-   SuppliedPrepareRef, AppliedGeneration}, GroupId, Ref,
-  Records,
-  #{active :=
-      #{group_id := GroupId,
-        participant :=
-          #{phase := prepared, prepare_ref := StoredPrepareRef,
-            manifest := Manifest, plan_digest := PlanDigest,
-            plan := PlanBlob}} = Active,
-    generation := Generation} = Projection) ->
-    case finalize_prepare_matches(
-           Verdict, SuppliedPrepareRef, StoredPrepareRef) andalso
-         prepare_history_matches(Records, StoredPrepareRef) andalso
-         expected_finalize_generation(Verdict, Generation) of
-        {ok, AppliedGeneration} ->
-            case decision_matches_active(Active, DecisionRef, Verdict) of
-                true ->
-            Active1 = release_participant(Active),
-            Effect =
-                case Verdict of
-                    commit ->
-                        {apply_prepared, GroupId, Manifest, PlanDigest,
-                         PlanBlob, Ref, AppliedGeneration};
-                    abort ->
-                        {discard_prepared, GroupId, Manifest, PlanDigest,
-                         PlanBlob, Ref, AppliedGeneration}
-                end,
-                    {ok,
-                     Projection#{active := Active1, consensus_lock := open,
-                                 proof_fence :=
-                                   {pending_apply, GroupId, ref_slot(Ref),
-                                    AppliedGeneration},
-                                 generation := AppliedGeneration},
-                     [Effect]};
-                false ->
-                    {error, {invalid_transition, origin_phase}}
-            end;
-        {ok, _OtherGeneration} ->
-            {error, {invalid_transition, bad_applied_generation}};
-        {error, _} = Error ->
-            Error;
-        false ->
-            {error, {invalid_transition, participant_phase}}
-    end;
-finalize_transition(
   {quod_dtx_finalize, ?RECORD_VERSION, GroupId, DecisionRef, abort,
    none, AppliedGeneration}, GroupId, Ref,
-  Records,
-  #{generation := AppliedGeneration} = Projection) ->
+  Records, Projection) ->
     %% The certified direct abort is a metadata tombstone.  In particular it
     %% is allowed through another group's lock and changes no gate or role.
     case not maps:is_key(prepare, Records) andalso
@@ -2896,30 +3112,219 @@ finalize_transition(
             {error, {invalid_transition, origin_phase}}
     end;
 finalize_transition(
+  {quod_dtx_finalize, ?RECORD_VERSION, GroupId, DecisionRef, Verdict,
+   SuppliedPrepareRef, AppliedGeneration}, GroupId, Ref,
+  Records, Projection) ->
+    case finalize_prepared(
+           prepare, GroupId, DecisionRef, Verdict, SuppliedPrepareRef,
+           AppliedGeneration, Ref, Records, Projection) of
+        {ok, Projection1, Effect} -> {ok, Projection1, [Effect]};
+        {error, _} = Error -> Error
+    end;
+finalize_transition(
   {quod_dtx_finalize, ?RECORD_VERSION, _, _, commit, none, _}, _, _, _, _) ->
     {error, {invalid_transition, prepare_required}};
 finalize_transition(_, _, _, _, _) ->
     {error, {invalid_transition, participant_phase}}.
 
+finalize_source_in_decision(
+  {quod_dtx_decision, ?RECORD_VERSION, GroupId, _BeginRef, Verdict,
+   Rows, _Reasons}, GroupId, DecisionRef, Records,
+  #{target := Source} = Projection) ->
+    Group = maps:get(GroupId, maps:get(groups, Projection), none),
+    case Group of
+      #{participant := #{phase := prepared,
+                                 prepare_kind := 'begin',
+                                 prepare_ref := BeginRef,
+                                 prepared_generation := PreparedGeneration}} ->
+    case lists:keyfind(Source, 1, Rows) of
+        {Source, BeginRef} ->
+            case expected_finalize_generation(Verdict, PreparedGeneration) of
+                {ok, AppliedGeneration} ->
+                    case finalize_prepared(
+                           'begin', GroupId, DecisionRef, Verdict, BeginRef,
+                           AppliedGeneration, DecisionRef,
+                           Records, Projection) of
+                        {ok, Projection1, Effect} ->
+                            case retain_source_application(
+                                   GroupId, DecisionRef, AppliedGeneration,
+                                   Projection1) of
+                                {ok, Projection2} ->
+                                    {ok, Projection2, [Effect]};
+                                {error, _} = Error ->
+                                    Error
+                            end;
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error ->
+                    Error
+            end;
+        _ ->
+            {error, {invalid_transition, bad_participant_set}}
+    end;
+      #{participant := none} -> {ok, Projection, []};
+      _ -> {error, {invalid_transition, participant_phase}}
+    end;
+finalize_source_in_decision(_, _, _, _, _) ->
+    {error, {invalid_transition, participant_phase}}.
+
+%% Complete carries the source's Decision-as-Finalize generation. Keep that
+%% exact binding in the committed projection until Complete consumes it. A
+%% material write remains blocking until the ordered apply acknowledgement;
+%% abort, read-only, and event-only source plans retain the same marker without
+%% closing proofs. Participant-only Finalize rows are still removed on ack.
+retain_source_application(GroupId, DecisionRef, AppliedGeneration,
+                          #{apply_fences := Fences} = Projection) ->
+    ExpectedSlot = ref_slot(DecisionRef),
+    case maps:get(GroupId, Fences, none) of
+        none ->
+            {ok, Projection#{
+                   apply_fences := Fences#{
+                     GroupId => #{slot => ExpectedSlot,
+                                  generation => AppliedGeneration,
+                                  blocking => false}}}};
+        #{slot := ExpectedSlot, generation := AppliedGeneration,
+          blocking := true} ->
+            {ok, Projection};
+        _ ->
+            {error, {invalid_transition, bad_applied_generation}}
+    end.
+
+finalize_prepared(
+  PrepareKind, GroupId, DecisionRef, Verdict, SuppliedPrepareRef,
+  AppliedGeneration, ApplyRef, Records,
+  Projection) ->
+    Active = maps:get(GroupId, maps:get(groups, Projection), none),
+    case Active of
+      #{participant :=
+          #{phase := prepared, prepare_kind := PrepareKind,
+            prepare_ref := StoredPrepareRef,
+            manifest := Manifest, plan_digest := PlanDigest,
+            plan := PlanBlob,
+            prepared_generation := PreparedGeneration}} ->
+    case finalize_prepare_matches(
+           Verdict, SuppliedPrepareRef, StoredPrepareRef) andalso
+         prepared_history_matches(
+           PrepareKind, Records, StoredPrepareRef) andalso
+         expected_finalize_generation(Verdict, PreparedGeneration) of
+        {ok, AppliedGeneration} ->
+            case decision_matches_active(Active, DecisionRef, Verdict) of
+                true ->
+                    Active1 = release_participant(Active),
+                    Effect =
+                        case Verdict of
+                            commit ->
+                                {apply_prepared, GroupId, Manifest,
+                                 PlanDigest, PlanBlob, ApplyRef,
+                                 AppliedGeneration};
+                            abort ->
+                                {discard_prepared, GroupId, Manifest,
+                                 PlanDigest, PlanBlob, ApplyRef,
+                                 AppliedGeneration}
+                        end,
+                    case apply_projection_transition(
+                           Verdict, GroupId, ApplyRef, AppliedGeneration,
+                           PlanBlob, Active1, Projection) of
+                        {ok, Projection1} -> {ok, Projection1, Effect};
+                        {error, _} = Error -> Error
+                    end;
+                false ->
+                    {error, {invalid_transition, origin_phase}}
+            end;
+        {ok, _OtherGeneration} ->
+            {error, {invalid_transition, bad_applied_generation}};
+        {error, _} = Error ->
+            Error;
+        false ->
+            {error, {invalid_transition, participant_phase}}
+    end;
+      _ -> {error, {invalid_transition, participant_phase}}
+    end.
+
+apply_projection_transition(Verdict, GroupId, ApplyRef, GroupGeneration,
+                            PlanBlob, Group, Projection) ->
+    Conflicts1 = maps:remove(GroupId, maps:get(conflicts, Projection)),
+    Projection0 = put_group(GroupId, Group, Projection#{conflicts := Conflicts1}),
+    case Verdict of
+        abort -> {ok, Projection0};
+        commit ->
+            Global = maps:get(generation, Projection0),
+            case Global < ?MAX_UINT64 of
+                false -> {error, {invalid_transition, generation_exhausted}};
+                true ->
+                    {ok, Plan} = decode(PlanBlob),
+                    Fences0 = maps:get(apply_fences, Projection0),
+                    %% Explicit events are ordered durable occurrences but do
+                    %% not mutate the fact projection. Assert/retract clauses
+                    %% do require the exact apply acknowledgement even when
+                    %% the reducer later finds the individual operation a
+                    %% no-op, because only that reducer owns that decision.
+                    Fences1 =
+                        case maps:get(writes, conflict_descriptor(Plan)) =/= [] of
+                            true -> Fences0#{GroupId =>
+                                      #{slot => ref_slot(ApplyRef),
+                                        generation => GroupGeneration,
+                                        blocking => true}};
+                            false -> Fences0
+                        end,
+                    {ok, Projection0#{generation := Global + 1,
+                                     apply_fences := Fences1}}
+            end
+    end.
+
 complete_transition(
   {quod_dtx_complete, ?RECORD_VERSION, GroupId, DecisionRef, Rows}, GroupId,
   Records,
-  #{active :=
-      #{group_id := GroupId, participant := none,
+  Projection) ->
+    Group = maps:get(GroupId, maps:get(groups, Projection), none),
+    case Group of
+      #{participant := none,
         origin := #{phase := {decided, Verdict},
                     decision_ref := StoredDecision,
-                    targets := Targets}},
-    consensus_lock := open, proof_fence := Fence} = Projection) ->
+                    targets := Targets}} ->
     case {decision_history(Records, StoredDecision, GroupId, Verdict),
           StoredDecision =:= DecisionRef,
-          finalize_row_identities(Rows) =:= Targets,
-          metadata_fence_allowed(Fence)} of
-        {{ok, ReasonsBlob}, true, true, true} ->
-            {ok, Verdict, ReasonsBlob, Projection#{active := none}};
-        _ -> {error, {invalid_transition, bad_completion_set}}
+          finalize_row_identities(Rows) =:= Targets} of
+        {{ok, ReasonsBlob}, true, true} ->
+            case complete_projection(
+                   GroupId, DecisionRef, Rows, Projection) of
+                {ok, Projection1} ->
+                    {ok, Verdict, ReasonsBlob,
+                     put_group(
+                       GroupId, #{origin => none, participant => none},
+                       Projection1)};
+                error ->
+                    {error, {invalid_transition, bad_completion_set}}
+            end;
+        _ ->
+            {error, {invalid_transition, bad_completion_set}}
+    end;
+      _ -> {error, {invalid_transition, origin_phase}}
     end;
 complete_transition(_, _, _, _) ->
     {error, {invalid_transition, origin_phase}}.
+
+%% A live candidate cannot reach this fold while its source application is
+%% pending: preview_batch/3 enforces proposal_readiness/2 first.
+%% During certified replay there is no local apply callback, so the terminal
+%% Complete itself consumes only the exact source-fused fence represented by
+%% its source row.  Unrelated or mismatched fences remain invalid and intact.
+complete_projection(GroupId, DecisionRef, Rows,
+                    #{target := Source, apply_fences := Fences} = Projection) ->
+    DecisionSlot = ref_slot(DecisionRef),
+    case {lists:keyfind(Source, 1, Rows),
+          maps:get(GroupId, Fences, none)} of
+        {false, none} ->
+            {ok, Projection};
+        {{Source, DecisionRef, Generation},
+         #{slot := DecisionSlot, generation := Generation,
+           blocking := Blocking}}
+          when is_boolean(Blocking) ->
+            {ok, Projection#{
+                   apply_fences := maps:remove(GroupId, Fences)}};
+        _ ->
+            error
+    end.
 
 decision_history(Records, DecisionRef, GroupId, Verdict) ->
     case maps:find(decision, Records) of
@@ -2941,27 +3346,31 @@ completion_effect(GroupId, abort, ReasonsBlob, Ref) ->
     {ok, Reasons} = decode_abort_reasons(ReasonsBlob),
     {completed, GroupId, abort, Ref, Reasons}.
 
--doc "Open the proof fence only for the exact prepared-Finalize acknowledgment.".
+-doc "Open only the exact prepared-Finalize fence; retain a source marker until Complete.".
 -spec acknowledge_finalize(<<_:256>>, pos_integer(), non_neg_integer(),
                            projection()) ->
           {ok, projection()} | {error, term()}.
 acknowledge_finalize(GroupId, Slot, Generation,
-                     #{proof_fence :=
-                         {pending_apply, GroupId, Slot, Generation},
-                       generation := Current} = Projection)
+                     #{apply_fences := Fences} = Projection)
   when is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_integer(Generation), Generation =:= Current,
-       Generation =< ?MAX_UINT64 ->
-    case valid_projection(Projection) of
-        true ->
-            {ok, Projection#{proof_fence := open}};
-        false ->
-            {error, stale_finalize_ack}
+       is_integer(Generation), Generation =< ?MAX_UINT64 ->
+    case {valid_projection(Projection), maps:get(GroupId, Fences, none)} of
+        {true, #{slot := Slot, generation := Generation} = Fence} ->
+            Fences1 =
+                case maps:get(GroupId, maps:get(groups, Projection), none) of
+                    #{origin := Origin, participant := none}
+                      when Origin =/= none ->
+                        Fences#{GroupId => Fence#{blocking := false}};
+                    _ ->
+                        maps:remove(GroupId, Fences)
+                end,
+            {ok, Projection#{apply_fences := Fences1}};
+        _ -> {error, stale_finalize_ack}
     end;
 acknowledge_finalize(_, _, _, _) ->
     {error, stale_finalize_ack}.
 
-release_participant(#{origin := none}) -> none;
+release_participant(#{origin := none}) -> #{origin => none, participant => none};
 release_participant(Active) -> Active#{participant := none}.
 
 decision_matches_active(
@@ -2973,17 +3382,14 @@ decision_matches_active(
   DecisionRef, Verdict) -> true;
 decision_matches_active(_, _, _) -> false.
 
-direct_decision_matches(#{active := none}, _GroupId, _DecisionRef) -> true;
-direct_decision_matches(
-  #{active := #{group_id := GroupId,
-                origin := #{phase := {decided, abort},
+direct_decision_matches(Projection, GroupId, DecisionRef) ->
+    case maps:get(GroupId, maps:get(groups, Projection), none) of
+      none -> true;
+      #{origin := #{phase := {decided, abort},
                             decision_ref := DecisionRef},
-                participant := none}},
-  GroupId, DecisionRef) -> true;
-direct_decision_matches(
-  #{active := #{group_id := ActiveGroup}}, GroupId, _DecisionRef)
-  when ActiveGroup =/= GroupId -> true;
-direct_decision_matches(_, _, _) -> false.
+                participant := none} -> true;
+      _ -> false
+    end.
 
 expected_finalize_generation(commit, ?MAX_UINT64) ->
     {error, {invalid_transition, generation_exhausted}};
@@ -2992,8 +3398,8 @@ expected_finalize_generation(commit, Generation) ->
 expected_finalize_generation(abort, Generation) ->
     {ok, Generation}.
 
-prepare_history_matches(Records, PrepareRef) ->
-    case maps:find(prepare, Records) of
+prepared_history_matches(PrepareKind, Records, PrepareRef) ->
+    case maps:find(PrepareKind, Records) of
         {ok, #{ref := StoredRef}} -> StoredRef =:= PrepareRef;
         error -> false
     end.
@@ -3002,9 +3408,6 @@ finalize_prepare_matches(commit, PrepareRef, PrepareRef) -> true;
 finalize_prepare_matches(abort, PrepareRef, PrepareRef) -> true;
 finalize_prepare_matches(_, _, _) -> false.
 
-metadata_fence_allowed(open) -> true;
-metadata_fence_allowed({pending_apply, _, _, _}) -> true;
-metadata_fence_allowed(_) -> false.
 
 participant_identities(Manifest) ->
     [Identity || {Identity, _} <- manifest_participants(Manifest)].
@@ -3060,24 +3463,68 @@ valid_history_records(
 valid_history_records(_, _) -> false.
 
 valid_projection(
-  #{target := Target, active := Active, consensus_lock := Lock,
-    proof_fence := Fence, generation := Generation} = Projection)
+  #{target := Target, groups := Groups, conflicts := Conflicts,
+    apply_fences := Fences, generation := Generation} = Projection)
   when map_size(Projection) =:= 5,
+       is_map(Groups), is_map(Conflicts), is_map(Fences),
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->
-    valid_identity(Target) andalso valid_active(Active, Target) andalso
-        valid_lock(Lock) andalso valid_fence(Fence) andalso
-        gates_match_active(Active, Lock, Fence);
+    valid_identity(Target) andalso valid_groups(Groups, Target) andalso
+        Conflicts =:= conflicts_from_groups(Groups) andalso
+        valid_apply_fences(Fences, Groups);
 valid_projection(_) -> false.
 
-valid_active(none, _Target) -> true;
-valid_active(#{group_id := <<_:256>> = GroupId, origin := Origin,
-               participant := Participant} = Active, Target)
-  when map_size(Active) =:= 3 ->
+valid_groups(Groups, Target) ->
+    maps:fold(
+      fun(GroupId, Group, true) -> valid_group(GroupId, Group, Target);
+         (_, _, false) -> false
+      end, true, Groups).
+
+valid_group(<<_:256>> = GroupId,
+            #{origin := Origin, participant := Participant} = Group, Target)
+  when map_size(Group) =:= 2 ->
     valid_origin_role(Origin) andalso
         valid_participant_role(Participant, Target, GroupId) andalso
         (Origin =/= none orelse Participant =/= none);
-valid_active(_, _) -> false.
+valid_group(_, _, _) -> false.
+
+conflicts_from_groups(Groups) ->
+    maps:fold(
+      fun(GroupId, #{participant := #{descriptor := Descriptor}}, Acc) ->
+              Acc#{GroupId => Descriptor};
+         (_GroupId, _Group, Acc) -> Acc
+      end, #{}, Groups).
+
+valid_apply_fences(Fences, Groups) ->
+    maps:fold(
+      fun(<<_:256>> = GroupId,
+          #{slot := Slot, generation := Generation,
+            blocking := Blocking} = Fence, true)
+            when map_size(Fence) =:= 3,
+                 is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
+                 is_integer(Generation), Generation >= 0,
+                 Generation =< ?MAX_UINT64,
+                 is_boolean(Blocking) ->
+              valid_apply_marker(GroupId, Slot, Blocking, Groups);
+         (_, _, _) -> false
+      end, true, Fences).
+
+%% A nonblocking row is not a generic fence: it is the exact source
+%% application marker retained after a source-fused Decision until Complete.
+%% Keep that protocol meaning structural so malformed restored state cannot
+%% invent inert marker rows. Blocking rows may also belong to a participant-
+%% only Finalize whose origin role lives in another ontology.
+valid_apply_marker(_GroupId, _Slot, true, _Groups) ->
+    true;
+valid_apply_marker(GroupId, Slot, false, Groups) ->
+    case maps:get(GroupId, Groups, none) of
+        #{origin := #{phase := {decided, _Verdict},
+                      decision_ref := DecisionRef},
+          participant := none} ->
+            ref_slot(DecisionRef) =:= Slot;
+        _ ->
+            false
+    end.
 
 valid_origin_role(none) -> true;
 valid_origin_role(#{phase := begun, begin_ref := Ref,
@@ -3095,20 +3542,52 @@ valid_origin_role(_) -> false.
 
 valid_participant_role(none, _Target, _GroupId) -> true;
 valid_participant_role(#{phase := prepared, begin_ref := BeginRef,
+                         prepare_kind := PrepareKind,
                          prepare_ref := PrepareRef,
                          plan_digest := <<_:256>> = PlanDigest,
                          manifest := Manifest,
-                         plan := PlanBlob} = Participant, Target, GroupId)
-  when map_size(Participant) =:= 6, is_binary(PlanBlob),
+                         plan := PlanBlob, descriptor := Descriptor,
+                         prepared_generation := PreparedGeneration}
+                       = Participant, Target, GroupId)
+  when map_size(Participant) =:= 9, is_binary(PlanBlob),
+       is_integer(PreparedGeneration), PreparedGeneration >= 0,
+       PreparedGeneration =< ?MAX_UINT64,
        byte_size(PlanBlob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
     validate_certified_ref(BeginRef) andalso
         validate_certified_ref(PrepareRef) andalso
         ref_identity(PrepareRef) =:= Target andalso
         valid_manifest(Manifest) andalso
-        participant_plan_valid(
-          Target, GroupId, BeginRef, PrepareRef,
-          Manifest, PlanDigest, PlanBlob);
+        valid_conflict_descriptor(Descriptor) andalso
+        prepared_role_valid(
+          PrepareKind, Target, GroupId, BeginRef, PrepareRef,
+          Manifest, PlanDigest, PlanBlob) andalso
+        case decode(PlanBlob) of
+            {ok, Plan} ->
+                conflict_descriptor(Plan) =:= Descriptor andalso
+                    overlay_generation(Plan) =:= PreparedGeneration;
+            _ -> false
+        end;
 valid_participant_role(_, _, _) -> false.
+
+prepared_role_valid('begin', Target, GroupId, BeginRef, BeginRef,
+                    Manifest, PlanDigest, PlanBlob) ->
+    Target =:= manifest_origin(Manifest) andalso
+        ref_identity(BeginRef) =:= Target andalso
+        ref_record_digest(BeginRef) =:= GroupId andalso
+        case decode(PlanBlob) of
+            {ok, Plan} ->
+                target(Plan) =:= Target andalso digest(Plan) =:= PlanDigest
+                    andalso valid_signed_plan(Plan) andalso
+                    plan_matches_manifest(
+                      Target, Plan, PlanDigest, Manifest);
+            {error, _} -> false
+        end;
+prepared_role_valid(prepare, Target, GroupId, BeginRef, PrepareRef,
+                    Manifest, PlanDigest, PlanBlob) ->
+    participant_plan_valid(
+      Target, GroupId, BeginRef, PrepareRef,
+      Manifest, PlanDigest, PlanBlob);
+prepared_role_valid(_, _, _, _, _, _, _, _) -> false.
 
 participant_plan_valid(Target, GroupId, BeginRef, PrepareRef,
                        Manifest, PlanDigest, PlanBlob) ->
@@ -3131,28 +3610,6 @@ valid_identity_list([Identity | Rest], Previous)
   when Previous =:= none; Previous < Identity ->
     valid_identity(Identity) andalso valid_identity_list(Rest, Identity);
 valid_identity_list(_, _) -> false.
-
-valid_lock(open) -> true;
-valid_lock({locked, <<_:256>>}) -> true;
-valid_lock(_) -> false.
-
-valid_fence(open) -> true;
-valid_fence({pending, <<_:256>>}) -> true;
-valid_fence({pending_apply, <<_:256>>, Slot, Generation})
-  when is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64 -> true;
-valid_fence(_) -> false.
-
-gates_match_active(
-  #{group_id := GroupId, participant := #{phase := prepared}},
-  {locked, GroupId}, {pending, GroupId}) -> true;
-gates_match_active(#{participant := none}, open, open) -> true;
-gates_match_active(
-  #{participant := none}, open, {pending_apply, _, _, _}) -> true;
-gates_match_active(none, open, open) -> true;
-gates_match_active(none, open, {pending_apply, _, _, _}) -> true;
-gates_match_active(_, _, _) -> false.
 
 history_accepts_group(#{group_id := none}, _GroupId) -> true;
 history_accepts_group(#{group_id := GroupId}, GroupId) -> true;

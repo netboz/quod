@@ -64,31 +64,12 @@ lowering_capacity_keeps_active_custody_test() ->
 
 superseded_snapshot_version_is_identified_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_effect_old_format_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
-    Path = filename:join(Dir, "direct_effects.qej"),
-    try
-        ok = filelib:ensure_dir(Path),
-        Payload = term_to_binary(
-                    {quod_effect_journal, 1, []}, [deterministic]),
-        Digest = crypto:hash(sha256, Payload),
-        Bytes = <<?MAGIC:32/unsigned-big,
-                  (byte_size(Payload)):32/unsigned-big,
-                  Digest/binary, Payload/binary>>,
-        ok = file:write_file(Path, Bytes),
-        PreviousTrapExit = process_flag(trap_exit, true),
-        try
-            ?assertMatch(
-               {error, {{effect_journal_format_unsupported, 1}, _}},
-               quod_effect_journal:start_link(#{data_dir => Dir}))
-        after
-            process_flag(trap_exit, PreviousTrapExit)
-        end
-    after
-        _ = file:del_dir_r(Dir)
-    end.
+    assert_unsupported_snapshot_version(
+      1, {quod_effect_journal, 1, []}),
+    %% V5 stored a different meaning in the operation row's 32-byte field.
+    %% Reject it explicitly rather than guessing during recovery.
+    assert_unsupported_snapshot_version(
+      5, {quod_effect_journal, 5, 64, []}).
 
 prepared_recovery_may_restore_genesis_atoms_test() ->
     %% A prepared genesis can contain an atom which existed in the authoring
@@ -494,6 +475,173 @@ bound_owner_death_retires_live_unactivated_row_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+operation_cancel_before_bind_removes_every_exact_reservation_test() ->
+    with_operation_journal(
+      fun(_Dir, _Journal, Fixture, Binding) ->
+          Blob = operation_blob(Fixture),
+          Token1 = stage_operation_reservation(Fixture, Binding, #{}),
+          Token2 = stage_operation_reservation(Fixture, Binding, #{}),
+          ?assertMatch(#{reservations := 2, active := 0},
+                       quod_effect_journal:stats()),
+          ?assertEqual(cancelled,
+                       cancel_operation(Binding, Blob)),
+          ?assertMatch(#{reservations := 0, active := 0},
+                       quod_effect_journal:stats()),
+          ?assertEqual({error, missing_effect_preparation},
+                       quod_effect_journal:bind_operation(Token1, Blob)),
+          ?assertEqual({error, missing_effect_preparation},
+                       quod_effect_journal:bind_operation(Token2, Blob)),
+          ?assertEqual(not_found, cancel_operation(Binding, Blob))
+      end).
+
+operation_bind_consumes_duplicates_and_cancel_survives_restart_test() ->
+    with_operation_journal(
+      fun(Dir, Journal, Fixture, Binding) ->
+          Parent = self(),
+          Blob = operation_blob(Fixture),
+          Owner = spawn(
+                    fun() ->
+                        Token1 = stage_operation_reservation(
+                                   Fixture, Binding, #{}),
+                        _Token2 = stage_operation_reservation(
+                                    Fixture, Binding, #{}),
+                        Parent !
+                            {operation_bind_result, self(),
+                             quod_effect_journal:bind_operation(
+                               Token1, Blob)}
+                    end),
+          OwnerMRef = monitor(process, Owner),
+          EffectId =
+              receive
+                  {operation_bind_result, Owner, {ok, Id}} -> Id
+              after 1000 -> error(operation_bind_timeout)
+              end,
+          receive {'DOWN', OwnerMRef, process, Owner, normal} -> ok
+          after 1000 -> error(operation_owner_down_timeout)
+          end,
+          ?assertMatch(#{reservations := 0, operation_active := 1},
+                       quod_effect_journal:stats()),
+          ?assertMatch({ok, #{state := operation_pending}},
+                       quod_effect_journal:status(EffectId)),
+          stop(Journal),
+
+          {ok, Restarted} =
+              quod_effect_journal:start_link(#{data_dir => Dir}),
+          unlink(Restarted),
+          ?assertMatch({ok, #{state := operation_pending}},
+                       quod_effect_journal:status(EffectId)),
+          ?assertEqual(cancelled, cancel_operation(Binding, Blob)),
+          ?assertMatch(
+             {ok, #{state := retired,
+                    result := source_intent_cancelled}},
+             quod_effect_journal:status(EffectId)),
+          stop(Restarted),
+
+          {ok, RestartedAgain} =
+              quod_effect_journal:start_link(#{data_dir => Dir}),
+          unlink(RestartedAgain),
+          ?assertMatch(
+             {ok, #{state := retired,
+                    result := source_intent_cancelled}},
+             quod_effect_journal:status(EffectId)),
+          ?assertEqual(cancelled, cancel_operation(Binding, Blob)),
+          stop(RestartedAgain)
+      end).
+
+operation_unbound_reservation_is_lost_on_journal_restart_test() ->
+    with_operation_journal(
+      fun(Dir, Journal, Fixture, Binding) ->
+          Blob = operation_blob(Fixture),
+          Token = stage_operation_reservation(Fixture, Binding, #{}),
+          ?assertMatch(#{reservations := 1},
+                       quod_effect_journal:stats()),
+          stop(Journal),
+          {ok, Restarted} =
+              quod_effect_journal:start_link(#{data_dir => Dir}),
+          unlink(Restarted),
+          ?assertMatch(#{reservations := 0},
+                       quod_effect_journal:stats()),
+          ?assertEqual({error, missing_effect_preparation},
+                       quod_effect_journal:bind_operation(Token, Blob)),
+          stop(Restarted)
+      end).
+
+operation_cancel_authentication_is_fail_closed_test() ->
+    with_operation_journal(
+      fun(_Dir, _Journal, Fixture, Binding) ->
+          Blob = operation_blob(Fixture),
+          Token = stage_operation_reservation(Fixture, Binding, #{}),
+          {TargetNs, _TargetAnchor} = maps:get(target, Binding),
+          Author = maps:get(author, Binding),
+          ?assertEqual(
+             {error, invalid_operation_effect},
+             quod_effect_journal:cancel_operation(
+               hash(8301), TargetNs, Blob)),
+          ?assertEqual(
+             {error, invalid_operation_effect},
+             quod_effect_journal:cancel_operation(
+               Author, <<TargetNs/binary, "-wrong">>, Blob)),
+          ?assertEqual(
+             {error, invalid_operation_effect},
+             quod_effect_journal:cancel_operation(
+               Author, TargetNs, tampered_operation_blob(Fixture))),
+          ?assertMatch(#{reservations := 1, active := 0},
+                       quod_effect_journal:stats()),
+          ?assertMatch({ok, <<_:256>>},
+                       quod_effect_journal:bind_operation(Token, Blob))
+      end).
+
+operation_binding_requires_every_attested_field_test() ->
+    with_operation_journal(
+      fun(_Dir, _Journal, Fixture, Binding) ->
+          Blob = operation_blob(Fixture),
+          {TargetNs, TargetAnchor} = maps:get(target, Binding),
+          Coordinator = operation_coordinator(Binding),
+          Mismatches =
+              [{#{plan_digest => hash(8311)},
+                missing_effect_preparation},
+               {#{manifest_digest => hash(8312)},
+                invalid_operation_effect},
+               {#{coordinator => setelement(3, Coordinator, hash(8313))},
+                invalid_operation_effect},
+               {#{target => {TargetNs, flip_hash(TargetAnchor)}},
+                invalid_operation_effect}],
+          lists:foreach(
+            fun({Overrides, ExpectedReason}) ->
+                Token = stage_operation_reservation(
+                          Fixture, Binding, Overrides),
+                ?assertEqual(
+                   {error, ExpectedReason},
+                   quod_effect_journal:bind_operation(Token, Blob)),
+                ?assertMatch(#{reservations := 1, active := 0},
+                             quod_effect_journal:stats()),
+                ok = quod_effect_journal:release_reservation(Token)
+            end, Mismatches)
+      end).
+
+operation_reservation_owner_death_prevents_late_bind_test() ->
+    with_operation_journal(
+      fun(_Dir, _Journal, Fixture, Binding) ->
+          Parent = self(),
+          Blob = operation_blob(Fixture),
+          Owner = spawn(
+                    fun() ->
+                        Token = stage_operation_reservation(
+                                  Fixture, Binding, #{}),
+                        Parent ! {operation_reservation, self(), Token}
+                    end),
+          OwnerMRef = monitor(process, Owner),
+          Token = receive {operation_reservation, Owner, T} -> T
+                  after 1000 -> error(operation_reservation_timeout)
+                  end,
+          receive {'DOWN', OwnerMRef, process, Owner, normal} -> ok
+          after 1000 -> error(operation_owner_down_timeout)
+          end,
+          ok = wait_reservations(0, 100),
+          ?assertEqual({error, missing_effect_preparation},
+                       quod_effect_journal:bind_operation(Token, Blob))
+      end).
+
 group_binding_survives_owner_death_and_restart_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Dir = filename:join(
@@ -531,23 +679,51 @@ group_binding_survives_owner_death_and_restart_test() ->
         {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Journal),
         ok = quod_effect_journal:configure_capacity(64),
+        ManifestDigest = hash(8204),
+        Coordinator = group_coordinator(GroupRef),
+        {WrongAction, WrongDesired, Effect, WrongPrepared} = PreparedEffect,
+        {ok, WrongReservation} = quod_effect_journal:reserve(self()),
+        ok = quod_effect_journal:stage(
+               WrongReservation, WrongAction, WrongDesired,
+               Effect, WrongPrepared),
+        WrongCoordinator = setelement(3, Coordinator, hash(8299)),
+        ok = quod_effect_journal:bind_reservation(
+               WrongReservation, PlanDigest, ManifestDigest,
+               WrongCoordinator, Target),
+        ?assertEqual(
+           {error, invalid_group_effect},
+           quod_effect_journal:bind_group(
+             Plan, GroupRef, Target, PlanDigest, WrongReservation)),
+        ?assertMatch(#{reservations := 1}, quod_effect_journal:stats()),
+        ok = quod_effect_journal:release_reservation(WrongReservation),
         Owner = spawn(
                   fun() ->
+                      {Action, Desired, Effect, Prepared} = PreparedEffect,
+                      {ok, Reservation} =
+                          quod_effect_journal:reserve(self()),
+                      ok = quod_effect_journal:stage(
+                             Reservation, Action, Desired,
+                             Effect, Prepared),
+                      ok = quod_effect_journal:bind_reservation(
+                             Reservation, PlanDigest, ManifestDigest,
+                             Coordinator, Target),
                       Parent !
-                          {group_bind_result, self(),
+                          {group_bind_result, self(), Reservation,
                            quod_effect_journal:bind_group(
                              Plan, GroupRef, Target, PlanDigest,
-                             PreparedEffect)}
+                             Reservation)}
                   end),
         OwnerMRef = monitor(process, Owner),
-        receive {group_bind_result, Owner, ok} -> ok
-        after 1000 -> error(group_bind_timeout)
-        end,
+        Reservation =
+            receive {group_bind_result, Owner, Token, ok} -> Token
+            after 1000 -> error(group_bind_timeout)
+            end,
         receive {'DOWN', OwnerMRef, process, Owner, normal} -> ok
         after 1000 -> error(group_owner_down_timeout)
         end,
         EffectId = quod_effect:effect_id(Effect),
-        ExactRef = {group_effect, 1, GroupRef, Target, PlanDigest},
+        ExactRef = {group_effect, 2, GroupRef, Target, PlanDigest,
+                    ManifestDigest},
         ?assertMatch(
            {ok, #{state := group_pending, ref := ExactRef}},
            quod_effect_journal:status(EffectId)),
@@ -564,12 +740,12 @@ group_binding_survives_owner_death_and_restart_test() ->
         ?assertEqual(
            ok,
            quod_effect_journal:bind_group(
-             Plan, GroupRef, Target, PlanDigest, PreparedEffect)),
+             Plan, GroupRef, Target, PlanDigest, Reservation)),
         OtherGroupRef = setelement(6, GroupRef, hash(8203)),
         ?assertEqual(
            {error, effect_journal_conflict},
            quod_effect_journal:bind_group(
-             Plan, OtherGroupRef, Target, PlanDigest, PreparedEffect)),
+             Plan, OtherGroupRef, Target, PlanDigest, Reservation)),
         receive {unexpected_group_effect_handoff, Simplex} -> ?assert(false)
         after 20 -> ok
         end,
@@ -588,6 +764,125 @@ group_binding_survives_owner_death_and_restart_test() ->
         restore_env(node_pubkey, SavedKey),
         _ = file:del_dir_r(Dir)
     end.
+
+with_operation_journal(Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Dir = filename:join(
+            "/tmp",
+            "quod_operation_effect_journal_" ++
+                integer_to_list(erlang:unique_integer([positive]))),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    SavedKey = application:get_env(quod, node_pubkey),
+    {PreparationKey, _PreparationSeed} = quod_identity:generate(),
+    RootConfig = #{data_dir => Dir,
+                   ledger_dir => filename:join(Dir, "ledger"),
+                   genesis_hash => hash(8320)},
+    application:set_env(
+      quod, namespace_desired,
+      #{content => #{?ROOT_NS => RootConfig}, brahms => #{}}),
+    application:set_env(quod, node_pubkey, PreparationKey),
+    try
+        Fixture = quod_ct:signed_effect_operation_submission(
+                    #{prepared_effect => true}),
+        Blob = operation_blob(Fixture),
+        {ok, Binding} =
+            quod_transaction:decode_operation_submission(Blob),
+        {TargetNs, TargetAnchor} = maps:get(target, Binding),
+        TargetKey = quod_effect:executor(maps:get(effect, Binding)),
+        application:set_env(quod, node_pubkey, TargetKey),
+        GenesisTable = install_genesis_anchor(TargetNs, TargetAnchor),
+        Parent = self(),
+        Simplex = spawn(
+                    fun() ->
+                        fake_binding_simplex(
+                          Parent, TargetNs,
+                          {TargetNs, TargetAnchor, TargetKey, hash(8321)})
+                    end),
+        receive {fake_simplex_ready, Simplex} -> ok
+        after 1000 -> error(fake_simplex_timeout)
+        end,
+        try
+            {ok, Journal} =
+                quod_effect_journal:start_link(#{data_dir => Dir}),
+            unlink(Journal),
+            ok = quod_effect_journal:configure_capacity(unlimited),
+            Fun(Dir, Journal, Fixture, Binding)
+        after
+            stop_registered_journal(),
+            exit(Simplex, kill),
+            true = ets:delete(GenesisTable)
+        end
+    after
+        restore_env(namespace_desired, SavedDesired),
+        restore_env(node_pubkey, SavedKey),
+        _ = file:del_dir_r(Dir)
+    end.
+
+stage_operation_reservation(Fixture, Binding, Overrides) ->
+    {Action, Desired, Effect, Prepared} = maps:get(prepared_effect, Fixture),
+    {ok, Token} = quod_effect_journal:reserve(self()),
+    ok = quod_effect_journal:stage(
+           Token, Action, Desired, Effect, Prepared),
+    PlanDigest = maps:get(
+                   plan_digest, Overrides,
+                   maps:get(plan_digest, Binding)),
+    ManifestDigest = maps:get(
+                       manifest_digest, Overrides,
+                       maps:get(manifest_digest, Binding)),
+    Coordinator = maps:get(
+                    coordinator, Overrides,
+                    operation_coordinator(Binding)),
+    Target = maps:get(target, Overrides, maps:get(target, Binding)),
+    ok = quod_effect_journal:bind_reservation(
+           Token, PlanDigest, ManifestDigest, Coordinator, Target),
+    Token.
+
+operation_coordinator(
+  #{claim := #transaction{origin = {Ns, Anchor}},
+    author := Author, admission := Admission}) ->
+    {Ns, Anchor, Author, Admission}.
+
+operation_blob(Fixture) ->
+    {ok, Blob} = quod_transaction:encode_operation_submission(
+                   maps:get(submission, Fixture)),
+    Blob.
+
+cancel_operation(Binding, Blob) ->
+    {TargetNs, _TargetAnchor} = maps:get(target, Binding),
+    quod_effect_journal:cancel_operation(
+      maps:get(author, Binding), TargetNs, Blob).
+
+tampered_operation_blob(Fixture) ->
+    {submit, Author, <<First, Rest/binary>>, Canonical} =
+        maps:get(submission, Fixture),
+    term_to_binary(
+      {submit, Author, <<(First bxor 1), Rest/binary>>, Canonical},
+      [deterministic]).
+
+flip_hash(<<First, Rest/binary>>) ->
+    <<(First bxor 1), Rest/binary>>.
+
+install_genesis_anchor(Ns, Anchor) ->
+    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = ets:new(Name, [named_table, public, set]),
+    true = ets:insert(Table, {anchor, Anchor}),
+    Table.
+
+stop_registered_journal() ->
+    case quod_reg:where({quod_effect_journal, node}) of
+        Pid when is_pid(Pid) -> stop(Pid);
+        undefined -> ok
+    end.
+
+wait_reservations(Expected, Attempts) when Attempts > 0 ->
+    case quod_effect_journal:stats() of
+        #{reservations := Expected} -> ok;
+        _ ->
+            receive after 1 -> ok end,
+            wait_reservations(Expected, Attempts - 1)
+    end;
+wait_reservations(_Expected, 0) ->
+    error(reservation_cleanup_timeout).
 
 with_snapshot(State, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -636,7 +931,7 @@ fixture(State) ->
                                  sig = none}),
     TxId = Transaction#transaction.tx_id,
     Ref = {transaction, ?ROOT_NS, Anchor, TxId},
-    Row = {quod_effect_row, 4, quod_effect:effect_id(Effect), Effect,
+    Row = {quod_effect_row, 5, quod_effect:effect_id(Effect), Effect,
            ActionBytes, DesiredBytes, PreparedBytes,
            term_to_binary(Transaction, [deterministic]), Ref, Admission,
            State, 0, none},
@@ -662,6 +957,9 @@ group_fixture(Pub, Seed, RootAnchor) ->
              diff_ops => 0,
              read_functors => 0,
              effects_count => 1,
+             conflict_descriptor =>
+                 #{reads => [], writes => [],
+                   custody => [quod_effect:target(Effect)]},
              diff => journal_wire_blob([]),
              read_check => journal_wire_blob([]),
              effects => journal_wire_blob([Effect]),
@@ -670,7 +968,7 @@ group_fixture(Pub, Seed, RootAnchor) ->
     Signer = #{pubkey => Pub,
                key => quod_identity:key_term({Pub, Seed})},
     PlanBytes = term_to_binary(
-                  {<<"quod.dtx.plan">>, 7, Core}, [deterministic]),
+                  {<<"quod.dtx.plan">>, 8, Core}, [deterministic]),
     Plan = {quod_plan, Core, Pub, quod_identity:sign(PlanBytes, Signer)},
     true = quod_dtx:verify(Plan),
     {ok, Material} = quod_dtx:material(Plan),
@@ -680,6 +978,36 @@ group_fixture(Pub, Seed, RootAnchor) ->
                 Pub, hash(8212), hash(8213)},
     {Plan, GroupRef, Target, PlanDigest,
      {Action, Desired, Effect, Prepared}, Effect}.
+
+group_coordinator(
+  {group, Ns, Anchor, Coordinator, Admission, _GroupId}) ->
+    {Ns, Anchor, Coordinator, Admission}.
+
+assert_unsupported_snapshot_version(Version, Snapshot) ->
+    Dir = filename:join(
+            "/tmp",
+            "quod_effect_old_format_" ++ integer_to_list(Version) ++ "_" ++
+                integer_to_list(erlang:unique_integer([positive]))),
+    Path = filename:join(Dir, "direct_effects.qej"),
+    try
+        ok = filelib:ensure_dir(Path),
+        Payload = term_to_binary(Snapshot, [deterministic]),
+        Digest = crypto:hash(sha256, Payload),
+        Bytes = <<?MAGIC:32/unsigned-big,
+                  (byte_size(Payload)):32/unsigned-big,
+                  Digest/binary, Payload/binary>>,
+        ok = file:write_file(Path, Bytes),
+        PreviousTrapExit = process_flag(trap_exit, true),
+        try
+            ?assertMatch(
+               {error, {{effect_journal_format_unsupported, Version}, _}},
+               quod_effect_journal:start_link(#{data_dir => Dir}))
+        after
+            process_flag(trap_exit, PreviousTrapExit)
+        end
+    after
+        _ = file:del_dir_r(Dir)
+    end.
 
 journal_wire_blob(Term) ->
     {ok, Blob} = quod_wire_term:encode_canonical(Term),
@@ -693,7 +1021,7 @@ write_snapshot(Dir, Row) ->
     Path = filename:join(Dir, "direct_effects.qej"),
     ok = filelib:ensure_dir(Path),
     Payload = term_to_binary(
-                {quod_effect_journal, 5, 64, Rows}, [deterministic]),
+                {quod_effect_journal, 6, 64, Rows}, [deterministic]),
     Digest = crypto:hash(sha256, Payload),
     Bytes = <<?MAGIC:32/unsigned-big,
               (byte_size(Payload)):32/unsigned-big,
@@ -719,7 +1047,10 @@ fake_simplex_loop(Parent, Reply) ->
     end.
 
 fake_binding_simplex(Parent, Binding) ->
-    true = quod_reg:reg({quod_simplex, ?ROOT_NS}),
+    fake_binding_simplex(Parent, ?ROOT_NS, Binding).
+
+fake_binding_simplex(Parent, Ns, Binding) ->
+    true = quod_reg:reg({quod_simplex, Ns}),
     Parent ! {fake_simplex_ready, self()},
     fake_binding_simplex_loop(Parent, Binding).
 

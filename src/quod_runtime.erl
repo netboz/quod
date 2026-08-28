@@ -122,12 +122,6 @@ observers therefore maintain current P without reconstructing best-effort effect
 -define(DEFAULT_MAX_HEAVY_WORKERS, 8).    %% global concurrent resource-worker cap
 -define(DEFAULT_MAX_HEAVY_PENDING, 1024). %% distinct queued resources, coalescing included
 -define(DEFAULT_MAX_HEAVY_JOB_BYTES, 65536).
--define(DEFAULT_SOURCE_FOLLOW_RETRY_MS, 5000).
-%% One sweep serves every source view that still needs a follow reference, so a
-%% large catalogue costs one timer and a fixed amount of scheduler work per turn
-%% rather than one timer and one attach attempt per durable fact.
--define(SOURCE_FOLLOW_SWEEP_BATCH, 16).
--define(SOURCE_FOLLOW_RETRY_CAP_MS, 60000).
 
 %% raw declaration fields — UNVALIDATED wire/KB terms until validate/2 has passed them
 -record(handler, {id :: term(),
@@ -157,13 +151,14 @@ observers therefore maintain current P without reconstructing best-effort effect
             %% One local consumer reference per exact durable subscription.
             %% Verification, cache and materialized P remain shared node-wide.
             source_views = #{} :: #{{binary(), binary()} => map()},
-            %% One shared retry lane for every source view awaiting a follow
-            %% reference: the armed sweep, its current backoff, and the counter
-            %% that keeps attach attempts fair across a large catalogue.
-            source_sweep = none :: none | {reference(), reference()},
-            source_sweep_delay = 0 :: non_neg_integer(),
+            %% One message-driven attachment queue. It yields after every
+            %% local owner call and is repopulated only by catalogue change or
+            %% the foreign owner's gproc registration edge: no timer, batch
+            %% cap, or retry ladder.
+            source_attach_queue = [] :: [{binary(), binary()}],
+            source_attach_token = none :: none | reference(),
             source_attempts = 0 :: non_neg_integer(),
-            foreign_log_monitor = none :: none | {pid(), reference()},
+            foreign_log_monitor = none :: none | reference(),
             %% ONE killable runner at a time — a reconcile or an ordered-tier event batch
             runner = none :: none | {reconcile | events, pid(), reference(), reference(),
                                      reference()},
@@ -307,9 +302,7 @@ handle_call(get_stats, _From, S) ->
               source_views_building => source_state_count(building, S#s.source_views),
               source_views_unreachable =>
                   source_state_count(unreachable, S#s.source_views),
-              %% One shared retry lane, and the running attach count that
-              %% proves a large catalogue stays bounded per sweep.
-              source_sweep_armed => S#s.source_sweep =/= none,
+              source_attach_queued => length(S#s.source_attach_queue),
               source_attempts => S#s.source_attempts,
               p_height => S#s.p_height, e_frontier => S#s.e_frontier,
               queue_len => S#s.queue_len,
@@ -429,14 +422,19 @@ handle_info(
   {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice}, S0) ->
     {noreply, handle_source_notice(
                 FollowRef, NoticeRef, Identity, Notice, S0)};
-handle_info({source_follow_sweep, Token},
-            S0 = #s{source_sweep = {_Timer, Token}}) ->
-    {noreply, run_source_sweep(S0#s{source_sweep = none})};
-handle_info({source_follow_sweep, _StaleToken}, S) ->
+handle_info({source_follow_attach, Token},
+            S0 = #s{source_attach_token = Token}) ->
+    {noreply,
+     run_source_attach(S0#s{source_attach_token = none})};
+handle_info({source_follow_attach, _StaleToken}, S) ->
     {noreply, S};
 handle_info(
-  {'DOWN', MRef, process, Pid, _Reason},
-  S = #s{foreign_log_monitor = {Pid, MRef}}) ->
+  {gproc, registered, MRef, _Name},
+  S = #s{foreign_log_monitor = MRef}) ->
+    {noreply, queue_waiting_source_views(S)};
+handle_info(
+  {gproc, unreg, MRef, _Name},
+  S = #s{foreign_log_monitor = MRef}) ->
     {noreply, foreign_log_down(S)};
 %% The direct post-commit envelope (est-carrying): the ordered tier's input. Enqueue in
 %% arrival (= height) order; overflow collapses to one reconciliation at the newest snapshot.
@@ -1052,36 +1050,33 @@ reconcile_source_views(Subscriptions, S0) ->
                        false -> enqueue_source_follow(Identity, Acc)
                    end
            end, S1, Subscriptions),
-    %% A new subscription enters the same sweep as a retry, so reconciling ten
-    %% thousand facts never issues ten thousand immediate attach calls.
-    maybe_release_foreign_log_monitor(sweep_source_views_now(S2)).
+    %% Attachment yields through one self-message per identity, so a large
+    %% catalogue never blocks this runtime turn. A missing owner is parked and
+    %% woken by its one gproc name-follow monitor, never by a retry timer.
+    drive_source_attach(
+      maybe_release_foreign_log_monitor(
+        ensure_foreign_log_monitor(S2))).
 
 enqueue_source_follow(Identity, S0) ->
     Height = case maps:get(Identity, S0#s.source_views, undefined) of
                  #{state := State} -> source_last_height(State);
                  undefined -> 0
              end,
-    put_source_view(
-      Identity,
-      #{follow_ref => none, state => {building, Height}, attempt => 0}, S0).
+    queue_source_identities(
+      [Identity],
+      put_source_view(
+        Identity,
+        #{follow_ref => none, state => {building, Height}, attempt => 0}, S0)).
 
 attach_source_follow(Identity, S0) ->
     Height = source_view_height(Identity, S0),
     {Attempt, S1} = next_source_attempt(S0),
     case quod_foreign_log:follow(Identity) of
         {ok, FollowRef} ->
-            case ensure_foreign_log_monitor(S1) of
-                {ok, S2} ->
-                    put_source_view(
-                      Identity,
-                      #{follow_ref => FollowRef, state => {building, Height},
-                        attempt => Attempt}, S2);
-                {error, S2} ->
-                    %% The owner died between its reply and our monitor. The
-                    %% reference died with it; retain only explicit P state.
-                    mark_source_unreachable(
-                      Identity, unavailable, Height, Attempt, S2)
-            end;
+            put_source_view(
+              Identity,
+              #{follow_ref => FollowRef, state => {building, Height},
+                attempt => Attempt}, S1);
         {error, Reason} ->
             mark_source_unreachable(Identity, Reason, Height, Attempt, S1)
     end.
@@ -1099,35 +1094,25 @@ next_source_attempt(S = #s{source_attempts = Attempts}) ->
     {Attempts + 1, S#s{source_attempts = Attempts + 1}}.
 
 mark_source_unreachable(Identity, Reason, Height, Attempt, S0) ->
-    S1 = put_source_view(
-           Identity,
-           #{follow_ref => none, state => {unreachable, Reason, Height},
-             attempt => Attempt}, S0),
-    schedule_source_sweep(S1).
+    put_source_view(
+      Identity,
+      #{follow_ref => none, state => {unreachable, Reason, Height},
+        attempt => Attempt}, S0).
 
-ensure_foreign_log_monitor(
-  S = #s{foreign_log_monitor = {Pid, _MRef}}) when is_pid(Pid) ->
-    case quod_reg:where({foreign_log, node}) of
-        Pid -> {ok, S};
-        NewPid when is_pid(NewPid) ->
-            replace_foreign_log_monitor(NewPid, S);
-        undefined -> {error, clear_foreign_log_monitor(S)}
-    end;
+ensure_foreign_log_monitor(S = #s{source_views = Views})
+  when map_size(Views) =:= 0 ->
+    clear_foreign_log_monitor(S);
+ensure_foreign_log_monitor(S = #s{foreign_log_monitor = MRef})
+  when is_reference(MRef) ->
+    S;
 ensure_foreign_log_monitor(S) ->
-    case quod_reg:where({foreign_log, node}) of
-        Pid when is_pid(Pid) -> replace_foreign_log_monitor(Pid, S);
-        undefined -> {error, S}
-    end.
-
-replace_foreign_log_monitor(Pid, S0) ->
-    S1 = clear_foreign_log_monitor(S0),
-    MRef = erlang:monitor(process, Pid),
-    {ok, S1#s{foreign_log_monitor = {Pid, MRef}}}.
+    MRef = quod_reg:monitor_name({foreign_log, node}, follow),
+    S#s{foreign_log_monitor = MRef}.
 
 clear_foreign_log_monitor(S = #s{foreign_log_monitor = none}) -> S;
 clear_foreign_log_monitor(
-  S = #s{foreign_log_monitor = {_Pid, MRef}}) ->
-    _ = erlang:demonitor(MRef, [flush]),
+  S = #s{foreign_log_monitor = MRef}) ->
+    ok = quod_reg:demonitor_name({foreign_log, node}, MRef),
     S#s{foreign_log_monitor = none}.
 
 handle_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
@@ -1242,82 +1227,52 @@ ack_source_notice(FollowRef, NoticeRef, S) ->
     ok = quod_foreign_log:ack(FollowRef, NoticeRef),
     S.
 
-%% One armed sweep at a time. Views waiting for a follow reference are attached
-%% oldest attempt first, so a repeatedly unavailable target cannot starve later
-%% subscriptions. The catalogue itself is not capped; this only bounds work in
-%% one asynchronous sweep.
-run_source_sweep(S0) ->
-    Batch = source_sweep_batch(S0),
-    S1 = lists:foldl(fun attach_source_follow/2, S0, Batch),
-    Attached = lists:any(
-                 fun(Identity) ->
-                         case maps:get(Identity, S1#s.source_views, undefined) of
-                             #{follow_ref := Ref} -> is_reference(Ref);
-                             _ -> false
-                         end
-                 end, Batch),
-    case Attached of
-        true -> schedule_source_sweep(S1#s{source_sweep_delay = 0});
-        false -> schedule_source_sweep(S1)
+%% Catalogue and owner-registration edges populate this queue. One identity is
+%% attempted per mailbox turn, preserving responsiveness without a compiled
+%% batch limit. Failed rows stay parked until a real owner replacement or a
+%% later catalogue reconciliation supplies another edge.
+queue_source_identities(Identities, S0) ->
+    Existing = maps:from_keys(S0#s.source_attach_queue, true),
+    Added = [Identity
+             || Identity <- Identities,
+                maps:is_key(Identity, S0#s.source_views),
+                not maps:is_key(Identity, Existing),
+                source_needs_attach(Identity, S0)],
+    drive_source_attach(
+      S0#s{source_attach_queue = S0#s.source_attach_queue ++ Added}).
+
+queue_waiting_source_views(S) ->
+    Waiting = [Identity
+               || {Identity, Row} <- maps:to_list(S#s.source_views),
+                  maps:get(follow_ref, Row, none) =:= none],
+    queue_source_identities(lists:sort(Waiting), S).
+
+source_needs_attach(Identity, #s{source_views = Views}) ->
+    case maps:get(Identity, Views, undefined) of
+        #{follow_ref := none} -> true;
+        _ -> false
     end.
 
-source_sweep_batch(#s{source_views = Views}) ->
-    Waiting = lists:sort(
-                [{maps:get(attempt, Row, 0), Identity}
-                 || {Identity, Row} <- maps:to_list(Views),
-                    maps:get(follow_ref, Row, none) =:= none]),
-    [Identity || {_Attempt, Identity} <-
-                     lists:sublist(Waiting, ?SOURCE_FOLLOW_SWEEP_BATCH)].
-
-source_sweep_pending(#s{source_views = Views}) ->
-    lists:any(fun(Row) -> maps:get(follow_ref, Row, none) =:= none end,
-              maps:values(Views)).
-
-schedule_source_sweep(S = #s{source_sweep = {_Timer, _Token}}) ->
+drive_source_attach(S = #s{source_attach_queue = [],
+                           source_attach_token = none}) ->
     S;
-schedule_source_sweep(S) ->
-    case source_sweep_pending(S) of
-        false -> S;
-        true -> arm_source_sweep(next_source_sweep_delay(S), S)
-    end.
-
-%% A catalogue change deserves one prompt attempt without waiting out a backoff
-%% earned by unrelated unreachable targets.
-sweep_source_views_now(S0) ->
-    case source_sweep_pending(S0) of
-        false -> S0;
-        true -> arm_source_sweep(0, cancel_source_sweep(S0))
-    end.
-
-arm_source_sweep(Delay, S) ->
+drive_source_attach(S = #s{source_attach_token = Token})
+  when is_reference(Token) ->
+    S;
+drive_source_attach(S) ->
     Token = make_ref(),
-    Timer = erlang:send_after(Delay, self(), {source_follow_sweep, Token}),
-    S#s{source_sweep = {Timer, Token}, source_sweep_delay = Delay}.
+    self() ! {source_follow_attach, Token},
+    S#s{source_attach_token = Token}.
 
-cancel_source_sweep(S = #s{source_sweep = none}) ->
-    S;
-cancel_source_sweep(S = #s{source_sweep = {Timer, _Token}}) ->
-    _ = erlang:cancel_timer(Timer),
-    S#s{source_sweep = none}.
-
-next_source_sweep_delay(S = #s{source_sweep_delay = 0}) ->
-    source_retry_ms(S);
-next_source_sweep_delay(S = #s{source_sweep_delay = Delay}) ->
-    erlang:min(Delay * 2, source_retry_cap_ms(S)).
-
-source_retry_ms(#s{config = Config}) ->
-    Value = maps:get(
-              subscription_follow_retry_ms, Config,
-              application:get_env(
-                quod, subscription_follow_retry_ms,
-                ?DEFAULT_SOURCE_FOLLOW_RETRY_MS)),
-    case is_integer(Value) andalso Value > 0 andalso Value =< 16#FFFFFFFF of
-        true -> Value;
-        false -> ?DEFAULT_SOURCE_FOLLOW_RETRY_MS
-    end.
-
-source_retry_cap_ms(S) ->
-    erlang:max(source_retry_ms(S), ?SOURCE_FOLLOW_RETRY_CAP_MS).
+run_source_attach(S0 = #s{source_attach_queue = [Identity | Rest]}) ->
+    S1 = S0#s{source_attach_queue = Rest},
+    S2 = case source_needs_attach(Identity, S1) of
+             true -> attach_source_follow(Identity, S1);
+             false -> S1
+         end,
+    drive_source_attach(S2);
+run_source_attach(S) ->
+    S.
 
 stop_source_view(Identity, S0) ->
     S1 = drop_source_queue(Identity, S0),
@@ -1328,7 +1283,9 @@ stop_source_view(Identity, S0) ->
                     ok = quod_foreign_log:unfollow(FollowRef);
                 none -> ok
             end,
-            S1#s{source_views = Views1};
+            S1#s{source_views = Views1,
+                 source_attach_queue =
+                     lists:delete(Identity, S1#s.source_attach_queue)};
         error ->
             S1
     end.
@@ -1336,27 +1293,29 @@ stop_source_view(Identity, S0) ->
 stop_source_views(S0) ->
     S1 = lists:foldl(
            fun stop_source_view/2, S0, maps:keys(S0#s.source_views)),
-    clear_foreign_log_monitor(cancel_source_sweep(S1)).
+    clear_foreign_log_monitor(
+      S1#s{source_attach_queue = [], source_attach_token = none}).
 
 maybe_release_foreign_log_monitor(S = #s{source_views = Views}) ->
-    case lists:any(
-           fun(#{follow_ref := Ref}) -> is_reference(Ref) end,
-           maps:values(Views)) of
-        true -> S;
-        false -> clear_foreign_log_monitor(S)
+    case map_size(Views) of
+        0 -> clear_foreign_log_monitor(
+               S#s{source_attach_queue = [], source_attach_token = none});
+        _ -> S
     end.
 
 foreign_log_down(S0) ->
-    %% Every reference died with the owner. Reset the shared backoff so the
-    %% restarted owner is retried promptly, not at whatever delay the previous
-    %% outage had earned.
-    S1 = S0#s{foreign_log_monitor = none, source_sweep_delay = 0},
+    %% Every reference died with the owner. The gproc `follow` monitor remains
+    %% armed and its exact `registered` edge will repopulate the attachment
+    %% queue when the replacement owner is addressable.
+    S1 = S0#s{source_attach_queue = [], source_attach_token = none},
     maps:fold(
       fun(Identity, Row, Acc0) ->
               Height = source_last_height(maps:get(state, Row)),
-              {Attempt, Acc1} = next_source_attempt(Acc0),
-              mark_source_unreachable(
-                Identity, unavailable, Height, Attempt, Acc1)
+              put_source_view(
+                Identity,
+                #{follow_ref => none,
+                  state => {unreachable, unavailable, Height},
+                  attempt => maps:get(attempt, Row, 0)}, Acc0)
       end, S1, S1#s.source_views).
 
 source_last_height({building, Height}) -> Height;
@@ -1704,11 +1663,7 @@ read_founding(Ns, Config) ->
 founding_payload(Data) ->
     case quod_ledger:classify(Data) of
         {content, Txs} -> {ok, founding_runtime(Txs)};
-        {'begin', _Control} -> {error, invalid_genesis_payload};
-        {prepare, _Control} -> {error, invalid_genesis_payload};
-        {decision, _Control} -> {error, invalid_genesis_payload};
-        {finalize, _Control} -> {error, invalid_genesis_payload};
-        {complete, _Control} -> {error, invalid_genesis_payload};
+        {controls, _Controls} -> {error, invalid_genesis_payload};
         noop -> {error, invalid_genesis_payload};
         invalid -> {error, invalid_genesis_payload}
     end.

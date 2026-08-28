@@ -34,22 +34,16 @@
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
 %% Durable multi-ontology control records.  The semantic body limit leaves a
 %% fixed margin below the existing 256 KiB block ceiling for the target-bound
-%% author envelope and singleton block framing.  A group has exactly the same
+%% author envelope and one-item maximum-size block framing. A group has the same
 %% participant ceiling as the proof that produced it.
 -define(QUOD_MAX_DTX_PARTICIPANTS, ?QUOD_MAX_SCOPES_PER_PROOF).
 -define(QUOD_MAX_DTX_BODY_BYTES, (224 * 1024)).
-%% Deterministic ETF adds exactly 13 bytes around a binary in `{dtx, Blob}`.
--define(QUOD_DTX_TAGGED_PAYLOAD_OVERHEAD_BYTES, 13).
+%% Deterministic ETF adds exactly 28 bytes around a binary in a canonical
+%% one-control payload `{batch, [{dtx, Blob}]}`. Ordinary blocks may carry more
+%% controls when their combined encoded size fits the block byte ceiling.
+-define(QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES, 28).
 -define(QUOD_MAX_DTX_CONTROL_BYTES,
-        (?MAX_BLOCK_BYTES - ?QUOD_DTX_TAGGED_PAYLOAD_OVERHEAD_BYTES)).
-
-%% Process-free DTX recovery endpoint. One semantic record or certified
-%% reference fits below this envelope with a fixed allowance for the v1
-%% request/reply wrapper and public outcome-status metadata.
--define(QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
-        (?QUOD_MAX_DTX_CONTROL_BYTES + (4 * 1024))).
--define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
--define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
+        (?MAX_BLOCK_BYTES - ?QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES)).
 
 %% One node-wide foreign-history owner (distributed-proof-plan §8). Dormant
 %% histories stay as verified disk caches and are opened only when a proof or
@@ -57,14 +51,31 @@
 %% there is no fixed population refusal.
 -define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
 -define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
+
+%% Process-free DTX recovery endpoint.  It may carry one optional page-format
+%% acceleration sidecar beside the semantic request/response, so it shares the
+%% existing foreign-page byte owner.  The transport frame remains the outer
+%% bound and the sidecar is never authority.
+-define(QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
+        ?QUOD_MAX_FOREIGN_PAGE_BYTES).
+-define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
+-define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
+
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
 %% converts it to this VM's heap words before installing the hard kill limit.
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).
 
-%% Hard-break scope-session wire.  These values are shared by producers,
-%% decoders, admission checks, and boundary tests; do not duplicate them in
-%% the transport or router.
--define(QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES, (128 * 1024)).
+%% Hard-break scope-session wire.  The largest command carries one exact
+%% operation-custody submission plus a maximum-size agent principal, two
+%% bounded namespaces, and fixed scope/ETF metadata.  Derive the envelope from
+%% those shared semantic owners so every submission accepted by the transaction
+%% codec can cross a remote scope.  The 1024-byte fixed allowance exceeds the
+%% current 920-byte maximum after the principal blob.
+-define(QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES, 1024).
+-define(QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES,
+        (?QUOD_MAX_OPERATION_SUBMISSION_BYTES +
+         ?QUOD_MAX_TOPLEVEL_GOAL_BYTES +
+         ?QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES)).
 -define(QUOD_SCOPE_COMMAND_TIMEOUT_MS, 30000).
 %% Reserve part of the origin-owned absolute proof budget for a target-authored
 %% terminal event to cross the network.  This is the maximum reserve: short

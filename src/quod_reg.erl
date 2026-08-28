@@ -28,8 +28,9 @@ matching **property**, both keyed by the same `Key = {Type, Id}`:
 | `{quod_simplex, Ns}`  | a namespace's consensus statem              |
 | `{quod_prolog, Ns}`   | a namespace's committed fact engine         |
 | `{quod_runtime, Ns}`  | a namespace's derived runtime projection    |
-| `{conn_stats, local}` | connection metrics subscribers (property)   |
+| `{connections, local}` | local connection owners (property)         |
 | `{channel, Name}`     | a pub/sub channel (property only, no owner) |
+| `{directory_route, {Namespace, Anchor}}` | exact route availability (property only) |
 
 ## Example
 

@@ -23,7 +23,8 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          publish/1, refresh/1, context/1,
          access_guard/1, check_access/1, check_mutable/1,
          committed_state/1, local_changes/1, effects/1,
-         prepared_effect/2, sealed_plan/1, signer_from_state/1,
+         prepared_effect/2, sealed_plan/1, effect_reservation/1,
+         signer_from_state/1,
          read_set/1, absorb_read_set/2, absorb_live_bridges/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
@@ -58,6 +59,15 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
               open | {sealed, map(), not_material | {ok, quod_dtx:plan()}},
           attestation = open ::
               open | {<<_:256>>, quod_dtx:attestation()},
+          %% An effect-bearing attestation is not exposed until the exact
+          %% private preparation is reserved in the journal. Bind and cancel
+          %% then race through that one owner; neither can recreate it.
+          effect_reservation = none :: none |
+              #{token := reference(), effect := quod_effect:effect(),
+                plan_digest := <<_:256>>, manifest_digest := <<_:256>>,
+                coordinator :=
+                    {binary(), <<_:256>>, <<_:256>>, <<_:256>>},
+                target := {binary(), <<_:256>>}},
           overlay_generation = 0 :: non_neg_integer(),
           %% The bounded canonical invocation transcript (`m:quod_dtx`).
           %% `transcript_rev` holds
@@ -110,7 +120,9 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
 stop(Handle) ->
     ensure_owner(Handle),
     case erase(session_key(Handle)) of
-        #session_state{current = Current} ->
+        #session_state{current = Current,
+                       effect_reservation = Reservation} ->
+            release_effect_reservation(Reservation),
             quod_erlog_db_local_prove:cleanup_read_set(Current);
         undefined ->
             ok
@@ -353,6 +365,21 @@ sealed_plan(Handle) ->
         open -> {error, {protocol_error, unexpected_scope_command}}
     end.
 
+-doc "Return the exact journal reservation latched with this session's attestation.".
+-spec effect_reservation(session()) ->
+          {ok, #{token := reference(), effect := quod_effect:effect(),
+                 plan_digest := <<_:256>>, manifest_digest := <<_:256>>,
+                 coordinator :=
+                     {binary(), <<_:256>>, <<_:256>>, <<_:256>>},
+                 target := {binary(), <<_:256>>}}} |
+          {error, missing_effect_preparation}.
+effect_reservation(Handle) ->
+    State = get_session(Handle),
+    case State#session_state.effect_reservation of
+        #{token := _Token} = Reservation -> {ok, Reservation};
+        none -> {error, missing_effect_preparation}
+    end.
+
 -doc "Return the session signer bound to the exact wrapped proof state.".
 -spec signer_from_state(tuple()) -> map() | none.
 signer_from_state(St) ->
@@ -532,14 +559,80 @@ latch_attestation(Handle, State, Plan, Manifest) ->
            Target, Plan, Manifest, State#session_state.signer) of
         {ok, Attestation} = Result ->
             Digest = quod_dtx:manifest_digest(Manifest),
-            put_session(
-              Handle,
-              State#session_state{
-                attestation = {Digest, Attestation}}),
-            Result;
+            Coordinator = quod_dtx:manifest_coordinator(Manifest),
+            case reserve_attested_effect(
+                   Handle, State, Plan, Digest, Coordinator, Target) of
+                {ok, State1} ->
+                    put_session(
+                      Handle,
+                      State1#session_state{
+                        attestation = {Digest, Attestation}}),
+                    Result;
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end.
+
+reserve_attested_effect(
+  Handle, State, Plan, ManifestDigest, Coordinator, Target) ->
+    case quod_dtx:material(Plan) of
+        {ok, #{effects := []}} ->
+            {ok, State};
+        {ok, #{effects := [Effect]} = Material} ->
+            case {quod_effect:validate_plan(Plan, Material),
+                  prepared_effect(Handle, Effect)} of
+                {true, {ok, {Action, Desired, Effect, Prepared}}} ->
+                    reserve_attested_preparation(
+                      State, Plan, ManifestDigest, Coordinator, Target,
+                      Action, Desired, Effect, Prepared);
+                {true, error} ->
+                    {error, missing_effect_preparation};
+                {false, _} ->
+                    {error, invalid_direct_effect}
+            end;
+        _ ->
+            {error, invalid_direct_effect}
+    end.
+
+reserve_attested_preparation(
+  State, Plan, ManifestDigest, Coordinator, Target,
+  Action, Desired, Effect, Prepared) ->
+    PlanDigest = quod_dtx:digest(Plan),
+    case quod_effect_journal:reserve(self()) of
+        {ok, Token} ->
+            case quod_effect_journal:stage(
+                   Token, Action, Desired, Effect, Prepared) of
+                ok ->
+                    case quod_effect_journal:bind_reservation(
+                           Token, PlanDigest, ManifestDigest,
+                           Coordinator, Target) of
+                        ok ->
+                            {ok,
+                             State#session_state{
+                               effect_reservation =
+                                 #{token => Token, effect => Effect,
+                                   plan_digest => PlanDigest,
+                                   manifest_digest => ManifestDigest,
+                                   coordinator => Coordinator,
+                                   target => Target}}};
+                        {error, _} = Error ->
+                            release_effect_reservation(#{token => Token}),
+                            Error
+                    end;
+                {error, _} = Error ->
+                    release_effect_reservation(#{token => Token}),
+                    Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+release_effect_reservation(#{token := Token}) ->
+    ok = quod_effect_journal:release_reservation(Token);
+release_effect_reservation(none) ->
+    ok.
 
 checked_manifest_digest(Manifest) ->
     case quod_dtx:encode_manifest(Manifest) of

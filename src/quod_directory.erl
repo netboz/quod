@@ -4,7 +4,7 @@ Live ontology-route directory.
 
 The directory is network-observed soft state: three protected ETS indexes owned
 by this process, rebuilt after restart, and never written to consensus. Proof
-Proof workers call `resolve/1` / `directory_hosts/1` directly; those
+workers call `resolve/1` / `directory_hosts/1` directly; those
 read paths never call this gen_server and therefore remain available while its
 mailbox is busy.
 
@@ -18,6 +18,16 @@ Private direct seeds are local-only. They begin `provisional`, become
 `confirmed` after the scoped identity exchange pins the node key, ontology
 anchor, and advertised role. They take precedence over
 system routes, and never appear through the Prolog-facing `directory_hosts/1`.
+
+When a writer turn makes a confirmed validator route usable for the exact
+identity `{Namespace, GenesisAnchor}`, the owner publishes the bounded event
+`{directory_route_available, Identity}` on the
+`{directory_route, Identity}` property. The event carries no route or endpoint
+data; subscribers always reread this one ordinary projection. A fresh signed
+system advertisement for a node also re-announces every confirmed private
+identity pinned to that node. This is only an authenticated liveness edge after
+a restart or partition; the private route and certified history remain the
+authority.
 """.
 
 -behaviour(gen_server).
@@ -47,7 +57,10 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
     expire_tick_ms = ?DEFAULT_EXPIRE_TICK_MS,
     max_namespaces = ?DIRECTORY_MAX_NAMESPACES,
     max_routes_per_ns = ?DIRECTORY_MAX_ROUTES_PER_NS,
-    max_routes = ?DIRECTORY_MAX_ROUTES
+    max_routes = ?DIRECTORY_MAX_ROUTES,
+    %% Reverse index for liveness notifications only. The route table remains
+    %% the sole answer owner; this map contains no endpoint or role authority.
+    direct_seed_identities = #{} :: #{<<_:256>> => [{binary(), <<_:256>>}]}
 }).
 
 %%%===================================================================
@@ -336,10 +349,15 @@ confirm_seed(Ns, Endpoint, NodeKey, GenesisAnchor, Role,
                      {Ns, direct, RouteKey, NodeKey, Endpoint,
                       confirmed, GenesisAnchor, Role, infinity, 0, 0}),
             true = ets:delete_object(Routes, OldRow),
-            {ok, S};
+            S1 = remember_direct_seed_identity(
+                   NodeKey, {Ns, GenesisAnchor}, Role, S),
+            notify_usable_identities(
+              [Ns], [{Ns, GenesisAnchor, Role}], [], S1),
+            {ok, S1};
         [{Ns, direct, RouteKey, NodeKey, Endpoint, confirmed,
           GenesisAnchor, Role, infinity, 0, 0}] ->
-            {ok, S};
+            {ok, remember_direct_seed_identity(
+                   NodeKey, {Ns, GenesisAnchor}, Role, S)};
         [{Ns, direct, RouteKey, _OtherKey, Endpoint, confirmed,
           _OtherAnchor, _OtherRole, infinity, 0, 0}] ->
             {error, seed_identity_conflict};
@@ -353,6 +371,15 @@ confirm_seed(Ns, Endpoint, NodeKey, GenesisAnchor, Role,
     end;
 confirm_seed(_Ns, _Endpoint, _NodeKey, _GenesisAnchor, _Role, _S) ->
     {error, bad_seed_identity}.
+
+remember_direct_seed_identity(
+  NodeKey, Identity, validator,
+  S = #s{direct_seed_identities = ByPeer}) ->
+    Identities = maps:get(NodeKey, ByPeer, []),
+    S#s{direct_seed_identities =
+            ByPeer#{NodeKey => ordsets:add_element(Identity, Identities)}};
+remember_direct_seed_identity(_NodeKey, _Identity, observer, S) ->
+    S.
 
 capacity_for_seed(Ns, #s{routes = Routes, known = Known,
                          max_routes_per_ns = PerNs, max_routes = Max}) ->
@@ -453,6 +480,8 @@ preflight_record(NodeKey, Hosted, Epoch, Sequence, _Now,
 install_record_now(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, OldRows,
                    S = #s{routes = Routes, highwater = Highwater, known = Known,
                           ttl_ms = Ttl}) ->
+    Namespaces = affected_namespaces(Hosted, OldRows),
+    Before = usable_identities(Namespaces, Routes, Now),
     Expiry = Now + Ttl,
     %% Readers access ETS without crossing this process. Publish the complete
     %% replacement first, then remove the exact old generation, so a concurrent
@@ -466,6 +495,8 @@ install_record_now(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, OldRows,
                   OldRows),
     true = ets:insert(Known, [{Ns} || {Ns, _Anchor, _Role} <- Hosted]),
     true = ets:insert(Highwater, {NodeKey, Epoch, Sequence}),
+    notify_usable_identities(Namespaces, Hosted, Before, Now, S),
+    notify_direct_seed_identities(NodeKey, S),
     {S, Expiry}.
 
 highwater_newer(NodeKey, Epoch, Sequence, Highwater) ->
@@ -503,11 +534,89 @@ system_rows_for_node(NodeKey, Routes) ->
 %%%===================================================================
 
 expire_routes(Now, S = #s{routes = Routes}) ->
+    Expiring = ets:select(
+                 Routes,
+                 [{{'_', system, '_', '_', '_', '_', '_', '_', '$1',
+                    '_', '_'},
+                   [{'=<', '$1', Now}], ['$_']}]),
+    Namespaces = lists:usort([Ns || {Ns, system, _, _, _, _, _, _, _, _, _}
+                                        <- Expiring]),
+    %% At this mailbox turn the selected rows are already inactive by wall
+    %% clock, although they still make the raw route set ambiguous. Compare
+    %% the pre-deletion route set with the post-deletion live view so expiry
+    %% itself emits the edge for an identity released from an anchor conflict.
+    Before = usable_identities_before_expiry(Namespaces, Routes),
     _ = ets:select_delete(
           Routes,
           [{{'_', system, '_', '_', '_', '_', '_', '_', '$1', '_', '_'},
             [{'=<', '$1', Now}], [true]}]),
+    notify_usable_identities(Namespaces, [], Before, Now, S),
     S.
+
+affected_namespaces(Hosted, OldRows) ->
+    lists:usort(
+      [Ns || {Ns, _Anchor, _Role} <- Hosted] ++
+      [Ns || {Ns, system, _, _, _, _, _, _, _, _, _} <- OldRows]).
+
+notify_usable_identities(Namespaces, Installed, Before,
+                         #s{} = S) ->
+    notify_usable_identities(
+      Namespaces, Installed, Before, quod_time:mono_ms(), S).
+
+notify_usable_identities(Namespaces, Installed, Before, Now,
+                         #s{routes = Routes}) ->
+    After = usable_identities(Namespaces, Routes, Now),
+    InstalledValidators =
+        lists:usort([{Ns, Anchor}
+                     || {Ns, Anchor, validator} <- Installed]),
+    NewlyAvailable = ordsets:subtract(After, Before),
+    Notify = ordsets:intersection(
+               After, ordsets:union(InstalledValidators, NewlyAvailable)),
+    lists:foreach(fun publish_route_available/1, Notify),
+    ok.
+
+notify_direct_seed_identities(
+  NodeKey, #s{direct_seed_identities = ByPeer}) ->
+    lists:foreach(
+      fun publish_route_available/1,
+      maps:get(NodeKey, ByPeer, [])).
+
+publish_route_available(Identity) ->
+    _ = quod_reg:publish(
+          {directory_route, Identity},
+          {directory_route_available, Identity}),
+    ok.
+
+usable_identities(Namespaces, Routes, Now) ->
+    lists:flatmap(
+      fun(Ns) ->
+          Anchors = lists:usort(
+                      [Anchor
+                       || {_Ns, _Scope, _RouteKey, <<_:256>>, _Endpoint,
+                           confirmed, <<_:256>> = Anchor, validator,
+                           _Expiry, _Epoch, _Sequence} = Row
+                              <- ets:lookup(Routes, Ns),
+                          route_active(Row, Now)]),
+          case Anchors of
+              [Anchor] -> [{Ns, Anchor}];
+              _ -> []
+          end
+      end, Namespaces).
+
+usable_identities_before_expiry(Namespaces, Routes) ->
+    lists:flatmap(
+      fun(Ns) ->
+          Anchors = lists:usort(
+                      [Anchor
+                       || {_Ns, _Scope, _RouteKey, <<_:256>>, _Endpoint,
+                           confirmed, <<_:256>> = Anchor, validator,
+                           _Expiry, _Epoch, _Sequence}
+                              <- ets:lookup(Routes, Ns)]),
+          case Anchors of
+              [Anchor] -> [{Ns, Anchor}];
+              _ -> []
+          end
+      end, Namespaces).
 
 route_active({_Ns, direct, _Key, _NodeKey, _Endpoint, _Status,
               _Anchor, _Role, infinity, _Epoch, _Sequence}, _Now) ->

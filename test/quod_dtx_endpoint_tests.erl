@@ -1,18 +1,17 @@
 -module(quod_dtx_endpoint_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_transport_limits.hrl").
 
-channel_and_limits_are_fixed_test() ->
+channel_and_wire_bounds_are_fixed_test() ->
     Ns = <<"quod:endpoint">>,
     ?assertEqual(
        term_to_binary({quod_dtx, Ns}, [deterministic]),
        quod_dtx_endpoint:channel(Ns)),
-    ?assertEqual(
-       #{max_envelope_bytes => ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
-         worker_timeout_ms => 30000},
-       quod_dtx_endpoint:limits()),
+    ?assertEqual(?QUOD_MAX_FOREIGN_PAGE_BYTES,
+                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES),
     ?assert(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES <
             ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
 
@@ -30,16 +29,15 @@ all_request_shapes_roundtrip_deterministically_test() ->
          {applied, id(8), digest(2), certified_ref(), 9, commit},
          {applied, id(9), digest(2), certified_ref(), 0, abort},
          {outcome, id(10), transaction_ref(), digest(7), 11},
-         {outcome, id(12), operation_ref(), digest(7), 11}],
+         {outcome, id(12), operation_ref(), digest(7), 11},
+         {cancel_operation_effect, id(13), <<"signed-submission">>}],
     lists:foreach(
       fun(Request) ->
-          {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request),
-          ?assertEqual({ok, Request},
+          {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, []),
+          ?assertEqual({ok, Request, []},
                        quod_dtx_endpoint:decode_request(Ns, Frame)),
-          ?assertEqual({ok, Ns, Request},
-                       quod_dtx_endpoint:decode_request(Frame)),
           ?assertEqual({ok, Frame},
-                       quod_dtx_endpoint:encode_request(Ns, Request))
+                       quod_dtx_endpoint:encode_request(Ns, Request, []))
       end, Requests).
 
 all_response_shapes_roundtrip_and_correlate_test() ->
@@ -86,7 +84,10 @@ all_response_shapes_roundtrip_and_correlate_test() ->
          {{phase, id(4), digest(2), finalize},
           {phase, id(4), 8, {committed, Ref}}},
          {{applied, id(5), digest(2), Ref, 9, commit},
-          {applied, id(5), target(), digest(7), digest(2), Ref, 9, commit}}]
+          {applied, id(5), target(), digest(7), digest(2), Ref, 9, commit,
+           digest(8), <<9:512>>}},
+         {{cancel_operation_effect, id(6), <<"signed-submission">>},
+          {operation_effect_cancelled, id(6), cancelled}}]
         ++ [{{outcome, id(16 + N), maps:get(ref, Status), digest(7), 11},
              {outcome, id(16 + N), outcome_target(), digest(7), 12, Status}}
             || {N, Status} <- lists:enumerate(Statuses)],
@@ -105,11 +106,9 @@ all_response_shapes_roundtrip_and_correlate_test() ->
            not_found}}],
     lists:foreach(
       fun({Request, Response}) ->
-          {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response),
-          ?assertEqual({ok, Response},
+          {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
+          ?assertEqual({ok, Response, []},
                        quod_dtx_endpoint:decode_response(Ns, Frame)),
-          ?assertEqual({ok, Ns, Response},
-                       quod_dtx_endpoint:decode_response(Frame)),
           ?assert(quod_dtx_endpoint:correlates(Request, Response)),
           ?assertEqual(quod_dtx_endpoint:request_id(Request),
                        quod_dtx_endpoint:response_id(Response))
@@ -118,8 +117,8 @@ all_response_shapes_roundtrip_and_correlate_test() ->
       fun(Reason) ->
           Request = {outcome, id(60), GroupRef, digest(7), 11},
           Response = {error, id(60), Reason},
-          {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response),
-          ?assertEqual({ok, Response},
+          {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
+          ?assertEqual({ok, Response, []},
                        quod_dtx_endpoint:decode_response(Ns, Frame)),
           ?assert(quod_dtx_endpoint:correlates(Request, Response))
       end, [busy, not_ready, not_found, invalid_request]).
@@ -135,9 +134,10 @@ certified_remote_application_response_correlates_test() ->
     Request = {apply_claim, id(63), ClaimEvidence},
     Response = {application, id(63), committed, TargetEvidence},
     TargetNs = element(1, maps:get(participant_target, Fixture)),
-    ?assertMatch({ok, _}, quod_dtx_endpoint:encode_request(TargetNs, Request)),
     ?assertMatch({ok, _},
-                 quod_dtx_endpoint:encode_response(TargetNs, Response)),
+                 quod_dtx_endpoint:encode_request(TargetNs, Request, [])),
+    ?assertMatch({ok, _},
+                 quod_dtx_endpoint:encode_response(TargetNs, Response, [])),
     ?assert(quod_dtx_endpoint:correlates(Request, Response)).
 
 direction_namespace_and_exact_correlation_are_enforced_test() ->
@@ -146,9 +146,10 @@ direction_namespace_and_exact_correlation_are_enforced_test() ->
     Ref = certified_ref(),
     Request = {applied, id(1), digest(2), Ref, 9, commit},
     Response =
-        {applied, id(1), target(), digest(7), digest(2), Ref, 9, commit},
-    {ok, RequestFrame} = quod_dtx_endpoint:encode_request(Ns, Request),
-    {ok, ResponseFrame} = quod_dtx_endpoint:encode_response(Ns, Response),
+        {applied, id(1), target(), digest(7), digest(2), Ref, 9, commit,
+         digest(8), <<9:512>>},
+    {ok, RequestFrame} = quod_dtx_endpoint:encode_request(Ns, Request, []),
+    {ok, ResponseFrame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
     ?assertEqual(
        {error, {protocol_error, bad_shape}},
        quod_dtx_endpoint:decode_response(Ns, RequestFrame)),
@@ -164,6 +165,79 @@ direction_namespace_and_exact_correlation_are_enforced_test() ->
                  Request, setelement(8, Response, abort))),
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(2, Response, id(2)))).
+
+applied_v6_response_carries_signer_and_signature_but_v5_is_rejected_test() ->
+    Ns = <<"quod:endpoint">>,
+    Ref = certified_ref(),
+    Request = {applied, id(1), digest(2), Ref, 9, commit},
+    Response = {applied, id(1), target(), digest(7), digest(2), Ref, 9,
+                commit, digest(8), <<9:512>>},
+    {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
+    ?assertEqual({ok, Response, []},
+                 quod_dtx_endpoint:decode_response(Ns, Frame)),
+    ?assert(quod_dtx_endpoint:correlates(Request, Response)),
+    Inner = term_to_binary({Response, []}, [deterministic]),
+    ?assertEqual(
+       {error, {protocol_error, wrong_version}},
+       quod_dtx_endpoint:decode_response(Ns, outer(Ns, 5, Inner))).
+
+cancel_operation_effect_v6_hard_break_rejects_the_old_tuple_test() ->
+    Ns = <<"quod:endpoint">>,
+    RequestId = id(62),
+    OldRequest =
+        {cancel_operation_effect, RequestId, transaction_ref(),
+         target_transaction_ref(), digest(9)},
+    NewMalformedRequest =
+        {cancel_operation_effect, RequestId, <<"not-a-submission">>},
+    ?assertMatch(
+       {error, {protocol_error, bad_shape}},
+       quod_dtx_endpoint:encode_request(Ns, OldRequest, [])),
+    %% This layer owns framing only. The authenticated target engine calls the
+    %% one transaction decoder; parsing here too would verify every cancel
+    %% submission twice.
+    ?assertMatch(
+       {ok, _},
+       quod_dtx_endpoint:encode_request(Ns, NewMalformedRequest, [])),
+    ?assertEqual(error, quod_dtx_endpoint:request_id(OldRequest)),
+    ?assertEqual(RequestId,
+                 quod_dtx_endpoint:request_id(NewMalformedRequest)),
+    ?assert(
+       quod_dtx_endpoint:correlates(
+         NewMalformedRequest,
+         {operation_effect_cancelled, RequestId, cancelled})).
+
+entry_hint_roundtrips_as_untrusted_sidecar_test() ->
+    Ns = <<"quod:endpoint">>,
+    Request = {phase, id(1), digest(2), prepare},
+    Ref = certified_ref(),
+    Entry = #entry{index = 7, data = noop},
+    Hints = [{Ref, Entry}],
+    {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, Hints),
+    ?assertEqual({ok, Request, Hints},
+                 quod_dtx_endpoint:decode_request(Ns, Frame)),
+    %% The codec deliberately checks only bounded shape.  An uncertified
+    %% entry survives transport so the one foreign-log verifier, rather than
+    %% this framing module, remains responsible for rejecting or importing it.
+    ?assertEqual(none, Entry#entry.cert).
+
+malformed_received_hint_is_ignored_without_losing_the_request_test() ->
+    Ns = <<"quod:endpoint">>,
+    Request = {phase, id(1), digest(2), prepare},
+    Ref = certified_ref(),
+    WrongSlot = #entry{index = 8, data = noop},
+    Inner = term_to_binary({Request, [{Ref, WrongSlot}]}, [deterministic]),
+    Frame = outer(Ns, 6, Inner),
+    ?assertEqual({ok, Request, []},
+                 quod_dtx_endpoint:decode_request(Ns, Frame)),
+    ?assertEqual(
+       {error, {protocol_error, bad_hints}},
+       quod_dtx_endpoint:encode_request(
+         Ns, Request, [{Ref, WrongSlot}])),
+    Entry = #entry{index = 7, data = noop},
+    ?assertEqual(
+       {error, {protocol_error, bad_hints}},
+       quod_dtx_endpoint:encode_request(
+         Ns, Request, [{Ref, Entry}, {Ref, Entry}])).
 
 outcome_view_and_floor_correlation_are_exact_test() ->
     GroupRef = group_ref(),
@@ -226,8 +300,8 @@ submit_digest_correlation_is_exact_test() ->
 malformed_and_noncanonical_frames_fail_closed_test() ->
     Ns = <<"quod:endpoint">>,
     Good = {phase, id(1), digest(2), 'begin'},
-    GoodInner = term_to_binary(Good, [deterministic]),
-    WrongVersion = outer(Ns, 1, GoodInner),
+    GoodInner = term_to_binary({Good, []}, [deterministic]),
+    WrongVersion = outer(Ns, 5, GoodInner),
     WrongDomain = term_to_binary(
                     {quod_dtx_endpoint_old, 1, Ns, GoodInner},
                     [deterministic]),
@@ -254,18 +328,18 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
     ?assertEqual(
        {error, {protocol_error, bad_record}},
        quod_dtx_endpoint:encode_request(
-         Ns, {submit, id(1), CompressedRecord})),
+         Ns, {submit, id(1), CompressedRecord}, [])),
     TrailingRecord = <<(record_blob())/binary, 0>>,
     ?assertEqual(
        {error, {protocol_error, bad_record}},
        quod_dtx_endpoint:encode_request(
-         Ns, {submit, id(1), TrailingRecord})),
+         Ns, {submit, id(1), TrailingRecord}, [])),
     ?assertEqual(
        {error, {too_large, record}},
        quod_dtx_endpoint:encode_request(
          Ns,
          {submit, id(1),
-          <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>})).
+          <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}, [])).
 
 unknown_atoms_are_not_created_test() ->
     Ns = <<"quod:endpoint">>,
@@ -280,7 +354,9 @@ unknown_atoms_are_not_created_test() ->
               109, 0, 0, 0, 16, (id(1))/binary,
               109, 0, 0, 0, 32, (digest(2))/binary,
               118, (byte_size(AtomName)):16, AtomName/binary>>,
-    Frame = outer(Ns, 3, Inner),
+    InnerTerm = binary:part(Inner, 1, byte_size(Inner) - 1),
+    Wrapped = <<131, 104, 2, InnerTerm/binary, 106>>,
+    Frame = outer(Ns, 6, Wrapped),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -312,7 +388,7 @@ invalid_fixed_shapes_are_rejected_test() ->
          {applied, id(1), digest(2), invalid_ref, 0, commit},
          {applied, id(1), digest(2), Ref, -1, commit},
          {applied, id(1), digest(2), Ref, 0, unknown_verdict}],
-    [?assertMatch({error, _}, quod_dtx_endpoint:encode_request(Ns, Bad))
+    [?assertMatch({error, _}, quod_dtx_endpoint:encode_request(Ns, Bad, []))
      || Bad <- BadRequests],
     BadResponses =
         [{accepted, id(1), <<1:248>>, accepted_ref()},
@@ -335,7 +411,11 @@ invalid_fixed_shapes_are_rejected_test() ->
          {phase, id(1), 0, unknown},
          {phase, id(1), 0, {committed, invalid_ref}},
          {applied, id(1), {<<>>, digest(1)}, digest(2), digest(3), Ref,
-          0, commit},
+          0, commit, digest(4), <<5:512>>},
+         {applied, id(1), target(), digest(2), digest(3), Ref,
+          0, commit, <<4:248>>, <<5:512>>},
+         {applied, id(1), target(), digest(2), digest(3), Ref,
+          0, commit, digest(4), <<5:504>>},
          {error, id(1), timeout},
          {outcome, id(1), outcome_target(), digest(7), 12,
           #{status => pending, phase => unknown, ref => GroupRef}},
@@ -354,7 +434,7 @@ invalid_fixed_shapes_are_rejected_test() ->
          {outcome, id(1), outcome_target(), digest(7), -1, not_found},
          {outcome_barrier, id(1), outcome_target(), digest(7), 12,
           unknown}],
-    [?assertMatch({error, _}, quod_dtx_endpoint:encode_response(Ns, Bad))
+    [?assertMatch({error, _}, quod_dtx_endpoint:encode_response(Ns, Bad, []))
      || Bad <- BadResponses].
 
 outer(Ns, Version, Inner) ->

@@ -272,17 +272,14 @@ Returning success for a real group at Decision could remove latency only by chan
 `committed` to mean "chosen but perhaps not visible at the targets." That is a
 different API and is not part of this plan.
 
-### 4.3 Later option: fuse a real origin participant into origin phases
+### 4.3 Implemented source-participant fusion
 
-When A contributes real material, its committee currently runs separate local
-Prepare and Finalize blocks even though Begin and Decision are committed by the
-same committee in the same ledger. A later protocol revision may validate and
-lock A's plan in Begin, then apply/discard it in Decision by reusing the same
-Prepare/Finalize reducers.
-
-This can remove two more local blocks without weakening a check, but it changes
-the reducer and recovery format more deeply. It is deferred until the smaller
-foreign-only change is measured and reviewed.
+When A contributes real material, Begin validates and prepares A's plan by
+calling the exact Prepare policy/reducer; Decision applies or discards it by
+calling the exact Finalize reducer. No source-local Prepare or Finalize control
+is constructed, decoded, recovered, or committed. Remote participants retain
+their ordinary Prepare/Finalize phases. This removes two source blocks without
+removing or duplicating a check.
 
 ## 5. Remove normal polling after Finalize
 
@@ -367,11 +364,11 @@ byte, term, depth, committee, and VM-safety bounds remain.
 |---|---:|---|---|
 | removed `QUOD_DTX_ENDPOINT_MAX_WORKERS` | was 8 per hosted ontology | the ninth applied-state/current-view request got `busy`; Complete validation could prevent its own quorum | Slice 1 keeps the existing per-request worker owner and deletes the population cap, every population `busy` branch, and the public field |
 | removed `QUOD_DTX_ENDPOINT_MAX_CORRELATIONS` | was 8 participants x 64 validators = 512 per hosted ontology | a second valid operation in that ontology could get `busy` after one worst-case operation occupied the map | Slice 1 keeps the exact correlation map and caller deadline and deletes only the cross-operation population gate |
-| retained semantic DTX controls / waiters in Simplex | 8 participants + 1 = 9 controls and 1 waiter per semantic digest, per hosted ontology | an unrelated valid control or second live waiter gets `busy`; any parked control also activates the consensus barrier, even when it is not proposal-ready | keep the existing Simplex custody owner; refactor one canonical DTX readiness predicate, digest registry, ready/blocked indexes, monitorable waiter ownership, byte accounting, and retire path; only then remove both population counts |
+| retained semantic DTX controls / waiters in Simplex | no compiled population count; canonical hard-batch bytes remain bounded | the existing owner retains ready/blocked controls and exact waiters by semantic digest | keep the one Simplex custody owner, canonical readiness/indexes, monitored waiter ownership, byte accounting, and one retire path |
 | removed `QUOD_MAX_FOREIGN_PENDING` / `_PER_PEER` | was 32 per node / 4 per peer | certified-history work could get `busy`; one already-active identity separately returned `history_busy` | retain the one cache writer per identity; share concurrent current-view requests for that identity even when their route hints differ, and retain exact monitored ownership/deadlines instead of a population refusal |
 | `quod_catchup:MAX_INFLIGHT` | 32 read workers per hosted ontology | excess certified-history pulls are silently dropped, so a valid caller waits the full 8-second pull timeout | keep the wire unchanged; replace the counter with owned request rows and the same approved named active-work default 32; excess reads wait and start on worker completion, while expired/dead-link rows finish once and never disappear into the client timeout |
-| outer Simplex coordinator-owner failure state | saturates at 16; retry 100 ms to 3.2 seconds | bounds only restart-backoff bookkeeping and never abandons durable recovery | keep recovery unbounded; represent only the actual backoff state and delete its unreachable 5-second constant |
-| coordinator process retry | 100 ms to the configured 5 seconds | replans/retries one durable group; this 5-second maximum is reachable | keep as the coordinator's distinct recovery scheduler; do not conflate it with the outer Simplex owner |
+| removed outer Simplex coordinator backoff | was a 16-count, 100 ms--3.2 second state checked by unrelated mailbox turns and the 300 ms consensus tick | delayed recovery and hid deterministic coordinator faults behind repeated restarts | the exact monitored DOWN now reconciles durable recovery immediately; impossible start/bootstrap state fails loudly, and no timer/count/status remains |
+| removed coordinator progress retry | was 100 ms to a configured 5 seconds | rediscovered target/history progress by elapsed time | exact endpoint, certified-follow, directory-route, local-commit, and owner-registration messages now wake the parked coordinator; only request/wave silence deadlines remain |
 | effect-journal active custody | Root policy default 64, dynamically settable or `unlimited` | a new effect-bearing DTX can be refused before custody | keep: this is the explicitly approved committed Prolog policy owner; document that `unlimited` still retains terminal rows and increases full-snapshot disk rewrite cost |
 | effect execution | one journal worker per node plus one namespace-manager mutation worker/FIFO per node; no journal attempt deadline or heap kill; the manager's 15-second caller timeout does not cancel its worker | one wedged bridge blocks every later effect, then the namespace manager can move the same blockage downstream; the earliest repeatedly unavailable row can starve unrelated rows | keep journal custody/reconciliation, but make the existing namespace manager the sole per-namespace physical-mutation lane owner for journal effects, direct calls, and reconciliation; one manager finish path owns result/DOWN/deadline and different namespaces overlap |
 | relay completed-result cache | 2,048 rows plus expiry | an authenticated redrive can lose its cached terminal reply by unrelated population trimming and repeat admission work | remove the count in Slice 0.10d; retain expiry and exact submission identity, and carry its bytes in the same node-wide reservation acquired before relay admission |
@@ -383,11 +380,11 @@ for node-wide admission quotas:
 |---|---:|---|
 | Simplex signature worker | 2 seconds | per-attempt failure bound; keep, instrument, and wake progress by message |
 | validator foreign DTX verification | 6 seconds | per-validation attempt bound; keep under durable recovery and measure |
-| retained-control relay retry | 300 ms | failure retry only; local admission already wakes immediately after Slice 0 |
+| retained-control relay progress | link-up, leader/slot/committee, and exact ownership events | send once on reliable QUIC; the individual caller deadline is the final failure safeguard, never a timed normal-progress resend |
 | generic consensus maintenance tick / Delta | 300 ms / default 1 second, application-configurable | fallback liveness, never normal DTX readiness discovery |
 | maximum quorum rearms / pipeline depth | 3 / 1 | consensus-state shape, not transaction-population policy |
 | per-peer consensus outbox / dial timeout | 1,024 / 15 seconds | transport liveness/backpressure; not a DTX phase owner and requires a separate transport review before change |
-| current-view route candidates | at most 64 validator keys, at most 2 endpoints each | bounded candidate shape for one committee view; keep with the 64-validator protocol bound |
+| current-view route candidates / applied-certificate probe endpoints | at most 64 validator keys and 2 current endpoints each / the shared key-resolver endpoint, those current candidates, and the exact Finalize-era fallback are deduplicated | the committee bound limits probe keys; transport authenticates the expected key, while endpoint hints affect reachability only and cannot add a signer or vote |
 | recovery evidence / history | `2*N+3` = 19 at `N=8` / 5 entries | one-group recovery shape; keep and test at the maximum participant count |
 | DTX endpoint request id | 128 bits | correlation/wire shape; keep |
 
@@ -421,8 +418,8 @@ it.
 | pending commands per scope | 64 | a 65th command in one scope is rejected | retain: it is derived from the per-proof invocation shape, not node-wide concurrency |
 | inbound identity attestations | no population quota | every request has explicit request/link/attester ownership and final-deadline cleanup | implemented without adding another pool or counter |
 | unsigned ingress queue | 512 rows / 64 per author / 2 blocks (512 KiB) / 7-second lifetime per hosted ontology | valid unsigned work is parked in FIFO order, then gets `busy` at a count/byte threshold or when the independent ingress timer expires | keep this existing pre-sign owner rather than add a queue, but delete arbitrary row/per-author counts with the custody slice; one reviewed byte owner and the signed pre-Begin deadline must govern admission/waiting, so moving pressure here cannot merely move the hard rejection |
-| Simplex ordinary signed custody | 2,048 rows / 8 blocks = 2 MiB per hosted ontology process | a node-signed submission whose certified outcome is still unknown gets `busy` at either threshold | once signed, retain the exact row in the existing Simplex custody owner until certified inclusion/exclusion during that owner lifetime and never drop it because of a count. Reserve through the node-wide `quod_ingress_budget` before retention. Ordinary restart semantics remain `outcome_unknown`; 2 MiB is temporary code, not approved architecture |
-| Simplex relay pending | 2,048 rows per hosted ontology process | forwarded pre-Begin submission gets `busy` or waits | remove the separate count; retain one exact relay row only while its custody row needs placement, wake it on link/view/progress events, and use the same pre-sign byte owner rather than a second queue or policy |
+| Simplex ordinary signed custody | no compiled row or aggregate-byte refusal threshold; depth/bytes remain observable per hosted ontology process | a signed submission remains owned until certified completion or its existing terminal deadline | retain the exact row in the existing Simplex custody owner; a later node-wide policy may govern pre-sign admission but cannot drop accepted signed custody |
+| Simplex relay pending | no compiled population threshold | one exact relay row remains while its custody row needs placement | wake it on link/view/ownership events; no second queue, timed resend, or policy path |
 | authentication challenge/session tables | 256 / 256 per node | new unauthenticated challenge or login can be refused | approved as named node-instance policies with defaults 256/256 and an explicit `unlimited` value; retain TTL cleanup and table ownership, with no hidden product quota or per-agent rate limit |
 | directory hosted names per signed node record | 32 | a node cannot advertise a larger hosted set in one record | remove the semantic ontology-count limit in one coordinated directory format revision; stream/page a complete signed generation through existing bounded QUIC frames so transport bytes remain safely decodable without limiting how many ontologies a node may host |
 | directory retained routes per ontology / route rows, known namespaces, and signer high-water rows | 8 / 2,048 per node | a new signed record or direct seed is refused with `namespace_full`/`directory_full`, potentially leaving that ontology unreachable; existing rows are not evicted by capacity admission | delete all count admissions, fields, and refusal branches with no replacement ontology/route count; keep the one `quod_directory` ETS projection, authenticated leases, expiry, exact identity, freshness, and memory/count metrics. Higher-level ontology discovery will feed this same projection later |
@@ -673,7 +670,7 @@ than a local tuning patch.
 For exact retained boundary values, the shared headers/code remain the single
 source of truth. The audited client/wire safety set currently includes: 4 KiB
 authentication JSON; 16,819-byte raw signed-request and 23,452-byte HTTP JSON
-admission ceilings; 512 KiB result and 528 KiB result envelope; 128 KiB scope envelope;
+admission ceilings; 512 KiB result and 528 KiB result envelope; a scope envelope derived from the largest exact signed operation submission plus bounded scope metadata (currently 271,488 bytes);
 20,000 decoded term nodes, depth 64, and 1,024-byte symbols; at most 64 new
 symbols per authenticated material payload, 16,384 cumulative client-created
 atoms per VM lifetime, and 100,000 atoms of VM headroom. Challenge lifetime is
@@ -730,12 +727,13 @@ admission/materialization calls consume the signed request budget.
   and current-view cleanup reserves 1 second for mailbox cleanup. These are
   per-attempt failure/cleanup bounds, not an operation deadline.
 
-Progress messages must wake work immediately on both sides; timers remain
-failure or cleanup bounds. The outer Simplex coordinator-owner failure state
-does not terminate recovery: its exponential delay reaches 3.2 seconds and
-can never reach its declared 5-second maximum, so that owner's stale maximum
-and redundant count state are removed. The coordinator process has its own
-retry scheduler whose configured 5-second maximum is reachable and remains.
+Progress messages wake work immediately on both sides; timers remain failure
+or cleanup bounds. The outer Simplex owner has no backoff status, counter, or
+time comparison: the exact monitored DOWN reconciles from durable state in the
+same mailbox turn. The coordinator has no progress retry scheduler either;
+temporary endpoint/history unavailability stays inside its exact parked work
+and resumes from owner notifications. Impossible start or certified-Begin
+bootstrap state fails loudly instead of entering an endless delayed loop.
 
 #### Correctness and documentation drift found during the audit
 
@@ -762,31 +760,46 @@ Before protocol optimization, one small closure slice must:
 These are fixes to existing contracts and documentation, not new execution or
 authorization paths.
 
-## 6. Keep the Complete preflight, but share and parallelize it
+## 6. Keep the Complete preflight, then carry its certificate
 
-The coordinator checks participant application before submitting Complete;
-then every source validator checks again before voting.
+The coordinator checks participant application before submitting Complete.
+For each prepared remote Finalize, it freezes the committee certified by that
+exact Finalize and collects `f + 1` signatures over one exact applied
+statement. The resulting certificate is carried with the Complete proposal in
+the existing ephemeral validation sidecar, outside the semantic block hash.
 
-Only the validator check is security authority. The coordinator check is still
-useful as a liveness preflight: without it, an unready Complete can enter the
-origin consensus slot, repeatedly abstain, and delay unrelated origin work.
-Therefore it is not deleted in the first optimization.
+The coordinator collection is still a liveness preflight: without it, an
+unready Complete can enter the origin consensus slot, repeatedly abstain, and
+delay unrelated origin work. Authority remains local to every source
+validator: each verifies the sidecar certificate against the exact certified
+Finalize evidence before voting. Validators never trust the coordinator's
+verdict and never start another target fan-out.
 
-Refactor it instead:
+The one path is therefore:
 
-- use the existing `quod_dtx_current_view:verify_applied_many/3` once for all
-  targets rather than the coordinator's one-target-at-a-time path;
+- use one coordinator-side applied-certificate collector for all prepared
+  remote targets;
 - wake each target request from actual apply progress as described above;
-- keep validator `verify_complete_applied -> verify_applied_many` unchanged;
-  and
-- document that the first check protects availability while the second grants
-  authority.
+- retain the resulting portable certificates in the coordinator's volatile
+  recovery snapshot;
+- attach them to the existing proposal-validation sidecar when submitting the
+  deterministic Complete v3 record; and
+- make every source validator verify those signatures and bindings locally,
+  with no target network request in validation.
 
-The coordinator observation and validator verification deliberately do not
-share a cached verdict: they have different trust owners. They must, however,
-call the **same** verifier implementation. Once the coordinator is migrated,
-delete the singular production `verify_applied/4` path if it has no remaining
-consumer.
+Certificate construction and local verification share one statement format
+and one signature-verification owner. The certificate binds the network,
+target identity, exact Finalize-era committee id, group, Finalize reference,
+group generation, and verdict. `FinalizeRef` already fixes the slot whose
+durable applied floor was crossed, so no moving `AppliedFloor` value is copied
+into the statement. A later committee change cannot invalidate this historical
+evidence.
+
+Complete itself remains
+`{quod_dtx_complete, 3, GroupId, DecisionRef, FinalizeRows}`. The particular
+`f + 1` responders depend on arrival order and therefore must never affect the
+record digest or block hash. Replay and catch-up validate the committed
+Complete and its origin QC without the ephemeral sidecar.
 
 Deleting the preflight is allowed only after proving that an unready retained
 Complete cannot monopolize origin consensus.
@@ -832,11 +845,11 @@ DTX planner. Profile it later before planning it.
 | coordinator applied preflight | initially yes | availability gate, not authority |
 | Complete validator applied check | yes | Byzantine-safe terminal proof |
 
-The first remote target may need to fill the existing certified foreign-history
-cache to verify the certificate issuer's committee. Later calls reuse that
-owner. This is not a consensus round. Do not add a second identity cache or
-accept a self-authenticating committee claim merely to save a pull. Measure it
-before considering a compact portable committee proof.
+The coordinator may need to fill the existing certified foreign-history cache
+to obtain a target's exact Finalize evidence. Later calls reuse that owner.
+This is not a consensus round. Source validators receive that exact evidence
+through the same proposal sidecar and verify it through `quod_foreign_log`;
+they do not add a second history cache or contact the target again.
 
 ## 9. Slices
 
@@ -918,7 +931,7 @@ second authority.
   a bundled invariant, not a new runtime owner.
 - Keep one row per canonical semantic record digest. The row retains the
   current signed control/envelope, GroupId, scheduling `inserted_at`, metrics
-  `observation_started_at`, relay retry time, exact envelope bytes, placement,
+  `observation_started_at`, exact envelope bytes, placement,
   and a set of live endpoint-worker waiters. A duplicate semantic request
   attaches its distinct live worker to that row; it never signs or stores a
   second envelope.
@@ -929,19 +942,21 @@ second authority.
   scheduling `inserted_at`, preserving the behavior pinned in Slice 0.6.
 - Keep the registry volatile and rebuildable. The signing journal remains the
   subordinate anti-equivocation owner: it durably stores sequence floors and
-  exactly one pending Begin body/envelope, never this registry or later phase
-  rows. Startup inserts that recovered Begin through the same registry helper;
+  per-GroupId pending Begin bodies/envelopes, never this registry or later phase
+  rows. Startup inserts each recovered Begin through the same registry helper;
   coordinator/replay state and authenticated remote retry reconstruct later
   phases through normal submission. No volatile row is falsely described as
   crash-durable.
 
-#### One readiness decision
+#### Historical readiness decision (superseded by §4.7.7)
+
+The bullets in this subsection record the original singleton implementation
+and are non-normative. The implemented contract is the multi-group projection,
+exact conflict index, apply-fence map, and wait-die readiness in §4.7.7.
 
 - Replace the boolean `quod_dtx:proposal_allowed/2` scheduler hint with one
-  pure `proposal_readiness/2` result: `ready`, `{blocked, active_group}` or
-  `{blocked, apply}`, or `stale`. Its phase table is derived from the existing
-  reducer transitions and covers the active group, `consensus_lock`, and the
-  phase-specific `proof_fence` rules. The certified reducer remains final
+  pure `proposal_readiness/2` result. Its phase table was derived from the
+  then-existing singleton projection. The certified reducer remains final
   authority; readiness only decides retention and proposal scheduling.
 - Preserve the existing certified direct-abort exception through that same
   phase table. Do not add a Simplex special case for it. A generated test
@@ -957,8 +972,8 @@ second authority.
   same-group Decision remains ready because its reducer admission does not
   depend on that fence. A dual-role Finalize becomes ready only after its
   source Decision is committed.
-- Let one Simplex `retention_disposition/3` add only the replay-owned
-  `dtx_last_group` exclusion to that result. A completed group is stale;
+- Let one Simplex `retention_disposition/3` add the then-existing replay-owned
+  completed-group exclusion to that result. A completed group is stale;
   otherwise a future role-acquisition Begin/Prepare may be retained as
   blocked. Decision, ordinary Finalize, and Complete for an unrelated group
   remain stale rather than occupying custody forever. This is the only broader
@@ -969,23 +984,23 @@ second authority.
   forwarding wrapper.
 - Reclassify retained rows once when a pure readiness fingerprint changes,
   before `drive_retained_dtx` in the existing `keep_progress` tail. The
-  fingerprint is the committed DTX projection plus `dtx_last_group`; this one
+  fingerprint included the committed DTX projection and completed-group cursor; this one
   seam covers committed projection changes, exact `finalize_applied`, replay,
   and recovery. Initial insertion and re-sign use the same placement helper.
   Do not scatter event-specific reclassification branches through callbacks.
 
-Here, `{blocked, apply}` means the local committed projection has the exact
-`proof_fence = {pending_apply, ...}` that prevents this phase from being driven
-until the existing `finalize_applied` acknowledgement. It does not describe a
+Historically, `{blocked, apply}` meant that the local committed projection had
+pending material apply work preventing this phase from being driven until the
+exact apply acknowledgement. It did not describe a
 Complete whose *remote* participant preflight has not passed; that remains the
 existing verifier path in section 6.
 
 `stale` is terminal for this Simplex copy: use it when the exact record is not
 proposable now or after the exact local pending-apply acknowledgement. Every
 such local apply condition must be represented by a `{blocked, _}` result so
-custody is preserved rather than refused. Other protocol progress is redriven
-from the origin-owned authenticated relay retry, rather than duplicating
-cross-node custody in this registry.
+custody is preserved rather than refused. Other protocol progress wakes from
+the authenticated relay's exact link, leader, slot, committee, or ownership
+events rather than duplicating cross-node custody in this registry.
 
 #### One mutation and finish path
 
@@ -1004,7 +1019,8 @@ cross-node custody in this registry.
 - Delete the unused exported `submit_dtx/3` wrapper and its raw
   `{submit_dtx, Record}` gen_statem call clause if the final pre-edit sweep
   still finds no production consumer. All real local and remote submissions
-  already use `dtx_endpoint_local/3` or the authenticated DTX endpoint. This
+  already use `dtx_endpoint_local/4` (including the ephemeral validation
+  sidecar) or the authenticated DTX endpoint. This
   leaves one waiter shape—monitored endpoint worker pids—and avoids preserving
   an unmonitorable compatibility path merely to support the new registry.
 - Detach a dead/timed-out endpoint worker in O(1) through the reverse index.
@@ -1060,7 +1076,7 @@ cross-node custody in this registry.
 6. Restart recovery rebuilds the journal-pending Begin through the normal
    insertion helper; coordinator/replay and remote retry then reconstruct a
    mixture of ready and blocked later rows. The barrier reflects only ready
-   work, the journal still contains exactly one pending Begin, sequence floors
+   work, the journal retains every exact per-GroupId pending Begin, sequence floors
    do not regress, and no envelope or waiter is duplicated.
 7. Existing DTX endpoint, coordinator, recovery, replay, signed remote
    lifecycle CT, and chained-write behavior remain green. A hardware run
@@ -1682,19 +1698,26 @@ restart timer, or polling loop.
 
 Remote direct effects use this same singleton path and the existing DTX
 handoff ordering. The source first registers the exact C claim in its durable
-Simplex custody as dormant. Only then may the target scope persist the private
-prepared effect under the predicted C/T binding. After every required target
-binding acknowledges, the source activates that exact dormant C for consensus.
-There is therefore no target journal row whose source operation exists only in
-a dead proof worker.
+Simplex custody as dormant. The source custody owner monitors the proof worker
+only across this dormant handoff. The target has already reserved the exact
+private preparation before exposing its signed plan attestation; binding may
+only consume that reservation under the exact signed source submission. After
+the target binding acknowledges, the source activates that exact dormant C for
+consensus and clears the proof-owner monitor. There is therefore no target
+journal row whose source operation exists only in a dead proof worker.
 
 The signed `not_after_ms` is not used as a false absence proof: it limits the
 claim block timestamp, but a valid already-proposed claim could commit later.
 An abandoned effect row retires only through the exact source dormant-intent
 cancel/terminal transition, never because a wall timer guessed that C cannot
-exist. Source crash recovery owns the retained C; explicit cancellation binds
-the same C and retires the target row. B's ordinary transaction alone releases
-the effect for execution or retires it on rejection.
+exist. Explicit failure and proof-owner death enter the same idempotent source
+custody transition and start one cancellation coordinator. Cancellation sends
+the exact signed C submission, not an unsigned token. At the target, bind and
+cancel race through the one existing journal reservation: cancel-first removes
+the reservation so a late bind fails; bind-first persists the row so cancel
+retires it. Source restart reconstructs the same cancellation from the dormant
+signed row. B's ordinary transaction alone releases the effect for execution
+or retires it on rejection.
 
 Refactor the current DTX-only dormant-effect binding to this common durable
 operation handoff and delete the group-only duplicate. If the existing custody
@@ -1813,14 +1836,19 @@ ontologies. The live trace found seven distinct costs. They must be removed at
 their owners rather than hidden by shorter timeouts or a movement-specific
 route.
 
-##### 4.7.1 Measured bottleneck map
+##### 4.7.1 Measured pre-optimization bottleneck map
 
-| Rank | Current cause | Evidence | Required owner-side correction |
+This table records the hardware baseline that motivated the slice. Every
+owner-side correction in its last column is implemented in the current working
+tree; it is no longer a list of current causes. Final local gates, review, and
+hardware acceptance remain before deployment.
+
+| Rank | Pre-optimization cause | Evidence | Implemented owner-side correction |
 |---|---|---|---|
 | 1 | One source group remains active through Complete; later groups wait in one FIFO | concurrency-four p50 16.113 s, p99 17.200 s; 72.114 s aggregate admission wait | batch non-conflicting groups through the existing ledger/consensus owner; do not run uncoordinated parallel groups |
 | 2 | `quod_dtx_coordinator` executes the planner's participant commands one at a time | the planner returns every missing Prepare/Finalize/applied command, but `drive/1` runs only the head; after one progress result it discards the tail and replans | execute one same-phase participant wave concurrently and merge verified results in canonical target order |
 | 3 | an accepted phase returns a reference, then the caller separately reads certified history to recover the entry it just caused | source/target consensus averages tens of milliseconds while end-to-end sequential latency is seconds and grows with followed history | carry the exact committed entry as untrusted acceleration material into the one `quod_foreign_log` verifier |
-| 4 | applied verification is repeated per target and each check freezes a current view and probes a quorum | `verify_applied_many/3` already exists, but the group coordinator calls singular `verify_applied/4` once per target | collect one target post-apply certificate per Finalize wave, verify the certificate locally, and use the existing many-target helper during transition |
+| 4 | applied verification is repeated by the coordinator and then by every source validator | validators repeat the target quorum fan-out after the coordinator already established application | collect one signed target post-apply certificate per prepared Finalize wave, carry it in the existing ephemeral proposal-validation sidecar, and let source validators verify it locally |
 | 5 | temporary `busy`, `not_ready`, absent evidence, or unavailable route enters 100--5,000 ms retry ladders | `schedule_retry/1` remains in the common group coordinator and the foreign follower has refresh backoff | park the exact correlated request at its existing owner and wake it from admission, apply, cache, directory, or link messages; timers only end silent/dead operations |
 | 6 | a new target may know only the source ontology's historical endpoint, and a cold long-history check is tied to one caller deadline | reproduced with a long-lived source after a dynamic port change; a warm target succeeded while a new target returned `signed_scope_unavailable` | use the already authenticated incoming node contact as a reachability hint and make certified catch-up an owner-lived resumable job |
 | 7 | when the source ontology is also a participant, its own committee commits separate Prepare and Finalize blocks in addition to Begin and Decision | the live source ledger contains Begin, Prepare, Decision, Finalize, Complete for every chain | validate/lock the source plan in Begin and apply/discard it in Decision through the same pure reducers |
@@ -1902,15 +1930,44 @@ or receives well-formed but wrong bytes, ignores the hint and uses ordinary
 certified follow; the block is rejected only if the authoritative verification
 fails, never merely because the optional hint is bad.
 
-After a target applies Finalize, its existing endpoint/application owner
-collects the current committee's signed applied replies once. The resulting
-certificate binds network, target identity, committee view, group, Finalize
-reference, generation, verdict, and applied floor. Complete carries this
-bounded certificate. Source validators verify its signatures and binding
-locally instead of starting their own target fan-outs. A later committee change
-does not invalidate evidence signed by the exact Finalize-era committee.
+After a prepared remote target applies Finalize, the coordinator collects
+signed applied replies once from `f + 1` members of the committee certified by
+that exact Finalize. The resulting certificate binds network, target identity,
+Finalize-era committee id, group, Finalize reference, generation, and verdict.
+The reference's slot is the applied-through floor; there is no separate moving
+floor field. The certificate travels in the existing ephemeral
+proposal-validation sidecar, never in the deterministic Complete v3 body or
+block hash. Source validators verify it locally against the already-certified
+Finalize evidence instead of starting target fan-outs. Replay and catch-up need
+only the committed Complete QC and never require the sidecar.
+
+The source-fused participant needs no certificate: its Decision is also its
+Finalize and source apply readiness is local to the origin consensus owner. A
+remote direct abort with no Prepare is a durable no-op and its Finalize QC is
+sufficient. Remote commit and prepared-abort Finalizes each require exactly one
+applied certificate.
 
 ##### 4.7.4 Remove polling from normal progress
+
+**Foreign-follow status (current working tree, pending review):** the
+per-identity poll and retry-backoff timers are deleted. First attachment,
+explicit refresh, exact directory availability, and authenticated feed
+block/digest frames wake one coalesced certified-follow job. A feed frame is
+never evidence: its safe namespace envelope is recognized only as a freshness
+signal, then the existing foreign-history verifier fetches and validates the
+anchored history. The same feed channel now carries one volatile, correlated
+height-wake registration per source node and current certified target
+validator. Registration replies include the current height, later commits
+send an acknowledged wake, and link loss or committee replacement rebuilds the
+row from the existing route view. The control contains no fact or authority;
+it only closes the missed-edge race for the ordinary certified follower.
+Worker/page deadlines remain only as silence safeguards. The runtime's
+separate subscription retry sweep and its configuration are also deleted: one
+existing gproc name-follow monitor wakes all parked attachments when the
+shared owner registers, and an uncapped mailbox queue yields once per
+attachment. The group coordinator and its outer Simplex owner now use the
+same rule: exact progress/DOWN/registration messages wake work, with no
+ordinary retry timer or tick-driven backoff state.
 
 Classify every current `retry` edge before changing it:
 
@@ -1936,8 +1993,9 @@ the removed timers with shorter intervals or move polling behind the property.
 
 ##### 4.7.5 Make first contact and cold history converge
 
-**Implementation status (current working tree, pending review):** implemented
-without a new route or verifier. Authenticated scope and DTX ingress keep the
+**Implementation status:** implemented in the current full optimization tree,
+without a new route or verifier; final review and hardware acceptance remain.
+Authenticated scope and DTX ingress keep the
 source contact in their existing request/work owner and supply it only to the
 ordinary authorization or foreign-reference verification attempt. Decode-only
 scope, claim, Prepare, and Finalize material stores nothing; a contact may
@@ -2000,79 +2058,84 @@ remains mandatory durable recovery bookkeeping, but its append may finish
 asynchronously through the existing owner, like the singleton
 `remote_complete`. A disconnect cannot cause a retry or a second group.
 
-##### 4.7.7 Batch safe groups instead of adding parallel groups
+##### 4.7.7 Implemented conflict-safe group waves
 
-The concurrency-four staircase cannot be removed by making one group faster.
-It also must not be fixed by allowing several independent coordinators to
-mutate the old singleton `active` field.
+The hard break replaced top-level `{dtx, Blob}` with
+`{batch, [{dtx, Blob}, ...]}`. A control wave is non-empty, contains one phase,
+uses the signed author-lane order, and rejects duplicate lane/sequence pairs.
+The one decoder and one pure reducer own this rule for proposal, validation,
+apply, replay, and catch-up.
 
-Replace the DTX singleton block payload with the canonical ordered ledger-item
-batch used by the same Simplex consensus lane, and delete the old singleton
-decoder at the coordinated format break. The existing proposer may place
-several controls of the same phase in one block when the pure projection proves
-their sealed plans do not conflict. Conflict is derived only from exact OCC
-read tokens, mutation heads, lifecycle ownership, and effect custody; never
-from predicate names. An opaque effect or unprovable relation conflicts
-conservatively.
+The DTX projection is exactly
+`#{target, groups, conflicts, apply_fences, generation}`. Sealed material plans
+carry an atom-safe descriptor derived once from exact read functor keys,
+assert/retract head functors, and the closed typed effect-custody target.
+Events do not conflict. Materialization recomputes the descriptor and requires
+exact equality; malformed or unknown effects reject rather than entering an
+opaque fallback path.
 
-The DTX projection becomes an ordered map of active groups plus a derived lock
-index. Validation folds the batch in canonical order through the same DTX
-transition reducer used by apply and replay. A later group that conflicts stays
-in the existing FIFO; non-conflicting groups share Begin, Prepare, Decision,
-Finalize, and Complete blocks while retaining distinct group references,
-outcomes, recovery, and Explorer rows. There is no compiled group-count limit:
-the existing canonical block-byte bound ends a batch naturally.
+Prepare does not advance the global proof epoch. Each committed applied plan
+advances it once, including an event-only plan, while only actual assert/retract
+fact mutations create a blocking per-GroupId apply row. Abort/discard changes
+neither. Exact acknowledgement removes a remote participant row. For a
+source-fused Decision it opens the row but retains the exact nonblocking
+slot/generation marker until Complete consumes it; this makes live apply and
+certified replay use the same reducer state. Neither transition changes the
+global epoch.
+
+Independent groups share same-phase Begin, Prepare, Decision, Finalize, and
+Complete blocks. Overlapping RW, WR, WW, or custody keys use deterministic
+GroupId wait-die: one group waits and the other is refused, so concurrent
+Prepare waves cannot create a distributed lock cycle. Each group retains its
+own references, outcomes, recovery, and Explorer rows. There is no compiled
+group-count limit; the canonical block-byte bound ends a wave naturally.
 
 This is one generalized consensus input path, not a second group protocol.
-Crash recovery remains per durable group and reconstructs the active map and
-lock index from the ledger. If the projection cannot prove deterministic
-conflict behavior for effects or lifecycle operations, those groups remain
-serialized; no exception is added.
+Crash recovery remains per durable group and reconstructs the groups, conflict
+index, and exact apply fences from the ledger. Source Begin reuses the Prepare
+reducer and source Decision reuses the Finalize reducer; remote Prepare and
+Finalize are unchanged. Recovery therefore emits no source-local
+Prepare/Finalize command and emits remote phase commands as waves.
 
-Extend the existing retained-control registry rather than creating a batch
-queue beside it. Its ready `gb_set` currently selects
-`gb_sets:smallest/1`; replace that selection with a canonical fold that chooses
-the maximal non-conflicting ready prefix that fits the existing block-byte
-bound. Selected controls leave the same registry through the same completion,
-relay, DOWN, and recovery functions as a singleton does today.
+The existing retained-control registry, rather than a second batch queue,
+selects the maximal non-conflicting ready prefix that fits the block-byte
+bound. Selected controls leave through the same completion, relay, DOWN, and
+recovery functions as every other retained control.
 
-The format-break map must include every singular projection consumer, not just
-the wire decoder: `quod_dtx:valid_projection/1`, `origin_recovery/1`,
-`proposal_readiness/2`, the transition reducer, the history projection and
-checkpoint version in `quod_foreign_log`, `dtx_durable_lock/2`,
-`consensus_barrier/3`, `classify_dtx_group_barrier/3`, `local_group_pending/3`,
-retained-control readiness/selection, restart restoration, catch-up preview,
-stats, fixtures, Explorer classification, and the fixed-shape assertions in
-tests and documentation. Change them together and delete the singular field,
-decoder, branches, and comments; do not translate the new map back into a fake
-single active group for old consumers.
+All consumers use the multi-group projection directly: `valid_projection/1`,
+`origin_recoveries/1`, `proposal_readiness/2`, the transition/batch reducer,
+history/checkpoint projection, proof access, retention, restart restoration,
+catch-up preview, stats, fixtures, and Explorer classification. No singular
+field, decoder, compatibility branch, or fake single-group view remains.
 
 ##### 4.7.8 Implementation slices and stop gates
 
-Implementation status (working tree, not deployed): step 1 now instruments the
-existing path without changing its protocol. `quod_dtx_group_stage_seconds`
-measures proof/seal, dormant admission, coordinator phases, endpoint waits,
-phase/applied verification, retry waits, result handoff, and end-to-end time.
+Implementation status (working tree, not committed or deployed): slices 1--6
+are implemented together. Final local gates, closure review, clean re-found,
+and hardware benchmarks remain; this section makes no final performance claim.
+`quod_dtx_group_stage_seconds` measures proof/seal, dormant admission,
+coordinator phase waves, endpoint wait, phase verification, coordinator
+mailbox, result handoff, and end-to-end time.
 `quod_foreign_history_stage_seconds` measures the node-wide certified-history
 queue, exact/current/follow work, cache open/replay, and page fetch. Both use
 closed stage/result vocabularies; the existing GroupId and ProofId correlate
 traces but never become Prometheus labels. Existing consensus round and named
 apply-step histograms remain the consensus timing owner rather than being
-duplicated. The dashboard exposes the two new histograms. The hardware fixture
-and 95% accounting gate remain outstanding until this measurement-only tree is
+duplicated. The dashboard exposes the two histograms. The hardware fixture and
+95% accounting gate remain outstanding until the complete optimization tree is
 reviewed and deployed. `proof_seal`, `admission`, the coordinator phase waves,
 and `result_handoff` are non-overlapping group segments. `coordinator_total`
 and `end_to_end` are enclosing totals and must not be summed with those
-segments. Endpoint, verification, mailbox, retry, foreign-history, and
+segments. Endpoint, verification, mailbox, foreign-history, and
 consensus measurements are nested diagnostics. The segments need not yet tile
 the end-to-end total: activation-cast scheduling before coordinator start and
-the locally applied Complete waking the durable-outcome waiter after the
+the certified pre-Complete terminal notification waking the caller after the
 coordinator finishes remain explicit residuals for the 95% hardware gate.
 `result_handoff` begins when that waiter-resolution turn reaches the engine and
 includes outcome lookup, result shaping, and reply delivery; it is not merely
 the final message-send cost.
-Local verification on the exact tree is green: EUnit 1,368/0,
-`quod_ask_SUITE` 17/17, compile, xref, dialyzer, dashboard JSON, and diff-check.
+Earlier slice-local gates are historical evidence only; the final combined
+tree must publish fresh gate counts after this cleanup.
 
 1. **Observability only.** Add one correlation id across proof/seal, dormant
    admission, every group wave, evidence verification, applied certification,
@@ -2089,9 +2152,11 @@ Local verification on the exact tree is green: EUnit 1,368/0,
    owner-lived and resumable. Prove a stale-port, cold 1,000+ entry source
    eventually verifies without manual route injection.
 3. **Wave execution and evidence reuse.** Parallelize participant commands,
-   carry accepted-entry hints through both source proposals and retained-control
-   target relays, use `verify_applied_many/3`, install the one post-apply
-   certificate, and delete accepted-then-refetch duplication.
+   carry accepted entries through both source proposals and retained-control
+   target relays, collect prepared-target certificates once at the coordinator,
+   carry them in the same ephemeral validation
+   sidecar, verify them locally at source validators, and delete both
+   accepted-then-refetch duplication and validator target fan-out.
 4. **Message-driven progress.** Replace every normal retry timer with exact
    owner notifications, add the identity-scoped `quod_directory` property on
    the existing owner, then delete the retry configuration and stale tests.
@@ -2138,9 +2203,9 @@ stale, replay, and crash cases.
 - **Keep five phases and only carry evidence faster:** removes repeated fetches
   but cannot remove the one-active-group queue; it cannot meet concurrent
   same-source latency unless each complete group becomes unrealistically tiny.
-- **Allow uncoordinated parallel active groups:** mutating the old singleton
-  `active` field from several coordinators breaks the namespace lock/OCC
-  invariant and creates overlapping recovery state. Only the canonical,
+- **Allow uncoordinated parallel active groups:** mutating unrelated state from
+  several coordinators without one exact conflict reducer breaks OCC and
+  creates overlapping recovery state. Only the canonical,
   conflict-checked batch projection in section 4.7.7 may admit overlap.
 - **Create a special movement/write endpoint:** duplicates the executor and ACL
   and is forbidden.
@@ -2164,7 +2229,7 @@ stale, replay, and crash cases.
   operation claim, or invented A authorization transcript.
 - Four concurrent claims from one A and their four ordinary B transactions are
   eligible for their respective existing micro-batches and never enter the
-  one-active-group gate. Every operation retains its own request digest,
+  multi-ontology group-control path. Every operation retains its own request digest,
   target transaction id, ACL/OCC result, failure reasons, and public operation
   reference.
 - The predicted B transaction id is identical before and after attaching its A
@@ -2241,9 +2306,9 @@ stale, replay, and crash cases.
   facts, a raw node key, wrong namespace/anchor/instance, duplicates, malformed
   values, and stale certified state cannot configure an owner. Restart rebuilds
   the same projection; lowering a value does not kill already active work.
-- Retained controls that are blocked on apply do not activate the consensus
-  barrier. The canonical readiness function treats a local
-  `proof_fence={pending_apply,...}` as blocked, while the broader retention
+- Retained controls that are blocked on an exact same-group apply fence do not
+  activate a namespace-global consensus barrier. The canonical readiness
+  function treats that same-group Complete as blocked, while broader retention
   rule still admits a legal future role-acquisition control. Ready controls
   stay ordered, byte-accounted, and are retired from
   every index once after commit, supersession, or proof that current durable

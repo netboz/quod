@@ -96,6 +96,10 @@ vote, rebuild, and catch-up. Remaining, gated:
   / `node.keepalive_ms=500` (config, both ends — no RFC min-negotiation in this build) via one
   `quod_quic:liveness_opts/0` → **~2.5 s** dead-peer detection (was ~80 s). Verified live: 20- and 30-node
   fleets under mass churn (batch + mass-departure of up to 15) + ~15 tx/s; `unverified`=0 throughout.
+  The same pinned fork now also wakes a blocked stream owner exactly when the
+  peer grants enough connection and stream credit for the refused write. This
+  replaced ordinary flow-control retry timers without changing QUIC security,
+  packet processing, or stream ordering.
 - **quic fork follow-ups (netboz/erlang_quic) — deferred, non-blocking.** (a) a **process-level black-hole
   integration test** in the fork (only the pure `send_activity/4` truth-table + the clamp are unit-tested);
   (b) two RFC §10.1 upstream nits — make the idle-timeout close **silent** (§10.1 forbids a CONNECTION_CLOSE
@@ -265,8 +269,10 @@ stages, not carried forward:
   the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
-- **~~Vote-latch persistence across restart~~ — DONE (2026-07-22; superseded by Step 4).**
-  `quod_signing_journal` now owns the bounded QSJ1 `signing.0001` file per namespace. The only constructor
+- **~~Vote-latch persistence across restart~~ — DONE (2026-07-22; generalized since Step 4).**
+  `quod_signing_journal` now owns the QSJ2 `signing.0001` file per namespace. It
+  retains vote latches, DTX signing floors, every exact pending Begin by GroupId,
+  and retained signed content submissions. The only constructor
   for a new runtime share first appends a
   CRC-framed `{support|commit|complaint, Slot, BlockHash}` decision and calls `datasync`; only then may the
   signature enter the engine or transport. Boot reloads live decisions before recovery can vote, exact
@@ -358,7 +364,8 @@ stages, not carried forward:
   contiguity check never sees a gap.
 - **Proposal window + batching** — **DONE**: explicit `#batch{}`, `#local_proposal{}`, and per-slot
   `#round{}` state replace the old `proposing`/`pending` field cluster. A short bounded micro-batch shares
-  one block, certificate exchange, and fsync across up to 256 ordered transactions. The approved frontier
+  one block, certificate exchange, and fsync across as many ordered transactions
+  as fit the canonical block-byte bound; there is no separate transaction-count cap. The approved frontier
   may open one successor over an uncommitted parent, while the durable frontier still drains in order.
 - **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; each round's complaint/commit
   latches make the two finalization paths mutually exclusive.
@@ -415,7 +422,8 @@ submitter-measured, txs through a shallow node commit <100ms while txs through a
 take 2s+ — that is the visible bimodal tail. (3) The ROUNDS stayed fast throughout
 (`round_approve`/`round_commit` p99 ≤100ms), so the seconds are spent before the measured round,
 while the current leader receives followers' relay traffic and consensus evidence in one
-`gen_statem` mailbox. The 300ms relay retransmit, speculative placement misses, synchronous
+`gen_statem` mailbox. At the time of this historical run, the 300ms relay retransmit,
+speculative placement misses, synchronous
 diagnostic probes, and queue head-of-line behavior all amplified that mailbox load; the test
 did not attribute a percentage to each contributor. It was not a local network-only effect:
 the Hetzner satellite and local compute nodes both flooded.
@@ -482,9 +490,10 @@ fixes:
   redirect from its own frontier. While that slot remains usable, later local sequences reuse
   the same lane. Origin-local finality resolves inclusion or exclusion; an excluded ordinary
   write retains its exact signed submission and moves internally to the next earliest usable
-  seat. Receipt acknowledgement still demotes the 300 ms lost-send loop to a 5-second result
-  probe. Relay creation enforces the single-target/single-slot lane invariant consumed by the
-  O(1) route check.
+  seat. Receipt acknowledgement records remote custody for duplicate suppression. There is no
+  periodic lost-send or result-probe loop: when an authenticated relay stream is replaced, its
+  link-up edge replays the retained exact attempt once. Relay creation enforces the
+  single-target/single-slot lane invariant consumed by the O(1) route check.
 
   A fixed-work live comparison on 2026-07-26 then separated this routing change from
   the closed-loop load generator. For the same 960 offered operations, the exact-slot
@@ -612,18 +621,6 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
   registry. The local projection is certified by the existing continuous
   `quod_foreign_log` follow; reaction slices are in
   `event-reaction-refinement-plan.md`.
-
-- **Link backpressure signalling (still useful; relay amplification mitigated).** `quod_link`'s plain
-  `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,
-  `send_queue_full`) so transient pressure never tears a link down — the accepted cost is that frames
-  can DROP SILENTLY on a live link under load. Each layer owns its own recovery today: the Δ redrive
-  for consensus evidence and exact-request retransmit for relay. Relay now keeps the 300ms cadence only
-  until the destination returns `relay_accepted`; it then uses a 5s result-hint recovery probe. This
-  bounds amplification without assuming the original send succeeded. The link should still either
-  signal backpressure to its holder (a `{link_backpressure,...}` message) or run a
-  bounded in-link retry for consensus/relay frames (`send_reliable`'s `send_until_accepted` already
-  exists in the link process — unused by consensus). Found during the event-driven-ingress review
-  (DA, 2026-07-23); acknowledgement mitigation added 2026-07-26.
 
 ## 5. Parked (deliberately — don't reopen without a reason)
 

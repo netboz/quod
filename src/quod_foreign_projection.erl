@@ -7,8 +7,10 @@ in its certificate-verified cache.  This worker owns the corresponding Erlog
 ETS table and folds those cached entries through `quod_committed_projection`;
 it performs no network fetch, certificate verification, effect handling, or
 runtime reaction. For a live contiguous advance it preserves the canonical
-reducer's ordered `applied_ops`; a first build, rebuild, or resnapshot publishes
-state only and discards historical occurrences. Work is one existing
+reducer's ordered, per-control `applied_ops`; controls committed in one batch
+remain distinct publications at their shared ledger height. A first build,
+rebuild, or resnapshot publishes state only and discards historical
+occurrences. Work is one existing
 foreign-page window per mailbox turn, so rebuilding a long cached history never
 monopolizes the foreign-log owner.
 """.
@@ -18,6 +20,10 @@ monopolizes the foreign-log owner.
 -include("quod_proof_limits.hrl").
 
 -export([start_monitor/4, advance/4, stop/1]).
+
+-ifdef(TEST).
+-export([test_result_heads/1, test_result_publications/2]).
+-endif.
 
 -record(s, {
           owner :: pid(),
@@ -200,8 +206,8 @@ apply_entries([#entry{index = Index} = Entry | Rest], Projection0,
 
 result_heads(#{kind := content, transactions := Transactions}) ->
     lists:append([maps:get(changed_heads, Tx, []) || Tx <- Transactions]);
-result_heads(#{kind := dtx, changed_heads := Heads}) ->
-    Heads;
+result_heads(#{kind := dtx_batch, items := Items}) ->
+    lists:append([maps:get(changed_heads, Item, []) || Item <- Items]);
 result_heads(_Result) ->
     [].
 
@@ -210,13 +216,18 @@ result_publications(Index, #{kind := content, transactions := Transactions}) ->
      || Tx <- Transactions,
         AppliedOps <- [maps:get(applied_ops, Tx, [])],
         AppliedOps =/= []];
-result_publications(Index, #{kind := dtx} = Result) ->
-    case maps:get(applied_ops, Result, []) of
-        [] -> [];
-        AppliedOps -> [{Index, AppliedOps}]
-    end;
+result_publications(Index, #{kind := dtx_batch, items := Items}) ->
+    [{Index, AppliedOps}
+     || Item <- Items,
+        AppliedOps <- [maps:get(applied_ops, Item, [])],
+        AppliedOps =/= []];
 result_publications(_Index, _Result) ->
     [].
+
+-ifdef(TEST).
+test_result_heads(Result) -> result_heads(Result).
+test_result_publications(Index, Result) -> result_publications(Index, Result).
+-endif.
 
 merge_publications(_Left, _Right, true) -> resnapshot;
 merge_publications(resnapshot, _Right, false) -> resnapshot;

@@ -12,12 +12,13 @@ commit_recovery_reconstructs_every_phase_in_target_order_test() ->
           GroupId = maps:get(group_id, F),
 
           ?assertEqual(
-             {ok, [{submit, Origin, Begin}]},
+             {ok, {ordered, 'begin', [{submit, Origin, Begin}]}},
              quod_dtx_recovery:next(Begin, quod_dtx_recovery:empty())),
 
           BeginEvidence = evidence(Origin, Begin, 1, F),
           S1 = snapshot([BeginEvidence], [], [], none),
-          {ok, PrepareCommands} = quod_dtx_recovery:next(Begin, S1),
+          {ok, {independent, prepare, PrepareCommands}} =
+              quod_dtx_recovery:next(Begin, S1),
           ?assertEqual(Targets, command_targets(PrepareCommands)),
           [{submit, A, PrepareA}, {submit, B, PrepareB}] = PrepareCommands,
 
@@ -27,7 +28,7 @@ commit_recovery_reconstructs_every_phase_in_target_order_test() ->
           S2 = snapshot(
                  [BeginEvidence, PrepareAEvidence, PrepareBEvidence],
                  Generations, [], none),
-          {ok, [{submit, Origin, Decision}]} =
+          {ok, {ordered, decision, [{submit, Origin, Decision}]}} =
               quod_dtx_recovery:next(Begin, S2),
           ?assertEqual(
              {ok, #{kind => decision, group_id => GroupId,
@@ -43,7 +44,8 @@ commit_recovery_reconstructs_every_phase_in_target_order_test() ->
           S3 = snapshot(
                  [BeginEvidence, PrepareAEvidence, PrepareBEvidence,
                   DecisionEvidence], Generations, [], none),
-          {ok, FinalizeCommands} = quod_dtx_recovery:next(Begin, S3),
+          {ok, {independent, finalize, FinalizeCommands}} =
+              quod_dtx_recovery:next(Begin, S3),
           ?assertEqual(Targets, command_targets(FinalizeCommands)),
           [{submit, A, FinalizeA}, {submit, B, FinalizeB}] =
               FinalizeCommands,
@@ -61,19 +63,33 @@ commit_recovery_reconstructs_every_phase_in_target_order_test() ->
                DecisionEvidence, FinalizeAEvidence, FinalizeBEvidence],
           S4 = snapshot(PhaseEvidence, Generations, [], none),
           ?assertEqual(
-             {ok,
+             {ok, {independent, applied,
               [{applied, A, GroupId, evidence_ref(FinalizeAEvidence), 2,
                 commit},
                {applied, B, GroupId, evidence_ref(FinalizeBEvidence), 5,
-                commit}]},
+                commit}]}},
              quod_dtx_recovery:next(Begin, S4)),
 
           Applied =
               [applied(A, GroupId, FinalizeAEvidence, 2, commit),
                applied(B, GroupId, FinalizeBEvidence, 5, commit)],
           S5 = snapshot(PhaseEvidence, Generations, Applied, none),
-          {ok, [{submit, Origin, Complete}]} =
+          {ok, {ordered, complete, [{submit, Origin, Complete}]}} =
               quod_dtx_recovery:next(Begin, S5),
+          %% Arrival-dependent quorum signatures are validation sidecar data,
+          %% never semantic Complete bytes.  A different valid certificate
+          %% shape for the same two exact applied claims must therefore
+          %% reconstruct the identical Complete record.
+          AlternateApplied =
+              [replace_applied_signer(Row, digest(243), <<244:512>>)
+               || Row <- Applied],
+          ?assertEqual(
+             {ok, {ordered, complete,
+                   [{submit, Origin, Complete}]}},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(PhaseEvidence, Generations,
+                        AlternateApplied, none))),
           CompleteEvidence = evidence(Origin, Complete, 7, F),
           S6 = snapshot(
                  PhaseEvidence ++ [CompleteEvidence], Generations, [], none),
@@ -90,7 +106,7 @@ first_definite_refusal_builds_reasoned_abort_and_direct_tombstone_test() ->
           [A, B] = maps:get(targets, F),
           GroupId = maps:get(group_id, F),
           BeginEvidence = evidence(Origin, Begin, 10, F),
-          {ok, PrepareCommands} =
+          {ok, {independent, prepare, PrepareCommands}} =
               quod_dtx_recovery:next(
                 Begin, snapshot([BeginEvidence], [], [], none)),
           [{submit, A, PrepareA}, {submit, B, PrepareB}] = PrepareCommands,
@@ -108,7 +124,8 @@ first_definite_refusal_builds_reasoned_abort_and_direct_tombstone_test() ->
           S1 = snapshot(
                  [BeginEvidence, PrepareAEvidence],
                  [{A, 3}, {B, 7}], [], Refusal),
-          {ok, [{submit, Origin, AbortDecision}]} =
+          {ok, {ordered, decision,
+                [{submit, Origin, AbortDecision}]}} =
               quod_dtx_recovery:next(Begin, S1),
           ?assertEqual(
              {ok,
@@ -128,7 +145,8 @@ first_definite_refusal_builds_reasoned_abort_and_direct_tombstone_test() ->
 
           DecisionEvidence = evidence(Origin, AbortDecision, 12, F),
           Phase1 = [BeginEvidence, PrepareAEvidence, DecisionEvidence],
-          {ok, [{submit, A, FinalizeA}, {submit, B, FinalizeB}]} =
+          {ok, {independent, finalize,
+                [{submit, A, FinalizeA}, {submit, B, FinalizeB}]}} =
               quod_dtx_recovery:next(
                 Begin, snapshot(Phase1, [{A, 3}, {B, 7}], [], none)),
           ?assertMatch(
@@ -144,17 +162,23 @@ first_definite_refusal_builds_reasoned_abort_and_direct_tombstone_test() ->
           FinalizeBEvidence = evidence(B, FinalizeB, 14, F),
           Phase2 = Phase1 ++ [FinalizeAEvidence, FinalizeBEvidence],
           ?assertEqual(
-             {ok,
+             {ok, {independent, applied,
               [{applied, A, GroupId, evidence_ref(FinalizeAEvidence), 3,
-                abort}]},
+                abort}]}},
              quod_dtx_recovery:next(
                Begin, snapshot(Phase2, [{A, 3}, {B, 7}], [], none))),
           Applied = [applied(A, GroupId, FinalizeAEvidence, 3, abort)],
+          TerminalSnapshot =
+              snapshot(Phase2, [{A, 3}, {B, 7}], Applied, none),
+          ?assertEqual(
+             {ok, #{verdict => abort, reasons => Reasons,
+                    decision_slot => 12,
+                    participant_slots => [{A, 13, 3}, {B, 14, 7}]}},
+             quod_dtx_recovery:terminal(Begin, TerminalSnapshot)),
           ?assertMatch(
-             {ok, [{submit, Origin, _Complete}]},
-             quod_dtx_recovery:next(
-               Begin, snapshot(
-                        Phase2, [{A, 3}, {B, 7}], Applied, none)))
+             {ok, {ordered, complete,
+                   [{submit, Origin, _Complete}]}},
+             quod_dtx_recovery:next(Begin, TerminalSnapshot))
       end).
 
 missing_generation_emits_phase_queries_and_statuses_bind_exactly_test() ->
@@ -165,24 +189,25 @@ missing_generation_emits_phase_queries_and_statuses_bind_exactly_test() ->
           [A, B] = maps:get(targets, F),
           GroupId = maps:get(group_id, F),
           BeginEvidence = evidence(Origin, Begin, 20, F),
-          {ok, PrepareCommands} =
+          {ok, {independent, prepare, PrepareCommands}} =
               quod_dtx_recovery:next(
                 Begin, snapshot([BeginEvidence], [], [], none)),
           [{submit, A, PrepareA}, {submit, B, PrepareB}] = PrepareCommands,
           PrepareAEvidence = evidence(A, PrepareA, 21, F),
           PrepareBEvidence = evidence(B, PrepareB, 22, F),
           Phase0 = [BeginEvidence, PrepareAEvidence, PrepareBEvidence],
-          {ok, [{submit, Origin, Decision}]} =
+          {ok, {ordered, decision, [{submit, Origin, Decision}]}} =
               quod_dtx_recovery:next(
                 Begin, snapshot(Phase0, [], [], none)),
           DecisionEvidence = evidence(Origin, Decision, 23, F),
           Phase1 = Phase0 ++ [DecisionEvidence],
           ?assertEqual(
-             {ok, [{phase, A, GroupId, prepare},
-                   {phase, B, GroupId, prepare}]},
+             {ok, {independent, finalize,
+                   [{phase, A, GroupId, prepare},
+                    {phase, B, GroupId, prepare}]}},
              quod_dtx_recovery:next(
                Begin, snapshot(Phase1, [], [], none))),
-          {ok, FinalizeCommands} =
+          {ok, {independent, finalize, FinalizeCommands}} =
               quod_dtx_recovery:next(
                 Begin, snapshot(Phase1, [{A, 1}, {B, 1}], [], none)),
           [{submit, A, FinalizeA}, {submit, B, FinalizeB}] =
@@ -207,7 +232,8 @@ malformed_noncanonical_or_misbound_evidence_fails_closed_test() ->
           Origin = maps:get(origin, F),
           [A, B] = maps:get(targets, F),
           BeginEvidence = evidence(Origin, Begin, 30, F),
-          {ok, [{submit, A, PrepareA}, {submit, B, PrepareB}]} =
+          {ok, {independent, prepare,
+                [{submit, A, PrepareA}, {submit, B, PrepareB}]}} =
               quod_dtx_recovery:next(
                 Begin, snapshot([BeginEvidence], [], [], none)),
           PrepareAEvidence = evidence(A, PrepareA, 31, F),
@@ -323,6 +349,152 @@ accessors_are_total_and_history_phase_is_representation_safe_test() ->
                        quod_dtx:history_phase(unknown, #{}))
       end).
 
+material_source_reuses_begin_and_decision_without_source_commands_test() ->
+    with_fused_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          Origin = maps:get(origin, F),
+          [Origin, Remote] = maps:get(targets, F),
+          GroupId = maps:get(group_id, F),
+          BeginEvidence = evidence(Origin, Begin, 60, F),
+          BeginRef = evidence_ref(BeginEvidence),
+          {ok, {independent, prepare, [{submit, Remote, Prepare}]}} =
+              quod_dtx_recovery:next(
+                Begin, snapshot([BeginEvidence], [], [], none)),
+          PrepareEvidence = evidence(Remote, Prepare, 61, F),
+          {_Remote, PrepareControl, PrepareRef} = PrepareEvidence,
+          ?assertEqual(
+             {error, invalid_phase_evidence},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(
+                 [BeginEvidence, {Origin, PrepareControl, PrepareRef}],
+                 [], [], none))),
+          Generations = [{Origin, 1}, {Remote, 4}],
+          {ok, {ordered, decision, [{submit, Origin, Decision}]}} =
+              quod_dtx_recovery:next(
+                Begin,
+                snapshot([BeginEvidence, PrepareEvidence],
+                         Generations, [], none)),
+          ?assertMatch(
+             {ok, #{prepare_rows :=
+                        [{Origin, BeginRef}, {Remote, _}] }},
+             quod_dtx:recovery_phase(Decision)),
+          DecisionEvidence = evidence(Origin, Decision, 62, F),
+          DecisionRef = evidence_ref(DecisionEvidence),
+          Phase0 = [BeginEvidence, PrepareEvidence, DecisionEvidence],
+          {ok, {independent, finalize,
+                [{submit, Remote, Finalize}]}} =
+              quod_dtx_recovery:next(
+                Begin, snapshot(Phase0, Generations, [], none)),
+          FinalizeEvidence = evidence(Remote, Finalize, 63, F),
+          Phase1 = Phase0 ++ [FinalizeEvidence],
+          {ok, {independent, applied,
+                [{applied, Remote, GroupId, _, 5, commit}]}} =
+              quod_dtx_recovery:next(
+                Begin, snapshot(Phase1, Generations, [], none)),
+          Applied = [applied(Remote, GroupId, FinalizeEvidence, 5, commit)],
+          TerminalSnapshot = snapshot(Phase1, Generations, Applied, none),
+          ?assertEqual(
+             {ok, #{verdict => commit, reasons => none,
+                    decision_slot => 62,
+                    participant_slots =>
+                        [{Origin, 62, 2}, {Remote, 63, 5}]}},
+             quod_dtx_recovery:terminal(Begin, TerminalSnapshot)),
+          {ok, {ordered, complete, [{submit, Origin, Complete}]}} =
+              quod_dtx_recovery:next(
+                Begin, TerminalSnapshot),
+          {quod_dtx_complete, 3, GroupId, DecisionRef, FinalizeRows} = Complete,
+          ?assertEqual(
+             [{Origin, DecisionRef, 2},
+              {Remote, evidence_ref(FinalizeEvidence), 5}],
+             FinalizeRows)
+      end).
+
+%% Applied certificates are deliberately volatile validation evidence.  If
+%% the coordinator dies after certifying Finalize but before Complete commits,
+%% restart reconstructs only the durable phase chain.  The one recovery
+%% planner must therefore request the same applied claim again, accept a new
+%% certificate, and reconstruct byte-identical Complete semantics.  Once that
+%% Complete is certified, replay needs no copy of either certificate.
+lost_volatile_applied_certificate_is_recertified_before_complete_test() ->
+    with_fused_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          Origin = maps:get(origin, F),
+          [Origin, Remote] = maps:get(targets, F),
+          GroupId = maps:get(group_id, F),
+          BeginEvidence = evidence(Origin, Begin, 70, F),
+          {ok, {independent, prepare,
+                [{submit, Remote, Prepare}]}} =
+              quod_dtx_recovery:next(
+                Begin, snapshot([BeginEvidence], [], [], none)),
+          PrepareEvidence = evidence(Remote, Prepare, 71, F),
+          Generations = [{Origin, 1}, {Remote, 4}],
+          {ok, {ordered, decision,
+                [{submit, Origin, Decision}]}} =
+              quod_dtx_recovery:next(
+                Begin,
+                snapshot([BeginEvidence, PrepareEvidence],
+                         Generations, [], none)),
+          DecisionEvidence = evidence(Origin, Decision, 72, F),
+          {ok, {independent, finalize,
+                [{submit, Remote, Finalize}]}} =
+              quod_dtx_recovery:next(
+                Begin,
+                snapshot([BeginEvidence, PrepareEvidence,
+                          DecisionEvidence],
+                         Generations, [], none)),
+          FinalizeEvidence = evidence(Remote, Finalize, 73, F),
+          DurableEvidence =
+              [BeginEvidence, PrepareEvidence,
+               DecisionEvidence, FinalizeEvidence],
+          FinalizeRef = evidence_ref(FinalizeEvidence),
+          AppliedCommand =
+              {applied, Remote, GroupId, FinalizeRef, 5, commit},
+          DurableOnly =
+              snapshot(DurableEvidence, Generations, [], none),
+
+          %% This is the exact post-crash state: Finalize is durable, but the
+          %% certificate collected immediately before the crash is gone.
+          ?assertEqual(
+             {ok, {independent, applied, [AppliedCommand]}},
+             quod_dtx_recovery:next(Begin, DurableOnly)),
+          FirstApplied =
+              applied(Remote, GroupId, FinalizeEvidence, 5, commit),
+          {ok, {ordered, complete,
+                [{submit, Origin, CompleteBeforeCrash}]}} =
+              quod_dtx_recovery:next(
+                Begin,
+                snapshot(DurableEvidence, Generations,
+                         [FirstApplied], none)),
+
+          %% A replacement quorum can arrive in another order and contain
+          %% different signatures.  It certifies the same applied statement
+          %% and must reconstruct the same semantic Complete record.
+          ReplacementApplied =
+              replace_applied_signer(
+                FirstApplied, digest(245), <<246:512>>),
+          {ok, {ordered, complete,
+                [{submit, Origin, CompleteAfterRestart}]}} =
+              quod_dtx_recovery:next(
+                Begin,
+                snapshot(DurableEvidence, Generations,
+                         [ReplacementApplied], none)),
+          ?assertEqual(CompleteBeforeCrash, CompleteAfterRestart),
+
+          %% Complete is durable; neither volatile certificate is.  A later
+          %% coordinator/replay still recognizes the transaction as done.
+          CompleteEvidence =
+              evidence(Origin, CompleteAfterRestart, 74, F),
+          ?assertEqual(
+             {done, evidence_ref(CompleteEvidence)},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(DurableEvidence ++ [CompleteEvidence],
+                        Generations, [], none)))
+      end).
+
 semantic_record_codec_is_canonical_bounded_and_total_test() ->
     with_fixture(
       fun(F) ->
@@ -400,13 +572,19 @@ with_fixture(Fun) ->
     Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
     Fun(fixture(Signer)).
 
+with_fused_fixture(Fun) ->
+    {Pub, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    Fun(fused_fixture(Signer)).
+
 fixture(#{pubkey := Pub} = Signer) ->
-    Origin = {<<"quod:a">>, digest(1)},
-    Other = {<<"quod:b">>, digest(2)},
-    Targets = [Origin, Other],
+    Origin = {<<"quod:origin">>, digest(1)},
+    A = {<<"quod:a">>, digest(2)},
+    B = {<<"quod:b">>, digest(3)},
+    Targets = [A, B],
     ProofId = digest(3),
-    {PlanA, PlanABlob} = plan(Origin, ProofId, Origin, Signer, a),
-    {PlanB, PlanBBlob} = plan(Other, ProofId, Origin, Signer, b),
+    {PlanA, PlanABlob} = plan(A, ProofId, Origin, Signer, a),
+    {PlanB, PlanBBlob} = plan(B, ProofId, Origin, Signer, b),
     {ok, GoalBlob} = quod_durable_term:encode_goal({recover, group}),
     {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
     Admission = digest(4),
@@ -419,17 +597,47 @@ fixture(#{pubkey := Pub} = Signer) ->
             goal => GoalBlob, result => ResultBlob,
             request_binding => none,
             participants =>
-                [{Origin, quod_dtx:digest(PlanA)},
-                 {Other, quod_dtx:digest(PlanB)}]}),
-    {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
-    {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
+                [{A, quod_dtx:digest(PlanA)},
+                 {B, quod_dtx:digest(PlanB)}]}),
+    {ok, AttA} = quod_dtx:attest_plan(A, PlanA, Manifest, Signer),
+    {ok, AttB} = quod_dtx:attest_plan(B, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
           Manifest, none,
-          [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
-           {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
+          [{A, quod_dtx:digest(PlanA), PlanABlob, AttA},
+           {B, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     #{signer => Signer, admission => Admission,
       origin => Origin, targets => Targets,
+      'begin' => Begin, group_id => quod_dtx:group_id(Begin)}.
+
+fused_fixture(#{pubkey := Pub} = Signer) ->
+    Origin = {<<"quod:a">>, digest(11)},
+    Remote = {<<"quod:b">>, digest(12)},
+    ProofId = digest(13),
+    {PlanA, PlanABlob} = plan(Origin, ProofId, Origin, Signer, source),
+    {PlanB, PlanBBlob} = plan(Remote, ProofId, Origin, Signer, remote),
+    {ok, GoalBlob} = quod_durable_term:encode_goal({recover, fused}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    Admission = digest(14),
+    {ok, Manifest} =
+        quod_dtx:new_manifest(
+          #{proof_id => ProofId,
+            coordinator =>
+                {element(1, Origin), element(2, Origin), Pub, Admission},
+            nonce => digest(15), principal => anonymous,
+            goal => GoalBlob, result => ResultBlob,
+            request_binding => none,
+            participants =>
+                [{Origin, quod_dtx:digest(PlanA)},
+                 {Remote, quod_dtx:digest(PlanB)}]}),
+    {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
+    {ok, AttB} = quod_dtx:attest_plan(Remote, PlanB, Manifest, Signer),
+    {ok, Begin} = quod_dtx:new_begin(
+                    Manifest, none,
+                    [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
+                     {Remote, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
+    #{signer => Signer, admission => Admission,
+      origin => Origin, targets => [Origin, Remote],
       'begin' => Begin, group_id => quod_dtx:group_id(Begin)}.
 
 plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
@@ -475,8 +683,31 @@ snapshot(Evidence, Generations, Applied, Refusal) ->
       applied => Applied, refusal => Refusal}.
 
 applied(Target, GroupId, FinalizeEvidence, Generation, Verdict) ->
-    {Target, digest(240), GroupId, evidence_ref(FinalizeEvidence),
-     Generation, Verdict}.
+    FinalizeRef = evidence_ref(FinalizeEvidence),
+    Certificate =
+        {quod_dtx_applied_certificate, 1,
+         digest(239), Target, digest(240), GroupId, FinalizeRef,
+         Generation, Verdict, [{digest(241), <<242:512>>}]},
+    %% Recovery consumes a certificate only after the coordinator's exact
+    %% Finalize-era quorum verifier produced it.  This pure planner rechecks
+    %% the complete semantic binding and bounded certificate shape; signature
+    %% verification deliberately remains at that verifier boundary.
+    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+              Certificate)),
+    {Target, Certificate}.
+
+replace_applied_signer(
+  {Target,
+   {quod_dtx_applied_certificate, 1, NetworkIdentity, Target, CommitteeId,
+    GroupId, FinalizeRef, Generation, Verdict, _Signatures}},
+  Signer, Signature) ->
+    Certificate =
+        {quod_dtx_applied_certificate, 1, NetworkIdentity, Target,
+         CommitteeId, GroupId, FinalizeRef, Generation, Verdict,
+         [{Signer, Signature}]},
+    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+              Certificate)),
+    {Target, Certificate}.
 
 evidence_ref({_Target, _Control, Ref}) -> Ref.
 

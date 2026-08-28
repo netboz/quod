@@ -28,6 +28,7 @@ accepted.
          submission/2, submission_id/1, verify_submission/1,
          relay_attempt_id/5, decode_verified_submission/2,
          decode_submission_metadata/1,
+         encode_operation_submission/1, decode_operation_submission/1,
          validate_request/4, request_claim/1, remote_claim_route/1,
          requires_network_identity/1]).
 
@@ -36,12 +37,12 @@ accepted.
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
 -define(ID_VERSION, 7).
-%% V9 binds an author's continuous admission generation, signed-agent request,
-%% authorization transcript, and the atom-bearing diff/read set through the
-%% bounded Prolog wire alphabet, including explicit event occurrences. The
-%% fixed envelope can therefore be decoded
-%% safely before a small, explicit
-%% vocabulary allocation is permitted for an authenticated committee author.
+%% V11 binds an author's continuous admission generation, transaction role and
+%% role evidence, signed-agent request, authorization transcript, and the
+%% atom-bearing diff/read set through the bounded Prolog wire alphabet,
+%% including explicit event occurrences. The fixed envelope can therefore be
+%% decoded safely before a small, explicit vocabulary allocation is permitted
+%% for an authenticated committee author.
 %% Unrelated committee changes do not invalidate retained custody, while
 %% remove/re-admit makes every signature from the earlier admission
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
@@ -55,7 +56,7 @@ accepted.
 -define(SUBMISSION_ID_BYTES, 16).
 -define(COMMITTEE_ID_BYTES, 32).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
--define(MAX_CANONICAL_BYTES, (256 * 1024)).
+-define(OPERATION_CANCEL_DOMAIN, <<"quod.operation.cancel.v1">>).
 
 -type target_binding() :: {binary(), binary(), binary()}.
 
@@ -664,7 +665,7 @@ sign(Binding, Transaction, Identity) ->
 sign_submission(Binding, Transaction, Identity) ->
     case signing_material(Binding, Transaction, Identity) of
         {ok, Signed, Author, Signature, Canonical}
-          when byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+          when byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
             {ok, Signed, {submit, Author, Signature, Canonical}};
         {ok, _Signed, _Author, _Signature, _Canonical} ->
             {error, too_large};
@@ -722,7 +723,8 @@ submission(Binding, #transaction{author = Author, sig = Signature} = Transaction
   when is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES ->
     case bytes(Binding, Transaction) of
-        {ok, Canonical} when byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+        {ok, Canonical}
+          when byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
             {ok, {submit, Author, Signature, Canonical}};
         {ok, _Canonical} ->
             {error, too_large};
@@ -782,7 +784,8 @@ only operation permitted before the inner transaction is decoded.
 verify_submission({submit, Author, Signature, Canonical})
   when is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES,
-       is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+       is_binary(Canonical),
+       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
     quod_identity:verify(Signature, Canonical, Author);
 verify_submission(_Submission) ->
     false.
@@ -801,8 +804,9 @@ decode_verified_submission(
        is_binary(AuthorAdmission),
        is_binary(Author), is_binary(Signature),
        is_binary(Canonical),
-       byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
-    case quod_safe_term:decode(Canonical, ?MAX_CANONICAL_BYTES) of
+       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+    case quod_safe_term:decode(
+           Canonical, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES) of
         {ok,
          {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
           TxId, Origin, ProofId,
@@ -857,8 +861,10 @@ decode_verified_submission(_Binding, _Submission) ->
                  sequence := non_neg_integer()}} |
           {error, malformed_submission}.
 decode_submission_metadata(Canonical)
-  when is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
-    case quod_safe_term:decode(Canonical, ?MAX_CANONICAL_BYTES) of
+  when is_binary(Canonical),
+       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
+    case quod_safe_term:decode(
+           Canonical, ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES) of
         {ok,
          {?DOMAIN, ?VERSION, Ns, <<_:256>> = Anchor,
           <<_:256>> = Admission, <<_:256>> = TxId,
@@ -882,6 +888,147 @@ decode_submission_metadata(Canonical)
     end;
 decode_submission_metadata(_Canonical) ->
     {error, malformed_submission}.
+
+-doc "Encode one exact signed source claim for target operation custody.".
+-spec encode_operation_submission(term()) ->
+          {ok, binary()} | {error, invalid_operation_submission}.
+encode_operation_submission(Submission) ->
+    case operation_submission(Submission) of
+        {ok, _Binding} ->
+            Blob = term_to_binary(Submission, [deterministic]),
+            case byte_size(Blob) =< ?QUOD_MAX_OPERATION_SUBMISSION_BYTES of
+                true -> {ok, Blob};
+                false -> {error, invalid_operation_submission}
+            end;
+        {error, invalid_operation_submission} = Error ->
+            Error
+    end.
+
+-doc "Verify and decode one exact signed source claim used for operation custody.".
+-spec decode_operation_submission(binary()) ->
+          {ok,
+           #{submission := term(), claim := #transaction{},
+             claim_ref := term(), target := {binary(), <<_:256>>},
+             target_ref := term(), plan := quod_dtx:plan(),
+             plan_digest := <<_:256>>, manifest_digest := <<_:256>>,
+             effect := quod_effect:effect(),
+             author := <<_:256>>, admission := <<_:256>>,
+             cancel_digest := <<_:256>>}} |
+          {error, invalid_operation_submission}.
+decode_operation_submission(Blob)
+  when is_binary(Blob),
+       byte_size(Blob) =< ?QUOD_MAX_OPERATION_SUBMISSION_BYTES ->
+    case quod_safe_term:decode(
+           Blob, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES) of
+        {ok, Submission = {submit, _, _, _}} ->
+            case term_to_binary(Submission, [deterministic]) =:= Blob of
+                true -> operation_submission(Submission);
+                false -> {error, invalid_operation_submission}
+            end;
+        _ ->
+            {error, invalid_operation_submission}
+    end;
+decode_operation_submission(_Blob) ->
+    {error, invalid_operation_submission}.
+
+%% The outer signature is checked while the transaction bytes are still
+%% opaque. Only then may the fixed metadata reveal the exact source binding
+%% needed by the existing canonical transaction decoder.
+operation_submission(
+  Submission = {submit, Author, Signature, Canonical}) ->
+    case verify_submission(Submission) of
+        true ->
+            operation_submission_metadata(
+              Submission, Author, Signature,
+              decode_submission_metadata(Canonical));
+        false ->
+            {error, invalid_operation_submission}
+    end;
+operation_submission(_Submission) ->
+    {error, invalid_operation_submission}.
+
+operation_submission_metadata(
+  Submission, Author, Signature,
+  {ok, #{target := {OriginNs, OriginAnchor} = Origin,
+         admission := Admission, author := Author}})
+  when is_binary(OriginNs), byte_size(OriginNs) > 0 ->
+    case decode_verified_submission(
+           {OriginNs, OriginAnchor, Admission}, Submission) of
+        {ok,
+         Claim = #transaction{
+                   tx_id = <<_:256>> = ClaimTxId,
+                   origin = Origin,
+                   role = {remote_claim, Manifest,
+                           {Target, PlanDigest, PlanBlob, _Attestation},
+                           _PredictedTargetTxId}}} ->
+            operation_submission_claim(
+              Submission, Author, Signature, Admission, Claim, ClaimTxId,
+              Manifest, Target, PlanDigest, PlanBlob);
+        _ ->
+            {error, invalid_operation_submission}
+    end;
+operation_submission_metadata(
+  _Submission, _Author, _Signature, _Metadata) ->
+    {error, invalid_operation_submission}.
+
+operation_submission_claim(
+  Submission, Author, Signature, Admission,
+  Claim = #transaction{origin = {OriginNs, OriginAnchor}},
+  ClaimTxId, Manifest, Target, PlanDigest, PlanBlob) ->
+    case {quod_dtx:manifest_coordinator(Manifest),
+          quod_dtx:decode(PlanBlob)} of
+        {{OriginNs, OriginAnchor, Author, Admission}, {ok, Plan}} ->
+            operation_submission_plan(
+              Submission, Author, Signature, Admission, Claim,
+              {transaction, OriginNs, OriginAnchor, ClaimTxId},
+              Target, PlanDigest, quod_dtx:manifest_digest(Manifest), Plan);
+        _ ->
+            {error, invalid_operation_submission}
+    end.
+
+operation_submission_plan(
+  Submission, Author, Signature, Admission, Claim, ClaimRef,
+  Target, PlanDigest, ManifestDigest, Plan) ->
+    case {quod_dtx:target(Plan) =:= Target,
+          quod_dtx:digest(Plan) =:= PlanDigest,
+          quod_dtx:material(Plan)} of
+        {true, true, {ok, #{effects := [Effect]} = Material}} ->
+            case quod_effect:validate_plan(Plan, Material) of
+                true ->
+                    operation_submission_application(
+                      Submission, Author, Signature, Admission, Claim,
+                      ClaimRef, Target, PlanDigest, ManifestDigest,
+                      Plan, Effect);
+                false ->
+                    {error, invalid_operation_submission}
+            end;
+        _ ->
+            {error, invalid_operation_submission}
+    end.
+
+operation_submission_application(
+  Submission, Author, Signature, Admission, Claim, ClaimRef,
+  {TargetNs, TargetAnchor} = Target, PlanDigest, ManifestDigest,
+  Plan, Effect) ->
+    try remote_application(ClaimRef, Claim) of
+        #transaction{tx_id = <<_:256>> = TargetTxId} ->
+            {ok,
+             #{submission => Submission, claim => Claim,
+               claim_ref => ClaimRef, target => Target,
+               target_ref =>
+                   {transaction, TargetNs, TargetAnchor, TargetTxId},
+               plan => Plan, plan_digest => PlanDigest,
+               manifest_digest => ManifestDigest, effect => Effect,
+               author => Author, admission => Admission,
+               cancel_digest =>
+                   crypto:hash(
+                     sha256,
+                     <<?OPERATION_CANCEL_DOMAIN/binary, Signature/binary>>) }};
+        _ ->
+            {error, invalid_operation_submission}
+    catch
+        _:_ -> {error, invalid_operation_submission}
+    end.
 
 valid_role_fields(
   Target, #transaction{role = application, evidence = none,

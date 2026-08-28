@@ -106,45 +106,45 @@ export function replaceHistory(ns: string, txs: LedgerRow[], nextBefore: number 
 }
 
 // Merge full txs (e.g. from a height search) without touching the paging cursor.
-export function mergeFull(ns: string, txs: TxFull[], cert: Cert) {
-  const fresh = txs.map((t): LiveTx => ({ ...t, status: 'history', cert, live: false }))
-  emit({ rows: { ...state.rows, [ns]: mergeRows(state.rows[ns] ?? [], fresh) } })
+function blockRows(ns: string, block: Block, live: boolean): LiveLedgerRow[] {
+  if (block.kind === 'content') {
+    return block.txs.map((t): LiveTx => ({
+      ...t,
+      status: live && t.role !== 'remote_claim' && t.role !== 'remote_complete' ? 'pending' : 'history',
+      cert: block.cert,
+      live,
+    }))
+  }
+  if (block.kind === 'dtx_batch') {
+    return (block.controls ?? []).map((control): LiveControl => ({
+      row_type: 'control',
+      row_id: `dtx:${control.record_digest}`,
+      ns,
+      height: block.slot,
+      time: block.time,
+      phase: control.kind,
+      control,
+      cert: block.cert,
+      live,
+    }))
+  }
+  return []
 }
 
-function isDtxPhase(kind: Block['kind']): kind is ControlRow['phase'] {
-  return kind === 'begin' || kind === 'prepare' || kind === 'decision' || kind === 'finalize' || kind === 'complete'
-}
-
-function addBlock(ns: string, block: Block) {
-  const existing = state.rows[ns] ?? []
-  const have = new Set(existing.map((t) => t.row_id))
-  const fresh: LiveLedgerRow[] = block.kind === 'content'
-    ? block.txs
-        .filter((t) => !have.has(t.row_id))
-        .map((t): LiveTx => ({
-          ...t,
-          status: t.role === 'remote_claim' || t.role === 'remote_complete' ? 'history' : 'pending',
-          cert: block.cert,
-          live: true,
-        }))
-    : block.control && isDtxPhase(block.kind)
-      ? [{
-          row_type: 'control',
-          row_id: `dtx:${block.control.record_digest}`,
-          ns,
-          height: block.slot,
-          time: block.time,
-          phase: block.kind,
-          control: block.control,
-          cert: block.cert,
-          live: true,
-        }]
-      : []
-  const rows = mergeRows(existing, fresh)
+// Merge every record from one immutable block. A DTX block can contain many
+// same-phase controls, so callers receive the exact rows they may select.
+export function mergeBlock(ns: string, block: Block, live = false): LiveLedgerRow[] {
+  const fresh = blockRows(ns, block, live)
+  const rows = mergeRows(state.rows[ns] ?? [], fresh)
   emit({
     rows: { ...state.rows, [ns]: rows },
     heights: { ...state.heights, [ns]: Math.max(block.slot, state.heights[ns] ?? 0) },
   })
+  return fresh
+}
+
+function addBlock(ns: string, block: Block) {
+  mergeBlock(ns, block, true)
 }
 
 // The apply outcome arrives explicitly per tx (applied_live / rejected_live) — no inference.

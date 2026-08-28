@@ -10,7 +10,7 @@ the same rules without sharing either protocol's statement format.
 -include("quod_ingress_limits.hrl").
 
 -export([threshold/1, committee_size/1, valid_signature_list/2,
-         sanitize/3, verify/3]).
+         sanitize/3, sanitize_at_least/4, verify/3]).
 
 -type node_key() :: <<_:256>>.
 -type signature() :: <<_:512>>.
@@ -39,6 +39,20 @@ committee_size(_MalformedDuplicateOrTooLarge, _Count, _Seen) ->
 sanitize(Committee, Bytes, Signatures) when is_binary(Bytes) ->
     case committee_size(Committee) of
         {ok, N} when N > 0 ->
+            sanitize_at_least(Committee, Bytes, Signatures, threshold(N));
+        _ ->
+            error
+    end;
+sanitize(_Committee, _Bytes, _Signatures) ->
+    error.
+
+-doc "Return valid member signatures when the caller's protocol threshold is met.".
+-spec sanitize_at_least(term(), binary(), term(), pos_integer()) ->
+          {ok, [signed_row()]} | error.
+sanitize_at_least(Committee, Bytes, Signatures, Needed)
+  when is_binary(Bytes), is_integer(Needed), Needed > 0 ->
+    case committee_size(Committee) of
+        {ok, N} when N >= Needed ->
             case bounded_signatures(Signatures, N) of
                 true ->
                     Members = ordsets:from_list(Committee),
@@ -49,7 +63,7 @@ sanitize(Committee, Bytes, Signatures) when is_binary(Bytes) ->
                                   ordsets:is_element(Signer, Members),
                                   quod_identity:verify(
                                     Signature, Bytes, Signer)]),
-                    case length(Valid) >= threshold(N) of
+                    case length(Valid) >= Needed of
                         true -> {ok, Valid};
                         false -> error
                     end;
@@ -59,7 +73,7 @@ sanitize(Committee, Bytes, Signatures) when is_binary(Bytes) ->
         _ ->
             error
     end;
-sanitize(_Committee, _Bytes, _Signatures) ->
+sanitize_at_least(_Committee, _Bytes, _Signatures, _Needed) ->
     error.
 
 -spec valid_signature_list(term(), non_neg_integer()) -> boolean().

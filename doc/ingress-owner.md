@@ -219,9 +219,9 @@ still commit.
   retargeting. Remote `bad_change`, `stale_seq`, and even `{ok, Slot}` are result
   hints; local durable inclusion/exclusion and local revalidation resolve the
   caller.
-- Keep source relay submissions solely in the bounded retained-attempt map, not
-  the generic consensus outbox. Link-up reconstructs the complete prefix in
-  author-sequence order; retry of any due member resends the prefix through it.
+- Keep source relay submissions solely in the retained-attempt map, not the
+  generic consensus outbox. Link-up reconstructs the complete prefix once in
+  author-sequence order; no timer polls or resends live work.
 - Carry every submit, accepted acknowledgement, and result only on the
   deterministic `{ingress, Ns}` channel. `{log, Ns}` is consensus-only and has
   no relay fallback.
@@ -356,9 +356,9 @@ Correctness tests must cover:
 - future-slot result-cache invalidation and full-prefix replay after reseat;
 - original deadline and caller `outcome_unknown`;
 - both admit and remove membership changes bypassing retained custody;
-- bounded retained-custody refusal and later event-driven wake-up for malformed
-  committee view, full relay capacity, exact duplicate attempt, and lane
-  conflict;
+- event-driven retained-custody wake-up for malformed committee view, exact
+  duplicate attempt, and lane conflict, with no compiled custody or relay
+  population threshold;
 - fail-closed rejection of non-definitive relay shapes;
 - one ledger occurrence of each retained signed submission in the honest
   ingress workload;
@@ -376,7 +376,7 @@ The fixed-work acceptance run remains 1,920 writes at 25 ms:
 - tries per operation at most 1.02, target 1.00;
 - no public slot-closed retries; internal retargets are measured separately;
 - p99 no worse than 562 ms, target below 450 ms;
-- no increase in skips, progress timeouts, round p99, or relay redrives;
+- no increase in skips, progress timeouts, round p99, or exact relay duplicates;
 - retarget-hop p99 at most two and lifetime bounded by original arrival.
 
 The channel split is complete, but relay frames still enter the same

@@ -1,21 +1,29 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v2 wire boundary for durable operation recovery traffic.
+Pure v6 wire boundary for durable operation recovery traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
 outcome requests carry a committee id and minimum certified slot; replies carry
 the responder's anchored identity and applied floor. The separate group-only
 `outcome_barrier` is accepted from the reference's exact coordinator only after
-certified-current quorum absence. The namespace engine remains responsible for authenticated-link
-identity checks, readiness, rate/capacity accounting, worker monitors, DTX
-semantics, signing, consensus, and durable state.
+certified-current quorum absence. Applied requests bind one exact Finalize,
+generation, and verdict; each validator response carries its signed vote for
+the caller to combine into the portable certificate owned by
+`quod_dtx_current_view`. Operation-effect cancellation carries the exact
+signed source submission; `quod_transaction` remains its sole semantic decoder.
+The namespace engine remains responsible for
+authenticated-link identity checks, readiness, rate/capacity accounting,
+worker monitors, DTX semantics, signing, consensus, and durable state.
 
 One bidirectional channel is derived from the target namespace. Frames carry a
-second copy of that namespace in a hard-break envelope, and callers normally
-use the direction-aware `decode_request/2` or `decode_response/2` form to bind
-it to the channel they subscribed to. Semantic DTX record bytes stay opaque to
-this module. A singleton application carries one canonical certified claim
+second copy of that namespace in a hard-break envelope. The direction-aware
+`decode_request/2` and `decode_response/2` functions bind that copy to the
+channel the caller subscribed to. Semantic DTX record bytes stay opaque to
+this module. A validation sidecar may carry exact committed entries or applied
+certificates beside the semantic term. This module only bounds and shape-checks
+them: `quod_foreign_log` verifies entries and `quod_dtx_current_view` verifies
+certificates. A one-target remote application carries one canonical certified claim
 owned by `quod_transaction`; the target reconstructs its deterministic
 application. Both enter the existing target signing and consensus machinery.
 """.
@@ -25,15 +33,15 @@ application. Both enter the existing target signing and consensus machinery.
 -include("quod_transport_limits.hrl").
 
 -export([channel/1,
-         encode_request/2, encode_response/2,
-         decode_request/1, decode_request/2,
-         decode_response/1, decode_response/2,
-         request_id/1, response_id/1, correlates/2,
-         limits/0]).
--export_type([request/0, response/0, public_outcome_status/0]).
+         encode_request/3, encode_response/3,
+         decode_request/2, decode_response/2,
+         normalize_sidecar/1,
+         request_id/1, response_id/1, correlates/2]).
+-export_type([request/0, response/0, entry_hint/0, validation_item/0,
+              public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 3).
+-define(VERSION, 6).
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -52,11 +60,15 @@ application. Both enter the existing target signing and consensus machinery.
 -type outcome_ref() :: transaction_ref() | group_ref() | operation_ref().
 -type phase_kind() :: 'begin' | prepare | decision | finalize | complete.
 -type verdict() :: commit | abort.
+-type entry_hint() :: {quod_dtx:certified_ref(), #entry{}}.
+-type validation_item() ::
+        entry_hint() |
+        {{applied, identity(), quod_dtx:certified_ref()},
+         quod_dtx_current_view:applied_certificate()}.
 -type request() ::
         {submit, request_id(), binary()} |
         {apply_claim, request_id(), binary()} |
-        {cancel_operation_effect, request_id(), transaction_ref(),
-         transaction_ref(), <<_:256>>} |
+        {cancel_operation_effect, request_id(), binary()} |
         {phase, request_id(), <<_:256>>, phase_kind()} |
         {outcome, request_id(), outcome_ref(), <<_:256>>, pos_integer()} |
         {outcome_barrier, request_id(), group_ref(), <<_:256>>,
@@ -79,14 +91,15 @@ application. Both enter the existing target signing and consensus machinery.
         {outcome_barrier, request_id(), identity(), <<_:256>>,
          non_neg_integer(), barrier_status()} |
         {applied, request_id(), identity(), <<_:256>>, <<_:256>>,
-         quod_dtx:certified_ref(), non_neg_integer(), verdict()} |
+         quod_dtx:certified_ref(), non_neg_integer(), verdict(),
+         <<_:256>>, <<_:512>>} |
         {error, request_id(), busy | not_ready | not_found | invalid_request}.
 -type wire_error() ::
         {error, {too_large, dtx_endpoint | record}} |
         {error, {protocol_error, atom()}}.
 
 %% ------------------------------------------------------------------
-%% Channel and public limits
+%% Channel
 %% ------------------------------------------------------------------
 
 -doc "The one bidirectional DTX channel for a target namespace.".
@@ -94,28 +107,25 @@ application. Both enter the existing target signing and consensus machinery.
 channel(Namespace) when is_binary(Namespace), byte_size(Namespace) > 0 ->
     term_to_binary({?CHANNEL_TAG, Namespace}, [deterministic]).
 
--doc "Shared caps consumed later by the embedding namespace engine.".
--spec limits() -> map().
-limits() ->
-    #{max_envelope_bytes => ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
-      worker_timeout_ms => ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS}.
-
 %% ------------------------------------------------------------------
 %% Deterministic frame API
 %% ------------------------------------------------------------------
 
--spec encode_request(binary(), request()) -> {ok, binary()} | wire_error().
-encode_request(Namespace, Request) ->
-    encode_direction(Namespace, Request, request).
+-spec encode_request(binary(), request(), [validation_item()]) ->
+          {ok, binary()} | wire_error().
+encode_request(Namespace, Request, Hints) ->
+    encode_direction(Namespace, Request, Hints, request).
 
--spec encode_response(binary(), response()) -> {ok, binary()} | wire_error().
-encode_response(Namespace, Response) ->
-    encode_direction(Namespace, Response, response).
+-spec encode_response(binary(), response(), [validation_item()]) ->
+          {ok, binary()} | wire_error().
+encode_response(Namespace, Response, Hints) ->
+    encode_direction(Namespace, Response, Hints, response).
 
-encode_direction(Namespace, Inner, Direction) ->
-    case {valid_namespace(Namespace), validate_direction(Inner, Direction)} of
-        {true, ok} ->
-            InnerBinary = term_to_binary(Inner, [deterministic]),
+encode_direction(Namespace, Inner, Hints, Direction) ->
+    case {valid_namespace(Namespace), validate_direction(Inner, Direction),
+          valid_validation_sidecar(Hints)} of
+        {true, ok, true} ->
+            InnerBinary = term_to_binary({Inner, Hints}, [deterministic]),
             Envelope = term_to_binary(
                          {?DOMAIN, ?VERSION, Namespace, InnerBinary},
                          [deterministic]),
@@ -124,31 +134,20 @@ encode_direction(Namespace, Inner, Direction) ->
                 true -> {ok, Envelope};
                 false -> too_large(dtx_endpoint)
             end;
-        {false, _} -> protocol_error(bad_namespace);
-        {_, {error, _} = Error} -> Error
+        {false, _, _} -> protocol_error(bad_namespace);
+        {_, {error, _} = Error, _} -> Error;
+        {_, _, false} -> protocol_error(bad_hints)
     end.
-
--doc "Decode a request and return the namespace carried by its envelope.".
--spec decode_request(binary()) ->
-          {ok, binary(), request()} | wire_error().
-decode_request(Envelope) ->
-    decode_direction(any, Envelope, request).
 
 -doc "Decode a request only for the exact subscribed namespace.".
 -spec decode_request(binary(), binary()) ->
-          {ok, request()} | wire_error().
+          {ok, request(), [validation_item()]} | wire_error().
 decode_request(Namespace, Envelope) ->
     decode_expected(Namespace, Envelope, request).
 
--doc "Decode a response and return the namespace carried by its envelope.".
--spec decode_response(binary()) ->
-          {ok, binary(), response()} | wire_error().
-decode_response(Envelope) ->
-    decode_direction(any, Envelope, response).
-
 -doc "Decode a response only for the exact subscribed namespace.".
 -spec decode_response(binary(), binary()) ->
-          {ok, response()} | wire_error().
+          {ok, response(), [validation_item()]} | wire_error().
 decode_response(Namespace, Envelope) ->
     decode_expected(Namespace, Envelope, response).
 
@@ -156,7 +155,7 @@ decode_expected(Namespace, Envelope, Direction) ->
     case valid_namespace(Namespace) of
         true ->
             case decode_direction({expected, Namespace}, Envelope, Direction) of
-                {ok, Namespace, Inner} -> {ok, Inner};
+                {ok, Namespace, Inner, Hints} -> {ok, Inner, Hints};
                 {error, _} = Error -> Error
             end;
         false ->
@@ -199,28 +198,79 @@ decode_inner(Expected, Namespace, InnerBinary, Direction) ->
         {true, true, true} ->
             case quod_safe_term:decode(
                    InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
-                {ok, Inner} ->
-                    case term_to_binary(Inner, [deterministic]) =:= InnerBinary of
+                {ok, {Inner, RawHints} = Wrapped} ->
+                    case term_to_binary(Wrapped, [deterministic]) =:= InnerBinary of
                         false -> protocol_error(non_canonical);
                         true ->
                             case validate_direction(Inner, Direction) of
-                                ok -> {ok, Namespace, Inner};
+                                ok ->
+                                    {ok, Namespace, Inner,
+                                     normalize_sidecar(RawHints)};
                                 {error, _} = Error -> Error
                             end
                     end;
+                {ok, _Other} -> protocol_error(bad_shape);
                 {error, _} -> protocol_error(bad_etf)
             end
     end.
 
-namespace_matches(any, _Namespace) -> true;
 namespace_matches({expected, Namespace}, Namespace) -> true;
 namespace_matches({expected, _Other}, _Namespace) -> false.
 
 validate_direction(Term, request) -> validate_request(Term);
 validate_direction(Term, response) -> validate_response(Term).
 
+%% Hints are deliberately only shape-checked here. Exact-entry authority stays
+%% in quod_foreign_log; applied-certificate authority stays in
+%% quod_dtx_current_view. A malformed received sidecar becomes no hint and can
+%% never change the semantic request or response.
+valid_validation_sidecar(Hints) when is_list(Hints) ->
+    normalize_sidecar(Hints) =:= Hints;
+valid_validation_sidecar(_Hints) ->
+    false.
+
+-doc "Normalize one untrusted bounded validation sidecar; malformed rows disappear.".
+-spec normalize_sidecar(term()) -> [validation_item()].
+normalize_sidecar(Hints) when is_list(Hints) ->
+    normalize_sidecar(Hints, #{}, []);
+normalize_sidecar(_Malformed) ->
+    [].
+
+normalize_sidecar([], _Seen, Acc) ->
+    lists:reverse(Acc);
+normalize_sidecar([Hint = {Key, _Value} | Rest], Seen, Acc) ->
+    case valid_validation_item(Hint) andalso not maps:is_key(Key, Seen) of
+        true -> normalize_sidecar(Rest, Seen#{Key => true}, [Hint | Acc]);
+        false -> normalize_sidecar(Rest, Seen, Acc)
+    end;
+normalize_sidecar(_Improper, _Seen, _Acc) ->
+    [].
+
+valid_entry_hint({Ref, #entry{index = Slot} = Entry}) ->
+    quod_dtx:validate_certified_ref(Ref) andalso
+        case quod_dtx:certified_ref_binding(Ref) of
+            {ok, _Identity, Slot, _Digest} ->
+                case quod_catchup:page_stats([Entry]) of
+                    {ok, 1, _Bytes} -> true;
+                    {error, _} -> false
+                end;
+            _ ->
+                false
+        end.
+
+valid_validation_item({Ref, #entry{}} = Hint) ->
+    quod_dtx:validate_certified_ref(Ref) andalso valid_entry_hint(Hint);
+valid_validation_item(
+  {{applied, Target, FinalizeRef}, Certificate}) ->
+    case quod_dtx_current_view:applied_certificate_binding(Certificate) of
+        {ok, #{target := Target, finalize_ref := FinalizeRef}} -> true;
+        _ -> false
+    end;
+valid_validation_item(_Hint) ->
+    false.
+
 %% ------------------------------------------------------------------
-%% Fixed v2 operation algebra
+%% Fixed v6 operation algebra
 %% ------------------------------------------------------------------
 
 validate_request({submit, RequestId, RecordBlob}) ->
@@ -235,12 +285,9 @@ validate_request({phase, RequestId, GroupId, Kind}) ->
     validate_request_fields(
       RequestId, valid_digest(GroupId) andalso valid_phase_kind(Kind));
 validate_request(
-  {cancel_operation_effect, RequestId, ClaimRef, TargetRef,
-   <<_:256>>}) ->
+  {cancel_operation_effect, RequestId, SubmissionBlob}) ->
     validate_request_fields(
-      RequestId,
-      valid_transaction_ref(ClaimRef) andalso
-          valid_transaction_ref(TargetRef));
+      RequestId, valid_operation_submission(SubmissionBlob));
 validate_request(
   {outcome, RequestId, OutcomeRef, CommitteeId, MinimumSlot}) ->
     validate_request_fields(
@@ -275,6 +322,16 @@ validate_record_blob(RecordBlob) ->
         {error, {too_large, dtx_body}} -> too_large(record);
         {error, _} -> protocol_error(bad_record)
     end.
+
+%% The endpoint owns only the fixed request shape and outer envelope bound.
+%% The target engine invokes the transaction codec exactly once after its
+%% authenticated peer/readiness checks; this framing layer never parses or
+%% verifies the signed submission a second time.
+valid_operation_submission(SubmissionBlob) when is_binary(SubmissionBlob) ->
+    byte_size(SubmissionBlob) > 0 andalso
+        byte_size(SubmissionBlob) < ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES;
+valid_operation_submission(_SubmissionBlob) ->
+    false.
 
 validate_response({accepted, RequestId, SemanticDigest, CertifiedRef}) ->
     validate_response_fields(
@@ -317,12 +374,14 @@ validate_response(
           valid_uint64(AppliedFloor) andalso valid_barrier_status(Status));
 validate_response(
   {applied, RequestId, TargetIdentity, CommitteeId, GroupId, FinalizeRef,
-   Generation, Verdict}) ->
+   Generation, Verdict, Signer, Signature}) ->
     validate_response_fields(
       RequestId,
       valid_identity(TargetIdentity) andalso valid_digest(CommitteeId) andalso
           valid_digest(GroupId) andalso valid_certified_ref(FinalizeRef) andalso
-          valid_uint64(Generation) andalso valid_verdict(Verdict));
+          valid_uint64(Generation) andalso valid_verdict(Verdict) andalso
+          valid_digest(Signer) andalso is_binary(Signature) andalso
+          byte_size(Signature) =:= 64);
 validate_response({error, RequestId, Reason}) ->
     validate_response_fields(RequestId, valid_error_reason(Reason));
 validate_response(_) ->
@@ -442,7 +501,7 @@ valid_participant_slots(_, _, _) -> false.
 -spec request_id(term()) -> request_id() | error.
 request_id({submit, RequestId, _}) -> valid_id_or_error(RequestId);
 request_id({apply_claim, RequestId, _}) -> valid_id_or_error(RequestId);
-request_id({cancel_operation_effect, RequestId, _, _, _}) ->
+request_id({cancel_operation_effect, RequestId, _}) ->
     valid_id_or_error(RequestId);
 request_id({phase, RequestId, _, _}) -> valid_id_or_error(RequestId);
 request_id({outcome, RequestId, _, _, _}) -> valid_id_or_error(RequestId);
@@ -462,7 +521,7 @@ response_id({phase, RequestId, _, _}) -> valid_id_or_error(RequestId);
 response_id({outcome, RequestId, _, _, _, _}) -> valid_id_or_error(RequestId);
 response_id({outcome_barrier, RequestId, _, _, _, _}) ->
     valid_id_or_error(RequestId);
-response_id({applied, RequestId, _, _, _, _, _, _}) ->
+response_id({applied, RequestId, _, _, _, _, _, _, _, _}) ->
     valid_id_or_error(RequestId);
 response_id({error, RequestId, _}) -> valid_id_or_error(RequestId);
 response_id(_) -> error.
@@ -492,7 +551,7 @@ correlates(
     valid_pair(Request, Response) andalso
         application_response_matches(ClaimEvidence, TargetEvidence);
 correlates(
-  {cancel_operation_effect, RequestId, _, _, _} = Request,
+  {cancel_operation_effect, RequestId, _} = Request,
   {operation_effect_cancelled, RequestId, _} = Response) ->
     valid_pair(Request, Response);
 correlates({phase, RequestId, _, _} = Request,
@@ -515,7 +574,7 @@ correlates(
 correlates(
   {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict} = Request,
   {applied, RequestId, _TargetIdentity, _CommitteeId, GroupId, FinalizeRef,
-   Generation, Verdict} = Response) ->
+   Generation, Verdict, _Signer, _Signature} = Response) ->
     valid_pair(Request, Response);
 correlates(_Request, _Response) ->
     false.

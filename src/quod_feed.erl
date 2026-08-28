@@ -12,10 +12,12 @@ and before the rebuildable runtime in the `m:quod_ns` `rest_for_one` chain (it
 holds no state the others need). It has two halves:
 
 - **Producer** (a committee Member): on each *live* commit `m:quod_simplex` publishes
-  `{committed, Ns, Slot, Entry}` on the `{committed, Ns}` property; the feed **eager-pushes** the block to a
+  `{committed, Ns, Slot, Entry}` on the shared `{committed, Ns}` property; the feed **eager-pushes** the block to a
   small fanout of the node's `quod_brahms:view/1` (the Byzantine-resistant `sample/1` is reserved for
   the F2 anti-entropy pull-source selection). Never on the replay/rebuild path, so catching up
-  never re-broadcasts history (`content-layer-design.md` §14 live-vs-replay).
+  never re-broadcasts history (`content-layer-design.md` §14 live-vs-replay). A completed certified
+  catch-up publishes only `{certified_head, Ns, Slot}` on that property: this invalidates a stale cached
+  snapshot and wakes registered followers, but carries no block and fires no historical event.
 - **Relay / follower** (a caught-up non-member — see `follows/4`): a gossiped `{block, Entry}` for slot
   `H+1` is verified against the current committee and this process's pinned
   namespace/genesis domain (`quod_catchup:verify_forward/5`) and, if genuine,
@@ -51,12 +53,18 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -include("quod_ledger.hrl").
 -include("quod_transport_limits.hrl").
 
--export([start_link/2, stats/1, peer_ready/3]).
+-export([start_link/2, stats/1, peer_ready/3,
+         channel/1, progress_signal/2,
+         recipient_register_frame/3, recipient_ack_frame/4,
+         recipient_unregister_frame/3, decode_recipient/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
 -export([classify/2, encode/2, decode/2, digest_table/1, record_digest/3, ready/4, readiness_config_ok/1,
-         fold_snapshot/3]).
+         fold_snapshot/3, test_recipient_state/2,
+         test_recipient_control/5, test_recipient_commit/2,
+         test_recipient_down/3, test_recipient_rows/1,
+         test_set_snapshot/2, test_snapshot/1]).
 -endif.
 
 -define(PUSH_FANOUT,     4).             %% eager-push targets per fresh block (best-effort; anti-entropy backstops)
@@ -69,6 +77,16 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -define(READY_FRESH_MS,  15000).         %% peer_ready freshness: a digest older than this is a dead/mute peer
                                          %% (5 rounds at the default period; readiness_config_ok/0 enforces
                                          %% the window spans ≥2 periods so one lost digest can't drop a peer)
+-define(RECIPIENT_VERSION, 1).
+
+-record(recipient, {
+            link :: pid(),
+            mref :: reference(),
+            registration_id :: <<_:128>>,
+            acked_height = 0 :: non_neg_integer(),
+            in_flight = none :: none | non_neg_integer(),
+            pending_height = none :: none | non_neg_integer()
+           }).
 
 -record(s, {ns       :: binary(),
             genesis_hash :: <<_:256>>,
@@ -85,6 +103,12 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
             pushed   = 0 :: non_neg_integer(),   %% local commits we originated onto the feed
             ingested = 0 :: non_neg_integer(),   %% gossiped blocks we verified, applied, and relayed
             pulled   = 0 :: non_neg_integer(),   %% anti-entropy pull rounds we started
+            %% Volatile height-wake recipients.  One authenticated node gets
+            %% one row regardless of how many of its local consumers follow
+            %% this namespace.  A row owns no history or authority: it merely
+            %% keeps one correlated wake in flight and coalesces later heights.
+            recipients = #{} :: #{<<_:256>> => #recipient{}},
+            recipient_mrefs = #{} :: #{reference() => <<_:256>>},
             %% per-reason drop counters (bump via drop/2). `duplicate` (already have it, loop-suppressed) is
             %% benign gossip redundancy; `gap` is recovered by anti-entropy; `unverified` (bad cert) is the
             %% security-relevant one to watch. Pre-seeded to 0 so every reason is a stable metric series.
@@ -98,6 +122,76 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_feed, Ns}), ?MODULE, {Ns, Config}, []).
+
+-doc "The existing dissemination channel for one ontology namespace.".
+-spec channel(binary()) -> binary().
+channel(Ns) when is_binary(Ns) ->
+    term_to_binary({feed, Ns}, [deterministic]).
+
+-doc """
+Recognize a feed frame as a freshness signal for one namespace.
+
+This intentionally validates only the small safe outer envelope.  The inner
+block or digest remains untrusted and is never decoded or accepted here.  A
+caller may use `true` only to wake its ordinary certified-history verifier;
+the signal is not history evidence and grants no authority.
+""".
+-spec progress_signal(binary(), binary()) -> boolean().
+progress_signal(Payload, Ns)
+  when is_binary(Payload), is_binary(Ns),
+       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    case outer_envelope(Payload, Ns) of
+        {ok, _Inner} -> true;
+        error -> false
+    end;
+progress_signal(_Payload, _Ns) ->
+    false.
+
+-doc "Build one request to receive correlated height wakes for an exact feed.".
+-spec recipient_register_frame(binary(), <<_:256>>, <<_:128>>) -> binary().
+recipient_register_frame(Ns, <<_:256>> = Anchor,
+                         <<_:128>> = RegistrationId)
+  when is_binary(Ns) ->
+    encode(
+      Ns,
+      {recipient_register, ?RECIPIENT_VERSION, RegistrationId, Anchor}).
+
+-doc "Acknowledge the exact correlated height last received on a feed link.".
+-spec recipient_ack_frame(binary(), <<_:256>>, <<_:128>>,
+                          non_neg_integer()) -> binary().
+recipient_ack_frame(Ns, <<_:256>> = Anchor,
+                    <<_:128>> = RegistrationId, Height)
+  when is_binary(Ns), is_integer(Height), Height >= 0 ->
+    encode(
+      Ns,
+      {recipient_ack, ?RECIPIENT_VERSION, RegistrationId, Anchor, Height}).
+
+-doc "Remove one exact volatile feed-recipient registration.".
+-spec recipient_unregister_frame(binary(), <<_:256>>, <<_:128>>) -> binary().
+recipient_unregister_frame(Ns, <<_:256>> = Anchor,
+                           <<_:128>> = RegistrationId)
+  when is_binary(Ns) ->
+    encode(
+      Ns,
+      {recipient_unregister, ?RECIPIENT_VERSION, RegistrationId, Anchor}).
+
+-doc "Decode only the bounded, atom-safe recipient controls in a feed frame.".
+-spec decode_recipient(binary(), binary()) ->
+          {register, <<_:128>>, <<_:256>>}
+        | {registered, <<_:128>>, <<_:256>>, non_neg_integer()}
+        | {wake, <<_:128>>, <<_:256>>, non_neg_integer()}
+        | {ack, <<_:128>>, <<_:256>>, non_neg_integer()}
+        | {unregister, <<_:128>>, <<_:256>>}
+        | error.
+decode_recipient(Payload, Ns)
+  when is_binary(Payload), is_binary(Ns),
+       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    case outer_envelope(Payload, Ns) of
+        {ok, Inner} -> decode_recipient_inner(Inner);
+        error -> error
+    end;
+decode_recipient(_Payload, _Ns) ->
+    error.
 
 -doc "Dissemination counters for `Ns` (pushed/ingested/pulled/dropped), or `undefined` if down.".
 -spec stats(binary()) -> map() | undefined.
@@ -145,7 +239,7 @@ start(Ns, Config) ->
     case quod_simplex:genesis_hash(Ns) of
         GenesisHash when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
             Self = maps:get(node_id, Config),
-            Chan = term_to_binary({feed, Ns}, [deterministic]),
+            Chan = channel(Ns),
             quod_reg:subscribe({channel, Chan}),   %% gossiped blocks + digests on {feed, Ns}
             quod_reg:subscribe({committed, Ns}),   %% local live commits from quod_simplex
             %% the peer_ready liveness table: public so readers (`peer_ready/3`) never call into this process;
@@ -153,6 +247,13 @@ start(Ns, Config) ->
             %% with the feed and is rebuilt empty on restart. Plain `set` — it is write-mostly (a digest per
             %% follower per round) and read only rarely (per admit), so read_concurrency would tax the wrong path.
             Digests = ets:new(digest_table(Ns), [named_table, public, set]),
+            %% Inbound links belong to the transport, not this process.  A link
+            %% may therefore outlive a killed feed after its one-shot recipient
+            %% registration was delivered to the old owner (or to no owner
+            %% during startup).  Reset only this feed's peer-opened links after
+            %% subscribing: their source-side monitors reconnect and re-register,
+            %% while unrelated channels and outbound links remain untouched.
+            ok = quod_conn:reset_inbound_channel(Chan),
             arm_anti_entropy(),
             {ok, #s{ns = Ns, genesis_hash = GenesisHash, self = Self,
                     ledger_root = quod_ledger_store:ledger_dir(Config),
@@ -165,7 +266,8 @@ handle_call(get_stats, _From, S) ->
     {Tracked, Fresh} = digest_counts(S#s.digests),
     {reply, #{pushed => S#s.pushed, ingested => S#s.ingested,
               pulled => S#s.pulled, dropped => S#s.dropped,
-              digests => Tracked, fresh_digests => Fresh}, S};
+              digests => Tracked, fresh_digests => Fresh,
+              recipients => map_size(S#s.recipients)}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
 handle_cast(_Msg, S) -> {noreply, S}.
@@ -174,14 +276,23 @@ handle_cast(_Msg, S) -> {noreply, S}.
 %% already hold it). Fires only on the live commit path (quod_simplex publishes here from commit_block/
 %% skip_block), never on rebuild/catch-up, so history is never re-broadcast. Also folds the snapshot
 %% forward (this is how a MEMBER keeps its cache fresh between rounds without any status call).
-handle_info({committed, Ns, _Slot, #entry{} = Entry}, S = #s{ns = Ns}) ->
-    {noreply, eager_push(Entry, fold_snap(Entry, S#s{pushed = S#s.pushed + 1}))};
+handle_info({committed, Ns, Slot, #entry{} = Entry}, S = #s{ns = Ns}) ->
+    S1 = local_head_advanced(
+           Slot, Entry, S#s{pushed = S#s.pushed + 1}),
+    {noreply, eager_push(Entry, S1)};
+%% Catch-up/replay installed a certified head without creating a new live
+%% event.  Wake recipients so their ordinary certified follower re-reads that
+%% head, but do not fold the feed snapshot or gossip historical blocks.
+handle_info({certified_head, Ns, Slot}, S = #s{ns = Ns})
+  when is_integer(Slot), Slot >= 0 ->
+    {noreply, local_head_advanced(Slot, certified, S)};
 %% A gossiped block or digest from a peer on our {feed, Ns} channel. `Peer` is the sender's node id and
 %% `Addr` its announced endpoint (both from the authenticated link header). The transport has already
 %% learned `Peer => Addr`, so anti-entropy keeps the peer ID as its contact and catch-up responses remain
 %% bound to that authenticated identity.
-handle_info({quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S = #s{chan = Chan}) ->
-    {noreply, inbound(Peer, Payload, S)};
+handle_info({quod_message, {{Peer, _Addr}, InLink}, Chan, Payload},
+            S = #s{chan = Chan}) ->
+    {noreply, inbound(Peer, InLink, Payload, S)};
 handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};   %% Brahms / another namespace
 %% Anti-entropy round: advertise our height to every committee member (they judge admission readiness from
 %% it) and to one Byzantine-resistant sampled peer, then re-arm. A peer that is behind pulls the gap from
@@ -200,9 +311,14 @@ handle_info(anti_entropy, S) ->
 %% via quod_quic:send/3 and never monitor links ourselves, so the only process we monitor is the pull worker.)
 handle_info({'DOWN', _Ref, process, Pid, _Reason}, S = #s{pulling = Pid}) ->
     {noreply, S#s{pulling = false, snap = none}};
+handle_info({'DOWN', MRef, process, Pid, _Reason}, S) ->
+    {noreply, recipient_down(MRef, Pid, S)};
 handle_info(_Info, S) -> {noreply, S}.
 
-terminate(_Reason, #s{ns = Ns, chan = Chan}) ->
+terminate(_Reason, #s{ns = Ns, chan = Chan, recipients = Recipients}) ->
+    maps:foreach(
+      fun(_Peer, Recipient) -> retire_recipient(Recipient, true) end,
+      Recipients),
     _ = try quod_reg:unsubscribe({channel, Chan}) catch _:_ -> ok end,
     _ = try quod_reg:unsubscribe({committed, Ns}) catch _:_ -> ok end,
     ok.
@@ -211,9 +327,32 @@ terminate(_Reason, #s{ns = Ns, chan = Chan}) ->
 %%% inbound gossip: verify → ingest → relay (per-hop Byzantine check)
 %%%===================================================================
 
-inbound(_Peer, Payload, S) when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+inbound(_Peer, _InLink, Payload, S)
+  when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
     drop(oversized, S);   %% drop oversized BEFORE decode — bound binary_to_term memory
-inbound(Peer, Payload, S) ->
+inbound(Peer, InLink, Payload, S0) ->
+    case decode_recipient(Payload, S0#s.ns) of
+        {register, RegistrationId, Anchor} ->
+            {{Height, _Projection, _Syncing}, S} = current(S0),
+            recipient_control(
+              Peer, InLink, {register, RegistrationId, Anchor}, Height, S);
+        {ack, RegistrationId, Anchor, Height} ->
+            recipient_control(
+              Peer, InLink, {ack, RegistrationId, Anchor, Height},
+              undefined, S0);
+        {unregister, RegistrationId, Anchor} ->
+            recipient_control(
+              Peer, InLink, {unregister, RegistrationId, Anchor},
+              undefined, S0);
+        %% Responses and wakes belong to a remote registration owner.  A
+        %% hosted feed never treats them as target-side commands.
+        {registered, _, _, _} -> S0;
+        {wake, _, _, _} -> S0;
+        error ->
+            inbound_gossip(Peer, Payload, S0)
+    end.
+
+inbound_gossip(Peer, Payload, S) ->
     case decode(Payload, S#s.ns) of
         {block, #entry{} = Entry}      -> on_block(Entry, S);
         {digest, Hi} when is_integer(Hi), Hi >= 0 ->
@@ -262,6 +401,186 @@ on_block(#entry{index = Slot} = Entry,
 %% Bump one per-reason drop counter. Reasons are pre-seeded in #s so the metric series are stable.
 drop(Reason, S = #s{dropped = D}) ->
     S#s{dropped = maps:update_with(Reason, fun(C) -> C + 1 end, 1, D)}.
+
+%%%===================================================================
+%%% authenticated volatile feed recipients
+%%%===================================================================
+
+%% A recipient receives only a correlated height hint.  The authenticated
+%% link supplies the node identity; the payload supplies neither authority nor
+%% an endpoint.  History still enters exclusively through certified follow.
+recipient_control(
+  <<_:256>> = Peer, Link,
+  {register, <<_:128>> = RegistrationId, <<_:256>> = Anchor}, Height,
+  S = #s{genesis_hash = Anchor})
+  when is_pid(Link), is_integer(Height), Height >= 0 ->
+    register_recipient(Peer, Link, RegistrationId, Height, S);
+recipient_control(
+  <<_:256>> = Peer, Link,
+  {ack, <<_:128>> = RegistrationId, <<_:256>> = Anchor, Height},
+  _CurrentHeight, S = #s{genesis_hash = Anchor})
+  when is_pid(Link), is_integer(Height), Height >= 0 ->
+    acknowledge_recipient(Peer, Link, RegistrationId, Height, S);
+recipient_control(
+  <<_:256>> = Peer, Link,
+  {unregister, <<_:128>> = RegistrationId, <<_:256>> = Anchor},
+  _CurrentHeight, S = #s{genesis_hash = Anchor})
+  when is_pid(Link) ->
+    unregister_recipient(Peer, Link, RegistrationId, S);
+recipient_control(_Peer, _Link, _Control, _Height, S) ->
+    S.
+
+register_recipient(Peer, Link, RegistrationId, Height,
+                   S0 = #s{ns = Ns, genesis_hash = Anchor,
+                           recipients = Recipients0,
+                           recipient_mrefs = MonitorRefs0}) ->
+    case maps:get(Peer, Recipients0, undefined) of
+        #recipient{link = Link, registration_id = RegistrationId} ->
+            %% The ordered response on this live link cannot be overtaken.
+            %% Treat an exact duplicate as the same registration, not another
+            %% send or another monitor.
+            S0;
+        Old ->
+            {Recipients1, MonitorRefs1} =
+                case Old of
+                    #recipient{link = OldLink, mref = OldMRef} ->
+                        _ = erlang:demonitor(OldMRef, [flush]),
+                        case OldLink =:= Link of
+                            true -> ok;
+                            false -> retire_recipient(Old, true)
+                        end,
+                        {maps:remove(Peer, Recipients0),
+                         maps:remove(OldMRef, MonitorRefs0)};
+                    undefined ->
+                        {Recipients0, MonitorRefs0}
+                end,
+            MRef = erlang:monitor(process, Link),
+            Recipient = #recipient{
+                           link = Link, mref = MRef,
+                           registration_id = RegistrationId,
+                           in_flight = Height},
+            quod_link:send_ordered(
+              Link,
+              encode(
+                Ns,
+                {recipient_registered, ?RECIPIENT_VERSION,
+                 RegistrationId, Anchor, Height})),
+            S0#s{recipients = Recipients1#{Peer => Recipient},
+                 recipient_mrefs = MonitorRefs1#{MRef => Peer}}
+    end.
+
+acknowledge_recipient(
+  Peer, Link, RegistrationId, Height,
+  S = #s{ns = Ns, genesis_hash = Anchor, recipients = Recipients}) ->
+    case maps:get(Peer, Recipients, undefined) of
+        #recipient{link = Link, registration_id = RegistrationId,
+                   in_flight = Height, pending_height = Pending} = Recipient ->
+            Recipient1 =
+                case Pending of
+                    Next when is_integer(Next), Next > Height ->
+                        quod_link:send_ordered(
+                          Link,
+                          encode(
+                            Ns,
+                            {recipient_wake, ?RECIPIENT_VERSION,
+                             RegistrationId, Anchor, Next})),
+                        Recipient#recipient{
+                          acked_height = Height, in_flight = Next,
+                          pending_height = none};
+                    _ ->
+                        Recipient#recipient{
+                          acked_height = max(Height,
+                                             Recipient#recipient.acked_height),
+                          in_flight = none, pending_height = none}
+                end,
+            S#s{recipients = Recipients#{Peer => Recipient1}};
+        _ ->
+            %% Wrong peer, link, generation, or height is crossed/stale.
+            S
+    end.
+
+unregister_recipient(Peer, Link, RegistrationId,
+                     S = #s{recipients = Recipients}) ->
+    case maps:get(Peer, Recipients, undefined) of
+        #recipient{link = Link, registration_id = RegistrationId} ->
+            remove_recipient(Peer, true, S);
+        _ ->
+            S
+    end.
+
+recipient_committed(Height, S = #s{recipients = Recipients})
+  when is_integer(Height), Height >= 0 ->
+    Recipients1 = maps:map(
+                    fun(_Peer, Recipient) ->
+                        queue_recipient_height(Height, Recipient, S)
+                    end, Recipients),
+    S#s{recipients = Recipients1}.
+
+queue_recipient_height(
+  Height,
+  Recipient = #recipient{acked_height = Acked, in_flight = none,
+                         link = Link, registration_id = RegistrationId},
+  #s{ns = Ns, genesis_hash = Anchor}) when Height > Acked ->
+    quod_link:send_ordered(
+      Link,
+      encode(
+        Ns,
+        {recipient_wake, ?RECIPIENT_VERSION,
+         RegistrationId, Anchor, Height})),
+    Recipient#recipient{in_flight = Height};
+queue_recipient_height(
+  Height, Recipient = #recipient{in_flight = InFlight,
+                                 pending_height = Pending}, _S)
+  when is_integer(InFlight), Height > InFlight ->
+    Recipient#recipient{pending_height = newest_height(Height, Pending)};
+queue_recipient_height(_Height, Recipient, _S) ->
+    Recipient.
+
+newest_height(Height, none) -> Height;
+newest_height(Height, Existing) -> max(Height, Existing).
+
+%% One local head-advance owner updates both recipient freshness and the
+%% feed's cached consensus view.  A live commit carries the exact entry needed
+%% to fold that view.  Catch-up carries only a certified height, so invalidate
+%% the cache and let current/1 refresh it from Simplex on the next read.
+local_head_advanced(Height, #entry{} = Entry, S) ->
+    recipient_committed(Height, fold_snap(Entry, S));
+local_head_advanced(Height, certified, S) ->
+    recipient_committed(Height, S#s{snap = none}).
+
+recipient_down(MRef, Pid,
+               S = #s{recipient_mrefs = MonitorRefs,
+                      recipients = Recipients}) ->
+    case maps:get(MRef, MonitorRefs, undefined) of
+        <<_:256>> = Peer ->
+            case maps:get(Peer, Recipients, undefined) of
+                #recipient{link = Pid, mref = MRef} ->
+                    remove_recipient(Peer, false, S);
+                _ ->
+                    S#s{recipient_mrefs = maps:remove(MRef, MonitorRefs)}
+            end;
+        undefined ->
+            S
+    end.
+
+remove_recipient(Peer, Close,
+                 S = #s{recipients = Recipients,
+                        recipient_mrefs = MonitorRefs}) ->
+    case maps:take(Peer, Recipients) of
+        {Recipient = #recipient{mref = MRef}, Recipients1} ->
+            _ = erlang:demonitor(MRef, [flush]),
+            retire_recipient(Recipient, Close),
+            S#s{recipients = Recipients1,
+                recipient_mrefs = maps:remove(MRef, MonitorRefs)};
+        error ->
+            S
+    end.
+
+retire_recipient(#recipient{link = Link}, true) ->
+    _ = quod_link:close(Link),
+    ok;
+retire_recipient(#recipient{}, false) ->
+    ok.
 
 %% A node ingests pushed blocks (follows the feed) ONLY when it is a caught-up NON-member observer of a
 %% founded namespace:
@@ -326,11 +645,7 @@ fold_snapshot(Ns, #entry{index = Slot} = Entry,
         noop ->
             {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
              Syncing};
-        {'begin', _} -> none;
-        {prepare, _} -> none;
-        {decision, _} -> none;
-        {finalize, _} -> none;
-        {complete, _} -> none;
+        {controls, _Controls} -> none;
         invalid -> none
     end;
 fold_snapshot(_Ns, _Entry, _Snap) -> none.
@@ -534,7 +849,79 @@ fanout(Peers) -> quod_brahms:take_random(?PUSH_FANOUT, lists:usort(Peers)).
 encode(Ns, Msg) -> term_to_binary({feed, Ns, term_to_binary(Msg)}).
 
 decode(Payload, Ns) ->
+    case outer_envelope(Payload, Ns) of
+        {ok, Bin} -> try binary_to_term(Bin) catch _:_ -> error end;
+        error -> error
+    end.
+
+%% Unlike the block codec, recipient control decoding never needs to create
+%% atoms or materialize arbitrary history terms.  Keep the normalized shapes
+%% here so both sides of the link share one wire owner.
+decode_recipient_inner(Inner) ->
+    try binary_to_term(Inner, [safe]) of
+        {recipient_register, ?RECIPIENT_VERSION,
+         <<_:128>> = RegistrationId, <<_:256>> = Anchor} ->
+            {register, RegistrationId, Anchor};
+        {recipient_registered, ?RECIPIENT_VERSION,
+         <<_:128>> = RegistrationId, <<_:256>> = Anchor, Height}
+          when is_integer(Height), Height >= 0 ->
+            {registered, RegistrationId, Anchor, Height};
+        {recipient_wake, ?RECIPIENT_VERSION,
+         <<_:128>> = RegistrationId, <<_:256>> = Anchor, Height}
+          when is_integer(Height), Height >= 0 ->
+            {wake, RegistrationId, Anchor, Height};
+        {recipient_ack, ?RECIPIENT_VERSION,
+         <<_:128>> = RegistrationId, <<_:256>> = Anchor, Height}
+          when is_integer(Height), Height >= 0 ->
+            {ack, RegistrationId, Anchor, Height};
+        {recipient_unregister, ?RECIPIENT_VERSION,
+         <<_:128>> = RegistrationId, <<_:256>> = Anchor} ->
+            {unregister, RegistrationId, Anchor};
+        _ ->
+            error
+    catch _:_ ->
+        error
+    end.
+
+%% One safe owner for the feed's wire envelope. Consumers which need only a
+%% freshness hint stop here; the feed owner alone decodes the inner payload.
+outer_envelope(Payload, Ns) ->
     try binary_to_term(Payload, [safe]) of
-        {feed, Ns2, Bin} when Ns2 =:= Ns -> try binary_to_term(Bin) catch _:_ -> error end;
+        {feed, Ns, Bin} when is_binary(Bin) -> {ok, Bin};
         _ -> error
     catch _:_ -> error end.
+
+-ifdef(TEST).
+
+test_recipient_state(Ns, <<_:256>> = Anchor) when is_binary(Ns) ->
+    #s{ns = Ns, genesis_hash = Anchor, chan = channel(Ns)}.
+
+test_recipient_control(Peer, Link, Control, Height, State) ->
+    recipient_control(Peer, Link, Control, Height, State).
+
+test_recipient_commit(Height, State) ->
+    recipient_committed(Height, State).
+
+test_recipient_down(MRef, Pid, State) ->
+    recipient_down(MRef, Pid, State).
+
+test_recipient_rows(#s{recipients = Recipients}) ->
+    maps:map(
+      fun(_Peer, #recipient{link = Link, mref = MRef,
+                            registration_id = RegistrationId,
+                            acked_height = Acked,
+                            in_flight = InFlight,
+                            pending_height = Pending}) ->
+          #{link => Link, monitor => MRef,
+            registration_id => RegistrationId,
+            acked_height => Acked, in_flight => InFlight,
+            pending_height => Pending}
+      end, Recipients).
+
+test_set_snapshot(Snapshot, S) ->
+    S#s{snap = Snapshot}.
+
+test_snapshot(#s{snap = Snapshot}) ->
+    Snapshot.
+
+-endif.

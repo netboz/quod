@@ -34,8 +34,9 @@ init({Ns, Config}) ->
            restart => permanent, type => worker},
          %% dissemination feed ({feed, Ns} channel): push-pull epidemic gossip of committed blocks to the
          %% non-voting crowd, each block verified against its quorum cert per hop. It depends on the
-         %% earlier content children (reads consensus commits via {committed, Ns}, ingests through
-         %% quod_simplex, samples quod_brahms) and holds no state they need.
+         %% earlier content children (reads full live commits and height-only
+         %% catch-up wakes via the shared {committed, Ns} property, ingests
+         %% through quod_simplex, samples quod_brahms) and holds no state they need.
          #{id => quod_feed, start => {quod_feed, start_link, [Ns, Config]},
            restart => permanent, type => worker},
          %% runtime projection orchestrator (P tier, agent-fipa-plan §7/§8): rebuilds derived

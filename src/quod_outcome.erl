@@ -21,7 +21,7 @@ insert by `flush/1`; pending admission remains immediately durable. Only the
 other lookups go to the disk index.
 
 Distributed state uses the same file and owner.  One fixed state row holds the
-journal-derived local pending-Begin identity, the ledger-active dual-role
+journal-derived local pending-Begin identities, the ledger-active dual-role
 projection, and the ordered applied floor.  Exact per-GroupId rows remain on
 disk after their small in-memory cache entries are evicted, so an old direct
 abort tombstone can never become absence.  A committed block's transaction,
@@ -42,7 +42,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          check_operation/3, claim_operation/4,
          check_completion/4, complete_operation/5, unresolved_operations/1,
          ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
-         project_pending_begin/2, dtx_state/1,
+         project_pending_begins/2, dtx_state/1,
          lookup_group/2, group_history/2,
          apply_dtx/6, advance_applied/2, applied_floor/1]).
 
@@ -230,7 +230,7 @@ disk_index(Ns, Anchor, Name, Dtx, Floor) ->
            dtx = Dtx, applied_floor = Floor}.
 
 initial_dtx_state(Ns, Anchor) ->
-    #{pending_begin => none,
+    #{pending_begins => #{},
       projection => quod_dtx:initial_projection({Ns, Anchor}, 0),
       applied_floor => 0}.
 
@@ -265,42 +265,31 @@ report_close_error(Name, Operation, {error, Reason}) ->
 %% Distributed-group projection
 %% ===================================================================
 
--doc "Replace the rebuildable local pending-Begin identity from the journal.".
--spec project_pending_begin(index(), none | pending_begin()) ->
+-doc "Replace all rebuildable local pending-Begin identities from the journal.".
+-spec project_pending_begins(index(), [pending_begin()]) ->
           {ok, index()} | {error, index_error()}.
-project_pending_begin(Index = #index{dtx = #{pending_begin := none}}, none) ->
-    {ok, Index};
-project_pending_begin(Index = #index{dtx = Dtx}, none) ->
-    {ok, stage_dtx_state(Index, Dtx#{pending_begin := none})};
-project_pending_begin(Index = #index{dtx = Dtx}, Pending0) ->
-    case normalize_pending_begin(Pending0) of
-        {ok, Pending = #{lane := PendingLane,
-                         group_id := PendingGroupId,
-                         sequence := PendingSequence}} ->
-            case maps:get(pending_begin, Dtx) of
-                none ->
-                    {ok, stage_dtx_state(
-                           Index, Dtx#{pending_begin := Pending})};
-                Pending ->
-                    {ok, Index};
-                #{lane := Lane, group_id := GroupId,
-                  sequence := PreviousSequence}
-                  when Lane =:= PendingLane,
-                       GroupId =:= PendingGroupId,
-                       PreviousSequence < PendingSequence ->
-                    %% The signing journal may re-envelope one still-pending
-                    %% semantic Begin after its admission-scoped lane advances.
-                    %% Replace only that exact lane/group at a strictly newer
-                    %% sequence; an older or differently-bound row remains a
-                    %% fail-closed conflict.
-                    {ok, stage_dtx_state(
-                           Index, Dtx#{pending_begin := Pending})};
-                _Other ->
-                    {error, outcome_index_conflict}
+project_pending_begins(Index = #index{dtx = Dtx}, PendingRows)
+  when is_list(PendingRows) ->
+    case normalize_pending_begins(PendingRows, #{}) of
+        {ok, Pending} ->
+            case maps:get(pending_begins, Dtx) of
+                Pending -> {ok, Index};
+                _ -> {ok, stage_dtx_state(Index, Dtx#{pending_begins := Pending})}
             end;
-        error ->
-            {error, outcome_index_bad_group}
+        error -> {error, outcome_index_bad_group}
     end.
+
+normalize_pending_begins([], Acc) -> {ok, Acc};
+normalize_pending_begins([Row | Rest], Acc) ->
+    case normalize_pending_begin(Row) of
+        {ok, Pending = #{group_id := GroupId}} ->
+            case maps:is_key(GroupId, Acc) of
+                false -> normalize_pending_begins(Rest, Acc#{GroupId => Pending});
+                true -> error
+            end;
+        error -> error
+    end;
+normalize_pending_begins(_, _) -> error.
 
 normalize_pending_begin(
   #{lane := {<<_:256>> = Admission, <<_:256>> = Author},
@@ -376,9 +365,10 @@ Stage one already-reduced committed DTX control.
 
 `History`, `Projection`, and `Effects` must be the exact output of
 `quod_dtx:reduce/4`.  For a prepared Finalize the caller applies or discards
-the hidden plan before calling this function.  A returned `finalize_applied`
-value is only a deferred acknowledgement token: buffer it with the block's
-other post-apply work and do not send it to Simplex until the common
+the hidden plan before calling this function.  Whenever a Finalize records
+its applied state, the returned `finalize_applied` value is a deferred
+notification token: buffer it with the block's other post-apply work and do
+not send it to Simplex until the common
 `advance_applied/2` -> `flush/1` -> MVCC publication sequence has succeeded.
 No row becomes publicly terminal before that same boundary.
 """.
@@ -467,12 +457,8 @@ finish_group_update(Index = #index{dtx = Dtx}, GroupId, Row,
                            none -> Projection;
                            _ -> ProjectionOverride
                        end,
-    Pending0 = maps:get(pending_begin, Dtx),
-    Pending = case Pending0 of
-                  #{group_id := GroupId} -> none;
-                  _ -> Pending0
-              end,
-    Dtx1 = Dtx#{pending_begin := Pending,
+    Pending = maps:remove(GroupId, maps:get(pending_begins, Dtx)),
+    Dtx1 = Dtx#{pending_begins := Pending,
                 projection := StoredProjection},
     Key = group_key(Index, GroupId),
     Index1 = stage_row(Key, Row, stage_dtx_state(Index, Dtx1)),
@@ -606,28 +592,59 @@ participant_slots(_, _, _, _) ->
 apply_group_effects([], _Kind, _GroupId, _History, Row,
                     _Projection, _OldProjection, true) ->
     {ok, Row, none, none};
-apply_group_effects([Effect], Kind, GroupId, History, Row,
+apply_group_effects(Effects, Kind, GroupId, History, Row,
                     Projection, OldProjection, false) ->
-    apply_group_effect(
-      Effect, Kind, GroupId, History, Row, Projection, OldProjection);
+    apply_group_effects_new(
+      Effects, Kind, GroupId, History, Row, Projection, OldProjection,
+      none, none);
 apply_group_effects(_, _, _, _, _, _, _, _) ->
     error.
+
+apply_group_effects_new([], _Kind, _GroupId, _History, Row,
+                        _Projection, _OldProjection,
+                        DeferredAck, ProjectionOverride) ->
+    {ok, Row, DeferredAck, ProjectionOverride};
+apply_group_effects_new([Effect | Rest], Kind, GroupId, History, Row0,
+                        Projection, OldProjection,
+                        DeferredAck0, ProjectionOverride0) ->
+    case apply_group_effect(
+           Effect, Kind, GroupId, History, Row0,
+           Projection, OldProjection) of
+        {ok, Row1, DeferredAck1, ProjectionOverride1} ->
+            case {merge_once(DeferredAck0, DeferredAck1),
+                  merge_once(ProjectionOverride0, ProjectionOverride1)} of
+                {{ok, DeferredAck}, {ok, ProjectionOverride}} ->
+                    apply_group_effects_new(
+                      Rest, Kind, GroupId, History, Row1,
+                      Projection, OldProjection,
+                      DeferredAck, ProjectionOverride);
+                _ -> error
+            end;
+        error -> error
+    end;
+apply_group_effects_new(_, _, _, _, _, _, _, _, _) -> error.
+
+merge_once(none, Value) -> {ok, Value};
+merge_once(Value, none) -> {ok, Value};
+merge_once(_, _) -> error.
 
 apply_group_effect({origin_started, GroupId, Ref}, 'begin', GroupId,
                    History, Row, _Projection, _OldProjection) ->
     exact_effect_ref('begin', Ref, History, Row);
 apply_group_effect(
   {prepared, GroupId, Ref, Manifest, PlanDigest, PlanBlob, Generation},
-                   prepare, GroupId, History, Row, Projection,
+                   Kind, GroupId, History, Row, Projection,
                    _OldProjection) ->
-    case exact_history_ref(prepare, Ref, History) andalso
+    PrepareKind = prepare_kind_for_control(Kind),
+    case PrepareKind =/= invalid andalso
+         exact_history_ref(Kind, Ref, History) andalso
          is_binary(PlanBlob) andalso
          byte_size(PlanBlob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
          is_integer(Generation) andalso Generation >= 0 andalso
          Generation =< ?MAX_UINT64 andalso
          projection_holds_plan(
-           Projection, GroupId, Ref, Manifest, PlanDigest, PlanBlob,
-           Generation) of
+           Projection, GroupId, PrepareKind, Ref, Manifest, PlanDigest,
+           PlanBlob, Generation) of
         true ->
             {ok, Row, none, none};
         false -> error
@@ -643,18 +660,18 @@ apply_group_effect({decided, GroupId, Verdict, Ref}, decision, GroupId,
     end;
 apply_group_effect(
   {apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob, Ref, Generation},
-                   finalize, GroupId, History, Row, Projection,
+                   Kind, GroupId, History, Row, Projection,
                    OldProjection) ->
     applied_prepared(
-      commit, Manifest, PlanDigest, PlanBlob, Ref, Generation, GroupId,
-      History, Row, Projection, OldProjection);
+      Kind, commit, Manifest, PlanDigest, PlanBlob, Ref, Generation,
+      GroupId, History, Row, Projection, OldProjection);
 apply_group_effect(
   {discard_prepared, GroupId, Manifest, PlanDigest, PlanBlob, Ref, Generation},
-                   finalize, GroupId, History, Row, Projection,
+                   Kind, GroupId, History, Row, Projection,
                    OldProjection) ->
     applied_prepared(
-      abort, Manifest, PlanDigest, PlanBlob, Ref, Generation, GroupId,
-      History, Row, Projection, OldProjection);
+      Kind, abort, Manifest, PlanDigest, PlanBlob, Ref, Generation,
+      GroupId, History, Row, Projection, OldProjection);
 apply_group_effect({direct_applied_abort, GroupId, Ref, Generation},
                    finalize, GroupId, History, Row,
                    _Projection, _OldProjection) ->
@@ -692,48 +709,74 @@ decision_matches_effect(
   abort, _Ref, {quod_dtx_decision, 3, _, _, abort, _, _}) -> true;
 decision_matches_effect(_, _, _) -> false.
 
-applied_prepared(Verdict, Manifest, PlanDigest, PlanBlob, Ref, Generation,
+applied_prepared(Kind, Verdict, Manifest, PlanDigest, PlanBlob, Ref, Generation,
                  GroupId, History, Row, Projection, OldProjection) ->
-    case exact_history_ref(finalize, Ref, History) andalso
+    PrepareKind = prepare_kind_for_apply(Kind),
+    case PrepareKind =/= invalid andalso exact_history_ref(Kind, Ref, History)
+         andalso
          old_projection_holds_plan(
-           OldProjection, GroupId, Manifest, PlanDigest, PlanBlob) of
+           OldProjection, GroupId, PrepareKind,
+           Manifest, PlanDigest, PlanBlob) of
         true ->
             Slot = ref_slot(Ref),
-            case quod_dtx:acknowledge_finalize(
-                   GroupId, Slot, Generation, Projection) of
-                {ok, Projection1} ->
-                    case quod_dtx:manifest_group_ref(Manifest, GroupId) of
-                        {ok, GroupRef} ->
+            case quod_dtx:manifest_group_ref(Manifest, GroupId) of
+                {ok, GroupRef} ->
+                    Binding = #{group_ref => GroupRef,
+                                plan_digest => PlanDigest,
+                                manifest_digest =>
+                                    quod_dtx:manifest_digest(Manifest)},
+                    case maps:is_key(
+                           GroupId, maps:get(apply_fences, Projection)) of
+                        false ->
                             set_applied(
-                              Verdict, Ref, Generation,
-                              #{group_ref => GroupRef,
-                                plan_digest => PlanDigest},
-                              Row, Projection1, GroupId);
-                        error ->
-                            error
+                              Verdict, Ref, Generation, Binding,
+                              Row, none, GroupId);
+                        true ->
+                            case quod_dtx:acknowledge_finalize(
+                                   GroupId, Slot, Generation, Projection) of
+                                {ok, Projection1} ->
+                                    set_applied(
+                                      Verdict, Ref, Generation, Binding,
+                                      Row, Projection1, GroupId);
+                                {error, _} -> error
+                            end
                     end;
-                {error, _} -> error
+                error -> error
             end;
         false -> error
     end.
 projection_holds_plan(
-  #{active :=
-      #{group_id := GroupId,
-        participant :=
-          #{prepare_ref := StoredRef, manifest := Manifest,
-            plan_digest := PlanDigest, plan := PlanBlob}},
-    generation := StoredGeneration},
-  GroupId, Ref, Manifest, PlanDigest, PlanBlob, Generation) ->
-    Ref =:= StoredRef andalso Generation =:= StoredGeneration;
-projection_holds_plan(_, _, _, _, _, _, _) -> false.
+  #{groups := Groups},
+  GroupId, PrepareKind, Ref, Manifest, PlanDigest, PlanBlob, Generation) ->
+    case maps:get(GroupId, Groups, none) of
+      #{participant :=
+          #{prepare_kind := PrepareKind, prepare_ref := StoredRef,
+            manifest := Manifest,
+            plan_digest := PlanDigest, plan := PlanBlob,
+            prepared_generation := Generation}} -> Ref =:= StoredRef;
+      _ -> false
+    end;
+projection_holds_plan(_, _, _, _, _, _, _, _) -> false.
 
 old_projection_holds_plan(
-  #{active := #{group_id := GroupId,
-                participant :=
-                  #{manifest := Manifest, plan_digest := PlanDigest,
-                    plan := PlanBlob}}},
-  GroupId, Manifest, PlanDigest, PlanBlob) -> true;
-old_projection_holds_plan(_, _, _, _, _) -> false.
+  #{groups := Groups},
+  GroupId, PrepareKind, Manifest, PlanDigest, PlanBlob) ->
+    case maps:get(GroupId, Groups, none) of
+      #{participant :=
+                  #{prepare_kind := PrepareKind,
+                    manifest := Manifest, plan_digest := PlanDigest,
+                    plan := PlanBlob}} -> true;
+      _ -> false
+    end;
+old_projection_holds_plan(_, _, _, _, _, _) -> false.
+
+prepare_kind_for_control('begin') -> 'begin';
+prepare_kind_for_control(prepare) -> prepare;
+prepare_kind_for_control(_) -> invalid.
+
+prepare_kind_for_apply(decision) -> 'begin';
+prepare_kind_for_apply(finalize) -> prepare;
+prepare_kind_for_apply(_) -> invalid.
 
 set_applied(Verdict, Ref, Generation, Binding, Row, Projection, GroupId) ->
     Applied = maps:merge(
@@ -742,14 +785,9 @@ set_applied(Verdict, Ref, Generation, Binding, Row, Projection, GroupId) ->
                 Binding),
     case set_once(applied, Applied, Row) of
         {ok, Row1} ->
-            case Projection of
-                none ->
-                    {ok, Row1, none, none};
-                _ ->
-                    DeferredAck = {finalize_applied, GroupId,
-                                   ref_slot(Ref), Generation},
-                    {ok, Row1, DeferredAck, Projection}
-            end;
+            DeferredAck = {finalize_applied, GroupId,
+                           ref_slot(Ref), Generation},
+            {ok, Row1, DeferredAck, Projection};
         error -> error
     end.
 
@@ -1108,8 +1146,8 @@ lookup_group_ref(Index, Ref, Coordinator, Admission, GroupId) ->
 
 pending_group_ref(Index = #index{dtx = Dtx}, Ref,
                   Coordinator, Admission, GroupId) ->
-    case maps:get(pending_begin, Dtx) of
-        #{lane := {Admission, Coordinator}, group_id := GroupId} ->
+    case maps:get(GroupId, maps:get(pending_begins, Dtx), none) of
+        #{lane := {Admission, Coordinator}} ->
             {{ok, #{type => group, ref => Ref,
                     status => {pending, pending_begin}}}, Index};
         _ ->
@@ -1351,17 +1389,22 @@ valid_operation_state({terminal, Slot}) ->
 valid_operation_state(_) -> false.
 
 valid_dtx_state(
-  #{pending_begin := Pending, projection := Projection,
+  #{pending_begins := Pending, projection := Projection,
     applied_floor := Floor} = Dtx, Target)
   when map_size(Dtx) =:= 3,
        is_integer(Floor), Floor >= 0, Floor =< ?MAX_UINT64 ->
-    valid_pending_begin(Pending) andalso
+    valid_pending_begins(Pending) andalso
         valid_projection(Projection, Target);
 valid_dtx_state(_, _) -> false.
 
-valid_pending_begin(none) -> true;
-valid_pending_begin(Pending) ->
-    normalize_pending_begin(Pending) =:= {ok, Pending}.
+valid_pending_begins(Pending) when is_map(Pending) ->
+    maps:fold(
+      fun(GroupId, Row, true) ->
+              maps:get(group_id, Row, none) =:= GroupId andalso
+                  normalize_pending_begin(Row) =:= {ok, Row};
+         (_, _, false) -> false
+      end, true, Pending);
+valid_pending_begins(_) -> false.
 
 valid_group_row(
   #{history := History, ref := Ref, result := Result,
@@ -1402,8 +1445,8 @@ valid_applied(
   #{verdict := Verdict, finalize_ref := Ref,
     slot := Slot, generation := Generation,
     group_ref := {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
-    plan_digest := <<_:256>>} = Applied)
-  when map_size(Applied) =:= 6,
+    plan_digest := <<_:256>>, manifest_digest := <<_:256>>} = Applied)
+  when map_size(Applied) =:= 7,
        (Verdict =:= commit orelse Verdict =:= abort),
        is_binary(Ns), byte_size(Ns) > 0,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,

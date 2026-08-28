@@ -9,7 +9,8 @@ no registration): every function is synchronous and completes its required `fsyn
 before returning, and the handle is threaded by the caller — the writer is
 `m:quod_simplex`; `m:quod_catchup` opens a read-only view via `open_ro/2` to serve
 a joiner. The separate `m:quod_signing_journal` stores this validator's bounded
-in-flight vote decisions, DTX signing floors, and one pending Begin; it never
+in-flight vote decisions, DTX signing floors, and exact pending Begins by group;
+it never
 duplicates blocks or knowledge-base data.
 
 Layout, under `LedgerDir/<base64url(Ns)>/`:

@@ -561,9 +561,8 @@ admissible_without_queue(
           case Collecting of
               none ->
                   true;
-              {_Slot, Count, Bytes} ->
+              {_Slot, _Count, Bytes} ->
                   not Membership
-                      andalso Count < ?MAX_BATCH_TXS
                       andalso
                         Bytes + SignedBytes =< ?MAX_BLOCK_BYTES
           end.

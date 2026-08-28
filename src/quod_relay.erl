@@ -7,12 +7,13 @@ trusted-committee atom posture, but each strict decoder accepts only its
 dedicated transport channel's envelope.
 """.
 
+-include("quod_ingress_limits.hrl").
+
 -export([encode/2, decode_consensus_frame/2,
          decode_relay_frame/2,
          put_result/3, prune_results/1]).
 
 -define(MAX_RESULTS, 2048).
--define(MAX_CANONICAL_BYTES, (256 * 1024)).
 
 -spec encode(binary(), term()) -> binary().
 encode(Ns, Relay) ->
@@ -74,7 +75,8 @@ valid_wire({relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
        TargetSlot =< 16#FFFFFFFFFFFFFFFF,
        is_binary(Author), byte_size(Author) =:= 32,
        is_binary(Signature), byte_size(Signature) =:= 64,
-       is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+       is_binary(Canonical),
+       byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
     quod_trace:valid_carrier(TraceCarrier);
 valid_wire({relay_result, SubmissionId, AttemptId, CommitteeId,
             TargetSlot, Result})

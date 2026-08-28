@@ -3,10 +3,11 @@
 The single enumeration of what one consensus block and committed ledger slot
 may carry.
 
-Blocks and entries share the same tagged payload: `{batch, Transactions}` for
-ordinary content, or `{dtx, CanonicalControlBlob}` for one distributed-control
-barrier. The log is indexed by consensus slot, not by transaction, so one
-content slot may hold many transactions. Complaint-certified skips use the
+Blocks and entries have one tagged payload family: `{batch, Items}`.  A batch
+contains either ordinary transactions or canonical DTX-control envelopes, never
+both. A control batch contains one protocol phase in strict signed-journal order.
+The log is indexed by consensus slot, not by item, so one slot may carry many
+transactions or many independent controls. Complaint-certified skips use the
 distinct entry-only atom `noop`.
 
 `classify/1` is the one place the `entry_data()` variants are listed. Consumers that
@@ -28,7 +29,7 @@ untrusted payloads, so `invalid` is a tolerated classification, not a crash.
 
 -type control_kind() :: 'begin' | prepare | decision | finalize | complete.
 -type kind() :: {content, [#transaction{}]}
-              | {control_kind(), term()}
+              | {controls, [{control_kind(), term()}]}
               | noop
               | invalid.
 
@@ -36,8 +37,8 @@ untrusted payloads, so `invalid` is a tolerated classification, not a crash.
 Classify one committed slot's `data`:
 
 - `{content, Transactions}` — a well-formed transaction batch;
-- `{Kind, Control}` — one decoded, canonical DTX control, where `Kind` is
-  `'begin'`, `prepare`, `decision`, `finalize`, or `complete`;
+- `{controls, Controls}` — decoded canonical DTX controls from one phase in
+  strict signed-journal order;
 - `noop` — a complaint-certified skip, carrying nothing to fold;
 - `invalid` — not a recognized variant, a malformed batch, or an invalid DTX
   blob (untrusted input reaches here, so this is tolerated).
@@ -48,8 +49,8 @@ classify({batch, [#transaction{} | _] = Transactions}) ->
         true  -> {content, Transactions};
         false -> invalid
     end;
-classify({dtx, Blob}) when is_binary(Blob) ->
-    classify_control(Blob);
+classify({batch, [{dtx, Blob} | _] = Items}) when is_binary(Blob) ->
+    classify_controls(Items);
 classify(noop) ->
     noop;
 classify(_) ->
@@ -60,30 +61,29 @@ classify(_) ->
 payload(Data) ->
     case classify(Data) of
         {content, Transactions} -> {ok, Transactions};
-        {'begin', _Control}     -> error;
-        {prepare, _Control}     -> error;
-        {decision, _Control}    -> error;
-        {finalize, _Control}    -> error;
-        {complete, _Control}    -> error;
+        {controls, _Controls}   -> error;
         noop                    -> error;
         invalid                 -> error
     end.
 
-%% The total DTX decoder owns untrusted bytes. Only the five protocol kinds are
-%% admitted; an unknown kind cannot become a ledger variant accidentally.
-classify_control(Blob) ->
-    case quod_dtx:decode_control(Blob) of
-        {ok, Control} ->
-            case quod_dtx:control_kind(Control) of
-                'begin' -> {'begin', Control};
-                prepare -> {prepare, Control};
-                decision -> {decision, Control};
-                finalize -> {finalize, Control};
-                complete -> {complete, Control}
-            end;
-        {error, _Reason} ->
-            invalid
+%% The total DTX decoder owns untrusted bytes.  Decoding also proves each
+%% envelope canonical; the batch check below owns phase equality, uniqueness,
+%% and ordering once for every consumer.
+classify_controls(Items) ->
+    try
+        Controls = [decode_control_item(Item) || Item <- Items],
+        Wave = [Control || {_Kind, Control} <- Controls],
+        case quod_dtx:canonical_control_wave(Wave) of
+            true -> {controls, Controls};
+            false -> invalid
+        end
+    catch
+        _:_ -> invalid
     end.
+
+decode_control_item({dtx, Blob}) when is_binary(Blob) ->
+    {ok, Control} = quod_dtx:decode_control(Blob),
+    {quod_dtx:control_kind(Control), Control}.
 
 transaction_list([#transaction{} | Rest]) -> transaction_list(Rest);
 transaction_list([]) -> true;

@@ -7,12 +7,16 @@
 > `ontology-lifecycle-single-path-plan.md`. They are historical, not
 > compatibility requirements.
 
-**Status:** the base protocol was implemented in Quod 0.7.71 and the later
-single-path and DTX-effect refactors are implemented in the current working
-tree. These are not rolling format upgrades: activating them on a fleet with
-older persistence requires the coordinated clean re-found and private-journal
-cleanup specified in `ontology-lifecycle-single-path-plan.md` §2.6 and
-`dtx-durable-effects-plan.md`. No compatibility decoder is retained.
+**Status:** the base protocol was implemented in Quod 0.7.71 and the group
+effect path was deployed in 0.7.86. The combined 0.7.100 working-tree cut adds
+exact dormant source custody and cancellation for a signed one-target effect
+and hard-breaks the private journal to snapshot V6 / row V5. That delta is not
+yet deployed.
+These are not rolling format upgrades: activation on older persistence requires
+the coordinated clean re-found and private-journal cleanup specified in
+`ontology-lifecycle-single-path-plan.md` §2.6 and
+`dtx-durable-effects-plan.md`. No older decoder or compatibility route is
+retained.
 
 ## 1. Goal
 
@@ -334,14 +338,31 @@ The row contains:
 EffectId
 PublicDescriptor
 PrivatePrepared
-TransactionRef or exact GroupEffectRef
-SealedPlan and exact durable goal/result
+exact TransactionRef, GroupEffectRef, or OperationEffectRef
+sealed plan, exact transaction, or exact signed source submission
 transaction state = transaction_bound | transaction_ready |
                     transaction_submitted | released | applied |
                     retired | operator_error
 group state       = group_pending | released | applied |
                     retired | operator_error
+operation state   = operation_pending | transaction_ready |
+                    transaction_submitted | released | applied |
+                    retired | operator_error
 ```
+
+The current typed private references are:
+
+```erlang
+{transaction, Namespace, Anchor, TxId}
+{group_effect, 2, GroupRef, TargetIdentity, PlanDigest, ManifestDigest}
+{operation_effect, 1, ClaimRef, TargetRef, TargetIdentity,
+                      CancelDigest, PlanDigest}
+```
+
+The only accepted durable file shapes are
+`{quod_effect_journal, 6, Capacity, Rows}` and
+`{quod_effect_row, 5, ...}`. An older version fails loudly; it is not migrated
+or decoded through a fallback.
 
 The journal is local execution custody, not ontology D and not a second
 authority database. Its cached capacity is a projection of root D; it
@@ -359,14 +380,10 @@ prepares a new effect or re-proves the request automatically.
 ### 6.3 Signed-submission, remote-operation, and DTX custody
 
 The local effect journal owns preparation. On a local ordinary path, Simplex
-must durably own every signed byte it exposes. On a signed one-target foreign
-path, the source first registers the exact `remote_claim` as dormant custody,
-then the target journal binds its private effect to that predicted claim and
-application transaction; only after the binding acknowledges may the source
-activate the claim. A real multi-target write keeps the equivalent existing
-DTX register-before-bind hand-off. These are roles of the same signing and
-effect journals, not separate executors or effect counts. One Simplex custody
-row contains:
+must durably own every signed byte it exposes. A real multi-target write uses
+the existing DTX register-before-bind hand-off described below. These are roles
+of the same signing and effect journals, not separate executors or effect
+counts. One Simplex custody row contains:
 
 ```text
 continuous AuthorAdmission
@@ -404,13 +421,56 @@ first checks deterministic ledger history for the `TxId`; if it did not commit,
 the old-admission row retires visibly and is never re-signed under the new
 admission or re-authorized automatically.
 
+The signed one-target foreign path has one exact custody sequence:
+
+1. The source signs and datasyncs the `remote_claim` into Simplex custody with
+   placement `dormant`. Those exact bytes are not yet eligible for proposal or
+   relay.
+2. The same signed submission is sent through the still-sealed target scope.
+   The target journal is its sole semantic decoder. It verifies the submission
+   and consumes only the attested reservation matching the exact effect,
+   `PlanDigest`, `ManifestDigest`, coordinator, and target, then datasyncs an
+   `operation_pending` row. The row is bound to the predicted claim and target
+   transaction references; the target transaction does not exist yet.
+3. Only after that acknowledgement does the source checkpoint the stable
+   operation reference, release the proof snapshot, and activate the dormant
+   claim. Ordinary source consensus and the existing recovery owner then drive
+   the target application. When the exact target transaction is constructed,
+   `bind_operation_transaction/3` validates and attaches it to the same row;
+   the row then joins the ordinary `transaction_ready` hand-off.
+4. A bind/checkpoint failure, including a possibly lost bind reply, never
+   guesses whether the target persisted the row. One monitored cancellation
+   owner sends the exact signed source submission through the existing DTX
+   endpoint. The authenticated target accepts cancellation only when the
+   submission author is that peer, the target identity is local, and the full
+   operation reference/effect binding matches. Cancel-before-bind removes the
+   reservation; bind-before-cancel retires `operation_pending` as
+   `source_intent_cancelled`.
+5. Only a correlated target `cancelled` or `not_found` response lets the source
+   retire its dormant signed custody. Unavailability proves nothing: the owner
+   subscribes to the exact `{directory_route, TargetIdentity}` notification
+   before its first attempt, parks with custody retained, and retries the same
+   signed cancellation only on `{directory_route_available, TargetIdentity}`.
+   Cancellation uses
+   the shared monitored TLS-pinned DTX endpoint link and ordered sends; QUIC
+   `send_ready` wakes flow-controlled output. It never follows
+   `quod_foreign_log`, because cancellation needs reachability rather than
+   certified history. A source restart or proof-owner death recreates this same
+   sole cancellation owner from the retained dormant submission; no polling or
+   second cleanup authority exists.
+
 On the multi-ontology path, the same effect journal binds the prepared payload
-directly to `{GroupRef, TargetIdentity, PlanDigest}` while the origin Begin is
-still dormant. The row becomes `group_pending`; it has no independent
-transaction envelope and is never handed to a second signing path. Only after
-every effect participant has durable custody does the origin activate its
-existing DTX Begin. The complete group protocol and recovery rules are defined
-in `dtx-durable-effects-plan.md`.
+directly to
+`{group_effect, 2, GroupRef, TargetIdentity, PlanDigest, ManifestDigest}` while
+the origin Begin is still dormant. `ManifestDigest`, the manifest coordinator,
+and the target identity were already latched into the attested reservation;
+`bind_group_effects(GroupRef, PlanDigest)` supplies the remaining exact group
+reference without trusting a duplicate manifest field from the caller. The row
+becomes `group_pending`; it has no independent transaction envelope and never
+enters the ordinary Simplex hand-off. Only after every effect participant has
+durable custody does the origin activate its existing DTX Begin. The complete
+group protocol and recovery rules are defined in
+`dtx-durable-effects-plan.md`.
 
 ### 6.4 Commit and execution
 
@@ -440,7 +500,8 @@ Lifecycle handlers must be idempotent and state-verifying. A crash may repeat a
 local call, but must not create a second logical ontology or erase a different
 incarnation.
 
-Recovery follows the row's exact transaction or group-effect reference:
+Recovery follows the row's exact transaction, group-effect, or operation-effect
+reference:
 
 - **`transaction_ready`:** repeat only the idempotent Simplex custody hand-off
   using the exact sealed semantic bytes;
@@ -449,6 +510,10 @@ Recovery follows the row's exact transaction or group-effect reference:
   the proof owner never resubmits a newly built transaction;
 - **`group_pending`:** resolve only through the exact DTX group projection;
   no raw-history scan, re-proof, or second submission path is allowed;
+- **`operation_pending`:** the exact source claim is still dormant or the
+  target application has not yet attached its ordinary transaction; execute
+  nothing. Exact authenticated cancellation may retire it, while successful
+  application attachment converts it to the ordinary transaction path;
 - **not found while durable Simplex custody exists:** keep custody and retry;
 - **not found with neither valid custody nor the original continuous
   admission:** retire visibly; never re-prove;
@@ -763,6 +828,19 @@ The implementation review must account for at least these concrete seams:
     streaming blocks/status on that same socket.
 31. A future deletion fixture proves that the ledger entry commits before the
     destructive handler is allowed to run.
+32. A signed one-target effect claim remains dormant and unproposable until
+    the exact target `operation_pending` row has datasync'd.
+33. Operation binding consumes only a reservation matching the exact effect,
+    PlanDigest, ManifestDigest, coordinator, and target decoded from the signed
+    source submission.
+34. Wrong-peer, wrong-target, altered-submission, cancel-before-bind, and
+    bind-before-cancel races fail closed without activating or duplicating the
+    source claim.
+35. A lost bind reply and source restart retain the exact dormant submission
+    under one cancellation owner; only correlated target `cancelled` or
+    `not_found` retires it, and an unavailable target retries only on its exact
+    `{directory_route_available, TargetIdentity}` notification, never on
+    polling or a foreign-log follow.
 
 ## 12. Non-goals
 

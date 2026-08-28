@@ -12,23 +12,23 @@ exact_history_survives_interleaved_windows_test() ->
           {ControlB, RefB} = direct_abort(Target, key(20), key(21), 2, Signer),
 
           {ok, Projection, [_]} =
-              quod_dtx_phase_index:apply(
+              phase_apply(
                 Index, ControlA, RefA, Projection),
           {ok, Projection, [_]} =
-              quod_dtx_phase_index:apply(
+              phase_apply(
                 Index, ControlB, RefB, Projection),
 
           %% A later catch-up window may revisit an ancient GroupId.  The
           %% exact retry is idempotent, while a different record at the same
           %% phase is a deterministic conflict rather than a fresh history.
           {ok, Projection, []} =
-              quod_dtx_phase_index:apply(
+              phase_apply(
                 Index, ControlA, RefA, Projection),
           {ConflictingA, ConflictingRefA} =
               direct_abort(Target, key(10), key(12), 3, Signer),
           ?assertEqual(
              {error, {invalid_transition, semantic_conflict}},
-             quod_dtx_phase_index:apply(
+             phase_apply(
                Index, ConflictingA, ConflictingRefA, Projection))
       end).
 
@@ -43,14 +43,14 @@ failed_transition_never_replaces_exact_history_test() ->
           {Conflict, ConflictRef} =
               direct_abort(Target, key(31), key(33), 2, Signer),
           {ok, Projection, [_]} =
-              quod_dtx_phase_index:apply(
+              phase_apply(
                 Index, Original, OriginalRef, Projection),
           ?assertMatch(
              {error, {invalid_transition, _}},
-             quod_dtx_phase_index:apply(
+             phase_apply(
                Index, Conflict, ConflictRef, Projection)),
           {ok, Projection, []} =
-              quod_dtx_phase_index:apply(
+              phase_apply(
                 Index, Original, OriginalRef, Projection)
       end).
 
@@ -68,31 +68,31 @@ preview_isolated_until_one_explicit_commit_test() ->
 
           Delta0 = quod_dtx_phase_index:new_delta(),
           {ok, Delta1, Projection, [_]} =
-              quod_dtx_phase_index:preview(
+              phase_preview(
                 Index, Delta0, Original, OriginalRef, Projection),
 
           %% A later record in this same window sees the staged history.
           ?assertEqual(
              {error, {invalid_transition, semantic_conflict}},
-             quod_dtx_phase_index:preview(
+             phase_preview(
                Index, Delta1, Conflict, ConflictRef, Projection)),
 
           %% Discarding the delta models a failed ledger sink: DETS is still
           %% empty, so the alternative first record remains independently
           %% admissible.
           {ok, _Discarded, Projection, [_]} =
-              quod_dtx_phase_index:preview(
+              phase_preview(
                 Index, quod_dtx_phase_index:new_delta(),
                 Conflict, ConflictRef, Projection),
 
           ok = quod_dtx_phase_index:commit_delta(Index, Delta1),
           {ok, _RetryDelta, Projection, []} =
-              quod_dtx_phase_index:preview(
+              phase_preview(
                 Index, quod_dtx_phase_index:new_delta(),
                 Original, OriginalRef, Projection),
           ?assertEqual(
              {error, {invalid_transition, semantic_conflict}},
-             quod_dtx_phase_index:preview(
+             phase_preview(
                Index, quod_dtx_phase_index:new_delta(),
                Conflict, ConflictRef, Projection))
       end).
@@ -108,20 +108,42 @@ one_delta_commits_all_interleaved_groups_test() ->
           {ControlB, RefB} = direct_abort(
                                Target, key(41), key(42), 2, Signer),
           {ok, Delta1, Projection, [_]} =
-              quod_dtx_phase_index:preview(
+              phase_preview(
                 Index, quod_dtx_phase_index:new_delta(),
                 ControlA, RefA, Projection),
           {ok, Delta2, Projection, [_]} =
-              quod_dtx_phase_index:preview(
+              phase_preview(
                 Index, Delta1, ControlB, RefB, Projection),
           ok = quod_dtx_phase_index:commit_delta(Index, Delta2),
-          {ok, Projection, []} = quod_dtx_phase_index:apply(
+          {ok, Projection, []} = phase_apply(
                                      Index, ControlA, RefA, Projection),
-          {ok, Projection, []} = quod_dtx_phase_index:apply(
+          {ok, Projection, []} = phase_apply(
                                      Index, ControlB, RefB, Projection)
       end).
 
-window_delta_group_bound_is_enforced_without_mutation_test() ->
+same_phase_batch_commits_every_exact_history_test() ->
+    with_index(
+      fun(Index, _DataDir) ->
+          Signer = signer(),
+          Target = {<<"quod:phase-batch">>, key(46)},
+          Projection = quod_dtx:initial_projection(Target, 0),
+          {ControlA, RefA} = direct_abort(
+                               Target, key(500), key(501), 1, Signer),
+          {ControlB, RefB} = direct_abort(
+                               Target, key(502), key(503), 2, Signer),
+          {ok, Projection, Effects} = quod_dtx_phase_index:apply_batch(
+                                          Index,
+                                          [{ControlA, RefA},
+                                           {ControlB, RefB}],
+                                          Projection),
+          ?assertEqual(2, length(Effects)),
+          {ok, Projection, []} = phase_apply(
+                                      Index, ControlA, RefA, Projection),
+          {ok, Projection, []} = phase_apply(
+                                      Index, ControlB, RefB, Projection)
+      end).
+
+window_delta_has_no_arbitrary_group_count_cap_test() ->
     with_index(
       fun(Index, _DataDir) ->
           Signer = signer(),
@@ -134,24 +156,67 @@ window_delta_group_bound_is_enforced_without_mutation_test() ->
                                        Target, key(1000 + N), key(2000 + N),
                                        N, Signer),
                     {ok, Delta1, Projection, [_]} =
-                        quod_dtx_phase_index:preview(
+                        phase_preview(
                           Index, Delta0, Control, Ref, Projection),
                     Delta1
                 end,
                 quod_dtx_phase_index:new_delta(),
-                lists:seq(1, 256)),
-          {Overflow, OverflowRef} =
-              direct_abort(Target, key(1257), key(2257), 257, Signer),
-          ?assertEqual(
-             {error, phase_index_delta_full},
-             quod_dtx_phase_index:preview(
-               Index, Delta, Overflow, OverflowRef, Projection)),
+                lists:seq(1, 300)),
+          ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+          lists:foreach(
+            fun(N) ->
+                {Control, Ref} = direct_abort(
+                                   Target, key(1000 + N), key(2000 + N),
+                                   N, Signer),
+                {ok, Projection, []} = phase_apply(
+                                           Index, Control, Ref, Projection)
+            end, [1, 257, 300])
+      end).
 
-          %% Even a full rejected preview never became DETS authority.
-          {ok, _FreshDelta, Projection, [_]} =
-              quod_dtx_phase_index:preview(
-                Index, quod_dtx_phase_index:new_delta(),
-                Overflow, OverflowRef, Projection)
+phase_batch_failure_commits_no_partial_history_test() ->
+    with_index(
+      fun(Index, _DataDir) ->
+          Signer = signer(),
+          Target = {<<"quod:phase-batch-atomic">>, key(48)},
+          Projection = quod_dtx:initial_projection(Target, 0),
+          {ControlA, RefA} =
+              direct_abort(Target, key(200), key(201), 1, Signer),
+          {OriginalB, OriginalRefB} =
+              direct_abort(Target, key(300), key(301), 2, Signer),
+          {ConflictB, ConflictRefB} =
+              direct_abort(Target, key(300), key(302), 3, Signer),
+          {ok, Projection, [_]} = phase_apply(
+                                       Index, OriginalB, OriginalRefB,
+                                       Projection),
+
+          %% A reduces first, then B conflicts with its exact stored history.
+          %% The batch error must leave A absent rather than committing a
+          %% successful prefix.
+          ?assertEqual(
+             {error, {invalid_transition, semantic_conflict}},
+             quod_dtx_phase_index:apply_batch(
+               Index, [{ControlA, RefA}, {ConflictB, ConflictRefB}],
+               Projection)),
+          {ok, Projection, [_]} = phase_apply(
+                                       Index, ControlA, RefA, Projection),
+          {ok, Projection, []} = phase_apply(
+                                      Index, OriginalB, OriginalRefB,
+                                      Projection)
+      end).
+
+singleton_batch_reapply_is_idempotent_test() ->
+    with_index(
+      fun(Index, _DataDir) ->
+          Signer = signer(),
+          Target = {<<"quod:phase-singleton">>, key(49)},
+          Projection = quod_dtx:initial_projection(Target, 0),
+          {Control, Ref} = direct_abort(
+                             Target, key(400), key(401), 1, Signer),
+          {ok, Projection, [_]} = phase_apply(
+                                       Index, Control, Ref, Projection),
+          {ok, Projection, [#{effects := []}]} =
+              quod_dtx_phase_index:apply_batch(
+                Index, [{Control, Ref}], Projection)
       end).
 
 noncanonical_or_trailing_history_fails_closed_test() ->
@@ -168,7 +233,7 @@ noncanonical_or_trailing_history_fails_closed_test() ->
                  Index, GroupId, <<Canonical/binary, 0>>),
           ?assertEqual(
              {error, phase_index_corrupt},
-             quod_dtx_phase_index:apply(
+             phase_apply(
                Index, Control, Ref, Projection))
       end).
 
@@ -191,7 +256,7 @@ canonical_history_under_the_wrong_group_key_fails_closed_test() ->
                  term_to_binary(WrongHistory, [deterministic])),
           ?assertEqual(
              {error, {invalid_transition, bad_binding}},
-             quod_dtx_phase_index:apply(
+             phase_apply(
                Index, Control, Ref, Projection))
       end).
 
@@ -221,13 +286,13 @@ suspended_session_reopens_with_exact_history_test() ->
           Projection = quod_dtx:initial_projection(Target, 0),
           {Control, Ref} = direct_abort(
                              Target, key(81), key(82), 1, Signer),
-          {ok, Projection, [_]} = quod_dtx_phase_index:apply(
+          {ok, Projection, [_]} = phase_apply(
                                       Index0, Control, Ref, Projection),
           Path = quod_dtx_phase_index:test_path(Index0),
           {ok, Suspended0} = quod_dtx_phase_index:suspend(Index0),
           ?assert(filelib:is_file(Path)),
           {ok, Index1} = quod_dtx_phase_index:resume(Suspended0),
-          {ok, Projection, []} = quod_dtx_phase_index:apply(
+          {ok, Projection, []} = phase_apply(
                                      Index1, Control, Ref, Projection),
           {ok, Suspended1} = quod_dtx_phase_index:suspend(Index1),
           ok = quod_dtx_phase_index:close(Suspended1),
@@ -290,9 +355,25 @@ malformed_control_is_rejected_before_index_access_test() ->
           Projection = quod_dtx:initial_projection(Target, 0),
           ?assertEqual(
              {error, bad_phase_index_control},
-             quod_dtx_phase_index:apply(
+             phase_apply(
                Index, malformed, malformed, Projection))
       end).
+
+phase_preview(Index, Delta, Control, Ref, Projection) ->
+    case quod_dtx_phase_index:preview_batch(
+           Index, Delta, [{Control, Ref}], Projection) of
+        {ok, Delta1, Projection1, [#{effects := Effects}]} ->
+            {ok, Delta1, Projection1, Effects};
+        Other -> Other
+    end.
+
+phase_apply(Index, Control, Ref, Projection) ->
+    case quod_dtx_phase_index:apply_batch(
+           Index, [{Control, Ref}], Projection) of
+        {ok, Projection1, [#{effects := Effects}]} ->
+            {ok, Projection1, Effects};
+        Other -> Other
+    end.
 
 with_index(Fun) ->
     with_tmp(

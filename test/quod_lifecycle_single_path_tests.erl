@@ -533,7 +533,7 @@ foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
         ok = wait_effect_target_state(TargetNs, applied, 300),
         ?assertMatch(
            [#{state := applied,
-              ref := {group_effect, 1, GroupRef, _, _}}],
+              ref := {group_effect, 2, GroupRef, _, _, _}}],
            [Row || #{target := {RowNs, _}} = Row <-
                        quod_effect_journal:rows(),
                    RowNs =:= TargetNs])

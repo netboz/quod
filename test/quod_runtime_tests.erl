@@ -807,23 +807,24 @@ subscription_create_remove_uses_ordinary_transactions_test_() ->
     after cleanup_founded(F) end
     end}.
 
-%% A large catalogue must cost one shared retry lane, not one timer and one
-%% attach per durable fact. With no
-%% foreign-log owner every follow attempt fails, so every view stays in the
-%% waiting set and the sweep bound is the only thing keeping attempts finite.
-subscription_catalogue_retries_through_one_bounded_sweep_test_() ->
+%% Missing local ownership parks every durable subscription without a timer.
+%% The one gproc name-follow edge from the replacement owner then attaches the
+%% complete catalogue through mailbox turns. Forty is deliberately above the
+%% deleted sweep's batch of sixteen: this test would leave most rows waiting on
+%% the old bounded pass, while the message-driven path attaches all of them.
+subscription_catalogue_attaches_on_foreign_owner_registration_test_() ->
     {timeout, 60, fun() ->
-    Previous = application:get_env(quod, subscription_follow_retry_ms),
-    application:set_env(quod, subscription_follow_retry_ms, 200),
     F = setup_founded(<<>>),
     {_, Ns, _} = F,
+    ForeignDir = temp_runtime_dir("foreign-owner-registration"),
     Targets = 40,
     try
+        ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
         ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0}) -> true;
                                (_) -> false end),
         lists:foreach(
           fun(N) ->
-              Fact = {subscribes, <<"private:sweep-", (integer_to_binary(N))/binary>>,
+              Fact = {subscribes, <<"private:attach-", (integer_to_binary(N))/binary>>,
                       <<N:256>>},
               ?assertMatch({ok, _, _}, rp(Ns, {assertz, Fact}))
           end, lists:seq(1, Targets)),
@@ -833,35 +834,48 @@ subscription_catalogue_retries_through_one_bounded_sweep_test_() ->
                      source_views_active := Views})
                      when Active =:= Targets, Views =:= Targets -> true;
                   (_) -> false end),
-        %% Every view is tracked and waiting, and one armed sweep serves them
-        %% all. Its next turn attaches at most a batch rather than all forty,
-        %% which is what keeps a large catalogue off a per-target timer.
-        #{source_sweep_armed := Armed, source_attempts := Before} =
-            quod_runtime:stats(Ns),
-        ?assert(Armed),
-        ok = wait_stats(
-               Ns,
-               fun(#{source_attempts := Now}) -> Now > Before;
-                  (_) -> false end),
-        #{source_attempts := After} = quod_runtime:stats(Ns),
-        ?assert(After - Before =< 16),
-        %% Removing the catalogue drops every view and disarms the lane.
-        lists:foreach(
-          fun(N) ->
-              Fact = {subscribes, <<"private:sweep-", (integer_to_binary(N))/binary>>,
-                      <<N:256>>},
-              ?assertMatch({ok, _, _}, rp(Ns, {retract, Fact}))
-          end, lists:seq(1, Targets)),
-        ok = wait_stats(Ns, fun(#{mode := live, source_views_active := 0}) -> true;
-                               (_) -> false end)
+        #{source_attempts := Before} = quod_runtime:stats(Ns),
+        {ok, ForeignOwner} = quod_foreign_log:start_link(
+                               #{cache_dir => ForeignDir,
+                                 page_timeout_ms => 1000}),
+        try
+            ok = wait_until(
+                   fun() ->
+                           case quod_foreign_log:stats() of
+                               #{followed_histories := Targets,
+                                 follow_consumers := Targets} -> true;
+                               _ -> false
+                           end
+                   end),
+            ok = wait_stats(
+                   Ns,
+                   fun(#{source_attempts := After,
+                         source_attach_queued := 0})
+                         when After >= Before + Targets -> true;
+                      (_) -> false
+                   end),
+            %% Removing the catalogue drops every exact consumer and the
+            %% name-follow monitor; no delayed timer may recreate either.
+            lists:foreach(
+              fun(N) ->
+                  Fact = {subscribes,
+                          <<"private:attach-", (integer_to_binary(N))/binary>>,
+                          <<N:256>>},
+                  ?assertMatch({ok, _, _}, rp(Ns, {retract, Fact}))
+              end, lists:seq(1, Targets)),
+            ok = wait_stats(
+                   Ns,
+                   fun(#{mode := live, source_views_active := 0,
+                         source_attach_queued := 0}) -> true;
+                      (_) -> false
+                   end),
+            ?assertMatch(#{follow_consumers := 0}, quod_foreign_log:stats())
+        after
+            stop_foreign_owner(ForeignOwner, true)
+        end
     after
         cleanup_founded(F),
-        case Previous of
-            {ok, Value} ->
-                application:set_env(quod, subscription_follow_retry_ms, Value);
-            undefined ->
-                application:unset_env(quod, subscription_follow_retry_ms)
-        end
+        _ = file:del_dir_r(ForeignDir)
     end
     end}.
 
@@ -1013,10 +1027,7 @@ subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
         stop_foreign_owner(ForeignOwner, true),
         {ok, RebuiltOwner} = quod_foreign_log:start_link(
                                #{cache_dir => ForeignDir,
-                                 page_timeout_ms => 1000,
-                                 follow_poll_ms => 50,
-                                 follow_retry_ms => 10,
-                                 follow_max_retry_ms => 50}),
+                                 page_timeout_ms => 1000}),
         try
             ok = wait_stats(
                    SubscriberNs,
@@ -1090,6 +1101,12 @@ subscription_retraction_precedes_later_queued_remote_reaction_test() ->
 %% without creating a fact or adding DTX-specific dispatch.
 subscribed_reaction_observes_event_only_dtx_finalize_once_test_() ->
     {timeout, 90, fun() ->
+    %% Applied votes are bound to the root anchor. These standalone namespace
+    %% fixtures deliberately do not start quod:root, so install that one piece
+    %% of network configuration while exercising the real DTX path.
+    quod_ct:with_network_identity(
+      crypto:strong_rand_bytes(32),
+      fun() ->
     PreviousPub = application:get_env(quod, node_pubkey),
     PreviousKey = application:get_env(quod, identity_key),
     {NodePub, NodeSeed} = quod_identity:generate(),
@@ -1154,6 +1171,7 @@ subscribed_reaction_observes_event_only_dtx_finalize_once_test_() ->
         restore_env(node_pubkey, PreviousPub),
         restore_env(identity_key, PreviousKey)
     end
+    end)
     end}.
 
 %% The catalogue is P, not another status store: killing only the runtime loses
@@ -1648,11 +1666,8 @@ ensure_foreign_owner(Dir) ->
     case quod_reg:where({foreign_log, node}) of
         Pid when is_pid(Pid) -> {Pid, false};
         undefined ->
-            {ok, Pid} = quod_foreign_log:start_link(
-                          #{cache_dir => Dir, page_timeout_ms => 1000,
-                            follow_poll_ms => 50,
-                            follow_retry_ms => 10,
-                            follow_max_retry_ms => 50}),
+        {ok, Pid} = quod_foreign_log:start_link(
+                          #{cache_dir => Dir, page_timeout_ms => 1000}),
             {Pid, true}
     end.
 

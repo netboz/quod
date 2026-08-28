@@ -1,8 +1,8 @@
 # Transaction-author signatures
 
 **Status:** the original signature/relay milestone, the incompatible V8
-signed-request extension, and the current event-capable V9 generation are
-implemented. V9 has no
+signed-request extension, and the current V11 generation are implemented.
+V11 retains the event support introduced in V9 and has no
 compatibility decoder; a fleet carrying an older transaction generation must
 activate it through a clean persistence reset and re-found.
 
@@ -51,10 +51,11 @@ non-canonical nested plan is rejected before transaction construction.
 
 ```erlang
 term_to_binary(
-  {quod_transaction, 9,
+  {quod_transaction, 11,
    TargetNs, GenesisAnchor, AuthorAdmission,
    TxId, Origin, ProofId, PlanDigest, Goal, Result,
-   MaterialWire, EffectsWire, RequestAuth, AuthorizationTranscript,
+   MaterialWire, EffectsWire, Role, Evidence,
+   RequestAuth, AuthorizationTranscript,
    Author, AuthorSeq, SubmittedAt},
   [deterministic]).
 ```
@@ -66,14 +67,15 @@ before permitting a bounded vocabulary allocation for the authenticated
 committee author.
 
 `EffectsWire` is the separate bounded canonical encoding of the closed typed
-direct-effect list. `RequestAuth` is either `none` or the exact canonical
+direct-effect list. `Role` and `Evidence` bind the transaction's protocol role
+and its exact role-specific proof. `RequestAuth` is either `none` or the exact canonical
 signed-agent request evidence; `AuthorizationTranscript` is either `none` or
 the one canonical top-level `can_invoke/4` decision recorded during the proof.
 Both are signed and included in the semantic transaction id. Validators verify
 the request and re-prove the recorded ACL decision against the proposal parent;
 private prepared payloads and executable callbacks are never stored there.
 
-The tuple prefix `{quod_transaction, 9}` is the fixed cryptographic
+The tuple prefix `{quod_transaction, 11}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
 tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current
@@ -86,11 +88,11 @@ read check its canonical term order before the wire encoding.
 `Goal` and `Result` are covered because they are part of the committed audit
 record shown by the Explorer. `sig` is the sole excluded field.
 
-V9 differs from V8 only by admitting ordered `{event, Term}` occurrences in
-the already-signed `MaterialWire` diff alphabet. The semantic transaction-id
-domain is V5 and the signed DTX-plan domain is V6 for the same reason. Older
-V8/V4/V5 material is rejected; it is not translated or accepted beside the
-current generation.
+V9 introduced ordered `{event, Term}` occurrences in the already-signed
+`MaterialWire` diff alphabet. The current V11 envelope additionally binds
+`Role` and `Evidence`; its semantic transaction-id domain is V7 and the signed
+DTX-plan domain is V8. Older generations are rejected; they are not translated
+or accepted beside the current generation.
 
 ## Signing and validation
 
@@ -229,12 +231,11 @@ change. Queued later sequences remain behind it. Membership-changing
 submissions keep their terminal skip/re-proof rule. This preserves signed
 sequence order without exposing slot closure as an ordinary caller retry.
 
-Once a destination holds the request, it sends `relay_accepted`. Before that
-acknowledgement the author retransmits the exact request every 300 ms to recover
-a lost or reset ingress stream. After acknowledgement it probes only every 5
-seconds to recover a lost result hint, avoiding request amplification during a
-slow commit. Attempt IDs remain in the receiver's inflight set, so both kinds of
-retransmit are idempotent. Destinations cache completed results for 30 seconds.
+Once a destination holds the request, it sends `relay_accepted`. There is no
+periodic relay retransmit or result probe. The author retains the exact attempt;
+if its authenticated stream is replaced, the link-up edge replays the retained
+ordered prefix once. Attempt IDs keep that reconnect replay idempotent.
+Destinations cache completed results for 30 seconds.
 After restart, a destination with the durable target slot—including a former
 proposer now serving as an observer—can reconstruct inclusion or proven
 exclusion for a current committee source. A removed source with no exact live

@@ -3,8 +3,8 @@
 **Status:** implemented and source-gated. The mixed hardware workload in §11
 remains a repeatable release acceptance test, not unfinished route semantics.
 
-This plan closes the remaining hardware acceptance gap for ontology-subscription
-Slice 2 before subscription Slice 3 begins. It does not change subscription
+This plan closed the remaining private-route acceptance gap discovered during
+ontology-subscription Slice 2. It does not change subscription
 semantics, Prolog authorization, proof scopes, ledger records, or the DTX state
 machine.
 
@@ -234,16 +234,14 @@ total state transition:
 - stale results are correlated by slot, block hash, parent token, worker PID,
   and monitor generation and cannot affect a replacement candidate.
 
-After `abstain`, one generic local re-eligibility step on the **existing
-consensus tick** retries without depending on another peer. When the retained
-head candidate is still current and its validation fields are idle, the tick
-re-enters the existing `support_or_validate/3` path. It does not inspect
-why the previous attempt abstained and is not triggered specially by a route.
-
-A later route/contact therefore becomes visible on the next ordinary tick, and
-the same immutable candidate can commit without being re-signed, semantically
-resubmitted, or re-proved. The validation guard still permits at most one
-worker for the candidate.
+While an exact verification lacks a usable route, the existing foreign-log
+owner parks that request and subscribes to the directory identity. The
+`directory_route_available` message releases the parked request immediately;
+the caller deadline is only the final unavailability safeguard. If verification
+has already returned `abstain`, ordinary consensus recovery may later present
+the same immutable candidate again. There is no validation polling tick,
+re-signing, semantic resubmission, or re-proof. The validation guard still
+permits at most one worker for the candidate.
 
 ## 5. End-to-end flow
 
@@ -265,7 +263,9 @@ For an origin A writing atomically to private participants B and C:
    contacts only solve reachability.
 7. Normal target consensus certifies Prepare. Decision, Finalize, applied proof,
    and Complete continue through the existing DTX state machine.
-8. The caller is released only by the existing ordered Complete/outcome path.
+8. The live caller is released after every required participant application is
+   certified; Complete continues asynchronously and publishes the durable
+   outcome through the existing ordered path.
 
 No open proof scope, original browser, original proof worker, or manually
 configured reverse seed is required after step 4.
@@ -292,8 +292,8 @@ configured reverse seed is required after step 4.
 | Authenticated node contact | P | Existing volatile trusted-fleet reachability hint |
 | Bootstrap candidate association | P | Untrusted, rebuildable source-selection hint under the existing foreign-log cap |
 | Certified ontology routes/materialized foreign facts | P derived from D | Rebuilt only through the existing verifier |
-| Validation retry timer/latch | P | Bounded process lifecycle state |
-| Reactions/events | none in this closure | Subscription Slice 3 has not started |
+| Parked validation work and wake correlation | P | Bounded process lifecycle state; authenticated route events wake it |
+| Reactions/events | unchanged by this closure | Implemented subscription reactions keep their existing semantics |
 
 ## 8. Failure and security matrix
 
@@ -310,6 +310,7 @@ configured reverse seed is required after step 4.
 | Source appears later | Redrive the same immutable candidate |
 | Origin coordinator crashes after Begin | Another current origin validator recovers and advertises its own authenticated contact |
 | Target validator restarts | Volatile hints vanish; coordinator redrive or certified directory state reconstructs them |
+| Confirmed private target returns at the same endpoint | Its fresh signed root/system advertisement re-announces every exact private identity pinned to that node; the existing route waiter redials and still verifies the private anchor/history |
 | Foreign-log/cache restarts | Rebuild through the same certified history path |
 | Byzantine first endpoint | Ignore malformed/uncorrelated reply and continue bounded candidates |
 | All sources unavailable post-Begin | Keep recovering; caller retains `outcome_unknown`/GroupRef and must not retry the goal |
@@ -317,10 +318,10 @@ configured reverse seed is required after step 4.
 ## 9. Performance and bounds
 
 - No process per learned contact and no new unbounded route list.
-- Deduplicate bootstrap candidates by node key and exact ontology identity
-  under the existing foreign-log hint cap. One node key may occupy at most the
-  existing directory namespace bound, so it cannot fill the global history
-  budget by claiming arbitrary identities.
+- Deduplicate bootstrap candidates by node key inside each exact ontology
+  identity. The per-identity hint list is derived from the maximum supported
+  committee/contact shape; it is not a global ontology-history limit. A hint
+  creates only a lazy history row and can never evict a verified history.
 - Reuse the DTX participant cap, validator cap, correlation cap, and request
   deadlines. Foreign histories themselves have no numeric cap. The pre-existing uncapped QUIC
   address cache is neither expanded nor treated as the new association owner.
@@ -330,8 +331,8 @@ configured reverse seed is required after step 4.
   `quod_foreign_log`; do not make each DTX voter build a second local cache.
 - Submit fan-out is bounded by the current target committee and performed
   asynchronously under one deadline.
-- No sleeping worker or `wait_until`; retry and route-arrival wake-up use
-  messages/timers.
+- No sleeping worker or `wait_until`; route and certified-progress messages
+  wake parked work, while timers only end silent operations.
 
 Metrics reuse current transport, directory, foreign-log, and DTX gauges and add
 only the missing distinctions needed to diagnose this contract:
@@ -380,8 +381,9 @@ rates. No ontology identity or peer-selected value becomes a metric label.
 - Deliver the same semantic submission to the bounded current target validator
   set so every voter can receive a usable source hint.
 - Validation cleanup/redrive is one total transition.
-- The existing consensus tick re-enters the normal validation path for one
-  still-current retained candidate whose validation state is idle.
+- The existing foreign-log route waiter resumes on the exact directory-route
+  notification; consensus recovery may later redeliver an immutable candidate
+  only after a completed unavailable attempt.
 - Remove obsolete/manual reverse-route workarounds and duplicate retry clauses.
 
 ### D — scope and subscription reuse (implemented)
@@ -467,7 +469,7 @@ The implementation review must answer these with code evidence:
    state machine?
 4. Does any change duplicate `quod_directory`, `quod_catchup`, proof
    scopes, or the subscription follower?
-5. Is the one-tick re-entry bounded to one current idle candidate and prevented
-   from spawning duplicate validation workers?
+5. Does one exact route notification release only the parked work for that
+   identity, without spawning duplicate validation workers?
 6. Is every change internal P plumbing with no ledger, DTX, consensus,
    link-header, or endpoint-codec format change?

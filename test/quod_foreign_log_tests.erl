@@ -80,16 +80,25 @@ invalid_public_timeout_is_rejected_without_owner_test() ->
        quod_foreign_log:verify_reference(
          ref({<<"timeout">>, key(9)}, 1, 10), finalize, invalid)).
 
-resident_projection_requires_verified_clean_frontier_test() ->
+resident_projection_reuses_verified_frontier_and_phase_index_test() ->
     Identity = {<<"resident">>, key(8)},
     Projection = quod_simplex:history_projection(Identity),
     Resident = {verified, 7, Projection, phase_session},
     ?assertEqual(
-       {ok, Projection},
+       {ok, Projection, undefined},
        quod_foreign_log:test_resident_projection(
          Resident, 7, Projection, none, Identity)),
-    %% A restart-loaded row, changed durable height, historical lookup, or
-    %% unfinished DTX group must rebuild the phase session by replay.
+    ?assertEqual(
+       {ok, Projection, Projection},
+       quod_foreign_log:test_resident_projection(
+         Resident, 7, Projection, 7, Identity)),
+    ?assertEqual(
+       {ok, Projection, undefined},
+       quod_foreign_log:test_resident_projection(
+         Resident, 7, Projection, 8, Identity)),
+    %% A restart-loaded row, changed durable height, or historical lookup must
+    %% replay.  An unfinished DTX group does not: its exact phase index is part
+    %% of the suspended resident state and advances with the projection.
     ?assertEqual(
        replay,
        quod_foreign_log:test_resident_projection(
@@ -104,10 +113,280 @@ resident_projection_requires_verified_clean_frontier_test() ->
          Resident, 7, Projection, 3, Identity)),
     Pending = Projection#{dtx_pending => {pending, key(99)}},
     ?assertEqual(
-       replay,
+       {ok, Pending, undefined},
        quod_foreign_log:test_resident_projection(
          {verified, 7, Pending, phase_session},
          7, Pending, none, Identity)).
+
+dtx_batch_projection_keeps_each_controls_changes_separate_test() ->
+    FirstOps = [{assert, {{first_control, one}, true}}],
+    SecondOps = [{retract, {{second_control, two}, false}}],
+    FirstHeads = [{first_control, one}],
+    SecondHeads = [{second_control, two}],
+    Result =
+        #{kind => dtx_batch,
+          items =>
+              [#{group_id => key(801), applied_ops => FirstOps,
+                 changed_heads => FirstHeads},
+               #{group_id => key(802), applied_ops => SecondOps,
+                 changed_heads => SecondHeads}]},
+    ?assertEqual(
+       FirstHeads ++ SecondHeads,
+       quod_foreign_projection:test_result_heads(Result)),
+    %% A materialized follower emits two ordered occurrences at the shared
+    %% block height.  Aggregating the slot's operations would lose which
+    %% control produced which publication and permit cross-control leakage.
+    ?assertEqual(
+       [{9, FirstOps}, {9, SecondOps}],
+       quod_foreign_projection:test_result_publications(9, Result)).
+
+warm_exact_and_current_reuse_one_verified_phase_session_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31980},
+    Ref = maps:get(ref, Fixture),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Mode = atomics:new(2, []),
+    ok = atomics:put(Mode, 1, 1),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            case atomics:get(Mode, 1) of
+                1 ->
+                    BaseFetch(P, E, RequestedNs, From, To);
+                2 ->
+                    error({warm_exact_used_network, From});
+                3 when From =:= 3 ->
+                    _ = atomics:add_get(Mode, 2, 1),
+                    BaseFetch(P, E, RequestedNs, From, To);
+                3 ->
+                    error({warm_current_restarted_fetch, From})
+            end
+        end,
+    Dir = temp_dir("resident-warm-exact-current"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        [SessionFile] = phase_session_files(Dir, Identity),
+
+        %% The exact entry and its post-slot projection are already resident.
+        %% A network read or a new phase-index file would prove that the warm
+        %% path discarded and rebuilt work it had just verified.
+        ok = atomics:put(Mode, 1, 2),
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
+
+        %% Current-view confirmation still asks the remote committee whether
+        %% there is a newer slot, but it must resume the same verified phase
+        %% session for both its exact-reference and current-prefix passes.
+        ok = atomics:put(Mode, 1, 3),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 2}},
+           quod_foreign_log:verify_current(
+             route_candidates([{Peer, Endpoint}]), Ref, 5000)),
+        ?assert(atomics:get(Mode, 2) > 0),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+pending_prepare_to_finalize_resumes_phase_history_and_fetches_only_delta_test() ->
+    Fixture = prepared_then_committed_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31981},
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Mode = atomics:new(2, []),
+    ok = atomics:put(Mode, 1, 1),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            case atomics:get(Mode, 1) of
+                1 ->
+                    BaseFetch(P, E, RequestedNs, From, To);
+                2 when From =:= 3 ->
+                    _ = atomics:add_get(Mode, 2, 1),
+                    BaseFetch(P, E, RequestedNs, From, To);
+                2 ->
+                    error({finalize_restarted_fetch, From})
+            end
+        end,
+    Dir = temp_dir("resident-pending-finalize"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := prepare}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(prepare_ref, Fixture),
+             prepare, 5000)),
+        {2, PrepareProjection} = cache_checkpoint(Dir, Identity),
+        %% A participant-side Prepare does not advertise a pending group in
+        %% the public projection.  Its exact group history lives only in the
+        %% phase index, so accepting the Finalize from slot 3 alone below is
+        %% the non-vacuous proof that the suspended index was resumed.
+        ?assertEqual(#{}, maps:get(dtx_pending, PrepareProjection)),
+        [SessionFile] = phase_session_files(Dir, Identity),
+
+        %% Finalize depends on the exact Prepare history kept in the suspended
+        %% phase index.  The second request may fetch only slot 3; fetching
+        %% from an earlier slot or replacing the session is a hidden replay.
+        ok = atomics:put(Mode, 1, 2),
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(finalize_ref, Fixture),
+             finalize, 5000)),
+        ?assertEqual(1, atomics:get(Mode, 2)),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
+        ?assertMatch({3, _}, cache_checkpoint(Dir, Identity))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31982},
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Crash = atomics:new(1, []),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            case atomics:get(Crash, 1) of
+                0 -> BaseFetch(P, E, RequestedNs, From, To);
+                1 -> error({resident_fetch_crash, From})
+            end
+        end,
+    Dir = temp_dir("resident-worker-down"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        ?assertMatch(
+           #{histories := 1, resident_verified := 1},
+           quod_foreign_log:stats()),
+
+        %% Launch transfers the only suspended phase session to the worker.
+        %% If that worker dies before returning it, the owner has a durable
+        %% cache but no reusable in-memory verification state and must unload
+        %% the row.  Keeping `resident_verified=true` here would strand a
+        %% history that resident_cache/2 can never actually resume.
+        ok = atomics:put(Crash, 1, 1),
+        ?assertEqual(
+           {error, retry},
+           quod_foreign_log:current(
+             route_candidates([{Peer, Endpoint}]), Identity, 5000)),
+        ?assertMatch(
+           #{pending := 0, histories := 0, resident_verified := 0},
+           quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+accepted_entry_hint_advances_through_the_one_verified_cache_path_test() ->
+    Fixture = prepared_then_committed_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31983},
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    NetworkAllowed = atomics:new(1, []),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            case atomics:get(NetworkAllowed, 1) of
+                1 -> BaseFetch(P, E, RequestedNs, From, To);
+                0 -> error({accepted_hint_refetched, From})
+            end
+        end,
+    Dir = temp_dir("accepted-entry-hint"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ok = atomics:put(NetworkAllowed, 1, 1),
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := prepare}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(prepare_ref, Fixture),
+             prepare, 5000)),
+        [SessionFile] = phase_session_files(Dir, Identity),
+        FinalizeEntry = lists:last(maps:get(chain, Fixture)),
+
+        %% The response-carried entry is only acceleration material.  It is
+        %% accepted here solely because the ordinary history fold validates
+        %% it against the cached prefix and the ordinary exact checker binds
+        %% it to this Ref and phase before the page is persisted.
+        ok = atomics:put(NetworkAllowed, 1, 0),
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify_reference(
+             maps:get(finalize_ref, Fixture), finalize,
+             {Peer, Endpoint}, FinalizeEntry, 5000)),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
+        ?assertMatch({3, _}, cache_checkpoint(Dir, Identity))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+bad_accepted_entry_hint_is_inert_and_falls_back_to_certified_fetch_test() ->
+    Fixture = prepared_then_committed_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31984},
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Mode = atomics:new(2, []),
+    ok = atomics:put(Mode, 1, 1),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            case atomics:get(Mode, 1) of
+                1 ->
+                    BaseFetch(P, E, RequestedNs, From, To);
+                2 when From =:= 3 ->
+                    _ = atomics:add_get(Mode, 2, 1),
+                    BaseFetch(P, E, RequestedNs, From, To);
+                2 ->
+                    error({bad_hint_restarted_fetch, From})
+            end
+        end,
+    Dir = temp_dir("bad-accepted-entry-hint"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := prepare}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(prepare_ref, Fixture),
+             prepare, 5000)),
+        [SessionFile] = phase_session_files(Dir, Identity),
+        FinalizeEntry = lists:last(maps:get(chain, Fixture)),
+        BadHint = FinalizeEntry#entry{cert = none},
+
+        %% Previewing a bad hint mutates neither the durable cache nor the
+        %% phase index.  The same worker therefore continues from slot 2 and
+        %% obtains the authoritative slot 3 through its normal source.
+        ok = atomics:put(Mode, 1, 2),
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify_reference(
+             maps:get(finalize_ref, Fixture), finalize,
+             {Peer, Endpoint}, BadHint, 5000)),
+        ?assertEqual(1, atomics:get(Mode, 2)),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
+        ?assertMatch({3, _}, cache_checkpoint(Dir, Identity))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
 
 authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
     Dir = temp_dir("bootstrap-bounds"),
@@ -559,13 +838,10 @@ slow_follow_consumer_coalesces_live_occurrences_to_state_only_test() ->
          {advanced, 9, 10, Projection2, Freshness, [],
           [{10, [{retract, {{remote_ping, one}, {[], false}}}]}]})).
 
-follow_consumers_share_one_history_and_cleanup_exactly_test() ->
+follow_progress_is_message_driven_and_cleanup_is_exact_test() ->
     Dir = temp_dir("follow-lifecycle"),
     NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
-    Pid = start_owner_opts(
-            Dir, NoFetch,
-            #{follow_poll_ms => 50, follow_retry_ms => 10,
-              follow_max_retry_ms => 50}),
+    Pid = start_owner_opts(Dir, NoFetch, #{}),
     Identity = {unique_ns(), key(101)},
     try
         {ok, Follow1} = quod_foreign_log:follow(Identity),
@@ -577,8 +853,36 @@ follow_consumers_share_one_history_and_cleanup_exactly_test() ->
         ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
         FollowStats = quod_foreign_log:stats(),
         ?assertMatch(#{follow_unreachable := 1}, FollowStats),
-        ?assert(maps:get(follow_polls, FollowStats) > 0),
-        ?assert(maps:get(follow_retries, FollowStats) > 0),
+        ?assertEqual(1, maps:get(follow_wakes, FollowStats)),
+
+        %% An exact directory event wakes the parked verifier immediately.
+        %% There is no retry timer between these two attempts.
+        Pid ! {directory_route_available, Identity},
+        Unreachable2 = receive_follow(Follow1, Identity),
+        ?assertMatch({unreachable, unavailable, 0}, element(2, Unreachable2)),
+        ok = quod_foreign_log:ack(Follow1, element(1, Unreachable2)),
+        ?assertEqual(2, maps:get(follow_wakes, quod_foreign_log:stats())),
+
+        %% A TLS-authenticated but uncertified peer cannot spend work merely
+        %% by naming the same feed channel.  Generic block/digest freshness
+        %% is accepted only from this exact identity's certified committee.
+        Ns = element(1, Identity),
+        FeedChan = quod_feed:channel(Ns),
+        FeedWake = term_to_binary({feed, Ns, <<0, 1, 2>>}),
+        Pid ! {quod_message, {key(77), self()}, FeedChan, FeedWake},
+        ?assertEqual(2, maps:get(follow_wakes, quod_foreign_log:stats())),
+
+        %% A co-hosted commit does not need to leave this Erlang node and come
+        %% back through Brahms to wake the same certified follower.  The local
+        %% commit is still only a freshness edge; the failed certified fetch
+        %% below proves the entry was not consumed as trusted evidence.
+        _ = quod_reg:publish(
+              {committed, Ns},
+              {committed, Ns, 1, #entry{index = 1, data = noop}}),
+        Unreachable4 = receive_follow(Follow1, Identity),
+        ?assertMatch({unreachable, unavailable, 0}, element(2, Unreachable4)),
+        ok = quod_foreign_log:ack(Follow1, element(1, Unreachable4)),
+        ?assertEqual(3, maps:get(follow_wakes, quod_foreign_log:stats())),
 
         {ok, Follow2} = quod_foreign_log:follow(Identity),
         Notice2 = receive_follow(Follow2, Identity),
@@ -600,13 +904,520 @@ follow_consumers_share_one_history_and_cleanup_exactly_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+directory_renewal_does_not_probe_a_reachable_follow_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31979},
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    FetchCalls = atomics:new(1, []),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            _ = atomics:add_get(FetchCalls, 1, 1),
+            BaseFetch(P, E, RequestedNs, From, To)
+        end,
+    Dir = temp_dir("reachable-follow-directory-renewal"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        Building = receive_follow(FollowRef, Identity),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Building)),
+        Ready = receive_follow_resnapshot(FollowRef, Identity),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Ready)),
+        Before = quod_foreign_log:stats(),
+        ?assertEqual(0, maps:get(follow_unreachable, Before)),
+        Wakes = maps:get(follow_wakes, Before),
+        Calls = atomics:get(FetchCalls, 1),
+
+        %% The signed lease is useful for route/link reconciliation, but an
+        %% already-reachable certified follower waits for feed/commit progress.
+        %% It must not turn the lease cadence into a periodic history pull.
+        Pid ! {directory_route_available, Identity},
+        After = quod_foreign_log:stats(),
+        ?assertEqual(Wakes, maps:get(follow_wakes, After)),
+        ?assertEqual(Calls, atomics:get(FetchCalls, 1)),
+        ok = quod_foreign_log:unfollow(FollowRef),
+        ok = wait_follow_count(0, 2000)
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+feed_progress_is_correlated_to_each_anchored_committee_test() ->
+    Dir = temp_dir("feed-progress-committee-correlation"),
+    NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
+    Pid = start_owner_opts(Dir, NoFetch, #{}),
+    Ns = unique_ns(),
+    Fixture1 = fixture_base(Ns),
+    Fixture2 = fixture_base(Ns),
+    Peer1 = maps:get(pub, Fixture1),
+    Peer2 = maps:get(pub, Fixture2),
+    Identity1 = {Ns, maps:get(anchor, Fixture1)},
+    Identity2 = {Ns, maps:get(anchor, Fixture2)},
+    Projection1 = quod_simplex:history_advance(
+                    Ns, maps:get(genesis, Fixture1),
+                    quod_simplex:history_projection(Identity1)),
+    Projection2 = quod_simplex:history_advance(
+                    Ns, maps:get(genesis, Fixture2),
+                    quod_simplex:history_projection(Identity2)),
+    try
+        {ok, Follow1} = quod_foreign_log:follow(Identity1),
+        Building1 = receive_follow(Follow1, Identity1),
+        ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
+        Unreachable1 = receive_follow(Follow1, Identity1),
+        ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
+        {ok, Follow2} = quod_foreign_log:follow(Identity2),
+        Building2 = receive_follow(Follow2, Identity2),
+        ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
+        Unreachable2 = receive_follow(Follow2, Identity2),
+        ok = quod_foreign_log:ack(Follow2, element(1, Unreachable2)),
+        ok = quod_foreign_log:test_install_feed_projection(
+               Pid, Identity1, Projection1),
+        ok = quod_foreign_log:test_install_feed_projection(
+               Pid, Identity2, Projection2),
+        Wakes0 = maps:get(follow_wakes, quod_foreign_log:stats()),
+        FeedChan = quod_feed:channel(Ns),
+        Digest = quod_feed:encode(Ns, {digest, 2}),
+
+        %% Any authenticated outsider is inert, even with a valid feed shape.
+        Pid ! {quod_message, {key(32030), self()}, FeedChan, Digest},
+        ?assertEqual(Wakes0,
+                     maps:get(follow_wakes, quod_foreign_log:stats())),
+
+        %% The same namespace can identify distinct anchored histories. Peer1
+        %% is certified only by Identity1, so its digest wakes exactly that
+        %% follower and cannot spend work for Identity2.
+        Pid ! {quod_message, {Peer1, self()}, FeedChan, Digest},
+        Woken1 = receive_follow(Follow1, Identity1),
+        ok = quod_foreign_log:ack(Follow1, element(1, Woken1)),
+        ?assertEqual(Wakes0 + 1,
+                     maps:get(follow_wakes, quod_foreign_log:stats())),
+        receive
+            {quod_foreign_follow, Follow2, _, Identity2, _} ->
+                error(wrong_anchor_feed_woke_follower)
+        after 0 ->
+            ok
+        end,
+
+        %% Identity2's own certified peer independently wakes it.
+        Pid ! {quod_message, {Peer2, self()}, FeedChan, Digest},
+        Woken2 = receive_follow(Follow2, Identity2),
+        ok = quod_foreign_log:ack(Follow2, element(1, Woken2)),
+        ?assertEqual(Wakes0 + 2,
+                     maps:get(follow_wakes, quod_foreign_log:stats())),
+        ok = quod_foreign_log:unfollow(Follow1),
+        ok = quod_foreign_log:unfollow(Follow2)
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+feed_recipient_wake_is_exactly_correlated_and_interest_owned_test() ->
+    Dir = temp_dir("feed-recipient-source"),
+    TestPid = self(),
+    Fetch =
+        fun(_, _, _, _, _) ->
+            TestPid ! {feed_recipient_fetch_waiting, self()},
+            receive
+                release_feed_recipient_fetch -> {error, unavailable}
+            end
+        end,
+    Pid = start_owner_opts(Dir, Fetch, #{}),
+    Ns = unique_ns(),
+    Anchor = key(32010),
+    Identity = {Ns, Anchor},
+    Peer = key(32011),
+    RegistrationId = binary:part(key(32012), 0, 16),
+    WrongRegistrationId = binary:part(key(32013), 0, 16),
+    Link = spawn(fun() -> fake_feed_link(TestPid) end),
+    try
+        ok = quod_foreign_log:observe_candidate(
+               Identity, {Peer, {"127.0.0.1", 32010}}),
+        {ok, Follow1} = quod_foreign_log:follow(Identity),
+        Building1 = receive_follow(Follow1, Identity),
+        ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
+        _BlockedWorker = receive
+                             {feed_recipient_fetch_waiting, Worker} -> Worker
+                         after 1000 ->
+                             error(initial_follow_did_not_start)
+                         end,
+        Wakes0 = maps:get(follow_wakes, quod_foreign_log:stats()),
+
+        %% Install the post-handshake state directly: transport opening is
+        %% covered by QUIC tests, while this test owns the source correlation
+        %% boundary.  A crossed generation must neither ACK nor wake work.
+        ok = quod_foreign_log:test_install_feed_registration(
+               Pid, Identity, Peer, Link, RegistrationId),
+        Wrong = quod_feed:encode(
+                  Ns,
+                  {recipient_registered, 1,
+                   WrongRegistrationId, Anchor, 7}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Wrong},
+        ?assertEqual(Wakes0,
+                     maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertNot(receive_fake_feed_send(Link, 0)),
+
+        %% The exact registration response both closes the open/register race
+        %% and wakes the one existing certified follower.  Its height is only
+        %% acknowledged freshness; the still-blocked certified fetch proves
+        %% it was not applied as history evidence.
+        Registered = quod_feed:encode(
+                       Ns,
+                       {recipient_registered, 1,
+                        RegistrationId, Anchor, 7}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Registered},
+        Ack7 = receive_fake_feed_send(Link, 1000),
+        ?assertMatch(
+           {ack, RegistrationId, Anchor, 7},
+           quod_feed:decode_recipient(Ack7, Ns)),
+
+        Wake8 = quod_feed:encode(
+                  Ns,
+                  {recipient_wake, 1, RegistrationId, Anchor, 8}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Wake8},
+        Ack8 = receive_fake_feed_send(Link, 1000),
+        ?assertMatch(
+           {ack, RegistrationId, Anchor, 8},
+           quod_feed:decode_recipient(Ack8, Ns)),
+        %% The second edge is coalesced into the already-running certified
+        %% job; acknowledgements never create parallel history work.
+        ?assertEqual(Wakes0,
+                     maps:get(follow_wakes, quod_foreign_log:stats())),
+
+        %% One registration belongs to the anchored identity, not to an
+        %% individual consumer.  It survives the first detach and is removed
+        %% exactly when the last interest disappears.
+        {ok, Follow2} = quod_foreign_log:follow(Identity),
+        Building2 = receive_follow(Follow2, Identity),
+        ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
+        ok = quod_foreign_log:unfollow(Follow1),
+        ?assertEqual(1,
+                     maps:get(feed_registrations,
+                              quod_foreign_log:stats())),
+        ok = quod_foreign_log:unfollow(Follow2),
+        Unregister = receive_fake_feed_send(Link, 1000),
+        ?assertMatch(
+           {unregister, RegistrationId, Anchor},
+           quod_feed:decode_recipient(Unregister, Ns)),
+        receive
+            {fake_feed_link_closed, Link} -> ok
+        after 1000 ->
+            error(feed_registration_link_not_closed)
+        end,
+        ?assertEqual(0,
+                     maps:get(feed_registrations,
+                              quod_foreign_log:stats()))
+    after
+        Link ! close,
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+feed_registration_crossed_link_reply_preserves_opening_test() ->
+    Dir = temp_dir("feed-registration-crossed-open"),
+    NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
+    Pid = start_owner_opts(Dir, NoFetch, #{}),
+    TestPid = self(),
+    Ns = unique_ns(),
+    Anchor = key(32020),
+    Identity = {Ns, Anchor},
+    Peer = key(32021),
+    WrongPeer = key(32022),
+    RegistrationId = binary:part(key(32023), 0, 16),
+    OpenRef = make_ref(),
+    Chan = quod_feed:channel(Ns),
+    WrongPeerLink = spawn(fun() -> fake_feed_link(TestPid) end),
+    WrongChannelLink = spawn(fun() -> fake_feed_link(TestPid) end),
+    ExactLink = spawn(fun() -> fake_feed_link(TestPid) end),
+    try
+        ok = quod_foreign_log:test_install_feed_opening(
+               Pid, Identity, Peer, RegistrationId, OpenRef),
+
+        %% A crossed reply must close only the unrelated link.  In
+        %% particular it must not consume the real opening: the exact reply
+        %% below still has to install the link and send its registration.
+        Pid ! {link_up, OpenRef, WrongPeer, Chan, WrongPeerLink},
+        receive
+            {fake_feed_link_closed, WrongPeerLink} -> ok
+        after 1000 ->
+            error(crossed_peer_link_not_closed)
+        end,
+        Pid ! {link_up, OpenRef, Peer, <<"wrong-channel">>,
+               WrongChannelLink},
+        receive
+            {fake_feed_link_closed, WrongChannelLink} -> ok
+        after 1000 ->
+            error(crossed_channel_link_not_closed)
+        end,
+
+        Pid ! {link_up, OpenRef, Peer, Chan, ExactLink},
+        Register = receive_fake_feed_send(ExactLink, 1000),
+        ?assertMatch(
+           {register, RegistrationId, Anchor},
+           quod_feed:decode_recipient(Register, Ns))
+    after
+        WrongPeerLink ! close,
+        WrongChannelLink ! close,
+        ExactLink ! close,
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+local_commit_progress_subscription_is_namespace_refcounted_test() ->
+    Dir = temp_dir("local-commit-refcount"),
+    NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
+    Pid = start_owner_opts(Dir, NoFetch, #{}),
+    Ns = unique_ns(),
+    Identity1 = {Ns, key(121)},
+    Identity2 = {Ns, key(122)},
+    try
+        {ok, Follow1} = quod_foreign_log:follow(Identity1),
+        Building1 = receive_follow(Follow1, Identity1),
+        ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
+        Unreachable1 = receive_follow(Follow1, Identity1),
+        ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
+
+        {ok, Follow2} = quod_foreign_log:follow(Identity2),
+        Building2 = receive_follow(Follow2, Identity2),
+        ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
+        Unreachable2 = receive_follow(Follow2, Identity2),
+        ok = quod_foreign_log:ack(Follow2, element(1, Unreachable2)),
+
+        %% Releasing one anchored identity must retain the one per-namespace
+        %% subscription needed by the other identity.
+        ok = quod_foreign_log:unfollow(Follow1),
+        ok = wait_follow_count(1, 2000),
+        _ = quod_reg:publish(
+              {committed, Ns},
+              {committed, Ns, 2, #entry{index = 2, data = noop}}),
+        Woken2 = receive_follow(Follow2, Identity2),
+        ?assertMatch({unreachable, unavailable, 0}, element(2, Woken2)),
+        ok = quod_foreign_log:ack(Follow2, element(1, Woken2)),
+
+        %% Releasing the last identity removes both namespace progress
+        %% subscriptions.  The stats call is a mailbox barrier for any event
+        %% this process could still have delivered.
+        ok = quod_foreign_log:unfollow(Follow2),
+        ok = wait_follow_count(0, 2000),
+        Wakes = maps:get(follow_wakes, quod_foreign_log:stats()),
+        _ = quod_reg:publish(
+              {committed, Ns},
+              {committed, Ns, 3, #entry{index = 3, data = noop}}),
+        ?assertEqual(Wakes,
+                     maps:get(follow_wakes, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+follow_wakes_coalesce_while_certified_work_is_inflight_test() ->
+    Dir = temp_dir("follow-wake-coalesce"),
+    Parent = self(),
+    BlockingFetch =
+        fun(_, _, _, _, _) ->
+            Parent ! {follow_fetch_started, self()},
+            receive
+                release_follow_fetch -> {error, unavailable}
+            end
+        end,
+    Pid = start_owner_opts(Dir, BlockingFetch, #{}),
+    Identity = {unique_ns(), key(111)},
+    Peer = key(112),
+    Endpoint = {"127.0.0.1", 31990},
+    try
+        ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        Building = receive_follow(FollowRef, Identity),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Building)),
+        Worker1 = receive
+                      {follow_fetch_started, W1} -> W1
+                  after 2000 -> error(first_follow_fetch_not_started)
+                  end,
+
+        Ns = element(1, Identity),
+        Pid ! {directory_route_available, Identity},
+        Pid ! {directory_route_available, Identity},
+        Pid ! {quod_message, {Peer, self()}, quod_feed:channel(Ns),
+               term_to_binary({feed, Ns, <<"wake">>})},
+        ?assertEqual(1, maps:get(follow_wakes, quod_foreign_log:stats())),
+
+        Worker1 ! release_follow_fetch,
+        Unreachable1 = receive_follow(FollowRef, Identity),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Unreachable1)),
+        Unreachable2 = receive_follow(FollowRef, Identity),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Unreachable2)),
+        %% Three signals created one dirty edge and therefore one second job.
+        ?assertEqual(2, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ok = quod_foreign_log:unfollow(FollowRef),
+        ok = wait_follow_count(0, 2000)
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+exact_verification_parks_until_directory_progress_test() ->
+    Ns = unique_ns(),
+    Identity = {Ns, key(31990)},
+    Peer = key(31991),
+    Endpoint = {"127.0.0.1", 31991},
+    Ref = ref(Identity, 2, 31992),
+    TestPid = self(),
+    Fetch = fun(P, E, _RequestedNs, _From, _To) ->
+                    TestPid ! {parked_exact_fetch, P, E},
+                    {error, unavailable}
+            end,
+    Dir = temp_dir("parked-exact-directory"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        Request = gen_server:send_request(
+                    Pid,
+                    {verify_reference, Ref, finalize, none, none, 300}),
+        %% The stats call is a mailbox barrier: absence of a route has parked
+        %% the owned call instead of returning retry or starting a worker.
+        ?assertMatch(#{pending := 0, queued := 1},
+                     quod_foreign_log:stats()),
+
+        %% The contact remains an untrusted bootstrap hint.  Only the exact
+        %% directory progress edge makes the parked verifier select it and
+        %% run the ordinary anchored history fold.
+        ok = quod_foreign_log:observe_candidate(
+               Identity, {Peer, Endpoint}),
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        Pid ! {directory_route_available, Identity},
+        receive
+            {parked_exact_fetch, Peer, Endpoint} -> ok
+        after 1000 ->
+            error(parked_verifier_not_woken)
+        end,
+        %% The failed fetch parks again.  Only the caller's original final
+        %% deadline ends the request; there is no retry timer or ladder.
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(Request, 2000)),
+        ?assertMatch(#{pending := 0, queued := 0},
+                     quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+parked_route_does_not_block_later_request_contact_test() ->
+    Ns = unique_ns(),
+    Identity = {Ns, key(31993)},
+    Peer = key(31994),
+    Endpoint = {"127.0.0.1", 31992},
+    Ref = ref(Identity, 2, 31995),
+    TestPid = self(),
+    Fetch = fun(P, E, _RequestedNs, _From, _To) ->
+                    TestPid ! {contact_exact_fetch, P, E},
+                    {error, unavailable}
+            end,
+    Dir = temp_dir("parked-exact-contact"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        Parked = gen_server:send_request(
+                   Pid,
+                   {verify_reference, Ref, finalize, none, none, 350}),
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        Contact = gen_server:send_request(
+                    Pid,
+                    {verify_reference, Ref, finalize,
+                     {Peer, Endpoint}, none, 250}),
+        %% The second row has a usable request-scoped route, so it runs even
+        %% though the older row remains parked at the front of the one queue.
+        receive
+            {contact_exact_fetch, Peer, Endpoint} -> ok
+        after 1000 ->
+            error(contact_request_blocked_behind_parked_row)
+        end,
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(Contact, 2000)),
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(Parked, 2000)),
+        ?assertMatch(#{pending := 0, queued := 0},
+                     quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+uncertified_feed_progress_does_not_wake_parked_exact_verification_test() ->
+    Ns = unique_ns(),
+    Identity = {Ns, key(31998)},
+    Peer = key(31999),
+    Endpoint = {"127.0.0.1", 31993},
+    Ref = ref(Identity, 2, 32000),
+    TestPid = self(),
+    Fetch = fun(P, E, _RequestedNs, _From, _To) ->
+                    TestPid ! {feed_woken_exact_fetch, P, E},
+                    {error, unavailable}
+            end,
+    Dir = temp_dir("parked-exact-feed"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        Request = gen_server:send_request(
+                    Pid,
+                    {verify_reference, Ref, finalize, none, none, 300}),
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        ok = quod_foreign_log:observe_candidate(
+               Identity, {Peer, Endpoint}),
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        Pid ! {quod_message, {Peer, self()}, quod_feed:channel(Ns),
+               term_to_binary({feed, Ns, <<"wake">>})},
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        receive
+            {feed_woken_exact_fetch, Peer, Endpoint} ->
+                error(uncertified_feed_woke_parked_verifier)
+        after 0 ->
+            ok
+        end,
+
+        %% The exact directory signal remains the ordinary discovery wake.
+        Pid ! {directory_route_available, Identity},
+        receive
+            {feed_woken_exact_fetch, Peer, Endpoint} -> ok
+        after 1000 ->
+            error(directory_did_not_wake_parked_verifier)
+        end,
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(Request, 2000)),
+        ?assertMatch(#{pending := 0, queued := 0, histories := 0},
+                     quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+parked_exact_expires_only_at_its_caller_deadline_test() ->
+    Identity = {unique_ns(), key(31996)},
+    Ref = ref(Identity, 2, 31997),
+    Dir = temp_dir("parked-exact-deadline"),
+    Pid = start_owner(Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
+    try
+        Request = gen_server:send_request(
+                    Pid,
+                    {verify_reference, Ref, finalize,
+                     none, none, 80}),
+        ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
+        ?assertEqual(
+           {reply, {error, retry}},
+           gen_server:wait_response(Request, 2000)),
+        ?assertMatch(#{pending := 0, queued := 0, histories := 0},
+                     quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 follow_owner_identity_and_consumer_down_are_fail_closed_test() ->
     Dir = temp_dir("follow-owner"),
     NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
-    Pid = start_owner_opts(
-            Dir, NoFetch,
-            #{follow_poll_ms => 1000, follow_retry_ms => 100,
-              follow_max_retry_ms => 1000}),
+    Pid = start_owner_opts(Dir, NoFetch, #{}),
     Identity = {unique_ns(), key(102)},
     Parent = self(),
     Consumer = spawn(
@@ -970,7 +1781,7 @@ identity_current_global_network_dependency_case() ->
            quod_foreign_log:current(
              route_candidates(
                [{First, FirstEndpoint}, {Second, SecondEndpoint}]),
-             Identity, 5000)),
+             Identity, 200)),
         Calls = collect_bootstrap_route_fetches(FetchTag, []),
         ?assertEqual([], [ok || {PeerKey, _} <- Calls, PeerKey =:= Second]),
         ok
@@ -1041,7 +1852,7 @@ identity_current_view_rejects_stale_malformed_and_uncertified_history_test() ->
           try
               ?assertEqual(
                  {error, retry},
-                 quod_foreign_log:current(Routes, Identity, 2000))
+                 quod_foreign_log:current(Routes, Identity, 100))
           after
               stop_owner(Pid),
               _ = file:del_dir_r(Dir)
@@ -1062,7 +1873,7 @@ outsider_cannot_establish_identity_current_view_test() ->
            {error, retry},
            quod_foreign_log:current(
              route_candidates([{Outsider, {"127.0.0.1", 19196}}]),
-             Identity, 2000))
+             Identity, 100))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -1120,7 +1931,7 @@ current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
           try
               ?assertEqual(
                  {error, retry},
-                 quod_foreign_log:verify_current(Routes, Ref, 2000))
+                 quod_foreign_log:verify_current(Routes, Ref, 100))
           after
               stop_owner(Pid),
               _ = file:del_dir_r(Dir)
@@ -1140,7 +1951,7 @@ nonmember_route_cannot_corroborate_current_view_test() ->
            {error, retry},
            quod_foreign_log:verify_current(
              route_candidates([{Outsider, {"127.0.0.1", 19102}}]),
-             maps:get(ref, Fixture), 2000))
+             maps:get(ref, Fixture), 100))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -1515,7 +2326,7 @@ prepared_reference_reports_post_slot_generation_test() ->
     Pid = start_owner(Dir, chain_fetch(Ns, maps:get(chain, Fixture))),
     try
         ?assertMatch(
-           {ok, #{phase := prepare, generation := 1}},
+           {ok, #{phase := prepare, generation := 0}},
            quod_foreign_log:verify(
              maps:get(pub, Fixture), {"127.0.0.1", 19095},
              maps:get(ref, Fixture),
@@ -1538,7 +2349,7 @@ local_prepared_reference_uses_the_same_exact_verifier_test() ->
             CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
     try
         ?assertMatch(
-           {ok, #{phase := prepare, generation := 1}},
+           {ok, #{phase := prepare, generation := 0}},
            quod_foreign_log:verify_local(
              SourceDir, maps:get(ref, Fixture), prepare, 5000))
     after
@@ -1556,14 +2367,14 @@ cached_earlier_reference_uses_its_own_post_slot_projection_test() ->
     Endpoint = {"127.0.0.1", 19097},
     try
         ?assertMatch(
-           {ok, #{phase := finalize, generation := 2}},
+           {ok, #{phase := finalize, generation := 1}},
            quod_foreign_log:verify(
              Peer, Endpoint, maps:get(finalize_ref, Fixture),
              finalize, 5000)),
         %% The cache is now at slot 3.  Evidence for its slot-2 Prepare must
         %% still expose slot 2's generation rather than the cached head state.
         ?assertMatch(
-           {ok, #{phase := prepare, generation := 1}},
+           {ok, #{phase := prepare, generation := 0}},
            quod_foreign_log:verify(
              Peer, Endpoint, maps:get(prepare_ref, Fixture), prepare, 5000))
     after
@@ -1856,51 +2667,16 @@ prepared_fixture(Ns) ->
     Binding = {Ns, Anchor},
     Admission = maps:get(admission, Base),
     Origin = {<<"prepare-origin:", Ns/binary>>, key(80)},
-    Other = {<<"prepare-other:", Ns/binary>>, key(81)},
-    {ok, DiffBlob} = quod_wire_term:encode_canonical(
-                       [{assert, {{prepared_fixture, Ns}, true}}]),
-    {ok, EmptyBlob} = quod_wire_term:encode_canonical([]),
-    Core = #{target => Binding, base_height => 1,
-             proof_id => key(83), origin => Origin,
-             principal => anonymous, request_binding => none,
-             overlay_generation => 0,
-             diff_ops => 1, read_functors => 0, effects_count => 0,
-             diff => DiffBlob, read_check => EmptyBlob,
-             effects => EmptyBlob, live_bridges => EmptyBlob,
-             transcript => EmptyBlob},
-    PlanBytes = term_to_binary(
-                  {<<"quod.dtx.plan">>, 7, Core}, [deterministic]),
-    Plan = {quod_plan, Core, Pub,
-            quod_identity:sign(PlanBytes, Signer)},
-    {ok, PlanBlob} = quod_dtx:encode(Plan),
-    OtherCore = Core#{target := Other, diff_ops := 0, diff := EmptyBlob},
-    OtherPlanBytes = term_to_binary(
-                       {<<"quod.dtx.plan">>, 7, OtherCore}, [deterministic]),
-    OtherPlan = {quod_plan, OtherCore, Pub,
-                 quod_identity:sign(OtherPlanBytes, Signer)},
-    {ok, OtherPlanBlob} = quod_dtx:encode(OtherPlan),
-    {ok, GoalBlob} = quod_durable_term:encode_goal({foreign_prepare, Ns}),
-    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
-    {ok, Manifest} = quod_dtx:new_manifest(
-                       #{proof_id => key(83),
-                         coordinator =>
-                             {element(1, Origin), element(2, Origin),
-                              Pub, Admission},
-                         nonce => key(82), principal => anonymous,
-                         goal => GoalBlob, result => ResultBlob,
-                         request_binding => none,
-                         participants =>
-                             [{Binding, quod_dtx:digest(Plan)},
-                              {Other, quod_dtx:digest(OtherPlan)}]}),
-    {ok, Attestation} = quod_dtx:attest_plan(
-                          Binding, Plan, Manifest, Signer),
-    {ok, OtherAttestation} = quod_dtx:attest_plan(
-                               Other, OtherPlan, Manifest, Signer),
-    {ok, Begin} = quod_dtx:new_begin(
-                    Manifest, none,
-                    [{Binding, quod_dtx:digest(Plan), PlanBlob, Attestation},
-                     {Other, quod_dtx:digest(OtherPlan), OtherPlanBlob,
-                      OtherAttestation}]),
+    %% Reuse the shared public constructor so this foreign-history fixture
+    %% cannot retain an old plan/signature preimage when that protocol evolves.
+    BeginFixture = quod_ct:signed_dtx_begin_fixture(
+                     #{target => Origin,
+                       participant_target => Binding,
+                       node_identity => Signer,
+                       admission => Admission,
+                       proof_id => key(83),
+                       operation_id => key(82)}),
+    Begin = maps:get('begin', BeginFixture),
     GroupId = quod_dtx:group_id(Begin),
     BeginRef = ref_with_digest(Origin, 7, key(84), GroupId),
     {ok, PrepareRecord} = quod_dtx:new_prepare(
@@ -1957,7 +2733,7 @@ fixture_base(Ns) ->
       anchor => Anchor, admission => Admission}.
 
 control_entry(Ns, Anchor, Pub, Signer, Slot, ControlBlob) ->
-    Data = {dtx, ControlBlob},
+    Data = {batch, [{dtx, ControlBlob}]},
     Block = #block{slot = Slot, parent = Slot - 1, payload = Data},
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
@@ -2063,6 +2839,24 @@ collect_long_current_fetches(Acc) ->
         lists:reverse(Acc)
     end.
 
+phase_session_files(Dir, Identity) ->
+    CacheNs = quod_foreign_log:cache_namespace(Identity),
+    CacheDir = quod_ledger_store:ns_dir(Dir, CacheNs),
+    {ok, Names} = file:list_dir(CacheDir),
+    lists:sort(
+      [Name || Name <- Names,
+               lists:prefix("dtx-phases.", Name),
+               lists:suffix(".dets", Name)]).
+
+cache_checkpoint(Dir, Identity = {Ns, Anchor}) ->
+    CacheNs = quod_foreign_log:cache_namespace(Identity),
+    Path = filename:join(
+             quod_ledger_store:ns_dir(Dir, CacheNs), "checkpoint.term"),
+    {ok, Blob} = file:read_file(Path),
+    {quod_foreign_log_checkpoint, _Version, Ns, Anchor,
+     Height, _Bytes, Projection} = binary_to_term(Blob, [safe]),
+    {Height, Projection}.
+
 start_owner(Dir, Fetch) ->
     start_owner_opts(Dir, Fetch, #{}).
 
@@ -2084,6 +2878,35 @@ receive_follow(FollowRef, Identity) ->
             {NoticeRef, Notice}
     after 3000 ->
         error({missing_follow_notice, FollowRef, Identity})
+    end.
+
+receive_follow_resnapshot(FollowRef, Identity) ->
+    Notice = receive_follow(FollowRef, Identity),
+    case element(2, Notice) of
+        {resnapshot, _, _, _} ->
+            Notice;
+        {building, _} ->
+            ok = quod_foreign_log:ack(
+                   FollowRef, element(1, Notice)),
+            receive_follow_resnapshot(FollowRef, Identity);
+        Unexpected ->
+            error({unexpected_follow_notice, Unexpected})
+    end.
+
+fake_feed_link(Owner) ->
+    receive
+        {send_ordered, Payload} ->
+            Owner ! {fake_feed_link_send, self(), Payload},
+            fake_feed_link(Owner);
+        close ->
+            Owner ! {fake_feed_link_closed, self()}
+    end.
+
+receive_fake_feed_send(Link, Timeout) ->
+    receive
+        {fake_feed_link_send, Link, Payload} -> Payload
+    after Timeout ->
+        false
     end.
 
 wait_follow_count(Expected, Left) when Left =< 0 ->
@@ -2152,6 +2975,7 @@ temp_dir(Suffix) ->
     filename:join(
       "/tmp",
       "quod_foreign_log_" ++ Suffix ++ "_" ++
+          os:getpid() ++ "_" ++
           integer_to_list(erlang:unique_integer([positive, monotonic]))).
 
 key(N) -> crypto:hash(sha256, term_to_binary({foreign_key, N})).

@@ -20,9 +20,12 @@ order. One `gen_server` per namespace.
   participant uses that target ontology's ordinary `#transaction{}` consensus
   path. Two or more participants use the atomic
   Begin/Prepare/Decision/Finalize/Complete protocol; no participant publishes its
-  hidden diff before the certified decision and ordered Finalize apply. The caller
-  is parked until the ordinary apply or group Complete is published. If its local
-  wait expires first, it receives the corresponding anchored
+  hidden diff before the certified decision and ordered apply. A participating
+  source applies through Begin/Decision; remote participants use Prepare/Finalize.
+  The caller is parked until the ordinary apply or the group reaches its certified
+  pre-Complete terminal boundary. Complete remains mandatory recovery bookkeeping
+  and may finish asynchronously. If the local wait expires first, the caller receives
+  the corresponding anchored
   `outcome_unknown` reference and resolves that reference instead of re-proving.
 - **Lifecycle actions** are ordinary writable Prolog goals. The normal
   `can_invoke/4` gate and shared `action/3` relation prove policy and desired
@@ -31,8 +34,9 @@ order. One `gen_server` per namespace.
   after ordered apply.
 - **`apply_entry/3`** is the deterministic ordered state machine driven by
   `quod_simplex`. Content transactions re-check their read set (OCC) before apply;
-  DTX Prepare retains a hidden plan, Finalize(commit) publishes it once, and
-  Complete records the terminal group result. A **committee-changing** content
+  source Begin retains its hidden plan and source Decision publishes it once;
+  remote Prepare retains a hidden plan and Finalize(commit) publishes it once.
+  Complete records the durable terminal group result. A **committee-changing** content
   transaction (its diff asserts/retracts `peer_admitted`) applies unconditionally
   because it was re-validated against the exact parent before voting (see
   `request_content_verdict/6`), keeping the KB and validator projection in
@@ -53,9 +57,9 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          open_cursor/5, cancel_cursor/3,
          submit_plan/4, submit_role/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
-         effect_resolution/3,
-         project_pending_begin/2,
-         dtx_group_resolved/2,
+         effect_resolution/4,
+         project_pending_begins/2,
+         dtx_group_resolved/2, dtx_group_terminal/3,
          applied/1, apply_entry/3, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
          request_agent_attestation/4,
@@ -108,7 +112,6 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                     scope_step_timeout_ms => 30000,
                     outcome_backend => disk}).
 -define(ROOT_NS, <<"quod:root">>).
--define(APPLY_DEPENDENCY_RETRY_MS, 250).
 
 %% One proof-owned, pre-signing Begin transfer. The original client caller
 %% remains in #proof_worker.from; registration_from is the proof worker parked
@@ -282,7 +285,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% queue: stop serving proofs, retain no entry bytes here, and ask
             %% Simplex to replay once the shared dependency is available.
             apply_dependency = none ::
-                none | {network_identity, reference(), reference()},
+                none | {network_identity, reference()},
             %% A locally unavailable genesis-pinned predicate module is an
             %% installation problem, not corrupt ledger history.  Keep the
             %% engine alive but closed until a software restart can replay the
@@ -305,10 +308,11 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             outcomes :: quod_outcome:index(),
             requests  :: term(),                 %% gen_statem async-request collection, labelled by tx_id
             %% Consensus verdicts parked until the KB reaches the proposal's
-            %% parent height (Slot-1).  Membership and DTX Prepare share this
+            %% parent height (Slot-1).  Membership and DTX control waves share this
             %% one height/correlation/timer mechanism; only their pure
             %% validator and reply tag differ.
-            %% Tag => {Slot, {membership, Change} | {dtx, Control},
+            %% Tag => {Slot, {membership, Change} |
+            %%                 {dtx, Controls, BlockTimestamp},
             %%         ReplyTo, TimerRef}
             validations = #{} :: map(),
             applies   = 0, rejects = 0, proves = 0, conflicts = 0,
@@ -727,61 +731,65 @@ dtx_group_state(_Ns, _GroupId) ->
 -spec effect_resolution(
         {binary(), <<_:256>>},
         {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
-        <<_:256>>) ->
+        <<_:256>>, <<_:256>>) ->
           {ok, pending | {released, pos_integer()} | {retired, term()}} |
           {error, term()}.
 effect_resolution(
   {TargetNs, <<_:256>> = TargetAnchor},
   {group, OriginNs, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>> = GroupId}
     = GroupRef,
-  <<_:256>> = PlanDigest)
+  <<_:256>> = PlanDigest, <<_:256>> = ManifestDigest)
   when is_binary(TargetNs), byte_size(TargetNs) > 0,
        is_binary(OriginNs), byte_size(OriginNs) > 0 ->
     case quod_ontology:genesis_anchor(TargetNs) of
         {ok, TargetAnchor} ->
             effect_resolution_state(
-              TargetNs, GroupRef, PlanDigest,
+              TargetNs, GroupRef, PlanDigest, ManifestDigest,
               dtx_group_state(TargetNs, GroupId));
         {ok, _WrongAnchor} ->
             {ok, {retired, wrong_genesis_anchor}};
         {error, Reason} ->
             {error, Reason}
     end;
-effect_resolution(_Target, _GroupRef, _PlanDigest) ->
+effect_resolution(_Target, _GroupRef, _PlanDigest, _ManifestDigest) ->
     {error, invalid_group_effect_ref}.
 
 effect_resolution_state(
-  TargetNs, GroupRef, PlanDigest,
+  TargetNs, GroupRef, PlanDigest, ManifestDigest,
   {ok, #{applied :=
            #{verdict := commit, slot := Slot,
-             group_ref := GroupRef, plan_digest := PlanDigest}}}) ->
+             group_ref := GroupRef, plan_digest := PlanDigest,
+             manifest_digest := ManifestDigest}}}) ->
     case quod_runtime:effect_frontier(TargetNs) of
         {ok, Frontier} when Frontier >= Slot -> {ok, {released, Slot}};
         _ -> {ok, pending}
     end;
 effect_resolution_state(
-  _TargetNs, GroupRef, PlanDigest,
+  _TargetNs, GroupRef, PlanDigest, ManifestDigest,
   {ok, #{applied :=
            #{verdict := abort,
-             group_ref := GroupRef, plan_digest := PlanDigest}}}) ->
+             group_ref := GroupRef, plan_digest := PlanDigest,
+             manifest_digest := ManifestDigest}}}) ->
     {ok, {retired, aborted}};
 effect_resolution_state(
-  _TargetNs, _GroupRef, _PlanDigest,
+  _TargetNs, _GroupRef, _PlanDigest, _ManifestDigest,
   {ok, #{applied := Applied}})
   when Applied =/= none ->
     {ok, {retired, effect_journal_conflict}};
 effect_resolution_state(
-  _TargetNs, GroupRef, _PlanDigest,
+  _TargetNs, GroupRef, _PlanDigest, _ManifestDigest,
   {ok, #{history := none, applied := none}}) ->
     effect_origin_resolution(GroupRef);
 effect_resolution_state(
-  _TargetNs, _GroupRef, _PlanDigest,
+  _TargetNs, _GroupRef, _PlanDigest, _ManifestDigest,
   {ok, #{history := History, applied := none}})
   when is_map(History) ->
     {ok, pending};
-effect_resolution_state(_TargetNs, _GroupRef, _PlanDigest, {error, Reason}) ->
+effect_resolution_state(
+  _TargetNs, _GroupRef, _PlanDigest, _ManifestDigest, {error, Reason}) ->
     {error, Reason};
-effect_resolution_state(_TargetNs, _GroupRef, _PlanDigest, _Malformed) ->
+effect_resolution_state(
+  _TargetNs, _GroupRef, _PlanDigest, _ManifestDigest, _Malformed) ->
     {error, outcome_index_unavailable}.
 
 effect_origin_resolution(GroupRef) ->
@@ -795,11 +803,13 @@ effect_origin_resolution(GroupRef) ->
         {error, Reason} -> {error, Reason}
     end.
 
--doc "Project the signing journal's exact pending Begin before the engine becomes ready.".
--spec project_pending_begin(binary(), none | map()) -> ok.
-project_pending_begin(Ns, Pending) when is_binary(Ns) ->
+-doc "Atomically project every pending Begin from the signing journal before the engine becomes ready.".
+-spec project_pending_begins(binary(), [map()]) -> ok.
+project_pending_begins(Ns, PendingBegins)
+  when is_binary(Ns), is_list(PendingBegins) ->
     gen_server:cast(
-      quod_reg:via({quod_prolog, Ns}), {project_pending_begin, Pending}).
+      quod_reg:via({quod_prolog, Ns}),
+      {project_pending_begins, PendingBegins}).
 
 -doc "Recheck a local group waiter after an authoritative Simplex resolution edge.".
 -spec dtx_group_resolved(binary(), term()) -> ok.
@@ -810,6 +820,18 @@ dtx_group_resolved(Ns,
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}), {dtx_group_resolved, GroupRef});
 dtx_group_resolved(_Ns, _GroupRef) ->
+    ok.
+
+-doc "Resolve one live group waiter from the certified pre-Complete boundary.".
+-spec dtx_group_terminal(binary(), term(), map()) -> ok.
+dtx_group_terminal(
+  Ns,
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = GroupRef,
+  Terminal) when is_binary(Ns), is_map(Terminal) ->
+    gen_server:cast(
+      quod_reg:via({quod_prolog, Ns}),
+      {dtx_group_terminal, GroupRef, Terminal});
+dtx_group_terminal(_Ns, _GroupRef, _Terminal) ->
     ok.
 
 proof_request(TraceCtx, Principal, ExpectedAnchor, RequestEvidence) ->
@@ -914,18 +936,20 @@ request_content_verdict(Ns, Transactions, BlockTimestamp, Slot, ReplyTo, Tag) ->
        Slot, ReplyTo, Tag}).
 
 -doc """
-Look up one DTX control's exact group history at the proposal parent and, for
-Prepare, also validate its plan against that parent KB.  The reply is
-`{dtx_verdict, Tag, EnginePid, AppliedFloor,
-  {valid, History} | {invalid, Reason} | abstain}`.
+Look up every control's exact group history for one canonical phase wave at
+the proposal parent and, for Prepare, also validate every plan against that
+same parent KB. The reply is `{dtx_verdict, Tag, EnginePid, AppliedFloor,
+{valid, Histories} | {invalid, Reason} | abstain}` where `Histories` is keyed
+by GroupId.
 """.
--spec request_dtx_verdict(binary(), quod_dtx:control(), non_neg_integer(),
+-spec request_dtx_verdict(binary(), [quod_dtx:control()], non_neg_integer(),
                           pos_integer(), pid(), term()) -> ok.
-request_dtx_verdict(Ns, Control, BlockTimestamp, Slot, ReplyTo, Tag)
-  when is_binary(Ns), is_integer(Slot), Slot > 0, is_pid(ReplyTo) ->
+request_dtx_verdict(Ns, Controls, BlockTimestamp, Slot, ReplyTo, Tag)
+  when is_binary(Ns), is_list(Controls), Controls =/= [],
+       is_integer(Slot), Slot > 0, is_pid(ReplyTo) ->
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}),
-      {dtx_verdict_req, Control, BlockTimestamp, Slot, ReplyTo, Tag}).
+      {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag}).
 
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
@@ -1343,8 +1367,9 @@ handle_cast({public_proof, Caller, CallRef, Kind, Goal,
             reply_client({async, Caller, CallRef}, {error, invalid_agent_principal}),
             {noreply, S}
     end;
-handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
-    case quod_outcome:project_pending_begin(Outcomes0, Pending) of
+handle_cast({project_pending_begins, PendingBegins},
+            S = #s{outcomes = Outcomes0}) ->
+    case quod_outcome:project_pending_begins(Outcomes0, PendingBegins) of
         {ok, Outcomes1} ->
             case quod_outcome:flush(Outcomes1) of
                 {ok, Outcomes2} -> {noreply, S#s{outcomes = Outcomes2}};
@@ -1356,8 +1381,10 @@ handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
     end;
 handle_cast({dtx_group_resolved, GroupRef}, S) ->
     {noreply, release_group_waiter(GroupRef, S)};
+handle_cast({dtx_group_terminal, GroupRef, Terminal}, S) ->
+    {noreply, release_group_waiter_terminal(GroupRef, Terminal, S)};
 handle_cast({apply_entry, #entry{}, _Origin},
-            S = #s{apply_dependency = {network_identity, _, _}}) ->
+            S = #s{apply_dependency = {network_identity, _}}) ->
     %% Simplex owns the durable history and will replay it from the current
     %% applied floor. Do not grow a second in-memory entry queue here.
     {noreply, S};
@@ -1374,7 +1401,7 @@ handle_cast({proof_result, Ref, Result}, S) ->
 %% Simplex emits it after boot, member recovery, and observer anti-entropy; the first later live
 %% apply can also close a replay interval, handled in note_origin/4.
 handle_cast(mark_ready,
-            S = #s{apply_dependency = {network_identity, _, _}}) ->
+            S = #s{apply_dependency = {network_identity, _}}) ->
     {noreply, S};
 handle_cast(mark_ready, S = #s{projection_failure = Reason})
   when Reason =/= none ->
@@ -1411,10 +1438,10 @@ handle_cast(
      request_validation(
        {content, Transactions, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
 handle_cast(
-  {dtx_verdict_req, Control, BlockTimestamp, Slot, ReplyTo, Tag}, S) ->
+  {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag}, S) ->
     {noreply,
      request_validation(
-       {dtx, Control, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
+       {dtx, Controls, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
 handle_cast(
   {agent_attestation, Request, ReplyTo, Tag},
   S = #s{ready = true})
@@ -1596,18 +1623,14 @@ handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
         error -> {noreply, S}
     end;
 handle_info(
-  {retry_apply_dependency, network_identity, Token},
-  S = #s{apply_dependency = {network_identity, _Timer, Token}}) ->
-    case quod_ontology:network_identity() of
-        {ok, <<_:256>>} ->
-            case catch quod_simplex:rebuild(S#s.ns) of
-                ok -> {noreply, S#s{apply_dependency = none}};
-                _ -> {noreply, arm_apply_dependency_retry(S)}
-            end;
-        {error, _} ->
-            {noreply, arm_apply_dependency_retry(S)}
-    end;
-handle_info({retry_apply_dependency, network_identity, _StaleToken}, S) ->
+  {gproc, registered, Monitor, _Name},
+  S = #s{apply_dependency = {network_identity, Monitor}}) ->
+    {noreply, resume_apply_dependency(S)};
+handle_info(
+  {gproc, unreg, Monitor, _Name},
+  S = #s{apply_dependency = {network_identity, Monitor}}) ->
+    %% A missing root owner is precisely the state being waited for.  Keep the
+    %% follow monitor: its next registration edge wakes this engine directly.
     {noreply, S};
 %% `send_request/2` gives us a non-blocking gen_statem call without a helper process per
 %% transaction. Responses are matched through the opaque request-id collection and labelled
@@ -2356,13 +2379,13 @@ execute_routed_scope_command(
 
 scope_command_route(active, {scope_attest, _ManifestBlob}) -> error;
 scope_command_route(active, {bind_group_effects, _, _}) -> error;
-scope_command_route(active, {bind_operation_effect, _, _, _, _, _}) -> error;
+scope_command_route(active, {bind_operation_effect, _}) -> error;
 scope_command_route(active, {submit_plan, _, _, _, _}) -> error;
 scope_command_route(active, _Operation) -> active;
 scope_command_route(sealed, scope_close) -> sealed;
 scope_command_route(sealed, {scope_attest, _ManifestBlob}) -> sealed;
 scope_command_route(sealed, {bind_group_effects, _, _}) -> sealed;
-scope_command_route(sealed, {bind_operation_effect, _, _, _, _, _}) -> sealed;
+scope_command_route(sealed, {bind_operation_effect, _}) -> sealed;
 scope_command_route(sealed, {submit_plan, _, _, _, _}) -> sealed;
 scope_command_route(submitting, scope_close) -> sealed;
 scope_command_route(submitted, scope_close) -> sealed;
@@ -2417,8 +2440,7 @@ execute_sealed_scope_command(
               {bind_group_effects, RequestId, CommandSeq}, S)
     end;
 execute_sealed_scope_command(
-  {bind_operation_effect, ClaimRef, TargetRef, CancelToken,
-   PlanDigest, ClaimBlob},
+  {bind_operation_effect, SubmissionBlob},
   RequestId, CommandSeq, Binding,
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
@@ -2432,8 +2454,7 @@ execute_sealed_scope_command(
         true ->
             InternalRef = make_ref(),
             Pid ! {scope_bind_operation_effect, self(), SessionProofId,
-                   SessionRef, InternalRef, ClaimRef, ClaimBlob,
-                   TargetRef, CancelToken, PlanDigest},
+                   SessionRef, InternalRef, SubmissionBlob},
             add_remote_pending(
               Binding, InternalRef,
               {bind_operation_effect, RequestId, CommandSeq}, S)
@@ -3768,6 +3789,7 @@ terminate(_Reason, #s{ns = Ns, workers = W,
                       agent_attesters = AgentAttesters,
                       remote_authenticators = ScopeAuthenticators,
                       scope_workers = ScopeWorkers,
+                      apply_dependency = ApplyDependency,
                       outcomes = Outcomes}) ->
     maps:foreach(fun(_Ref, #proof_worker{pid = Pid}) -> kill_worker(Pid) end, W),
     maps:foreach(
@@ -3785,7 +3807,14 @@ terminate(_Reason, #s{ns = Ns, workers = W,
     _ = try quod_reg:unsubscribe(
               {channel, quod_scope_wire:request_channel(Ns)})
         catch _:_ -> ok end,
+    ok = clear_apply_dependency_monitor(ApplyDependency),
     ok = quod_outcome:close(Outcomes),
+    ok.
+
+clear_apply_dependency_monitor({network_identity, Monitor}) ->
+    quod_reg:demonitor_name(
+      {quod_simplex, quod_ontology:root_ns()}, Monitor);
+clear_apply_dependency_monitor(none) ->
     ok.
 
 %%%===================================================================
@@ -4402,28 +4431,23 @@ submit_unbound_foreign_claim(
     end.
 
 submit_effect_foreign_claim(
-  #pinned_origin{namespace = OriginNs,
-                 anchor = OriginAnchor} = Origin,
-  {TargetNs, TargetAnchor}, Plan, Handle,
-  Claim = #transaction{tx_id = ClaimTxId,
-                       role = {remote_claim, _, _, TargetTxId}},
+  #pinned_origin{namespace = OriginNs} = Origin,
+  _Target, _Plan, Handle,
+  Claim = #transaction{role = {remote_claim, _, _, _TargetTxId}},
   Bindings) ->
-    ClaimRef = {transaction, OriginNs, OriginAnchor, ClaimTxId},
-    TargetRef = {transaction, TargetNs, TargetAnchor, TargetTxId},
     case {quod_transaction:request_claim(Claim),
           quod_simplex:dtx_binding(OriginNs)} of
         {{ok, #{operation_ref := OperationRef}},
-         {ok, {OriginNs, OriginAnchor, Signer,
+         {ok, {OriginNs, _OriginAnchor, Signer,
                <<_:256>> = Admission}}} ->
             CustodyClaim = Claim#transaction{
                              author = Signer,
                              submitted_at = quod_time:now_ms()},
             case quod_simplex:register_transaction_custody(
                    OriginNs, Admission, CustodyClaim) of
-                {ok, CancelToken} ->
+                {ok, Submission} ->
                     bind_and_activate_effect_claim(
-                      Origin, Plan, Handle, CustodyClaim,
-                      ClaimRef, TargetRef, CancelToken,
+                      Origin, Handle, Submission, CustodyClaim,
                       OperationRef, Bindings);
                 {error, _} = Error -> Error
             end;
@@ -4433,11 +4457,10 @@ submit_effect_foreign_claim(
 
 bind_and_activate_effect_claim(
   #pinned_origin{namespace = OriginNs} = Origin,
-  Plan, Handle, Claim = #transaction{tx_id = ClaimTxId},
-  ClaimRef, TargetRef, CancelToken, OperationRef, Bindings) ->
+  Handle, Submission, #transaction{tx_id = ClaimTxId},
+  OperationRef, Bindings) ->
     case quod_scope_session:bind_operation_effect(
-           Handle, ClaimRef, Claim, TargetRef, CancelToken,
-           quod_dtx:digest(Plan),
+           Handle, Submission,
            max(1, quod_proof_context:remaining_ms())) of
         {ok, _EffectId} ->
             case checkpoint_and_release_origin_snapshot(
@@ -4465,28 +4488,28 @@ bind_and_activate_effect_claim(
                               [OriginNs, Reason]),
                             {error, {outcome_unknown, OperationRef}}
                     end;
-                _ ->
-                    {error, {outcome_unknown, OperationRef}}
+                {error, _} ->
+                    cancel_dormant_effect_claim(
+                      OriginNs, ClaimTxId, OperationRef)
             end;
         {error, _} ->
             %% The bind reply may have been lost after the target fsynced its
             %% private row. Keep C dormant and let the one exact cancellation
             %% owner settle both journals; absence is never guessed here.
-            case quod_reg:where({quod_simplex, OriginNs}) of
-                Owner when is_pid(Owner) ->
-                    case quod_dtx_coordinator:
-                           start_dormant_operation_monitor(
-                             Owner, OriginNs, Claim, CancelToken) of
-                        {ok, _Pid} -> ok;
-                        {error, Reason} ->
-                            logger:error(
-                              "quod[~ts]: dormant operation recovery did not start: ~p",
-                              [OriginNs, Reason])
-                    end;
-                undefined -> ok
-            end,
-            {error, {outcome_unknown, OperationRef}}
+            cancel_dormant_effect_claim(
+              OriginNs, ClaimTxId, OperationRef)
     end.
+
+cancel_dormant_effect_claim(OriginNs, ClaimTxId, OperationRef) ->
+    case quod_simplex:start_transaction_custody_cancellation(
+           OriginNs, ClaimTxId) of
+        ok -> ok;
+        {error, Reason} ->
+            logger:error(
+              "quod[~ts]: dormant operation cancellation did not start: ~p",
+              [OriginNs, Reason])
+    end,
+    {error, {outcome_unknown, OperationRef}}.
 
 await_recovered_foreign_application(
   OriginNs, ClaimTxId, OperationRef, Bindings) ->
@@ -5074,8 +5097,9 @@ retain_group_waiter(
                 bindings = Bindings},
             S1 = S#s{waiting_workers = Waiting1,
                      group_waiters = GroupWaiters#{GroupId => Waiter}},
-            %% Complete may have crossed this worker's scope-cleanup/result
-            %% message. Re-read the flushed projection now so that ordering
+            %% The certified pre-Complete terminal notification may have crossed
+            %% this worker's scope-cleanup/result message. Re-read the projection
+            %% now so that ordering
             %% cannot strand a waiter until its deadline.
             release_group_waiter(GroupRef, S1);
         {{Worker, Waiting1}, _} ->
@@ -6092,18 +6116,24 @@ finish_projection_result(
       [content_post_apply(Result, Index, Origin, S1) || Result <- Results],
       S1);
 finish_projection_result(
-  #{kind := dtx, control := Control, group_id := GroupId,
-    publication := Publication, deferred_ack := DeferredAck,
-    applied_ops := AppliedOps, stats := Stats}, Index, Origin, S0) ->
+  #{kind := dtx_batch, items := Items, stats := Stats},
+  Index, Origin, S0) when is_list(Items), Items =/= [] ->
     S1 = add_projection_stats(Stats, S0),
-    S2 = publish_dtx_outcome(Publication, AppliedOps, Index, Origin, S1),
-    S3 = finish_dtx_apply(DeferredAck, Control, Origin, S2),
-    S4 = maybe_release_completed_group(Control, GroupId, S3),
-    %% The journal remains the single custody owner. A DTX transition only
-    %% wakes its exact outcome reconciliation; commit still waits for the
-    %% runtime P-before-E frontier, while abort retires without decoding a plan.
+    S2 = lists:foldl(
+           fun(#{control := Control, group_id := GroupId,
+                 publication := Publication, applied_ops := AppliedOps,
+                 deferred_ack := DeferredAck}, Acc0) ->
+                   Acc1 = publish_dtx_outcome(
+                            Publication, AppliedOps, Index, Origin, Acc0),
+                   Acc2 = finish_dtx_apply(
+                            DeferredAck, Control, Origin, Acc1),
+                   maybe_release_completed_group(Control, GroupId, Acc2)
+           end, S1, Items),
+    %% The journal remains the single custody owner. The complete canonical
+    %% wave wakes reconciliation once after every per-control transition has
+    %% been published and acknowledged.
     quod_effect_journal:reconcile(),
-    S4;
+    S2;
 finish_projection_result(#{kind := noop}, _Index, _Origin, S) ->
     S;
 finish_projection_result(
@@ -6192,6 +6222,65 @@ release_group_waiter_by_id(GroupId, S = #s{group_waiters = Waiters}) ->
         undefined ->
             S
     end.
+
+%% The coordinator reaches this boundary only after every participant's
+%% Finalize is certified applied.  Complete is still appended by that same
+%% coordinator, but it is recovery bookkeeping rather than a reason to keep a
+%% live caller parked.  The exact GroupRef and waiter map make duplicate
+%% notices (including one after a coordinator restart) harmless.
+release_group_waiter_terminal(
+  {group, _Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}
+    = GroupRef,
+  #{verdict := Verdict, reasons := Reasons,
+    decision_slot := DecisionSlot, participant_slots := ParticipantSlots}
+    = Terminal,
+  S = #s{group_waiters = Waiters})
+  when map_size(Terminal) =:= 4,
+       (Verdict =:= commit orelse Verdict =:= abort),
+       is_integer(DecisionSlot), DecisionSlot > 0 ->
+    case {maps:get(GroupId, Waiters, undefined),
+          valid_terminal_participant_slots(ParticipantSlots),
+          valid_terminal_reasons(Verdict, Reasons)} of
+        {#group_waiter{group_ref = GroupRef,
+                       bindings = LiveBindings} = Waiter,
+         true, true} ->
+            Result =
+                case Verdict of
+                    commit ->
+                        {ok, [LiveBindings],
+                         #{ref => GroupRef, height => DecisionSlot,
+                           participant_slots => ParticipantSlots}};
+                    abort ->
+                        {fail, Reasons}
+                end,
+            finish_group_waiter(
+              GroupId, Waiter, Result, erlang:monotonic_time(), S);
+        _ ->
+            S
+    end;
+release_group_waiter_terminal(_GroupRef, _Terminal, S) ->
+    S.
+
+valid_terminal_participant_slots(Slots) ->
+    valid_terminal_participant_slots(Slots, none, 0).
+
+valid_terminal_participant_slots([], _Previous, Count) -> Count >= 2;
+valid_terminal_participant_slots(
+  [{{Ns, <<_:256>>} = Identity, Slot, Generation} | Rest], Previous, Count)
+  when (Previous =:= none orelse Previous < Identity),
+       is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(Slot), Slot > 0,
+       is_integer(Generation), Generation >= 0 ->
+    valid_terminal_participant_slots(Rest, Identity, Count + 1);
+valid_terminal_participant_slots(_Malformed, _Previous, _Count) -> false.
+
+valid_terminal_reasons(commit, none) -> true;
+valid_terminal_reasons(abort, [_ | _] = Reasons) ->
+    case quod_wire_term:encode_failure_reasons(Reasons) of
+        {ok, _} -> true;
+        {error, _} -> false
+    end;
+valid_terminal_reasons(_Verdict, _Reasons) -> false.
 
 release_group_waiter(
   GroupRef, S) ->
@@ -6609,7 +6698,7 @@ do_request_validation(Request, Slot, ReplyTo, Tag,
             S
     end.
 
-validation_position({dtx, _Control, _BlockTimestamp}, Parent,
+validation_position({dtx, _Controls, _BlockTimestamp}, Parent,
                     #s{applied = Parent, outcomes = Outcomes}) ->
     case quod_outcome:applied_floor(Outcomes) >= Parent of
         true -> ready;
@@ -6670,8 +6759,8 @@ test_resolve_validation(Request, Slot, Applied, Outcomes) ->
 
 validation_verdict({content, Transactions, BlockTimestamp}, S) ->
     content_validation_verdict(Transactions, BlockTimestamp, S);
-validation_verdict({dtx, Control, BlockTimestamp}, S) ->
-    dtx_validation_verdict(Control, BlockTimestamp, check, S).
+validation_verdict({dtx, Controls, BlockTimestamp}, S) ->
+    dtx_validation_verdict(Controls, BlockTimestamp, check, S).
 
 content_validation_verdict(Transactions, BlockTimestamp, S) ->
     commit_validation_result(
@@ -6679,12 +6768,36 @@ content_validation_verdict(Transactions, BlockTimestamp, S) ->
         Transactions, BlockTimestamp, check,
         commit_validation_context(S)), S).
 
-dtx_validation_verdict(Control, BlockTimestamp, OperationMode,
-                       S) ->
-    commit_validation_result(
-      quod_commit_validation:dtx(
-        Control, BlockTimestamp, OperationMode,
-        commit_validation_context(S)), S).
+dtx_validation_verdict(Controls, BlockTimestamp, OperationMode, S)
+  when is_list(Controls), Controls =/= [] ->
+    case quod_dtx:canonical_control_wave(Controls) of
+        true ->
+            commit_validation_result(
+              dtx_validation_wave(
+                Controls, BlockTimestamp, OperationMode,
+                commit_validation_context(S), #{}), S);
+        false ->
+            {{invalid, malformed_control}, S}
+    end;
+dtx_validation_verdict(_Malformed, _BlockTimestamp, _OperationMode, S) ->
+    {{invalid, malformed_control}, S}.
+
+dtx_validation_wave([], _BlockTimestamp, _OperationMode, Context, Histories) ->
+    {ok, {valid, Histories}, Context};
+dtx_validation_wave([Control | Rest], BlockTimestamp, OperationMode,
+                    Context0, Histories0) ->
+    case quod_commit_validation:dtx(
+           Control, BlockTimestamp, OperationMode, Context0) of
+        {ok, {valid, History}, Context1} ->
+            GroupId = quod_dtx:group_id(Control),
+            dtx_validation_wave(
+              Rest, BlockTimestamp, OperationMode, Context1,
+              Histories0#{GroupId => History});
+        {ok, Verdict, Context1} ->
+            {ok, Verdict, Context1};
+        {outcome_error, _Reason} = Error ->
+            Error
+    end.
 
 commit_validation_context(
   #s{ns = Ns, applied = Applied, est = Est,
@@ -6704,7 +6817,7 @@ wait_for_apply_dependency(Reason, S = #s{apply_dependency = none}) ->
     logger:warning(
       "committed record is waiting for root network identity: ~0p",
       [Reason]),
-    arm_apply_dependency_retry(
+    wait_for_network_identity(
       begin_dependency_replay(S#s{ready = false}));
 wait_for_apply_dependency(_Reason, S) ->
     S.
@@ -6719,12 +6832,32 @@ begin_dependency_replay(
 begin_dependency_replay(S) ->
     S.
 
-arm_apply_dependency_retry(S) ->
-    Token = make_ref(),
-    Timer = erlang:send_after(
-              ?APPLY_DEPENDENCY_RETRY_MS, self(),
-              {retry_apply_dependency, network_identity, Token}),
-    S#s{apply_dependency = {network_identity, Timer, Token}}.
+wait_for_network_identity(S) ->
+    case quod_ontology:network_identity() of
+        {ok, <<_:256>>} ->
+            request_dependency_replay(S);
+        {error, _} ->
+            Monitor = quod_reg:monitor_name(
+                        {quod_simplex, quod_ontology:root_ns()}, follow),
+            S#s{apply_dependency = {network_identity, Monitor}}
+    end.
+
+resume_apply_dependency(
+  S = #s{apply_dependency = {network_identity, Monitor}}) ->
+    case quod_ontology:network_identity() of
+        {ok, <<_:256>>} ->
+            ok = quod_reg:demonitor_name(
+                   {quod_simplex, quod_ontology:root_ns()}, Monitor),
+            request_dependency_replay(S#s{apply_dependency = none});
+        {error, _} ->
+            S
+    end.
+
+request_dependency_replay(S = #s{ns = Ns}) ->
+    %% `rebuild/1` is an asynchronous cast.  The ledger remains the only queue;
+    %% this process retains no committed entry while waiting or replaying.
+    ok = quod_simplex:rebuild(Ns),
+    S#s{apply_dependency = none}.
 
 %% Async delivery to the requesting statem (or a test pid) — a plain message so
 %% the statem consumes it as an `info` event and a test can receive it directly.
@@ -6732,7 +6865,7 @@ deliver_validation({content, _Transactions, _BlockTimestamp},
                    ReplyTo, Tag, Verdict, _S) ->
     ReplyTo ! {content_verdict, Tag, Verdict},
     ok;
-deliver_validation({dtx, _Control, _BlockTimestamp}, ReplyTo, Tag, Verdict,
+deliver_validation({dtx, _Controls, _BlockTimestamp}, ReplyTo, Tag, Verdict,
                    #s{outcomes = Outcomes}) ->
     ReplyTo ! {dtx_verdict, Tag, self(),
                quod_outcome:applied_floor(Outcomes), Verdict},

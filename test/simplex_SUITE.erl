@@ -324,8 +324,8 @@ consensus_commits_with_ingress_down(Config) ->
 %% A concurrent burst across every validator commits COMPLETELY with ZERO busy
 %% rejections: arrivals that miss a batch park in the bounded ingress queue and drain
 %% into following blocks instead of bouncing on a retry timer. This is the headline
-%% guarantee of the event-driven ingress work — before it, ~55% of burst appends were
-%% rejected busy and paced by the 300ms relay retransmit.
+%% guarantee of the event-driven ingress work — the superseded ingress path
+%% rejected about 55% of burst appends and amplified them through timed relay recovery.
 burst_commits_without_busy(Config) ->
     Nodes = ?config(nodes, Config),
     %% settle first (standalone-safe): one committed warmup write, readable on every
@@ -667,7 +667,7 @@ assert_membership_proposal_skipped(Config, Evil) ->
     Block = #block{slot = V, parent = H,
                    payload = {batch, [SignedEvil]}, timestamp = Ts},
     Chan  = term_to_binary({log, ?NS}, [deterministic]),
-    Frame = quod_simplex:encode(?NS, {propose, Block}),
+    Frame = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fpub, Chan, Frame])
          || {_, Fpub} <- Nodes, Fpub =/= LeaderPub],
     %% the crafted slot can ONLY be skipped (no honest support) — every node advances past it via a noop

@@ -23,19 +23,22 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
          remote_operation_fixture/1,
+         signed_effect_operation_submission/0,
+         signed_effect_operation_submission/1,
          signed_agent_facts/1,
          with_network_identity/2,
          wait_until/1, wait_until/2]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
--export([proof_gate_row/4]).
+-export([proof_gate_row/3]).
 
 %% Test-only constructor for the protected Simplex proof-gate row. Production
 %% deliberately accepts only the current layout; fixtures must not become a
 %% compatibility specification for retired ETS rows.
-proof_gate_row(Ready, Fence, Generation, LastGroup)
-  when is_boolean(Ready), is_integer(Generation), Generation >= 0 ->
+proof_gate_row(Ready, Generation, BlockingFences)
+  when is_boolean(Ready), is_integer(Generation), Generation >= 0,
+       is_list(BlockingFences) ->
     Self = <<250:256>>,
-    {proof_gate, Ready, Fence, Generation, LastGroup,
+    {proof_gate, Ready, Generation, lists:sort(BlockingFences),
      Self, [Self], <<251:256>>, #{}}.
 
 %% Smallest self-contained valid DTX fixture for consumers that only need to
@@ -57,7 +60,7 @@ dtx_decision_payload() ->
     {ok, Control} = quod_dtx:sign_control(
                       Target, Record, <<6:256>>, 1, 0, Signer),
     {ok, Blob} = quod_dtx:encode_control(Control),
-    {dtx, Blob}.
+    {batch, [{dtx, Blob}]}.
 
 %% One real self-contained Prepare record for endpoint tests.  Building it
 %% through the public plan/manifest/Begin APIs keeps refusal correlation pinned
@@ -194,9 +197,40 @@ with_network_identity(<<_:256>> = Network, Fun) when is_function(Fun, 0) ->
 %% Real multi-participant DTX tests reuse it; remote-operation tests derive the
 %% one sealed target plan before the planner selects the ordinary claim path.
 signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
+    Origin = maps:get(target, Overrides,
+                      {<<"quod:signed-fixture">>, <<201:256>>}),
+    Primary = maps:get(participant_target, Overrides, Origin),
+    Secondary =
+        case Primary =:= Origin of
+            true -> fixture_secondary_target(Primary, Overrides);
+            false -> Origin
+        end,
+    false = Primary =:= Secondary,
+    Base = signed_plan_fixture(Overrides, [Primary, Secondary]),
+    Begin = begin_from_signed_fixture(Base),
+    {ok, Control} =
+        quod_dtx:sign_control(
+          maps:get(origin, Base), Begin, maps:get(admission, Base), 1,
+          maps:get(submitted_at, Overrides, 1),
+          maps:get(node_identity, Base)),
+    maybe_add_fixture_transaction(
+      Base#{'begin' => Begin, begin_control => Control}, Overrides).
+
+signed_remote_plan_fixture(Overrides) when is_map(Overrides) ->
+    Origin = maps:get(target, Overrides,
+                      {<<"quod:remote-origin">>, <<211:256>>}),
+    Target = maps:get(participant_target, Overrides,
+                      {<<"quod:remote-target">>, <<212:256>>}),
+    false = Target =:= Origin,
+    signed_plan_fixture(
+      Overrides#{target => Origin, participant_target => Target}, [Target]).
+
+signed_plan_fixture(Overrides, ParticipantTargets0) ->
     Request = signed_goal_fixture(Overrides),
     Origin = {Ns, Anchor} = maps:get(target, Request),
     Target = maps:get(participant_target, Overrides, Origin),
+    ParticipantTargets = lists:usort(ParticipantTargets0),
+    true = lists:member(Target, ParticipantTargets),
     #{goal := FrozenGoal} = maps:get(evidence, Request),
     {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
     NodeIdentity =
@@ -210,13 +244,64 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
     #{pubkey := NodeKey} = NodeIdentity,
     ProofId = maps:get(proof_id, Overrides, <<204:256>>),
     Admission = maps:get(admission, Overrides, <<205:256>>),
-    Session =
-        quod_proof_session:start(
-          committed_kb([]),
-          #{read_set => true, proof_context => {origin, signed_fixture},
-            signer => NodeIdentity}),
+    PlanRows =
+        [begin
+             {Plan, PlanBlob} = signed_fixture_plan(
+                                  Participant, Origin, Goal, ProofId,
+                                  Request, NodeIdentity),
+             {Participant, Plan, PlanBlob}
+         end || Participant <- ParticipantTargets],
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    {ok, Manifest} =
+        quod_dtx:new_manifest(
+          #{proof_id => ProofId,
+            coordinator => {Ns, Anchor, NodeKey, Admission},
+            nonce => <<207:256>>,
+            principal => maps:get(principal, Request),
+            goal => maps:get(goal_blob, Request),
+            result => ResultBlob,
+            request_binding => maps:get(binding, Request),
+            participants =>
+                [{Participant, quod_dtx:digest(Plan)}
+                 || {Participant, Plan, _PlanBlob} <- PlanRows]}),
+    BundleRows =
+        [begin
+             {ok, Attestation} = quod_dtx:attest_plan(
+                                   Participant, Plan, Manifest, NodeIdentity),
+             {Participant, quod_dtx:digest(Plan), PlanBlob, Attestation}
+         end || {Participant, Plan, PlanBlob} <- PlanRows],
+    Plans = maps:from_list(
+              [{Participant, Plan}
+               || {Participant, Plan, _PlanBlob} <- PlanRows]),
+    PlanBlobs = maps:from_list(
+                  [{Participant, PlanBlob}
+                   || {Participant, _Plan, PlanBlob} <- PlanRows]),
+    Attestations = maps:from_list(
+                     [{Participant, Attestation}
+                      || {Participant, _Digest, _Blob, Attestation} <-
+                             BundleRows]),
+    Request#{node_identity => NodeIdentity, admission => Admission,
+             origin => Origin, participant_target => Target,
+             participant_targets => ParticipantTargets,
+             proof_id => ProofId, result_blob => ResultBlob,
+             plans => Plans, plan_blobs => PlanBlobs,
+             attestations => Attestations, bundles => BundleRows,
+             plan => maps:get(Target, Plans),
+             plan_blob => maps:get(Target, PlanBlobs),
+             attestation => maps:get(Target, Attestations),
+             manifest => Manifest}.
+
+signed_fixture_plan(Target, Origin, Goal, ProofId, Request, NodeIdentity) ->
+    Session = quod_proof_session:start(
+                committed_kb([]),
+                #{read_set => true,
+                  proof_context => {origin, signed_fixture},
+                  signer => NodeIdentity}),
     try
-        InvocationId = <<206:128>>,
+        InvocationDigest = crypto:hash(
+                             sha256,
+                             term_to_binary(Target, [deterministic])),
+        InvocationId = binary:part(InvocationDigest, 0, 16),
         %% The transcript records the selected target first. A foreign plan
         %% then carries the origin as its caller; the origin plan itself has
         %% only its ordinary top-level identity.
@@ -230,63 +315,55 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
                Session, InvocationId, Goal, allowed, Context,
                quod_transaction_scope:empty_selection()),
         {solution, _} = quod_proof_session:next(Session, InvocationId),
-        {ok, Plan} =
-            quod_dtx:seal_session(
-              Session,
-              #{target => Target, base_height => 1, proof_id => ProofId,
-                origin => Origin, principal => maps:get(principal, Request),
-                request_binding => maps:get(binding, Request)}),
+        {ok, Plan} = quod_dtx:seal_session(
+                       Session,
+                       #{target => Target, base_height => 1,
+                         proof_id => ProofId, origin => Origin,
+                         principal => maps:get(principal, Request),
+                         request_binding => maps:get(binding, Request)}),
         {ok, PlanBlob} = quod_dtx:encode(Plan),
-        {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
-        {ok, Manifest} =
-            quod_dtx:new_manifest(
-              #{proof_id => ProofId,
-                coordinator => {Ns, Anchor, NodeKey, Admission},
-                nonce => <<207:256>>,
-                principal => maps:get(principal, Request),
-                goal => maps:get(goal_blob, Request),
-                result => ResultBlob,
-                request_binding => maps:get(binding, Request),
-                participants => [{Target, quod_dtx:digest(Plan)}]}),
-        {ok, Attestation} =
-            quod_dtx:attest_plan(Target, Plan, Manifest, NodeIdentity),
-        {ok, Begin} =
-            quod_dtx:new_begin(
-              Manifest, maps:get(auth, Request),
-              [{Target, quod_dtx:digest(Plan), PlanBlob, Attestation}]),
-        {ok, Control} =
-            quod_dtx:sign_control(
-              Origin, Begin, Admission, 1,
-              maps:get(submitted_at, Overrides, 1), NodeIdentity),
-        Base =
-            Request#{node_identity => NodeIdentity, admission => Admission,
-                     participant_target => Target, proof_id => ProofId,
-                     plan => Plan, plan_blob => PlanBlob,
-                     attestation => Attestation,
-                     manifest => Manifest,
-                     'begin' => Begin,
-                     begin_control => Control},
-        case Target =:= Origin of
-            true ->
-                {ok, Material} = quod_dtx:material(Plan),
-                UnsignedTransaction =
-                    quod_transaction:from_plan(
-                      Plan, Material, maps:get(goal_blob, Request), ResultBlob,
-                      maps:get(auth, Request)),
-                SubmittedAt = maps:get(submitted_at, Overrides, 1),
-                {ok, Transaction} =
-                    quod_transaction:sign(
-                      {Ns, Anchor, Admission},
-                      UnsignedTransaction#transaction{
-                        author = NodeKey, author_seq = 1,
-                        submitted_at = SubmittedAt},
-                      NodeIdentity),
-                Base#{transaction => Transaction};
-            false ->
-                Base
-        end
+        {Plan, PlanBlob}
     after
         quod_proof_session:stop(Session)
+    end.
+
+begin_from_signed_fixture(Fixture) ->
+    {ok, Begin} = quod_dtx:new_begin(
+                    maps:get(manifest, Fixture), maps:get(auth, Fixture),
+                    maps:get(bundles, Fixture)),
+    Begin.
+
+maybe_add_fixture_transaction(
+  Fixture = #{origin := {Ns, Anchor} = Origin,
+              participant_target := Origin,
+              plan := Plan, result_blob := ResultBlob,
+              node_identity := #{pubkey := NodeKey} = NodeIdentity,
+              admission := Admission}, Overrides) ->
+    {ok, Material} = quod_dtx:material(Plan),
+    UnsignedTransaction = quod_transaction:from_plan(
+                            Plan, Material, maps:get(goal_blob, Fixture),
+                            ResultBlob, maps:get(auth, Fixture)),
+    SubmittedAt = maps:get(submitted_at, Overrides, 1),
+    {ok, Transaction} = quod_transaction:sign(
+                          {Ns, Anchor, Admission},
+                          UnsignedTransaction#transaction{
+                            author = NodeKey, author_seq = 1,
+                            submitted_at = SubmittedAt},
+                          NodeIdentity),
+    Fixture#{transaction => Transaction};
+maybe_add_fixture_transaction(Fixture, _Overrides) ->
+    Fixture.
+
+fixture_secondary_target(Primary, Overrides) ->
+    case maps:find(second_participant_target, Overrides) of
+        {ok, Secondary} ->
+            Secondary;
+        error ->
+            Candidate = {<<"quod:signed-fixture-secondary">>, <<208:256>>},
+            case Candidate =:= Primary of
+                false -> Candidate;
+                true -> {<<"quod:signed-fixture-secondary">>, <<209:256>>}
+            end
     end.
 
 %% One complete source-claim/target-application/source-receipt family.  The
@@ -297,7 +374,7 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
                       {<<"quod:remote-origin">>, <<211:256>>}),
     Target = maps:get(participant_target, Overrides,
                       {<<"quod:remote-target">>, <<212:256>>}),
-    Fixture = signed_dtx_begin_fixture(
+    Fixture = signed_remote_plan_fixture(
                 Overrides#{target => Origin, participant_target => Target}),
     Plan = maps:get(plan, Fixture),
     Bundle = {Target, quod_dtx:digest(Plan), maps:get(plan_blob, Fixture),
@@ -333,6 +410,106 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
              target_ref => TargetRef,
              certified_target_ref => CertifiedTargetRef,
              completion => Completion}.
+
+signed_effect_operation_submission() ->
+    signed_effect_operation_submission(#{}).
+
+signed_effect_operation_submission(Options) ->
+    Request = signed_goal_fixture(
+                #{target => {<<"quod:operation-source">>, <<221:256>>}}),
+    Origin = {OriginNs, OriginAnchor} = maps:get(target, Request),
+    Target = {<<"quod:operation-target">>, <<222:256>>},
+    {SourceKey, SourceSeed} = quod_identity:generate(),
+    SourceIdentity =
+        #{pubkey => SourceKey,
+          key => quod_identity:key_term({SourceKey, SourceSeed})},
+    CoordinatorKey =
+        case maps:get(coordinator, Options, source) of
+            source -> SourceKey;
+            mismatch -> element(1, quod_identity:generate())
+        end,
+    {TargetKey, TargetSeed} = quod_identity:generate(),
+    TargetIdentity =
+        #{pubkey => TargetKey,
+          key => quod_identity:key_term({TargetKey, TargetSeed})},
+    ProofId = <<223:256>>,
+    Admission = <<224:256>>,
+    {Effect, PreparedEffect} =
+        case maps:get(prepared_effect, Options, false) of
+            true ->
+                CreatedNs = <<"quod:operation-created">>,
+                Action = {create_ontology, CreatedNs, []},
+                Desired = {ontology_hosted, CreatedNs},
+                {ok, Structural} = quod_ontology:validate_action(Action),
+                {ok, Prepared} = quod_ontology:prepare_action(Structural),
+                {ok, PreparedDescriptor} = quod_ontology:prepared_effect(
+                                             Action, Prepared, TargetKey,
+                                             maps:get(principal, Request)),
+                {PreparedDescriptor,
+                 {Action, Desired, PreparedDescriptor, Prepared}};
+            false ->
+                {ok, Descriptor} = quod_effect:new(
+                                     create, TargetKey,
+                                     maps:get(principal, Request),
+                                     {<<"quod:operation-created">>,
+                                      <<225:256>>},
+                                     <<226:256>>, <<227:256>>),
+                {Descriptor, none}
+        end,
+    EffectTarget = quod_effect:target(Effect),
+    {ok, EmptyWire} = quod_wire_term:encode_canonical([]),
+    {ok, EffectWire} = quod_wire_term:encode_canonical([Effect]),
+    Core = #{target => Target, base_height => 1, proof_id => ProofId,
+             origin => Origin, principal => maps:get(principal, Request),
+             request_binding => maps:get(binding, Request),
+             overlay_generation => 0, diff_ops => 0, read_functors => 0,
+             effects_count => 1,
+             conflict_descriptor =>
+                 #{reads => [], writes => [], custody => [EffectTarget]},
+             diff => EmptyWire, read_check => EmptyWire,
+             effects => EffectWire, live_bridges => EmptyWire,
+             transcript => EmptyWire},
+    PlanBytes = term_to_binary(
+                  {<<"quod.dtx.plan">>, 8, Core}, [deterministic]),
+    Plan = {quod_plan, Core, TargetKey,
+            quod_identity:sign(PlanBytes, TargetIdentity)},
+    true = quod_dtx:verify(Plan),
+    {ok, Material} = quod_dtx:material(Plan),
+    true = quod_effect:validate_plan(Plan, Material),
+    PlanDigest = quod_dtx:digest(Plan),
+    {ok, Manifest} = quod_dtx:new_manifest(
+                       #{proof_id => ProofId,
+                         coordinator =>
+                             {OriginNs, OriginAnchor,
+                              CoordinatorKey, Admission},
+                         nonce => <<228:256>>,
+                         principal => maps:get(principal, Request),
+                         goal => maps:get(goal_blob, Request),
+                         result => durable_empty_result(),
+                         request_binding => maps:get(binding, Request),
+                         participants => [{Target, PlanDigest}]}),
+    {ok, Attestation} = quod_dtx:attest_plan(
+                          Target, Plan, Manifest, TargetIdentity),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    Claim0 = quod_transaction:remote_claim(
+               Origin, Manifest,
+               {Target, PlanDigest, PlanBlob, Attestation},
+               maps:get(auth, Request)),
+    {ok, Claim, Submission} = quod_transaction:sign_submission(
+                                {OriginNs, OriginAnchor, Admission},
+                                Claim0#transaction{author = SourceKey,
+                                                   author_seq = 1,
+                                                   submitted_at = 1},
+                                SourceIdentity),
+    #{submission => Submission, claim => Claim, effect => Effect,
+      prepared_effect => PreparedEffect,
+      manifest => Manifest, origin => Origin, target => Target,
+      source_identity => SourceIdentity, admission => Admission,
+      target_identity => TargetIdentity}.
+
+durable_empty_result() ->
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    Result.
 
 dtx_fixture_plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
     Session =

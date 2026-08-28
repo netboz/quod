@@ -159,10 +159,10 @@ export type TxsPage = { txs: LedgerRow[]; height: number; next_before: number | 
 export type Block = {
   slot: number
   time: number
-  kind: 'content' | 'begin' | 'prepare' | 'decision' | 'finalize' | 'complete' | 'noop' | 'invalid'
+  kind: 'content' | 'dtx_batch' | 'noop' | 'invalid'
   cert: Cert
   txs: TxFull[]
-  control?: Control
+  controls?: Control[]
 }
 
 export type Control = {

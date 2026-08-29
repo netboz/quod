@@ -904,6 +904,69 @@ follow_progress_is_message_driven_and_cleanup_is_exact_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+root_readiness_resumes_parked_projection_without_polling_test() ->
+    Fixture = signed_content_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Network = maps:get(network, Fixture),
+    Endpoint = {"127.0.0.1", 31980},
+    SavedDesired = application:get_env(quod, namespace_desired),
+    SavedStatic = application:get_env(quod, namespace_static_content),
+    RootNs = quod_ontology:root_ns(),
+    application:set_env(
+      quod, namespace_desired,
+      #{content => #{RootNs => #{genesis_hash => Network}}, brahms => #{}}),
+    application:set_env(quod, namespace_static_content, #{}),
+    Dir = temp_dir("root-ready-projection-wake"),
+    Pid = start_owner(
+            Dir, peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer])),
+    try
+        %% First verify and retain the certified history while Root is ready.
+        %% The regression concerns only its separately rebuilt P projection.
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:current(
+             route_candidates([{Peer, Endpoint}]), Identity, 5000)),
+        application:set_env(
+          quod, namespace_desired, #{content => #{}, brahms => #{}}),
+        ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        Initial = receive_follow(FollowRef, Identity),
+        ?assertMatch({building, 0}, element(2, Initial)),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Initial)),
+
+        %% The certified cache reaches the signed entry, but its projection
+        %% cannot validate that entry until Root supplies the network anchor.
+        Waiting = receive_follow(FollowRef, Identity),
+        ?assertMatch({building, _}, element(2, Waiting)),
+        ?assertMatch(
+           #{follow_building := 1, follow_unreachable := 0},
+           quod_foreign_log:stats()),
+
+        Desired0 = application:get_env(quod, namespace_desired, #{}),
+        Content0 = maps:get(content, Desired0, #{}),
+        application:set_env(
+          quod, namespace_desired,
+          Desired0#{content =>
+                        Content0#{RootNs => #{genesis_hash => Network}}}),
+        _ = quod_reg:publish(
+              {runtime, RootNs}, {replay_ready, boot, 1}),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Waiting)),
+        Ready = receive_follow_resnapshot(FollowRef, Identity),
+        ?assertMatch({resnapshot, 2, _, _}, element(2, Ready)),
+        ok = quod_foreign_log:ack(FollowRef, element(1, Ready)),
+        ?assertMatch(
+           #{follow_building := 0, follow_unreachable := 0},
+           quod_foreign_log:stats()),
+        ok = quod_foreign_log:unfollow(FollowRef)
+    after
+        stop_owner(Pid),
+        restore_application_env(namespace_desired, SavedDesired),
+        restore_application_env(namespace_static_content, SavedStatic),
+        _ = file:del_dir_r(Dir)
+    end.
+
 directory_renewal_does_not_probe_a_reachable_follow_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
@@ -2611,14 +2674,19 @@ long_identity_fixture(Ns, Height) when Height > 1 ->
           chain => [maps:get(genesis, Base) | Entries]}.
 
 signed_content_fixture(Ns) ->
-    Base = fixture_base(Ns),
+    ClientKeyPair = quod_identity:generate(),
+    {ClientPub, _ClientSeed} = ClientKeyPair,
+    AgentInstance = {human_user, test_agent},
+    Base = fixture_base(
+             Ns, [{agent_key, AgentInstance, ClientPub, active}]),
     Pub = maps:get(pub, Base),
     Signer = maps:get(signer, Base),
     Anchor = maps:get(anchor, Base),
     Admission = maps:get(admission, Base),
     Network = key(254),
     RequestFixture = quod_ct:signed_dtx_begin_fixture(
-                       #{target => {Ns, Anchor}, network => Network}),
+                       #{target => {Ns, Anchor}, network => Network,
+                         key_pair => ClientKeyPair}),
     Unsigned = (maps:get(transaction, RequestFixture))#transaction{
                  author = Pub, author_seq = 1, sig = none},
     {ok, Signed} = quod_transaction:sign(
@@ -2713,10 +2781,13 @@ prepared_then_committed_fixture(Ns) ->
               finalize_ref => FinalizeRef}.
 
 fixture_base(Ns) ->
+    fixture_base(Ns, []).
+
+fixture_base(Ns, InitialTerms) ->
     {Pub, Seed} = quod_identity:generate(),
     Signer = #{pubkey => Pub,
                key => quod_identity:key_term({Pub, Seed})},
-    Genesis = genesis(Ns, Pub),
+    Genesis = genesis(Ns, Pub, InitialTerms),
     Anchor = entry_hash(Genesis),
     Binding = {Ns, Anchor},
     {ok, [_], Projection1} =
@@ -2754,11 +2825,12 @@ content_entry(Ns, Anchor, Pub, Signer, Slot, Transactions) ->
                  sigs = [{Pub, Signature}]},
     #entry{index = Slot, data = Data, cert = Cert}.
 
-genesis(Ns, Pub) ->
+genesis(Ns, Pub, InitialTerms) ->
     Nonce = key(44),
     Tx = quod_simplex:test_genesis_tx(
            #{node_id => Pub, mode => create, committee => [],
-             node_addr => {"127.0.0.1", 19000}},
+             node_addr => {"127.0.0.1", 19000},
+             genesis_diff => quod_prolog:terms_to_diff(InitialTerms)},
            Ns, Pub, Nonce),
     #entry{index = 1, data = {batch, [Tx]}, cert = none}.
 
@@ -2924,6 +2996,11 @@ wait_follow_count(Expected, Left) ->
 stop_owner(Pid) when is_pid(Pid) ->
     unlink(Pid),
     try gen_server:stop(Pid) catch exit:_ -> ok end.
+
+restore_application_env(Key, {ok, Value}) ->
+    application:set_env(quod, Key, Value);
+restore_application_env(Key, undefined) ->
+    application:unset_env(quod, Key).
 
 control(Kind, Target, Record) ->
     {quod_dtx_control, 2, Kind, Target, Record,

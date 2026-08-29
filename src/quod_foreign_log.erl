@@ -31,9 +31,10 @@ They add no verifier or history path: a short monitored verification worker
 advances at most one certified page, and one unregistered materializer folds
 only the already-persisted cache through `quod_committed_projection`. Normal
 progress is message-driven: the initial attachment, exact directory-route
-events, local finalized commits, authenticated feed block/digest frames, and
-explicit consumer refresh wake one coalesced job. Commit and feed messages are
-freshness hints only; the ordinary certified follow remains the sole authority.
+events, local finalized commits, authenticated feed block/digest frames, Root
+replay readiness, and explicit consumer refresh wake one coalesced job. Commit
+and feed messages are freshness hints only; the ordinary certified follow
+remains the sole authority.
 For each certified current target validator, the owner maintains one volatile,
 identity-bound feed registration. Height-only wakes acknowledge freshness and
 release the existing certified follower; they carry no facts or authority and
@@ -155,6 +156,7 @@ that projection can be reused in memory.
           hinted_height = unknown :: unknown | non_neg_integer(),
           current_view = unconfirmed :: confirmed | unconfirmed,
           projection_state = building :: building | ready,
+          projection_wait = none :: none | network_identity,
           reachability = unknown :: reachable | unknown | {unreachable, term()},
           bootstrap_hints = [] :: [{<<_:256>>, term()}]
          }).
@@ -793,6 +795,7 @@ init(Opts) ->
             %% dedicated parent here also reclaims anything left by an
             %% untrappable kill before this owner restarted.
             cleanup_projection_dirs(Root),
+            true = quod_reg:subscribe({runtime, quod_ontology:root_ns()}),
             TransportMonitor = quod_reg:monitor_name({transport, node}, follow),
             S0 = #s{root = Root, fetch_fun = FetchFun,
                     page_timeout_ms = PageTimeout,
@@ -1433,6 +1436,11 @@ handle_info({committed, Ns, _Slot, #entry{}}, S) ->
     {noreply, wake_namespace_progress(Ns, S)};
 handle_info({certified_head, Ns, _Slot}, S) ->
     {noreply, wake_namespace_progress(Ns, S)};
+%% A materializer can discover its Root dependency immediately before or
+%% after Root publishes this edge.  The waiting handler below covers the
+%% crossed order; this edge resumes every worker already parked on it.
+handle_info({replay_ready, _Id, _Height}, S) ->
+    {noreply, resume_network_identity_projections(S)};
 handle_info({foreign_worker_done, RequestRef, Result, Meta0}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
         #request{identity = Identity} ->
@@ -2583,13 +2591,16 @@ ensure_materializer_advanced(Identity, S0) ->
                             put_history(
                               Identity,
                               H0#history{materializer = M,
-                                         projection_state = building},
+                                         projection_state = building,
+                                         projection_wait = none},
                               S0#s{projection_rebuilds =
                                        S0#s.projection_rebuilds + 1});
                         #materializer{pid = Pid, generation = Generation} ->
                             quod_foreign_projection:advance(
                               Pid, Generation, Height, Head),
-                            S0
+                            put_history(
+                              Identity,
+                              H0#history{projection_wait = none}, S0)
                     end;
                 _ ->
                     S0
@@ -2607,21 +2618,37 @@ projection_building(Identity, Generation, Height, S0) ->
             notify_history(
               Identity, {building, Height},
               put_history(
-                Identity, H0#history{projection_state = building}, S0));
+                Identity,
+                H0#history{projection_state = building,
+                           projection_wait = none}, S0));
         error -> S0
     end.
 
 projection_waiting(Identity, Generation, Height, S0) ->
     case materializer_matches(Identity, Generation, S0) of
         {ok, H0, _M} ->
-            notify_history(
-              Identity, {building, Height},
-              put_history(
-                Identity,
-                H0#history{reachability = {unreachable, network_identity}},
-                S0));
+            S1 = notify_history(
+                   Identity, {building, Height},
+                   put_history(
+                     Identity,
+                     H0#history{projection_wait = network_identity}, S0)),
+            %% Root may have become ready before this message crossed the
+            %% owner's mailbox.  Recheck the dependency at the edge instead
+            %% of waiting for an event which has already happened.
+            case quod_ontology:network_identity() of
+                {ok, <<_:256>>} -> ensure_materializer_advanced(Identity, S1);
+                _ -> S1
+            end;
         error -> S0
     end.
+
+resume_network_identity_projections(S0) ->
+    lists:foldl(
+      fun({Identity, #history{projection_wait = network_identity}}, S) ->
+              ensure_materializer_advanced(Identity, S);
+         ({_Identity, #history{}}, S) ->
+              S
+      end, S0, maps:to_list(S0#s.histories)).
 
 projection_ready(Identity, Generation,
                  #{from := From, height := Height,
@@ -2647,7 +2674,8 @@ projection_ready(Identity, Generation,
                           end,
             H1 = H0#history{materializer = M1,
                             last_advance_ms = LastAdvance,
-                            projection_state = ready},
+                            projection_state = ready,
+                            projection_wait = none},
             S1 = put_history(
                    Identity, H1,
                    S0#s{projection_bytes = Total,
@@ -2738,7 +2766,8 @@ discard_materializer(Identity, H0, M0, S0) ->
     stop_materializer(M0),
     put_history(
       Identity,
-      H0#history{materializer = none, projection_state = building},
+      H0#history{materializer = none, projection_state = building,
+                 projection_wait = none},
       S0#s{projection_bytes = max(
                                   0, S0#s.projection_bytes -
                                          M0#materializer.memory_bytes)}).
@@ -2762,6 +2791,7 @@ stop_follow_target(Identity, S0) ->
                             hinted_height = unknown,
                             current_view = unconfirmed,
                             projection_state = building,
+                            projection_wait = none,
                             reachability = unknown},
             S2 = put_history(Identity, H2, S1),
             maybe_close_progress_signals(

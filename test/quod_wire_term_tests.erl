@@ -49,6 +49,20 @@ goal_symbol_names_is_atom_safe_and_uses_callable_positions_test() ->
                  quod_wire_term:goal_symbol_names(
                    {{'$quod_symbol', not_binary}, ok})).
 
+remote_selector_is_materialized_but_inner_goal_stays_opaque_test() ->
+    Target = <<"wire_route_",
+               (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Inner = <<"wire_inner_",
+              (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Goal = {'::', {'$quod_symbol', Target},
+            {{'$quod_symbol', Inner}, ok}},
+    ?assertEqual({ok, [Target]}, quod_wire_term:goal_symbol_names(Goal)),
+    {ok, {'::', TargetAtom,
+          {{'$quod_symbol', Inner}, ok}}} =
+        quod_wire_term:materialize_goal_symbols(Goal),
+    ?assertEqual(Target, atom_to_binary(TargetAtom, utf8)),
+    ?assertError(badarg, binary_to_existing_atom(Inner, utf8)).
+
 database_update_clause_heads_are_callable_positions_test() ->
     HeadName = <<"wire_new_clause_head_",
                  (integer_to_binary(erlang:unique_integer([positive])))/binary>>,

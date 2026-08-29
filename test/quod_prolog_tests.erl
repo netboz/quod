@@ -136,20 +136,24 @@ signed_remote_selector_materializes_only_its_authenticated_target_test() ->
             {'$quod_symbol', Remote},
             {{'$quod_symbol', <<"benchmark_echo">>},
              {'$quod_symbol', <<"ok">>}}},
+    {ok, MaterializedGoal} = quod_wire_term:materialize_goal_symbols(Goal),
     ?assertEqual(
        remote_selector,
-       quod_prolog:test_signed_origin_policy_goal(Source, Goal)),
+       quod_prolog:test_signed_origin_policy_goal(Source, MaterializedGoal)),
     %% The route selector is the only origin-owned syntax.  Even a self route
     %% leaves its inner goal intact for the normal target stage.
     SelfGoal = {'::',
                 {'$quod_symbol', Source},
                 {{'$quod_symbol', <<"benchmark_echo">>},
                  {'$quod_symbol', <<"ok">>}}},
+    {ok, MaterializedSelfGoal} =
+        quod_wire_term:materialize_goal_symbols(SelfGoal),
     ?assertEqual(
        {local,
         {{'$quod_symbol', <<"benchmark_echo">>},
          {'$quod_symbol', <<"ok">>}}},
-       quod_prolog:test_signed_origin_policy_goal(Source, SelfGoal)),
+       quod_prolog:test_signed_origin_policy_goal(
+         Source, MaterializedSelfGoal)),
     ?assertEqual(
        invalid,
        quod_prolog:test_signed_origin_policy_goal(

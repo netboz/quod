@@ -4223,18 +4223,13 @@ signed_origin_authorized(
     end.
 
 signed_origin_policy_goal(Ns, {'::', TargetTerm, Inner}) ->
-    %% The signed parser preserves unknown atoms as opaque symbols until the
-    %% authenticated owning ontology needs them.  Only materialize the route
-    %% selector here: a foreign inner goal remains target-owned and is never
-    %% materialized by the origin merely to decide whose ACL applies.
-    case quod_wire_term:materialize_symbols(TargetTerm) of
-        {ok, Selector} ->
-            case quod_ontology_name:flatten(Selector) of
-                Ns -> {local, Inner};
-                Target when is_binary(Target) -> remote_selector;
-                error -> invalid
-            end;
-        {error, _} -> invalid
+    %% Ingress has already materialized the origin-owned route selector while
+    %% preserving the foreign inner goal opaquely. Policy only classifies the
+    %% resulting route; it does not repeat wire materialization.
+    case quod_ontology_name:flatten(TargetTerm) of
+        Ns -> {local, Inner};
+        Target when is_binary(Target) -> remote_selector;
+        error -> invalid
     end;
 signed_origin_policy_goal(_Ns, Goal) ->
     {local, Goal}.

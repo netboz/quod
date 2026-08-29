@@ -284,6 +284,7 @@ collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         assertz -> collect_clause_symbol(Tuple, 2, Acc);
         retract -> collect_clause_symbol(Tuple, 2, Acc);
         retractall -> collect_clause_symbol(Tuple, 2, Acc);
+        '::' -> collect_selector_symbol(Tuple, 2, Acc);
         _ -> {ok, Acc}
     end;
 collect_goal_symbols(_Goal, Acc) ->
@@ -333,6 +334,15 @@ collect_clause_symbols({':-', Head, Body}, Acc) ->
 collect_clause_symbols(Clause, Acc) ->
     collect_goal_symbols(Clause, Acc).
 
+%% The current ontology owns the route selector but not the selected
+%% ontology's inner goal. Materialize only the selector here; the target will
+%% perform the same goal walk after it authenticates and opens that scope.
+collect_selector_symbol(Tuple, Position, Acc)
+  when Position =< tuple_size(Tuple) ->
+    collect_new_symbols(element(Position, Tuple), Acc);
+collect_selector_symbol(_Tuple, _Position, _Acc) ->
+    error.
+
 collect_goal_positions(_Tuple, [], Acc) ->
     {ok, Acc};
 collect_goal_positions(Tuple, [Position | Rest], Acc) ->
@@ -370,6 +380,7 @@ replace_goal_symbols(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         assertz -> replace_clause_symbol(Tuple, 2);
         retract -> replace_clause_symbol(Tuple, 2);
         retractall -> replace_clause_symbol(Tuple, 2);
+        '::' -> replace_selector_symbol(Tuple, 2);
         _ -> Tuple
     end;
 replace_goal_symbols(Goal) ->
@@ -385,6 +396,11 @@ replace_clause_symbols({':-', Head, Body}) ->
     {':-', replace_goal_symbols(Head), replace_goal_symbols(Body)};
 replace_clause_symbols(Clause) ->
     replace_goal_symbols(Clause).
+
+replace_selector_symbol(Tuple, Position) when Position =< tuple_size(Tuple) ->
+    setelement(Position, Tuple, replace_symbols(element(Position, Tuple)));
+replace_selector_symbol(Tuple, _Position) ->
+    Tuple.
 
 replace_goal_positions(Tuple, Positions) ->
     lists:foldl(

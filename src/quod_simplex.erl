@@ -266,6 +266,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_finish_pending_begins_reconciliation/2,
          test_retire_invalid_dtx/3,
          test_reconcile_dtx_coordinator/1,
+         test_reconcile_dtx_coordinators/2,
          test_drop_dtx_coordinator/4,
          test_dtx_coordinator_state/1,
          test_stop_dtx_coordinator/1,
@@ -1789,6 +1790,8 @@ test_reconcile_signing_state(S) -> reconcile_signing_state(S).
 test_finish_pending_begins_reconciliation(Transition, S) ->
     finish_pending_begins_reconciliation(Transition, S).
 test_reconcile_dtx_coordinator(S) -> reconcile_dtx_coordinator(S).
+test_reconcile_dtx_coordinators(Desired, S) ->
+    reconcile_dtx_coordinators(Desired, S).
 test_drop_dtx_coordinator(Ref, Pid, Reason, S) ->
     drop_dtx_coordinator_owner(Ref, Pid, Reason, S).
 test_dtx_coordinator_state(#s{dtx_coordinators = Coordinators}) ->
@@ -4724,19 +4727,35 @@ start_dtx_coordinator(
 start_dtx_coordinator(
   {reference, GroupId, BeginRef},
   S = #s{ledger_root = LedgerRoot}) ->
-    Owner = self(),
-    {Pid, Monitor} =
-        spawn_monitor(
-          fun() ->
-              Result = dtx_local_evidence_at(
-                         LedgerRoot, BeginRef, 'begin'),
-              Owner ! {dtx_coordinator_bootstrap, self(),
-                       GroupId, BeginRef, Result}
-          end),
-    put_dtx_coordinator(
-      #dtx_coordinator_owner{
-        status = recovering, group_id = GroupId,
-        begin_ref = BeginRef, pid = Pid, monitor = Monitor}, S).
+    %% The certified-history owner has one writer per ontology identity.  Feed
+    %% historical Begin checks into that existing lane one at a time instead
+    %% of starting calls whose final deadlines would expire while queued
+    %% behind the same local ledger scan.  Completion below immediately wakes
+    %% the next bootstrap; live coordinators remain independent and concurrent.
+    case dtx_coordinator_bootstrap_active(S) of
+        true ->
+            S;
+        false ->
+            Owner = self(),
+            {Pid, Monitor} =
+                spawn_monitor(
+                  fun() ->
+                      Result = dtx_local_evidence_at(
+                                 LedgerRoot, BeginRef, 'begin'),
+                      Owner ! {dtx_coordinator_bootstrap, self(),
+                               GroupId, BeginRef, Result}
+                  end),
+            put_dtx_coordinator(
+              #dtx_coordinator_owner{
+                status = recovering, group_id = GroupId,
+                begin_ref = BeginRef, pid = Pid, monitor = Monitor}, S)
+    end.
+
+dtx_coordinator_bootstrap_active(#s{dtx_coordinators = Coordinators}) ->
+    lists:any(
+      fun(#dtx_coordinator_owner{status = recovering}) -> true;
+         (#dtx_coordinator_owner{}) -> false
+      end, maps:values(Coordinators)).
 
 start_dtx_coordinator_worker(
   GroupId, Begin, GroupRef, BeginRef, BeginEvidence,
@@ -4767,14 +4786,15 @@ finish_dtx_coordinator_bootstrap(
             case {Desired,
                   recovered_origin_begin(GroupId, BeginRef, Result)} of
                 {{reference, GroupId, BeginRef}, {ok, Begin, GroupRef}} ->
-                    start_dtx_coordinator(
-                      {recovered, GroupId, Begin, GroupRef,
-                       BeginRef, Result}, S0);
+                    reconcile_dtx_coordinator(
+                      start_dtx_coordinator(
+                        {recovered, GroupId, Begin, GroupRef,
+                         BeginRef, Result}, S0));
                 {{reference, GroupId, BeginRef}, {error, Reason}} ->
                     error({dtx_coordinator_begin_recovery_failed,
                            S#s.ns, GroupId, Reason});
                 {_NoLongerActive, _Result} ->
-                    S0
+                    reconcile_dtx_coordinator(S0)
             end;
         _ ->
             S

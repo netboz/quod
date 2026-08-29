@@ -2347,6 +2347,76 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
         file:del_dir_r(Dir)
     end.
 
+%% One ontology's certified-history cache has one writer.  Starting every
+%% historical Begin check together only moves that same-identity work into the
+%% verifier queue, where their caller deadlines expire together.  Recovery
+%% must admit one check and let its completion message start the next; this
+%% fixture holds the first verifier call open and proves no second call or
+%% recovery owner is created meanwhile.
+dtx_committed_begin_bootstrap_respects_foreign_history_lane_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    Begin = maps:get('begin', Fixture),
+    BeginControl = maps:get(begin_control, Fixture),
+    Origin = {Ns, Anchor} = maps:get(origin, Fixture),
+    {ok, {group, Ns, Anchor, Coordinator, Admission, GroupId1}} =
+        quod_dtx:begin_group_ref(Begin),
+    {_Entry, _Payload, BeginRef} =
+        certified_dtx_test_entry(Origin, BeginControl, 1),
+    GroupId2 = crypto:hash(sha256, <<GroupId1/binary, "next">>),
+    Desired =
+        #{GroupId1 => {reference, GroupId1, BeginRef},
+          GroupId2 => {reference, GroupId2, BeginRef}},
+    Dir = relay_store_dir("committed_begin_history_lane"),
+    case quod_reg:where({foreign_log, node}) of
+        Existing when is_pid(Existing) -> gen_server:stop(Existing);
+        undefined -> ok
+    end,
+    Parent = self(),
+    ForeignLog = spawn(
+                   fun() ->
+                       true = quod_reg:reg({foreign_log, node}),
+                       Parent ! {foreign_log_ready, self()},
+                       foreign_log_hold_verifications(Parent, Dir, BeginRef)
+                   end),
+    receive {foreign_log_ready, ForeignLog} -> ok after 1000 ->
+        error(foreign_log_registration_timeout)
+    end,
+    try
+        Base = st(#{ns => Ns, genesis_hash => Anchor,
+                    ledger_root => Dir, slot => 1,
+                    self => Coordinator, validators => [Coordinator],
+                    author_admissions => #{Coordinator => Admission},
+                    sync => ready, prolog_ready => true}),
+        Recovering = quod_simplex:test_reconcile_dtx_coordinators(
+                       Desired, Base),
+        ?assertEqual(
+           1,
+           map_size(quod_simplex:test_dtx_coordinator_state(Recovering))),
+        receive {verify_local_started, ForeignLog} -> ok after 1000 ->
+            error(first_begin_bootstrap_not_started)
+        end,
+        receive
+            {verify_local_started, ForeignLog} ->
+                error(second_begin_bootstrap_started_concurrently)
+        after 100 ->
+            ok
+        end,
+        _ = quod_simplex:test_stop_dtx_coordinator(Recovering)
+    after
+        ForeignLog ! stop,
+        file:del_dir_r(Dir)
+    end.
+
+foreign_log_hold_verifications(Parent, Dir, BeginRef) ->
+    receive
+        {'$gen_call', _From,
+         {verify_local, Dir, BeginRef, 'begin', _Timeout}} ->
+            Parent ! {verify_local_started, self()},
+            foreign_log_hold_verifications(Parent, Dir, BeginRef);
+        stop -> ok
+    end.
+
 %% The generic state builder has one dependency: `validators` supplies default
 %% admission ids, but a test's explicit admission view is authoritative.  This
 %% must not depend on maps:fold/3 traversal order (which differs as the VM atom

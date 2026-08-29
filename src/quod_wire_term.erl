@@ -28,6 +28,7 @@ payload; one aggregate payload gets one bounded allocation budget.
 -export([encode/1, decode/1,
          encode_canonical/1, decode_canonical/2,
          materialize_symbols/1, materialize_goal_symbols/1,
+         normalize_answer_symbols/2,
          goal_symbol_names/1, symbol_names/1,
          is_ground/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
@@ -64,6 +65,26 @@ decode(Wire) ->
         {ok, Term, _Nodes} -> {ok, Term};
         error -> {error, bad_term}
     end.
+
+-doc """
+Normalize a remote proof answer against the caller's retained goal vocabulary.
+
+An atom-safe decode represents an unknown symbol as `{'$quod_symbol', Bytes}`,
+while a later decode may return the atom after the target has materialized the
+same callable. Both spellings denote the same Prolog symbol. This function
+chooses the representation already retained by the caller (preferring the
+opaque spelling if a concurrent first use left both spellings in that goal)
+and applies it consistently to the goal and answer before unification.
+
+Symbols absent from the retained goal are left untouched. No atom is created.
+Network inputs have passed bounded wire validation; co-hosted inputs are
+already valid Erlog terms from the same proof-session owner.
+""".
+-spec normalize_answer_symbols(term(), term()) -> {term(), term()}.
+normalize_answer_symbols(Goal, Answer) ->
+    Representations = retained_symbol_representations(Goal, #{}),
+    {normalize_retained_symbols(Goal, Representations),
+     normalize_retained_symbols(Answer, Representations)}.
 
 -doc "Encode one bounded Prolog term as canonical deterministic wire bytes.".
 -spec encode_canonical(term()) -> {ok, binary()} | {error, bad_term}.
@@ -182,6 +203,58 @@ collect_symbol_names_list([Value | Rest], Symbols0) ->
         {ok, Symbols1} -> collect_symbol_names_list(Rest, Symbols1);
         error -> error
     end.
+
+retained_symbol_representations({'$quod_symbol', Name}, Acc)
+  when is_binary(Name), byte_size(Name) =< ?MAX_SYMBOL_BYTES ->
+    Acc#{Name => {'$quod_symbol', Name}};
+retained_symbol_representations(Tuple, Acc)
+  when is_tuple(Tuple), tuple_size(Tuple) =:= 1 ->
+    %% Erlog variables are not vocabulary, even when their names are atoms.
+    Acc;
+retained_symbol_representations(Tuple, Acc) when is_tuple(Tuple) ->
+    lists:foldl(
+      fun retained_symbol_representations/2, Acc, tuple_to_list(Tuple));
+retained_symbol_representations([Head | Tail], Acc0) ->
+    retained_symbol_representations(
+      Tail, retained_symbol_representations(Head, Acc0));
+retained_symbol_representations([], Acc) ->
+    Acc;
+retained_symbol_representations(Atom, Acc) when is_atom(Atom) ->
+    Name = atom_to_binary(Atom, utf8),
+    case maps:get(Name, Acc, Atom) of
+        {'$quod_symbol', Name} -> Acc;
+        _ -> Acc#{Name => Atom}
+    end;
+retained_symbol_representations(_Value, Acc) ->
+    Acc.
+
+normalize_retained_symbols({'$quod_symbol', Name}, Representations)
+  when is_binary(Name), byte_size(Name) =< ?MAX_SYMBOL_BYTES ->
+    maps:get(Name, Representations, {'$quod_symbol', Name});
+normalize_retained_symbols(Tuple, _Representations)
+  when is_tuple(Tuple), tuple_size(Tuple) >= 1,
+       element(1, Tuple) =:= '$quod_symbol' ->
+    %% Bounded wire validation rejects malformed reserved markers. Keep a
+    %% trusted malformed term indivisible here too instead of treating the
+    %% reserved marker atom as ordinary vocabulary.
+    Tuple;
+normalize_retained_symbols(Tuple, _Representations)
+  when is_tuple(Tuple), tuple_size(Tuple) =:= 1 ->
+    Tuple;
+normalize_retained_symbols(Tuple, Representations) when is_tuple(Tuple) ->
+    list_to_tuple(
+      [normalize_retained_symbols(Value, Representations)
+       || Value <- tuple_to_list(Tuple)]);
+normalize_retained_symbols([Head | Tail], Representations) ->
+    [normalize_retained_symbols(Head, Representations) |
+     normalize_retained_symbols(Tail, Representations)];
+normalize_retained_symbols([], _Representations) ->
+    [];
+normalize_retained_symbols(Atom, Representations) when is_atom(Atom) ->
+    Name = atom_to_binary(Atom, utf8),
+    maps:get(Name, Representations, Atom);
+normalize_retained_symbols(Value, _Representations) ->
+    Value.
 
 materialize_symbol_names(Names) ->
     case lists:all(fun valid_symbol_name/1, Names) of

@@ -32,7 +32,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -export([test_serve_nested/1, test_await_scope_reply/2,
          test_await_identity/4, test_await_remote_scope_open/4,
          test_remote_open_error/2, test_seed_confirmation_error/2,
-         test_remember_route_error/2]).
+         test_remember_route_error/2, test_bind_answer/2]).
 -endif.
 
 -doc "Register the `::` handler onto a freshly-built kb (`#est{}`).".
@@ -139,9 +139,8 @@ drive_stream(Stream, GoalTerm, Target, Next, St) ->
 %% PRE-unify bindings/var-counter, so backtracking restores them and pulls the next
 %% solution — the streaming analogue of a clause choice point.
 emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
-    {Grafted, Vn1} = graft(Sol, Vn),   %% rename any target-side vars to fresh local ones
-    case erlog_int:unify(GoalTerm, Grafted, Bs) of
-        {succeed, Bs1} ->
+    case bind_answer(GoalTerm, Sol, Bs, Vn) of
+        {ok, Bs1, Vn1} ->
             Fail = fun(#cp{bs = Bs0, vn = Vn0}, Cps, FSt) ->
                        drive_stream(Stream, GoalTerm, Target, Next,
                                     FSt#est{bs = Bs0, vn = Vn0, cps = Cps})
@@ -149,10 +148,28 @@ emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
             Cp = #cp{type = compiled, data = Fail, next = Next, bs = Bs, vn = Vn},
             St1 = erlog_int:push_choicepoint(Cp, St),
             erlog_int:prove_body(Next, St1#est{bs = Bs1, vn = Vn1});
-        fail ->
-            %% This solution doesn't unify with the (partially bound) goal — skip it.
-            drive_stream(Stream, GoalTerm, Target, Next, St)
+        {error, Reason} ->
+            ask_error(Reason)
     end.
+
+bind_answer(GoalTerm, Sol, Bs, Vn) ->
+    {Grafted, Vn1} = graft(Sol, Vn),
+    %% Atom and opaque spellings denote one Prolog symbol. The caller's
+    %% retained goal spelling wins; any remaining mismatch is a protocol error.
+    {NormalizedGoal, NormalizedAnswer} =
+        quod_wire_term:normalize_answer_symbols(GoalTerm, Grafted),
+    case erlog_int:unify(NormalizedGoal, NormalizedAnswer, Bs) of
+        {succeed, Bs1} -> {ok, Bs1, Vn1};
+        fail -> {error, {protocol_error, answer_binding}}
+    end.
+
+-ifdef(TEST).
+test_bind_answer(Goal, Answer) ->
+    case bind_answer(Goal, Answer, erlog_int:new_bindings(), 0) of
+        {ok, Bs, _Vn} -> {ok, Bs};
+        {error, _} = Error -> Error
+    end.
+-endif.
 
 %% Rename every variable (a 1-tuple in erlog) in a target solution term to a fresh local
 %% var, consistently within the term, so target-side and asker-side var namespaces never

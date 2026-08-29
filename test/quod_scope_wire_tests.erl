@@ -170,6 +170,13 @@ scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
     ?assertEqual(
        {ok, InvocationError}, quod_scope_wire:decode_response(Encoded)).
 
+answer_binding_protocol_error_round_trips_test() ->
+    Event = event(
+              {invocation_error, id(31), 1,
+               {protocol_error, answer_binding}}),
+    {ok, Encoded} = quod_scope_wire:encode_event(Event),
+    ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Encoded)).
+
 seal_operations_round_trip_and_stay_bounded_test() ->
     SealCommand = command(scope_seal),
     {ok, EncodedCommand} = quod_scope_wire:encode_command(SealCommand),

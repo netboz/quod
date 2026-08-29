@@ -17,6 +17,44 @@ unknown_symbol_does_not_allocate_atom_test() ->
     {ok, Wire} = quod_wire_term:encode({'$quod_symbol', Symbol}),
     ?assertEqual({0, Symbol}, Wire).
 
+answer_bytes_bind_identically_before_and_after_atom_creation_test() ->
+    Name = <<"quod_wire_answer_race_", (integer_to_binary(
+                 erlang:unique_integer([positive])))/binary>>,
+    Wire = {4, [{0, Name}, {0, <<"ok">>}]},
+    {ok, Before = {{'$quod_symbol', Name}, ok}} =
+        quod_wire_term:decode(Wire),
+    {Goal1, Answer1} = quod_wire_term:normalize_answer_symbols(Before, Before),
+    _ = binary_to_atom(Name, utf8),
+    {ok, After} = quod_wire_term:decode(Wire),
+    {Goal2, Answer2} = quod_wire_term:normalize_answer_symbols(Before, After),
+    ?assertEqual({Goal1, Answer1}, {Goal2, Answer2}),
+    {ok, St} = erlog_int:new(erlog_db_dict, null),
+    ?assertMatch({succeed, _}, erlog_int:unify(Goal1, Answer1, St#est.bs)),
+    ?assertMatch({succeed, _}, erlog_int:unify(Goal2, Answer2, St#est.bs)).
+
+variable_name_is_not_treated_as_goal_vocabulary_test() ->
+    Name = <<"X">>,
+    Goal = {{'$quod_symbol', Name}, {'X'}},
+    Answer = {'X', {'X'}},
+    ?assertEqual({Goal, Goal},
+                 quod_wire_term:normalize_answer_symbols(Goal, Answer)).
+
+opaque_spelling_wins_when_retained_goal_contains_both_test() ->
+    Name = <<"quod_wire_both_spellings_", (integer_to_binary(
+                 erlang:unique_integer([positive])))/binary>>,
+    Opaque = {'$quod_symbol', Name},
+    Atom = binary_to_atom(Name, utf8),
+    Goal = {pair, {Opaque, ok}, {Atom, ok}},
+    Expected = {pair, {Opaque, ok}, {Opaque, ok}},
+    ?assertEqual({Expected, Expected},
+                 quod_wire_term:normalize_answer_symbols(Goal, Goal)).
+
+malformed_reserved_marker_is_not_walked_as_vocabulary_test() ->
+    Malformed = {'$quod_symbol', not_binary},
+    ?assertEqual({Malformed, Malformed},
+                 quod_wire_term:normalize_answer_symbols(Malformed,
+                                                           Malformed)).
+
 unknown_predicate_stays_opaque_until_target_materializes_test() ->
     Symbol = <<"quod_unknown_predicate">>,
     WireGoal = {4, [{0, Symbol}, {0, <<"x">>}]},

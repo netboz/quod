@@ -971,7 +971,7 @@ valid_protocol_kind(Kind) ->
        bad_transaction_mode,
        bad_payload, bad_payload_kind, bad_error_code,
        command_sequence, event_sequence, answer_sequence,
-       request_binding, session_binding, identity_binding,
+       request_binding, answer_binding, session_binding, identity_binding,
        manifest_binding,
        unexpected_scope_command, proof_engine]).
 

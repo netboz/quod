@@ -209,6 +209,83 @@ policy_kb(Facts) ->
     State2 = quod_ask:load(quod_predicates:load(State1)),
     quod_ct:commit_kb(quod_ct:assert_facts(Facts, State2)).
 
+remote_nested_first_use_answer_binds_test() ->
+    Name = unique_answer_symbol(<<"nested_first">>),
+    Wire = {4, [{0, Name}, {0, <<"ok">>}]},
+    {ok, RetainedGoal = {{'$quod_symbol', Name}, ok}} =
+        quod_wire_term:decode(Wire),
+    Predicate = binary_to_atom(Name, utf8),
+    {ok, Answer = {Predicate, ok}} = quod_wire_term:decode(Wire),
+    ?assertMatch({ok, _}, quod_ask:test_bind_answer(RetainedGoal, Answer)).
+
+existing_and_fresh_answer_symbols_bind_identically_test() ->
+    ?assertMatch(
+       {ok, _}, quod_ask:test_bind_answer({known_answer, ok},
+                                          {known_answer, ok})),
+    Name = unique_answer_symbol(<<"fresh_equivalent">>),
+    RetainedGoal = {{'$quod_symbol', Name}, ok},
+    Answer = {binary_to_atom(Name, utf8), ok},
+    ?assertMatch({ok, _}, quod_ask:test_bind_answer(RetainedGoal, Answer)).
+
+normalized_remote_answer_preserves_variable_binding_test() ->
+    Name = unique_answer_symbol(<<"variable_binding">>),
+    RetainedGoal = {{'$quod_symbol', Name}, {'Value'}},
+    Answer = {binary_to_atom(Name, utf8), 42},
+    {ok, Bindings} = quod_ask:test_bind_answer(RetainedGoal, Answer),
+    ?assertEqual(42, erlog_int:dderef({'Value'}, Bindings)).
+
+remote_answer_mismatch_is_typed_protocol_error_test() ->
+    ?assertEqual(
+       {error, {protocol_error, answer_binding}},
+       quod_ask:test_bind_answer({expected_answer, {'Value'}},
+                                 {different_answer, 42})),
+    ?assertEqual(
+       {error, {protocol_error, answer_binding}},
+       quod_ask:test_bind_answer({pair, {'Value'}, {'Value'}},
+                                 {pair, one, two})).
+
+remote_answer_normalization_does_not_allocate_foreign_symbols_test() ->
+    Name = unique_answer_symbol(<<"foreign_value">>),
+    ?assertError(badarg, binary_to_existing_atom(Name, utf8)),
+    {ok, Bindings} =
+        quod_ask:test_bind_answer(
+          {lookup, {'Value'}}, {lookup, {'$quod_symbol', Name}}),
+    ?assertEqual({'$quod_symbol', Name},
+                 erlog_int:dderef({'Value'}, Bindings)),
+    ?assertError(badarg, binary_to_existing_atom(Name, utf8)).
+
+concurrent_first_use_answers_bind_on_same_node_test() ->
+    Name = unique_answer_symbol(<<"concurrent_first">>),
+    Wire = {4, [{0, Name}, {0, <<"ok">>}]},
+    {ok, FirstGoal} = quod_wire_term:decode(Wire),
+    {ok, SecondGoal} = quod_wire_term:decode(Wire),
+    _ = binary_to_atom(Name, utf8),
+    {ok, Answer} = quod_wire_term:decode(Wire),
+    Parent = self(),
+    Workers =
+        [spawn_monitor(
+           fun() ->
+               Parent ! {self(), quod_ask:test_bind_answer(Goal, Answer)}
+           end) || Goal <- [FirstGoal, SecondGoal]],
+    lists:foreach(
+      fun({Pid, Monitor}) ->
+          receive
+              {Pid, {ok, _Bindings}} ->
+                  _ = erlang:demonitor(Monitor, [flush]),
+                  ok;
+              {Pid, Other} ->
+                  error({concurrent_answer_failed, Other});
+              {'DOWN', Monitor, process, Pid, Reason} ->
+                  error({concurrent_answer_crashed, Reason})
+          after 1000 ->
+              error(concurrent_answer_timeout)
+          end
+      end, Workers).
+
+unique_answer_symbol(Prefix) ->
+    <<"quod_answer_", Prefix/binary, "_",
+      (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
+
 ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->

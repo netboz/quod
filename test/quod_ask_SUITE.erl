@@ -5,6 +5,7 @@
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([remote_scope_solutions/1, remote_scope_symbol_safety/1,
+         remote_signed_fresh_nested_symbol/1,
          remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
          remote_scope_nested_failure_reasons/1,
          remote_scope_deep_failure_reasons/1,
@@ -31,6 +32,7 @@
 -define(SCOPE_WAVE_SIZE, 8).
 
 all() -> [remote_scope_solutions, remote_scope_symbol_safety,
+          remote_signed_fresh_nested_symbol,
           remote_scope_chain_policy, remote_scope_failure_reasons,
           remote_scope_nested_failure_reasons,
           remote_scope_deep_failure_reasons,
@@ -263,6 +265,59 @@ remote_scope_symbol_safety(Config) ->
     ?assertMatch({fail, [_ | _]},
                  peer:call(Asker, quod_prolog, prove,
                            [?ASKER_NS, Unknown], 60000)).
+
+%% A retains the new predicate as an opaque symbol. C alone starts with its
+%% fact. B materializes the spelling from a deliberately failing local branch
+%% while leaving C's nested goal opaque, then C returns that same symbol. Both
+%% simultaneous first-use requests must bind without a failed seed request.
+remote_signed_fresh_nested_symbol(Config) ->
+    Asker = ?config(asker, Config),
+    Third = ?config(third, Config),
+    NetworkId = ?config(network_id, Config),
+    AgentPub = ?config(agent_pub, Config),
+    AgentKey = ?config(agent_key, Config),
+    Session = ?config(client_session, Config),
+    ClientPeer = ?config(client_peer, Config),
+    AgentAnchor = ?config(asker_anchor, Config),
+    RaceSuffix = integer_to_list(erlang:unique_integer([positive])),
+    RacePredicateText = "quod_fresh_race_" ++ RaceSuffix,
+    RacePredicate = list_to_atom(RacePredicateText),
+    ?assertMatch(
+       {ok, [_], _},
+       peer:call(
+         Third, quod_prolog, prove,
+         [?THIRD_NS, {assertz, {RacePredicate, ok}}], 60000)),
+    RaceGoalText = iolist_to_binary(
+                     ["\"animals\"::((", RacePredicateText,
+                      "(ok), fail); \"third\"::", RacePredicateText,
+                      "(ok))."]),
+    Requests =
+        [signed_goal_request(
+           NetworkId, AgentPub, AgentKey, ?ASKER_NS, AgentAnchor,
+           maps:get(expires_ms, Session), read, RaceGoalText)
+         || _ <- [first, second]],
+    Parent = self(),
+    RaceRef = make_ref(),
+    Workers =
+        [spawn(
+           fun() ->
+               receive {RaceRef, go} -> ok end,
+               Parent !
+                   {RaceRef, Label,
+                    peer:call(
+                      Asker, quod_client_goal_ingress, submit,
+                      [read, maps:get(session_id, Session), Bytes,
+                       RequestSignature, ClientPeer], 60000)}
+           end)
+         || {Label, {Bytes, RequestSignature}} <-
+                lists:zip([first, second], Requests)],
+    lists:foreach(fun(Worker) -> Worker ! {RaceRef, go} end, Workers),
+    Results = collect_gateway_race(RaceRef, 2, []),
+    lists:foreach(
+      fun({_Label,
+           {ok, _, {normalized, {answers, _Height, [_Answer]}}}}) -> ok;
+         ({Label, Other}) -> error({fresh_symbol_race_failed, Label, Other})
+      end, Results).
 
 remote_scope_chain_policy(Config) ->
     Asker = ?config(asker, Config),

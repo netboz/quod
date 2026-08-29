@@ -1212,6 +1212,75 @@ dtx_admission_rechecks_binding_before_promotion_test() ->
              quod_simplex:test_dtx_admission_state(Rejected))
       end).
 
+%% A younger conflicting Begin is a normal pre-handoff OCC refusal, not an
+%% unexpected state.  It leaves no dormant intent and cannot stop an
+%% independent request behind it from advancing in the same progress pass.
+dtx_admission_conflict_rejects_once_and_advances_fifo_test() ->
+    with_dtx_admission_fixture(
+      fun(Fixture, _Begin, _GroupRef, S0) ->
+          Origin = maps:get(target, Fixture),
+          Identity = maps:get(node_identity, Fixture),
+          Admission = maps:get(admission, Fixture),
+          KeyPair = maps:get(key_pair, Fixture),
+          Other = quod_ct:signed_dtx_begin_fixture(
+                    #{target => Origin, node_identity => Identity,
+                      admission => Admission, key_pair => KeyPair,
+                      proof_id => <<301:256>>, operation_id => <<302:256>>,
+                      submitted_at => 2}),
+          [Holder, Contender] =
+              lists:sort(
+                fun(A, B) ->
+                        quod_dtx:group_id(maps:get('begin', A)) <
+                            quod_dtx:group_id(maps:get('begin', B))
+                end, [Fixture, Other]),
+          {_, _, HolderRef} = certified_dtx_test_entry(
+                                Origin, maps:get(begin_control, Holder), 1),
+          {ok, _History, Locked, _Effects} = quod_dtx:reduce(
+                                                maps:get(begin_control, Holder),
+                                                HolderRef,
+                                                quod_dtx:initial_group_history(),
+                                                quod_dtx:initial_projection(
+                                                  Origin, 0)),
+          ContenderBegin = maps:get('begin', Contender),
+          {ok, ContenderRef} = quod_dtx:begin_group_ref(ContenderBegin),
+          Independent = quod_ct:signed_dtx_begin_fixture(
+                          #{target => Origin, node_identity => Identity,
+                            admission => Admission, key_pair => KeyPair,
+                            goal_text => <<"assertz(independent(ok)).">>,
+                            proof_id => <<303:256>>,
+                            operation_id => <<304:256>>, submitted_at => 3}),
+          IndependentBegin = maps:get('begin', Independent),
+          {ok, IndependentRef} = quod_dtx:begin_group_ref(IndependentBegin),
+          ConflictIntent = make_ref(),
+          IndependentIntent = make_ref(),
+          ConflictFrom = {self(), make_ref()},
+          IndependentFrom = {self(), make_ref()},
+          Deadline = quod_time:mono_ms() + 5000,
+          LockedState = quod_simplex:test_state_set(
+                          dtx_projection, Locked, S0),
+          {ok, Q1} = quod_simplex:test_enqueue_dtx_intent(
+                       ConflictFrom, self(), ConflictIntent,
+                       ContenderBegin, ContenderRef, Deadline, LockedState),
+          {ok, Q2} = quod_simplex:test_enqueue_dtx_intent(
+                       IndependentFrom, self(), IndependentIntent,
+                       IndependentBegin, IndependentRef, Deadline, Q1),
+          {Advanced, Actions} =
+              quod_simplex:test_progress_dtx_admission(Q2),
+          ?assertEqual(
+             [{reply, ConflictFrom, {error, operation_conflict}},
+              {reply, IndependentFrom, {accepted, IndependentIntent}}],
+             Actions),
+          ?assertEqual(
+             #{engine => self(),
+               dormant => #{quod_dtx:group_id(IndependentBegin) =>
+                                  IndependentIntent},
+               waiting => []},
+             quod_simplex:test_dtx_admission_state(Advanced)),
+          _ = quod_simplex:test_cancel_dtx_intent(
+                self(), IndependentIntent, Advanced),
+          ok
+      end).
+
 dtx_retained_begin_does_not_block_an_independent_group_test() ->
     with_dtx_admission_fixture(
       fun(Fixture, Begin, GroupRef, S0) ->

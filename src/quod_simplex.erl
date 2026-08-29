@@ -4183,6 +4183,15 @@ progress_live_dtx_intent(
             %% corroborated its tip.  The existing sync_done event re-enters
             %% this same FIFO once signing is safe.
             {S, ActionsRev};
+        {refused, conflict} ->
+            %% Wait-die has made this pre-handoff refusal final.  No durable
+            %% owner exists yet, so remove only this intent and let the same
+            %% progress pass consider the next queued group immediately.
+            S1 = S#s{dtx_admission =
+                       Admission#dtx_admission{waiting = Waiting}},
+            progress_dtx_admission(
+              compact_dtx_admission(S1),
+              [{reply, From, {error, operation_conflict}} | ActionsRev]);
         ready ->
             quod_metrics:observe_dtx_admission_wait(
               Ns, max(0, Now - EnqueuedAt)),

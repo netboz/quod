@@ -645,7 +645,7 @@ re-found may expose both the specialized and signed write entrances.
 ## Historical signed-client protocol break and deployment
 
 This section records the generation introduced by the signed-client work. The
-current generation is transaction V11, semantic transaction ID V7, and signed
+current generation is transaction V12, semantic transaction ID V7, and signed
 DTX plan V8; it retains the event support introduced in transaction V9.
 `doc/transaction-signatures.md` and
 `doc/event-reaction-refinement-plan.md` are authoritative for those current

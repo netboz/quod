@@ -381,7 +381,7 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
               maps:get(attestation, Fixture)},
     Claim = quod_transaction:remote_claim(
               Origin, maps:get(manifest, Fixture), Bundle,
-              maps:get(auth, Fixture)),
+              maps:get(auth, Fixture), maps:get(foreign_reads, Overrides, [])),
     {OriginNs, OriginAnchor} = Origin,
     ClaimRef = {transaction, OriginNs, OriginAnchor,
                 Claim#transaction.tx_id},
@@ -494,7 +494,7 @@ signed_effect_operation_submission(Options) ->
     Claim0 = quod_transaction:remote_claim(
                Origin, Manifest,
                {Target, PlanDigest, PlanBlob, Attestation},
-               maps:get(auth, Request)),
+               maps:get(auth, Request), []),
     {ok, Claim, Submission} = quod_transaction:sign_submission(
                                 {OriginNs, OriginAnchor, Admission},
                                 Claim0#transaction{author = SourceKey,

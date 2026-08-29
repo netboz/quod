@@ -89,7 +89,8 @@ all_response_shapes_roundtrip_and_correlate_test() ->
            digest(8), <<9:512>>}},
          {{read_attest, id(14), read_plan_blob()},
           {read_attest, id(14), target(), read_plan_proof_id(),
-           read_plan_digest(), read_anchor_ref(), digest(8), <<9:512>>}},
+           read_plan_digest(), read_anchor_ref(), digest(7), digest(8),
+           <<9:512>>}},
          {{cancel_operation_effect, id(6), <<"signed-submission">>},
           {operation_effect_cancelled, id(6), cancelled}}]
         ++ [{{outcome, id(16 + N), maps:get(ref, Status), digest(7), 11},
@@ -175,14 +176,15 @@ read_attest_correlation_binds_the_exact_plan_test() ->
     Request = {read_attest, id(14), read_plan_blob()},
     Response =
         {read_attest, id(14), target(), read_plan_proof_id(),
-         read_plan_digest(), read_anchor_ref(), digest(8), <<9:512>>},
+         read_plan_digest(), read_anchor_ref(), digest(7), digest(8),
+         <<9:512>>},
     ?assert(quod_dtx_endpoint:correlates(Request, Response)),
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(4, Response, digest(17)))),
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(5, Response, digest(16)))).
 
-applied_v7_response_carries_signer_and_signature_but_v6_is_rejected_test() ->
+applied_v8_response_carries_signer_and_signature_test() ->
     Ns = <<"quod:endpoint">>,
     Ref = certified_ref(),
     Request = {applied, id(1), digest(2), Ref, 9, commit},
@@ -197,7 +199,7 @@ applied_v7_response_carries_signer_and_signature_but_v6_is_rejected_test() ->
        {error, {protocol_error, wrong_version}},
        quod_dtx_endpoint:decode_response(Ns, outer(Ns, 6, Inner))).
 
-cancel_operation_effect_v7_hard_break_rejects_the_old_tuple_test() ->
+cancel_operation_effect_v8_rejects_the_old_tuple_test() ->
     Ns = <<"quod:endpoint">>,
     RequestId = id(62),
     OldRequest =
@@ -242,7 +244,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     Ref = certified_ref(),
     WrongSlot = #entry{index = 8, data = noop},
     Inner = term_to_binary({Request, [{Ref, WrongSlot}]}, [deterministic]),
-    Frame = outer(Ns, 7, Inner),
+    Frame = outer(Ns, 8, Inner),
     ?assertEqual({ok, Request, []},
                  quod_dtx_endpoint:decode_request(Ns, Frame)),
     ?assertEqual(
@@ -372,7 +374,7 @@ unknown_atoms_are_not_created_test() ->
               118, (byte_size(AtomName)):16, AtomName/binary>>,
     InnerTerm = binary:part(Inner, 1, byte_size(Inner) - 1),
     Wrapped = <<131, 104, 2, InnerTerm/binary, 106>>,
-    Frame = outer(Ns, 7, Wrapped),
+    Frame = outer(Ns, 8, Wrapped),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -428,7 +430,8 @@ invalid_fixed_shapes_are_rejected_test() ->
          {phase, id(1), 0, unknown},
          {phase, id(1), 0, {committed, invalid_ref}},
          {read_attest, id(1), target(), read_plan_proof_id(),
-          read_plan_digest(), certified_ref(), digest(4), <<5:512>>},
+          read_plan_digest(), certified_ref(), digest(3), digest(4),
+          <<5:512>>},
          {applied, id(1), {<<>>, digest(1)}, digest(2), digest(3), Ref,
           0, commit, digest(4), <<5:512>>},
          {applied, id(1), target(), digest(2), digest(3), Ref,

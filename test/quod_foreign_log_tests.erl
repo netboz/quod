@@ -82,43 +82,47 @@ invalid_public_timeout_is_rejected_without_owner_test() ->
 
 resident_projection_reuses_verified_frontier_and_phase_index_test() ->
     Identity = {<<"resident">>, key(8)},
-    Projection = quod_simplex:history_projection(Identity),
+    Committee = [key(9)],
+    CommitteeId = key(10),
+    Projection = (quod_simplex:history_projection(Identity))#{
+                   committee => Committee,
+                   committee_id => CommitteeId,
+                   committee_views =>
+                       [{1, Committee, CommitteeId, #{}}],
+                   history_head => {7, key(11)}},
+    Checkpoint = maps:remove(committee_views, Projection),
     Resident = {verified, 7, Projection, phase_session},
     ?assertEqual(
-       {ok, Projection, undefined},
-       quod_foreign_log:test_resident_projection(
-         Resident, 7, Projection, none, Identity)),
-    ?assertEqual(
        {ok, Projection, Projection},
        quod_foreign_log:test_resident_projection(
-         Resident, 7, Projection, 7, Identity)),
+         Resident, 7, Checkpoint, 7, Identity)),
     ?assertEqual(
        {ok, Projection, undefined},
        quod_foreign_log:test_resident_projection(
-         Resident, 7, Projection, 8, Identity)),
+         Resident, 7, Checkpoint, 8, Identity)),
     %% A restart-loaded row or changed durable height must replay.  An exact
     %% historical reference inside this owner's already-certified prefix does
-    %% not: the retained entry binds its slot/hash/digest and current routing
-    %% metadata comes from this resident projection.  An unfinished DTX group
-    %% likewise keeps using the phase index suspended with that projection.
+    %% not: the retained entry binds its slot/hash/digest and committee-era
+    %% routing metadata comes from this resident projection. An unfinished DTX
+    %% group likewise keeps using the phase index suspended with that projection.
     ?assertEqual(
        replay,
        quod_foreign_log:test_resident_projection(
-         none, 7, Projection, none, Identity)),
+         none, 7, Checkpoint, 7, Identity)),
     ?assertEqual(
        replay,
        quod_foreign_log:test_resident_projection(
-         Resident, 8, Projection, none, Identity)),
+         Resident, 8, Checkpoint, 7, Identity)),
     ?assertEqual(
        {ok, Projection, Projection},
        quod_foreign_log:test_resident_projection(
-         Resident, 7, Projection, 3, Identity)),
+         Resident, 7, Checkpoint, 3, Identity)),
     Pending = Projection#{dtx_pending => {pending, key(99)}},
     ?assertEqual(
        {ok, Pending, undefined},
        quod_foreign_log:test_resident_projection(
          {verified, 7, Pending, phase_session},
-         7, Pending, none, Identity)).
+         7, maps:remove(committee_views, Pending), 8, Identity)).
 
 dtx_batch_projection_keeps_each_controls_changes_separate_test() ->
     FirstOps = [{assert, {{first_control, one}, true}}],
@@ -1533,6 +1537,9 @@ verify_exact_reference_and_persisted_cache_test() ->
            maps:get(routes, Evidence)),
         ?assert(is_binary(maps:get(committee_id, Evidence))),
         ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
+        ?assertMatch(
+           {ok, #{slot := 2, phase := finalize, control := _}},
+           quod_foreign_log:verify(Peer, Endpoint, Ref, entry, 5000)),
         ?assertEqual(
            {error, retry},
            quod_foreign_log:verify(
@@ -1553,6 +1560,34 @@ verify_exact_reference_and_persisted_cache_test() ->
              Peer, Endpoint, Ref, finalize, 5000))
     after
         stop_owner(Pid2),
+        _ = file:del_dir_r(Dir)
+    end.
+
+generic_entry_reference_accepts_certified_content_test() ->
+    Fixture = long_identity_fixture(unique_ns(), 2),
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    [_, #entry{data = {batch, [Transaction]}} = Entry] =
+        maps:get(chain, Fixture),
+    {ok, Ref} = quod_dtx:certified_entry_ref(
+                  {Ns, Anchor}, Entry, Transaction),
+    Dir = temp_dir("generic-content-entry"),
+    Pid = start_owner(
+            Dir, chain_fetch(Ns, maps:get(chain, Fixture))),
+    try
+        ?assertMatch(
+           {ok, #{phase := transaction, transaction := Transaction,
+                  committee := [_]}},
+           quod_foreign_log:verify(
+             maps:get(pub, Fixture), {"127.0.0.1", 19093},
+             Ref, entry, 5000)),
+        ?assertMatch(
+           {ok, #{phase := transaction, transaction := Transaction}},
+           quod_foreign_log:verify(
+             maps:get(pub, Fixture), {"127.0.0.1", 19093},
+             Ref, transaction, 5000))
+    after
+        stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.
 
@@ -1644,16 +1679,120 @@ certified_current_view_advances_past_finalize_membership_test() ->
                              maps:get(ref, Fixture), finalize, 5000),
         {ok, Current} = quod_foreign_log:verify_current(
                           Routes, maps:get(ref, Fixture), 5000),
+        %% The current-view call advanced the resident cache past a committee
+        %% rotation. Re-reading the older exact Finalize must still return the
+        %% committee that was certified at its own slot, independently of the
+        %% verifier's newer cache head and without a genesis replay.
+        {ok, HistoricalAgain} = quod_foreign_log:verify_reference(
+                                  maps:get(ref, Fixture), finalize, 5000),
         ?assertEqual(2, maps:get(slot, Historical)),
         ?assertEqual(3, maps:get(slot, Current)),
+        ?assertEqual([Old], maps:get(committee, Historical)),
+        ?assertEqual(maps:get(committee, Historical),
+                     maps:get(committee, HistoricalAgain)),
+        ?assertEqual(maps:get(committee_id, Historical),
+                     maps:get(committee_id, HistoricalAgain)),
         ?assertEqual(lists:sort([Old, New]), maps:get(committee, Current)),
         ?assertNotEqual(maps:get(committee_id, Historical),
                         maps:get(committee_id, Current)),
+        %% Applied evidence signed before the rotation remains valid against
+        %% the exact Finalize evidence after the cache advances. Substituting
+        %% the current head's committee view must fail.
+        NetworkIdentity = key(179),
+        GroupId = quod_dtx:group_id(maps:get(control, Fixture)),
+        {ok, Vote} = quod_dtx_current_view:sign_applied_vote(
+                       NetworkIdentity, {Ns, maps:get(anchor, Fixture)},
+                       maps:get(committee_id, Historical), GroupId,
+                       maps:get(ref, Fixture),
+                       maps:get(generation, Historical), abort,
+                       maps:get(signer, Fixture)),
+        AppliedCertificate =
+            {quod_dtx_applied_certificate, 1, NetworkIdentity,
+             {Ns, maps:get(anchor, Fixture)},
+             maps:get(committee_id, Historical), GroupId,
+             maps:get(ref, Fixture), maps:get(generation, Historical),
+             abort, [Vote]},
+        ?assert(quod_dtx_current_view:verify_applied_certificate(
+                  AppliedCertificate, NetworkIdentity, HistoricalAgain)),
+        ?assertNot(quod_dtx_current_view:verify_applied_certificate(
+                     AppliedCertificate, NetworkIdentity, Current)),
         ?assertEqual(
            lists:keysort(1, Routes), maps:get(route_candidates, Current))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
+    end.
+
+restart_rebuilds_committee_eras_for_old_exact_references_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Old = maps:get(pub, Fixture),
+    New = maps:get(new_pub, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Routes = route_candidates(
+               [{Old, {"127.0.0.1", 19000}},
+                {New, {"127.0.0.1", 19101}}]),
+    Fetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Old, New]),
+    Dir = temp_dir("restart-committee-eras"),
+    Pid1 = start_owner(Dir, Fetch),
+    {Historical, Current} =
+        try
+            {ok, Historical0} = quod_foreign_log:verify(
+                                  Old, {"127.0.0.1", 19000},
+                                  maps:get(ref, Fixture), finalize, 5000),
+            {ok, Current0} = quod_foreign_log:verify_current(
+                               Routes, maps:get(ref, Fixture), 5000),
+            {_Height, Checkpoint} = cache_checkpoint(Dir, Identity),
+            ?assertEqual(false, maps:is_key(committee_views, Checkpoint)),
+            {Historical0, Current0}
+        after
+            stop_owner(Pid1)
+        end,
+    Pid2 = start_owner(Dir, Fetch),
+    try
+        {ok, HistoricalAgain} = quod_foreign_log:verify_reference(
+                                  maps:get(ref, Fixture), finalize, 5000),
+        {ok, CurrentAgain} = quod_foreign_log:verify_current(
+                               Routes, maps:get(ref, Fixture), 5000),
+        ?assertEqual(maps:get(committee, Historical),
+                     maps:get(committee, HistoricalAgain)),
+        ?assertEqual(maps:get(committee_id, Historical),
+                     maps:get(committee_id, HistoricalAgain)),
+        ?assertEqual(maps:get(committee, Current),
+                     maps:get(committee, CurrentAgain)),
+        ?assertEqual(maps:get(committee_id, Current),
+                     maps:get(committee_id, CurrentAgain))
+    after
+        stop_owner(Pid2),
+        _ = file:del_dir_r(Dir)
+    end.
+
+verify_local_uses_anchor_era_after_local_committee_rotation_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Old = maps:get(pub, Fixture),
+    SourceDir = temp_dir("local-rotation-source"),
+    CacheDir = temp_dir("local-rotation-cache"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(
+                     Store0, maps:get(chain, Fixture)),
+    ok = quod_ledger_store:close(Store1),
+    Pid = start_owner(
+            CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
+    try
+        {ok, Current} = quod_foreign_log:verify_local_current(
+                          SourceDir, maps:get(ref, Fixture), 5000),
+        {ok, Historical} = quod_foreign_log:verify_local(
+                             SourceDir, maps:get(ref, Fixture),
+                             finalize, 5000),
+        ?assertEqual(3, maps:get(slot, Current)),
+        ?assertEqual([Old], maps:get(committee, Historical)),
+        ?assertNotEqual(maps:get(committee_id, Current),
+                        maps:get(committee_id, Historical))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
     end.
 
 local_current_view_folds_to_captured_ledger_head_test() ->
@@ -2438,8 +2577,8 @@ cached_earlier_reference_reuses_certified_current_projection_test() ->
              finalize, 5000)),
         [SessionFile] = phase_session_files(Dir, {Ns, maps:get(anchor, Fixture)}),
         %% The cache is now certified through slot 3.  The immutable slot-2
-        %% Prepare is checked against its retained entry while current routing
-        %% metadata comes from the resident head.  Prepare recovery reads the
+        %% Prepare is checked against its retained entry while committee-era
+        %% routing metadata comes from the resident projection. Prepare recovery reads the
         %% exact base generation from its signed plan, not this current-view
         %% field.  Replacing the phase session would prove a hidden replay.
         ?assertMatch(

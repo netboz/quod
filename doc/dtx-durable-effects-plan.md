@@ -305,7 +305,7 @@ the same register-before-bind safety rule:
    ordinary transaction hand-off.
 5. Bind failure, checkpoint failure, and a possibly lost bind reply all enter
    one monitored cancellation owner. It sends the exact signed source
-   submission through endpoint V6's existing `cancel_operation_effect`
+   submission through endpoint V8's existing `cancel_operation_effect`
    request over the shared endpoint transport: an explicit monitored,
    TLS-pinned link and ordered send; the reply is ordered too, and QUIC
    `send_ready` wakes flow-controlled output. The target authenticates the
@@ -431,9 +431,9 @@ hard-break allocation:
 - `RECORD_VERSION = 3`;
 - `CONTROL_VERSION = 2`;
 - `ATTESTATION_VERSION = 2`;
-- ordinary transaction wire V11;
+- ordinary transaction wire V12;
 - scope wire V8, including group and operation effect binding;
-- process-free DTX endpoint V6, including exact signed operation
+- process-free DTX endpoint V8, including exact signed operation
   cancellation and signed applied responses; and
 - effect-journal snapshot V6 / row V5.
 

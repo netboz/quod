@@ -3,7 +3,8 @@
 Status: **approved architecture plan** (Yan, 2026-08-29). Author: Claude
 (review/plan role). Implementation: GPT, slice by slice, each slice reviewed
 before the next. Slice 1, the read-certificate primitive, is implemented and
-reviewed with no blocker; slices 2–8 are not built.
+reviewed with no blocker. Slice 2, the signed carrier and shared validation
+path, is implemented and awaiting review; slices 3–8 are not built.
 
 Diagrams (static SVG, exists-today in dark blue, new in green):
 `figures/write-lanes/` — overview, lane chooser, one sequence per lane,
@@ -205,10 +206,13 @@ so the atom boundary holds.
   claim commits.
 
 **Binding to B's committee.** The certificate binds
-`{B identity, ProofId, PlanDigest, AnchorRef}` where AnchorRef is a certified
-ref to B's last non-noop slot ≤ H. The writer's validators verify it through
-the existing foreign-reference path (`verify_remote_dtx_reference`), which
-already returns the committee at that slot. Deterministic, no clocks.
+`{B identity, ProofId, PlanDigest, AnchorRef, CommitteeId}` where AnchorRef is
+a certified ref to B's last non-noop slot ≤ H. The shared certified-history
+projection retains one in-memory row per committee era, so exact-reference
+verification selects the post-anchor committee and id independently of the
+verifier's current cache head. The durable checkpoint remains compact; the
+existing restart replay rebuilds the era rows. Deterministic, no clocks and no
+second verifier or cache.
 
 ### 4.3 L2 — independent writes (`independent(...)`)
 
@@ -271,7 +275,10 @@ a new signed goal and goes through the lanes above.
    `conflict_retry`; one refusal cannot override enough matching votes.
 2. **Carrier** — `#transaction.foreign_reads`, `from_plan`, `bytes`,
    `required_references`, `validate_foreign_reads/2` in both roles, N-ref
-   generalisation of `verify_content_foreign_references`. Bump `?VERSION`.
+   generalisation of `verify_content_foreign_references`. Transaction V12.
+   **Implemented.** Exact anchor verification reuses the existing certified
+   follower for either content or DTX-control entries; no second verifier or
+   phase-probing path was added.
 3. **Scope command** — `certify_reads` command/event in `quod_scope_wire`,
    `quod_scope_session`, `quod_prolog` sealed-state route, `quod_ask_router`.
 4. **Routing** — pure `route_plans/…` implementing the table; thread

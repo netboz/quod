@@ -3,6 +3,75 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+read_certificate(ProofId, N) ->
+    Target = {<<"quod:certified-read-", (integer_to_binary(N))/binary>>,
+              <<N:256>>},
+    {Ns, Anchor} = Target,
+    {Signer, Seed} = quod_identity:generate(),
+    Identity = #{pubkey => Signer,
+                 key => quod_identity:key_term({Signer, Seed})},
+    {ok, AnchorRef} = quod_dtx:certified_ref(
+                        Ns, Anchor, 2, <<(N + 100):256>>, <<(N + 200):256>>,
+                        <<"certified-read-qc">>),
+    PlanDigest = <<(N + 300):256>>,
+    CommitteeId = <<(N + 400):256>>,
+    {ok, Vote} = quod_read_certificate:sign(
+                   Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                   Identity),
+    {ok, Certificate} = quod_read_certificate:new(
+                          Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                          [Vote]),
+    Evidence = #{identity => Target, committee => [Signer],
+                 committee_id => CommitteeId},
+    {Certificate, AnchorRef, Evidence}.
+
+foreign_read_certificates_use_exact_reference_committees_test() ->
+    ProofId = <<71:256>>,
+    {CertificateA, RefA, EvidenceA} = read_certificate(ProofId, 72),
+    {CertificateB, RefB, EvidenceB} = read_certificate(ProofId, 73),
+    Transaction = #transaction{tx_id = <<>>, role = application,
+                               foreign_reads = lists:sort(
+                                                 [CertificateA, CertificateB]),
+                               origin = {<<"quod:writer">>, <<74:256>>},
+                               proof_id = ProofId, plan_digest = <<75:256>>,
+                               goal = <<>>, result = <<>>, diff = [],
+                               read_check = #{}, effects = []},
+    Evidence = #{RefA => EvidenceA, RefB => EvidenceB},
+    ?assertEqual(ok, quod_commit_validation:validate_foreign_reads(
+                       Transaction, Evidence)),
+    ?assertEqual(
+       {error, foreign_read_reference_binding},
+       quod_commit_validation:validate_foreign_reads(
+         Transaction, maps:remove(RefB, Evidence))),
+    ?assertEqual(
+       {error, foreign_read_reference_binding},
+       quod_commit_validation:validate_foreign_reads(
+         Transaction,
+         Evidence#{RefA := EvidenceA#{committee_id => <<0:256>>}})),
+    ?assertEqual(
+       {error, foreign_read_proof_binding},
+       quod_commit_validation:validate_foreign_reads(
+         Transaction#transaction{proof_id = <<76:256>>}, Evidence)),
+    #{committee := [_Signer]} = EvidenceA,
+    ?assertEqual(
+       {error, invalid_foreign_read_certificate},
+       quod_commit_validation:validate_foreign_reads(
+         Transaction, Evidence#{RefA := EvidenceA#{committee => []}})).
+
+remote_completion_cannot_carry_foreign_reads_test() ->
+    ProofId = <<77:256>>,
+    {Certificate, _Ref, _Evidence} = read_certificate(ProofId, 78),
+    Completion = #transaction{tx_id = <<>>, role = {remote_complete, op,
+                                                     <<79:256>>, target},
+                              foreign_reads = [Certificate],
+                              origin = {<<"quod:writer">>, <<80:256>>},
+                              proof_id = ProofId, plan_digest = <<81:256>>,
+                              goal = <<>>, result = <<>>, diff = [],
+                              read_check = #{}, effects = []},
+    ?assertEqual(
+       {error, malformed_foreign_reads},
+       quod_commit_validation:validate_foreign_reads(Completion, #{})).
+
 remote_application_uses_one_target_evaluator_for_apply_reject_and_invalid_test() ->
     Fixture = quod_ct:remote_operation_fixture(#{}),
     Application = maps:get(application, Fixture),

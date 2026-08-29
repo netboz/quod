@@ -17,7 +17,7 @@ accepted.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([from_plan/5, remote_claim/4, remote_application/2,
+-export([from_plan/5, remote_claim/5, remote_application/2,
          remote_complete/4, attach_evidence/3,
          encode_evidence/2, decode_evidence/1,
          stable_ref/1,
@@ -37,8 +37,9 @@ accepted.
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
 -define(ID_VERSION, 7).
-%% V11 binds an author's continuous admission generation, transaction role and
-%% role evidence, signed-agent request, authorization transcript, and the
+%% V12 binds an author's continuous admission generation, transaction role,
+%% role evidence, certified foreign reads, signed-agent request, authorization
+%% transcript, and the
 %% atom-bearing diff/read set through the bounded Prolog wire alphabet,
 %% including explicit event occurrences. The fixed envelope can therefore be
 %% decoded safely before a small, explicit vocabulary allocation is permitted
@@ -48,7 +49,7 @@ accepted.
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
 %% each committed control's certified reference binds the exact committee that
 %% finalized its ledger position.
--define(VERSION, 11).
+-define(VERSION, 12).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -63,9 +64,10 @@ accepted.
 -doc """
 Build the unsigned semantic transaction carried by one sealed plan.
 
-`Material` must be the canonical result returned by `quod_dtx:material/1`;
-this is what makes the origin's opaque-byte id and validators' decoded-term id
-identical.
+`Material` is the canonical result returned by `quod_dtx:material/1`, optionally
+augmented with the already-certified `foreign_reads` list. This keeps the
+origin's opaque-byte id and validators' decoded-term id identical while the
+replaceable certificates remain outside that semantic id.
 """.
 -spec from_plan(quod_dtx:plan(), map(), binary(), binary(),
                 none | quod_client_goal:request_auth()) -> #transaction{}.
@@ -77,10 +79,12 @@ from_plan(Plan, #{diff := Diff, read_check := ReadCheck,
     Target = quod_dtx:target(Plan),
     {StoredAuth, AuthTranscript} =
         request_fields(Plan, Material, GoalBlob, RequestAuth),
+    ForeignReads = foreign_reads_from_material(Material),
     Transaction =
         #transaction{tx_id = <<>>,
                      role = application,
                      evidence = none,
+                     foreign_reads = ForeignReads,
                      origin = quod_dtx:origin(Plan),
                      proof_id = quod_dtx:proof_id(Plan),
                      plan_digest = quod_dtx:digest(Plan),
@@ -100,11 +104,13 @@ from_plan(Plan, #{diff := Diff, read_check := ReadCheck,
 
 -doc "Build the source operation claim for one signed foreign sealed plan.".
 -spec remote_claim({binary(), <<_:256>>}, quod_dtx:manifest(), tuple(),
-                   quod_client_goal:request_auth()) -> #transaction{}.
+                   quod_client_goal:request_auth(), [term()]) -> #transaction{}.
 remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
              {Target, PlanDigest, PlanBlob, Attestation} = Bundle,
-             {agent_goal_v1, <<_:256>>, _Bytes, _Signature} = RequestAuth)
+             {agent_goal_v1, <<_:256>>, _Bytes, _Signature} = RequestAuth,
+             ForeignReads0)
   when is_binary(OriginNs), is_binary(PlanBlob) ->
+    ForeignReads = canonical_foreign_reads_or_error(ForeignReads0),
     {ok, Plan} = quod_dtx:decode(PlanBlob),
     Origin = quod_dtx:origin(Plan),
     false = quod_dtx:target(Plan) =:= Origin,
@@ -118,6 +124,7 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
         #transaction{tx_id = <<>>,
                      role = {remote_claim, Manifest, Bundle, <<0:256>>},
                      evidence = none,
+                     foreign_reads = ForeignReads,
                      origin = Origin,
                      proof_id = quod_dtx:proof_id(Plan),
                      plan_digest = quod_dtx:digest(Plan),
@@ -144,6 +151,7 @@ remote_application(
   #transaction{origin = {OriginNs, OriginAnchor} = Origin,
                role = {remote_claim, Manifest,
                        {Target, PlanDigest, PlanBlob, Attestation}, _Predicted},
+               foreign_reads = ForeignReads,
                request_auth = RequestAuth, goal = GoalBlob,
                result = ResultBlob})
   when is_binary(OriginNs), is_binary(PlanBlob),
@@ -164,6 +172,7 @@ remote_application(
                      role = {remote_application, ClaimRef,
                              OperationRef, RequestDigest},
                      evidence = none,
+                     foreign_reads = ForeignReads,
                      origin = Origin,
                      proof_id = quod_dtx:proof_id(Plan),
                      plan_digest = quod_dtx:digest(Plan),
@@ -191,6 +200,7 @@ remote_complete({Ns, <<_:256>> = Anchor} = Origin, OperationRef,
                      role = {remote_complete, OperationRef,
                              RequestDigest, TargetRef},
                      evidence = none,
+                     foreign_reads = [],
                      origin = Origin, proof_id = RequestDigest,
                      plan_digest = RequestDigest,
                      goal = GoalBlob, result = ResultBlob,
@@ -269,20 +279,53 @@ role(#transaction{role = Role}) -> Role.
 -spec evidence(#transaction{}) -> term().
 evidence(#transaction{evidence = Evidence}) -> Evidence.
 
--doc "Return the certified foreign transaction references required by content.".
--spec required_references(#transaction{}) -> [term()] | error.
+-doc "Return typed exact ledger references required to validate content.".
+-spec required_references(#transaction{}) -> [{transaction | entry, term()}] | error.
 required_references(
   #transaction{role = {remote_application, ClaimRef, _, _},
-               evidence = {CertifiedRef, _}}) ->
-    case stable_ref(CertifiedRef) of ClaimRef -> [CertifiedRef]; _ -> error end;
+               evidence = {CertifiedRef, _},
+               foreign_reads = ForeignReads}) ->
+    case {stable_ref(CertifiedRef), read_reference_requirements(ForeignReads)} of
+        {ClaimRef, {ok, ReadRefs}} -> [{transaction, CertifiedRef} | ReadRefs];
+        _ -> error
+    end;
 required_references(
   #transaction{role = {remote_complete, _, _, TargetRef},
-               evidence = {CertifiedRef, _}}) ->
-    case stable_ref(CertifiedRef) of TargetRef -> [CertifiedRef]; _ -> error end;
-required_references(#transaction{role = application, evidence = none}) -> [];
+               evidence = {CertifiedRef, _}, foreign_reads = []}) ->
+    case stable_ref(CertifiedRef) of
+        TargetRef -> [{transaction, CertifiedRef}];
+        _ -> error
+    end;
+required_references(#transaction{role = application, evidence = none,
+                                 foreign_reads = ForeignReads}) ->
+    read_reference_requirements_or_error(ForeignReads);
 required_references(#transaction{role = {remote_claim, _, _, _},
-                                 evidence = none}) -> [];
+                                 evidence = none,
+                                 foreign_reads = ForeignReads}) ->
+    read_reference_requirements_or_error(ForeignReads);
 required_references(#transaction{}) -> error.
+
+read_reference_requirements_or_error(ForeignReads) ->
+    case read_reference_requirements(ForeignReads) of
+        {ok, Requirements} -> Requirements;
+        error -> error
+    end.
+
+read_reference_requirements(ForeignReads) ->
+    case canonical_foreign_reads(ForeignReads) of
+        {ok, Certificates} ->
+            read_reference_requirements(Certificates, []);
+        error -> error
+    end.
+
+read_reference_requirements([], Acc) ->
+    {ok, lists:reverse(Acc)};
+read_reference_requirements([Certificate | Rest], Acc) ->
+    case quod_read_certificate:binding(Certificate) of
+        {ok, #{anchor_ref := AnchorRef}} ->
+            read_reference_requirements(Rest, [{entry, AnchorRef} | Acc]);
+        error -> error
+    end.
 
 -doc "Project one certified ledger reference to its stable transaction identity.".
 -spec stable_ref(term()) ->
@@ -586,6 +629,7 @@ semantic_role(Role) -> Role.
 bytes({TargetNs, TargetAnchor, AuthorAdmission},
       Transaction = #transaction{tx_id = TxId, role = Role,
                    evidence = Evidence,
+                   foreign_reads = ForeignReads,
                    origin = Origin, proof_id = ProofId,
                    plan_digest = PlanDigest, goal = Goal,
                    result = Result, diff = Diff, read_check = ReadCheck,
@@ -598,8 +642,9 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
        is_binary(AuthorAdmission), byte_size(TargetAnchor) =:= 32,
        byte_size(AuthorAdmission) =:= 32 ->
     case {encode_material(Diff, ReadCheck, Effects),
+          canonical_foreign_reads(ForeignReads),
           valid_role_fields({TargetNs, TargetAnchor}, Transaction)} of
-        {{ok, MaterialWire, EffectsWire}, true}
+        {{ok, MaterialWire, EffectsWire}, {ok, ForeignReads}, true}
           when byte_size(EffectsWire) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
             case quod_effect:validate_transaction(
                    TargetNs, TargetAnchor, Author, Effects) of
@@ -608,15 +653,15 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
                      canonical_bytes(
                        TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
                        ProofId, PlanDigest, Goal, Result, MaterialWire,
-                       EffectsWire, Role, Evidence,
+                       EffectsWire, Role, Evidence, ForeignReads,
                        RequestAuth, AuthTranscript,
                        Author, AuthorSeq, SubmittedAt)};
                 false ->
                     {error, bad_term}
             end;
-        {{ok, _MaterialWire, _EffectsWire}, _} ->
+        {{ok, _MaterialWire, _EffectsWire}, _ForeignReads, _} ->
             {error, bad_term};
-        {{error, bad_term} = Error, _} ->
+        {{error, bad_term} = Error, _ForeignReads, _} ->
             Error
     end;
 bytes(_Binding, _Transaction) ->
@@ -624,12 +669,12 @@ bytes(_Binding, _Transaction) ->
 
 canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
                 ProofId, PlanDigest, Goal, Result, MaterialWire, EffectsWire,
-                Role, Evidence, RequestAuth, AuthTranscript, Author,
+                Role, Evidence, ForeignReads, RequestAuth, AuthTranscript, Author,
                 AuthorSeq, SubmittedAt) ->
     term_to_binary(
       {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
        TxId, Origin, ProofId, PlanDigest, Goal, Result, MaterialWire,
-       EffectsWire, Role, Evidence, RequestAuth, AuthTranscript,
+       EffectsWire, Role, Evidence, ForeignReads, RequestAuth, AuthTranscript,
        Author, AuthorSeq, SubmittedAt},
       [deterministic]).
 
@@ -811,6 +856,7 @@ decode_verified_submission(
          {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
           TxId, Origin, ProofId,
           PlanDigest, Goal, Result, MaterialWire, EffectsWire, Role, Evidence,
+          ForeignReads,
           RequestAuth, AuthTranscript,
           Author, AuthorSeq,
           SubmittedAt}} ->
@@ -819,6 +865,7 @@ decode_verified_submission(
                     Transaction =
                         #transaction{tx_id = TxId, role = Role,
                                      evidence = Evidence, origin = Origin,
+                                     foreign_reads = ForeignReads,
                                      proof_id = ProofId,
                                      plan_digest = PlanDigest,
                                      goal = Goal, result = Result,
@@ -853,7 +900,7 @@ decode_verified_submission(
 decode_verified_submission(_Binding, _Submission) ->
     {error, malformed_submission}.
 
--doc "Decode bounded metadata from the one current V11 transaction envelope.".
+-doc "Decode bounded metadata from the one current V12 transaction envelope.".
 -spec decode_submission_metadata(term()) ->
           {ok, #{target := {binary(), binary()},
                  admission := binary(), tx_id := binary(),
@@ -870,6 +917,7 @@ decode_submission_metadata(Canonical)
           <<_:256>> = Admission, <<_:256>> = TxId,
           _Origin, _ProofId, _PlanDigest, _Goal, _Result,
           _MaterialWire, EffectsWire, _Role, _Evidence,
+          _ForeignReads,
           _RequestAuth, _AuthTranscript,
           <<_:256>> = Author, Sequence, _SubmittedAt} = Decoded}
           when is_binary(Ns), is_integer(Sequence), Sequence >= 0 ->
@@ -1072,8 +1120,10 @@ valid_role_fields(
   #transaction{role = {remote_application, ClaimRef, OperationRef,
                        <<_:256>> = RequestDigest},
                evidence = {CertifiedRef, #transaction{} = Claim},
+               foreign_reads = ForeignReads,
                request_auth = none, auth_transcript = none}) ->
-    stable_ref(CertifiedRef) =:= ClaimRef andalso
+    ForeignReads =:= Claim#transaction.foreign_reads andalso
+        stable_ref(CertifiedRef) =:= ClaimRef andalso
         certified_transaction_matches(CertifiedRef, Claim) andalso
         remote_claim_binding(Claim, OperationRef, RequestDigest);
 valid_role_fields(
@@ -1081,6 +1131,7 @@ valid_role_fields(
   #transaction{role = {remote_complete, OperationRef,
                        <<_:256>> = RequestDigest, TargetRef},
                evidence = {CertifiedRef, #transaction{} = TargetTx},
+               foreign_reads = [],
                request_auth = none, auth_transcript = none}) ->
     operation_origin(OperationRef) =:= Target andalso
         stable_ref(CertifiedRef) =:= TargetRef andalso
@@ -1088,6 +1139,28 @@ valid_role_fields(
         remote_application_binding(TargetTx, OperationRef, RequestDigest);
 valid_role_fields(_Target, _Transaction) ->
     false.
+
+foreign_reads_from_material(Material) ->
+    canonical_foreign_reads_or_error(maps:get(foreign_reads, Material, [])).
+
+canonical_foreign_reads_or_error(ForeignReads) ->
+    case canonical_foreign_reads(ForeignReads) of
+        {ok, Canonical} -> Canonical;
+        error -> error(bad_foreign_reads)
+    end.
+
+canonical_foreign_reads(ForeignReads) when is_list(ForeignReads) ->
+    case lists:all(fun quod_read_certificate:valid_shape/1, ForeignReads) of
+        true ->
+            Canonical = lists:usort(ForeignReads),
+            case Canonical =:= ForeignReads of
+                true -> {ok, Canonical};
+                false -> error
+            end;
+        false -> error
+    end;
+canonical_foreign_reads(_ForeignReads) ->
+    error.
 
 predicted_remote_tx_id(Origin, Claim, PredictedTxId) ->
     {OriginNs, OriginAnchor} = Origin,

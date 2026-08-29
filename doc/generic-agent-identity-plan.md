@@ -251,7 +251,7 @@ The deployed tree uses one incompatible generation:
 |---|---|
 | browser session challenge | `quod.agent.challenge.v1` |
 | signed request | `quod.agent.goal.v1` / `agent_goal_v1` |
-| transaction bytes | V11 |
+| transaction bytes | V12 |
 | semantic transaction id | V7 |
 | DTX plan | V8 |
 | DTX manifest | V3 |

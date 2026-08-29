@@ -96,9 +96,33 @@ committee_view_projection_test() ->
     {ok, AdmitCBlock} = quod_simplex:block_from_entry(AdmitC),
     ?assertEqual(
        quod_simplex:committee_view_id(
-         Ns, 4, quod_simplex:block_hash(AdmitCBlock), [A, B, C]),
+       Ns, 4, quod_simplex:block_hash(AdmitCBlock), [A, B, C]),
        AdmitCId),
-    ?assertNotEqual(GenesisId, AdmitCId).
+    ?assertNotEqual(GenesisId, AdmitCId),
+    %% Exact-reference consumers select by slot, not by the projection's
+    %% current head. Stable content and noop slots remain in the prior era.
+    lists:foreach(
+      fun(Slot) ->
+          ?assertMatch(
+             {ok, [A, B], GenesisId, _},
+             quod_simplex:history_committee_view(Slot, Full))
+      end,
+      [1, 2, 3]),
+    ?assertMatch(
+       {ok, [A, B, C], AdmitCId, _},
+       quod_simplex:history_committee_view(4, Full)),
+    ?assertEqual(error, quod_simplex:history_committee_view(5, Full)).
+
+committee_view_is_not_invented_before_membership_test() ->
+    Ns = <<"committee:unfounded">>,
+    Entry = #entry{index = 1,
+                   data = {batch,
+                           [tx([{assert, {{ordinary, fact}, true}}])]}},
+    Projection = quod_simplex:test_log_projection(
+                   Ns, [Entry], quod_simplex:history_projection()),
+    ?assertEqual(undefined, maps:get(committee_id, Projection)),
+    ?assertEqual([], maps:get(committee_views, Projection)),
+    ?assertEqual(error, quod_simplex:history_committee_view(1, Projection)).
 
 %% Returning to the same validator set after a leave/rejoin is a new view.
 %% Reasserting a current member (for example to refresh its endpoint) retains
@@ -1434,6 +1458,59 @@ dtx_unverified_endpoint_contacts_are_never_retained_test() ->
         stop_registered_prolog_sink(EndpointSink),
         gen_server:stop(ForeignLog),
         _ = file:del_dir_r(Dir)
+    end.
+
+%% Seen is shared across the candidate's requirements, but the reference kind
+%% remains part of the proof obligation.  Identical bytes already verified as
+%% a control entry cannot later satisfy a transaction requirement (or the
+%% reverse) merely because both requirements use the same map key.
+content_reference_seen_reuse_is_type_safe_test() ->
+    Ref = {certified, <<74:256>>, 2, <<75:256>>, <<76:256>>},
+    EntryEvidence = #{entry => #entry{index = 2, data = noop}},
+    TransactionEvidence = #{transaction => #transaction{}},
+    ?assertMatch(
+       {valid, _},
+       quod_simplex:test_verify_content_requirements(
+         [{entry, Ref}, {entry, Ref}], #{Ref => EntryEvidence})),
+    ?assertEqual(
+       {invalid, foreign_reference},
+       quod_simplex:test_verify_content_requirements(
+         [{entry, Ref}, {transaction, Ref}], #{Ref => EntryEvidence})),
+    ?assertEqual(
+       {invalid, foreign_reference},
+       quod_simplex:test_verify_content_requirements(
+         [{transaction, Ref}, {entry, Ref}],
+         #{Ref => TransactionEvidence})).
+
+%% The authenticated endpoint is a request-scoped route hint for the claim
+%% transaction only.  Read-certificate anchors in the same application must
+%% be resolved and verified independently, never through that contact.
+content_reference_contact_is_claim_only_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    ClaimRef = maps:get(certified_claim_ref, Fixture),
+    Application = maps:get(application, Fixture),
+    Target = maps:get(participant_target, Fixture),
+    {ok, EvidenceBlob} = quod_transaction:encode_evidence(
+                           ClaimRef, maps:get(claim, Fixture)),
+    Request = {apply_claim, <<77:128>>, EvidenceBlob},
+    Worker = spawn(fun validation_owner/0),
+    Peer = <<78:256>>,
+    Endpoint = {"127.0.0.1", 15973},
+    {_Monitor, State} = quod_simplex:test_seed_dtx_worker(
+                          Worker, {Peer, Endpoint}, Request,
+                          {link, self()}, st(#{})),
+    EntryRef = {certified, <<79:256>>, 3, <<80:256>>, <<81:256>>},
+    try
+        Contacts = quod_simplex:test_content_reference_contacts(
+                     [{Application,
+                       [{transaction, ClaimRef}, {entry, EntryRef}]}],
+                     Target, State),
+        ?assertEqual(
+           #{ClaimRef => {maps:get(origin, Fixture), {Peer, Endpoint}}},
+           Contacts),
+        ?assertEqual(false, maps:is_key(EntryRef, Contacts))
+    after
+        exit(Worker, kill)
     end.
 
 foreign_contact_is_routable(Identity, {Peer, Endpoint}) ->
@@ -2799,7 +2876,7 @@ read_attest_validator_signs_the_exact_current_ledger_anchor_test() ->
                      sync => ready, prolog_ready => true, store => Store3}),
         RequestId = <<61:128>>,
         {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
-         Self, Signature} =
+         CommitteeId, Self, Signature} =
             quod_simplex:test_dtx_endpoint_result(
               {read_attest, RequestId, PlanBlob},
               {read_plan_valid, Plan, 3}, State),
@@ -2808,7 +2885,8 @@ read_attest_validator_signs_the_exact_current_ledger_anchor_test() ->
         ?assertMatch({ok, Target, 2, _},
                      quod_dtx:certified_ref_binding(AnchorRef)),
         ?assert(quod_read_certificate:verify_vote(
-                  Target, ProofId, PlanDigest, AnchorRef, Self, Signature))
+                  Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                  Self, Signature))
     after
         quod_ledger_store:close(Store3),
         file:del_dir_r(Dir)
@@ -9438,6 +9516,11 @@ validator_routes_follow_the_committee_history_test() ->
     ?assertEqual(
        #{A => {"10.0.0.9", 9009}, B => {"10.0.0.2", 9002}},
        quod_simplex:history_validator_routes(P2)),
+    [{1, Committee, CommitteeId, RefreshedRoutes}] =
+        maps:get(committee_views, P2),
+    ?assertEqual(lists:sort([A, B]), Committee),
+    ?assertEqual(maps:get(committee_id, P1), CommitteeId),
+    ?assertEqual(quod_simplex:history_validator_routes(P2), RefreshedRoutes),
     E3 = #entry{index = 3,
                 data = {batch, [tx([
                     {retract,
@@ -9445,7 +9528,8 @@ validator_routes_follow_the_committee_history_test() ->
                 ])]}},
     P3 = quod_simplex:history_advance(Ns, E3, P2),
     ?assertEqual(#{B => {"10.0.0.2", 9002}},
-                 quod_simplex:history_validator_routes(P3)).
+                 quod_simplex:history_validator_routes(P3)),
+    ?assertEqual(2, length(maps:get(committee_views, P3))).
 
 content_only_catchup_repopulates_verified_validator_routes_test() ->
     [Self, Peer | _] = [P || {P, _} <- committee(3)],

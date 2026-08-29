@@ -11,25 +11,25 @@ module only checks the statement shape and committee signatures it is given.
 
 -include("quod_proof_limits.hrl").
 
--export([sign/5, verify_vote/6, new/5, binding/1, valid_shape/1, verify/2]).
+-export([sign/6, verify_vote/7, new/6, binding/1, valid_shape/1, verify/3]).
 -export_type([certificate/0]).
 
--define(CERTIFICATE_VERSION, 1).
--define(VOTE_VERSION, 1).
+-define(CERTIFICATE_VERSION, 2).
+-define(VOTE_VERSION, 2).
 -define(VOTE_DOMAIN, <<"quod.read.certificate">>).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type signed_row() :: {<<_:256>>, <<_:512>>}.
 -type certificate() ::
-        {quod_read_certificate, 1, identity(), <<_:256>>, <<_:256>>,
-         quod_dtx:certified_ref(), [signed_row()]}.
+        {quod_read_certificate, 2, identity(), <<_:256>>, <<_:256>>,
+         quod_dtx:certified_ref(), <<_:256>>, [signed_row()]}.
 
 -doc "Sign one exact read-certificate statement with a validator identity.".
--spec sign(identity(), <<_:256>>, <<_:256>>, quod_dtx:certified_ref(),
+-spec sign(identity(), <<_:256>>, <<_:256>>, quod_dtx:certified_ref(), <<_:256>>,
            quod_identity:signer()) -> {ok, signed_row()} | error.
-sign(Target, ProofId, PlanDigest, AnchorRef,
+sign(Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
      #{pubkey := <<_:256>> = Signer, key := _} = Identity) ->
-    case statement(Target, ProofId, PlanDigest, AnchorRef) of
+    case statement(Target, ProofId, PlanDigest, AnchorRef, CommitteeId) of
         {ok, Statement} ->
             case quod_identity:sign(vote_bytes(Statement), Identity) of
                 <<_:512>> = Signature -> {ok, {Signer, Signature}};
@@ -37,26 +37,27 @@ sign(Target, ProofId, PlanDigest, AnchorRef,
             end;
         error -> error
     end;
-sign(_Target, _ProofId, _PlanDigest, _AnchorRef, _Identity) ->
+sign(_Target, _ProofId, _PlanDigest, _AnchorRef, _CommitteeId, _Identity) ->
     error.
 
 -doc "Verify one correlated validator vote before adding it to a certificate.".
 -spec verify_vote(identity(), <<_:256>>, <<_:256>>,
-                  quod_dtx:certified_ref(), <<_:256>>, <<_:512>>) -> boolean().
-verify_vote(Target, ProofId, PlanDigest, AnchorRef, Signer, Signature) ->
-    case statement(Target, ProofId, PlanDigest, AnchorRef) of
+                  quod_dtx:certified_ref(), <<_:256>>, <<_:256>>, <<_:512>>) -> boolean().
+verify_vote(Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+            Signer, Signature) ->
+    case statement(Target, ProofId, PlanDigest, AnchorRef, CommitteeId) of
         {ok, Statement} ->
             quod_identity:verify(Signature, vote_bytes(Statement), Signer);
         error -> false
     end.
 
 -doc "Build the canonical certificate from already-correlated validator votes.".
--spec new(identity(), <<_:256>>, <<_:256>>, quod_dtx:certified_ref(),
+-spec new(identity(), <<_:256>>, <<_:256>>, quod_dtx:certified_ref(), <<_:256>>,
           [signed_row()]) -> {ok, certificate()} | error.
-new(Target, ProofId, PlanDigest, AnchorRef, Signatures) ->
+new(Target, ProofId, PlanDigest, AnchorRef, CommitteeId, Signatures) ->
     Certificate =
         {quod_read_certificate, ?CERTIFICATE_VERSION, Target, ProofId,
-         PlanDigest, AnchorRef, lists:keysort(1, Signatures)},
+         PlanDigest, AnchorRef, CommitteeId, lists:keysort(1, Signatures)},
     case valid_shape(Certificate) of
         true -> {ok, Certificate};
         false -> error
@@ -66,8 +67,8 @@ new(Target, ProofId, PlanDigest, AnchorRef, Signatures) ->
 -spec binding(certificate()) -> {ok, map()} | error.
 binding(
   {quod_read_certificate, ?CERTIFICATE_VERSION, Target, ProofId,
-   PlanDigest, AnchorRef, Signatures} = Certificate) ->
-    case statement(Target, ProofId, PlanDigest, AnchorRef) of
+   PlanDigest, AnchorRef, CommitteeId, Signatures} = Certificate) ->
+    case statement(Target, ProofId, PlanDigest, AnchorRef, CommitteeId) of
         {ok, Statement} ->
             case valid_signatures(Signatures) andalso
                  erlang:external_size(Certificate) =<
@@ -76,6 +77,7 @@ binding(
                     {ok, #{target => Target, proof_id => ProofId,
                            plan_digest => PlanDigest,
                            anchor_ref => AnchorRef,
+                           committee_id => CommitteeId,
                            statement => Statement,
                            signatures => Signatures}};
                 false -> error
@@ -94,10 +96,11 @@ valid_shape(Certificate) ->
     end.
 
 -doc "Verify exactly `f + 1` signatures from the certified anchor committee.".
--spec verify(certificate(), [<<_:256>>]) -> boolean().
-verify(Certificate, Committee) ->
+-spec verify(certificate(), [<<_:256>>], <<_:256>>) -> boolean().
+verify(Certificate, Committee, CommitteeId) ->
     case {binding(Certificate), quod_quorum:committee_size(Committee)} of
-        {{ok, #{statement := Statement, signatures := Signatures}},
+        {{ok, #{committee_id := CommitteeId, statement := Statement,
+                signatures := Signatures}},
          {ok, N}} when N > 0 ->
             Needed = quod_dtx_current_view:threshold(N),
             length(Signatures) =:= Needed andalso
@@ -110,15 +113,15 @@ verify(Certificate, Committee) ->
     end.
 
 statement(Target = {Ns, <<_:256>>}, <<_:256>> = ProofId,
-          <<_:256>> = PlanDigest, AnchorRef)
+          <<_:256>> = PlanDigest, AnchorRef, <<_:256>> = CommitteeId)
   when is_binary(Ns), byte_size(Ns) > 0 ->
     case quod_dtx:certified_ref_binding(AnchorRef) of
         {ok, Target, _Slot, _RecordDigest} ->
             {ok, {quod_read_vote, ?VOTE_VERSION,
-                  Target, ProofId, PlanDigest, AnchorRef}};
+                  Target, ProofId, PlanDigest, AnchorRef, CommitteeId}};
         _ -> error
     end;
-statement(_Target, _ProofId, _PlanDigest, _AnchorRef) ->
+statement(_Target, _ProofId, _PlanDigest, _AnchorRef, _CommitteeId) ->
     error.
 
 vote_bytes(Statement) ->

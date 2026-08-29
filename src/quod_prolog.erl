@@ -4411,7 +4411,7 @@ submit_signed_foreign_manifest(
                               PlanBlob, Attestation},
                     try quod_transaction:remote_claim(
                           {OriginNs, OriginAnchor}, Manifest,
-                          Bundle, RequestAuth) of
+                          Bundle, RequestAuth, []) of
                         Claim ->
                             submit_signed_foreign_claim(
                               Origin, Target, Plan, Handle,

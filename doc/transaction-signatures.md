@@ -1,8 +1,9 @@
 # Transaction-author signatures
 
 **Status:** the original signature/relay milestone, the incompatible V8
-signed-request extension, and the current V11 generation are implemented.
-V11 retains the event support introduced in V9 and has no
+signed-request extension, and the current V12 generation are implemented.
+V12 retains the event support introduced in V9 and adds the signed
+read-certificate carrier. It has no
 compatibility decoder; a fleet carrying an older transaction generation must
 activate it through a clean persistence reset and re-found.
 
@@ -51,10 +52,10 @@ non-canonical nested plan is rejected before transaction construction.
 
 ```erlang
 term_to_binary(
-  {quod_transaction, 11,
+  {quod_transaction, 12,
    TargetNs, GenesisAnchor, AuthorAdmission,
    TxId, Origin, ProofId, PlanDigest, Goal, Result,
-   MaterialWire, EffectsWire, Role, Evidence,
+   MaterialWire, EffectsWire, Role, Evidence, ForeignReads,
    RequestAuth, AuthorizationTranscript,
    Author, AuthorSeq, SubmittedAt},
   [deterministic]).
@@ -68,14 +69,16 @@ committee author.
 
 `EffectsWire` is the separate bounded canonical encoding of the closed typed
 direct-effect list. `Role` and `Evidence` bind the transaction's protocol role
-and its exact role-specific proof. `RequestAuth` is either `none` or the exact canonical
+and its exact role-specific proof. `ForeignReads` is the canonical list of
+portable read certificates. It is signed but, like replaceable role evidence,
+is excluded from the semantic transaction id. `RequestAuth` is either `none` or the exact canonical
 signed-agent request evidence; `AuthorizationTranscript` is either `none` or
 the one canonical top-level `can_invoke/4` decision recorded during the proof.
 Both are signed and included in the semantic transaction id. Validators verify
 the request and re-prove the recorded ACL decision against the proposal parent;
 private prepared payloads and executable callbacks are never stored there.
 
-The tuple prefix `{quod_transaction, 11}` is the fixed cryptographic
+The tuple prefix `{quod_transaction, 12}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
 tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current
@@ -89,8 +92,8 @@ read check its canonical term order before the wire encoding.
 record shown by the Explorer. `sig` is the sole excluded field.
 
 V9 introduced ordered `{event, Term}` occurrences in the already-signed
-`MaterialWire` diff alphabet. The current V11 envelope additionally binds
-`Role` and `Evidence`; its semantic transaction-id domain is V7 and the signed
+`MaterialWire` diff alphabet. V11 added `Role` and `Evidence`; the current V12
+also binds `ForeignReads`. Its semantic transaction-id domain is V7 and the signed
 DTX-plan domain is V8. Older generations are rejected; they are not translated
 or accepted beside the current generation.
 

@@ -1,6 +1,6 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v7 wire boundary for durable operation and read-attestation traffic.
+Pure v8 wire boundary for durable operation and read-attestation traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
@@ -41,7 +41,7 @@ application. Both enter the existing target signing and consensus machinery.
               public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 7).
+-define(VERSION, 8).
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -92,7 +92,7 @@ application. Both enter the existing target signing and consensus machinery.
         {outcome_barrier, request_id(), identity(), <<_:256>>,
          non_neg_integer(), barrier_status()} |
         {read_attest, request_id(), identity(), <<_:256>>, <<_:256>>,
-         quod_dtx:certified_ref(), <<_:256>>, <<_:512>>} |
+         quod_dtx:certified_ref(), <<_:256>>, <<_:256>>, <<_:512>>} |
         {applied, request_id(), identity(), <<_:256>>, <<_:256>>,
          quod_dtx:certified_ref(), non_neg_integer(), verdict(),
          <<_:256>>, <<_:512>>} |
@@ -274,7 +274,7 @@ valid_validation_item(_Hint) ->
     false.
 
 %% ------------------------------------------------------------------
-%% Fixed v7 operation algebra
+%% Fixed v8 operation algebra
 %% ------------------------------------------------------------------
 
 validate_request({submit, RequestId, RecordBlob}) ->
@@ -380,12 +380,13 @@ validate_response(
           valid_uint64(AppliedFloor) andalso valid_barrier_status(Status));
 validate_response(
   {read_attest, RequestId, TargetIdentity, ProofId, PlanDigest, AnchorRef,
-   Signer, Signature}) ->
+   CommitteeId, Signer, Signature}) ->
     validate_response_fields(
       RequestId,
       valid_identity(TargetIdentity) andalso valid_digest(ProofId) andalso
           valid_digest(PlanDigest) andalso valid_certified_ref(AnchorRef) andalso
           certified_ref_identity(AnchorRef) =:= TargetIdentity andalso
+          valid_digest(CommitteeId) andalso
           valid_digest(Signer) andalso is_binary(Signature) andalso
           byte_size(Signature) =:= 64);
 validate_response(
@@ -538,7 +539,7 @@ response_id({phase, RequestId, _, _}) -> valid_id_or_error(RequestId);
 response_id({outcome, RequestId, _, _, _, _}) -> valid_id_or_error(RequestId);
 response_id({outcome_barrier, RequestId, _, _, _, _}) ->
     valid_id_or_error(RequestId);
-response_id({read_attest, RequestId, _, _, _, _, _, _}) ->
+response_id({read_attest, RequestId, _, _, _, _, _, _, _}) ->
     valid_id_or_error(RequestId);
 response_id({applied, RequestId, _, _, _, _, _, _, _, _}) ->
     valid_id_or_error(RequestId);
@@ -593,7 +594,7 @@ correlates(
 correlates(
   {read_attest, RequestId, PlanBlob} = Request,
   {read_attest, RequestId, TargetIdentity, ProofId, PlanDigest, AnchorRef,
-   _Signer, _Signature} = Response) ->
+   _CommitteeId, _Signer, _Signature} = Response) ->
     valid_pair(Request, Response) andalso
         case quod_dtx:decode(PlanBlob) of
             {ok, Plan} ->

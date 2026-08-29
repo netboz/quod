@@ -7,14 +7,14 @@ f_plus_one_signatures_verify_test() ->
     [A, B | _] = maps:get(signers, F),
     Certificate = certificate(F, [A, B]),
     ?assert(quod_read_certificate:verify(
-              Certificate, committee(F))).
+              Certificate, committee(F), maps:get(committee_id, F))).
 
 one_below_threshold_does_not_verify_test() ->
     F = fixture(7),
     [A, B | _] = maps:get(signers, F),
     Certificate = certificate(F, [A, B]),
     ?assertNot(quod_read_certificate:verify(
-                 Certificate, committee(F))).
+                 Certificate, committee(F), maps:get(committee_id, F))).
 
 noncommittee_signatures_are_ignored_test() ->
     F = fixture(4),
@@ -22,29 +22,31 @@ noncommittee_signatures_are_ignored_test() ->
     Outsider = signer(),
     Certificate = certificate(F, [A, Outsider]),
     ?assertNot(quod_read_certificate:verify(
-                 Certificate, committee(F))).
+                 Certificate, committee(F), maps:get(committee_id, F))).
 
 every_statement_field_is_signature_bound_test() ->
     F = fixture(1),
     [A] = maps:get(signers, F),
     Certificate = certificate(F, [A]),
-    {quod_read_certificate, 1, Target, ProofId, PlanDigest,
-     AnchorRef, Rows} = Certificate,
+    {quod_read_certificate, 2, Target, ProofId, PlanDigest,
+     AnchorRef, CommitteeId, Rows} = Certificate,
     OtherTarget = {<<"quod:other">>, digest(41)},
     OtherRef = certified_ref(OtherTarget, 8, digest(42)),
     Mutations =
-        [{quod_read_certificate, 1, OtherTarget, ProofId, PlanDigest,
-          OtherRef, Rows},
-         {quod_read_certificate, 1, Target, digest(43), PlanDigest,
-          AnchorRef, Rows},
-         {quod_read_certificate, 1, Target, ProofId, digest(44),
-          AnchorRef, Rows},
-         {quod_read_certificate, 1, Target, ProofId, PlanDigest,
-          certified_ref(Target, 9, digest(45)), Rows}],
+        [{quod_read_certificate, 2, OtherTarget, ProofId, PlanDigest,
+          OtherRef, CommitteeId, Rows},
+         {quod_read_certificate, 2, Target, digest(43), PlanDigest,
+          AnchorRef, CommitteeId, Rows},
+         {quod_read_certificate, 2, Target, ProofId, digest(44),
+          AnchorRef, CommitteeId, Rows},
+         {quod_read_certificate, 2, Target, ProofId, PlanDigest,
+          certified_ref(Target, 9, digest(45)), CommitteeId, Rows},
+         {quod_read_certificate, 2, Target, ProofId, PlanDigest,
+          AnchorRef, digest(46), Rows}],
     lists:foreach(
       fun(Mutated) ->
               ?assertNot(quod_read_certificate:verify(
-                           Mutated, committee(F)))
+                           Mutated, committee(F), CommitteeId))
       end, Mutations).
 
 fixture(N) ->
@@ -52,6 +54,7 @@ fixture(N) ->
     Target = {<<"quod:read-target">>, digest(1)},
     #{target => Target, proof_id => digest(2), plan_digest => digest(3),
       anchor_ref => certified_ref(Target, 7, digest(4)),
+      committee_id => digest(5),
       signers => Signers}.
 
 certificate(F, Signers) ->
@@ -60,13 +63,13 @@ certificate(F, Signers) ->
              {ok, Row} = quod_read_certificate:sign(
                            maps:get(target, F), maps:get(proof_id, F),
                            maps:get(plan_digest, F), maps:get(anchor_ref, F),
-                           Signer),
+                           maps:get(committee_id, F), Signer),
              Row
          end || Signer <- Signers],
     {ok, Certificate} = quod_read_certificate:new(
                           maps:get(target, F), maps:get(proof_id, F),
                           maps:get(plan_digest, F), maps:get(anchor_ref, F),
-                          Rows),
+                          maps:get(committee_id, F), Rows),
     Certificate.
 
 committee(F) ->

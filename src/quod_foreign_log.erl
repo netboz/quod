@@ -395,11 +395,13 @@ Verify one exact reference against a co-hosted namespace's durable ledger.
 
 The same lazy cache and forward verifier as `verify/5` are used, but pages
 come from `LedgerRoot` instead of the network and no route-peer membership
-claim is needed.  Returned generation, committee, committee id, and validator
-routes are those immediately after the referenced slot, never current state.
+claim is needed. Returned committee and committee id are fixed by the
+referenced slot. Validator routes are reachability hints from that committee
+era, never authority.
 """.
 -spec verify_local(file:filename_all(), quod_dtx:certified_ref(),
-                   transaction | 'begin' | prepare | decision | finalize | complete,
+                   entry | transaction | 'begin' | prepare | decision |
+                   finalize | complete,
                    pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
@@ -1871,7 +1873,11 @@ drop_first(Predicate, [Item | Rest]) ->
             end
     end.
 
+%% `entry` asks this same exact-reference verifier to accept either content or
+%% a DTX control. Read certificates bind the last material ledger entry, whose
+%% class is intentionally opaque to the certificate collector.
 valid_phase('begin') -> true;
+valid_phase(entry) -> true;
 valid_phase(transaction) -> true;
 valid_phase(prepare) -> true;
 valid_phase(decision) -> true;
@@ -3992,12 +3998,14 @@ open_replayed_cache(Root, CacheNs, Ns, Anchor, Store, Height,
             observe_foreign_stage(
               cache_replay, cache_result(ReplayResult), StartedNative),
             case ReplayResult of
-                {ok, Projection, TargetProjection}
-                  when Projection =:= CheckpointProjection ->
-                    {ok, Store, Height, Projection,
-                     PhaseIndex, TargetProjection};
-                {ok, _Different, _TargetProjection} ->
-                    close_cache(Store, PhaseIndex, cache_corrupt);
+                {ok, Projection, TargetProjection} ->
+                    case checkpoint_projection(Projection) of
+                        CheckpointProjection ->
+                            {ok, Store, Height, Projection,
+                             PhaseIndex, TargetProjection};
+                        _Different ->
+                            close_cache(Store, PhaseIndex, cache_corrupt)
+                    end;
                 {error, retry} ->
                     close_cache(Store, PhaseIndex, retry);
                 {error, _} ->
@@ -4028,23 +4036,19 @@ discard_resident_phase(_) -> ok.
 %% verified work.
 %%
 %% An exact reference below the resident head is already inside that certified
-%% prefix.  Its slot, block hash, and record digest are checked against the
-%% retained ledger entry; current committee/routes come from the resident head,
-%% which is the useful view for subsequent contact.  Phase generations needed
-%% for protocol recovery remain bound by the immutable control/plan itself.
-%% Therefore exact lookups may reuse the current projection in either arrival
-%% order instead of rebuilding the certified prefix from genesis.
+%% prefix. Its slot, block hash, and record digest are checked against the
+%% retained ledger entry. The exact-reference verifier uses the projection's
+%% committee-era index once to restore the post-slot committee, id, and route
+%% hints. Therefore exact lookups may reuse the current projection in either
+%% arrival order without making validity depend on the verifier's cache head.
 resident_projection(
-  {verified, Height, Projection, PhaseSession}, Height, Projection, TargetSlot,
-  Identity) when PhaseSession =/= none ->
-    case valid_projection(Projection, Identity) of
+  {verified, Height, Projection, PhaseSession}, Height, CheckpointProjection,
+  TargetSlot, Identity) when PhaseSession =/= none ->
+    case valid_projection(Projection, Identity) andalso
+         checkpoint_projection(Projection) =:= CheckpointProjection of
         true ->
-            SlotProjection = case TargetSlot of
-                                 Slot when is_integer(Slot), Slot =< Height ->
-                                     Projection;
-                                 _ -> undefined
-                             end,
-            {ok, Projection, SlotProjection};
+            {ok, Projection,
+             resident_target_projection(TargetSlot, Height, Projection)};
         false -> replay
     end;
 resident_projection(_Resident, _Height, _Projection, _TargetSlot, _Identity) ->
@@ -4842,18 +4846,22 @@ page_indices(_, _Next, _To) -> false.
 
 verify_exact_reference(Store, Ref, ExpectedPhase, Projection) ->
     Slot = ref_slot(Ref),
-    case quod_ledger_store:read_at(Store, Slot) of
-        {ok, #entry{} = Entry} ->
+    case {quod_ledger_store:read_at(Store, Slot),
+          reference_projection(Slot, Slot, Projection)} of
+        {{ok, #entry{} = Entry}, {ok, EvidenceProjection}} ->
             verify_exact_reference_entry(
-              Ref, ExpectedPhase, Entry, Projection);
-        not_found ->
+              Ref, ExpectedPhase, Entry, EvidenceProjection);
+        {not_found, _} ->
+            {error, retry};
+        {_, error} ->
             {error, retry}
     end.
 
 verify_exact_reference_entry(
   Ref, ExpectedPhase, #entry{data = Data} = Entry, Projection) ->
     case quod_ledger:classify(Data) of
-        {content, Transactions} when ExpectedPhase =:= transaction ->
+        {content, Transactions}
+          when ExpectedPhase =:= transaction; ExpectedPhase =:= entry ->
             verify_exact_transaction_reference(
               Ref, Entry, Transactions, Projection);
         {controls, Controls} ->
@@ -4869,7 +4877,8 @@ verify_exact_control_reference(
     case [{Kind, Control}
           || {Kind, Control} <- Controls,
              quod_dtx:record_digest(Control) =:= Digest] of
-        [{ExpectedPhase, Control}] ->
+        [{ActualPhase, Control}]
+          when ExpectedPhase =:= ActualPhase; ExpectedPhase =:= entry ->
             Identity = ref_identity(Ref),
             case quod_dtx:certified_entry_ref(Identity, Entry, Control) of
                 {ok, Ref} ->
@@ -4882,7 +4891,7 @@ verify_exact_control_reference(
                        slot => ref_slot(Ref),
                        block_hash => ref_block_hash(Ref),
                        record_digest => Digest,
-                       phase => ExpectedPhase,
+                       phase => ActualPhase,
                        generation => Generation,
                        control => Control,
                        entry => Entry,
@@ -5003,7 +5012,7 @@ ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
 write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
     Bytes = cache_log_bytes(Root, CacheNs),
     Term = {quod_foreign_log_checkpoint, ?CACHE_VERSION,
-            Ns, Anchor, Height, Bytes, Projection},
+            Ns, Anchor, Height, Bytes, checkpoint_projection(Projection)},
     Blob = term_to_binary(Term, [deterministic]),
     case byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
         true -> atomic_write(checkpoint_path(Root, CacheNs), Blob);
@@ -5187,11 +5196,67 @@ valid_projection(
         (CommitteeId =:= undefined orelse
          (is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32)) andalso
         valid_dtx_target(Dtx, ExpectedIdentity) andalso
-        %% Keep the persisted projection shape exact.  The batch hard break
-        %% removed the singular `dtx_last_group` cursor; the canonical wave
-        %% and phase index now own ordering for every control in a slot.
-        map_size(Projection) =:= 10;
+        valid_committee_views(Projection, ExpectedIdentity);
 valid_projection(_, _) -> false.
+
+%% Committee eras are retained only by the running certified-history owner.
+%% The durable checkpoint stays at the fixed current-projection shape; after a
+%% restart the existing one-time replay rebuilds both the DTX phase session and
+%% these eras together. This avoids both per-reference genesis replay and an
+%% ever-growing checkpoint envelope.
+checkpoint_projection(Projection) ->
+    maps:remove(committee_views, Projection).
+
+valid_committee_views(#{committee_views := Views} = Projection,
+                      _ExpectedIdentity)
+  when is_list(Views), map_size(Projection) =:= 11 ->
+    valid_committee_view_rows(Views);
+valid_committee_views(Projection, _ExpectedIdentity) ->
+    %% Compact persisted checkpoints deliberately omit the resident-only era
+    %% index and retain the exact ten-field shape.
+    map_size(Projection) =:= 10.
+
+valid_committee_view_rows([]) -> true;
+valid_committee_view_rows(
+  [{Start, Committee, <<_:256>>, Routes} | Rest])
+  when is_integer(Start), Start > 0, is_map(Routes) ->
+    bounded_committee(Committee, 0) andalso
+        valid_validator_routes(Routes, Committee) andalso
+        valid_committee_view_rows(Rest, Start);
+valid_committee_view_rows(_) -> false.
+
+valid_committee_view_rows([], _PreviousStart) -> true;
+valid_committee_view_rows(
+  [{Start, Committee, <<_:256>>, Routes} | Rest], PreviousStart)
+  when is_integer(Start), Start > 0, Start < PreviousStart,
+       is_map(Routes) ->
+    bounded_committee(Committee, 0) andalso
+        valid_validator_routes(Routes, Committee) andalso
+        valid_committee_view_rows(Rest, Start);
+valid_committee_view_rows(_, _) -> false.
+
+reference_projection(Slot, Height, Projection)
+  when is_integer(Slot), Slot > 0, Slot =< Height ->
+    case quod_simplex:history_committee_view(Slot, Projection) of
+        {ok, Committee, CommitteeId, Routes} ->
+            {ok, Projection#{committee := Committee,
+                             committee_id := CommitteeId,
+                             validator_routes := Routes}};
+        error -> error
+    end;
+reference_projection(_Slot, _Height, _Projection) ->
+    error.
+
+resident_target_projection(TargetSlot, Height, Projection) ->
+    case TargetSlot of
+        Slot when is_integer(Slot), Slot > 0, Slot =< Height ->
+            %% Keep the one certified resident projection here.
+            %% verify_exact_reference performs the sole exact-slot era
+            %% substitution after reading the entry.
+            Projection;
+        _CurrentOrFuture ->
+            undefined
+    end.
 
 valid_validator_routes(Routes, Committee) ->
     maps:fold(

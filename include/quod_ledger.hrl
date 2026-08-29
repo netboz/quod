@@ -52,9 +52,11 @@
                                        {remote_claim, term(), term(), binary()} |
                                        {remote_complete, term(), binary(), term()},
                                                         %% one canonical content family: Prolog application or
-                                                        %% operation metadata; certificates are never stored here
+                                                        %% operation metadata; evidence has dedicated fields below
                  evidence = none :: none | {term(), tuple()},
                                                         %% exact referenced record + certified ledger ref;
+                                                        %% signed but excluded from semantic identity
+                 foreign_reads = [] :: [term()],       %% certified read-only plan statements;
                                                         %% signed but excluded from semantic identity
                  origin       :: {binary(), binary()},%% proof origin identity {OriginNs, OriginAnchor}; genesis = {Ns, <<0:256>>}
                  proof_id = none :: binary() | none,  %% 32-byte distributed-proof id; none only for genesis

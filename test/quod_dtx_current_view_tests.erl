@@ -191,7 +191,8 @@ read_certificate_reaches_f_plus_one_without_a_consensus_block_test() ->
                           maps:get(owner_ns, F), {source(F), PlanBlob},
                           1000, Deps),
     ?assert(quod_read_certificate:verify(
-              Certificate, maps:get(committee, F))).
+              Certificate, maps:get(committee, F),
+              maps:get(committee_id, F))).
 
 read_certificate_one_below_f_plus_one_retries_test() ->
     F = fixture(7),
@@ -206,6 +207,37 @@ read_certificate_one_below_f_plus_one_retries_test() ->
                      false -> {error, not_ready}
                  end
              end),
+    ?assertEqual(
+       {error, retry},
+       quod_dtx_current_view:test_certify_reads(
+         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+
+read_certificate_ignores_vote_from_another_committee_view_test() ->
+    F = fixture(4),
+    [WrongView, Valid | _] = maps:get(committee, F),
+    PlanBlob = read_plan_blob(F, <<"read_certificate_wrong_view">>),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) when Key =:= WrongView ->
+                     {ok, Reply, Hints} = read_attest_reply(F, Key, Request),
+                     {read_attest, RequestId, Target, ProofId, PlanDigest,
+                      AnchorRef, _CommitteeId, Signer, _Signature} = Reply,
+                     WrongCommitteeId = <<0:256>>,
+                     Identity = maps:get(Key, maps:get(signers, F)),
+                     {ok, {Signer, WrongSignature}} =
+                         quod_read_certificate:sign(
+                           Target, ProofId, PlanDigest, AnchorRef,
+                           WrongCommitteeId, Identity),
+                     {ok, {read_attest, RequestId, Target, ProofId,
+                           PlanDigest, AnchorRef, WrongCommitteeId,
+                           Signer, WrongSignature}, Hints};
+                (Key, Request) when Key =:= Valid ->
+                     read_attest_reply(F, Key, Request);
+                (_Key, _Request) ->
+                     {error, not_ready}
+             end),
+    %% f+1 is two for a four-member committee. The mismatched vote is ignored,
+    %% leaving only one valid vote and therefore no certificate.
     ?assertEqual(
        {error, retry},
        quod_dtx_current_view:test_certify_reads(
@@ -250,7 +282,8 @@ read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
                           maps:get(owner_ns, F), {source(F), PlanBlob},
                           1000, Deps),
     ?assert(quod_read_certificate:verify(
-              Certificate, maps:get(committee, F))).
+              Certificate, maps:get(committee, F),
+              maps:get(committee_id, F))).
 
 read_certification_never_allocates_foreign_plan_symbols_test() ->
     F = fixture(1),
@@ -264,7 +297,7 @@ read_certification_never_allocates_foreign_plan_symbols_test() ->
                         read_attest_reply(F, SignerKey, Request)
                 end),
     ?assertMatch(
-       {ok, {quod_read_certificate, 1, _, _, _, _, _}},
+       {ok, {quod_read_certificate, 2, _, _, _, _, _, _}},
        quod_dtx_current_view:test_certify_reads(
          maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)),
     ?assertEqual(Before, erlang:system_info(atom_count)),
@@ -802,18 +835,19 @@ applied_reply(
 read_attest_reply(F, Key, Request) when is_binary(Key) ->
     read_attest_reply(F, maps:get(Key, maps:get(signers, F)), Request);
 read_attest_reply(
-  _F, #{pubkey := Signer} = Identity,
+  F, #{pubkey := Signer} = Identity,
   {read_attest, RequestId, PlanBlob}) ->
     {ok, Plan} = quod_dtx:decode(PlanBlob),
     Target = quod_dtx:target(Plan),
     ProofId = quod_dtx:proof_id(Plan),
     PlanDigest = quod_dtx:digest(Plan),
     AnchorRef = certified_ref(Target, 8, digest(241)),
+    CommitteeId = maps:get(committee_id, F),
     {ok, {Signer, Signature}} = quod_read_certificate:sign(
                                  Target, ProofId, PlanDigest, AnchorRef,
-                                 Identity),
+                                 CommitteeId, Identity),
     {ok, {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
-          Signer, Signature}, []}.
+          CommitteeId, Signer, Signature}, []}.
 
 read_attest_conflict({read_attest, RequestId, _PlanBlob}) ->
     {ok, {error, RequestId, conflict_retry}, []}.

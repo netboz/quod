@@ -502,7 +502,7 @@ valid_read_request(_OwnerNs, _Source, _PlanBlob, _TimeoutMs) ->
 certify_reads_view(
   OwnerNs, Source, Plan, PlanBlob, Target, View, Deadline, Dependencies) ->
     case valid_identity_current_view(Target, View) of
-        {ok, Committee, _CommitteeId, MinimumSlot, Routes} ->
+        {ok, Committee, CommitteeId, MinimumSlot, Routes} ->
             case MinimumSlot >= quod_dtx:base_height(Plan) of
                 true ->
                     Sources = probe_sources(
@@ -512,7 +512,8 @@ certify_reads_view(
                          remaining(Deadline) > 0 of
                         true ->
                             collect_read_votes(
-                              OwnerNs, Sources, Plan, PlanBlob, Needed,
+                              OwnerNs, Sources, Plan, PlanBlob, CommitteeId,
+                              Needed,
                               Deadline, Dependencies);
                         false ->
                             {error, retry}
@@ -525,12 +526,13 @@ certify_reads_view(
     end.
 
 collect_read_votes(
-  OwnerNs, Sources, Plan, PlanBlob, Needed, Deadline, Dependencies) ->
+  OwnerNs, Sources, Plan, PlanBlob, CommitteeId, Needed, Deadline,
+  Dependencies) ->
     Probe =
         fun(Key, Source) ->
                 case probe_read_attest(
                        OwnerNs, Key, Source, Plan, PlanBlob,
-                       Deadline, Dependencies) of
+                       CommitteeId, Deadline, Dependencies) of
                     {ok, Binding, SignedRow} ->
                         {signed, {read, Binding}, SignedRow};
                     conflict_retry ->
@@ -540,10 +542,12 @@ collect_read_votes(
         end,
     case collect_quorum(
            read_certificate_probe, Sources, Needed, Deadline, Probe) of
-        {ok, {signed, {read, {Target, ProofId, PlanDigest, AnchorRef}},
+        {ok, {signed, {read, {Target, ProofId, PlanDigest, AnchorRef,
+                              CommitteeId}},
               Signatures}} ->
             case quod_read_certificate:new(
-                   Target, ProofId, PlanDigest, AnchorRef, Signatures) of
+                   Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                   Signatures) of
                 {ok, Certificate} -> {ok, Certificate};
                 error -> {error, retry}
             end;
@@ -1294,17 +1298,18 @@ call_endpoint(OwnerNs, TargetNs, PeerKey, Source, Request,
     end.
 
 probe_read_attest(
-  OwnerNs, PeerKey, Source, Plan, PlanBlob, Deadline, Dependencies) ->
+  OwnerNs, PeerKey, Source, Plan, PlanBlob, CommitteeId, Deadline,
+  Dependencies) ->
     {TargetNs, _Anchor} = Target = quod_dtx:target(Plan),
     Request = {read_attest, request_id(), PlanBlob},
     probe_read_attest_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Target,
       quod_dtx:proof_id(Plan), quod_dtx:digest(Plan),
-      Deadline, Dependencies).
+      CommitteeId, Deadline, Dependencies).
 
 probe_read_attest_source(
   {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
-  Target, ProofId, PlanDigest, Deadline, Dependencies) ->
+  Target, ProofId, PlanDigest, CommitteeId, Deadline, Dependencies) ->
     walk_remote_candidates(
       Endpoints, Deadline,
       fun(Endpoint, AttemptDeadline) ->
@@ -1314,7 +1319,8 @@ probe_read_attest_source(
       end,
       fun(Result) ->
           case read_attest_response_vote(
-                 Request, Target, ProofId, PlanDigest, PeerKey, Result) of
+                 Request, Target, ProofId, PlanDigest, CommitteeId,
+                 PeerKey, Result) of
               {ok, _, _} = Vote -> {done, Vote};
               conflict_retry -> {done, conflict_retry};
               ignore -> continue
@@ -1323,35 +1329,38 @@ probe_read_attest_source(
       ignore);
 probe_read_attest_source(
   local, OwnerNs, TargetNs, PeerKey, Request,
-  Target, ProofId, PlanDigest, Deadline, Dependencies) ->
+  Target, ProofId, PlanDigest, CommitteeId, Deadline, Dependencies) ->
     read_attest_response_vote(
-      Request, Target, ProofId, PlanDigest, PeerKey,
+      Request, Target, ProofId, PlanDigest, CommitteeId, PeerKey,
       call_endpoint(
         OwnerNs, TargetNs, PeerKey, local, Request,
         Deadline, Dependencies)).
 
 read_attest_response_vote(
-  Request, Target, ProofId, PlanDigest, ExpectedSigner,
+  Request, Target, ProofId, PlanDigest, CommitteeId, ExpectedSigner,
   {ok, {read_attest, _RequestId, Target, ProofId, PlanDigest, AnchorRef,
+        CommitteeId,
         ExpectedSigner, Signature} = Response}) ->
     case quod_dtx_endpoint:correlates(Request, Response) andalso
          quod_read_certificate:verify_vote(
            Target, ProofId, PlanDigest, AnchorRef,
+           CommitteeId,
            ExpectedSigner, Signature) of
         true ->
-            {ok, {Target, ProofId, PlanDigest, AnchorRef},
+            {ok, {Target, ProofId, PlanDigest, AnchorRef, CommitteeId},
              {ExpectedSigner, Signature}};
         false -> ignore
     end;
 read_attest_response_vote(
-  Request, _Target, _ProofId, _PlanDigest, _ExpectedSigner,
+  Request, _Target, _ProofId, _PlanDigest, _CommitteeId, _ExpectedSigner,
   {ok, {error, _RequestId, conflict_retry} = Response}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true -> conflict_retry;
         false -> ignore
     end;
 read_attest_response_vote(
-  _Request, _Target, _ProofId, _PlanDigest, _ExpectedSigner, _Result) ->
+  _Request, _Target, _ProofId, _PlanDigest, _CommitteeId,
+  _ExpectedSigner, _Result) ->
     ignore.
 
 probe_applied(OwnerNs, PeerKey, Source,

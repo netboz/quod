@@ -41,6 +41,23 @@ signed() ->
     {ok, Tx} = quod_transaction:sign(?BINDING, Tx0, Identity),
     {Tx, Identity}.
 
+read_certificate(ProofId, N) ->
+    Target = {<<"quod:read-", (integer_to_binary(N))/binary>>, <<N:256>>},
+    {Ns, Anchor} = Target,
+    {Signer, Identity} = identity(),
+    {ok, AnchorRef} = quod_dtx:certified_ref(
+                        Ns, Anchor, 3, <<(N + 100):256>>, <<(N + 200):256>>,
+                        <<"read-qc">>),
+    PlanDigest = <<(N + 300):256>>,
+    CommitteeId = <<(N + 400):256>>,
+    {ok, Vote} = quod_read_certificate:sign(
+                   Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                   Identity),
+    {ok, Certificate} = quod_read_certificate:new(
+                          Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                          [Vote]),
+    {Certificate, Target, AnchorRef, [Signer]}.
+
 empty_projection() -> quod_simplex:history_projection().
 projection(Pub) ->
     quod_simplex:history_projection(
@@ -73,6 +90,96 @@ deterministic_read_check_order_test() ->
     ?assertEqual(quod_transaction:bytes(?BINDING, A),
                  quod_transaction:bytes(?BINDING, B)).
 
+foreign_reads_are_signed_but_do_not_change_semantic_id_test() ->
+    {Pub, Identity} = identity(),
+    Base = unsigned(Pub),
+    {Certificate, _Target, _AnchorRef, _Committee} =
+        read_certificate(Base#transaction.proof_id, 32),
+    WithReads = quod_transaction:bind_id(
+                  {?NS, ?ANCHOR},
+                  Base#transaction{tx_id = <<>>, foreign_reads = [Certificate]}),
+    ?assertEqual(Base#transaction.tx_id, WithReads#transaction.tx_id),
+    ?assertNotEqual(quod_transaction:bytes(?BINDING, Base),
+                    quod_transaction:bytes(?BINDING, WithReads)),
+    {ok, Signed} = quod_transaction:sign(?BINDING, WithReads, Identity),
+    ?assert(quod_transaction:verify(?BINDING, Signed)),
+    ?assertNot(quod_transaction:verify(
+                 ?BINDING, Signed#transaction{foreign_reads = []})).
+
+from_plan_carries_canonical_foreign_reads_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Plan = maps:get(plan, Fixture),
+    {ok, Material0} = quod_dtx:material(Plan),
+    {Certificate, _Target, _AnchorRef, _Committee} =
+        read_certificate(quod_dtx:proof_id(Plan), 33),
+    Transaction = quod_transaction:from_plan(
+                    Plan, Material0#{foreign_reads => [Certificate]},
+                    maps:get(goal_blob, Fixture),
+                    maps:get(result_blob, Fixture), maps:get(auth, Fixture)),
+    ?assertEqual([Certificate], Transaction#transaction.foreign_reads),
+    ?assertMatch([{entry, _}],
+                 quod_transaction:required_references(Transaction)).
+
+remote_claim_carries_foreign_reads_into_application_test() ->
+    ProofId = <<204:256>>,
+    {Certificate, _ReadTarget, AnchorRef, _Committee} =
+        read_certificate(ProofId, 34),
+    Fixture = quod_ct:remote_operation_fixture(
+                #{proof_id => ProofId, foreign_reads => [Certificate]}),
+    Claim = maps:get(claim, Fixture),
+    Application = maps:get(application, Fixture),
+    ?assertEqual([Certificate], Claim#transaction.foreign_reads),
+    ?assertEqual([Certificate], Application#transaction.foreign_reads),
+    ?assertMatch([{transaction, _}, {entry, AnchorRef}],
+                 quod_transaction:required_references(Application)),
+    ?assertMatch([{entry, AnchorRef}],
+                 quod_transaction:required_references(Claim)),
+    %% The target application must carry the exact certificate list committed
+    %% by its source claim. Dropping it is a malformed role, not a different
+    %% but otherwise valid application.
+    {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
+    ?assertEqual(
+       {error, bad_term},
+       quod_transaction:bytes(
+         {TargetNs, TargetAnchor, <<205:256>>},
+         Application#transaction{foreign_reads = [], author = <<206:256>>,
+                                 author_seq = 1, submitted_at = 1})).
+
+noncanonical_foreign_reads_are_rejected_test() ->
+    {Pub, _Identity} = identity(),
+    Tx = unsigned(Pub),
+    {Certificate, _Target, _AnchorRef, _Committee} =
+        read_certificate(Tx#transaction.proof_id, 35),
+    ?assertEqual(
+       {error, bad_term},
+       quod_transaction:bytes(
+         ?BINDING,
+         Tx#transaction{foreign_reads = [Certificate, Certificate]})),
+    ?assertEqual(
+       error,
+       quod_transaction:required_references(
+         Tx#transaction{foreign_reads = [Certificate, Certificate]})).
+
+malformed_v12_foreign_reads_fail_during_full_decode_test() ->
+    {Tx, Identity} = signed(),
+    {ok, Canonical} = quod_transaction:bytes(?BINDING, Tx),
+    Decoded = binary_to_term(Canonical),
+    lists:foreach(
+      fun(ForeignReads) ->
+          MalformedCanonical = term_to_binary(
+                                 setelement(16, Decoded, ForeignReads),
+                                 [deterministic]),
+          Signature = quod_identity:sign(MalformedCanonical, Identity),
+          Submission = {submit, Tx#transaction.author, Signature,
+                        MalformedCanonical},
+          ?assert(quod_transaction:verify_submission(Submission)),
+          ?assertEqual(
+             {error, malformed_material},
+             quod_transaction:decode_verified_submission(
+               ?BINDING, Submission))
+      end,
+      [not_a_list, [not_a_certificate]]).
+
 semantic_id_v5_domain_is_pinned_test() ->
     Tx = unsigned(<<0:256>>),
     ?assertNotEqual(Tx#transaction.tx_id, semantic_v4_id(Tx)).
@@ -101,6 +208,8 @@ every_committed_field_is_bound_test() ->
       Tx#transaction{result = OtherResult},
       Tx#transaction{diff = [{assert, {{value, alpha, 2}, true}}]},
       Tx#transaction{read_check = #{{value, 3} => {present, 43}}},
+      Tx#transaction{foreign_reads =
+                       [element(1, read_certificate(Tx#transaction.proof_id, 31))]},
       Tx#transaction{author = <<0:256>>},
       Tx#transaction{author_seq = 2},
       Tx#transaction{submitted_at = 1750000000001}
@@ -335,8 +444,10 @@ remote_operation_role_and_evidence_roundtrip_test() ->
     Application = maps:get(application, Fixture),
     Completion = maps:get(completion, Fixture),
     ?assertEqual(shared, quod_transaction:remote_claim_route(Claim)),
-    ?assertMatch([_], quod_transaction:required_references(Application)),
-    ?assertMatch([_], quod_transaction:required_references(Completion)),
+    ?assertMatch([{transaction, _}],
+                 quod_transaction:required_references(Application)),
+    ?assertMatch([{transaction, _}],
+                 quod_transaction:required_references(Completion)),
     ?assertEqual([], quod_transaction:required_references(Claim)),
     {CertifiedClaimRef, StoredClaim} = Application#transaction.evidence,
     {ok, EvidenceBlob} = quod_transaction:encode_evidence(
@@ -456,30 +567,31 @@ relay_submission_roundtrip_test() ->
                  quod_transaction:decode_verified_submission(
                    {<<"other">>, ?ANCHOR, ?ADMISSION}, Submission)).
 
-superseded_v9_transaction_is_explicitly_rejected_test() ->
+superseded_v11_transaction_is_explicitly_rejected_test() ->
     {Tx, Identity} = signed(),
-    {ok, V11Bytes} = quod_transaction:bytes(?BINDING, Tx),
-    {quod_transaction, 11, Ns, Anchor, Admission,
+    {ok, V12Bytes} = quod_transaction:bytes(?BINDING, Tx),
+    {quod_transaction, 12, Ns, Anchor, Admission,
      TxId, Origin, ProofId, PlanDigest, Goal, Result,
      MaterialWire, EffectsWire, _Role, _Evidence,
+     _ForeignReads,
      RequestAuth, AuthorizationTranscript,
-     Author, AuthorSeq, SubmittedAt} = binary_to_term(V11Bytes),
-    V9Bytes = term_to_binary(
-                {quod_transaction, 9, Ns, Anchor, Admission,
+     Author, AuthorSeq, SubmittedAt} = binary_to_term(V12Bytes),
+    V11Bytes = term_to_binary(
+                {quod_transaction, 11, Ns, Anchor, Admission,
                  TxId, Origin, ProofId, PlanDigest, Goal, Result,
-                 MaterialWire, EffectsWire, RequestAuth,
+                 MaterialWire, EffectsWire, application, none, RequestAuth,
                  AuthorizationTranscript,
                  Author, AuthorSeq, SubmittedAt},
                 [deterministic]),
-    V9Signature = quod_identity:sign(V9Bytes, Identity),
-    V9Submission = {submit, Author, V9Signature, V9Bytes},
-    ?assert(quod_transaction:verify_submission(V9Submission)),
+    V11Signature = quod_identity:sign(V11Bytes, Identity),
+    V11Submission = {submit, Author, V11Signature, V11Bytes},
+    ?assert(quod_transaction:verify_submission(V11Submission)),
     ?assertEqual(
        {error, malformed_submission},
-       quod_transaction:decode_submission_metadata(V9Bytes)),
+       quod_transaction:decode_submission_metadata(V11Bytes)),
     ?assertEqual(
        {error, unsupported_version},
-       quod_transaction:decode_verified_submission(?BINDING, V9Submission)).
+       quod_transaction:decode_verified_submission(?BINDING, V11Submission)).
 
 different_canonical_submissions_have_different_ids_test() ->
     {Tx, Identity} = signed(),
@@ -590,10 +702,10 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 11, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 12, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
            <<>>, <<>>, MaterialWire, CanonicalEffects,
-           application, none, none, none, Author, 1, 0},
+           application, none, [], none, none, Author, 1, 0},
           [deterministic]),
     Signature = quod_identity:sign(Canonical, Identity),
     Submission = {submit, Author, Signature, Canonical},

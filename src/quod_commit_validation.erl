@@ -22,7 +22,7 @@ liveness observations while preserving the one existing authorization path
 
 -export([new/5, outcomes/1, content/4, dtx/4, read_only_plan/2,
          prepared_material/4,
-         remote_application/2]).
+         remote_application/2, validate_foreign_reads/2]).
 -export_type([context/0, mode/0]).
 
 -record(context, {
@@ -49,6 +49,42 @@ new({_Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer)
 
 -spec outcomes(context()) -> quod_outcome:index().
 outcomes(#context{outcomes = Outcomes}) -> Outcomes.
+
+-doc "Verify carried read certificates against exact certified-entry evidence.".
+-spec validate_foreign_reads(#transaction{}, map()) -> ok | {error, term()}.
+validate_foreign_reads(#transaction{role = {remote_complete, _, _, _},
+                                    foreign_reads = []}, _Evidence) ->
+    ok;
+validate_foreign_reads(#transaction{role = {remote_complete, _, _, _}},
+                       _Evidence) ->
+    {error, malformed_foreign_reads};
+validate_foreign_reads(#transaction{foreign_reads = Certificates,
+                                    proof_id = ProofId}, Evidence)
+  when is_list(Certificates), is_map(Evidence) ->
+    validate_foreign_reads(Certificates, ProofId, Evidence);
+validate_foreign_reads(#transaction{}, _Evidence) ->
+    {error, malformed_foreign_reads}.
+
+validate_foreign_reads([], _ProofId, _Evidence) ->
+    ok;
+validate_foreign_reads([Certificate | Rest], ProofId, Evidence) ->
+    case quod_read_certificate:binding(Certificate) of
+        {ok, #{target := Target, proof_id := ProofId,
+               anchor_ref := AnchorRef,
+               committee_id := CommitteeId}} ->
+            case maps:get(AnchorRef, Evidence, none) of
+                #{identity := Target, committee := Committee,
+                  committee_id := CommitteeId} ->
+                    case quod_read_certificate:verify(
+                           Certificate, Committee, CommitteeId) of
+                        true -> validate_foreign_reads(Rest, ProofId, Evidence);
+                        false -> {error, invalid_foreign_read_certificate}
+                    end;
+                _ -> {error, foreign_read_reference_binding}
+            end;
+        {ok, _OtherBinding} -> {error, foreign_read_proof_binding};
+        error -> {error, malformed_foreign_reads}
+    end.
 
 -spec content(term(), term(), mode(), context()) -> result(term()).
 content(Transactions, BlockTimestamp, Mode,

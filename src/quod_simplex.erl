@@ -120,7 +120,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          valid_genesis_transaction/2, genesis_predicate_manifest/1,
          valid_history_entry/4, valid_history_entry/5,
          history_projection/0, history_projection/1, history_projection/5,
-         history_committee/1, history_validator_routes/1,
+         history_committee/1, history_committee_view/2,
+         history_validator_routes/1,
          history_advance/3, history_advance/4,
          history_validate_advance/3, history_validate_advance/4,
          history_preview_advance/5,
@@ -228,6 +229,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_dtx_endpoint_ready/2,
          test_dtx_outcome_result/2,
          test_validate_dtx_reference_evidence/2,
+         test_verify_content_requirements/2,
+         test_content_reference_contacts/3,
          test_verify_complete_applied/4,
          test_relevant_validation_sidecar/2,
          test_merge_validation_sidecars/2,
@@ -1607,6 +1610,12 @@ test_dtx_outcome_result(OutcomeRef, Result) ->
     dtx_outcome_result(OutcomeRef, Result).
 test_validate_dtx_reference_evidence(Control, Evidence) ->
     validate_dtx_reference_evidence(Control, Evidence).
+test_verify_content_requirements(Requirements, Seen) ->
+    verify_content_requirements(
+      Requirements, <<0:256>>, undefined, #{}, Seen).
+test_content_reference_contacts(
+  ReferencePlan, TargetIdentity, #s{dtx_workers = Workers}) ->
+    content_reference_contacts(ReferencePlan, Workers, TargetIdentity).
 test_verify_complete_applied(
   Control, Evidence, ValidationSidecar, NetworkIdentity) ->
     case quod_dtx:control_kind(Control) of
@@ -2612,7 +2621,7 @@ dtx_outcome_result(OutcomeRef, {error, _}) ->
 
 -doc "Verify one exact certified ledger reference in the owning local ledger.".
 -spec dtx_local_evidence(binary(), quod_dtx:certified_ref(),
-                         transaction | 'begin' | prepare | decision |
+                         entry | transaction | 'begin' | prepare | decision |
                          finalize | complete) ->
           {ok, map()} |
           {error, not_ready | not_found | invalid_request}.
@@ -5436,8 +5445,11 @@ content_reference_contacts(ReferencePlan, Workers, TargetIdentity) ->
                    #transaction{tx_id = TxId}}
                     when Identity =/= TargetIdentity ->
                       case maps:get(TxId, ReferencesByTransaction, []) of
-                          [Ref] -> Acc#{Ref => {Identity, Contact}};
-                          _ -> Acc
+                          References ->
+                              case [Ref || {transaction, Ref} <- References] of
+                                  [Ref] -> Acc#{Ref => {Identity, Contact}};
+                                  _ -> Acc
+                              end
                       end;
                   _ ->
                       Acc
@@ -6010,7 +6022,8 @@ applied_endpoint_response(
 read_attest_endpoint_response(
   RequestId, Plan, Applied,
   S = #s{slot = Applied, last_applied = Applied,
-         self = Self, id = Signer, store = Store}) ->
+         self = Self, id = Signer, store = Store,
+         committee_id = CommitteeId}) ->
     Target = target_identity(S),
     case endpoint_read_ready(S) andalso lists:member(Self, active_validators(S))
          andalso applied_signer_matches(Self, Signer) andalso
@@ -6021,10 +6034,12 @@ read_attest_endpoint_response(
                     ProofId = quod_dtx:proof_id(Plan),
                     PlanDigest = quod_dtx:digest(Plan),
                     case quod_read_certificate:sign(
-                           Target, ProofId, PlanDigest, AnchorRef, Signer) of
+                           Target, ProofId, PlanDigest, AnchorRef,
+                           CommitteeId, Signer) of
                         {ok, {Self, Signature}} ->
                             {read_attest, RequestId, Target, ProofId,
-                             PlanDigest, AnchorRef, Self, Signature};
+                             PlanDigest, AnchorRef, CommitteeId,
+                             Self, Signature};
                         error ->
                             {error, RequestId, read_certificate_unavailable}
                     end;
@@ -10171,49 +10186,85 @@ verify_content_foreign_references(
   [{#transaction{} = Transaction, References} | Rest],
   LocalIdentity, LedgerRoot,
   Contacts, Seen0) ->
-    case References of
-        [Ref] ->
-            case maps:find(Ref, Seen0) of
-                {ok, Referenced} ->
-                    verify_content_reference_binding(
-                      Transaction, Referenced, Rest,
-                      LocalIdentity, LedgerRoot, Contacts, Seen0);
-                error ->
-                    case verify_content_reference(
-                           Ref, LocalIdentity, LedgerRoot, Contacts) of
-                        {valid, #{transaction := Referenced}} ->
-                            verify_content_reference_binding(
-                              Transaction, Referenced, Rest,
-                              LocalIdentity, LedgerRoot, Contacts,
-                              Seen0#{Ref => Referenced});
-                        {valid, _Malformed} ->
-                            {invalid, foreign_reference};
-                        Other -> Other
-                    end
-            end;
-        _ -> {invalid, malformed_foreign_references}
+    case verify_content_requirements(
+           References, LocalIdentity, LedgerRoot, Contacts, Seen0) of
+        {valid, Seen1} ->
+            verify_content_reference_binding(
+              Transaction, Rest, LocalIdentity, LedgerRoot, Contacts, Seen1);
+        Other -> Other
     end;
 verify_content_foreign_references(
   _Malformed, _LocalIdentity, _LedgerRoot, _Contacts, _Seen) ->
     {invalid, malformed_foreign_references}.
 
-verify_content_reference_binding(Transaction, Referenced, Rest,
+verify_content_requirements([], _LocalIdentity, _LedgerRoot, _Contacts, Seen) ->
+    {valid, Seen};
+verify_content_requirements([{Phase, Ref} | Rest],
+                            LocalIdentity, LedgerRoot, Contacts, Seen0) ->
+    case maps:find(Ref, Seen0) of
+        {ok, Evidence} ->
+            case reference_evidence_satisfies(Phase, Evidence) of
+                true ->
+                    verify_content_requirements(
+                      Rest, LocalIdentity, LedgerRoot, Contacts, Seen0);
+                false -> {invalid, foreign_reference}
+            end;
+        error ->
+            case verify_content_reference(
+                   Ref, Phase, LocalIdentity, LedgerRoot, Contacts) of
+                {valid, Evidence} ->
+                    verify_content_requirements(
+                      Rest, LocalIdentity, LedgerRoot, Contacts,
+                      Seen0#{Ref => Evidence});
+                Other -> Other
+            end
+    end;
+verify_content_requirements(_Malformed, _LocalIdentity, _LedgerRoot,
+                            _Contacts, _Seen) ->
+    {invalid, malformed_foreign_references}.
+
+reference_evidence_satisfies(transaction,
+                             #{transaction := #transaction{}}) -> true;
+reference_evidence_satisfies(entry,
+                             #{entry := #entry{}}) -> true;
+reference_evidence_satisfies(_Phase, _Evidence) -> false.
+
+verify_content_reference_binding(Transaction, Rest,
                                  LocalIdentity, LedgerRoot, Contacts, Seen) ->
-    case quod_transaction:evidence(Transaction) of
-        {_Ref, Referenced} ->
+    case {verify_role_reference_binding(Transaction, Seen),
+          quod_commit_validation:validate_foreign_reads(Transaction, Seen)} of
+        {true, ok} ->
             verify_content_foreign_references(
               Rest, LocalIdentity, LedgerRoot, Contacts, Seen);
-        _ -> {invalid, foreign_reference_binding}
+        {false, _} -> {invalid, foreign_reference_binding};
+        {_, {error, Reason}} -> {invalid, Reason}
     end.
 
-verify_content_reference(Ref, LocalIdentity, LedgerRoot, Contacts) ->
+verify_role_reference_binding(
+  #transaction{role = {remote_application, _, _, _},
+               evidence = {Ref, Referenced}}, Seen) ->
+    case maps:get(Ref, Seen, none) of
+        #{transaction := Referenced} -> true;
+        _ -> false
+    end;
+verify_role_reference_binding(
+  #transaction{role = {remote_complete, _, _, _},
+               evidence = {Ref, Referenced}}, Seen) ->
+    case maps:get(Ref, Seen, none) of
+        #{transaction := Referenced} -> true;
+        _ -> false
+    end;
+verify_role_reference_binding(#transaction{evidence = none}, _Seen) -> true;
+verify_role_reference_binding(#transaction{}, _Seen) -> false.
+
+verify_content_reference(Ref, Phase, LocalIdentity, LedgerRoot, Contacts) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, LocalIdentity, _Slot, _Digest} ->
             verify_local_dtx_reference(
-              Ref, transaction, LocalIdentity, LedgerRoot);
+              Ref, Phase, LocalIdentity, LedgerRoot);
         {ok, ForeignIdentity, _Slot, _Digest} ->
             verify_remote_dtx_reference(
-              Ref, transaction, ForeignIdentity,
+              Ref, Phase, ForeignIdentity,
               reference_contact(Ref, ForeignIdentity, Contacts));
         error -> {invalid, malformed_foreign_reference}
     end.
@@ -10562,6 +10613,7 @@ local_history_source(
     end.
 
 valid_dtx_phase('begin') -> true;
+valid_dtx_phase(entry) -> true;
 valid_dtx_phase(transaction) -> true;
 valid_dtx_phase(prepare) -> true;
 valid_dtx_phase(decision) -> true;
@@ -10580,7 +10632,7 @@ verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}, Contact, EntryHint) ->
         _LocalSimplex ->
             case dtx_local_evidence(Ns, Ref, Phase) of
                 {ok, #{transaction := _Transaction} = Evidence}
-                  when Phase =:= transaction ->
+                  when Phase =:= transaction; Phase =:= entry ->
                     {valid, Evidence};
                 {ok, #{control := _Control} = Evidence} ->
                     {valid, Evidence};
@@ -14055,6 +14107,8 @@ block_from_entry(_) -> error.
         #{committee := [node_id()],
           validator_routes := #{node_id() => {term(), pos_integer()}},
           committee_id := binary() | undefined,
+          committee_views := [{slot(), [node_id()], binary(),
+                               #{node_id() => {term(), pos_integer()}}}],
           admissions := #{node_id() => binary()},
           sequences := #{node_id() => non_neg_integer()},
           timestamp := non_neg_integer(),
@@ -14081,6 +14135,7 @@ history_projection({Ns, <<_:256>>} = Target) when is_binary(Ns) ->
 history_projection(Committee, CommitteeId, Admissions, Sequences, Timestamp) ->
     #{committee => Committee, validator_routes => #{},
       committee_id => CommitteeId,
+      committee_views => [],
       admissions => Admissions, sequences => Sequences,
       timestamp => Timestamp, dtx => undefined, dtx_lanes => #{},
       dtx_pending => #{}, history_head => none}.
@@ -14091,11 +14146,12 @@ state_projection(
      author_admissions = Admissions, author_seqs = Sequences,
      last_ts = Timestamp, dtx_projection = Dtx, dtx_lanes = DtxLanes,
      dtx_pending = Pending, history_head = HistoryHead}) ->
-    (history_projection(
+    Projection = (history_projection(
        Committee, CommitteeId, Admissions, Sequences, Timestamp))#{
       validator_routes := ValidatorRoutes,
       dtx := Dtx, dtx_lanes := DtxLanes,
-      dtx_pending := Pending, history_head := HistoryHead}.
+      dtx_pending := Pending, history_head := HistoryHead},
+    seed_current_committee_view(Projection).
 
 install_projection(
   #{committee := Committee, validator_routes := ValidatorRoutes,
@@ -14171,6 +14227,25 @@ retire_changed_admissions(OldAdmissions, Admissions,
 -doc "Read the canonical validator set from a history projection.".
 -spec history_committee(history_projection()) -> [node_id()].
 history_committee(#{committee := Committee}) -> Committee.
+
+-doc "Return the certified post-slot committee view for one exact history slot.".
+-spec history_committee_view(slot(), history_projection()) ->
+          {ok, [node_id()], binary(),
+           #{node_id() => {term(), pos_integer()}}} | error.
+history_committee_view(
+  Slot, #{history_head := {Height, _Hash}, committee_views := Views})
+  when is_integer(Slot), Slot > 0, Slot =< Height, is_list(Views) ->
+    committee_view_at(Slot, Views);
+history_committee_view(_Slot, _Projection) ->
+    error.
+
+committee_view_at(Slot, [{Start, Committee, CommitteeId, Routes} | _Rest])
+  when Start =< Slot ->
+    {ok, Committee, CommitteeId, Routes};
+committee_view_at(Slot, [_Later | Rest]) ->
+    committee_view_at(Slot, Rest);
+committee_view_at(_Slot, []) ->
+    error.
 
 -doc "Read the bounded validator key-to-endpoint map from a history projection.".
 -spec history_validator_routes(history_projection()) ->
@@ -14256,8 +14331,11 @@ history_advance_content(
     Routes0 = advance_validator_routes(Data, Routes),
     case committee_delta(Data) of
         {[], []} ->
-            Projection#{validator_routes => maps:with(V, Routes0),
-                        sequences => Seqs0, timestamp => max(T, Ts)};
+            record_committee_view(
+              Slot, V, maps:get(committee_id, Projection),
+              maps:with(V, Routes0),
+              Projection#{validator_routes => maps:with(V, Routes0),
+                          sequences => Seqs0, timestamp => max(T, Ts)});
         {Adds, _Removes} ->
             V1 = apply_committee_delta(Data, V),
             case V1 =:= V of
@@ -14265,9 +14343,12 @@ history_advance_content(
                     %% Reasserting an existing member may refresh its endpoint
                     %% in Prolog, but it is not a leave/rejoin and must not
                     %% rotate admission identity or sequence state.
-                    Projection#{validator_routes => maps:with(V, Routes0),
-                                sequences => Seqs0,
-                                timestamp => max(T, Ts)};
+                    record_committee_view(
+                      Slot, V, maps:get(committee_id, Projection),
+                      maps:with(V, Routes0),
+                      Projection#{validator_routes => maps:with(V, Routes0),
+                                  sequences => Seqs0,
+                                  timestamp => max(T, Ts)});
                 false ->
                     {ok, Block} = block_from_entry(Entry),
                     BlockHash = block_hash(Block),
@@ -14288,16 +14369,54 @@ history_advance_content(
                     DtxLanes1 = prune_dtx_lanes(
                                   Admissions1,
                                   maps:get(dtx_lanes, Projection, #{})),
-                    Projection#{committee => V1,
-                                validator_routes => maps:with(V1, Routes0),
-                                committee_id => CommitteeId1,
-                                admissions => Admissions1,
-                                sequences => maps:without(
-                                               NewlyAdmitted,
-                                               maps:with(V1, Seqs0)),
-                                dtx_lanes => DtxLanes1,
-                                timestamp => max(T, Ts)}
+                    Routes1 = maps:with(V1, Routes0),
+                    record_committee_view(
+                      Slot, V1, CommitteeId1, Routes1,
+                      Projection#{committee => V1,
+                                  validator_routes => Routes1,
+                                  committee_id => CommitteeId1,
+                                  admissions => Admissions1,
+                                  sequences => maps:without(
+                                                 NewlyAdmitted,
+                                                 maps:with(V1, Seqs0)),
+                                  dtx_lanes => DtxLanes1,
+                                  timestamp => max(T, Ts)})
             end
+    end.
+
+seed_current_committee_view(
+  Projection = #{history_head := {Slot, _Hash},
+                 committee := [_ | _] = Committee,
+                 committee_id := <<_:256>> = CommitteeId,
+                 validator_routes := Routes}) ->
+    record_committee_view(
+      Slot, Committee, CommitteeId, Routes, Projection);
+seed_current_committee_view(Projection) ->
+    Projection.
+
+%% Views are ordered newest first. One row represents one committee era; route
+%% refreshes update that era instead of creating per-slot history. Routes are
+%% reachability hints, while the committee and id are the authority fixed by
+%% the certified history fold.
+record_committee_view(
+  _Slot, _Committee, undefined, _Routes, Projection) ->
+    %% A committee era begins only once genesis (or another membership entry)
+    %% has established its signed view id.  A content-only pre-genesis fold is
+    %% invalid as history, but keeping this pure projector neutral lets its
+    %% caller return the existing typed history error instead of manufacturing
+    %% a corrupt resident row containing `undefined`.
+    Projection;
+record_committee_view(
+  Slot, Committee, CommitteeId, Routes,
+  Projection = #{committee_views := Views}) when is_binary(CommitteeId),
+                                                  byte_size(CommitteeId) =:= 32 ->
+    View = {Slot, Committee, CommitteeId, Routes},
+    case Views of
+        [{Start, Committee, CommitteeId, _OldRoutes} | Rest] ->
+            Projection#{committee_views :=
+                            [{Start, Committee, CommitteeId, Routes} | Rest]};
+        _ ->
+            Projection#{committee_views := [View | Views]}
     end.
 
 prune_dtx_lanes(Admissions, DtxLanes) ->

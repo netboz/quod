@@ -2718,6 +2718,102 @@ dtx_endpoint_applied_uses_finalize_committee_test() ->
                Request, {applied_state, Evidence, Snapshot}, S))
       end).
 
+read_attest_observer_returns_typed_unavailable_without_signing_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{goal_text => <<"\\+(missing(ok)).">>}),
+    Plan = maps:get(plan, Fixture),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    {Ns, Anchor} = quod_dtx:target(Plan),
+    {Self, Identity} = id(),
+    {Validator, _ValidatorIdentity} = id(),
+    Applied = 8,
+    State = st(#{ns => Ns, genesis_hash => Anchor,
+                 self => Self, id => Identity,
+                 validators => [Validator], slot => Applied,
+                 last_applied => Applied, sync => ready,
+                 prolog_ready => true, store => memory}),
+    RequestId = <<58:128>>,
+    ?assertEqual(
+       {error, RequestId, read_certificate_unavailable},
+       quod_simplex:test_dtx_endpoint_result(
+         {read_attest, RequestId, PlanBlob},
+         {read_plan_valid, Plan, Applied}, State)).
+
+read_attest_stale_token_refusal_remains_typed_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{goal_text => <<"\\+(missing(ok)).">>}),
+    Plan = maps:get(plan, Fixture),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    RequestId = <<59:128>>,
+    ?assertEqual(
+       {error, RequestId, conflict_retry},
+       quod_simplex:test_dtx_endpoint_result(
+         {read_attest, RequestId, PlanBlob},
+         {error, conflict_retry}, st(#{}))).
+
+read_attest_requires_one_exact_applied_height_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{goal_text => <<"\\+(missing(ok)).">>}),
+    Plan = maps:get(plan, Fixture),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    RequestId = <<60:128>>,
+    Request = {read_attest, RequestId, PlanBlob},
+    Refusal = {error, RequestId, read_certificate_unavailable},
+    ?assertEqual(
+       Refusal,
+       quod_simplex:test_dtx_endpoint_result(
+         Request, {read_plan_valid, Plan, 8},
+         st(#{slot => 9, last_applied => 8}))),
+    ?assertEqual(
+       Refusal,
+       quod_simplex:test_dtx_endpoint_result(
+         Request, {read_plan_valid, Plan, 8},
+         st(#{slot => 8, last_applied => 9}))),
+    ?assertEqual(
+       Refusal,
+       quod_simplex:test_dtx_endpoint_result(
+         Request, {read_plan_valid, Plan, 9},
+         st(#{slot => 8, last_applied => 8}))).
+
+read_attest_validator_signs_the_exact_current_ledger_anchor_test() ->
+    {Self, Identity} = id(),
+    Target = {Ns, Anchor} =
+        {<<"quod:read-attest-validator">>, <<60:256>>},
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{target => Target, node_identity => Identity,
+                  goal_text => <<"\\+(missing(ok)).">>}),
+    Plan = maps:get(plan, Fixture),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    Control = maps:get(begin_control, Fixture),
+    {Entry1, _} = committed_dtx_test_entry(Control, 1),
+    {Entry2, _} = committed_dtx_test_entry(Control, 2),
+    Noop = #entry{index = 3, data = noop},
+    Dir = relay_store_dir("read_attest_validator"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store3} = quod_ledger_store:append(
+                     Store0, [Entry1, Entry2, Noop]),
+    try
+        State = st(#{ns => Ns, genesis_hash => Anchor,
+                     self => Self, id => Identity,
+                     validators => [Self], slot => 3, last_applied => 3,
+                     sync => ready, prolog_ready => true, store => Store3}),
+        RequestId = <<61:128>>,
+        {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
+         Self, Signature} =
+            quod_simplex:test_dtx_endpoint_result(
+              {read_attest, RequestId, PlanBlob},
+              {read_plan_valid, Plan, 3}, State),
+        ?assertEqual(quod_dtx:proof_id(Plan), ProofId),
+        ?assertEqual(quod_dtx:digest(Plan), PlanDigest),
+        ?assertMatch({ok, Target, 2, _},
+                     quod_dtx:certified_ref_binding(AnchorRef)),
+        ?assert(quod_read_certificate:verify_vote(
+                  Target, ProofId, PlanDigest, AnchorRef, Self, Signature))
+    after
+        quod_ledger_store:close(Store3),
+        file:del_dir_r(Dir)
+    end.
+
 dtx_endpoint_applied_waits_for_exact_projection_message_test() ->
     {Author, AuthorId} = id(),
     Ns = <<"quod:dtx-applied-wake">>,

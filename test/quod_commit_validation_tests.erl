@@ -219,6 +219,37 @@ prepare_validation_and_materialization_are_owned_here_test() ->
              quod_commit_validation:dtx(Control, 1, check, Context))
       end).
 
+read_certificate_refuses_a_stale_read_token_test() ->
+    Fixture = valid_prepare_fixture(
+                #{goal_text => <<"\\+(missing(ok)).">>}),
+    {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
+    Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
+    Plan = maps:get(plan, Fixture),
+    [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
+      _ReadDigest, _Tag}] = quod_dtx:transcript(Plan),
+    {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
+    CallerNamespaces = [Ns || {Ns, _Anchor} <- tl(FullChain)],
+    {ok, Principal} = quod_agent_ref:materialize_principal(
+                        maps:get(principal, Fixture)),
+    Policy = {can_invoke, Goal, Principal, CallerNamespaces, TargetNs},
+    Member = {peer_admitted, Signer, "validator", 14567, Signer},
+    BaseFacts = quod_ct:signed_agent_facts(Fixture) ++ [Policy, Member],
+    %% The sealed read observed missing/1 as absent.  The unchanged snapshot
+    %% certifies, while the same plan against a snapshot where missing/1 was
+    %% asserted is refused by the ordinary Prepare OCC validator.
+    with_context(
+      TargetNs, TargetAnchor, BaseFacts,
+      fun(Context) ->
+          ?assertEqual(ok, quod_commit_validation:read_only_plan(Plan, Context))
+      end),
+    with_context(
+      TargetNs, TargetAnchor, [{missing, ok} | BaseFacts],
+      fun(Context) ->
+          ?assertEqual(
+             {error, conflict_retry},
+             quod_commit_validation:read_only_plan(Plan, Context))
+      end).
+
 external_predicate_manifest_is_immutable_after_genesis_test() ->
     Ns = <<"quod:immutable-predicate-manifest">>,
     Anchor = <<229:256>>,

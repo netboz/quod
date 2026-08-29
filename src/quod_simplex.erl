@@ -5518,6 +5518,8 @@ dtx_endpoint_operation_ready({outcome, _, _, _, _}, S) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready({outcome_barrier, _, _, _, _}, S) ->
     endpoint_read_ready(S);
+dtx_endpoint_operation_ready({read_attest, _, _}, S) ->
+    endpoint_read_ready(S);
 dtx_endpoint_operation_ready({applied, _, _, _, _, _}, S) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready(_, _S) ->
@@ -5550,6 +5552,19 @@ execute_dtx_endpoint_request(
   Ns, _Peer, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
        _MinimumSlot}, _TimeoutMs) ->
     execute_outcome_snapshot(Ns, GroupRef);
+execute_dtx_endpoint_request(
+  Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs) ->
+    case quod_dtx:decode(PlanBlob) of
+        {ok, Plan} ->
+            case quod_prolog:validate_read_plan(Ns, Plan, TimeoutMs) of
+                {ok, Applied} -> {read_plan_valid, Plan, Applied};
+                {error, conflict_retry} -> {error, conflict_retry};
+                {error, invalid_read_plan} -> {error, invalid_request};
+                {error, _} -> {error, read_certificate_unavailable}
+            end;
+        {error, _} ->
+            {error, invalid_request}
+    end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {applied, _RequestId, GroupId, FinalizeRef,
        _Generation, _Verdict}, _TimeoutMs) ->
@@ -5813,6 +5828,10 @@ dtx_endpoint_result_response(
     {outcome_barrier_endpoint_response(
        RequestId, GroupRef, CommitteeId, MinimumSlot, Snapshot, S), []};
 dtx_endpoint_result_response(
+  {read_attest, RequestId, _PlanBlob},
+  {read_plan_valid, Plan, Applied}, S) ->
+    {read_attest_endpoint_response(RequestId, Plan, Applied, S), []};
+dtx_endpoint_result_response(
   {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict},
   {applied_state, Evidence, State}, S) ->
     {applied_endpoint_response(
@@ -5820,7 +5839,9 @@ dtx_endpoint_result_response(
        Evidence, State, S), []};
 dtx_endpoint_result_response(Request, {error, Reason}, _S)
   when Reason =:= busy; Reason =:= not_ready;
-       Reason =:= not_found; Reason =:= invalid_request ->
+       Reason =:= not_found; Reason =:= invalid_request;
+       Reason =:= conflict_retry;
+       Reason =:= read_certificate_unavailable ->
     {{error, quod_dtx_endpoint:request_id(Request), Reason}, []};
 dtx_endpoint_result_response(Request, _Result, _S) ->
     {{error, quod_dtx_endpoint:request_id(Request), not_ready}, []}.
@@ -5984,6 +6005,57 @@ applied_endpoint_response(
             {error, RequestId, not_found};
         {false, _, _, _} ->
             {error, RequestId, not_ready}
+    end.
+
+read_attest_endpoint_response(
+  RequestId, Plan, Applied,
+  S = #s{slot = Applied, last_applied = Applied,
+         self = Self, id = Signer, store = Store}) ->
+    Target = target_identity(S),
+    case endpoint_read_ready(S) andalso lists:member(Self, active_validators(S))
+         andalso applied_signer_matches(Self, Signer) andalso
+         quod_dtx:target(Plan) =:= Target of
+        true ->
+            case read_certificate_anchor(Store, Target, Applied) of
+                {ok, AnchorRef} ->
+                    ProofId = quod_dtx:proof_id(Plan),
+                    PlanDigest = quod_dtx:digest(Plan),
+                    case quod_read_certificate:sign(
+                           Target, ProofId, PlanDigest, AnchorRef, Signer) of
+                        {ok, {Self, Signature}} ->
+                            {read_attest, RequestId, Target, ProofId,
+                             PlanDigest, AnchorRef, Self, Signature};
+                        error ->
+                            {error, RequestId, read_certificate_unavailable}
+                    end;
+                {error, _} ->
+                    {error, RequestId, read_certificate_unavailable}
+            end;
+        false ->
+            {error, RequestId, read_certificate_unavailable}
+    end;
+read_attest_endpoint_response(RequestId, _Plan, _Applied, _S) ->
+    {error, RequestId, read_certificate_unavailable}.
+
+%% Complaint skips carry no state change, so the nearest preceding committed
+%% payload is the exact state anchor.  A non-noop row that cannot itself form a
+%% portable certified reference is never skipped: doing so would attest newer
+%% state under an older committee.
+read_certificate_anchor(_Store, _Target, Slot) when Slot =< 1 ->
+    {error, unavailable};
+read_certificate_anchor(Store, Target, Slot) ->
+    case quod_ledger_store:read_at(Store, Slot) of
+        {ok, #entry{data = Data} = Entry} ->
+            case quod_ledger:classify(Data) of
+                noop -> read_certificate_anchor(Store, Target, Slot - 1);
+                {content, [Transaction | _]} ->
+                    quod_dtx:certified_entry_ref(Target, Entry, Transaction);
+                {controls, [{_Kind, Control} | _]} ->
+                    quod_dtx:certified_entry_ref(Target, Entry, Control);
+                invalid -> {error, unavailable}
+            end;
+        _ ->
+            {error, unavailable}
     end.
 
 applied_finalize_committee(

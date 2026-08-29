@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 500" width="1080" height="500" role="img" aria-label="Which lane a goal takes, decided from how many ontologies write and whether any other ontology was only read."><rect x="0" y="0" width="1080" height="500" fill="#FFFFFF"/><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000000"/></marker></defs>
+<rect x="340.0" y="20" width="260" height="54" rx="4" fill="#004488" stroke="#002B57" stroke-width="1.5"/>
+<polygon points="357.0,110 583.0,110 595.0,137.0 583.0,164 357.0,164 345.0,137.0" fill="#DDAA33" stroke="#8A6A14" stroke-width="1.5"/>
+<rect x="25.0" y="210" width="190" height="54" rx="4" fill="#004488" stroke="#002B57" stroke-width="1.5"/>
+<polygon points="292.0,210 508.0,210 520.0,237.0 508.0,264 292.0,264 280.0,237.0" fill="#DDAA33" stroke="#8A6A14" stroke-width="1.5"/>
+<polygon points="647.0,210 873.0,210 885.0,237.0 873.0,264 647.0,264 635.0,237.0" fill="#DDAA33" stroke="#8A6A14" stroke-width="1.5"/>
+<rect x="125.0" y="320" width="250" height="54" rx="4" fill="#228833" stroke="#155A22" stroke-width="1.5"/>
+<polygon points="417.0,320 583.0,320 595.0,347.0 583.0,374 417.0,374 405.0,347.0" fill="#DDAA33" stroke="#8A6A14" stroke-width="1.5"/>
+<rect x="615.0" y="320" width="170" height="54" rx="4" fill="#004488" stroke="#002B57" stroke-width="1.5"/>
+<polygon points="827.0,320 993.0,320 1005.0,347.0 993.0,374 827.0,374 815.0,347.0" fill="#DDAA33" stroke="#8A6A14" stroke-width="1.5"/>
+<rect x="340.0" y="430" width="160" height="54" rx="4" fill="#004488" stroke="#002B57" stroke-width="1.5"/>
+<rect x="510.0" y="430" width="200" height="54" rx="4" fill="#004488" stroke="#002B57" stroke-width="1.5"/>
+<rect x="730.0" y="430" width="200" height="54" rx="4" fill="#228833" stroke="#155A22" stroke-width="1.5"/>
+<rect x="965.0" y="430" width="110" height="54" rx="4" fill="#994455" stroke="#5E2A35" stroke-width="1.5"/>
+<path d="M470,74 L470,110" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M345,137 L215,137 L215,210" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M470,164 L470,186 L400,186 L400,210" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M595,137 L760,137 L760,210" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M340,237 L250,237 L250,320" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M400,264 L400,296 L500,296 L500,320" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M760,264 L760,296 L700,296 L700,320" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M885,237 L910,237 L910,320" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M500,374 L500,404 L500,430" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M595,347 L612,347 L612,404 L710,404 L710,430" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M910,374 L910,404 L930,404 L930,430" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<path d="M1005,347 L1020,347 L1020,430" fill="none" stroke="#000000" stroke-width="2.2" marker-end="url(#ah)"/>
+<text x="470.0" y="46.25" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Sealed plans</text>
+<text x="470.0" y="62.75" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Mono&#x27;, Menlo, Consolas, monospace" font-size="10.5" font-weight="normal">one per ontology touched</text>
+<text x="470.0" y="141.75" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">How many ontologies write?</text>
+<text x="120.0" y="236.25" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Plain read result</text>
+<text x="120.0" y="252.75" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Mono&#x27;, Menlo, Consolas, monospace" font-size="10.5" font-weight="normal">nothing committed</text>
+<text x="400.0" y="234.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Any other ontology</text>
+<text x="400.0" y="249.5" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">only read?</text>
+<text x="760.0" y="241.75" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Wrapped in independent(...)?</text>
+<text x="250.0" y="344.0" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">L1 · Read certificates,</text>
+<text x="250.0" y="359.5" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">then one ordinary write</text>
+<text x="500.0" y="351.75" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Writer is the origin?</text>
+<text x="700.0" y="351.75" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">L3 · Atomic group</text>
+<text x="910.0" y="351.75" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Signed request?</text>
+<text x="420.0" y="461.75" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">L0 · Local write</text>
+<text x="610.0" y="456.25" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Single-target lane</text>
+<text x="610.0" y="472.75" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Mono&#x27;, Menlo, Consolas, monospace" font-size="10.5" font-weight="normal">claim → write → receipt</text>
+<text x="830.0" y="454.0" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">L2 · One claim,</text>
+<text x="830.0" y="469.5" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">N parallel writes</text>
+<text x="1020.0" y="456.25" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600">Error</text>
+<text x="1020.0" y="472.75" text-anchor="middle" fill="#FFFFFF" font-family="&#x27;IBM Plex Mono&#x27;, Menlo, Consolas, monospace" font-size="10.5" font-weight="normal">needs signature</text>
+<rect x="247.53333333333336" y="120.5" width="32.53333333333333" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="263.8" y="131.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">none</text>
+<rect x="420.8" y="169.5" width="26.400000000000002" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="434.0" y="180.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">one</text>
+<rect x="652.4666666666667" y="120.5" width="75.46666666666667" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="690.2" y="131.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">two or more</text>
+<rect x="257.6" y="220.5" width="26.400000000000002" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="270.8" y="231.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">yes</text>
+<rect x="443.6666666666667" y="279.5" width="20.266666666666666" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="453.8" y="290.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">no</text>
+<rect x="687.4000000000001" y="279.5" width="81.60000000000001" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="728.2" y="290.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">no (default)</text>
+<rect x="910.8" y="266.3" width="26.400000000000002" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="924.0" y="276.8" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">yes</text>
+<rect x="502.8" y="391.5" width="26.400000000000002" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="516.0" y="402.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">yes</text>
+<rect x="587.8666666666667" y="369.0" width="20.266666666666666" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="598.0" y="379.5" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">no</text>
+<rect x="881.1999999999999" y="393.5" width="26.400000000000002" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="894.4" y="404.0" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">yes</text>
+<rect x="1023.8666666666667" y="380.3" width="20.266666666666666" height="16.5" fill="#FFFFFF" rx="2"/>
+<text x="1034.0" y="390.8" text-anchor="middle" fill="#000000" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600">no</text>
+</svg>

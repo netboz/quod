@@ -19,6 +19,7 @@ all_request_shapes_roundtrip_deterministically_test() ->
     Ns = <<"quod:endpoint">>,
     Requests =
         [{submit, id(1), record_blob()},
+         {read_attest, id(14), read_plan_blob()},
          {phase, id(2), digest(2), 'begin'},
          {phase, id(3), digest(2), prepare},
          {phase, id(4), digest(2), decision},
@@ -86,6 +87,9 @@ all_response_shapes_roundtrip_and_correlate_test() ->
          {{applied, id(5), digest(2), Ref, 9, commit},
           {applied, id(5), target(), digest(7), digest(2), Ref, 9, commit,
            digest(8), <<9:512>>}},
+         {{read_attest, id(14), read_plan_blob()},
+          {read_attest, id(14), target(), read_plan_proof_id(),
+           read_plan_digest(), read_anchor_ref(), digest(8), <<9:512>>}},
          {{cancel_operation_effect, id(6), <<"signed-submission">>},
           {operation_effect_cancelled, id(6), cancelled}}]
         ++ [{{outcome, id(16 + N), maps:get(ref, Status), digest(7), 11},
@@ -121,7 +125,8 @@ all_response_shapes_roundtrip_and_correlate_test() ->
           ?assertEqual({ok, Response, []},
                        quod_dtx_endpoint:decode_response(Ns, Frame)),
           ?assert(quod_dtx_endpoint:correlates(Request, Response))
-      end, [busy, not_ready, not_found, invalid_request]).
+      end, [busy, not_ready, not_found, invalid_request,
+            conflict_retry, read_certificate_unavailable]).
 
 certified_remote_application_response_correlates_test() ->
     Fixture = quod_ct:remote_operation_fixture(#{}),
@@ -166,7 +171,18 @@ direction_namespace_and_exact_correlation_are_enforced_test() ->
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(2, Response, id(2)))).
 
-applied_v6_response_carries_signer_and_signature_but_v5_is_rejected_test() ->
+read_attest_correlation_binds_the_exact_plan_test() ->
+    Request = {read_attest, id(14), read_plan_blob()},
+    Response =
+        {read_attest, id(14), target(), read_plan_proof_id(),
+         read_plan_digest(), read_anchor_ref(), digest(8), <<9:512>>},
+    ?assert(quod_dtx_endpoint:correlates(Request, Response)),
+    ?assertNot(quod_dtx_endpoint:correlates(
+                 Request, setelement(4, Response, digest(17)))),
+    ?assertNot(quod_dtx_endpoint:correlates(
+                 Request, setelement(5, Response, digest(16)))).
+
+applied_v7_response_carries_signer_and_signature_but_v6_is_rejected_test() ->
     Ns = <<"quod:endpoint">>,
     Ref = certified_ref(),
     Request = {applied, id(1), digest(2), Ref, 9, commit},
@@ -179,9 +195,9 @@ applied_v6_response_carries_signer_and_signature_but_v5_is_rejected_test() ->
     Inner = term_to_binary({Response, []}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, wrong_version}},
-       quod_dtx_endpoint:decode_response(Ns, outer(Ns, 5, Inner))).
+       quod_dtx_endpoint:decode_response(Ns, outer(Ns, 6, Inner))).
 
-cancel_operation_effect_v6_hard_break_rejects_the_old_tuple_test() ->
+cancel_operation_effect_v7_hard_break_rejects_the_old_tuple_test() ->
     Ns = <<"quod:endpoint">>,
     RequestId = id(62),
     OldRequest =
@@ -226,7 +242,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     Ref = certified_ref(),
     WrongSlot = #entry{index = 8, data = noop},
     Inner = term_to_binary({Request, [{Ref, WrongSlot}]}, [deterministic]),
-    Frame = outer(Ns, 6, Inner),
+    Frame = outer(Ns, 7, Inner),
     ?assertEqual({ok, Request, []},
                  quod_dtx_endpoint:decode_request(Ns, Frame)),
     ?assertEqual(
@@ -301,7 +317,7 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
     Ns = <<"quod:endpoint">>,
     Good = {phase, id(1), digest(2), 'begin'},
     GoodInner = term_to_binary({Good, []}, [deterministic]),
-    WrongVersion = outer(Ns, 5, GoodInner),
+    WrongVersion = outer(Ns, 6, GoodInner),
     WrongDomain = term_to_binary(
                     {quod_dtx_endpoint_old, 1, Ns, GoodInner},
                     [deterministic]),
@@ -356,7 +372,7 @@ unknown_atoms_are_not_created_test() ->
               118, (byte_size(AtomName)):16, AtomName/binary>>,
     InnerTerm = binary:part(Inner, 1, byte_size(Inner) - 1),
     Wrapped = <<131, 104, 2, InnerTerm/binary, 106>>,
-    Frame = outer(Ns, 6, Wrapped),
+    Frame = outer(Ns, 7, Wrapped),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -385,6 +401,7 @@ invalid_fixed_shapes_are_rejected_test() ->
          {outcome, id(1), GroupRef, <<1:248>>, 1},
          {outcome, id(1), GroupRef, digest(7), 0},
          {outcome_barrier, id(1), transaction_ref(), digest(7), 1},
+         {read_attest, id(1), <<"not-a-plan">>},
          {applied, id(1), digest(2), invalid_ref, 0, commit},
          {applied, id(1), digest(2), Ref, -1, commit},
          {applied, id(1), digest(2), Ref, 0, unknown_verdict}],
@@ -410,6 +427,8 @@ invalid_fixed_shapes_are_rejected_test() ->
          {phase, id(1), 16#10000000000000000, pending},
          {phase, id(1), 0, unknown},
          {phase, id(1), 0, {committed, invalid_ref}},
+         {read_attest, id(1), target(), read_plan_proof_id(),
+          read_plan_digest(), certified_ref(), digest(4), <<5:512>>},
          {applied, id(1), {<<>>, digest(1)}, digest(2), digest(3), Ref,
           0, commit, digest(4), <<5:512>>},
          {applied, id(1), target(), digest(2), digest(3), Ref,
@@ -465,6 +484,36 @@ accepted_ref() ->
                   <<"quod:target">>, digest(1), 7,
                   digest(2), record_blob_digest(), <<"qc">>),
     Ref.
+
+read_anchor_ref() ->
+    {Ns, Anchor} = target(),
+    {ok, Ref} = quod_dtx:certified_ref(
+                  Ns, Anchor, 7, digest(2), digest(3), <<"qc">>),
+    Ref.
+
+read_plan_blob() ->
+    {ok, Blob} = quod_dtx:encode(read_plan()),
+    Blob.
+
+read_plan() ->
+    {ok, Empty} = quod_wire_term:encode_canonical([]),
+    {ok, Reads} = quod_wire_term:encode_canonical(
+                    [{{benchmark_echo, 1}, never_present}]),
+    Core = #{target => target(), base_height => 1,
+             proof_id => read_plan_proof_id(),
+             origin => {<<"quod:origin">>, digest(11)},
+             principal => anonymous, request_binding => none,
+             overlay_generation => 0, diff_ops => 0, read_functors => 1,
+             effects_count => 0,
+             conflict_descriptor =>
+                 #{reads => [{<<"benchmark_echo">>, 1}],
+                   writes => [], custody => []},
+             diff => Empty, read_check => Reads, effects => Empty,
+             live_bridges => Empty, transcript => Empty},
+    {quod_plan, Core, none, none}.
+
+read_plan_proof_id() -> digest(15).
+read_plan_digest() -> quod_dtx:digest(read_plan()).
 
 group_ref() ->
     {group, <<"quod:origin">>, digest(1), digest(2), digest(3), digest(4)}.

@@ -57,6 +57,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          open_cursor/5, cancel_cursor/3,
          submit_plan/4, submit_role/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
+         validate_read_plan/3,
          effect_resolution/4,
          project_pending_begins/2,
          dtx_group_resolved/2, dtx_group_terminal/3,
@@ -727,6 +728,22 @@ dtx_group_state(Ns, <<_:256>> = GroupId) when is_binary(Ns) ->
 dtx_group_state(_Ns, _GroupId) ->
     {error, invalid_group_id}.
 
+-doc "Validate a sealed read-only plan against this ontology's committed head.".
+-spec validate_read_plan(binary(), quod_dtx:plan(), pos_integer()) ->
+          {ok, non_neg_integer()} | {error, term()}.
+validate_read_plan(Ns, Plan, TimeoutMs)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    %% The endpoint worker owns this deadline. Passing its remaining time
+    %% prevents a queued engine call from outliving the authenticated request.
+    try gen_server:call(
+          quod_reg:via({quod_prolog, Ns}),
+          {validate_read_plan, Plan}, TimeoutMs)
+    catch exit:_ -> {error, not_ready}
+    end;
+validate_read_plan(_Ns, _Plan, _TimeoutMs) ->
+    {error, invalid_request}.
+
 -doc "Resolve one target-local group-effect binding from applied projections.".
 -spec effect_resolution(
         {binary(), <<_:256>>},
@@ -1195,6 +1212,25 @@ handle_call({dtx_group_state, GroupId}, _From,
             S = #s{outcomes = Outcomes0}) ->
     {Reply, Outcomes1} = local_dtx_group_state(GroupId, Outcomes0),
     {reply, Reply, S#s{outcomes = Outcomes1}};
+handle_call({validate_read_plan, _Plan}, _From,
+            S = #s{ready = false}) ->
+    {reply, {error, not_ready}, S};
+handle_call({validate_read_plan, Plan}, _From,
+            S = #s{ns = Ns, applied = Applied, est = Est,
+                   outcomes = Outcomes, signer = Signer}) ->
+    Reply =
+        case quod_simplex:genesis_hash(Ns) of
+            <<_:256>> = Anchor ->
+                Context = quod_commit_validation:new(
+                            {Ns, Anchor}, Applied, Est, Outcomes, Signer),
+                case quod_commit_validation:read_only_plan(Plan, Context) of
+                    ok -> {ok, Applied};
+                    {error, Reason} -> {error, Reason}
+                end;
+            undefined ->
+                {error, not_ready}
+        end,
+    {reply, Reply, S};
 %% The worker has already sealed every participant and built one immutable
 %% semantic Begin. Registration is asynchronous to Simplex and correlated by
 %% this exact proof worker, so other proofs and the engine mailbox keep moving.

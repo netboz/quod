@@ -20,7 +20,8 @@ liveness observations while preserving the one existing authorization path
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([new/5, outcomes/1, content/4, dtx/4, prepared_material/4,
+-export([new/5, outcomes/1, content/4, dtx/4, read_only_plan/2,
+         prepared_material/4,
          remote_application/2]).
 -export_type([context/0, mode/0]).
 
@@ -94,6 +95,22 @@ prepared_plan(Manifest, PlanDigest, PlanBlob,
     case prepared_application(Manifest, PlanDigest, PlanBlob, Context) of
         {ok, _EventContext, _Material} -> ok;
         {error, _} = Error -> Error
+    end.
+
+-doc "Validate one sealed read-only plan through the ordinary Prepare checks.".
+-spec read_only_plan(quod_dtx:plan(), context()) -> ok | {error, term()}.
+read_only_plan(Plan, Context = #context{target = Target}) ->
+    case quod_dtx:verify(Plan) andalso quod_dtx:target(Plan) =:= Target andalso
+         quod_dtx:diff_ops(Plan) =:= 0 andalso
+         quod_dtx:effects_count(Plan) =:= 0 andalso
+         maps:get(read_functors, quod_dtx:core(Plan), 0) > 0 of
+        true ->
+            case validate_prepared_plan_header(Plan, Context) of
+                {ok, _Material} -> ok;
+                {error, _} = Error -> Error
+            end;
+        false ->
+            {error, invalid_read_plan}
     end.
 
 -spec prepared_material(quod_dtx:manifest(), <<_:256>>, binary(), context()) ->

@@ -2133,9 +2133,10 @@ field, decoder, compatibility branch, or fake single-group view remains.
 
 ##### 4.7.8 Implementation slices and stop gates
 
-Implementation status (working tree, not committed or deployed): slices 1--6
-are implemented together. Final local gates, closure review, clean re-found,
-and hardware benchmarks remain; this section makes no final performance claim.
+Implementation status: the DTX optimization tree and its certified-history
+residency correction are committed and deployed through 0.7.113. The hardware
+attribution gate below is complete; the broader sub-500-ms product goal moves
+to the approved write-lanes plan rather than further group batching.
 `quod_dtx_group_stage_seconds` measures proof/seal, dormant admission,
 coordinator phase waves, endpoint wait, phase verification, coordinator
 mailbox, result handoff, and end-to-end time.
@@ -2163,8 +2164,28 @@ stage and numeric item index are attributes; group/target/goal data is neither
 a metric label nor durable/wire state. Spawned workers receive the captured
 parent trace context explicitly, so their work remains correlated without
 depending on an Erlang process dictionary being inherited.
-Earlier slice-local gates are historical evidence only; the final combined
-tree must publish fresh gate counts after this cleanup.
+Earlier slice-local gates are historical evidence only.
+
+Hardware baselines are kept distinct:
+
+- **Comparable pre-residency baseline — 0.7.111:** warm A -> B -> C -> D at
+  concurrency 1 was 19/20, p50 590 ms, p99 631 ms; independent chains at
+  concurrency 4 were 16/20, p50 6.69 s, p99 13.48 s.
+- **Diagnostic regression — 0.7.112:** this was the deliberately instrumented
+  tree immediately before the residency fix, not the comparable baseline. Its
+  concurrency-4 p50 was 20.60 s (Begin mean 6.46 s, Decision mean 11.38 s),
+  with 123 certified-prefix replays.
+- **Residency correction — 0.7.113:** concurrency 4 completed 20/20 with p50
+  936 ms and zero certified-prefix replays. Per-request means attribute 98.4%
+  of end-to-end time; Decision mean is 149.7 ms, so the former 2.84 s
+  post-Decision wait is gone rather than hidden inside another stage.
+- Three unchanged warm 0.7.113 concurrency-1 repetitions completed 20/20 at
+  p50/p99 663/750 ms, 785/900 ms, and 722/848 ms. This is real run variance,
+  but the serial path is slower than the shared 0.7.111 run. It is not caused
+  by the exact retained-entry reuse: that branch applies only to a requested
+  slot below the resident head, while these serial chains advance monotonically;
+  the slower 709/815 ms diagnostic run already appeared on 0.7.112 before the
+  residency correction.
 
 1. **Observability only.** Add one correlation id across proof/seal, dormant
    admission, every group wave, evidence verification, applied certification,

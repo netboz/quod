@@ -1,6 +1,6 @@
 -module(quod_dtx_current_view).
 -moduledoc """
-Bounded committee corroboration for DTX recovery reads.
+Committee corroboration for DTX recovery and sealed read plans.
 
 Applied verification freezes the committee certified by the exact Finalize and
 asks distinct members of that committee for signed replies. `f + 1` replies
@@ -17,13 +17,19 @@ shared key resolver's current endpoint, the existing live candidates, and the
 exact Finalize-era fallback sequentially after deduplication. The transport
 still authenticates the expected key; no endpoint creates another vote or
 request id.
+
+Read certification uses the same frozen-view routing and quorum collector. A
+target validator checks the sealed read-only plan through the ordinary Prepare
+validator at its current committed head, then signs the plan digest and exact
+certified ledger anchor. The collector keeps the plan vocabulary opaque.
 """.
 
 -include("quod_proof_limits.hrl").
 
 -export([submit_operation/4, submit_claim_application/5,
          submit_operation_to/5,
-         certify_applied_many/3, lookup_outcome/4,
+         certify_applied_many/3, certify_reads/3, lookup_outcome/4,
+         threshold/1,
          sign_applied_vote/8, verify_applied_certificate/3,
          valid_applied_certificate_shape/1,
          applied_certificate_binding/1]).
@@ -31,7 +37,8 @@ request id.
 
 -ifdef(TEST).
 -export([test_certify_applied/6, test_certify_applied_many/4,
-         test_lookup_outcome/5, test_threshold/1,
+         test_certify_reads/4,
+         test_lookup_outcome/5,
          test_endpoint_failure_disposition/2,
          test_submit_operation_candidates/2]).
 -endif.
@@ -374,6 +381,14 @@ certify_applied_many(OwnerNs, Requests, TimeoutMs) ->
     certify_applied_many_with(
       OwnerNs, Requests, TimeoutMs, production_dependencies()).
 
+-doc "Build one `f + 1` certificate for an opaque sealed read-only plan.".
+-spec certify_reads(binary(), {source(), binary()}, pos_integer()) ->
+          {ok, quod_read_certificate:certificate()} |
+          {error, invalid_request | conflict_retry | retry}.
+certify_reads(OwnerNs, Request, TimeoutMs) ->
+    certify_reads_with(
+      OwnerNs, Request, TimeoutMs, production_dependencies()).
+
 -doc """
 Resolve one anchored public outcome through a frozen certified current view.
 
@@ -445,6 +460,97 @@ certify_applied_with(
             end;
         error ->
             {error, invalid_request}
+    end.
+
+certify_reads_with(OwnerNs, {Source, PlanBlob}, TimeoutMs, Dependencies) ->
+    case valid_read_request(OwnerNs, Source, PlanBlob, TimeoutMs) of
+        {ok, Plan, Target} ->
+            Deadline = quod_time:mono_ms() + TimeoutMs,
+            case call_current_view(
+                   Source, {identity, Target}, Deadline, Dependencies) of
+                {ok, View} ->
+                    certify_reads_view(
+                      OwnerNs, Source, Plan, PlanBlob, Target, View,
+                      Deadline, Dependencies);
+                {error, _} ->
+                    {error, retry}
+            end;
+        error ->
+            {error, invalid_request}
+    end;
+certify_reads_with(_OwnerNs, _Request, _TimeoutMs, _Dependencies) ->
+    {error, invalid_request}.
+
+valid_read_request(OwnerNs, Source, PlanBlob, TimeoutMs)
+  when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
+    case {valid_source(Source), quod_dtx:decode(PlanBlob)} of
+        {true, {ok, Plan}} ->
+            case quod_dtx:verify(Plan) andalso
+                 quod_dtx:diff_ops(Plan) =:= 0 andalso
+                 quod_dtx:effects_count(Plan) =:= 0 andalso
+                 maps:get(read_functors, quod_dtx:core(Plan), 0) > 0 of
+                true -> {ok, Plan, quod_dtx:target(Plan)};
+                false -> error
+            end;
+        _ -> error
+    end;
+valid_read_request(_OwnerNs, _Source, _PlanBlob, _TimeoutMs) ->
+    error.
+
+certify_reads_view(
+  OwnerNs, Source, Plan, PlanBlob, Target, View, Deadline, Dependencies) ->
+    case valid_identity_current_view(Target, View) of
+        {ok, Committee, _CommitteeId, MinimumSlot, Routes} ->
+            case MinimumSlot >= quod_dtx:base_height(Plan) of
+                true ->
+                    Sources = probe_sources(
+                                Source, Committee, Routes, Dependencies),
+                    Needed = threshold(length(Committee)),
+                    case length(Sources) >= Needed andalso
+                         remaining(Deadline) > 0 of
+                        true ->
+                            collect_read_votes(
+                              OwnerNs, Sources, Plan, PlanBlob, Needed,
+                              Deadline, Dependencies);
+                        false ->
+                            {error, retry}
+                    end;
+                false ->
+                    {error, retry}
+            end;
+        _ ->
+            {error, retry}
+    end.
+
+collect_read_votes(
+  OwnerNs, Sources, Plan, PlanBlob, Needed, Deadline, Dependencies) ->
+    Probe =
+        fun(Key, Source) ->
+                case probe_read_attest(
+                       OwnerNs, Key, Source, Plan, PlanBlob,
+                       Deadline, Dependencies) of
+                    {ok, Binding, SignedRow} ->
+                        {signed, {read, Binding}, SignedRow};
+                    conflict_retry ->
+                        {ok, conflict_retry};
+                    ignore -> ignore
+                end
+        end,
+    case collect_quorum(
+           read_certificate_probe, Sources, Needed, Deadline, Probe) of
+        {ok, {signed, {read, {Target, ProofId, PlanDigest, AnchorRef}},
+              Signatures}} ->
+            case quod_read_certificate:new(
+                   Target, ProofId, PlanDigest, AnchorRef, Signatures) of
+                {ok, Certificate} -> {ok, Certificate};
+                error -> {error, retry}
+            end;
+        {ok, conflict_retry} ->
+            {error, conflict_retry};
+        _ ->
+            {error, retry}
     end.
 
 certify_applied_many_with(OwnerNs, Requests, TimeoutMs, Dependencies)
@@ -1187,6 +1293,67 @@ call_endpoint(OwnerNs, TargetNs, PeerKey, Source, Request,
             end
     end.
 
+probe_read_attest(
+  OwnerNs, PeerKey, Source, Plan, PlanBlob, Deadline, Dependencies) ->
+    {TargetNs, _Anchor} = Target = quod_dtx:target(Plan),
+    Request = {read_attest, request_id(), PlanBlob},
+    probe_read_attest_source(
+      Source, OwnerNs, TargetNs, PeerKey, Request, Target,
+      quod_dtx:proof_id(Plan), quod_dtx:digest(Plan),
+      Deadline, Dependencies).
+
+probe_read_attest_source(
+  {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
+  Target, ProofId, PlanDigest, Deadline, Dependencies) ->
+    walk_remote_candidates(
+      Endpoints, Deadline,
+      fun(Endpoint, AttemptDeadline) ->
+          call_endpoint(
+            OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
+            AttemptDeadline, Dependencies)
+      end,
+      fun(Result) ->
+          case read_attest_response_vote(
+                 Request, Target, ProofId, PlanDigest, PeerKey, Result) of
+              {ok, _, _} = Vote -> {done, Vote};
+              conflict_retry -> {done, conflict_retry};
+              ignore -> continue
+          end
+      end,
+      ignore);
+probe_read_attest_source(
+  local, OwnerNs, TargetNs, PeerKey, Request,
+  Target, ProofId, PlanDigest, Deadline, Dependencies) ->
+    read_attest_response_vote(
+      Request, Target, ProofId, PlanDigest, PeerKey,
+      call_endpoint(
+        OwnerNs, TargetNs, PeerKey, local, Request,
+        Deadline, Dependencies)).
+
+read_attest_response_vote(
+  Request, Target, ProofId, PlanDigest, ExpectedSigner,
+  {ok, {read_attest, _RequestId, Target, ProofId, PlanDigest, AnchorRef,
+        ExpectedSigner, Signature} = Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) andalso
+         quod_read_certificate:verify_vote(
+           Target, ProofId, PlanDigest, AnchorRef,
+           ExpectedSigner, Signature) of
+        true ->
+            {ok, {Target, ProofId, PlanDigest, AnchorRef},
+             {ExpectedSigner, Signature}};
+        false -> ignore
+    end;
+read_attest_response_vote(
+  Request, _Target, _ProofId, _PlanDigest, _ExpectedSigner,
+  {ok, {error, _RequestId, conflict_retry} = Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true -> conflict_retry;
+        false -> ignore
+    end;
+read_attest_response_vote(
+  _Request, _Target, _ProofId, _PlanDigest, _ExpectedSigner, _Result) ->
+    ignore.
+
 probe_applied(OwnerNs, PeerKey, Source,
               {NetworkIdentity, {TargetNs, _Anchor} = Target, CommitteeId,
                GroupId, FinalizeRef, Generation, Verdict},
@@ -1340,6 +1507,9 @@ test_certify_applied_many(OwnerNs, Requests, TimeoutMs, Dependencies) ->
     certify_applied_many_with(
       OwnerNs, Requests, TimeoutMs, Dependencies).
 
+test_certify_reads(OwnerNs, Request, TimeoutMs, Dependencies) ->
+    certify_reads_with(OwnerNs, Request, TimeoutMs, Dependencies).
+
 test_lookup_outcome(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
     lookup_outcome_with(
       OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies).
@@ -1363,6 +1533,4 @@ test_submit_operation_candidates(Request, Results) when is_list(Results) ->
                Request, quod_time:mono_ms() + 1000, not_ready, Attempt),
     {Result, atomics:get(Counter, 1)}.
 
-test_threshold(N) when is_integer(N), N > 0, N =< ?MAX_VALIDATORS ->
-    threshold(N).
 -endif.

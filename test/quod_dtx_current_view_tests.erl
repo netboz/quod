@@ -7,7 +7,7 @@
 thresholds_are_f_plus_one_at_every_committee_boundary_test() ->
     ?assertEqual(
        [{1, 1}, {4, 2}, {7, 3}, {64, 22}],
-       [{N, quod_dtx_current_view:test_threshold(N)} || N <- [1, 4, 7, 64]]).
+       [{N, quod_dtx_current_view:threshold(N)} || N <- [1, 4, 7, 64]]).
 
 %% Cancellation has one event-driven retry owner: endpoint failure returns to
 %% that owner instead of walking another route immediately. For every other
@@ -173,6 +173,103 @@ one_below_f_plus_one_is_retry_test() ->
                  end
              end),
     ?assertEqual({error, retry}, certify(F, Deps)).
+
+read_certificate_reaches_f_plus_one_without_a_consensus_block_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    PlanBlob = read_plan_blob(F, <<"read_certificate_known">>),
+    Successes = maps:from_keys([A, B], true),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) ->
+                 case maps:is_key(Key, Successes) of
+                     true -> read_attest_reply(F, Key, Request);
+                     false -> {error, not_ready}
+                 end
+             end),
+    {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
+                          maps:get(owner_ns, F), {source(F), PlanBlob},
+                          1000, Deps),
+    ?assert(quod_read_certificate:verify(
+              Certificate, maps:get(committee, F))).
+
+read_certificate_one_below_f_plus_one_retries_test() ->
+    F = fixture(7),
+    [A, B | _] = maps:get(committee, F),
+    PlanBlob = read_plan_blob(F, <<"read_certificate_below">>),
+    Successes = maps:from_keys([A, B], true),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) ->
+                 case maps:is_key(Key, Successes) of
+                     true -> read_attest_reply(F, Key, Request);
+                     false -> {error, not_ready}
+                 end
+             end),
+    ?assertEqual(
+       {error, retry},
+       quod_dtx_current_view:test_certify_reads(
+         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+
+read_certificate_f_plus_one_stale_refusals_remain_typed_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    PlanBlob = read_plan_blob(F, <<"read_certificate_stale_quorum">>),
+    Stale = maps:from_keys([A, B], true),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) ->
+                 case maps:is_key(Key, Stale) of
+                     true -> read_attest_conflict(Request);
+                     false -> {error, not_ready}
+                 end
+             end),
+    ?assertEqual(
+       {error, conflict_retry},
+       quod_dtx_current_view:test_certify_reads(
+         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+
+read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
+    F = fixture(4),
+    [Stale, A, B | _] = maps:get(committee, F),
+    PlanBlob = read_plan_blob(F, <<"read_certificate_mixed_quorum">>),
+    Votes = maps:from_keys([A, B], true),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) ->
+                 case Key of
+                     Stale -> read_attest_conflict(Request);
+                     _ ->
+                         case maps:is_key(Key, Votes) of
+                             true -> read_attest_reply(F, Key, Request);
+                             false -> {error, not_ready}
+                         end
+                 end
+             end),
+    {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
+                          maps:get(owner_ns, F), {source(F), PlanBlob},
+                          1000, Deps),
+    ?assert(quod_read_certificate:verify(
+              Certificate, maps:get(committee, F))).
+
+read_certification_never_allocates_foreign_plan_symbols_test() ->
+    F = fixture(1),
+    Symbol = <<"quod_read_certificate_foreign_symbol_6e985f">>,
+    ?assertException(error, badarg,
+                     binary_to_existing_atom(Symbol, utf8)),
+    PlanBlob = read_plan_blob(F, Symbol),
+    Before = erlang:system_info(atom_count),
+    Deps = dependencies(
+             F, fun(SignerKey, Request) ->
+                        read_attest_reply(F, SignerKey, Request)
+                end),
+    ?assertMatch(
+       {ok, {quod_read_certificate, 1, _, _, _, _, _}},
+       quod_dtx_current_view:test_certify_reads(
+         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)),
+    ?assertEqual(Before, erlang:system_info(atom_count)),
+    ?assertException(error, badarg,
+                     binary_to_existing_atom(Symbol, utf8)).
 
 retired_finalize_member_uses_shared_resolver_after_endpoint_move_test() ->
     F0 = fixture(1),
@@ -701,6 +798,42 @@ applied_reply(
                                  Generation, Verdict, Identity),
     {ok, {applied, RequestId, Target, CommitteeId, GroupId, FinalizeRef,
           Generation, Verdict, Signer, Signature}, []}.
+
+read_attest_reply(F, Key, Request) when is_binary(Key) ->
+    read_attest_reply(F, maps:get(Key, maps:get(signers, F)), Request);
+read_attest_reply(
+  _F, #{pubkey := Signer} = Identity,
+  {read_attest, RequestId, PlanBlob}) ->
+    {ok, Plan} = quod_dtx:decode(PlanBlob),
+    Target = quod_dtx:target(Plan),
+    ProofId = quod_dtx:proof_id(Plan),
+    PlanDigest = quod_dtx:digest(Plan),
+    AnchorRef = certified_ref(Target, 8, digest(241)),
+    {ok, {Signer, Signature}} = quod_read_certificate:sign(
+                                 Target, ProofId, PlanDigest, AnchorRef,
+                                 Identity),
+    {ok, {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
+          Signer, Signature}, []}.
+
+read_attest_conflict({read_attest, RequestId, _PlanBlob}) ->
+    {ok, {error, RequestId, conflict_retry}, []}.
+
+read_plan_blob(F, Symbol) ->
+    Target = maps:get(target, F),
+    {ok, Empty} = quod_wire_term:encode_canonical([]),
+    {ok, Reads} = quod_wire_term:encode_canonical(
+                    [{{{'$quod_symbol', Symbol}, 1}, never_present}]),
+    Core = #{target => Target, base_height => 1, proof_id => digest(242),
+             origin => {<<"quod:read-origin">>, digest(243)},
+             principal => anonymous, request_binding => none,
+             overlay_generation => 0, diff_ops => 0, read_functors => 1,
+             effects_count => 0,
+             conflict_descriptor =>
+                 #{reads => [{Symbol, 1}], writes => [], custody => []},
+             diff => Empty, read_check => Reads, effects => Empty,
+             live_bridges => Empty, transcript => Empty},
+    {ok, Blob} = quod_dtx:encode({quod_plan, Core, none, none}),
+    Blob.
 
 fixture(N) ->
     OwnerNs = <<"quod:owner">>,

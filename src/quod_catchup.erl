@@ -782,7 +782,11 @@ handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 handle_cast({send_resp, OwnerRef, ReplyLink, Resp, Result}, S0) ->
     case maps:take(OwnerRef, S0#s.inflight) of
         {StartedMs, Inflight1} ->
-            ok = quod_link:send(ReplyLink, encode_frame(S0#s.ns, Resp)),
+            %% A certified page is protocol data, not a lossy freshness cue.
+            %% Keep it on the request's authenticated link and let QUIC's
+            %% send_ready event release transient flow-control pressure.
+            ok = quod_link:send_ordered(
+                   ReplyLink, encode_frame(S0#s.ns, Resp)),
             S1 = S0#s{inflight = Inflight1},
             {noreply,
              record_server_terminal(Result, elapsed_ms(StartedMs), S1)};

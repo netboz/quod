@@ -1295,7 +1295,9 @@ dtx_prepare_contact_is_bound_to_its_certified_origin_test() ->
 
 %% A keyed peer may claim any origin inside decode-only DTX material. The
 %% authenticated endpoint is useful to the exact verification attempt, but it
-%% must not create a global foreign-history row before that attempt succeeds.
+%% must not become a reusable route before that attempt succeeds. A transient
+%% history row is not the security boundary: an exact verifier or an unrelated
+%% legitimate follower may own one while this asynchronous request is active.
 dtx_unverified_endpoint_contacts_are_never_retained_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Dir = relay_store_dir("unverified_dtx_contact"),
@@ -1328,9 +1330,12 @@ dtx_unverified_endpoint_contacts_are_never_retained_test() ->
         {ApplyState, []} = quod_simplex:test_dtx_endpoint_frame(
                              TargetNs, serve, PeerContact, EndpointSink,
                              ApplyFrame, ApplyState0),
-        ?assertMatch(
-           #{histories := 0, bootstrap_candidates := 0},
-           quod_foreign_log:stats()),
+        ?assertEqual(
+           false,
+           foreign_contact_is_routable(Target, PeerContact)),
+        ?assertEqual(
+           0,
+           maps:get(bootstrap_candidates, quod_foreign_log:stats())),
         ok = quod_simplex:test_close_dtx_endpoint(ApplyState),
 
         PrepareFixture = quod_ct:dtx_prepare_fixture(),
@@ -1349,14 +1354,25 @@ dtx_unverified_endpoint_contacts_are_never_retained_test() ->
         {SubmitState, []} = quod_simplex:test_dtx_endpoint_frame(
                               PrepareNs, serve, PeerContact, EndpointSink,
                               SubmitFrame, SubmitState0),
-        ?assertMatch(
-           #{histories := 0, bootstrap_candidates := 0},
-           quod_foreign_log:stats()),
+        ?assertEqual(
+           false,
+           foreign_contact_is_routable(PrepareTarget, PeerContact)),
+        ?assertEqual(
+           0,
+           maps:get(bootstrap_candidates, quod_foreign_log:stats())),
         ok = quod_simplex:test_close_dtx_endpoint(SubmitState)
     after
         stop_registered_prolog_sink(EndpointSink),
         gen_server:stop(ForeignLog),
         _ = file:del_dir_r(Dir)
+    end.
+
+foreign_contact_is_routable(Identity, {Peer, Endpoint}) ->
+    case quod_foreign_log:route_hints(Identity, []) of
+        {ok, Routes} ->
+            lists:member(Endpoint, proplists:get_value(Peer, Routes, []));
+        {error, unavailable} ->
+            false
     end.
 
 ready_dtx_endpoint_state(
@@ -1422,11 +1438,11 @@ dtx_endpoint_owner_down_detaches_waiter_but_retains_submission_test() ->
         RetryOwner ! stop
     end.
 
-%% A co-hosted endpoint submit is already in the namespace owner's custody
-%% when its call returns to the statem. It must enter the ordinary DTX proposal
-%% path in that same callback; otherwise every local phase waits for the 300 ms
-%% maintenance tick even though no prerequisite changed.
-dtx_endpoint_local_submit_drives_retained_phase_immediately_test() ->
+%% A co-hosted endpoint submit enters custody in its call turn, then one
+%% self-message drives every control already waiting in the mailbox. This is
+%% immediate and event-driven, but gives concurrent submissions one natural
+%% Erlang scheduling edge in which to form a byte-bounded consensus wave.
+dtx_endpoint_local_submit_drives_on_mailbox_edge_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
     {Ns, Anchor} = maps:get(target, Fixture),
     #{pubkey := Self} = Signer = maps:get(signer, Fixture),
@@ -1453,11 +1469,18 @@ dtx_endpoint_local_submit_drives_retained_phase_immediately_test() ->
                   history_head => {0, <<0:256>>},
                   eng => quod_simplex:eng_new(?DOMAIN, [Self], 0),
                   store => memory, signing_journal => Journal}),
-        {keep_state, Proposed, _Actions} =
+        {keep_state, Retained, _Actions0} =
             quod_simplex:running(
               {call, From},
               {dtx_endpoint_local, Request, ValidationSidecar, 1000}, S0),
         try
+            ?assertEqual(
+               0, maps:get(proposals, quod_simplex:stats_map(Retained))),
+            receive dtx_drive -> ok
+            after 0 -> error(missing_dtx_mailbox_wake)
+            end,
+            {keep_state, Proposed, _Actions1} =
+                quod_simplex:running(info, dtx_drive, Retained),
             ?assertEqual(
                1, maps:get(proposals, quod_simplex:stats_map(Proposed))),
             {_, _, {_, #block{slot = 1}}, _, _} =
@@ -1465,10 +1488,129 @@ dtx_endpoint_local_submit_drives_retained_phase_immediately_test() ->
             ?assertEqual(ValidationSidecar,
                          quod_simplex:test_dtx_round_hints(1, Proposed))
         after
-            ok = quod_simplex:terminate(test, running, Proposed)
+            ok = quod_simplex:terminate(test, running, Retained)
         end
     after
         _ = catch quod_signing_journal:close(Journal),
+        _ = file:del_dir_r(Dir)
+    end.
+
+%% Once a retained control is queued on a live ordered link, unrelated
+%% progress turns must not enqueue it again.  The placement is tied to the
+%% link pid, so replacing that link makes the same durable row eligible for
+%% exactly one reconstruction send without a retry clock or relay queue.
+dtx_reliable_relay_is_placed_once_per_link_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    #{pubkey := Self} = Signer = maps:get(signer, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Record = maps:get(prepare, Fixture),
+    {ok, RecordBlob} = quod_dtx:encode_record(Record),
+    Request = {submit, <<213:128>>, RecordBlob},
+    Peer = <<0:256>>,
+    ?assertNotEqual(Peer, Self),
+    Validators = lists:sort([Peer, Self]),
+    Parent = self(),
+    FirstLink = spawn(fun() -> receive_ordered_relay(Parent, first_link) end),
+    From = {self(), make_ref()},
+    Dir = relay_store_dir("dtx_reliable_placement"),
+    {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+    try
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Self, id => Signer,
+                  validators => Validators,
+                  author_admissions => #{Self => Admission},
+                  sync => ready, prolog_ready => true,
+                  slot => 0, approved => 0,
+                  history_head => {0, <<0:256>>},
+                  eng => quod_simplex:eng_new(?DOMAIN, Validators, 0),
+                  store => memory, signing_journal => Journal,
+                  conns => #{Peer => {FirstLink, make_ref()}}}),
+        {keep_state, Retained, _Actions0} =
+            quod_simplex:running(
+              {call, From},
+              {dtx_endpoint_local, Request, [], 1000}, S0),
+        receive dtx_drive -> ok
+        after 0 -> error(missing_dtx_mailbox_wake)
+        end,
+        {keep_state, Placed, _Actions1} =
+            quod_simplex:running(info, dtx_drive, Retained),
+        FirstFrame =
+            receive {first_link, Frame} -> Frame
+            after 1000 -> error(missing_ordered_dtx_relay)
+            end,
+        [#{relay_placement := {Peer, LinkPid}}] =
+            maps:values(
+              maps:get(rows,
+                       quod_simplex:test_retained_dtx_state(Placed))),
+        ?assertEqual(FirstLink, LinkPid),
+        {keep_state, Unchanged, _Actions2} =
+            quod_simplex:test_keep_progress_transition(Placed, Placed),
+        receive
+            {send_ordered, _DuplicateFrame} ->
+                error(duplicate_ordered_dtx_relay)
+        after 0 ->
+            ok
+        end,
+        NewLink = spawn(fun() -> receive_ordered_relay(Parent, new_link) end),
+        Reconnected = quod_simplex:test_state_set(
+                        conns, #{Peer => {NewLink, make_ref()}}, Unchanged),
+        {keep_state, Replaced, _Actions3} =
+            quod_simplex:test_keep_progress_transition(
+              Reconnected, Reconnected),
+        receive
+            {new_link, FirstFrame} -> ok
+        after 1000 ->
+            error(missing_reconnected_dtx_relay)
+        end,
+        [#{relay_placement := {Peer, NewLink}}] =
+            maps:values(
+              maps:get(rows,
+                       quod_simplex:test_retained_dtx_state(Replaced)))
+    after
+        _ = catch quod_signing_journal:close(Journal),
+        _ = file:del_dir_r(Dir)
+    end.
+
+receive_ordered_relay(Parent, Tag) ->
+    receive
+        {send_ordered, Frame} -> Parent ! {Tag, Frame};
+        _OtherLinkTraffic -> receive_ordered_relay(Parent, Tag)
+    end.
+
+%% A relayed control that reaches the current leader while an ordinary batch
+%% is open used to be discarded by handle_dtx_submit/4. It now enters the one
+%% retained DTX owner and shares the same mailbox wake as a local endpoint
+%% submit; no retry tick or second relay queue is needed.
+dtx_relay_received_while_leader_busy_is_retained_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    #{pubkey := Self} = Signer = maps:get(signer, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Control = maps:get(prepare_control, Fixture),
+    {ok, Envelope} = quod_dtx:encode_control(Control),
+    Dir = relay_store_dir("dtx_relay_retention"),
+    {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+    try
+        Busy = quod_simplex:test_state_set(
+                 collecting, {1, []},
+                 st(#{ns => Ns, genesis_hash => Anchor,
+                      self => Self, id => Signer,
+                      validators => [Self],
+                      author_admissions => #{Self => Admission},
+                      signing_journal => Journal,
+                      sync => ready, prolog_ready => true})),
+        Retained = quod_simplex:dispatch(
+                     Self, {dtx_submit, [Envelope], []}, Busy),
+        ?assertMatch(
+           #{retained := 1, ready := 1, waiters := 0},
+           quod_simplex:test_retained_dtx_state(Retained)),
+        ?assert(quod_simplex:test_dtx_drive_scheduled(Retained)),
+        receive dtx_drive -> ok
+        after 0 -> error(missing_relay_dtx_mailbox_wake)
+        end
+    after
+        ok = quod_signing_journal:close(Journal),
         _ = file:del_dir_r(Dir)
     end.
 

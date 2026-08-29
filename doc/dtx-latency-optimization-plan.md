@@ -60,6 +60,19 @@ input for Slice 4.7 below; it is not a release performance claim.
 The node-local policy work is deliberately gated on the existing physical-node
 identity plan rather than inventing a temporary configuration authority.
 
+The `0.7.103` working tree closes the last retained-control handoff gap found
+by the hardware concurrency trace. Local and relayed controls enter the same
+retained Simplex owner, one mailbox message coalesces controls already admitted
+in that turn, and a busy leader retains rather than drops an authenticated
+relay. DTX relays use the existing ordered QUIC FIFO and record their exact
+volatile link-process placement in the retained row: unrelated progress cannot
+enqueue duplicates, while link replacement or improved evidence re-drives the
+same durable row once. No relay queue, polling timer, or second custody owner
+was added. Coordinator waves now expose correlated OpenTelemetry parent/item
+spans so the hardware run can separate actual endpoint work from parked time.
+This paragraph is an implementation statement, not a performance claim; the
+fresh `A -> B -> C -> D` measurements remain the release gate.
+
 Decisions already fixed for review are: browser omission means the remaining
 authenticated-session lifetime; authentication capacities start at 256/256;
 foreign-history and catch-up active work start at 32 in their distinct owners;
@@ -2102,6 +2115,16 @@ selects the maximal non-conflicting ready prefix that fits the block-byte
 bound. Selected controls leave through the same completion, relay, DOWN, and
 recovery functions as every other retained control.
 
+Admission schedules one self-message rather than driving the first row inside
+its caller's state-machine turn. Every already-admitted control ahead of that
+message can therefore enter the same legal wave without a batching timer. A
+remote leader verifies and re-signs the semantic controls into this same
+registry even while another proposal is active; it no longer drops the relay.
+The sender's retained row marks the exact ordered-link pid after placement, so
+ordinary mailbox traffic cannot duplicate the frame. Link replacement makes
+the marker stale naturally, and an improved validation sidecar explicitly
+clears it. The retained row remains the only reconstructable owner throughout.
+
 All consumers use the multi-group projection directly: `valid_projection/1`,
 `origin_recoveries/1`, `proposal_readiness/2`, the transition/batch reducer,
 history/checkpoint projection, proof access, retention, restart restoration,
@@ -2134,6 +2157,12 @@ coordinator finishes remain explicit residuals for the 95% hardware gate.
 `result_handoff` begins when that waiter-resolution turn reaches the engine and
 includes outcome lookup, result shaping, and reply delivery; it is not merely
 the final message-send cost.
+Each coordinator wave also owns one `quod.dtx.wave` OpenTelemetry span and one
+child `quod.dtx.wave.item` span per participant operation. Only the closed
+stage and numeric item index are attributes; group/target/goal data is neither
+a metric label nor durable/wire state. Spawned workers receive the captured
+parent trace context explicitly, so their work remains correlated without
+depending on an Erlang process dictionary being inherited.
 Earlier slice-local gates are historical evidence only; the final combined
 tree must publish fresh gate counts after this cleanup.
 

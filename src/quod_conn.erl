@@ -684,6 +684,7 @@ connection_down(Reason, #s{peer = Peer, owner = Owner,
     fail_pending(Peer, Pending),
     terminal_start(Peer, Owner, Reason).
 
+-spec owner_down(term(), #s{}) -> no_return().
 owner_down(Reason, #s{peer = Peer, pending = Pending}) ->
     fail_pending(Peer, Pending),
     exit({shutdown, Reason}).

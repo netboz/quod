@@ -251,6 +251,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_seed_dtx_submission/3,
          test_seed_dtx_submission_at/4,
          test_eligible_dtx_wave/1,
+         test_dtx_drive_scheduled/1,
          test_resolve_committed_dtx/3,
          test_retain_dtx_record/3,
          test_dtx_retain_admissible/2,
@@ -1075,6 +1076,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     observation_started_at :: integer(),
     validation_sidecar = [] :: [quod_dtx_endpoint:validation_item()],
     placement :: ready | blocked,
+    %% Volatile placement on the existing consensus link.  The retained row
+    %% remains the sole custody owner; this marker only prevents unrelated
+    %% mailbox traffic from enqueueing the same reliable relay repeatedly.
+    %% A replacement link has a different pid and therefore re-drives it.
+    relay_placement = none :: none | {node_id(), pid()},
     bytes :: non_neg_integer(),
     waiters = #{} :: #{pid() => true}
 }).
@@ -1285,6 +1291,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
               :: #{<<_:256>> => {<<_:256>>, <<_:256>>}},
             dtx_admission = none :: none | #dtx_admission{},
             retained_dtx = #retained_dtx{} :: #retained_dtx{},
+            %% One mailbox edge coalesces every control already admitted by
+            %% this process. It is deliberately a message, not a batching
+            %% timer: controls already waiting in the mailbox join the same
+            %% byte-bounded wave and the next turn drives it immediately.
+            dtx_drive_scheduled = false :: boolean(),
             dtx_correlations = #{} ::
               #{binary() => #dtx_correlation{}},
             dtx_out_channels = #{} ::
@@ -1731,6 +1742,7 @@ test_dtx_waiter_set(Waiters) ->
 test_eligible_dtx_wave(S) ->
     [{Digest, Record}
      || {Digest, #dtx_submission{record = Record}} <- eligible_dtx_wave(S)].
+test_dtx_drive_scheduled(#s{dtx_drive_scheduled = Scheduled}) -> Scheduled.
 test_resolve_committed_dtx(Entry, Payload, S) ->
     resolve_committed_dtx(Entry, Payload, S).
 test_retain_dtx_record(Record, Waiter, S) ->
@@ -1760,12 +1772,14 @@ test_retained_dtx_state(#s{retained_dtx = Registry}) ->
                                     observation_started_at = ObservedAt,
                                     bytes = Bytes, envelope = Envelope,
                                     validation_sidecar = ValidationSidecar,
-                                    placement = Placement}) ->
+                                    placement = Placement,
+                                    relay_placement = RelayPlacement}) ->
                         #{inserted_at => InsertedAt,
                           observation_started_at => ObservedAt,
                           bytes => Bytes, envelope => Envelope,
                           validation_sidecar => ValidationSidecar,
-                          placement => Placement}
+                          placement => Placement,
+                          relay_placement => RelayPlacement}
                 end, retained_rows(Registry)),
       fingerprint => Registry#retained_dtx.fingerprint}.
 test_refresh_retained_readiness(S) -> refresh_retained_readiness(S).
@@ -3691,6 +3705,13 @@ running_impl(
   info, {dtx_endpoint_worker_result, Pid, Result}, S0) ->
     {S1, Actions} = finish_dtx_server_worker(Pid, Result, S0),
     keep_progress(S0, S1, Actions);
+running_impl(info, dtx_drive, S0 = #s{dtx_drive_scheduled = true}) ->
+    %% This self-message sits behind every control already in the mailbox.
+    %% Clearing the latch before keep_progress lets the one retained owner
+    %% select the largest legal wave without sleeping or polling.
+    keep_progress(S0, S0#s{dtx_drive_scheduled = false}, []);
+running_impl(info, dtx_drive, S) ->
+    {keep_state, S};
 running_impl(
   info,
   {dtx_coordinator_bootstrap, Pid, GroupId, BeginRef, Result}, S0) ->
@@ -6240,10 +6261,19 @@ merge_submission_validation_sidecar(
                         bytes = Bytes}, NewHints) ->
     Merged = relevant_control_validation_sidecar(
                Record, merge_validation_sidecars(Existing, NewHints)),
-    Row#dtx_submission{
-      validation_sidecar = Merged,
-      bytes = Bytes - validation_sidecar_bytes(Existing) +
-          validation_sidecar_bytes(Merged)}.
+    case Merged =:= Existing of
+        true ->
+            Row;
+        false ->
+            %% Better evidence changes the relay frame.  It must cross the
+            %% current link once even when the semantic control was already
+            %% placed there.
+            Row#dtx_submission{
+              validation_sidecar = Merged,
+              relay_placement = none,
+              bytes = Bytes - validation_sidecar_bytes(Existing) +
+                  validation_sidecar_bytes(Merged)}
+    end.
 
 %% Exact-entry hints are immutable acceleration and keep their first valid
 %% value. Applied certificates are replaceable proposal evidence: a malformed
@@ -6282,7 +6312,8 @@ retain_dtx_record(Record, Waiter, ValidationSidecar,
                             case retained_attach_waiter(
                                    Digest, Waiter, Registry0) of
                                 {ok, Registry1} ->
-                                    {ok, S#s{retained_dtx = Registry1}};
+                                    {ok, schedule_dtx_drive(
+                                           S#s{retained_dtx = Registry1})};
                                 {error, Reason} ->
                                     {error, Reason}
                             end;
@@ -6296,6 +6327,12 @@ retain_dtx_record(Record, Waiter, ValidationSidecar,
         {error, _} ->
             {error, invalid_dtx_submission}
     end.
+
+schedule_dtx_drive(S = #s{dtx_drive_scheduled = true}) ->
+    S;
+schedule_dtx_drive(S) ->
+    self() ! dtx_drive,
+    S#s{dtx_drive_scheduled = true}.
 
 %% The committed multi-group projection is the sole phase owner.  Retained
 %% controls use its public readiness verdict directly; there is no parallel
@@ -6360,9 +6397,11 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
                                   bytes = byte_size(Envelope) +
                                       validation_sidecar_bytes(ValidationSidecar),
                                   waiters = dtx_waiter_set(Waiter)},
-                            {ok, S#s{signing_journal = Journal1,
-                                     retained_dtx = retained_put_new(
-                                                      Submission, Registry)}};
+                            {ok, schedule_dtx_drive(
+                                   S#s{signing_journal = Journal1,
+                                       retained_dtx = retained_put_new(
+                                                        Submission,
+                                                        Registry)})};
                         {error, Reason} ->
                             {error, Reason}
                     end;
@@ -8300,6 +8339,8 @@ propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
         undefined -> S3
     end.
 
+drive_retained_dtx(S = #s{dtx_drive_scheduled = true}) ->
+    S;
 drive_retained_dtx(S = #s{retained_dtx = Registry}) ->
     case retained_count(Registry) of
         0 -> S;
@@ -8404,16 +8445,7 @@ drive_dtx_at_slot(
         local ->
             propose_dtx_wave(Slot, Envelopes, ValidationSidecar, S);
         {relay, Peer} ->
-            SentHints = fit_consensus_validation_sidecar(
-                          S#s.ns,
-                          fun(Hints) ->
-                              {dtx_submit, Envelopes, Hints}
-                          end,
-                          ValidationSidecar),
-            Frame = encode(
-                      S#s.ns,
-                      {dtx_submit, Envelopes, SentHints}),
-            send_frame(Peer, Frame, S);
+            send_dtx_relay(Peer, Wave, S);
         blocked ->
             S
     end.
@@ -8475,19 +8507,22 @@ handle_dtx_submit(_Peer, Envelopes, ValidationSidecar, S) ->
         false -> S;
         true ->
             {controls, Classified} = quod_ledger:classify(Payload),
-            Records = [quod_dtx:control_body(Control)
-                       || {_Kind, Control} <- Classified],
-            case {proposal_slot_for_dtx(Records, S), S#s.collecting} of
-                {{ok, Slot}, none} ->
-                    case dtx_slot_route(Slot, S) of
-                        local ->
-                            propose_dtx_wave(
-                              Slot, Envelopes, ValidationSidecar, S);
-                        _ -> S
-                    end;
-                _ ->
-                    S
-            end
+            %% A committee relay carries reachability, not a second custody
+            %% form. The authenticated signed controls are checked above;
+            %% their semantic records now enter the exact same local signing
+            %% and retained owner as endpoint submissions. A busy leader
+            %% therefore keeps work for the next legal slot instead of
+            %% silently dropping it.
+            lists:foldl(
+              fun({_Kind, Control}, Acc) ->
+                      Record = quod_dtx:control_body(Control),
+                      Hints = relevant_control_validation_sidecar(
+                                Control, ValidationSidecar),
+                      case retain_dtx_record(Record, none, Hints, Acc) of
+                          {ok, Acc1} -> Acc1;
+                          {error, _CurrentStateRefusal} -> Acc
+                      end
+              end, S, Classified)
     end.
 
 dtx_controls_validation_sidecar(Controls, ValidationSidecar) ->
@@ -9266,8 +9301,6 @@ retire_custody_placement(
                     {Lane, false} -> Lane
                 end},
     case Placement of
-        dormant ->
-            S1;
         {local, _Slot, _CommitteeId} ->
             S1;
         {relay, AttemptId, _Target, _Slot, _CommitteeId} ->
@@ -12115,6 +12148,60 @@ send_frame(Peer, Frame, S = #s{chan = Chan, conns = Conns, outbox = Outbox, dial
                          S1#s{dialing = Dialing#{Peer => dial_deadline()}}
             end
     end.
+
+%% DTX controls remain in `retained_dtx` until certified commit, so the wire
+%% needs no second outbox. A live stream uses the link's message-driven ordered
+%% FIFO; QUIC `send_ready` resumes local flow control. With no stream, link-up
+%% is the exact wake that re-drives the retained rows. The consensus progress
+%% timer remains only the final failed-dial safeguard.
+send_dtx_relay(
+  Peer, Wave,
+  S = #s{chan = Chan, conns = Conns, dialing = Dialing}) ->
+    case maps:get(Peer, Conns, undefined) of
+        {LinkPid, _Ref} ->
+            Pending =
+                [{Digest, Row}
+                 || {Digest,
+                     Row = #dtx_submission{relay_placement = Placement}}
+                        <- Wave,
+                    Placement =/= {Peer, LinkPid}],
+            send_pending_dtx_relay(Peer, LinkPid, Pending, S);
+        undefined ->
+            case maps:is_key(Peer, Dialing) of
+                true -> S;
+                false ->
+                    _ = quod_quic:open_link(Peer, Chan),
+                    S#s{dialing = Dialing#{Peer => dial_deadline()}}
+            end
+    end.
+
+send_pending_dtx_relay(_Peer, _LinkPid, [], S) ->
+    S;
+send_pending_dtx_relay(Peer, LinkPid, Pending, S) ->
+    Envelopes = [Envelope
+                 || {_Digest, #dtx_submission{envelope = Envelope}}
+                        <- Pending],
+    ValidationSidecar = dtx_wave_validation_sidecar(Pending),
+    SentHints = fit_consensus_validation_sidecar(
+                  S#s.ns,
+                  fun(Hints) -> {dtx_submit, Envelopes, Hints} end,
+                  ValidationSidecar),
+    Frame = encode(S#s.ns, {dtx_submit, Envelopes, SentHints}),
+    ok = quod_link:send_ordered(LinkPid, Frame),
+    mark_dtx_relay_placed(Pending, Peer, LinkPid, S).
+
+mark_dtx_relay_placed(Pending, Peer, LinkPid,
+                      S = #s{retained_dtx = Registry0}) ->
+    Registry1 =
+        lists:foldl(
+          fun({Digest, _Row}, Registry) ->
+                  Current = maps:get(Digest, retained_rows(Registry)),
+                  retained_replace(
+                    Current#dtx_submission{
+                      relay_placement = {Peer, LinkPid}},
+                    Registry)
+          end, Registry0, Pending),
+    S#s{retained_dtx = Registry1}.
 
 %% Relay submissions are already retained in `relay_pending`; duplicating them
 %% into the generic bounded outbox would let unrelated consensus traffic evict

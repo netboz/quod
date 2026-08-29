@@ -66,7 +66,8 @@ coordinator.
     results = #{} :: #{non_neg_integer() => term()},
     meta = #{} :: map(),
     timer :: reference(),
-    started_native :: integer()
+    started_native :: integer(),
+    trace_span = undefined :: undefined | quod_trace:span_ctx()
 }).
 
 -record(state, {
@@ -879,6 +880,13 @@ start_typed_wave(Stage, Items, Meta, S0) ->
     Ref = make_ref(),
     Parent = self(),
     Context = wave_context(S0),
+    {WaveTraceCtx, WaveTraceSpan} = quod_trace:start_span(
+                                      quod_trace:context(),
+                                      <<"quod.dtx.wave">>, internal,
+                                      #{'quod.dtx.stage' =>
+                                            atom_to_binary(Stage, utf8),
+                                        'quod.dtx.wave.items' =>
+                                            length(Items)}),
     WorkerSpecs = lists:zip(lists:seq(1, length(Items)), Items),
     Workers =
         lists:foldl(
@@ -887,7 +895,16 @@ start_typed_wave(Stage, Items, Meta, S0) ->
                       spawn_owned_monitor(
                         Parent,
                         fun() ->
-                                Result = run_wave_work(Stage, Item, Context),
+                                Result = quod_trace:with_span(
+                                           WaveTraceCtx,
+                                           <<"quod.dtx.wave.item">>, internal,
+                                           #{'quod.dtx.stage' =>
+                                                 atom_to_binary(Stage, utf8),
+                                             'quod.dtx.wave.item' => Index},
+                                           fun(_SpanCtx) ->
+                                                   run_wave_work(
+                                                     Stage, Item, Context)
+                                           end),
                                 Parent ! {dtx_wave_result, Ref, self(),
                                           Index, Result}
                         end),
@@ -898,7 +915,8 @@ start_typed_wave(Stage, Items, Meta, S0) ->
               self(), {dtx_wave_timeout, Ref}),
     Wave = #wave{ref = Ref, stage = Stage, items = Items,
                  workers = Workers, timer = Timer, meta = Meta,
-                 started_native = erlang:monotonic_time()},
+                 started_native = erlang:monotonic_time(),
+                 trace_span = WaveTraceSpan},
     {next, S0#state{commands = none, wave = Wave}}.
 
 wave_context(#state{owner_ns = OwnerNs, config = Config,
@@ -921,8 +939,9 @@ finish_wave(S0 = #state{wave = #wave{stage = Stage,
                                       results = Results,
                                       meta = Meta,
                                       timer = Timer,
-                                      started_native = StartedNative}}) ->
+                                      started_native = StartedNative} = Wave}) ->
     _ = erlang:cancel_timer(Timer),
+    finish_wave_trace(Wave, ok),
     %% The public prepare/finalize/applied stage spans all of its submit,
     %% evidence, and wait turns.  It is closed by `enter_stage/2` at the next
     %% protocol stage (or by coordinator termination), not at a sub-wave.
@@ -1205,12 +1224,14 @@ worker_down_disposition(Stage, Reason)
 
 timeout_wave(Wave = #wave{workers = Workers, results = Results}, S) ->
     stop_wave_workers(Wave),
+    finish_wave_trace(Wave, timeout),
     Results1 = maps:fold(
                  fun(_Pid, {_Monitor, Index}, Acc) ->
                          Acc#{Index => {worker_down, timeout}}
                  end, Results, Workers),
     finish_wave(
-      S#state{wave = Wave#wave{workers = #{}, results = Results1}}).
+      S#state{wave = Wave#wave{workers = #{}, results = Results1,
+                               trace_span = undefined}}).
 
 submit_command_io({submit, Target, Record}, Context) ->
     try
@@ -1544,7 +1565,16 @@ close_coordinator(Result,
     ok.
 
 stop_active_wave(none) -> ok;
-stop_active_wave(#wave{} = Wave) -> stop_wave_workers(Wave).
+stop_active_wave(#wave{} = Wave) ->
+    stop_wave_workers(Wave),
+    finish_wave_trace(Wave, cancelled).
+
+finish_wave_trace(#wave{trace_span = undefined}, _Result) ->
+    ok;
+finish_wave_trace(#wave{trace_span = SpanCtx}, ok) ->
+    quod_trace:finish_span(SpanCtx, ok);
+finish_wave_trace(#wave{trace_span = SpanCtx}, Result) ->
+    quod_trace:finish_span(SpanCtx, {error, Result}).
 
 observe_stage(#state{owner_ns = Ns}, Stage, Result, StartedNative)
   when is_integer(StartedNative) ->

@@ -42,12 +42,17 @@ dead, unreachable, or wrongly authenticated peer fail to come up.
 
 -define(HEADER_TIMEOUT_MS, 5000).
 -define(ACK_TIMEOUT_MS, 5000).   %% opener waits this long for the peer's ACK before failing the link
+-type send_item() ::
+        {best_effort, binary()}
+      | {ordered, binary()}
+      | {reliable, pid(), reference(), binary(), integer()}.
+-type send_queue() :: {[send_item()], [send_item()]}.
 -record(s, {conn, sid, channel, peer, direction, buf = <<>>,
             %% One mailbox-ordered send FIFO. An ordered/reliable frame at its
             %% head parks until quod_conn forwards QUIC's exact send_ready for
             %% this stream; successors cannot pass it.
-            sendq = {[], []},
-            send_wait = none}). %% none | {Token, TimerRef}
+            sendq = {[], []} :: send_queue(),
+            send_wait = none :: none | {reference(), reference()}}).
 
 -doc "Extract the authenticated key from either transport identity shape.".
 -spec peer_key(term()) -> <<_:256>> | undefined.
@@ -285,7 +290,7 @@ test_ordered_send_result(Conn, Sid, Frame) ->
 -endif.
 
 enqueue_send(Item, S = #s{sendq = Q0}) ->
-    drain_sends(S#s{sendq = queue:in(Item, Q0)}).
+    drain_sends(S#s{sendq = sendq_in(Item, Q0)}).
 
 %% Try each accepted frame once. Transient QUIC refusal parks the FIFO head;
 %% progress resumes only from the transport's send_ready message. There is no
@@ -293,33 +298,52 @@ enqueue_send(Item, S = #s{sendq = Q0}) ->
 drain_sends(S = #s{send_wait = {_Token, _TimerRef}}) ->
     S;
 drain_sends(S = #s{sendq = Q0}) ->
-    case queue:peek(Q0) of
+    case sendq_head(Q0) of
         empty ->
             S;
-        {value, Item} ->
+        {value, Item, Q} ->
             case send_item(Item, S) of
                 ok ->
                     sent_item(Item),
-                    {{value, _}, Q1} = queue:out(Q0),
+                    Q1 = sendq_drop(Q),
                     drain_sends(S#s{sendq = Q1});
                 {blocked, best_effort, Reason} ->
                     count_drop(Reason, S),
-                    {{value, _}, Q1} = queue:out(Q0),
+                    Q1 = sendq_drop(Q),
                     drain_sends(S#s{sendq = Q1});
                 {blocked, _Protected, _Reason} ->
-                    park_send(Item, S);
+                    park_send(Item, S#s{sendq = Q});
                 {error, ordered, Reason} ->
                     ordered_send_failed(Reason, S);
                 {error, best_effort, Reason} ->
                     count_drop(Reason, S),
-                    {{value, _}, Q1} = queue:out(Q0),
+                    Q1 = sendq_drop(Q),
                     drain_sends(S#s{sendq = Q1});
                 {error, reliable, Reason} ->
                     reliable_result(Item, {error, Reason}),
-                    {{value, _}, Q1} = queue:out(Q0),
+                    Q1 = sendq_drop(Q),
                     drain_sends(S#s{sendq = Q1})
             end
     end.
+
+%% Local two-list FIFO.  This is intentionally owned here rather than
+%% pattern-matching `queue`'s opaque representation: the link needs only four
+%% operations, and Dialyzer must be able to verify every stream-reset cleanup.
+sendq_in(Item, {Front, Rear}) ->
+    {Front, [Item | Rear]}.
+
+sendq_head({[], []}) ->
+    empty;
+sendq_head({[], Rear}) ->
+    sendq_head({lists:reverse(Rear), []});
+sendq_head(Q = {[Item | _], _Rear}) ->
+    {value, Item, Q}.
+
+sendq_drop({[_Item | Rest], Rear}) ->
+    {Rest, Rear}.
+
+sendq_to_list({Front, Rear}) ->
+    Front ++ lists:reverse(Rear).
 
 send_item({ordered, Frame}, #s{conn = Conn, sid = Sid}) ->
     classify_send(ordered, ?ORDERED_SEND_RESULT(Conn, Sid, Frame));
@@ -349,12 +373,14 @@ classify_send(Kind, {error, Reason}) ->
     {error, Kind, Reason}.
 
 sent_item({reliable, From, Ref, _Frame, _Deadline}) ->
-    From ! {Ref, ok};
+    From ! {Ref, ok},
+    ok;
 sent_item(_Item) ->
     ok.
 
 reliable_result({reliable, From, Ref, _Frame, _Deadline}, Result) ->
-    From ! {Ref, Result};
+    From ! {Ref, Result},
+    ok;
 reliable_result(_Item, _Result) ->
     ok.
 
@@ -379,13 +405,14 @@ resume_sends(S) ->
     drain_sends(S#s{send_wait = none}).
 
 send_deadline(Token, S = #s{send_wait = {Token, _TimerRef}, sendq = Q0}) ->
-    case queue:peek(Q0) of
-        {value, {ordered, _Frame}} ->
+    case sendq_head(Q0) of
+        {value, {ordered, _Frame}, Q} ->
             ordered_send_failed(backpressure_timeout,
-                                S#s{send_wait = none});
-        {value, {reliable, _From, _Ref, _Frame, _Deadline} = Item} ->
+                                S#s{sendq = Q, send_wait = none});
+        {value,
+         {reliable, _From, _Ref, _Frame, _Deadline} = Item, Q} ->
             reliable_result(Item, {error, backpressure_timeout}),
-            {{value, _}, Q1} = queue:out(Q0),
+            Q1 = sendq_drop(Q),
             drain_sends(S#s{sendq = Q1, send_wait = none});
         _ ->
             S#s{send_wait = none}
@@ -393,6 +420,7 @@ send_deadline(Token, S = #s{send_wait = {Token, _TimerRef}, sendq = Q0}) ->
 send_deadline(_StaleToken, S) ->
     S.
 
+-spec ordered_send_failed(term(), #s{}) -> no_return().
 ordered_send_failed(Reason, S = #s{conn = Conn, sid = Sid}) ->
     count_drop(Reason, S),
     reply_queued_reliable({error, {ordered_send_failed, Reason}}, S),
@@ -403,11 +431,12 @@ ordered_send_failed(Reason, S = #s{conn = Conn, sid = Sid}) ->
 reply_queued_reliable(Result, #s{sendq = Q}) ->
     lists:foreach(
       fun(Item) -> reliable_result(Item, Result) end,
-      queue:to_list(Q)),
+      sendq_to_list(Q)),
     ok.
 
 count_drop(Reason, #s{peer = Peer, channel = Channel}) ->
-    quod_metrics:count_link_send_drop(Peer, Channel, Reason).
+    _ = quod_metrics:count_link_send_drop(Peer, Channel, Reason),
+    ok.
 
 cancel_send_timer(#s{send_wait = {_Token, TimerRef}}) ->
     _ = erlang:cancel_timer(TimerRef, [{async, false}, {info, false}]),

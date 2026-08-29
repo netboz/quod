@@ -108,7 +108,7 @@ same_link_response_test() ->
         ?assertEqual(0, maps:get(server_inflight, Stats)),
         ?assertEqual(1, maps:get(server_inflight_peak, Stats)),
         receive
-            {send, ResponseFrame} ->
+            {send_ordered, ResponseFrame} ->
                 ?assertMatch(
                    {ok, {blocks_resp, RequestId,
                          [#entry{index = 2}, #entry{index = 3}], 5}, _},

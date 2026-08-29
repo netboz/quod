@@ -138,7 +138,8 @@ materialize_goal(PublicKey, Peer, Goal) ->
 materialize_request(PublicKey, Peer, AgentRefBlob, Goal) ->
     case quod_agent_ref:decode(AgentRefBlob) of
         {ok, #{reference := AgentRef}} ->
-            case materialize_goal(PublicKey, Peer, {AgentRef, Goal}) of
+            case call(
+                   {materialize_request, PublicKey, Peer, AgentRef, Goal}) of
                 {ok, {MaterializedAgentRef, MaterializedGoal}} ->
                     {ok, MaterializedAgentRef, MaterializedGoal};
                 {error, _} = Error -> Error
@@ -207,6 +208,8 @@ handle_call({admit_forwarded_goal, PublicKey, ForwarderKey}, _From, S) ->
     reply(admit_forwarded_goal_request(PublicKey, ForwarderKey, S));
 handle_call({materialize_goal, PublicKey, Peer, Goal}, _From, S) ->
     reply(materialize_verified_goal(PublicKey, Peer, Goal, S));
+handle_call({materialize_request, PublicKey, Peer, AgentRef, Goal}, _From, S) ->
+    reply(materialize_verified_request(PublicKey, Peer, AgentRef, Goal, S));
 handle_call(_Request, _From, S) ->
     {reply, {error, invalid_request}, S}.
 
@@ -411,22 +414,48 @@ materialize_verified_goal(<<_:256>> = PublicKey, Peer, Goal, S0) ->
     case quod_wire_term:goal_symbol_names(Goal) of
         {ok, Names} ->
             NewNames = [Name || Name <- Names, not existing_atom(Name)],
-            materialize_new_symbols(PublicKey, Peer, Goal, length(NewNames), S0);
+            materialize_new_symbols(
+              PublicKey, Peer, length(NewNames),
+              fun() -> quod_wire_term:materialize_goal_symbols(Goal) end, S0);
         {error, _} ->
             {{error, invalid_goal}, S0}
     end;
 materialize_verified_goal(_PublicKey, _Peer, _Goal, S) ->
     {{error, invalid_signing_key}, S}.
 
-materialize_new_symbols(_PublicKey, _Peer, Goal, 0, S) ->
-    case quod_wire_term:materialize_goal_symbols(Goal) of
-        {ok, Materialized} -> {{ok, Materialized}, S};
-        {error, Reason} -> {{error, Reason}, S}
+materialize_verified_request(
+  <<_:256>> = PublicKey, Peer, AgentRef, Goal, S0) ->
+    case {quod_wire_term:symbol_names(AgentRef),
+          quod_wire_term:goal_symbol_names(Goal)} of
+        {{ok, AgentNames}, {ok, GoalNames}} ->
+            Names = ordsets:union(AgentNames, GoalNames),
+            NewNames = [Name || Name <- Names, not existing_atom(Name)],
+            materialize_new_symbols(
+              PublicKey, Peer, length(NewNames),
+              fun() -> materialize_request_terms(AgentRef, Goal) end, S0);
+        _ ->
+            {{error, invalid_goal}, S0}
     end;
-materialize_new_symbols(PublicKey, Peer, Goal, Count,
+materialize_verified_request(_PublicKey, _Peer, _AgentRef, _Goal, S) ->
+    {{error, invalid_signing_key}, S}.
+
+materialize_request_terms(AgentRef, Goal) ->
+    case quod_wire_term:materialize_symbols(AgentRef) of
+        {ok, MaterializedAgentRef} ->
+            case quod_wire_term:materialize_goal_symbols(Goal) of
+                {ok, MaterializedGoal} ->
+                    {ok, {MaterializedAgentRef, MaterializedGoal}};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+materialize_new_symbols(_PublicKey, _Peer, 0, Materialize, S) ->
+    materialized_reply(Materialize(), S);
+materialize_new_symbols(PublicKey, Peer, Count, Materialize,
                         #s{atom_baseline = Baseline,
                            max_materialized_atoms = Max} = S0)
-  when Count > 0 ->
+  when Count > 0, is_function(Materialize, 0) ->
     Used = max(0, erlang:system_info(atom_count) - Baseline),
     case Used + Count =< Max of
         false ->
@@ -441,14 +470,12 @@ materialize_new_symbols(PublicKey, Peer, Goal, Count,
                     %% The owner serializes client vocabulary allocation.  The
                     %% existing materializer still enforces per-request and VM
                     %% headroom limits shared with every other wire boundary.
-                    case quod_wire_term:materialize_goal_symbols(Goal) of
-                        {ok, Materialized} ->
-                            {{ok, Materialized}, S1};
-                        {error, Reason} ->
-                            {{error, Reason}, S1}
-                    end
+                    materialized_reply(Materialize(), S1)
             end
     end.
+
+materialized_reply({ok, Materialized}, S) -> {{ok, Materialized}, S};
+materialized_reply({error, Reason}, S) -> {{error, Reason}, S}.
 
 charge_pair(FirstField, FirstKey, SecondField, SecondKey, S) ->
     charge_pair_many(FirstField, FirstKey, SecondField, SecondKey, 1, S).

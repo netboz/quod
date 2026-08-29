@@ -266,7 +266,8 @@ collect_goal_symbols(Tuple, _Acc)
     error;
 collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
     case element(1, Tuple) of
-        {'$quod_symbol', Name} when is_binary(Name) -> {ok, Acc#{Name => true}};
+        {'$quod_symbol', Name} when is_binary(Name) ->
+            collect_opaque_goal_positions(Name, Tuple, Acc#{Name => true});
         Marker when is_tuple(Marker), tuple_size(Marker) >= 1,
                     element(1, Marker) =:= '$quod_symbol' -> error;
         ',' -> collect_goal_positions(Tuple, [2, 3], Acc);
@@ -286,6 +287,33 @@ collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         _ -> {ok, Acc}
     end;
 collect_goal_symbols(_Goal, Acc) ->
+    {ok, Acc}.
+
+%% Parser V2 deliberately keeps every source identifier opaque. Once an
+%% opaque callable names one of Prolog's goal-bearing built-ins, its executable
+%% positions still need the same walk as the already-materialized spelling.
+%% Unknown callables keep ordinary arguments opaque.
+collect_opaque_goal_positions(<<"once">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [2], Acc);
+collect_opaque_goal_positions(<<"call">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [2], Acc);
+collect_opaque_goal_positions(<<"not">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [2], Acc);
+collect_opaque_goal_positions(<<"findall">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [3], Acc);
+collect_opaque_goal_positions(<<"bagof">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [3], Acc);
+collect_opaque_goal_positions(<<"setof">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [3], Acc);
+collect_opaque_goal_positions(<<"asserta">>, Tuple, Acc) ->
+    collect_clause_symbol(Tuple, 2, Acc);
+collect_opaque_goal_positions(<<"assertz">>, Tuple, Acc) ->
+    collect_clause_symbol(Tuple, 2, Acc);
+collect_opaque_goal_positions(<<"retract">>, Tuple, Acc) ->
+    collect_clause_symbol(Tuple, 2, Acc);
+collect_opaque_goal_positions(<<"retractall">>, Tuple, Acc) ->
+    collect_clause_symbol(Tuple, 2, Acc);
+collect_opaque_goal_positions(_Name, _Tuple, Acc) ->
     {ok, Acc}.
 
 %% A clause passed to a database-update predicate contains executable syntax:
@@ -323,7 +351,11 @@ replace_goal_symbols({'$quod_symbol', Name}) ->
 replace_goal_symbols(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
     case element(1, Tuple) of
         {'$quod_symbol', Name} ->
-            setelement(1, Tuple, binary_to_existing_atom(Name, utf8));
+            %% Re-enter after replacing the callable so a V2 spelling such as
+            %% opaque assertz(opaque_head(...)) receives the same executable-
+            %% position treatment as an already-materialized assertz/1.
+            replace_goal_symbols(
+              setelement(1, Tuple, binary_to_existing_atom(Name, utf8)));
         ',' -> replace_goal_positions(Tuple, [2, 3]);
         ';' -> replace_goal_positions(Tuple, [2, 3]);
         '->' -> replace_goal_positions(Tuple, [2, 3]);

@@ -64,7 +64,7 @@ read_mode_cannot_write_or_open_a_foreign_scope(
                                        Ns, ?ANCHOR, KeyPair, Session,
                                        <<"should_not_exist.">>),
     ?assertMatch(
-       {ok, _, {normalized, fail}},
+       {ok, _, {normalized, {failed, _Reasons}}},
        quod_client_goal_ingress:submit(read,
          SessionId, AbsentBytes, AbsentSignature, ?PEER)),
     {ScopeBytes, ScopeSignature} = signed_read(

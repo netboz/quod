@@ -266,6 +266,52 @@ signed_goal_materialization_leaves_data_opaque_test() ->
          ?assertError(badarg, binary_to_existing_atom(Data, utf8))
       end).
 
+signed_request_materializes_origin_but_not_remote_goal_test() ->
+    {PublicKey, _} = quod_identity:generate(),
+    AgentClass = unique_symbol(<<"request_agent_class_">>),
+    AgentInstance = unique_symbol(<<"request_agent_instance_">>),
+    OriginFunctor = unique_symbol(<<"request_origin_functor_">>),
+    RemoteFunctor = unique_symbol(<<"request_remote_functor_">>),
+    InstanceText = iolist_to_binary(
+                     [AgentClass, "(", AgentInstance, ")."]),
+    Ns = <<"request:agent">>,
+    Anchor = <<71:256>>,
+    {ok, #{blob := AgentRefBlob}} =
+        quod_agent_ref:from_text(Ns, Anchor, InstanceText, 2),
+    Goal =
+        {',',
+         {{'$quod_symbol', <<"assertz">>},
+          {{'$quod_symbol', OriginFunctor}, ok}},
+         {'::', <<"request:remote">>,
+          {{'$quod_symbol', RemoteFunctor}, ok}}},
+    lists:foreach(
+      fun(Name) ->
+          ?assertError(badarg, binary_to_existing_atom(Name, utf8))
+      end, [AgentClass, AgentInstance, OriginFunctor, RemoteFunctor]),
+    with_auth(
+      #{atom_baseline => erlang:system_info(atom_count),
+        max_materialized_atoms => 1024},
+      fun() ->
+          {ok,
+           {agent_instance_ref, Ns, Anchor,
+            {MaterializedClass, MaterializedInstance}},
+           {',', {assertz, {MaterializedOrigin, ok}},
+            {'::', <<"request:remote">>,
+             {{'$quod_symbol', RemoteFunctor}, ok}}}} =
+              quod_client_auth:materialize_request(
+                PublicKey, ?PEER, AgentRefBlob, Goal),
+          ?assertEqual(binary_to_existing_atom(AgentClass, utf8),
+                       MaterializedClass),
+          ?assertEqual(binary_to_existing_atom(AgentInstance, utf8),
+                       MaterializedInstance),
+          ?assertEqual(binary_to_existing_atom(OriginFunctor, utf8),
+                       MaterializedOrigin),
+          %% The selected remote ontology owns this callable vocabulary. The
+          %% source must carry it opaquely until open_authorized_scope/8.
+          ?assertError(
+             badarg, binary_to_existing_atom(RemoteFunctor, utf8))
+      end).
+
 materialized_atom_ceiling_survives_auth_owner_restart_test() ->
     Baseline = erlang:system_info(atom_count),
     Options = #{atom_baseline => Baseline,

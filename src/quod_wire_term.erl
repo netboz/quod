@@ -520,6 +520,12 @@ decode({3, Float}, _Depth, Nodes) when is_float(Float) ->
     {ok, Float, Nodes + 1};
 decode({4, Items}, Depth, Nodes) when is_list(Items) ->
     case decode_list(Items, Depth + 1, Nodes + 1, []) of
+        %% This tuple is the in-memory representation of an opaque symbol;
+        %% its only canonical wire representation is tag 0 above.  Rejecting
+        %% the tuple spelling here makes decode_canonical/2 itself enforce the
+        %% same decode/encode identity that callers previously recomputed.
+        {ok, ['$quod_symbol', Binary], _Nodes1} when is_binary(Binary) ->
+            error;
         {ok, Terms, Nodes1} -> {ok, list_to_tuple(Terms), Nodes1};
         error -> error
     end;

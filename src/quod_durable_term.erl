@@ -99,27 +99,13 @@ encode(Kind, Term, MaxBytes) ->
 
 decode(_Kind, Blob, MaxBytes)
   when is_binary(Blob), byte_size(Blob) =< MaxBytes ->
-    case quod_safe_term:decode(Blob, MaxBytes) of
-        {ok, WireTerm} ->
-            case quod_wire_term:decode(WireTerm) of
-                {ok, Term} ->
-                    case quod_wire_term:encode(Term) of
-                        {ok, ReencodedWireTerm} ->
-                            Canonical = term_to_binary(
-                                          ReencodedWireTerm,
-                                          [deterministic]),
-                            case Canonical =:= Blob of
-                                true -> {ok, Term};
-                                false -> {error, bad_term}
-                            end;
-                        {error, bad_term} ->
-                            {error, bad_term}
-                    end;
-                {error, bad_term} ->
-                    {error, bad_term}
-            end;
-        {error, _} ->
-            {error, bad_term}
+    %% The shared wire decoder checks the deterministic ETF bytes before it
+    %% decodes the bounded Prolog term.  Re-encoding that decoded term here was
+    %% the same canonicality check a second time and made ledger replay walk
+    %% every durable goal/result twice.
+    case quod_wire_term:decode_canonical(Blob, MaxBytes) of
+        {ok, Term} -> {ok, Term};
+        {error, _} -> {error, bad_term}
     end;
 decode(Kind, Blob, MaxBytes) when is_binary(Blob), byte_size(Blob) > MaxBytes ->
     {error, {too_large, Kind}};

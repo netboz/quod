@@ -24,6 +24,7 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(effect_execution_uses_its_generic_descriptor(Fixture))},
           {timeout, 30, ?_test(stopped_ontology_resumes_same_anchor(Fixture))},
           ?_test(wrong_anchor_is_not_a_satisfied_effect(Fixture)),
+          ?_test(static_anchor_is_available_before_manager_merge(Fixture)),
           ?_test(structural_validation_is_total(Fixture)),
           ?_test(current_principal_is_engine_owned(Fixture)),
           ?_test(internal_staging_continuation_cannot_be_forged(Fixture)),
@@ -505,6 +506,36 @@ internal_staging_continuation_cannot_be_forged(_Fixture) ->
     ?assertEqual({ontology_creation_failed, invalid_action},
                  lists:last(Reasons)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
+
+static_anchor_is_available_before_manager_merge(_Fixture) ->
+    Ns = unique_ns(<<"static-anchor">>),
+    StaticAnchor = crypto:strong_rand_bytes(32),
+    DesiredAnchor = crypto:strong_rand_bytes(32),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    SavedStatic = application:get_env(quod, namespace_static_content),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    Content0 = maps:get(content, Desired0, #{}),
+    Static0 = application:get_env(quod, namespace_static_content, #{}),
+    try
+        application:set_env(
+          quod, namespace_desired,
+          Desired0#{content => maps:remove(Ns, Content0)}),
+        application:set_env(
+          quod, namespace_static_content,
+          Static0#{Ns => #{genesis_hash => StaticAnchor}}),
+        ?assertEqual({ok, StaticAnchor}, quod_ontology:genesis_anchor(Ns)),
+
+        %% Once the manager publishes its desired mirror, that single runtime
+        %% owner remains authoritative over the earlier static input.
+        application:set_env(
+          quod, namespace_desired,
+          Desired0#{content =>
+                        Content0#{Ns => #{genesis_hash => DesiredAnchor}}}),
+        ?assertEqual({ok, DesiredAnchor}, quod_ontology:genesis_anchor(Ns))
+    after
+        restore_env([{namespace_desired, SavedDesired},
+                     {namespace_static_content, SavedStatic}])
+    end.
 
 foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
     ForeignNs = unique_ns(<<"foreign-prerequisite">>),

@@ -243,7 +243,8 @@ root_ns() -> ?ROOT_NS.
 -doc """
 Return the exact local 32-byte genesis anchor. A live Simplex anchor wins; while
 the namespace is starting, a pinned join anchor is read from the manager's
-serialized desired configuration.
+serialized desired configuration or, before the manager has initialized that
+mirror, from the same static configuration it will merge into it.
 """.
 -spec genesis_anchor(term()) -> {ok, binary()} | {error, term()}.
 genesis_anchor(Name) ->
@@ -286,16 +287,25 @@ network_identity(true, {_Ns, <<_:256>>}) ->
 
 desired_genesis_anchor(Ns) ->
     Desired = application:get_env(quod, namespace_desired, #{}),
-    Content =
+    DesiredContent =
         case Desired of
-            #{content := Value} when is_map(Value) -> Value;
+            #{content := DesiredMap} when is_map(DesiredMap) -> DesiredMap;
             _ -> #{}
         end,
-    case maps:get(Ns, Content, undefined) of
+    StaticContent = application:get_env(quod, namespace_static_content, #{}),
+    Config =
+        case maps:find(Ns, DesiredContent) of
+            {ok, ConfigValue} -> ConfigValue;
+            error when is_map(StaticContent) ->
+                maps:get(Ns, StaticContent, undefined);
+            error ->
+                undefined
+        end,
+    case Config of
         undefined ->
             {error, not_hosted};
-        Config when is_map(Config) ->
-            case maps:get(genesis_hash, Config, undefined) of
+        ConfigMap when is_map(ConfigMap) ->
+            case maps:get(genesis_hash, ConfigMap, undefined) of
                 Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
                     {ok, Hash};
                 _ ->

@@ -2172,9 +2172,12 @@ tree must publish fresh gate counts after this cleanup.
    arbitrary target, agent, group, or goal. Include coordinator mailbox wait,
    foreign-cache queue/replay/fetch time, endpoint wait, and consensus proposal,
    finality, and apply time. Re-run the exact hardware fixture before behavior
-   changes. Do not begin the protocol refactor until the measured stages account
-   for at least 95% of end-to-end wall time; any unexplained remainder is a
-   bottleneck to trace, not an acceptable `other` bucket.
+   changes. Do not begin the protocol refactor until the non-overlapping stages
+   account for at least 95% of end-to-end wall time. Compute that gate from
+   per-request stage sums, or equivalently from means over the same completed
+   request population; marginal p50/p99 values from different requests must
+   never be added. Any unexplained remainder is a bottleneck to trace, not an
+   acceptable `other` bucket.
 2. **Liveness correctness.** Give the pre-authorization verifier its
    authenticated current contact without storing an unapproved identity; only
    successful authorization may retain the contact. Make cold catch-up

@@ -96,9 +96,11 @@ resident_projection_reuses_verified_frontier_and_phase_index_test() ->
        {ok, Projection, undefined},
        quod_foreign_log:test_resident_projection(
          Resident, 7, Projection, 8, Identity)),
-    %% A restart-loaded row, changed durable height, or historical lookup must
-    %% replay.  An unfinished DTX group does not: its exact phase index is part
-    %% of the suspended resident state and advances with the projection.
+    %% A restart-loaded row or changed durable height must replay.  An exact
+    %% historical reference inside this owner's already-certified prefix does
+    %% not: the retained entry binds its slot/hash/digest and current routing
+    %% metadata comes from this resident projection.  An unfinished DTX group
+    %% likewise keeps using the phase index suspended with that projection.
     ?assertEqual(
        replay,
        quod_foreign_log:test_resident_projection(
@@ -108,7 +110,7 @@ resident_projection_reuses_verified_frontier_and_phase_index_test() ->
        quod_foreign_log:test_resident_projection(
          Resident, 8, Projection, none, Identity)),
     ?assertEqual(
-       replay,
+       {ok, Projection, Projection},
        quod_foreign_log:test_resident_projection(
          Resident, 7, Projection, 3, Identity)),
     Pending = Projection#{dtx_pending => {pending, key(99)}},
@@ -117,74 +119,6 @@ resident_projection_reuses_verified_frontier_and_phase_index_test() ->
        quod_foreign_log:test_resident_projection(
          {verified, 7, Pending, phase_session},
          7, Pending, none, Identity)).
-
-queued_exact_checks_advance_the_shared_projection_in_slot_order_test() ->
-    Fixture = long_identity_fixture(unique_ns(), 4),
-    Ns = maps:get(ns, Fixture),
-    Chain = maps:get(chain, Fixture),
-    Peer = maps:get(pub, Fixture),
-    Endpoint = {"127.0.0.1", 31979},
-    Ref2 = content_ref_at(Fixture, 2),
-    Ref3 = content_ref_at(Fixture, 3),
-    Ref4 = content_ref_at(Fixture, 4),
-    TestPid = self(),
-    First = atomics:new(1, []),
-    BaseFetch = peer_chain_fetch(Ns, Chain, [Peer]),
-    Fetch =
-        fun(P, E, RequestedNs, From, To) ->
-            TestPid ! {ordered_exact_fetch, From, To, self()},
-            case atomics:compare_exchange(First, 1, 0, 1) of
-                ok -> receive release_first_exact -> ok end;
-                _ -> ok
-            end,
-            BaseFetch(P, E, RequestedNs, From, To)
-        end,
-    Dir = temp_dir("ordered-exact-queue"),
-    Pid = start_owner(Dir, Fetch),
-    try
-        Active = gen_server:send_request(
-                   Pid, {verify, Peer, Endpoint, Ref2, transaction, 5000}),
-        FirstWorker = receive
-                          {ordered_exact_fetch, 1, 2, Worker} -> Worker
-                      after 2000 ->
-                          error(first_exact_not_started)
-                      end,
-        Newer = gen_server:send_request(
-                  Pid, {verify, Peer, Endpoint, Ref4, transaction, 5000}),
-        Older = gen_server:send_request(
-                  Pid, {verify, Peer, Endpoint, Ref3, transaction, 5000}),
-        %% The stats call is a mailbox barrier.  Before this change the slot-4
-        %% row stayed ahead of slot 3, advanced the cache to 4, and forced the
-        %% slot-3 row to replay slots 1..4 from disk.
-        ?assertEqual(2, maps:get(queued, quod_foreign_log:stats())),
-        FirstWorker ! release_first_exact,
-        ?assertMatch(
-           {reply, {ok, #{slot := 2}}},
-           gen_server:wait_response(Active, 3000)),
-        receive
-            {ordered_exact_fetch, 3, 3, _} -> ok;
-            {ordered_exact_fetch, 3, 4, _} ->
-                error(newer_exact_ran_before_older)
-        after 3000 ->
-            error(older_exact_not_started)
-        end,
-        ?assertMatch(
-           {reply, {ok, #{slot := 3}}},
-           gen_server:wait_response(Older, 3000)),
-        receive
-            {ordered_exact_fetch, 4, 4, _} -> ok
-        after 3000 ->
-            error(newer_exact_not_started)
-        end,
-        ?assertMatch(
-           {reply, {ok, #{slot := 4}}},
-           gen_server:wait_response(Newer, 3000)),
-        ?assertMatch(#{pending := 0, queued := 0},
-                     quod_foreign_log:stats())
-    after
-        stop_owner(Pid),
-        _ = file:del_dir_r(Dir)
-    end.
 
 dtx_batch_projection_keeps_each_controls_changes_separate_test() ->
     FirstOps = [{assert, {{first_control, one}, true}}],
@@ -2489,7 +2423,7 @@ local_prepared_reference_uses_the_same_exact_verifier_test() ->
         _ = file:del_dir_r(CacheDir)
     end.
 
-cached_earlier_reference_uses_its_own_post_slot_projection_test() ->
+cached_earlier_reference_reuses_certified_current_projection_test() ->
     Fixture = prepared_then_committed_fixture(unique_ns()),
     Dir = temp_dir("historical-generation"),
     Ns = maps:get(ns, Fixture),
@@ -2502,12 +2436,19 @@ cached_earlier_reference_uses_its_own_post_slot_projection_test() ->
            quod_foreign_log:verify(
              Peer, Endpoint, maps:get(finalize_ref, Fixture),
              finalize, 5000)),
-        %% The cache is now at slot 3.  Evidence for its slot-2 Prepare must
-        %% still expose slot 2's generation rather than the cached head state.
+        [SessionFile] = phase_session_files(Dir, {Ns, maps:get(anchor, Fixture)}),
+        %% The cache is now certified through slot 3.  The immutable slot-2
+        %% Prepare is checked against its retained entry while current routing
+        %% metadata comes from the resident head.  Prepare recovery reads the
+        %% exact base generation from its signed plan, not this current-view
+        %% field.  Replacing the phase session would prove a hidden replay.
         ?assertMatch(
-           {ok, #{phase := prepare, generation := 0}},
+           {ok, #{phase := prepare, generation := 1}},
            quod_foreign_log:verify(
-             Peer, Endpoint, maps:get(prepare_ref, Fixture), prepare, 5000))
+             Peer, Endpoint, maps:get(prepare_ref, Fixture), prepare, 5000)),
+        ?assertEqual(
+           [SessionFile],
+           phase_session_files(Dir, {Ns, maps:get(anchor, Fixture)}))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -2740,15 +2681,6 @@ long_identity_fixture(Ns, Height) when Height > 1 ->
          end || Slot <- lists:seq(2, Height)],
     Base#{ns => Ns,
           chain => [maps:get(genesis, Base) | Entries]}.
-
-content_ref_at(Fixture, Slot) ->
-    Ns = maps:get(ns, Fixture),
-    Anchor = maps:get(anchor, Fixture),
-    Entry = lists:nth(Slot, maps:get(chain, Fixture)),
-    #entry{data = {batch, [Transaction]}} = Entry,
-    {ok, Ref} = quod_dtx:certified_entry_ref(
-                  {Ns, Anchor}, Entry, Transaction),
-    Ref.
 
 signed_content_fixture(Ns) ->
     ClientKeyPair = quod_identity:generate(),

@@ -2448,7 +2448,17 @@ cached_earlier_reference_reuses_certified_current_projection_test() ->
              Peer, Endpoint, maps:get(prepare_ref, Fixture), prepare, 5000)),
         ?assertEqual(
            [SessionFile],
-           phase_session_files(Dir, {Ns, maps:get(anchor, Fixture)}))
+           phase_session_files(Dir, {Ns, maps:get(anchor, Fixture)})),
+        %% Reusing the certified resident prefix never turns membership in the
+        %% local store into authority.  The requested digest must still rebuild
+        %% the exact certified reference from that slot's retained entry.
+        BadDigestRef = setelement(
+                         7, maps:get(prepare_ref, Fixture),
+                         key(retained_wrong_record_digest)),
+        ?assertEqual(
+           {error, invalid_foreign_reference},
+           quod_foreign_log:verify(
+             Peer, Endpoint, BadDigestRef, prepare, 5000))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)

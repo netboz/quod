@@ -1129,7 +1129,7 @@ start_distinct_routed_worker(Identity, TimeoutMs, Work, From, S0) ->
             {ok, start_or_park_routed(Queued, S1)};
         #history{} = H0 ->
             H1 = H0#history{
-                   waiting = queue:in(Queued, H0#history.waiting)},
+                   waiting = enqueue_verification(Queued, H0#history.waiting)},
             {ok, put_history(Identity, H1, S1)}
     end.
 
@@ -1150,7 +1150,9 @@ start_or_park_routed(
               Identity,
               put_history(
                 Identity,
-                H0#history{waiting = queue:in(Parked, H0#history.waiting)},
+                H0#history{
+                  waiting = enqueue_verification(
+                              Parked, H0#history.waiting)},
                 S0))
     end.
 
@@ -1201,9 +1203,56 @@ start_distinct_worker(
                         fetch_fun = FetchFun,
                         work_timeout_ms = WorkTimeout,
                         enqueued_native = erlang:monotonic_time()},
-            H1 = H0#history{waiting = queue:in(Queued, H0#history.waiting)},
+            H1 = H0#history{
+                   waiting = enqueue_verification(
+                               Queued, H0#history.waiting)},
             {ok, put_history(Identity, H1, S1)}
     end.
+
+%% One certified history projection advances forwards.  Concurrent exact
+%% checks can arrive out of slot order; running a newer slot before an older
+%% queued slot would force the older check to replay the same durable prefix.
+%% Keep FIFO between work classes, but order the trailing exact-reference run
+%% by slot so one existing cache/session can advance through it once.
+enqueue_verification(Queued, Waiting0) ->
+    case exact_request_slot(Queued) of
+        none ->
+            queue:in(Queued, Waiting0);
+        Slot ->
+            Items0 = queue:to_list(Waiting0),
+            {Prefix, ExactSuffix} = split_exact_suffix(Items0),
+            queue:from_list(
+              Prefix ++ insert_exact_by_slot(
+                          Slot, Queued, ExactSuffix))
+    end.
+
+split_exact_suffix(Items) ->
+    {ExactRev, PrefixRev} =
+        lists:splitwith(
+          fun(Item) -> exact_request_slot(Item) =/= none end,
+          lists:reverse(Items)),
+    {lists:reverse(PrefixRev), lists:reverse(ExactRev)}.
+
+insert_exact_by_slot(_Slot, Queued, []) ->
+    [Queued];
+insert_exact_by_slot(Slot, Queued, [Existing | Rest] = ExistingAndRest) ->
+    case exact_request_slot(Existing) of
+        ExistingSlot when Slot < ExistingSlot ->
+            [Queued | ExistingAndRest];
+        _ ->
+            [Existing | insert_exact_by_slot(Slot, Queued, Rest)]
+    end.
+
+exact_request_slot(
+  #queued_request{work = {exact, _Peer, _Endpoint, Ref, _Phase}}) ->
+    ref_slot(Ref);
+exact_request_slot(
+  #queued_request{
+    work = #routed_work{
+              kind = {exact_reference, Ref, _Phase, _EntryHint}}}) ->
+    ref_slot(Ref);
+exact_request_slot(_Queued) ->
+    none.
 
 launch_request(RequestRef, Peer, Identity, WorkTimeout,
                Work, FetchFun, From, CallerTimeout, S0) ->
@@ -1991,9 +2040,9 @@ park_failed_routed_request(RequestRef, S0) ->
                                 enqueued_native = erlang:monotonic_time()},
                     S2 = put_history(
                            Identity,
-                           H0#history{waiting = queue:in(
-                                                  Parked,
-                                                  H0#history.waiting)}, S1),
+                           H0#history{
+                             waiting = enqueue_verification(
+                                         Parked, H0#history.waiting)}, S1),
                     start_next_request(
                       Identity, open_progress_signals(Identity, S2))
             end;

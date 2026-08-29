@@ -2620,10 +2620,8 @@ dtx_local_evidence(Ns, Ref, ExpectedPhase)
                quod_reg:via({quod_simplex, Ns}),
                {dtx_local_evidence_source, Ref, ExpectedPhase}, 1000) of
             {ok, LedgerRoot} ->
-                local_evidence_result(
-                  quod_foreign_log:verify_local(
-                    LedgerRoot, Ref, ExpectedPhase,
-                    ?DTX_FOREIGN_VERIFY_MS));
+                dtx_local_evidence_at(
+                  LedgerRoot, Ref, ExpectedPhase);
             {error, _} = Error ->
                 Error
         end
@@ -2631,6 +2629,15 @@ dtx_local_evidence(Ns, Ref, ExpectedPhase)
     end;
 dtx_local_evidence(_Ns, _Ref, _ExpectedPhase) ->
     {error, invalid_request}.
+
+%% A coordinator recovered by this Simplex already has the immutable ledger
+%% root in its owner state.  Passing that capability to the existing verifier
+%% avoids asking the busy owner process to return data it just supplied to the
+%% worker.  External callers still resolve and validate the source above.
+dtx_local_evidence_at(LedgerRoot, Ref, ExpectedPhase) ->
+    local_evidence_result(
+      quod_foreign_log:verify_local(
+        LedgerRoot, Ref, ExpectedPhase, ?DTX_FOREIGN_VERIFY_MS)).
 
 local_evidence_result({ok, Evidence}) -> {ok, Evidence};
 local_evidence_result({error, phase_mismatch}) -> {error, invalid_request};
@@ -4716,12 +4723,13 @@ start_dtx_coordinator(
       S);
 start_dtx_coordinator(
   {reference, GroupId, BeginRef},
-  S = #s{ns = Ns}) ->
+  S = #s{ledger_root = LedgerRoot}) ->
     Owner = self(),
     {Pid, Monitor} =
         spawn_monitor(
           fun() ->
-              Result = dtx_local_evidence(Ns, BeginRef, 'begin'),
+              Result = dtx_local_evidence_at(
+                         LedgerRoot, BeginRef, 'begin'),
               Owner ! {dtx_coordinator_bootstrap, self(),
                        GroupId, BeginRef, Result}
           end),

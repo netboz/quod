@@ -2277,6 +2277,76 @@ dtx_committed_begin_is_adopted_by_live_coordinator_test() ->
     _ = quod_simplex:test_stop_dtx_coordinator(Reconciled),
     ok.
 
+%% Historical-Begin recovery already runs under the Simplex owner that holds
+%% the immutable ledger root.  It must verify that ledger directly rather than
+%% call back into the same statem and turn a busy startup mailbox into
+%% `not_ready`.  No Simplex is registered for Ns here, so the former callback
+%% path necessarily returned not_ready while the owner-provided path succeeds.
+dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    Begin = maps:get('begin', Fixture),
+    BeginControl = maps:get(begin_control, Fixture),
+    Origin = {Ns, Anchor} = maps:get(origin, Fixture),
+    {ok, {group, Ns, Anchor, Coordinator, Admission, GroupId}} =
+        quod_dtx:begin_group_ref(Begin),
+    {_Entry, _Payload, BeginRef} =
+        certified_dtx_test_entry(Origin, BeginControl, 1),
+    {ok, _History, Projection, _} = quod_dtx:reduce(
+                                      BeginControl, BeginRef,
+                                      quod_dtx:initial_group_history(),
+                                      quod_dtx:initial_projection(Origin, 0)),
+    Dir = relay_store_dir("committed_begin_owned_source"),
+    case quod_reg:where({foreign_log, node}) of
+        Existing when is_pid(Existing) -> gen_server:stop(Existing);
+        undefined -> ok
+    end,
+    Parent = self(),
+    ForeignLog = spawn(
+                   fun() ->
+                       true = quod_reg:reg({foreign_log, node}),
+                       Parent ! {foreign_log_ready, self()},
+                       receive
+                           {'$gen_call', {Caller, Tag},
+                            {verify_local, Dir, BeginRef, 'begin', Timeout}}
+                             when is_integer(Timeout), Timeout > 0 ->
+                               Caller !
+                                   {Tag,
+                                    {ok, #{phase => 'begin',
+                                           control => BeginControl}}},
+                               receive stop -> ok end
+                       end
+                   end),
+    receive {foreign_log_ready, ForeignLog} -> ok after 1000 ->
+        error(foreign_log_registration_timeout)
+    end,
+    try
+        undefined = quod_reg:where({quod_simplex, Ns}),
+        Base = st(#{ns => Ns, genesis_hash => Anchor,
+                    ledger_root => Dir, slot => 1,
+                    self => Coordinator, validators => [Coordinator],
+                    author_admissions => #{Coordinator => Admission},
+                    sync => ready, prolog_ready => true,
+                    dtx_projection => Projection}),
+        Recovering = quod_simplex:test_reconcile_dtx_coordinator(Base),
+        #{status := recovering, pid := Worker} =
+            maps:get(GroupId,
+                     quod_simplex:test_dtx_coordinator_state(Recovering)),
+        receive
+            {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef,
+             {ok, #{phase := 'begin', control := BeginControl}}} ->
+                ok;
+            {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef, Other} ->
+                error({unexpected_begin_bootstrap_result, Other})
+        after 5000 ->
+            error(committed_begin_bootstrap_timeout)
+        end,
+        _ = quod_simplex:test_stop_dtx_coordinator(Recovering)
+    after
+        ForeignLog ! stop,
+        file:del_dir_r(Dir)
+    end.
+
 %% The generic state builder has one dependency: `validators` supplies default
 %% admission ids, but a test's explicit admission view is authoritative.  This
 %% must not depend on maps:fold/3 traversal order (which differs as the VM atom

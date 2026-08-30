@@ -219,13 +219,27 @@ seal_attest_and_submit_are_reply_correlated_test() ->
           after ?TIMEOUT -> error(attest_event_timeout)
           end,
 
+          {ok, CertifyRequest} = quod_ask_router:command(
+                                   Handle, 30000, certify_reads),
+          {scope_command, Binding, CertifySeq, CertifyRequest, 30000,
+           certify_reads} = receive_command(request),
+          CertificateBlob = <<"bounded read certificate">>,
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     4, CertifyRequest, CertifySeq, 0, false,
+                     {reads_certified, CertificateBlob}),
+          receive
+              {quod_scope_event, Handle, CertifyRequest, 0, false,
+               {reads_certified, CertificateBlob}} -> ok
+          after ?TIMEOUT -> error(read_certificate_event_timeout)
+          end,
+
           Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>, []},
           {ok, SubmitRequest} = quod_ask_router:command(
                                   Handle, 30000, Submit),
           {scope_command, Binding, SubmitSeq, SubmitRequest, 30000, Submit} =
               receive_command(request),
           send_event(Router, TargetKey, ReturnLink, Binding,
-                     4, SubmitRequest, SubmitSeq, 0, false,
+                     5, SubmitRequest, SubmitSeq, 0, false,
                      {plan_submitted, {rejected, bad_plan}}),
           receive
               {quod_scope_event, Handle, SubmitRequest, 0, false,

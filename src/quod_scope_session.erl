@@ -18,7 +18,7 @@ a synchronous call to itself.
 -include("quod_ledger.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/4, attest_plan/3, bind_group_effects/3,
+         seal/4, attest_plan/3, certify_reads/2, bind_group_effects/3,
          bind_operation_effect/3, submit_plan/4,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0, principal/0,
@@ -26,7 +26,8 @@ a synchronous call to itself.
 
 -ifdef(TEST).
 -export([test_answer_disposition/1, test_committed_submit_outcome/3,
-         test_await_remote_submit/5]).
+         test_await_remote_submit/5,
+         test_normalize_read_certificate_result/1]).
 -endif.
 
 -record(runtime, {
@@ -461,6 +462,161 @@ await_remote_operation_effect(Handle, RequestId, Router, MRef, TimeoutMs) ->
         demonitor(MRef, [flush])
     end.
 
+-doc "Certify the exact read-only plan already sealed by this scope.".
+-spec certify_reads(handle() | term(), quod_dtx:plan()) ->
+          {ok, quod_read_certificate:certificate()} | {error, term()}.
+certify_reads(
+  {local_scope, _ScopeId, Ns, Anchor, _Height, Session}, Plan) ->
+    checked_read_certificate_result(
+      Plan, certify_session_reads(Ns, {Ns, Anchor}, Session, Plan));
+certify_reads(
+  {quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
+   _Ns, _Anchor} = Handle, Plan) ->
+    case command_remaining_ms() of
+        0 ->
+            {error, current_execution_limit()};
+        RemainingMs ->
+            RequestRef = make_ref(),
+            Pid ! {scope_certify_reads, self(), ProofId, SessionRef,
+                   RequestRef},
+            MRef = monitor(process, Pid),
+            try
+                receive
+                    {scope_reply, Pid, ProofId, SessionRef, RequestRef,
+                     {reads_certified, Result}} ->
+                        checked_read_certificate_result(Plan, Result);
+                    {'DOWN', MRef, process, Pid, Reason} ->
+                        {error, failure_reason(Handle, Reason)}
+                after RemainingMs ->
+                    {error, current_execution_limit()}
+                end
+            after
+                demonitor(MRef, [flush])
+            end
+    end;
+certify_reads({remote_scope, _, _, _, _} = Handle, Plan) ->
+    remote_certify_reads(Handle, Plan);
+certify_reads(_Handle, _Plan) ->
+    {error, {protocol_error, session_binding}}.
+
+remote_certify_reads(Handle, Plan) ->
+    case bind_remote_router(Handle) of
+        {ok, Router, MRef} ->
+            case command_remaining_ms() of
+                0 ->
+                    {error, current_execution_limit()};
+                RemainingMs ->
+                    case quod_ask_router:command(
+                           Handle, RemainingMs, certify_reads) of
+                        {ok, RequestId} ->
+                            await_remote_read_certificate(
+                              Handle, Plan, RequestId, Router, MRef,
+                              RemainingMs);
+                        {sent, _RequestId} ->
+                            {error, {protocol_error, request_binding}};
+                        {error, _} = Error ->
+                            Error
+                    end
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+await_remote_read_certificate(
+  Handle, Plan, RequestId, Router, MRef, RemainingMs) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {reads_certified, Blob}} ->
+            case quod_scope_wire:decode_payload(read_certificate, Blob) of
+                {ok, Certificate} ->
+                    checked_read_certificate_result(
+                      Plan, {ok, Certificate});
+                {error, _} = Error -> Error
+            end;
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {scope_error, Reason}} ->
+            {error, Reason};
+        {quod_scope_down, Handle, Reason} ->
+            {error, failure_reason(Handle, Reason)};
+        {'DOWN', MRef, process, Router, _Reason} ->
+            {error, failure_reason(Handle, unavailable)}
+    after RemainingMs ->
+        remote_timeout(
+          Handle, RequestId, {error, current_execution_limit()})
+    end.
+
+checked_read_certificate_result(Plan, {ok, Certificate}) ->
+    case quod_read_certificate:binding(Certificate) of
+        {ok, #{target := Target, proof_id := ProofId,
+               plan_digest := PlanDigest}} ->
+            case Target =:= quod_dtx:target(Plan) andalso
+                 ProofId =:= quod_dtx:proof_id(Plan) andalso
+                 PlanDigest =:= quod_dtx:digest(Plan) of
+                true -> {ok, Certificate};
+                false -> {error, {protocol_error, request_binding}}
+            end;
+        error ->
+            {error, {protocol_error, bad_payload}}
+    end;
+checked_read_certificate_result(_Plan, {error, _} = Error) ->
+    Error;
+checked_read_certificate_result(_Plan, _Malformed) ->
+    {error, {protocol_error, bad_payload}}.
+
+certify_session_reads(Ns, Target, Session, ExpectedPlan) ->
+    Result =
+        case quod_proof_session:sealed_plan(Session) of
+            {ok, Plan}
+              when ExpectedPlan =:= own_sealed_plan;
+                   Plan =:= ExpectedPlan ->
+                certify_local_read_plan(Ns, Target, Plan);
+            {ok, _OtherPlan} ->
+                {error, {protocol_error, request_binding}};
+            {error, _Reason} ->
+                {error, {protocol_error, proof_engine}}
+        end,
+    normalize_read_certificate_result(Result).
+
+certify_local_read_plan(Ns, Target, Plan) ->
+    RemainingMs = min(command_remaining_ms(),
+                      ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
+    case RemainingMs of
+        0 ->
+            {error, current_execution_limit()};
+        _ ->
+            certify_local_read_plan(
+              Ns, Target, Plan, RemainingMs)
+    end.
+
+certify_local_read_plan(Ns, Target, Plan, RemainingMs) ->
+    case quod_dtx:encode(Plan) of
+        {ok, PlanBlob} ->
+            case quod_simplex:history_source(Target, validator) of
+                {ok, LedgerRoot} ->
+                    quod_dtx_current_view:certify_reads(
+                      Ns, {{local, LedgerRoot}, PlanBlob}, RemainingMs);
+                {error, _} ->
+                    {error, read_certificate_unavailable}
+            end;
+        {error, _} ->
+            {error, {protocol_error, proof_engine}}
+    end.
+
+normalize_read_certificate_result({ok, _} = Result) -> Result;
+normalize_read_certificate_result(
+  {error, read_certificate_unavailable} = Error) -> Error;
+normalize_read_certificate_result({error, conflict_retry} = Error) -> Error;
+normalize_read_certificate_result({error, retry}) ->
+    {error, read_certificate_unavailable};
+normalize_read_certificate_result({error, invalid_request}) ->
+    {error, {protocol_error, proof_engine}};
+normalize_read_certificate_result(
+  {error, {protocol_error, Reason}} = Error)
+  when Reason =:= request_binding; Reason =:= bad_payload;
+       Reason =:= proof_engine -> Error;
+normalize_read_certificate_result({error, _Reason}) ->
+    {error, {protocol_error, proof_engine}}.
+
 is_local_group_effect_row(
   {{local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session},
    <<_:256>>}) -> true;
@@ -735,6 +891,9 @@ test_await_remote_submit(Handle, RequestId, Router, OutcomeRef, RemainingMs) ->
     after
         demonitor(MRef, [flush])
     end.
+
+test_normalize_read_certificate_result(Result) ->
+    normalize_read_certificate_result(Result).
 -endif.
 
 -doc "Close the complete ontology scope. Idempotent at the origin.".
@@ -945,6 +1104,20 @@ dispatch_message({scope_attest, Origin, ProofId, Ref,
             send_reply(
               RequestRef,
               {attested, quod_proof_session:attest(Session, Manifest)}),
+            handled;
+        false ->
+            handled
+    end;
+dispatch_message({scope_certify_reads, Origin, ProofId, Ref, RequestRef}) ->
+    case valid_command(Origin, ProofId, Ref) of
+        true ->
+            #runtime{namespace = Ns, anchor = Anchor,
+                     session = Session} = runtime(),
+            send_reply(
+              RequestRef,
+              {reads_certified,
+               certify_session_reads(
+                 Ns, {Ns, Anchor}, Session, own_sealed_plan)}),
             handled;
         false ->
             handled

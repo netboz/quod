@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 8).
+-define(VERSION, 9).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -60,7 +60,7 @@ renew the scope lifetime.
          quod_dtx:principal(), <<_:256>>}.
 -type command_operation() ::
         {scope_open, authentication()} | scope_close | scope_seal |
-        {scope_attest, binary()} |
+        {scope_attest, binary()} | certify_reads |
         {bind_group_effects, term(), <<_:256>>} |
         {bind_operation_effect, binary()} |
         {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
@@ -82,7 +82,7 @@ renew the scope lifetime.
 -type event_operation() ::
         {scope_opened, non_neg_integer()} | scope_closed |
         {plan_sealed, binary()} | plan_not_material |
-        {plan_attested, binary()} |
+        {plan_attested, binary()} | {reads_certified, binary()} |
         group_effects_bound | {operation_effect_bound, <<_:256>>} |
         {plan_submitted, {committed, pos_integer(), binary()} |
                          {rejected, atom()} |
@@ -112,7 +112,7 @@ renew the scope lifetime.
          non_neg_integer(), boolean(), event_operation()}.
 -type payload_kind() ::
         goal | answer | failure_reasons | erlog_error | plan | manifest |
-        attestation | result | operation_submission.
+        attestation | read_certificate | result | operation_submission.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
         {error, {protocol_error, atom()}}.
@@ -343,6 +343,12 @@ encode_payload(manifest, Manifest) ->
     quod_dtx:encode_manifest(Manifest);
 encode_payload(attestation, Attestation) ->
     quod_dtx:encode_attestation(Attestation);
+encode_payload(read_certificate, Certificate) ->
+    case quod_read_certificate:encode(Certificate) of
+        {ok, _} = Result -> Result;
+        {error, too_large} -> too_large(read_certificate);
+        {error, invalid_read_certificate} -> protocol_error(bad_payload)
+    end;
 encode_payload(failure_reasons, Reasons) ->
     normalize_failure_reason_payload(
       quod_wire_term:encode_failure_reasons(Reasons));
@@ -374,6 +380,12 @@ decode_payload(manifest, Encoded) when is_binary(Encoded) ->
     quod_dtx:decode_manifest(Encoded);
 decode_payload(attestation, Encoded) when is_binary(Encoded) ->
     quod_dtx:decode_attestation(Encoded);
+decode_payload(read_certificate, Encoded) when is_binary(Encoded) ->
+    case quod_read_certificate:decode(Encoded) of
+        {ok, _} = Result -> Result;
+        {error, too_large} -> too_large(read_certificate);
+        {error, invalid_read_certificate} -> protocol_error(bad_payload)
+    end;
 decode_payload(failure_reasons, Encoded) ->
     normalize_failure_reason_payload(
       quod_wire_term:decode_failure_reasons(Encoded));
@@ -416,6 +428,7 @@ payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
 payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
 payload_limit(manifest) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(attestation) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
+payload_limit(read_certificate) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
 payload_limit(operation_submission) ->
     {ok, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES};
@@ -431,6 +444,7 @@ validate_command_operation(scope_close) -> ok;
 validate_command_operation(scope_seal) -> ok;
 validate_command_operation({scope_attest, ManifestBlob}) ->
     validate_blob(manifest, ManifestBlob);
+validate_command_operation(certify_reads) -> ok;
 validate_command_operation(
   {bind_group_effects, GroupRef, <<_:256>>}) ->
     validate_group_ref(GroupRef);
@@ -517,6 +531,8 @@ validate_event_operation({plan_sealed, Blob}) ->
 validate_event_operation(plan_not_material) -> ok;
 validate_event_operation({plan_attested, Blob}) ->
     validate_blob(attestation, Blob);
+validate_event_operation({reads_certified, Blob}) ->
+    validate_blob(read_certificate, Blob);
 validate_event_operation(group_effects_bound) -> ok;
 validate_event_operation({operation_effect_bound, <<_:256>>}) -> ok;
 validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
@@ -879,6 +895,8 @@ valid_uint64(Integer) ->
 %% remain opaque bounded quod_wire_term blobs in their dedicated operations.
 validate_public_error(read_only) -> ok;
 validate_public_error(signed_scope_unavailable) -> ok;
+validate_public_error(read_certificate_unavailable) -> ok;
+validate_public_error(conflict_retry) -> ok;
 validate_public_error({Tag, Value} = Reason) ->
     case namespaced_error_tag(Tag) of
         true ->

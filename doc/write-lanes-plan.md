@@ -4,7 +4,9 @@ Status: **approved architecture plan** (Yan, 2026-08-29). Author: Claude
 (review/plan role). Implementation: GPT, slice by slice, each slice reviewed
 before the next. Slice 1, the read-certificate primitive, is implemented and
 reviewed with no blocker. Slice 2, the signed carrier and shared validation
-path, is implemented and awaiting review; slices 3–8 are not built.
+path, is implemented and reviewed with no blocker. Slice 3, the sealed-scope
+certificate command, is implemented and awaiting review; slices 4–8 are not
+built.
 
 Diagrams (static SVG, exists-today in dark blue, new in green):
 `figures/write-lanes/` — overview, lane chooser, one sequence per lane,
@@ -281,6 +283,12 @@ a new signed goal and goes through the lanes above.
    phase-probing path was added.
 3. **Scope command** — `certify_reads` command/event in `quod_scope_wire`,
    `quod_scope_session`, `quod_prolog` sealed-state route, `quod_ask_router`.
+   **Implemented.** The command carries no plan supplied by the caller: the
+   target scope certifies only its own already-sealed plan. The existing
+   consensus owner returns its read-ready ledger source atomically only when
+   the serving node is a validator; observers return the typed
+   `read_certificate_unavailable`. The returned certificate is checked against
+   the caller's retained plan before it can be carried onward.
 4. **Routing** — pure `route_plans/…` implementing the table; thread
    certificates and the origin `read_check`; delete the old case. CT:
    `remote_signed_read_certified_write` (A reads B, writes C → a single

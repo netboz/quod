@@ -78,6 +78,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_scope_timeout_reason/2,
          test_scope_command_budget_valid/3,
          test_scope_command_route/2,
+         test_read_certificate_scope_reply/2,
+         test_certify_reads_pending_reason/2,
          test_sealed_submit_transition/0,
          test_target_scope_lifetime_ms/2,
          test_remote_timeout_correlation/3,
@@ -2414,12 +2416,14 @@ execute_routed_scope_command(
       {protocol_error, unexpected_scope_command}, S).
 
 scope_command_route(active, {scope_attest, _ManifestBlob}) -> error;
+scope_command_route(active, certify_reads) -> error;
 scope_command_route(active, {bind_group_effects, _, _}) -> error;
 scope_command_route(active, {bind_operation_effect, _}) -> error;
 scope_command_route(active, {submit_plan, _, _, _, _}) -> error;
 scope_command_route(active, _Operation) -> active;
 scope_command_route(sealed, scope_close) -> sealed;
 scope_command_route(sealed, {scope_attest, _ManifestBlob}) -> sealed;
+scope_command_route(sealed, certify_reads) -> sealed;
 scope_command_route(sealed, {bind_group_effects, _, _}) -> sealed;
 scope_command_route(sealed, {bind_operation_effect, _}) -> sealed;
 scope_command_route(sealed, {submit_plan, _, _, _, _}) -> sealed;
@@ -2454,6 +2458,25 @@ execute_sealed_scope_command(
                     poison_remote_scope(
                       Binding, RequestId, CommandSeq, Reason, S)
             end
+    end;
+execute_sealed_scope_command(
+  certify_reads, RequestId, CommandSeq, Binding,
+  #remote_scope{
+     handle = {quod_scope_session, Pid, _SessionScopeId,
+               SessionProofId, SessionRef, _Ns, _Anchor},
+     pending = Pending}, S) ->
+    case certify_reads_pending_reason(
+           Pending, target_namespace(Binding)) of
+        {error, Reason} ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq, Reason, S);
+        ok ->
+            InternalRef = make_ref(),
+            Pid ! {scope_certify_reads, self(), SessionProofId, SessionRef,
+                   InternalRef},
+            add_remote_pending(
+              Binding, InternalRef,
+              {certify_reads, RequestId, CommandSeq}, S)
     end;
 execute_sealed_scope_command(
   {bind_group_effects, GroupRef, PlanDigest},
@@ -3013,6 +3036,18 @@ handle_bound_scope_reply(
     poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S);
 handle_bound_scope_reply(
   Binding, _Scope,
+  {certify_reads, RequestId, CommandSeq},
+  {reads_certified, Result}, S) ->
+    case read_certificate_scope_reply(
+           Result, target_namespace(Binding)) of
+        {event, Operation} ->
+            emit_scope_event(
+              Binding, RequestId, CommandSeq, Operation, S);
+        {error, Reason} ->
+            poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S)
+    end;
+handle_bound_scope_reply(
+  Binding, _Scope,
   {bind_group_effects, RequestId, CommandSeq},
   {group_effects_bound, ok}, S) ->
     emit_scope_event(
@@ -3185,6 +3220,22 @@ public_scope_reason(Reason, Ns) ->
     Candidate = public_scope_candidate(Reason, Ns),
     quod_scope_wire:normalize_public_error(Candidate, Ns).
 
+certify_reads_pending_reason(Pending, Ns) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        true -> ok;
+        false -> {error, {proof_limit_exceeded, Ns}}
+    end.
+
+read_certificate_scope_reply({ok, Certificate}, _Ns) ->
+    case quod_scope_wire:encode_payload(read_certificate, Certificate) of
+        {ok, Blob} -> {event, {reads_certified, Blob}};
+        {error, Reason} -> {error, Reason}
+    end;
+read_certificate_scope_reply({error, Reason}, Ns) ->
+    {error, public_scope_reason(Reason, Ns)};
+read_certificate_scope_reply(_Malformed, _Ns) ->
+    {error, {protocol_error, proof_engine}}.
+
 public_scope_candidate({erlog, _}, _Ns) -> {protocol_error, proof_engine};
 public_scope_candidate(unknown_invocation, _Ns) ->
     {protocol_error, unexpected_scope_command};
@@ -3282,6 +3333,14 @@ test_scope_command_budget_valid(Operation, RemainingMs, Deadline) ->
 
 test_scope_command_route(State, Operation) ->
     scope_command_route(State, Operation).
+
+test_read_certificate_scope_reply(Result, Ns) ->
+    read_certificate_scope_reply(Result, Ns).
+
+test_certify_reads_pending_reason(PendingCount, Ns)
+  when is_integer(PendingCount), PendingCount >= 0 ->
+    Pending = maps:from_keys(lists:seq(1, PendingCount), true),
+    certify_reads_pending_reason(Pending, Ns).
 
 test_sealed_submit_transition() ->
     {ok, AuthenticationDigest} =

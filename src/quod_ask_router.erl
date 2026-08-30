@@ -1170,6 +1170,7 @@ build_bounded_command(
 command_expects_event(scope_close) -> false;
 command_expects_event(scope_seal) -> true;
 command_expects_event({scope_attest, _}) -> true;
+command_expects_event(certify_reads) -> true;
 command_expects_event({bind_group_effects, _, _}) -> true;
 command_expects_event({bind_operation_effect, _}) -> true;
 command_expects_event({submit_plan, _, _, _, _}) -> true;

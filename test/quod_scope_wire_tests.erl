@@ -17,6 +17,7 @@ all_command_shapes_roundtrip_deterministically_test() ->
          scope_close,
          scope_seal,
          {scope_attest, Manifest},
+         certify_reads,
          {bind_group_effects, GroupRef, key(130)},
          {bind_operation_effect, <<"signed operation submission">>},
          {invoke_open, id(1), selection(none, []), chain(2), Goal},
@@ -98,6 +99,7 @@ all_events_carry_exact_state_and_roundtrip_test() ->
          plan_not_material,
          {plan_sealed, <<"opaque plan">>},
          {plan_attested, Attestation},
+         {reads_certified, <<"opaque read certificate">>},
          group_effects_bound,
          {invocation_opened, id(1)},
          {solution, id(1), 1, Answer},
@@ -232,7 +234,25 @@ manifest_attestation_payloads_are_canonical_and_bounded_test() ->
        quod_scope_wire:encode_event(
          event(
            {plan_attested,
+            <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))),
+    ?assertEqual(
+       {error, {too_large, read_certificate}},
+       quod_scope_wire:encode_event(
+         event(
+           {reads_certified,
             <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))).
+
+read_certificate_scope_results_use_the_closed_error_catalog_test() ->
+    Command = command(certify_reads),
+    {ok, CommandBlob} = quod_scope_wire:encode_command(Command),
+    ?assertEqual({ok, Command}, quod_scope_wire:decode_request(CommandBlob)),
+    lists:foreach(
+      fun(Reason) ->
+          Event = event({scope_error, Reason}),
+          {ok, Blob} = quod_scope_wire:encode_event(Event),
+          ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Blob))
+      end,
+      [read_certificate_unavailable, conflict_retry]).
 
 group_effect_binding_is_exact_and_bounded_test() ->
     GroupRef = group_ref(),
@@ -799,7 +819,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 8, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 9, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

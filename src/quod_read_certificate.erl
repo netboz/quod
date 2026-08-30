@@ -11,7 +11,8 @@ module only checks the statement shape and committee signatures it is given.
 
 -include("quod_proof_limits.hrl").
 
--export([sign/6, verify_vote/7, new/6, binding/1, valid_shape/1, verify/3]).
+-export([sign/6, verify_vote/7, new/6, binding/1, valid_shape/1, verify/3,
+         encode/1, decode/1]).
 -export_type([certificate/0]).
 
 -define(CERTIFICATE_VERSION, 2).
@@ -111,6 +112,41 @@ verify(Certificate, Committee, CommitteeId) ->
                 end;
         _ -> false
     end.
+
+-doc "Encode one canonical bounded certificate for an opaque carrier.".
+-spec encode(certificate()) ->
+          {ok, binary()} | {error, invalid_read_certificate | too_large}.
+encode(Certificate) ->
+    case valid_shape(Certificate) of
+        true ->
+            Blob = term_to_binary(Certificate, [deterministic]),
+            case byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES of
+                true -> {ok, Blob};
+                false -> {error, too_large}
+            end;
+        false ->
+            {error, invalid_read_certificate}
+    end.
+
+-doc "Decode one canonical bounded certificate; committee authority is checked separately.".
+-spec decode(binary()) ->
+          {ok, certificate()} | {error, invalid_read_certificate | too_large}.
+decode(Blob)
+  when is_binary(Blob), byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES ->
+    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+        {ok, Certificate} ->
+            case valid_shape(Certificate) andalso
+                 term_to_binary(Certificate, [deterministic]) =:= Blob of
+                true -> {ok, Certificate};
+                false -> {error, invalid_read_certificate}
+            end;
+        {error, too_large} -> {error, too_large};
+        {error, _} -> {error, invalid_read_certificate}
+    end;
+decode(Blob) when is_binary(Blob) ->
+    {error, too_large};
+decode(_) ->
+    {error, invalid_read_certificate}.
 
 statement(Target = {Ns, <<_:256>>}, <<_:256>> = ProofId,
           <<_:256>> = PlanDigest, AnchorRef, <<_:256>> = CommitteeId)

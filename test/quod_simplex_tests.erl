@@ -2816,6 +2816,28 @@ read_attest_observer_returns_typed_unavailable_without_signing_test() ->
          {read_attest, RequestId, PlanBlob},
          {read_plan_valid, Plan, Applied}, State)).
 
+history_source_role_requirement_is_checked_by_the_consensus_owner_test() ->
+    Ns = <<"quod:history-role">>,
+    Anchor = crypto:hash(sha256, <<1501:64>>),
+    Self = crypto:hash(sha256, <<1502:64>>),
+    LedgerRoot = <<"/tmp/quod-history-role">>,
+    Base = quod_simplex:test_state(
+             #{ns => Ns, self => Self, genesis_hash => Anchor,
+               ledger_root => LedgerRoot, store => ready,
+               sync => ready, prolog_ready => true, validators => []}),
+    Identity = {Ns, Anchor},
+    ?assertEqual(
+       {ok, LedgerRoot},
+       quod_simplex:test_local_history_source(Identity, any, Base)),
+    ?assertEqual(
+       {error, read_certificate_unavailable},
+       quod_simplex:test_local_history_source(Identity, validator, Base)),
+    Validator = quod_simplex:test_state_set(validators, [Self], Base),
+    ?assertEqual(
+       {ok, LedgerRoot},
+       quod_simplex:test_local_history_source(
+         Identity, validator, Validator)).
+
 read_attest_stale_token_refusal_remains_typed_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(
                 #{goal_text => <<"\\+(missing(ok)).">>}),

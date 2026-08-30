@@ -257,7 +257,7 @@ The deployed tree uses one incompatible generation:
 | DTX manifest | V3 |
 | DTX control envelope | V2 |
 | DTX record family | V3 |
-| scope wire | V8 |
+| scope wire | deployed V8; current unactivated source V9 |
 | scope authorization domain | V5 |
 | direct effect descriptor | V2 |
 | identity certificate | `quod.agent.identity.v1` |

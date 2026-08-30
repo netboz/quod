@@ -315,6 +315,169 @@ local_scope_uses_shared_seal_and_attestation_lifecycle_test() ->
         quod_proof_session:stop(Session)
     end.
 
+read_certificate_facades_test_() ->
+    {setup, fun setup_read_certificate_target/0,
+     fun cleanup_read_certificate_target/1,
+     fun(Ctx) ->
+         [?_test(local_read_certificate_facade_binds_the_sealed_plan(Ctx)),
+          ?_test(cohosted_read_certificate_facade_uses_its_live_session(Ctx))]
+     end}.
+
+local_read_certificate_facade_binds_the_sealed_plan(Ctx) ->
+    {Session, Plan} = sealed_read_session(Ctx, key(301)),
+    Target = maps:get(target, Ctx),
+    {Ns, Anchor} = Target,
+    Handle = {local_scope, id(302), Ns, Anchor, 2, Session},
+    try
+        with_proof_context(
+          fun() ->
+              ?assertEqual(
+                 {ok, 2}, quod_prolog:validate_read_plan(Ns, Plan, 5000)),
+              {ok, Certificate} =
+                  quod_scope_session:certify_reads(Handle, Plan),
+              ?assertMatch(
+                 {ok, #{target := Target}},
+                 quod_read_certificate:binding(Certificate)),
+              OtherPlan = sealed_test_plan(
+                            Target, maps:get(origin, Ctx), key(303),
+                            anonymous, maps:get(signer, Ctx)),
+              ?assertEqual(
+                 {error, {protocol_error, request_binding}},
+                 quod_scope_session:certify_reads(Handle, OtherPlan))
+          end)
+    after
+        quod_proof_session:stop(Session)
+    end.
+
+cohosted_read_certificate_facade_uses_its_live_session(Ctx) ->
+    {Handle, WorkerMRef} = start_read_scope_worker(Ctx, key(304)),
+    {quod_scope_session, Worker, _ScopeId, ProofId, SessionRef,
+     _Ns, _Anchor} = Handle,
+    InvocationId = id(305),
+    Origin = maps:get(origin, Ctx),
+    {ok, OpenRef} = quod_scope_session:invoke_open(
+                      Handle, InvocationId, {readable, ok},
+                      [Origin], quod_transaction_scope:empty_selection()),
+    ?assertEqual(
+       {opened, InvocationId},
+       receive_scope_reply(Worker, ProofId, SessionRef, OpenRef)),
+    {ok, NextRef} = quod_scope_session:invoke_next(Handle, InvocationId, 1),
+    ?assertMatch(
+       {solution, 1, _, _},
+       receive_scope_reply(Worker, ProofId, SessionRef, NextRef)),
+    Plan = try
+        with_proof_context(
+          fun() ->
+              {ok, SealedPlan} = quod_scope_session:seal(
+                                   Handle, Origin, anonymous, none),
+              ?assertMatch(
+                 {ok, {quod_read_certificate, 2, _, _, _, _, _, _}},
+                 quod_scope_session:certify_reads(Handle, SealedPlan)),
+              SealedPlan
+          end)
+    after
+        quod_scope_session:close(Handle),
+        receive
+            {'DOWN', WorkerMRef, process, Worker, _} -> ok
+        after 1000 ->
+            exit(Worker, kill)
+        end
+    end,
+
+    %% The same live worker path must close an open-session error before it
+    %% reaches either the co-hosted caller or the scope wire.
+    {OpenHandle, OpenMRef} = start_read_scope_worker(Ctx, key(306)),
+    OpenWorker = quod_scope_session:pid(OpenHandle),
+    try
+        with_proof_context(
+          fun() ->
+              ?assertEqual(
+                 {error, {protocol_error, proof_engine}},
+                 quod_scope_session:certify_reads(OpenHandle, Plan))
+          end)
+    after
+        quod_scope_session:close(OpenHandle),
+        receive
+            {'DOWN', OpenMRef, process, OpenWorker, _} -> ok
+        after 1000 ->
+            exit(OpenWorker, kill)
+        end
+    end.
+
+read_certificate_result_normalization_is_closed_test() ->
+    Certificate = {quod_read_certificate, 2, a, b, c, d, e, []},
+    ?assertEqual(
+       {ok, Certificate},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {ok, Certificate})),
+    ?assertEqual(
+       {error, read_certificate_unavailable},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {error, retry})),
+    ?assertEqual(
+       {error, conflict_retry},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {error, conflict_retry})),
+    ?assertEqual(
+       {error, {protocol_error, proof_engine}},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {error, invalid_request})),
+    ?assertEqual(
+       {error, {protocol_error, proof_engine}},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {error, not_material})).
+
+observer_scope_refuses_read_certification_before_any_signature_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Unique = integer_to_binary(erlang:unique_integer([positive])),
+    Ns = <<"quod:observer-certificate-", Unique/binary>>,
+    Anchor = key(307),
+    Self = key(308),
+    OtherValidator = key(309),
+    State = quod_simplex:test_state(
+              #{ns => Ns, self => Self, genesis_hash => Anchor,
+                ledger_root => <<"/tmp/observer-certificate">>,
+                store => ready, sync => ready, prolog_ready => true,
+                validators => [OtherValidator]}),
+    Parent = self(),
+    Owner = spawn(
+              fun() ->
+                  true = gproc:reg({n, l, {quod_simplex, Ns}}),
+                  Parent ! observer_owner_ready,
+                  observer_history_owner(Parent, State)
+              end),
+    receive observer_owner_ready -> ok after 1000 -> error(owner_start_timeout) end,
+    Target = {Ns, Anchor},
+    Signer = maps:get(signer, setup_read_identity()),
+    Ctx = #{target => Target, origin => {<<"quod:origin">>, key(310)},
+            signer => Signer,
+            facts => [{readable, ok}, {certificate_anchor, ok}]},
+    {Session, Plan} = sealed_read_session(Ctx, key(311)),
+    Handle = {local_scope, id(312), Ns, Anchor, 2, Session},
+    try
+        with_proof_context(
+          fun() ->
+              ?assertEqual(
+                 {error, read_certificate_unavailable},
+                 quod_scope_session:certify_reads(Handle, Plan))
+          end),
+        receive
+            {observer_history_request, validator,
+             {error, read_certificate_unavailable}} -> ok
+        after 1000 ->
+            error(observer_role_was_not_checked)
+        end,
+        receive
+            {observer_history_request, _, {ok, _}} ->
+                error(observer_exposed_a_signing_source)
+        after 0 ->
+            ok
+        end
+    after
+        quod_proof_session:stop(Session),
+        Owner ! stop
+    end.
+
 cohosted_materialize_uses_exact_worker_reply_test() ->
     ScopeId = id(16),
     ProofId = key(17),
@@ -646,6 +809,26 @@ remote_scope_seal_and_attestation_are_verified_end_to_end_test() ->
         stop_remote_fixture(Router, Handle)
     end.
 
+remote_scope_read_certificate_is_bound_to_the_exact_sealed_plan_test() ->
+    {Router, Handle, Plan, Certificate} = remote_read_certificate_fixture(),
+    try
+        with_proof_context(
+          fun() ->
+              ?assertEqual(
+                 {ok, Certificate},
+                 quod_scope_session:certify_reads(Handle, Plan)),
+              OtherPlan = sealed_test_plan(
+                            quod_dtx:target(Plan), quod_dtx:origin(Plan),
+                            key(201), quod_dtx:principal(Plan),
+                            element(2, test_signer())),
+              ?assertEqual(
+                 {error, {protocol_error, request_binding}},
+                 quod_scope_session:certify_reads(Handle, OtherPlan))
+          end)
+    after
+        stop_remote_fixture(Router, Handle)
+    end.
+
 fake_worker(Parent) ->
     receive
         Message ->
@@ -840,6 +1023,38 @@ remote_attestation_fixture() ->
     Router ! {set_handle, Handle},
     {Router, Handle, Plan, TargetKey, TargetIdentity}.
 
+remote_read_certificate_fixture() ->
+    Parent = self(),
+    {TargetKey, Signer} = test_signer(),
+    RequestLink = spawn(fun request_link/0),
+    ScopeId = id(202),
+    ProofId = key(203),
+    OriginIdentity = {<<"quod:origin">>, key(204)},
+    TargetIdentity = {<<"quod:target">>, key(205)},
+    Principal = {node, key(206)},
+    Plan = sealed_test_plan(
+             TargetIdentity, OriginIdentity, ProofId, Principal, Signer),
+    {TargetNs, TargetAnchor} = TargetIdentity,
+    {ok, AnchorRef} = quod_dtx:certified_ref(
+                        TargetNs, TargetAnchor, 4, key(207), key(208),
+                        term_to_binary({qc, read_certificate},
+                                       [deterministic])),
+    CommitteeId = key(209),
+    {ok, SignedRow} = quod_read_certificate:sign(
+                        TargetIdentity, ProofId, quod_dtx:digest(Plan),
+                        AnchorRef, CommitteeId, Signer),
+    {ok, Certificate} = quod_read_certificate:new(
+                          TargetIdentity, ProofId, quod_dtx:digest(Plan),
+                          AnchorRef, CommitteeId, [SignedRow]),
+    Mode = {read_certificate_fixture, Certificate},
+    Router = spawn(fun() -> fake_router(Parent, Mode, 1) end),
+    Binding = node_binding(
+                key(206), TargetKey, ProofId, ScopeId,
+                OriginIdentity, TargetIdentity, read_only),
+    Handle = {remote_scope, Router, id(210), Binding, RequestLink},
+    Router ! {set_handle, Handle},
+    {Router, Handle, Plan, Certificate}.
+
 fake_router(Parent, Mode, Counter) ->
     receive
         {set_handle, Handle} ->
@@ -919,6 +1134,13 @@ send_router_event(
             Owner ! {quod_scope_event, Handle, RequestId, 1, true,
                      {scope_error, {protocol_error, manifest_binding}}}
     end;
+send_router_event(
+  {read_certificate_fixture, Certificate}, Owner, Handle, RequestId,
+  certify_reads) ->
+    {ok, Blob} = quod_scope_wire:encode_payload(
+                   read_certificate, Certificate),
+    Owner ! {quod_scope_event, Handle, RequestId, 1, false,
+             {reads_certified, Blob}};
 send_router_event({scope_error, Reason}, Owner, Handle, RequestId, Operation) ->
     case control_ack(Operation) of
         none -> ok;
@@ -1008,6 +1230,121 @@ flush_scope_messages() ->
 
 request_link() ->
     receive stop -> ok end.
+
+setup_read_identity() ->
+    {Pubkey, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pubkey,
+               key => quod_identity:key_term({Pubkey, Seed})},
+    #{pubkey => Pubkey, signer => Signer}.
+
+setup_read_certificate_target() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Unique = integer_to_binary(erlang:unique_integer([positive])),
+    Dir = filename:join(
+            "/tmp", "quod_scope_read_certificate_" ++ binary_to_list(Unique)),
+    Ns = <<"quod:root">>,
+    #{pubkey := Pubkey, signer := Signer} = setup_read_identity(),
+    SavedNodePubkey = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, Pubkey),
+    InitialFacts =
+        [{readable, ok},
+         {can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Ns'}}],
+    Facts = [{certificate_anchor, ok} | InitialFacts],
+    Cfg = #{node_id => Pubkey, identity => Signer, data_dir => Dir,
+            mode => create,
+            genesis_diff => quod_prolog:terms_to_diff(InitialFacts)},
+    {ok, Pid} = quod_ns:start_link(Ns, Cfg),
+    unlink(Pid),
+    {ok, [#{}], 2} =
+        quod_prolog:prove(Ns, {assertz, {certificate_anchor, ok}}),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ForeignCache = filename:join(Dir, "foreign-cache"),
+    {ForeignLog, OwnForeignLog} =
+        case quod_foreign_log:start_link(#{cache_dir => ForeignCache}) of
+            {ok, ForeignLogPid} ->
+                unlink(ForeignLogPid),
+                {ForeignLogPid, true};
+            {error, {already_started, ForeignLogPid}} ->
+                {ForeignLogPid, false}
+        end,
+    #{dir => Dir, ns => Ns, pid => Pid, signer => Signer,
+      target => {Ns, Anchor},
+      origin => {<<"quod:scope-read-origin">>, key(313)},
+      facts => Facts, saved_node_pubkey => SavedNodePubkey,
+      foreign_log => ForeignLog, own_foreign_log => OwnForeignLog}.
+
+cleanup_read_certificate_target(
+  #{dir := Dir, pid := Pid, saved_node_pubkey := SavedNodePubkey,
+    foreign_log := ForeignLog, own_foreign_log := OwnForeignLog}) ->
+    MRef = monitor(process, Pid),
+    exit(Pid, shutdown),
+    receive
+        {'DOWN', MRef, process, Pid, _} -> ok
+    after 5000 ->
+        ok
+    end,
+    _ = file:del_dir_r(Dir),
+    case OwnForeignLog of
+        true ->
+            ForeignMRef = monitor(process, ForeignLog),
+            exit(ForeignLog, shutdown),
+            receive
+                {'DOWN', ForeignMRef, process, ForeignLog, _} -> ok
+            after 1000 ->
+                ok
+            end;
+        false ->
+            ok
+    end,
+    case SavedNodePubkey of
+        {ok, Value} -> application:set_env(quod, node_pubkey, Value);
+        undefined -> application:unset_env(quod, node_pubkey)
+    end,
+    ok.
+
+sealed_read_session(Ctx, ProofId) ->
+    Target = maps:get(target, Ctx),
+    Origin = maps:get(origin, Ctx),
+    Session = quod_proof_session:start(
+                committed(maps:get(facts, Ctx)),
+                #{read_set => true,
+                  proof_context => {test, read_certificate},
+                  signer => maps:get(signer, Ctx)}),
+    Invocation = crypto:strong_rand_bytes(16),
+    ok = quod_proof_session:open(
+           Session, Invocation, {readable, ok}, allowed,
+           quod_predicates:proof_context(
+             element(1, Target), 2, undefined, [Target, Origin]),
+           quod_transaction_scope:empty_selection()),
+    ?assertMatch(
+       {solution, _}, quod_proof_session:next(Session, Invocation)),
+    {ok, Plan} = quod_proof_session:seal(
+                   Session,
+                   #{target => Target, base_height => 2,
+                     proof_id => ProofId, origin => Origin,
+                     principal => anonymous, request_binding => none}),
+    {Session, Plan}.
+
+start_read_scope_worker(Ctx, ProofId) ->
+    {Ns, Anchor} = maps:get(target, Ctx),
+    quod_scope_session:start(
+      crypto:strong_rand_bytes(16), ProofId, self(), Ns, Anchor, 2,
+      committed(maps:get(facts, Ctx)), self(),
+      #{principal => anonymous, request_binding => none,
+        signer => maps:get(signer, Ctx),
+        deadline_ms => quod_time:mono_ms() + 10000}).
+
+observer_history_owner(Parent, State) ->
+    receive
+        {'$gen_call', From, {history_source, Identity, Requirement}} ->
+            Result = quod_simplex:test_local_history_source(
+                       Identity, Requirement, State),
+            Parent ! {observer_history_request, Requirement, Result},
+            gen:reply(From, Result),
+            observer_history_owner(Parent, State);
+        stop ->
+            ok
+    end.
 
 committed(Facts) -> quod_ct:committed_kb(Facts).
 

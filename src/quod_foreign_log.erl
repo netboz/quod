@@ -3513,7 +3513,7 @@ normalize_worker_result({{error, _} = Result, Meta}) when is_map(Meta) ->
 
 follow_identity(Owner, RequestRef, Identity = {Ns, _Anchor}, Sources, Root,
                 FetchFun, PageTimeout, RequestTimeout, Resident) ->
-    case quod_simplex:history_source(Identity) of
+    case quod_simplex:history_source(Identity, any) of
         {ok, LedgerRoot} ->
             LocalPeer = {local, Identity},
             LocalFetch =

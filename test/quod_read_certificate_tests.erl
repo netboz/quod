@@ -24,6 +24,21 @@ noncommittee_signatures_are_ignored_test() ->
     ?assertNot(quod_read_certificate:verify(
                  Certificate, committee(F), maps:get(committee_id, F))).
 
+canonical_codec_roundtrips_and_rejects_noncanonical_or_wrong_shape_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(signers, F),
+    Certificate = certificate(F, [A, B]),
+    {ok, Blob} = quod_read_certificate:encode(Certificate),
+    ?assertEqual({ok, Certificate}, quod_read_certificate:decode(Blob)),
+    ?assertEqual(
+       {error, invalid_read_certificate},
+       quod_read_certificate:decode(
+         term_to_binary(Certificate, [{minor_version, 1}]))),
+    ?assertEqual(
+       {error, invalid_read_certificate},
+       quod_read_certificate:decode(
+         term_to_binary({quod_read_certificate, 99}, [deterministic]))).
+
 every_statement_field_is_signature_bound_test() ->
     F = fixture(1),
     [A] = maps:get(signers, F),

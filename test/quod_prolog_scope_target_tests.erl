@@ -213,6 +213,9 @@ sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
          sealed, {scope_attest, ManifestBlob})),
     ?assertEqual(
        sealed,
+       quod_prolog:test_scope_command_route(sealed, certify_reads)),
+    ?assertEqual(
+       sealed,
        quod_prolog:test_scope_command_route(sealed, scope_close)),
     ?assertEqual(
        sealed,
@@ -248,7 +251,39 @@ sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
     ?assertEqual(
        error,
        quod_prolog:test_scope_command_route(
-         opening_session, {scope_attest, ManifestBlob})).
+         opening_session, {scope_attest, ManifestBlob})),
+    ?assertEqual(
+       error,
+       quod_prolog:test_scope_command_route(active, certify_reads)).
+
+read_certificate_reply_and_capacity_use_the_existing_scope_seams_test() ->
+    Ns = <<"quod:certificate-target">>,
+    Certificate = read_certificate(Ns),
+    {event, {reads_certified, Blob}} =
+        quod_prolog:test_read_certificate_scope_reply(
+          {ok, Certificate}, Ns),
+    ?assertEqual(
+       {ok, Certificate},
+       quod_scope_wire:decode_payload(read_certificate, Blob)),
+    ?assertEqual(
+       {error, conflict_retry},
+       quod_prolog:test_read_certificate_scope_reply(
+         {error, conflict_retry}, Ns)),
+    ?assertEqual(
+       {error, {protocol_error, proof_engine}},
+       quod_prolog:test_read_certificate_scope_reply(
+         {error, unlisted_internal_reason}, Ns)),
+    ?assertEqual(
+       {error, {protocol_error, proof_engine}},
+       quod_prolog:test_read_certificate_scope_reply(malformed, Ns)),
+    ?assertEqual(
+       ok,
+       quod_prolog:test_certify_reads_pending_reason(
+         ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE - 1, Ns)),
+    ?assertEqual(
+       {error, {proof_limit_exceeded, Ns}},
+       quod_prolog:test_certify_reads_pending_reason(
+         ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE, Ns)).
 
 idle_expiry_reuses_exact_last_command_correlation_test() ->
     OpenRequest = <<1:128>>,
@@ -325,6 +360,26 @@ test_binding(Ns) ->
     {scope_binding, <<1:256>>, <<2:256>>, <<3:256>>, <<4:128>>,
      {<<"quod:origin">>, <<5:256>>}, {Ns, <<6:256>>}, read_write,
      {node, <<1:256>>}, AuthenticationDigest}.
+
+read_certificate(Ns) ->
+    Anchor = <<201:256>>,
+    Target = {Ns, Anchor},
+    ProofId = <<202:256>>,
+    PlanDigest = <<203:256>>,
+    CommitteeId = <<204:256>>,
+    {Pubkey, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pubkey,
+               key => quod_identity:key_term({Pubkey, Seed})},
+    {ok, AnchorRef} = quod_dtx:certified_ref(
+                        Ns, Anchor, 2, <<205:256>>, <<206:256>>,
+                        term_to_binary(read_certificate, [deterministic])),
+    {ok, SignedRow} = quod_read_certificate:sign(
+                        Target, ProofId, PlanDigest, AnchorRef,
+                        CommitteeId, Signer),
+    {ok, Certificate} = quod_read_certificate:new(
+                          Target, ProofId, PlanDigest, AnchorRef,
+                          CommitteeId, [SignedRow]),
+    Certificate.
 
 identity_certificate(Fixture, ProofId) ->
     Evidence = maps:get(evidence, Fixture),

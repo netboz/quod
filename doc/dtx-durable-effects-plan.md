@@ -432,7 +432,9 @@ hard-break allocation:
 - `CONTROL_VERSION = 2`;
 - `ATTESTATION_VERSION = 2`;
 - ordinary transaction wire V12;
-- scope wire V8, including group and operation effect binding;
+- scope wire V8 in that cut, including group and operation effect binding;
+  the current write-lanes Slice 3 source is V9 and adds sealed read
+  certification;
 - process-free DTX endpoint V8, including exact signed operation
   cancellation and signed applied responses; and
 - effect-journal snapshot V6 / row V5.
@@ -631,9 +633,10 @@ The exact source closure is:
   enter them, and operation rows enter only after exact transaction
   attachment; and
 - keep `quod_scope_wire`, `quod_scope_session`, and the existing target scope
-  dispatcher as the one V8 transport for both `bind_group_effects` and
-  `bind_operation_effect`; keep `quod_transaction` as the sole decoder of the
-  latter's exact signed submission.
+  dispatcher as the one transport for both `bind_group_effects` and
+  `bind_operation_effect` (V8 in that cut; current source is V9); keep
+  `quod_transaction` as the sole decoder of the latter's exact signed
+  submission.
 
 The active documentation sweep must rewrite, not merely historical-label, the
 old boundary in at least:

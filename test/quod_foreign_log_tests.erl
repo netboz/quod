@@ -1839,7 +1839,18 @@ local_current_view_folds_to_captured_ledger_head_test() ->
         ?assertMatch(
            {ok, #{slot := 3, committee := [_, _]}},
            quod_foreign_log:verify_local_current(
-             SourceDir, maps:get(ref, Fixture), 5000))
+             SourceDir, maps:get(ref, Fixture), 5000)),
+        Identity = {Ns, maps:get(anchor, Fixture)},
+        [SessionFile] = phase_session_files(CacheDir, Identity),
+        ?assertMatch(
+           {ok, #{slot := 3, committee := [_, _]}},
+           quod_foreign_log:verify_local_current(
+             SourceDir, maps:get(ref, Fixture), 5000)),
+        %% Local and remote current checks share the same resident projection
+        %% seam. Replacing this scratch session proves the local half silently
+        %% replayed the certified prefix instead of resuming it.
+        ?assertEqual(
+           [SessionFile], phase_session_files(CacheDir, Identity))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(SourceDir),
@@ -2040,7 +2051,15 @@ local_identity_current_view_needs_no_phase_reference_test() ->
            {ok, #{identity := Identity, slot := 3,
                   committee := [_, _]}},
            quod_foreign_log:local_current(
-             SourceDir, Identity, 5000))
+             SourceDir, Identity, 5000)),
+        [SessionFile] = phase_session_files(CacheDir, Identity),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 3,
+                  committee := [_, _]}},
+           quod_foreign_log:local_current(
+             SourceDir, Identity, 5000)),
+        ?assertEqual(
+           [SessionFile], phase_session_files(CacheDir, Identity))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(SourceDir),

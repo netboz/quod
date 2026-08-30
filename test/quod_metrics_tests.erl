@@ -126,6 +126,8 @@ remote_operation_latency_uses_only_fixed_stage_and_result_labels_test() ->
         ok = quod_metrics:observe_remote_operation_stage(
                Ns, source_claim, ok, OneSecond),
         ok = quod_metrics:observe_remote_operation_stage(
+               Ns, read_certification, ok, OneSecond),
+        ok = quod_metrics:observe_remote_operation_stage(
                Ns, attacker_stage, ok, OneSecond),
         ok = quod_metrics:observe_remote_operation_stage(
                Ns, source_claim, attacker_result, OneSecond),
@@ -133,6 +135,10 @@ remote_operation_latency_uses_only_fixed_stage_and_result_labels_test() ->
                      quod_remote_operation_stage_seconds,
                      [Ns, <<"source_claim">>, <<"ok">>]),
         ?assertEqual(1.0, Sum),
+        {_, ReadCertificationSum} = prometheus_histogram:value(
+                                      quod_remote_operation_stage_seconds,
+                                      [Ns, <<"read_certification">>, <<"ok">>]),
+        ?assertEqual(1.0, ReadCertificationSum),
         ?assertEqual(
            undefined,
            prometheus_histogram:value(

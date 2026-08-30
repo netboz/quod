@@ -4528,16 +4528,36 @@ read_certificate_test_barrier() -> ok.
 certify_read_plans([]) ->
     {ok, []};
 certify_read_plans(Rows) ->
-    case read_certification_rows(Rows, []) of
-        {ok, CertificationRows} ->
-            case quod_scope_session:certify_reads_many(
-                   [{Handle, Plan}
-                    || {_Identity, Plan, Handle} <- CertificationRows]) of
-                {ok, Certificates} -> {ok, lists:sort(Certificates)};
-                {error, _} = Error -> Error
-            end;
-        {error, _} = Error -> Error
+    Started = erlang:monotonic_time(),
+    Result =
+        case read_certification_rows(Rows, []) of
+            {ok, CertificationRows} ->
+                case quod_scope_session:certify_reads_many(
+                       [{Handle, Plan}
+                        || {_Identity, Plan, Handle} <- CertificationRows]) of
+                    {ok, Certificates} -> {ok, lists:sort(Certificates)};
+                    {error, _} = Error -> Error
+                end;
+            {error, _} = Error -> Error
+        end,
+    ok = observe_read_certification(Result, Started),
+    Result.
+
+observe_read_certification(Result, Started) ->
+    case quod_proof_context:origin_identity() of
+        {Ns, <<_:256>>} ->
+            quod_metrics:observe_remote_operation_stage(
+              Ns, read_certification,
+              read_certification_metric_result(Result),
+              erlang:monotonic_time() - Started);
+        _ -> ok
     end.
+
+read_certification_metric_result({ok, _}) -> ok;
+read_certification_metric_result({error, conflict_retry}) -> rejected;
+read_certification_metric_result(
+  {error, read_certificate_unavailable}) -> uncertain;
+read_certification_metric_result({error, _}) -> failed.
 
 read_certification_rows([], RevRows) ->
     {ok, lists:reverse(RevRows)};

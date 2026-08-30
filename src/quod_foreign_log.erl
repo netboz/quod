@@ -3455,9 +3455,10 @@ verification_work(
       RequestTimeout, Resident);
 verification_work(
   {local_current, LedgerRoot, Ref}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, _RequestTimeout, _Resident) ->
+  Root, FetchFun, PageTimeout, _RequestTimeout, Resident) ->
     verify_local_current_cached(
-      Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout);
+      Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout,
+      Resident);
 verification_work(
   {current_identity, Sources, Identity}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident) ->
@@ -3466,10 +3467,10 @@ verification_work(
       Root, FetchFun, PageTimeout, RequestTimeout, Resident);
 verification_work(
   {local_current_identity, LedgerRoot, Identity}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, _RequestTimeout, _Resident) ->
+  Root, FetchFun, PageTimeout, _RequestTimeout, Resident) ->
     verify_local_current_identity_cached(
       Owner, RequestRef, LedgerRoot, Identity,
-      Root, FetchFun, PageTimeout);
+      Root, FetchFun, PageTimeout, Resident);
 verification_work(
   {follow, Identity, Sources}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident) ->
@@ -3824,7 +3825,8 @@ current_snapshot_result(
        projection => Projection}}.
 
 verify_local_current_cached(
-  Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout) ->
+  Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout,
+  Resident) ->
     Identity = {Ns, _Anchor} = ref_identity(Ref),
     case quod_ledger_store:open_ro(Ns, LedgerRoot) of
         {ok, Source} ->
@@ -3834,7 +3836,7 @@ verify_local_current_cached(
                 true ->
                     verify_local_current_height(
                       Owner, RequestRef, {finalize, Ref}, Identity, Height,
-                      Root, FetchFun, PageTimeout);
+                      Root, FetchFun, PageTimeout, Resident);
                 false ->
                     {{error, retry}, #{}}
             end;
@@ -3844,7 +3846,7 @@ verify_local_current_cached(
 
 verify_local_current_identity_cached(
   Owner, RequestRef, LedgerRoot,
-  Identity = {Ns, _Anchor}, Root, FetchFun, PageTimeout) ->
+  Identity = {Ns, _Anchor}, Root, FetchFun, PageTimeout, Resident) ->
     case quod_ledger_store:open_ro(Ns, LedgerRoot) of
         {ok, Source} ->
             Height = quod_ledger_store:last(Source),
@@ -3853,7 +3855,7 @@ verify_local_current_identity_cached(
                 true ->
                     verify_local_current_height(
                       Owner, RequestRef, none, Identity, Height,
-                      Root, FetchFun, PageTimeout);
+                      Root, FetchFun, PageTimeout, Resident);
                 false ->
                     {{error, retry}, #{}}
             end;
@@ -3863,9 +3865,10 @@ verify_local_current_identity_cached(
 
 verify_local_current_height(
   Owner, RequestRef, RequiredReference, Identity, Height,
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, Resident) ->
     LocalPeer = {local, Identity},
-    case open_cache(Owner, RequestRef, Identity, Root, Height) of
+    case open_cache(
+           Owner, RequestRef, Identity, Root, Height, Resident) of
         {ok, Store0, Height0, Projection0, PhaseIndex, HeightProjection0} ->
             Outcome =
                 try
@@ -3913,9 +3916,6 @@ verify_current_basis(Store, {Phase, Ref}, CurrentProjection) ->
         {ok, _Evidence} -> ok;
         {error, _} = Error -> Error
     end.
-
-open_cache(Owner, RequestRef, Identity, Root, TargetSlot) ->
-    open_cache(Owner, RequestRef, Identity, Root, TargetSlot, none).
 
 open_cache(Owner, RequestRef, Identity, Root, TargetSlot, Resident) ->
     StartedNative = erlang:monotonic_time(),

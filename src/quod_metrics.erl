@@ -1017,6 +1017,8 @@ remote_operation_stage(gateway_verification) ->
 remote_operation_stage(identity_certificate) ->
     {ok, <<"identity_certificate">>};
 remote_operation_stage(proof_seal) -> {ok, <<"proof_seal">>};
+remote_operation_stage(read_certification) ->
+    {ok, <<"read_certification">>};
 remote_operation_stage(source_claim) -> {ok, <<"source_claim">>};
 remote_operation_stage(claim_verification) ->
     {ok, <<"claim_verification">>};

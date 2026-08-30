@@ -5,8 +5,8 @@ Status: **approved architecture plan** (Yan, 2026-08-29). Author: Claude
 before the next. Slice 1, the read-certificate primitive, is implemented and
 reviewed with no blocker. Slice 2, the signed carrier and shared validation
 path, is implemented and reviewed with no blocker. Slice 3, the sealed-scope
-certificate command, is implemented and awaiting review; slices 4–8 are not
-built.
+certificate command, is implemented and reviewed with no blocker; slices 4–8
+are not built.
 
 Diagrams (static SVG, exists-today in dark blue, new in green):
 `figures/write-lanes/` — overview, lane chooser, one sequence per lane,

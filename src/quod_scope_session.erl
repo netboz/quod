@@ -462,7 +462,12 @@ await_remote_operation_effect(Handle, RequestId, Router, MRef, TimeoutMs) ->
         demonitor(MRef, [flush])
     end.
 
--doc "Certify the exact read-only plan already sealed by this scope.".
+-doc """
+Certify the exact read-only plan already sealed by this scope.
+
+Failures use the one closed public scope-error catalog owned by
+`quod_scope_wire`, including payload-size and execution-limit errors.
+""".
 -spec certify_reads(handle() | term(), quod_dtx:plan()) ->
           {ok, quod_read_certificate:certificate()} | {error, term()}.
 certify_reads(
@@ -603,19 +608,15 @@ certify_local_read_plan(Ns, Target, Plan, RemainingMs) ->
     end.
 
 normalize_read_certificate_result({ok, _} = Result) -> Result;
-normalize_read_certificate_result(
-  {error, read_certificate_unavailable} = Error) -> Error;
-normalize_read_certificate_result({error, conflict_retry} = Error) -> Error;
 normalize_read_certificate_result({error, retry}) ->
     {error, read_certificate_unavailable};
 normalize_read_certificate_result({error, invalid_request}) ->
     {error, {protocol_error, proof_engine}};
-normalize_read_certificate_result(
-  {error, {protocol_error, Reason}} = Error)
-  when Reason =:= request_binding; Reason =:= bad_payload;
-       Reason =:= proof_engine -> Error;
-normalize_read_certificate_result({error, _Reason}) ->
-    {error, {protocol_error, proof_engine}}.
+normalize_read_certificate_result({error, Reason} = Error) ->
+    case quod_scope_wire:valid_public_error(Reason) of
+        true -> Error;
+        false -> {error, {protocol_error, proof_engine}}
+    end.
 
 is_local_group_effect_row(
   {{local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session},

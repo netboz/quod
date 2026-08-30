@@ -18,6 +18,7 @@ module only checks the statement shape and committee signatures it is given.
 -define(CERTIFICATE_VERSION, 2).
 -define(VOTE_VERSION, 2).
 -define(VOTE_DOMAIN, <<"quod.read.certificate">>).
+-define(MAX_CERTIFICATE_BYTES, ?QUOD_MAX_DTX_BODY_BYTES).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type signed_row() :: {<<_:256>>, <<_:512>>}.
@@ -73,7 +74,7 @@ binding(
         {ok, Statement} ->
             case valid_signatures(Signatures) andalso
                  erlang:external_size(Certificate) =<
-                     ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+                     ?MAX_CERTIFICATE_BYTES of
                 true ->
                     {ok, #{target => Target, proof_id => ProofId,
                            plan_digest => PlanDigest,
@@ -120,7 +121,7 @@ encode(Certificate) ->
     case valid_shape(Certificate) of
         true ->
             Blob = term_to_binary(Certificate, [deterministic]),
-            case byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES of
+            case byte_size(Blob) =< ?MAX_CERTIFICATE_BYTES of
                 true -> {ok, Blob};
                 false -> {error, too_large}
             end;
@@ -132,8 +133,8 @@ encode(Certificate) ->
 -spec decode(binary()) ->
           {ok, certificate()} | {error, invalid_read_certificate | too_large}.
 decode(Blob)
-  when is_binary(Blob), byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+  when is_binary(Blob), byte_size(Blob) =< ?MAX_CERTIFICATE_BYTES ->
+    case quod_safe_term:decode(Blob, ?MAX_CERTIFICATE_BYTES) of
         {ok, Certificate} ->
             case valid_shape(Certificate) andalso
                  term_to_binary(Certificate, [deterministic]) =:= Blob of

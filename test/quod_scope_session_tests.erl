@@ -344,6 +344,13 @@ local_read_certificate_facade_binds_the_sealed_plan(Ctx) ->
               ?assertEqual(
                  {error, {protocol_error, request_binding}},
                  quod_scope_session:certify_reads(Handle, OtherPlan))
+          end),
+        with_proof_context_deadline(
+          quod_time:mono_ms(),
+          fun() ->
+              ?assertEqual(
+                 {error, {proof_limit_exceeded, <<"quod:origin">>}},
+                 quod_scope_session:certify_reads(Handle, Plan))
           end)
     after
         quod_proof_session:stop(Session)
@@ -418,6 +425,14 @@ read_certificate_result_normalization_is_closed_test() ->
        {error, conflict_retry},
        quod_scope_session:test_normalize_read_certificate_result(
          {error, conflict_retry})),
+    ?assertEqual(
+       {error, {proof_limit_exceeded, <<"quod:target">>}},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {error, {proof_limit_exceeded, <<"quod:target">>}})),
+    ?assertEqual(
+       {error, {too_large, read_certificate}},
+       quod_scope_session:test_normalize_read_certificate_result(
+         {error, {too_large, read_certificate}})),
     ?assertEqual(
        {error, {protocol_error, proof_engine}},
        quod_scope_session:test_normalize_read_certificate_result(

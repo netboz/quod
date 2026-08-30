@@ -1,6 +1,7 @@
 -module(quod_read_certificate_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_proof_limits.hrl").
 
 f_plus_one_signatures_verify_test() ->
     F = fixture(4),
@@ -38,6 +39,18 @@ canonical_codec_roundtrips_and_rejects_noncanonical_or_wrong_shape_test() ->
        {error, invalid_read_certificate},
        quod_read_certificate:decode(
          term_to_binary({quod_read_certificate, 99}, [deterministic]))).
+
+codec_bound_is_owned_by_the_dtx_body_limit_test() ->
+    AtLimit = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
+    AboveLimit = <<AtLimit/binary, 0>>,
+    %% The exact-limit blob reaches decoding and fails only because it is not
+    %% a certificate; the next byte is rejected by the shared byte owner.
+    ?assertEqual(
+       {error, invalid_read_certificate},
+       quod_read_certificate:decode(AtLimit)),
+    ?assertEqual(
+       {error, too_large},
+       quod_read_certificate:decode(AboveLimit)).
 
 every_statement_field_is_signature_bound_test() ->
     F = fixture(1),

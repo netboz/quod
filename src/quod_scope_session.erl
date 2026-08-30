@@ -18,8 +18,9 @@ a synchronous call to itself.
 -include("quod_ledger.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/4, attest_plan/3, certify_reads/2, bind_group_effects/3,
-         bind_operation_effect/3, submit_plan/4,
+         seal/4, attest_plan/3, certify_reads/2, certify_reads_many/1,
+         bind_group_effects/3,
+         bind_operation_effect/3, submit_plan/5,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0, principal/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
@@ -504,6 +505,150 @@ certify_reads({remote_scope, _, _, _, _} = Handle, Plan) ->
 certify_reads(_Handle, _Plan) ->
     {error, {protocol_error, session_binding}}.
 
+-doc "Certify several sealed read scopes concurrently under their one proof owner.".
+-spec certify_reads_many([{handle(), quod_dtx:plan()}]) ->
+          {ok, [quod_read_certificate:certificate()]} | {error, term()}.
+certify_reads_many(Rows) when is_list(Rows) ->
+    Deadline = quod_time:mono_ms() + command_remaining_ms(),
+    {LocalRows, AsyncRows} =
+        lists:partition(fun is_local_read_row/1, Rows),
+    case start_read_certifications(AsyncRows, Deadline, []) of
+        {ok, Pending} ->
+            case certify_local_read_rows(LocalRows, []) of
+                {ok, LocalCertificates} ->
+                    await_read_certifications(
+                      Pending, Deadline, LocalCertificates);
+                {error, _} = Error ->
+                    cleanup_read_certifications(Pending),
+                    Error
+            end;
+        {error, Error, Pending} ->
+            cleanup_read_certifications(Pending),
+            Error
+    end;
+certify_reads_many(_Rows) ->
+    {error, {protocol_error, session_binding}}.
+
+is_local_read_row(
+  {{local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session}, _Plan}) -> true;
+is_local_read_row(_Row) -> false.
+
+certify_local_read_rows([], RevCertificates) ->
+    {ok, lists:reverse(RevCertificates)};
+certify_local_read_rows([{Handle, Plan} | Rest], RevCertificates) ->
+    case certify_reads(Handle, Plan) of
+        {ok, Certificate} ->
+            certify_local_read_rows(
+              Rest, [Certificate | RevCertificates]);
+        {error, _} = Error -> Error
+    end.
+
+start_read_certifications([], _Deadline, RevPending) ->
+    {ok, lists:reverse(RevPending)};
+start_read_certifications([{Handle, Plan} | Rest], Deadline, RevPending) ->
+    RemainingMs = max(0, Deadline - quod_time:mono_ms()),
+    case start_read_certification(Handle, Plan, RemainingMs) of
+        {ok, Pending} ->
+            start_read_certifications(
+              Rest, Deadline, [Pending | RevPending]);
+        {error, _} = Error ->
+            {error, Error, lists:reverse(RevPending)}
+    end.
+
+start_read_certification(
+  {quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
+   _Ns, _Anchor} = Handle, Plan, _RemainingMs) ->
+    RequestRef = make_ref(),
+    Pid ! {scope_certify_reads, self(), ProofId, SessionRef, RequestRef},
+    MRef = monitor(process, Pid),
+    {ok, {cohosted_read, Handle, Plan, Pid, ProofId,
+          SessionRef, RequestRef, MRef}};
+start_read_certification(
+  {remote_scope, _, _, _, _} = Handle, Plan, RemainingMs) ->
+    case bind_remote_router(Handle) of
+        {ok, Router, MRef} ->
+            case quod_ask_router:command(
+                   Handle, RemainingMs, certify_reads) of
+                {ok, RequestId} ->
+                    {ok, {remote_read, Handle, Plan, RequestId,
+                          Router, MRef}};
+                {sent, _RequestId} ->
+                    {error, {protocol_error, request_binding}};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end;
+start_read_certification(_Handle, _Plan, _RemainingMs) ->
+    {error, {protocol_error, session_binding}}.
+
+await_read_certifications([], _Deadline, Certificates) ->
+    {ok, Certificates};
+await_read_certifications([Pending | Rest], Deadline, Certificates) ->
+    RemainingMs = max(0, Deadline - quod_time:mono_ms()),
+    case await_read_certification(Pending, RemainingMs) of
+        {ok, Certificate} ->
+            await_read_certifications(
+              Rest, Deadline, [Certificate | Certificates]);
+        {error, _} = Error ->
+            cleanup_read_certifications(Rest),
+            Error
+    end.
+
+await_read_certification(
+  {cohosted_read, Handle, Plan, Pid, ProofId,
+   SessionRef, RequestRef, MRef}, TimeoutMs) ->
+    try
+        receive
+            {scope_reply, Pid, ProofId, SessionRef, RequestRef,
+             {reads_certified, Result}} ->
+                checked_read_certificate_result(Plan, Result);
+            {'DOWN', MRef, process, Pid, Reason} ->
+                {error, failure_reason(Handle, Reason)}
+        after TimeoutMs ->
+            {error, current_execution_limit()}
+        end
+    after
+        demonitor(MRef, [flush])
+    end;
+await_read_certification(
+  {remote_read, Handle, Plan, RequestId, Router, MRef}, TimeoutMs) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {reads_certified, Blob}} ->
+            case quod_scope_wire:decode_payload(read_certificate, Blob) of
+                {ok, Certificate} ->
+                    checked_read_certificate_result(
+                      Plan, {ok, Certificate});
+                {error, _} = Error -> Error
+            end;
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {scope_error, Reason}} ->
+            {error, Reason};
+        {quod_scope_down, Handle, Reason} ->
+            {error, failure_reason(Handle, Reason)};
+        {'DOWN', MRef, process, Router, _Reason} ->
+            {error, failure_reason(Handle, unavailable)}
+    after TimeoutMs ->
+        remote_timeout(
+          Handle, RequestId, {error, current_execution_limit()})
+    end.
+
+cleanup_read_certifications(Pending) ->
+    lists:foreach(fun cleanup_read_certification/1, Pending).
+
+cleanup_read_certification(
+  {cohosted_read, _Handle, _Plan, Pid, ProofId,
+   SessionRef, RequestRef, MRef}) ->
+    demonitor(MRef, [flush]),
+    receive
+        {scope_reply, Pid, ProofId, SessionRef, RequestRef, _Reply} -> ok
+    after 0 -> ok
+    end;
+cleanup_read_certification(
+  {remote_read, Handle, _Plan, RequestId, _Router, _MRef}) ->
+    _ = quod_ask_router:cancel(Handle, RequestId),
+    drain_remote_event(Handle, RequestId).
+
 remote_certify_reads(Handle, Plan) ->
     case bind_remote_router(Handle) of
         {ok, Router, MRef} ->
@@ -789,9 +934,10 @@ Local and co-hosted targets submit engine-direct (`quod_prolog:submit_plan/4`)
 comes back: the transaction is authored, signed, and parked entirely on the
 target node.
 """.
--spec submit_plan(handle() | term(), quod_dtx:plan(), term(), map()) ->
+-spec submit_plan(handle() | term(), quod_dtx:plan(), term(), map(), [term()]) ->
           {ok, pos_integer(), binary()} | {error, term()}.
-submit_plan({remote_scope, _, _, _, _} = Handle, Plan, Goal, DurableResult) ->
+submit_plan({remote_scope, _, _, _, _} = Handle, Plan, Goal, DurableResult,
+            ForeignReads) ->
     case bind_remote_router(Handle) of
         {ok, Router, MRef} ->
             case command_remaining_ms() of
@@ -800,19 +946,20 @@ submit_plan({remote_scope, _, _, _, _} = Handle, Plan, Goal, DurableResult) ->
                 RemainingMs ->
                     remote_submit(
                       Handle, Plan, Goal, DurableResult,
-                      quod_proof_context:request_auth(), RemainingMs,
+                      ForeignReads, quod_proof_context:request_auth(), RemainingMs,
                       Router, MRef)
             end;
         {error, _} = Error ->
             Error
     end;
-submit_plan(_Handle, _Plan, _Goal, _DurableResult) ->
+submit_plan(_Handle, _Plan, _Goal, _DurableResult, _ForeignReads) ->
     {error, {protocol_error, session_binding}}.
 
 remote_submit(
-  Handle, Plan, Goal, DurableResult, RequestAuth,
+  Handle, Plan, Goal, DurableResult, ForeignReads, RequestAuth,
   RemainingMs, Router, MRef) ->
-    case encode_submit_operation(Plan, Goal, DurableResult, RequestAuth) of
+    case encode_submit_operation(
+           Plan, Goal, DurableResult, ForeignReads, RequestAuth) of
         {ok, Operation, OutcomeRef} ->
             case quod_ask_router:command(Handle, RemainingMs, Operation) of
                 {ok, RequestId} ->
@@ -828,20 +975,22 @@ remote_submit(
             Error
     end.
 
-encode_submit_operation(Plan, Goal, Bindings, RequestAuth) ->
-    case quod_scope_wire:encode_payload(plan, Plan) of
-        {ok, PlanBlob} ->
+encode_submit_operation(Plan, Goal, Bindings, ForeignReads, RequestAuth) ->
+    case {quod_scope_wire:encode_payload(plan, Plan),
+          quod_scope_wire:encode_payload(foreign_reads, ForeignReads)} of
+        {{ok, PlanBlob}, {ok, ForeignReadsBlob}} ->
             case quod_transaction:encode_durable_submission(Goal, Bindings) of
                 {ok, GoalBlob, ResultBlob} ->
                     OutcomeRef = quod_transaction:plan_outcome_ref(
                                    Plan, GoalBlob, ResultBlob, RequestAuth),
                     {ok, {submit_plan, PlanBlob, GoalBlob,
-                          ResultBlob,
+                          ResultBlob, ForeignReadsBlob,
                           quod_trace:inject(quod_trace:context())},
                      OutcomeRef};
                 {error, _} = Error -> Error
             end;
-        {error, _} = Error -> Error
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error
     end.
 
 await_remote_submit(

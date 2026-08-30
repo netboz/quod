@@ -5,8 +5,9 @@ Status: **approved architecture plan** (Yan, 2026-08-29). Author: Claude
 before the next. Slice 1, the read-certificate primitive, is implemented and
 reviewed with no blocker. Slice 2, the signed carrier and shared validation
 path, is implemented and reviewed with no blocker. Slice 3, the sealed-scope
-certificate command, is implemented and reviewed with no blocker; slices 4–8
-are not built.
+certificate command, is implemented and reviewed with no blocker. Slice 4,
+the lane chooser and certificate routing, is implemented and reviewed with no
+blocker; slices 5–8 are not built.
 
 Diagrams (static SVG, exists-today in dark blue, new in green):
 `figures/write-lanes/` — overview, lane chooser, one sequence per lane,
@@ -32,19 +33,19 @@ never touch the expensive one.
 
 ## 2. Findings from the codebase
 
-### F1. How a goal is routed today (`quod_prolog.erl:4285-4332`)
+### F1. How a goal was routed before Slice 4
 
-After a proof, every ontology it touched is sealed. An ontology counts as
-"material" — and gets a full Prepare/Finalize slot in the group — if its
-plan has **any** of: a write, **a read**, or an effect
+Before Slice 4, after a proof every ontology it touched was sealed. An
+ontology counted as "material" — and got a full Prepare/Finalize slot in the
+group — if its plan had **any** of: a write, **a read**, or an effect
 (`quod_dtx:material_participant/1`, `quod_dtx.erl:481-496`).
 
 The cheap single-target lane (claim in A → ordinary write in B → receipt in
-A; roles `remote_claim` / `remote_application` / `remote_complete`) is taken
+A; roles `remote_claim` / `remote_application` / `remote_complete`) was taken
 only when **exactly one** ontology is material, it is not the source, the
 request is client-signed, and no third ontology was touched.
 
-Consequences:
+The consequences were:
 - A goal that *reads* B and *writes* D is a 2-participant group: B gets
   Prepare and Finalize rounds although nothing is written there.
 - A goal where the source A writes anything and one remote B writes is a
@@ -155,7 +156,7 @@ only reads. Decided once, after sealing.
 | ≥2 | any | yes | yes | L2 fan-out claim |
 | ≥2 | any | no | yes | error `independent_requires_signed_request` |
 
-`quod_dtx:material_participant/1` is replaced by `writes/1` and
+Slice 4 replaces `quod_dtx:material_participant/1` with `writes/1` and
 `reads_only/1`; the `SignedForeign` computation and the four-case match in
 `submit_sealed_plans` are deleted.
 
@@ -203,9 +204,14 @@ so the atom boundary holds.
   `validate_foreign_reads/2` used by both roles.
 - Local writer: threaded through `submit_single_plan → submit_plan_encoded →
   from_plan`.
-- The origin's *own* reads need no certificate: they go into the claim's
-  `read_check` (today `#{}`) and the source committee checks them when the
-  claim commits.
+- In the signed remote-claim lane, the origin is treated like every other
+  read-only dependency: its reads are certified and carried in
+  `foreign_reads`; the claim has an empty `read_check`. The target validates
+  that certificate through the same `validate_foreign_reads/2` path as every
+  other reader, without validator-to-validator fan-out. The claim records the
+  signed operation; it does not authorize the target action. The target's
+  existing sealed `can_invoke/4` transcript remains the only authorization for
+  the target write.
 
 **Binding to B's committee.** The certificate binds
 `{B identity, ProofId, PlanDigest, AnchorRef, CommitteeId}` where AnchorRef is
@@ -293,7 +299,11 @@ a new signed goal and goes through the lanes above.
    certificates and the origin `read_check`; delete the old case. CT:
    `remote_signed_read_certified_write` (A reads B, writes C → a single
    transaction outcome, not a group), `local_write_with_foreign_read`,
-   `read_certificate_stale_rejected`.
+   `read_certificate_stale_rejected`. **Implemented; awaiting review.**
+   Certification is started for all remote/co-hosted readers before waiting,
+   using the existing scope owner and router; the one deadline is only the
+   terminal failure safeguard. Fresh ontologies certify their pinned genesis
+   through the same exact certified-reference verifier used for later slots.
 5. **Docs** — the passages in §5, the snapshot-validity rule, the
    remaining cross-document routing changes.
 6. **`independent/1`** — control construct → context flag; nesting error.

@@ -142,8 +142,24 @@ remote_claim_carries_foreign_reads_into_application_test() ->
        {error, bad_term},
        quod_transaction:bytes(
          {TargetNs, TargetAnchor, <<205:256>>},
-         Application#transaction{foreign_reads = [], author = <<206:256>>,
+                 Application#transaction{foreign_reads = [], author = <<206:256>>,
                                  author_seq = 1, submitted_at = 1})).
+
+foreign_read_carrier_round_trips_canonically_test() ->
+    ProofId = <<208:256>>,
+    {CertificateA, _, _, _} = read_certificate(ProofId, 36),
+    {CertificateB, _, _, _} = read_certificate(ProofId, 37),
+    Certificates = lists:sort([CertificateB, CertificateA]),
+    {ok, Blob} = quod_transaction:encode_foreign_reads(Certificates),
+    ?assertEqual({ok, Certificates},
+                 quod_transaction:decode_foreign_reads(Blob)),
+    ?assertEqual({error, bad_foreign_reads},
+                 quod_transaction:encode_foreign_reads(
+                   [CertificateA, CertificateA])),
+    ?assertEqual({error, bad_foreign_reads},
+                 quod_transaction:decode_foreign_reads(
+                   term_to_binary({quod_foreign_reads, 1, [<<"bad">>]},
+                                  [deterministic]))).
 
 noncanonical_foreign_reads_are_rejected_test() ->
     {Pub, _Identity} = identity(),

@@ -175,12 +175,14 @@ view, whether the scope is local, co-hosted, or remote.
    caller merges it before its `::` goal fails, so ordinary Prolog alternatives may inspect and
    recover. Infrastructure or authorization failures are typed errors, poison the whole
    pre-commit proof, and are never retried as another proof after the target may have executed.
-   A writing proof seals every material scope. One material target uses that target's ordinary
-   consensus path. For a signed foreign write, the agent ontology first commits a batchable
+   A writing proof seals every touched scope. Read-only scopes contribute f+1 snapshot
+   certificates and no consensus records. One writer uses that target's ordinary consensus
+   path. For a signed foreign write, the agent ontology first commits a batchable
    operation claim, the target commits the ordinary application, and the agent ontology records
    the completion asynchronously; the caller returns with the target's anchored outcome
-   reference. Two or more material/read-dependent targets enter one atomic
-   Begin/Prepare/Decision/Finalize/Complete group and return its anchored group reference if the
+   reference. Two or more writers enter one atomic
+   Begin/Prepare/Decision/Finalize/Complete group, retaining their read-only dependencies as
+   participants for now, and return its anchored group reference if the
    caller can no longer wait. The caller resolves either reference instead of re-proving.
 
 ### 4.1 Where the work runs: one worker per ontology scope
@@ -368,7 +370,7 @@ automatic retry after the target may have executed.
 | retained invocations per scope | 64 | bounded refusal before allocation |
 | answers per invocation | 10 000 | `{too_many_answers, Ns}` |
 | encoded nested goal / answer | 8 KiB / 64 KiB | `{too_large, goal}` or `{too_large, answer}` |
-| scope envelope / outer transport frame | derived 271,488 bytes / 1 MiB | `{too_large, scope_envelope}` or frame rejection |
+| scope envelope / outer transport frame | derived 500,864 bytes / 1 MiB | `{too_large, scope_envelope}` or frame rejection |
 | complete reasons / one reason | 32 KiB / 4 KiB | bounded truncation |
 | retained distributed savepoint generations | 1 024 per proof | `{savepoint_limit_exceeded, 1024}` |
 | one scope worker heap | 64 MiB | `{proof_limit_exceeded, Ns}` |
@@ -567,11 +569,13 @@ removes the directory route.
 
 Cross-ontology asks still happen while a question **runs**, on the node running it
 (prove-before-broadcast); apply never re-asks anything. A read-only proof creates no ledger
-record. One signed foreign material participant commits a metadata claim in the
-agent ontology, then an ordinary target-authored application, followed by an
-asynchronous metadata completion in the agent ontology. Two or more
-material/read-dependent participants use explicit DTX control barriers in their
-existing per-ontology Simplex logs. Validators verify sealed plans, authorization transcripts,
+record. One signed foreign writer commits a metadata claim in the agent
+ontology, then an ordinary target-authored application, followed by an
+asynchronous metadata completion in the agent ontology. Read-only dependencies
+provide f+1 certificates for their exact sealed snapshots and write no control
+records. Two or more writers use explicit DTX control barriers in their
+existing per-ontology Simplex logs; their read-only dependencies remain in that
+atomic group for now. Validators verify sealed plans, authorization transcripts,
 OCC tokens, certified foreign references, and phase rules; they do not re-run the arbitrary
 derivation.
 

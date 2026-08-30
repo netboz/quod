@@ -19,6 +19,7 @@ accepted.
 
 -export([from_plan/5, remote_claim/5, remote_application/2,
          remote_complete/4, attach_evidence/3,
+         encode_foreign_reads/1, decode_foreign_reads/1,
          encode_evidence/2, decode_evidence/1,
          stable_ref/1,
          role/1, evidence/1, required_references/1,
@@ -104,7 +105,8 @@ from_plan(Plan, #{diff := Diff, read_check := ReadCheck,
 
 -doc "Build the source operation claim for one signed foreign sealed plan.".
 -spec remote_claim({binary(), <<_:256>>}, quod_dtx:manifest(), tuple(),
-                   quod_client_goal:request_auth(), [term()]) -> #transaction{}.
+                   quod_client_goal:request_auth(), [term()]) ->
+          #transaction{}.
 remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
              {Target, PlanDigest, PlanBlob, Attestation} = Bundle,
              {agent_goal_v1, <<_:256>>, _Bytes, _Signature} = RequestAuth,
@@ -1092,6 +1094,7 @@ valid_role_fields(
                      PlanDigest, PlanBlob, Attestation},
                     <<_:256>> = PredictedTxId},
             evidence = none, goal = Goal,
+            diff = [], read_check = #{}, effects = [],
             request_auth =
               {agent_goal_v1, <<_:256>>, _Bytes, <<_:512>>} = Auth,
             auth_transcript = none})
@@ -1132,6 +1135,7 @@ valid_role_fields(
                        <<_:256>> = RequestDigest, TargetRef},
                evidence = {CertifiedRef, #transaction{} = TargetTx},
                foreign_reads = [],
+               diff = [], read_check = #{}, effects = [],
                request_auth = none, auth_transcript = none}) ->
     operation_origin(OperationRef) =:= Target andalso
         stable_ref(CertifiedRef) =:= TargetRef andalso
@@ -1142,6 +1146,75 @@ valid_role_fields(_Target, _Transaction) ->
 
 foreign_reads_from_material(Material) ->
     canonical_foreign_reads_or_error(maps:get(foreign_reads, Material, [])).
+
+-doc "Encode the canonical certificate list carried by a scope submission.".
+-spec encode_foreign_reads([term()]) ->
+          {ok, binary()} | {error, bad_foreign_reads | too_large}.
+encode_foreign_reads(ForeignReads) ->
+    case canonical_foreign_reads(ForeignReads) of
+        {ok, Canonical} ->
+            case encode_read_certificates(Canonical, []) of
+                {ok, RevBlobs} ->
+                    Blob = term_to_binary(
+                             {quod_foreign_reads, 1,
+                              lists:reverse(RevBlobs)}, [deterministic]),
+                    case byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES of
+                        true -> {ok, Blob};
+                        false -> {error, too_large}
+                    end;
+                error ->
+                    {error, bad_foreign_reads}
+            end;
+        error ->
+            {error, bad_foreign_reads}
+    end.
+
+-doc "Decode the canonical certificate list carried by a scope submission.".
+-spec decode_foreign_reads(binary()) ->
+          {ok, [term()]} | {error, bad_foreign_reads | too_large}.
+decode_foreign_reads(Blob)
+  when is_binary(Blob), byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES ->
+    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+        {ok, {quod_foreign_reads, 1, CertificateBlobs}}
+          when is_list(CertificateBlobs) ->
+            case decode_read_certificates(CertificateBlobs, []) of
+                {ok, RevCertificates} ->
+                    Certificates = lists:reverse(RevCertificates),
+                    case canonical_foreign_reads(Certificates) of
+                        {ok, Certificates} ->
+                            case encode_foreign_reads(Certificates) of
+                                {ok, Blob} -> {ok, Certificates};
+                                _ -> {error, bad_foreign_reads}
+                            end;
+                        error -> {error, bad_foreign_reads}
+                    end;
+                error -> {error, bad_foreign_reads}
+            end;
+        _ -> {error, bad_foreign_reads}
+    end;
+decode_foreign_reads(Blob) when is_binary(Blob) ->
+    {error, too_large};
+decode_foreign_reads(_) ->
+    {error, bad_foreign_reads}.
+
+encode_read_certificates([], RevBlobs) ->
+    {ok, RevBlobs};
+encode_read_certificates([Certificate | Rest], RevBlobs) ->
+    case quod_read_certificate:encode(Certificate) of
+        {ok, Blob} -> encode_read_certificates(Rest, [Blob | RevBlobs]);
+        {error, _} -> error
+    end.
+
+decode_read_certificates([], RevCertificates) ->
+    {ok, RevCertificates};
+decode_read_certificates([Blob | Rest], RevCertificates) when is_binary(Blob) ->
+    case quod_read_certificate:decode(Blob) of
+        {ok, Certificate} ->
+            decode_read_certificates(Rest, [Certificate | RevCertificates]);
+        {error, _} -> error
+    end;
+decode_read_certificates(_Malformed, _RevCertificates) ->
+    error.
 
 canonical_foreign_reads_or_error(ForeignReads) ->
     case canonical_foreign_reads(ForeignReads) of

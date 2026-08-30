@@ -101,7 +101,11 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_dtx_handoff_summary/1,
          test_active_operation/3,
          test_inflight_public_reply/1,
-         test_await_public_proof/5]).
+         test_await_public_proof/5,
+         test_route_plans/3,
+         test_install_read_certificate_barrier/0,
+         test_await_read_certificate_barrier/1,
+         test_release_read_certificate_barrier/0]).
 %% Pure verdict and scope-correlation seams driven directly by EUnit.
 -endif.
 
@@ -582,7 +586,7 @@ submit_plan(TargetNs, Plan, Goal, Bindings) when is_map(Bindings) ->
                 undefined -> {error, {ontology_unreachable, TargetNs}};
                 Pid -> try gen_server:call(
                              Pid,
-                             {submit_plan, Plan, GoalBlob, ResultBlob, none,
+                             {submit_plan, Plan, GoalBlob, ResultBlob, none, [],
                               [Bindings], quod_trace:context()}, infinity)
                        catch exit:_ ->
                            {error, {outcome_unknown,
@@ -1146,10 +1150,10 @@ handle_call(
 %% the committed outcome resolves at apply.
 handle_call(
   {submit_plan, Plan, GoalBlob, ResultBlob, RequestAuth,
-   ReplyBindings, TraceCtx}, From, S) ->
+   ForeignReads, ReplyBindings, TraceCtx}, From, S) ->
     accept_plan_submission(
       From, Plan, GoalBlob, ResultBlob, RequestAuth,
-      ReplyBindings, TraceCtx, S);
+      ForeignReads, ReplyBindings, TraceCtx, S);
 handle_call(
   {submit_role, Change, ReplyBindings, TraceCtx}, From, S) ->
     accept_role_submission(
@@ -2419,14 +2423,14 @@ scope_command_route(active, {scope_attest, _ManifestBlob}) -> error;
 scope_command_route(active, certify_reads) -> error;
 scope_command_route(active, {bind_group_effects, _, _}) -> error;
 scope_command_route(active, {bind_operation_effect, _}) -> error;
-scope_command_route(active, {submit_plan, _, _, _, _}) -> error;
+scope_command_route(active, {submit_plan, _, _, _, _, _}) -> error;
 scope_command_route(active, _Operation) -> active;
 scope_command_route(sealed, scope_close) -> sealed;
 scope_command_route(sealed, {scope_attest, _ManifestBlob}) -> sealed;
 scope_command_route(sealed, certify_reads) -> sealed;
 scope_command_route(sealed, {bind_group_effects, _, _}) -> sealed;
 scope_command_route(sealed, {bind_operation_effect, _}) -> sealed;
-scope_command_route(sealed, {submit_plan, _, _, _, _}) -> sealed;
+scope_command_route(sealed, {submit_plan, _, _, _, _, _}) -> sealed;
 scope_command_route(submitting, scope_close) -> sealed;
 scope_command_route(submitted, scope_close) -> sealed;
 scope_command_route(_State, _Operation) -> error.
@@ -2519,7 +2523,7 @@ execute_sealed_scope_command(
               {bind_operation_effect, RequestId, CommandSeq}, S)
     end;
 execute_sealed_scope_command(
-  {submit_plan, _, _, _, _} = Operation,
+  {submit_plan, _, _, _, _, _} = Operation,
   RequestId, CommandSeq, Binding, Scope, S) ->
     %% An ordinary single-target plan is handed to the target consensus
     %% engine exactly once. Move out of `sealed` before the
@@ -2622,7 +2626,7 @@ execute_active_scope_command(
       Binding, release, BatchIds,
       {batch_released, RequestId, CommandSeq, BatchIds}, Scope, S);
 execute_active_scope_command(
-  {submit_plan, _, _, _, _}, RequestId, CommandSeq, Binding, _Scope, S) ->
+  {submit_plan, _, _, _, _, _}, RequestId, CommandSeq, Binding, _Scope, S) ->
     poison_remote_scope(
       Binding, RequestId, CommandSeq,
       {protocol_error, unexpected_scope_command}, S);
@@ -2672,7 +2676,8 @@ close_remote_scope(Binding, RequestId, CommandSeq, S) ->
     drop_remote_scope(Binding, S1).
 
 execute_remote_plan_submission(
-  {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier},
+  {submit_plan, PlanBlob, GoalBlob, ResultBlob, ForeignReadsBlob,
+   TraceCarrier},
   RequestId, CommandSeq,
   Binding = {scope_binding, _OriginKey, _TargetKey, ProofId, _ScopeId,
              OriginIdentity, TargetIdentity, Mode,
@@ -2681,8 +2686,9 @@ execute_remote_plan_submission(
                 request_auth = RequestAuth},
   S) ->
     From = {remote_submit, Binding, RequestId, CommandSeq},
-    case Mode =:= read_write andalso decode_submit_plan(PlanBlob) of
-        {ok, Plan} ->
+    case {Mode =:= read_write andalso decode_submit_plan(PlanBlob),
+          quod_scope_wire:decode_payload(foreign_reads, ForeignReadsBlob)} of
+        {{ok, Plan}, {ok, ForeignReads}} ->
             %% The wire submission must be the authenticated scope's own plan:
             %% same proof, same origin. A plan borrowed from another proof or
             %% origin is refused before any consensus interaction.
@@ -2693,8 +2699,9 @@ execute_remote_plan_submission(
                  quod_dtx:request_binding(Plan) =:= RequestBinding of
                 true ->
                     case accept_plan_submission(
-                           From, Plan, GoalBlob, ResultBlob, RequestAuth, [],
-                           quod_trace:extract(TraceCarrier), S) of
+                           From, Plan, GoalBlob, ResultBlob, RequestAuth,
+                           ForeignReads, [], quod_trace:extract(TraceCarrier),
+                           S) of
                         {noreply, S1} -> S1;
                         {reply, Reply, S1} ->
                             finish_remote_submit(From, Reply, S1);
@@ -2708,9 +2715,11 @@ execute_remote_plan_submission(
                 false ->
                     finish_remote_submit(From, {error, bad_plan}, S)
             end;
-        false ->
+        {false, _} ->
             finish_remote_submit(From, {error, bad_plan}, S);
-        {error, _Reason} ->
+        {{error, _Reason}, _} ->
+            finish_remote_submit(From, {error, bad_plan}, S);
+        {_, {error, _Reason}} ->
             finish_remote_submit(From, {error, bad_plan}, S)
     end.
 
@@ -3342,6 +3351,9 @@ test_certify_reads_pending_reason(PendingCount, Ns)
     Pending = maps:from_keys(lists:seq(1, PendingCount), true),
     certify_reads_pending_reason(Pending, Ns).
 
+test_route_plans(Plans, OriginIdentity, SignedRequest) ->
+    route_plans(Plans, OriginIdentity, SignedRequest).
+
 test_sealed_submit_transition() ->
     {ok, AuthenticationDigest} =
         quod_scope_wire:authentication_digest(node),
@@ -3350,7 +3362,9 @@ test_sealed_submit_transition() ->
          {<<"quod:origin">>, <<5:256>>},
          {<<"quod:target">>, <<6:256>>}, read_write,
          {node, <<1:256>>}, AuthenticationDigest},
-    Operation = {submit_plan, <<"not-a-plan">>, <<>>, <<>>, []},
+    {ok, ForeignReadsBlob} = quod_scope_wire:encode_payload(foreign_reads, []),
+    Operation = {submit_plan, <<"not-a-plan">>, <<>>, <<>>,
+                 ForeignReadsBlob, []},
     Scope = #remote_scope{binding = Binding, state = sealed},
     S0 = #s{remote_scopes = #{Binding => Scope}},
     S1 = execute_sealed_scope_command(
@@ -4355,9 +4369,10 @@ run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
     finish_pinned_proof(Kind, Origin, Goal, Result).
 
 %% A successful writable proof seals every scope while all sessions are still
-%% open, then routes the immutable participant set once: zero material plans is
-%% a read, one plan uses that target's ordinary consensus path, and two or more
-%% use one atomic group. A participant contributed writes or OCC reads.
+%% open, then routes the immutable participant set once. Only write/effect
+%% plans consume consensus slots; read-only dependencies become certificates
+%% for the ordinary single-writer path. Two or more writers retain the atomic
+%% group unchanged.
 %% Read-only proof kinds and failed proofs pass through; failed proofs close
 %% without sealing.
 finish_pinned_proof(prove, Origin, Goal, {ok, Bindings, _Diff, ReadSet}) ->
@@ -4373,52 +4388,166 @@ finish_pinned_proof(_Kind, _Origin, _Goal, Result) ->
     Result.
 
 submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
-    Participants = lists:sort(
-                     [Identity || {Identity, Plan} <- maps:to_list(Plans),
-                                  quod_dtx:participates(Plan)]),
-    MaterialParticipants = lists:sort(
-                             [Identity
-                              || {Identity, Plan} <- maps:to_list(Plans),
-                                 quod_dtx:material_participant(Plan)]),
-    EffectParticipants =
-        [Identity || {Identity, Plan} <- maps:to_list(Plans),
-                     quod_dtx:effects_count(Plan) > 0],
     OriginIdentity = quod_proof_context:origin_identity(),
-    SignedForeign =
-        case MaterialParticipants of
-            [OnlyTarget] ->
-                quod_proof_context:request_auth() =/= none andalso
-                    OnlyTarget =/= OriginIdentity andalso
-                    lists:all(
-                      fun(Identity) ->
-                          Identity =:= OnlyTarget orelse
-                              Identity =:= OriginIdentity
-                      end, Participants);
-            _ -> false
-        end,
+    Route = route_plans(
+              Plans, OriginIdentity,
+              quod_proof_context:request_auth() =/= none),
+    RemoteClaim = case Route of
+                      {remote_claim, _, _} -> true;
+                      _ -> false
+                  end,
     ok = observe_remote_seal(
-           Origin, SignedForeign, SealStarted),
-    case {Participants, MaterialParticipants,
-          EffectParticipants, SignedForeign} of
-        {[], [], _, _} ->
-            %% Nothing staged anywhere: the ordinary read result. Sealed
-            %% read-only plans stay in the context for the group protocol.
+           Origin, RemoteClaim, SealStarted),
+    case Route of
+        read ->
             {ok, Bindings, [], ReadSet};
-        {_Participants, [Target], [], true} ->
-            submit_remote_claim(
-              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {_Participants, [Target], [Target], true} ->
-            submit_remote_claim(
-              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {[Target], _Material, [], false} ->
-            submit_single_plan(
-              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {[Target], _Material, [Target], false} ->
-            submit_single_plan(
-              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {_Participants, _, _, _} ->
+        {single, Target, ReadRows} ->
+            with_certified_read_dependencies(
+              ReadRows,
+              fun(ForeignReads) ->
+                  submit_single_plan(
+                    Origin, Target, maps:get(Target, Plans), Goal, Bindings,
+                    ForeignReads)
+              end);
+        {remote_claim, Target, ReadRows} ->
+            with_certified_read_dependencies(
+              ReadRows,
+              fun(ForeignReads) ->
+                  submit_remote_claim(
+                    Origin, Target, maps:get(Target, Plans), Goal, Bindings,
+                    ForeignReads)
+              end);
+        {group, Participants} ->
             submit_group(
-              Origin, Goal, Bindings, Plans, MaterialParticipants)
+              Origin, Goal, Bindings, Plans, Participants)
+    end.
+
+%% Pure lane choice: consensus ownership is determined only by the sealed
+%% plans, never by where their sessions happen to be hosted.
+route_plans(Plans, OriginIdentity, SignedRequest) ->
+    Rows = lists:sort(maps:to_list(Plans)),
+    Writers = [{Identity, Plan} || {Identity, Plan} <- Rows,
+                                    quod_dtx:writes(Plan)],
+    Readers = [{Identity, Plan} || {Identity, Plan} <- Rows,
+                                    quod_dtx:reads_only(Plan)],
+    case Writers of
+        [] ->
+            read;
+        [{Target, _Plan}] when SignedRequest, Target =/= OriginIdentity ->
+            {remote_claim, Target, Readers};
+        [{Target, _Plan}] ->
+            {single, Target, Readers};
+        [_ | _] ->
+            %% L3 is unchanged: only writers and their OCC readers consume
+            %% Prepare/Finalize slots. A pure signed-origin claim is already
+            %% represented by Begin and is not a participant of its own.
+            {group, lists:sort(
+                      [Identity || {Identity, _Plan} <- Writers ++ Readers])}
+    end.
+
+with_certified_read_dependencies(ReadRows, Fun) ->
+    ok = read_certificate_test_barrier(),
+    case certify_read_plans(ReadRows) of
+        {ok, ForeignReads} -> Fun(ForeignReads);
+        {error, _} = Error -> Error
+    end.
+
+%% The stale-read CT case must move a reader's head after sealing but before
+%% certification. This test-only rendezvous is message-driven and one-shot;
+%% production has no branch, delay, or progress-polling mechanism here.
+-ifdef(TEST).
+read_certificate_test_barrier() ->
+    case application:get_env(quod, read_certificate_test_barrier) of
+        {ok, {hold, Observer}} when is_pid(Observer) ->
+            Ref = make_ref(),
+            Observer ! {read_certificate_test_barrier, self(), Ref},
+            receive
+                {read_certificate_test_barrier, Ref, continue} -> ok
+            end,
+            ok = application:unset_env(
+                   quod, read_certificate_test_barrier);
+        _ -> ok
+    end.
+
+test_install_read_certificate_barrier() ->
+    Observer = spawn(fun() -> read_certificate_barrier_observer(waiting, []) end),
+    application:set_env(
+      quod, read_certificate_test_barrier, {hold, Observer}).
+
+test_await_read_certificate_barrier(TimeoutMs)
+  when is_integer(TimeoutMs), TimeoutMs > 0 ->
+    case application:get_env(quod, read_certificate_test_barrier) of
+        {ok, {hold, Observer}} when is_pid(Observer) ->
+            CallRef = make_ref(),
+            Observer ! {await_read_certificate_barrier, self(), CallRef},
+            receive
+                {read_certificate_barrier_ready, CallRef} -> ok
+            after TimeoutMs -> not_ready
+            end;
+        _ -> not_ready
+    end.
+
+test_release_read_certificate_barrier() ->
+    case application:get_env(quod, read_certificate_test_barrier) of
+        {ok, {hold, Observer}} when is_pid(Observer) ->
+            CallRef = make_ref(),
+            Observer ! {release_read_certificate_barrier, self(), CallRef},
+            receive
+                {read_certificate_barrier_released, CallRef} -> ok
+            after 3000 -> not_ready
+            end;
+        _ -> not_ready
+    end.
+
+read_certificate_barrier_observer(waiting, Waiters) ->
+    receive
+        {read_certificate_test_barrier, Pid, Ref}
+          when is_pid(Pid), is_reference(Ref) ->
+            lists:foreach(
+              fun({Waiter, CallRef}) ->
+                  Waiter ! {read_certificate_barrier_ready, CallRef}
+              end, Waiters),
+            read_certificate_barrier_observer({ready, Pid, Ref}, []);
+        {await_read_certificate_barrier, Waiter, CallRef} ->
+            read_certificate_barrier_observer(
+              waiting, [{Waiter, CallRef} | Waiters])
+    end;
+read_certificate_barrier_observer({ready, Pid, Ref} = Ready, _Waiters) ->
+    receive
+        {await_read_certificate_barrier, Waiter, CallRef} ->
+            Waiter ! {read_certificate_barrier_ready, CallRef},
+            read_certificate_barrier_observer(Ready, []);
+        {release_read_certificate_barrier, Releaser, CallRef} ->
+            Pid ! {read_certificate_test_barrier, Ref, continue},
+            Releaser ! {read_certificate_barrier_released, CallRef}
+    end.
+-else.
+read_certificate_test_barrier() -> ok.
+-endif.
+
+certify_read_plans([]) ->
+    {ok, []};
+certify_read_plans(Rows) ->
+    case read_certification_rows(Rows, []) of
+        {ok, CertificationRows} ->
+            case quod_scope_session:certify_reads_many(
+                   [{Handle, Plan}
+                    || {_Identity, Plan, Handle} <- CertificationRows]) of
+                {ok, Certificates} -> {ok, lists:sort(Certificates)};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+read_certification_rows([], RevRows) ->
+    {ok, lists:reverse(RevRows)};
+read_certification_rows([{Identity, Plan} | Rest], RevRows) ->
+    case quod_proof_context:scope_handle(Identity) of
+        {ok, Handle} ->
+            read_certification_rows(
+              Rest, [{Identity, Plan, Handle} | RevRows]);
+        error ->
+            {error, {protocol_error, session_binding}}
     end.
 
 observe_remote_seal(
@@ -4430,7 +4559,7 @@ observe_remote_seal(_Origin, false, _SealStarted) -> ok.
 submit_remote_claim(
   #pinned_origin{namespace = OriginNs, anchor = OriginAnchor,
                  proof_id = ProofId} = Origin,
-  Target, Plan, Goal, Bindings) ->
+  Target, Plan, Goal, Bindings, ForeignReads) ->
     RequestAuth = quod_proof_context:request_auth(),
     RequestBinding = quod_proof_context:request_binding(),
     case {encode_proof_submission(Goal, Bindings),
@@ -4451,7 +4580,8 @@ submit_remote_claim(
                   participants => [{Target, quod_dtx:digest(Plan)}]},
             submit_signed_foreign_manifest(
               Origin, Target, Plan, PlanBlob, Handle,
-              ManifestInput, RequestAuth, Bindings);
+              ManifestInput, RequestAuth, ForeignReads,
+              Bindings);
         {{error, _} = Error, _, _, _} -> Error;
         {_, {error, _} = Error, _, _} -> Error;
         {_, _, error, _} -> {error, {protocol_error, session_binding}};
@@ -4461,7 +4591,8 @@ submit_remote_claim(
 
 submit_signed_foreign_manifest(
   #pinned_origin{namespace = OriginNs, anchor = OriginAnchor} = Origin,
-  Target, Plan, PlanBlob, Handle, ManifestInput, RequestAuth, Bindings) ->
+  Target, Plan, PlanBlob, Handle, ManifestInput, RequestAuth,
+  ForeignReads, Bindings) ->
     case quod_dtx:new_manifest(ManifestInput) of
         {ok, Manifest} ->
             case quod_scope_session:attest_plan(Handle, Plan, Manifest) of
@@ -4470,7 +4601,7 @@ submit_signed_foreign_manifest(
                               PlanBlob, Attestation},
                     try quod_transaction:remote_claim(
                           {OriginNs, OriginAnchor}, Manifest,
-                          Bundle, RequestAuth, []) of
+                          Bundle, RequestAuth, ForeignReads) of
                         Claim ->
                             submit_signed_foreign_claim(
                               Origin, Target, Plan, Handle,
@@ -4644,18 +4775,18 @@ checkpoint_bound_effect(
       {checkpoint_bound_effect, WorkerRef, Effect, Change, OutcomeRef},
       infinity).
 
-submit_single_plan(Origin, Target, Plan, Goal, Bindings) ->
+submit_single_plan(Origin, Target, Plan, Goal, Bindings, ForeignReads) ->
     case encode_proof_submission(Goal, Bindings) of
         {ok, GoalBlob, ResultBlob} ->
             case quod_dtx:effects_count(Plan) of
                 0 ->
                     submit_single_ordinary_plan(
                       Origin, Target, Plan, Goal, Bindings,
-                      GoalBlob, ResultBlob);
+                      GoalBlob, ResultBlob, ForeignReads);
                 1 ->
                     submit_single_effect_plan(
                       Origin, Target, Plan, Bindings,
-                      GoalBlob, ResultBlob);
+                      GoalBlob, ResultBlob, ForeignReads);
                 _ ->
                     {error, invalid_direct_effect}
             end;
@@ -4666,7 +4797,7 @@ submit_single_plan(Origin, Target, Plan, Goal, Bindings) ->
 submit_single_ordinary_plan(
   #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
   Target, Plan, Goal, Bindings,
-  GoalBlob, ResultBlob) ->
+  GoalBlob, ResultBlob, ForeignReads) ->
     RequestAuth = quod_proof_context:request_auth(),
     OutcomeRef = quod_transaction:plan_outcome_ref(
                    Plan, GoalBlob, ResultBlob, RequestAuth),
@@ -4674,7 +4805,8 @@ submit_single_ordinary_plan(
                 ok ->
                     Result = submit_single_plan_at_target(
                                Target, Plan, Goal, Bindings,
-                               GoalBlob, ResultBlob, RequestAuth),
+                               GoalBlob, ResultBlob, RequestAuth,
+                               ForeignReads),
                     case Result of
                         {ok, _B, Index, _TxId} ->
                             Handle = committed_plan_handle(
@@ -4699,12 +4831,14 @@ committed_plan_handle(_RequestAuth, _Target, _Origin, _Index, OutcomeRef) ->
 submit_single_effect_plan(
   #pinned_origin{namespace = Ns, anchor = Anchor,
                  session = Session} = Origin,
-  {Ns, Anchor} = Target, Plan, Bindings, GoalBlob, ResultBlob) ->
+  {Ns, Anchor} = Target, Plan, Bindings, GoalBlob, ResultBlob,
+  ForeignReads) ->
     RequestAuth = quod_proof_context:request_auth(),
     case quod_dtx:material(Plan) of
         {ok, #{effects := [Effect]} = Material} ->
             Change0 = quod_transaction:from_plan(
-                        Plan, Material, GoalBlob, ResultBlob, RequestAuth),
+                        Plan, Material#{foreign_reads => ForeignReads},
+                        GoalBlob, ResultBlob, RequestAuth),
             Change = Change0#transaction{
                        author = quod_dtx:signer(Plan),
                        submitted_at = quod_time:now_ms()},
@@ -4727,7 +4861,7 @@ submit_single_effect_plan(
             {error, invalid_direct_effect}
     end;
 submit_single_effect_plan(_Origin, _Target, _Plan, _Bindings,
-                          _GoalBlob, _ResultBlob) ->
+                          _GoalBlob, _ResultBlob, _ForeignReads) ->
     {error, effect_executor_not_local}.
 
 with_effect_journal_preparation(Action, Desired, Effect, Prepared, Fun) ->
@@ -4805,32 +4939,36 @@ submit_bound_effect_plan_encoded(
 
 submit_single_plan_at_target(
   {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings,
-  GoalBlob, ResultBlob, RequestAuth) ->
+  GoalBlob, ResultBlob, RequestAuth, ForeignReads) ->
     case quod_proof_context:scope_handle(Target) of
         {ok, {remote_scope, _, _, _, _} = Handle} ->
             %% The remote facade canonical-encodes the same immutable values;
             %% OutcomeRef above is therefore the exact target transaction.
-            submit_remote_plan(Handle, Plan, Goal, Bindings);
+            submit_remote_plan(
+              Handle, Plan, Goal, Bindings, ForeignReads);
         {ok, {local_scope, _, TargetNs, TargetAnchor, _, _}} ->
             submit_plan_encoded(
-              TargetNs, Plan, GoalBlob, ResultBlob, RequestAuth, Bindings);
+              TargetNs, Plan, GoalBlob, ResultBlob, RequestAuth,
+              ForeignReads, Bindings);
         {ok, {quod_scope_session, _, _, _, _,
               TargetNs, TargetAnchor}} ->
             submit_plan_encoded(
-              TargetNs, Plan, GoalBlob, ResultBlob, RequestAuth, Bindings);
+              TargetNs, Plan, GoalBlob, ResultBlob, RequestAuth,
+              ForeignReads, Bindings);
         _ ->
             {error, {ontology_unreachable, TargetNs}}
     end.
 
 submit_plan_encoded(
-  TargetNs, Plan, GoalBlob, ResultBlob, RequestAuth, Bindings) ->
+  TargetNs, Plan, GoalBlob, ResultBlob, RequestAuth,
+  ForeignReads, Bindings) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, {ontology_unreachable, TargetNs}};
         Pid ->
             try gen_server:call(
                   Pid,
                   {submit_plan, Plan, GoalBlob, ResultBlob, RequestAuth,
-                   [Bindings], quod_trace:context()}, infinity)
+                   ForeignReads, [Bindings], quod_trace:context()}, infinity)
             catch exit:_ ->
                 {error,
                  {outcome_unknown,
@@ -5015,8 +5153,9 @@ attest_group_plans(
 
 %% The remote target committed under its own authorship; only the bounded
 %% outcome crosses back through the still-open scope session.
-submit_remote_plan(Handle, Plan, Goal, Bindings) ->
-    case quod_scope_session:submit_plan(Handle, Plan, Goal, Bindings) of
+submit_remote_plan(Handle, Plan, Goal, Bindings, ForeignReads) ->
+    case quod_scope_session:submit_plan(
+           Handle, Plan, Goal, Bindings, ForeignReads) of
         {ok, Slot, TxId} -> {ok, [Bindings], Slot, TxId};
         {error, _} = Error -> Error
     end.
@@ -5632,17 +5771,17 @@ run_proof_est(Goal, Est) ->
 %% is rejected before any consensus interaction.
 accept_plan_submission(
   _From, _Plan, _GoalBlob, _ResultBlob, _RequestAuth,
-  _ReplyBindings, _TraceCtx,
+  _ForeignReads, _ReplyBindings, _TraceCtx,
   S = #s{ready = false, ns = Ns}) ->
     {reply, {error, {ontology_rebuilding, Ns}}, S};
 accept_plan_submission(
   From, Plan, GoalBlob, ResultBlob, RequestAuth,
-  ReplyBindings, TraceCtx, S) ->
+  ForeignReads, ReplyBindings, TraceCtx, S) ->
     case valid_plan_submission(Plan, GoalBlob, ResultBlob, S) of
         {ok, #{effects := []} = Material} ->
             submit_plan_envelope(
               From, Plan, Material, GoalBlob, ReplyBindings, ResultBlob,
-              RequestAuth, TraceCtx, S);
+              RequestAuth, ForeignReads, TraceCtx, S);
         {ok, _EffectBearingMaterial} ->
             %% Direct effects require the checkpointed exact-transaction
             %% handoff. The ordinary plan API must not create a second path.
@@ -5686,7 +5825,10 @@ accept_bound_effect_submission(
     case valid_plan_submission(Plan, GoalBlob, ResultBlob, S) of
         {ok, Material} ->
             Expected0 = quod_transaction:from_plan(
-                          Plan, Material, GoalBlob, ResultBlob,
+                          Plan,
+                          Material#{foreign_reads =>
+                                      Change#transaction.foreign_reads},
+                          GoalBlob, ResultBlob,
                           Change#transaction.request_auth),
             Expected = Expected0#transaction{
                          author = S#s.self,
@@ -5787,8 +5929,8 @@ outcome_index_error(Reason, Ref, S) ->
 -ifdef(TEST).
 test_not_ready_plan_submission(Ns) ->
     {reply, Reply, _State} = accept_plan_submission(
-                               ignored, ignored, ignored, ignored, none, [],
-                               otel_ctx:new(),
+                               ignored, ignored, ignored, ignored, none,
+                               [], [], otel_ctx:new(),
                                #s{ready = false, ns = Ns}),
     Reply.
 -endif.
@@ -5821,12 +5963,13 @@ self_witnessed(_Signer, _Self) ->
     false.
 
 submit_plan_envelope(From, Plan, Material, GoalBlob, ReplyBindings, ResultBlob,
-                     RequestAuth, TraceCtx,
+                     RequestAuth, ForeignReads, TraceCtx,
                      S = #s{ns = Ns, outcomes = Outcomes0,
                             parked = Parked}) ->
     Anchor = target_anchor(Ns),
     Change0 = quod_transaction:from_plan(
-                Plan, Material, GoalBlob, ResultBlob, RequestAuth),
+                Plan, Material#{foreign_reads => ForeignReads},
+                GoalBlob, ResultBlob, RequestAuth),
     Change = Change0#transaction{author = S#s.self,
                                  submitted_at = quod_time:now_ms()},
     Tx = Change#transaction.tx_id,
@@ -6028,9 +6171,9 @@ submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
              discard_unsubmitted(Tx, S)}
     end.
 
-%% The outer wire decoder has only bounded the three opaque blobs. Decode the
+%% The outer wire decoder has only bounded the four opaque blobs. Decode the
 %% plan after scope authentication because its proof/origin identity is needed
-%% for this command; accept_plan_submission/6 remains the shared local/remote
+%% for this command; accept_plan_submission remains the shared local/remote
 %% trust boundary that canonical-decodes goal and result before consensus.
 decode_submit_plan(PlanBlob) ->
     quod_scope_wire:decode_plan_payload(PlanBlob).

@@ -1563,6 +1563,35 @@ verify_exact_reference_and_persisted_cache_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+foreign_exact_reference_accepts_only_the_pinned_genesis_entry_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    [#entry{data = {batch, [Genesis]}} = GenesisEntry | _] =
+        maps:get(chain, Fixture),
+    {ok, GenesisRef} = quod_dtx:certified_entry_ref(
+                         {Ns, Anchor}, GenesisEntry, Genesis),
+    Dir = temp_dir("exact-pinned-genesis"),
+    Pid = start_owner(Dir, chain_fetch(Ns, maps:get(chain, Fixture))),
+    try
+        %% Slot 1 has no quorum certificate.  It is accepted only because the
+        %% immutable genesis entry rebuilds to the identity's pinned anchor.
+        ?assertMatch(
+           {ok, #{slot := 1, phase := transaction, transaction := Genesis}},
+           quod_foreign_log:verify(
+             maps:get(pub, Fixture), {"127.0.0.1", 19094}, GenesisRef,
+             transaction, 5000)),
+        BadAnchorRef = setelement(4, GenesisRef, key(genesis_wrong_anchor)),
+        ?assertEqual(
+           {error, retry},
+           quod_foreign_log:verify(
+             maps:get(pub, Fixture), {"127.0.0.1", 19094}, BadAnchorRef,
+             transaction, 5000))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 generic_entry_reference_accepts_certified_content_test() ->
     Fixture = long_identity_fixture(unique_ns(), 2),
     Ns = maps:get(ns, Fixture),

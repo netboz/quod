@@ -194,9 +194,10 @@ token or compared with another validator's local state.
 
 ### 4.2 Direct effects use the ordinary or DTX commit path
 
-A direct effect in the sole material plan uses the ordinary transaction path.
-If two or more scopes are material, the same sealed effect-bearing plan is a
-normal DTX participant. Its target stores the private prepared payload before
+A direct effect in the sole writing plan uses the ordinary transaction path;
+read-only dependencies provide snapshot certificates. If two or more scopes
+write, the same sealed effect-bearing plan is a normal DTX participant. Its
+target stores the private prepared payload before
 Begin activation, validates the public descriptor through the shared plan
 validator, and releases the effect only after its ordered
 `Finalize(commit)` reaches the existing P-before-E runtime barrier.

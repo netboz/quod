@@ -16,7 +16,8 @@ signed HTTP goal
   -> ordinary Prolog proof and target ACL
   -> sealed participant plans
   -> one foreign target: remote_claim / application / remote_complete
-  -> two or more material ontologies: DTX control waves through Complete
+  -> read-only targets: f+1 snapshot certificates, no control records
+  -> two or more writers: DTX control waves through Complete
 ```
 
 A direct signed request committed successfully on the source and target

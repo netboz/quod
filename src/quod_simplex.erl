@@ -6065,7 +6065,7 @@ read_attest_endpoint_response(RequestId, _Plan, _Applied, _S) ->
 %% payload is the exact state anchor.  A non-noop row that cannot itself form a
 %% portable certified reference is never skipped: doing so would attest newer
 %% state under an older committee.
-read_certificate_anchor(_Store, _Target, Slot) when Slot =< 1 ->
+read_certificate_anchor(_Store, _Target, Slot) when Slot < 1 ->
     {error, unavailable};
 read_certificate_anchor(Store, Target, Slot) ->
     case quod_ledger_store:read_at(Store, Slot) of

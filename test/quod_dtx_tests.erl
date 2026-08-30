@@ -162,7 +162,8 @@ signed_origin_scope_seals_operation_claim_without_database_diff_test() ->
         ?assertEqual([], quod_dtx:diff(Plan)),
         ?assertEqual(#{}, quod_dtx:read_check(Plan)),
         ?assert(quod_dtx:participates(Plan)),
-        ?assertNot(quod_dtx:material_participant(Plan))
+        ?assertNot(quod_dtx:writes(Plan)),
+        ?assertNot(quod_dtx:reads_only(Plan))
     after
         quod_proof_session:stop(Session)
     end.
@@ -188,6 +189,80 @@ read_only_participant_seals_empty_diff_with_read_check_test() ->
         ?assertEqual([], quod_dtx:diff(Plan)),
         ?assertMatch(#{{parent, 2} := {present, 1}},
                      quod_dtx:read_check(Plan))
+    after
+        quod_proof_session:stop(Session)
+    end.
+
+write_lane_routing_is_derived_only_from_sealed_plans_test() ->
+    Origin = {<<"quod:origin">>, key(3)},
+    RemoteA = {<<"quod:remote-a">>, key(4)},
+    RemoteB = {<<"quod:remote-b">>, key(5)},
+    RemoteC = {<<"quod:remote-c">>, key(6)},
+    Binding = {agent_goal_v1, key(45)},
+    OriginWrite = sealed_route_plan([], {assertz, {origin_mark, one}},
+                                    Origin, Origin, Binding),
+    OriginRead = sealed_route_plan([{origin_fact, one}],
+                                   {origin_fact, one},
+                                   Origin, Origin, Binding),
+    OriginClaim = sealed_route_plan([], true, Origin, Origin, Binding),
+    RemoteRead = sealed_route_plan([{remote_fact, one}],
+                                   {remote_fact, one},
+                                   RemoteA, Origin, Binding),
+    RemoteReadC = sealed_route_plan([{remote_fact, three}],
+                                    {remote_fact, three},
+                                    RemoteC, Origin, Binding),
+    RemoteWriteA = sealed_route_plan([], {assertz, {remote_mark, one}},
+                                     RemoteA, Origin, Binding),
+    RemoteWriteB = sealed_route_plan([], {assertz, {remote_mark, two}},
+                                     RemoteB, Origin, Binding),
+    ?assertEqual(
+       read,
+       quod_prolog:test_route_plans(
+         #{Origin => OriginRead, RemoteA => RemoteRead}, Origin, true)),
+    ?assertMatch(
+       {single, Origin, [_, _]},
+       quod_prolog:test_route_plans(
+         #{Origin => OriginWrite, RemoteA => RemoteRead,
+           RemoteC => RemoteReadC}, Origin, true)),
+    ?assertMatch(
+       {single, Origin, []},
+       quod_prolog:test_route_plans(
+         #{Origin => OriginWrite}, Origin, true)),
+    ?assertMatch(
+       {remote_claim, RemoteA, [_, _]},
+       quod_prolog:test_route_plans(
+         #{Origin => OriginRead, RemoteA => RemoteWriteA,
+           RemoteC => RemoteReadC}, Origin, true)),
+    ?assertMatch(
+       {remote_claim, RemoteA, []},
+       quod_prolog:test_route_plans(
+         #{Origin => OriginClaim, RemoteA => RemoteWriteA}, Origin, true)),
+    ?assertMatch(
+       {single, RemoteA, [_]},
+       quod_prolog:test_route_plans(
+         #{Origin => OriginRead, RemoteA => RemoteWriteA}, Origin, false)),
+    {group, Participants} = quod_prolog:test_route_plans(
+                              #{Origin => OriginClaim,
+                                RemoteA => RemoteWriteA,
+                                RemoteB => RemoteWriteB}, Origin, true),
+    ?assertEqual(lists:sort([RemoteA, RemoteB]), Participants),
+    {group, ParticipantsWithOriginRead} = quod_prolog:test_route_plans(
+                                            #{Origin => OriginRead,
+                                              RemoteA => RemoteWriteA,
+                                              RemoteB => RemoteWriteB},
+                                            Origin, true),
+    ?assertEqual(
+       lists:sort([Origin, RemoteA, RemoteB]), ParticipantsWithOriginRead).
+
+sealed_route_plan(Facts, Goal, Target, Origin, RequestBinding) ->
+    Session = session(Facts),
+    try
+        {_Id, {solution, _}} = first(Session, Goal),
+        {ok, Plan} = quod_dtx:seal_session(
+                       Session,
+                       (bind())#{target := Target, origin := Origin,
+                                 request_binding := RequestBinding}),
+        Plan
     after
         quod_proof_session:stop(Session)
     end.
@@ -2450,6 +2525,33 @@ certified_entry_ref_binds_exact_entry_test() ->
        {error, invalid_certified_entry},
        quod_dtx:certified_entry_ref(
          Target, Entry#entry{cert = Cert#cert{slot = Slot + 1}}, Control)).
+
+certified_entry_ref_binds_pinned_genesis_test() ->
+    Ns = <<"quod:certified-genesis">>,
+    Genesis = #transaction{
+                 tx_id = <<71:256>>, origin = {Ns, <<0:256>>},
+                 diff = [], read_check = #{}, sig = none},
+    Entry = #entry{index = 1, data = {batch, [Genesis]},
+                   timestamp = 0, cert = none},
+    {ok, Block} = quod_simplex:block_from_entry(Entry),
+    Anchor = quod_simplex:block_hash(Block),
+    Target = {Ns, Anchor},
+    {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Genesis),
+    ?assertMatch({ok, Target, 1, _},
+                 quod_dtx:certified_ref_binding(Ref)),
+    {ok, Target, 1, GenesisDigest} = quod_dtx:certified_ref_binding(Ref),
+    ?assertEqual(crypto:hash(sha256, Genesis#transaction.tx_id),
+                 GenesisDigest),
+    %% Genesis finality comes only from the exact pinned block hash.  Merely
+    %% being an unsigned slot-1 transaction cannot manufacture a reference.
+    ?assertEqual(
+       {error, invalid_certified_entry},
+       quod_dtx:certified_entry_ref(
+         {Ns, <<72:256>>}, Entry, Genesis)),
+    ?assertEqual(
+       {error, invalid_certified_entry},
+       quod_dtx:certified_entry_ref(
+         Target, Entry#entry{timestamp = 1}, Genesis)).
 
 %% ------------------------------------------------------------------
 %% V1 control fixtures

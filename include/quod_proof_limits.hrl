@@ -66,14 +66,15 @@
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).
 
 %% Hard-break scope-session wire.  The largest command carries one exact
-%% operation-custody submission plus a maximum-size agent principal, two
-%% bounded namespaces, and fixed scope/ETF metadata.  Derive the envelope from
-%% those shared semantic owners so every submission accepted by the transaction
-%% codec can cross a remote scope.  The 1024-byte fixed allowance exceeds the
-%% current 920-byte maximum after the principal blob.
+%% operation-custody submission, the certified-read carrier accepted by the
+%% transaction codec, a maximum-size agent principal, two bounded namespaces,
+%% and fixed scope/ETF metadata. Derive the envelope from those shared semantic
+%% owners so every accepted submission can cross a remote scope. The 1024-byte
+%% fixed allowance exceeds the current fixed metadata after the principal blob.
 -define(QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES, 1024).
 -define(QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES,
         (?QUOD_MAX_OPERATION_SUBMISSION_BYTES +
+         ?QUOD_MAX_DTX_BODY_BYTES +
          ?QUOD_MAX_TOPLEVEL_GOAL_BYTES +
          ?QUOD_SCOPE_WIRE_MAX_FIXED_METADATA_BYTES)).
 -define(QUOD_SCOPE_COMMAND_TIMEOUT_MS, 30000).

@@ -275,7 +275,7 @@ the same barrier-driven reconciliation immediately.
 
 ### 5.4 Signed one-target effect custody and cancellation
 
-A signed goal with one foreign material target does not use a one-participant
+A signed goal with one foreign writer does not use a one-participant
 group. It uses the ordinary
 `remote_claim -> remote_application -> remote_complete` path, while retaining
 the same register-before-bind safety rule:
@@ -433,8 +433,8 @@ hard-break allocation:
 - `ATTESTATION_VERSION = 2`;
 - ordinary transaction wire V12;
 - scope wire V8 in that cut, including group and operation effect binding;
-  the current write-lanes Slice 3 source is V9 and adds sealed read
-  certification;
+  the current write-lanes Slice 4 source is V10 and carries certified reads
+  into ordinary target submission;
 - process-free DTX endpoint V8, including exact signed operation
   cancellation and signed applied responses; and
 - effect-journal snapshot V6 / row V5.
@@ -634,7 +634,7 @@ The exact source closure is:
   attachment; and
 - keep `quod_scope_wire`, `quod_scope_session`, and the existing target scope
   dispatcher as the one transport for both `bind_group_effects` and
-  `bind_operation_effect` (V8 in that cut; current source is V9); keep
+  `bind_operation_effect` (V8 in that cut; current source is V10); keep
   `quod_transaction` as the sole decoder of the latter's exact signed
   submission.
 

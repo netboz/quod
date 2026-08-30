@@ -265,7 +265,8 @@ If A has a real diff, OCC read, or effect, A remains a participant.
 ### 4.2 Keep the full group protocol only for genuinely distributed atomic work
 
 Under the current contract these records are necessary when two or more
-material/read-dependent ontologies must choose one atomic outcome:
+writing ontologies must choose one atomic outcome; their read-only dependencies
+remain participants for now:
 
 - Begin freezes the exact operation and participant plans before any target
   locks.
@@ -683,7 +684,7 @@ than a local tuning patch.
 For exact retained boundary values, the shared headers/code remain the single
 source of truth. The audited client/wire safety set currently includes: 4 KiB
 authentication JSON; 16,819-byte raw signed-request and 23,452-byte HTTP JSON
-admission ceilings; 512 KiB result and 528 KiB result envelope; a scope envelope derived from the largest exact signed operation submission plus bounded scope metadata (currently 271,488 bytes);
+admission ceilings; 512 KiB result and 528 KiB result envelope; a scope envelope derived from the largest exact signed operation submission, bounded certified reads, and scope metadata (currently 500,864 bytes);
 20,000 decoded term nodes, depth 64, and 1,024-byte symbols; at most 64 new
 symbols per authenticated material payload, 16,384 cumulative client-created
 atoms per VM lifetime, and 100,000 atoms of VM headroom. Challenge lifetime is
@@ -1509,9 +1510,10 @@ latency promise.
 
 The five-phase foreign-singleton path is not merely an implementation that
 needs faster evidence. It is the wrong protocol class. The normative
-`inter-ontology.md` contract already says one material target uses that
-target's ordinary transaction path; only two or more material/read-dependent
-targets require DTX. Signed-client operation recovery later overrode that rule
+`inter-ontology.md` contract already says one writer uses that target's
+ordinary transaction path; read-only dependencies use certificates, and only
+two or more writers require DTX. Signed-client operation recovery later
+overrode the singleton rule
 by forcing every signed foreign write through DTX so the agent ontology could
 claim the operation first. That preserved exactly-once recovery, but coupled an
 operation journal requirement to distributed atomic commit.
@@ -1527,8 +1529,8 @@ The guarantees must be separated:
    transaction without re-proving the goal;
 5. a later durable receipt in A stops recovery and makes replay proportional to
    unresolved work rather than all historical operations; and
-6. two or more material/read-dependent ontologies still use the existing DTX
-   atomic protocol.
+6. two or more writing ontologies still use the existing DTX atomic protocol;
+   their read-only dependencies remain atomic participants for now.
 
 The selected singleton path is therefore:
 
@@ -1747,9 +1749,9 @@ selects the protocol from actual dependencies:
 |---|---|
 | no participating plan | read result, no ledger record |
 | one plan, target is signed origin | ordinary target transaction |
-| one plan, foreign signed origin | remote claim -> ordinary target transaction -> async receipt |
+| one plan, foreign signed origin | certified reads -> remote claim -> ordinary target transaction -> async receipt |
 | one plan, unsigned trusted in-VM origin | existing ordinary target transaction |
-| two or more material/read-dependent plans | existing DTX group |
+| two or more writing plans | existing DTX group, including its readers |
 
 Keep: `quod_transaction` canonical application transaction, target
 `can_invoke/4`, `quod_commit_validation` as the pure check/apply authority,
@@ -1844,8 +1846,8 @@ closure review finds one active path.
 #### Slice 4.7 -- optimize genuine groups without changing their semantics
 
 The full pipeline review does not assume the singleton cutover solves
-A -> B -> C -> D or any goal with two or more material/read-dependent
-ontologies. The live trace found seven distinct costs. They must be removed at
+A -> B -> C -> D or any goal with two or more writing ontologies. The live
+trace found seven distinct costs. They must be removed at
 their owners rather than hidden by shorter timeouts or a movement-specific
 route.
 

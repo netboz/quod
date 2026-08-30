@@ -216,10 +216,11 @@ goal. It does not map the request through a hard-coded predicate catalogue.
 Several signed distributed writes from one agent ontology may prove
 concurrently. A one-target foreign write becomes a batchable source claim and
 a batchable ordinary target application, so requests may share both content
-blocks. Only a real group with two or more material/read-dependent targets
-uses the DTX control-wave path, whose shared conflict projection permits
-independent groups and serializes overlaps. This is neither a retry nor a
-second executor.
+blocks. Read-only dependencies contribute f+1 snapshot certificates instead
+of control records. Only a real group with two or more writers uses the DTX
+control-wave path; its read-only dependencies remain atomic participants for
+now. The shared conflict projection permits independent groups and serializes
+overlaps. This is neither a retry nor a second executor.
 
 The sealed plan binds that subject and signed request digest. A local ordinary
 transaction carries the complete signed request. A one-target foreign write

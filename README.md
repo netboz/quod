@@ -73,11 +73,13 @@ authors but never replace target `can_invoke/4` authorization. Signed goals use
 the deployed generic anchored agent principal: the canonical
 `agent_instance_ref/3` identifies the actor, and its containing ontology proves
 the active signing key.
-For a signed write with one foreign material target, the agent ontology first
+For a signed write with one foreign writer, the agent ontology first
 commits a batchable operation claim, the target commits one ordinary
 application under its normal ACL/OCC path, and the agent ontology records the
-completion asynchronously. Only two or more material/read-dependent targets
-use the five-record atomic DTX protocol.
+completion asynchronously. Any read-only ontologies contribute f+1 snapshot
+certificates, not Prepare/Finalize records. Only two or more writers use the
+five-record atomic DTX protocol; their read-only dependencies remain
+participants of that atomic group for now.
 The canonical consensus signature contract is
 [`doc/consensus-signatures.md`](doc/consensus-signatures.md).
 

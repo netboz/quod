@@ -311,7 +311,8 @@ submit_operations_round_trip_and_stay_bounded_test() ->
     {ok, GoalBlob} = quod_durable_term:encode_goal({goal, ok}),
     {ok, ResultBlob} = quod_durable_term:encode_result(#{'X' => ok}),
     Submit = command(
-               {submit_plan, <<"plan blob">>, GoalBlob, ResultBlob, []}),
+               {submit_plan, <<"plan blob">>, GoalBlob, ResultBlob,
+                payload(foreign_reads, []), []}),
     {ok, EncodedSubmit} = quod_scope_wire:encode_command(Submit),
     ?assertEqual({ok, Submit}, quod_scope_wire:decode_request(EncodedSubmit)),
     %% Goal/result bytes remain opaque at the outer command boundary. Their
@@ -320,7 +321,8 @@ submit_operations_round_trip_and_stay_bounded_test() ->
     OpaqueSubmit = command(
                      {submit_plan, <<"plan blob">>,
                       <<"not canonical goal ETF">>,
-                      <<"not canonical result ETF">>, []}),
+                      <<"not canonical result ETF">>,
+                      payload(foreign_reads, []), []}),
     {ok, EncodedOpaque} = quod_scope_wire:encode_command(OpaqueSubmit),
     ?assertEqual(
        {ok, OpaqueSubmit}, quod_scope_wire:decode_request(EncodedOpaque)),
@@ -329,16 +331,18 @@ submit_operations_round_trip_and_stay_bounded_test() ->
        quod_scope_wire:encode_command(
          command({submit_plan,
                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>,
-                  GoalBlob, ResultBlob, []}))),
+                  GoalBlob, ResultBlob, payload(foreign_reads, []), []}))),
     ?assertEqual(
        {error, {too_large, result}},
        quod_scope_wire:encode_command(
          command({submit_plan, <<"p">>, GoalBlob,
-                  <<0:(?QUOD_MAX_DURABLE_RESULT_BYTES + 1)/unit:8>>, []}))),
+                  <<0:(?QUOD_MAX_DURABLE_RESULT_BYTES + 1)/unit:8>>,
+                  payload(foreign_reads, []), []}))),
     ?assertEqual(
        {error, {protocol_error, bad_payload}},
        quod_scope_wire:encode_command(
          command({submit_plan, <<"p">>, GoalBlob, ResultBlob,
+                  payload(foreign_reads, []),
                   [{<<"not-trace-context">>, <<"x">>}]}))),
     TxId = <<2:256>>,
     Committed = event({plan_submitted, {committed, 7, TxId}}),
@@ -819,7 +823,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 9, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 10, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

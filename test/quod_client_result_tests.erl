@@ -30,7 +30,8 @@ all_normalized_results_roundtrip_test() ->
          {error, cursor_not_found}, {error, cursor_not_ready},
          {error, cursor_busy},
          {error, invalid_action}, {error, non_backtrackable_action},
-         {error, proof_unavailable}, {error, result_too_large}],
+         {error, conflict_retry}, {error, proof_unavailable},
+         {error, result_too_large}],
     lists:foreach(
       fun(Result) ->
           {ok, Blob} = quod_client_result:encode(Result),
@@ -72,6 +73,11 @@ aggregate_result_bound_is_identical_before_transport_test() ->
     ?assertEqual({error, result_too_large}, Result),
     ?assertEqual({413, #{error => result_too_large}},
                  quod_client_result:http_normalized(Evidence, Result)).
+
+conflict_retry_is_a_specific_public_conflict_test() ->
+    ?assertEqual(
+       {409, #{error => conflict_retry}},
+       quod_client_result:http_error({error, conflict_retry})).
 
 malformed_and_noncanonical_results_are_rejected_test() ->
     ?assertEqual({error, invalid_result},

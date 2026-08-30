@@ -313,7 +313,7 @@ ask_test_() ->
           ?_test(t_failed_transaction_restores_all_selected_scopes(Ctx)),
           ?_test(t_unrelated_reentrant_invocation_has_no_transaction_lineage(Ctx)),
           {timeout, 30, ?_test(t_reentrant_scope_reuse(Ctx))},
-          {timeout, 30, ?_test(t_origin_scope_reentry_commits_group(Ctx))},
+          {timeout, 30, ?_test(t_origin_scope_reentry_commits(Ctx))},
           ?_test(t_nested_failure_reasons(Ctx)),
           ?_test(t_nested_refusal_fails_logically(Ctx)),
           ?_test(t_read_only_tree_rejects_first_write(Ctx)),
@@ -324,9 +324,9 @@ ask_test_() ->
           ?_test(t_permission_gate(Ctx)),
           ?_test(t_signed_nested_scope_uses_target_policy(Ctx)),
           ?_test(t_failure_reasons_cross_local_ask(Ctx)),
-          {timeout, 30, ?_test(t_foreign_write_commits_group(Ctx))},
+          {timeout, 30, ?_test(t_foreign_write_uses_certified_read(Ctx))},
           {timeout, 30,
-           ?_test(t_prepare_refusal_aborts_group_with_reasons(Ctx))},
+           ?_test(t_single_writer_refusal_is_returned(Ctx))},
           ?_test(t_scope_engine_stays_responsive(Ctx)),
           ?_test(t_target_crash_kills_scope(Ctx)),
           ?_test(t_scope_worker_limit(Ctx)),
@@ -614,14 +614,12 @@ t_three_scope_chain(#{pets := P}) ->
                  prove(P, {'::', chain_b, {via_c, {'X'}}})).
 
 %% A failed invocation's writes remain in B's shared proof scope during the
-%% proof. The origin's influencing authorization read makes the final write a
-%% two-participant group; Complete makes both the read dependency and B's write
-%% durable before the caller returns.
+%% proof. The origin contributes only a certified read dependency, so B's
+%% surviving write commits as one ordinary transaction.
 t_failed_foreign_branch_retains_state(#{pets := P, chain_b := B}) ->
     Goal = {';', {'::', chain_b, stage_and_fail},
                  {'::', chain_b, shared_mark_visible}},
-    assert_group_committed(
-      prove_group(P, Goal, [P, B]), [<<"chain_b">>, <<"pets">>]),
+    assert_foreign_transaction(prove(P, Goal), <<"chain_b">>),
     ?assertMatch({ok, [#{}], _}, prove(B, shared_mark)).
 
 %% transaction/1 restores B before the enclosing disjunction tries its second
@@ -631,8 +629,7 @@ t_transaction_restores_foreign_branch_before_alternative(
   #{pets := P, chain_b := B}) ->
     First = {',', {'::', chain_b, {assertz, tx_hidden}}, fail},
     Goal = {transaction, {';', First, {'::', chain_b, tx_second}}},
-    assert_group_committed(
-      prove_group(P, Goal, [P, B]), [<<"chain_b">>, <<"pets">>]),
+    assert_foreign_transaction(prove(P, Goal), <<"chain_b">>),
     ?assertMatch({fail, _}, prove(B, tx_hidden)),
     ?assertMatch({ok, [#{}], _}, prove(B, tx_kept)).
 
@@ -650,9 +647,8 @@ t_origin_transaction_is_inherited_by_selected_branch(
 %% Erlog's local token; the origin controller restores C before B continues.
 t_selected_scope_transaction_restores_descendant(
   #{pets := P, chain_c := C}) ->
-    assert_group_committed(
-      prove(P, {'::', chain_b, tx_via_c}),
-      [<<"chain_b">>, <<"chain_c">>, <<"pets">>]),
+    assert_foreign_transaction(
+      prove(P, {'::', chain_b, tx_via_c}), <<"chain_c">>),
     ?assertMatch({fail, _}, prove(C, c_tx_hidden)),
     ?assertMatch({ok, [#{}], _}, prove(C, c_tx_kept)).
 
@@ -752,17 +748,15 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
 %% C calls back into the already-suspended B scope. The B write must be visible
 %% there; opening a second B overlay would make the proof fail instead.
 t_reentrant_scope_reuse(#{pets := P, chain_b := B}) ->
-    assert_group_committed(
-      prove(P, {'::', chain_b, {via_c_back, ok}}),
-      [<<"chain_b">>, <<"chain_c">>, <<"pets">>]),
+    assert_foreign_transaction(
+      prove(P, {'::', chain_b, {via_c_back, ok}}), <<"chain_b">>),
     ?assertMatch({ok, [#{}], _}, prove(B, reentry_mark)).
 
 %% B selects the already-running origin scope A. The write belongs to A's
-%% group plan; no second A overlay is opened.
-t_origin_scope_reentry_commits_group(#{pets := P}) ->
-    assert_group_committed(
-      prove(P, {'::', chain_b, via_origin_write}),
-      [<<"chain_b">>, <<"pets">>]),
+%% ordinary local transaction; no second A overlay is opened.
+t_origin_scope_reentry_commits(#{pets := P}) ->
+    {ok, [#{}], Index} = prove(P, {'::', chain_b, via_origin_write}),
+    ?assert(is_integer(Index) andalso Index > 0),
     ?assertMatch({ok, [#{}], _}, prove(P, origin_callback_write)).
 
 t_nested_failure_reasons(#{pets := P}) ->
@@ -1064,70 +1058,32 @@ t_failure_reasons_cross_local_ask(#{pets := P}) ->
        {ok, [#{'Outer' := Remote}], _},
        prove(P, Recover)).
 
-%% A foreign write also depends on the origin's authorization read. The group
-%% commits both participants before exposing the target write.
-t_foreign_write_commits_group(#{animals := A, pets := P}) ->
+%% An unsigned foreign write whose source contributes only an authorization
+%% read uses that source's read certificate and the target's one ordinary
+%% transaction. A read-only source no longer consumes an empty group slot.
+t_foreign_write_uses_certified_read(#{animals := A, pets := P}) ->
     Goal = {assertz, {stolen, fact}},
-    assert_group_committed(
-      prove(P, {'::', animals, Goal}), [<<"animals">>, <<"pets">>]),
+    ?assertMatch(
+       {ok, [_], {transaction, <<"animals">>, _, _}},
+       prove(P, {'::', animals, Goal})),
     ?assertMatch({ok, [#{}], _}, prove(A, {stolen, fact})).
 
-%% A deterministic participant refusal becomes the group's logical abort.  Its
-%% bounded reason stack reaches the originating Prolog proof unchanged, and no
-%% hidden participant write becomes visible.
-t_prepare_refusal_aborts_group_with_reasons(
+%% A one-writer transaction is rejected directly by the target's ordinary
+%% commit validator. It is not represented as an L3 Prepare refusal, and the
+%% rejected policy removal never becomes visible.
+t_single_writer_refusal_is_returned(
   #{pets := P, chain_b := B}) ->
-    {fail, Reasons} = prove(P, {'::', chain_b, drop_policy}),
-    Anchor = quod_simplex:genesis_hash(B),
-    ?assert(lists:member(
-              {prepare_refused, {ontology, B, Anchor}}, Reasons)),
-    ?assert(lists:member(policy_self_seal_forbidden, Reasons)),
+    ?assertEqual(
+       {error, policy_self_seal_forbidden},
+       prove(P, {'::', chain_b, drop_policy})),
     ?assertMatch(
        {ok, [#{}], _},
        prove(B, {can_invoke, probe, anonymous, [], B})).
 
-assert_group_committed(
-  {ok, [_Bindings],
-   #{ref := {group, _Ns, _Anchor, _Coordinator, _Admission, _GroupId},
-     participant_slots := Slots}}, Names) ->
-    ?assertEqual(length(Names), length(Slots)),
-    ?assertEqual(
-       lists:sort(
-         [{Ns, quod_simplex:genesis_hash(Ns)} || Ns <- Names]),
-       lists:sort(
-         [Identity || {Identity = {Ns, <<_:256>>}, Slot, Generation} <- Slots,
-                      is_binary(Ns),
-                      is_integer(Slot), Slot > 0,
-                      is_integer(Generation), Generation >= 0])).
-
-prove_group(Ns, Goal, Watched) ->
-    Parent = self(),
-    Ref = make_ref(),
-    {Pid, Monitor} = spawn_monitor(
-                       fun() -> Parent ! {Ref, prove(Ns, Goal)} end),
-    receive
-        {Ref, Result} ->
-            _ = erlang:demonitor(Monitor, [flush]),
-            Result;
-        {'DOWN', Monitor, process, Pid, Reason} ->
-            error({group_proof_crashed, Reason})
-    after 15000 ->
-        exit(Pid, kill),
-        error(
-          {group_timeout,
-           [{WatchedNs, group_diagnostic(WatchedNs)}
-            || WatchedNs <- Watched]})
-    end.
-
-group_diagnostic(Ns) ->
-    Status = quod_simplex:status(Ns),
-    case maps:to_list(maps:get(dtx_coordinators, Status, #{})) of
-        [{GroupId, _}] when is_binary(GroupId), byte_size(GroupId) =:= 32 ->
-            #{simplex => Status,
-              prolog => quod_prolog:dtx_group_state(Ns, GroupId)};
-        _ ->
-            #{simplex => Status}
-    end.
+assert_foreign_transaction(
+  {ok, [_Bindings], {transaction, TargetNs, <<_:256>>, <<_:256>>}},
+  TargetNs) ->
+    ok.
 
 %% A scope may be deriving an unproductive goal without blocking its owning
 %% ontology engine. Killing that isolated worker leaves the engine healthy.

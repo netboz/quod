@@ -246,10 +246,11 @@ relation as every other durable goal. Their staging bridge prepares one typed
 effect in the proof overlay; it never performs IO during the proof. The
 root transaction controls creation and the node transaction controls join.
 An effect local to the proof origin is committed through the ordinary local
-content path. A signed effect for one foreign ontology uses the same
+content path. A signed effect for one foreign writing ontology uses the same
 `remote_claim` -> ordinary `remote_application` -> `remote_complete` path as
-every other one-target foreign write. Only a proof with two or more material
-ontologies uses the Begin/Prepare/Decision/Finalize/Complete group. The one
+every other one-target foreign write. Read-only ontologies provide f+1 snapshot
+certificates. Only a proof with two or more writing ontologies uses the
+Begin/Prepare/Decision/Finalize/Complete group. The one
 node-wide journal owns custody in every case, invokes the typed helper only
 after its controlling commit is applied, then verifies the real desired state.
 This is the D/P/E boundary made explicit, not a second executor or a claim that
@@ -609,7 +610,7 @@ codec seam:
 | one actively deriving step | existing configurable 30,000 ms |
 | one transport frame | existing 1 MiB |
 | one encoded nested goal / one answer | 8 KiB / 64 KiB |
-| one session command/reply envelope | derived from the largest exact signed operation submission plus bounded scope metadata (currently 271,488 bytes) |
+| one session command/reply envelope | derived from the largest exact signed operation submission, bounded certified reads, and scope metadata (currently 500,864 bytes) |
 | one failure reason / complete reason stack / retained entries / diagnostic choice-point boundaries | existing 4 KiB / 32 KiB / 256 / 256 |
 | one scope invocation transcript | 12 KiB |
 | one signed local-plan envelope | 24 KiB |
@@ -886,9 +887,11 @@ As built in this Step-4 slice (`quod_dtx`), with the same binding properties:
   zero-anchor plan; a keyed engine without its live genesis anchor refuses the
   proof as rebuilding.
 
-All scopes whose reads influenced a writing proof participate, including a
-scope with an empty local diff. Otherwise a premise in B could change while A
-and C commit. If every diff is empty, the proof returns directly from its pinned
+For a one-writer proof, read-only scopes certify their exact pinned snapshots
+instead of participating in a group. The writer validates those certificates
+before its ordinary transaction commits. For two or more writers, read-only
+scopes remain DTX participants so the existing atomic group contract is
+unchanged. If every diff is empty, the proof returns directly from its pinned
 views and creates no ledger entry or ordinary OCC pass, matching today's local
 frozen-read semantics. It still resolves the accumulated DTX visibility state:
 every normal selected scope must remain certified-current at return; an exact
@@ -902,21 +905,22 @@ fence only prevents crossing an unresolved distributed commit. This preserves
 the project's existing read-skew contract instead of adding a global read
 consensus protocol to the write milestone.
 
-When exactly one ontology has a diff or influencing read dependency, its target
-validator submits the sealed plan through the existing one-ontology transaction
-path—even when it is foreign to the proof origin. The hard-break ordinary
+When exactly one ontology writes, its target validator submits the sealed plan
+through the existing one-ontology transaction path—even when it is foreign to
+the proof origin. Read-only scopes contribute f+1 certificates for their exact
+sealed snapshots. The hard-break ordinary
 transaction envelope is generalized to bind the target ontology/anchor,
 `ProofId`, origin identity, bounded top-level goal/result, plan/transcript
 digest, and the target's normal author sequence/signature. The target still authors its own
-ledger entry, and `outcome(OutcomeRef)` can recover the exact result. Two or more
-material/read-dependent ontologies use the protocol below. There is no separate
-Prolog API or behavioral mode.
+ledger entry, and `outcome(OutcomeRef)` can recover the exact result. Two or
+more writing ontologies use the protocol below, retaining their readers as
+participants for now. There is no separate Prolog API or behavioral mode.
 
 This reuses the one-ledger mechanics, not today's private function unchanged.
 Extract one target-owned `quod_prolog:submit_plan/4` primitive from
 `submit_write/8`. It validates the sealed local plan, builds the unsigned
 ordinary envelope, submits it from the target engine, and owns the parked/result
-state until apply. Both an ordinary local proof and a sole-foreign material
+state until apply. Both an ordinary local proof and a sole-foreign writer
 scope call that primitive. Delete the old caller-engine `submit_write/8` shape
 and its `CallerNs =:= Ns` guard so no second foreign submission path or proxy-
 authored transaction survives.
@@ -952,15 +956,18 @@ As built:
   requested mutation is already present, so the existing transaction,
   remote claim, or DTX Begin can carry its durable operation claim with an
   empty diff. For a
-  writing proof, single-participant routing counts every plan whose signed
-  diff is non-empty, whose signed read set is non-empty, which carries one
-  direct effect, or which carries that origin operation claim. A direct effect
-  and a diff may not coexist in the same plan; separate participant plans may
-  contain either. It submits the
-  sole local participant's plan engine-direct. A signed foreign singleton
-  commits a batchable `remote_claim` in the agent ontology, submits the
-  certified claim as an ordinary `remote_application` to the selected scope,
-  and later records `remote_complete` asynchronously. Outcome only crosses back:
+  writing proof, lane selection counts writers only: a diff or direct effect
+  makes a writer; a read-only scope supplies a certificate in a one-writer
+  lane and remains a DTX participant only when there are two or more writers.
+  A direct effect and a diff may not coexist in the same plan; separate plans
+  may contain either. It submits the sole local writer's plan engine-direct.
+  A signed foreign singleton certifies every read-only dependency, including a
+  read-only origin, then commits a batchable `remote_claim` in the agent
+  ontology with an empty `read_check`. It submits that certified claim as an
+  ordinary `remote_application` to the selected scope and later records
+  `remote_complete` asynchronously. The claim is an operation record, not a
+  second authorization route: the selected target still rechecks its sealed
+  `can_invoke/4` transcript. Outcome only crosses back:
   `{committed, Slot, TxId} | {rejected, Reason} |
   {outcome_unknown, OutcomeRef}` from a closed vocabulary),
   and returns `{ok, [Bindings], {transaction, Ns, Anchor, TxId}}` for a

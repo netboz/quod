@@ -2914,6 +2914,47 @@ read_attest_validator_signs_the_exact_current_ledger_anchor_test() ->
         file:del_dir_r(Dir)
     end.
 
+read_attest_validator_signs_the_pinned_genesis_anchor_test() ->
+    {Self, Identity} = id(),
+    Ns = <<"quod:read-attest-genesis">>,
+    Genesis = quod_simplex:test_genesis_tx(
+                #{external_predicate_modules => []}, Ns, Self, <<62:256>>),
+    Entry = #entry{index = 1, data = {batch, [Genesis]},
+                   timestamp = 0, cert = none},
+    {ok, Block} = quod_simplex:block_from_entry(Entry),
+    Anchor = quod_simplex:block_hash(Block),
+    Target = {Ns, Anchor},
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{target => Target, node_identity => Identity,
+                  goal_text => <<"\\+(missing(ok)).">>}),
+    Plan = maps:get(plan, Fixture),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    Dir = relay_store_dir("read_attest_genesis"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store1} = quod_ledger_store:append(Store0, [Entry]),
+    try
+        ?assertMatch({ok, _},
+                     quod_dtx:certified_entry_ref(Target, Entry, Genesis)),
+        State = st(#{ns => Ns, genesis_hash => Anchor,
+                     self => Self, id => Identity,
+                     validators => [Self], slot => 1, last_applied => 1,
+                     sync => ready, prolog_ready => true, store => Store1}),
+        RequestId = <<63:128>>,
+        {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
+         CommitteeId, Self, Signature} =
+            quod_simplex:test_dtx_endpoint_result(
+              {read_attest, RequestId, PlanBlob},
+              {read_plan_valid, Plan, 1}, State),
+        ?assertMatch({ok, Target, 1, _},
+                     quod_dtx:certified_ref_binding(AnchorRef)),
+        ?assert(quod_read_certificate:verify_vote(
+                  Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                  Self, Signature))
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
 dtx_endpoint_applied_waits_for_exact_projection_message_test() ->
     {Author, AuthorId} = id(),
     Ns = <<"quod:dtx-applied-wake">>,

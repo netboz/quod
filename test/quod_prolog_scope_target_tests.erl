@@ -203,7 +203,8 @@ cleanup_remains_valid_after_execution_budget_expires_test() ->
 
 sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
     ManifestBlob = <<"manifest">>,
-    Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>, []},
+    Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>,
+              foreign_reads_blob(), []},
     ?assertEqual(
        active,
        quod_prolog:test_scope_command_route(active, scope_seal)),
@@ -399,3 +400,7 @@ identity_certificate(Fixture, ProofId) ->
     View = #{identity => maps:get(target, Fixture),
              committee => [Validator], committee_id => CommitteeId},
     {Certificate, View}.
+
+foreign_reads_blob() ->
+    {ok, Blob} = quod_scope_wire:encode_payload(foreign_reads, []),
+    Blob.

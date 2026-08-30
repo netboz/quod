@@ -4911,7 +4911,7 @@ verify_exact_transaction_reference(Ref, Entry, Transactions, Projection) ->
     Identity = ref_identity(Ref),
     Digest = ref_record_digest(Ref),
     case [T || #transaction{tx_id = TxId} = T <- Transactions,
-               TxId =:= Digest] of
+               transaction_reference_digest(ref_slot(Ref), TxId) =:= Digest] of
         [Transaction] ->
             case quod_dtx:certified_entry_ref(
                    Identity, Entry, Transaction) of
@@ -4936,6 +4936,16 @@ verify_exact_transaction_reference(Ref, Entry, Transactions, Projection) ->
         _ ->
             {error, invalid_foreign_reference}
     end.
+
+
+%% The genesis transaction id is a tagged, namespace-bearing value rather
+%% than a 32-byte ordinary transaction id.  Its exact certified reference
+%% uses the digest of that value; slot 1 is independently fixed by the pinned
+%% genesis block hash before this selector is reached.
+transaction_reference_digest(1, TxId) when is_binary(TxId) ->
+    crypto:hash(sha256, TxId);
+transaction_reference_digest(_Slot, TxId) ->
+    TxId.
 
 verify_reference_source(Peer, {ok, #{committee := Committee}} = Result,
                         true) ->

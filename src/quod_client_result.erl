@@ -32,7 +32,8 @@ where the proof ran.
 -type public_error() ::
         read_only | target_unavailable | ontology_rebuilding | ontology_busy |
         cursor_not_found | cursor_not_ready | cursor_busy | invalid_action |
-        non_backtrackable_action | proof_unavailable | result_too_large.
+        non_backtrackable_action | conflict_retry | proof_unavailable |
+        result_too_large.
 -type result() ::
         {answers, non_neg_integer(), [binary()]} |
         {solution, <<_:256>>, non_neg_integer(), binary()} |
@@ -163,6 +164,7 @@ public_error(cursor_not_ready) -> cursor_not_ready;
 public_error(cursor_busy) -> cursor_busy;
 public_error(invalid_action) -> invalid_action;
 public_error(non_backtrackable_action) -> non_backtrackable_action;
+public_error(conflict_retry) -> conflict_retry;
 public_error(result_too_large) -> result_too_large;
 public_error(_Reason) -> proof_unavailable.
 
@@ -290,6 +292,7 @@ valid_public_error(Reason) ->
         Reason =:= cursor_busy orelse
         Reason =:= invalid_action orelse
         Reason =:= non_backtrackable_action orelse
+        Reason =:= conflict_retry orelse
         Reason =:= proof_unavailable orelse Reason =:= result_too_large.
 
 -doc "Render one already-normalized local or forwarded result.".
@@ -346,6 +349,8 @@ http_error({error, invalid_action}) ->
     {400, #{error => invalid_action}};
 http_error({error, non_backtrackable_action}) ->
     {400, #{error => non_backtrackable_action}};
+http_error({error, conflict_retry}) ->
+    {409, #{error => conflict_retry}};
 http_error({error, result_too_large}) ->
     {413, #{error => result_too_large}};
 http_error({error, proof_unavailable}) ->

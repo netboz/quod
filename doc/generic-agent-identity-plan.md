@@ -188,12 +188,13 @@ operation-claim rules.
 
 ### 5.2 Remote or multi-ontology write
 
-A signed write with exactly one foreign material target uses the batchable
+A signed write with exactly one foreign writer uses the batchable
 remote-operation path. A commits `remote_claim`, containing the complete
 signed request, stable operation claim, exact sealed target plan, and predicted
 target transaction reference. B then commits one ordinary
-`remote_application`; A records `remote_complete` asynchronously. Two or more
-material/read-dependent targets still use the atomic DTX group protocol.
+`remote_application`; A records `remote_complete` asynchronously. Read-only
+dependencies contribute f+1 snapshot certificates. Two or more writers still
+use the atomic DTX group protocol, retaining their readers for now.
 
 A's claim validators verify:
 
@@ -257,7 +258,7 @@ The deployed tree uses one incompatible generation:
 | DTX manifest | V3 |
 | DTX control envelope | V2 |
 | DTX record family | V3 |
-| scope wire | deployed V8; current unactivated source V9 |
+| scope wire | deployed V8 in that review; current source V10 |
 | scope authorization domain | V5 |
 | direct effect descriptor | V2 |
 | identity certificate | `quod.agent.identity.v1` |

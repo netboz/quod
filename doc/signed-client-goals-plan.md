@@ -25,8 +25,9 @@ procedure.
 
 The current coordinated generation extends that same projection with
 batchable `remote_claim` and `remote_complete` metadata. A signed write with
-one foreign material target is no longer a one-participant DTX group: it is a
-source claim followed by the target's ordinary application. The historical
+one foreign writer is not a one-participant DTX group: it is a source claim
+followed by the target's ordinary application, carrying f+1 certificates for
+any read-only dependencies. The historical
 Slice-3 one-participant wording below is retained only where explicitly
 labelled.
 
@@ -478,12 +479,12 @@ material can become visible:
 - a read creates no durable claim;
 - a write whose sole material participant is the origin uses its ordinary
   transaction as the claim;
-- a write with exactly one foreign material target commits a batchable
+- a write with exactly one foreign writer commits a batchable
   `remote_claim` in the origin, then one ordinary `remote_application` in the
   target; a batchable `remote_complete` in the origin later marks the claim
-  terminal; and
-- two or more material/read-dependent targets use a DTX Begin and the atomic
-  group protocol.
+  terminal; read-only dependencies contribute f+1 snapshot certificates; and
+- two or more writers use a DTX Begin and the atomic group protocol, retaining
+  their read-only dependencies as participants for now.
 
 The claim fixes the exact target transaction before any foreign diff can
 become visible. It preserves the authoritative origin operation record without
@@ -836,8 +837,10 @@ agent principal, and proof-scoped identity certificate. Each target verifies
 identity and then runs its own ordinary `can_invoke/4` proof. Every sealed plan
 binds the same request digest. A foreign-only material write commits the
 complete request and operation claim once as `remote_claim` in the origin,
-then uses the target's ordinary `remote_application`; two or more targets carry
-the request once in the origin Begin.
+then uses the target's ordinary `remote_application`; read-only dependencies
+contribute f+1 snapshot certificates. Two or more writing targets carry the
+request once in the origin Begin, with their readers retained in the atomic
+group for now.
 
 Root-network identity unavailability is one typed retry result shared by live
 preview, replay, catch-up, and foreign-history verification. It is not a
@@ -1258,8 +1261,9 @@ The review must answer these before implementation:
 - A forged recorded authorization verdict, an authorization entry for another
   goal, and a policy revoked between sealing and apply are each rejected
   deterministically during proposal validation and replay.
-- A signed write with only one foreign material participant creates an origin
-  Begin and never uses the direct foreign ordinary path.
+- A signed write with one foreign writer creates an origin `remote_claim`,
+  carries any read certificates into its ordinary target application, and
+  never creates an atomic DTX Begin.
 - Request evidence and authorization transcripts at their exact transaction,
   Begin, and signing-journal limits are accepted; each limit-plus-one form is
   rejected before retention.

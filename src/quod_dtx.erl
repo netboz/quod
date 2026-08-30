@@ -60,6 +60,12 @@ replay. Neither transition changes the global proof generation.
 """.
 
 -include("quod_proof_limits.hrl").
+
+%% Slot 1 is final by the ontology's pinned genesis block hash rather than by
+%% a later consensus certificate.  Keeping that proof inside the existing
+%% certified-reference shape lets fresh and long-lived ontologies use the one
+%% exact-reference verifier.
+-define(GENESIS_FINALITY_PROOF, <<"quod/genesis-anchor/v1">>).
 -include("quod_client_goal_limits.hrl").
 -include("quod_ledger.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
@@ -69,7 +75,7 @@ replay. Neither transition changes the global proof generation.
          core/1, target/1, base_height/1, proof_id/1, origin/1,
          principal/1, request_binding/1, overlay_generation/1, signer/1,
          valid_principal/1,
-         participates/1, material_participant/1, diff_ops/1, effects_count/1,
+         participates/1, writes/1, reads_only/1, diff_ops/1, effects_count/1,
          conflict_descriptor/1,
          diff_bytes/1, read_check_bytes/1, effects_bytes/1,
          live_bridges_bytes/1,
@@ -478,18 +484,22 @@ digest(Plan) -> crypto:hash(sha256, plan_bytes(core(Plan))).
 -spec diff_ops(plan()) -> non_neg_integer().
 diff_ops(Plan) -> maps:get(diff_ops, core(Plan)).
 
--doc "Whether a plan contributes material or the origin's operation claim.".
+-doc "Whether a plan writes, contributes OCC reads, or carries the origin claim.".
 -spec participates(plan()) -> boolean().
 participates(Plan) ->
-    material_participant(Plan) orelse
+    writes(Plan) orelse reads_only(Plan) orelse
         operation_claim_plan(
           target(Plan), origin(Plan), request_binding(Plan)).
 
--doc "Whether a plan contributes actual diff, OCC-read, or effect material.".
--spec material_participant(plan()) -> boolean().
-material_participant(Plan) ->
-    diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0 orelse
-        effects_count(Plan) > 0.
+-doc "Whether this ontology must commit a write or direct effect.".
+-spec writes(plan()) -> boolean().
+writes(Plan) ->
+    diff_ops(Plan) > 0 orelse effects_count(Plan) > 0.
+
+-doc "Whether this plan contributes OCC reads but no write or direct effect.".
+-spec reads_only(plan()) -> boolean().
+reads_only(Plan) ->
+    not writes(Plan) andalso maps:get(read_functors, core(Plan)) > 0.
 
 operation_claim_plan(
   Identity, Identity, {agent_goal_v1, <<_:256>>}) -> true;
@@ -994,6 +1004,31 @@ or encodes the certificate independently.
 -spec certified_entry_ref({binary(), <<_:256>>}, #entry{},
                           control() | #transaction{}) ->
           {ok, certified_ref()} | {error, invalid_certified_entry}.
+certified_entry_ref(
+  {Ns, <<_:256>> = Anchor},
+  #entry{index = 1, data = {batch, [Transaction]}, cert = none} = Entry,
+  #transaction{tx_id = TxId, sig = none,
+               origin = {Ns, <<0:256>>}, proof_id = none,
+               plan_digest = none} = Transaction)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_binary(TxId), byte_size(TxId) > 0 ->
+    case quod_simplex:block_from_entry(Entry) of
+        {ok, Block} ->
+            case quod_simplex:block_hash(Block) =:= Anchor of
+                true ->
+                    case certified_ref(
+                           Ns, Anchor, 1, Anchor,
+                           crypto:hash(sha256, TxId),
+                           ?GENESIS_FINALITY_PROOF) of
+                        {ok, Ref} -> {ok, Ref};
+                        {error, _} -> {error, invalid_certified_entry}
+                    end;
+                false ->
+                    {error, invalid_certified_entry}
+            end;
+        error ->
+            {error, invalid_certified_entry}
+    end;
 certified_entry_ref(
   {Ns, <<_:256>> = Anchor},
   #entry{index = Slot, data = {batch, Transactions},

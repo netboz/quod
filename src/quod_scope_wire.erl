@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 9).
+-define(VERSION, 10).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -63,7 +63,8 @@ renew the scope lifetime.
         {scope_attest, binary()} | certify_reads |
         {bind_group_effects, term(), <<_:256>>} |
         {bind_operation_effect, binary()} |
-        {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
+        {submit_plan, binary(), binary(), binary(), binary(),
+         [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
         {invoke_cancel, opaque_id()} |
@@ -112,7 +113,8 @@ renew the scope lifetime.
          non_neg_integer(), boolean(), event_operation()}.
 -type payload_kind() ::
         goal | answer | failure_reasons | erlog_error | plan | manifest |
-        attestation | read_certificate | result | operation_submission.
+        attestation | read_certificate | foreign_reads | result |
+        operation_submission.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
         {error, {protocol_error, atom()}}.
@@ -349,6 +351,12 @@ encode_payload(read_certificate, Certificate) ->
         {error, too_large} -> too_large(read_certificate);
         {error, invalid_read_certificate} -> protocol_error(bad_payload)
     end;
+encode_payload(foreign_reads, Certificates) ->
+    case quod_transaction:encode_foreign_reads(Certificates) of
+        {ok, _} = Result -> Result;
+        {error, too_large} -> too_large(foreign_reads);
+        {error, bad_foreign_reads} -> protocol_error(bad_payload)
+    end;
 encode_payload(failure_reasons, Reasons) ->
     normalize_failure_reason_payload(
       quod_wire_term:encode_failure_reasons(Reasons));
@@ -385,6 +393,12 @@ decode_payload(read_certificate, Encoded) when is_binary(Encoded) ->
         {ok, _} = Result -> Result;
         {error, too_large} -> too_large(read_certificate);
         {error, invalid_read_certificate} -> protocol_error(bad_payload)
+    end;
+decode_payload(foreign_reads, Encoded) when is_binary(Encoded) ->
+    case quod_transaction:decode_foreign_reads(Encoded) of
+        {ok, _} = Result -> Result;
+        {error, too_large} -> too_large(foreign_reads);
+        {error, bad_foreign_reads} -> protocol_error(bad_payload)
     end;
 decode_payload(failure_reasons, Encoded) ->
     normalize_failure_reason_payload(
@@ -429,6 +443,7 @@ payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
 payload_limit(manifest) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(attestation) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(read_certificate) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
+payload_limit(foreign_reads) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
 payload_limit(operation_submission) ->
     {ok, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES};
@@ -452,13 +467,15 @@ validate_command_operation(
   {bind_operation_effect, SubmissionBlob}) ->
     validate_blob(operation_submission, SubmissionBlob);
 validate_command_operation(
-  {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier}) ->
-    %% These three payloads remain opaque until the authenticated command has
+  {submit_plan, PlanBlob, GoalBlob, ResultBlob, ForeignReadsBlob,
+   TraceCarrier}) ->
+    %% These four payloads remain opaque until the authenticated command has
     %% passed its exact scope binding, sequence, deadline, readiness and quota
     %% gates. Deep canonical decoding belongs to the shared target admission
     %% boundary; unauthorised peers pay only bounded envelope decoding here.
     case quod_trace:valid_carrier(TraceCarrier) of
-        true -> validate_submit_blobs(PlanBlob, GoalBlob, ResultBlob);
+        true -> validate_submit_blobs(
+                  PlanBlob, GoalBlob, ResultBlob, ForeignReadsBlob);
         false -> protocol_error(bad_payload)
     end;
 validate_command_operation(
@@ -510,11 +527,15 @@ validate_command_operation({controller_error, ControllerId, Reason}) ->
     validate_id_error(ControllerId, Reason);
 validate_command_operation(_) -> protocol_error(bad_shape).
 
-validate_submit_blobs(PlanBlob, GoalBlob, ResultBlob) ->
+validate_submit_blobs(PlanBlob, GoalBlob, ResultBlob, ForeignReadsBlob) ->
     case validate_blob(plan, PlanBlob) of
         ok ->
             case validate_blob(goal, GoalBlob) of
-                ok -> validate_blob(result, ResultBlob);
+                ok ->
+                    case validate_blob(result, ResultBlob) of
+                        ok -> validate_blob(foreign_reads, ForeignReadsBlob);
+                        {error, _} = Error -> Error
+                    end;
                 {error, _} = Error -> Error
             end;
         {error, _} = Error -> Error

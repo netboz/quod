@@ -554,17 +554,15 @@ foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
     ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
     TargetNs = unique_ns(<<"effect-with-foreign-read">>),
     try
-        {ok, [#{}],
-         #{ref := GroupRef, participant_slots := ParticipantSlots}} =
-            quod_prolog:execute(
-              ?ROOT_NS, {create_ontology, TargetNs, []}),
-        ?assertMatch({group, _, _, _, _, _}, GroupRef),
-        ?assertEqual(2, length(ParticipantSlots)),
+        {ok, [#{}], Height} = quod_prolog:execute(
+                                ?ROOT_NS,
+                                {create_ontology, TargetNs, []}),
+        ?assert(is_integer(Height) andalso Height > 0),
         ok = wait_ready(TargetNs, 300),
         ok = wait_effect_target_state(TargetNs, applied, 300),
         ?assertMatch(
            [#{state := applied,
-              ref := {group_effect, 2, GroupRef, _, _, _}}],
+              ref := {transaction, ?ROOT_NS, _, _}}],
            [Row || #{target := {RowNs, _}} = Row <-
                        quod_effect_journal:rows(),
                    RowNs =:= TargetNs])

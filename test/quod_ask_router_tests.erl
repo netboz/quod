@@ -233,7 +233,8 @@ seal_attest_and_submit_are_reply_correlated_test() ->
           after ?TIMEOUT -> error(read_certificate_event_timeout)
           end,
 
-          Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>, []},
+          Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>,
+                    foreign_reads_blob(), []},
           {ok, SubmitRequest} = quod_ask_router:command(
                                   Handle, 30000, Submit),
           {scope_command, Binding, SubmitSeq, SubmitRequest, 30000, Submit} =
@@ -1083,6 +1084,9 @@ target_identity({scope_binding, _, _, _, _, _, TargetIdentity, _, _, _}) ->
     TargetIdentity.
 
 endpoint() -> {"127.0.0.1", 14567}.
+foreign_reads_blob() ->
+    {ok, Blob} = quod_scope_wire:encode_payload(foreign_reads, []),
+    Blob.
 namespace(N) -> iolist_to_binary([<<"quod:n">>, integer_to_binary(N)]).
 key(N) -> <<N:256>>.
 proof_id(N) -> <<N:256>>.

@@ -844,6 +844,42 @@ remote_scope_read_certificate_is_bound_to_the_exact_sealed_plan_test() ->
         stop_remote_fixture(Router, Handle)
     end.
 
+read_certificate_many_cleans_up_on_cohosted_worker_down_test() ->
+    Ns = <<"quod:cohosted-read-down">>,
+    ProofId = key(211),
+    SessionRef = make_ref(),
+    Worker = spawn(
+               fun() ->
+                   receive
+                       {scope_certify_reads, _Caller, ProofId,
+                        SessionRef, _RequestRef} ->
+                           exit(simulated_worker_down)
+                   end
+               end),
+    Handle = {quod_scope_session, Worker, id(212), ProofId, SessionRef,
+              Ns, key(213)},
+    with_proof_context(
+      fun() ->
+          ?assertEqual(
+             {error, {protocol_error, proof_engine}},
+             quod_scope_session:certify_reads_many([{Handle, invalid_plan}]))
+      end).
+
+read_certificate_many_surfaces_remote_scope_error_test() ->
+    {ErrorRouter, ErrorHandle, _ErrorScopeId, _ErrorIdentity} =
+        remote_fixture({scope_error, conflict_retry}),
+    try
+        with_proof_context(
+          fun() ->
+              ?assertEqual(
+                 {error, conflict_retry},
+                 quod_scope_session:certify_reads_many(
+                   [{ErrorHandle, invalid_plan}]))
+          end)
+    after
+        stop_remote_fixture(ErrorRouter, ErrorHandle)
+    end.
+
 fake_worker(Parent) ->
     receive
         Message ->
@@ -1156,6 +1192,10 @@ send_router_event(
                    read_certificate, Certificate),
     Owner ! {quod_scope_event, Handle, RequestId, 1, false,
              {reads_certified, Blob}};
+send_router_event(
+  {scope_error, Reason}, Owner, Handle, RequestId, certify_reads) ->
+    Owner ! {quod_scope_event, Handle, RequestId,
+             7, false, {scope_error, Reason}};
 send_router_event({scope_error, Reason}, Owner, Handle, RequestId, Operation) ->
     case control_ack(Operation) of
         none -> ok;

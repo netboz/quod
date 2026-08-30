@@ -2,6 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("quod_ledger.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([remote_scope_solutions/1, remote_scope_symbol_safety/1,
@@ -12,6 +13,10 @@
          remote_scope_structural_reason_truncation/1,
          remote_scope_cancel/1, remote_scope_transport_reuse/1,
          remote_signed_gateway_read_execute_cursor/1,
+         remote_signed_read_certified_write/1,
+         local_write_with_foreign_read/1,
+         read_certificate_stale_rejected/1,
+         remote_signed_origin_read_certificate_stale_rejected/1,
          remote_signed_two_gateway_race/1,
          remote_signed_gateway_group/1,
          remote_signed_concurrent_gateway_groups/1,
@@ -39,6 +44,10 @@ all() -> [remote_scope_solutions, remote_scope_symbol_safety,
           remote_scope_structural_reason_truncation,
           remote_scope_cancel, remote_scope_transport_reuse,
           remote_signed_gateway_read_execute_cursor,
+          remote_signed_read_certified_write,
+          local_write_with_foreign_read,
+          read_certificate_stale_rejected,
+          remote_signed_origin_read_certificate_stale_rejected,
           remote_signed_two_gateway_race,
           remote_signed_gateway_group,
           remote_signed_concurrent_gateway_groups,
@@ -122,6 +131,9 @@ init_per_suite(Config) ->
             %% Exact remote selectors deliberately have no matching A policy;
             %% the target ontology alone must authorize its predicate.
             "can_invoke((assertz(signed_pets_mark(_)), _), "
+            "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
+            "_Chain, _Ns).\n",
+            "can_invoke((instance_of(pet, my_dog), _), "
             "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
             "_Chain, _Ns).\n",
             PetsBin,
@@ -522,6 +534,136 @@ remote_signed_gateway_read_execute_cursor(Config) ->
        peer:call(
          Asker, quod_client_goal_ingress, cursor_command,
          [maps:get(session_id, Session), StopCursor, stop, Peer], 60000)).
+
+%% B contributes only a certified read. C remains the sole writer, so this is
+%% one ordinary remote operation claim and target transaction, never a DTX
+%% group with empty Prepare/Finalize slots for B.
+remote_signed_read_certified_write(Config) ->
+    Asker = ?config(asker, Config),
+    Third = ?config(third, Config),
+    Tag = erlang:unique_integer([positive]),
+    GoalText = iolist_to_binary(
+                 io_lib:format(
+                   "\"animals\"::diet(dog, kibble), "
+                   "\"third\"::dtx_write(~B).", [Tag])),
+    {ok, Evidence,
+     {normalized,
+      {committed, [_],
+       {transaction, ?THIRD_NS, ThirdAnchor, _} = TargetRef}}} =
+        submit_signed_execute(Config, GoalText),
+    ?assertEqual(
+       ThirdAnchor,
+       peer:call(Third, quod_simplex, genesis_hash, [?THIRD_NS])),
+    ?assertEqual(
+       TargetRef,
+       completed_remote_operation(
+         Asker, maps:get(operation_ref, Evidence), 600)),
+    assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag).
+
+%% A writes locally while B contributes only a certified read. The result is
+%% A's ordinary transaction; there is no source claim and no DTX group.
+local_write_with_foreign_read(Config) ->
+    Asker = ?config(asker, Config),
+    Tag = erlang:unique_integer([positive]),
+    GoalText = iolist_to_binary(
+                 io_lib:format(
+                   "assertz(signed_pets_mark(~B)), "
+                   "\"animals\"::diet(dog, kibble).", [Tag])),
+    ?assertMatch(
+       {ok, _,
+        {normalized,
+         {committed, [_], {transaction, ?ASKER_NS, _, _}}}},
+       submit_signed_execute(Config, GoalText)),
+    assert_fact_once(Asker, ?ASKER_NS, signed_pets_mark, Tag).
+
+%% The read token is sealed first. B then commits another diet/2 fact before
+%% its validators sign the certificate. Certification must reject the stale
+%% token and A's local write must remain absent.
+read_certificate_stale_rejected(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    Tag = erlang:unique_integer([positive]),
+    GoalText = iolist_to_binary(
+                 io_lib:format(
+                   "assertz(signed_pets_mark(~B)), "
+                   "\"animals\"::diet(dog, kibble).", [Tag])),
+    ok = peer:call(
+           Asker, quod_prolog,
+           test_install_read_certificate_barrier, []),
+    Parent = self(),
+    RequestRef = make_ref(),
+    _ = spawn(
+          fun() ->
+              Parent ! {RequestRef, submit_signed_execute(Config, GoalText)}
+          end),
+    try
+        ok = peer:call(
+               Asker, quod_prolog,
+               test_await_read_certificate_barrier, [3000]),
+        ?assertMatch(
+           {ok, [_], _},
+           peer:call(
+             Target, quod_prolog, prove,
+             [?NS, {assertz, {diet, dog, {stale_marker, Tag}}}],
+             60000))
+    after
+        %% Never leave the TEST-only rendezvous installed if an assertion
+        %% above fails: a later proof would otherwise correctly wait forever.
+        _ = peer:call(
+              Asker, quod_prolog,
+              test_release_read_certificate_barrier, [])
+    end,
+    Result = receive
+                 {RequestRef, Value} -> Value
+             after 60000 ->
+                 ct:fail(stale_read_request_did_not_finish)
+             end,
+    ?assertMatch(
+       {ok, _, {normalized, {error, conflict_retry}}}, Result),
+    assert_fact_absent(Asker, ?ASKER_NS, signed_pets_mark, Tag).
+
+%% The signed claim lane treats A's own read exactly like any other read-only
+%% dependency. If A changes after sealing but before certification, neither the
+%% source claim nor C's write may be submitted.
+remote_signed_origin_read_certificate_stale_rejected(Config) ->
+    Asker = ?config(asker, Config),
+    Third = ?config(third, Config),
+    Tag = erlang:unique_integer([positive]),
+    GoalText = iolist_to_binary(
+                 io_lib:format(
+                   "instance_of(pet, my_dog), \"third\"::dtx_write(~B).",
+                   [Tag])),
+    ok = peer:call(
+           Asker, quod_prolog,
+           test_install_read_certificate_barrier, []),
+    Parent = self(),
+    RequestRef = make_ref(),
+    _ = spawn(
+          fun() ->
+              Parent ! {RequestRef, submit_signed_execute(Config, GoalText)}
+          end),
+    try
+        ok = peer:call(
+               Asker, quod_prolog,
+               test_await_read_certificate_barrier, [3000]),
+        %% The source proof is deliberately parked before its certificate.
+        %% Commit the intervening source-head change at the consensus seam so
+        %% this test does not depend on a second client ingress being admitted
+        %% while the first signed request still owns that ingress session.
+        append_source_marker(Config, Tag)
+    after
+        _ = peer:call(
+              Asker, quod_prolog,
+              test_release_read_certificate_barrier, [])
+    end,
+    Result = receive
+                 {RequestRef, Value} -> Value
+             after 60000 ->
+                 ct:fail(origin_stale_read_request_did_not_finish)
+             end,
+    ?assertMatch(
+       {ok, _, {normalized, {error, conflict_retry}}}, Result),
+    assert_fact_absent(Third, ?THIRD_NS, dtx_third_mark, Tag).
 
 %% Two independent gateways race the same signed execute. One may receive a
 %% typed pre-custody availability refusal while the other proof is sealing;
@@ -1221,6 +1363,30 @@ assert_fact_absent(Peer, Ns, Predicate, Tag) ->
        {ok, [#{'Hits' := []}], _},
        peer:call(Peer, quod_prolog, prove, [Ns, Goal], 10000)).
 
+append_source_marker(Config, Tag) ->
+    Asker = ?config(asker, Config),
+    Author = ?config(asker_pub, Config),
+    Anchor = ?config(asker_anchor, Config),
+    {ok, Goal} = quod_durable_term:encode_goal({test_source_marker, Tag}),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    PlanDigest = crypto:hash(
+                   sha256,
+                   term_to_binary({test_source_marker, Tag},
+                                  [deterministic])),
+    Change = quod_transaction:bind_id(
+               {?ASKER_NS, Anchor},
+               #transaction{tx_id = <<>>,
+                            origin = {?ASKER_NS, Anchor},
+                            proof_id = <<0:256>>, plan_digest = PlanDigest,
+                            goal = Goal, result = Result,
+                            diff = [{assert,
+                                     {{instance_of, pet,
+                                       {stale_origin_marker, Tag}}, true}}],
+                            read_check = #{}, author = Author, sig = none}),
+    ?assertMatch({ok, _},
+                 peer:call(Asker, quod_simplex, append,
+                           [?ASKER_NS, Change], 60000)).
+
 dtx_disjoint_predicates() ->
     [{dtx_disjoint_write_chain_1, dtx_animals_mark_1,
       dtx_third_write_1, dtx_third_mark_1},
@@ -1489,6 +1655,22 @@ signed_goal_request(NetworkId, PublicKey, KeyPair,
     {ok, Bytes} = quod_client_goal:encode(Request),
     {Bytes,
      quod_identity:sign(Bytes, quod_identity:key_term(KeyPair))}.
+
+submit_signed_execute(Config, GoalText) ->
+    NetworkId = ?config(network_id, Config),
+    AgentPub = ?config(agent_pub, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentAnchor = ?config(asker_anchor, Config),
+    Session = ?config(client_session, Config),
+    {RequestBytes, Signature} = signed_goal_request(
+                                  NetworkId, AgentPub, AgentKey,
+                                  ?ASKER_NS, AgentAnchor,
+                                  maps:get(expires_ms, Session), execute,
+                                  GoalText),
+    peer:call(
+      ?config(asker, Config), quod_client_goal_ingress, submit,
+      [execute, maps:get(session_id, Session), RequestBytes, Signature,
+       ?config(client_peer, Config)], 60000).
 
 prolog_binary_literal(Bytes) ->
     iolist_to_binary(

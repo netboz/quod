@@ -683,13 +683,14 @@ action selector, and duplicate checks have been removed together. The
 implemented refactor and deletion map are in
 `ontology-lifecycle-single-path-plan.md`.
 
-An ordinary prerequisite may use `::`. If that proof reads or writes another
-material ontology while its target plan contains a direct effect, the existing
-DTX protocol commits the plans atomically. Every effect-bearing target stores
-its private prepared payload before Begin is activated, and only that target's
-ordered `Finalize(commit)` releases the effect through the normal P-before-E
-runtime path. The target's ordinary `can_invoke/4` and action prerequisites
-remain the only policy checks.
+An ordinary prerequisite may use `::`. If that proof writes another ontology
+while its target plan contains a direct effect, the existing DTX protocol
+commits the plans atomically. Foreign reads alone use the one-writer
+certificate lane and do not create a DTX participant. Every effect-bearing
+target stores its private prepared payload before Begin is activated, and only
+that target's ordered `Finalize(commit)` releases the effect through the
+normal P-before-E runtime path. The target's ordinary `can_invoke/4` and
+action prerequisites remain the only policy checks.
 
 The common target-first action rule also defines idempotence: an already-hosted
 same-name create is a no-op without comparing its unused options, while join's

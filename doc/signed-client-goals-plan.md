@@ -477,7 +477,7 @@ The origin ledger therefore receives the first durable claim before any foreign
 material can become visible:
 
 - a read creates no durable claim;
-- a write whose sole material participant is the origin uses its ordinary
+- a write whose sole writer is the origin uses its ordinary
   transaction as the claim;
 - a write with exactly one foreign writer commits a batchable
   `remote_claim` in the origin, then one ordinary `remote_application` in the

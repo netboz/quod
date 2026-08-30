@@ -7,7 +7,8 @@ reviewed with no blocker. Slice 2, the signed carrier and shared validation
 path, is implemented and reviewed with no blocker. Slice 3, the sealed-scope
 certificate command, is implemented and reviewed with no blocker. Slice 4,
 the lane chooser and certificate routing, is implemented and reviewed with no
-blocker. Slice 5, the documentation closure, is complete and awaiting review;
+blocker. Slice 5, the documentation closure, is complete and reviewed with no
+blocker;
 slices 6–8 are not built.
 
 Diagrams (static SVG, exists-today in dark blue, new in green):
@@ -296,7 +297,7 @@ Completed in Slice 5:
 2. **Carrier** — `#transaction.foreign_reads`, `from_plan`, `bytes`,
    `required_references`, `validate_foreign_reads/2` in both roles, N-ref
    generalisation of `verify_content_foreign_references`. Transaction V12.
-   **Implemented.** Exact anchor verification reuses the existing certified
+   **Implemented; review closed.** Exact anchor verification reuses the existing certified
    follower for either content or DTX-control entries; no second verifier or
    phase-probing path was added.
 3. **Scope command** — `certify_reads` command/event in `quod_scope_wire`,
@@ -317,7 +318,7 @@ Completed in Slice 5:
    terminal failure safeguard. Fresh ontologies certify their pinned genesis
    through the same exact certified-reference verifier used for later slots.
 5. **Docs** — the passages in §5, the snapshot-validity rule, and the
-   remaining cross-document routing changes. **Completed; awaiting review.**
+   remaining cross-document routing changes. **Completed; review closed.**
 6. **`independent/1`** — control construct → context flag; nesting error.
 7. **L2 claim generalisation** — N-bundle roles, per-target outcome rows,
    `execute_claimed_application` bundle selection; delete single-bundle shapes.

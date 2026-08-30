@@ -49,7 +49,7 @@ The following are not open to implementation shortcuts:
    prerequisites authorize its plan. DTX effect support adds no policy check.
 2. **One distributed-write path per cardinality.** A single foreign target uses
    the ordinary `remote_claim -> remote_application -> remote_complete` path.
-   Two or more material ontologies use Begin, Prepare, Decision, Finalize,
+   Two or more writers use Begin, Prepare, Decision, Finalize,
    Complete, their current coordinator, and their current recovery driver.
 3. **One effect-custody owner.** `quod_effect_journal` retains the private
    prepared bytes and executes the effect. No participant-specific journal or

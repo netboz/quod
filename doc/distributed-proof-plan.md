@@ -888,8 +888,10 @@ As built in this Step-4 slice (`quod_dtx`), with the same binding properties:
   proof as rebuilding.
 
 For a one-writer proof, read-only scopes certify their exact pinned snapshots
-instead of participating in a group. The writer validates those certificates
-before its ordinary transaction commits. For two or more writers, read-only
+instead of participating in a group. A certificate proves the reader's state
+when its committee signs the sealed plan; it is not a lock, so that reader may
+change afterwards. The writer validates those certificates before its ordinary
+transaction commits. For two or more writers, read-only
 scopes remain DTX participants so the existing atomic group contract is
 unchanged. If every diff is empty, the proof returns directly from its pinned
 views and creates no ledger entry or ordinary OCC pass, matching today's local
@@ -1007,10 +1009,12 @@ re-proving remains forbidden.
 
 ## 7. Atomic multi-ontology commit
 
-Independent appends are forbidden: one ontology could apply while another
-detects an OCC conflict. Use the existing per-ontology Simplex logs in one
-origin-coordinated BFT commit protocol. The origin is only the durable
-coordinator; it has no privileged Prolog semantics.
+Multi-ontology appends are atomic by default: one ontology must not apply
+while another detects an OCC conflict. Use the existing per-ontology Simplex
+logs in one origin-coordinated BFT commit protocol. The origin is only the
+durable coordinator; it has no privileged Prolog semantics. The planned L2
+`independent(...)` lane will be the explicit opt-out for writes whose caller
+accepts separate outcomes; it is not implemented yet.
 
 As in current one-ontology writes, committees do not re-execute an arbitrary
 Prolog derivation: they deterministically verify the target author, transcript

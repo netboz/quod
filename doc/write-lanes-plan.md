@@ -7,7 +7,8 @@ reviewed with no blocker. Slice 2, the signed carrier and shared validation
 path, is implemented and reviewed with no blocker. Slice 3, the sealed-scope
 certificate command, is implemented and reviewed with no blocker. Slice 4,
 the lane chooser and certificate routing, is implemented and reviewed with no
-blocker; slices 5–8 are not built.
+blocker. Slice 5, the documentation closure, is complete and awaiting review;
+slices 6–8 are not built.
 
 Diagrams (static SVG, exists-today in dark blue, new in green):
 `figures/write-lanes/` — overview, lane chooser, one sequence per lane,
@@ -121,12 +122,13 @@ reads. That is the gap.
 |---|---|---|---|
 | **L0 — local** | writes in one ontology, reads nowhere else | as today | ~0.4 s |
 | **L1 — one writer + snapshot reads** | writes in ONE ontology, reads in others | read ontologies issue a **read certificate** (validators co-sign the read plan at their height — no block); the write goes through the existing single-target lane (claim → write → receipt), or L0 if the writer is local | ≈ one-hop (0.13–0.22 s p99 measured) + one parallel signature round-trip |
-| **L2 — independent writes** | writes in TWO+ ontologies, goal says `independent(...)` | one claim in the source listing all targets → N ordinary writes in parallel → one receipt with per-target outcomes; a rejected target stays rejected, the others stay committed; no undo | ≈ one-hop regardless of N |
+| **L2 — independent writes** *(planned)* | writes in TWO+ ontologies, goal says `independent(...)` | one claim in the source listing all targets → N ordinary writes in parallel → one receipt with per-target outcomes; a rejected target stays rejected, the others stay committed; no undo | ≈ one-hop regardless of N |
 | **L3 — atomic writes** | writes in TWO+ ontologies, default (transfers) | existing Begin/Prepare/Decision/Finalize/Complete, unchanged; rare by design; optimised later | ~0.7 s warm today → ~0.5 s after optimisation |
 
-What changes for a goal author: nothing for L0/L1 (automatic). For
-multi-ontology writes the default stays safe (L3); wrapping the writes in
-`independent(...)` picks L2. `transaction(...)` keeps its current meaning.
+What changes for a goal author today: nothing for L0/L1 (automatic). For
+multi-ontology writes the default stays safe (L3). When slices 6–8 land,
+wrapping the writes in `independent(...)` will select L2.
+`transaction(...)` keeps its current meaning.
 
 What leaves the hot path: the Prepare/Finalize rounds for every ontology
 that was only read; the whole group protocol for independent writes; the
@@ -222,7 +224,7 @@ verifier's current cache head. The durable checkpoint remains compact; the
 existing restart replay rebuilds the era rows. Deterministic, no clocks and no
 second verifier or cache.
 
-### 4.3 L2 — independent writes (`independent(...)`)
+### 4.3 L2 — independent writes (`independent(...)`, planned)
 
 ![L2 sequence](figures/write-lanes/fig4-l2.svg)
 
@@ -262,16 +264,26 @@ history on other nodes, and drives local reactions. None of this asks any
 ontology to agree with another; a reaction that needs to be durable becomes
 a new signed goal and goes through the lanes above.
 
-## 5. What gets deleted (no shims)
-- `material_participant/1` and the `SignedForeign` case in `submit_sealed_plans`.
-- Single-bundle shapes in `remote_claim` / `remote_application` /
-  `remote_complete` and `remote_claim_target/1` (L2 slices).
-- Version bumps, no dual decoders: `quod_transaction ?VERSION`, endpoint
-  request vocabulary, scope-wire command set (fresh genesis, project policy).
-- Doc passages that state the old rule: `distributed-proof-plan.md:1003`
-  ("independent appends are forbidden" → "unless declared"),
-  `inter-ontology.md:178-184` and `:569-575` (read-dependent → certificate;
-  only ≥2 writers group).
+## 5. Completed and deferred removals (no shims)
+
+Completed in Slice 4:
+
+- `material_participant/1`, the `SignedForeign` case, and the old four-case
+  routing match in `submit_sealed_plans`.
+
+Deferred to the planned L2 slices:
+
+- single-bundle shapes in `remote_claim` / `remote_application` /
+  `remote_complete` and `remote_claim_target/1`;
+- their coordinated format changes, with no dual decoders.
+
+Completed in Slice 5:
+
+- the remaining cross-document descriptions now distinguish the implemented
+  one-writer certificate lane from the still-planned `independent(...)` lane;
+- the snapshot rule is explicit: a certificate proves the reader's sealed
+  snapshot when its committee signs; a later change in that reader does not
+  invalidate the already-certified snapshot.
 
 ## 6. Slices, in value order (each independently green)
 1. **Read-certificate primitive** — `quod_read_certificate` (statement,
@@ -299,13 +311,13 @@ a new signed goal and goes through the lanes above.
    certificates and the origin `read_check`; delete the old case. CT:
    `remote_signed_read_certified_write` (A reads B, writes C → a single
    transaction outcome, not a group), `local_write_with_foreign_read`,
-   `read_certificate_stale_rejected`. **Implemented; awaiting review.**
+   `read_certificate_stale_rejected`. **Implemented; review closed.**
    Certification is started for all remote/co-hosted readers before waiting,
    using the existing scope owner and router; the one deadline is only the
    terminal failure safeguard. Fresh ontologies certify their pinned genesis
    through the same exact certified-reference verifier used for later slots.
-5. **Docs** — the passages in §5, the snapshot-validity rule, the
-   remaining cross-document routing changes.
+5. **Docs** — the passages in §5, the snapshot-validity rule, and the
+   remaining cross-document routing changes. **Completed; awaiting review.**
 6. **`independent/1`** — control construct → context flag; nesting error.
 7. **L2 claim generalisation** — N-bundle roles, per-target outcome rows,
    `execute_claimed_application` bundle selection; delete single-bundle shapes.
@@ -400,12 +412,12 @@ https://personal.sron.nl/~pault/ ; values from https://github.com/Descanonge/tol
   for effect-bearing writes.
 - `world-consequence-direction.md:673-682, 1041-1047` — "a DTX per sword
   swing is not affordable"; keep cross-ontology consequence rare.
-- `inter-ontology.md:178-184, 292, 318-322, 569-575` — the normative
-  one-material / two-or-more rule (to be rewritten); reads are not
-  subscriptions; heights not comparable across ontologies.
+- `inter-ontology.md:178-184, 292, 318-322, 569-575` — the implemented
+  one-writer / two-or-more-writers rule; reads are not subscriptions; heights
+  are not comparable across ontologies.
 - `distributed-proof-plan.md:79-83, 178-183, 905-912, 1001-1004, 1034-1040` —
-  all-or-nothing contract; read sets never rolled back; "independent appends
-  are forbidden" (to be qualified); wait-die.
+  all-or-nothing contract; read sets never rolled back; atomic-by-default
+  multi-writer rule; wait-die.
 - `dtx-latency-optimization-plan.md` §4.2, §4.7, 1536-1541, 2268-2270, 2498 —
   groups only for genuinely distributed atomic work; claim/receipt are
   metadata never facts; one-target groups rejected.

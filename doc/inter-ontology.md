@@ -176,8 +176,10 @@ view, whether the scope is local, co-hosted, or remote.
    recover. Infrastructure or authorization failures are typed errors, poison the whole
    pre-commit proof, and are never retried as another proof after the target may have executed.
    A writing proof seals every touched scope. Read-only scopes contribute f+1 snapshot
-   certificates and no consensus records. One writer uses that target's ordinary consensus
-   path. For a signed foreign write, the agent ontology first commits a batchable
+   certificates and no consensus records. A certificate proves the exact sealed
+   snapshot when that reader's committee signs it; that reader may change later.
+   One writer uses that target's ordinary consensus path. For a signed foreign write,
+   the agent ontology first commits a batchable
    operation claim, the target commits the ordinary application, and the agent ontology records
    the completion asynchronously; the caller returns with the target's anchored outcome
    reference. Two or more writers enter one atomic
@@ -573,8 +575,10 @@ record. One signed foreign writer commits a metadata claim in the agent
 ontology, then an ordinary target-authored application, followed by an
 asynchronous metadata completion in the agent ontology. Read-only dependencies
 provide f+1 certificates for their exact sealed snapshots and write no control
-records. Two or more writers use explicit DTX control barriers in their
-existing per-ontology Simplex logs; their read-only dependencies remain in that
+records. The certificate proves its reader's state when signed, not a lock on
+that reader; a later reader change is valid. Two or more writers use explicit
+DTX control barriers in their existing per-ontology Simplex logs; their
+read-only dependencies remain in that
 atomic group for now. Validators verify sealed plans, authorization transcripts,
 OCC tokens, certified foreign references, and phase rules; they do not re-run the arbitrary
 derivation.

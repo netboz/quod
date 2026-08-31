@@ -33,6 +33,7 @@ coordinator.
          test_dormant_cancel_disposition/2,
          test_dormant_wait_event/4,
          test_dormant_cancel_request/2,
+         test_operation_target_response_disposition/2,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
          test_endpoint_request_candidates/5,
@@ -410,9 +411,34 @@ operation_target_response(
       Owner, OwnerMonitor, Request, Response,
       {rejected, Reason}, EvidenceBlob, Context);
 operation_target_response(
-  Owner, _OwnerMonitor, _Request, _Response,
-  #{operation_ref := OperationRef}) ->
-    operation_stop(Owner, OperationRef, invalid_target_response).
+  Owner, OwnerMonitor, Request, Response,
+  Context = #{operation_ref := OperationRef}) ->
+    case operation_target_response_disposition(Request, Response) of
+        wait ->
+            operation_wait_target(Owner, OwnerMonitor, Context);
+        invalid_operation_claim ->
+            operation_stop(Owner, OperationRef, invalid_operation_claim);
+        invalid_target_response ->
+            operation_stop(Owner, OperationRef, invalid_target_response)
+    end.
+
+operation_target_response_disposition(Request, Response) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true -> operation_target_error_disposition(Response);
+        false -> invalid_target_response
+    end.
+
+operation_target_error_disposition({error, _RequestId, invalid_request}) ->
+    invalid_operation_claim;
+operation_target_error_disposition({error, _RequestId, _Temporary}) ->
+    wait;
+operation_target_error_disposition(_Response) ->
+    invalid_target_response.
+
+-ifdef(TEST).
+test_operation_target_response_disposition(Request, Response) ->
+    operation_target_response_disposition(Request, Response).
+-endif.
 
 operation_target_result(
   Owner, OwnerMonitor, Request, Response, Result, EvidenceBlob,

@@ -23,6 +23,36 @@ options_are_strict_and_share_the_endpoint_deadline_test() ->
        quod_dtx_coordinator:test_options(
          #{request_timeout_ms => 0})).
 
+remote_operation_temporary_reply_parks_on_progress_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    {ok, ClaimEvidence} = quod_transaction:encode_evidence(
+                            maps:get(certified_claim_ref, Fixture),
+                            maps:get(claim, Fixture)),
+    RequestId = <<199:128>>,
+    Request = {apply_claim, RequestId, ClaimEvidence},
+    lists:foreach(
+      fun(Reason) ->
+          ?assertEqual(
+             wait,
+             quod_dtx_coordinator:
+               test_operation_target_response_disposition(
+                 Request, {error, RequestId, Reason}))
+      end,
+      [busy, not_ready, not_found, conflict_retry,
+       read_certificate_unavailable]),
+    ?assertEqual(
+       invalid_operation_claim,
+       quod_dtx_coordinator:test_operation_target_response_disposition(
+         Request, {error, RequestId, invalid_request})),
+    ?assertEqual(
+       invalid_target_response,
+       quod_dtx_coordinator:test_operation_target_response_disposition(
+         Request, {error, <<200:128>>, not_ready})),
+    ?assertEqual(
+       invalid_target_response,
+       quod_dtx_coordinator:test_operation_target_response_disposition(
+         Request, malformed)).
+
 cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
     with_fixture(
       fun(F) ->

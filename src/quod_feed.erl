@@ -54,7 +54,7 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -include("quod_transport_limits.hrl").
 
 -export([start_link/2, stats/1, peer_ready/3,
-         channel/1, progress_signal/2,
+         channel/1, progress_signal/2, progress_height/2,
          recipient_register_frame/3, recipient_ack_frame/4,
          recipient_unregister_frame/3, decode_recipient/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -146,6 +146,36 @@ progress_signal(Payload, Ns)
     end;
 progress_signal(_Payload, _Ns) ->
     false.
+
+-doc """
+Read the claimed height from the feed's small digest shape.
+
+The height is only a freshness hint from the authenticated peer. It never
+authorizes or advances history. Large block frames are deliberately left
+opaque here and return `unknown`.
+""".
+-spec progress_height(binary(), binary()) ->
+          {ok, non_neg_integer()} | unknown | error.
+progress_height(Payload, Ns)
+  when is_binary(Payload), is_binary(Ns),
+       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    case outer_envelope(Payload, Ns) of
+        {ok, Inner} when byte_size(Inner) =< 64 ->
+            try binary_to_term(Inner, [safe]) of
+                {digest, Height} when is_integer(Height), Height >= 0 ->
+                    {ok, Height};
+                _ ->
+                    unknown
+            catch
+                _:_ -> unknown
+            end;
+        {ok, _OpaqueBlock} ->
+            unknown;
+        error ->
+            error
+    end;
+progress_height(_Payload, _Ns) ->
+    error.
 
 -doc "Build one request to receive correlated height wakes for an exact feed.".
 -spec recipient_register_frame(binary(), <<_:256>>, <<_:128>>) -> binary().

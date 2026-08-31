@@ -46,16 +46,19 @@ fail-stops too — committed entries are never silently discarded on either. `op
 opens a concurrent, **non-truncating** read-only view for the catch-up/feed server,
 bounding the readable tail at the last complete contiguous entry.
 
-Snapshots/compaction are deferred (`doc/deferred.md` §3); nothing compacts yet, so
-the full log always rescans at open.
+Compaction is deferred (`doc/deferred.md` §3). An ordinary recovery open scans
+the full log; a live sole writer may instead hand its already-verified sparse
+index to the next worker through an immutable session.
 """.
 -include("quod_ledger.hrl").
 
--export([open/2, ledger_dir/1, open_ro/2, close/1, namespace/1,
+-export([open/2, ledger_dir/1, open_ro/2, snapshot/1, resume/1,
+         open_ro_snapshot/1, close/1,
+         namespace/1,
          append/2, read_at/2, read_range/3, fold/5, last/1]).
 -export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
--export_type([handle/0]).
+-export_type([handle/0, session/0]).
 
 %% Every superseded frame magic stays named here so an old segment is rejected
 %% as an identifiable format, never mistaken for corruption or a trimmable tail.
@@ -77,6 +80,17 @@ the full log always rescans at open.
                 last_index  = 0 :: log_index(),
                 base_offset = 0 :: non_neg_integer()}).   %% next append offset (== log file size)
 -opaque handle() :: #store{}.
+
+%% A read snapshot copies the writer's already-verified sparse index without
+%% sharing its raw file handle. A catch-up worker opens its own read-only handle
+%% and is bounded to this exact committed prefix even if the writer appends
+%% concurrently.
+-record(session, {dir         :: file:filename_all(),
+                  ns          :: binary(),
+                  cps = <<>>  :: binary(),
+                  last_index  = 0 :: log_index(),
+                  base_offset = 0 :: non_neg_integer()}).
+-opaque session() :: #session{}.
 
 -doc "Return the ontology whose ledger this handle reads.".
 -spec namespace(handle()) -> binary().
@@ -155,6 +169,69 @@ open_ro(Ns, DataDir) ->
 -doc "Close the store's file handle.".
 -spec close(handle()) -> ok.
 close(#store{log_fd = Fd}) -> _ = file:close(Fd), ok.
+
+-doc "Copy the exact committed prefix and its already-verified sparse index.".
+-spec snapshot(handle()) -> session().
+snapshot(#store{dir = Dir, ns = Ns, cps = Cps,
+               last_index = LastIndex, base_offset = BaseOffset}) ->
+    #session{dir = Dir, ns = Ns, cps = Cps,
+             last_index = LastIndex, base_offset = BaseOffset}.
+
+-doc """
+Resume the sole append owner from its captured, already-verified index without
+rescanning the ledger. The file must still end at the captured boundary; any
+other writer or torn append makes the session stale and forces the caller back
+through the ordinary recovery open.
+""".
+-spec resume(session()) -> {ok, handle()} | {error, changed | term()}.
+resume(#session{dir = Dir, ns = Ns, cps = Cps,
+                last_index = LastIndex, base_offset = BaseOffset}) ->
+    LogPath = filename:join(Dir, "log.0001"),
+    case file:open(LogPath, [read, write, raw, binary]) of
+        {ok, Fd} ->
+            case file:position(Fd, eof) of
+                {ok, BaseOffset} ->
+                    {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
+                                last_index = LastIndex,
+                                base_offset = BaseOffset}};
+                {ok, _DifferentSize} ->
+                    _ = file:close(Fd),
+                    {error, changed};
+                {error, Reason} ->
+                    _ = file:close(Fd),
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-doc """
+Open a read-only handle over an exact writer snapshot without rescanning the
+log. An append after the snapshot is harmless: this handle remains bounded to
+the captured last index. A shorter file refuses the snapshot; CRC and index
+checks still protect every returned frame.
+""".
+-spec open_ro_snapshot(session()) -> {ok, handle()} | {error, changed | term()}.
+open_ro_snapshot(#session{dir = Dir, ns = Ns, cps = Cps,
+                last_index = LastIndex, base_offset = BaseOffset}) ->
+    LogPath = filename:join(Dir, "log.0001"),
+    case file:open(LogPath, [read, raw, binary]) of
+        {ok, Fd} ->
+            case file:position(Fd, eof) of
+                {ok, CurrentSize} when CurrentSize >= BaseOffset ->
+                    {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
+                                last_index = LastIndex,
+                                base_offset = BaseOffset}};
+                {ok, _ShorterSize} ->
+                    _ = file:close(Fd),
+                    {error, changed};
+                {error, Reason} ->
+                    _ = file:close(Fd),
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% append

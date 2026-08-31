@@ -42,6 +42,9 @@ progress_signal_checks_only_the_safe_namespace_envelope_test() ->
     ?assert(quod_feed:progress_signal(Digest, Ns)),
     ?assertNot(quod_feed:progress_signal(Block, <<"feed:other">>)),
     ?assertNot(quod_feed:progress_signal(<<0, 1, 2>>, Ns)),
+    ?assertEqual({ok, 7}, quod_feed:progress_height(Digest, Ns)),
+    ?assertEqual(unknown, quod_feed:progress_height(Block, Ns)),
+    ?assertEqual(error, quod_feed:progress_height(Digest, <<"feed:other">>)),
     %% The wake parser never decodes the inner term.  Even malformed inner
     %% bytes are only a harmless wake for the certified verifier.
     OuterOnly = term_to_binary({feed, Ns, <<0, 1, 2>>}),

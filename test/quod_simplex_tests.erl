@@ -2836,7 +2836,30 @@ history_source_role_requirement_is_checked_by_the_consensus_owner_test() ->
     ?assertEqual(
        {ok, LedgerRoot},
        quod_simplex:test_local_history_source(
-         Identity, validator, Validator)).
+         Identity, validator, Validator)),
+    CommitteeId = crypto:hash(sha256, <<1503:64>>),
+    Current = quod_simplex:test_state_set(
+                committee_id, CommitteeId,
+                quod_simplex:test_state_set(
+                  last_applied, 7,
+                  quod_simplex:test_state_set(slot, 8, Validator))),
+    ?assertEqual(
+       {ok, #{identity => Identity, slot => 7, generation => 0,
+              committee => [Self], committee_id => CommitteeId,
+              route_candidates => []}},
+       quod_simplex:test_local_history_current_view(
+         Identity, validator, Current)),
+    ?assertEqual(
+       {error, invalid_identity},
+       quod_simplex:test_local_history_current_view(
+         {Ns, crypto:hash(sha256, <<1504:64>>)}, validator, Current)),
+    ?assertEqual(
+       {error, read_certificate_unavailable},
+       quod_simplex:test_local_history_current_view(
+         Identity, validator,
+         quod_simplex:test_state_set(
+           last_applied, 7,
+           quod_simplex:test_state_set(slot, 8, Base)))).
 
 read_attest_stale_token_refusal_remains_typed_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(
@@ -2911,6 +2934,48 @@ read_attest_validator_signs_the_exact_current_ledger_anchor_test() ->
                   Self, Signature))
     after
         quod_ledger_store:close(Store3),
+        file:del_dir_r(Dir)
+    end.
+
+read_attest_keeps_the_admitted_snapshot_when_consensus_advances_test() ->
+    {Self, Identity} = id(),
+    Target = {Ns, Anchor} =
+        {<<"quod:read-attest-advance">>, <<64:256>>},
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{target => Target, node_identity => Identity,
+                  goal_text => <<"\\+(missing(ok)).">>}),
+    Plan = maps:get(plan, Fixture),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    Control = maps:get(begin_control, Fixture),
+    {Entry1, _} = committed_dtx_test_entry(Control, 1),
+    {Entry2, _} = committed_dtx_test_entry(Control, 2),
+    Entry3 = #entry{index = 3, data = noop},
+    Entry4 = #entry{index = 4, data = noop},
+    Dir = relay_store_dir("read_attest_advance"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store4} = quod_ledger_store:append(
+                     Store0, [Entry1, Entry2, Entry3, Entry4]),
+    try
+        Common = #{ns => Ns, genesis_hash => Anchor,
+                   self => Self, id => Identity,
+                   validators => [Self], sync => ready,
+                   prolog_ready => true, store => Store4},
+        AdmissionState = st(Common#{slot => 3, last_applied => 3}),
+        ResponseState = st(Common#{slot => 4, last_applied => 4}),
+        RequestId = <<65:128>>,
+        {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
+         CommitteeId, Self, Signature} =
+            quod_simplex:test_dtx_endpoint_result_at(
+              {read_attest, RequestId, PlanBlob},
+              {read_plan_valid, Plan, 3},
+              AdmissionState, ResponseState),
+        ?assertMatch({ok, Target, 2, _},
+                     quod_dtx:certified_ref_binding(AnchorRef)),
+        ?assert(quod_read_certificate:verify_vote(
+                  Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
+                  Self, Signature))
+    after
+        quod_ledger_store:close(Store4),
         file:del_dir_r(Dir)
     end.
 

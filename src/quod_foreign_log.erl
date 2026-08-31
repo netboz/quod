@@ -51,9 +51,12 @@ used to discover that progress.
 There is no numeric limit on foreign identities, follows, encoded cache, or
 materialized projections. An inactive identity retains its bounded current
 projection only after this running owner has verified it. Ledger handles,
-phase indexes, workers, and channels remain active only for a proof or follow.
-After an owner restart, the first use replays and verifies the disk cache before
-that projection can be reused in memory.
+phase indexes, workers, and catch-up channels remain active only for proof or
+follow work. A current-view row, once watched, keeps its existing committee
+feed registrations open so unchanged requests can reuse that verified
+projection; any missing or newer height returns to the ordinary verifier.
+After an owner restart, the first use replays and verifies the disk cache
+before that projection can be reused in memory.
 """.
 
 -behaviour(gen_server).
@@ -66,8 +69,8 @@ that projection can be reused in memory.
 -export([start_link/0, start_link/1,
          verify/5, verify_reference/3, verify_local/4,
          verify_reference/4, verify_reference/5,
-         verify_current/3, verify_local_current/3,
-         current/3, current/4, local_current/3,
+         verify_current/3,
+         current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, refresh/1, ack/2, unfollow/1,
          required_references/1, stats/0]).
@@ -78,7 +81,8 @@ that projection can be reused in memory.
          test_resident_projection/5,
          test_install_feed_registration/5,
          test_install_feed_opening/5,
-         test_install_feed_projection/3]).
+         test_install_feed_projection/3,
+         test_corrupt_resident_height/3]).
 -endif.
 
 -define(KEY, {foreign_log, node}).
@@ -141,6 +145,7 @@ that projection can be reused in memory.
           projection = undefined :: undefined | map(),
           resident_verified = false :: boolean(),
           phase_session = none :: none | term(),
+          cache_session = none :: none | quod_ledger_store:session(),
           channel_open = false :: boolean(),
           waiting = {[], []} :: term(),
           last_used = 0 :: integer(),
@@ -150,6 +155,8 @@ that projection can be reused in memory.
           follow_inflight = false :: boolean(),
           follow_dirty = false :: boolean(),
           progress_signals_open = false :: boolean(),
+          current_watch = none :: none | remote,
+          current_reference = none :: none | quod_dtx:certified_ref(),
           materializer = none :: none | #materializer{},
           last_probe_ms = 0 :: integer(),
           last_advance_ms = 0 :: integer(),
@@ -195,7 +202,8 @@ that projection can be reused in memory.
           open_ref = none :: none | reference(),
           link = none :: none | pid(),
           mref = none :: none | reference(),
-          registered = false :: boolean()
+          registered = false :: boolean(),
+          height = unknown :: unknown | non_neg_integer()
          }).
 
 -record(s, {
@@ -463,33 +471,6 @@ verify_current(_Routes, _Ref, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
 -doc """
-Return the certified projection at a co-hosted ledger's captured durable head.
-
-The exact Finalize and every entry through that head are folded through the
-same verifier/cache as foreign history.  No network route or remote height is
-consulted.
-""".
--spec verify_local_current(file:filename_all(), quod_dtx:certified_ref(),
-                           pos_integer()) ->
-          {ok, map()} | {error, term()}.
-verify_local_current(LedgerRoot, Ref, TimeoutMs)
-  when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
-       is_integer(TimeoutMs), TimeoutMs > 0,
-       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case quod_reg:where(?KEY) of
-        Pid when is_pid(Pid) ->
-            try gen_server:call(
-                  Pid, {verify_local_current, LedgerRoot, Ref, TimeoutMs},
-                  TimeoutMs + 1000)
-            catch exit:_ -> {error, retry}
-            end;
-        undefined ->
-            {error, retry}
-    end;
-verify_local_current(_LedgerRoot, _Ref, _TimeoutMs) ->
-    {error, bad_foreign_reference}.
-
--doc """
 Return one certificate-verified current committee view for an anchored identity.
 
 Unlike `verify_current/3`, this form has no phase reference to establish first.
@@ -538,37 +519,6 @@ current(Routes0, Identity, Contact, TimeoutMs)
             {error, bad_foreign_reference}
     end;
 current(_Routes, _Identity, _Contact, _TimeoutMs) ->
-    {error, bad_foreign_reference}.
-
--doc """
-Return the certified current view at a co-hosted anchored ledger's captured
-durable head.  It uses the same shared cache and history fold as `current/3`,
-without requiring a DTX phase reference.
-""".
--spec local_current(file:filename_all(), {binary(), <<_:256>>},
-                    pos_integer()) ->
-          {ok, map()} | {error, term()}.
-local_current(LedgerRoot, Identity, TimeoutMs)
-  when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
-       is_integer(TimeoutMs), TimeoutMs > 0,
-       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case valid_identity(Identity) of
-        true ->
-            case quod_reg:where(?KEY) of
-                Pid when is_pid(Pid) ->
-                    try gen_server:call(
-                          Pid,
-                          {local_current, LedgerRoot, Identity, TimeoutMs},
-                          TimeoutMs + 1000)
-                    catch exit:_ -> {error, retry}
-                    end;
-                undefined ->
-                    {error, retry}
-            end;
-        false ->
-            {error, bad_foreign_reference}
-    end;
-local_current(_LedgerRoot, _Identity, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
 -doc "Start one monitored consumer of the shared certified target projection.".
@@ -648,6 +598,10 @@ test_install_feed_projection(Pid, Identity, Projection)
   when is_pid(Pid), is_map(Projection) ->
     gen_server:call(
       Pid, {test_install_feed_projection, Identity, Projection}).
+
+test_corrupt_resident_height(Pid, Identity, Height)
+  when is_pid(Pid), is_integer(Height), Height >= 0 ->
+    gen_server:call(Pid, {test_corrupt_resident_height, Identity, Height}).
 -endif.
 
 -doc """
@@ -936,23 +890,6 @@ handle_call(
             {reply, {error, Reason}, S0}
     end;
 handle_call(
-  {verify_local_current, LedgerRoot, Ref, TimeoutMs}, From, S0) ->
-    case validate_local_current_request(
-           LedgerRoot, Ref, TimeoutMs) of
-        {ok, Identity} ->
-            LocalPeer = {local, Identity},
-            FetchFun =
-                fun(_Peer, _Endpoint, Ns, FromIndex, ToIndex) ->
-                    quod_catchup:serve_blocks(
-                      Ns, LedgerRoot, FromIndex, ToIndex)
-                end,
-            begin_worker(
-              LocalPeer, Identity, TimeoutMs,
-              {local_current, LedgerRoot, Ref}, FetchFun, From, S0);
-        {error, Reason} ->
-            {reply, {error, Reason}, S0}
-    end;
-handle_call(
   {current, Routes, Identity, Contact, TimeoutMs}, From, S0) ->
     case validate_current_identity_request(
            Routes, Identity, TimeoutMs) of
@@ -961,28 +898,6 @@ handle_call(
               Identity, flatten_route_candidates(Routes), Contact, TimeoutMs,
               {current_identity, Identity},
               From, S0);
-        {error, Reason} ->
-            {reply, {error, Reason}, S0}
-    end;
-handle_call(
-  {local_current, LedgerRoot, Identity, TimeoutMs}, From, S0) ->
-    case validate_local_current_identity_request(
-           LedgerRoot, Identity, TimeoutMs) of
-        ok ->
-            LocalPeer = {local, Identity},
-            {Ns, _Anchor} = Identity,
-            FetchFun =
-                fun(_Peer, _Endpoint, RequestedNs, FromIndex, ToIndex) ->
-                    case RequestedNs =:= Ns of
-                        true -> quod_catchup:serve_blocks(
-                                  Ns, LedgerRoot, FromIndex, ToIndex);
-                        false -> {error, wrong_namespace}
-                    end
-                end,
-            begin_worker(
-              LocalPeer, Identity, TimeoutMs,
-              {local_current_identity, LedgerRoot, Identity},
-              FetchFun, From, S0);
         {error, Reason} ->
             {reply, {error, Reason}, S0}
     end;
@@ -1030,17 +945,18 @@ handle_private_call(
    Identity, <<_:256>> = Peer, Link, <<_:128>> = RegistrationId},
   _From, S0) when is_pid(Link) ->
     Key = {Identity, Peer},
+    S1 = close_feed_registration_key(Key, S0),
     MRef = erlang:monitor(process, Link),
     Registration = #feed_registration{
                       identity = Identity, peer = Peer,
                       registration_id = RegistrationId,
                       link = Link, mref = MRef},
     {reply, ok,
-     S0#s{
+     S1#s{
        feed_registrations =
-           (S0#s.feed_registrations)#{Key => Registration},
+           (S1#s.feed_registrations)#{Key => Registration},
        feed_registration_monitors =
-           (S0#s.feed_registration_monitors)#{MRef => Key}}};
+           (S1#s.feed_registration_monitors)#{MRef => Key}}};
 handle_private_call(
   {test_install_feed_opening,
    Identity, <<_:256>> = Peer, <<_:128>> = RegistrationId, OpenRef},
@@ -1068,6 +984,15 @@ handle_private_call(
             {reply, ok, put_history(Identity, H1, S1)};
         false ->
             {reply, {error, bad_projection}, S0}
+    end;
+handle_private_call(
+  {test_corrupt_resident_height, Identity, Height}, _From, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            {reply, ok,
+             put_history(Identity, H0#history{height = Height}, S0)};
+        undefined ->
+            {reply, {error, not_found}, S0}
     end;
 handle_private_call(_Request, _From, S) ->
     {reply, {error, bad_request}, S}.
@@ -1224,34 +1149,44 @@ launch_request_owned(RequestRef, Peer, Identity, WorkTimeout,
 launch_request_owned(RequestRef, Peer, Identity, WorkTimeout,
                      RequestWork, WorkerWork, FetchFun,
                      InternalFrom, Callers, S0) ->
-    Owner = self(),
-    Root = S0#s.root,
-    PageTimeout = S0#s.page_timeout_ms,
-    Resident = resident_cache(Identity, S0),
-    Worker = spawn_opt(
-               fun() ->
-                   verification_worker(
-                     Owner, RequestRef, WorkerWork, Root, FetchFun, PageTimeout,
-                     WorkTimeout, Resident)
-               end,
-               [{max_heap_size,
-                 #{size => foreign_worker_heap_words(),
-                   kill => true, error_logger => true}}]),
-    MRef = erlang:monitor(process, Worker),
-    Timer = request_work_timer(InternalFrom, WorkTimeout, RequestRef),
-    Request = #request{from = InternalFrom, callers = Callers, peer = Peer,
-                       identity = Identity, worker = Worker,
-                       work = RequestWork,
-                       mref = MRef, timer = Timer},
-    H0 = maps:get(Identity, S0#s.histories),
-    %% The worker exclusively owns the suspended phase session until it
-    %% returns it in verified metadata. A crash therefore leaves no stale
-    %% session eligible for reuse.
-    H1 = H0#history{active = RequestRef, resident_verified = false,
-                    phase_session = none,
-                    last_used = quod_time:mono_ms()},
-    S0#s{pending = (S0#s.pending)#{RequestRef => Request},
-         histories = (S0#s.histories)#{Identity => H1}}.
+    case resident_current_identity(WorkerWork, Identity, S0) of
+        {ok, Evidence} ->
+            cancel_caller_timers(Callers),
+            reply_request_callers(maps:keys(Callers), {ok, Evidence}),
+            observe_foreign_stage(
+              request_current, ok, erlang:monotonic_time()),
+            start_next_request(Identity, touch_history(Identity, S0));
+        miss ->
+            Owner = self(),
+            Root = S0#s.root,
+            PageTimeout = S0#s.page_timeout_ms,
+            Resident = resident_cache(Identity, S0),
+            Worker = spawn_opt(
+                       fun() ->
+                           verification_worker(
+                             Owner, RequestRef, WorkerWork, Root, FetchFun,
+                             PageTimeout, WorkTimeout, Resident)
+                       end,
+                       [{max_heap_size,
+                         #{size => foreign_worker_heap_words(),
+                           kill => true, error_logger => true}}]),
+            MRef = erlang:monitor(process, Worker),
+            Timer = request_work_timer(InternalFrom, WorkTimeout, RequestRef),
+            Request = #request{from = InternalFrom, callers = Callers,
+                               peer = Peer, identity = Identity,
+                               worker = Worker, work = RequestWork,
+                               mref = MRef, timer = Timer},
+            H0 = maps:get(Identity, S0#s.histories),
+            %% The worker exclusively owns the suspended phase session until
+            %% it returns it in verified metadata. A crash therefore leaves
+            %% no stale session eligible for reuse.
+            H1 = H0#history{active = RequestRef,
+                            resident_verified = false,
+                            phase_session = none,
+                            last_used = quod_time:mono_ms()},
+            S0#s{pending = (S0#s.pending)#{RequestRef => Request},
+                 histories = (S0#s.histories)#{Identity => H1}}
+    end.
 
 verification_work_timeout(S) ->
     %% Shared current/reference work outlives individual callers, so it uses
@@ -1279,10 +1214,125 @@ request_work_timer(none, _WorkTimeout, _RequestRef) ->
 resident_cache(Identity, #s{histories = Histories}) ->
     case maps:get(Identity, Histories, undefined) of
         #history{height = Height, projection = Projection,
-                 resident_verified = true, phase_session = PhaseSession}
-          when is_map(Projection), PhaseSession =/= none ->
-            {verified, Height, Projection, PhaseSession};
+                 resident_verified = true, phase_session = PhaseSession,
+                 cache_session = CacheSession}
+          when is_map(Projection), PhaseSession =/= none,
+               CacheSession =/= none ->
+            {verified_session, Height, Projection,
+             PhaseSession, CacheSession};
         _ -> none
+    end.
+
+%% A current view already certified by this owner remains current while a
+%% quorum of the identity's committee keeps an ordered feed registration at
+%% that exact height. The registrations are only freshness witnesses: a
+%% missing row or any newer height falls through to the ordinary certified
+%% fetch and fold below.
+resident_current_identity(
+  {current_identity, Sources, Identity}, Identity,
+  S) ->
+    resident_confirmed_current(Sources, Identity, S);
+resident_current_identity(
+  {current, Sources, Ref}, Identity,
+  S = #s{histories = Histories}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{current_reference = Ref} ->
+            resident_confirmed_current(Sources, Identity, S);
+        _ ->
+            miss
+    end;
+resident_current_identity(_Work, _Identity, _S) ->
+    miss.
+
+resident_confirmed_current(Sources, Identity,
+                           S = #s{histories = Histories}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{height = Height, projection = Projection,
+                 resident_verified = true, phase_session = PhaseSession,
+                 current_watch = remote, progress_signals_open = true,
+                 current_view = confirmed}
+          when Height > 0, is_map(Projection), PhaseSession =/= none ->
+            Committee = quod_simplex:history_committee(Projection),
+            case Committee of
+                [] ->
+                    miss;
+                [_ | _] ->
+                    Needed = quod_simplex:quorum(length(Committee)),
+                    Matching = matching_feed_heights(
+                                 Identity, Committee, Height,
+                                 S#s.feed_registrations),
+                    case Matching >= Needed of
+                        true ->
+                            {ok, current_view_evidence(
+                                   Identity, Height, Projection,
+                                   current_route_candidates(
+                                     Sources, Projection))};
+                        false ->
+                            miss
+                    end
+            end;
+        _ ->
+            miss
+    end.
+
+matching_feed_heights(Identity, Committee, Height, Registrations) ->
+    length(
+      [ok
+       || Peer <- Committee,
+          #feed_registration{registered = true, height = RegisteredHeight,
+                             link = Link} <-
+              [maps:get({Identity, Peer}, Registrations, undefined)],
+          RegisteredHeight =:= Height,
+          is_pid(Link)]).
+
+touch_history(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            put_history(
+              Identity, H0#history{last_used = quod_time:mono_ms()}, S0);
+        undefined ->
+            S0
+    end.
+
+retain_current_watch(
+  Identity,
+  #routed_work{kind = {current_identity, Identity}},
+  {ok, #{slot := Height}}, S0) ->
+    retain_current_view(Identity, keep, Height, S0);
+retain_current_watch(
+  Identity,
+  #routed_work{kind = {current_reference, Ref}},
+  {ok, #{slot := Height}}, S0) ->
+    retain_current_view(Identity, Ref, Height, S0);
+retain_current_watch(_Identity, _Work, _Result, S0) ->
+    S0.
+
+retain_current_view(Identity, Reference, Height, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{height = Height, resident_verified = true} = H0 ->
+            View = retained_current_view(Height, H0),
+            H1 = H0#history{
+                   current_watch = remote,
+                   current_reference = retained_current_reference(
+                                         Reference, H0),
+                   hinted_height = retained_hint(Height, H0),
+                   current_view = View},
+            open_progress_signals(Identity, put_history(Identity, H1, S0));
+        _ ->
+            S0
+    end.
+
+retained_current_reference(keep, #history{current_reference = Ref}) -> Ref;
+retained_current_reference(Ref, #history{}) -> Ref.
+
+retained_hint(Height, #history{hinted_height = Hint})
+  when is_integer(Hint) -> max(Height, Hint);
+retained_hint(Height, #history{}) -> Height.
+
+retained_current_view(Height, H0) ->
+    case retained_hint(Height, H0) > Height of
+        true -> unconfirmed;
+        false -> confirmed
     end.
 
 %% The certified-history cache has one writer per identity. Concurrent scope
@@ -1434,10 +1484,10 @@ handle_info(
 %% The same live-finality edge that drives the local feed is the reliable wake
 %% for a co-hosted followed ontology.  The entry itself is never evidence here:
 %% every interested identity still advances through the one certified follower.
-handle_info({committed, Ns, _Slot, #entry{}}, S) ->
-    {noreply, wake_namespace_progress(Ns, S)};
-handle_info({certified_head, Ns, _Slot}, S) ->
-    {noreply, wake_namespace_progress(Ns, S)};
+handle_info({committed, Ns, Slot, #entry{}}, S) ->
+    {noreply, wake_namespace_progress(Ns, Slot, S)};
+handle_info({certified_head, Ns, Slot}, S) ->
+    {noreply, wake_namespace_progress(Ns, Slot, S)};
 %% A materializer can discover its Root dependency immediately before or
 %% after Root publishes this edge.  The waiting handler below covers the
 %% crossed order; this edge resumes every worker already parked on it.
@@ -1445,7 +1495,7 @@ handle_info({replay_ready, _Id, _Height}, S) ->
     {noreply, resume_network_identity_projections(S)};
 handle_info({foreign_worker_done, RequestRef, Result, Meta0}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
-        #request{identity = Identity} ->
+        #request{identity = Identity, work = Work} ->
             Meta = resident_worker_meta(Result, Meta0),
             S1 = install_worker_meta(
                    RequestRef, Meta,
@@ -1454,11 +1504,12 @@ handle_info({foreign_worker_done, RequestRef, Result, Meta0}, S0) ->
                      true -> release_route_waiters(Identity, S1);
                      false -> S1
                  end,
-            case {Result, maps:get(RequestRef, S2#s.pending, undefined)} of
+            S3 = retain_current_watch(Identity, Work, Result, S2),
+            case {Result, maps:get(RequestRef, S3#s.pending, undefined)} of
                 {{error, retry}, #request{work = #routed_work{}}} ->
-                    {noreply, park_failed_routed_request(RequestRef, S2)};
+                    {noreply, park_failed_routed_request(RequestRef, S3)};
                 _ ->
-                    {noreply, finish_request(RequestRef, Result, S2)}
+                    {noreply, finish_request(RequestRef, Result, S3)}
             end;
         undefined ->
             {noreply, S0}
@@ -1641,13 +1692,6 @@ validate_current_request([_ | _] = Routes, Ref, TimeoutMs) ->
 validate_current_request(_Routes, _Ref, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
-validate_local_current_request(LedgerRoot, Ref, TimeoutMs) ->
-    case validate_local_request(
-           LedgerRoot, Ref, finalize, TimeoutMs) of
-        {ok, Identity} -> {ok, Identity};
-        {error, _} = Error -> Error
-    end.
-
 validate_current_identity_request([_ | _] = Routes, Identity, TimeoutMs) ->
     case normalize_route_candidates(Routes) of
         {ok, Routes} ->
@@ -1656,14 +1700,6 @@ validate_current_identity_request([_ | _] = Routes, Identity, TimeoutMs) ->
             {error, bad_foreign_reference}
     end;
 validate_current_identity_request(_Routes, _Identity, _TimeoutMs) ->
-    {error, bad_foreign_reference}.
-
-validate_local_current_identity_request(
-  LedgerRoot, Identity, TimeoutMs)
-  when is_list(LedgerRoot); is_binary(LedgerRoot) ->
-    validate_current_identity(Identity, TimeoutMs);
-validate_local_current_identity_request(
-  _LedgerRoot, _Identity, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
 validate_current_identity(Identity, TimeoutMs)
@@ -2292,11 +2328,28 @@ remove_follow_any(FollowRef, S0) ->
                    Identity, H1,
                    S0#s{follows = maps:remove(FollowRef, S0#s.follows)}),
             case map_size(Consumers1) of
-                0 -> hibernate_history(
-                       Identity, stop_follow_target(Identity, S1));
+                0 ->
+                    case H1#history.current_watch of
+                        Watch when Watch =/= none -> hibernate_history(
+                                  Identity,
+                                  release_follow_materializer(Identity, S1));
+                        none -> hibernate_history(
+                                   Identity,
+                                   stop_follow_target(Identity, S1))
+                    end;
                 _ -> S1
             end;
         error ->
+            S0
+    end.
+
+release_follow_materializer(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{materializer = none} ->
+            S0;
+        #history{materializer = #materializer{} = Materializer} = H0 ->
+            discard_materializer(Identity, H0, Materializer, S0);
+        undefined ->
             S0
     end.
 
@@ -2333,10 +2386,12 @@ put_consumer(FollowRef, Consumer, H) ->
 put_history(Identity, H, S) ->
     S#s{histories = (S#s.histories)#{Identity => H}}.
 
-%% A cache is durable verified data. Once no request or follow owns it, close
-%% its channel and open disk handles, but retain the one bounded projection and
-%% suspended derived phase session already verified by this owner. The next use
-%% resumes both instead of replaying the same certified prefix from genesis.
+%% A cache is durable verified data. Once no worker or projection consumer owns
+%% it, close its catch-up channel and disk handles, but retain the one bounded
+%% projection, immutable ledger-index session, and suspended derived phase
+%% session already verified by this owner. A current-view watch keeps the feed
+%% freshness registration; the next real delta resumes the same verifier
+%% instead of replaying or rescanning history.
 %% After a node restart only the cache remains; first use verifies it fully.
 hibernate_history(Identity = {Ns, _}, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
@@ -2351,6 +2406,14 @@ hibernate_history(Identity = {Ns, _}, S0) ->
             S0
     end.
 
+hibernate_idle_history(
+  _Identity, _Ns,
+  #history{resident_verified = true, current_watch = Watch}, S0)
+  when Watch =/= none ->
+    %% A current-view row stays attached to its existing catch-up and feed
+    %% subscriptions. Height wakes drive the same certified follower, so the
+    %% next request never pays an avoidable detach/re-attach cycle.
+    S0;
 hibernate_idle_history(
   Identity, Ns,
   H0 = #history{resident_verified = true, channel_open = true}, S0) ->
@@ -2437,33 +2500,45 @@ test_coalesce_notice(Previous, Newest) ->
 -endif.
 
 %% A live block/digest, a directory change, or an explicit consumer refresh is
-%% only a wake signal.  It never advances the cache.  At most one follow job
-%% and one coalesced dirty edge exist per identity; the existing certified
-%% worker remains the sole place which can accept history.
+%% only a wake signal. It never advances the cache itself. At most one follow
+%% job and one coalesced dirty edge exist per subscribed projection identity.
+%% A current-view-only wake merely invalidates that view; the next real request
+%% advances it through the same verifier. The certified worker remains the sole
+%% place which can accept history.
 wake_follow(Identity, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
-        #history{consumers = Consumers, follow_token = none,
-                 follow_inflight = false} = H0
-          when map_size(Consumers) > 0 ->
-            Token = make_ref(),
-            self() ! {follow_refresh, Identity, Token},
-            put_history(
-              Identity, H0#history{follow_token = Token},
-              S0#s{follow_wakes = S0#s.follow_wakes + 1});
-        %% The queued mailbox turn has not started its certified work yet, so
-        %% every signal already belongs to that same job.  Do not manufacture
-        %% a redundant second pass merely because several edges arrived in
-        %% one scheduler turn.
-        #history{consumers = Consumers, follow_token = Token,
-                 follow_inflight = false}
-          when map_size(Consumers) > 0, is_reference(Token) ->
-            S0;
-        #history{consumers = Consumers} = H0
-          when map_size(Consumers) > 0 ->
-            put_history(Identity, H0#history{follow_dirty = true}, S0);
+        #history{} = H0 ->
+            case follow_refresh_needed(H0) of
+                false ->
+                    S0;
+                true ->
+                    case {H0#history.follow_token,
+                          H0#history.follow_inflight} of
+                        {none, false} ->
+                            Token = make_ref(),
+                            self() ! {follow_refresh, Identity, Token},
+                            put_history(
+                              Identity, H0#history{follow_token = Token},
+                              S0#s{follow_wakes = S0#s.follow_wakes + 1});
+                        {Token, false} when is_reference(Token) ->
+                            %% The queued mailbox turn has not started its
+                            %% certified work yet, so every signal already
+                            %% belongs to that same job.
+                            S0;
+                        {_Token, true} ->
+                            put_history(
+                              Identity, H0#history{follow_dirty = true}, S0)
+                    end
+            end;
         _ ->
             S0
     end.
+
+follow_refresh_needed(#history{consumers = Consumers})
+  when map_size(Consumers) > 0 ->
+    true;
+follow_refresh_needed(#history{}) ->
+    false.
 
 %% Directory renewal is a route/reconnection edge, not a periodic history
 %% probe. Parked exact work is released by the caller above, and a live feed
@@ -2480,23 +2555,29 @@ wake_follow_if_route_needed(Identity, S0) ->
 
 begin_follow_refresh(Identity, Token, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
-        #history{follow_token = Token, consumers = Consumers} = H0
-          when map_size(Consumers) > 0 ->
-            H1 = H0#history{follow_token = none, follow_inflight = true},
-            S1 = put_history(Identity, H1, S0),
-            Timeout = follow_request_timeout(S1),
-            case selected_route_sources(Identity, [], S1) of
-                {error, anchor_conflict} ->
-                    finish_follow_refresh(
-                      Identity, Token, {error, {unreachable, anchor_conflict}},
-                      S1);
-                {ok, Sources} ->
-                    case start_worker(
-                           {follow, Identity}, Identity, Timeout,
-                           {follow, Identity, Sources}, S1#s.fetch_fun,
-                           {follow, Identity, Token}, S1) of
-                        {ok, S2} -> S2
-                    end
+        #history{follow_token = Token} = H0 ->
+            case follow_refresh_needed(H0) of
+                true ->
+                    H1 = H0#history{follow_token = none,
+                                    follow_inflight = true},
+                    S1 = put_history(Identity, H1, S0),
+                    Timeout = follow_request_timeout(S1),
+                    case selected_route_sources(Identity, [], S1) of
+                        {error, anchor_conflict} ->
+                            finish_follow_refresh(
+                              Identity, Token,
+                              {error, {unreachable, anchor_conflict}}, S1);
+                        {ok, Sources} ->
+                            case start_worker(
+                                   {follow, Identity}, Identity, Timeout,
+                                   {follow, Identity, Sources}, S1#s.fetch_fun,
+                                   {follow, Identity, Token}, S1) of
+                                {ok, S2} -> S2
+                            end
+                    end;
+                false ->
+                    put_history(
+                      Identity, H0#history{follow_token = none}, S0)
             end;
         _ ->
             S0
@@ -2507,7 +2588,7 @@ follow_request_timeout(S) ->
 
 finish_follow_refresh(Identity, _Token, Reply, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
-        #history{consumers = Consumers} = H0
+        #history{consumers = Consumers, current_watch = none} = H0
           when map_size(Consumers) =:= 0 ->
             hibernate_history(
               Identity,
@@ -2867,6 +2948,7 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                     ResidentVerified =
                         maps:get(resident_verified, Meta, false),
                     PhaseSession = maps:get(phase_session, Meta, none),
+                    CacheSession = maps:get(cache_session, Meta, none),
                     close_replaced_phase_session(
                       H0#history.phase_session, PhaseSession),
                     H1 = H0#history{height = maps:get(height, Meta, H0#history.height),
@@ -2874,6 +2956,7 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                                     projection = Projection,
                                     resident_verified = ResidentVerified,
                                     phase_session = PhaseSession,
+                                    cache_session = CacheSession,
                                     bootstrap_hints = Bootstrap},
                     Total1 = max(
                                0, S0#s.total_bytes - H0#history.bytes +
@@ -2903,7 +2986,8 @@ resident_worker_meta({ok, _Evidence}, #{phase_session := Session} = Meta)
 resident_worker_meta(_Result, Meta) ->
     Meta.
 
-is_successful_current_outcome({ok, _Evidence, _Height, _Projection}) -> true;
+is_successful_current_outcome(
+  {ok, _Evidence, _Store, _Height, _Projection}) -> true;
 is_successful_current_outcome(_) -> false.
 
 finish_phase_session(true, PhaseIndex, {Result, Meta}) ->
@@ -2967,8 +3051,11 @@ open_progress_signals(Identity = {Ns, _Anchor}, S0) ->
 maybe_close_progress_signals(Identity = {Ns, _Anchor}, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{progress_signals_open = true,
-                 consumers = Consumers} = H0 ->
+                 consumers = Consumers,
+                 current_watch = CurrentWatch,
+                 resident_verified = ResidentVerified} = H0 ->
             case map_size(Consumers) =:= 0 andalso
+                 not (CurrentWatch =/= none andalso ResidentVerified) andalso
                  not has_parked_route_waiter(H0) of
                 true ->
                     _ = catch quod_reg:unsubscribe(
@@ -3052,7 +3139,10 @@ close_all_feed_registrations(S0) ->
 desired_feed_registration_routes(Identity, S) ->
     case maps:get(Identity, S#s.histories, undefined) of
         #history{progress_signals_open = true,
-                 projection = Projection} when is_map(Projection) ->
+                 current_watch = Watch, consumers = Consumers,
+                 projection = Projection}
+          when is_map(Projection),
+               (map_size(Consumers) > 0 orelse Watch =:= remote) ->
             case selected_route_sources(Identity, [], S) of
                 {ok, Sources} ->
                     maps:from_list(
@@ -3235,20 +3325,39 @@ accept_feed_recipient_signal(Peer, Link, Identity = {Ns, Anchor},
               Link,
               quod_feed:recipient_ack_frame(
                 Ns, Anchor, RegistrationId, Height)),
-            Registration1 = Registration#feed_registration{registered = true},
+            Registration1 = Registration#feed_registration{
+                              registered = true, height = Height},
+            S1 = note_feed_height(
+                   Identity, Height,
+                   S0#s{feed_registrations =
+                            (S0#s.feed_registrations)#{
+                              Key => Registration1}}),
             wake_follow(
-              Identity,
-              release_route_waiters(
-                Identity,
-                S0#s{feed_registrations =
-                         (S0#s.feed_registrations)#{
-                           Key => Registration1}}));
+              Identity, release_route_waiters(Identity, S1));
         _CrossedOrStale ->
             S0
     end;
 accept_feed_recipient_signal(_Peer, _Link, _Identity,
                              _RegistrationId, _Height, S) ->
     S.
+
+note_feed_height(Identity, Height, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{height = ResidentHeight, hinted_height = OldHint} = H0 ->
+            Hint = case OldHint of
+                       Known when is_integer(Known) -> max(Known, Height);
+                       unknown -> Height
+                   end,
+            View = case Height > ResidentHeight of
+                       true -> unconfirmed;
+                       false -> H0#history.current_view
+                   end,
+            put_history(
+              Identity,
+              H0#history{hinted_height = Hint, current_view = View}, S0);
+        undefined ->
+            S0
+    end.
 
 close_identity_feed_registrations(Identity, S0) ->
     Keys = [Key
@@ -3308,7 +3417,9 @@ handle_feed_signal(Peer, Link, Chan, Payload, S0) ->
                 error ->
                     case quod_feed:progress_signal(Payload, Ns) of
                         true ->
-                            wake_namespace_progress_from_peer(Peer, Ns, S0);
+                            wake_namespace_progress_from_peer(
+                              Peer, Ns,
+                              quod_feed:progress_height(Payload, Ns), S0);
                         false -> S0
                     end;
                 %% Target-side controls are consumed by a hosted `quod_feed`.
@@ -3320,7 +3431,7 @@ handle_feed_signal(Peer, Link, Chan, Payload, S0) ->
             S0
     end.
 
-wake_namespace_progress(Ns, S0) ->
+wake_namespace_progress(Ns, _Height, S0) ->
     Identities =
         [Identity
          || {Identity = {HistoryNs, _Anchor},
@@ -3329,14 +3440,18 @@ wake_namespace_progress(Ns, S0) ->
             HistoryNs =:= Ns],
     lists:foldl(
       fun(Identity, Acc) ->
-              wake_follow(Identity, release_route_waiters(Identity, Acc))
+              wake_follow(
+                Identity,
+                release_route_waiters(
+                  Identity,
+                  invalidate_current_view(Identity, Acc)))
       end, S0, Identities).
 
 %% A generic feed block/digest carries no anchor. Correlate its authenticated
 %% peer separately for every same-named identity and accept it only when that
 %% peer belongs to the identity's latest certified committee. It remains a
 %% freshness edge; the ordinary follower still verifies every fetched byte.
-wake_namespace_progress_from_peer(Peer, Ns, S0) ->
+wake_namespace_progress_from_peer(Peer, Ns, Progress, S0) ->
     Identities =
         [Identity
          || {Identity = {HistoryNs, _Anchor},
@@ -3349,8 +3464,41 @@ wake_namespace_progress_from_peer(Peer, Ns, S0) ->
               Peer, quod_simplex:history_committee(Projection))],
     lists:foldl(
       fun(Identity, Acc) ->
-              wake_follow(Identity, release_route_waiters(Identity, Acc))
+              Acc1 = release_route_waiters(Identity, Acc),
+              case progress_may_advance(Identity, Progress, Acc1) of
+                  true ->
+                      wake_follow(
+                        Identity,
+                        invalidate_current_view(Identity, Acc1));
+                  false ->
+                      Acc1
+              end
       end, S0, Identities).
+
+%% Digest heights are authenticated reachability/freshness hints, never
+%% evidence. A height at or below the certified resident row cannot require
+%% work. A newer height and every opaque block still wake the one verifier.
+progress_may_advance(
+  Identity, {ok, Height}, #s{histories = Histories}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{height = ResidentHeight} when is_integer(ResidentHeight) ->
+            Height > ResidentHeight;
+        _ ->
+            true
+    end;
+progress_may_advance(_Identity, unknown, _S) ->
+    true;
+progress_may_advance(_Identity, error, _S) ->
+    false.
+
+invalidate_current_view(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{current_watch = Watch} = H0 when Watch =/= none ->
+            put_history(
+              Identity, H0#history{current_view = unconfirmed}, S0);
+        _ ->
+            S0
+    end.
 
 handle_catchup_frame(Peer, Chan, Payload, S0) ->
     case maps:get(Chan, S0#s.channels, undefined) of
@@ -3412,7 +3560,8 @@ verification_worker(
     Result0 = verification_work(
                 Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
                 RequestTimeout, Resident),
-    {Result, Meta} = normalize_worker_result(Result0),
+    {Result, Meta0} = normalize_worker_result(Result0),
+    Meta = close_worker_cache(Meta0),
     observe_foreign_stage(
       verification_stage(Work), foreign_result(Result), StartedNative),
     Owner ! {foreign_worker_done, RequestRef, Result, Meta}.
@@ -3420,9 +3569,7 @@ verification_worker(
 verification_stage({exact, _, _, _, _}) -> request_exact;
 verification_stage({exact_routes, _, _, _, _}) -> request_exact;
 verification_stage({current, _, _}) -> request_current;
-verification_stage({local_current, _, _}) -> request_current;
 verification_stage({current_identity, _, _}) -> request_current;
-verification_stage({local_current_identity, _, _}) -> request_current;
 verification_stage({follow, _, _}) -> request_follow.
 
 foreign_result({ok, _}) -> ok;
@@ -3454,23 +3601,11 @@ verification_work(
       Owner, RequestRef, Sources, Ref, Root, FetchFun, PageTimeout,
       RequestTimeout, Resident);
 verification_work(
-  {local_current, LedgerRoot, Ref}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, _RequestTimeout, Resident) ->
-    verify_local_current_cached(
-      Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout,
-      Resident);
-verification_work(
   {current_identity, Sources, Identity}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident) ->
     certified_current_snapshot(
       Owner, RequestRef, Sources, Identity,
       Root, FetchFun, PageTimeout, RequestTimeout, Resident);
-verification_work(
-  {local_current_identity, LedgerRoot, Identity}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, _RequestTimeout, Resident) ->
-    verify_local_current_identity_cached(
-      Owner, RequestRef, LedgerRoot, Identity,
-      Root, FetchFun, PageTimeout, Resident);
 verification_work(
   {follow, Identity, Sources}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident) ->
@@ -3512,6 +3647,16 @@ normalize_worker_result({{ok, _} = Result, Meta}) when is_map(Meta) ->
 normalize_worker_result({{error, _} = Result, Meta}) when is_map(Meta) ->
     {Result, Meta}.
 
+%% A raw cache handle never crosses the worker boundary. The owner retains only
+%% its immutable verified index; the next worker reopens the same append owner
+%% in O(1), while a changed file falls back to ordinary recovery.
+close_worker_cache(#{cache_store := Store} = Meta) ->
+    Session = quod_ledger_store:snapshot(Store),
+    _ = quod_ledger_store:close(Store),
+    (maps:remove(cache_store, Meta))#{cache_session => Session};
+close_worker_cache(Meta) ->
+    Meta.
+
 follow_identity(Owner, RequestRef, Identity = {Ns, _Anchor}, Sources, Root,
                 FetchFun, PageTimeout, RequestTimeout, Resident) ->
     case quod_simplex:history_source(Identity, any) of
@@ -3551,26 +3696,22 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, LedgerRoot,
                    Owner, RequestRef, Identity, Root, none, Resident) of
                 {ok, Store0, Height0, Projection0, PhaseIndex, _} ->
                     Outcome =
-                        try
-                            case Tip > Height0 of
-                                true ->
-                                    Target = min(
-                                               Tip,
-                                               Height0 +
-                                                   ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-                                    advance_snapshot_sources(
-                                      [{LocalPeer, local}], Owner, RequestRef,
-                                      Ns, Anchor, Identity, Store0, Height0,
-                                      Projection0, PhaseIndex, Root, Target,
-                                      FetchFun, PageTimeout);
-                                false ->
-                                    {ok, Store0, Height0, Projection0}
-                            end
-                        after
-                            _ = quod_ledger_store:close(Store0)
+                        case Tip > Height0 of
+                            true ->
+                                Target = min(
+                                           Tip,
+                                           Height0 +
+                                               ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                                advance_snapshot_sources(
+                                  [{LocalPeer, local}], Owner, RequestRef,
+                                  Ns, Anchor, Identity, Store0, Height0,
+                                  Projection0, PhaseIndex, Root, Target,
+                                  FetchFun, PageTimeout);
+                            false ->
+                                {ok, Store0, Height0, Projection0}
                         end,
                     case Outcome of
-                        {ok, _Store1, Height1, Projection1} ->
+                        {ok, Store1, Height1, Projection1} ->
                             PhaseSession = suspend_phase_session(PhaseIndex),
                             View = case Height1 >= Tip of
                                        true -> confirmed;
@@ -3588,8 +3729,10 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, LedgerRoot,
                                bytes => cache_persisted_bytes(
                                           Root, cache_namespace(Identity)),
                                projection => Projection1,
-                               phase_session => PhaseSession}};
+                               phase_session => PhaseSession,
+                               cache_store => Store1}};
                         {error, _} ->
+                            _ = quod_ledger_store:close(Store0),
                             close_phase_session(PhaseIndex),
                             {{error, retry},
                              #{height => Height0,
@@ -3610,8 +3753,7 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
     Slot = ref_slot(Ref),
     case open_cache(Owner, RequestRef, Identity, Root, Slot, Resident) of
         {ok, Store0, Height0, Projection0, PhaseIndex, SlotProjection0} ->
-            Outcome = try
-                          case fetch_exact_reference(
+            Outcome = case fetch_exact_reference(
                                  Owner, RequestRef, Peer, Endpoint, Ref,
                                  Phase, Identity, Store0, Height0,
                                  Projection0, SlotProjection0, PhaseIndex,
@@ -3625,20 +3767,17 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                                        Store1, Ref, Phase,
                                        EvidenceProjection),
                                      RequirePeer),
-                                   CacheHeight, CacheProjection};
-                              {ok, _Store1, CacheHeight, CacheProjection,
+                                   Store1, CacheHeight, CacheProjection};
+                              {ok, Store1, CacheHeight, CacheProjection,
                                {evidence, Evidence}} ->
                                   {verified,
                                    verify_reference_source(
                                      Peer, {ok, Evidence}, RequirePeer),
-                                   CacheHeight, CacheProjection};
+                                   Store1, CacheHeight, CacheProjection};
                               Other -> Other
-                          end
-            after
-                _ = quod_ledger_store:close(Store0)
             end,
             case Outcome of
-                {verified, Result = {ok, _}, VerifiedHeight,
+                {verified, Result = {ok, _}, VerifiedStore, VerifiedHeight,
                  VerifiedProjection} ->
                     PhaseSession = suspend_phase_session(PhaseIndex),
                     Bytes = cache_persisted_bytes(
@@ -3646,8 +3785,11 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                     {Result,
                      #{height => VerifiedHeight, bytes => Bytes,
                        projection => VerifiedProjection,
-                       phase_session => PhaseSession}};
-                {verified, Result, VerifiedHeight, VerifiedProjection} ->
+                       phase_session => PhaseSession,
+                       cache_store => VerifiedStore}};
+                {verified, Result, _VerifiedStore, VerifiedHeight,
+                 VerifiedProjection} ->
+                    _ = quod_ledger_store:close(Store0),
                     close_phase_session(PhaseIndex),
                     Bytes = cache_persisted_bytes(
                               Root, cache_namespace(Identity)),
@@ -3655,12 +3797,14 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                      #{height => VerifiedHeight, bytes => Bytes,
                        projection => VerifiedProjection}};
                 {error, cache_corrupt} ->
+                    _ = quod_ledger_store:close(Store0),
                     close_phase_session(PhaseIndex),
                     retry_corrupt_cache(
                       Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                       Identity, Root, FetchFun, PageTimeout,
                       RequirePeer, Retried, EntryHint);
                 {error, _} ->
+                    _ = quod_ledger_store:close(Store0),
                     close_phase_session(PhaseIndex),
                     {{error, retry},
                      #{height => Height0,
@@ -3747,6 +3891,11 @@ verify_current_reference(
 
 resident_from_meta(
   #{height := Height, projection := Projection,
+    phase_session := PhaseSession, cache_store := Store})
+  when is_integer(Height), is_map(Projection), PhaseSession =/= none ->
+    {verified_store, Height, Projection, PhaseSession, Store};
+resident_from_meta(
+  #{height := Height, projection := Projection,
     phase_session := PhaseSession})
   when is_integer(Height), is_map(Projection), PhaseSession =/= none ->
     {verified, Height, Projection, PhaseSession};
@@ -3766,14 +3915,14 @@ certified_current_snapshot(
     case open_cache(Owner, RequestRef, Identity, Root, none, Resident) of
         {ok, Store0, Height0, Projection0, PhaseIndex, _RefProjection} ->
             Outcome =
-                try
+                begin
                     Hints = current_route_candidates(Sources, Projection0),
                     case advance_current_snapshot(
                            Owner, RequestRef, Hints, Identity, Store0,
                            Height0, Projection0, PhaseIndex, Root,
                            FetchFun, PageTimeout, RequestTimeout,
                            AdvanceMode) of
-                        {ok, _Store1, Height1, Projection1} ->
+                        {ok, Store1, Height1, Projection1} ->
                             ConfirmHints = current_route_candidates(
                                              Sources, Projection1),
                             case current_view_confirmed(
@@ -3785,18 +3934,21 @@ certified_current_snapshot(
                                     {ok, current_view_evidence(
                                            Identity, Height1, Projection1,
                                            ConfirmHints),
-                                     Height1, Projection1};
+                                     Store1, Height1, Projection1};
                                 false ->
-                                    {unconfirmed, Height1, Projection1}
+                                    {unconfirmed, Store1, Height1, Projection1}
                             end;
                         {error, _} = Error ->
                             Error
                     end
-                after
-                    _ = quod_ledger_store:close(Store0)
                 end,
+            Successful = is_successful_current_outcome(Outcome),
+            case Successful of
+                true -> ok;
+                false -> _ = quod_ledger_store:close(Store0)
+            end,
             finish_phase_session(
-              is_successful_current_outcome(Outcome), PhaseIndex,
+              Successful, PhaseIndex,
               current_snapshot_result(Outcome, Root, Identity,
                                       Height0, Projection0));
         {error, _} ->
@@ -3804,14 +3956,15 @@ certified_current_snapshot(
     end.
 
 current_snapshot_result(
-  {ok, Evidence, Height, Projection}, Root, Identity,
+  {ok, Evidence, Store, Height, Projection}, Root, Identity,
   _OldHeight, _OldProjection) ->
     {{ok, Evidence},
      #{height => Height,
        bytes => cache_persisted_bytes(Root, cache_namespace(Identity)),
-       projection => Projection}};
+       projection => Projection,
+       cache_store => Store}};
 current_snapshot_result(
-  {unconfirmed, Height, Projection}, Root, Identity,
+  {unconfirmed, _Store, Height, Projection}, Root, Identity,
   _OldHeight, _OldProjection) ->
     {{error, retry},
      #{height => Height,
@@ -3824,99 +3977,6 @@ current_snapshot_result(
        bytes => cache_persisted_bytes(Root, cache_namespace(Identity)),
        projection => Projection}}.
 
-verify_local_current_cached(
-  Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout,
-  Resident) ->
-    Identity = {Ns, _Anchor} = ref_identity(Ref),
-    case quod_ledger_store:open_ro(Ns, LedgerRoot) of
-        {ok, Source} ->
-            Height = quod_ledger_store:last(Source),
-            _ = quod_ledger_store:close(Source),
-            case Height >= ref_slot(Ref) of
-                true ->
-                    verify_local_current_height(
-                      Owner, RequestRef, {finalize, Ref}, Identity, Height,
-                      Root, FetchFun, PageTimeout, Resident);
-                false ->
-                    {{error, retry}, #{}}
-            end;
-        _ ->
-            {{error, retry}, #{}}
-    end.
-
-verify_local_current_identity_cached(
-  Owner, RequestRef, LedgerRoot,
-  Identity = {Ns, _Anchor}, Root, FetchFun, PageTimeout, Resident) ->
-    case quod_ledger_store:open_ro(Ns, LedgerRoot) of
-        {ok, Source} ->
-            Height = quod_ledger_store:last(Source),
-            _ = quod_ledger_store:close(Source),
-            case Height > 0 of
-                true ->
-                    verify_local_current_height(
-                      Owner, RequestRef, none, Identity, Height,
-                      Root, FetchFun, PageTimeout, Resident);
-                false ->
-                    {{error, retry}, #{}}
-            end;
-        _ ->
-            {{error, retry}, #{}}
-    end.
-
-verify_local_current_height(
-  Owner, RequestRef, RequiredReference, Identity, Height,
-  Root, FetchFun, PageTimeout, Resident) ->
-    LocalPeer = {local, Identity},
-    case open_cache(
-           Owner, RequestRef, Identity, Root, Height, Resident) of
-        {ok, Store0, Height0, Projection0, PhaseIndex, HeightProjection0} ->
-            Outcome =
-                try
-                    case fetch_to_height(
-                           Owner, RequestRef, LocalPeer, local,
-                           Height, Identity,
-                           Store0, Height0, Projection0, HeightProjection0,
-                           PhaseIndex, Root, FetchFun, PageTimeout) of
-                        {ok, Store1, CacheHeight, CacheProjection,
-                         CurrentProjection}
-                          when CacheHeight >= Height ->
-                            case verify_current_basis(
-                                   Store1, RequiredReference,
-                                   CurrentProjection) of
-                                ok ->
-                                    {ok, current_view_evidence(
-                                           Identity, Height,
-                                           CurrentProjection,
-                                           current_route_candidates(
-                                             empty_route_sources(),
-                                             CurrentProjection)),
-                                     CacheHeight, CacheProjection};
-                                {error, _} = Error -> Error
-                            end;
-                        {ok, _Store1, _CacheHeight, _Projection,
-                         _CurrentProjection} ->
-                            {error, retry};
-                        {error, _} = Error -> Error
-                    end
-                after
-                    _ = quod_ledger_store:close(Store0)
-                end,
-            finish_phase_session(
-              is_successful_current_outcome(Outcome), PhaseIndex,
-              current_snapshot_result(Outcome, Root, Identity,
-                                      Height0, Projection0));
-        {error, _} ->
-            {{error, retry}, #{}}
-    end.
-
-verify_current_basis(_Store, none, _CurrentProjection) ->
-    ok;
-verify_current_basis(Store, {Phase, Ref}, CurrentProjection) ->
-    case verify_exact_reference(Store, Ref, Phase, CurrentProjection) of
-        {ok, _Evidence} -> ok;
-        {error, _} = Error -> Error
-    end.
-
 open_cache(Owner, RequestRef, Identity, Root, TargetSlot, Resident) ->
     StartedNative = erlang:monotonic_time(),
     Result = open_cache_raw(
@@ -3924,6 +3984,54 @@ open_cache(Owner, RequestRef, Identity, Root, TargetSlot, Resident) ->
     observe_foreign_stage(cache_open, cache_result(Result), StartedNative),
     Result.
 
+open_cache_raw(_Owner, _RequestRef, Identity, _Root, TargetSlot,
+               {verified_store, Height, Projection, PhaseSession, Store}) ->
+    CacheNs = cache_namespace(Identity),
+    case retained_cache_matches(
+           Store, CacheNs, Height, Projection, Identity) of
+        true ->
+            case quod_dtx_phase_index:resume(PhaseSession) of
+                {ok, PhaseIndex} ->
+                    {ok, Store, Height, Projection, PhaseIndex,
+                     resident_target_projection(
+                       TargetSlot, Height, Projection)};
+                {error, _} ->
+                    _ = quod_ledger_store:close(Store),
+                    {error, cache_corrupt}
+            end;
+        false ->
+            _ = quod_ledger_store:close(Store),
+            discard_resident_phase(
+              {verified, Height, Projection, PhaseSession}),
+            {error, cache_corrupt}
+    end;
+open_cache_raw(Owner, RequestRef, Identity, Root, TargetSlot,
+               {verified_session, Height, Projection,
+                PhaseSession, CacheSession}) ->
+    CacheNs = cache_namespace(Identity),
+    case quod_ledger_store:resume(CacheSession) of
+        {ok, Store} ->
+            case retained_cache_matches(
+                   Store, CacheNs, Height, Projection, Identity) of
+                true ->
+                    case quod_dtx_phase_index:resume(PhaseSession) of
+                        {ok, PhaseIndex} ->
+                            {ok, Store, Height, Projection, PhaseIndex,
+                             resident_target_projection(
+                               TargetSlot, Height, Projection)};
+                        {error, _} ->
+                            _ = quod_ledger_store:close(Store),
+                            {error, cache_corrupt}
+                    end;
+                false ->
+                    _ = quod_ledger_store:close(Store),
+                    {error, cache_corrupt}
+            end;
+        {error, _} ->
+            close_phase_session(PhaseSession),
+            open_cache_raw(
+              Owner, RequestRef, Identity, Root, TargetSlot, none)
+    end;
 open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
                Resident) ->
     CacheNs = cache_namespace(Identity),
@@ -3961,6 +4069,13 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
             end;
         {error, _} ->
             {error, cache_corrupt}
+    end.
+
+retained_cache_matches(Store, CacheNs, Height, Projection, Identity) ->
+    try quod_ledger_store:namespace(Store) =:= CacheNs andalso
+        quod_ledger_store:last(Store) =:= Height andalso
+        valid_projection(Projection, Identity)
+    catch _:_ -> false
     end.
 
 open_cache_projection(

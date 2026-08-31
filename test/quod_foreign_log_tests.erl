@@ -202,6 +202,200 @@ warm_exact_and_current_reuse_one_verified_phase_session_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+resident_current_view_uses_height_wake_and_verifies_real_delta_test() ->
+    Fixture = prepared_then_committed_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31989},
+    [Genesis, Prepare, _Finalize] = FullChain = maps:get(chain, Fixture),
+    InitialChain = [Genesis, Prepare],
+    Routes = route_candidates([{Peer, Endpoint}]),
+    TestPid = self(),
+    Mode = atomics:new(1, []),
+    ok = atomics:put(Mode, 1, 1),
+    InitialFetch = peer_chain_fetch(Ns, InitialChain, [Peer]),
+    AdvancedFetch = peer_chain_fetch(Ns, FullChain, [Peer]),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            TestPid ! {resident_current_fetch, From},
+            case atomics:get(Mode, 1) of
+                1 -> InitialFetch(P, E, RequestedNs, From, To);
+                2 -> error({unchanged_current_fetched, From});
+                3 -> AdvancedFetch(P, E, RequestedNs, From, To)
+            end
+        end,
+    Dir = temp_dir("resident-current-height-wake"),
+    Pid = start_owner(Dir, Fetch),
+    RegistrationId = binary:part(key(31990), 0, 16),
+    Link = spawn(fun() -> fake_feed_link(TestPid) end),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 2}},
+           quod_foreign_log:current(Routes, Identity, 5000)),
+        [SessionFile] = phase_session_files(Dir, Identity),
+        flush_resident_current_fetches(),
+
+        %% Install the exact post-handshake link owned by the existing feed
+        %% registration seam. Its registered height is a freshness witness,
+        %% never history evidence.
+        ok = quod_foreign_log:test_install_feed_registration(
+               Pid, Identity, Peer, Link, RegistrationId),
+        Registered = quod_feed:encode(
+                       Ns,
+                       {recipient_registered, 1,
+                        RegistrationId, maps:get(anchor, Fixture), 2}),
+        Pid ! {quod_message, {Peer, Link},
+               quod_feed:channel(Ns), Registered},
+        Ack2 = receive_fake_feed_send(Link, 1000),
+        ?assertMatch(
+           {ack, RegistrationId, _, 2},
+           quod_feed:decode_recipient(Ack2, Ns)),
+
+        %% The ordinary anti-entropy digest repeats the already-certified
+        %% height. It is liveness, not new history, and must not discard the
+        %% exact height witness or manufacture verifier work.
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns),
+               quod_feed:encode(Ns, {digest, 2})},
+
+        %% The unchanged request is answered from the one resident certified
+        %% row. Any fetch would fail this call, and the suspended phase file
+        %% proves that no second fold/session was created.
+        ok = atomics:put(Mode, 1, 2),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 2}},
+           quod_foreign_log:current(Routes, Identity, 5000)),
+        ?assertEqual([], collect_resident_current_fetches([])),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
+        ?assertEqual(
+           1, maps:get(feed_registrations, quod_foreign_log:stats())),
+
+        %% A later correlated height invalidates only freshness. The next
+        %% request must return to the ordinary verifier, consume slot 3, and
+        %% never restart from genesis.
+        ok = atomics:put(Mode, 1, 3),
+        WakesBefore = maps:get(follow_wakes, quod_foreign_log:stats()),
+        Wake3 = quod_feed:encode(
+                  Ns,
+                  {recipient_wake, 1,
+                   RegistrationId, maps:get(anchor, Fixture), 3}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Wake3},
+        Ack3 = receive_fake_feed_send(Link, 1000),
+        ?assertMatch(
+           {ack, RegistrationId, _, 3},
+           quod_feed:decode_recipient(Ack3, Ns)),
+        %% A freshness watch is not a subscription. The wake invalidates the
+        %% resident view but must not start background follow work; only the
+        %% real request below advances the one certified verifier.
+        ?assertEqual(
+           WakesBefore,
+           maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertEqual([], collect_resident_current_fetches([])),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 3}},
+           quod_foreign_log:current(Routes, Identity, 5000)),
+        Fetches = collect_resident_current_fetches([]),
+        ?assert(lists:member(3, Fetches)),
+        ?assertNot(lists:member(1, Fetches)),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
+    after
+        Link ! close,
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+resident_current_reference_uses_same_height_wake_without_fetch_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Ref = maps:get(ref, Fixture),
+    Endpoint = {"127.0.0.1", 31991},
+    Routes = route_candidates([{Peer, Endpoint}]),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Mode = atomics:new(1, []),
+    ok = atomics:put(Mode, 1, 1),
+    TestPid = self(),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            TestPid ! {resident_current_reference_fetch, From},
+            case atomics:get(Mode, 1) of
+                1 -> BaseFetch(P, E, RequestedNs, From, To);
+                2 -> error({unchanged_current_reference_fetched, From})
+            end
+        end,
+    Dir = temp_dir("resident-current-reference-height-wake"),
+    Pid = start_owner(Dir, Fetch),
+    RegistrationId = binary:part(key(31992), 0, 16),
+    Link = spawn(fun() -> fake_feed_link(TestPid) end),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 2}},
+           quod_foreign_log:verify_current(Routes, Ref, 5000)),
+        [SessionFile] = phase_session_files(Dir, Identity),
+        flush_resident_current_reference_fetches(),
+
+        ok = quod_foreign_log:test_install_feed_registration(
+               Pid, Identity, Peer, Link, RegistrationId),
+        Registered = quod_feed:encode(
+                       Ns,
+                       {recipient_registered, 1, RegistrationId,
+                        maps:get(anchor, Fixture), 2}),
+        Pid ! {quod_message, {Peer, Link},
+               quod_feed:channel(Ns), Registered},
+        Ack = receive_fake_feed_send(Link, 1000),
+        ?assertMatch(
+           {ack, RegistrationId, _, 2},
+           quod_feed:decode_recipient(Ack, Ns)),
+
+        ok = atomics:put(Mode, 1, 2),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 2}},
+           quod_foreign_log:verify_current(Routes, Ref, 5000)),
+        ?assertEqual([], collect_resident_current_reference_fetches([])),
+        ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
+    after
+        Link ! close,
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+resident_cache_session_height_mismatch_recovers_through_one_cache_path_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31993},
+    TestPid = self(),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            TestPid ! {resident_mismatch_fetch, From},
+            BaseFetch(P, E, RequestedNs, From, To)
+        end,
+    Dir = temp_dir("resident-session-height-mismatch"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        flush_resident_mismatch_fetches(),
+
+        %% The immutable ledger session still resumes because its file is
+        %% unchanged, but the deliberately inconsistent retained height must
+        %% close that handle and recover through the ordinary verifier.
+        ok = quod_foreign_log:test_corrupt_resident_height(Pid, Identity, 3),
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        ?assert(lists:member(1, collect_resident_mismatch_fetches([])))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 pending_prepare_to_finalize_resumes_phase_history_and_fetches_only_delta_test() ->
     Fixture = prepared_then_committed_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
@@ -1796,67 +1990,6 @@ restart_rebuilds_committee_eras_for_old_exact_references_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-verify_local_uses_anchor_era_after_local_committee_rotation_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ns = maps:get(ns, Fixture),
-    Old = maps:get(pub, Fixture),
-    SourceDir = temp_dir("local-rotation-source"),
-    CacheDir = temp_dir("local-rotation-cache"),
-    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
-    {ok, Store1} = quod_ledger_store:append(
-                     Store0, maps:get(chain, Fixture)),
-    ok = quod_ledger_store:close(Store1),
-    Pid = start_owner(
-            CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    try
-        {ok, Current} = quod_foreign_log:verify_local_current(
-                          SourceDir, maps:get(ref, Fixture), 5000),
-        {ok, Historical} = quod_foreign_log:verify_local(
-                             SourceDir, maps:get(ref, Fixture),
-                             finalize, 5000),
-        ?assertEqual(3, maps:get(slot, Current)),
-        ?assertEqual([Old], maps:get(committee, Historical)),
-        ?assertNotEqual(maps:get(committee_id, Current),
-                        maps:get(committee_id, Historical))
-    after
-        stop_owner(Pid),
-        _ = file:del_dir_r(SourceDir),
-        _ = file:del_dir_r(CacheDir)
-    end.
-
-local_current_view_folds_to_captured_ledger_head_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ns = maps:get(ns, Fixture),
-    SourceDir = temp_dir("local-current-source"),
-    CacheDir = temp_dir("local-current-cache"),
-    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
-    {ok, Store1} = quod_ledger_store:append(
-                     Store0, maps:get(chain, Fixture)),
-    ok = quod_ledger_store:close(Store1),
-    Pid = start_owner(
-            CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    try
-        ?assertMatch(
-           {ok, #{slot := 3, committee := [_, _]}},
-           quod_foreign_log:verify_local_current(
-             SourceDir, maps:get(ref, Fixture), 5000)),
-        Identity = {Ns, maps:get(anchor, Fixture)},
-        [SessionFile] = phase_session_files(CacheDir, Identity),
-        ?assertMatch(
-           {ok, #{slot := 3, committee := [_, _]}},
-           quod_foreign_log:verify_local_current(
-             SourceDir, maps:get(ref, Fixture), 5000)),
-        %% Local and remote current checks share the same resident projection
-        %% seam. Replacing this scratch session proves the local half silently
-        %% replayed the certified prefix instead of resuming it.
-        ?assertEqual(
-           [SessionFile], phase_session_files(CacheDir, Identity))
-    after
-        stop_owner(Pid),
-        _ = file:del_dir_r(SourceDir),
-        _ = file:del_dir_r(CacheDir)
-    end.
-
 identity_current_view_starts_at_genesis_and_tracks_rotation_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
@@ -2034,38 +2167,6 @@ identity_current_global_network_dependency_case() ->
         _ = file:del_dir_r(Dir)
     end.
 
-local_identity_current_view_needs_no_phase_reference_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ns = maps:get(ns, Fixture),
-    Identity = {Ns, maps:get(anchor, Fixture)},
-    SourceDir = temp_dir("local-identity-current-source"),
-    CacheDir = temp_dir("local-identity-current-cache"),
-    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
-    {ok, Store1} = quod_ledger_store:append(
-                     Store0, maps:get(chain, Fixture)),
-    ok = quod_ledger_store:close(Store1),
-    Pid = start_owner(
-            CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    try
-        ?assertMatch(
-           {ok, #{identity := Identity, slot := 3,
-                  committee := [_, _]}},
-           quod_foreign_log:local_current(
-             SourceDir, Identity, 5000)),
-        [SessionFile] = phase_session_files(CacheDir, Identity),
-        ?assertMatch(
-           {ok, #{identity := Identity, slot := 3,
-                  committee := [_, _]}},
-           quod_foreign_log:local_current(
-             SourceDir, Identity, 5000)),
-        ?assertEqual(
-           [SessionFile], phase_session_files(CacheDir, Identity))
-    after
-        stop_owner(Pid),
-        _ = file:del_dir_r(SourceDir),
-        _ = file:del_dir_r(CacheDir)
-    end.
-
 identity_current_view_rejects_stale_malformed_and_uncertified_history_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
@@ -2131,16 +2232,12 @@ outsider_cannot_establish_identity_current_view_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-malformed_identity_current_request_is_rejected_before_owner_test() ->
+malformed_remote_identity_current_request_is_rejected_before_owner_test() ->
     ?assertEqual(
        {error, bad_foreign_reference},
        quod_foreign_log:current(
          route_candidates([{key(197), {"127.0.0.1", 19197}}]),
-         {<<>>, key(198)}, 1000)),
-    ?assertEqual(
-       {error, bad_foreign_reference},
-       quod_foreign_log:local_current(
-         "/unused", {<<"valid">>, <<1>>}, 1000)).
+         {<<>>, key(198)}, 1000)).
 
 current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
@@ -3097,6 +3194,52 @@ collect_identity_current_fetches(Acc) ->
     receive
         {identity_current_fetch, From} ->
             collect_identity_current_fetches([From | Acc])
+    after 50 ->
+        lists:reverse(Acc)
+    end.
+
+flush_resident_current_fetches() ->
+    receive
+        {resident_current_fetch, _From} -> flush_resident_current_fetches()
+    after 0 ->
+        ok
+    end.
+
+collect_resident_current_fetches(Acc) ->
+    receive
+        {resident_current_fetch, From} ->
+            collect_resident_current_fetches([From | Acc])
+    after 50 ->
+        lists:reverse(Acc)
+    end.
+
+flush_resident_current_reference_fetches() ->
+    receive
+        {resident_current_reference_fetch, _From} ->
+            flush_resident_current_reference_fetches()
+    after 0 ->
+        ok
+    end.
+
+collect_resident_current_reference_fetches(Acc) ->
+    receive
+        {resident_current_reference_fetch, From} ->
+            collect_resident_current_reference_fetches([From | Acc])
+    after 50 ->
+        lists:reverse(Acc)
+    end.
+
+flush_resident_mismatch_fetches() ->
+    receive
+        {resident_mismatch_fetch, _From} -> flush_resident_mismatch_fetches()
+    after 0 ->
+        ok
+    end.
+
+collect_resident_mismatch_fetches(Acc) ->
+    receive
+        {resident_mismatch_fetch, From} ->
+            collect_resident_mismatch_fetches([From | Acc])
     after 50 ->
         lists:reverse(Acc)
     end.

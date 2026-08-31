@@ -7,11 +7,11 @@ was not present for (`mode=join`, Simplex 4).
 Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_link`
 channel, separate from `quod_simplex`'s `{log, Ns}` channel:
 
-- **Server** (any Member holding the durable log): serves a `{blocks_req, From, To}` by reading the
-  committed `#entry{}` range from the store via `quod_ledger_store:open_ro/2` — a **read-only,
-  non-truncating** handle opened alongside the live writer, so a slow/large pull never touches the
-  consensus `gen_statem` and never corrupts the log. Each request runs in a worker; concurrency + range +
-  frame size are bounded (hostile-net + memory caps).
+- **Server** (any Member holding the durable log): asks the existing consensus owner for a copy of its
+  already-verified sparse ledger index, then reads the committed `#entry{}` range through a separate
+  **read-only** handle. The worker never shares the writer's raw descriptor and never rescans the full
+  log. Each request runs in a worker; concurrency + range + frame size are bounded (hostile-net +
+  memory caps).
 - **Client** (a joiner): `contact/1` samples ONE download contact — the live, self-filtered Brahms view
   first, the static seeds (minus this node's own `node_addr`) as the cold-start fallback
   (`quod_brahms:sample_contact/2`) — and `pull/4` requests `[From, To]` from it. The contact is STICKY for
@@ -214,7 +214,7 @@ worker; pure w.r.t. the gen_server (opens/closes its own handle).
         {ok, [#entry{}], log_index()} | {error, term()}.
 serve_blocks(Ns, DataDir, From0, To) ->
     From = max(1, From0),
-    case quod_ledger_store:open_ro(Ns, DataDir) of
+    case open_read_view(Ns, DataDir) of
         {error, _} = E -> E;
         {ok, Store}    ->
             try
@@ -225,6 +225,18 @@ serve_blocks(Ns, DataDir, From0, To) ->
             catch _:R -> {error, R}
             after quod_ledger_store:close(Store)
             end
+    end.
+
+%% A hosted namespace already owns the one verified sparse index in Simplex.
+%% Reusing a snapshot avoids an O(history) rescan for every tiny catch-up page.
+%% The fallback is the same offline/startup reader used before this optimization;
+%% it is not another source of truth and every returned frame is still checked.
+open_read_view(Ns, DataDir) ->
+    case quod_simplex:ledger_read_snapshot(Ns) of
+        {ok, Snapshot} ->
+            quod_ledger_store:open_ro_snapshot(Snapshot);
+        {error, not_ready} ->
+            quod_ledger_store:open_ro(Ns, DataDir)
     end.
 
 %% The longest PREFIX of `Es` whose serialized size stays within ?RESP_BUDGET, so the whole response frame

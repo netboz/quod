@@ -34,6 +34,10 @@ store_test_() ->
       fun t_append_read/1,
       fun t_opaque_payload_roundtrip/1,
       fun t_reopen_persists/1,
+      fun t_read_snapshot_preserves_verified_index/1,
+      fun t_read_snapshot_accepts_append_but_refuses_truncation/1,
+      fun t_resume_snapshot_appends_without_rescan/1,
+      fun t_resume_snapshot_refuses_a_changed_file/1,
       fun t_torn_tail_recovery/1,
       fun t_torn_tail_bad_crc_trims/1,
       fun t_interior_corruption_fail_stops/1,
@@ -120,6 +124,74 @@ t_reopen_persists({Dir, Ns}) ->
         ?assertEqual(2, quod_ledger_store:last(S2)),
         ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2)),
         ok = quod_ledger_store:close(S2)
+    end.
+
+%% Catch-up workers reuse the writer's verified sparse index but open their own
+%% raw descriptor, preserving the one-process ownership rule.
+t_read_snapshot_preserves_verified_index({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
+        Session = quod_ledger_store:snapshot(S1),
+        {ok, S2} = quod_ledger_store:open_ro_snapshot(Session),
+        ?assertEqual(Ns, quod_ledger_store:namespace(S2)),
+        ?assertEqual(3, quod_ledger_store:last(S2)),
+        ?assertMatch({ok, #entry{index = 2}},
+                     quod_ledger_store:read_at(S2, 2)),
+        ok = quod_ledger_store:close(S2),
+        ok = quod_ledger_store:close(S1)
+    end.
+
+%% Later appends cannot widen a captured view; truncating its committed prefix
+%% makes it unusable.
+t_read_snapshot_accepts_append_but_refuses_truncation({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1)]),
+        Session = quod_ledger_store:snapshot(S1),
+        {ok, S2} = quod_ledger_store:append(S1, [ent(2)]),
+        {ok, View} = quod_ledger_store:open_ro_snapshot(Session),
+        ?assertEqual(1, quod_ledger_store:last(View)),
+        ?assertEqual(not_found, quod_ledger_store:read_at(View, 2)),
+        ok = quod_ledger_store:close(View),
+        ok = quod_ledger_store:close(S2),
+        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        {ok, Fd} = file:open(LogPath, [write, raw, binary]),
+        ok = file:truncate(Fd),
+        ok = file:close(Fd),
+        ?assertEqual({error, changed},
+                     quod_ledger_store:open_ro_snapshot(Session))
+    end.
+
+%% The foreign-history owner hands this immutable session between consecutive
+%% workers. Resuming must preserve the verified index and remain appendable.
+t_resume_snapshot_appends_without_rescan({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2)]),
+        Session = quod_ledger_store:snapshot(S1),
+        ok = quod_ledger_store:close(S1),
+        {ok, S2} = quod_ledger_store:resume(Session),
+        ?assertEqual(2, quod_ledger_store:last(S2)),
+        {ok, S3} = quod_ledger_store:append(S2, [ent(3)]),
+        ?assertMatch({ok, #entry{index = 3}},
+                     quod_ledger_store:read_at(S3, 3)),
+        ok = quod_ledger_store:close(S3)
+    end.
+
+%% A stale session never overwrites or trims work performed after it was
+%% captured. The ordinary open path remains the sole recovery owner.
+t_resume_snapshot_refuses_a_changed_file({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1)]),
+        Session = quod_ledger_store:snapshot(S1),
+        {ok, S2} = quod_ledger_store:append(S1, [ent(2)]),
+        ok = quod_ledger_store:close(S2),
+        ?assertEqual({error, changed}, quod_ledger_store:resume(Session)),
+        {ok, Recovered} = quod_ledger_store:open(Ns, Dir),
+        ?assertEqual(2, quod_ledger_store:last(Recovered)),
+        ok = quod_ledger_store:close(Recovered)
     end.
 
 %% open_ro gives a read-only view of the committed log (the catch-up/feed server's read path).

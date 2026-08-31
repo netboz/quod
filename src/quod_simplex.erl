@@ -142,11 +142,11 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
          cancel_dtx_begin/3, dtx_group_barrier/3,
          dtx_endpoint_request/7, dtx_endpoint_local/4,
-         history_source/2, transaction_evidence/3,
+         history_source/2, history_current_view/2, transaction_evidence/3,
          operation_claim_evidence/3,
          dtx_local_evidence/3, dtx_applied_source/2,
          dtx_outcome_lookup/2,
-         status/1, committee/1, genesis_hash/1,
+         status/1, committee/1, ledger_read_snapshot/1, genesis_hash/1,
          acquire_proof_access/1, check_proof_access/1,
          identity_view/1,
          stats/1, namespaces/0]).
@@ -178,6 +178,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
          test_dtx_source_identity/2,
          test_local_history_source/3,
+         test_local_history_current_view/3,
          test_consensus_barrier/1, test_dtx_consensus_barrier/2,
          test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
@@ -245,7 +246,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_dtx_correlation_link_error/4,
          test_timeout_dtx_correlation/2,
          test_drop_dtx_correlation_caller/2,
-         test_dtx_endpoint_result/3,
+         test_dtx_endpoint_result/3, test_dtx_endpoint_result_at/4,
          test_dtx_endpoint_result_with_hints/3,
          test_waiting_applied_key/2,
          test_seed_dtx_worker/5,
@@ -1131,6 +1132,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     peer :: local | node_id(),
     contact = none :: none | {node_id(), term()},
     request :: quod_dtx_endpoint:request(),
+    attestation = none :: none | term(),
     destination :: {link, pid()} | {caller, term()},
     started_at = undefined :: undefined | integer()
 }).
@@ -1705,6 +1707,10 @@ test_drop_dtx_correlation_caller(RequestId, S) ->
     end.
 test_dtx_endpoint_result(Request, Result, S) ->
     element(1, dtx_endpoint_result_response(Request, Result, S)).
+test_dtx_endpoint_result_at(Request, Result, AdmissionS, ResponseS) ->
+    Attestation = dtx_endpoint_attestation(Request, AdmissionS),
+    element(1, dtx_endpoint_result_response(
+                 Request, Result, Attestation, ResponseS)).
 test_dtx_endpoint_result_with_hints(Request, Result, S) ->
     dtx_endpoint_result_response(Request, Result, S).
 test_waiting_applied_key(Request, Result) ->
@@ -2515,6 +2521,21 @@ history_source({Ns, <<_:256>>} = Identity, Requirement)
 history_source(_Identity, _Requirement) ->
     {error, invalid_identity}.
 
+-doc "Return the consensus owner's verified current view for a co-hosted ontology.".
+-spec history_current_view({binary(), <<_:256>>}, any | validator) ->
+          {ok, map()} |
+          {error, not_ready | invalid_identity | read_certificate_unavailable}.
+history_current_view({Ns, <<_:256>>} = Identity, Requirement)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       (Requirement =:= any orelse Requirement =:= validator) ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {history_current_view, Identity, Requirement}, 1000)
+    catch exit:_ -> {error, not_ready}
+    end;
+history_current_view(_Identity, _Requirement) ->
+    {error, invalid_identity}.
+
 -doc "Return the exact signed transaction and certified reference at a known slot.".
 -spec transaction_evidence(binary(), pos_integer(), <<_:256>>) ->
           {ok, quod_dtx:certified_ref(), #transaction{}} |
@@ -2687,6 +2708,25 @@ dtx_applied_source(_Ns, _FinalizeRef) ->
 status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
 stats(Ns)     -> call(Ns, get_stats, undefined).
+
+-doc "Return a read-only snapshot of this owner's already-verified ledger index.".
+-spec ledger_read_snapshot(binary()) ->
+          {ok, quod_ledger_store:session()} | {error, not_ready}.
+ledger_read_snapshot(Ns) when is_binary(Ns) ->
+    try quod_reg:where({quod_simplex, Ns}) of
+        Pid when is_pid(Pid) ->
+            %% A busy consensus owner may decline this serving optimization;
+            %% catch-up then uses its existing fully verified O(history) open.
+            try gen_statem:call(Pid, get_ledger_read_snapshot, 1000)
+            catch exit:_ -> {error, not_ready}
+            end;
+        undefined ->
+            {error, not_ready}
+    catch _:_ ->
+        {error, not_ready}
+    end;
+ledger_read_snapshot(_Ns) ->
+    {error, not_ready}.
 
 -doc "The immutable 32-byte slot-1 genesis anchor for this consensus process, including before a fresh joiner has downloaded slot 1.".
 -spec genesis_hash(binary()) -> binary() | undefined.
@@ -3561,6 +3601,11 @@ running_impl({call, From}, {history_source, Identity, Requirement}, S) ->
     {keep_state, S,
      [{reply, From,
        local_history_source(Identity, Requirement, S)}]};
+running_impl(
+  {call, From}, {history_current_view, Identity, Requirement}, S) ->
+    {keep_state, S,
+     [{reply, From,
+       local_history_current_view(Identity, Requirement, S)}]};
 running_impl({call, From}, get_dtx_binding, S) ->
     Reply = case current_dtx_binding(S) of
                 {ok, Binding} -> {ok, Binding};
@@ -4007,6 +4052,10 @@ running_impl({call, From}, finish_feed_replay, S) ->
     {keep_state, S, [{reply, From, ok}]};
 running_impl({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running_impl({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
+running_impl({call, From}, get_ledger_read_snapshot,
+             S = #s{store = Store}) when Store =/= undefined ->
+    {keep_state, S,
+     [{reply, From, {ok, quod_ledger_store:snapshot(Store)}}]};
 running_impl({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
 running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 
@@ -5337,7 +5386,9 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     Worker = #dtx_server_worker{
                pid = Pid, monitor = Monitor, owner_mref = OwnerMRef,
                peer = Peer, contact = endpoint_contact(PeerIdentity),
-               request = Request, destination = Destination,
+               request = Request,
+               attestation = dtx_endpoint_attestation(Request, S),
+               destination = Destination,
                started_at = quod_time:mono_ms()},
     S#s{dtx_workers = Workers#{Pid => Worker}}.
 
@@ -5764,13 +5815,15 @@ finish_dtx_server_worker(
     case maps:take(Pid, Workers) of
         {#dtx_server_worker{monitor = Monitor, request = Request,
                             owner_mref = OwnerMRef,
+                            attestation = Attestation,
                             destination = Destination,
                             started_at = StartedAt}, Rest} ->
             _ = erlang:demonitor(Monitor, [flush]),
             demonitor_if_set(OwnerMRef),
             S1 = detach_dtx_endpoint_waiter(
                    Pid, S#s{dtx_workers = Rest}),
-            Response0 = dtx_endpoint_result_response(Request, Result, S1),
+            Response0 = dtx_endpoint_result_response(
+                          Request, Result, Attestation, S1),
             {Response, ValidationSidecar} = valid_generated_dtx_response(
                                        Request, Response0, S1#s.ns),
             observe_simplex_owner_terminal(
@@ -5851,7 +5904,10 @@ dtx_endpoint_result_response(
 dtx_endpoint_result_response(
   {read_attest, RequestId, _PlanBlob},
   {read_plan_valid, Plan, Applied}, S) ->
-    {read_attest_endpoint_response(RequestId, Plan, Applied, S), []};
+    Attestation = dtx_endpoint_attestation(
+                    {read_attest, RequestId, <<>>}, S),
+    {read_attest_endpoint_response(
+       RequestId, Plan, Applied, Attestation, S), []};
 dtx_endpoint_result_response(
   {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict},
   {applied_state, Evidence, State}, S) ->
@@ -5866,6 +5922,14 @@ dtx_endpoint_result_response(Request, {error, Reason}, _S)
     {{error, quod_dtx_endpoint:request_id(Request), Reason}, []};
 dtx_endpoint_result_response(Request, _Result, _S) ->
     {{error, quod_dtx_endpoint:request_id(Request), not_ready}, []}.
+
+dtx_endpoint_result_response(
+  {read_attest, RequestId, _PlanBlob},
+  {read_plan_valid, Plan, Applied}, Attestation, S) ->
+    {read_attest_endpoint_response(
+       RequestId, Plan, Applied, Attestation, S), []};
+dtx_endpoint_result_response(Request, Result, _Attestation, S) ->
+    dtx_endpoint_result_response(Request, Result, S).
 
 submitted_prepare_digest(RecordBlob) ->
     case quod_dtx:decode_record(RecordBlob) of
@@ -6028,14 +6092,32 @@ applied_endpoint_response(
             {error, RequestId, not_ready}
     end.
 
+%% Validation runs outside the consensus owner. Capture the exact committed
+%% snapshot at admission so a later block cannot turn a valid result into a
+%% false refusal. The certificate remains bound to that older certified
+%% anchor and committee; a later commit is deliberately not a read lock.
+dtx_endpoint_attestation(
+  {read_attest, _RequestId, _PlanBlob},
+  S = #s{slot = Applied, last_applied = Applied,
+         self = Self, id = Signer, committee_id = CommitteeId})
+  when Applied > 0 ->
+    case endpoint_read_ready(S) andalso
+         lists:member(Self, active_validators(S)) andalso
+         applied_signer_matches(Self, Signer) of
+        true ->
+            {read_attest, target_identity(S), Applied,
+             CommitteeId, Self, Signer};
+        false ->
+            none
+    end;
+dtx_endpoint_attestation(_Request, _S) ->
+    none.
+
 read_attest_endpoint_response(
   RequestId, Plan, Applied,
-  S = #s{slot = Applied, last_applied = Applied,
-         self = Self, id = Signer, store = Store,
-         committee_id = CommitteeId}) ->
-    Target = target_identity(S),
-    case endpoint_read_ready(S) andalso lists:member(Self, active_validators(S))
-         andalso applied_signer_matches(Self, Signer) andalso
+  {read_attest, Target, Applied, CommitteeId, Self, Signer},
+  S = #s{store = Store}) ->
+    case target_identity(S) =:= Target andalso
          quod_dtx:target(Plan) =:= Target of
         true ->
             case read_certificate_anchor(Store, Target, Applied) of
@@ -6058,7 +6140,8 @@ read_attest_endpoint_response(
         false ->
             {error, RequestId, read_certificate_unavailable}
     end;
-read_attest_endpoint_response(RequestId, _Plan, _Applied, _S) ->
+read_attest_endpoint_response(
+  RequestId, _Plan, _Applied, _Attestation, _S) ->
     {error, RequestId, read_certificate_unavailable}.
 
 %% Complaint skips carry no state change, so the nearest preceding committed
@@ -10623,6 +10706,48 @@ local_history_source(
         {true, false, _, _} -> {error, not_ready};
         _ -> {error, invalid_identity}
     end.
+
+%% The live consensus owner has already verified this projection. A local
+%% current-view request must reuse it rather than rebuild and persist a second
+%% copy of the same local ledger through the foreign-history owner.
+local_history_current_view(Identity, Requirement, S) ->
+    case local_history_source(Identity, Requirement, S) of
+        {ok, _LedgerRoot} ->
+            Projection = state_projection(S),
+            Committee = history_committee(Projection),
+            Height = S#s.last_applied,
+            Dtx = maps:get(dtx, Projection),
+            case Height > 0 andalso Committee =/= [] of
+                true ->
+                    {ok,
+                     #{identity => Identity,
+                       slot => Height,
+                       generation => maps:get(generation, Dtx),
+                       committee => Committee,
+                       committee_id => maps:get(committee_id, Projection),
+                       route_candidates =>
+                           local_history_route_candidates(
+                             Committee,
+                             history_validator_routes(Projection))}};
+                false ->
+                    {error, not_ready}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+local_history_route_candidates(Committee, Routes) ->
+    lists:keysort(
+      1,
+      [{Peer, [Endpoint]}
+       || Peer <- Committee,
+          {ok, Endpoint} <- [maps:find(Peer, Routes)],
+          quod_quic:valid_endpoint(Endpoint)]).
+
+-ifdef(TEST).
+test_local_history_current_view(Identity, Requirement, S) ->
+    local_history_current_view(Identity, Requirement, S).
+-endif.
 
 valid_dtx_phase('begin') -> true;
 valid_dtx_phase(entry) -> true;

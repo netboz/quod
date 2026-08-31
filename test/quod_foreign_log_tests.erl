@@ -859,7 +859,7 @@ authenticated_live_endpoint_precedes_certified_history_with_fallback_test() ->
         %% A caller-supplied address never displaces certified history.
         ?assertEqual(
            {ok, [{Peer, [Historical]}]},
-           quod_foreign_log:route_hints(Identity, [{Peer, Supplied}])),
+           quod_foreign_log:route_hints(Identity, [{Peer, [Supplied]}])),
         %% Learning the already-certified address does not manufacture a
         %% second attempt for the same peer.
         quod_foreign_log:observe_candidate(Identity, {Peer, Historical}),
@@ -871,7 +871,8 @@ authenticated_live_endpoint_precedes_certified_history_with_fallback_test() ->
         quod_foreign_log:observe_candidate(Identity, {Peer, Live}),
         ?assertEqual(
            {ok, [{Peer, [Live, Historical]}]},
-           quod_foreign_log:route_hints(Identity, [])),
+           quod_foreign_log:route_hints(
+             Identity, [{Peer, [Supplied]}])),
         ?assertMatch(
            {ok, #{identity := Identity}},
            quod_foreign_log:verify_current(

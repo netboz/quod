@@ -2181,7 +2181,7 @@ applied_source({Ns, _Anchor} = Target, FinalizeRef, HistoricalRoutes) ->
             end;
         false ->
             Historical =
-                [{PeerKey, Endpoint}
+                [{PeerKey, [Endpoint]}
                  || {PeerKey, Endpoint} <- maps:to_list(HistoricalRoutes),
                     quod_quic:valid_endpoint(Endpoint)],
             case quod_foreign_log:route_hints(Target, Historical) of

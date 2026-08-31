@@ -369,15 +369,17 @@ observe_candidate(_Identity, _Contact) ->
 -doc """
 Return the route-hint view for one exact ontology identity.
 
-`Supplied` may contain already-certified historical routes from a caller. It
-is merged inside the foreign-log owner with directory, cached-history, and
-authenticated bootstrap hints; no caller should reimplement that merge. Before
-a committee is certified, each result row contains one discovery endpoint.
+`Supplied` may contain already-certified historical route candidates from a
+caller. It uses the same keyed, ordered endpoint-list representation returned
+by this function and by current-view evidence. It is merged inside the
+foreign-log owner with directory, cached-history, and authenticated bootstrap
+hints; no caller should reimplement that merge. Before a committee is
+certified, each result row contains one discovery endpoint.
 After certification, each row contains at most two ordered endpoints: a
 first-party live contact, its certified historical fallback, or—only when no
 certified endpoint exists—a supplied discovery fallback.
 """.
--spec route_hints({binary(), <<_:256>>}, [{<<_:256>>, term()}]) ->
+-spec route_hints({binary(), <<_:256>>}, [{<<_:256>>, [term()]}]) ->
           {ok, [{<<_:256>>, [term()]}]} |
           {error, unavailable | anchor_conflict | invalid_request}.
 route_hints(Identity, Supplied) ->
@@ -941,10 +943,11 @@ handle_call(
             {reply, {error, Reason}, S0}
     end;
 handle_call({route_hints, Identity, Supplied}, _From, S0) ->
-    case {valid_identity(Identity), normalize_route_hints(Supplied)} of
+    case {valid_identity(Identity), normalize_route_candidates(Supplied)} of
         {true, {ok, Normalized}} ->
             S1 = ensure_history(Identity, S0),
-            Reply = case selected_route_sources(Identity, Normalized, S1) of
+            Reply = case selected_route_sources(
+                           Identity, flatten_route_candidates(Normalized), S1) of
                         {ok, Sources} ->
                             case route_candidates(Sources) of
                                 [_ | _] = Routes -> {ok, Routes};
@@ -1838,24 +1841,6 @@ validate_current_ref(Ref, TimeoutMs) ->
         _ ->
             {error, bad_foreign_reference}
     end.
-
-normalize_route_hints(Routes) when is_list(Routes) ->
-    normalize_route_hints(Routes, 0, []);
-normalize_route_hints(_) ->
-    error.
-
-normalize_route_hints([], _Count, Acc) ->
-    {ok, lists:usort(Acc)};
-normalize_route_hints(
-  [{<<_:256>> = Peer, Endpoint} | Rest], Count, Acc)
-  when Count < ?MAX_VALIDATORS ->
-    case quod_quic:valid_endpoint(Endpoint) of
-        true -> normalize_route_hints(Rest, Count + 1,
-                                      [{Peer, Endpoint} | Acc]);
-        false -> error
-    end;
-normalize_route_hints(_, _Count, _Acc) ->
-    error.
 
 normalize_route_candidates(Routes) when is_list(Routes) ->
     normalize_route_candidates(Routes, 0, []);

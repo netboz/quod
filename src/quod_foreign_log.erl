@@ -401,17 +401,43 @@ valid_route_candidates(Routes) ->
 -doc """
 Verify one exact reference against a co-hosted namespace's durable ledger.
 
-The same lazy cache and forward verifier as `verify/5` are used, but pages
-come from `LedgerRoot` instead of the network and no route-peer membership
-claim is needed. Returned committee and committee id are fixed by the
-referenced slot. Validator routes are reachability hints from that committee
-era, never authority.
+When the caller supplies an immutable snapshot of its already-open committed
+store and its current verified projection, a reference certified by that same
+committee is read and checked directly. A reference from an older committee
+era falls back to the same lazy cache and forward verifier as `verify/5`; its
+pages come from `LedgerRoot` instead of the network and no route-peer membership
+claim is needed. Returned committee and committee id are fixed by the referenced
+slot. Validator routes are reachability hints from that committee era, never
+authority.
 """.
--spec verify_local(file:filename_all(), quod_dtx:certified_ref(),
+-spec verify_local(file:filename_all() |
+                   #{ledger_root := file:filename_all(),
+                     snapshot := quod_ledger_store:session(),
+                     projection := quod_simplex:history_projection()},
+                   quod_dtx:certified_ref(),
                    entry | transaction | 'begin' | prepare | decision |
                    finalize | complete,
                    pos_integer()) ->
           {ok, map()} | {error, term()}.
+verify_local(
+  #{ledger_root := LedgerRoot, snapshot := Snapshot,
+    projection := Projection},
+  Ref, ExpectedPhase, TimeoutMs)
+  when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
+       is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+    case ExpectedPhase of
+        entry ->
+            verify_resident_or_historical_local_entry(
+              LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection);
+        transaction ->
+            verify_resident_or_historical_local_entry(
+              LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection);
+        _ControlPhase ->
+            %% Control evidence also carries the exact historical DTX
+            %% generation. Keep it on the phase-index-backed verifier.
+            verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
+    end;
 verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
   when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
        is_integer(TimeoutMs), TimeoutMs > 0,
@@ -429,6 +455,75 @@ verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
     end;
 verify_local(_LedgerRoot, _Ref, _ExpectedPhase, _TimeoutMs) ->
     {error, bad_foreign_reference}.
+
+verify_resident_or_historical_local_entry(
+  LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection) ->
+    case verify_resident_local_entry(
+           Snapshot, Ref, ExpectedPhase, Projection) of
+        {error, historical_committee} ->
+            verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs);
+        Result ->
+            Result
+    end.
+
+%% A local consensus owner has already verified the complete durable prefix.
+%% The commit certificate check below establishes that the referenced entry
+%% belongs to its current committee era; only that case may reuse the current
+%% projection.  Older eras retain the full historical verifier above.
+verify_resident_local_entry(Snapshot, Ref, ExpectedPhase, Projection) ->
+    case quod_dtx:certified_ref_binding(Ref) of
+        {ok, Identity = {Ns, Anchor}, Slot, _Digest} ->
+            case valid_projection(Projection, Identity) of
+                true ->
+                    verify_resident_local_snapshot(
+                      Snapshot, Slot, Ns, Anchor, Ref, ExpectedPhase,
+                      Projection);
+                false ->
+                    {error, bad_foreign_reference}
+            end;
+        error ->
+            {error, bad_foreign_reference}
+    end.
+
+verify_resident_local_snapshot(
+  Snapshot, Slot, Ns, Anchor, Ref, ExpectedPhase, Projection) ->
+    case quod_ledger_store:open_ro_snapshot(Snapshot) of
+        {ok, Store} ->
+            try
+                case quod_ledger_store:read_at(Store, Slot) of
+                    {ok, #entry{index = Slot} = Entry} ->
+                        verify_resident_local_entry_cert(
+                          Ns, Anchor, Ref, ExpectedPhase,
+                          Entry, Projection);
+                    not_found ->
+                        {error, retry}
+                end
+            after
+                quod_ledger_store:close(Store)
+            end;
+        {error, _Unavailable} ->
+            {error, retry}
+    end.
+
+verify_resident_local_entry_cert(
+  _Ns, _Anchor, Ref, ExpectedPhase,
+  #entry{index = 1, cert = none} = Entry, Projection) ->
+    verify_exact_reference_entry(Ref, ExpectedPhase, Entry, Projection);
+verify_resident_local_entry_cert(
+  Ns, Anchor, Ref, ExpectedPhase,
+  #entry{cert = #cert{} = Cert} = Entry, Projection) ->
+    Committee = quod_simplex:history_committee(Projection),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    case quod_simplex:verify_cert(Domain, Cert, Committee) of
+        true ->
+            verify_exact_reference_entry(
+              Ref, ExpectedPhase, Entry, Projection);
+        false ->
+            {error, historical_committee}
+    end;
+verify_resident_local_entry_cert(
+  _Ns, _Anchor, _Ref, _ExpectedPhase, _Entry, _Projection) ->
+    {error, historical_committee}.
 
 -doc """
 Return one quorum-corroborated certified view at or after `FinalizeRef`.

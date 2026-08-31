@@ -10178,8 +10178,7 @@ support_or_validate_content(
     end.
 
 start_content_validation(Transactions, BlockTimestamp, Sl, BH,
-                         S = #s{ledger_root = LedgerRoot,
-                                dtx_workers = DtxWorkers}) ->
+                         S = #s{dtx_workers = DtxWorkers}) ->
     case content_reference_plan(Transactions) of
         {ok, []} ->
             request_content_validation(
@@ -10187,13 +10186,14 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
         {ok, ReferencePlan} ->
             Owner = self(),
             LocalIdentity = target_identity(S),
+            LocalSource = local_reference_source(S),
             Contacts = content_reference_contacts(
                          ReferencePlan, DtxWorkers, LocalIdentity),
             Worker = spawn(
                        fun() ->
                            Verdict = verify_content_foreign_references(
                                        ReferencePlan, LocalIdentity,
-                                       LedgerRoot, Contacts),
+                                       LocalSource, Contacts),
                            ok = observe_verified_reference_contacts(
                                   Verdict, Contacts),
                            Owner ! {content_foreign_verdict,
@@ -10448,16 +10448,17 @@ continue_dtx_verdict(Verdict, Payload, Block, Sl, BH, ParentToken, S) ->
 
 start_dtx_foreign_validation(
   ReferencePlan, Histories, Sl, BH, ParentToken,
-  S = #s{ledger_root = LedgerRoot, dtx_workers = DtxWorkers}) ->
+  S = #s{dtx_workers = DtxWorkers}) ->
     Owner = self(),
     LocalIdentity = target_identity(S),
+    LocalSource = local_reference_source(S),
     ValidationSidecar = (round_state(Sl, S))#round.validation_sidecar,
     Contacts = dtx_reference_contacts(
                  ReferencePlan, DtxWorkers, LocalIdentity),
     Worker = spawn(
                fun() ->
                    Verdict = verify_dtx_foreign_references(
-                               ReferencePlan, LocalIdentity, LedgerRoot, Contacts,
+                               ReferencePlan, LocalIdentity, LocalSource, Contacts,
                                ValidationSidecar),
                    ok = observe_verified_reference_contacts(
                           Verdict, Contacts),
@@ -10655,10 +10656,16 @@ validate_dtx_reference_evidence(Control, Evidence) ->
     quod_dtx:validate_references(Control, Evidence).
 
 verify_local_dtx_reference(
-  Ref, Phase, _Identity, LedgerRoot) ->
+  Ref, Phase, _Identity, LocalSource) ->
     verify_local_dtx_reference_result(
       quod_foreign_log:verify_local(
-        LedgerRoot, Ref, Phase, ?DTX_FOREIGN_VERIFY_MS)).
+        LocalSource, Ref, Phase, ?DTX_FOREIGN_VERIFY_MS)).
+
+local_reference_source(
+  S = #s{ledger_root = LedgerRoot, store = Store}) ->
+    #{ledger_root => LedgerRoot,
+      snapshot => quod_ledger_store:snapshot(Store),
+      projection => state_projection(S)}.
 
 verify_local_dtx_reference_result(
   {ok, #{transaction := _Transaction} = Evidence}) ->

@@ -1840,6 +1840,114 @@ verify_local_uses_exact_historical_projection_test() ->
         _ = file:del_dir_r(CacheDir)
     end.
 
+verify_local_reuses_current_committee_entry_without_history_owner_test() ->
+    Fixture = long_identity_fixture(unique_ns(), 300),
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Binding = {Ns, Anchor},
+    Chain = maps:get(chain, Fixture),
+    #entry{data = {batch, [Transaction]}} = Entry = lists:last(Chain),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Binding, Entry, Transaction),
+    {ok, Chain, Projection} = quod_catchup:verify_forward(
+                                Ns, Anchor,
+                                quod_simplex:history_projection(Binding),
+                                1, Chain),
+    SourceDir = temp_dir("resident-local-source"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(Store0, Chain),
+    Source = #{ledger_root => SourceDir,
+               snapshot => quod_ledger_store:snapshot(Store1),
+               projection => Projection},
+    try
+        %% No quod_foreign_log owner is running. Success therefore proves the
+        %% current certified entry was read directly instead of replayed. The
+        %% verifier runs in another process so passing a writer-owned raw file
+        %% handle instead of the immutable snapshot would fail.
+        ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
+        ?assertMatch(
+           {ok, #{phase := transaction, transaction := Transaction,
+                  committee := [_]}},
+           verify_local_in_worker(Source, Ref, transaction)),
+        BadRef = setelement(7, Ref, key(resident_digest_mismatch)),
+        ?assertEqual(
+           {error, invalid_foreign_reference},
+           verify_local_in_worker(Source, BadRef, transaction))
+    after
+        quod_ledger_store:close(Store1),
+        _ = file:del_dir_r(SourceDir)
+    end.
+
+verify_local_in_worker(Source, Ref, Phase) ->
+    Caller = self(),
+    Tag = make_ref(),
+    _ = spawn(
+          fun() ->
+              Caller ! {Tag, quod_foreign_log:verify_local(
+                               Source, Ref, Phase, 5000)}
+          end),
+    receive
+        {Tag, Result} -> Result
+    after 6000 ->
+        error(verify_local_worker_timeout)
+    end.
+
+verify_local_current_entry_falls_back_for_historical_committee_test() ->
+    Fixture = long_identity_fixture(unique_ns(), 2),
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Binding = {Ns, Anchor},
+    [Genesis, #entry{data = {batch, [Referenced]}} = ReferencedEntry] =
+        maps:get(chain, Fixture),
+    {ok, Ref} = quod_dtx:certified_entry_ref(
+                  Binding, ReferencedEntry, Referenced),
+    OldPub = maps:get(pub, Fixture),
+    OldSigner = maps:get(signer, Fixture),
+    Admission = maps:get(admission, Fixture),
+    NewPub = key(historical_committee_new_member),
+    Membership0 = #transaction{
+                    origin = Binding,
+                    proof_id = key(historical_committee_proof),
+                    plan_digest = key(historical_committee_plan),
+                    goal = durable_goal({admit, NewPub}),
+                    result = durable_result(),
+                    diff = [{assert,
+                             {{peer_admitted, NewPub,
+                               "127.0.0.1", 19101, NewPub}, true}}],
+                    read_check = #{}, author = OldPub, author_seq = 2,
+                    submitted_at = 2, sig = none},
+    Membership1 = quod_transaction:bind_id(Binding, Membership0),
+    {ok, Membership} = quod_transaction:sign(
+                         {Ns, Anchor, Admission}, Membership1, OldSigner),
+    MembershipEntry = content_entry(
+                        Ns, Anchor, OldPub, OldSigner, 3, [Membership]),
+    Chain = [Genesis, ReferencedEntry, MembershipEntry],
+    {ok, Chain, Projection} = quod_catchup:verify_forward(
+                                Ns, Anchor,
+                                quod_simplex:history_projection(Binding),
+                                1, Chain),
+    SourceDir = temp_dir("historical-local-source"),
+    CacheDir = temp_dir("historical-local-cache"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(Store0, Chain),
+    Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
+    Source = #{ledger_root => SourceDir,
+               snapshot => quod_ledger_store:snapshot(Store1),
+               projection => Projection},
+    try
+        %% Ref was certified by the former committee. The current projection
+        %% must not be substituted; the existing historical verifier supplies
+        %% the exact committee era instead.
+        ?assertMatch(
+           {ok, #{phase := transaction, committee := [OldPub]}},
+           quod_foreign_log:verify_local(
+             Source, Ref, transaction, 5000))
+    after
+        stop_owner(Pid),
+        quod_ledger_store:close(Store1),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
 foreign_projection_loads_genesis_pinned_predicates_test() ->
     Ns = unique_ns(),
     Pub = key(210),

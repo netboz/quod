@@ -424,9 +424,8 @@ lookup_outcome_with(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
 
 production_dependencies() ->
     #{view =>
-          fun({local, LedgerRoot}, {identity, Identity}, Timeout) ->
-                  quod_foreign_log:local_current(
-                    LedgerRoot, Identity, Timeout);
+          fun({local, _LedgerRoot}, {identity, Identity}, _Timeout) ->
+                  quod_simplex:history_current_view(Identity, validator);
              ({remote, Routes}, {identity, Identity}, Timeout) ->
                   quod_foreign_log:current(Routes, Identity, Timeout)
           end,

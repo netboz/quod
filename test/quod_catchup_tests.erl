@@ -54,21 +54,25 @@ byte_cap_test() ->
     Dir = filename:join("/tmp", "quod_catchup_big_" ++ integer_to_list(erlang:unique_integer([positive]))),
     Ns  = <<"catchup:big">>,
     Big = binary:copy(<<0>>, 200 * 1024),   %% ~200 KiB payload per entry
-    {ok, S0} = quod_ledger_store:open(Ns, Dir),
-    Es = [#entry{index = I, cert = none,
-                 data = {batch,
-                         [#transaction{tx_id = integer_to_binary(I), origin = {Ns, <<0:256>>},
-                                       diff = [{assert, {{blob, I}, Big}}], read_check = #{},
-                                       author = <<"a">>, sig = none}]}}
-          || I <- lists:seq(1, 8)],          %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget
-    {ok, S1} = quod_ledger_store:append(S0, Es),
-    ok = quod_ledger_store:close(S1),
-    {ok, Served, 8} = quod_catchup:serve_blocks(Ns, Dir, 1, 1000),
-    ?assert(length(Served) >= 1),          %% always makes progress
-    ?assert(length(Served) < 8),           %% but byte-capped below the full window
-    Bytes = lists:sum([byte_size(term_to_binary(E, [deterministic])) || E <- Served]),
-    ?assert(Bytes < 1024 * 1024),          %% the served entries fit under quod_link's 1 MiB frame cap
-    _ = file:del_dir_r(Dir).
+    _ = file:del_dir_r(Dir),
+    try
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        Es = [#entry{index = I, cert = none,
+                     data = {batch,
+                             [#transaction{tx_id = integer_to_binary(I), origin = {Ns, <<0:256>>},
+                                           diff = [{assert, {{blob, I}, Big}}], read_check = #{},
+                                           author = <<"a">>, sig = none}]}}
+              || I <- lists:seq(1, 8)],      %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget
+        {ok, S1} = quod_ledger_store:append(S0, Es),
+        ok = quod_ledger_store:close(S1),
+        {ok, Served, 8} = quod_catchup:serve_blocks(Ns, Dir, 1, 1000),
+        ?assert(length(Served) >= 1),      %% always makes progress
+        ?assert(length(Served) < 8),       %% but byte-capped below the full window
+        Bytes = lists:sum([byte_size(term_to_binary(E, [deterministic])) || E <- Served]),
+        ?assert(Bytes < 1024 * 1024)       %% the served entries fit under quod_link's 1 MiB frame cap
+    after
+        _ = file:del_dir_r(Dir)
+    end.
 
 %% Every response is bound to an authenticated node key. A keyed contact starts
 %% bound; an endpoint contact becomes bound during its identified open, before

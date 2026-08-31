@@ -72,6 +72,36 @@ remote_completion_cannot_carry_foreign_reads_test() ->
        {error, malformed_foreign_reads},
        quod_commit_validation:validate_foreign_reads(Completion, #{})).
 
+later_duplicate_remote_completion_keeps_first_terminal_slot_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Origin = {Ns, Anchor} = maps:get(origin, Fixture),
+    Claim = maps:get(claim, Fixture),
+    Completion = maps:get(completion, Fixture),
+    TargetRef = maps:get(target_ref, Fixture),
+    {ok, ClaimData} = quod_transaction:request_claim(Claim),
+    OperationRef = maps:get(operation_ref, ClaimData),
+    {ok, Outcomes0} = quod_outcome:open(
+                        Ns, Anchor, #{outcome_backend => memory}),
+    {new, Outcomes1} = quod_outcome:claim_operation(
+                         Outcomes0, 2, ClaimData, TargetRef),
+    Context0 = quod_commit_validation:new(
+                 Origin, 1, quod_ct:committed_kb([]), Outcomes1, none),
+    try
+        {ok, valid, Context1} = quod_commit_validation:content(
+                                  [Completion], 1, {claim, 4}, Context0),
+        %% Two validators may submit the same deterministic receipt before
+        %% slot 4 is applied.  A later committed copy is a duplicate, not an
+        %% outcome-index conflict which may crash every replica on replay.
+        {ok, valid, Context2} = quod_commit_validation:content(
+                                  [Completion], 1, {claim, 5}, Context1),
+        {{ok, #{state := {terminal, 4}}}, _} = quod_outcome:lookup_ref(
+                                                  quod_commit_validation:outcomes(
+                                                    Context2),
+                                                  OperationRef)
+    after
+        ok = quod_outcome:close(Outcomes0)
+    end.
+
 remote_application_uses_one_target_evaluator_for_apply_reject_and_invalid_test() ->
     Fixture = quod_ct:remote_operation_fixture(#{}),
     Application = maps:get(application, Fixture),

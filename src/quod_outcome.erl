@@ -1058,7 +1058,13 @@ complete_operation(Index, Slot,
                 {{ok, #{ref := OperationRef, request_digest := Digest,
                         outcome_ref := OutcomeRef,
                         state := {terminal, Existing}}}, Index1}
-                  when Existing =:= Slot ->
+                  when Existing =< Slot ->
+                    %% Several validators may observe the same target outcome
+                    %% and submit the same deterministic receipt before the
+                    %% first receipt is applied locally.  Consensus can then
+                    %% commit that exact transaction again in a later slot.
+                    %% Preserve the first terminal slot, just as ordinary
+                    %% duplicate transactions preserve their first outcome.
                     {replay, Index1};
                 {{ok, _Conflict}, _Index1} ->
                     {error, outcome_index_conflict};

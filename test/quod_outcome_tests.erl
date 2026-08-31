@@ -129,7 +129,12 @@ remote_claim_and_completion_form_one_durable_operation_test() ->
                       Index2, OperationRef, Digest, TargetRef),
     {new, Index4} = quod_outcome:complete_operation(
                       Index3, 4, OperationRef, Digest, TargetRef),
-    {ok, Index4a} = quod_outcome:flush(Index4),
+    {replay, Index4Duplicate} = quod_outcome:complete_operation(
+                                  Index4, 5, OperationRef,
+                                  Digest, TargetRef),
+    {{ok, #{state := {terminal, 4}}}, _} =
+        quod_outcome:lookup_ref(Index4Duplicate, OperationRef),
+    {ok, Index4a} = quod_outcome:flush(Index4Duplicate),
     {[], Index5} = quod_outcome:unresolved_operations(Index4a),
     {{ok, Stored}, Index6} = quod_outcome:lookup_ref(Index5, OperationRef),
     ?assertEqual(

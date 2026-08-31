@@ -2526,6 +2526,63 @@ certified_entry_ref_binds_exact_entry_test() ->
        quod_dtx:certified_entry_ref(
          Target, Entry#entry{cert = Cert#cert{slot = Slot + 1}}, Control)).
 
+certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
+    F = protocol_fixture(),
+    {Ns, Anchor} = Target = maps:get(target_a, F),
+    Control = maps:get(begin_control, F),
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    Slot = 9,
+    Timestamp = 1234,
+    Payload = {batch, [{dtx, Blob}]},
+    Block = #block{slot = Slot, parent = Slot - 1,
+                   payload = Payload, timestamp = Timestamp},
+    BlockHash = quod_simplex:block_hash(Block),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Identities = [begin
+                      {Pub, Seed} = quod_identity:generate(),
+                      {Pub, #{pubkey => Pub,
+                              key => quod_identity:key_term({Pub, Seed})}}
+                  end || _ <- lists:seq(1, 4)],
+    Committee = lists:sort([Pub || {Pub, _} <- Identities]),
+    Shares = maps:from_list(
+               [{Pub, quod_simplex:make_share(
+                        Domain, commit, Slot, BlockHash, Signer)}
+                || {Pub, Signer} <- Identities]),
+    [A, B, C, D] = Committee,
+    Form = fun(Keys) ->
+                   {ok, Cert} = quod_simplex:form_cert(
+                                  Domain, commit, Slot, BlockHash,
+                                  [maps:get(Key, Shares) || Key <- Keys],
+                                  Committee),
+                   Cert
+           end,
+    RefCert = Form([A, B, C]),
+    LocalCert = Form([B, C, D]),
+    RefEntry = #entry{index = Slot, data = Payload,
+                      timestamp = Timestamp, cert = RefCert},
+    LocalEntry = RefEntry#entry{cert = LocalCert},
+    {ok, Ref} = quod_dtx:certified_entry_ref(Target, RefEntry, Control),
+    %% This is the live N=4 case: both replicas certified the same immutable
+    %% block, but each retained a different valid three-of-four proof.
+    ?assertNotEqual(term_to_binary(RefCert, [deterministic]),
+                    term_to_binary(LocalCert, [deterministic])),
+    ?assert(quod_dtx:certified_entry_ref_matches(
+              Target, LocalEntry, Control, Ref, Committee)),
+    BadDigestRef = setelement(7, Ref, key(16#d1)),
+    ?assertNot(quod_dtx:certified_entry_ref_matches(
+                 Target, LocalEntry, Control, BadDigestRef, Committee)),
+    OtherHash = key(16#d2),
+    OtherShares = [quod_simplex:make_share(
+                     Domain, commit, Slot, OtherHash, Signer)
+                   || {_Pub, Signer} <- Identities],
+    {ok, OtherCert} = quod_simplex:form_cert(
+                        Domain, commit, Slot, OtherHash,
+                        lists:sublist(OtherShares, 3), Committee),
+    BadProofRef = setelement(
+                    8, Ref, term_to_binary(OtherCert, [deterministic])),
+    ?assertNot(quod_dtx:certified_entry_ref_matches(
+                 Target, LocalEntry, Control, BadProofRef, Committee)).
+
 certified_entry_ref_binds_pinned_genesis_test() ->
     Ns = <<"quod:certified-genesis">>,
     Genesis = #transaction{

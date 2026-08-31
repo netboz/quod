@@ -5090,11 +5090,12 @@ verify_exact_control_reference(
         [{ActualPhase, Control}]
           when ExpectedPhase =:= ActualPhase; ExpectedPhase =:= entry ->
             Identity = ref_identity(Ref),
-            case quod_dtx:certified_entry_ref(Identity, Entry, Control) of
-                {ok, Ref} ->
+            Committee = quod_simplex:history_committee(Projection),
+            case quod_dtx:certified_entry_ref_matches(
+                   Identity, Entry, Control, Ref, Committee) of
+                true ->
                     DtxProjection = maps:get(dtx, Projection),
                     Generation = maps:get(generation, DtxProjection),
-                    Committee = quod_simplex:history_committee(Projection),
                     Routes = quod_simplex:history_validator_routes(Projection),
                     {ok,
                      #{identity => Identity,
@@ -5108,7 +5109,7 @@ verify_exact_control_reference(
                        committee => Committee,
                        committee_id => maps:get(committee_id, Projection),
                        routes => Routes}};
-                _ ->
+                false ->
                     {error, invalid_foreign_reference}
             end;
         [{_OtherPhase, _Control}] ->
@@ -5123,9 +5124,10 @@ verify_exact_transaction_reference(Ref, Entry, Transactions, Projection) ->
     case [T || #transaction{tx_id = TxId} = T <- Transactions,
                transaction_reference_digest(ref_slot(Ref), TxId) =:= Digest] of
         [Transaction] ->
-            case quod_dtx:certified_entry_ref(
-                   Identity, Entry, Transaction) of
-                {ok, Ref} ->
+            Committee = quod_simplex:history_committee(Projection),
+            case quod_dtx:certified_entry_ref_matches(
+                   Identity, Entry, Transaction, Ref, Committee) of
+                true ->
                     DtxProjection = maps:get(dtx, Projection),
                     #{generation := Generation} = DtxProjection,
                     {ok, #{identity => Identity,
@@ -5141,7 +5143,7 @@ verify_exact_transaction_reference(Ref, Entry, Transactions, Projection) ->
                            committee_id => maps:get(committee_id, Projection),
                            routes => quod_simplex:history_validator_routes(
                                        Projection)}};
-                _ -> {error, invalid_foreign_reference}
+                false -> {error, invalid_foreign_reference}
             end;
         _ ->
             {error, invalid_foreign_reference}

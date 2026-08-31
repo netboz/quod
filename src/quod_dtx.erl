@@ -86,7 +86,8 @@ replay. Neither transition changes the global proof generation.
          encode_manifest/1, decode_manifest/1,
          attest_plan/4, verify_plan_attestation/4,
          encode_attestation/1, decode_attestation/1,
-         certified_ref/6, certified_entry_ref/3, validate_certified_ref/1,
+         certified_ref/6, certified_entry_ref/3,
+         certified_entry_ref_matches/5, validate_certified_ref/1,
          new_begin/3, new_prepare/3, new_decision/4,
          new_finalize/5, new_complete/3,
          encode_record/1, decode_record/1,
@@ -1083,6 +1084,67 @@ certified_entry_ref(
     end;
 certified_entry_ref(_, _, _) ->
     {error, invalid_certified_entry}.
+
+-doc """
+Verify that one certified reference names this exact committed record.
+
+Commit certificates are quorum proofs, not canonical byte strings: two honest
+replicas may retain different valid quorum subsets for the same block.  The
+reference therefore binds the immutable block and record fields exactly, then
+verifies its own supplied finality proof against the committee for that slot;
+it never requires that proof to equal the certificate bytes retained locally.
+""".
+-spec certified_entry_ref_matches(
+        identity(), #entry{}, control() | #transaction{},
+        certified_ref(), [<<_:256>>]) -> boolean().
+certified_entry_ref_matches(
+  Identity = {Ns, <<_:256>> = Anchor}, Entry, Record, Ref, Committee)
+  when is_binary(Ns), byte_size(Ns) > 0, is_list(Committee) ->
+    case certified_entry_ref(Identity, Entry, Record) of
+        {ok, ExpectedRef} ->
+            case {certified_ref_core(ExpectedRef),
+                  certified_ref_core(Ref)} of
+                {Core, Core} ->
+                    valid_certified_ref_finality(
+                      Ns, Anchor, Ref, Committee);
+                _ ->
+                    false
+            end;
+        {error, _} ->
+            false
+    end;
+certified_entry_ref_matches(_Identity, _Entry, _Record, _Ref, _Committee) ->
+    false.
+
+certified_ref_core(
+  {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
+   RecordDigest, _FinalityProof}) ->
+    {?REF_VERSION, Ns, Anchor, Slot, BlockHash, RecordDigest};
+certified_ref_core(_Malformed) ->
+    error.
+
+valid_certified_ref_finality(
+  _Ns, _Anchor,
+  {quod_dtx_ref, ?REF_VERSION, _RefNs, _RefAnchor, 1,
+   _BlockHash, _RecordDigest, ?GENESIS_FINALITY_PROOF}, _Committee) ->
+    true;
+valid_certified_ref_finality(
+  Ns, Anchor,
+  {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
+   _RecordDigest, FinalityProof}, Committee)
+  when is_integer(Slot), Slot > 1, is_binary(FinalityProof) ->
+    try binary_to_term(FinalityProof, [safe]) of
+        #cert{kind = commit, slot = Slot, block_hash = BlockHash} = Cert ->
+            quod_simplex:verify_cert(
+              quod_simplex:consensus_domain(Ns, Anchor), Cert, Committee);
+        _ ->
+            false
+    catch _:_ ->
+        false
+    end;
+valid_certified_ref_finality(
+  _Ns, _Anchor, _Malformed, _Committee) ->
+    false.
 
 -doc "Shape-check a certified reference without interpreting its proof.".
 -spec validate_certified_ref(term()) -> boolean().

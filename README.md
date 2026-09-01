@@ -150,11 +150,16 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.123
+TAG=0.7.124
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
+
+# 0.7.124 hard-breaks the node-to-node identity channel from wire V1 to V2.
+# Stop all allocations before this upgrade; do not mix V1 and V2 in a rolling
+# deployment. This preserves the anchored volumes and does not re-found.
+nomad job stop quod
 
 # STEADY-STATE REDEPLOY — use this only when the release declares no persisted
 # format break and the network has already been founded with the current

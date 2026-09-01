@@ -108,6 +108,123 @@ terminal_result_accepts_any_typed_rejection_reason_test() ->
          #{status => {rejected, <<"not-an-atom">>, 7},
            tx_id => <<47:256>>})).
 
+agent_identity_freshness_tracks_the_proved_key_not_ledger_height_test() ->
+    Ns = <<"quod:agent-freshness">>,
+    Anchor = <<48:256>>,
+    Instance = {human_user, test},
+    SigningKey = <<49:256>>,
+    KeyFact = {agent_key, Instance, SigningKey, active},
+    Est1 = quod_ct:committed_kb([KeyFact]),
+    {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
+                                   Ns, Anchor,
+                                   <<"human_user(test).">>, 2),
+    Session = quod_proof_session:start(
+                Est1, #{read_set => false, read_only => true,
+                        scope_id => <<50:128>>}),
+    try
+        {true, ReadCheck} = quod_ask:authenticate_agent(
+                              {agent, AgentRef}, SigningKey,
+                              {Ns, Anchor}, 1, Session),
+        ?assertEqual([{agent_key, 3}], maps:keys(ReadCheck)),
+
+        %% An unrelated committed source claim or content write advances the
+        %% ontology without revoking the exact key fact proved above.
+        {ok, PendingUnrelated} = quod_diff:apply_ops(
+                                   Est1, diff_for({unrelated_claim, 1})),
+        Est2 = quod_ct:commit_kb(PendingUnrelated, 2, 1),
+        ?assert(quod_prolog:test_agent_identity_reads_current(
+                  ReadCheck, Est2)),
+
+        %% MVCC tokens deliberately track predicates, not individual clauses.
+        %% Rotating another agent's key therefore invalidates this in-flight
+        %% attestation too; pin that conservative boundary explicitly.
+        OtherKeyFact = {agent_key, {human_user, other}, <<51:256>>, active},
+        {ok, PendingOtherKey} = quod_diff:apply_ops(
+                                  Est2, diff_for(OtherKeyFact)),
+        EstWithOtherKey = quod_ct:commit_kb(PendingOtherKey, 3, 1),
+        ?assertNot(quod_prolog:test_agent_identity_reads_current(
+                     ReadCheck, EstWithOtherKey)),
+
+        %% Mutating agent_key/3 changes the captured MVCC token, so the same
+        %% attestation proof can no longer be signed.
+        [{assert, KeyClause}] = diff_for(KeyFact),
+        {ok, PendingRevocation} = quod_diff:apply_ops(
+                                    Est2, [{retract, KeyClause}]),
+        Est3 = quod_ct:commit_kb(PendingRevocation, 3, 1),
+        ?assertNot(quod_prolog:test_agent_identity_reads_current(
+                     ReadCheck, Est3)),
+        ?assertNot(quod_prolog:test_agent_identity_reads_current(#{}, Est2)),
+        ?assertNot(quod_prolog:test_agent_identity_reads_current(
+                     #{bad => token}, Est2))
+    after
+        quod_proof_session:stop(Session)
+    end.
+
+agent_identity_signing_accepts_unrelated_height_advance_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"quod:agent-sign-freshness:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Anchor = <<52:256>>,
+    CommitteeId = <<53:256>>,
+    {ValidatorKey, ValidatorSeed} = quod_identity:generate(),
+    ValidatorIdentity =
+        #{pubkey => ValidatorKey,
+          key => quod_identity:key_term({ValidatorKey, ValidatorSeed})},
+    Fixture = quod_ct:signed_goal_fixture(
+                #{target => {Ns, Anchor}, deadline => 1_800_000_000_000}),
+    #{evidence := Evidence, principal := Principal,
+      signing_key := SigningKey, agent_instance := Instance} = Fixture,
+    KeyFact = {agent_key, Instance, SigningKey, active},
+    GenesisTable = binary_to_atom(
+                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    GenesisTable = ets:new(GenesisTable, [named_table, protected, set]),
+    true = ets:insert(
+             GenesisTable,
+             [{anchor, Anchor},
+              {proof_gate, true, 0, [], ValidatorKey, [ValidatorKey],
+               CommitteeId, #{}}]),
+    {ok, Engine} = quod_prolog:start_link(
+                     Ns, #{node_id => ValidatorKey,
+                           identity => ValidatorIdentity,
+                           outcome_backend => memory}),
+    try
+        ok = quod_prolog:mark_ready(Ns),
+        ok = ab(Ns, 1, batch(change(Ns, diff_for(KeyFact), #{}))),
+        _ = quod_prolog:applied(Ns),
+
+        Est1 = quod_ct:committed_kb([KeyFact]),
+        Session = quod_proof_session:start(
+                    Est1, #{read_set => false, read_only => true,
+                            scope_id => <<54:128>>}),
+        ReadCheck = try
+            {true, Captured} = quod_ask:authenticate_agent(
+                                 Principal, SigningKey, {Ns, Anchor}, 1,
+                                 Session),
+            Captured
+        after
+            quod_proof_session:stop(Session)
+        end,
+
+        %% The engine advances after the proof, exactly as it did when a
+        %% concurrent remote_claim exposed the hardware failure.
+        ok = ab(Ns, 2,
+                batch(change(Ns, diff_for({unrelated_claim, 1}), #{}))),
+        _ = quod_prolog:applied(Ns),
+        ProofId = <<55:256>>,
+        ?assertMatch(
+           {ok, ValidatorKey, _, _},
+           gen_server:call(
+             Engine,
+             {sign_agent_identity, ReadCheck, Evidence, ProofId,
+              CommitteeId, maps:get(deadline, Fixture)}))
+    after
+        case is_process_alive(Engine) of
+            true -> gen_server:stop(Engine);
+            false -> ok
+        end,
+        ets:delete(GenesisTable)
+    end.
+
 live_signed_operation_is_busy_not_outcome_unknown_test() ->
     Key = {<<1:256>>, <<2:256>>},
     Digest = <<3:256>>,

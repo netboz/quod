@@ -103,6 +103,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_inflight_public_reply/1,
          test_await_public_proof/5,
          test_route_plans/3,
+         test_agent_identity_reads_current/2,
          test_install_read_certificate_barrier/0,
          test_await_read_certificate_barrier/1,
          test_release_read_certificate_barrier/0]).
@@ -1341,14 +1342,15 @@ handle_call(
             {reply, {error, stale}, S}
     end;
 handle_call(
-  {sign_agent_identity, Applied, Evidence, ProofId,
+  {sign_agent_identity, ReadCheck, Evidence, ProofId,
    CommitteeId, NotAfter},
   {Worker, _Tag},
-  S = #s{applied = Applied,
+  S = #s{est = Est,
          signer = Signer = #{pubkey := <<_:256>> = Self}, ns = Ns})
   when is_pid(Worker) ->
-    Reply = case quod_simplex:identity_view(Ns) of
-                {ok, #{committee_id := CommitteeId, self := Self}} ->
+    Reply = case {quod_simplex:identity_view(Ns),
+                  agent_identity_reads_current(ReadCheck, Est)} of
+                {{ok, #{committee_id := CommitteeId, self := Self}}, true} ->
                     case quod_agent_identity:statement(
                            Evidence, ProofId, CommitteeId, NotAfter) of
                         {ok, Statement} ->
@@ -1363,7 +1365,7 @@ handle_call(
             end,
     {reply, Reply, S};
 handle_call(
-  {sign_agent_identity, _Applied, _Evidence, _ProofId,
+  {sign_agent_identity, _ReadCheck, _Evidence, _ProofId,
    _CommitteeId, _NotAfter}, _From, S) ->
     {reply, {error, retry}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
@@ -1783,13 +1785,12 @@ attest_authenticated_agent(
     Result = try quod_ask:authenticate_agent(
                    Principal, SigningKey,
                    {Ns, quod_simplex:genesis_hash(Ns)}, Applied, Session) of
-                 true ->
-                     case {quod_proof_session:check_access(Session),
-                           quod_simplex:identity_view(Ns)} of
-                         {ok, {ok, #{committee_id := CommitteeId}}} ->
+                 {true, ReadCheck} ->
+                     case quod_simplex:identity_view(Ns) of
+                         {ok, #{committee_id := CommitteeId}} ->
                              try gen_server:call(
                                    Engine,
-                                   {sign_agent_identity, Applied,
+                                   {sign_agent_identity, ReadCheck,
                                     Evidence, ProofId, CommitteeId, NotAfter})
                              catch exit:_ -> {error, retry}
                              end;
@@ -1800,6 +1801,25 @@ attest_authenticated_agent(
                  quod_proof_session:stop(Session)
              end,
     Result.
+
+%% Agent attestation is invalidated only by a fact it actually consulted.
+%% Source claims and other unrelated commits may advance the ontology while
+%% the read-only proof runs; rejecting those commits by height made identity
+%% collection fail spuriously under concurrent signed work. The ordinary MVCC
+%% read tokens already express the required freshness boundary.
+agent_identity_reads_current(
+  ReadCheck,
+  #est{db = #db{mod = quod_erlog_db_mvcc, ref = Ref}}) ->
+    maps:is_key({agent_key, 3}, ReadCheck) andalso
+        quod_diff:valid_read_check(ReadCheck) andalso
+        quod_diff:validate(ReadCheck, Ref) =:= ok;
+agent_identity_reads_current(_ReadCheck, _Est) ->
+    false.
+
+-ifdef(TEST).
+test_agent_identity_reads_current(ReadCheck, Est) ->
+    agent_identity_reads_current(ReadCheck, Est).
+-endif.
 
 finish_agent_attester(MRef, _Reason,
                       S = #s{agent_attesters = Attesters}) ->
@@ -4319,7 +4339,7 @@ signed_origin_authorized(
   Principal, SigningKey, Goal, {Ns, _Anchor} = Identity, Height, Session) ->
     case quod_ask:authenticate_agent(
            Principal, SigningKey, Identity, Height, Session) of
-        true ->
+        {true, _AgentKeyReads} ->
             case signed_origin_policy_goal(Ns, Goal) of
                 remote_selector -> true;
                 {local, PolicyGoal} ->

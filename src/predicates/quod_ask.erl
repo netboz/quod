@@ -1392,10 +1392,11 @@ open_authorized_scope(Principal, RequestedGoal, Chain,
             {error, {protocol_error, bad_payload}}
     end.
 
--doc "Prove only that the signing key is active in its exact agent ontology.".
+-doc "Prove that the signing key is active and return its committed MVCC read tokens.".
 -spec authenticate_agent({agent, binary()}, <<_:256>>,
                          quod_proof_context:identity(), non_neg_integer(),
-                         quod_proof_session:session()) -> boolean().
+                         quod_proof_session:session()) ->
+          {true, map()} | false.
 authenticate_agent(Principal = {agent, _}, SigningKey,
                    {Ns, <<_:256>>} = Identity, Height, Session)
   when is_binary(SigningKey), byte_size(SigningKey) =:= 32,
@@ -1407,11 +1408,19 @@ authenticate_agent(Principal = {agent, _}, SigningKey,
                           quod_proof_session:committed_state(Session), Ctx),
             Wrapped = quod_erlog_db_local_prove:wrap_state(
                         Committed,
-                        #{read_set => false, read_only => true,
+                        #{read_set => true, read_only => true,
                           access_guard =>
                               quod_proof_session:access_guard(Session)}),
+            #est{db = #db{ref = ReadOverlay}} = Wrapped,
             try case agent_key_goal(Identity, Principal, SigningKey) of
-                    {ok, KeyGoal} -> prove_bool(KeyGoal, Wrapped);
+                    {ok, KeyGoal} ->
+                        case prove_bool(KeyGoal, Wrapped) of
+                            true ->
+                                {true,
+                                 quod_erlog_db_local_prove:get_read_set(
+                                   ReadOverlay)};
+                            false -> false
+                        end;
                     error -> false
                 end
             after

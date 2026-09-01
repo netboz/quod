@@ -72,7 +72,7 @@ remote_completion_cannot_carry_foreign_reads_test() ->
        {error, malformed_foreign_reads},
        quod_commit_validation:validate_foreign_reads(Completion, #{})).
 
-later_duplicate_remote_completion_keeps_first_terminal_slot_test() ->
+duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->
     Fixture = quod_ct:remote_operation_fixture(#{}),
     Origin = {Ns, Anchor} = maps:get(origin, Fixture),
     Claim = maps:get(claim, Fixture),
@@ -90,10 +90,15 @@ later_duplicate_remote_completion_keeps_first_terminal_slot_test() ->
         {ok, valid, Context1} = quod_commit_validation:content(
                                   [Completion], 1, {claim, 4}, Context0),
         %% Two validators may submit the same deterministic receipt before
-        %% slot 4 is applied.  A later committed copy is a duplicate, not an
-        %% outcome-index conflict which may crash every replica on replay.
+        %% slot 4 is applied. Once either copy commits, the other candidate
+        %% must remain valid: rejecting that already-in-flight receipt skips
+        %% consensus slots and can starve unrelated source claims. The exact
+        %% operation, digest, and target binding make only a byte-equivalent
+        %% receipt a replay.
+        {ok, valid, Checked} = quod_commit_validation:content(
+                                 [Completion], 1, check, Context1),
         {ok, valid, Context2} = quod_commit_validation:content(
-                                  [Completion], 1, {claim, 5}, Context1),
+                                  [Completion], 1, {claim, 5}, Checked),
         {{ok, #{state := {terminal, 4}}}, _} = quod_outcome:lookup_ref(
                                                   quod_commit_validation:outcomes(
                                                     Context2),

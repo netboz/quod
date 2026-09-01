@@ -203,17 +203,11 @@ validate_content_transactions(
                                        RequestDigest, TargetRef)
                  end,
     case Transition of
-        {new, Outcomes1} ->
+        {TransitionKind, Outcomes1}
+          when TransitionKind =:= new; TransitionKind =:= replay ->
             validate_content_transactions(
               Rest, Network, BlockTimestamp, Mode, Seen,
               Context0#context{outcomes = Outcomes1});
-        {replay, Outcomes1} when Mode =/= check ->
-            validate_content_transactions(
-              Rest, Network, BlockTimestamp, Mode, Seen,
-              Context0#context{outcomes = Outcomes1});
-        {replay, Outcomes1} ->
-            {ok, {invalid, duplicate_operation_completion},
-             Context0#context{outcomes = Outcomes1}};
         {error, Reason} ->
             {outcome_error, Reason}
     end;

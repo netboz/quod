@@ -13,7 +13,9 @@ There is deliberately no durable file, registry name, compatibility protocol,
 or wall-clock abort.  Once Begin may be durable, temporary unavailability can
 only delay recovery. Exact owner notifications wake parked work; request
 deadlines only bound a silent peer or dead worker. Owner death terminates the
-coordinator.
+coordinator. A persistently temporary target reply therefore remains parked
+under that durable owner until progress or owner shutdown; the client deadline
+does not cancel or resubmit the uncertain operation.
 """.
 
 -include("quod_ledger.hrl").

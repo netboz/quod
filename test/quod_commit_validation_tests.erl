@@ -107,6 +107,56 @@ duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->
         ok = quod_outcome:close(Outcomes0)
     end.
 
+non_identical_remote_completion_remains_invalid_in_proposal_check_test() ->
+    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Origin = {Ns, Anchor} = maps:get(origin, Fixture),
+    Claim = maps:get(claim, Fixture),
+    Completion = maps:get(completion, Fixture),
+    TargetRef = maps:get(target_ref, Fixture),
+    {ok, ClaimData} = quod_transaction:request_claim(Claim),
+    OperationRef = maps:get(operation_ref, ClaimData),
+    RequestDigest = maps:get(digest, ClaimData),
+    {ok, Outcomes0} = quod_outcome:open(
+                        Ns, Anchor, #{outcome_backend => memory}),
+    {new, Outcomes1} = quod_outcome:claim_operation(
+                         Outcomes0, 2, ClaimData, TargetRef),
+    Context0 = quod_commit_validation:new(
+                 Origin, 1, quod_ct:committed_kb([]), Outcomes1, none),
+    try
+        {ok, valid, Terminal} = quod_commit_validation:content(
+                                  [Completion], 1, {claim, 4}, Context0),
+        {transaction, TargetNs, TargetAnchor, _TargetTxId} = TargetRef,
+        DifferentTarget = {transaction, TargetNs, TargetAnchor,
+                           key(different_target)},
+        DifferentTargetCompletion = Completion#transaction{
+          role = {remote_complete, OperationRef,
+                  RequestDigest, DifferentTarget}},
+        DifferentDigestCompletion = Completion#transaction{
+          role = {remote_complete, OperationRef,
+                  key(different_digest), TargetRef}},
+        {operation, OperationNs, OperationAnchor,
+         AgentRef, _OperationId} = OperationRef,
+        DifferentOperation = {operation, OperationNs, OperationAnchor,
+                              AgentRef, key(different_operation)},
+        DifferentOperationCompletion = Completion#transaction{
+          role = {remote_complete, DifferentOperation,
+                  RequestDigest, TargetRef}},
+        ?assertEqual(
+           {outcome_error, outcome_index_conflict},
+           quod_commit_validation:content(
+             [DifferentTargetCompletion], 1, check, Terminal)),
+        ?assertEqual(
+           {outcome_error, outcome_index_conflict},
+           quod_commit_validation:content(
+             [DifferentDigestCompletion], 1, check, Terminal)),
+        ?assertEqual(
+           {outcome_error, outcome_index_bad_operation},
+           quod_commit_validation:content(
+             [DifferentOperationCompletion], 1, check, Terminal))
+    after
+        ok = quod_outcome:close(Outcomes0)
+    end.
+
 remote_application_uses_one_target_evaluator_for_apply_reject_and_invalid_test() ->
     Fixture = quod_ct:remote_operation_fixture(#{}),
     Application = maps:get(application, Fixture),
@@ -491,3 +541,6 @@ membership_retract(Pubkey, Host, Port) ->
     [{assert, Clause}] = quod_ct:diff_for(
                            {peer_admitted, Pubkey, Host, Port, Pubkey}),
     [{retract, Clause}].
+
+key(Term) ->
+    crypto:hash(sha256, term_to_binary(Term, [deterministic])).

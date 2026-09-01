@@ -1949,6 +1949,106 @@ verify_local_current_entry_falls_back_for_historical_committee_test() ->
         _ = file:del_dir_r(CacheDir)
     end.
 
+verify_local_committee_shrink_never_relabels_historical_entry_test() ->
+    Ns = unique_ns(),
+    Members = lists:sort(
+                [begin
+                     {Pub, Seed} = quod_identity:generate(),
+                     {Pub, #{pubkey => Pub,
+                             key => quod_identity:key_term({Pub, Seed})}}
+                 end || _ <- lists:seq(1, 5)]),
+    [{Author, AuthorSigner} | _] = Members,
+    MemberKeys = [Pub || {Pub, _Signer} <- Members],
+    GenesisTx = quod_simplex:test_genesis_tx(
+                  #{committee => tl(MemberKeys),
+                    node_addr => {"127.0.0.1", 19000}},
+                  Ns, Author, key(shrink_genesis_incarnation)),
+    Genesis = #entry{index = 1, data = {batch, [GenesisTx]},
+                     timestamp = 0, cert = none},
+    Anchor = entry_hash(Genesis),
+    Binding = {Ns, Anchor},
+    {ok, [Genesis], GenesisProjection} = quod_catchup:verify_forward(
+                                           Ns, Anchor,
+                                           quod_simplex:history_projection(
+                                             Binding),
+                                           1, [Genesis]),
+    {ok, AuthorBinding} = quod_simplex:history_binding(
+                            Binding, Author, GenesisProjection),
+    Referenced0 = #transaction{
+                    origin = Binding,
+                    proof_id = key(shrink_referenced_proof),
+                    plan_digest = key(shrink_referenced_plan),
+                    goal = durable_goal(shrink_referenced),
+                    result = durable_result(),
+                    diff = [{assert, {{shrink_referenced, true}, true}}],
+                    read_check = #{}, author = Author, author_seq = 1,
+                    submitted_at = 1, sig = none},
+    Referenced1 = quod_transaction:bind_id(Binding, Referenced0),
+    {ok, Referenced} = quod_transaction:sign(
+                         AuthorBinding, Referenced1, AuthorSigner),
+    OldQuorum = lists:sublist(Members, 4),
+    ReferencedEntry = committee_content_entry(
+                        Ns, Anchor, OldQuorum, 2, [Referenced]),
+    Removed = lists:last(MemberKeys),
+    Membership0 = #transaction{
+                    origin = Binding,
+                    proof_id = key(shrink_membership_proof),
+                    plan_digest = key(shrink_membership_plan),
+                    goal = durable_goal({remove, Removed}),
+                    result = durable_result(),
+                    diff = [{retract,
+                             {{peer_admitted, Removed,
+                               undefined, undefined, Removed}, true}}],
+                    read_check = #{}, author = Author, author_seq = 2,
+                    submitted_at = 2, sig = none},
+    Membership1 = quod_transaction:bind_id(Binding, Membership0),
+    {ok, Membership} = quod_transaction:sign(
+                         AuthorBinding, Membership1, AuthorSigner),
+    MembershipEntry = committee_content_entry(
+                        Ns, Anchor, OldQuorum, 3, [Membership]),
+    Chain = [Genesis, ReferencedEntry, MembershipEntry],
+    {ok, Chain, FullProjection} = quod_catchup:verify_forward(
+                                    Ns, Anchor,
+                                    quod_simplex:history_projection(Binding),
+                                    1, Chain),
+    {ok, Ref} = quod_dtx:certified_entry_ref(
+                  Binding, ReferencedEntry, Referenced),
+    {ok, OldCommittee, OldCommitteeId, _} =
+        quod_simplex:history_committee_view(2, FullProjection),
+    [{3, CurrentCommittee, CurrentCommitteeId, CurrentRoutes} | _] =
+        maps:get(committee_views, FullProjection),
+    ?assertEqual(5, length(OldCommittee)),
+    ?assertEqual(4, length(CurrentCommittee)),
+    %% This is the live Simplex shape: one exact row for the current era, not
+    %% the foreign follower's full historical index. Before the fix, the old
+    %% 4-of-5 certificate also satisfied the smaller current 3-of-4 quorum and
+    %% the fast path returned CurrentCommitteeId for slot 2.
+    CurrentProjection = FullProjection#{
+                          committee_views :=
+                              [{3, CurrentCommittee, CurrentCommitteeId,
+                                CurrentRoutes}]},
+    SourceDir = temp_dir("shrink-local-source"),
+    CacheDir = temp_dir("shrink-local-cache"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(Store0, Chain),
+    Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
+    Source = #{ledger_root => SourceDir,
+               snapshot => quod_ledger_store:snapshot(Store1),
+               projection => CurrentProjection},
+    try
+        ?assertMatch(
+           {ok, #{phase := transaction,
+                  committee := OldCommittee,
+                  committee_id := OldCommitteeId}},
+           quod_foreign_log:verify_local(
+             Source, Ref, transaction, 5000))
+    after
+        stop_owner(Pid),
+        quod_ledger_store:close(Store1),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
 foreign_projection_loads_genesis_pinned_predicates_test() ->
     Ns = unique_ns(),
     Pub = key(210),
@@ -3235,6 +3335,22 @@ content_entry(Ns, Anchor, Pub, Signer, Slot, Transactions) ->
                                 Domain, commit, Slot, BlockHash, Signer),
     Cert = #cert{kind = commit, slot = Slot, block_hash = BlockHash,
                  sigs = [{Pub, Signature}]},
+    #entry{index = Slot, data = Data, cert = Cert}.
+
+committee_content_entry(Ns, Anchor, Signers, Slot, Transactions) ->
+    Data = {batch, Transactions},
+    Block = #block{slot = Slot, parent = Slot - 1, payload = Data},
+    BlockHash = quod_simplex:block_hash(Block),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Signatures =
+        [begin
+             #share{sig = Signature} = quod_simplex:make_share(
+                                         Domain, commit, Slot,
+                                         BlockHash, Signer),
+             {Pub, Signature}
+         end || {Pub, Signer} <- Signers],
+    Cert = #cert{kind = commit, slot = Slot, block_hash = BlockHash,
+                 sigs = Signatures},
     #entry{index = Slot, data = Data, cert = Cert}.
 
 genesis(Ns, Pub, InitialTerms) ->

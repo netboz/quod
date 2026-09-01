@@ -469,9 +469,9 @@ verify_resident_or_historical_local_entry(
     end.
 
 %% A local consensus owner has already verified the complete durable prefix.
-%% The commit certificate check below establishes that the referenced entry
-%% belongs to its current committee era; only that case may reuse the current
-%% projection.  Older eras retain the full historical verifier above.
+%% Its live projection retains the exact start of the current committee era;
+%% only references in that era may reuse it. Older eras retain the full
+%% historical verifier above.
 verify_resident_local_entry(Snapshot, Ref, ExpectedPhase, Projection) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, Identity = {Ns, Anchor}, Slot, _Digest} ->
@@ -488,17 +488,16 @@ verify_resident_local_entry(Snapshot, Ref, ExpectedPhase, Projection) ->
     end.
 
 verify_resident_local_snapshot(
-  Snapshot, Slot, Ns, Anchor, Ref, ExpectedPhase, Projection) ->
+  Snapshot, Slot, Ns, _Anchor, Ref, ExpectedPhase, Projection) ->
     case quod_ledger_store:open_ro_snapshot(Snapshot) of
         {ok, Store} ->
             try
-                case quod_ledger_store:read_at(Store, Slot) of
-                    {ok, #entry{index = Slot} = Entry} ->
-                        verify_resident_local_entry_cert(
-                          Ns, Anchor, Ref, ExpectedPhase,
-                          Entry, Projection);
-                    not_found ->
-                        {error, retry}
+                case quod_ledger_store:namespace(Store) of
+                    Ns ->
+                        verify_resident_local_store(
+                          Store, Slot, Ref, ExpectedPhase, Projection);
+                    _OtherNamespace ->
+                        {error, bad_foreign_reference}
                 end
             after
                 quod_ledger_store:close(Store)
@@ -507,25 +506,17 @@ verify_resident_local_snapshot(
             {error, retry}
     end.
 
-verify_resident_local_entry_cert(
-  _Ns, _Anchor, Ref, ExpectedPhase,
-  #entry{index = 1, cert = none} = Entry, Projection) ->
-    verify_exact_reference_entry(Ref, ExpectedPhase, Entry, Projection);
-verify_resident_local_entry_cert(
-  Ns, Anchor, Ref, ExpectedPhase,
-  #entry{cert = #cert{} = Cert} = Entry, Projection) ->
-    Committee = quod_simplex:history_committee(Projection),
-    Domain = quod_simplex:consensus_domain(Ns, Anchor),
-    case quod_simplex:verify_cert(Domain, Cert, Committee) of
-        true ->
+verify_resident_local_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
+    case {quod_ledger_store:read_at(Store, Slot),
+          reference_projection(Slot, Slot, Projection)} of
+        {{ok, #entry{index = Slot} = Entry}, {ok, EvidenceProjection}} ->
             verify_exact_reference_entry(
-              Ref, ExpectedPhase, Entry, Projection);
-        false ->
+              Ref, ExpectedPhase, Entry, EvidenceProjection);
+        {not_found, _} ->
+            {error, retry};
+        {_, error} ->
             {error, historical_committee}
-    end;
-verify_resident_local_entry_cert(
-  _Ns, _Anchor, _Ref, _ExpectedPhase, _Entry, _Projection) ->
-    {error, historical_committee}.
+    end.
 
 -doc """
 Return one quorum-corroborated certified view at or after `FinalizeRef`.

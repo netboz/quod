@@ -226,7 +226,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_author_admission/1,
          test_set_author_admissions/2,
          test_retire_changed_admissions/3,
-         test_install_projection/2,
+         test_install_projection/2, test_state_projection/1,
          test_dtx_slot_route/2,
          test_dtx_endpoint_ready/2,
          test_dtx_outcome_result/2,
@@ -1239,6 +1239,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             committee_id = undefined :: binary() | undefined,
                                                      %% hash identity of the exact membership-adoption block;
                                                      %% undefined only while the namespace has no founded view
+            committee_start = undefined :: slot() | undefined,
+                                                     %% first slot governed by committee_id; retained so the
+                                                     %% live one-row projection can distinguish its current era
+                                                     %% from historical references without replaying current-era
+                                                     %% history or relabelling old slots with today's committee
             slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
                                                      %% strictly in order, so this is also the committed floor)
             approved     = 0  :: slot(),             %% latest notarized/activated slot; proposals extend this
@@ -1424,6 +1429,8 @@ test_retire_changed_admissions(OldAdmissions, Admissions, S) ->
     retire_changed_admissions(OldAdmissions, Admissions, S).
 test_install_projection(Projection, S) ->
     install_projection(Projection, S).
+test_state_projection(S) ->
+    state_projection(S).
 test_enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef,
                         DeadlineMs, S) ->
     enqueue_dtx_intent(
@@ -14287,6 +14294,7 @@ history_projection(Committee, CommitteeId, Admissions, Sequences, Timestamp) ->
 state_projection(
   #s{validators = Committee, validator_routes = ValidatorRoutes,
      committee_id = CommitteeId,
+     committee_start = CommitteeStart,
      author_admissions = Admissions, author_seqs = Sequences,
      last_ts = Timestamp, dtx_projection = Dtx, dtx_lanes = DtxLanes,
      dtx_pending = Pending, history_head = HistoryHead}) ->
@@ -14295,11 +14303,12 @@ state_projection(
       validator_routes := ValidatorRoutes,
       dtx := Dtx, dtx_lanes := DtxLanes,
       dtx_pending := Pending, history_head := HistoryHead},
-    seed_current_committee_view(Projection).
+    seed_current_committee_view(Projection, CommitteeStart).
 
 install_projection(
   #{committee := Committee, validator_routes := ValidatorRoutes,
     committee_id := CommitteeId,
+    committee_views := CommitteeViews,
     admissions := Admissions, sequences := Sequences,
     timestamp := Timestamp, dtx := Dtx, dtx_lanes := DtxLanes,
     dtx_pending := Pending,
@@ -14316,6 +14325,8 @@ install_projection(
         end,
     S1 = S#s{validators = Committee, validator_routes = ValidatorRoutes,
              committee_id = CommitteeId,
+             committee_start = current_committee_start(
+                                 CommitteeId, CommitteeViews),
              author_admissions = Admissions, author_seqs = Sequences,
              last_ts = Timestamp, dtx_projection = Dtx,
              dtx_lanes = DtxLanes,
@@ -14529,14 +14540,30 @@ history_advance_content(
     end.
 
 seed_current_committee_view(
-  Projection = #{history_head := {Slot, _Hash},
+  Projection = #{history_head := {_Height, _Hash},
                  committee := [_ | _] = Committee,
                  committee_id := <<_:256>> = CommitteeId,
-                 validator_routes := Routes}) ->
+                 validator_routes := Routes}, Slot)
+  when is_integer(Slot), Slot > 0 ->
     record_committee_view(
       Slot, Committee, CommitteeId, Routes, Projection);
-seed_current_committee_view(Projection) ->
+seed_current_committee_view(Projection, undefined) ->
     Projection.
+
+current_committee_start(undefined, []) ->
+    undefined;
+current_committee_start(<<_:256>>, []) ->
+    %% A projection without an era row cannot authorize the resident-history
+    %% fast path. This occurs only in deliberately partial test/recovery
+    %% fixtures; production replay creates the row from certified genesis.
+    undefined;
+current_committee_start(
+  <<_:256>> = CommitteeId,
+  [{Start, _Committee, CommitteeId, _Routes} | _])
+  when is_integer(Start), Start > 0 ->
+    Start;
+current_committee_start(CommitteeId, CommitteeViews) ->
+    error({invalid_current_committee_view, CommitteeId, CommitteeViews}).
 
 %% Views are ordered newest first. One row represents one committee era; route
 %% refreshes update that era instead of creating per-slot history. Routes are

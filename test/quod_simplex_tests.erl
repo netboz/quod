@@ -124,6 +124,36 @@ committee_view_is_not_invented_before_membership_test() ->
     ?assertEqual([], maps:get(committee_views, Projection)),
     ?assertEqual(error, quod_simplex:history_committee_view(1, Projection)).
 
+live_state_projection_retains_current_committee_era_start_test() ->
+    Ns = <<"committee:live-era-start">>,
+    Anchor = <<21:256>>,
+    Member = <<22:256>>,
+    CommitteeId = <<23:256>>,
+    Admission = <<24:256>>,
+    Routes = #{Member => {"127.0.0.1", 19000}},
+    Projection = (quod_simplex:history_projection({Ns, Anchor}))#{
+                   committee := [Member],
+                   validator_routes := Routes,
+                   committee_id := CommitteeId,
+                   committee_views :=
+                       [{40, [Member], CommitteeId, Routes}],
+                   admissions := #{Member => Admission},
+                   sequences := #{Member => 0},
+                   history_head := {100, <<25:256>>}},
+    S0 = quod_simplex:test_state(
+           #{ns => Ns, self => Member, slot => 100,
+             author_admissions => #{Member => Admission}}),
+    S1 = quod_simplex:test_install_projection(Projection, S0),
+    LiveProjection = quod_simplex:test_state_projection(S1),
+    ?assertMatch(
+       {ok, [Member], CommitteeId, Routes},
+       quod_simplex:history_committee_view(40, LiveProjection)),
+    ?assertMatch(
+       {ok, [Member], CommitteeId, Routes},
+       quod_simplex:history_committee_view(100, LiveProjection)),
+    ?assertEqual(
+       error, quod_simplex:history_committee_view(39, LiveProjection)).
+
 %% Returning to the same validator set after a leave/rejoin is a new view.
 %% Reasserting a current member (for example to refresh its endpoint) retains
 %% the current view and admission generation.

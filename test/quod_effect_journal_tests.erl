@@ -9,10 +9,7 @@
 
 capacity_is_projected_and_restart_durable_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_effect_capacity_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir("quod_effect_capacity_"),
     try
         {ok, Pid} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Pid),
@@ -211,10 +208,7 @@ prepared_binding_survives_namespace_restart_gap_test() ->
 
 duplicate_reference_returns_conflict_without_killing_journal_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_effect_journal_duplicate_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir("quod_effect_journal_duplicate_"),
     try
         {Effect1, _Admission1, _Transaction1, Ref, Row1} =
             fixture(transaction_bound),
@@ -391,10 +385,7 @@ stale_reconcile_cannot_demote_terminal_row_test() ->
 
 bound_owner_death_retires_live_unactivated_row_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_effect_bound_owner_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir("quod_effect_bound_owner_"),
     SavedDesired = application:get_env(quod, namespace_desired),
     SavedKey = application:get_env(quod, node_pubkey),
     {Pub, _Seed} = quod_identity:generate(),
@@ -644,10 +635,7 @@ operation_reservation_owner_death_prevents_late_bind_test() ->
 
 group_binding_survives_owner_death_and_restart_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_group_effect_journal_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir("quod_group_effect_journal_"),
     SavedDesired = application:get_env(quod, namespace_desired),
     SavedKey = application:get_env(quod, node_pubkey),
     {Pub, Seed} = quod_identity:generate(),
@@ -767,10 +755,7 @@ group_binding_survives_owner_death_and_restart_test() ->
 
 with_operation_journal(Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_operation_effect_journal_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir("quod_operation_effect_journal_"),
     SavedDesired = application:get_env(quod, namespace_desired),
     SavedKey = application:get_env(quod, node_pubkey),
     {PreparationKey, _PreparationSeed} = quod_identity:generate(),
@@ -886,10 +871,7 @@ wait_reservations(_Expected, 0) ->
 
 with_snapshot(State, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
-    Dir = filename:join(
-            "/tmp",
-            "quod_effect_journal_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir("quod_effect_journal_"),
     try
         ?assertEqual(undefined,
                      quod_reg:where({quod_effect_journal, node})),
@@ -984,10 +966,8 @@ group_coordinator(
     {Ns, Anchor, Coordinator, Admission}.
 
 assert_unsupported_snapshot_version(Version, Snapshot) ->
-    Dir = filename:join(
-            "/tmp",
-            "quod_effect_old_format_" ++ integer_to_list(Version) ++ "_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
+    Dir = unique_tmp_dir(
+            "quod_effect_old_format_" ++ integer_to_list(Version) ++ "_"),
     Path = filename:join(Dir, "direct_effects.qej"),
     try
         ok = filelib:ensure_dir(Path),
@@ -1008,6 +988,10 @@ assert_unsupported_snapshot_version(Version, Snapshot) ->
     after
         _ = file:del_dir_r(Dir)
     end.
+
+unique_tmp_dir(Prefix) ->
+    Suffix = binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
+    filename:join("/tmp", Prefix ++ Suffix).
 
 journal_wire_blob(Term) ->
     {ok, Blob} = quod_wire_term:encode_canonical(Term),

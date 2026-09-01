@@ -285,6 +285,109 @@ read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
               Certificate, maps:get(committee, F),
               maps:get(committee_id, F))).
 
+read_certificate_combines_equivalent_finality_subsets_test() ->
+    F = fixture(4),
+    [A, B, C, D] = maps:get(committee, F),
+    Signers = maps:get(signers, F),
+    RefA = read_anchor_ref(
+             F, [maps:get(Key, Signers) || Key <- [A, B, C]]),
+    RefB = read_anchor_ref(
+             F, [maps:get(Key, Signers) || Key <- [B, C, D]]),
+    ?assertNotEqual(element(8, RefA), element(8, RefB)),
+    PlanBlob = read_plan_blob(F, <<"equivalent_finality_subsets">>),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) when Key =:= A ->
+                     read_attest_reply(F, Key, Request, RefA);
+                (Key, Request) when Key =:= B ->
+                     read_attest_reply(F, Key, Request, RefB);
+                (_Key, _Request) ->
+                     {error, not_ready}
+             end),
+    {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
+                          maps:get(owner_ns, F), {source(F), PlanBlob},
+                          1000, Deps),
+    ?assert(quod_read_certificate:verify(
+              Certificate, maps:get(committee, F),
+              maps:get(committee_id, F))).
+
+read_certificate_selects_verified_proof_from_equivalent_votes_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    GoodRef = read_anchor_ref(
+                F, maps:values(maps:get(signers, F))),
+    BadRef = setelement(8, GoodRef, term_to_binary(invalid_finality)),
+    PlanBlob = read_plan_blob(F, <<"verified_equivalent_proof">>),
+    Deps0 = dependencies(
+              F,
+              fun(Key, Request) when Key =:= A ->
+                      read_attest_reply(F, Key, Request, BadRef);
+                 (Key, Request) when Key =:= B ->
+                      read_attest_reply(F, Key, Request, GoodRef);
+                 (_Key, _Request) ->
+                      {error, not_ready}
+              end),
+    TestPid = self(),
+    Deps = Deps0#{
+      exact_entry =>
+          fun(_Source, Ref, _Timeout) when Ref =:= BadRef ->
+                  TestPid ! rejected_bad_finality,
+                  {error, invalid_foreign_reference};
+             (_Source, Ref, _Timeout) when Ref =:= GoodRef ->
+                  TestPid ! accepted_good_finality,
+                  {ok, read_entry_evidence(Ref)}
+          end},
+    {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
+                          maps:get(owner_ns, F), {source(F), PlanBlob},
+                          1000, Deps),
+    ?assertEqual(GoodRef, element(6, Certificate)),
+    receive rejected_bad_finality -> ok after 0 -> error(bad_ref_not_checked) end,
+    receive accepted_good_finality -> ok after 0 -> error(good_ref_not_checked) end.
+
+read_certificate_refuses_when_no_equivalent_proof_verifies_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    GoodRef = read_anchor_ref(
+                F, maps:values(maps:get(signers, F))),
+    BadRef = setelement(8, GoodRef, term_to_binary(invalid_finality)),
+    PlanBlob = read_plan_blob(F, <<"no_verified_equivalent_proof">>),
+    Deps0 = dependencies(
+              F,
+              fun(Key, Request) when Key =:= A; Key =:= B ->
+                      read_attest_reply(F, Key, Request, BadRef);
+                 (_Key, _Request) ->
+                      {error, not_ready}
+              end),
+    Deps = Deps0#{exact_entry =>
+                      fun(_Source, _Ref, _Timeout) ->
+                              {error, invalid_foreign_reference}
+                      end},
+    ?assertEqual(
+       {error, retry},
+       quod_dtx_current_view:test_certify_reads(
+         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+
+read_certificate_does_not_combine_different_record_digests_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    RefA = read_anchor_ref(
+             F, maps:values(maps:get(signers, F))),
+    RefB = setelement(7, RefA, digest(242)),
+    PlanBlob = read_plan_blob(F, <<"different_record_digests">>),
+    Deps = dependencies(
+             F,
+             fun(Key, Request) when Key =:= A ->
+                     read_attest_reply(F, Key, Request, RefA);
+                (Key, Request) when Key =:= B ->
+                     read_attest_reply(F, Key, Request, RefB);
+                (_Key, _Request) ->
+                     {error, not_ready}
+             end),
+    ?assertEqual(
+       {error, retry},
+       quod_dtx_current_view:test_certify_reads(
+         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+
 read_certification_never_allocates_foreign_plan_symbols_test() ->
     F = fixture(1),
     Symbol = <<"quod_read_certificate_foreign_symbol_6e985f">>,
@@ -297,7 +400,7 @@ read_certification_never_allocates_foreign_plan_symbols_test() ->
                         read_attest_reply(F, SignerKey, Request)
                 end),
     ?assertMatch(
-       {ok, {quod_read_certificate, 2, _, _, _, _, _, _}},
+       {ok, {quod_read_certificate, 3, _, _, _, _, _, _}},
        quod_dtx_current_view:test_certify_reads(
          maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)),
     ?assertEqual(Before, erlang:system_info(atom_count)),
@@ -766,6 +869,17 @@ dependencies(F, Reply) ->
           fun(_OwnerNs, _TargetNs, Key, _Endpoint, Request, _Timeout) ->
                   Reply(Key, Request)
           end,
+      exact_entry =>
+          fun(_Source, Ref, _Timeout) ->
+                  case quod_dtx:certified_ref_claim(Ref) of
+                      {ok, {Identity, Slot, BlockHash, RecordDigest}} ->
+                          {ok, #{identity => Identity, slot => Slot,
+                                 block_hash => BlockHash,
+                                 record_digest => RecordDigest}};
+                      error ->
+                          {error, invalid_foreign_reference}
+                  end
+          end,
       resolve => fun(_Key) -> error end,
       node_key => fun() -> none end,
       network_identity =>
@@ -835,19 +949,50 @@ applied_reply(
 read_attest_reply(F, Key, Request) when is_binary(Key) ->
     read_attest_reply(F, maps:get(Key, maps:get(signers, F)), Request);
 read_attest_reply(
-  F, #{pubkey := Signer} = Identity,
+  F, #{pubkey := _} = Identity,
   {read_attest, RequestId, PlanBlob}) ->
+    read_attest_reply(
+      F, Identity, {read_attest, RequestId, PlanBlob},
+      read_anchor_ref(F, maps:values(maps:get(signers, F)))).
+
+read_attest_reply(F, Key, Request, AnchorRef) when is_binary(Key) ->
+    read_attest_reply(
+      F, maps:get(Key, maps:get(signers, F)), Request, AnchorRef);
+read_attest_reply(
+  F, #{pubkey := Signer} = Identity,
+  {read_attest, RequestId, PlanBlob}, AnchorRef) ->
     {ok, Plan} = quod_dtx:decode(PlanBlob),
     Target = quod_dtx:target(Plan),
     ProofId = quod_dtx:proof_id(Plan),
     PlanDigest = quod_dtx:digest(Plan),
-    AnchorRef = certified_ref(Target, 8, digest(241)),
     CommitteeId = maps:get(committee_id, F),
     {ok, {Signer, Signature}} = quod_read_certificate:sign(
                                  Target, ProofId, PlanDigest, AnchorRef,
                                  CommitteeId, Identity),
     {ok, {read_attest, RequestId, Target, ProofId, PlanDigest, AnchorRef,
           CommitteeId, Signer, Signature}, []}.
+
+read_anchor_ref(F, Signers) ->
+    {Ns, Anchor} = maps:get(target, F),
+    Slot = 8,
+    BlockHash = digest(20 + Slot),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Shares = [quod_simplex:make_share(
+                Domain, commit, Slot, BlockHash, Signer)
+              || Signer <- Signers],
+    {ok, Cert} = quod_simplex:form_cert(
+                   Domain, commit, Slot, BlockHash, Shares,
+                   maps:get(committee, F)),
+    {ok, Ref} = quod_dtx:certified_ref(
+                  Ns, Anchor, Slot, BlockHash, digest(241),
+                  term_to_binary(Cert, [deterministic])),
+    Ref.
+
+read_entry_evidence(Ref) ->
+    {ok, {Identity, Slot, BlockHash, RecordDigest}} =
+        quod_dtx:certified_ref_claim(Ref),
+    #{identity => Identity, slot => Slot, block_hash => BlockHash,
+      record_digest => RecordDigest}.
 
 read_attest_conflict({read_attest, RequestId, _PlanBlob}) ->
     {ok, {error, RequestId, conflict_retry}, []}.

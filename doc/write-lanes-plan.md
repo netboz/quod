@@ -217,13 +217,18 @@ so the atom boundary holds.
   the target write.
 
 **Binding to B's committee.** The certificate binds
-`{B identity, ProofId, PlanDigest, AnchorRef, CommitteeId}` where AnchorRef is
-a certified ref to B's last non-noop slot ≤ H. The shared certified-history
-projection retains one in-memory row per committee era, so exact-reference
-verification selects the post-anchor committee and id independently of the
-verifier's current cache head. The durable checkpoint remains compact; the
-existing restart replay rebuilds the era rows. Deterministic, no clocks and no
-second verifier or cache.
+`{B identity, ProofId, PlanDigest, AnchorClaim, CommitteeId}`. `AnchorClaim` is
+the immutable identity of B's last non-noop entry ≤ H: slot, block hash and
+record digest. The certificate also carries one independently verified
+`AnchorRef` for that claim so the existing certified-history verifier can find
+and prove the exact entry. Quorum certificates are proofs, not canonical byte
+strings: validators may retain different valid signature subsets for the same
+entry, and those proof bytes are deliberately outside `AnchorClaim`. The
+shared certified-history projection retains one in-memory row per committee
+era, so exact-reference verification selects the post-anchor committee and id
+independently of the verifier's current cache head. The durable checkpoint
+remains compact; the existing restart replay rebuilds the era rows.
+Deterministic, no clocks and no second verifier or cache.
 
 ### 4.3 L2 — independent writes (`independent(...)`, planned)
 

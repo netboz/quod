@@ -3,10 +3,16 @@
 Portable `f + 1` evidence that one sealed read-only plan still validates.
 
 The certificate contains no facts and interprets no Prolog vocabulary.  It
-binds the target ontology, distributed proof, opaque plan digest, and one
-certified ledger reference fixing the committee whose signatures may count.
-Certified-history verification remains owned by `m:quod_foreign_log`; this
-module only checks the statement shape and committee signatures it is given.
+binds the target ontology, distributed proof, opaque plan digest, immutable
+ledger-entry claim, and committee whose signatures may count.  It also carries
+one certified reference proving that claim.  Certified-history verification
+remains owned by `m:quod_foreign_log`; this module only checks the statement
+shape and committee signatures it is given.
+
+Version 3 changes the signed statement without changing the outer endpoint
+reply shape.  It therefore requires a coordinated full-fleet deployment: a
+mixed V2/V3 fleet rejects the other version's votes and manifests as an f+1
+quorum that is never reached, rather than as an envelope decode error.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -15,15 +21,15 @@ module only checks the statement shape and committee signatures it is given.
          encode/1, decode/1]).
 -export_type([certificate/0]).
 
--define(CERTIFICATE_VERSION, 2).
--define(VOTE_VERSION, 2).
+-define(CERTIFICATE_VERSION, 3).
+-define(VOTE_VERSION, 3).
 -define(VOTE_DOMAIN, <<"quod.read.certificate">>).
 -define(MAX_CERTIFICATE_BYTES, ?QUOD_MAX_DTX_BODY_BYTES).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type signed_row() :: {<<_:256>>, <<_:512>>}.
 -type certificate() ::
-        {quod_read_certificate, 2, identity(), <<_:256>>, <<_:256>>,
+        {quod_read_certificate, 3, identity(), <<_:256>>, <<_:256>>,
          quod_dtx:certified_ref(), <<_:256>>, [signed_row()]}.
 
 -doc "Sign one exact read-certificate statement with a validator identity.".
@@ -65,7 +71,7 @@ new(Target, ProofId, PlanDigest, AnchorRef, CommitteeId, Signatures) ->
         false -> error
     end.
 
--doc "Return the exact signed binding without verifying committee authority.".
+-doc "Return the signed statement, carried anchor proof, and signature rows.".
 -spec binding(certificate()) -> {ok, map()} | error.
 binding(
   {quod_read_certificate, ?CERTIFICATE_VERSION, Target, ProofId,
@@ -152,10 +158,11 @@ decode(_) ->
 statement(Target = {Ns, <<_:256>>}, <<_:256>> = ProofId,
           <<_:256>> = PlanDigest, AnchorRef, <<_:256>> = CommitteeId)
   when is_binary(Ns), byte_size(Ns) > 0 ->
-    case quod_dtx:certified_ref_binding(AnchorRef) of
-        {ok, Target, _Slot, _RecordDigest} ->
+    case quod_dtx:certified_ref_claim(AnchorRef) of
+        {ok, {Target, Slot, BlockHash, RecordDigest}} ->
             {ok, {quod_read_vote, ?VOTE_VERSION,
-                  Target, ProofId, PlanDigest, AnchorRef, CommitteeId}};
+                  Target, ProofId, PlanDigest,
+                  {Slot, BlockHash, RecordDigest}, CommitteeId}};
         _ -> error
     end;
 statement(_Target, _ProofId, _PlanDigest, _AnchorRef, _CommitteeId) ->

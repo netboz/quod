@@ -20,8 +20,10 @@ request id.
 
 Read certification uses the same frozen-view routing and quorum collector. A
 target validator checks the sealed read-only plan through the ordinary Prepare
-validator at its current committed head, then signs the plan digest and exact
-certified ledger anchor. The collector keeps the plan vocabulary opaque.
+validator at its current committed head, then signs the plan digest and the
+immutable claim of its certified ledger anchor. Different valid finality-proof
+subsets for that same claim remain interchangeable evidence. The collector
+keeps the plan vocabulary opaque.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -439,6 +441,13 @@ production_dependencies() ->
                   quod_simplex:dtx_endpoint_request(
                     Owner, TargetNs, PeerKey, Endpoint, Request, [], Timeout)
           end,
+      exact_entry =>
+          fun({local, LedgerRoot}, Ref, Timeout) ->
+                  quod_foreign_log:verify_local(
+                    LedgerRoot, Ref, entry, Timeout);
+             ({remote, _Routes}, Ref, Timeout) ->
+                  quod_foreign_log:verify_reference(Ref, entry, Timeout)
+          end,
       resolve => fun quod_quic:resolve/1,
       node_key => fun node_key/0,
       network_identity => fun quod_ontology:network_identity/0}.
@@ -511,8 +520,8 @@ certify_reads_view(
                          remaining(Deadline) > 0 of
                         true ->
                             collect_read_votes(
-                              OwnerNs, Sources, Plan, PlanBlob, CommitteeId,
-                              Needed,
+                              OwnerNs, Source, Sources, Plan, PlanBlob,
+                              CommitteeId, Needed,
                               Deadline, Dependencies);
                         false ->
                             {error, retry}
@@ -525,15 +534,15 @@ certify_reads_view(
     end.
 
 collect_read_votes(
-  OwnerNs, Sources, Plan, PlanBlob, CommitteeId, Needed, Deadline,
+  OwnerNs, Source, Sources, Plan, PlanBlob, CommitteeId, Needed, Deadline,
   Dependencies) ->
     Probe =
-        fun(Key, Source) ->
+        fun(Key, ProbeSource) ->
                 case probe_read_attest(
-                       OwnerNs, Key, Source, Plan, PlanBlob,
+                       OwnerNs, Key, ProbeSource, Plan, PlanBlob,
                        CommitteeId, Deadline, Dependencies) of
-                    {ok, Binding, SignedRow} ->
-                        {signed, {read, Binding}, SignedRow};
+                    {ok, Binding, SignedRow, AnchorRef} ->
+                        {signed, {read, Binding}, SignedRow, AnchorRef};
                     conflict_retry ->
                         {ok, conflict_retry};
                     ignore -> ignore
@@ -541,14 +550,20 @@ collect_read_votes(
         end,
     case collect_quorum(
            read_certificate_probe, Sources, Needed, Deadline, Probe) of
-        {ok, {signed, {read, {Target, ProofId, PlanDigest, AnchorRef,
-                              CommitteeId}},
-              Signatures}} ->
-            case quod_read_certificate:new(
-                   Target, ProofId, PlanDigest, AnchorRef, CommitteeId,
-                   Signatures) of
-                {ok, Certificate} -> {ok, Certificate};
-                error -> {error, retry}
+        {ok, {signed, {read, {Target, ProofId, PlanDigest, AnchorClaim,
+                              CommitteeId}}, Rows}} ->
+            case verified_read_anchor(
+                   Source, Target, AnchorClaim, Rows, Deadline,
+                   Dependencies) of
+                {ok, AnchorRef, Signatures} ->
+                    case quod_read_certificate:new(
+                           Target, ProofId, PlanDigest, AnchorRef,
+                           CommitteeId, Signatures) of
+                        {ok, Certificate} -> {ok, Certificate};
+                        error -> {error, retry}
+                    end;
+                error ->
+                    {error, retry}
             end;
         {ok, conflict_retry} ->
             {error, conflict_retry};
@@ -1002,14 +1017,14 @@ collect_applied(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
                            OwnerNs, Key, Source, Claim, Deadline,
                            Dependencies) of
                         {ok, SignedRow} ->
-                            {signed, applied, SignedRow};
+                            {signed, applied, SignedRow, none};
                         ignore -> ignore
                     end
             end,
     case collect_quorum(
            dtx_applied_probe, Sources, Needed, Deadline, Probe) of
-        {ok, {signed, applied, Signatures}} ->
-            applied_certificate(Claim, Signatures);
+        {ok, {signed, applied, Rows}} ->
+            applied_certificate(Claim, signed_rows(Rows));
         _ ->
             retry
     end.
@@ -1094,20 +1109,61 @@ count_match({ok, Value}, Needed, Counts) ->
         true -> {reached, Value};
         false -> {continue, Counts#{Value => Count}}
     end;
-count_match({signed, Value, {<<_:256>> = Signer, <<_:512>> = Signature}},
-            Needed, Counts) ->
+count_match(
+  {signed, Value, {<<_:256>> = Signer, <<_:512>> = Signature}, Witness},
+  Needed, Counts) ->
     Key = {signed, Value},
-    Signatures0 = maps:get(Key, Counts, #{}),
-    Signatures = Signatures0#{Signer => Signature},
-    case map_size(Signatures) >= Needed of
+    Rows0 = maps:get(Key, Counts, #{}),
+    Rows = Rows0#{Signer => {Signature, Witness}},
+    case map_size(Rows) >= Needed of
         true ->
             {reached,
-             {signed, Value, lists:keysort(1, maps:to_list(Signatures))}};
+             {signed, Value,
+              [{RowSigner, RowSignature, RowWitness}
+               || {RowSigner, {RowSignature, RowWitness}} <-
+                      lists:keysort(1, maps:to_list(Rows))]}};
         false ->
-            {continue, Counts#{Key => Signatures}}
+            {continue, Counts#{Key => Rows}}
     end;
 count_match(_Ignored, _Needed, Counts) ->
     {continue, Counts}.
+
+signed_rows(Rows) ->
+    [{Signer, Signature} || {Signer, Signature, _Witness} <- Rows].
+
+verified_read_anchor(Source, Target, Claim, Rows, Deadline, Dependencies) ->
+    %% Votes establish the immutable entry claim. The certified-history owner
+    %% separately validates one carried finality proof at the entry's actual
+    %% committee era; proof-subset bytes are neither identity nor authority by
+    %% themselves. This is the same exact-reference verifier used downstream.
+    Candidates = lists:uniq([Ref || {_Signer, _Signature, Ref} <- Rows]),
+    case verify_read_anchor_candidates(
+           Source, Target, Claim, Candidates, Deadline, Dependencies) of
+        {ok, AnchorRef} -> {ok, AnchorRef, signed_rows(Rows)};
+        error -> error
+    end.
+
+verify_read_anchor_candidates(
+  _Source, _Target, _Claim, [], _Deadline, _Dependencies) ->
+    error;
+verify_read_anchor_candidates(
+  Source, Target, {Slot, BlockHash, RecordDigest} = Claim,
+  [Ref | Rest], Deadline, Dependencies) ->
+    case remaining(Deadline) of
+        0 ->
+            error;
+        Wait ->
+            Verify = maps:get(exact_entry, Dependencies),
+            case Verify(Source, Ref, Wait) of
+                {ok, #{identity := Target, slot := Slot,
+                       block_hash := BlockHash,
+                       record_digest := RecordDigest}} ->
+                    {ok, Ref};
+                _ ->
+                    verify_read_anchor_candidates(
+                      Source, Target, Claim, Rest, Deadline, Dependencies)
+            end
+    end.
 
 stop_workers(Tag, Ref, Pending) ->
     maps:foreach(
@@ -1320,7 +1376,7 @@ probe_read_attest_source(
           case read_attest_response_vote(
                  Request, Target, ProofId, PlanDigest, CommitteeId,
                  PeerKey, Result) of
-              {ok, _, _} = Vote -> {done, Vote};
+              {ok, _, _, _} = Vote -> {done, Vote};
               conflict_retry -> {done, conflict_retry};
               ignore -> continue
           end
@@ -1340,18 +1396,23 @@ read_attest_response_vote(
   {ok, {read_attest, _RequestId, Target, ProofId, PlanDigest, AnchorRef,
         CommitteeId,
         ExpectedSigner, Signature} = Response}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) andalso
-         quod_read_certificate:verify_vote(
-           Target, ProofId, PlanDigest, AnchorRef,
-           CommitteeId,
-           ExpectedSigner, Signature) of
-        true ->
-            {ok, {Target, ProofId, PlanDigest, AnchorRef, CommitteeId},
-             {ExpectedSigner, Signature}};
-        false -> ignore
+    case {quod_dtx_endpoint:correlates(Request, Response),
+          quod_read_certificate:verify_vote(
+            Target, ProofId, PlanDigest, AnchorRef,
+            CommitteeId, ExpectedSigner, Signature),
+          quod_dtx:certified_ref_claim(AnchorRef)} of
+        {true, true,
+         {ok, {Target, Slot, BlockHash, RecordDigest}}} ->
+            {ok,
+             {Target, ProofId, PlanDigest,
+              {Slot, BlockHash, RecordDigest}, CommitteeId},
+             {ExpectedSigner, Signature}, AnchorRef};
+        _ ->
+            ignore
     end;
 read_attest_response_vote(
-  Request, _Target, _ProofId, _PlanDigest, _CommitteeId, _ExpectedSigner,
+  Request, _Target, _ProofId, _PlanDigest, _CommitteeId,
+  _ExpectedSigner,
   {ok, {error, _RequestId, conflict_retry} = Response}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true -> conflict_retry;

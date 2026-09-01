@@ -87,7 +87,8 @@ replay. Neither transition changes the global proof generation.
          attest_plan/4, verify_plan_attestation/4,
          encode_attestation/1, decode_attestation/1,
          certified_ref/6, certified_entry_ref/3,
-         certified_entry_ref_matches/5, validate_certified_ref/1,
+         certified_entry_ref_matches/5, certified_ref_claim/1,
+         validate_certified_ref/1,
          new_begin/3, new_prepare/3, new_decision/4,
          new_finalize/5, new_complete/3,
          encode_record/1, decode_record/1,
@@ -1102,8 +1103,8 @@ certified_entry_ref_matches(
   when is_binary(Ns), byte_size(Ns) > 0, is_list(Committee) ->
     case certified_entry_ref(Identity, Entry, Record) of
         {ok, ExpectedRef} ->
-            case {certified_ref_core(ExpectedRef),
-                  certified_ref_core(Ref)} of
+            case {certified_ref_claim(ExpectedRef),
+                  certified_ref_claim(Ref)} of
                 {Core, Core} ->
                     valid_certified_ref_finality(
                       Ns, Anchor, Ref, Committee);
@@ -1116,11 +1117,18 @@ certified_entry_ref_matches(
 certified_entry_ref_matches(_Identity, _Entry, _Record, _Ref, _Committee) ->
     false.
 
-certified_ref_core(
-  {quod_dtx_ref, ?REF_VERSION, Ns, Anchor, Slot, BlockHash,
-   RecordDigest, _FinalityProof}) ->
-    {?REF_VERSION, Ns, Anchor, Slot, BlockHash, RecordDigest};
-certified_ref_core(_Malformed) ->
+-doc "Return the immutable claim without treating its finality-proof bytes as identity.".
+-spec certified_ref_claim(certified_ref()) ->
+          {ok, {identity(), pos_integer(), <<_:256>>, <<_:256>>}} | error.
+certified_ref_claim(
+  {quod_dtx_ref, ?REF_VERSION, Ns, <<_:256>> = Anchor, Slot,
+   <<_:256>> = BlockHash, <<_:256>> = RecordDigest, _FinalityProof} = Ref)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    case validate_certified_ref(Ref) of
+        true -> {ok, {{Ns, Anchor}, Slot, BlockHash, RecordDigest}};
+        false -> error
+    end;
+certified_ref_claim(_Malformed) ->
     error.
 
 valid_certified_ref_finality(

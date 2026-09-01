@@ -378,7 +378,7 @@ cohosted_read_certificate_facade_uses_its_live_session(Ctx) ->
               {ok, SealedPlan} = quod_scope_session:seal(
                                    Handle, Origin, anonymous, none),
               ?assertMatch(
-                 {ok, {quod_read_certificate, 2, _, _, _, _, _, _}},
+                 {ok, {quod_read_certificate, 3, _, _, _, _, _, _}},
                  quod_scope_session:certify_reads(Handle, SealedPlan)),
               SealedPlan
           end)
@@ -412,7 +412,7 @@ cohosted_read_certificate_facade_uses_its_live_session(Ctx) ->
     end.
 
 read_certificate_result_normalization_is_closed_test() ->
-    Certificate = {quod_read_certificate, 2, a, b, c, d, e, []},
+    Certificate = {quod_read_certificate, 3, a, b, c, d, e, []},
     ?assertEqual(
        {ok, Certificate},
        quod_scope_session:test_normalize_read_certificate_result(

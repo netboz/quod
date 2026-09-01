@@ -292,7 +292,8 @@ bootstrap candidates are transport hints only.  The existing history verifier
 still proves the exact anchor, phase, certificate chain, and serving committee.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       transaction | 'begin' | prepare | decision | finalize | complete,
+                       entry | transaction | 'begin' | prepare | decision |
+                       finalize | complete,
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, TimeoutMs) ->
     verify_reference(Ref, ExpectedPhase, none, TimeoutMs).
@@ -305,7 +306,8 @@ into bootstrap state; a caller may retain it separately only after this
 verification succeeds.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       transaction | 'begin' | prepare | decision | finalize | complete,
+                       entry | transaction | 'begin' | prepare | decision |
+                       finalize | complete,
                        none | {<<_:256>>, term()}, pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, Contact, TimeoutMs) ->
@@ -320,7 +322,8 @@ unrelated material is ignored and ordinary certified fetching remains the
 correctness path.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       transaction | 'begin' | prepare | decision | finalize | complete,
+                       entry | transaction | 'begin' | prepare | decision |
+                       finalize | complete,
                        none | {<<_:256>>, term()}, none | #entry{},
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, Contact, EntryHint0, TimeoutMs)

@@ -531,6 +531,23 @@ operation_recovery_owner_replies_once_and_retains_exact_result_test() ->
        quod_simplex:test_operation_target_result(
          {rejected, not_authorized}, TargetRef)).
 
+%% A relay can acknowledge a committed source claim before a non-leading
+%% gateway applies that same block. The waiter must park in the existing
+%% recovery owner and survive projection installation; the old code returned
+%% outcome_unknown immediately, so this test could not reach the assertions.
+%% If its caller dies first, the pre-projection placeholder leaves no residue.
+operation_waiter_survives_relay_reply_before_claim_projection_test() ->
+    Claim = maps:get(
+              claim, quod_ct:remote_operation_fixture(#{})),
+    ?assertEqual(
+       #{waiting_status => awaiting_projection,
+         waiting_count => 1,
+         abandoned_present => false,
+         projected_status => pending,
+         projected_slot => 7,
+         projected_waiters => 1},
+       quod_simplex:test_operation_wait_before_projection(7, Claim)).
+
 %% Response ownership is the exact authenticated peer plus the exact request;
 %% a valid response on the right namespace from any other peer is inert.
 dtx_endpoint_response_correlation_is_exact_and_released_test() ->

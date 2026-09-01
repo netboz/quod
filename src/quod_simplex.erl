@@ -277,6 +277,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_stop_dtx_coordinator/1,
          test_dtx_endpoint_counts/1, test_owner_stats/1,
          test_operation_target_result/2,
+         test_operation_wait_before_projection/2,
          test_endpoint_terminal_result/1,
          test_dtx_worker_terminal_result/2,
          test_dtx_retirement_result/1,
@@ -1149,16 +1150,19 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     monitor = none :: none | reference()
 }).
 
-%% One volatile driver per still-unresolved durable one-target claim.  The map
-%% is rebuilt from Prolog's operation projection; no recovery state lives only
-%% here and completed historical operations retain no process.
+%% One volatile driver per still-unresolved durable one-target claim. A
+%% relayed commit acknowledgement may briefly park its caller here before this
+%% replica applies the claim projection. The durable claim remains the source;
+%% the map is rebuilt from Prolog's projection and completed history retains no
+%% process.
 -record(operation_recovery_owner, {
     operation_ref :: term(),
-    claim_slot :: pos_integer(),
+    claim_slot = none :: none | pos_integer(),
     claim_tx_id = none :: none | <<_:256>>,
-    target_ref :: term(),
-    request_digest :: <<_:256>>,
-    status = pending :: pending | running | blocked | settling,
+    target_ref = none :: none | term(),
+    request_digest = none :: none | <<_:256>>,
+    status = pending ::
+        awaiting_projection | pending | running | blocked | settling,
     pid = none :: none | pid(),
     monitor = none :: none | reference(),
     target_result = pending ::
@@ -1875,6 +1879,26 @@ test_operation_target_result(Result, TargetRef) ->
       stored => Stored#operation_recovery_owner.target_result,
       waiters => map_size(Stored#operation_recovery_owner.waiters),
       duplicate => Duplicate}.
+test_operation_wait_before_projection(Slot, Claim = #transaction{}) ->
+    {ok, #{operation_ref := OperationRef}} =
+        quod_transaction:request_claim(Claim),
+    Tag = make_ref(),
+    S0 = #s{operation_recoveries = #{}},
+    {wait, S1} = await_operation_recovery(
+                   {self(), Tag}, OperationRef, S0),
+    Waiting = maps:get(OperationRef, S1#s.operation_recoveries),
+    [Monitor] = maps:keys(Waiting#operation_recovery_owner.waiters),
+    {true, Abandoned} = drop_operation_waiter(Monitor, self(), S1),
+    S2 = apply_operation_projection(Slot, Claim, S1),
+    Projected = maps:get(OperationRef, S2#s.operation_recoveries),
+    #{waiting_status => Waiting#operation_recovery_owner.status,
+      waiting_count => map_size(Waiting#operation_recovery_owner.waiters),
+      abandoned_present =>
+          maps:is_key(OperationRef, Abandoned#s.operation_recoveries),
+      projected_status => Projected#operation_recovery_owner.status,
+      projected_slot => Projected#operation_recovery_owner.claim_slot,
+      projected_waiters =>
+          map_size(Projected#operation_recovery_owner.waiters)}.
 test_endpoint_terminal_result(Result) -> endpoint_terminal_result(Result).
 test_dtx_worker_terminal_result(Result, Response) ->
     dtx_worker_terminal_result(Result, Response).
@@ -2345,9 +2369,11 @@ operation_projection(
   when is_binary(Ns), is_integer(Slot), Slot > 0 ->
     %% Projection remains asynchronous for both live apply and replay.  A
     %% synchronous callback into Simplex would deadlock while Simplex is
-    %% feeding replay entries to Prolog.  On live apply Prolog sends this cast
-    %% before releasing the parked submit_role caller, so the owner message is
-    %% already ahead of that caller's later await request in this mailbox.
+    %% feeding replay entries to Prolog. On a locally executed live submit,
+    %% Prolog sends this cast before releasing the parked submit_role caller,
+    %% so mailbox order installs the owner first. A relayed leader reply may
+    %% overtake this replica's apply; await_operation_recovery/3 parks that
+    %% waiter in the same owner until this cast arrives.
     gen_statem:cast(
       quod_reg:via({quod_simplex, Ns}),
       {operation_projection, Slot, Change}).
@@ -4436,6 +4462,16 @@ apply_operation_projection(
                     S#s{operation_recoveries = Recoveries#{
                           OperationRef => Owner}};
                 #operation_recovery_owner{
+                   status = awaiting_projection, waiters = Waiters} ->
+                    %% A relayed submit reply can reach a non-leading gateway
+                    %% just before that gateway applies the same committed
+                    %% claim.  Preserve the already-parked result waiter and
+                    %% let this one ordinary projection install the durable
+                    %% recovery owner; no retry or second outcome path exists.
+                    S#s{operation_recoveries = Recoveries#{
+                          OperationRef => Owner#operation_recovery_owner{
+                                            waiters = Waiters}}};
+                #operation_recovery_owner{
                    claim_slot = Slot, claim_tx_id = ClaimTxId,
                    target_ref = TargetRef, request_digest = Digest} ->
                     S;
@@ -4464,21 +4500,33 @@ await_operation_recovery(
   S = #s{operation_recoveries = Recoveries}) ->
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{target_result = pending,
-                                           waiters = Waiters} ->
-            {Caller, _Tag} = From,
-            Monitor = erlang:monitor(process, Caller),
-            {wait,
-             S#s{operation_recoveries = Recoveries#{
-                   OperationRef => Owner#operation_recovery_owner{
-                     waiters = Waiters#{Monitor => From}}}}};
+                                           waiters = _Waiters} ->
+            park_operation_waiter(From, OperationRef, Owner, S);
         #operation_recovery_owner{target_result = Result} ->
             {reply, Result, S};
         undefined ->
-            %% The live claim projection is causally ordered before the
-            %% submit_role reply. Absence here therefore means this process
-            %% cannot own the claimed operation.
-            {reply, {error, {outcome_unknown, OperationRef}}, S}
+            %% A local submit applies its projection before replying. A
+            %% relayed submit, however, can return from the leader before this
+            %% gateway consumes the committed block. Park in the same recovery
+            %% map and let apply_operation_projection/3 wake normal ownership.
+            %% This is deliberately optimistic: if this replica already
+            %% removed a terminal owner, the existing caller deadline returns
+            %% outcome_unknown rather than adding a second outcome lookup.
+            Owner = #operation_recovery_owner{
+                       operation_ref = OperationRef,
+                       status = awaiting_projection},
+            park_operation_waiter(From, OperationRef, Owner, S)
     end.
+
+park_operation_waiter(
+  From = {Caller, _Tag}, OperationRef,
+  Owner = #operation_recovery_owner{waiters = Waiters},
+  S = #s{operation_recoveries = Recoveries}) ->
+    Monitor = erlang:monitor(process, Caller),
+    {wait,
+     S#s{operation_recoveries = Recoveries#{
+           OperationRef => Owner#operation_recovery_owner{
+             waiters = Waiters#{Monitor => From}}}}}.
 
 finish_operation_target_result(
   Pid, OperationRef, Result0, TargetRef,
@@ -4527,9 +4575,19 @@ drop_operation_waiter(
           {Found0, Acc}) ->
           case maps:get(Monitor, Waiters, undefined) of
               {Pid, _Tag} ->
-                  {true,
-                   Acc#{OperationRef => Owner#operation_recovery_owner{
-                          waiters = maps:remove(Monitor, Waiters)}}};
+                  Remaining = maps:remove(Monitor, Waiters),
+                  case {Owner#operation_recovery_owner.status,
+                        map_size(Remaining)} of
+                      {awaiting_projection, 0} ->
+                          %% No durable claim has reached this replica and no
+                          %% caller remains. Do not retain volatile residue.
+                          {true, Acc};
+                      _ ->
+                          {true,
+                           Acc#{OperationRef =>
+                                  Owner#operation_recovery_owner{
+                                    waiters = Remaining}}}
+                  end;
               _ ->
                   {Found0, Acc#{OperationRef => Owner}}
           end
@@ -4574,6 +4632,10 @@ install_operation_desired(
                                TargetRef =:= Owner#operation_recovery_owner.target_ref,
                                Digest =:= Owner#operation_recovery_owner.request_digest ->
                             Current;
+                        #operation_recovery_owner{
+                           status = awaiting_projection,
+                           waiters = Waiters} ->
+                            Owner#operation_recovery_owner{waiters = Waiters};
                         undefined ->
                             Owner;
                         _ ->

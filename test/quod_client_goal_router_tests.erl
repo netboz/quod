@@ -124,6 +124,62 @@ post_send_timeout_is_uncertain_and_leaves_nothing_test() ->
           await_stats(Router, #{correlations => 0, routes => 0})
       end).
 
+invalid_response_counts_the_exact_gateway_boundary_test() ->
+    with_outcome_metrics(
+      fun() ->
+          with_router(
+            fun(Router, Link, _Fixture) ->
+                Fixture = fixture(execute),
+                Evidence = maps:get(evidence, Fixture),
+                Before = outcome_counter(gateway_execute_transport),
+                Caller = submit_async(Router, Fixture, none, 1000),
+                {Request, _Frame} = sent_request(Link),
+                RequestId = quod_client_goal_endpoint:request_id(Request),
+                respond_opaque(
+                  Router, Link,
+                  {result, RequestId, term_to_binary(arbitrary)}),
+                receive
+                    {Caller, {error, {uncertain, Evidence}}} -> ok
+                after 1000 -> error(invalid_response_uncertainty_missing)
+                end,
+                ?assertEqual(
+                   Before + 1,
+                   outcome_counter(gateway_execute_transport)),
+                await_stats(Router, #{correlations => 0, routes => 0})
+            end)
+      end).
+
+normalized_target_pending_is_not_counted_again_at_gateway_test() ->
+    with_outcome_metrics(
+      fun() ->
+          with_router(
+            fun(Router, Link, _Fixture) ->
+                Fixture = fixture(execute),
+                Evidence = maps:get(evidence, Fixture),
+                Ref = maps:get(operation_ref, Evidence),
+                TargetBefore = outcome_counter(target_execute),
+                GatewayBefore = outcome_counter(gateway_execute_transport),
+                ok = quod_client_result:observe_outcome_unknown(
+                       target_execute, engine_result,
+                       {error, {outcome_unknown, Ref}}),
+                Caller = submit_async(Router, Fixture, none, 1000),
+                {Request, _Frame} = sent_request(Link),
+                RequestId = quod_client_goal_endpoint:request_id(Request),
+                {ok, ResultBlob} = quod_client_result:encode({pending, Ref}),
+                respond(Router, Link, {result, RequestId, ResultBlob}),
+                receive
+                    {Caller, {ok, Evidence,
+                              {normalized, {pending, Ref}}}} -> ok
+                after 1000 -> error(target_pending_result_missing)
+                end,
+                ?assertEqual(TargetBefore + 1,
+                             outcome_counter(target_execute)),
+                ?assertEqual(GatewayBefore,
+                             outcome_counter(gateway_execute_transport)),
+                await_stats(Router, #{correlations => 0, routes => 0})
+            end)
+      end).
+
 caller_death_cleans_the_exact_outbound_correlation_test() ->
     with_router(
       fun(Router, Link, Fixture) ->
@@ -275,11 +331,34 @@ open_fun(Link) ->
     end.
 
 fixture() ->
+    fixture(read).
+
+fixture(Mode) when Mode =:= read; Mode =:= execute ->
     quod_ct:signed_goal_fixture(
       #{network => <<16#45:256>>, target => {<<"quod:test">>, <<16#46:256>>},
-        key_pair => quod_identity:generate(), mode => read,
+        key_pair => quod_identity:generate(), mode => Mode,
         deadline => quod_time:now_ms() + 5000,
         goal_text => <<"true.">>}).
+
+with_outcome_metrics(Fun) ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_routertest">>),
+        Fun()
+    after
+        true = unregister(quod_metrics),
+        Placeholder ! stop
+    end.
+
+outcome_counter(Producer) ->
+    Label = atom_to_binary(Producer, utf8),
+    case prometheus_counter:value(
+           quod_client_outcome_unknown_total, [Label]) of
+        undefined -> 0;
+        Value -> Value
+    end.
 
 submit(Router, Fixture, CursorBinding, TimeoutMs) ->
     quod_client_goal_router:test_submit(
@@ -322,6 +401,14 @@ sent_request(Link) ->
 
 respond(Router, Link, Response) ->
     {ok, Frame} = quod_client_goal_endpoint:encode_response(Response),
+    Router ! {quod_message, {?PEER, Link},
+              quod_client_goal_endpoint:channel(), Frame},
+    ok.
+
+respond_opaque(Router, Link, Response) ->
+    InnerBlob = term_to_binary(Response, [deterministic]),
+    Frame = term_to_binary(
+              {quod_client_goal_endpoint, 1, InnerBlob}, [deterministic]),
     Router ! {quod_message, {?PEER, Link},
               quod_client_goal_endpoint:channel(), Frame},
     ok.

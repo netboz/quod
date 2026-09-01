@@ -74,6 +74,7 @@ Two collection paths:
 | `quod_node_owner_bytes_current{component}` | gauge | | current bytes retained by node-wide owners that report byte totals |
 | `quod_ontology_owner_duration_seconds` / `quod_node_owner_duration_seconds` | histogram | `component`, `phase`, `result` | lifetime of rows explicitly retired by a live owner, using only fixed labels |
 | `quod_ontology_owner_terminal_total` / `quod_node_owner_terminal_total` | counter | `component`, `phase`, `result` | rows explicitly retired by a live owner, using only fixed labels |
+| `quod_client_outcome_unknown_total` | counter | `producer` | client-visible uncertain write outcomes, split by the exact target or gateway boundary that produced them |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_remote_operation_stage_seconds{namespace,stage,result}` | histogram | | fixed stages of a signed one-target foreign operation; values never become labels |
@@ -104,7 +105,8 @@ Two collection paths:
          observe_foreign_history_stage/3,
          observe_runtime_reaction/3,
          observe_ontology_owner_terminal/5,
-         observe_node_owner_terminal/4]).
+         observe_node_owner_terminal/4,
+         count_client_outcome_unknown/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -483,6 +485,10 @@ declare(NodeId) ->
           [{name, quod_node_owner_terminal_total},
            {help, "Node-wide internal owner rows explicitly retired by live owners, using only fixed component, phase, and result labels."},
            {labels, [component, phase, result]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_client_outcome_unknown_total},
+           {help, "Client-visible uncertain write outcomes, split by the fixed target or gateway boundary that produced them. Operation, ontology, peer, and failure values are never labels."},
+           {labels, [producer]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
@@ -1150,6 +1156,23 @@ observe_node_owner_terminal(Component, Phase, Result, DurationMs)
 observe_node_owner_terminal(_Component, _Phase, _Result, _DurationMs) ->
     ok.
 
+-doc "Count one client-visible uncertain write result at its exact producing boundary.".
+-spec count_client_outcome_unknown(
+        target_execute | target_cursor |
+        gateway_execute_transport | gateway_cursor_transport) -> ok.
+count_client_outcome_unknown(Producer) ->
+    case {client_outcome_unknown_producer(Producer), whereis(?MODULE)} of
+        {{ok, ProducerLabel}, Pid} when is_pid(Pid) ->
+            try
+                _ = prometheus_counter:inc(
+                      quod_client_outcome_unknown_total, [ProducerLabel]),
+                ok
+            catch _:_ -> ok
+            end;
+        _ ->
+            ok
+    end.
+
 -doc """
 One frame discarded at the QUIC send gate (`m:quod_link` ignores backpressure by design;
 this makes the ignored return VISIBLE). The transport channel is reduced to the fixed
@@ -1548,6 +1571,16 @@ node_owner_component(foreign_history) -> {ok, <<"foreign_history">>};
 node_owner_component(client_goal_router) -> {ok, <<"client_goal_router">>};
 node_owner_component(scope_router) -> {ok, <<"scope_router">>};
 node_owner_component(_) -> error.
+
+client_outcome_unknown_producer(target_execute) ->
+    {ok, <<"target_execute">>};
+client_outcome_unknown_producer(target_cursor) ->
+    {ok, <<"target_cursor">>};
+client_outcome_unknown_producer(gateway_execute_transport) ->
+    {ok, <<"gateway_execute_transport">>};
+client_outcome_unknown_producer(gateway_cursor_transport) ->
+    {ok, <<"gateway_cursor_transport">>};
+client_outcome_unknown_producer(_) -> error.
 
 owner_phase('begin') -> {ok, <<"begin">>};
 owner_phase(prepare) -> {ok, <<"prepare">>};

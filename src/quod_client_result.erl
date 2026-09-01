@@ -14,6 +14,7 @@ where the proof ran.
 -include("quod_proof_limits.hrl").
 
 -export([normalize/2, normalize_error/1, encode/1, decode/1,
+         observe_outcome_unknown/3, report_outcome_unknown/3,
          http_normalized/2, http_error/1]).
 -export_type([result/0]).
 
@@ -54,6 +55,51 @@ normalize(Evidence, Raw) ->
 -spec normalize_error(term()) -> {error, public_error()}.
 normalize_error(Reason) ->
     {error, public_error(Reason)}.
+
+-doc "Report the raw outcome_unknown shape and ignore every other result.".
+-spec observe_outcome_unknown(atom(), atom(), term()) -> ok.
+observe_outcome_unknown(
+  Producer, Cause, {error, {outcome_unknown, Ref}}) ->
+    report_outcome_unknown(Producer, Cause, Ref);
+observe_outcome_unknown(_Producer, _Cause, _Result) ->
+    ok.
+
+-doc "Record one client-visible uncertain result without exposing identities as metric labels.".
+-spec report_outcome_unknown(atom(), atom(), term()) -> ok.
+report_outcome_unknown(Producer, Cause, Ref) ->
+    %% Reporting must never become a dependency of the result path it observes.
+    try
+        case outcome_ref_log_fields(Ref) of
+            {ok, Kind, Ns, Id} ->
+                ok = quod_metrics:count_client_outcome_unknown(Producer),
+                logger:warning(
+                  "quod: client-visible outcome_unknown producer=~p cause=~p kind=~p namespace=~p id=~ts",
+                  [Producer, Cause, Kind, Ns,
+                   binary:encode_hex(Id, lowercase)]),
+                ok;
+            error ->
+                ok
+        end
+    catch _:_ -> ok
+    end.
+
+outcome_ref_log_fields(
+  {transaction, Ns, <<_:256>>, <<_:256>> = TxId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, transaction, Ns, TxId};
+outcome_ref_log_fields(
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>> = GroupId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, group, Ns, GroupId};
+outcome_ref_log_fields(
+  {operation, Ns, <<_:256>>, AgentRef, <<_:256>> = OperationId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    case quod_agent_ref:valid_principal({agent, AgentRef}) of
+        true -> {ok, operation, Ns, OperationId};
+        false -> error
+    end;
+outcome_ref_log_fields(_Ref) ->
+    error.
 
 normalize_unbounded(Evidence, {ok, Bindings, Height})
   when is_list(Bindings), is_integer(Height), Height >= 0,

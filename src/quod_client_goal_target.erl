@@ -163,6 +163,7 @@ execute(#{request := #{mode := execute}} = Evidence, Goal, Principal,
     normalized(Evidence, quod_prolog:execute_signed(Evidence, Goal, Principal)).
 
 normalized(Evidence, {ok, Evidence, Raw}) ->
+    observe_target_outcome(Evidence, Raw),
     {ok, Evidence,
      {normalized, quod_client_result:normalize(Evidence, Raw)}};
 %% These replies cannot carry durable custody. Keep that fact visible to the
@@ -174,8 +175,22 @@ normalized(_Evidence, {error, Reason} = Error)
        Reason =:= operation_conflict ->
     Error;
 normalized(Evidence, Raw) ->
+    observe_target_outcome(Evidence, Raw),
     {ok, Evidence,
      {normalized, quod_client_result:normalize(Evidence, Raw)}}.
+
+observe_target_outcome(
+  #{request := #{mode := execute}},
+  Raw) ->
+    quod_client_result:observe_outcome_unknown(
+      target_execute, engine_result, Raw);
+observe_target_outcome(
+  #{request := #{mode := cursor}},
+  Raw) ->
+    quod_client_result:observe_outcome_unknown(
+      target_cursor, engine_result, Raw);
+observe_target_outcome(_Evidence, _Raw) ->
+    ok.
 
 network_identity() ->
     case quod_ontology:network_identity() of

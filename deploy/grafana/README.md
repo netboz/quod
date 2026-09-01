@@ -76,6 +76,7 @@ with them.
 | Transaction authentication | Signature check time · Invalid signatures | Ed25519 verification cost; whether corrupted or dishonest transaction input was rejected |
 | Prolog execution & memory | Active queries · KB memory & retained history | Query saturation; ETS growth; whether frozen queries are temporarily retaining old data |
 | Rejections & failures | Append rejections by reason · Failed writes | Overload/wrong or closed target slot/skip vs OCC conflicts and request timeouts |
+| Signed remote operations | Client-visible uncertain write outcomes | Which target or gateway boundary returned `pending`; the matching warning log carries its exact cause and stable reference. |
 | Dissemination feed | Feed activity · Dropped blocks | Gossip push/ingest/pull health; gap-drop bursts |
 | Brahms overlay | View/sample/links · estimated population N | Overlay connectivity plus each node's bounded estimate of total live population |
 | Runtime P tier | Runtime · Ontology subscriptions and certified follows | Whether local projections are healthy; counts of compiled `subscribes/2`, authorized `react_on/3`, source interests, per-runtime source-view states, and node-wide shared follower health. |

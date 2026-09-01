@@ -1272,6 +1272,12 @@ The review must answer these before implementation:
 - Admission exactly at the signed deadline replays identically; later custody
   is dropped before proposal, and uncertainty returns the operation reference
   rather than authorizing another proof.
+- Every client-visible `outcome_unknown` increments one fixed-producer metric
+  and emits one warning carrying its stable reference and exact local cause;
+  internal recovery uncertainty is not counted as a client result.
+- `operation_pending` from an explicit outcome-resolution request is status
+  for an already-known operation, not a fresh uncertainty, so it is not
+  counted by that metric.
 - Every remote and nested scope rejects changed request bytes, changed
   principal, changed authentication digest, or missing evidence.
 - Cursor Accept after multiple Next operations commits the selected result

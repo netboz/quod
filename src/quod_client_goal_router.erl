@@ -117,6 +117,8 @@ await_call(Ref, MRef, TimeoutMs) ->
             after 1000 -> {error, unavailable}
             end
     after TimeoutMs + 1000 ->
+        %% The worker normally wins inside this grace turn. A scheduler stall
+        %% beyond it may preserve both this boundary and its later exact cause.
         demonitor(MRef, [flush]),
         {error, unavailable}
     end.
@@ -348,7 +350,9 @@ outbound_link_worker(Router, From, Peer, Link, Request, Frame, TimeoutMs,
             outbound_responses(
               Router, From, CallerMRef, RouterMRef, Peer, Link, Request,
               Deadline, RouteKey, Meta);
-        {error, _} -> reply(From, uncertain_reply(Meta))
+        {error, _} ->
+            reply(From, transport_uncertain(
+                          Request, Meta, send_failed))
     end.
 
 bind_and_send(Router, Request, Peer, Link, Frame) ->
@@ -370,19 +374,24 @@ outbound_responses(Router, From, CallerMRef, RouterMRef, Peer, Link, Request,
                       Router, From, Peer, Link,
                       Request, Response, RouteKey, Meta);
                 {error, _} ->
-                    reply(From, uncertain_reply(Meta))
+                    reply(From, transport_uncertain(
+                                  Request, Meta, invalid_response))
             end;
         {'DOWN', CallerMRef, process, _Caller, _} -> ok;
         {'DOWN', RouterMRef, process, Router, _} ->
-            reply(From, uncertain_reply(Meta))
+            reply(From, transport_uncertain(
+                          Request, Meta, router_down))
     after remaining(Deadline) ->
-        reply(From, uncertain_reply(Meta))
+        reply(From, transport_uncertain(
+                      Request, Meta, response_timeout))
     end.
 
 outbound_response(Router, From, Peer, Link, Request, Response, RouteKey,
                   Meta) ->
     case quod_client_goal_endpoint:correlates(Request, Response) of
-        false -> reply(From, uncertain_reply(Meta));
+        false ->
+            reply(From, transport_uncertain(
+                          Request, Meta, response_mismatch));
         true ->
             case Response of
                 {refused, _, Reason} ->
@@ -400,28 +409,44 @@ outbound_response(Router, From, Peer, Link, Request, Response, RouteKey,
             end
     end.
 
-finish_result(Router, From, RouteKey, _Request, ResultBlob, Peer, Link,
+finish_result(Router, From, RouteKey, Request, ResultBlob, Peer, Link,
               #{expires_ms := ExpiresMs, evidence := Evidence}) ->
-    case quod_client_result:decode(ResultBlob) of
-        {ok, Result} ->
-            RouteReply = try gen_server:call(
-                      Router,
-                      {route_result, self(), RouteKey, Result, Peer, Link,
-                       ExpiresMs}, 5000)
-                catch exit:_ -> {error, unavailable}
-                end,
-            case RouteReply of
-                ok ->
-                    reply(From, {ok, Evidence, {normalized, Result}});
-                {error, _} -> reply(From, {error, {uncertain, Evidence}})
-            end;
+    %% decode_response/1 admitted this same immutable blob immediately above;
+    %% do not keep a second, unreachable invalid-result outcome path here.
+    {ok, Result} = quod_client_result:decode(ResultBlob),
+    RouteReply = try gen_server:call(
+                  Router,
+                  {route_result, self(), RouteKey, Result, Peer, Link,
+                   ExpiresMs}, 5000)
+        catch exit:_ -> {error, unavailable}
+        end,
+    case RouteReply of
+        ok ->
+            reply(From, {ok, Evidence, {normalized, Result}});
         {error, _} ->
-            reply(From, {error, {uncertain, Evidence}})
+            reply(From, transport_uncertain(
+                          Request,
+                          #{evidence => Evidence},
+                          route_state_lost))
     end.
 
 reply(From, Reply) -> gen_server:reply(From, Reply), ok.
 
-uncertain_reply(#{evidence := Evidence}) ->
+transport_uncertain(
+  {submit, _RequestId, _RequestBytes, _Signature, _CursorBinding, _Carrier},
+  #{evidence := #{request := #{mode := execute}} = Evidence}, Cause) ->
+    Ref = maps:get(operation_ref, Evidence),
+    ok = quod_client_result:report_outcome_unknown(
+           gateway_execute_transport, Cause, Ref),
+    {error, {uncertain, Evidence}};
+transport_uncertain(
+  {cursor, _RequestId, _CursorId, accept},
+  #{evidence := Evidence}, Cause) ->
+    Ref = maps:get(operation_ref, Evidence),
+    ok = quod_client_result:report_outcome_unknown(
+           gateway_cursor_transport, Cause, Ref),
+    {error, {uncertain, Evidence}};
+transport_uncertain(_Request, #{evidence := Evidence}, _Cause) ->
     {error, {uncertain, Evidence}}.
 
 remaining(Deadline) -> erlang:max(0, Deadline - quod_time:mono_ms()).
@@ -493,11 +518,16 @@ target_request(Peer, Link,
     send_result(Link, Request, Result).
 
 cursor_target_result({ok, Evidence, Raw}) ->
+    observe_cursor_target_outcome(Raw),
     quod_client_result:normalize(Evidence, Raw);
 cursor_target_result({error, not_found}) -> {error, cursor_not_found};
 cursor_target_result({error, not_ready}) -> {error, cursor_not_ready};
 cursor_target_result({error, busy}) -> {error, cursor_busy};
 cursor_target_result({error, _}) -> {error, proof_unavailable}.
+
+observe_cursor_target_outcome(Raw) ->
+    quod_client_result:observe_outcome_unknown(
+      target_cursor, cursor_coordinator, Raw).
 
 send_submit_target_result(Link, Request, Result) ->
     case submit_target_result(Request, Result) of

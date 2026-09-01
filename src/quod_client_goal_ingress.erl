@@ -232,7 +232,7 @@ forward_routes([Route | Rest], Evidence, RequestBytes, Signature, Owner,
         {error, {uncertain, Evidence}} ->
             uncertain_submit(Evidence);
         {error, unavailable} ->
-            uncertain_submit(Evidence);
+            uncertain_submit(Evidence, router_unavailable);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -250,10 +250,22 @@ test_forward_routes(Routes,
                    cursor_binding(Mode), [], ExpiresMs, Submit).
 -endif.
 
-uncertain_submit(#{request := #{mode := execute}} = Evidence) ->
-    {ok, Evidence, {normalized, {pending, maps:get(operation_ref, Evidence)}}};
-uncertain_submit(_Evidence) ->
+uncertain_submit(Evidence) ->
+    uncertain_submit(Evidence, reported).
+
+uncertain_submit(
+  #{request := #{mode := execute}} = Evidence, Cause) ->
+    Ref = maps:get(operation_ref, Evidence),
+    ok = report_gateway_uncertainty(Cause, Ref),
+    {ok, Evidence, {normalized, {pending, Ref}}};
+uncertain_submit(_Evidence, _Cause) ->
     {error, signed_target_unavailable}.
+
+report_gateway_uncertainty(reported, _Ref) ->
+    ok;
+report_gateway_uncertainty(Cause, Ref) ->
+    quod_client_result:report_outcome_unknown(
+      gateway_execute_transport, Cause, Ref).
 
 request_timeout(ExpiresMs) ->
     Remaining = erlang:max(1, ExpiresMs - quod_time:now_ms()),
@@ -262,6 +274,7 @@ request_timeout(ExpiresMs) ->
 cursor_owner_command(Owner, CursorId, Command) ->
     case quod_client_cursor:command(Owner, CursorId, Command) of
         {ok, Evidence, Raw} ->
+            observe_cursor_outcome(Raw),
             {ok, Evidence,
              {normalized, quod_client_result:normalize(Evidence, Raw)}};
         {error, not_found} ->
@@ -272,6 +285,10 @@ cursor_owner_command(Owner, CursorId, Command) ->
             {error, cursor_busy};
         {error, _} = Error -> Error
     end.
+
+observe_cursor_outcome(Raw) ->
+    quod_client_result:observe_outcome_unknown(
+      target_cursor, cursor_coordinator, Raw).
 
 forwarded_cursor_command(Owner, CursorId, Command) ->
     case quod_client_goal_router:cursor(

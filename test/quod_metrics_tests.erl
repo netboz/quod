@@ -34,8 +34,68 @@ renders_without_non_ascii_help_test() ->
        nomatch,
        binary:match(
          Bin, <<"# HELP quod_feed_recipients ">>)),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_client_outcome_unknown_total ">>)),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
+
+client_outcome_unknown_uses_only_fixed_producer_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    ok = quod_metrics:count_client_outcome_unknown(target_execute),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        Producers =
+            [target_execute, target_cursor,
+             gateway_execute_transport, gateway_cursor_transport],
+        lists:foreach(
+          fun(Producer) ->
+                  Label = atom_to_binary(Producer, utf8),
+                  Before = counter_value_or_zero(
+                             quod_client_outcome_unknown_total, [Label]),
+                  ok = quod_metrics:count_client_outcome_unknown(Producer),
+                  ?assertEqual(
+                     Before + 1,
+                     prometheus_counter:value(
+                      quod_client_outcome_unknown_total, [Label]))
+          end, Producers),
+        TxRef = {transaction, <<"quod:metrics">>, <<1:256>>, <<2:256>>},
+        TargetBefore = counter_value_or_zero(
+                         quod_client_outcome_unknown_total,
+                         [<<"target_execute">>]),
+        ok = quod_client_result:observe_outcome_unknown(
+               target_execute, test_producer,
+               {error, {outcome_unknown, TxRef}}),
+        ok = quod_client_result:observe_outcome_unknown(
+               target_execute, test_producer, {error, conflict_retry}),
+        ok = quod_client_result:observe_outcome_unknown(
+               target_execute, test_producer,
+               {error, {outcome_unknown, malformed}}),
+        ?assertEqual(
+           TargetBefore + 1,
+           prometheus_counter:value(
+             quod_client_outcome_unknown_total,
+             [<<"target_execute">>])),
+        ok = quod_metrics:count_client_outcome_unknown(
+               attacker_controlled_producer),
+        ?assertEqual(
+           undefined,
+           prometheus_counter:value(
+             quod_client_outcome_unknown_total,
+             [<<"attacker_controlled_producer">>]))
+    after
+        true = unregister(quod_metrics),
+        Placeholder ! stop
+    end.
+
+counter_value_or_zero(Name, Labels) ->
+    case prometheus_counter:value(Name, Labels) of
+        undefined -> 0;
+        Value -> Value
+    end.
 
 %% Commit latency is a SUBMITTER-side, single-clock observation (quod_prolog calls this
 %% when a parked write resolves as applied). Absent metrics process => silent no-op

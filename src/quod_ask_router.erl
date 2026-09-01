@@ -12,7 +12,10 @@ The same owner record retains the first fatal poison until a synchronous final
 fence atomically checks link liveness and detaches that proof's remote scopes.
 
 This is the only remote-scope protocol. Invalid non-scope frames are rejected
-by the fixed `quod_scope_wire` decoder.
+by the fixed `quod_scope_wire` decoder.  Identity collection likewise has one
+owner: established attester links are monitored, and either their reply or
+their death wakes that collector.  Its deadline is only the final safeguard
+for a peer or connection that produces neither signal.
 """.
 
 -behaviour(gen_server).
@@ -29,7 +32,8 @@ by the fixed `quod_scope_wire` decoder.
 -ifdef(TEST).
 -export([identify/4, ensure_scope/5, unregister/1,
          test_start_link/2, test_start_link/3, test_stats/1,
-         test_identity_collection_progress/3]).
+         test_identity_collection_progress/3,
+         test_collect_identity_loop/5]).
 -endif.
 
 -define(KEY, {ask_router, node}).
@@ -103,9 +107,25 @@ by the fixed `quod_scope_wire` decoder.
 -record(inbound_identity, {
     link :: pid(),
     request_id :: <<_:128>>,
+    request_binding :: {<<_:256>>, <<_:256>>},
     timer :: reference(),
     token :: reference(),
     started_at :: integer()
+}).
+
+-record(identity_collection, {
+    ref :: reference(),
+    request_id :: <<_:128>>,
+    statement :: quod_agent_identity:statement(),
+    statement_bytes :: binary(),
+    committee :: [<<_:256>>],
+    routes :: [{<<_:256>>, [term()]}],
+    frame :: binary(),
+    deadline :: integer(),
+    opens = #{} :: #{reference() => {<<_:256>>, [term()]}},
+    links = #{} :: #{reference() => {<<_:256>>, pid(), [term()]}},
+    waiting = #{} :: #{<<_:256>> => true},
+    signatures = #{} :: #{<<_:256>> => <<_:512>>}
 }).
 
 -record(s, {
@@ -650,33 +670,54 @@ handle_identity_request(PeerIdentity, Link, Payload,
     case {PeerKey, quod_agent_identity:decode_request(Payload)} of
         {<<_:256>>, {ok, Request =
                            {agent_identity_request, RequestId,
-                            _ProofId, RequestBytes, Signature, _NotAfter}}} ->
+                            ProofId, RequestBytes, Signature, _NotAfter}}} ->
             Key = {PeerKey, RequestId},
-            case {maps:is_key(Key, Inbound),
-                  quod_client_goal:verify(RequestBytes, Signature)} of
-                {false, {ok, #{request := #{agent_namespace := Ns}}}} ->
-                    case quod_reg:where({quod_prolog, Ns}) of
-                        Pid when is_pid(Pid) ->
-                            Token = make_ref(),
-                            Timer = erlang:send_after(
-                                      ?QUOD_SCOPE_COMMAND_TIMEOUT_MS,
-                                      self(),
-                                      {inbound_agent_identity_timeout,
-                                       Key, Token}),
-                            quod_prolog:request_agent_attestation(
-                              Ns, Request, self(),
-                              {inbound_agent_identity, Key}),
-                            track_owner_peaks(
-                              S#s{identity_inbound = Inbound#{
-                                    Key => #inbound_identity{
-                                      link = Link,
-                                      request_id = RequestId,
-                                      timer = Timer,
-                                      token = Token,
-                                      started_at = quod_time:mono_ms()}}});
-                        undefined -> S
+            case quod_client_goal:verify(RequestBytes, Signature) of
+                {ok, #{request := #{agent_namespace := Ns},
+                       request_digest := RequestDigest}} ->
+                    Binding = {ProofId, RequestDigest},
+                    case maps:get(Key, Inbound, undefined) of
+                        undefined ->
+                            case quod_reg:where({quod_prolog, Ns}) of
+                                Pid when is_pid(Pid) ->
+                                    Token = make_ref(),
+                                    Timer = erlang:send_after(
+                                              ?QUOD_SCOPE_COMMAND_TIMEOUT_MS,
+                                              self(),
+                                              {inbound_agent_identity_timeout,
+                                               Key, Token}),
+                                    quod_prolog:request_agent_attestation(
+                                      Ns, Request, self(),
+                                      {inbound_agent_identity, Key}),
+                                    track_owner_peaks(
+                                      S#s{identity_inbound = Inbound#{
+                                            Key => #inbound_identity{
+                                              link = Link,
+                                              request_id = RequestId,
+                                              request_binding = Binding,
+                                              timer = Timer,
+                                              token = Token,
+                                              started_at =
+                                                  quod_time:mono_ms()}}});
+                                undefined ->
+                                    send_identity_refusal(Link, RequestId),
+                                    S
+                            end;
+                        Existing = #inbound_identity{
+                                     request_binding = Binding} ->
+                            %% The first route may have carried the request and
+                            %% died before its response.  Keep the one
+                            %% attestation and move its terminal reply to the
+                            %% authenticated replacement link.
+                            S#s{identity_inbound = Inbound#{
+                                  Key => Existing#inbound_identity{link = Link}}};
+                        #inbound_identity{} ->
+                            send_identity_refusal(Link, RequestId),
+                            S
                     end;
-                _ -> S
+                _InvalidSignedRequest ->
+                    send_identity_refusal(Link, RequestId),
+                    S
             end;
         _ -> S
     end.
@@ -702,7 +743,7 @@ finish_inbound_identity(Key, Result,
                         {ok, Frame} -> quod_link:send_ordered(Link, Frame);
                         {error, _} -> ok
                     end;
-                _ -> ok
+                _ -> send_identity_refusal(Link, RequestId)
             end,
             observe_scope_router_terminal(
               identity, identity_result(Result), StartedAt),
@@ -713,10 +754,20 @@ finish_inbound_identity(Key, Result,
 expire_inbound_identity(Key, Token,
                              S = #s{identity_inbound = Inbound}) ->
     case maps:get(Key, Inbound, undefined) of
-        #inbound_identity{token = Token, started_at = StartedAt} ->
+        #inbound_identity{token = Token, link = Link,
+                          request_id = RequestId,
+                          started_at = StartedAt} ->
+            send_identity_refusal(Link, RequestId),
             observe_scope_router_terminal(identity, timeout, StartedAt),
             S#s{identity_inbound = maps:remove(Key, Inbound)};
         _ -> S
+    end.
+
+send_identity_refusal(Link, <<_:128>> = RequestId) when is_pid(Link) ->
+    case quod_agent_identity:encode_response(
+           {agent_identity_refusal, RequestId}) of
+        {ok, Frame} -> quod_link:send_ordered(Link, Frame);
+        {error, _} -> ok
     end.
 
 collect_agent_identity(
@@ -756,8 +807,11 @@ collect_agent_identity(
         Waiting = RemoteWaiting#{Self => true},
         Deadline = quod_time:mono_ms() + RemainingMs,
         collect_agent_identity_loop(
-          Ref, RequestId, Statement, StatementBytes, Committee,
-          Routes, Frame, Deadline, Opens, Waiting, #{})
+          #identity_collection{
+             ref = Ref, request_id = RequestId,
+             statement = Statement, statement_bytes = StatementBytes,
+             committee = Committee, routes = Routes, frame = Frame,
+             deadline = Deadline, opens = Opens, waiting = Waiting})
     after
         _ = try quod_reg:unsubscribe({channel, ?AGENT_IDENTITY_CHANNEL})
             catch _:_ -> ok
@@ -782,8 +836,12 @@ open_identity_candidate(_Peer, [], Opens) ->
     {Opens, #{}}.
 
 collect_agent_identity_loop(
-  Ref, RequestId, Statement, StatementBytes, Committee, Routes,
-  Frame, Deadline, Opens, Waiting, Signatures) ->
+  Collection = #identity_collection{
+                  ref = Ref, request_id = RequestId,
+                  statement = Statement, statement_bytes = StatementBytes,
+                  committee = Committee, routes = Routes,
+                  deadline = Deadline, opens = Opens,
+                  waiting = Waiting, signatures = Signatures}) ->
     case identity_collection_progress(
            length(Committee), map_size(Waiting), map_size(Signatures)) of
         complete ->
@@ -808,65 +866,113 @@ collect_agent_identity_loop(
                          {agent_identity_collection, Ref, Signer},
                          {ok, Signer, Statement, Signature}} ->
                             collect_agent_identity_loop(
-                              Ref, RequestId, Statement, StatementBytes,
-                              Committee, Routes, Frame, Deadline, Opens,
-                              maps:remove(Signer, Waiting),
-                              add_identity_signature(
-                                Signer, Signature, StatementBytes,
-                                Committee, Signatures));
+                              identity_collection_answered(
+                                Signer,
+                                Collection#identity_collection{
+                                  signatures = add_identity_signature(
+                                                 Signer, Signature,
+                                                 StatementBytes, Committee,
+                                                 Signatures)}));
                         {quod_agent_attestation,
                          {agent_identity_collection, Ref, Signer}, _Error} ->
                             collect_agent_identity_loop(
-                              Ref, RequestId, Statement, StatementBytes,
-                              Committee, Routes, Frame, Deadline, Opens,
-                              maps:remove(Signer, Waiting), Signatures);
+                              identity_collection_answered(
+                                Signer, Collection));
                         {link_up, OpenRef, Peer, ?AGENT_IDENTITY_CHANNEL, Link}
                           when is_pid(Link) ->
-                            case maps:take(OpenRef, Opens) of
-                                {{Peer, _Rest}, Opens1} ->
-                                    quod_link:send_ordered(Link, Frame),
-                                    collect_agent_identity_loop(
-                                      Ref, RequestId, Statement,
-                                      StatementBytes, Committee, Routes,
-                                      Frame, Deadline, Opens1, Waiting,
-                                      Signatures);
-                                _ ->
-                                    collect_agent_identity_loop(
-                                      Ref, RequestId, Statement,
-                                      StatementBytes, Committee, Routes,
-                                      Frame, Deadline, Opens, Waiting,
-                                      Signatures)
-                            end;
+                            collect_agent_identity_loop(
+                              identity_collection_link_up(
+                                OpenRef, Peer, Link, Collection));
                         {link_error, OpenRef, Peer, ?AGENT_IDENTITY_CHANNEL} ->
                             {Opens1, Waiting1} =
                                 retry_identity_route(
                                   OpenRef, Peer, Opens, Waiting),
                             collect_agent_identity_loop(
-                              Ref, RequestId, Statement, StatementBytes,
-                              Committee, Routes, Frame, Deadline, Opens1,
-                              Waiting1, Signatures);
+                              Collection#identity_collection{
+                                opens = Opens1, waiting = Waiting1});
+                        {'DOWN', MRef, process, Link, _Reason}
+                          when is_reference(MRef), is_pid(Link) ->
+                            collect_agent_identity_loop(
+                              identity_collection_link_down(
+                                MRef, Link, Collection));
                         {quod_message, {PeerIdentity, _Link},
                          ?AGENT_IDENTITY_CHANNEL, Payload} ->
                             Peer = quod_link:peer_key(PeerIdentity),
-                            {Waiting1, Signatures1} =
-                                case accept_identity_response(
-                                       Peer, Payload, RequestId, Statement,
-                                       StatementBytes, Committee,
-                                       Signatures) of
-                                    {answered, Accepted} ->
-                                        {maps:remove(Peer, Waiting), Accepted};
-                                    ignore ->
-                                        {Waiting, Signatures}
-                                end,
-                            collect_agent_identity_loop(
-                              Ref, RequestId, Statement, StatementBytes,
-                              Committee, Routes, Frame, Deadline, Opens,
-                              Waiting1, Signatures1)
+                            case accept_identity_response(
+                                   Peer, Payload, RequestId, Statement,
+                                   StatementBytes, Committee, Signatures) of
+                                {answered, Accepted} ->
+                                    collect_agent_identity_loop(
+                                      identity_collection_answered(
+                                        Peer,
+                                        Collection#identity_collection{
+                                          signatures = Accepted}));
+                                ignore ->
+                                    collect_agent_identity_loop(Collection)
+                            end
                     after Remaining ->
                         {error, unavailable}
                     end
             end
     end.
+
+identity_collection_link_up(
+  OpenRef, Peer, Link,
+  Collection = #identity_collection{
+                  frame = Frame, opens = Opens, links = Links,
+                  waiting = Waiting}) ->
+    case maps:take(OpenRef, Opens) of
+        {{Peer, Rest}, Opens1} when is_map_key(Peer, Waiting) ->
+            MRef = erlang:monitor(process, Link),
+            quod_link:send_ordered(Link, Frame),
+            Collection#identity_collection{
+              opens = Opens1,
+              links = Links#{MRef => {Peer, Link, Rest}}};
+        {{_CrossedPeer, _Rest}, Opens1} ->
+            Collection#identity_collection{opens = Opens1};
+        error ->
+            Collection
+    end.
+
+identity_collection_link_down(
+  MRef, Link,
+  Collection = #identity_collection{
+                  opens = Opens, links = Links, waiting = Waiting}) ->
+    case maps:take(MRef, Links) of
+        {{Peer, Link, Rest}, Links1} ->
+            case maps:is_key(Peer, Waiting) of
+                true ->
+                    {Opens1, RouteWaiting} =
+                        open_identity_candidate(Peer, Rest, Opens),
+                    Waiting1 = case maps:is_key(Peer, RouteWaiting) of
+                                   true -> Waiting;
+                                   false -> maps:remove(Peer, Waiting)
+                               end,
+                    Collection#identity_collection{
+                      opens = Opens1, links = Links1,
+                      waiting = Waiting1};
+                false ->
+                    Collection#identity_collection{links = Links1}
+            end;
+        _UnrelatedOrStale ->
+            Collection
+    end.
+
+identity_collection_answered(
+  Peer,
+  Collection = #identity_collection{links = Links, waiting = Waiting}) ->
+    Collection#identity_collection{
+      links = drop_identity_peer_links(Peer, Links),
+      waiting = maps:remove(Peer, Waiting)}.
+
+drop_identity_peer_links(Peer, Links) ->
+    maps:fold(
+      fun(MRef, {Peer0, _Link, _Rest}, Acc) when Peer0 =:= Peer ->
+              demonitor(MRef, [flush]),
+              maps:remove(MRef, Acc);
+         (_MRef, _Other, Acc) ->
+              Acc
+      end, Links, Links).
 
 identity_collection_progress(CommitteeSize, WaitingCount, SignatureCount) ->
     Threshold = quod_quorum:threshold(CommitteeSize),
@@ -881,6 +987,28 @@ test_identity_collection_progress(
   CommitteeSize, WaitingCount, SignatureCount) ->
     identity_collection_progress(
       CommitteeSize, WaitingCount, SignatureCount).
+
+test_collect_identity_loop(
+  OpenRef, <<_:256>> = Peer, Committee, Signatures, DeadlineMs)
+  when (is_reference(OpenRef) orelse OpenRef =:= none),
+       is_list(Committee), is_map(Signatures),
+       is_integer(DeadlineMs), DeadlineMs > 0 ->
+    Opens = case OpenRef of
+                none -> #{};
+                _ -> #{OpenRef => {Peer, []}}
+            end,
+    collect_agent_identity_loop(
+      #identity_collection{
+         ref = make_ref(), request_id = <<1:128>>,
+         statement =
+             {agent_identity_v1, <<0:256>>,
+              {<<"quod:test-agent">>, <<0:256>>}, <<0:256>>, <<0:256>>,
+              <<>>, <<0:256>>, <<4:256>>, 1, active},
+         statement_bytes = <<"test-statement">>,
+         committee = Committee, routes = [], frame = <<"test-frame">>,
+         deadline = quod_time:mono_ms() + DeadlineMs,
+         opens = Opens, waiting = #{Peer => true},
+         signatures = Signatures}).
 -endif.
 
 retry_identity_route(OpenRef, Peer, Opens, Waiting) ->
@@ -905,6 +1033,16 @@ accept_identity_response(
             {answered,
              add_identity_signature(
                Peer, Signature, StatementBytes, Committee, Signatures)};
+        {ok, {agent_identity_refusal, RequestId}} ->
+            {answered, Signatures};
+        %% A decoded response correlated to this request is terminal for its
+        %% authenticated peer even when its statement fields are stale or its
+        %% signature is unusable.  It cannot later become a vote for the exact
+        %% immutable request, so keeping that peer outstanding only parks the
+        %% collector until the outer proof deadline.
+        {ok, {agent_identity_response, RequestId, _Signer,
+              _CommitteeId, _NotAfter, _Signature}} ->
+            {answered, Signatures};
         _ -> ignore
     end;
 accept_identity_response(

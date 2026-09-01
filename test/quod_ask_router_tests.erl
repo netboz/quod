@@ -27,6 +27,165 @@ identity_collection_stops_as_soon_as_quorum_is_decided_test() ->
        complete,
        quod_ask_router:test_identity_collection_progress(9, 2, 7)).
 
+identity_collection_link_loss_decides_without_proof_deadline_test() ->
+    Parent = self(),
+    Peer = key(1),
+    OpenRef = make_ref(),
+    Collector = spawn(
+                  fun() ->
+                      Parent !
+                          {identity_collection_result,
+                           quod_ask_router:test_collect_identity_loop(
+                             OpenRef, Peer, identity_committee(),
+                             two_identity_signatures(), 3000)}
+                  end),
+    Link = spawn(
+             fun() ->
+                 receive
+                     {send_ordered, <<"test-frame">>} ->
+                         Parent ! {identity_frame_sent, self()},
+                         receive stop -> ok end
+                 end
+             end),
+    Collector ! {link_up, OpenRef, Peer,
+                 quod_agent_identity:channel(), Link},
+    receive {identity_frame_sent, Link} -> ok
+    after ?TIMEOUT -> error(identity_frame_not_sent)
+    end,
+    exit(Link, kill),
+    receive
+        {identity_collection_result, Result} ->
+            ?assertEqual({error, unavailable}, Result)
+    after 500 ->
+        exit(Collector, kill),
+        error(identity_link_loss_waited_for_proof_deadline)
+    end.
+
+identity_collection_correlated_refusal_decides_immediately_test() ->
+    assert_identity_response_decides(
+      {agent_identity_refusal, <<1:128>>}).
+
+identity_collection_correlated_stale_response_is_terminal_test() ->
+    assert_identity_response_decides(
+      {agent_identity_response, <<1:128>>, key(1), key(99), 0, <<0:512>>}).
+
+assert_identity_response_decides(Response) ->
+    Parent = self(),
+    Peer = key(1),
+    Collector = spawn(
+                  fun() ->
+                      Parent !
+                          {identity_collection_result,
+                           quod_ask_router:test_collect_identity_loop(
+                             none, Peer, identity_committee(),
+                             two_identity_signatures(), 3000)}
+                  end),
+    {ok, Payload} = quod_agent_identity:encode_response(Response),
+    Collector ! {quod_message, {Peer, self()},
+                 quod_agent_identity:channel(), Payload},
+    receive
+        {identity_collection_result, Result} ->
+            ?assertEqual({error, unavailable}, Result)
+    after 500 ->
+        exit(Collector, kill),
+        error(identity_response_waited_for_proof_deadline)
+    end.
+
+identity_committee() -> [key(N) || N <- lists:seq(1, 4)].
+
+two_identity_signatures() ->
+    #{key(2) => <<2:512>>, key(3) => <<3:512>>}.
+
+inbound_identity_request_without_host_returns_correlated_refusal_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    with_router(
+      fun(Router, TestPid, _OriginKey, Peer) ->
+          Fixture = quod_ct:signed_goal_fixture(#{}),
+          RequestId = <<7:128>>,
+          Request =
+              {agent_identity_request, RequestId, proof_id(7),
+               maps:get(request_bytes, Fixture),
+               maps:get(signature, Fixture), maps:get(deadline, Fixture)},
+          {ok, Payload} = quod_agent_identity:encode_request(Request),
+          Link = fake_link(TestPid, identity_refusal),
+          Router ! {quod_message, {Peer, Link},
+                    quod_agent_identity:channel(), Payload},
+          receive
+              {link_frame, identity_refusal, ResponsePayload} ->
+                  ?assertEqual(
+                     {ok, {agent_identity_refusal, RequestId}},
+                     quod_agent_identity:decode_response(ResponsePayload))
+          after ?TIMEOUT ->
+              error(missing_identity_refusal)
+          end,
+          stop_link(Link)
+      end).
+
+inbound_identity_duplicate_moves_reply_to_replacement_link_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    with_router(
+      fun(Router, TestPid, _OriginKey, Peer) ->
+          Ns = <<"quod:identity-replacement-test">>,
+          Fixture = quod_ct:signed_goal_fixture(
+                      #{target => {Ns, <<201:256>>}}),
+          RequestId = <<8:128>>,
+          Request =
+              {agent_identity_request, RequestId, proof_id(8),
+               maps:get(request_bytes, Fixture),
+               maps:get(signature, Fixture), maps:get(deadline, Fixture)},
+          {ok, Payload} = quod_agent_identity:encode_request(Request),
+          Attester = fake_identity_attester(TestPid, Ns),
+          receive {identity_attester_ready, Attester} -> ok
+          after ?TIMEOUT -> error(identity_attester_not_registered)
+          end,
+          Link1 = fake_link(TestPid, identity_original),
+          Link2 = fake_link(TestPid, identity_replacement),
+          Router ! {quod_message, {Peer, Link1},
+                    quod_agent_identity:channel(), Payload},
+          {Attester, Router, Tag} = receive
+              {identity_attestation_requested, Attester, Router, Tag0} ->
+                  {Attester, Router, Tag0}
+          after ?TIMEOUT -> error(identity_attestation_not_requested)
+          end,
+          Router ! {quod_message, {Peer, Link2},
+                    quod_agent_identity:channel(), Payload},
+          _ = quod_ask_router:test_stats(Router),
+          Attester ! {finish_identity_attestation, Router, Tag,
+                      {error, unavailable}},
+          receive
+              {link_frame, identity_replacement, ResponsePayload} ->
+                  ?assertEqual(
+                     {ok, {agent_identity_refusal, RequestId}},
+                     quod_agent_identity:decode_response(ResponsePayload))
+          after ?TIMEOUT ->
+              error(identity_replacement_link_not_used)
+          end,
+          receive
+              {link_frame, identity_original, _} ->
+                  error(identity_reply_used_dead_route)
+          after 25 -> ok
+          end,
+          stop_link(Link1),
+          stop_link(Link2),
+          exit(Attester, kill)
+      end).
+
+fake_identity_attester(TestPid, Ns) ->
+    spawn(
+      fun() ->
+          true = gproc:reg({n, l, {quod_prolog, Ns}}),
+          TestPid ! {identity_attester_ready, self()},
+          receive
+              {'$gen_cast', {agent_attestation, _Request, ReplyTo, Tag}} ->
+                  TestPid ! {identity_attestation_requested,
+                             self(), ReplyTo, Tag},
+                  receive
+                      {finish_identity_attestation, ReplyTo, Tag, Result} ->
+                          ReplyTo ! {quod_agent_attestation, Tag, Result}
+                  end
+          end
+      end).
+
 pending_precedes_send_and_scope_is_reused_test() ->
     with_router(
       fun(Router, TestPid, OriginKey, TargetKey) ->

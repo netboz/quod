@@ -5,6 +5,11 @@ Canonical proof-scoped agent-identity statement and quorum certificate.
 The statement is constructed from a verified signed goal and a certified
 current committee view.  Callers can request this one statement; they cannot
 ask a validator to sign arbitrary bytes.
+
+The runtime exchange has one terminal response grammar: a signed attestation
+or a request-correlated refusal.  Wire V2 introduced the refusal so an
+available peer that cannot attest wakes the collector instead of leaving it
+parked until the proof deadline.
 """.
 
 -include("quod_client_goal_limits.hrl").
@@ -19,7 +24,7 @@ ask a validator to sign arbitrary bytes.
 
 -define(STATEMENT_DOMAIN, <<"quod.agent.identity.v1", 0>>).
 -define(WIRE_DOMAIN, <<"quod.agent.identity.wire", 0>>).
--define(WIRE_VERSION, 1).
+-define(WIRE_VERSION, 2).
 -define(CHANNEL, <<"quod.agent.identity">>).
 -define(MAX_WIRE_BYTES, (?QUOD_CLIENT_GOAL_REQUEST_BYTES + 32768)).
 
@@ -158,6 +163,9 @@ encode_response(
   {agent_identity_response, <<_:128>>, <<_:256>>, <<_:256>>,
    NotAfter, <<_:512>>} = Response)
   when is_integer(NotAfter), NotAfter >= 0 ->
+    encode_wire(response, Response);
+encode_response(
+  {agent_identity_refusal, <<_:128>>} = Response) ->
     encode_wire(response, Response);
 encode_response(_Response) -> {error, invalid_request}.
 

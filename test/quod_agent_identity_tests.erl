@@ -79,9 +79,22 @@ request_and_response_wire_are_closed_and_correlated_test() ->
     {ok, ResponseBytes} = quod_agent_identity:encode_response(Response),
     ?assertEqual({ok, Response},
                  quod_agent_identity:decode_response(ResponseBytes)),
+    Refusal = {agent_identity_refusal, RequestId},
+    {ok, RefusalBytes} = quod_agent_identity:encode_response(Refusal),
+    ?assertEqual({ok, Refusal},
+                 quod_agent_identity:decode_response(RefusalBytes)),
     ?assertEqual(
        {error, invalid_request},
-       quod_agent_identity:decode_request(ResponseBytes)).
+       quod_agent_identity:decode_request(ResponseBytes)),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_agent_identity:decode_request(RefusalBytes)),
+    OldWire = term_to_binary(
+                {<<"quod.agent.identity.wire", 0>>, 1,
+                 response, Refusal}, [deterministic]),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_agent_identity:decode_response(OldWire)).
 
 fixture(N) ->
     Now = quod_time:now_ms(),

@@ -166,6 +166,16 @@ unavailable origin history returns retryable `signed_scope_unavailable`. A bad
 signature, binding, principal, request digest, or malformed certificate fails
 closed.
 
+The attestation exchange is terminal per contacted validator. A validator
+returns either its signed attestation or a refusal correlated to the exact
+request. An established QUIC link is monitored by the same proof-owned
+collector; a reply or link death wakes it immediately. The proof deadline is
+only the final safeguard when neither signal arrives. Identity wire V2 adds
+the refusal and deliberately has no old-format decoder. If the same bound
+request reaches a validator again over a replacement route while its one
+attestation is still running, the terminal reply moves to that new link; the
+attestation is not duplicated.
+
 For remote reads, a certificate issued just before a key rotation may remain
 usable only until its short proof-bounded expiry. For writes, A's current
 parent validation of the active key occurs before durable Begin/transaction
@@ -262,6 +272,7 @@ The deployed tree uses one incompatible generation:
 | scope authorization domain | V5 |
 | direct effect descriptor | V2 |
 | identity certificate | `quod.agent.identity.v1` |
+| identity attestation wire | V2 |
 
 The client-goal endpoint and DTX endpoint still carry their opaque payloads in
 their existing outer versions. Directory records, foreign-cache entries,
@@ -297,6 +308,7 @@ only when explicitly labelled historical.
 | A ACL has no rule for direct `B::Goal` | irrelevant; B alone authorizes B's predicate |
 | B ACL refuses | ordinary target `can_invoke/4` refusal |
 | identity quorum or current view unavailable | retryable signed-scope unavailability |
+| contacted identity validator refuses or its link dies | that validator becomes unavailable immediately; no progress polling |
 | certificate malformed, wrongly bound, or signed by insufficient members | fail closed before target execution |
 | key changes before A's durable acceptance | current-parent validation refuses |
 | key changes after durable acceptance | existing recovery continues to one outcome |

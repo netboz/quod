@@ -229,11 +229,12 @@ namespace manager's mailbox. Durable desired state belongs to committed root
 and node-actor facts; the manager is their sole local projection owner, and
 one serialized mutation lane changes namespace supervisors: direct local
 lifecycle calls and catalogue reconciliation use the same worker lane instead
-of racing or blocking the manager. Unavailable rows retry with exponential
-backoff; exact already-materialized identities are reused without rescanning
-their ledgers. Identical root facts deduplicate. A malformed fact is logged and
-skipped, while conflicting anchors park only that namespace and retain its last
-exact materialized identity until root resolves the conflict.
+of racing or blocking the manager. Missing identities park on their exact
+directory-route property; namespace replay and supervisor registration wake
+only the affected reconciliation. Exact already-materialized identities are
+reused without rescanning their ledgers. Identical root facts deduplicate. A
+malformed fact is logged and skipped, while conflicting anchors are visibly
+blocked until a root-catalogue or newer node-policy revision changes the facts.
 
 ## 3. Prolog is the authority; Erlang is the bridge
 

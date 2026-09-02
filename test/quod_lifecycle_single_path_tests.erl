@@ -45,8 +45,14 @@ lifecycle_single_path_test_() ->
           ?_test(aborted_hosting_fact_changes_nothing(Fixture)),
           ?_test(retracted_hosting_fact_removes_restart_intent(Fixture)),
           {timeout, 30,
+           ?_test(parked_hosting_starts_on_exact_directory_route(Fixture))},
+          {timeout, 30,
            ?_test(dynamic_hosting_survives_content_tree_restart(Fixture))},
-          ?_test(obsolete_desired_file_has_no_authority(Fixture))]
+          {timeout, 30,
+           ?_test(wrong_anchor_child_stops_then_exact_material_restarts(Fixture))},
+          ?_test(obsolete_desired_file_has_no_authority(Fixture)),
+          ?_test(parked_hosting_is_exact_event_driven_and_unsubscribes(Fixture)),
+          ?_test(catalogue_worker_failures_are_terminal_owner_failures(Fixture))]
      end}.
 
 effect_capacity_is_committed_root_policy(_Fixture) ->
@@ -1040,6 +1046,116 @@ retracted_hosting_fact_removes_restart_intent(
     ok = wait_desired_absent(Ns, 300),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
 
+parked_hosting_starts_on_exact_directory_route(
+  #{dir := Dir, actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"route-arrival">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    NodeKey = crypto:strong_rand_bytes(32),
+    Identity = {Ns, Anchor},
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+    ok = wait_route_wait(Identity, present, 300),
+    ?assertEqual(undefined, quod_reg:where({directory, node})),
+    {ok, Directory} = quod_directory:start_link(
+                        #{allowlist => #{Ns => [NodeKey]},
+                          identity_dir => Dir,
+                          expire_tick_ms => 60000, ttl_ms => 10000}),
+    unlink(Directory),
+    try
+        %% Installation publishes only the exact identity. The manager rereads
+        %% the directory, prepares the ordinary pinned join and starts it.
+        {ok, _} = quod_directory:install_record(
+                    NodeKey, {<<"route-host">>, 15432},
+                    [{Ns, Anchor, validator}], 1, 1),
+        ok = wait_namespace_started(Ns, 300),
+        ok = wait_route_wait(Identity, absent, 300),
+        ?assertEqual(Anchor, maps:get(genesis_hash, desired_content(Ns)))
+    after
+        ?assertMatch({ok, [_], _},
+                     quod_prolog:execute(ActorNs, {retract, Host})),
+        ok = wait_desired_absent(Ns, 300),
+        stop_process(Directory)
+    end.
+
+parked_hosting_is_exact_event_driven_and_unsubscribes(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"parked-host">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    Other = crypto:strong_rand_bytes(32),
+    Identity = {Ns, Anchor},
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+    ok = wait_route_wait(Identity, present, 300),
+    Manager = quod_reg:where({namespace_manager, node}),
+    ?assert(lists:member(
+              Manager,
+              gproc:lookup_pids(
+                {p, l, {directory_route, Identity}}))),
+
+    %% Wait subscriptions are process state. A replacement manager must derive
+    %% the same park from the committed actor projection without a checkpoint.
+    stop_process(Manager),
+    {ok, NewManager} = quod_namespace_manager:start_link(),
+    unlink(NewManager),
+    ok = wait_route_wait(Identity, present, 300),
+    ?assertNot(lists:member(
+                 Manager,
+                 gproc:lookup_pids(
+                   {p, l, {directory_route, Identity}}))),
+    ?assert(lists:member(
+              NewManager,
+              gproc:lookup_pids(
+                {p, l, {directory_route, Identity}}))),
+
+    %% An unrelated anchored identity cannot wake this work. The exact wake
+    %% also cannot manufacture authority: without a route it merely rereads
+    %% the directory and remains parked.
+    NewManager ! {directory_route_available, {Ns, Other}},
+    NewManager ! {directory_route_available, Identity},
+    timer:sleep(350),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ?assertMatch(#{route_waits := #{Identity := _}},
+                 quod_namespace_manager:test_recovery_state()),
+
+    %% 350 ms exceeds the deleted 250 ms retry. Time alone made no progress.
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
+    ok = wait_route_wait(Identity, absent, 300),
+    ?assertNot(lists:member(
+                 NewManager,
+                 gproc:lookup_pids(
+                   {p, l, {directory_route, Identity}}))).
+
+catalogue_worker_failures_are_terminal_owner_failures(
+  #{actor_principal := Principal}) ->
+    ok = wait_system_query_idle(300),
+    Manager1 = quod_reg:where({namespace_manager, node}),
+    ManagerRef1 = monitor(process, Manager1),
+    {Worker, _Token1} = quod_namespace_manager:test_arm_system_query(),
+    exit(Worker, kill),
+    receive
+        {'DOWN', ManagerRef1, process, Manager1,
+         {system_catalogue_worker_failed, killed}} -> ok
+    after 1000 -> error(catalogue_worker_failure_did_not_stop_manager)
+    end,
+    {ok, Manager2} = quod_namespace_manager:start_link(),
+    unlink(Manager2),
+    ok = wait_node_actor_principal(Principal, 300),
+    ok = wait_system_query_idle(300),
+
+    ManagerRef2 = monitor(process, Manager2),
+    {_Worker2, Token2} = quod_namespace_manager:test_arm_system_query(),
+    Manager2 ! {system_catalogue_timeout, Token2},
+    receive
+        {'DOWN', ManagerRef2, process, Manager2,
+         system_catalogue_query_timeout} -> ok
+    after 1000 -> error(catalogue_worker_timeout_did_not_stop_manager)
+    end,
+    {ok, Manager3} = quod_namespace_manager:start_link(),
+    unlink(Manager3),
+    ok = wait_node_actor_principal(Principal, 300).
+
 dynamic_hosting_survives_content_tree_restart(
   #{manager := Manager, ns_sup := NsSup,
     actor_ns := ActorNs, actor_anchor := ActorAnchor,
@@ -1077,6 +1193,48 @@ dynamic_hosting_survives_content_tree_restart(
     ?assertNot(maps:is_key(prepared_genesis_entry, Config)),
     ?assertNot(maps:is_key(genesis_diff, Config)),
     ok = wait_effect_capacity(64, 300).
+
+wrong_anchor_child_stops_then_exact_material_restarts(
+  Fixture = #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"anchor-swap">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
+    ok = wait_ready(Ns, 300),
+    OldAnchor = quod_simplex:genesis_hash(Ns),
+    ok = host_locally(Fixture, Ns, OldAnchor),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    OldHost = {hosts_ontology, NodeRef, Ns, OldAnchor, private},
+
+    %% Remove only this test-owned ledger directory while the old process still
+    %% holds its open fd. This lets us prepare a genuinely different genesis
+    %% for the same name before the committed hosting replacement stops it.
+    OldConfig = desired_content(Ns),
+    StoreDir = quod_ledger_store:ns_dir(
+                 quod_ledger_store:ledger_dir(OldConfig), Ns),
+    ok = file:del_dir_r(StoreDir),
+    {ok, Structural} = quod_ontology:validate_action(
+                         {create_ontology, Ns, []}),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    NewAnchor = quod_ontology:prepared_anchor(Prepared),
+    ?assertNotEqual(OldAnchor, NewAnchor),
+    NewHost = {hosts_ontology, NodeRef, Ns, NewAnchor, private},
+    ?assertMatch(
+       {ok, [_ | _], _},
+       quod_prolog:execute(
+         ActorNs,
+         {transaction, {',', {retract, OldHost}, {assertz, NewHost}}})),
+    ok = wait_route_wait({Ns, NewAnchor}, present, 300),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+
+    %% Material arrival uses the ordinary lifecycle entry. The parked desired
+    %% identity then becomes ready under the replacement anchor.
+    ?assertMatch(
+       {ok, created, Ns, NewAnchor},
+       quod_ontology:execute_prepared(Prepared)),
+    ok = wait_ready(Ns, 300),
+    ?assertEqual(NewAnchor, quod_simplex:genesis_hash(Ns)),
+    ok = wait_route_wait({Ns, NewAnchor}, absent, 300).
 
 obsolete_desired_file_has_no_authority(
   #{dir := Dir, actor_principal := ActorPrincipal}) ->
@@ -1302,6 +1460,34 @@ wait_desired_absent(Ns, N) ->
         true -> receive after 10 -> wait_desired_absent(Ns, N - 1) end
     end.
 
+wait_route_wait(Identity, Expected, 0) ->
+    error({route_wait_state_timeout, Identity, Expected,
+           quod_namespace_manager:test_recovery_state()});
+wait_route_wait(Identity, Expected, N) ->
+    #{route_waits := Waits} = quod_namespace_manager:test_recovery_state(),
+    Present = maps:is_key(Identity, Waits),
+    case {Expected, Present} of
+        {present, true} -> ok;
+        {absent, false} -> ok;
+        _ -> receive after 10 ->
+                 wait_route_wait(Identity, Expected, N - 1)
+             end
+    end.
+
+wait_system_query_idle(0) -> error(system_query_idle_timeout);
+wait_system_query_idle(N) ->
+    case quod_namespace_manager:test_recovery_state() of
+        #{system_query := idle} -> ok;
+        _ -> receive after 10 -> wait_system_query_idle(N - 1) end
+    end.
+
+wait_namespace_started(_Ns, 0) -> error(namespace_start_timeout);
+wait_namespace_started(Ns, N) ->
+    case quod_reg:where({quod_ns, Ns}) of
+        Pid when is_pid(Pid) -> ok;
+        undefined -> receive after 10 -> wait_namespace_started(Ns, N - 1) end
+    end.
+
 desired_has_content(Ns) ->
     Desired = application:get_env(
                 quod, namespace_desired,
@@ -1327,14 +1513,14 @@ wait_node_actor_principal(Principal, N) ->
 
 wait_manager_idle(_Manager, 0) ->
     error(namespace_manager_idle_timeout);
-wait_manager_idle(Manager, N) ->
-    %% #s.mutation_worker is element 8. sys:get_state is sent after the test's
-    %% reconcile message, so observing it idle proves that cycle completed.
-    case element(8, sys:get_state(Manager)) of
+wait_manager_idle(_Manager, N) ->
+    %% The call is ordered after the test's reconcile message, so observing the
+    %% manager-owned mutation lane idle proves that cycle completed.
+    case quod_namespace_manager:test_mutation_worker() of
         undefined -> ok;
         _ ->
             receive after 10 -> ok end,
-            wait_manager_idle(Manager, N - 1)
+            wait_manager_idle(undefined, N - 1)
     end.
 
 wait_effect_target_state(_Ns, _Expected, 0) ->

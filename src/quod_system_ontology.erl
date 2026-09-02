@@ -159,6 +159,8 @@ materialize_new(#{namespace := Ns} = Descriptor, Rest, Existing,
               Rest, Existing, Configs#{Ns => Config}, Pending, Blocked);
         {error, unavailable} ->
             materialize(Rest, Existing, Configs, [Ns | Pending], Blocked);
+        {error, {ledger_read_failed, _}} = Error ->
+            Error;
         {error, Reason} ->
             case retryable(Reason) of
                 true ->
@@ -178,9 +180,7 @@ existing_config(#{namespace := Ns, anchor := Anchor}, Existing) ->
         _ -> none
     end.
 
-retryable(anchor_conflict) -> true;
 retryable(root_unavailable) -> true;
-retryable({ledger_read_failed, _}) -> true;
 retryable(_) -> false.
 
 materialize_one(#{namespace := Ns, anchor := Anchor}) ->

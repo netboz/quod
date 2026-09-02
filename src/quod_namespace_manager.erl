@@ -33,20 +33,18 @@ itself owns only projection state, ordering, and replies.
 -export([start_link/0,
          start_content/2, start_new_content/2, stop_content/1,
          start_brahms/2, stop_brahms/1, adopt_node_actor/0,
-         project_node_policy/4]).
+         project_node_policy/4, hosting_snapshot/0]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([test_node_actor_result_class/1, test_projection_conflicts/3,
-         test_install_system_projection/4, test_retired_names/3]).
+         test_install_system_projection/4, test_retired_names/3,
+         test_mutation_worker/0, test_recovery_state/0,
+         test_arm_system_query/0]).
 -endif.
 
 -define(KEY, {namespace_manager, node}).
 -define(DESIRED_ENV, namespace_desired).
--define(RETRY_MS, 250).
--define(RETRY_MAX_MS, 60000).
--define(SYSTEM_RETRY_MIN_MS, 1000).
--define(SYSTEM_RETRY_MAX_MS, 60000).
 -define(SYSTEM_QUERY_TIMEOUT_MS, 15000).
 -define(ROOT_NS, <<"quod:root">>).
 
@@ -56,10 +54,8 @@ itself owns only projection state, ordering, and replies.
     ns_monitor = undefined,
     brahms_sup = undefined,
     brahms_monitor = undefined,
-    retry = undefined,
     mutation_worker = undefined,
     reconcile_dirty = false,
-    reconcile_incomplete = false,
     pending_calls = undefined,
     bootstrap_content = #{},
     system_content = #{},
@@ -67,12 +63,16 @@ itself owns only projection state, ordering, and replies.
     node_projection = none,
     retired_content = #{},
     system_blocked = #{},
+    identity_blocked = #{},
     system_query = undefined,
-    system_retry = undefined,
-    system_retry_ms = ?SYSTEM_RETRY_MIN_MS,
     system_dirty = false,
     node_actor = none,
-    reconcile_retry_ms = ?RETRY_MS
+    route_waits = #{},
+    system_route_waits = #{},
+    node_route_waits = #{},
+    runtime_waits = #{},
+    hosting_revision = 0,
+    ready_content = []
 }).
 
 start_link() ->
@@ -106,6 +106,10 @@ project_node_policy(Namespace, Height, Scope, Projection) ->
     gen_server:call(quod_reg:via(?KEY),
                     {project_node_policy, Namespace, Height, Scope, Projection},
                     15000).
+
+-doc "Return the manager-owned revisioned set of locally ready content identities.".
+hosting_snapshot() ->
+    gen_server:call(quod_reg:via(?KEY), hosting_snapshot, 5000).
 
 start_child(Kind, Ns, Config)
   when is_binary(Ns), is_map(Config) ->
@@ -149,11 +153,17 @@ init([]) ->
     application:unset_env(quod, node_actor_principal),
     true = quod_reg:subscribe({runtime, ?ROOT_NS}),
     true = quod_reg:subscribe({namespace_topology, node}),
+    NsMonitor = quod_reg:monitor_name({quod_ns_sup, node}, follow),
+    BrahmsMonitor = quod_reg:monitor_name({quod_brahms_sup, node}, follow),
     self() ! reconcile,
     self() ! refresh_system_catalogue,
     maybe_subscribe_node_actor(NodeActor),
     {ok, #s{desired = Desired, bootstrap_content = Bootstrap,
             system_content = System, node_actor = NodeActor,
+            ns_sup = quod_reg:where({quod_ns_sup, node}),
+            ns_monitor = NsMonitor,
+            brahms_sup = quod_reg:where({quod_brahms_sup, node}),
+            brahms_monitor = BrahmsMonitor,
             pending_calls = queue:new()}}.
 
 handle_call({project_node_policy, Namespace, Height, Scope, Projection}, _From, S) ->
@@ -161,9 +171,11 @@ handle_call({project_node_policy, Namespace, Height, Scope, Projection}, _From, 
         {ok, S1} -> {reply, ok, S1};
         {error, _} = Error -> {reply, Error, S}
     end;
+handle_call(hosting_snapshot, _From,
+            S = #s{hosting_revision = Revision, ready_content = Ready}) ->
+    {reply, {ok, Revision, Ready}, S};
 handle_call(Request, From, S) ->
-    S0 = reset_reconcile_backoff(S),
-    {noreply, continue_work(enqueue_call(Request, From, S0))}.
+    {noreply, continue_work(enqueue_call(Request, From, S))}.
 
 begin_request(
   {start_new, content, Ns, Config}, _From,
@@ -251,7 +263,7 @@ finish_request(
     {{ok, GenesisHash}, S};
 finish_request(
   {start_new, _Ns, _Config, {rejected, Reason, Cleanup}}, S) ->
-    {{error, Reason}, schedule_reconcile_if_stop_error(Cleanup, S)};
+    {{error, Reason}, log_mutation_failure(Cleanup, S)};
 finish_request(
   {start_new, Ns, _Config, {start_result, Result}}, S) ->
     Reply = normalize_new_start_result(Ns, Result),
@@ -261,10 +273,10 @@ finish_request(
     Result = complete_ensured_child(
                Kind, Ns, Config, RawResult, Validation),
     maybe_notify_directory(Kind, Result),
-    {Result, schedule_reconcile_if_error(Result, S)};
+    {Result, log_mutation_failure(Result, S)};
 finish_request({stop, Kind, Result}, S) ->
     maybe_notify_directory(Kind, Result),
-    {Result, schedule_reconcile_if_stop_error(Result, S)}.
+    {Result, log_mutation_failure(Result, S)}.
 
 normalize_new_start_result(Ns, {error, {already_started, _Pid}}) ->
     {error, {already_configured, Ns}};
@@ -305,23 +317,20 @@ handle_cast(_Message, S) ->
     {noreply, S}.
 
 handle_info(reconcile, S = #s{mutation_worker = undefined}) ->
-    S0 = S#s{retry = undefined},
+    S0 = sync_runtime_waits(S),
     case queue:is_empty(S0#s.pending_calls) of
         true -> {noreply, start_reconcile(S0)};
         false -> {noreply, S0#s{reconcile_dirty = true}}
     end;
 handle_info(reconcile, S) ->
-    {noreply, S#s{retry = undefined, reconcile_dirty = true}};
+    {noreply, S#s{reconcile_dirty = true}};
 handle_info(
   {mutation_result, Token,
-   {reconcile, Changed, Complete, StorageAdds, NodeActorResult}},
+   {reconcile, Changed, Complete, StorageAdds, NodeActorResult,
+    IdentityBlocked}},
   S = #s{mutation_worker = {_Pid, MRef, Token, reconcile}}) ->
     demonitor(MRef, [flush]),
     publish_reconcile_storage(StorageAdds),
-    case Changed of
-        true -> notify_content_changed();
-        false -> ok
-    end,
     case install_node_actor_result(NodeActorResult) of
         ok -> ok;
         {error, Reason} -> exit({node_actor_invalid, Reason})
@@ -331,10 +340,18 @@ handle_info(
             quod_runtime:reconcile_now(ActorNs);
         _ -> ok
     end,
-    S0 = S#s{mutation_worker = undefined,
-             reconcile_incomplete = not Complete},
+    log_identity_blocked(IdentityBlocked, S#s.identity_blocked),
+    S0 = install_ready_content(
+           maps:keys(StorageAdds),
+           sync_node_route_waits(
+             S#s{mutation_worker = undefined,
+                 identity_blocked = IdentityBlocked})),
+    case Changed of
+        true -> notify_content_changed();
+        false -> ok
+    end,
     S1 = case Complete of
-             true -> reset_reconcile_backoff(S0#s{retired_content = #{}});
+             true -> S0#s{retired_content = #{}};
              false -> S0
          end,
     {noreply, continue_work(S1)};
@@ -354,8 +371,7 @@ handle_info(
     %% queued behind it. Drain the queue, then reconcile the uncertain result.
     {noreply,
      continue_work(
-       S#s{mutation_worker = undefined,
-           reconcile_incomplete = true})};
+       S#s{mutation_worker = undefined})};
 handle_info(process_pending_call,
             S = #s{mutation_worker = undefined, pending_calls = Queue0}) ->
     case queue:out(Queue0) of
@@ -371,16 +387,15 @@ handle_info(process_pending_call,
                     {noreply, start_call_worker(Work, From, S1)}
             end
     end;
-handle_info(refresh_system_catalogue, S0) ->
-    S = cancel_system_retry(S0),
+handle_info(refresh_system_catalogue, S) ->
     {noreply, start_system_query(S)};
 handle_info({replay_ready, _Id, _Height}, S) ->
     self() ! reconcile,
-    {noreply, request_system_refresh(reset_system_backoff(S))};
+    {noreply, request_system_refresh(S)};
 handle_info({applied_live, Envelope}, S) ->
     case system_catalogue_changed(Envelope) of
         true ->
-            {noreply, request_system_refresh(reset_system_backoff(S))};
+            {noreply, request_system_refresh(S)};
         false -> {noreply, S}
     end;
 handle_info({namespace_topology, _Namespaces}, S) ->
@@ -388,6 +403,21 @@ handle_info({namespace_topology, _Namespaces}, S) ->
     %% committed. The existing topology edge wakes the same reconciler.
     self() ! reconcile,
     {noreply, S};
+handle_info({directory_route_available, Identity},
+            S = #s{route_waits = Waits}) ->
+    case maps:get(Identity, Waits, []) of
+        [] -> {noreply, S};
+        Kinds ->
+            S1 = case lists:member(node, Kinds) of
+                     true -> materialize_node_route(Identity, S);
+                     false -> S
+                 end,
+            S2 = case lists:member(system, Kinds) of
+                     true -> request_system_refresh(S1);
+                     false -> S1
+                 end,
+            {noreply, S2}
+    end;
 handle_info(
   {system_catalogue_result, Token, Result},
   S = #s{system_query = {_Pid, MRef, Token, Timer}}) ->
@@ -397,45 +427,37 @@ handle_info(
     {noreply, continue_system_refresh(finish_system_query(Result, S0))};
 handle_info(
   {'DOWN', Ref, process, Pid, Reason},
-  S = #s{system_query = {Pid, Ref, _Token, Timer}}) ->
+  #s{system_query = {Pid, Ref, _Token, Timer}}) ->
     cancel_timer(Timer),
-    logger:error(
-      "quod: system-ontology catalogue worker failed: ~p", [Reason]),
-    {noreply,
-     schedule_system_retry(S#s{system_query = undefined})};
+    exit({system_catalogue_worker_failed, Reason});
 handle_info(
   {system_catalogue_timeout, Token},
-  S = #s{system_query = {Pid, MRef, Token, _Timer}}) ->
+  #s{system_query = {Pid, MRef, Token, _Timer}}) ->
     demonitor(MRef, [flush]),
     exit(Pid, kill),
-    logger:error("quod: system-ontology catalogue query timed out"),
-    {noreply,
-     schedule_system_retry(S#s{system_query = undefined})};
-handle_info(
-  {'DOWN', Ref, process, Pid, _Reason},
-  S = #s{ns_monitor = Ref, ns_sup = Pid}) ->
-    {noreply,
-     schedule_reconcile(
-       reset_reconcile_backoff(
-         S#s{ns_sup = undefined, ns_monitor = undefined}))};
-handle_info(
-  {'DOWN', Ref, process, Pid, _Reason},
-  S = #s{brahms_monitor = Ref, brahms_sup = Pid}) ->
-    {noreply,
-     schedule_reconcile(
-       reset_reconcile_backoff(
-         S#s{brahms_sup = undefined,
-             brahms_monitor = undefined}))};
+    exit(system_catalogue_query_timeout);
+handle_info({gproc, registered, Ref, _Name},
+            S = #s{ns_monitor = Ref}) ->
+    self() ! reconcile,
+    {noreply, S#s{ns_sup = quod_reg:where({quod_ns_sup, node})}};
+handle_info({gproc, unreg, Ref, _Name}, S = #s{ns_monitor = Ref}) ->
+    {noreply, S#s{ns_sup = undefined}};
+handle_info({gproc, registered, Ref, _Name},
+            S = #s{brahms_monitor = Ref}) ->
+    self() ! reconcile,
+    {noreply, S#s{brahms_sup = quod_reg:where({quod_brahms_sup, node})}};
+handle_info({gproc, unreg, Ref, _Name}, S = #s{brahms_monitor = Ref}) ->
+    {noreply, S#s{brahms_sup = undefined}};
 handle_info(_Info, S) ->
     {noreply, S}.
 
 terminate(_Reason, S) ->
-    cancel_retry(S#s.retry),
     stop_mutation(S#s.mutation_worker),
-    cancel_timer(S#s.system_retry),
     stop_system_query(S#s.system_query),
-    demonitor_if(S#s.ns_monitor),
-    demonitor_if(S#s.brahms_monitor),
+    demonitor_supervisor({quod_ns_sup, node}, S#s.ns_monitor),
+    demonitor_supervisor({quod_brahms_sup, node}, S#s.brahms_monitor),
+    unsubscribe_waits(S#s.route_waits, directory_route),
+    unsubscribe_waits(S#s.runtime_waits, runtime),
     _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
     _ = catch quod_reg:unsubscribe({namespace_topology, node}),
     _ = unsubscribe_node_actor(S#s.node_actor),
@@ -447,17 +469,18 @@ terminate(_Reason, S) ->
 %% process continues accepting catalogue changes and records that another pass
 %% is needed.  There is still exactly one reconciler and one desired-state
 %% owner.
-start_reconcile(S0) ->
-    S = bind_supervisors(S0),
+start_reconcile(S) ->
     Parent = self(),
     Token = make_ref(),
     {Pid, MRef} =
         spawn_monitor(
           fun() ->
-              {Changed, Complete, StorageAdds, ActorResult} = reconcile_all(S),
+              {Changed, Complete, StorageAdds, ActorResult,
+               IdentityBlocked} = reconcile_all(S),
               Parent !
                   {mutation_result, Token,
-                   {reconcile, Changed, Complete, StorageAdds, ActorResult}}
+                   {reconcile, Changed, Complete, StorageAdds, ActorResult,
+                    IdentityBlocked}}
           end),
     S#s{mutation_worker = {Pid, MRef, Token, reconcile},
         reconcile_dirty = false}.
@@ -476,10 +499,8 @@ continue_work(S = #s{pending_calls = Queue}) ->
 
 finish_reconcile_cycle(S = #s{reconcile_dirty = true}) ->
     self() ! reconcile,
-    S#s{reconcile_dirty = false, reconcile_incomplete = false};
-finish_reconcile_cycle(S = #s{reconcile_incomplete = true}) ->
-    schedule_reconcile(S#s{reconcile_incomplete = false});
-finish_reconcile_cycle(S) -> reset_reconcile_backoff(S).
+    S#s{reconcile_dirty = false};
+finish_reconcile_cycle(S) -> S.
 
 stop_mutation({Pid, MRef, _Token, _Kind}) ->
     demonitor(MRef, [flush]),
@@ -547,10 +568,7 @@ finish_system_query(
     log_blocked_systems(Reported, S0#s.system_blocked),
     S1 = install_system_content(
            System, S0#s{system_blocked = Reported}),
-    case Pending of
-        [] -> reset_system_backoff(S1);
-        _ -> schedule_system_retry(S1)
-    end;
+    sync_system_route_waits(Pending, Descriptors, S1);
 %% Root itself is started by static bootstrap configuration.  Its replay-ready
 %% event is the retry signal; polling a root which does not exist yet would only
 %% produce log noise.  A malformed committed catalogue also waits for its next
@@ -560,11 +578,8 @@ finish_system_query({error, root_not_ready}, S) -> S;
 finish_system_query({error, {ontology_rebuilding, ?ROOT_NS}}, S) -> S;
 finish_system_query({error, malformed_system_catalogue}, S) ->
     log_invalid_system_catalogue(malformed_system_catalogue, S);
-finish_system_query({error, Reason}, S) ->
-    logger:error(
-      "quod: system-ontology catalogue unavailable or invalid: ~p",
-      [Reason]),
-    schedule_system_retry(S).
+finish_system_query({error, Reason}, _S) ->
+    exit({system_catalogue_unavailable, Reason}).
 
 log_invalid_system_catalogue(Reason, S) ->
     logger:error(
@@ -650,23 +665,11 @@ install_system_content(System,
     Desired1 = Desired#{content => NewContent},
     persist_desired(Desired1),
     self() ! reconcile,
-    reset_reconcile_backoff(
-      S#s{desired = Desired1, system_content = System,
-          node_content = NodeContent,
-          node_projection = invalidate_projection(Conflict,
-                                                  S#s.node_projection),
-          retired_content = maps:merge(S#s.retired_content, Retired)}).
-
-schedule_system_retry(S = #s{system_retry = Ref})
-  when is_reference(Ref) -> S;
-schedule_system_retry(S = #s{system_retry_ms = Delay}) ->
-    Ref = erlang:send_after(
-            Delay, self(), refresh_system_catalogue),
-    S#s{system_retry = Ref,
-        system_retry_ms = min(?SYSTEM_RETRY_MAX_MS, Delay * 2)}.
-
-reset_system_backoff(S) ->
-    S#s{system_retry_ms = ?SYSTEM_RETRY_MIN_MS}.
+    S#s{desired = Desired1, system_content = System,
+        node_content = NodeContent,
+        node_projection = invalidate_projection(Conflict,
+                                                S#s.node_projection),
+        retired_content = maps:merge(S#s.retired_content, Retired)}.
 
 log_blocked_systems(Blocked, OldBlocked) ->
     maps:foreach(
@@ -679,10 +682,6 @@ log_blocked_systems(Blocked, OldBlocked) ->
                     [Id, Problem])
           end
       end, Blocked).
-
-cancel_system_retry(S = #s{system_retry = Ref}) ->
-    cancel_timer(Ref),
-    S#s{system_retry = undefined}.
 
 stop_system_query({Pid, MRef, _Token, Timer}) ->
     cancel_timer(Timer),
@@ -747,14 +746,15 @@ install_node_projection(
                             Desired1 = (S#s.desired)#{content => Content},
                             persist_desired(Desired1),
                             self() ! reconcile,
-                            {ok, S#s{desired = Desired1,
-                                     node_content = NodeContent,
-                                     node_projection =
-                                       #{revision => Revision,
-                                         contacts => Contacts},
-                                     retired_content = maps:merge(
-                                                         S#s.retired_content,
-                                                         Retired)}};
+                            {ok, sync_node_route_waits(
+                                   S#s{desired = Desired1,
+                                       node_content = NodeContent,
+                                       node_projection =
+                                         #{revision => Revision,
+                                           contacts => Contacts},
+                                       retired_content = maps:merge(
+                                                           S#s.retired_content,
+                                                           Retired)})};
                         {error, _} = Error -> Error
                     end;
                 {error, _} = Error -> Error
@@ -866,6 +866,35 @@ test_install_system_projection(Bootstrap, System, Node, OldSystem) ->
     install_system_projection(Bootstrap, System, Node, OldSystem).
 test_retired_names(Retired, Running, Current) ->
     retired_content_names(Retired, Running, Current).
+test_mutation_worker() ->
+    S = sys:get_state(quod_reg:via(?KEY)),
+    S#s.mutation_worker.
+test_recovery_state() ->
+    S = sys:get_state(quod_reg:via(?KEY)),
+    #{system_blocked => S#s.system_blocked,
+      identity_blocked => S#s.identity_blocked,
+      route_waits => S#s.route_waits,
+      runtime_waits => S#s.runtime_waits,
+      system_query => case S#s.system_query of
+                          undefined -> idle;
+                          _ -> active
+                      end,
+      hosting_revision => S#s.hosting_revision,
+      ready_content => S#s.ready_content}.
+test_arm_system_query() ->
+    Caller = self(),
+    ReplyRef = make_ref(),
+    _ = sys:replace_state(
+          quod_reg:via(?KEY),
+          fun(S = #s{system_query = undefined}) ->
+              {Pid, MRef} = spawn_monitor(fun() -> receive stop -> ok end end),
+              Token = make_ref(),
+              Timer = erlang:send_after(
+                        60000, self(), {system_catalogue_timeout, Token}),
+              Caller ! {ReplyRef, Pid, Token},
+              S#s{system_query = {Pid, MRef, Token, Timer}}
+          end),
+    receive {ReplyRef, Pid, Token} -> {Pid, Token} end.
 -endif.
 
 desired_env() ->
@@ -935,50 +964,148 @@ log_ignored_static_content(Static) ->
       "committed root/node facts are the hosting authority",
       [maps:keys(Static)]).
 
-bind_supervisors(S) ->
-    {NsSup, NsMonitor} =
-        bind_supervisor(
-          quod_reg:where({quod_ns_sup, node}),
-          S#s.ns_sup, S#s.ns_monitor),
-    {BrahmsSup, BrahmsMonitor} =
-        bind_supervisor(
-          quod_reg:where({quod_brahms_sup, node}),
-          S#s.brahms_sup, S#s.brahms_monitor),
-    S#s{ns_sup = NsSup,
-        ns_monitor = NsMonitor,
-        brahms_sup = BrahmsSup,
-        brahms_monitor = BrahmsMonitor}.
+sync_system_route_waits(Pending, Descriptors, S) ->
+    PendingSet = maps:from_list([{Ns, true} || Ns <- Pending]),
+    Wanted = maps:from_list(
+               [{{maps:get(namespace, D), maps:get(anchor, D)}, true}
+                || D <- Descriptors,
+                   maps:is_key(maps:get(namespace, D), PendingSet)]),
+    {S1, Added} = sync_route_wait_source(system, Wanted, S),
+    case Added of
+        true -> request_system_refresh(S1);
+        false -> S1
+    end.
 
-bind_supervisor(Pid, Pid, Ref)
-  when is_pid(Pid), is_reference(Ref) ->
-    {Pid, Ref};
-bind_supervisor(Pid, _OldPid, OldRef)
-  when is_pid(Pid) ->
-    demonitor_if(OldRef),
-    {Pid, monitor(process, Pid)};
-bind_supervisor(_Pid, OldPid, OldRef) ->
-    {OldPid, OldRef}.
+sync_node_route_waits(S = #s{node_content = NodeContent}) ->
+    Wanted = maps:fold(
+               fun(Ns, Config, Acc) ->
+                   case local_material_ready(Ns, Config) of
+                       true -> Acc;
+                       false -> Acc#{{Ns, maps:get(genesis_hash, Config)} => true}
+                   end
+               end, #{}, NodeContent),
+    NewNodeWaits = maps:keys(Wanted) -- maps:keys(S#s.node_route_waits),
+    {S1, _AddedSubscription} = sync_route_wait_source(node, Wanted, S),
+    %% Subscribe first, then force the same exact-identity reread used by a
+    %% directory wake. This remains necessary when a system wait already owns
+    %% the shared gproc subscription.
+    _ = [self() ! {directory_route_available, Identity}
+         || Identity <- NewNodeWaits],
+    S1.
+
+sync_route_wait_source(system, Wanted, S) ->
+    sync_route_wait_sources(S#s{system_route_waits = Wanted});
+sync_route_wait_source(node, Wanted, S) ->
+    sync_route_wait_sources(S#s{node_route_waits = Wanted}).
+
+sync_route_wait_sources(S) ->
+    Combined = maps:fold(
+                 fun(Identity, _True, Acc) ->
+                     Acc#{Identity => [system | maps:get(Identity, Acc, [])]}
+                 end, #{}, S#s.system_route_waits),
+    Wanted = maps:fold(
+               fun(Identity, _True, Acc) ->
+                   Acc#{Identity => [node | maps:get(Identity, Acc, [])]}
+               end, Combined, S#s.node_route_waits),
+    sync_waits(directory_route, Wanted, S#s.route_waits, S).
+
+sync_runtime_waits(S = #s{desired = Desired, node_actor = NodeActor}) ->
+    ActorNs = case NodeActor of
+                  #{namespace := Ns} -> Ns;
+                  none -> none
+              end,
+    Content = maps:get(content, Desired),
+    Wanted = maps:from_list(
+               [{Ns, replay_ready}
+                || {Ns, Config} <- maps:to_list(Content),
+                   Ns =/= ?ROOT_NS, Ns =/= ActorNs,
+                   runtime_wait_required(Ns, Config)]),
+    {S1, _Added} = sync_waits(runtime, Wanted, S#s.runtime_waits, S),
+    S1.
+
+runtime_wait_required(Ns, Config) ->
+    case running_pid(content, Ns) of
+        Pid when is_pid(Pid) ->
+            started_genesis(Ns, Config) =/= {ok, maps:get(genesis_hash, Config)};
+        undefined -> false
+    end.
+
+sync_waits(Kind, Wanted, Current, S) ->
+    Removed = maps:keys(Current) -- maps:keys(Wanted),
+    Added = maps:keys(Wanted) -- maps:keys(Current),
+    _ = [catch quod_reg:unsubscribe({Kind, Key}) || Key <- Removed],
+    _ = [true = quod_reg:subscribe({Kind, Key}) || Key <- Added],
+    S1 = case Kind of
+             directory_route -> S#s{route_waits = Wanted};
+             runtime -> S#s{runtime_waits = Wanted}
+         end,
+    {S1, Added =/= []}.
+
+materialize_node_route({Ns, Anchor} = Identity, S) ->
+    case node_route_config(Ns, Anchor) of
+        {ok, Config0} ->
+            Existing = maps:get(Ns, S#s.node_content),
+            Config = Config0#{hosting_visibility =>
+                                  maps:get(hosting_visibility, Existing,
+                                           private)},
+            NodeContent = (S#s.node_content)#{Ns => Config},
+            Content = content_projection(S#s.bootstrap_content,
+                                         S#s.system_content, NodeContent),
+            Desired = (S#s.desired)#{content => Content},
+            persist_desired(Desired),
+            self() ! reconcile,
+            sync_node_route_waits(
+              S#s{desired = Desired, node_content = NodeContent});
+        {error, unavailable} -> S;
+        {error, Reason} ->
+            logger:error("quod: node-host route materialization failed for ~p: ~p",
+                         [Identity, Reason]),
+            S
+    end.
+
+node_route_config(Ns, Anchor) ->
+    case quod_directory:validator_routes(Ns, Anchor) of
+        {ok, Routes} when Routes =/= [] ->
+            Seeds = lists:usort(
+                      [Endpoint || #{endpoint := Endpoint} <- Routes]),
+            quod_ontology:prepare_host_join(Ns, Anchor, Seeds);
+        {ok, []} -> {error, unavailable};
+        {error, unavailable} -> {error, unavailable};
+        {error, Reason} -> {error, Reason}
+    end.
+
+unsubscribe_waits(Waits, Kind) ->
+    _ = [catch quod_reg:unsubscribe({Kind, Key}) || Key <- maps:keys(Waits)],
+    ok.
+
+demonitor_supervisor(Key, Ref) when is_reference(Ref) ->
+    _ = catch quod_reg:demonitor_name(Key, Ref),
+    ok;
+demonitor_supervisor(_Key, _Ref) -> ok.
 
 reconcile_all(S = #s{desired = Desired}) ->
-    {ContentChanged, ContentComplete, StorageAdds} =
+    {ContentChanged, ContentComplete, StorageAdds, IdentityBlocked} =
         reconcile_kind(
           content, maps:get(content, Desired), S),
-    {_BrahmsChanged, BrahmsComplete, _NoStorage} =
+    {_BrahmsChanged, BrahmsComplete, _NoStorage, _NoBlocked} =
         reconcile_kind(
           brahms, maps:get(brahms, Desired), S),
     ActorResult = verify_node_actor(S#s.node_actor),
     {ContentChanged,
      ContentComplete andalso BrahmsComplete
          andalso node_actor_complete(ActorResult),
-     StorageAdds, ActorResult}.
+     StorageAdds, ActorResult, IdentityBlocked}.
 
 reconcile_kind(Kind, Desired, S) ->
     case supervisor_available(Kind, S) of
         false ->
-            {false, false, #{}};
+            {false, false, #{}, #{}};
         true ->
             Running = running_children(Kind),
-            Undesired = retired_names(Kind, Running, S),
+            IdentityBlocked = wrong_identity_rows(Kind, Running, Desired),
+            Undesired = lists:usort(
+                          retired_names(Kind, Running, S)
+                          ++ maps:keys(IdentityBlocked)),
             StopResults =
                 [stop_one(Kind, Ns) || Ns <- Undesired],
             Missing =
@@ -1002,7 +1129,7 @@ reconcile_kind(Kind, Desired, S) ->
                               start_complete(Result)
                           end, Results)
                 andalso Ready,
-            {Changed, Complete, StorageAdds}
+            {Changed, Complete, StorageAdds, IdentityBlocked}
     end.
 
 retired_names(content, Running,
@@ -1014,6 +1141,34 @@ retired_names(brahms, _Running, _S) -> [].
 retired_content_names(Retired, Running, Current) ->
     [Ns || Ns <- maps:keys(Retired), maps:is_key(Ns, Running),
            not maps:is_key(Ns, Current)].
+
+wrong_identity_rows(content, Running, Desired) ->
+    maps:from_list(
+      [{Ns, #{wanted_anchor => maps:get(genesis_hash, Config),
+              running_anchor => current_genesis(Ns)}}
+       || {Ns, Config} <- maps:to_list(Desired),
+          maps:is_key(Ns, Running),
+          started_genesis(Ns, Config) =:= {error, genesis_mismatch}]);
+wrong_identity_rows(brahms, _Running, _Desired) -> #{}.
+
+current_genesis(Ns) ->
+    case quod_simplex:genesis_hash(Ns) of
+        <<_:256>> = Anchor -> Anchor;
+        _ -> unavailable
+    end.
+
+log_identity_blocked(Current, Previous) ->
+    _ = maps:map(
+          fun(Ns, Details) ->
+              case maps:get(Ns, Previous, undefined) of
+                  Details -> ok;
+                  _ ->
+                      logger:error(
+                        "quod: stopping wrong-anchor hosted ontology ~p: ~p",
+                        [Ns, Details])
+              end
+          end, Current),
+    ok.
 
 supervisor_available(content, #s{ns_sup = Pid}) ->
     is_pid(Pid) andalso is_process_alive(Pid);
@@ -1083,7 +1238,6 @@ maybe_notify_directory(brahms, _Result) ->
     ok.
 
 notify_content_changed() ->
-    quod_directory_control:namespace_changed(),
     _ = quod_reg:publish(
           {namespace_topology, node},
           {namespace_topology,
@@ -1131,6 +1285,16 @@ publish_reconcile_storage(StorageAdds) ->
     application:set_env(
       quod, content_storage_dirs, maps:merge(Storage0, StorageAdds)).
 
+install_ready_content(Ready0, S = #s{ready_content = Old}) ->
+    Ready = lists:sort(Ready0),
+    case Ready =:= Old of
+        true -> S;
+        false ->
+            Revision = S#s.hosting_revision + 1,
+            quod_directory_control:hosting_changed(self(), Revision, Ready),
+            S#s{hosting_revision = Revision, ready_content = Ready}
+    end.
+
 completed_start_succeeded(content, Ns, Result, Validated) ->
     start_succeeded(Result) andalso maps:is_key(Ns, Validated);
 completed_start_succeeded(brahms, _Ns, Result, _Validated) ->
@@ -1151,37 +1315,12 @@ content_storage(Config) ->
     #{data => quod_ledger_store:data_dir(Config),
       ledger => quod_ledger_store:ledger_dir(Config)}.
 
-schedule_reconcile_if_error(Result, S) ->
-    case start_succeeded(Result) of
-        true -> S;
-        false -> schedule_reconcile(S)
-    end.
-
-schedule_reconcile_if_stop_error(Result, S) ->
+log_mutation_failure(Result, S) ->
     case Result of
-        ok -> S;
-        _ -> schedule_reconcile(S)
-    end.
-
-schedule_reconcile(S = #s{retry = Ref})
-  when is_reference(Ref) ->
-    S;
-schedule_reconcile(S = #s{reconcile_retry_ms = Delay}) ->
-    Ref = erlang:send_after(Delay, self(), reconcile),
-    S#s{retry = Ref,
-        reconcile_retry_ms = min(?RETRY_MAX_MS, Delay * 2)}.
-
-reset_reconcile_backoff(S) ->
-    S#s{reconcile_retry_ms = ?RETRY_MS}.
-
-cancel_retry(Ref) when is_reference(Ref) ->
-    _ = erlang:cancel_timer(Ref),
-    ok;
-cancel_retry(_) ->
-    ok.
-
-demonitor_if(Ref) when is_reference(Ref) ->
-    demonitor(Ref, [flush]),
-    ok;
-demonitor_if(_) ->
-    ok.
+        ok -> ok;
+        {ok, _} -> ok;
+        {ok, _, _} -> ok;
+        _ -> logger:error("quod: namespace mutation did not complete: ~p",
+                          [Result])
+    end,
+    S.

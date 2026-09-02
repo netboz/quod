@@ -32,6 +32,7 @@ conveniences around that preparation and execution code.
          prepared_effect/4, prepared_anchor/1,
          prepared_bytes/1, decode_prepared/1,
          prepare_local_resume/3, local_resume_config/3, prepare_system_join/3,
+         prepare_host_join/3,
          local_state/1, genesis_anchor/1,
          network_identity/0, network_identity/2,
          root_ns/0]).
@@ -556,12 +557,22 @@ existing local ledger).
           {ok, map()} | {error, term()}.
 prepare_system_join(Ns, Anchor, SeedPeers)
   when is_binary(Ns), is_list(SeedPeers) ->
+    case prepare_host_join(Ns, Anchor, SeedPeers) of
+        {ok, Config} -> {ok, Config#{system_ontology => true}};
+        {error, _} = Error -> Error
+    end.
+
+-doc "Prepare the same exact anchored join for an ordinary committed host fact.".
+-spec prepare_host_join(binary(), <<_:256>>, [term()]) ->
+          {ok, map()} | {error, term()}.
+prepare_host_join(Ns, Anchor, SeedPeers)
+  when is_binary(Ns), is_list(SeedPeers) ->
     case prepare_join(Ns, Anchor, SeedPeers) of
         {ok, #prepared_lifecycle{status = resumed, config = Config}} ->
-            {ok, Config#{system_ontology => true}};
+            {ok, Config};
         {ok, #prepared_lifecycle{status = joining, config = Config}}
           when SeedPeers =/= [] ->
-            {ok, Config#{system_ontology => true}};
+            {ok, Config};
         {ok, #prepared_lifecycle{status = joining}} ->
             {error, unavailable};
         {error, _} = Error -> Error

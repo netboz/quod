@@ -643,6 +643,41 @@ resync_snapshot_is_page_bounded_test() ->
     {Second, done} = quod_directory_control:snapshot_page(128, Records),
     ?assertEqual(1, length(Second)).
 
+hosting_snapshot_is_bound_to_one_manager_epoch_test() ->
+    with_control(
+      #{},
+      fun() ->
+          OldManager = spawn(fun link_sink_loop/0),
+          NewManager = spawn(fun link_sink_loop/0),
+          try
+              ok = quod_directory_control:test_set_manager_epoch(OldManager),
+              ok = quod_directory_control:hosting_changed(
+                     OldManager, 7, [<<"quod:old">>]),
+              _ = sys:get_state(quod_reg:via({directory, control})),
+              ?assertMatch(
+                 #{hosting_revision := 7,
+                   hosting_names := [<<"quod:old">>]},
+                 quod_directory_control:test_control_state()),
+
+              %% Registration of a replacement manager starts a new revision
+              %% epoch. Late snapshots from the previous pid cannot cross it.
+              ok = quod_directory_control:test_set_manager_epoch(NewManager),
+              ok = quod_directory_control:hosting_changed(
+                     OldManager, 100, [<<"quod:stale">>]),
+              ok = quod_directory_control:hosting_changed(
+                     NewManager, 1, [<<"quod:new">>]),
+              _ = sys:get_state(quod_reg:via({directory, control})),
+              ?assertMatch(
+                 #{manager_pid := NewManager,
+                   hosting_revision := 1,
+                   hosting_names := [<<"quod:new">>]},
+                 quod_directory_control:test_control_state())
+          after
+              exit(OldManager, kill),
+              exit(NewManager, kill)
+          end
+      end).
+
 running_namespace_changes_replace_the_advertised_set_test() ->
     {Pub, Signer} = signer(),
     A = <<"quod:dynamic-a">>,
@@ -671,9 +706,9 @@ running_namespace_changes_replace_the_advertised_set_test() ->
         AHost = start_hosted_namespace(A, validator),
         {ok, Control0} = quod_directory_control:start_link(Opts),
         try
-            %% A stale notification before the application startup barrier
-            %% cannot publish the partially booted live registry.
-            ok = quod_directory_control:namespace_changed(),
+            ok = quod_directory_control:test_set_hosting_snapshot(1, [A]),
+            %% A snapshot before the application startup barrier cannot
+            %% publish the partially booted hosted set.
             timer:sleep(150),
             ?assertNot(maps:get(
                          tracking, quod_directory_control:stats())),
@@ -691,8 +726,9 @@ running_namespace_changes_replace_the_advertised_set_test() ->
             timer:sleep(5),
             stop_hosted_namespace(AHost),
             _BHost = start_hosted_namespace(B, observer),
-            %% No lifecycle notification: the next renewal must still read the
-            %% live registry and publish one complete replacement set.
+            %% The manager snapshot is the hosted-set input. Renewal may
+            %% re-read readiness, but never rediscover authority by scanning.
+            ok = quod_directory_control:test_set_hosting_snapshot(2, [B]),
             Control0 ! directory_tick,
             ?assertEqual(
                ok,
@@ -732,6 +768,10 @@ running_namespace_changes_replace_the_advertised_set_test() ->
               Private),
             _AHost2 = start_hosted_namespace(A, validator),
             {ok, _Control1} = quod_directory_control:start_link(Opts),
+            %% A real control restart obtains this complete snapshot from the
+            %% registered namespace manager. This isolated test installs the
+            %% same manager-epoch input explicitly.
+            ok = quod_directory_control:test_set_hosting_snapshot(3, [A]),
             ?assertEqual(
                ok,
                wait_until(

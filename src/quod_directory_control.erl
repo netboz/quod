@@ -20,7 +20,7 @@ relayed announcements only from a current root control peer.
 
 -include("quod_directory_limits.hrl").
 
--export([start_link/0, start_link/1, start_tracking/0, namespace_changed/0,
+-export([start_link/0, start_link/1, start_tracking/0, hosting_changed/3,
          stats/0, channel/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
@@ -28,7 +28,8 @@ relayed announcements only from a current root control peer.
          test_set_control_peers/1, test_set_control_link/3,
          test_control_state/0, test_apply_peer_result/1,
          test_install_control_link/3,
-         test_set_pending_link/3, test_validate_peer_proof/1]).
+         test_set_pending_link/3, test_validate_peer_proof/1,
+         test_set_hosting_snapshot/2, test_set_manager_epoch/1]).
 -endif.
 
 -define(KEY, {directory, control}).
@@ -69,6 +70,10 @@ relayed announcements only from a current root control peer.
     last_resync = #{},
     renew_ms = ?RENEW_MS,
     directory_ref = undefined,
+    manager_monitor = undefined,
+    manager_pid = undefined,
+    hosting_revision = -1,
+    hosting_names = [],
     tracking = false
 }).
 
@@ -79,28 +84,26 @@ start_link(Opts) ->
     gen_server:start_link(quod_reg:via(?KEY), ?MODULE, Opts, []).
 
 -doc """
-Start advertising bounded descriptors for the complete allowlisted intersection
-of namespaces actually registered under `quod_ns_sup`. Each descriptor carries
-the namespace's immutable genesis anchor and current validator/observer role.
-This is called once after application startup; later namespace changes and
-renewals re-read that live state.
+Start advertising bounded descriptors for the allowlisted intersection of the
+namespace manager's complete ready snapshot. Each descriptor carries the
+namespace's immutable genesis anchor and current validator/observer role.
+This is called once after application startup; later manager revisions replace
+the snapshot and renewals only revalidate its current live state.
 """.
 -spec start_tracking() -> ok | {error, term()}.
 start_tracking() ->
     gen_server:call(quod_reg:via(?KEY), start_tracking, 10000).
 
--doc """
-Reconcile advertisements with the namespaces currently owned by `quod_ns_sup`.
-Lifecycle callers use this asynchronous notification; the periodic renewal also
-reconciles, so a lost notification cannot leave a stale hosted set indefinitely.
-""".
--spec namespace_changed() -> ok.
-namespace_changed() ->
+-doc "Install one manager-epoch-bound ready-hosting snapshot.".
+hosting_changed(ManagerPid, Revision, Names)
+  when is_pid(ManagerPid), is_integer(Revision), Revision >= 0,
+       is_list(Names) ->
     case quod_reg:where(?KEY) of
         Pid when is_pid(Pid) ->
-            gen_server:cast(Pid, namespace_changed);
-        undefined ->
-            ok
+            gen_server:cast(Pid,
+                            {hosting_changed, ManagerPid, Revision, Names}),
+            ok;
+        undefined -> ok
     end.
 
 stats() ->
@@ -151,7 +154,10 @@ test_control_state() ->
       control_links => S#s.control_links,
       peer_query => S#s.peer_query,
       peer_height => S#s.peer_height,
-      peer_status => S#s.peer_status}.
+      peer_status => S#s.peer_status,
+      manager_pid => S#s.manager_pid,
+      hosting_revision => S#s.hosting_revision,
+      hosting_names => S#s.hosting_names}.
 
 test_apply_peer_result(Result) ->
     sys:replace_state(
@@ -183,6 +189,26 @@ test_set_pending_link(NodeKey, Endpoint, OpenRef) ->
 
 test_validate_peer_proof(Result) ->
     validate_peer_proof(Result).
+
+test_set_hosting_snapshot(Revision, Names) ->
+    Caller = self(),
+    sys:replace_state(
+      quod_reg:via(?KEY),
+      fun(S) -> S#s{manager_pid = Caller,
+                    hosting_revision = -1}
+      end),
+    ok = hosting_changed(Caller, Revision, Names),
+    _ = sys:get_state(quod_reg:via(?KEY)),
+    ok.
+
+test_set_manager_epoch(ManagerPid) when is_pid(ManagerPid) ->
+    sys:replace_state(
+      quod_reg:via(?KEY),
+      fun(S) -> S#s{manager_pid = ManagerPid,
+                    hosting_revision = -1,
+                    hosting_names = []}
+      end),
+    ok.
 -endif.
 
 channel() ->
@@ -198,13 +224,20 @@ init(Opts) ->
                       allowlist = maps:get(allowlist, Cfg),
                       allowed_keys = maps:get(allowed_keys, Cfg),
                       root_contacts = maps:get(root_contacts, Cfg),
-                      renew_ms = maps:get(renew_ms, Cfg)},
+                      renew_ms = maps:get(renew_ms, Cfg),
+                      manager_monitor =
+                        quod_reg:monitor_name({namespace_manager, node}, follow),
+                      directory_ref =
+                        quod_reg:monitor_name({directory, node}, follow)},
+            Base1 = refresh_manager_snapshot(
+                      Base#s{manager_pid =
+                               quod_reg:where({namespace_manager, node})}),
             case serving_identity(Cfg) of
                 disabled ->
-                    {ok, recover_lifecycle(Base)};
+                    {ok, recover_lifecycle(Base1)};
                 {ok, Identity} ->
                     {ok, recover_lifecycle(
-                           Base#s{
+                           Base1#s{
                              enabled = true,
                              self_key = maps:get(node_key, Identity),
                              signer = maps:get(signer, Identity),
@@ -244,18 +277,21 @@ handle_call(stats, _From, S) ->
 handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
-handle_cast(namespace_changed, S = #s{tracking = true}) ->
-    case set_observed_hosted(S) of
-        {ok, S1} ->
-            {noreply, S1};
-        {error, namespace_supervisor_unavailable} ->
-            {noreply, S};
-        {error, Reason} ->
-            logger:warning(
-              "quod: directory namespace reconciliation failed: ~p",
-              [Reason]),
-            {noreply, S}
+handle_cast({hosting_changed, ManagerPid, Revision, Names},
+            S = #s{manager_pid = ManagerPid,
+                   hosting_revision = Previous})
+  when Revision > Previous ->
+    S1 = S#s{hosting_revision = Revision, hosting_names = Names},
+    case S1#s.tracking of
+        true ->
+            case set_observed_hosted(S1) of
+                {ok, S2} -> {noreply, S2};
+                {error, _} -> {noreply, S1}
+            end;
+        false -> {noreply, S1}
     end;
+handle_cast({hosting_changed, _ManagerPid, _Revision, _Names}, S) ->
+    {noreply, S};
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -267,6 +303,21 @@ handle_info({directory_peer_result, Token, Result}, S) ->
     {noreply, handle_peer_result(Token, Result, S)};
 handle_info({directory_peer_query_timeout, Token}, S) ->
     {noreply, handle_peer_query_timeout(Token, S)};
+handle_info({gproc, registered, Ref, _Name},
+            S = #s{manager_monitor = Ref}) ->
+    S1 = refresh_manager_snapshot(
+           S#s{manager_pid = quod_reg:where({namespace_manager, node}),
+               hosting_revision = -1, hosting_names = []}),
+    {noreply, recover_tracking_event(S1)};
+handle_info({gproc, unreg, Ref, _Name},
+            S = #s{manager_monitor = Ref}) ->
+    {noreply, S#s{manager_pid = undefined,
+                  hosting_revision = -1, hosting_names = []}};
+handle_info({gproc, registered, Ref, _Name},
+            S = #s{directory_ref = Ref}) ->
+    {noreply, recover_directory_state(S)};
+handle_info({gproc, unreg, Ref, _Name}, S = #s{directory_ref = Ref}) ->
+    {noreply, maintain_directory_control(S#s{records = #{}})};
 handle_info(
   {directory_control_dial_timeout, NodeKey, Endpoint, OpenRef}, S) ->
     {noreply,
@@ -275,31 +326,6 @@ handle_info(
   {directory_contact_dial_timeout, Endpoint, OpenRef}, S) ->
     {noreply,
      handle_contact_dial_timeout(Endpoint, OpenRef, S)};
-handle_info(recover_tracking, S) ->
-    case observed_hosted(S) of
-        {ok, Hosted} ->
-            case hosted_ready(Hosted) of
-                true ->
-                    {noreply,
-                     set_normalized_hosted(Hosted, S)};
-                false ->
-                    schedule_tracking_recovery(),
-                    {noreply, S}
-            end;
-        {error, _} ->
-            schedule_tracking_recovery(),
-            {noreply, S}
-    end;
-handle_info(recover_directory, S) ->
-    case quod_reg:where({directory, node}) of
-        Pid when is_pid(Pid) ->
-            Ref = monitor(process, Pid),
-            {noreply, recover_directory_state(
-                        S#s{directory_ref = Ref})};
-        undefined ->
-            _ = erlang:send_after(100, self(), recover_directory),
-            {noreply, S}
-    end;
 handle_info({link_up, Ref, PeerKey, Channel, LinkPid},
             S = #s{channel = Channel}) ->
     {noreply, handle_directory_link_up(
@@ -322,10 +348,6 @@ handle_info({quod_message, {PeerKey, LinkPid}, Channel, Payload},
     %% current link; announcements require current root-relay authority.
     {noreply, inbound(
                 Payload, {pinned_link, PeerKey, LinkPid}, S)};
-handle_info({'DOWN', Ref, process, _Pid, _Reason},
-            S = #s{directory_ref = Ref}) when is_reference(Ref) ->
-    _ = erlang:send_after(100, self(), recover_directory),
-    {noreply, S#s{directory_ref = undefined}};
 handle_info({'DOWN', Ref, process, Pid, Reason}, S) ->
     case handle_peer_query_down(Ref, Pid, Reason, S) of
         {matched, S1} ->
@@ -338,6 +360,10 @@ handle_info(_Info, S) ->
 
 terminate(_Reason, S) ->
     cleanup_control_state(S),
+    _ = catch quod_reg:demonitor_name(
+                {namespace_manager, node}, S#s.manager_monitor),
+    _ = catch quod_reg:demonitor_name(
+                {directory, node}, S#s.directory_ref),
     _ = catch quod_reg:unsubscribe({channel, S#s.channel}),
     ok.
 
@@ -938,19 +964,20 @@ set_observed_hosted(S) ->
             Error
     end.
 
-normalize_hosted(NodeKey, Allowlist) ->
+normalize_hosted(NodeKey, Allowlist, HostingNames) ->
     %% Iterate the bounded public allowlist rather than every private ontology
     %% this node may host. The wire cap applies only to the advertised subset.
     Public = lists:sort(
-               maps:fold(
-                 fun(Ns, Keys, Acc) ->
+               lists:foldl(
+                 fun(Ns, Acc) ->
+                     Keys = maps:get(Ns, Allowlist, #{}),
                      case maps:is_key(NodeKey, Keys)
                               andalso is_pid(
                                         quod_reg:where({quod_ns, Ns})) of
                          true -> [Ns | Acc];
                          false -> Acc
                      end
-                 end, [], Allowlist)),
+                 end, [], HostingNames)),
     case length(Public) =< ?DIRECTORY_MAX_NAMESPACES of
         true -> describe_hosted(Public, []);
         false -> {error, bad_hosted}
@@ -1486,26 +1513,33 @@ serving_identity(#{identity_dir := IdentityDir}) ->
 %%%===================================================================
 
 recover_lifecycle(S) ->
-    DirectoryRef =
-        case quod_reg:where({directory, node}) of
-            Pid when is_pid(Pid) -> monitor(process, Pid);
-            undefined -> undefined
-        end,
-    case application:get_env(quod, directory_tracking, false) of
-        true -> schedule_tracking_recovery();
-        false -> ok
-    end,
     self() ! directory_tick,
-    S#s{directory_ref = DirectoryRef}.
+    recover_tracking_event(S).
 
-schedule_tracking_recovery() ->
-    _ = erlang:send_after(100, self(), recover_tracking),
-    ok.
+recover_tracking_event(S) ->
+    case application:get_env(quod, directory_tracking, false) of
+        true ->
+            case set_observed_hosted(S) of
+                {ok, S1} -> S1;
+                {error, _} -> S
+            end;
+        false -> S
+    end.
 
-observed_hosted(#s{self_key = NodeKey, allowlist = Allowlist}) ->
+refresh_manager_snapshot(S = #s{manager_pid = Pid}) when is_pid(Pid) ->
+    case catch quod_namespace_manager:hosting_snapshot() of
+        {ok, Revision, Names}
+          when is_integer(Revision), Revision >= 0, is_list(Names) ->
+            S#s{hosting_revision = Revision, hosting_names = Names};
+        _ -> S
+    end;
+refresh_manager_snapshot(S) -> S.
+
+observed_hosted(#s{self_key = NodeKey, allowlist = Allowlist,
+                   hosting_names = HostingNames}) ->
     case quod_reg:where({quod_ns_sup, node}) of
         Pid when is_pid(Pid) ->
-            normalize_hosted(NodeKey, Allowlist);
+            normalize_hosted(NodeKey, Allowlist, HostingNames);
         undefined ->
             {error, namespace_supervisor_unavailable}
     end.
@@ -1517,12 +1551,6 @@ reconcile_observed_hosted(S) ->
         {error, _} = Error ->
             Error
     end.
-
-hosted_ready(Hosted) ->
-    lists:all(
-      fun({Ns, _GenesisAnchor, _Role}) ->
-          quod_reg:where({quod_prolog, Ns}) =/= undefined
-      end, Hosted).
 
 recover_directory_state(S) ->
     %% Peer leases cannot be restored without extending their receiver-local

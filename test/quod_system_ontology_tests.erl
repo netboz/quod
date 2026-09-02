@@ -65,6 +65,38 @@ matching_materialized_identity_is_reused_without_reopening_ledger_test() ->
        quod_system_ontology:materialize(
          [#{namespace => Ns, anchor => Anchor}], #{Ns => Config})).
 
+ledger_read_failure_is_a_catalogue_owner_failure_test() ->
+    Ns = <<"quod:unreadable-system">>,
+    Anchor = <<6:256>>,
+    Root = filename:join(
+             "/tmp",
+             "quod_system_read_" ++
+                 binary_to_list(
+                   binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    Saved = application:get_env(quod, namespace_desired),
+    try
+        application:set_env(
+          quod, namespace_desired,
+          #{content => #{<<"quod:root">> =>
+                             #{data_dir => Root, ledger_dir => Root}},
+            brahms => #{}}),
+        Config = quod_ontology:local_resume_config(Ns, Anchor, Root),
+        LedgerDir = quod_ledger_store:ledger_dir(Config),
+        NsDir = quod_ledger_store:ns_dir(LedgerDir, Ns),
+        ok = filelib:ensure_dir(NsDir),
+        ok = file:write_file(NsDir, <<"not a ledger directory">>),
+        ?assertMatch(
+           {error, {ledger_read_failed, _}},
+           quod_system_ontology:materialize(
+             [#{namespace => Ns, anchor => Anchor}], #{}))
+    after
+        _ = file:del_dir_r(Root),
+        case Saved of
+            {ok, Value} -> application:set_env(quod, namespace_desired, Value);
+            undefined -> application:unset_env(quod, namespace_desired)
+        end
+    end.
+
 assert_one_malformed(Rejected) ->
     ?assertEqual(1, map_size(Rejected)),
     ?assertEqual(

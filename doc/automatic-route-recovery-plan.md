@@ -306,13 +306,14 @@ replaces its local private rows atomically. The directory derives the current
 endpoint from the exact `HostNodeRef` route and exposes the target only to this
 node's resolver; it never advertises that row.
 
-If the manager is temporarily absent, the projection bridge subscribes to its
-existing registered identity and fails the current handler run without
-changing P. The manager's registration edge asks `quod_runtime` for a fresh
-reconcile. It does not sleep and call the bridge again. Likewise, a child-start
-failure is redriven only by a concrete supervisor, route, catalogue, hosting,
-or explicit lifecycle event. The manager's ordinary `reconcile_retry` timer is
-deleted rather than retained for non-route failures under another name.
+If the manager is temporarily absent, the projection bridge fails the current
+handler run without changing P. The restarted manager re-verifies its node
+actor and asks that actor's existing runtime owner for a fresh reconciliation;
+the bridge owns no second manager subscription. It does not sleep and call the
+bridge again. Likewise, a child-start failure is redriven only by a concrete
+supervisor, route, catalogue, hosting, or explicit lifecycle event. The
+manager's ordinary `reconcile_retry` timer is deleted rather than retained for
+non-route failures under another name.
 
 The manager publishes one revisioned, complete projection of desired source
 and ready local identities to directory control through their existing
@@ -329,7 +330,7 @@ System-catalogue failures have named, event-driven outcomes; deleting
 | root absent, rebuilding, or not replayed | park the catalogue read | root runtime registration or `replay_ready` |
 | committed `system_ontology/2` changed | invalidate the old query/result | exact root `applied_live` changed-head edge |
 | exact route absent/unavailable | park only that materialization | `{directory_route, {Namespace, Anchor}}` availability/withdrawal edge |
-| `anchor_conflict` | keep the last valid root row and mark the exact identity blocked | root catalogue change, exact directory generation change, or local namespace inventory change |
+| `anchor_conflict` | keep the last valid root row and mark the exact identity blocked | root catalogue changed-head or a newer node-policy projection revision |
 | query-worker crash | fail the namespace manager so its existing supervisor restarts the owner; do not respawn the worker in place | supervisor restart and fresh root registration/snapshot |
 | query-worker deadline | kill the wedged worker and fail the owner as above; the deadline is only a final failure safeguard | supervisor restart |
 | `{ledger_read_failed, Reason}` | fail loudly as a local storage-owner fault instead of classifying it retryable | existing supervisor/application recovery after storage reopens |
@@ -338,6 +339,10 @@ A persistent worker or ledger fault therefore trips existing supervisor
 intensity and node health instead of polling forever. A root or route becoming
 available wakes only the parked exact work. Advancing time alone never turns a
 failed catalogue into progress.
+
+A child start or stop failure is logged and remains pending until a concrete
+supervisor, route, catalogue, hosting, or explicit lifecycle event changes the
+inputs. It is never redriven merely because time passed.
 
 ## 7. Directory publication and receipt
 
@@ -617,6 +622,8 @@ No later slice starts until the prior review is green.
   second mutation path.
 
 ### Slice 3 — event-driven bottom-up recovery
+
+**Implemented; awaiting review.**
 
 - Resume local system ledgers from root catalogue and park missing exact
   identities on directory route properties.

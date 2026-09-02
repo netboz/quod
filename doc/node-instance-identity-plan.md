@@ -1,9 +1,11 @@
 # Physical node instances and durable node references — plan
 
-**Status:** the generic actor-identity prerequisite in Slice 1 is implemented,
-committed, and deployed. Node-specific Slices 2--4 remain planning only;
-no dedicated node ontology, active `NodeRef`, or node-hosting projection is
-implemented by this document. `ontology-actor-architecture.md` remains
+**Status:** the generic actor-identity prerequisite is deployed. Node-specific
+Slices 2--3 are implemented in the current working tree and await review: an
+ordinary node actor ontology can be created through root, its exact reference
+is stored beside `node.key`, and the namespace manager resumes and verifies it
+before exposing the common agent principal. Node-hosting projection remains
+planned in Slice 4. `ontology-actor-architecture.md` remains
 authoritative for the actor model, `inter-ontology.md` for `::`,
 `ontology-subscription-plan.md` for subscriptions, and the directory documents
 for live route discovery.
@@ -196,8 +198,8 @@ committee projection, vote, certificate, or quorum calculation.
 3. The existing lifecycle action commits one root effect record and creates
    the node ontology on the effect executor.
 4. After the new ontology exposes its certified anchor, the node persists its
-   exact node reference in the existing desired-state row and verifies the
-   committed instance/key binding.
+   exact node reference in `node.actor` beside `node.key` and verifies the
+   committed instance/key binding. The pointer is not hosting authority.
 5. Only then is the generic actor identity available to higher-level node
    actions. Root bootstrap and consensus can continue to use their existing
    node-key identity until the separately reviewed generic-agent principal
@@ -218,15 +220,15 @@ creation.
    for its node ontology. Policy may instead authorize another agent to submit
    it; creation and containment do not imply ownership.
 4. The node retains and verifies the resulting exact reference through the
-   existing desired-state store.
+   exact `node.actor` pointer beside `node.key`.
 5. Any additional hosting of that exact node ontology uses the existing
    `quod:node::join_ontology/3` action.
 
 The brief interval between root admission and node-ontology readiness is
 explicit. During it, the process may participate under the existing transport
 key but cannot claim the new stable actor reference. Node-level actor actions
-fail closed until the certified node ontology is ready. Reconciliation retries
-the ordinary creation/outcome workflow; it never invents another ontology or
+fail closed until the certified node ontology is ready. Reconciliation resumes
+only the exact retained local ledger; it never recreates the ontology or
 reissues a write whose outcome is uncertain.
 
 ### 6.3 Restart, movement, and loss
@@ -291,6 +293,8 @@ ontology history remains authoritative.
 
 ### Slice 2 — node ontology creation and local binding
 
+**Status: implemented in the current working tree; awaiting review.**
+
 - Add a pure node-genesis builder which returns ordinary
   `create_ontology/2` options; it does not call lifecycle APIs.
 - Submit those options through the existing root action.
@@ -303,15 +307,24 @@ ontology history remains authoritative.
 
 ### Slice 3 — node actor activation
 
+**Status: implemented in the current working tree; awaiting review.**
+
 - Bind the generic actor principal to the verified node instance and active
   key.
-- Move higher-level node actions from the transitional key-only principal to
-  the generic actor principal in one change.
+- Move any higher-level node action from the transitional key-only principal
+  to the generic actor principal in one change. No such action exists yet:
+  activation exposes the
+  verified common principal for the hosting projection in the next reviewed
+  slice. The surviving `{node, Key}` clauses remain only the documented
+  transport/consensus bootstrap role, so there is no superseded action clause
+  to retain or delete yet.
 - Keep transport, committee, and consensus signatures keyed exactly as today.
 - Delete the superseded principal clauses, tests, comments, and docs; retain no
   compatibility alias.
 
 ### Slice 4 — measured node policies
+
+**Status: planning only.**
 
 - Express agent hosting, ontology hosting, or explicit private-node relations
   as ordinary Prolog facts only when their concrete use cases require them.

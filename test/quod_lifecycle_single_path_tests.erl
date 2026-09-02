@@ -16,6 +16,7 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(repeated_create_is_a_noop(Fixture))},
           {timeout, 30, ?_test(failed_transaction_branch_discards_its_effect(Fixture))},
           {timeout, 30, ?_test(join_uses_the_same_goal_path(Fixture))},
+          {timeout, 30, ?_test(node_actor_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_agent_create_uses_the_same_goal_path(Fixture))},
           {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
           {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
@@ -79,13 +80,16 @@ setup() ->
     Suffix = binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
     Dir = filename:join("/tmp", "quod_lifecycle_single_" ++ Suffix),
     Saved = save_env(
-              [node_pubkey, identity_key, node_addr,
+              [node_pubkey, identity_key, identity_dir, content_data_dir,
+               node_actor_principal, node_addr,
                namespace_desired, namespace_static_content,
                namespace_desired_path, content_storage_dirs]),
     {Pub, Seed} = quod_identity:generate(),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(
       quod, identity_key, quod_identity:key_term({Pub, Seed})),
+    application:set_env(quod, identity_dir, Dir),
+    application:set_env(quod, content_data_dir, Dir),
     application:set_env(quod, node_addr, {"127.0.0.1", 14567}),
     application:set_env(
       quod, namespace_desired, #{content => #{}, brahms => #{}}),
@@ -127,10 +131,24 @@ setup() ->
            {external_predicate_modules, [quod_ontology_predicates]}]),
     ok = wait_ready(?NODE_NS, 300),
     ok = wait_effect_capacity(64, 300),
+    ActorNs = unique_ns(<<"node-actor">>),
+    ActorInstanceText = <<"physical_node(primary).">>,
+    {ok, ActorOptions} = quod_node_actor:creation_options(
+                           ActorNs, ActorInstanceText, 2, Pub),
+    {ok, [#{}], _} = quod_prolog:execute(
+                       ?ROOT_NS,
+                       {create_ontology, ActorNs, ActorOptions}),
+    ok = wait_ready(ActorNs, 300),
+    ActorAnchor = quod_simplex:genesis_hash(ActorNs),
+    {ok, ActorPrincipal} = quod_node_actor:bind(
+                             ActorNs, ActorAnchor, ActorInstanceText, 2),
+    ok = wait_node_actor_principal(ActorPrincipal, 300),
     #{dir => Dir, saved => Saved, manager => Manager,
       ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
       router => Router, foreign_log => ForeignLog,
-      root_config => RootConfig}.
+      root_config => RootConfig, actor_ns => ActorNs,
+      actor_anchor => ActorAnchor, actor_principal => ActorPrincipal,
+      actor_instance_text => ActorInstanceText}.
 
 cleanup(#{dir := Dir, saved := Saved, manager := Manager,
           ns_sup := NsSup, brahms_sup := BrahmsSup, journal := Journal,
@@ -224,6 +242,72 @@ join_uses_the_same_goal_path(_Fixture) ->
     ok = wait_ready(Ns, 300),
     ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {joined_fact, ok})).
+
+node_actor_uses_ordinary_creation(
+  #{actor_ns := Ns, actor_anchor := Anchor,
+    actor_principal := Principal, actor_instance_text := InstanceText,
+    manager := Manager}) ->
+    {ok, PublicKey} = application:get_env(quod, node_pubkey),
+    ?assertEqual({ok, Principal}, quod_node_actor:principal()),
+    Manager ! reconcile,
+    ok = wait_manager_idle(Manager, 300),
+    ?assertEqual({ok, Principal}, quod_node_actor:principal()),
+    Blob = element(2, Principal),
+    ?assertEqual({ok, Principal}, quod_node_actor:verify(Blob, PublicKey)),
+    ?assertEqual(
+       {error, node_actor_active_key_mismatch},
+       quod_node_actor:verify(Blob, <<99:256>>)),
+    {ok, WrongAnchorBlob} = quod_node_actor:reference(
+                              Ns, <<0:256>>, InstanceText, 2),
+    ?assertEqual(
+       {error, node_actor_anchor_mismatch},
+       quod_node_actor:verify(WrongAnchorBlob, PublicKey)),
+    {ok, WrongInstanceBlob} = quod_node_actor:reference(
+                                Ns, Anchor,
+                                <<"physical_node(other).">>, 2),
+    ?assertEqual(
+       {error, node_actor_instance_mismatch},
+       quod_node_actor:verify(WrongInstanceBlob, PublicKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(
+         Ns, {instance_of, node, {physical_node, primary}})),
+    Instance = {physical_node, primary},
+    OtherInstance = {physical_node, duplicate},
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {assertz, {instance_of, node, OtherInstance}})),
+    ?assertEqual(
+       {error, node_actor_instance_mismatch},
+       quod_node_actor:verify(Blob, PublicKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {retract, {instance_of, node, OtherInstance}})),
+    RotatedKey = <<42:256>>,
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {retract, {agent_key, Instance, PublicKey, active}})),
+    ?assertEqual(
+       {error, node_actor_inactive_key},
+       quod_node_actor:verify(Blob, PublicKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns, {assertz, {agent_key, Instance, RotatedKey, active}})),
+    ?assertEqual(
+       {error, node_actor_active_key_mismatch},
+       quod_node_actor:verify(Blob, PublicKey)),
+    ?assertEqual({ok, Principal}, quod_node_actor:verify(Blob, RotatedKey)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         Ns,
+         {',',
+          {retract, {agent_key, Instance, RotatedKey, active}},
+          {assertz, {agent_key, Instance, PublicKey, active}}})).
 
 signed_agent_create_uses_the_same_goal_path(_Fixture) ->
     {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
@@ -870,7 +954,9 @@ reconcile_republishes_running_content(#{manager := Manager}) ->
     ok = wait_storage_dirs(Ns, ExpectedDirs, 300).
 
 dynamic_hosting_survives_content_tree_restart(
-  #{manager := Manager, ns_sup := NsSup}) ->
+  #{manager := Manager, ns_sup := NsSup,
+    actor_ns := ActorNs, actor_anchor := ActorAnchor,
+    actor_principal := ActorPrincipal}) ->
     Ns = unique_ns(<<"tree-restart">>),
     ?assertMatch(
        {ok, [#{}], _},
@@ -890,8 +976,11 @@ dynamic_hosting_survives_content_tree_restart(
     unlink(NewManager),
     ok = wait_ready(?ROOT_NS, 300),
     ok = wait_ready(Ns, 300),
+    ok = wait_ready(ActorNs, 300),
     ?assertEqual(RootAnchor, quod_simplex:genesis_hash(?ROOT_NS)),
     ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertEqual(ActorAnchor, quod_simplex:genesis_hash(ActorNs)),
+    ok = wait_node_actor_principal(ActorPrincipal, 300),
     ?assertEqual({ok, ready}, quod_ontology:local_state(Ns)),
     Config = desired_content(Ns),
     ?assertEqual(Anchor, maps:get(genesis_hash, Config)),
@@ -1049,6 +1138,28 @@ wait_ready(Ns, N) ->
     case quod_prolog:prove_ro(Ns, true) of
         {ok, _, _} -> ok;
         _ -> receive after 10 -> wait_ready(Ns, N - 1) end
+    end.
+
+wait_node_actor_principal(_Principal, 0) ->
+    error(node_actor_activation_timeout);
+wait_node_actor_principal(Principal, N) ->
+    case quod_node_actor:principal() of
+        {ok, Principal} -> ok;
+        _ ->
+            receive after 10 -> ok end,
+            wait_node_actor_principal(Principal, N - 1)
+    end.
+
+wait_manager_idle(_Manager, 0) ->
+    error(namespace_manager_idle_timeout);
+wait_manager_idle(Manager, N) ->
+    %% #s.mutation_worker is element 8. sys:get_state is sent after the test's
+    %% reconcile message, so observing it idle proves that cycle completed.
+    case element(8, sys:get_state(Manager)) of
+        undefined -> ok;
+        _ ->
+            receive after 10 -> ok end,
+            wait_manager_idle(Manager, N - 1)
     end.
 
 wait_effect_target_state(_Ns, _Expected, 0) ->

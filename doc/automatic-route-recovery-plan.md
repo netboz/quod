@@ -234,8 +234,10 @@ This refines the required root -> system -> ordinary order without inventing a
 bootstrap service: the node actor pointer is the already-planned minimal bridge
 between shared system recovery and ordinary per-node policy.
 
-A missing, malformed, conflicting, or wrong-anchor node pointer leaves node
-actor authority unavailable and starts no ordinary hosted ontology. It never
+A missing pointer leaves node actor authority unavailable and starts no
+ordinary hosted ontology. A malformed, conflicting, wrong-anchor, or
+locally-unresolvable retained pointer fails namespace-manager initialization
+loudly instead of running with an ambiguous physical identity. Neither case
 selects a directory result by name or creates a replacement actor. A node that
 has lost every local copy and has no other certified replica is a data-loss
 case, not something route discovery may conceal.
@@ -569,10 +571,13 @@ No later slice starts until the prior review is green.
   `agent_instance_ref/3` principal.
 - Replace the identity plan's §6 references to the existing desired-state
   store: the pointer lives in the identity directory beside `node.key` and the
-  directory epoch. Commit the node actor's own discoverable self-hosting row
-  after creation so other nodes can resolve that exact actor without making it
-  part of its own bootstrap.
-- Pin the node-actor projection module in that ontology's genesis.
+  directory epoch. Slice 2 commits the node actor's own discoverable
+  self-hosting row as soon as `hosts_ontology/4` and the anchor-binding creation
+  continuation exist; the row is not part of the actor's own bootstrap.
+- Pin the existing ontology external-predicate module in the node actor's
+  genesis. The founding hosting handler and its projection bridge land with
+  `hosts_ontology/4` in Slice 2; Slice-1 development actors are recreated by
+  the coordinated Slice-6 clean re-found because genesis is immutable.
 - Add no node-specific signer, ACL evaluator, route owner, or process.
 - Tests: first creation, exact restart, wrong anchor, wrong instance, inactive
   key, corrupt pointer, key rotation, and another host carrying the ledger
@@ -582,6 +587,8 @@ No later slice starts until the prior review is green.
 
 - Add `hosts_ontology/4`, `knows_ontology_host/4`, their ordinary policy/action
   rules, the founding state handler, and one projection bridge.
+- Put that founding handler and bridge module in every new node actor's
+  genesis; do not attempt to retrofit the Slice-1 development genesis.
 - Refactor creation to the single anchor-binding shape and compose create/join
   plus hosting facts through ordinary multi-ontology goals.
 - Make namespace manager merge root, system catalogue, and node-actor

@@ -30,7 +30,7 @@ conveniences around that preparation and execution code.
 -export([validate_action/1, prepare_action/2, canonical_name/1,
          execute_prepared/1,
          prepared_effect/4, prepared_bytes/1, decode_prepared/1,
-         prepare_system_join/3,
+         prepare_local_resume/3, prepare_system_join/3,
          local_state/1, genesis_anchor/1,
          network_identity/0, network_identity/2,
          root_ns/0]).
@@ -556,6 +556,29 @@ prepare_system_join(Ns, Anchor, SeedPeers)
             {ok, Config#{system_ontology => true}};
         {ok, #prepared_lifecycle{status = joining}} ->
             {error, unavailable};
+        {error, _} = Error -> Error
+    end.
+
+-doc """
+Build the ordinary pinned-join configuration for an exact ontology already
+present in this node's ledger store.  This is the shared local-resume seam;
+it grants neither system status nor hosting authority.
+""".
+-spec prepare_local_resume(binary(), <<_:256>>, file:filename_all()) ->
+          {ok, map()} | {error, term()}.
+prepare_local_resume(Ns, Anchor, DataDir)
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+    {_Ns, Config0} =
+        quod_app:build_ns_config(
+          #{namespace => Ns, mode => join,
+            data_dir => unicode:characters_to_binary(DataDir),
+            genesis_file => <<>>,
+            genesis_hash => binary:encode_hex(Anchor), seeds => []}),
+    Config = Config0#{genesis_hash => Anchor},
+    case existing_ledger(Ns, Config) of
+        {resumed, Anchor} -> {ok, Config};
+        {resumed, _OtherAnchor} -> {error, genesis_mismatch};
+        created -> {error, not_hosted};
         {error, _} = Error -> Error
     end.
 

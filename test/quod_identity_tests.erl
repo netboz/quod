@@ -119,6 +119,37 @@ corrupt_directory_epoch_fails_closed_test() ->
         rm_rf(Dir)
     end.
 
+node_actor_pointer_is_exact_idempotent_and_private_test() ->
+    Dir = tmp_dir(),
+    try
+        Blob = agent_blob(<<1:256>>, <<2:256>>, <<"node(primary).">>),
+        Other = agent_blob(<<3:256>>, <<4:256>>, <<"node(other).">>),
+        ?assertEqual(none, quod_identity:load_node_actor_pointer(Dir)),
+        ?assertEqual(ok, quod_identity:store_node_actor_pointer(Dir, Blob)),
+        ?assertEqual(ok, quod_identity:store_node_actor_pointer(Dir, Blob)),
+        ?assertEqual(
+           {error, node_actor_identity_mismatch},
+           quod_identity:store_node_actor_pointer(Dir, Other)),
+        ?assertEqual({ok, Blob}, quod_identity:load_node_actor_pointer(Dir)),
+        Path = filename:join(Dir, "node.actor"),
+        {ok, #file_info{mode = Mode}} = file:read_file_info(Path),
+        ?assertEqual(8#600, Mode band 8#777)
+    after
+        rm_rf(Dir)
+    end.
+
+corrupt_node_actor_pointer_fails_closed_test() ->
+    Dir = tmp_dir(),
+    try
+        ok = filelib:ensure_dir(filename:join(Dir, "x")),
+        ok = file:write_file(filename:join(Dir, "node.actor"), <<"bad">>),
+        ?assertEqual(
+           {error, bad_node_actor_pointer},
+           quod_identity:load_node_actor_pointer(Dir))
+    after
+        rm_rf(Dir)
+    end.
+
 short_format_test() ->
     {Pub, _} = quod_identity:generate(),
     S = quod_identity:short(Pub),
@@ -128,8 +159,14 @@ short_format_test() ->
 
 %% --- helpers ---
 
+agent_blob(Ns, Anchor, InstanceText) ->
+    {ok, #{blob := Blob}} =
+        quod_agent_ref:from_text(Ns, Anchor, InstanceText, 1),
+    Blob.
+
 tmp_dir() ->
-    filename:join("/tmp", "quod_id_test_" ++ integer_to_list(erlang:unique_integer([positive]))).
+    Suffix = binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
+    filename:join("/tmp", "quod_id_test_" ++ Suffix).
 
 rm_rf(Dir) ->
     _ = [file:delete(F) || F <- filelib:wildcard(filename:join(Dir, "*"))],

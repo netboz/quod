@@ -31,6 +31,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 -include_lib("public_key/include/public_key.hrl").
 
 -export([ensure/1, advance_directory_epoch/1,
+         load_node_actor_pointer/1, store_node_actor_pointer/2,
          generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
          sign/2, verify/3, write_atomic/3]).
 
@@ -49,6 +50,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 
 -define(KEYFILE, "node.key").
 -define(DIRECTORY_EPOCH_FILE, "directory.epoch").
+-define(NODE_ACTOR_FILE, "node.actor").
 
 %% ======================================================================
 %% API
@@ -98,6 +100,49 @@ advance_directory_epoch(Dir) ->
         {error, _} = Error ->
             Error
     end.
+
+-doc """
+Load the exact local node-actor reference stored beside `node.key`.
+
+The file is only a bootstrap pointer.  Authority remains in the referenced
+ontology: callers must verify its anchor, node instance and active key before
+using the returned principal.
+""".
+-spec load_node_actor_pointer(file:filename_all()) ->
+          none | {ok, binary()} | {error, term()}.
+load_node_actor_pointer(Dir) ->
+    Path = filename:join(Dir, ?NODE_ACTOR_FILE),
+    case file:read_file(Path) of
+        {ok, Bytes} -> decode_node_actor_pointer(Bytes);
+        {error, enoent} -> none;
+        {error, _} = Error -> Error
+    end.
+
+-doc """
+Persist one exact node-actor reference.  Repeating the same binding is
+idempotent; replacing it with another identity fails closed.
+""".
+-spec store_node_actor_pointer(file:filename_all(), binary()) ->
+          ok | {error, term()}.
+store_node_actor_pointer(Dir, Blob) when is_binary(Blob) ->
+    case quod_agent_ref:decode(Blob) of
+        {ok, _} ->
+            case load_node_actor_pointer(Dir) of
+                none ->
+                    Path = filename:join(Dir, ?NODE_ACTOR_FILE),
+                    Bytes = term_to_binary(
+                              {quod_node_actor_pointer, 1, Blob},
+                              [deterministic]),
+                    write_atomic(Path, Bytes, 8#600);
+                {ok, Blob} -> ok;
+                {ok, _Other} -> {error, node_actor_identity_mismatch};
+                {error, _} = Error -> Error
+            end;
+        {error, _} ->
+            {error, invalid_node_actor_pointer}
+    end;
+store_node_actor_pointer(_Dir, _Blob) ->
+    {error, invalid_node_actor_pointer}.
 
 -doc "Generate a fresh Ed25519 keypair `{PubKey, Seed}` (not persisted).".
 -spec generate() -> keypair().
@@ -253,6 +298,19 @@ read_epoch(Path) ->
         {ok, _} -> {error, bad_directory_epoch_file};
         {error, enoent} -> {ok, 0};
         {error, _} = Error -> Error
+    end.
+
+decode_node_actor_pointer(Bytes) ->
+    try binary_to_term(Bytes, [safe]) of
+        {quod_node_actor_pointer, 1, Blob} when is_binary(Blob) ->
+            case quod_agent_ref:decode(Blob) of
+                {ok, _} -> {ok, Blob};
+                {error, _} -> {error, bad_node_actor_pointer}
+            end;
+        _ ->
+            {error, bad_node_actor_pointer}
+    catch
+        _:_ -> {error, bad_node_actor_pointer}
     end.
 
 ok_(ok)               -> ok;

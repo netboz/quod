@@ -11,6 +11,12 @@ content is also checkpointed by this same owner, so a full application restart
 restores deliberate hosting without scanning directories or starting unrelated
 ledger data.
 
+The physical node actor is the single bootstrap exception to that general
+hosting store: one exact local pointer beside `node.key` resumes only its
+already-present ledger, after which this manager verifies the committed node
+instance and active-key binding. The pointer is identity bootstrap, never
+hosting or directory authority.
+
 After the statically configured root becomes ready, this same owner reads its
 committed `system_ontology/2` catalogue. Exact anchored system joins are
 merged into the existing desired-state projection; there is no second system
@@ -29,9 +35,12 @@ itself only owns state, ordering, persistence, and replies.
 
 -export([start_link/0,
          start_content/2, start_new_content/2, stop_content/1,
-         start_brahms/2, stop_brahms/1]).
+         start_brahms/2, stop_brahms/1, adopt_node_actor/0]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
+-ifdef(TEST).
+-export([test_node_actor_result_class/1]).
+-endif.
 
 -define(KEY, {namespace_manager, node}).
 -define(DESIRED_ENV, namespace_desired).
@@ -62,6 +71,7 @@ itself only owns state, ordering, persistence, and replies.
     system_retry = undefined,
     system_retry_ms = ?SYSTEM_RETRY_MIN_MS,
     system_dirty = false,
+    node_actor = none,
     reconcile_retry_ms = ?RETRY_MS
 }).
 
@@ -86,6 +96,10 @@ start_brahms(Ns, Config) ->
 stop_brahms(Ns) ->
     stop_child(brahms, Ns).
 
+-doc "Adopt the exact node-actor pointer persisted by the enrollment seam.".
+adopt_node_actor() ->
+    gen_server:cast(quod_reg:via(?KEY), adopt_node_actor).
+
 start_child(Kind, Ns, Config)
   when is_binary(Ns), is_map(Config) ->
     gen_server:call(
@@ -107,13 +121,15 @@ stop_child(_Kind, _Ns) ->
     {error, not_found}.
 
 init([]) ->
+    {NodeActor, NodeActorContent} = node_actor_bootstrap(),
     Durable0 = quod_namespace_desired_store:load(),
     Desired0 = desired_env(),
     Static = application:get_env(quod, namespace_static_content, #{}),
     %% Static operator configuration takes ownership of a same-name ontology.
     %% Remove the superseded dynamic row instead of leaving latent intent that
     %% could unexpectedly reappear if the static block is removed later.
-    Durable = maps:without(maps:keys(Static), Durable0),
+    Durable = maps:without(
+                maps:keys(Static) ++ maps:keys(NodeActorContent), Durable0),
     ok = persist_durable_if_changed(Durable0, Durable),
     Mirrored = maps:get(content, Desired0),
     System = maps:filter(
@@ -121,18 +137,23 @@ init([]) ->
                    is_map(Config)
                        andalso maps:get(system_ontology, Config, false) =:= true
                end, Mirrored),
-    Ephemeral = maps:without(
+    Ephemeral0 = maps:without(
                   maps:keys(maps:merge(maps:merge(Durable, Static), System)),
                   Mirrored),
+    Ephemeral = merge_node_actor_content(
+                  NodeActorContent, Durable, Static, System, Ephemeral0),
     Content = content_projection(Durable, Ephemeral, System, Static),
     Desired = Desired0#{content => Content},
     persist_desired(Desired),
+    application:unset_env(quod, node_actor_principal),
     true = quod_reg:subscribe({runtime, ?ROOT_NS}),
     self() ! reconcile,
     self() ! refresh_system_catalogue,
+    maybe_subscribe_node_actor(NodeActor),
     {ok, #s{desired = Desired, durable_content = Durable,
             static_content = Static, ephemeral_content = Ephemeral,
-            system_content = System, pending_calls = queue:new()}}.
+            system_content = System, node_actor = NodeActor,
+            pending_calls = queue:new()}}.
 
 handle_call(Request, From, S) ->
     S0 = reset_reconcile_backoff(S),
@@ -287,6 +308,11 @@ started_genesis(Ns, Config) ->
             {error, genesis_unavailable}
     end.
 
+handle_cast(adopt_node_actor, S) ->
+    {NodeActor, NodeActorContent} = node_actor_bootstrap(),
+    S1 = adopt_node_actor_state(NodeActor, NodeActorContent, S),
+    self() ! reconcile,
+    {noreply, S1};
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -300,13 +326,17 @@ handle_info(reconcile, S) ->
     {noreply, S#s{retry = undefined, reconcile_dirty = true}};
 handle_info(
   {mutation_result, Token,
-   {reconcile, Changed, Complete, StorageAdds}},
+   {reconcile, Changed, Complete, StorageAdds, NodeActorResult}},
   S = #s{mutation_worker = {_Pid, MRef, Token, reconcile}}) ->
     demonitor(MRef, [flush]),
     publish_reconcile_storage(StorageAdds),
     case Changed of
         true -> notify_content_changed();
         false -> ok
+    end,
+    case install_node_actor_result(NodeActorResult) of
+        ok -> ok;
+        {error, Reason} -> exit({node_actor_invalid, Reason})
     end,
     S0 = S#s{mutation_worker = undefined,
              reconcile_incomplete = not Complete},
@@ -352,6 +382,7 @@ handle_info(refresh_system_catalogue, S0) ->
     S = cancel_system_retry(S0),
     {noreply, start_system_query(S)};
 handle_info({replay_ready, _Id, _Height}, S) ->
+    self() ! reconcile,
     {noreply, request_system_refresh(reset_system_backoff(S))};
 handle_info({applied_live, Envelope}, S) ->
     case system_catalogue_changed(Envelope) of
@@ -408,6 +439,7 @@ terminate(_Reason, S) ->
     demonitor_if(S#s.ns_monitor),
     demonitor_if(S#s.brahms_monitor),
     _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
+    _ = unsubscribe_node_actor(S#s.node_actor),
     ok.
 
 %% Supervisor termination may legitimately wait for an ontology subtree to
@@ -423,10 +455,10 @@ start_reconcile(S0) ->
     {Pid, MRef} =
         spawn_monitor(
           fun() ->
-              {Changed, Complete, StorageAdds} = reconcile_all(S),
+              {Changed, Complete, StorageAdds, ActorResult} = reconcile_all(S),
               Parent !
                   {mutation_result, Token,
-                   {reconcile, Changed, Complete, StorageAdds}}
+                   {reconcile, Changed, Complete, StorageAdds, ActorResult}}
           end),
     S#s{mutation_worker = {Pid, MRef, Token, reconcile},
         reconcile_dirty = false}.
@@ -653,6 +685,108 @@ cancel_timer(Ref) when is_reference(Ref) ->
     ok;
 cancel_timer(_) -> ok.
 
+node_actor_bootstrap() ->
+    case quod_node_actor:bootstrap() of
+        none -> {none, #{}};
+        {ok, Blob, Config} ->
+            {ok, #{identity := {Ns, Anchor}}} = quod_agent_ref:decode(Blob),
+            {#{blob => Blob, namespace => Ns, anchor => Anchor},
+             #{Ns => Config}};
+        {error, Reason} ->
+            error({node_actor_bootstrap_failed, Reason})
+    end.
+
+adopt_node_actor_state(
+  NodeActor, NodeActorContent,
+  S = #s{desired = Desired, durable_content = Durable0,
+         static_content = Static, system_content = System,
+         ephemeral_content = Ephemeral0, node_actor = PreviousActor}) ->
+    ActorNamespaces = maps:keys(NodeActorContent),
+    Durable = maps:without(ActorNamespaces, Durable0),
+    ok = persist_durable_if_changed(Durable0, Durable),
+    EphemeralBase = maps:without(ActorNamespaces, Ephemeral0),
+    Ephemeral = merge_node_actor_content(
+                  NodeActorContent, Durable, Static, System, EphemeralBase),
+    Content = content_projection(Durable, Ephemeral, System, Static),
+    Desired1 = Desired#{content => Content},
+    persist_desired(Desired1),
+    maybe_subscribe_adopted_node_actor(PreviousActor, NodeActor),
+    S#s{desired = Desired1, durable_content = Durable,
+        ephemeral_content = Ephemeral, node_actor = NodeActor}.
+
+maybe_subscribe_adopted_node_actor(none, NodeActor) ->
+    maybe_subscribe_node_actor(NodeActor);
+maybe_subscribe_adopted_node_actor(#{namespace := Ns}, #{namespace := Ns}) ->
+    ok;
+maybe_subscribe_adopted_node_actor(PreviousActor, NodeActor) ->
+    _ = unsubscribe_node_actor(PreviousActor),
+    maybe_subscribe_node_actor(NodeActor).
+
+merge_node_actor_content(NodeActorContent, Durable, Static, System, Ephemeral) ->
+    maps:fold(
+      fun(Ns, Config, Acc) ->
+          Sources = [maps:get(Ns, Source, undefined)
+                     || Source <- [Durable, Static, System, Acc]],
+          case [Other || Other <- Sources, Other =/= undefined,
+                         maps:get(genesis_hash, Other, undefined)
+                             =/= maps:get(genesis_hash, Config)] of
+              [] -> Acc#{Ns => Config};
+              _ -> error({node_actor_identity_conflict, Ns})
+          end
+      end, Ephemeral, NodeActorContent).
+
+maybe_subscribe_node_actor(none) -> ok;
+maybe_subscribe_node_actor(#{namespace := Ns}) ->
+    true = quod_reg:subscribe({runtime, Ns}),
+    ok.
+
+unsubscribe_node_actor(none) -> ok;
+unsubscribe_node_actor(#{namespace := Ns}) ->
+    catch quod_reg:unsubscribe({runtime, Ns}),
+    ok.
+
+verify_node_actor(none) -> none;
+verify_node_actor(#{blob := Blob}) ->
+    case application:get_env(quod, node_pubkey) of
+        {ok, <<_:256>> = PublicKey} -> quod_node_actor:verify(Blob, PublicKey);
+        _ -> {error, node_identity_unavailable}
+    end.
+
+node_actor_complete(Result) ->
+    node_actor_result_class(Result) =/= pending.
+
+install_node_actor_result(Result) ->
+    case node_actor_result_class(Result) of
+        absent -> ok;
+        {ready, Principal} ->
+            application:set_env(quod, node_actor_principal, Principal),
+            ok;
+        pending -> ok;
+        {fatal, Reason} -> {error, Reason}
+    end.
+
+node_actor_result_class(none) -> absent;
+node_actor_result_class({ok, Principal}) -> {ready, Principal};
+node_actor_result_class({error, node_actor_anchor_mismatch}) ->
+    {fatal, node_actor_anchor_mismatch};
+node_actor_result_class({error, node_actor_instance_mismatch}) ->
+    {fatal, node_actor_instance_mismatch};
+node_actor_result_class({error, node_actor_active_key_mismatch}) ->
+    {fatal, node_actor_active_key_mismatch};
+node_actor_result_class({error, node_actor_inactive_key}) ->
+    {fatal, node_actor_inactive_key};
+node_actor_result_class({error, malformed_node_actor_identity}) ->
+    {fatal, malformed_node_actor_identity};
+node_actor_result_class({error, invalid_node_actor_pointer}) ->
+    {fatal, invalid_node_actor_pointer};
+node_actor_result_class({error, bad_node_actor_pointer}) ->
+    {fatal, bad_node_actor_pointer};
+node_actor_result_class({error, _Transient}) -> pending.
+
+-ifdef(TEST).
+test_node_actor_result_class(Result) -> node_actor_result_class(Result).
+-endif.
+
 desired_env() ->
     case application:get_env(quod, ?DESIRED_ENV, undefined) of
         #{content := Content, brahms := Brahms} = Desired
@@ -734,7 +868,11 @@ reconcile_all(S = #s{desired = Desired}) ->
     {_BrahmsChanged, BrahmsComplete, _NoStorage} =
         reconcile_kind(
           brahms, maps:get(brahms, Desired), S),
-    {ContentChanged, ContentComplete andalso BrahmsComplete, StorageAdds}.
+    ActorResult = verify_node_actor(S#s.node_actor),
+    {ContentChanged,
+     ContentComplete andalso BrahmsComplete
+         andalso node_actor_complete(ActorResult),
+     StorageAdds, ActorResult}.
 
 reconcile_kind(Kind, Desired, S) ->
     case supervisor_available(Kind, S) of

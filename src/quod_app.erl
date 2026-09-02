@@ -126,6 +126,7 @@ apply_identity(Cfg) ->
     %% Published so the other per-node secrets that live beside `node.key` — the
     %% browser-TLS keypair — resolve the same directory without re-deriving it.
     application:set_env(quod, identity_dir, Dir),
+    application:set_env(quod, content_data_dir, DataDir),
     application:set_env(
       quod, namespace_desired_path,
       filename:join(DataDir, "hosted_namespaces.qnd")),

@@ -48,7 +48,7 @@ key, and its ACL permissions are separate; no permission follows from
 
 There is consequently no core `create_agent` or `create_human_user` action.
 Class-specific Prolog may offer a convenience action which constructs ordinary
-genesis facts, and creation policy may restrict `create_ontology/2` to an exact
+genesis facts, and creation policy may restrict `create_ontology/3` to an exact
 existing agent or inspect dynamically changeable prerequisites. It must still
 use this one preparer, lifecycle effect, and namespace-manager path.
 
@@ -139,21 +139,23 @@ the same preparation and execution functions directly.
   latter case the supplied options are not applied and the explicit result prevents
   a caller from mistaking resume for a new creation.
 
-The namespace manager durably checkpoints the configurations it admitted
-through `start_new_content/2`. A whole application restart reloads that
-node-local desired set and reopens each existing ledger at its exact genesis
-anchor. Static content configuration overrides a same-name checkpoint at boot.
-The checkpoint is not a replicated ontology catalogue and grants no network
-authority; it records only what this node deliberately hosts. An explicit
-`stop_content/1` removes the corresponding checkpoint before stopping it.
+Creation itself is one committed root effect; it is not restart authority.
+Persistent hosting is the ordinary committed
+`hosts_ontology(NodeRef, Name, Anchor, Visibility)` fact in the local node
+actor ontology. The node actor's founding state handler projects that complete
+fact set through the namespace manager after replay. A local stop affects the
+running child only; retracting the hosting fact removes restart intent.
 
 ## Ordinary governed action
 
 `quod:root` declares creation through the shared `action/3` relation. A public
-`execute` of `create_ontology(Name, Options)` enters the ordinary proof, is
+`execute` of `create_ontology(Name, Options, Anchor)` enters the ordinary proof, is
 checked by `can_invoke/4`, and is bound to one opaque proof-local internal
 transition. That transition's prerequisites read `current_principal/1`, apply
 `can_create_ontology/3`, and require `not_hosted` before source input is read.
+Preparation binds `Anchor` to the exact deterministic genesis identity before
+the transaction seals, so the same ordinary multi-ontology goal may commit the
+matching node hosting fact without guessing or rereading it.
 
 The internal staging continuation compiles the source once into an immutable
 prepared descriptor and stages one typed direct effect. The controlling

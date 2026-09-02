@@ -38,15 +38,13 @@ start(_StartType, _StartArgs) ->
     %% from an earlier in-VM run. A control-child restart after this barrier
     %% sees `true` and safely re-derives the live set.
     application:set_env(quod, directory_tracking, false),
-    %% The manager reloads dynamic hosting intent from its node-local durable
-    %% snapshot. The environment is only an in-VM mirror; static configuration
-    %% is supplied separately and wins any same-name collision at boot.
+    %% This environment is only an in-VM projection. Restart authority comes
+    %% from root bootstrap and committed ontology facts.
     application:set_env(
       quod, namespace_desired,
       #{content => #{}, brahms => #{}}),
     application:set_env(quod, namespace_static_content,
                         static_content(Content)),
-    maybe_clear_dynamic_path(Content),
     {ok, Sup} = quod_sup:start_link(),
     ok = maybe_join(Content),
     ok = maybe_start_ns(Content),
@@ -127,9 +125,6 @@ apply_identity(Cfg) ->
     %% browser-TLS keypair — resolve the same directory without re-deriving it.
     application:set_env(quod, identity_dir, Dir),
     application:set_env(quod, content_data_dir, DataDir),
-    application:set_env(
-      quod, namespace_desired_path,
-      filename:join(DataDir, "hosted_namespaces.qnd")),
     case quod_identity:ensure(Dir) of
         {ok, #{pubkey := Pub, cert := Cert, key := Key}} ->
             application:set_env(quod, node_pubkey, Pub),
@@ -146,10 +141,6 @@ apply_identity(Cfg) ->
 static_content(none) -> #{};
 static_content(Blocks) when is_list(Blocks) ->
     maps:from_list([build_ns_config(Block) || Block <- Blocks]).
-
-maybe_clear_dynamic_path(none) ->
-    application:unset_env(quod, namespace_desired_path);
-maybe_clear_dynamic_path(_Blocks) -> ok.
 
 %% `identity.dir` if set, else `<data_dir>/identity` — i.e. INSIDE the same dir the ledger
 %% resolves (`data_dir/1`), so identity always shares the ledger's durability domain and

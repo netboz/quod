@@ -7,7 +7,7 @@ policy stated here and in `generic-agent-identity-plan.md`.
 
 ## 1. Decision
 
-`create_ontology/2` belongs to `quod:root`.
+`create_ontology/3` belongs to `quod:root`.
 
 Creation introduces a new ontology identity. Root is the network bootstrap,
 system-catalogue, and network-wide creation-policy authority, so it is the
@@ -22,7 +22,8 @@ creation:
 - the accepted action is an ordinary root proof and root transaction;
 - the transaction contains the existing closed `create` direct effect;
 - the one node-wide effect journal executes that effect after root applies it;
-- the one namespace manager creates and checkpoints the local namespace;
+- the one namespace manager creates the local namespace; committed node-actor
+  hosting facts separately own restart intent;
 - the created ontology still owns its own independent genesis and ledger;
 - root gains no per-ontology catalogue row, endpoint, route, or hosting table.
 
@@ -61,7 +62,7 @@ ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
 
 action('$quod_stage_ontology'(Handle,
-                              create_ontology(Name, Options),
+                              create_ontology(Name, Options, Anchor),
                               ontology_hosted(Name)),
        [current_principal(Agent),
         can_create_ontology(Agent, Name, Options),
@@ -94,7 +95,7 @@ bridge. Root uses the helper for create; node uses it inside
 
 The shared governed bridge remains `quod_ontology_predicates`:
 
-- `{create_ontology, 2}` is accepted only in `quod:root`;
+- `{create_ontology, 3}` is accepted only in `quod:root`;
 - `{join_ontology, 3}` is accepted only in `quod:node`;
 - both allocate one opaque proof-local request and enter the existing common
   `action/3` relation;
@@ -220,7 +221,7 @@ ownership. No runtime source fallback or compatibility policy is added.
 
 ## 7. Required tests
 
-1. A node-authored `create_ontology/2` against root commits one root
+1. A node-authored `create_ontology/3` against root commits one root
    transaction, contains one existing create effect, and starts the new
    ontology on that executor node.
 2. The same goal against `quod:node` fails and stages no effect.
@@ -247,7 +248,7 @@ ownership. No runtime source fallback or compatibility policy is added.
     exact executor node; another root validator does not execute it.
 13. Root catch-up/replay validates the creation transaction without a
     node-specific exception.
-14. A signed agent uses the generic `quod:root::create_ontology/2` goal and the
+14. A signed agent uses the generic `quod:root::create_ontology/3` goal and the
     same root action/effect path as a node-authored creation.
 15. A source/client/test grep finds no `create_user_home`, `quod_user`, special
     registration path, or current claim that `quod:node` owns creation.

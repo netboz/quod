@@ -91,10 +91,10 @@ predicate_modules_are_engine_local_test() ->
         ?assertMatch(
            {staging, quod_ontology_predicates,
             lifecycle_request_predicate},
-           quod_predicates:descriptor(Root, {create_ontology, 2})),
+           quod_predicates:descriptor(Root, {create_ontology, 3})),
         ?assertEqual(
            undefined,
-           quod_predicates:descriptor(Common, {create_ontology, 2}))
+           quod_predicates:descriptor(Common, {create_ontology, 3}))
     after
         delete_est(Common),
         delete_est(Root)

@@ -18,6 +18,7 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(join_uses_the_same_goal_path(Fixture))},
           {timeout, 30, ?_test(node_actor_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_agent_create_uses_the_same_goal_path(Fixture))},
+          {timeout, 60, ?_test(create_and_host_is_one_ordinary_goal(Fixture))},
           {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
           {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
           {timeout, 30, ?_test(action_timeout_returns_exact_outcome(Fixture))},
@@ -25,7 +26,7 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(effect_execution_uses_its_generic_descriptor(Fixture))},
           {timeout, 30, ?_test(stopped_ontology_resumes_same_anchor(Fixture))},
           ?_test(wrong_anchor_is_not_a_satisfied_effect(Fixture)),
-          ?_test(static_anchor_is_available_before_manager_merge(Fixture)),
+          ?_test(ordinary_static_config_is_not_authority(Fixture)),
           ?_test(structural_validation_is_total(Fixture)),
           ?_test(current_principal_is_engine_owned(Fixture)),
           ?_test(internal_staging_continuation_cannot_be_forged(Fixture)),
@@ -41,8 +42,11 @@ lifecycle_single_path_test_() ->
           ?_test(committed_agent_approval_uses_the_same_action(Fixture)),
           {timeout, 30, ?_test(false_postcondition_is_reported(Fixture))},
           ?_test(reconcile_republishes_running_content(Fixture)),
+          ?_test(aborted_hosting_fact_changes_nothing(Fixture)),
+          ?_test(retracted_hosting_fact_removes_restart_intent(Fixture)),
           {timeout, 30,
-           ?_test(dynamic_hosting_survives_content_tree_restart(Fixture))}]
+           ?_test(dynamic_hosting_survives_content_tree_restart(Fixture))},
+          ?_test(obsolete_desired_file_has_no_authority(Fixture))]
      end}.
 
 effect_capacity_is_committed_root_policy(_Fixture) ->
@@ -83,7 +87,7 @@ setup() ->
               [node_pubkey, identity_key, identity_dir, content_data_dir,
                node_actor_principal, node_addr,
                namespace_desired, namespace_static_content,
-               namespace_desired_path, content_storage_dirs]),
+               content_storage_dirs]),
     {Pub, Seed} = quod_identity:generate(),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(
@@ -93,9 +97,6 @@ setup() ->
     application:set_env(quod, node_addr, {"127.0.0.1", 14567}),
     application:set_env(
       quod, namespace_desired, #{content => #{}, brahms => #{}}),
-    application:set_env(
-      quod, namespace_desired_path,
-      filename:join(Dir, "hosted_namespaces.qnd")),
     application:set_env(quod, content_storage_dirs, #{}),
     {ok, Router} = quod_ask_router:start_link(),
     unlink(Router),
@@ -109,8 +110,6 @@ setup() ->
     unlink(BrahmsSup),
     {ok, NsSup} = quod_ns_sup:start_link(),
     unlink(NsSup),
-    {ok, Manager} = quod_namespace_manager:start_link(),
-    unlink(Manager),
     RootBlock =
         #{namespace => ?ROOT_NS, mode => create,
           genesis_file => <<"ontologies/quod_root.pl">>,
@@ -119,6 +118,8 @@ setup() ->
     RootConfig = RootConfig0#{proof_timeout_ms => 5000},
     application:set_env(
       quod, namespace_static_content, #{?ROOT_NS => RootConfig}),
+    {ok, Manager} = quod_namespace_manager:start_link(),
+    unlink(Manager),
     {ok, _} = quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
     ok = wait_ready(?ROOT_NS, 300),
     NodeSource = list_to_binary(
@@ -135,11 +136,13 @@ setup() ->
     ActorInstanceText = <<"physical_node(primary).">>,
     {ok, ActorOptions} = quod_node_actor:creation_options(
                            ActorNs, ActorInstanceText, 2, Pub),
-    {ok, [#{}], _} = quod_prolog:execute(
+    {ok, [#{'ActorAnchor' := CreatedActorAnchor}], _} = quod_prolog:execute(
                        ?ROOT_NS,
-                       {create_ontology, ActorNs, ActorOptions}),
+                       {create_ontology, ActorNs, ActorOptions,
+                        {'ActorAnchor'}}),
     ok = wait_ready(ActorNs, 300),
     ActorAnchor = quod_simplex:genesis_hash(ActorNs),
+    ?assertEqual(ActorAnchor, CreatedActorAnchor),
     {ok, ActorPrincipal} = quod_node_actor:bind(
                              ActorNs, ActorAnchor, ActorInstanceText, 2),
     ok = wait_node_actor_principal(ActorPrincipal, 300),
@@ -148,7 +151,8 @@ setup() ->
       router => Router, foreign_log => ForeignLog,
       root_config => RootConfig, actor_ns => ActorNs,
       actor_anchor => ActorAnchor, actor_principal => ActorPrincipal,
-      actor_instance_text => ActorInstanceText}.
+      actor_instance_text => ActorInstanceText,
+      actor_keypair => {Pub, Seed}}.
 
 cleanup(#{dir := Dir, saved := Saved, manager := Manager,
           ns_sup := NsSup, brahms_sup := BrahmsSup, journal := Journal,
@@ -183,7 +187,7 @@ create_is_one_normal_effect_transaction(#{root_config := RootConfig}) ->
         {create_ontology, Ns,
          [{source,
            <<"can_invoke(_, _, _, _).\n"
-             "hello(world).\n">>}]},
+             "hello(world).\n">>}], {'_'}},
     {ok, [#{}], Height} = quod_prolog:execute(?ROOT_NS, Goal),
     ok = wait_ready(Ns, 300),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {hello, world})),
@@ -207,7 +211,7 @@ create_is_one_normal_effect_transaction(#{root_config := RootConfig}) ->
 
 repeated_create_is_a_noop(_Fixture) ->
     Ns = unique_ns(<<"repeated">>),
-    Goal = {create_ontology, Ns, []},
+    Goal = create_goal(Ns, []),
     ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ok = wait_ready(Ns, 300),
     Before = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
@@ -220,8 +224,8 @@ failed_transaction_branch_discards_its_effect(_Fixture) ->
     Goal =
         {';',
          {transaction,
-          {',', {create_ontology, FirstNs, []}, fail}},
-         {create_ontology, SecondNs, []}},
+          {',', create_goal(FirstNs, []), fail}},
+         create_goal(SecondNs, [])},
     ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ok = wait_ready(SecondNs, 300),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(FirstNs)),
@@ -229,8 +233,9 @@ failed_transaction_branch_discards_its_effect(_Fixture) ->
 
 join_uses_the_same_goal_path(_Fixture) ->
     Ns = unique_ns(<<"join">>),
-    Create = {create_ontology, Ns,
-              [{source, <<"can_invoke(_, _, _, _).\njoined_fact(ok).\n">>}]},
+    Create = create_goal(
+               Ns,
+               [{source, <<"can_invoke(_, _, _, _).\njoined_fact(ok).\n">>}]),
     ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Create)),
     ok = wait_ready(Ns, 300),
     Anchor = quod_simplex:genesis_hash(Ns),
@@ -325,7 +330,7 @@ signed_agent_create_uses_the_same_goal_path(_Fixture) ->
             open_client_session(NetworkId, NodeKey, KeyPair, Peer),
         GoalText = iolist_to_binary(
                      ["quod:root::create_ontology(\"", NewNs,
-                      "\", [])."]),
+                      "\", [], _)."]),
         {RequestBytes, Signature} = signed_agent_goal(
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
@@ -336,6 +341,61 @@ signed_agent_create_uses_the_same_goal_path(_Fixture) ->
                SessionId, RequestBytes, Signature, Peer),
         ok = wait_ready(NewNs, 300)
     after
+        stop_process(AuthPid)
+    end.
+
+create_and_host_is_one_ordinary_goal(
+  #{actor_ns := ActorNs, actor_anchor := ActorAnchor,
+    actor_instance_text := InstanceText,
+    actor_keypair := {PublicKey, _} = KeyPair,
+    actor_principal := Principal}) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    NewNs = unique_ns(<<"composed-created">>),
+    Peer = {127, 0, 0, 7},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    ok = commit_root({assertz, {ontology_creator_agent, NodeRef}}),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Agent = #{namespace => ActorNs, anchor => ActorAnchor,
+                  instance_text => InstanceText},
+        GoalText = iolist_to_binary(
+                     ["quod:root::create_ontology(\"", NewNs,
+                      "\", [], Anchor), \"", ActorNs,
+                      "\"::assertz(hosts_ontology(",
+                      agent_ref_source(NodeRef, InstanceText), ", ",
+                      prolog_binary_literal(NewNs),
+                      ", Anchor, private))."]),
+        {RequestBytes, Signature} = signed_agent_goal_version(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      GoalText, 2),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer),
+        ok = wait_ready(NewNs, 300),
+        Anchor = quod_simplex:genesis_hash(NewNs),
+        ok = wait_desired_content(NewNs, Anchor, 300),
+        {ok, HostRows, _} = quod_prolog:prove_ro(
+                              ActorNs,
+                              {hosts_ontology, {'NodeRef'}, {'Namespace'},
+                               {'Anchor'}, private}),
+        ?assert(
+           lists:any(
+              fun(#{'NodeRef' := Ref, 'Namespace' := Ns,
+                    'Anchor' := A}) ->
+                      Ref =:= NodeRef andalso Ns =:= NewNs
+                          andalso A =:= Anchor
+              end, HostRows))
+    after
+        _ = quod_prolog:execute(
+              ?ROOT_NS, {retract, {ontology_creator_agent, NodeRef}}),
         stop_process(AuthPid)
     end.
 
@@ -359,7 +419,7 @@ signed_root_create_obeys_entry_acl(_Fixture) ->
                 open_client_session(NetworkId, NodeKey, KeyPair, Peer),
             GoalText = iolist_to_binary(
                          ["quod:root::create_ontology(\"", DeniedNs,
-                          "\", [])."]),
+                          "\", [], _)."]),
             {RequestBytes, Signature} = signed_agent_goal(
                                           NetworkId, PublicKey, KeyPair,
                                           Agent, execute, SessionExpires,
@@ -401,7 +461,7 @@ action_timeout_returns_exact_outcome(#{manager := Manager}) ->
     Ns = unique_ns(<<"action-timeout">>),
     ok = sys:suspend(Manager),
     Result =
-        try quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})
+        try quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))
         after ok = sys:resume(Manager)
         end,
     ?assertMatch(
@@ -428,7 +488,7 @@ effect_completion_survives_journal_restart(#{dir := Dir}) ->
               Parent !
                   {journal_restart_result, self(),
                    quod_prolog:execute(
-                     ?ROOT_NS, {create_ontology, Ns, []})}
+                     ?ROOT_NS, create_goal(Ns, []))}
           end),
     try
         Worker =
@@ -516,7 +576,7 @@ effect_execution_uses_its_generic_descriptor(_Fixture) ->
 
 stopped_ontology_resumes_same_anchor(_Fixture) ->
     Ns = unique_ns(<<"resume-anchor">>),
-    Action = {create_ontology, Ns, []},
+    Action = create_goal(Ns, []),
     ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Action)),
     ok = wait_ready(Ns, 300),
     Anchor = quod_simplex:genesis_hash(Ns),
@@ -531,7 +591,7 @@ wrong_anchor_is_not_a_satisfied_effect(_Fixture) ->
     Ns = unique_ns(<<"wrong-anchor">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
     ok = wait_ready(Ns, 300),
     Actual = quod_simplex:genesis_hash(Ns),
     <<First, Rest/binary>> = Actual,
@@ -585,13 +645,13 @@ current_principal_is_engine_owned(_Fixture) ->
 internal_staging_continuation_cannot_be_forged(_Fixture) ->
     Ns = unique_ns(<<"forged-continuation">>),
     Goal = {'$quod_stage_ontology', forged_handle,
-            {create_ontology, Ns, []}, {ontology_hosted, Ns}},
+            create_goal(Ns, []), {ontology_hosted, Ns}},
     {fail, Reasons} = quod_prolog:execute(?ROOT_NS, Goal),
     ?assertEqual({ontology_creation_failed, invalid_action},
                  lists:last(Reasons)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
 
-static_anchor_is_available_before_manager_merge(_Fixture) ->
+ordinary_static_config_is_not_authority(_Fixture) ->
     Ns = unique_ns(<<"static-anchor">>),
     StaticAnchor = crypto:strong_rand_bytes(32),
     DesiredAnchor = crypto:strong_rand_bytes(32),
@@ -607,7 +667,7 @@ static_anchor_is_available_before_manager_merge(_Fixture) ->
         application:set_env(
           quod, namespace_static_content,
           Static0#{Ns => #{genesis_hash => StaticAnchor}}),
-        ?assertEqual({ok, StaticAnchor}, quod_ontology:genesis_anchor(Ns)),
+        ?assertEqual({error, not_hosted}, quod_ontology:genesis_anchor(Ns)),
 
         %% Once the manager publishes its desired mirror, that single runtime
         %% owner remains authoritative over the earlier static input.
@@ -640,7 +700,7 @@ foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
     try
         {ok, [#{}], Height} = quod_prolog:execute(
                                 ?ROOT_NS,
-                                {create_ontology, TargetNs, []}),
+                                create_goal(TargetNs, [])),
         ?assert(is_integer(Height) andalso Height > 0),
         ok = wait_ready(TargetNs, 300),
         ok = wait_effect_target_state(TargetNs, applied, 300),
@@ -679,7 +739,7 @@ foreign_prerequisite_failure_keeps_its_reason(_Fixture) ->
     try
         {fail, Reasons} = quod_prolog:execute(
                             ?ROOT_NS,
-                            {create_ontology, TargetNs, []}),
+                            create_goal(TargetNs, [])),
         ?assert(lists:member(remote_lifecycle_denied, Reasons)),
         ?assertEqual(BeforeRows, quod_effect_journal:rows()),
         ?assertEqual(BeforeHeight,
@@ -708,7 +768,7 @@ agent_is_gated_by_root_creation_policy(_Fixture) ->
             open_client_session(NetworkId, NodeKey, KeyPair, Peer),
         GoalText = iolist_to_binary(
                      ["quod:root::create_ontology(\"", DeniedNs,
-                      "\", [])."]),
+                      "\", [], _)."]),
         {RequestBytes, Signature} = signed_agent_goal(
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
@@ -730,7 +790,7 @@ agent_is_gated_by_root_creation_policy(_Fixture) ->
 node_does_not_own_generic_creation_policy(_Fixture) ->
     Ns = unique_ns(<<"wrong-owner">>),
     {fail, Reasons} =
-        quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []}),
+        quod_prolog:execute(?NODE_NS, create_goal(Ns, [])),
     ?assertEqual({ontology_creation_failed, wrong_ontology},
                  lists:last(Reasons)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
@@ -738,13 +798,13 @@ node_does_not_own_generic_creation_policy(_Fixture) ->
 invalid_create_never_reaches_hosting(_Fixture) ->
     BadNs = <<>>,
     {fail, Reasons} =
-        quod_prolog:execute(?ROOT_NS, {create_ontology, BadNs, []}),
+        quod_prolog:execute(?ROOT_NS, create_goal(BadNs, [])),
     ?assertEqual({ontology_creation_failed, invalid_name},
                  lists:last(Reasons)),
     ?assertEqual({error, invalid_name}, quod_ontology:local_state(BadNs)),
     {fail, VariableReasons} =
         quod_prolog:execute(
-          ?ROOT_NS, {create_ontology, {'Namespace'}, []}),
+          ?ROOT_NS, create_goal({'Namespace'}, [])),
     ?assertEqual({ontology_creation_failed, invalid_arguments},
                  lists:last(VariableReasons)).
 
@@ -775,9 +835,10 @@ collisions_preserve_existing_state(_Fixture) ->
        {ok, [#{}], _},
        quod_prolog:execute(
          ?ROOT_NS,
-         {create_ontology, Ns,
-          [{source,
-            <<"can_invoke(_, _, _, _).\nkept(true).\n">>}]})),
+         create_goal(
+           Ns,
+           [{source,
+             <<"can_invoke(_, _, _, _).\nkept(true).\n">>}]))),
     ok = wait_ready(Ns, 300),
     Pid0 = quod_reg:where({quod_ns, Ns}),
     Desired0 = application:get_env(quod, namespace_desired, #{}),
@@ -850,7 +911,7 @@ failed_root_policy_does_not_read_or_stage(_Fixture) ->
             open_client_session(NetworkId, NodeKey, KeyPair, Peer),
         Goal = iolist_to_binary(
                  ["create_ontology(\"", Ns,
-                  "\", [source_file(\"", Missing, "\")])."]),
+                  "\", [source_file(\"", Missing, "\")], _)."]),
         RoutedGoal = <<"quod:root::", Goal/binary>>,
         {RequestBytes, Signature} = signed_agent_goal(
                                       NetworkId, PublicKey, KeyPair,
@@ -898,7 +959,7 @@ committed_agent_approval_uses_the_same_action(_Fixture) ->
         Goal = iolist_to_binary(
                  ["create_ontology(\"", Ns,
                   "\", [source(\"can_invoke(_, _, _, _)."
-                  "\\napproved(ok).\\n\")])."]),
+                  "\\napproved(ok).\\n\")], _)."]),
         RoutedGoal = <<"quod:root::", Goal/binary>>,
         {RequestBytes, Signature} = signed_agent_goal(
                                       NetworkId, PublicKey, KeyPair,
@@ -919,20 +980,20 @@ false_postcondition_is_reported(_Fixture) ->
     Original = root_creation_action(),
     {action,
      {'$quod_stage_ontology', Handle,
-      {create_ontology, Name, Options}, _OriginalDesired},
+      {create_ontology, Name, Options, Anchor}, _OriginalDesired},
      Prerequisites, _Desired} = Original,
     FalseDesired = {never_reached, Name},
     Modified =
         {action,
          {'$quod_stage_ontology', Handle,
-          {create_ontology, Name, Options}, FalseDesired},
+          {create_ontology, Name, Options, Anchor}, FalseDesired},
          Prerequisites, FalseDesired},
     ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
     Ns = unique_ns(<<"false-postcondition">>),
     try
         ?assertEqual(
            {error, {operator_error, postcondition_failed}},
-           quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
+           quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
         ok = wait_ready(Ns, 300),
         ?assertEqual({ok, ready}, quod_ontology:local_state(Ns))
     after
@@ -940,18 +1001,44 @@ false_postcondition_is_reported(_Fixture) ->
                {',', {retract, Modified}, {assertz, Original}})
     end.
 
-reconcile_republishes_running_content(#{manager := Manager}) ->
+reconcile_republishes_running_content(Fixture = #{manager := Manager}) ->
     Ns = unique_ns(<<"reconcile-publish">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
     ok = wait_ready(Ns, 300),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ok = host_locally(Fixture, Ns, Anchor),
     Config = desired_content(Ns),
     ExpectedDirs = #{data => quod_ledger_store:data_dir(Config),
                      ledger => quod_ledger_store:ledger_dir(Config)},
     application:set_env(quod, content_storage_dirs, #{}),
     Manager ! reconcile,
     ok = wait_storage_dirs(Ns, ExpectedDirs, 300).
+
+aborted_hosting_fact_changes_nothing(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"aborted-host">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:execute(ActorNs, {transaction, {',', {assertz, Host}, fail}})),
+    ?assertEqual(false, desired_has_content(Ns)),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs, Host)).
+
+retracted_hosting_fact_removes_restart_intent(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    Ns = unique_ns(<<"retracted-host">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+    ok = wait_desired_content(Ns, Anchor, 300),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
+    ok = wait_desired_absent(Ns, 300),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
 
 dynamic_hosting_survives_content_tree_restart(
   #{manager := Manager, ns_sup := NsSup,
@@ -960,9 +1047,12 @@ dynamic_hosting_survives_content_tree_restart(
     Ns = unique_ns(<<"tree-restart">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
+       quod_prolog:execute(?ROOT_NS, create_goal(Ns, []))),
     ok = wait_ready(Ns, 300),
     Anchor = quod_simplex:genesis_hash(Ns),
+    ok = host_locally(
+           #{actor_ns => ActorNs, actor_principal => ActorPrincipal},
+           Ns, Anchor),
     RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
 
     stop_process(Manager),
@@ -988,6 +1078,35 @@ dynamic_hosting_survives_content_tree_restart(
     ?assertNot(maps:is_key(genesis_diff, Config)),
     ok = wait_effect_capacity(64, 300).
 
+obsolete_desired_file_has_no_authority(
+  #{dir := Dir, actor_principal := ActorPrincipal}) ->
+    GhostNs = unique_ns(<<"obsolete-desired">>),
+    GhostAnchor = crypto:strong_rand_bytes(32),
+    Path = filename:join(Dir, "hosted_namespaces.qnd"),
+    Payload = term_to_binary(
+                {quod_namespace_desired, 1,
+                 [{GhostNs, #{mode => join, genesis_hash => GhostAnchor}}]},
+                [deterministic]),
+    Bytes = <<16#514E4431:32/unsigned-big,
+              (byte_size(Payload)):32/unsigned-big,
+              (crypto:hash(sha256, Payload))/binary, Payload/binary>>,
+    ok = file:write_file(Path, Bytes),
+    ?assertMatch({ok, Bytes}, file:read_file(Path)),
+    SavedPath = application:get_env(quod, namespace_desired_path),
+    try
+        application:set_env(quod, namespace_desired_path, Path),
+        stop_process(quod_reg:where({namespace_manager, node})),
+        application:set_env(
+          quod, namespace_desired, #{content => #{}, brahms => #{}}),
+        {ok, NewManager} = quod_namespace_manager:start_link(),
+        unlink(NewManager),
+        ok = wait_node_actor_principal(ActorPrincipal, 300),
+        ?assertEqual(false, desired_has_content(GhostNs)),
+        ?assertEqual({ok, not_hosted}, quod_ontology:local_state(GhostNs))
+    after
+        restore_env([{namespace_desired_path, SavedPath}])
+    end.
+
 commit_root(Goal) ->
     ?assertMatch({ok, [_ | _], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ok.
@@ -996,9 +1115,21 @@ root_creation_action() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     [Declaration] =
         [Term || {action,
-                  {'$quod_stage_ontology', _, {create_ontology, _, _}, _},
+                  {'$quod_stage_ontology', _, {create_ontology, _, _, _}, _},
                   _, _} = Term <- quod_prolog:read_terms(File)],
     Declaration.
+
+create_goal(Ns, Options) ->
+    {create_ontology, Ns, Options, {'_'}}.
+
+host_locally(#{actor_ns := ActorNs, actor_principal := Principal}, Ns, Anchor) ->
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    ?assertMatch(
+       {ok, [_ | _], _},
+       quod_prolog:execute(
+         ActorNs,
+         {assertz, {hosts_ontology, NodeRef, Ns, Anchor, private}})),
+    wait_desired_content(Ns, Anchor, 300).
 
 root_open_invoke_clause() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
@@ -1035,6 +1166,17 @@ signed_agent_goal(NetworkId, PublicKey, KeyPair,
                   #{namespace := AgentNs, anchor := AgentAnchor,
                     instance_text := InstanceText},
                   Mode, SessionExpires, GoalText) ->
+    signed_agent_goal_version(
+      NetworkId, PublicKey, KeyPair,
+      #{namespace => AgentNs, anchor => AgentAnchor,
+        instance_text => InstanceText},
+      Mode, SessionExpires, GoalText, 1).
+
+signed_agent_goal_version(
+  NetworkId, PublicKey, KeyPair,
+  #{namespace := AgentNs, anchor := AgentAnchor,
+    instance_text := InstanceText},
+  Mode, SessionExpires, GoalText, ParserVersion) ->
     Request = #{network_identity => NetworkId,
                 signing_public_key => PublicKey,
                 operation_id => crypto:strong_rand_bytes(32),
@@ -1042,7 +1184,7 @@ signed_agent_goal(NetworkId, PublicKey, KeyPair,
                 agent_genesis_anchor => AgentAnchor,
                 agent_instance_text => InstanceText,
                 mode => Mode,
-                parser_version => 1,
+                parser_version => ParserVersion,
                 not_after_ms => min(SessionExpires,
                                     quod_time:now_ms() + 30000),
                 goal_text => GoalText},
@@ -1052,7 +1194,12 @@ signed_agent_goal(NetworkId, PublicKey, KeyPair,
 
 assert_signed_action_result(
   {ok, _, {normalized, {committed, [_],
-                        {transaction, ?ROOT_NS, _, _}}}},
+                        {transaction, _, _, _}}}},
+  _SessionId, _RequestBytes, _Signature, _Peer) ->
+    ok;
+assert_signed_action_result(
+  {ok, _, {normalized, {committed, [_],
+                        {group_outcome, _, _, _}}}},
   _SessionId, _RequestBytes, _Signature, _Peer) ->
     ok;
 assert_signed_action_result(
@@ -1105,8 +1252,7 @@ provision_agent(PublicKey, GrantCreation) ->
        {ok, [#{}], _},
        quod_prolog:execute(
          ?ROOT_NS,
-         {create_ontology, AgentNs,
-          [{source, InitialSource}]})),
+         create_goal(AgentNs, [{source, InitialSource}]))),
     ok = wait_ready(AgentNs, 300),
     AgentAnchor = quod_simplex:genesis_hash(AgentNs),
     {ok, #{blob := AgentRefBlob}} =
@@ -1127,11 +1273,40 @@ prolog_binary_literal(Bytes) ->
         || <<Byte>> <= Bytes],
        "\">>"]).
 
+agent_ref_source({agent_instance_ref, Ns, Anchor, _Instance}, InstanceText) ->
+    InstanceSource = binary:part(InstanceText, 0, byte_size(InstanceText) - 1),
+    ["agent_instance_ref(", prolog_binary_literal(Ns), ", ",
+     prolog_binary_literal(Anchor), ", ",
+     InstanceSource, ")"].
+
 desired_content(Ns) ->
     Desired = application:get_env(
                 quod, namespace_desired,
                 #{content => #{}, brahms => #{}}),
     maps:get(Ns, maps:get(content, Desired)).
+
+wait_desired_content(_Ns, _Anchor, 0) -> error(hosting_projection_not_installed);
+wait_desired_content(Ns, Anchor, N) ->
+    Desired = application:get_env(
+                quod, namespace_desired,
+                #{content => #{}, brahms => #{}}),
+    case maps:get(Ns, maps:get(content, Desired), undefined) of
+        #{genesis_hash := Anchor} -> ok;
+        _ -> receive after 10 -> wait_desired_content(Ns, Anchor, N - 1) end
+    end.
+
+wait_desired_absent(_Ns, 0) -> error(hosting_projection_not_removed);
+wait_desired_absent(Ns, N) ->
+    case desired_has_content(Ns) of
+        false -> ok;
+        true -> receive after 10 -> wait_desired_absent(Ns, N - 1) end
+    end.
+
+desired_has_content(Ns) ->
+    Desired = application:get_env(
+                quod, namespace_desired,
+                #{content => #{}, brahms => #{}}),
+    maps:is_key(Ns, maps:get(content, Desired)).
 
 wait_ready(_Ns, 0) -> error(namespace_not_ready);
 wait_ready(Ns, N) ->

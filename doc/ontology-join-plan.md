@@ -216,7 +216,7 @@ ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
 
 action('$quod_stage_ontology'(Handle,
-                              create_ontology(Name, Options),
+                              create_ontology(Name, Options, Anchor),
                               ontology_hosted(Name)),
        [current_principal(Agent),
         can_create_ontology(Agent, Name, Options),
@@ -247,7 +247,7 @@ can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 ```
 
-The public fully ground `create_ontology/2` goal targets root;
+The public fully ground `create_ontology/3` goal targets root;
 `join_ontology/3` targets node. Each runs as one ordinary proof. Signed
 requests carry their verified principal; node-authored requests derive
 `node(NodePublicKey)` from the engine. The target's normal `can_invoke/4` entry
@@ -324,10 +324,11 @@ committee member. Admission remains the ontology's existing, separate
 `admit/3` transaction, including its `can_join/3` and `peer_ready/1` checks.
 
 Calling `join/3` again while the namespace is live fails as `already_hosted`
-without altering the existing process or desired map. A full application
-restart reloads the namespace manager's node-local hosting checkpoint and
-resumes the exact anchored ledger automatically. After a deliberate stop,
-calling `join/3` with the same anchor resumes it explicitly. The existing join
+without altering the existing process or desired projection. A full
+application restart rebuilds hosting from the committed `hosts_ontology/4`
+facts in the local node actor ontology and resumes the exact anchored ledger.
+After a deliberate stop, the retained hosting fact may resume it; retracting
+that fact removes restart intent. The existing join
 startup validation rejects a different anchor for an existing ledger; no
 migration or compatibility path is added.
 
@@ -336,9 +337,9 @@ without calling `join/3` again because `ontology_joined(Name, GenesisHash)` is
 already true. Repeating it with a different anchor fails: the desired state is
 false and the namespace is not `not_hosted`.
 
-As with runtime creation, the checkpoint contains only local desired hosting.
-It neither admits this node to the target committee nor publishes a directory
-record; those remain separate authorized operations.
+As with runtime creation, hosting intent is an ordinary node-actor fact. It
+neither admits this node to the target committee nor by itself grants network
+authority; those remain separate authorized operations.
 
 ## Tests
 

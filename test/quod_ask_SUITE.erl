@@ -985,7 +985,7 @@ remote_signed_gateway_group_with_root_effect(Config) ->
                    "assertz(signed_pets_mark(~B)), "
                    "\"quod:root\"::create_ontology(\"~s\", "
                    "[source(\"can_invoke(_, _, _, _).\\n"
-                   "remote_effect_created(ok).\\n\")]).",
+                   "remote_effect_created(ok).\\n\")], _Anchor).",
                    [Tag, CreatedNs])),
     {RequestBytes, Signature} = signed_goal_request(
                                   NetworkId, AgentPub, AgentKey,

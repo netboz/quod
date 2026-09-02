@@ -72,7 +72,7 @@ ontology does not silently make every contained agent its owner, and adding
 `instance_of/2` does not silently grant access.
 
 Here, the creator is the authenticated agent whose authorized
-`create_ontology/2` goal caused the lifecycle operation. It is not the node
+`create_ontology/3` goal caused the lifecycle operation. It is not the node
 that happened to execute the post-commit effect. The exact durable ownership
 fact/ACL representation remains one of the reviewed choices in section 10.
 
@@ -147,7 +147,7 @@ ontology's creator and ACL remain authoritative.
 `quod:human_user` therefore has a narrow scope. It defines the `human_user`
 subclass and human-specific rules. It is neither a registry of all humans nor
 the identity checked by the generic signed-goal path. A new ontology may be
-founded through the ordinary `create_ontology/2` lifecycle with local instance
+founded through the ordinary `create_ontology/3` lifecycle with local instance
 facts in its genesis, for example:
 
 ```prolog
@@ -163,7 +163,7 @@ Quod has no core `create_agent` or `create_human_user` operation. Creating a
 logical agent in an existing ontology is an ordinary transaction that asserts
 the required class, key, ACL, and other policy facts. Giving that agent a new
 ontology means passing the same facts as genesis input to the existing
-`create_ontology/2` action. A domain ontology may define a convenience Prolog
+`create_ontology/3` action. A domain ontology may define a convenience Prolog
 action that constructs this fact set, but it must reuse those ordinary paths
 and must not introduce another Erlang executor.
 
@@ -171,7 +171,7 @@ The two ordinary creation forms are therefore:
 
 | case | operation | result |
 |---|---|---|
-| new containing ontology | call the existing `create_ontology/2` action with `instance_of/2`, `agent_key/3`, ACL, and domain facts in genesis | one normally founded ontology containing the new local agent instance |
+| new containing ontology | call the existing `create_ontology/3` action with `instance_of/2`, `agent_key/3`, ACL, and domain facts in genesis | one normally founded ontology containing the new local agent instance |
 | existing containing ontology | submit an ordinary authorized goal which asserts the required instance, key, ACL, and domain facts | one ordinary transaction in that ontology |
 
 `instance_of(agent, Instance)` by itself records only class membership. It
@@ -189,7 +189,7 @@ may found further ontologies. This avoids both a circular “agent required to
 create the first agent” rule and a permanently open registration bypass.
 
 Creation permission is likewise ordinary policy. An ACL may allow only one
-specific existing `agent_instance_ref/3` to invoke `create_ontology/2`; that
+specific existing `agent_instance_ref/3` to invoke `create_ontology/3`; that
 agent may be a FIPA agent which first conducts an arbitrarily rich approval
 workflow. The action prerequisites may inspect committed approval facts,
 creation counts, or other ontology-defined policy and may be changed through
@@ -225,8 +225,9 @@ genesis digest keeps that ontology not-ready while healthy catalogue rows
 continue normally.
 
 Catalogue reads and potentially slow child reconciliation run outside the
-namespace manager's mailbox. The manager remains the one desired-state owner
-and one serialized mutation lane changes namespace supervisors: direct local
+namespace manager's mailbox. Durable desired state belongs to committed root
+and node-actor facts; the manager is their sole local projection owner, and
+one serialized mutation lane changes namespace supervisors: direct local
 lifecycle calls and catalogue reconciliation use the same worker lane instead
 of racing or blocking the manager. Unavailable rows retry with exponential
 backoff; exact already-materialized identities are reused without rescanning
@@ -374,7 +375,7 @@ modules pinned by its certified genesis:
 | `peer_ready/1`, `admit/3`, `remove/1` | query/staging | common membership primitives registered in every ontology; policy still decides whether they may be invoked |
 | `directory_host/5`, `directory_control_peer/1` | `query` | `quod:root` or a later directory system ontology; one owner only |
 | `ontology_join_state/2`, `ontology_genesis_anchor/2` | `query` | move with lifecycle ownership to the `quod:node` predicate module; node policy reuses these local observations rather than duplicating them |
-| `current_principal/1`, `create_ontology/2`, `join_ontology/3` | query plus ordinary action/staging | the principal query binds existing proof authority; root owns creation of a new identity and node owns joining an existing identity, while both reuse the normal action path and one prepared-effect journal |
+| `current_principal/1`, `create_ontology/3`, `join_ontology/3` | query plus ordinary action/staging | the principal query binds existing proof authority; root owns creation of a new identity and node owns joining an existing identity, while both reuse the normal action path and one prepared-effect journal |
 | `effect_custody_capacity/1`, `set_effect_custody_capacity/1`, internal capacity projection | ordinary D plus one founding `projection` bridge | root is the sole policy owner because it starts before any other system ontology; default 64 or one committed override (including `unlimited`) is projected through the existing state-handler tier into the one node-wide journal |
 | current user-home helpers | Prolog convenience plus query | the temporary root rule derives fixed home arguments and calls generic creation; remove it at the agent-format break, and add no agent-specific executor |
 | `projection_noop/1`, `enqueue_projection/2` | `projection` | common runtime machinery registered in every ontology |

@@ -234,7 +234,7 @@ events or send application notifications.
 For ontology hosting, for example, a node ontology may contain:
 
 ```prolog
-hosts_ontology(NodeRef, Namespace, Anchor).
+hosts_ontology(NodeRef, Namespace, Anchor, Visibility).
 ```
 
 One state handler watches this fact. Its one convergence goal ensures the
@@ -542,17 +542,20 @@ re-found; no intermediate event-only network is founded.
   already counts them. Add no duplicate event metric or dashboard panel unless
   measurement shows a distinct operational question.
 
-### Slice 4 — hosting projections
+### Slice 4 — hosting projections (implemented by automatic-route recovery Slice 2)
 
 This is the sole hosting-projection implementation. The minimal agent vertical
 in `agent-fipa-plan.md` consumes it, and later node/FIPA lifecycle slices add
 policy above it rather than adding another hosting owner.
 
-- Represent desired ontology/agent hosting as ordinary facts in the owning
-  node ontology.
-- Use one state convergence goal for live changes and restart restoration.
-- Refactor existing lifecycle effects and namespace desired-state persistence
-  onto that owner; delete obsolete stores, callbacks, comments, and tests.
+- Desired ontology hosting is the ordinary `hosts_ontology/4` fact in the
+  dedicated node actor ontology; exact private contacts are
+  `knows_ontology_host/4` facts there.
+- The genesis-pinned `node_ontology_hosting` state handler uses one projection
+  bridge for live changes and restart restoration.
+- Lifecycle effects remain one-time custody. The obsolete namespace desired
+  store and its callbacks/tests are deleted; the namespace manager now owns
+  only the root/system/node projection and one mutation lane.
 - Do not change root creation, consensus, directory routing, or signed goals.
 - Treat `generic-agent-identity-plan.md` and then
   `node-instance-identity-plan.md` as the gates for the exact identity,

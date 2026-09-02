@@ -44,7 +44,7 @@ labelled.
 
 > The deployed model removes the transitional `create_user_home` helper. It
 > is not renamed to `create_agent`: Quod has no core agent-construction
-> predicate. Existing `create_ontology/2` may place local `instance_of/2`,
+> predicate. Existing `create_ontology/3` may place local `instance_of/2`,
 > `agent_key/3`, and ACL facts in genesis, and ordinary transactions may add
 > instances later. `instance_of/2` creates only logical class membership; a
 > separate committed hosting fact controls an optional Erlang runtime.

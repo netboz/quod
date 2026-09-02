@@ -29,7 +29,7 @@ is no `create_source/2`, legacy argument detection, or compatibility branch.
 All inputs converge before validation and use the existing atomic creation
 path.
 
-`create_ontology/2` is a governed staging predicate owned by `quod:root`;
+`create_ontology/3` is a governed staging predicate owned by `quod:root`;
 `join_ontology/3` is owned by `quod:node`. Both enter the same ordinary proof,
 `action/3`, preparation, and direct-effect machinery; there is no top-level
 router or lifecycle executor. An ontology that wants an unrelated domain

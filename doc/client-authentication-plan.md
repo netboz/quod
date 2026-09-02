@@ -87,7 +87,7 @@ it must not silently fall back to plaintext browser storage.
 
 There is no global ontology containing every human or machine agent, no
 key-derived home namespace, and no special registration executor. An
-authorized application uses ordinary `create_ontology/2` genesis input or an
+authorized application uses ordinary `create_ontology/3` genesis input or an
 ordinary transaction to establish facts such as:
 
 ```prolog
@@ -104,7 +104,7 @@ agent_instance_ref(Namespace, GenesisAnchor, local_human_1)
 
 `quod:human_user` defines that subclass and related profile vocabulary; it does
 not hold every instance or provide a special creation executor. Initial class, key,
-and ACL facts use the existing generic `create_ontology/2` genesis input, while
+and ACL facts use the existing generic `create_ontology/3` genesis input, while
 later facts use ordinary transactions. Class membership has no hidden runtime
 effect.
 

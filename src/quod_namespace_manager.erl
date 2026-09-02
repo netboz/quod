@@ -1,15 +1,12 @@
 -module(quod_namespace_manager).
 -moduledoc """
-Desired-state owner for per-ontology content and Brahms children.
+Projection owner for per-ontology content and Brahms children.
 
 The two child supervisors are intentionally replaceable. Their dynamic child
 specs disappear if either supervisor process is restarted, so this manager
-keeps the node's desired namespace configurations separately and reconciles
-them after an exact supervisor `DOWN`. Desired state is serialized here and
-mirrored in the application environment. Dynamically created and joined
-content is also checkpointed by this same owner, so a full application restart
-restores deliberate hosting without scanning directories or starting unrelated
-ledger data.
+reconciles the desired projection derived from root bootstrap, the committed
+root system catalogue, and the local node actor's committed hosting facts.
+Lifecycle effects may start content once, but never become restart authority.
 
 The physical node actor is the single bootstrap exception to that general
 hosting store: one exact local pointer beside `node.key` resumes only its
@@ -20,26 +17,28 @@ hosting or directory authority.
 After the statically configured root becomes ready, this same owner reads its
 committed `system_ontology/2` catalogue. Exact anchored system joins are
 merged into the existing desired-state projection; there is no second system
-ontology supervisor or restart mechanism. Local dynamic stop requests remove
-only local intent and cannot override static or committed-root ownership.
+ontology supervisor or restart mechanism. A local stop affects the running
+child only; committed root or node-actor facts remain the restart authority.
 
 This process is also the sole publisher of the explorer's namespace-to-ledger
 projection. A caller may die or time out after a start request is accepted, so
 post-start genesis validation and publication must not live in that caller.
 Every potentially slow supervisor start or stop—direct lifecycle or desired
 state reconciliation—runs through one monitored mutation lane. The manager
-itself only owns state, ordering, persistence, and replies.
+itself owns only projection state, ordering, and replies.
 """.
 
 -behaviour(gen_server).
 
 -export([start_link/0,
          start_content/2, start_new_content/2, stop_content/1,
-         start_brahms/2, stop_brahms/1, adopt_node_actor/0]).
+         start_brahms/2, stop_brahms/1, adopt_node_actor/0,
+         project_node_policy/4]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([test_node_actor_result_class/1]).
+-export([test_node_actor_result_class/1, test_projection_conflicts/3,
+         test_install_system_projection/4, test_retired_names/3]).
 -endif.
 
 -define(KEY, {namespace_manager, node}).
@@ -62,10 +61,11 @@ itself only owns state, ordering, persistence, and replies.
     reconcile_dirty = false,
     reconcile_incomplete = false,
     pending_calls = undefined,
-    durable_content = #{},
-    static_content = #{},
-    ephemeral_content = #{},
+    bootstrap_content = #{},
     system_content = #{},
+    node_content = #{},
+    node_projection = none,
+    retired_content = #{},
     system_blocked = #{},
     system_query = undefined,
     system_retry = undefined,
@@ -82,8 +82,9 @@ start_content(Ns, Config) ->
     start_child(content, Ns, Config).
 
 %% Runtime creation is an admission, not an idempotent ensure. The manager
-%% starts and validates the newcomer before recording its desired state, so a
-%% failed admission cannot remove or replace an older ontology with the name.
+%% starts and validates the newcomer without creating restart authority. A
+%% previously committed, exact-anchor node hosting projection may already name
+%% it when create and host were one multi-ontology transaction.
 start_new_content(Ns, Config) ->
     start_new_child(content, Ns, Config).
 
@@ -99,6 +100,12 @@ stop_brahms(Ns) ->
 -doc "Adopt the exact node-actor pointer persisted by the enrollment seam.".
 adopt_node_actor() ->
     gen_server:cast(quod_reg:via(?KEY), adopt_node_actor).
+
+-doc "Install one complete revisioned projection from the local node actor.".
+project_node_policy(Namespace, Height, Scope, Projection) ->
+    gen_server:call(quod_reg:via(?KEY),
+                    {project_node_policy, Namespace, Height, Scope, Projection},
+                    15000).
 
 start_child(Kind, Ns, Config)
   when is_binary(Ns), is_map(Config) ->
@@ -122,39 +129,38 @@ stop_child(_Kind, _Ns) ->
 
 init([]) ->
     {NodeActor, NodeActorContent} = node_actor_bootstrap(),
-    Durable0 = quod_namespace_desired_store:load(),
     Desired0 = desired_env(),
-    Static = application:get_env(quod, namespace_static_content, #{}),
-    %% Static operator configuration takes ownership of a same-name ontology.
-    %% Remove the superseded dynamic row instead of leaving latent intent that
-    %% could unexpectedly reappear if the static block is removed later.
-    Durable = maps:without(
-                maps:keys(Static) ++ maps:keys(NodeActorContent), Durable0),
-    ok = persist_durable_if_changed(Durable0, Durable),
+    Static0 = application:get_env(quod, namespace_static_content, #{}),
+    %% Configuration is bootstrap authority for root only. Ordinary and system
+    %% hosting come from committed facts, never from a parallel config owner.
+    RootBootstrap = maps:with([?ROOT_NS], Static0),
+    log_ignored_static_content(maps:without([?ROOT_NS], Static0)),
+    Bootstrap = merge_exact_content(RootBootstrap, NodeActorContent,
+                                    node_actor_identity_conflict),
     Mirrored = maps:get(content, Desired0),
     System = maps:filter(
                fun(_Ns, Config) ->
                    is_map(Config)
                        andalso maps:get(system_ontology, Config, false) =:= true
                end, Mirrored),
-    Ephemeral0 = maps:without(
-                  maps:keys(maps:merge(maps:merge(Durable, Static), System)),
-                  Mirrored),
-    Ephemeral = merge_node_actor_content(
-                  NodeActorContent, Durable, Static, System, Ephemeral0),
-    Content = content_projection(Durable, Ephemeral, System, Static),
+    Content = content_projection(Bootstrap, System, #{}),
     Desired = Desired0#{content => Content},
     persist_desired(Desired),
     application:unset_env(quod, node_actor_principal),
     true = quod_reg:subscribe({runtime, ?ROOT_NS}),
+    true = quod_reg:subscribe({namespace_topology, node}),
     self() ! reconcile,
     self() ! refresh_system_catalogue,
     maybe_subscribe_node_actor(NodeActor),
-    {ok, #s{desired = Desired, durable_content = Durable,
-            static_content = Static, ephemeral_content = Ephemeral,
+    {ok, #s{desired = Desired, bootstrap_content = Bootstrap,
             system_content = System, node_actor = NodeActor,
             pending_calls = queue:new()}}.
 
+handle_call({project_node_policy, Namespace, Height, Scope, Projection}, _From, S) ->
+    case install_node_projection(Namespace, Height, Scope, Projection, S) of
+        {ok, S1} -> {reply, ok, S1};
+        {error, _} = Error -> {reply, Error, S}
+    end;
 handle_call(Request, From, S) ->
     S0 = reset_reconcile_backoff(S),
     {noreply, continue_work(enqueue_call(Request, From, S0))}.
@@ -163,14 +169,23 @@ begin_request(
   {start_new, content, Ns, Config}, _From,
   S = #s{desired = Desired}) ->
     Content = maps:get(content, Desired),
-    case {maps:is_key(Ns, Content), running_pid(content, Ns)} of
-        {true, _Pid} ->
+    case {maps:get(Ns, Content, undefined), running_pid(content, Ns)} of
+        {DesiredConfig, undefined} when is_map(DesiredConfig) ->
+            %% In a composed create+host transaction the committed hosting
+            %% fact can reach P before root's effect runs. It is the same
+            %% authority, not a collision, only when both prepared configs bind
+            %% the exact genesis anchor.
+            case same_anchor(DesiredConfig, Config) of
+                true -> {work, {start_new, Ns, Config}, S};
+                false -> {reply, {error, {already_configured, Ns}}, S}
+            end;
+        {DesiredConfig, _Pid} when is_map(DesiredConfig) ->
             {reply, {error, {already_configured, Ns}}, S};
-        {false, Pid} when is_pid(Pid) ->
+        {undefined, Pid} when is_pid(Pid) ->
             %% A failed earlier stop can leave an undesired child alive. Never
             %% attach a new config to a process that was started under another.
             {reply, {error, {already_configured, Ns}}, S};
-        {false, undefined} ->
+        {undefined, undefined} ->
             {work, {start_new, Ns, Config}, S}
     end;
 begin_request(
@@ -180,10 +195,7 @@ begin_request(
     KindDesired = maps:get(Kind, Desired),
     case maps:get(Ns, KindDesired, undefined) of
         undefined ->
-            SAdded = add_desired(Kind, Ns, Config, S),
-            Desired1 = SAdded#s.desired,
-            persist_desired(Desired1),
-            {work, {ensure, Kind, Ns, Config}, SAdded};
+            {work, {ensure, Kind, Ns, Config}, S};
         Config ->
             {work, {ensure, Kind, Ns, Config}, S};
         _OtherConfig ->
@@ -191,30 +203,12 @@ begin_request(
     end;
 begin_request(
   {stop, Kind, Ns}, _From,
-  S = #s{desired = Desired, durable_content = Durable})
+  S = #s{desired = Desired})
   when Kind =:= content; Kind =:= brahms ->
     KindDesired = maps:get(Kind, Desired),
-    case maps:is_key(Ns, KindDesired) of
-        false ->
-            {reply, {error, not_found}, S};
-        true ->
-            Durable1 = remove_durable(Kind, Ns, Durable),
-            ok = persist_durable_if_changed(Durable, Durable1),
-            SRemoved = remove_desired(Kind, Ns, S#s{
-                                                    durable_content = Durable1}),
-            Desired1 = SRemoved#s.desired,
-            persist_desired(Desired1),
-            %% A local stop removes only local dynamic intent.  Static operator
-            %% configuration and the committed root catalogue are independent,
-            %% stronger desired-state owners; if either still names the
-            %% ontology, stopping its child would only create a pointless
-            %% stop/restart cycle and a window in which the system contract is
-            %% false.
-            Retained = maps:is_key(Ns, maps:get(Kind, Desired1)),
-            case Retained of
-                true -> {reply, ok, SRemoved};
-                false -> {work, {stop, Kind, Ns}, SRemoved}
-            end
+    case {maps:is_key(Ns, KindDesired), running_pid(Kind, Ns)} of
+        {false, undefined} -> {reply, {error, not_found}, S};
+        _ -> {work, {stop, Kind, Ns}, S}
     end;
 begin_request(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
@@ -251,20 +245,10 @@ run_request_work({stop, Kind, Ns}) ->
 
 finish_request(
   {start_new, Ns, Config, {accepted, GenesisHash}},
-  S = #s{desired = Desired, durable_content = Durable}) ->
-    DurableConfig =
-        quod_namespace_desired_store:resume_config(Config, GenesisHash),
-    Durable1 = Durable#{Ns => DurableConfig},
-    ok = quod_namespace_desired_store:store(Durable1),
-    Content = content_projection(
-                Durable1, S#s.ephemeral_content,
-                S#s.system_content, S#s.static_content),
-    Desired1 = Desired#{content => Content},
-    persist_desired(Desired1),
+  S) ->
     publish_storage(Ns, Config),
     notify_content_changed(),
-    {{ok, GenesisHash},
-     S#s{desired = Desired1, durable_content = Durable1}};
+    {{ok, GenesisHash}, S};
 finish_request(
   {start_new, _Ns, _Config, {rejected, Reason, Cleanup}}, S) ->
     {{error, Reason}, schedule_reconcile_if_stop_error(Cleanup, S)};
@@ -311,6 +295,10 @@ started_genesis(Ns, Config) ->
 handle_cast(adopt_node_actor, S) ->
     {NodeActor, NodeActorContent} = node_actor_bootstrap(),
     S1 = adopt_node_actor_state(NodeActor, NodeActorContent, S),
+    case NodeActor of
+        #{namespace := ActorNs} -> quod_runtime:reconcile_now(ActorNs);
+        none -> ok
+    end,
     self() ! reconcile,
     {noreply, S1};
 handle_cast(_Message, S) ->
@@ -338,10 +326,15 @@ handle_info(
         ok -> ok;
         {error, Reason} -> exit({node_actor_invalid, Reason})
     end,
+    case {node_actor_result_class(NodeActorResult), S#s.node_actor} of
+        {{ready, _}, #{namespace := ActorNs}} ->
+            quod_runtime:reconcile_now(ActorNs);
+        _ -> ok
+    end,
     S0 = S#s{mutation_worker = undefined,
              reconcile_incomplete = not Complete},
     S1 = case Complete of
-             true -> reset_reconcile_backoff(S0);
+             true -> reset_reconcile_backoff(S0#s{retired_content = #{}});
              false -> S0
          end,
     {noreply, continue_work(S1)};
@@ -390,6 +383,11 @@ handle_info({applied_live, Envelope}, S) ->
             {noreply, request_system_refresh(reset_system_backoff(S))};
         false -> {noreply, S}
     end;
+handle_info({namespace_topology, _Namespaces}, S) ->
+    %% A lifecycle effect may materialize a ledger after its hosting fact was
+    %% committed. The existing topology edge wakes the same reconciler.
+    self() ! reconcile,
+    {noreply, S};
 handle_info(
   {system_catalogue_result, Token, Result},
   S = #s{system_query = {_Pid, MRef, Token, Timer}}) ->
@@ -439,6 +437,7 @@ terminate(_Reason, S) ->
     demonitor_if(S#s.ns_monitor),
     demonitor_if(S#s.brahms_monitor),
     _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
+    _ = catch quod_reg:unsubscribe({namespace_topology, node}),
     _ = unsubscribe_node_actor(S#s.node_actor),
     ok.
 
@@ -637,14 +636,26 @@ install_system_content(System,
     S;
 install_system_content(System,
                        S = #s{desired = Desired}) ->
-    NewContent = content_projection(
-                   S#s.durable_content, S#s.ephemeral_content,
-                   System, S#s.static_content),
+    {NewContent, NodeContent, Retired, Conflict} =
+        install_system_projection(S#s.bootstrap_content, System,
+                                  S#s.node_content, S#s.system_content),
+    case Conflict of
+        none -> ok;
+        {node_host_anchor_conflict, Ns} = Reason ->
+            logger:error(
+              "quod: rejected node hosting projection conflicting with "
+              "root system ontology ~p: ~p", [Ns, Reason]),
+            wake_node_actor(S#s.node_actor)
+    end,
     Desired1 = Desired#{content => NewContent},
     persist_desired(Desired1),
     self() ! reconcile,
     reset_reconcile_backoff(
-      S#s{desired = Desired1, system_content = System}).
+      S#s{desired = Desired1, system_content = System,
+          node_content = NodeContent,
+          node_projection = invalidate_projection(Conflict,
+                                                  S#s.node_projection),
+          retired_content = maps:merge(S#s.retired_content, Retired)}).
 
 schedule_system_retry(S = #s{system_retry = Ref})
   when is_reference(Ref) -> S;
@@ -698,21 +709,85 @@ node_actor_bootstrap() ->
 
 adopt_node_actor_state(
   NodeActor, NodeActorContent,
-  S = #s{desired = Desired, durable_content = Durable0,
-         static_content = Static, system_content = System,
-         ephemeral_content = Ephemeral0, node_actor = PreviousActor}) ->
-    ActorNamespaces = maps:keys(NodeActorContent),
-    Durable = maps:without(ActorNamespaces, Durable0),
-    ok = persist_durable_if_changed(Durable0, Durable),
-    EphemeralBase = maps:without(ActorNamespaces, Ephemeral0),
-    Ephemeral = merge_node_actor_content(
-                  NodeActorContent, Durable, Static, System, EphemeralBase),
-    Content = content_projection(Durable, Ephemeral, System, Static),
+  S = #s{desired = Desired, bootstrap_content = Bootstrap0,
+         system_content = System, node_content = NodeContent,
+         node_actor = PreviousActor}) ->
+    RootBootstrap = maps:with([?ROOT_NS], Bootstrap0),
+    Bootstrap = merge_exact_content(RootBootstrap, NodeActorContent,
+                                    node_actor_identity_conflict),
+    ok = projection_conflicts(Bootstrap, System, NodeContent),
+    Content = content_projection(Bootstrap, System, NodeContent),
     Desired1 = Desired#{content => Content},
     persist_desired(Desired1),
     maybe_subscribe_adopted_node_actor(PreviousActor, NodeActor),
-    S#s{desired = Desired1, durable_content = Durable,
-        ephemeral_content = Ephemeral, node_actor = NodeActor}.
+    S#s{desired = Desired1, bootstrap_content = Bootstrap,
+        node_actor = NodeActor}.
+
+install_node_projection(
+  Namespace, Height, _Scope, Projection,
+  S = #s{node_actor = #{namespace := Namespace},
+         node_projection = Previous}) ->
+    Revision = Height,
+    case projection_revision(Previous, Revision) of
+        stale -> {error, stale_node_hosting_projection};
+        same -> {ok, S};
+        newer ->
+            case node_projection_content(Projection) of
+                {ok, NodeContent, Contacts} ->
+                    case projection_conflicts(
+                           S#s.bootstrap_content, S#s.system_content,
+                           NodeContent) of
+                        ok ->
+                            OldNames = maps:keys(S#s.node_content),
+                            RetiredNames = OldNames -- maps:keys(NodeContent),
+                            Retired = maps:with(RetiredNames, S#s.node_content),
+                            Content = content_projection(
+                                        S#s.bootstrap_content,
+                                        S#s.system_content, NodeContent),
+                            Desired1 = (S#s.desired)#{content => Content},
+                            persist_desired(Desired1),
+                            self() ! reconcile,
+                            {ok, S#s{desired = Desired1,
+                                     node_content = NodeContent,
+                                     node_projection =
+                                       #{revision => Revision,
+                                         contacts => Contacts},
+                                     retired_content = maps:merge(
+                                                         S#s.retired_content,
+                                                         Retired)}};
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end
+    end;
+install_node_projection(_, _, _, _, _) ->
+    {error, node_actor_context_mismatch}.
+
+projection_revision(none, _Revision) -> newer;
+projection_revision(#{revision := Height, status := invalid}, Height) -> newer;
+projection_revision(#{revision := OldHeight}, Height) ->
+    case Height - OldHeight of
+        N when N > 0 -> newer;
+        N when N < 0 -> stale;
+        0 -> same
+    end.
+
+node_projection_content(#{hosts := Hosts, contacts := Contacts})
+  when is_map(Hosts), is_map(Contacts) ->
+    case application:get_env(quod, content_data_dir) of
+        {ok, DataDir} ->
+            {ok,
+             maps:map(
+               fun(_Ns, #{namespace := Ns, anchor := Anchor,
+                          visibility := Visibility}) ->
+                   (quod_ontology:local_resume_config(Ns, Anchor, DataDir))#{
+                     hosting_visibility => Visibility,
+                     local_material_required => true}
+               end, Hosts),
+             Contacts};
+        _ -> {error, node_storage_unavailable}
+    end;
+node_projection_content(_) -> {error, malformed_node_hosting_projection}.
 
 maybe_subscribe_adopted_node_actor(none, NodeActor) ->
     maybe_subscribe_node_actor(NodeActor);
@@ -722,18 +797,18 @@ maybe_subscribe_adopted_node_actor(PreviousActor, NodeActor) ->
     _ = unsubscribe_node_actor(PreviousActor),
     maybe_subscribe_node_actor(NodeActor).
 
-merge_node_actor_content(NodeActorContent, Durable, Static, System, Ephemeral) ->
+merge_exact_content(Preferred, Additional, ConflictTag) ->
     maps:fold(
       fun(Ns, Config, Acc) ->
-          Sources = [maps:get(Ns, Source, undefined)
-                     || Source <- [Durable, Static, System, Acc]],
-          case [Other || Other <- Sources, Other =/= undefined,
-                         maps:get(genesis_hash, Other, undefined)
-                             =/= maps:get(genesis_hash, Config)] of
-              [] -> Acc#{Ns => Config};
-              _ -> error({node_actor_identity_conflict, Ns})
+          case maps:get(Ns, Acc, undefined) of
+              undefined -> Acc#{Ns => Config};
+              Existing ->
+                  case same_anchor(Existing, Config) of
+                      true -> Acc;
+                      false -> error({ConflictTag, Ns})
+                  end
           end
-      end, Ephemeral, NodeActorContent).
+      end, Preferred, Additional).
 
 maybe_subscribe_node_actor(none) -> ok;
 maybe_subscribe_node_actor(#{namespace := Ns}) ->
@@ -785,6 +860,12 @@ node_actor_result_class({error, _Transient}) -> pending.
 
 -ifdef(TEST).
 test_node_actor_result_class(Result) -> node_actor_result_class(Result).
+test_projection_conflicts(Bootstrap, System, Node) ->
+    projection_conflicts(Bootstrap, System, Node).
+test_install_system_projection(Bootstrap, System, Node, OldSystem) ->
+    install_system_projection(Bootstrap, System, Node, OldSystem).
+test_retired_names(Retired, Running, Current) ->
+    retired_content_names(Retired, Running, Current).
 -endif.
 
 desired_env() ->
@@ -799,43 +880,60 @@ desired_env() ->
 persist_desired(Desired) ->
     application:set_env(quod, ?DESIRED_ENV, Desired).
 
-content_projection(Durable, Ephemeral, System, Static) ->
-    %% Static configuration owns ordinary hosting over stale node-local intent.
-    %% A committed root system descriptor is stronger still: local config must
-    %% never replace its exact genesis anchor.
-    maps:merge(
-      maps:merge(maps:merge(Durable, Ephemeral), Static), System).
+content_projection(Bootstrap, System, Node) ->
+    %% Root bootstrap and root-catalogued system facts outrank node facts.
+    maps:merge(Node, maps:merge(Bootstrap, System)).
 
-add_desired(content, Ns, Config,
-            S = #s{desired = Desired, ephemeral_content = Ephemeral}) ->
-    Ephemeral1 = Ephemeral#{Ns => Config},
-    Content = content_projection(
-                S#s.durable_content, Ephemeral1,
-                S#s.system_content, S#s.static_content),
-    S#s{desired = Desired#{content => Content},
-        ephemeral_content = Ephemeral1};
-add_desired(brahms, Ns, Config, S = #s{desired = Desired}) ->
-    Brahms = maps:get(brahms, Desired),
-    S#s{desired = Desired#{brahms => Brahms#{Ns => Config}}}.
+same_anchor(A, B) ->
+    maps:get(genesis_hash, A, undefined) =:=
+        maps:get(genesis_hash, B, undefined).
 
-remove_desired(content, Ns, S = #s{desired = Desired}) ->
-    Durable = maps:remove(Ns, S#s.durable_content),
-    Ephemeral = maps:remove(Ns, S#s.ephemeral_content),
-    Content = content_projection(
-                Durable, Ephemeral,
-                S#s.system_content, S#s.static_content),
-    S#s{desired = Desired#{content => Content},
-        durable_content = Durable, ephemeral_content = Ephemeral};
-remove_desired(brahms, Ns, S = #s{desired = Desired}) ->
-    Brahms = maps:get(brahms, Desired),
-    S#s{desired = Desired#{brahms => maps:remove(Ns, Brahms)}}.
+projection_conflicts(Bootstrap, System, Node) ->
+    Strong = maps:merge(Bootstrap, System),
+    maps:fold(
+      fun(Ns, Config, ok) ->
+              case maps:get(Ns, Strong, undefined) of
+                  undefined -> ok;
+                  StrongConfig ->
+                      case same_anchor(Config, StrongConfig) of
+                          true -> ok;
+                          false -> {error, {node_host_anchor_conflict, Ns}}
+                      end
+              end;
+         (_Ns, _Config, Error) -> Error
+      end, ok, Node).
 
-remove_durable(content, Ns, Durable) -> maps:remove(Ns, Durable);
-remove_durable(brahms, _Ns, Durable) -> Durable.
+install_system_projection(Bootstrap, System, Node, OldSystem) ->
+    Strong = maps:merge(Bootstrap, System),
+    ConflictNames =
+        [Ns || {Ns, Config} <- maps:to_list(Node),
+               case maps:get(Ns, Strong, undefined) of
+                   undefined -> false;
+                   StrongConfig -> not same_anchor(Config, StrongConfig)
+               end],
+    Node1 = maps:without(ConflictNames, Node),
+    RemovedSystem = maps:without(maps:keys(System), OldSystem),
+    Conflict = case ConflictNames of
+                   [] -> none;
+                   [Ns | _] -> {node_host_anchor_conflict, Ns}
+               end,
+    {content_projection(Bootstrap, System, Node1),
+     Node1, RemovedSystem, Conflict}.
 
-persist_durable_if_changed(Content, Content) -> ok;
-persist_durable_if_changed(_Old, New) ->
-    quod_namespace_desired_store:store(New).
+invalidate_projection(none, Projection) -> Projection;
+invalidate_projection(_Conflict, none) -> none;
+invalidate_projection(_Conflict, Projection) ->
+    Projection#{status => invalid}.
+
+wake_node_actor(none) -> ok;
+wake_node_actor(#{namespace := Ns}) -> quod_runtime:reconcile_now(Ns).
+
+log_ignored_static_content(Static) when map_size(Static) =:= 0 -> ok;
+log_ignored_static_content(Static) ->
+    logger:warning(
+      "quod: ignoring non-root namespace_static_content identities ~p; "
+      "committed root/node facts are the hosting authority",
+      [maps:keys(Static)]).
 
 bind_supervisors(S) ->
     {NsSup, NsMonitor} =
@@ -880,9 +978,7 @@ reconcile_kind(Kind, Desired, S) ->
             {false, false, #{}};
         true ->
             Running = running_children(Kind),
-            Undesired =
-                [Ns || Ns <- maps:keys(Running),
-                       not maps:is_key(Ns, Desired)],
+            Undesired = retired_names(Kind, Running, S),
             StopResults =
                 [stop_one(Kind, Ns) || Ns <- Undesired],
             Missing =
@@ -903,11 +999,21 @@ reconcile_kind(Kind, Desired, S) ->
             Complete = lists:all(fun stop_succeeded/1, StopResults)
                 andalso lists:all(
                           fun({_Ns, Result}) ->
-                              start_succeeded(Result)
+                              start_complete(Result)
                           end, Results)
                 andalso Ready,
             {Changed, Complete, StorageAdds}
     end.
+
+retired_names(content, Running,
+              #s{retired_content = Retired, desired = Desired}) ->
+    Current = maps:get(content, Desired),
+    retired_content_names(Retired, Running, Current);
+retired_names(brahms, _Running, _S) -> [].
+
+retired_content_names(Retired, Running, Current) ->
+    [Ns || Ns <- maps:keys(Retired), maps:is_key(Ns, Running),
+           not maps:is_key(Ns, Current)].
 
 supervisor_available(content, #s{ns_sup = Pid}) ->
     is_pid(Pid) andalso is_process_alive(Pid);
@@ -933,7 +1039,10 @@ running_pid(brahms, Ns) ->
     quod_reg:where({quod_brahms, Ns}).
 
 start_one(content, Ns, Config) ->
-    quod_ns_sup:start_child(Ns, Config);
+    case local_material_ready(Ns, Config) of
+        true -> quod_ns_sup:start_child(Ns, Config);
+        false -> {parked, local_material}
+    end;
 start_one(brahms, Ns, Config) ->
     quod_brahms_sup:start_child(Ns, Config).
 
@@ -947,6 +1056,15 @@ start_succeeded({ok, Pid, _Info}) when is_pid(Pid) -> true;
 start_succeeded({error, {already_started, Pid}})
   when is_pid(Pid) -> true;
 start_succeeded(_) -> false.
+
+local_material_ready(Ns, #{local_material_required := true,
+                           genesis_hash := Anchor,
+                           data_dir := DataDir}) ->
+    case quod_ontology:prepare_local_resume(Ns, Anchor, DataDir) of
+        {ok, _} -> true;
+        _ -> false
+    end;
+local_material_ready(_Ns, _Config) -> true.
 
 stop_succeeded(ok) -> true;
 stop_succeeded({error, not_found}) -> true;
@@ -999,7 +1117,10 @@ complete_running_children(content, Desired) ->
                               {false, ValidAcc, DirsAcc}
                       end;
                   undefined ->
-                      {false, ValidAcc, DirsAcc}
+                      case local_material_ready(Ns, Config) of
+                          false -> {Complete0, ValidAcc, DirsAcc};
+                          true -> {false, ValidAcc, DirsAcc}
+                      end
               end
           end, {true, #{}, #{}}, Desired),
     {Complete, Validated, StorageAdds}.
@@ -1014,6 +1135,9 @@ completed_start_succeeded(content, Ns, Result, Validated) ->
     start_succeeded(Result) andalso maps:is_key(Ns, Validated);
 completed_start_succeeded(brahms, _Ns, Result, _Validated) ->
     start_succeeded(Result).
+
+start_complete({parked, local_material}) -> true;
+start_complete(Result) -> start_succeeded(Result).
 
 %% The manager serializes every writer of this projection. Stopped ontologies
 %% deliberately remain addressable by the explorer, so entries are not removed

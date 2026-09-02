@@ -103,7 +103,7 @@ observers therefore maintain current P without reconstructing best-effort effect
 -include("quod_ledger.hrl").
 
 -export([start_link/2, stats/1, effect_frontier/1,
-         enqueue_heavy/4, revision/2, await_revision/4]).
+         enqueue_heavy/4, revision/2, await_revision/4, reconcile_now/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
@@ -252,6 +252,10 @@ revision(Ns, Resource) ->
     try gen_server:call(quod_reg:via({quod_runtime, Ns}), {revision, Resource}, 1000)
     catch _:_ -> 0 end.
 
+-doc "Wake the existing runtime reconciler after local projection authority changes.".
+reconcile_now(Ns) ->
+    gen_server:cast(quod_reg:via({quod_runtime, Ns}), reconcile_now).
+
 -doc """
 Block until `Resource`'s installed revision reaches `Rev` — the per-resource release gate a
 heavy-dependent effect uses instead of the namespace-wide P-before-E frontier. Returns
@@ -398,6 +402,10 @@ handle_cast({heavy_done, Resource, Ref, Outcome}, S) ->
         _ ->
             {noreply, S}   %% stale report from a killed/superseded worker
     end;
+handle_cast(reconcile_now, S = #s{runner = {_, _, _, _, _}}) ->
+    {noreply, S#s{pending_edge = {projection, make_ref()}}};
+handle_cast(reconcile_now, S) ->
+    {noreply, replace_snapshot_and_reconcile({projection, make_ref()}, S)};
 handle_cast(_Msg, S) -> {noreply, S}.
 
 %% A ready edge: the KB finished a rebuild (Id = RecoveryId, or `boot` for the quiet first

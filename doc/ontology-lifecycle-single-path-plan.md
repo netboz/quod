@@ -290,7 +290,7 @@ implementation details:
 In `quod:root`:
 
 ```prolog
-action(create_ontology(Name, Options),
+action(create_ontology(Name, Options, Anchor),
        [current_principal(Agent),
         can_create_ontology(Agent, Name, Options)],
        ontology_hosted(Name)).

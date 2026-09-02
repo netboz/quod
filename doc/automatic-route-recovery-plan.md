@@ -1,7 +1,11 @@
 # Automatic ontology-route recovery — implementation plan
 
-**Status: planning approved after adversarial review; no source implementation
-has started.** This plan is the implementation boundary for replacing
+**Status: Slices 1 and 2 implemented; Slice 2 review closed.**
+Versions 0.7.129 and later in this development arc must not be deployed to the
+existing fleet before the coordinated Slice-6 clean re-found: its immutable
+root ledger contains `create_ontology/2`, while this cut deliberately replaces
+that contract with `create_ontology/3` and provides no compatibility path.
+This plan is the implementation boundary for replacing
 operator-listed routes and node-local hosting intent with one fact-driven
 recovery path. Slice 1 may start only from this reviewed revision.
 
@@ -585,6 +589,8 @@ No later slice starts until the prior review is green.
 
 ### Slice 2 — committed hosting/private contacts and the sole projection
 
+**Implemented; review closed.**
+
 - Add `hosts_ontology/4`, `knows_ontology_host/4`, their ordinary policy/action
   rules, the founding state handler, and one projection bridge.
 - Put that founding handler and bridge module in every new node actor's
@@ -593,6 +599,11 @@ No later slice starts until the prior review is green.
   plus hosting facts through ordinary multi-ontology goals.
 - Make namespace manager merge root, system catalogue, and node-actor
   projection only, with root/system precedence explicit and fail-closed.
+- When root removes a system ontology, retire and stop that system-owned local
+  child. If an equal-anchor node hosting fact still desires it, keep it running
+  without a stop/restart flap. If a newly added system identity conflicts with
+  an earlier node row, discard only that weaker row, retain the root identity,
+  and make the node handler fail loudly on its next reconciliation.
 - Delete `quod_namespace_desired_store`, `durable_content`, ordinary static
   ownership, and persistence-after-start.
 - Keep one-time lifecycle effect custody unchanged.

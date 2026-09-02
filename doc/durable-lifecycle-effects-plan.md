@@ -582,7 +582,7 @@ policy and must account for its state growth honestly.
 
 ## 8. Future deletion and other predicates
 
-The implementation routes both `create_ontology/2` and `join_ontology/3`
+The implementation routes both `create_ontology/3` and `join_ontology/3`
 through the shared mechanism.
 
 A future deletion predicate must use the same transaction/effect path:

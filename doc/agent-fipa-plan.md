@@ -58,7 +58,11 @@ projection of committed facts.
    corresponding diff is committed and visible in the local KB.
 4. **Replay does not emit effects.** Historical replay rebuilds facts only.
 5. **Runtime state is reconstructible.** Every process, timer, route index, and
-   mailbox registration derived from facts has a reconciliation path.
+   mailbox registration derived from facts has a reconciliation path. A
+   physical node's durable hosting and exact private-contact knowledge are the
+   `hosts_ontology/4` and `knows_ontology_host/4` facts in its dedicated node
+   actor ontology; its local manager and directory remain disposable
+   projections of those facts.
 6. **Ontology ownership is respected.** A foreign mutation is an action request
    executed by the target ontology, never a foreign ready-made diff.
 7. **No global FIPA message ledger.** Communication is routed to the involved
@@ -741,7 +745,7 @@ There is no core `create_agent` or `create_human_user` predicate.
 The creator, contained instance, signing key, ACL permissions, and runtime host
 are separate. An agent reference grants none of them implicitly. Ordinary
 creation policy may authorize only a specific existing agent to call
-`create_ontology/2`; that caller may be a FIPA agent whose conversation and
+`create_ontology/3`; that caller may be a FIPA agent whose conversation and
 approval facts satisfy changeable Prolog prerequisites. This is ordinary ACL
 and action policy, not a separate delegation feature.
 

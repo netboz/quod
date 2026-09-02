@@ -62,13 +62,16 @@ reconcile_effect_custody_capacity(Scope) :-
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
 ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
+ontology_created(Name, Anchor) :-
+    ontology_hosted(Name),
+    ontology_genesis_anchor(Name, Anchor).
 
-action('$quod_stage_ontology'(Handle, create_ontology(Name, Options),
-                              ontology_hosted(Name)),
+action('$quod_stage_ontology'(Handle, create_ontology(Name, Options, Anchor),
+                              ontology_created(Name, Anchor)),
        [current_principal(Agent),
         can_create_ontology(Agent, Name, Options),
         ontology_join_state(Name, not_hosted)],
-       ontology_hosted(Name)).
+       ontology_created(Name, Anchor)).
 
 %% An admitted root validator may found a general ontology. Signed agents use
 %% the same action only when root contains their exact durable grant.

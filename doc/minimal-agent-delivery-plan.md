@@ -315,7 +315,7 @@ ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
 
 action('$quod_stage_ontology'(Handle,
-                              create_ontology(Name, Options),
+                              create_ontology(Name, Options, Anchor),
                               ontology_hosted(Name)),
        [current_principal(Agent),
         can_create_ontology(Agent, Name, Options),

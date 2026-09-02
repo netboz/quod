@@ -29,8 +29,9 @@ conveniences around that preparation and execution code.
 
 -export([validate_action/1, prepare_action/2, canonical_name/1,
          execute_prepared/1,
-         prepared_effect/4, prepared_bytes/1, decode_prepared/1,
-         prepare_local_resume/3, prepare_system_join/3,
+         prepared_effect/4, prepared_anchor/1,
+         prepared_bytes/1, decode_prepared/1,
+         prepare_local_resume/3, local_resume_config/3, prepare_system_join/3,
          local_state/1, genesis_anchor/1,
          network_identity/0, network_identity/2,
          root_ns/0]).
@@ -51,7 +52,7 @@ conveniences around that preparation and execution code.
         {ok, joining | resumed, binary(), binary()} |
         {error, term()}.
 
--type local_state() :: not_hosted | starting | joining | ready | stopping.
+-type local_state() :: not_hosted | starting | joining | ready.
 
 -ifdef(TEST).
 -type input_option() ::
@@ -80,7 +81,14 @@ conveniences around that preparation and execution code.
 -ifdef(TEST).
 -spec create(term(), [input_option()]) -> creation().
 create(Name, Options) ->
-    execute_action({create_ontology, Name, Options}).
+    case validate_action({create_ontology, Name, Options}) of
+        {ok, Structural} ->
+            case prepare_action(Structural, none) of
+                {ok, Prepared} -> execute_prepared(Prepared);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
 
 -spec join(term(), unicode:chardata(), [term()]) -> joining().
 join(Name, GenesisHash, Seeds) ->
@@ -242,9 +250,8 @@ root_ns() -> ?ROOT_NS.
 
 -doc """
 Return the exact local 32-byte genesis anchor. A live Simplex anchor wins; while
-the namespace is starting, a pinned join anchor is read from the manager's
-serialized desired configuration or, before the manager has initialized that
-mirror, from the same static configuration it will merge into it.
+an authoritative namespace is starting, its pinned join anchor is read from
+the manager's in-memory projection or root bootstrap configuration.
 """.
 -spec genesis_anchor(term()) -> {ok, binary()} | {error, term()}.
 genesis_anchor(Name) ->
@@ -292,11 +299,12 @@ desired_genesis_anchor(Ns) ->
             #{content := DesiredMap} when is_map(DesiredMap) -> DesiredMap;
             _ -> #{}
         end,
-    StaticContent = application:get_env(quod, namespace_static_content, #{}),
     Config =
         case maps:find(Ns, DesiredContent) of
             {ok, ConfigValue} -> ConfigValue;
-            error when is_map(StaticContent) ->
+            error when Ns =:= ?ROOT_NS ->
+                StaticContent = application:get_env(
+                                  quod, namespace_static_content, #{}),
                 maps:get(Ns, StaticContent, undefined);
             error ->
                 undefined
@@ -568,19 +576,24 @@ it grants neither system status nor hosting authority.
           {ok, map()} | {error, term()}.
 prepare_local_resume(Ns, Anchor, DataDir)
   when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32 ->
-    {_Ns, Config0} =
-        quod_app:build_ns_config(
-          #{namespace => Ns, mode => join,
-            data_dir => unicode:characters_to_binary(DataDir),
-            genesis_file => <<>>,
-            genesis_hash => binary:encode_hex(Anchor), seeds => []}),
-    Config = Config0#{genesis_hash => Anchor},
+    Config = local_resume_config(Ns, Anchor, DataDir),
     case existing_ledger(Ns, Config) of
         {resumed, Anchor} -> {ok, Config};
         {resumed, _OtherAnchor} -> {error, genesis_mismatch};
         created -> {error, not_hosted};
         {error, _} = Error -> Error
     end.
+
+-doc "Build the deterministic local resume config without claiming the ledger exists.".
+-spec local_resume_config(binary(), <<_:256>>, file:filename_all()) -> map().
+local_resume_config(Ns, <<_:256>> = Anchor, DataDir) when is_binary(Ns) ->
+    {_Ns, Config0} =
+        quod_app:build_ns_config(
+          #{namespace => Ns, mode => join,
+            data_dir => unicode:characters_to_binary(DataDir),
+            genesis_file => <<>>,
+            genesis_hash => binary:encode_hex(Anchor), seeds => []}),
+    Config0#{genesis_hash => Anchor}.
 
 -doc "Build the closed public descriptor for one exact private preparation.".
 -spec prepared_effect(term(), prepared_descriptor(), <<_:256>>,
@@ -653,6 +666,10 @@ start(Ns, Config, Status) ->
             {error, {start_failed, Reason}}
     end.
 
+-doc "Return the exact genesis anchor bound by lifecycle preparation.".
+-spec prepared_anchor(prepared_descriptor()) -> <<_:256>>.
+prepared_anchor(#prepared_lifecycle{anchor = Anchor}) -> Anchor.
+
 canonical_name(Name) ->
     case try quod_ontology_name:flatten(Name)
          catch _:_ -> error
@@ -723,17 +740,12 @@ normalize_host(Host0) ->
     end.
 
 local_state_validated(Ns) ->
-    Desired = application:get_env(quod, namespace_desired, #{}),
-    Content = maps:get(content, Desired, #{}),
-    Wanted = maps:is_key(Ns, Content),
     NamespacePid = quod_reg:where({quod_ns, Ns}),
     SimplexPid = quod_reg:where({quod_simplex, Ns}),
-    case {Wanted, is_pid(NamespacePid), is_pid(SimplexPid)} of
-        {false, false, false} -> not_hosted;
-        {false, _, _} -> stopping;
-        {true, false, false} -> starting;
-        {true, _, false} -> starting;
-        {true, _, true} ->
+    case {is_pid(NamespacePid), is_pid(SimplexPid)} of
+        {false, false} -> not_hosted;
+        {_, false} -> starting;
+        {_, true} ->
             case quod_simplex:status(Ns) of
                 #{syncing := false} -> ready;
                 _ -> joining

@@ -1,11 +1,9 @@
 # Physical node instances and durable node references — plan
 
-**Status:** the generic actor-identity prerequisite is deployed. Node-specific
-Slices 2--3 are implemented in the current working tree and await review: an
-ordinary node actor ontology can be created through root, its exact reference
-is stored beside `node.key`, and the namespace manager resumes and verifies it
-before exposing the common agent principal. Node-hosting projection remains
-planned in Slice 4. `ontology-actor-architecture.md` remains
+**Status:** the generic actor-identity prerequisite and node-specific identity
+Slices 2--3 are delivered. Automatic-route-recovery Slice 2 adds the founding
+hosting handler and sole local hosting projection and awaits adversarial
+review. `ontology-actor-architecture.md` remains
 authoritative for the actor model, `inter-ontology.md` for `::`,
 `ontology-subscription-plan.md` for subscriptions, and the directory documents
 for live route discovery.
@@ -75,7 +73,7 @@ joining its committee or hosting its ledger.
 ## 3. Node ontology content
 
 A node ontology is created through the existing root-owned
-`create_ontology/2` action. It is an ordinary ontology, not a new lifecycle
+`create_ontology/3` action. It is an ordinary ontology, not a new lifecycle
 kind and not automatically a system ontology. Its genesis contains at least:
 
 ```prolog
@@ -85,7 +83,7 @@ agent_key(NodeInstance, NodePublicKey, active).
 
 It also contains the explicit ACL and any domain facts selected by the
 creation policy. The generic creator-provenance rule remains unchanged: the
-creator is the authenticated actor which authorized `create_ontology/2`, not
+creator is the authenticated actor which authorized `create_ontology/3`, not
 the machine that happened to execute the post-commit creation effect. The node
 instance does not automatically become ontology owner merely because it is
 contained there.
@@ -193,7 +191,7 @@ committee projection, vote, certificate, or quorum calculation.
 1. The node creates or loads its existing `node.key` and founds root through
    the existing one-time bootstrap procedure.
 2. Once root is ready and the founding node is admitted, the node submits one
-   ordinary root `create_ontology/2` goal containing its node instance, active
+   ordinary root `create_ontology/3` goal containing its node instance, active
    public-key binding, and explicit ACL.
 3. The existing lifecycle action commits one root effect record and creates
    the node ontology on the effect executor.
@@ -216,7 +214,7 @@ creation.
    through existing configuration and transport.
 2. Existing root membership policy admits that key through the unchanged
    `admit/3` path.
-3. The admitted node submits the same ordinary root `create_ontology/2` goal
+3. The admitted node submits the same ordinary root `create_ontology/3` goal
    for its node ontology. Policy may instead authorize another agent to submit
    it; creation and containment do not imply ownership.
 4. The node retains and verifies the resulting exact reference through the
@@ -269,7 +267,8 @@ of node-instance authority waits for the common agent path.
 | node ACL, provenance, capabilities, and domain policy | D | node ontology ledger |
 | committee `peer_admitted/4` | D | each committee ontology's existing ledger |
 | `system_ontology/2` | D | root; lists shared system ontologies only, never per-node instance ontologies |
-| exact local node-reference bootstrap pointer | P/configuration | minimal local boot configuration; accepted only after certified validation |
+| exact local node-reference bootstrap pointer | P/configuration | identity directory beside `node.key`; accepted only after certified validation and never hosting authority |
+| `hosts_ontology/4`, `knows_ontology_host/4` | D | dedicated node actor ontology |
 | endpoint, QUIC link, route, lease, expiry, and retry state | P | existing `quod_quic`, `quod_directory`, and namespace runtime owners |
 | private node seed | secret provider state | existing node data directory/vault; never an ontology fact |
 | create/join lifecycle operation | E | existing post-commit effect journal and namespace lifecycle |
@@ -293,10 +292,10 @@ ontology history remains authoritative.
 
 ### Slice 2 — node ontology creation and local binding
 
-**Status: implemented in the current working tree; awaiting review.**
+**Status: delivered in 0.7.128.**
 
 - Add a pure node-genesis builder which returns ordinary
-  `create_ontology/2` options; it does not call lifecycle APIs.
+  `create_ontology/3` options; it does not call lifecycle APIs.
 - Submit those options through the existing root action.
 - Store one exact local bootstrap pointer with the ground instance term needed
   to find and verify the node ontology; do not turn it into general hosting
@@ -307,7 +306,7 @@ ontology history remains authoritative.
 
 ### Slice 3 — node actor activation
 
-**Status: implemented in the current working tree; awaiting review.**
+**Status: delivered in 0.7.128.**
 
 - Bind the generic actor principal to the verified node instance and active
   key.
@@ -324,7 +323,9 @@ ontology history remains authoritative.
 
 ### Slice 4 — measured node policies
 
-**Status: planning only.**
+**Status: hosting facts and their local projection are implemented by
+`automatic-route-recovery-plan.md` Slice 2; directory publication remains in
+that plan's Slice 4.**
 
 - Express agent hosting, ontology hosting, or explicit private-node relations
   as ordinary Prolog facts only when their concrete use cases require them.

@@ -34,7 +34,7 @@ agent ontology A
   -> remote_complete records the certified target receipt in A
 ```
 
-Root owns only `create_ontology/2`. A different effect-bearing predicate stays
+Root owns only `create_ontology/3`. A different effect-bearing predicate stays
 in the ontology that defines it and follows the same mechanism.
 
 The design must also support a normal group containing several data/OCC
@@ -717,7 +717,7 @@ At minimum, review must independently prove:
 
 1. an effect-only foreign participant is admitted and its origin operation
    claim remains in A;
-2. Root alone authorizes `create_ontology/2`; A performs no duplicate ACL;
+2. Root alone authorizes `create_ontology/3`; A performs no duplicate ACL;
 3. a target ACL refusal produces no journal row and no signed/durable Begin;
 4. changing any effect, plan, target, principal, executor, GroupRef,
    PlanDigest, or ManifestDigest fails closed;

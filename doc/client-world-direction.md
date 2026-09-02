@@ -178,7 +178,7 @@ This separates two useful forms of global update:
 The implemented local-client slice establishes the dedicated TLS endpoint,
 node-bound Ed25519 challenge-response, short-lived node-local sessions, and one
 signed-goal API for reads, writes, and cursors. Agent enrollment uses generic
-root-owned `create_ontology/2` plus ordinary class, key, and ACL facts; the
+root-owned `create_ontology/3` plus ordinary class, key, and ACL facts; the
 specialized `create_user_home` workflow is deleted. The interactive Explorer console uses that same
 login and API; the standalone Explorer listener is read-only. The same signed
 request and stable agent principal now cross remote and nested ontology scopes through

@@ -23,6 +23,7 @@ payload; one aggregate payload gets one bounded allocation budget.
 """.
 
 -include("quod_vm_limits.hrl").
+-include("quod_term_limits.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([encode/1, decode/1,
@@ -35,7 +36,6 @@ payload; one aggregate payload gets one bounded allocation budget.
          valid_failure_reason_stack/1]).
 
 -define(MAX_NODES, 20000).
--define(MAX_DEPTH, 64).
 -define(MAX_SYMBOL_BYTES, 1024).
 
 -type wire() :: term().
@@ -581,7 +581,8 @@ decode_canonical_failure_reason_wire(Blob, Wire) ->
 canonical(Term) ->
     term_to_binary(Term, [deterministic]).
 
-encode(_Term, Depth, Nodes) when Depth > ?MAX_DEPTH; Nodes >= ?MAX_NODES -> error;
+encode(_Term, Depth, Nodes)
+  when Depth > ?QUOD_MAX_TERM_DEPTH; Nodes >= ?MAX_NODES -> error;
 encode({'$quod_symbol', Binary}, _Depth, Nodes)
   when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
     {ok, {0, Binary}, Nodes + 1};
@@ -626,7 +627,8 @@ encode_list([Head | Tail], Depth, Nodes, Acc) ->
         error -> error
     end.
 
-decode(_Wire, Depth, Nodes) when Depth > ?MAX_DEPTH; Nodes >= ?MAX_NODES -> error;
+decode(_Wire, Depth, Nodes)
+  when Depth > ?QUOD_MAX_TERM_DEPTH; Nodes >= ?MAX_NODES -> error;
 decode({0, Binary}, _Depth, Nodes)
   when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
     Term = try binary_to_existing_atom(Binary, utf8)

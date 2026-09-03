@@ -1,6 +1,10 @@
 # Automatic ontology-route recovery — implementation plan
 
 **Status: Slices 1 and 2 implemented; Slice 2 review closed.**
+The byte-canonical correction is proceeding as R1–R4. R1 is implemented and
+awaiting closure review with a bounded `quod_ask_SUITE` result of 20/22: the
+two remote symbol-safety cases still cross Slice 4's materializing committee
+filter. R3/R4 must close both failures before Slice 4 can be called complete.
 Versions 0.7.129 and later in this development arc must not be deployed to the
 existing fleet before the coordinated Slice-6 clean re-found: its immutable
 root ledger contains `create_ontology/2`, while this cut deliberately replaces

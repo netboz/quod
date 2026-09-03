@@ -27,9 +27,10 @@ untrusted payloads, so `invalid` is a tolerated classification, not a crash.
 
 -export([payload/1, classify/1,
          encoded_payload_size/1,
-         new_block/4, decode_block/1, block_bytes/1, valid_block_view/1,
+         new_block/4, decode_block/1, decode_block/2,
+         block_bytes/1, valid_block_view/1,
          new_entry/4, entry/2, noop_entry/2, block_from_entry/1,
-         encode_entry/1, decode_entry/1]).
+         encode_entry/1, decode_entry/1, decode_entry/2]).
 
 -export_type([kind/0]).
 
@@ -140,9 +141,15 @@ encoded_payload_size(Payload) ->
     end.
 
 -spec decode_block(binary()) -> {ok, #block{}} | {error, bad_block}.
-decode_block(Bytes)
+decode_block(Bytes) ->
+    decode_block(Bytes, materialized).
+
+-spec decode_block(binary(), materialized | wrapped) ->
+          {ok, #block{}} | {error, bad_block}.
+decode_block(Bytes, SymbolMode)
   when is_binary(Bytes),
-       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
+       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES,
+       (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
     case {quod_safe_term:validate_canonical(
             Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
           quod_safe_term:decode(
@@ -151,7 +158,7 @@ decode_block(Bytes)
           when is_integer(Slot), Slot >= 0,
                is_integer(Parent), Parent >= 0,
                is_integer(Timestamp), Timestamp >= 0 ->
-            case decode_payload(PayloadWire) of
+            case decode_payload(PayloadWire, SymbolMode) of
                 {ok, Payload} ->
                     {ok, #block{slot = Slot, parent = Parent,
                                 payload = Payload, timestamp = Timestamp,
@@ -162,7 +169,7 @@ decode_block(Bytes)
         _ ->
             {error, bad_block}
     end;
-decode_block(_Bytes) ->
+decode_block(_Bytes, _SymbolMode) ->
     {error, bad_block}.
 
 -spec block_bytes(#block{}) -> binary() | error.
@@ -171,8 +178,27 @@ block_bytes(#block{}) -> error.
 
 -spec valid_block_view(term()) -> boolean().
 valid_block_view(#block{block_bytes = Bytes} = Block) when is_binary(Bytes) ->
-    decode_block(Bytes) =:= {ok, Block};
+    case encode_block_view(Block) of
+        {ok, Bytes} -> true;
+        _ -> false
+    end;
 valid_block_view(_) -> false.
+
+encode_block_view(#block{slot = Slot, parent = Parent, payload = Payload,
+                         timestamp = Timestamp})
+  when is_integer(Slot), Slot >= 0,
+       is_integer(Parent), Parent >= 0,
+       is_integer(Timestamp), Timestamp >= 0 ->
+    case encode_payload(Payload) of
+        {ok, PayloadWire} ->
+            quod_safe_term:encode_canonical(
+              {quod_block, 1, Slot, Parent, PayloadWire, Timestamp},
+              ?QUOD_MAX_CANONICAL_BLOCK_BYTES);
+        error ->
+            {error, bad_term}
+    end;
+encode_block_view(_) ->
+    {error, bad_term}.
 
 encode_payload(Payload) ->
     case classify(Payload) of
@@ -195,14 +221,14 @@ encode_payload(Payload) ->
             error
     end.
 
-decode_payload({batch, [{transaction, Blob} | _] = Items})
+decode_payload({batch, [{transaction, Blob} | _] = Items}, SymbolMode)
   when is_binary(Blob) ->
     try
         Transactions = [begin
                             {transaction, TxBlob} = Item,
                             {ok, Tx} =
                                 quod_transaction:decode_ledger_transaction(
-                                  TxBlob),
+                                  TxBlob, SymbolMode),
                             Tx
                         end || Item <- Items],
         case transaction_list(Transactions) of
@@ -212,12 +238,13 @@ decode_payload({batch, [{transaction, Blob} | _] = Items})
     catch
         _:_ -> error
     end;
-decode_payload(Payload = {batch, [{dtx, Blob} | _]}) when is_binary(Blob) ->
+decode_payload(Payload = {batch, [{dtx, Blob} | _]}, _SymbolMode)
+  when is_binary(Blob) ->
     case classify(Payload) of
         {controls, _} -> {ok, Payload};
         _ -> error
     end;
-decode_payload(_) ->
+decode_payload(_, _SymbolMode) ->
     error.
 
 -spec entry(#block{}, term()) -> #entry{}.
@@ -255,16 +282,29 @@ noop_entry(Index, Cert) when is_integer(Index), Index >= 1 ->
            block_bytes = none, cert = Cert}.
 
 -spec block_from_entry(term()) -> {ok, #block{}} | error.
-block_from_entry(
+block_from_entry(Entry) ->
+    block_from_entry_view(Entry).
+
+block_from_entry_view(
   #entry{index = Index, data = Data, timestamp = Timestamp,
          block_bytes = Bytes})
   when is_binary(Bytes) ->
-    case decode_block(Bytes) of
-        {ok, #block{slot = Index, payload = Data,
-                    timestamp = Timestamp} = Block} -> {ok, Block};
-        _ -> error
+    %% Decode only to recover the parent carried by the canonical bytes.  The
+    %% entry's payload may be the materialized or opaque view of those same
+    %% bytes, so validate it by re-encoding rather than term equality.
+    case decode_block(Bytes, wrapped) of
+        {ok, #block{slot = Index, parent = Parent,
+                    timestamp = Timestamp}} ->
+            Block = #block{slot = Index, parent = Parent, payload = Data,
+                           timestamp = Timestamp, block_bytes = Bytes},
+            case valid_block_view(Block) of
+                true -> {ok, Block};
+                false -> error
+            end;
+        _ ->
+            error
     end;
-block_from_entry(_) -> error.
+block_from_entry_view(_) -> error.
 
 -spec encode_entry(#entry{}) -> {ok, binary()} | {error, bad_entry}.
 encode_entry(#entry{index = Index, data = noop, timestamp = 0,
@@ -292,22 +332,29 @@ encode_entry_term(Term) ->
     end.
 
 -spec decode_entry(binary()) -> {ok, #entry{}} | {error, bad_entry}.
-decode_entry(Bytes)
+decode_entry(Bytes) ->
+    decode_entry(Bytes, materialized).
+
+-spec decode_entry(binary(), materialized | wrapped) ->
+          {ok, #entry{}} | {error, bad_entry}.
+decode_entry(Bytes, SymbolMode)
   when is_binary(Bytes),
-       byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+       byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES,
+       (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
     case {quod_safe_term:validate_canonical(
             Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
           quod_safe_term:decode(
             Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
         {ok, {ok, {quod_entry, 1, Index, none, CertWire}}}
           when is_integer(Index), Index >= 1 ->
-            case decode_cert_wire(CertWire) of
+            case decode_cert_wire(CertWire, SymbolMode) of
                 {ok, Cert} -> {ok, noop_entry(Index, Cert)};
                 error -> {error, bad_entry}
             end;
         {ok, {ok, {quod_entry, 1, Index, BlockBytes, CertWire}}}
           when is_integer(Index), Index >= 1, is_binary(BlockBytes) ->
-            case {decode_block(BlockBytes), decode_cert_wire(CertWire)} of
+            case {decode_block(BlockBytes, SymbolMode),
+                  decode_cert_wire(CertWire, SymbolMode)} of
                 {{ok, #block{slot = Index} = Block}, {ok, Cert}} ->
                     %% decode_block/1 has already proved that this view is the
                     %% canonical interpretation of BlockBytes.  Do not decode
@@ -319,7 +366,7 @@ decode_entry(Bytes)
         _ ->
             {error, bad_entry}
     end;
-decode_entry(_) ->
+decode_entry(_, _SymbolMode) ->
     {error, bad_entry}.
 
 cert_wire(#implicit_cert{support = Support,
@@ -329,12 +376,12 @@ cert_wire(#implicit_cert{support = Support,
     {implicit, Support, ChildBytes, Commit};
 cert_wire(Cert) -> Cert.
 
-decode_cert_wire({implicit, Support, ChildBytes, Commit})
+decode_cert_wire({implicit, Support, ChildBytes, Commit}, SymbolMode)
   when is_binary(ChildBytes) ->
-    case decode_block(ChildBytes) of
+    case decode_block(ChildBytes, SymbolMode) of
         {ok, Child} ->
             {ok, #implicit_cert{support = Support,
                                 child = Child, commit = Commit}};
         {error, _} -> error
     end;
-decode_cert_wire(Cert) -> {ok, Cert}.
+decode_cert_wire(Cert, _SymbolMode) -> {ok, Cert}.

@@ -54,7 +54,8 @@ index to the next worker through an immutable session.
 """.
 -include("quod_ledger.hrl").
 
--export([open/2, ledger_dir/1, open_ro/2, snapshot/1, resume/1,
+-export([open/2, open/3, ledger_dir/1, open_ro/2, open_ro/3,
+         snapshot/1, resume/1,
          open_ro_snapshot/1, close/1,
          namespace/1,
          append/2, read_at/2, read_range/3, fold/5, last/1]).
@@ -81,7 +82,8 @@ index to the next worker through an immutable session.
                 cps = <<>>  :: binary(),          %% sparse index: the K-th 8-byte word is the file
                                                   %% offset of entry `1 + K*?CP_INTERVAL`
                 last_index  = 0 :: log_index(),
-                base_offset = 0 :: non_neg_integer()}).   %% next append offset (== log file size)
+                base_offset = 0 :: non_neg_integer(), %% next append offset (== log file size)
+                symbol_mode = materialized :: materialized | wrapped}).
 -opaque handle() :: #store{}.
 
 %% A read snapshot copies the writer's already-verified sparse index without
@@ -92,7 +94,8 @@ index to the next worker through an immutable session.
                   ns          :: binary(),
                   cps = <<>>  :: binary(),
                   last_index  = 0 :: log_index(),
-                  base_offset = 0 :: non_neg_integer()}).
+                  base_offset = 0 :: non_neg_integer(),
+                  symbol_mode = materialized :: materialized | wrapped}).
 -opaque session() :: #session{}.
 
 -doc "Return the ontology whose ledger this handle reads.".
@@ -137,13 +140,21 @@ ledger_dir(Config) ->
 -doc "Open (creating if needed) the on-disk store for `Ns` under `DataDir`.".
 -spec open(binary(), file:filename_all()) -> {ok, handle()}.
 open(Ns, DataDir) ->
+    open(Ns, DataDir, materialized).
+
+-doc "Open a store whose decoded views use target-owned or opaque foreign symbols.".
+-spec open(binary(), file:filename_all(), materialized | wrapped) ->
+          {ok, handle()}.
+open(Ns, DataDir, SymbolMode)
+  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     Dir = ns_dir(DataDir, Ns),
     ok = filelib:ensure_path(Dir),
     LogPath = filename:join(Dir, "log.0001"),
     {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
-    {Cps, LastI, BaseOff} = scan(Fd, trim),
+    {Cps, LastI, BaseOff} = scan(Fd, trim, SymbolMode),
     {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
-                last_index = LastI, base_offset = BaseOff}}.
+                last_index = LastI, base_offset = BaseOff,
+                symbol_mode = SymbolMode}}.
 
 -doc """
 Open a READ-ONLY handle for a concurrent reader (the catch-up/feed server) alongside the live writer.
@@ -154,13 +165,21 @@ the log does not exist yet.
 """.
 -spec open_ro(binary(), file:filename_all()) -> {ok, handle()} | {error, no_log | term()}.
 open_ro(Ns, DataDir) ->
+    open_ro(Ns, DataDir, materialized).
+
+-doc "Open a read-only store with the selected symbol representation.".
+-spec open_ro(binary(), file:filename_all(), materialized | wrapped) ->
+          {ok, handle()} | {error, no_log | term()}.
+open_ro(Ns, DataDir, SymbolMode)
+  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     Dir = ns_dir(DataDir, Ns),
     case file:open(filename:join(Dir, "log.0001"), [read, raw, binary]) of
         {ok, Fd} ->
             try
-                {Cps, LastI, BaseOff} = scan(Fd, stop),
+                {Cps, LastI, BaseOff} = scan(Fd, stop, SymbolMode),
                 {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
-                            last_index = LastI, base_offset = BaseOff}}
+                            last_index = LastI, base_offset = BaseOff,
+                            symbol_mode = SymbolMode}}
             catch C:R ->
                 _ = file:close(Fd),   %% never leak the fd if the scan throws (e.g. a garbage term)
                 {error, {scan_failed, C, R}}
@@ -176,9 +195,11 @@ close(#store{log_fd = Fd}) -> _ = file:close(Fd), ok.
 -doc "Copy the exact committed prefix and its already-verified sparse index.".
 -spec snapshot(handle()) -> session().
 snapshot(#store{dir = Dir, ns = Ns, cps = Cps,
-               last_index = LastIndex, base_offset = BaseOffset}) ->
+               last_index = LastIndex, base_offset = BaseOffset,
+               symbol_mode = SymbolMode}) ->
     #session{dir = Dir, ns = Ns, cps = Cps,
-             last_index = LastIndex, base_offset = BaseOffset}.
+             last_index = LastIndex, base_offset = BaseOffset,
+             symbol_mode = SymbolMode}.
 
 -doc """
 Resume the sole append owner from its captured, already-verified index without
@@ -188,7 +209,8 @@ through the ordinary recovery open.
 """.
 -spec resume(session()) -> {ok, handle()} | {error, changed | term()}.
 resume(#session{dir = Dir, ns = Ns, cps = Cps,
-                last_index = LastIndex, base_offset = BaseOffset}) ->
+                last_index = LastIndex, base_offset = BaseOffset,
+                symbol_mode = SymbolMode}) ->
     LogPath = filename:join(Dir, "log.0001"),
     case file:open(LogPath, [read, write, raw, binary]) of
         {ok, Fd} ->
@@ -196,7 +218,8 @@ resume(#session{dir = Dir, ns = Ns, cps = Cps,
                 {ok, BaseOffset} ->
                     {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                                 last_index = LastIndex,
-                                base_offset = BaseOffset}};
+                                base_offset = BaseOffset,
+                                symbol_mode = SymbolMode}};
                 {ok, _DifferentSize} ->
                     _ = file:close(Fd),
                     {error, changed};
@@ -216,7 +239,8 @@ checks still protect every returned frame.
 """.
 -spec open_ro_snapshot(session()) -> {ok, handle()} | {error, changed | term()}.
 open_ro_snapshot(#session{dir = Dir, ns = Ns, cps = Cps,
-                last_index = LastIndex, base_offset = BaseOffset}) ->
+                last_index = LastIndex, base_offset = BaseOffset,
+                symbol_mode = SymbolMode}) ->
     LogPath = filename:join(Dir, "log.0001"),
     case file:open(LogPath, [read, raw, binary]) of
         {ok, Fd} ->
@@ -224,7 +248,8 @@ open_ro_snapshot(#session{dir = Dir, ns = Ns, cps = Cps,
                 {ok, CurrentSize} when CurrentSize >= BaseOffset ->
                     {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                                 last_index = LastIndex,
-                                base_offset = BaseOffset}};
+                                base_offset = BaseOffset,
+                                symbol_mode = SymbolMode}};
                 {ok, _ShorterSize} ->
                     _ = file:close(Fd),
                     {error, changed};
@@ -247,7 +272,8 @@ batch; returns only after it completes (the entries are durable before
 """.
 -spec append(handle(), [#entry{}]) -> {ok, handle()}.
 append(S, []) -> {ok, S};
-append(S = #store{log_fd = Fd, base_offset = Off0, cps = Cps0, last_index = LI0}, Entries) ->
+append(S = #store{log_fd = Fd, base_offset = Off0, cps = Cps0,
+                  last_index = LI0}, Entries) ->
     ok = assert_contiguous(LI0, Entries),
     {Off1, Cps1, LI1} =
         lists:foldl(
@@ -300,16 +326,17 @@ fail loudly (`{fold_beyond_tail, To, Last}`), never act on a truncated view.
 fold(_S, From, To, _Fun, Acc) when From > To -> Acc;
 fold(#store{last_index = LI}, _From, To, _Fun, _Acc) when To > LI ->
     error({fold_beyond_tail, To, LI});
-fold(S = #store{log_fd = Fd}, From, To, Fun, Acc) ->
-    fold_run(Fd, {locate(S, From), <<>>}, From, To, Fun, Acc).
+fold(S = #store{log_fd = Fd, symbol_mode = SymbolMode}, From, To, Fun, Acc) ->
+    fold_run(Fd, {locate(S, From), <<>>}, From, To, Fun, Acc, SymbolMode).
 
-fold_run(_Fd, _Cur, I, To, _Fun, Acc) when I > To -> Acc;
-fold_run(Fd, Cur, I, To, Fun, Acc) ->
+fold_run(_Fd, _Cur, I, To, _Fun, Acc, _SymbolMode) when I > To -> Acc;
+fold_run(Fd, Cur, I, To, Fun, Acc, SymbolMode) ->
     case next_frame(Fd, Cur) of
         {frame, Payload, Cur1} ->
-            case quod_ledger:decode_entry(Payload) of
+            case quod_ledger:decode_entry(Payload, SymbolMode) of
                 {ok, #entry{index = I} = E} ->
-                    fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc));
+                    fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc),
+                             SymbolMode);
                 {ok, #entry{index = J}} ->
                     error({corrupt_entry, I, {wrong_index, J}});
                 {error, Why} ->
@@ -430,12 +457,13 @@ fill(Fd, Off, Buf, Need) ->
 %% contiguity from index 1. `Mode` decides what a bad tail does: the WRITER (`trim`)
 %% recovers/fail-stops; a READ-ONLY view (`stop`) only bounds itself — it must never
 %% mutate the live writer's file.
-scan(Fd, Mode) -> scan(Fd, {0, <<>>}, <<>>, 0, Mode).
+scan(Fd, Mode, SymbolMode) ->
+    scan(Fd, {0, <<>>}, <<>>, 0, Mode, SymbolMode).
 
-scan(Fd, Cur = {Off, _}, Cps, LastI, Mode) ->
+scan(Fd, Cur = {Off, _}, Cps, LastI, Mode, SymbolMode) ->
     case next_frame(Fd, Cur) of
         {frame, Payload, Cur1} ->
-            case quod_ledger:decode_entry(Payload) of
+            case quod_ledger:decode_entry(Payload, SymbolMode) of
                 {ok, #entry{index = I}} ->
                     %% A CRC-valid frame at the wrong index — including a first frame that is not
                     %% index 1 — means the segment is corrupt from here on (see the moduledoc:
@@ -443,7 +471,8 @@ scan(Fd, Cur = {Off, _}, Cps, LastI, Mode) ->
                     %% checkpoint), so it is handled as bad, never silently indexed.
                     case I =:= LastI + 1 of
                         true ->
-                            scan(Fd, Cur1, checkpoint(I, Off, Cps), I, Mode);
+                            scan(Fd, Cur1, checkpoint(I, Off, Cps), I, Mode,
+                                 SymbolMode);
                         false ->
                             scan_bad(Fd, Off, Cps, LastI,
                                      {discontinuity, I}, Mode)

@@ -775,6 +775,22 @@ bounded_material_failure_is_total_test() ->
          {?NS, ?ANCHOR}, 2, {batch, [SignedShape]},
          projection(Author))).
 
+foreign_ledger_decode_keeps_unknown_vocabulary_opaque_test() ->
+    Name = <<"quod_r3_ledger_", (binary:encode_hex(
+                                   crypto:strong_rand_bytes(8)))/binary>>,
+    Symbol = {'$quod_symbol', Name},
+    Head = {Symbol, value},
+    Genesis = #transaction{
+                 tx_id = <<41:256>>, origin = {?NS, <<0:256>>},
+                 diff = [{assert, {Head, {[], false}}}], read_check = #{},
+                 author = <<42:256>>, sig = none, signed_bytes = none},
+    ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
+    {ok, Blob} = quod_transaction:encode_ledger_transaction(Genesis),
+    ?assertMatch(
+       {ok, #transaction{diff = [{assert, {Head, {[], false}}}]}},
+       quod_transaction:decode_ledger_transaction(Blob, wrapped)),
+    ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)).
+
 deep_term(0, Term) -> Term;
 deep_term(Depth, Term) -> deep_term(Depth - 1, {nested, Term}).
 

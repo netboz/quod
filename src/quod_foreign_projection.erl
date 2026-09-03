@@ -126,7 +126,7 @@ materialize_turn(S = #s{identity = {Ns, _Anchor}, root = Root,
                         target_height = Target}) ->
     From = quod_committed_projection:applied(Projection0) + 1,
     To = min(Target, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
-    case quod_ledger_store:open_ro(CacheNs, Root) of
+    case quod_ledger_store:open_ro(CacheNs, Root, wrapped) of
         {ok, Store} ->
             Result = try quod_ledger_store:read_range(Store, From, To)
                      after quod_ledger_store:close(Store)

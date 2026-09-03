@@ -20,8 +20,11 @@ channel, separate from `quod_simplex`'s `{log, Ns}` channel:
   server is never trusted (the certificate is the proof).
 
 Committed entries cross this channel only as their canonical byte envelopes.
-The endpoint decodes those bytes into local views; trustlessness still comes
-from certificate verification at the caller, never from the serving peer.
+The target endpoint decodes those bytes into its local view; a foreign-history
+consumer keeps unknown application symbols opaque. Catch-up request ids are
+random 128-bit binaries, so the bounded inner grammar needs no fleet-local
+runtime terms or unsafe decoder. Trustlessness still comes from certificate
+verification at the caller, never from the serving peer.
 """.
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
@@ -29,7 +32,7 @@ from certificate verification at the caller, never from the serving peer.
 -include("quod_proof_limits.hrl").
 
 -export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, stats/1,
-         channel/1, encode_frame/2, decode_frame/2, page_stats/1,
+         channel/1, encode_frame/2, decode_frame/2, decode_frame/3, page_stats/1,
          verify_forward/5, verify_forward/6, verify_entry/3,
          catch_up/5, catch_up/7]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -57,11 +60,11 @@ from certificate verification at the caller, never from the serving peer.
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
             data_dir :: file:filename_all(),
             seeds    = []  :: [endpoint()],             %% static cold-start contacts (sample_contact fallback)
-            pending  = #{} :: #{reference() => #client_pull{}},
+            pending  = #{} :: #{<<_:128>> => #client_pull{}},
                                       %% client: one exact owned row per pull
             pending_peak = 0 :: non_neg_integer(),
             openings = #{} :: #{reference() =>
-                                  {reference(), endpoint(), binary()}},
+                                  {<<_:128>>, endpoint(), binary()}},
                                       %% identified OpenRef=>{ReqId,Endpoint,Frame}
             inflight = #{} :: #{reference() => integer()},
                                       %% server: one exact row per live read worker
@@ -156,8 +159,10 @@ channel(Ns) when is_binary(Ns) ->
 -spec encode_frame(binary(), term()) -> binary().
 encode_frame(Ns, Term) when is_binary(Ns) ->
     WireTerm = encode_wire_term(Term),
+    {ok, Inner} = quod_safe_term:encode_canonical(
+                    WireTerm, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
     term_to_binary(
-      {catchup, Ns, term_to_binary(WireTerm, [deterministic])},
+      {catchup, Ns, Inner},
       [deterministic]).
 
 encode_wire_term({blocks_resp, ReqId, Entries, Height}) when is_list(Entries) ->
@@ -173,50 +178,61 @@ encode_wire_term(Term) ->
 -doc "Decode one existing catch-up frame, returning its inner encoded byte count.".
 -spec decode_frame(binary(), binary()) ->
           {ok, term(), non_neg_integer()} | {error, term()}.
-decode_frame(Ns, Payload)
+decode_frame(Ns, Payload) ->
+    decode_frame(Ns, Payload, materialized).
+
+-doc "Decode a catch-up frame with target-owned or opaque foreign symbols.".
+-spec decode_frame(binary(), binary(), materialized | wrapped) ->
+          {ok, term(), non_neg_integer()} | {error, term()}.
+decode_frame(Ns, Payload, SymbolMode)
   when is_binary(Ns), is_binary(Payload),
-       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES,
+       (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
     try binary_to_term(Payload, [safe]) of
         {catchup, Ns, Bin}
           when is_binary(Bin),
                byte_size(Bin) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-            %% R2 changes only the committed-entry identity to exact bytes.
-            %% The existing catch-up control grammar still carries Erlang
-            %% references whose node-name atom may be unknown here; R3 owns
-            %% replacing this trusted-fleet decode with the wrapped decoder.
-            try decode_wire_term(binary_to_term(Bin), byte_size(Bin))
-            catch _:_ -> {error, bad_frame}
+            case quod_safe_term:decode_wrapped(
+                   Bin, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+                {ok, WireTerm} ->
+                    decode_wire_term(WireTerm, byte_size(Bin), SymbolMode);
+                {error, _} ->
+                    {error, bad_frame}
             end;
         _ ->
             {error, bad_frame}
     catch _:_ ->
         {error, bad_frame}
     end;
-decode_frame(_Ns, _Payload) ->
+decode_frame(_Ns, _Payload, _SymbolMode) ->
     {error, frame_too_large}.
 
-decode_wire_term({blocks_resp_bytes, ReqId, EntryBlobs, Height}, Bytes)
-  when is_list(EntryBlobs) ->
-    case decode_entry_blobs(EntryBlobs, []) of
+decode_wire_term({blocks_req, <<_:128>> = ReqId, From, To}, Bytes, _SymbolMode)
+  when is_integer(From), From > 0, is_integer(To), To >= From ->
+    {ok, {blocks_req, ReqId, From, To}, Bytes};
+decode_wire_term(
+  {blocks_resp_bytes, <<_:128>> = ReqId, EntryBlobs, Height}, Bytes,
+  SymbolMode)
+  when is_list(EntryBlobs), is_integer(Height), Height >= 0 ->
+    case decode_entry_blobs(EntryBlobs, SymbolMode, []) of
         {ok, Entries} ->
             {ok, {blocks_resp, ReqId, Entries, Height}, Bytes};
         error ->
             {error, bad_frame}
     end;
-decode_wire_term({blocks_resp, _ReqId, _Entries, _Height}, _Bytes) ->
-    %% There is no record-carrying compatibility wire in this format cut.
-    {error, bad_frame};
-decode_wire_term(Term, Bytes) ->
-    {ok, Term, Bytes}.
+decode_wire_term({blocks_err, <<_:128>> = ReqId}, Bytes, _SymbolMode) ->
+    {ok, {blocks_err, ReqId}, Bytes};
+decode_wire_term(_Term, _Bytes, _SymbolMode) ->
+    {error, bad_frame}.
 
-decode_entry_blobs([Blob | Rest], Acc) when is_binary(Blob) ->
-    case quod_ledger:decode_entry(Blob) of
-        {ok, Entry} -> decode_entry_blobs(Rest, [Entry | Acc]);
+decode_entry_blobs([Blob | Rest], SymbolMode, Acc) when is_binary(Blob) ->
+    case quod_ledger:decode_entry(Blob, SymbolMode) of
+        {ok, Entry} -> decode_entry_blobs(Rest, SymbolMode, [Entry | Acc]);
         {error, _} -> error
     end;
-decode_entry_blobs([], Acc) ->
+decode_entry_blobs([], _SymbolMode, Acc) ->
     {ok, lists:reverse(Acc)};
-decode_entry_blobs(_Malformed, _Acc) ->
+decode_entry_blobs(_Malformed, _SymbolMode, _Acc) ->
     error.
 
 -doc "Bound a decoded catch-up page by the shared entry-count and encoded-byte limits.".
@@ -899,8 +915,7 @@ route(_Peer, ReplyLink, {blocks_req, ReqId, From, To}, S) ->
 route(Peer, _ReplyLink, {blocks_resp, ReqId, Entries, Height}, S) ->
     handle_resp(Peer, ReqId, Entries, Height, S);
 route(Peer, _ReplyLink, {blocks_err, ReqId}, S) ->
-    handle_err(Peer, ReqId, S);
-route(_Peer, _ReplyLink, _Other, S) -> S.
+    handle_err(Peer, ReqId, S).
 
 %% Server: read the requested range in a worker (never block the endpoint; concurrency-capped). Over the
 %% cap ⇒ drop; the client times out and retries a fresher/other peer.
@@ -967,7 +982,7 @@ peer_matches(Peer, {bound, Peer}) -> true;
 peer_matches(_Peer, {bound, _ExpectedPeer}) -> false.
 
 begin_pull(Contact, From, To, ReplyTo, S = #s{ns = Ns, chan = Chan}) ->
-    ReqId = make_ref(),
+    ReqId = crypto:strong_rand_bytes(16),
     StartedMs = quod_time:mono_ms(),
     Frame = encode_frame(Ns, {blocks_req, ReqId, From, To}),
     TRef = erlang:send_after(

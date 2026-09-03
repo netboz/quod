@@ -31,6 +31,7 @@ payload; one aggregate payload gets one bounded allocation budget.
          materialize_symbols/1, materialize_goal_symbols/1,
          normalize_answer_symbols/2,
          goal_symbol_names/1, symbol_names/1,
+         is_symbol/1, callable_functor/1,
          is_ground/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
@@ -39,6 +40,31 @@ payload; one aggregate payload gets one bounded allocation budget.
 -define(MAX_SYMBOL_BYTES, 1024).
 
 -type wire() :: term().
+
+-doc "Whether a term is one atom symbol in materialized or opaque wire form.".
+-spec is_symbol(term()) -> boolean().
+is_symbol(Atom) when is_atom(Atom) -> true;
+is_symbol({'$quod_symbol', Binary})
+  when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES -> true;
+is_symbol(_) -> false.
+
+-doc "Return a callable's functor without materializing an opaque symbol.".
+-spec callable_functor(term()) ->
+          {ok, {term(), non_neg_integer()}} | error.
+callable_functor({'$quod_symbol', _} = Symbol) ->
+    case is_symbol(Symbol) of
+        true -> {ok, {Symbol, 0}};
+        false -> error
+    end;
+callable_functor(Atom) when is_atom(Atom) ->
+    {ok, {Atom, 0}};
+callable_functor(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->
+    case is_symbol(element(1, Term)) of
+        true -> {ok, {element(1, Term), tuple_size(Term) - 1}};
+        false -> error
+    end;
+callable_functor(_) ->
+    error.
 
 -doc "Whether an Erlog term contains no unbound variable (including anonymous `_`).".
 -spec is_ground(term()) -> boolean().

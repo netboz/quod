@@ -9,9 +9,12 @@ and canonical entry envelopes carry those bytes plus finality evidence. Decoded
 records are local views, never a second identity. This is a ledger and wire
 format break folded into the coordinated Slice-6 clean re-found; there is no old
 decoder or compatibility path. The source identifiers are transaction V13,
-ledger-frame V5, canonical block/entry V1, and DTX-endpoint V9. R3/R4 must still make foreign materialization
-atom-safe and close the two bounded `quod_ask_SUITE` failures before Slice 4 can
-be called complete.
+ledger-frame V5, canonical block/entry V1, and DTX-endpoint V9. R3 keeps
+foreign application symbols opaque through catch-up, disk cache, projection,
+and certified-current reads; it also replaces fleet-local catch-up request
+references with binary ids and closes the two bounded `quod_ask_SUITE`
+failures. R4 must still close the committee-filter integration before Slice 4
+can be called complete.
 Versions 0.7.129 and later in this development arc must not be deployed to the
 existing fleet before the coordinated Slice-6 clean re-found: its immutable
 root ledger contains `create_ontology/2`, while this cut deliberately replaces

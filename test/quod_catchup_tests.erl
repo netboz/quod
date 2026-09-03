@@ -91,6 +91,57 @@ peer_binding_test() ->
     ?assert(quod_catchup:peer_matches(A, {bound, A})),
     ?assertNot(quod_catchup:peer_matches(B, {bound, A})).
 
+binary_request_id_is_the_only_catchup_grammar_test() ->
+    Ns = <<"catchup:binary-request-id">>,
+    RequestId = crypto:strong_rand_bytes(16),
+    ?assertMatch(
+       {ok, {blocks_req, RequestId, 1, 2}, _},
+       quod_catchup:decode_frame(
+         Ns, quod_catchup:encode_frame(
+               Ns, {blocks_req, RequestId, 1, 2}))),
+    %% Runtime references were the only reason the old inner frame needed an
+    %% unsafe fleet-local decoder.  A hand-built legacy frame is rejected by
+    %% the one wrapped decoder before it can enter the protocol grammar.
+    LegacyInner = term_to_binary(
+                    {blocks_req, make_ref(), 1, 2}, [deterministic]),
+    LegacyFrame = term_to_binary(
+                    {catchup, Ns, LegacyInner}, [deterministic]),
+    ?assertEqual(
+       {error, bad_frame}, quod_catchup:decode_frame(Ns, LegacyFrame)).
+
+foreign_response_keeps_unknown_vocabulary_opaque_test() ->
+    Ns = <<"catchup:opaque-response">>,
+    Name = <<"quod_r3_catchup_", (binary:encode_hex(
+                                   crypto:strong_rand_bytes(8)))/binary>>,
+    Symbol = {'$quod_symbol', Name},
+    Transaction = #transaction{
+                     tx_id = <<12:256>>, origin = {Ns, <<0:256>>},
+                     diff = [{assert, {{Symbol, value}, {[], false}}}],
+                     read_check = #{}, author = <<13:256>>, sig = none,
+                     signed_bytes = none},
+    {ok, TransactionBytes} =
+        quod_transaction:encode_ledger_transaction(Transaction),
+    {ok, BlockBytes} = quod_safe_term:encode_canonical(
+                         {quod_block, 1, 1, 0,
+                          {batch, [{transaction, TransactionBytes}]}, 0},
+                         1024 * 1024),
+    Entry = #entry{index = 1, data = {batch, [Transaction]}, timestamp = 0,
+                   block_bytes = BlockBytes, cert = none},
+    RequestId = crypto:strong_rand_bytes(16),
+    Frame = quod_catchup:encode_frame(
+              Ns, {blocks_resp, RequestId, [Entry], 1}),
+    ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
+    {ok, {blocks_resp, RequestId, [Decoded], 1}, _} =
+        quod_catchup:decode_frame(Ns, Frame, wrapped),
+    ?assertMatch(
+       #entry{data =
+                {batch,
+                 [#transaction{
+                    diff = [{assert,
+                             {{Symbol, value}, {[], false}}}]}]}},
+       Decoded),
+    ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)).
+
 %% A catch-up response belongs to the authenticated stream that carried its
 %% request.  Threading that exact link through the read worker avoids a reverse
 %% resolver/dial dependency and also works for directory-pinned no-learn links.
@@ -98,7 +149,7 @@ same_link_response_test() ->
     Fixture = {Dir, Ns, _Cert} = setup(),
     Peer = <<9:256>>,
     Endpoint = {"127.0.0.1", 14569},
-    RequestId = make_ref(),
+    RequestId = crypto:strong_rand_bytes(16),
     Channel = quod_catchup:channel(Ns),
     try
         S0 = quod_catchup:test_state(Ns, Dir),
@@ -144,7 +195,7 @@ identified_endpoint_binds_live_key_before_request_test() ->
     Ns = <<"catchup:identified-endpoint">>,
     Peer = <<10:256>>,
     Endpoint = {"127.0.0.1", 14570},
-    RequestId = make_ref(),
+    RequestId = crypto:strong_rand_bytes(16),
     OpenRef = make_ref(),
     CallRef = make_ref(),
     Timer = erlang:send_after(5000, self(), identified_test_timeout),
@@ -190,7 +241,7 @@ identified_endpoint_failure_drops_late_link_test() ->
     Ns = <<"catchup:identified-failure">>,
     Peer = <<11:256>>,
     Endpoint = {"127.0.0.1", 14571},
-    RequestId = make_ref(),
+    RequestId = crypto:strong_rand_bytes(16),
     OpenRef = make_ref(),
     CallRef = make_ref(),
     Timer = erlang:send_after(5000, self(), identified_failure_timeout),

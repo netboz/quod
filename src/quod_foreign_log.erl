@@ -211,7 +211,7 @@ before that projection can be reused in memory.
           fetch_fun = undefined :: undefined | function(),
           page_timeout_ms = ?DEFAULT_PAGE_TIMEOUT_MS :: pos_integer(),
           pending = #{} :: #{reference() => #request{}},
-          pulls = #{} :: #{reference() => #pull{}},
+          pulls = #{} :: #{<<_:128>> => #pull{}},
           histories = #{} :: #{{binary(), binary()} => #history{}},
           follows = #{} :: #{reference() => {binary(), <<_:256>>}},
           %% Unverified, TLS-authenticated transport contacts are small P
@@ -998,7 +998,7 @@ handle_call(
   S = #s{fetch_fun = undefined}) ->
     case maps:get(RequestRef, S#s.pending, undefined) of
         #request{identity = {Ns, _Anchor}} ->
-            ReqId = make_ref(),
+            ReqId = crypto:strong_rand_bytes(16),
             Timer = erlang:send_after(
                       S#s.page_timeout_ms, self(), {pull_timeout, ReqId}),
             Chan = quod_catchup:channel(Ns),
@@ -3577,7 +3577,7 @@ invalidate_current_view(Identity, S0) ->
 handle_catchup_frame(Peer, Chan, Payload, S0) ->
     case maps:get(Chan, S0#s.channels, undefined) of
         {Ns, _Count} ->
-            case quod_catchup:decode_frame(Ns, Payload) of
+            case quod_catchup:decode_frame(Ns, Payload, wrapped) of
                 {ok, {blocks_resp, ReqId, Entries, Height}, InnerBytes}
                   when InnerBytes =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
                     reply_pull(Peer, ReqId, {ok, Entries, Height}, S0);
@@ -4113,7 +4113,7 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
     ok = cleanup_cache_temps(Dir),
     case ensure_manifest(Owner, RequestRef, Root, Identity, CacheNs) of
         ok ->
-            try quod_ledger_store:open(CacheNs, Root) of
+            try quod_ledger_store:open(CacheNs, Root, wrapped) of
                 {ok, Store} ->
                     Height = quod_ledger_store:last(Store),
                     case load_checkpoint(Root, Identity, CacheNs, Height) of

@@ -381,7 +381,11 @@ remote_scope_nested_failure_reasons(Config) ->
     ?assertEqual(
        {ok, {'$quod_symbol', <<"third_blocked">>}},
        peer:call(Asker, quod_wire_term, decode,
-                 [{0, <<"third_blocked">>}])).
+                 [{0, <<"third_blocked">>}])),
+    assert_foreign_current_keeps_symbol_opaque(
+      Asker, ?config(third, Config), ?THIRD_NS,
+      ?config(third_pub, Config), ?config(third_addr, Config),
+      <<"third_blocked">>).
 
 remote_scope_deep_failure_reasons(Config) ->
     Asker = ?config(asker, Config),
@@ -391,7 +395,25 @@ remote_scope_deep_failure_reasons(Config) ->
                         [?ASKER_NS, Remote], 60000),
     ?assert(length(Reasons) > 64),
     ?assertEqual(Remote, hd(Reasons)),
-    ?assertEqual({'$quod_symbol', <<"deep_bottom">>}, lists:last(Reasons)).
+    ?assertEqual({'$quod_symbol', <<"deep_bottom">>}, lists:last(Reasons)),
+    assert_foreign_current_keeps_symbol_opaque(
+      Asker, ?config(target, Config), ?NS,
+      ?config(target_pub, Config), ?config(target_addr, Config),
+      <<"deep_bottom">>).
+
+assert_foreign_current_keeps_symbol_opaque(
+  Asker, Host, Ns, HostKey, Endpoint, SymbolName) ->
+    Anchor = peer:call(Host, quod_simplex, genesis_hash, [Ns]),
+    ?assertMatch(
+       {ok, #{identity := {Ns, Anchor}}},
+       peer:call(
+         Asker, quod_foreign_log, current,
+         [[{HostKey, [Endpoint]}], {Ns, Anchor}, 20000], 25000)),
+    %% current/3 must be able to certify and retain the complete foreign
+    %% history without interning that ontology's application vocabulary.
+    ?assertEqual(
+       {ok, {'$quod_symbol', SymbolName}},
+       peer:call(Asker, quod_wire_term, decode, [{0, SymbolName}])).
 
 remote_scope_structural_reason_truncation(Config) ->
     Asker = ?config(asker, Config),

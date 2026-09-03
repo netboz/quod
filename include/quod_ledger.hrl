@@ -34,8 +34,10 @@
                     | {present, non_neg_integer()}
                     | {absent, non_neg_integer()}
                     | static.
+-type prolog_symbol() :: atom() | {'$quod_symbol', binary()}.
 -type read_check() ::
-        #{ {Functor :: atom(), Arity :: non_neg_integer()} => read_token() }.
+        #{ {Functor :: prolog_symbol(), Arity :: non_neg_integer()} =>
+               read_token() }.
 
 %% The committed change record. Every non-genesis transaction carries an Ed25519
 %% signature over canonical bytes bound to the TARGET's immutable identity

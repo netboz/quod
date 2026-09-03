@@ -20,6 +20,30 @@ valid_read_check_test() ->
     ?assertNot(quod_diff:valid_read_check(#{{fact, 1} => {present, -1}})),
     ?assertNot(quod_diff:valid_read_check(#{{fact, 1} => {absent, 1.0}})).
 
+opaque_foreign_functor_is_a_normal_map_key_test() ->
+    Name = <<"quod_r3_foreign_", (binary:encode_hex(
+                                    crypto:strong_rand_bytes(8)))/binary>>,
+    Symbol = {'$quod_symbol', Name},
+    Functor = {Symbol, 1},
+    Head = {Symbol, value},
+    Op = {assert, {Head, {[], false}}},
+    ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
+    ?assert(quod_diff:valid_read_check(#{Functor => never_present})),
+    ?assert(quod_diff:valid_ops([Op])),
+    Est0 = quod_committed_projection:new_est(),
+    try
+        {ok, Est1, [Op]} = quod_diff:apply_ops_report(Est0, [Op]),
+        ?assertEqual(
+           {ok, [{Head, {[], false}}]},
+           quod_diff:interpreted_clauses(Est1, Functor)),
+        ?assert(quod_diff:touches_functor([Op], Functor)),
+        ?assertException(
+           error, badarg, binary_to_existing_atom(Name, utf8))
+    after
+        #est{db = #db{ref = Ref}} = Est0,
+        quod_erlog_db_mvcc:delete(Ref)
+    end.
+
 valid_ops_test() ->
     Raw = {assert, {{fact, {0}, [nested, value]}, true}},
     Compiled =

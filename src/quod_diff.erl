@@ -47,7 +47,8 @@ Pure helpers over the committed erlog database for the content layer.
 valid_read_check(ReadCheck) when is_map(ReadCheck) ->
     maps:fold(
       fun({Functor, Arity}, Token, true) ->
-              is_atom(Functor) andalso is_integer(Arity) andalso Arity >= 0
+              quod_wire_term:is_symbol(Functor)
+                  andalso is_integer(Arity) andalso Arity >= 0
                   andalso valid_read_token(Token);
          (_Key, _Token, _Acc) ->
               false
@@ -74,10 +75,10 @@ founding diff must assert a `{can_invoke, 4}` head, so neither an
 assert-then-retract trick nor a hand-built policy-less genesis can create an
 ontology that denies the very proof that would give it a policy.
 """.
--spec asserts_functor([op()], {atom(), non_neg_integer()}) -> boolean().
+-spec asserts_functor([op()], {term(), non_neg_integer()}) -> boolean().
 asserts_functor(Diff, Functor) ->
     lists:any(
-      fun({assert, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
+      fun({assert, {Head, _Body}}) -> functor(Head) =:= Functor;
          (_) -> false
       end, Diff).
 
@@ -150,19 +151,24 @@ apply_ops_preserving_policy_report(Est, Ops) ->
 -spec has_clause(module(), term(), term(), term()) -> boolean().
 has_clause(M, R, H, B0) ->
     B = normalize_body(B0),
-    clause_present(M, R, erlog_int:functor(H), H, B).
+    clause_present(M, R, functor(H), H, B).
 
 -doc "Return exact stored `{Head, Body}` clauses for one interpreted functor in a frozen snapshot.".
--spec interpreted_clauses(tuple(), {atom(), non_neg_integer()}) ->
+-spec interpreted_clauses(tuple(), {term(), non_neg_integer()}) ->
           {ok, [clause()]} | {error, not_interpreted}.
 interpreted_clauses(#est{db = #db{mod = M, ref = R}}, {F, A} = Functor)
-  when is_atom(F), is_integer(A), A >= 0 ->
-    case M:get_procedure(R, Functor) of
-        {clauses, Clauses} ->
-            {ok, [{Head, Body} || {_Tag, Head, Body} <- Clauses]};
-        undefined ->
-            {ok, []};
-        _BuiltInOrCompiled ->
+  when is_integer(A), A >= 0 ->
+    case quod_wire_term:is_symbol(F) of
+        true ->
+            case M:get_procedure(R, Functor) of
+                {clauses, Clauses} ->
+                    {ok, [{Head, Body} || {_Tag, Head, Body} <- Clauses]};
+                undefined ->
+                    {ok, []};
+                _BuiltInOrCompiled ->
+                    {error, not_interpreted}
+            end;
+        false ->
             {error, not_interpreted}
     end;
 interpreted_clauses(_Est, _Functor) ->
@@ -207,10 +213,8 @@ valid_wire_term(Term) ->
         {error, bad_term} -> false
     end.
 
-callable_head(Head) when is_atom(Head) -> true;
-callable_head(Head) when is_tuple(Head), tuple_size(Head) >= 2 ->
-    is_atom(element(1, Head));
-callable_head(_) -> false.
+callable_head(Head) ->
+    quod_wire_term:callable_functor(Head) =/= error.
 
 %% Erlog stores clause bodies in compiled `{Code, HasCut}` form. Explicitly
 %% constructed transactions may carry a legal source body instead; apply_ops/2
@@ -246,16 +250,22 @@ callable_body(Body) when is_atom(Body) -> true;
 callable_body({Variable}) -> valid_variable(Variable);
 callable_body(Body) -> callable_head(Body).
 
-valid_code_label(Label) -> is_atom(Label) orelse (is_integer(Label) andalso Label >= 0).
-valid_variable(Variable) -> is_atom(Variable) orelse (is_integer(Variable) andalso Variable >= 0).
+valid_code_label(Label) ->
+    quod_wire_term:is_symbol(Label)
+        orelse (is_integer(Label) andalso Label >= 0).
+valid_variable(Variable) ->
+    quod_wire_term:is_symbol(Variable)
+        orelse (is_integer(Variable) andalso Variable >= 0).
 
 %% Stored clauses use integer variable ids after compilation (`{0}`, `{1}`, ...),
 %% while source terms use atom ids. Erlog's public `is_legal_term/1` only accepts
 %% the latter, so the durable representation needs this small explicit walker.
 valid_stored_term({Variable}) -> valid_variable(Variable);
-valid_stored_term(Term) when is_tuple(Term), tuple_size(Term) >= 2,
-                             is_atom(element(1, Term)) ->
-    valid_tuple_args(Term, 2, tuple_size(Term));
+valid_stored_term({'$quod_symbol', _} = Symbol) ->
+    quod_wire_term:is_symbol(Symbol);
+valid_stored_term(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->
+    quod_wire_term:is_symbol(element(1, Term))
+        andalso valid_tuple_args(Term, 2, tuple_size(Term));
 valid_stored_term([Head | Tail]) ->
     valid_stored_term(Head) andalso valid_stored_term(Tail);
 valid_stored_term(Term) ->
@@ -268,7 +278,7 @@ valid_tuple_args(Term, Index, Size) ->
 
 apply_op(M, R, {assert, Clause}) ->
     {H, B} = normalize_clause(Clause),
-    F = erlog_int:functor(H),
+    F = functor(H),
     case clause_present(M, R, F, H, B) of
         true  -> {R, unchanged};                       %% content dedup: no-op
         false -> case M:assertz_clause(R, F, H, B) of
@@ -278,7 +288,7 @@ apply_op(M, R, {assert, Clause}) ->
     end;
 apply_op(M, R, {retract, Clause}) ->
     {H, B} = normalize_clause(Clause),
-    F = erlog_int:functor(H),
+    F = functor(H),
     case find_tag(M, R, F, H, B) of
         {ok, Tag} -> case M:retract_clause(R, F, Tag) of
                          {ok, R1} -> {R1, changed};
@@ -316,13 +326,17 @@ find_tag(M, R, F, H, B) ->
     end.
 
 -doc "Whether a diff asserts or retracts any clause with the exact functor.".
--spec touches_functor(list(), {atom(), arity()}) -> boolean().
+-spec touches_functor(list(), {term(), arity()}) -> boolean().
 touches_functor(Ops, Functor) when is_list(Ops) ->
     lists:any(
-      fun({assert, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
-         ({retract, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
+      fun({assert, {Head, _Body}}) -> functor(Head) =:= Functor;
+         ({retract, {Head, _Body}}) -> functor(Head) =:= Functor;
          (_) -> false
       end, Ops).
+
+functor(Head) ->
+    {ok, Functor} = quod_wire_term:callable_functor(Head),
+    Functor.
 
 require_interpreted_policy(
   #est{db = #db{mod = M, ref = R}} = Candidate) ->

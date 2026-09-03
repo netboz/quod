@@ -3092,7 +3092,7 @@ worst_case_implicit_entry_frame_stays_below_budget_test() ->
               Parent, #implicit_cert{support = Support,
                                      child = Child, commit = Commit}),
     Frame = quod_catchup:encode_frame(
-              Ns, {blocks_resp, make_ref(), [Entry], 3}),
+              Ns, {blocks_resp, crypto:strong_rand_bytes(16), [Entry], 3}),
     ?assert(byte_size(Frame) < ?QUOD_MAX_FOREIGN_PAGE_BYTES),
     ?assertMatch({ok, 1, _}, quod_catchup:page_stats([Entry])).
 

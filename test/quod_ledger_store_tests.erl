@@ -35,6 +35,7 @@ store_test_() ->
      [fun t_empty/1,
       fun t_append_read/1,
       fun t_opaque_payload_roundtrip/1,
+      fun t_wrapped_foreign_store_never_materializes_symbols/1,
       fun t_reopen_persists/1,
       fun t_read_snapshot_preserves_verified_index/1,
       fun t_read_snapshot_accepts_append_but_refuses_truncation/1,
@@ -125,6 +126,44 @@ t_opaque_payload_roundtrip({Dir, Ns}) ->
         {ok, Reopened} = quod_ledger_store:read_at(S2, 1),
         ?assertEqual(Data, Reopened#entry.data),
         ok = quod_ledger_store:close(S2)
+    end.
+
+%% The foreign-log cache owns opaque decoded views. Its symbol mode must
+%% survive the immutable session handoff between verification workers.
+t_wrapped_foreign_store_never_materializes_symbols({Dir, Ns}) ->
+    fun() ->
+        Name = <<"quod_r3_store_", (binary:encode_hex(
+                                     crypto:strong_rand_bytes(8)))/binary>>,
+        Symbol = {'$quod_symbol', Name},
+        Transaction = (chg(1))#transaction{
+                        diff = [{assert,
+                                 {{Symbol, value}, {[], false}}}]},
+        {ok, TransactionBytes} =
+            quod_transaction:encode_ledger_transaction(Transaction),
+        {ok, BlockBytes} = quod_safe_term:encode_canonical(
+                             {quod_block, 1, 1, 0,
+                              {batch, [{transaction, TransactionBytes}]}, 0},
+                             1024 * 1024),
+        Entry = #entry{index = 1, data = {batch, [Transaction]},
+                       timestamp = 0, block_bytes = BlockBytes, cert = none},
+        ?assertException(error, badarg,
+                         binary_to_existing_atom(Name, utf8)),
+        {ok, S0} = quod_ledger_store:open(Ns, Dir, wrapped),
+        {ok, S1} = quod_ledger_store:append(S0, [Entry]),
+        Session = quod_ledger_store:snapshot(S1),
+        ok = quod_ledger_store:close(S1),
+        {ok, S2} = quod_ledger_store:resume(Session),
+        ?assertMatch(
+           {ok,
+            #entry{data =
+                     {batch,
+                      [#transaction{
+                         diff = [{assert,
+                                  {{Symbol, value}, {[], false}}}]}]}}},
+           quod_ledger_store:read_at(S2, 1)),
+        ok = quod_ledger_store:close(S2),
+        ?assertException(error, badarg,
+                         binary_to_existing_atom(Name, utf8))
     end.
 
 t_reopen_persists({Dir, Ns}) ->

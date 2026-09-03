@@ -480,26 +480,19 @@ Quod keeps these responsibilities non-overlapping:
 | exact system ontology identities | D facts `system_ontology/2` in root | the namespace manager treats each row as desired exact identity; it can start/synchronise it only after the ordinary route mechanism supplies a verified host |
 | public name to exact anchored ontology identity | ordinary D facts and rules in the future Quod public-discovery service; never an endpoint | that future service returns the anchored identity and may return provisional first-contact hints; it never returns or certifies a live route |
 | eligibility to host an ontology | the target ontology's ordinary D lifecycle policy and ACL | existing lifecycle actions/effects; the resolver neither grants nor replaces this authority |
-| permission to publish a directory advertisement today | exact namespace-to-node-key deployment allowlist in `quod_directory_auth` | `quod_directory_control`; this existing bootstrap authority is not the target ontology's hosting ACL and must not be silently described as one |
+| permission to publish a directory advertisement | a node actor's committed, discoverable `hosts_ontology/4` fact; exact root bootstrap is the sole configured exception | the namespace manager projects ready local facts and `quod_directory_control` signs the complete generation; neither grants target ACL authority |
 | current host endpoint, reachability, lease and freshness | P only | the existing `quod_directory` ETS indexes plus the existing QUIC link pool |
-| private first contact | scoped P bootstrap input | a provisional direct seed in that same directory until authenticated identity confirmation; never durable authority or a second resolver |
+| private contact | a committed `knows_ontology_host/4` fact names the exact target and `HostNodeRef`, never an endpoint | the same local directory projection derives the current endpoint from that host actor's discoverable self-route and never advertises the private row |
 
-The target architecture is that every node keeps root and every root-listed
-system ontology synchronised from startup. “Keep connected” means preserving
-their existing namespace runtime and its ordinary consensus/feed connections,
-not inventing one special socket or bypassing route verification. A
-`system_ontology/2` row names desired identity only: it neither proves which
-node hosts the ontology nor authorizes an advertisement.
-
-The current tree does not yet realise that target automatically. It learns a
-system ontology's first route only when the existing exact deployment
-allowlist admits a signed system advertisement or when an operator supplies a
-private first contact. The shipped deployment currently enables shared
-publication for root explicitly; reading `system_ontology/2` cannot manufacture
-the missing route. Slice 0.10f closes this bootstrap gap through the same
-directory and QUIC path. Until that slice lands, the deployment allowlist
-remains the honest advertisement authority; it must later be replaced in one
-coordinated change, never run beside a second Prolog-derived authority.
+Every node keeps root and every root-listed system ontology synchronised from
+startup. “Keep connected” means preserving their existing namespace runtime
+and ordinary consensus/feed connections, not inventing one special socket or
+bypassing route verification. A `system_ontology/2` row names desired identity;
+the namespace manager recovers that runtime, and ready root/system rows feed
+the same signed generation as ordinary discoverable hosting facts. This
+fact-backed path is implemented in the automatic-route-recovery arc and awaits
+its coordinated clean re-found; the deleted deployment allowlist never runs
+beside it.
 
 System ontologies bypass only future public-name discovery: root already
 provides their exact anchored identities. They still use `quod_directory` to
@@ -508,31 +501,14 @@ feed, and link owners once joined. They do not depend on a DF, AMS, OA, or a
 second resolver.
 
 For every other ontology, callers continue to name the ontology, never a
-physical node. Higher-level discovery/registration belongs to the future Quod
-public-discovery service planned separately in `doc/agent-fipa-plan.md`. It may
-supply an anchored identity and provisional contact hints. Those hints enter
-the existing directory and become usable only after the directory's normal
-identity, host, freshness, and link verification; they are not authoritative
-routes. `::`, subscriptions, certified following and DTX continue to read the
-one directory projection directly. A cache miss may later trigger
-asynchronous public discovery and wake the same existing request owner, but a
-proof never calls a second route store or performs a recursive Prolog route
-lookup.
-
-This latency plan does not implement that future public-discovery service and
-must not delete or narrow today's system signed-announcement/private-contact
-mechanisms before their replacement exists. It only removes arbitrary
-population limits and gives the current directory format enough room to
-represent the hosts already supported by Quod.
-
-The current direct-seed API is retained only as the primitive for a private
-invitation or first contact. This latency work does not turn it into durable
-network policy. Today a configured seed is rebuilt on restart, a dynamically
-added seed is volatile, provisional/confirmed rows have no expiry, and a
-conflicting confirmed identity is not replaced; there is no removal API.
-Explicit policy-driven lifetime/removal/replacement belongs to the future
-private-discovery slice, and no new `remove_direct_seed` contract is claimed
-here. Endpoints never enter ontology facts, subscriptions, or public-discovery
+physical node. Higher-level name-to-identity discovery belongs to the future
+Quod public-discovery service planned separately in
+`doc/agent-fipa-plan.md`. `::`, subscriptions, certified following and DTX read
+the one fact-backed directory projection directly. A cache miss may later
+trigger asynchronous public discovery and wake the same existing request
+owner, but a proof never calls a second route store or performs a recursive
+Prolog route lookup. Endpoints never enter ontology facts, subscriptions, or
+public-discovery
 durable facts.
 
 Removing the 32-name record limit is part of this same ownership correction.
@@ -2407,10 +2383,9 @@ stale, replay, and crash cases.
   `<512` guard.
 - More than eight verified routes for one ontology and more than 2,048 route,
   known-namespace, and signer-high-water rows are admitted without any
-  population refusal. Authentication, identity, freshness, replacement,
-  direct-seed confirmation, and expiry still work through the same directory
-  owner. A future policy-driven direct-seed removal contract is explicitly out
-  of this slice and has no vacuous test here.
+  population refusal. Authentication, identity, generation completeness,
+  freshness, replacement, and expiry still work through the same directory
+  owner.
 - A node advertises more than 32 hosted descriptors across a complete signed
   generation. The receiver installs it only after all bounded records/pages
   verify; missing, duplicate, reordered, stale-epoch, wrong-digest, and

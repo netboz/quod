@@ -1058,14 +1058,13 @@ parked_hosting_starts_on_exact_directory_route(
     ok = wait_route_wait(Identity, present, 300),
     ?assertEqual(undefined, quod_reg:where({directory, node})),
     {ok, Directory} = quod_directory:start_link(
-                        #{allowlist => #{Ns => [NodeKey]},
-                          identity_dir => Dir,
+                        #{identity_dir => Dir,
                           expire_tick_ms => 60000, ttl_ms => 10000}),
     unlink(Directory),
     try
         %% Installation publishes only the exact identity. The manager rereads
         %% the directory, prepares the ordinary pinned join and starts it.
-        {ok, _} = quod_directory:install_record(
+        {ok, _} = quod_ct:install_directory_generation(
                     NodeKey, {<<"route-host">>, 15432},
                     [{Ns, Anchor, validator}], 1, 1),
         ok = wait_namespace_started(Ns, 300),

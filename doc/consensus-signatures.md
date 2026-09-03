@@ -98,7 +98,7 @@ This contract has no compatibility path:
   `{quod_vote, 2, Domain, Kind, Slot, BlockHash}` and reject QVJ1, QVJ2, or a
   different domain — a journal binds the share domain, so an older one must
   never be restored as equivocation history for a chain that no longer exists;
-- signed directory records and bodies are version 2.
+- signed directory generations are version 1.
 
 Deployment is stop, wipe, and re-found—not a rolling upgrade. Both `ledger_dir`
 and `data_dir` must be wiped when they differ; the current Nomad layout

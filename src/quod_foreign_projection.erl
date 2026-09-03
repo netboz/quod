@@ -19,7 +19,7 @@ monopolizes the foreign-log owner.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_monitor/4, advance/4, stop/1]).
+-export([start_monitor/4, advance/4, clauses/4, stop/1]).
 
 -ifdef(TEST).
 -export([test_result_heads/1, test_result_publications/2]).
@@ -56,6 +56,26 @@ advance(Pid, Generation, Height, {Height, <<_:256>>} = Head)
     Pid ! {advance, Generation, Height, Head},
     ok.
 
+-doc "Read exact interpreted clauses from this certified materialized snapshot.".
+-spec clauses(pid(), reference(), [{term(), non_neg_integer()}], pos_integer()) ->
+          {ok, map()} | {error, term()}.
+clauses(Pid, Generation, Functors, TimeoutMs)
+  when is_pid(Pid), is_reference(Generation), is_list(Functors),
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    Ref = make_ref(),
+    MRef = monitor(process, Pid),
+    Pid ! {clauses, self(), Ref, Generation, Functors},
+    receive
+        {foreign_projection_clauses, Ref, Result} ->
+            demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, process, Pid, _Reason} -> {error, unavailable}
+    after TimeoutMs ->
+        demonitor(MRef, [flush]),
+        {error, unavailable}
+    end;
+clauses(_, _, _, _) -> {error, bad_request}.
+
 -spec stop(pid()) -> ok.
 stop(Pid) when is_pid(Pid) ->
     Pid ! stop,
@@ -89,6 +109,14 @@ loop(S = #s{generation = Generation}) ->
         {advance, Generation, Height, Head} ->
             advance_requested(Height, Head, S);
         {advance, _StaleGeneration, _Height, _Head} ->
+            loop(S);
+        {clauses, Caller, Ref, Generation, Functors} when is_pid(Caller) ->
+            Caller ! {foreign_projection_clauses, Ref,
+                      stored_clauses(Functors, S#s.projection)},
+            loop(S);
+        {clauses, Caller, Ref, _StaleGeneration, _Functors}
+          when is_pid(Caller) ->
+            Caller ! {foreign_projection_clauses, Ref, {error, stale}},
             loop(S);
         {'DOWN', _MRef, process, Owner, _Reason}
           when Owner =:= S#s.owner ->
@@ -182,11 +210,38 @@ continue_loop(S = #s{generation = Generation}) ->
                   resnapshot = true});
         {advance, _StaleGeneration, _Height, _Head} ->
             continue_loop(S);
+        {clauses, Caller, Ref, Generation, _Functors} when is_pid(Caller) ->
+            Caller ! {foreign_projection_clauses, Ref, {error, building}},
+            continue_loop(S);
+        {clauses, Caller, Ref, _StaleGeneration, _Functors}
+          when is_pid(Caller) ->
+            Caller ! {foreign_projection_clauses, Ref, {error, stale}},
+            continue_loop(S);
         {'DOWN', _MRef, process, Owner, _Reason}
           when Owner =:= S#s.owner ->
             ok;
         stop -> ok
     end.
+
+stored_clauses(Functors, Projection) ->
+    Est = quod_committed_projection:est(Projection),
+    lists:foldl(
+      fun(Functor, {ok, Acc}) ->
+              case valid_functor(Functor) of
+                  true ->
+                      case quod_diff:interpreted_clauses(Est, Functor) of
+                          {ok, Clauses} -> {ok, Acc#{Functor => Clauses}};
+                          {error, Reason} -> {error, {Functor, Reason}}
+                      end;
+                  false -> {error, bad_request}
+              end;
+         (_Functor, {error, _} = Error) -> Error
+      end, {ok, #{}}, Functors).
+
+valid_functor({Name, Arity}) ->
+    quod_wire_term:is_symbol(Name)
+        andalso is_integer(Arity) andalso Arity >= 0;
+valid_functor(_) -> false.
 
 apply_entries([], Projection, Changed, Publications) ->
     {ok, Projection, Changed, Publications};

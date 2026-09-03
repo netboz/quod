@@ -206,7 +206,8 @@ than being caller variables.
 
 - No root `ontology/2` fact and no replicated catalogue.
 - No replicated hosting catalogue or automatic hosting on another node.
-- No directory advertisement: private reachability remains local/direct-seed.
+- No root-owned hosting catalogue: private reachability is projected from the
+  hosting node's committed `knows_ontology_host/4` facts.
 - Generic agent identity and creation authorization now enter through Root's
   ordinary action and ACL path; the low-level preparer owns none of that policy.
   Payment, atom-capacity, deletion, transfer, and remote membership design

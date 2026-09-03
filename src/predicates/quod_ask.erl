@@ -30,9 +30,10 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
          close_stream/1]).
 -ifdef(TEST).
 -export([test_serve_nested/1, test_await_scope_reply/2,
-         test_await_identity/4, test_await_remote_scope_open/4,
-         test_remote_open_error/2, test_seed_confirmation_error/2,
-         test_remember_route_error/2, test_bind_answer/2]).
+         test_await_remote_scope_open/4,
+         test_remote_open_error/2,
+         test_remember_route_error/2, test_bind_answer/2,
+         test_eligible_routes/1, test_committee_routes/2]).
 -endif.
 
 -doc "Register the `::` handler onto a freshly-built kb (`#est{}`).".
@@ -319,91 +320,8 @@ open_directory_scope(Target) ->
     end.
 
 choose_directory_scope(Target, Routes) ->
-    Confirmed = [Route || Route = #{scope := direct, status := confirmed}
-                              <- Routes],
-    Provisional = [Route || Route = #{scope := direct, status := provisional}
-                                <- Routes],
-    System = [Route || Route = #{scope := system} <- Routes],
-    case Confirmed of
-        [_ | _] -> open_anchored_routes(Target, Confirmed);
-        [] -> probe_direct_routes(Target, Provisional, System, none)
-    end.
-
-probe_direct_routes(Target, [], System, BestError) ->
-    case open_anchored_routes(Target, System) of
-        {error, {ontology_unreachable, Target}} when BestError =/= none ->
-            {error, BestError};
-        Result -> Result
-    end;
-probe_direct_routes(Target,
-                    [#{endpoint := Endpoint} = Route | Rest], System,
-                    BestError) ->
-    case identify_direct_seed(Target, Endpoint) of
-        {ok, NodeKey, {Target, Anchor}, Role} ->
-            case quod_directory:confirm_direct_seed(
-                   Target, Endpoint, NodeKey, Anchor, Role) of
-                ok ->
-                    Confirmed = Route#{status => confirmed,
-                                       node_key => NodeKey,
-                                       genesis_anchor => Anchor,
-                                       role => Role},
-                    open_anchored_routes(Target, [Confirmed]);
-                {error, Reason} ->
-                    continue_seed_routes(
-                      Target, Rest, System, BestError,
-                      seed_confirmation_error(Target, Reason))
-            end;
-        {ok, _NodeKey, _WrongIdentity, _Role} ->
-            {error, {protocol_error, identity_binding}};
-        {error, Reason} ->
-            continue_seed_routes(
-              Target, Rest, System, BestError,
-              remote_open_error(Target, Reason))
-    end.
-
-continue_seed_routes(Target, Rest, System, BestError, unavailable) ->
-    probe_direct_routes(Target, Rest, System, BestError);
-continue_seed_routes(Target, Rest, System, BestError,
-                     {retry, PublicReason}) ->
-    probe_direct_routes(
-      Target, Rest, System,
-      remember_route_error(BestError, PublicReason));
-continue_seed_routes(_Target, _Rest, _System, _BestError,
-                     {fatal, PublicReason}) ->
-    {error, PublicReason}.
-
-seed_confirmation_error(_Target, unknown_seed) ->
-    unavailable;
-seed_confirmation_error(_Target, Reason)
-  when Reason =:= seed_identity_conflict;
-       Reason =:= ambiguous_seed;
-       Reason =:= bad_seed_identity ->
-    {fatal, {protocol_error, identity_binding}};
-seed_confirmation_error(_Target, _Reason) ->
-    {fatal, {protocol_error, proof_engine}}.
-
-identify_direct_seed(Target, Endpoint) ->
-    case execution_remaining_ms() of
-        0 -> {error, current_proof_limit()};
-        RemainingMs ->
-            case quod_ask_router:identify(Endpoint, Target, RemainingMs) of
-                {pending, Router, Generation, OpenRef} ->
-                    await_identity(Target, Router, Generation, OpenRef);
-                {error, _} = Error -> Error
-            end
-    end.
-
-await_identity(Target, Router, Generation, OpenRef) ->
-    case quod_proof_context:bind_router(Router, Generation, Target) of
-        {ok, MRef} ->
-            receive
-                {quod_scope_identity, OpenRef, Result} -> Result;
-                {'DOWN', MRef, process, Router, _Reason} ->
-                    {error, {ontology_unreachable, Target}}
-            end;
-        {error, _} = Error ->
-            Error
-    end.
+    open_anchored_routes(
+      Target, [Route || Route = #{status := confirmed} <- Routes]).
 
 open_anchored_routes(Target, Routes) ->
     Eligible = eligible_routes(Routes),
@@ -413,20 +331,52 @@ open_anchored_routes(Target, Routes) ->
     case {Eligible, Anchors} of
         {[], _} -> {error, {ontology_unreachable, Target}};
         {_, [Anchor]} ->
-            Identity = {Target, Anchor},
-            quod_proof_context:get_or_open_scope(
-              Identity,
-              fun(ScopeId) ->
-                  open_remote_routes(Target, Anchor, ScopeId, Eligible)
-              end);
+            case verified_plain_read_routes(Target, Anchor, Eligible) of
+                {ok, Verified} ->
+                    Identity = {Target, Anchor},
+                    quod_proof_context:get_or_open_scope(
+                      Identity,
+                      fun(ScopeId) ->
+                          open_remote_routes(
+                            Target, Anchor, ScopeId, Verified)
+                      end);
+                {error, _} = Error -> Error
+            end;
         _ -> {error, {anchor_conflict, Target}}
     end.
 
 eligible_routes(Routes) ->
-    ReadOnly = quod_proof_context:read_only(),
-    [Route || Route = #{role := Role} <- Routes,
-              Role =:= validator orelse
-                  (ReadOnly andalso Role =:= observer)].
+    [Route || Route = #{role := validator} <- Routes].
+
+verified_plain_read_routes(Target, Anchor, Routes) ->
+    case quod_proof_context:read_only() of
+        false -> {ok, Routes};
+        true -> verify_target_committee_routes(Target, Anchor, Routes)
+    end.
+
+verify_target_committee_routes(Target, Anchor, Routes) ->
+    case execution_remaining_ms() of
+        0 -> {error, current_proof_limit()};
+        RemainingMs ->
+            Sources = [{Key, [Endpoint]}
+                       || #{node_key := <<_:256>> = Key,
+                            endpoint := Endpoint} <- Routes,
+                          quod_quic:valid_endpoint(Endpoint)],
+            case quod_foreign_log:current(
+                   Sources, {Target, Anchor}, RemainingMs) of
+                {ok, Projection} ->
+                    Committee = quod_simplex:history_committee(Projection),
+                    case committee_routes(Routes, Committee) of
+                        [] -> {error, {ontology_unreachable, Target}};
+                        Verified -> {ok, Verified}
+                    end;
+                {error, _} -> {error, {ontology_unreachable, Target}}
+            end
+    end.
+
+committee_routes(Routes, Committee) ->
+    [Route || Route = #{node_key := Key} <- Routes,
+              lists:member(Key, Committee)].
 
 open_remote_routes(Target, Anchor, ScopeId, Routes) ->
     open_remote_routes(Target, Anchor, ScopeId, Routes, none).
@@ -599,12 +549,10 @@ remote_open_error_kind(_Reason) -> proof_engine.
 
 -ifdef(TEST).
 test_remote_open_error(Target, Reason) -> remote_open_error(Target, Reason).
-test_seed_confirmation_error(Target, Reason) ->
-    seed_confirmation_error(Target, Reason).
 test_remember_route_error(Current, Reason) ->
     remember_route_error(Current, Reason).
-test_await_identity(Target, Router, Generation, OpenRef) ->
-    await_identity(Target, Router, Generation, OpenRef).
+test_eligible_routes(Routes) -> eligible_routes(Routes).
+test_committee_routes(Routes, Committee) -> committee_routes(Routes, Committee).
 test_await_remote_scope_open(Target, Router, Generation, OpenRef) ->
     await_remote_scope_open(Target, Router, Generation, OpenRef).
 -endif.

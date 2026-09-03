@@ -72,7 +72,7 @@ before that projection can be reused in memory.
          verify_current/3,
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
-         follow/1, refresh/1, ack/2, unfollow/1,
+         follow/1, refresh/1, ack/2, projection_clauses/3, unfollow/1,
          required_references/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -655,6 +655,28 @@ ack(FollowRef, NoticeRef)
 ack(_FollowRef, _NoticeRef) ->
     ok.
 
+-doc "Read exact clauses from the certified projection owned by this follow.".
+-spec projection_clauses(reference(), [{term(), non_neg_integer()}],
+                         pos_integer()) -> {ok, map()} | {error, term()}.
+projection_clauses(FollowRef, Functors, TimeoutMs)
+  when is_reference(FollowRef), is_list(Functors),
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            Handle = try gen_server:call(
+                           Pid, {projection_handle, FollowRef, self()}, 1000)
+                     catch exit:_ -> {error, unavailable}
+                     end,
+            case Handle of
+                {ok, ProjectionPid, Generation} ->
+                    quod_foreign_projection:clauses(
+                      ProjectionPid, Generation, Functors, TimeoutMs);
+                {error, _} = Error -> Error
+            end;
+        undefined -> {error, unavailable}
+    end;
+projection_clauses(_, _, _) -> {error, bad_request}.
+
 -doc "Remove one exact follow owned by the calling consumer.".
 -spec unfollow(reference()) -> ok.
 unfollow(FollowRef) when is_reference(FollowRef) ->
@@ -915,6 +937,8 @@ handle_call({follow, Identity}, From, S0) ->
 handle_call({unfollow, FollowRef}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
+handle_call({projection_handle, FollowRef, ConsumerPid}, _From, S) ->
+    {reply, follow_materializer(FollowRef, ConsumerPid, S), S};
 handle_call(
   {verify, Peer, Endpoint, Ref, Phase, TimeoutMs}, From, S0) ->
     case validate_route_request(Peer, Endpoint, Ref, Phase, TimeoutMs) of
@@ -2439,6 +2463,18 @@ follow_consumer(FollowRef, S) ->
                     end;
                 undefined -> error
             end
+    end.
+
+follow_materializer(FollowRef, ConsumerPid, S) ->
+    case follow_consumer(FollowRef, S) of
+        {ok, _Identity, #consumer{pid = ConsumerPid},
+         #history{projection_state = ready,
+                  materializer = #materializer{pid = Pid,
+                                               generation = Generation}}} ->
+            {ok, Pid, Generation};
+        {ok, _Identity, #consumer{pid = ConsumerPid}, _History} ->
+            {error, building};
+        _ -> {error, not_found}
     end.
 
 consumer_by_monitor(MRef, S) ->

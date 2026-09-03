@@ -5,7 +5,9 @@
 -include("quod_ledger.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([remote_scope_solutions/1, remote_scope_symbol_safety/1,
+-export([remote_plain_read_excludes_live_observer/1,
+         remote_plain_read_rejects_lying_validator/1,
+         remote_scope_solutions/1, remote_scope_symbol_safety/1,
          remote_signed_fresh_nested_symbol/1,
          remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
          remote_scope_nested_failure_reasons/1,
@@ -36,7 +38,9 @@
 -define(ROOT_NS, <<"quod:root">>).
 -define(SCOPE_WAVE_SIZE, 8).
 
-all() -> [remote_scope_solutions, remote_scope_symbol_safety,
+all() -> [remote_plain_read_excludes_live_observer,
+          remote_plain_read_rejects_lying_validator,
+          remote_scope_solutions, remote_scope_symbol_safety,
           remote_signed_fresh_nested_symbol,
           remote_scope_chain_policy, remote_scope_failure_reasons,
           remote_scope_nested_failure_reasons,
@@ -58,9 +62,8 @@ all() -> [remote_scope_solutions, remote_scope_symbol_safety,
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
-    {WrongPub, _} = wrong_key_before(TargetPub),
     {AskerPub, _} = AskerKey = quod_identity:generate(),
-    {ThirdPub, _} = ThirdKey = quod_identity:generate(),
+    {ThirdPub, _} = ThirdKey = key_before(TargetPub),
     {AgentPub, _} = AgentKey = quod_identity:generate(),
     TargetAddr = {"127.0.0.1", ?TARGET_PORT},
     AskerAddr = {"127.0.0.1", ?ASKER_PORT},
@@ -69,13 +72,17 @@ init_per_suite(Config) ->
     Pets = filename:join(code:priv_dir(quod), "ontologies/pets.pl"),
     {ok, AnimalsBin} = file:read_file(Animals),
     {ok, PetsBin} = file:read_file(Pets),
+    FilterSymbolName =
+        <<"quod_r4_target_only_",
+          (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
     TargetGenesis = filename:join(?config(priv_dir, Config), "remote_animals.pl"),
     ok = file:write_file(
            TargetGenesis,
            ["can_invoke(_Goal, agent_instance_ref(<<\"pets\">>, _, "
             "human_user(test_agent)), _Chain, _Ns).\n",
             AnimalsBin,
-            "\necho(X).\n"
+            "\necho(X).\n",
+            FilterSymbolName, "(opaque).\n",
             "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n",
             "via_third_failure :- third::third_blocked.\n",
             "dtx_write_chain(X) :- assertz(dtx_animals_mark(X)), "
@@ -118,7 +125,7 @@ init_per_suite(Config) ->
     start_namespace(Target, TargetPub, ?PRIVATE_NS, PrivateGenesis, [], Config),
     start_root_namespace(Target, TargetPub, Config),
     start_brahms(Target, ?NS, TargetAddr, []),
-    DirectoryAllow = #{?NS => [WrongPub, TargetPub],
+    DirectoryAllow = #{?NS => [ThirdPub, TargetPub],
                        ?THIRD_NS => [ThirdPub],
                        ?ROOT_NS => [TargetPub]},
     AskerGenesis = filename:join(?config(priv_dir, Config), "remote_pets.pl"),
@@ -150,16 +157,22 @@ init_per_suite(Config) ->
                      Asker, quod_simplex, genesis_hash, [?ASKER_NS]),
     RootAnchor = peer:call(
                    Target, quod_simplex, genesis_hash, [?ROOT_NS]),
+    NetworkId = RootAnchor,
+    lists:foreach(
+      fun(Peer) -> set_network_identity(Peer, NetworkId) end,
+      [Target, Asker, Third]),
+    %% The third node is a real, fully synchronized observer of `animals`.
+    %% Its key sorts before the sole validator so the live selection tests
+    %% below would choose it first if advertised roles were trusted.
+    ok = peer:call(Third, quod_quic, learn, [TargetPub, TargetAddr]),
+    ok = peer:call(Target, quod_quic, learn, [ThirdPub, ThirdAddr]),
+    start_join_namespace(
+      Third, ThirdPub, ?NS, TargetAnchor, [TargetAddr], Config),
+    start_brahms(Third, ?NS, ThirdAddr, [TargetAddr]),
     AgentRef = {agent_instance_ref, ?ASKER_NS, AskerAnchor,
                 {human_user, test_agent}},
-    %% A lower-sorting route points at a valid server with the WRONG certificate:
-    %% the pinned dial must reject it and advance to the real route.
     {ok, _} = peer:call(
-                Asker, quod_directory, install_record,
-                [WrongPub, TargetAddr,
-                 [{?NS, TargetAnchor, validator}], 1, 1]),
-    {ok, _} = peer:call(
-                Asker, quod_directory, install_record,
+                Asker, quod_ct, install_directory_generation,
                 [TargetPub, TargetAddr,
                  [{?NS, TargetAnchor, validator},
                   {?ROOT_NS, RootAnchor, validator}], 1, 1]),
@@ -168,37 +181,38 @@ init_per_suite(Config) ->
     %% origin route for Begin/Decision evidence.  B deliberately still has no
     %% C route: nested scope selection remains owned and relayed by A.
     {ok, _} = peer:call(
-                Asker, quod_directory, install_record,
+                Asker, quod_ct, install_directory_generation,
                 [ThirdPub, ThirdAddr,
-                 [{?THIRD_NS, ThirdAnchor, validator}], 1, 1]),
+                 [{?THIRD_NS, ThirdAnchor, validator},
+                  {?NS, TargetAnchor, observer}], 1, 1]),
     {ok, _} = peer:call(
-                Third, quod_directory, install_record,
+                Third, quod_ct, install_directory_generation,
                 [TargetPub, TargetAddr,
                  [{?NS, TargetAnchor, validator}], 1, 1]),
     {ok, _} = peer:call(
-                Target, quod_directory, install_record,
+                Target, quod_ct, install_directory_generation,
                 [AskerPub, AskerAddr,
                  [{?ASKER_NS, AskerAnchor, validator}], 1, 1]),
     {ok, _} = peer:call(
-                Third, quod_directory, install_record,
+                Third, quod_ct, install_directory_generation,
                 [AskerPub, AskerAddr,
                  [{?ASKER_NS, AskerAnchor, validator}], 1, 1]),
-    %% The private ontology is reachable only through an explicit local seed.
+    %% Private reachability is the local projection of an exact committed
+    %% HostNodeRef.  The target ontology's public route supplies that host's
+    %% current endpoint; the private ontology itself is never advertised.
+    PrivateAnchor = peer:call(
+                      Target, quod_simplex, genesis_hash, [?PRIVATE_NS]),
+    HostNodeRef = {agent_instance_ref, ?NS, TargetAnchor, target_node},
     ok = peer:call(
-           Asker, quod_directory, add_direct_seed,
-           [?PRIVATE_NS, TargetAddr]),
+           Asker, quod_directory, install_private_projection,
+           [[#{namespace => ?PRIVATE_NS, anchor => PrivateAnchor,
+               host_node_ref => HostNodeRef}]]),
     %% The origin, not the currently executing B scope, selects C for A→B→C.
     %% B therefore has no C route; this exercises the authenticated controller
     %% relay and target-only atom materialization path.
-    ok = peer:call(
-           Asker, quod_directory, add_direct_seed,
-           [?THIRD_NS, ThirdAddr]),
+    %% C was installed above through the same candidate path.
     start_brahms(Asker, ?ASKER_NS, AskerAddr, [TargetAddr]),
     start_brahms(Third, ?THIRD_NS, ThirdAddr, []),
-    NetworkId = RootAnchor,
-    lists:foreach(
-      fun(Peer) -> set_network_identity(Peer, NetworkId) end,
-      [Target, Asker, Third]),
     %% Root's ordinary Prolog policy, not the transport fixture, grants this
     %% exact durable agent permission to create an ontology.  The signed
     %% remote-effect case below must still pass Root's normal can_invoke and
@@ -215,6 +229,7 @@ init_per_suite(Config) ->
     Session = open_client_session(
                 Asker, NetworkId, AskerPub, AgentKey, ClientPeer),
     wait_ready(Target, ?NS, {diet, dog, kibble}),
+    wait_ready(Third, ?NS, {diet, dog, kibble}),
     wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
     wait_ready(Third, ?THIRD_NS,
                {can_invoke, probe, anonymous, [], ?THIRD_NS}),
@@ -238,10 +253,10 @@ init_per_suite(Config) ->
       end, ACLs),
     [{target, Target}, {asker, Asker}, {third, Third},
      {target_pub, TargetPub}, {asker_pub, AskerPub},
-     {wrong_pub, WrongPub},
      {target_addr, TargetAddr}, {third_pub, ThirdPub},
      {third_addr, ThirdAddr}, {network_id, NetworkId},
-     {asker_anchor, AskerAnchor},
+     {target_anchor, TargetAnchor}, {third_anchor, ThirdAnchor},
+     {asker_anchor, AskerAnchor}, {filter_symbol_name, FilterSymbolName},
      {agent_ref, AgentRef},
      {agent_key, AgentKey}, {agent_pub, AgentPub},
      {client_peer, ClientPeer}, {client_session, Session},
@@ -252,6 +267,93 @@ end_per_suite(Config) ->
                                       ?config(asker, Config),
                                       ?config(third, Config)]],
     ok.
+
+%% A real, caught-up observer can answer the ontology locally, but an
+%% advertised observer row is never eligible to answer a single-host remote
+%% read. The sole current validator must own the live scope.
+remote_plain_read_excludes_live_observer(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    Observer = ?config(third, Config),
+    ObserverKey = ?config(third_pub, Config),
+    {known, Routes} = peer:call(Asker, quod_directory, resolve, [?NS]),
+    ?assert(lists:any(
+              fun(#{node_key := Key, role := observer}) ->
+                      Key =:= ObserverKey;
+                 (_) -> false
+              end, Routes)),
+    ?assertMatch(
+       {ok, [_], _},
+       peer:call(Observer, quod_prolog, prove_ro,
+                 [?NS, {diet, dog, kibble}], 5000)),
+    assert_symbol_opaque(Asker, ?config(filter_symbol_name, Config)),
+    AtomsBefore = peer:call(Asker, erlang, system_info, [atom_count]),
+    assert_remote_scope_owner(Asker, Target, Observer),
+    ?assertEqual(
+       AtomsBefore, peer:call(Asker, erlang, system_info, [atom_count])),
+    assert_symbol_opaque(Asker, ?config(filter_symbol_name, Config)).
+
+%% The same live observer now lies in its next signed directory generation and
+%% labels itself a validator. Its key sorts before the real validator, so a
+%% role-trusting selector would open the scope there. The certified target
+%% committee removes it and resolution reaches the honest coexisting route.
+remote_plain_read_rejects_lying_validator(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    Liar = ?config(third, Config),
+    LiarKey = ?config(third_pub, Config),
+    LiarEndpoint = ?config(third_addr, Config),
+    TargetKey = ?config(target_pub, Config),
+    TargetAnchor = ?config(target_anchor, Config),
+    ThirdAnchor = ?config(third_anchor, Config),
+    LyingRows = [{?THIRD_NS, ThirdAnchor, validator},
+                 {?NS, TargetAnchor, validator}],
+    HonestRows = [{?THIRD_NS, ThirdAnchor, validator},
+                  {?NS, TargetAnchor, observer}],
+    {ok, _} = peer:call(
+                Asker, quod_ct, install_directory_generation,
+                [LiarKey, LiarEndpoint, LyingRows, 1, 2]),
+    try
+        {known, Routes} = peer:call(
+                            Asker, quod_directory, resolve, [?NS]),
+        ValidatorKeys = [Key || #{role := validator, node_key := Key} <- Routes],
+        ?assertEqual([LiarKey, TargetKey], ValidatorKeys),
+        assert_symbol_opaque(Asker, ?config(filter_symbol_name, Config)),
+        AtomsBefore = peer:call(Asker, erlang, system_info, [atom_count]),
+        assert_remote_scope_owner(Asker, Target, Liar),
+        ?assertEqual(
+           AtomsBefore, peer:call(Asker, erlang, system_info, [atom_count])),
+        assert_symbol_opaque(Asker, ?config(filter_symbol_name, Config))
+    after
+        {ok, _} = peer:call(
+                    Asker, quod_ct, install_directory_generation,
+                    [LiarKey, LiarEndpoint, HonestRows, 1, 3])
+    end.
+
+assert_remote_scope_owner(Asker, Validator, RefusedHost) ->
+    wait_scope_workers(Validator, 0, 200),
+    wait_scope_workers(RefusedHost, 0, 200),
+    Loop = {'::', ?NS, loop},
+    Caller = peer:call(Asker, erlang, spawn,
+                       [quod_prolog, prove_ro, [?ASKER_NS, Loop]]),
+    try
+        wait_scope_workers(Validator, 1, 1500),
+        ?assertEqual(0, scope_worker_count(RefusedHost))
+    after
+        true = peer:call(Asker, erlang, exit, [Caller, kill]),
+        wait_engine_stat(Asker, ?ASKER_NS, proof_workers, 0, 500),
+        wait_scope_workers(Validator, 0, 500),
+        wait_scope_workers(RefusedHost, 0, 200)
+    end.
+
+scope_worker_count(Peer) ->
+    maps:get(scope_workers,
+             peer:call(Peer, quod_prolog, stats, [?NS]), undefined).
+
+assert_symbol_opaque(Peer, SymbolName) ->
+    ?assertEqual(
+       {ok, {'$quod_symbol', SymbolName}},
+       peer:call(Peer, quod_wire_term, decode, [{0, SymbolName}])).
 
 remote_scope_solutions(Config) ->
     Asker = ?config(asker, Config),
@@ -350,10 +452,13 @@ remote_scope_chain_policy(Config) ->
        {ok, [#{'X' := 42}], _},
        peer:call(Asker, quod_prolog, prove,
                  [?ASKER_NS, {';', Denied, Allowed}], 60000)),
-    {known, [Route]} = peer:call(
-                         Asker, quod_directory, resolve, [?PRIVATE_NS]),
-    ?assertEqual(direct, maps:get(scope, Route)),
-    ?assertEqual(confirmed, maps:get(status, Route)),
+    {known, Routes} = peer:call(
+                        Asker, quod_directory, resolve, [?PRIVATE_NS]),
+    ?assert(Routes =/= []),
+    ?assert(lists:all(
+              fun(#{scope := private, status := confirmed}) -> true;
+                 (_) -> false
+              end, Routes)),
     ?assertEqual([], peer:call(
                        Asker, quod_directory, directory_hosts,
                        [?PRIVATE_NS])).
@@ -495,11 +600,6 @@ remote_signed_gateway_read_execute_cursor(Config) ->
        [[{<<"D">>, kibble}]],
        [begin {ok, Binding} = quod_durable_term:decode_result(Blob), Binding end
         || Blob <- ReadBlobs]),
-    %% This first request also proves pre-send failover past the lower-sorting
-    %% wrong-certificate route. Retire it so the remaining cases stay fast.
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
-
     Tag = erlang:unique_integer([positive]),
     ExecuteText = iolist_to_binary(
                     io_lib:format("assertz(gateway_mark(~B)).", [Tag])),
@@ -716,12 +816,6 @@ remote_signed_two_gateway_race(Config) ->
     AgentPub = ?config(agent_pub, Config),
     AgentKey = ?config(agent_key, Config),
     ClientPeer = ?config(client_peer, Config),
-    %% This case is independently runnable.  The suite starts with one
-    %% synthetic wrong-certificate route to exercise failover elsewhere, but
-    %% this concurrency assertion must not inherit its removal from a prior
-    %% test case.
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
     AskerSession = open_client_session(
                      Asker, NetworkId, ?config(asker_pub, Config),
                      AgentKey, ClientPeer),
@@ -818,7 +912,7 @@ remote_signed_gateway_group(Config) ->
     ThirdAddr = ?config(third_addr, Config),
     ThirdAnchor = peer:call(Third, quod_simplex, genesis_hash, [?THIRD_NS]),
     {ok, _} = peer:call(
-                Target, quod_directory, install_record,
+                Target, quod_ct, install_directory_generation,
                 [ThirdPub, ThirdAddr,
                  [{?THIRD_NS, ThirdAnchor, validator}], 1, 1]),
     %% Third already received Target's exact current record in suite setup.
@@ -866,9 +960,6 @@ remote_signed_concurrent_gateway_groups(Config) ->
     Session = ?config(client_session, Config),
     ClientPeer = ?config(client_peer, Config),
     AgentAnchor = ?config(asker_anchor, Config),
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
-
     PredicateRows = dtx_disjoint_predicates(),
     Requests =
         [begin
@@ -943,8 +1034,6 @@ remote_signed_queued_occ_abort(Config) ->
     AgentPub = ?config(agent_pub, Config),
     ClientPeer = ?config(client_peer, Config),
     AgentAnchor = ?config(asker_anchor, Config),
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
     Session = open_client_session(
                 Asker, NetworkId, ?config(asker_pub, Config),
                 AgentKey, ClientPeer),
@@ -1048,13 +1137,9 @@ remote_signed_gateway_group_with_root_effect(Config) ->
     ok.
 
 %% One browser-equivalent request crosses two remote scope hops and commits
-%% through the ordinary group protocol.  Earlier cases have already proved
-%% failover past the suite's synthetic wrong-certificate route; retire that
-%% route now so every DTX evidence phase does not pay its full dial timeout.
+%% through the ordinary group protocol.
 remote_signed_group_uses_exact_agent_request(Config) ->
     Asker = ?config(asker, Config),
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
     NetworkId = ?config(network_id, Config),
     AgentKey = ?config(agent_key, Config),
     AgentPub = ?config(agent_pub, Config),
@@ -1112,10 +1197,6 @@ remote_group_recovers_after_origin_crash(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Third = ?config(third, Config),
-    %% This case must not rely on an earlier case having retired the suite's
-    %% synthetic wrong-certificate route.
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
     Tag = erlang:unique_integer([positive]),
     Goal = {',', {assertz, {dtx_pets_mark, Tag}},
                  {'::', ?NS, {dtx_write_chain, Tag}}},
@@ -1184,36 +1265,6 @@ remote_group_recovers_after_origin_crash(Config) ->
         _ = peer:call(
               Asker, application, unset_env,
               [quod, dtx_test_phase_barrier])
-    end.
-
-retire_wrong_route(_Peer, _WrongPub, _Endpoint, 0) ->
-    ct:fail(could_not_retire_synthetic_wrong_route);
-retire_wrong_route(Peer, WrongPub, Endpoint, Retries) ->
-    case set_synthetic_route(
-           Peer, WrongPub, Endpoint, [], 1, 2, Retries) of
-        ok -> ok;
-        %% Another case in the same suite may already have installed this
-        %% exact newer retirement record.  The desired route is absent in
-        %% either case, so retirement is idempotently complete.
-        stale_record -> ok;
-        Other ->
-            ct:fail({wrong_route_retirement_failed, Other})
-    end.
-
-set_synthetic_route(_Peer, _Key, _Endpoint, _Hosted,
-                    _Epoch, _Sequence, 0) ->
-    ct:fail(could_not_update_synthetic_route);
-set_synthetic_route(Peer, Key, Endpoint, Hosted,
-                    Epoch, Sequence, Retries) ->
-    case peer:call(
-           Peer, quod_directory, install_record,
-           [Key, Endpoint, Hosted, Epoch, Sequence]) of
-        {ok, _} -> ok;
-        {error, rate_limited} ->
-            timer:sleep(50),
-            set_synthetic_route(
-              Peer, Key, Endpoint, Hosted, Epoch, Sequence, Retries - 1);
-        {error, Reason} -> Reason
     end.
 
 wait_decision_barrier(ProofRef, Config) ->
@@ -1768,8 +1819,8 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
     %% every synthetic namespace. Keep their explicit certified route fixtures
     %% alive for the whole suite so long-running protocol cases test the route,
     %% not fixture expiry.
-    Set(directory, #{allowlist => DirectoryAllowlist,
-                     ttl_ms => 600000, expire_tick_ms => 60000}),
+    _ = DirectoryAllowlist,
+    Set(directory, #{ttl_ms => 600000, expire_tick_ms => 60000}),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config),
     Peer.
@@ -1783,6 +1834,17 @@ start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config) ->
     Cfg = #{node_id => Pub, mode => create, role => member,
             data_dir => DataDir, seed_peers => Seeds,
             genesis_file => Genesis},
+    {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
+    ok.
+
+start_join_namespace(Peer, Pub, Ns, Anchor, Seeds, Config) ->
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                unicode:characters_to_list(
+                  [atom_to_list(peer:call(Peer, erlang, node, [])),
+                   "_observer_", Ns])),
+    Cfg = #{node_id => Pub, mode => join, genesis_hash => Anchor,
+            data_dir => DataDir, seed_peers => Seeds},
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
     ok.
 
@@ -1831,17 +1893,24 @@ wait_ready(Peer, Ns, Goal, Retries) ->
 
 wait_scope_workers(_Peer, _Expected, 0) -> ct:fail(scope_worker_timeout);
 wait_scope_workers(Peer, Expected, Retries) ->
-    Stats = peer:call(Peer, quod_prolog, stats, [?NS]),
-    case maps:get(scope_workers, Stats, undefined) of
+    wait_engine_stat(Peer, ?NS, scope_workers, Expected, Retries).
+
+wait_engine_stat(_Peer, _Ns, _Key, _Expected, 0) ->
+    ct:fail(engine_stat_timeout);
+wait_engine_stat(Peer, Ns, Key, Expected, Retries) ->
+    Stats = peer:call(Peer, quod_prolog, stats, [Ns]),
+    case maps:get(Key, Stats, undefined) of
         Expected -> ok;
-        _ -> timer:sleep(10), wait_scope_workers(Peer, Expected, Retries - 1)
+        _ ->
+            timer:sleep(10),
+            wait_engine_stat(Peer, Ns, Key, Expected, Retries - 1)
     end.
 
-wrong_key_before(TargetPub) ->
+key_before(TargetPub) ->
     {Pub, _} = Key = quod_identity:generate(),
     case Pub < TargetPub of
         true -> Key;
-        false -> wrong_key_before(TargetPub)
+        false -> key_before(TargetPub)
     end.
 
 deep_failure_rules() ->

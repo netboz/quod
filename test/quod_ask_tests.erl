@@ -52,30 +52,8 @@ remote_route_errors_retry_only_before_execution_test() ->
        quod_ask:test_remember_route_error(
          First, {ontology_rebuilding, Target})).
 
-direct_seed_confirmation_errors_are_public_and_typed_test() ->
-    Target = <<"quod:seed-errors">>,
-    ?assertEqual(
-       unavailable,
-       quod_ask:test_seed_confirmation_error(Target, unknown_seed)),
-    lists:foreach(
-      fun(Reason) ->
-          ?assertEqual(
-             {fatal, {protocol_error, identity_binding}},
-             quod_ask:test_seed_confirmation_error(Target, Reason))
-      end,
-      [seed_identity_conflict, ambiguous_seed, bad_seed_identity]),
-    ?assertEqual(
-       {fatal, {protocol_error, proof_engine}},
-       quod_ask:test_seed_confirmation_error(Target, unexpected_internal)).
-
 pending_router_death_is_reported_at_each_opening_wait_test() ->
     Target = <<"quod:router-death">>,
-    assert_pending_router_death(
-      Target,
-      fun(Router, Generation, OpenRef) ->
-          quod_ask:test_await_identity(
-            Target, Router, Generation, OpenRef)
-      end),
     assert_pending_router_death(
       Target,
       fun(Router, Generation, OpenRef) ->
@@ -99,6 +77,20 @@ assert_pending_router_death(Target, WaitFun) ->
           fun(_Scope) -> ok end, fun(_Proxy) -> ok end),
         exit(Router, kill)
     end.
+
+plain_reads_never_select_advertised_observers_test() ->
+    Validator = #{role => validator, node_key => <<1:256>>},
+    Observer = #{role => observer, node_key => <<2:256>>},
+    ?assertEqual([Validator],
+                 quod_ask:test_eligible_routes([Observer, Validator])).
+
+advertised_validator_must_belong_to_certified_committee_test() ->
+    HonestKey = <<3:256>>, LiarKey = <<4:256>>,
+    Honest = #{role => validator, node_key => HonestKey},
+    Liar = #{role => validator, node_key => LiarKey},
+    ?assertEqual([Honest],
+                 quod_ask:test_committee_routes(
+                   [Liar, Honest], [HonestKey])).
 
 wait_for_router_test_stop() ->
     receive stop -> ok end.

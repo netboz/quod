@@ -3,7 +3,7 @@
 Signed dissemination and renewal for `quod_directory`.
 
 This process owns no directory answer index. It verifies and forwards
-immutable signed records, while the bounded directory service remains the
+immutable signed generations, while the directory service remains the
 sole ETS writer.
 Directory-control authority comes from the local root ontology's committed
 `peer_admitted/4` facts. A monitored worker reads that snapshot without
@@ -20,16 +20,17 @@ relayed announcements only from a current root control peer.
 
 -include("quod_directory_limits.hrl").
 
--export([start_link/0, start_link/1, start_tracking/0, hosting_changed/3,
+-export([start_link/0, start_link/1, start_tracking/0, hosting_changed/4,
          stats/0, channel/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([snapshot_page/2, decode_control/1, test_ingest/2,
+-export([decode_control/1,
          test_set_control_peers/1, test_set_control_link/3,
          test_control_state/0, test_apply_peer_result/1,
          test_install_control_link/3,
          test_set_pending_link/3, test_validate_peer_proof/1,
-         test_set_hosting_snapshot/2, test_set_manager_epoch/1]).
+         test_set_hosting_snapshot/2, test_set_manager_epoch/1,
+         test_partition_hosted/1]).
 -endif.
 
 -define(KEY, {directory, control}).
@@ -39,12 +40,8 @@ relayed announcements only from a current root control peer.
 -define(PEER_QUERY_TIMEOUT_MS, 5000).
 -define(CONTROL_DIAL_LIMIT, 4).
 -define(CONTROL_DIAL_TIMEOUT_MS, 11000).
--define(MAX_ROOT_CONTACTS, 128).
 -define(MAX_CONTROL_BYTES, (1 bsl 20)).
 -define(MAX_ANNOUNCE_FRAME_BYTES, (17 * 1024)).
--define(MAX_RESYNC_BYTES, (900 * 1024)).
--define(RESYNC_MIN_MS, 5000).
--define(RESYNC_SESSION_TTL_MS, 30000).
 
 -record(s, {
     channel,
@@ -53,12 +50,12 @@ relayed announcements only from a current root control peer.
     signer = undefined,
     endpoint = undefined,
     epoch = undefined,
-    sequence = 0,
+    generation = 0,
     hosted = [],
-    allowlist = #{},
-    allowed_keys = #{},
     root_contacts = [],
-    records = #{},
+    generations = #{},
+    assemblies = #{},
+    validations = #{},
     control_peers = #{},
     dial_queue = {[], []},
     pending_links = #{},
@@ -67,13 +64,13 @@ relayed announcements only from a current root control peer.
     peer_query = undefined,
     peer_height = undefined,
     peer_status = never_succeeded,
-    last_resync = #{},
     renew_ms = ?RENEW_MS,
     directory_ref = undefined,
     manager_monitor = undefined,
     manager_pid = undefined,
     hosting_revision = -1,
-    hosting_names = [],
+    hosting_projection = [],
+    private_projection = [],
     tracking = false
 }).
 
@@ -84,9 +81,9 @@ start_link(Opts) ->
     gen_server:start_link(quod_reg:via(?KEY), ?MODULE, Opts, []).
 
 -doc """
-Start advertising bounded descriptors for the allowlisted intersection of the
-namespace manager's complete ready snapshot. Each descriptor carries the
-namespace's immutable genesis anchor and current validator/observer role.
+Start advertising the manager's complete committed ready projection. Each
+descriptor carries the namespace's immutable genesis anchor and current
+validator/observer role.
 This is called once after application startup; later manager revisions replace
 the snapshot and renewals only revalidate its current live state.
 """.
@@ -95,13 +92,14 @@ start_tracking() ->
     gen_server:call(quod_reg:via(?KEY), start_tracking, 10000).
 
 -doc "Install one manager-epoch-bound ready-hosting snapshot.".
-hosting_changed(ManagerPid, Revision, Names)
+hosting_changed(ManagerPid, Revision, Names, Private)
   when is_pid(ManagerPid), is_integer(Revision), Revision >= 0,
-       is_list(Names) ->
+       is_list(Names), is_list(Private) ->
     case quod_reg:where(?KEY) of
         Pid when is_pid(Pid) ->
             gen_server:cast(Pid,
-                            {hosting_changed, ManagerPid, Revision, Names}),
+                            {hosting_changed, ManagerPid, Revision,
+                             Names, Private}),
             ok;
         undefined -> ok
     end.
@@ -112,23 +110,6 @@ stats() ->
     end.
 
 -ifdef(TEST).
-test_ingest(SignedRecord, Source) ->
-    Caller = self(),
-    Ref = make_ref(),
-    _ = sys:replace_state(
-          quod_reg:via(?KEY),
-          fun(S) ->
-              case accept_signed(SignedRecord, Source, false, S) of
-                  {ok, S1} ->
-                      Caller ! {Ref, ok},
-                      S1;
-                  {error, Reason} ->
-                      Caller ! {Ref, {error, Reason}},
-                      S
-              end
-          end),
-    receive {Ref, Result} -> Result end.
-
 test_set_control_peers(Keys) ->
     sys:replace_state(
       quod_reg:via(?KEY),
@@ -157,7 +138,7 @@ test_control_state() ->
       peer_status => S#s.peer_status,
       manager_pid => S#s.manager_pid,
       hosting_revision => S#s.hosting_revision,
-      hosting_names => S#s.hosting_names}.
+      hosting_projection => S#s.hosting_projection}.
 
 test_apply_peer_result(Result) ->
     sys:replace_state(
@@ -197,7 +178,7 @@ test_set_hosting_snapshot(Revision, Names) ->
       fun(S) -> S#s{manager_pid = Caller,
                     hosting_revision = -1}
       end),
-    ok = hosting_changed(Caller, Revision, Names),
+    ok = hosting_changed(Caller, Revision, Names, []),
     _ = sys:get_state(quod_reg:via(?KEY)),
     ok.
 
@@ -206,7 +187,7 @@ test_set_manager_epoch(ManagerPid) when is_pid(ManagerPid) ->
       quod_reg:via(?KEY),
       fun(S) -> S#s{manager_pid = ManagerPid,
                     hosting_revision = -1,
-                    hosting_names = []}
+                    hosting_projection = []}
       end),
     ok.
 -endif.
@@ -221,8 +202,6 @@ init(Opts) ->
         {ok, Cfg} ->
             Base = #s{channel = Channel,
                       self_key = local_node_key(),
-                      allowlist = maps:get(allowlist, Cfg),
-                      allowed_keys = maps:get(allowed_keys, Cfg),
                       root_contacts = maps:get(root_contacts, Cfg),
                       renew_ms = maps:get(renew_ms, Cfg),
                       manager_monitor =
@@ -261,9 +240,7 @@ handle_call(start_tracking, _From, S) ->
 handle_call(stats, _From, S) ->
     {reply, #{enabled => S#s.enabled,
               tracking => S#s.tracking,
-              records => map_size(
-                           active_records(
-                             quod_time:mono_ms(), S#s.records)),
+              records => map_size(S#s.generations),
               control_peer_count => map_size(S#s.control_peers),
               control_link_count => map_size(S#s.control_links),
               control_pending_count => map_size(S#s.pending_links),
@@ -273,15 +250,17 @@ handle_call(stats, _From, S) ->
               root_proof_height => S#s.peer_height,
               root_proof_status => S#s.peer_status,
               epoch => S#s.epoch,
-              sequence => S#s.sequence}, S};
+              sequence => S#s.generation}, S};
 handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
-handle_cast({hosting_changed, ManagerPid, Revision, Names},
+handle_cast({hosting_changed, ManagerPid, Revision, Names, Private},
             S = #s{manager_pid = ManagerPid,
                    hosting_revision = Previous})
   when Revision > Previous ->
-    S1 = S#s{hosting_revision = Revision, hosting_names = Names},
+    install_private_projection(Private),
+    S1 = S#s{hosting_revision = Revision, hosting_projection = Names,
+             private_projection = Private},
     case S1#s.tracking of
         true ->
             case set_observed_hosted(S1) of
@@ -290,7 +269,7 @@ handle_cast({hosting_changed, ManagerPid, Revision, Names},
             end;
         false -> {noreply, S1}
     end;
-handle_cast({hosting_changed, _ManagerPid, _Revision, _Names}, S) ->
+handle_cast({hosting_changed, _ManagerPid, _Revision, _Names, _Private}, S) ->
     {noreply, S};
 handle_cast(_Message, S) ->
     {noreply, S}.
@@ -307,17 +286,17 @@ handle_info({gproc, registered, Ref, _Name},
             S = #s{manager_monitor = Ref}) ->
     S1 = refresh_manager_snapshot(
            S#s{manager_pid = quod_reg:where({namespace_manager, node}),
-               hosting_revision = -1, hosting_names = []}),
+               hosting_revision = -1, hosting_projection = []}),
     {noreply, recover_tracking_event(S1)};
 handle_info({gproc, unreg, Ref, _Name},
             S = #s{manager_monitor = Ref}) ->
     {noreply, S#s{manager_pid = undefined,
-                  hosting_revision = -1, hosting_names = []}};
+                  hosting_revision = -1, hosting_projection = []}};
 handle_info({gproc, registered, Ref, _Name},
             S = #s{directory_ref = Ref}) ->
     {noreply, recover_directory_state(S)};
 handle_info({gproc, unreg, Ref, _Name}, S = #s{directory_ref = Ref}) ->
-    {noreply, maintain_directory_control(S#s{records = #{}})};
+    {noreply, maintain_directory_control(S)};
 handle_info(
   {directory_control_dial_timeout, NodeKey, Endpoint, OpenRef}, S) ->
     {noreply,
@@ -348,17 +327,27 @@ handle_info({quod_message, {PeerKey, LinkPid}, Channel, Payload},
     %% current link; announcements require current root-relay authority.
     {noreply, inbound(
                 Payload, {pinned_link, PeerKey, LinkPid}, S)};
+handle_info({directory_generation_validated, Token, Result}, S) ->
+    {noreply, finish_generation_validation(Token, Result, S)};
 handle_info({'DOWN', Ref, process, Pid, Reason}, S) ->
-    case handle_peer_query_down(Ref, Pid, Reason, S) of
+    case handle_generation_validation_down(Ref, Pid, Reason, S) of
+        {matched, S1} -> {noreply, S1};
+        unmatched -> case handle_peer_query_down(Ref, Pid, Reason, S) of
         {matched, S1} ->
             {noreply, S1};
         unmatched ->
             {noreply, handle_control_link_down(Ref, Pid, S)}
+        end
     end;
 handle_info(_Info, S) ->
     {noreply, S}.
 
 terminate(_Reason, S) ->
+    maps:foreach(
+      fun(_Author, #{pid := Pid, mref := MRef}) ->
+          demonitor(MRef, [flush]),
+          exit(Pid, kill)
+      end, S#s.validations),
     cleanup_control_state(S),
     _ = catch quod_reg:demonitor_name(
                 {namespace_manager, node}, S#s.manager_monitor),
@@ -482,6 +471,8 @@ handle_peer_query_down(_MonitorRef, _Pid, _Reason, _S) ->
     unmatched.
 
 schedule_peer_retry() ->
+    %% This is the root-authority liveness fallback, not ordinary namespace
+    %% recovery: successful root projection changes wake reconciliation.
     _ = erlang:send_after(
           ?PEER_RETRY_MS, self(), refresh_control_peers),
     ok.
@@ -868,7 +859,7 @@ retire_control_link({_Endpoint, LinkPid, MonitorRef}) ->
     ok.
 
 send_control_resyncs(S = #s{control_links = Links}) ->
-    Frame = resync_request_frame(0),
+    Frame = resync_request_frame(),
     maps:foreach(
       fun(_NodeKey, {_Endpoint, LinkPid, _MonitorRef}) ->
           quod_link:send(LinkPid, Frame)
@@ -964,37 +955,25 @@ set_observed_hosted(S) ->
             Error
     end.
 
-normalize_hosted(NodeKey, Allowlist, HostingNames) ->
-    %% Iterate the bounded public allowlist rather than every private ontology
-    %% this node may host. The wire cap applies only to the advertised subset.
-    Public = lists:sort(
-               lists:foldl(
-                 fun(Ns, Acc) ->
-                     Keys = maps:get(Ns, Allowlist, #{}),
-                     case maps:is_key(NodeKey, Keys)
-                              andalso is_pid(
-                                        quod_reg:where({quod_ns, Ns})) of
-                         true -> [Ns | Acc];
-                         false -> Acc
-                     end
-                 end, [], HostingNames)),
-    case length(Public) =< ?DIRECTORY_MAX_NAMESPACES of
-        true -> describe_hosted(Public, []);
-        false -> {error, bad_hosted}
-    end.
+normalize_hosted(Projection) ->
+    %% Eligibility is the committed manager projection.  This owner merely
+    %% intersects it with live, exact-anchor runtimes; configuration is not a
+    %% second namespace authority and private rows never reach the wire.
+    Public = [Row || #{visibility := discoverable} = Row <- Projection],
+    describe_hosted(Public, []).
 
-describe_hosted([Ns | Rest], Acc) ->
+describe_hosted([#{namespace := Ns, anchor := Expected,
+                   source := Source} | Rest], Acc) ->
     case {quod_simplex:genesis_hash(Ns), quod_simplex:status(Ns)} of
-        {<<_:256>> = GenesisAnchor, #{role := Role}}
+        {Expected, #{role := Role}}
           when Role =:= validator; Role =:= observer ->
-            describe_hosted(Rest, [{Ns, GenesisAnchor, Role} | Acc]);
+            describe_hosted(Rest, [{Ns, Expected, Role, Source} | Acc]);
         _ ->
             {error, {hosted_descriptor_unavailable, Ns}}
     end;
 describe_hosted([], Acc) ->
     Hosted = lists:reverse(Acc),
-    case quod_directory_auth:validate_hosted(
-           Hosted, ?DIRECTORY_MAX_NAMESPACES) of
+    case quod_directory_shape:validate_hosted(Hosted) of
         {ok, Hosted} -> {ok, Hosted};
         error -> {error, bad_hosted}
     end.
@@ -1024,9 +1003,7 @@ publish_hosted(S) ->
 
 directory_tick(S = #s{renew_ms = RenewMs}) ->
     arm_tick(RenewMs),
-    S0 = S#s{records =
-                 active_records(quod_time:mono_ms(), S#s.records)},
-    SControl = maintain_directory_control(S0),
+    SControl = maintain_directory_control(S),
     case SControl#s.tracking andalso can_advertise(SControl) of
         true -> renew_advertisement(SControl);
         false -> SControl
@@ -1054,40 +1031,132 @@ renew_advertisement(S) ->
 
 advertise_current(S) ->
     case sign_current(S) of
-        {ok, SignedRecord, S1} ->
-            case accept_signed(
-                   SignedRecord,
-                   {direct, S1#s.self_key, S1#s.endpoint},
-                   false, S1) of
-                {ok, S2} ->
-                    {ok,
-                     send_control_frame(
-                       announce_frame(SignedRecord),
-                       S2#s.self_key, S2)};
-                {error, Reason} ->
-                    {error, Reason, S1}
-            end;
+        {ok, Generations, S1} ->
+            install_local_generations(Generations, S1);
         {error, Reason} ->
             {error, Reason, S}
     end.
 
-can_advertise(#s{enabled = true, self_key = NodeKey,
-                 allowed_keys = AllowedKeys}) ->
-    maps:is_key(NodeKey, AllowedKeys);
+install_local_generations([], S) -> {ok, S};
+install_local_generations([{Pages, Complete} | Rest], S) ->
+    case install_generation(Complete) of
+        {ok, ExpiresAt} ->
+            Author = quod_directory_generation:author(Complete),
+            Entry = #{pages => Pages, expires_at => ExpiresAt},
+            S1 = S#s{generations =
+                         (S#s.generations)#{Author => Entry}},
+            S2 = send_generation_pages(Pages, S1#s.self_key, S1),
+            install_local_generations(Rest, S2);
+        {error, Reason} -> {error, Reason, S}
+    end.
+
+can_advertise(#s{enabled = true}) ->
+    true;
 can_advertise(_S) ->
     false.
 
 sign_current(S = #s{self_key = NodeKey, endpoint = Endpoint,
-                    hosted = Hosted, epoch = Epoch, sequence = Sequence,
+                    hosted = Hosted, epoch = Epoch, generation = Generation,
                     signer = Signer}) ->
-    Next = Sequence + 1,
-    case quod_directory_record:sign(
-           NodeKey, Endpoint, Hosted, Epoch, Next, Signer) of
-        {ok, SignedRecord} ->
-            {ok, SignedRecord, S#s{sequence = Next}};
-        {error, _} = Error ->
-            Error
+    Next = Generation + 1,
+    {RootRows, NodeRows} = partition_hosted(Hosted),
+    case generation_specs(RootRows, NodeRows, S) of
+        {ok, Specs} ->
+            case sign_generation_specs(
+                   Specs, NodeKey, Endpoint, Epoch, Next, Signer, []) of
+                {ok, Generations} ->
+                    {ok, Generations, S#s{generation = Next}};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
     end.
+
+partition_hosted(Hosted) ->
+    lists:partition(
+      fun({_Ns, _Anchor, _Role, Source}) ->
+          Source =:= bootstrap orelse Source =:= system
+      end, Hosted).
+
+-ifdef(TEST).
+test_partition_hosted(Hosted) -> partition_hosted(Hosted).
+-endif.
+
+generation_specs(RootRows, NodeRows,
+                 #s{self_key = SelfKey, control_peers = Peers}) ->
+    RootAuthor =
+        case {maps:is_key(SelfKey, Peers),
+              quod_simplex:genesis_hash(?ROOT_NS)} of
+            {true, <<_:256>> = Anchor} -> {root_bootstrap, Anchor, SelfKey};
+            _ -> unavailable
+        end,
+    NodeAuthor =
+        case quod_node_actor:principal() of
+            {ok, {agent, Blob}} -> {node_actor, Blob};
+            _ -> unavailable
+        end,
+    case {generation_spec(RootAuthor, RootRows),
+          generation_spec(NodeAuthor, NodeRows)} of
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error;
+        {RootSpec, NodeSpec} ->
+            Specs = [Spec || Spec <- [RootSpec, NodeSpec], Spec =/= none],
+            case Specs of
+                [] -> {error, advertisement_author_unavailable};
+                _ -> {ok, Specs}
+            end
+    end.
+
+%% An available author publishes an empty generation too: that is how removal
+%% atomically withdraws its previous rows. Missing authority is acceptable only
+%% when that authority has no rows to claim.
+generation_spec(unavailable, []) -> none;
+generation_spec(unavailable, _Rows) -> {error, advertisement_author_unavailable};
+generation_spec(Author, Rows) -> {Author, Rows}.
+
+sign_generation_specs([], _NodeKey, _Endpoint, _Epoch, _Generation, _Signer,
+                      Acc) ->
+    {ok, lists:reverse(Acc)};
+sign_generation_specs([{Author, Rows} | Rest], NodeKey, Endpoint, Epoch,
+                      Generation, Signer, Acc) ->
+    case quod_directory_generation:sign_generation(
+           Author, NodeKey, Endpoint, Epoch, Generation, Rows, Signer) of
+        {ok, Pages} ->
+            case assemble_pages(Pages) of
+                {ok, Complete} ->
+                    sign_generation_specs(Rest, NodeKey, Endpoint, Epoch,
+                                          Generation, Signer,
+                                          [{Pages, Complete} | Acc]);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+assemble_pages(Pages) ->
+    lists:foldl(
+      fun(_Encoded, {error, _} = Error) -> Error;
+         (_Encoded, {ok, _} = Complete) -> Complete;
+         (Encoded, Assembly) ->
+              case quod_directory_generation:decode(Encoded) of
+                  {ok, Page} ->
+                      case quod_directory_generation:assemble(Page, Assembly) of
+                          {pending, Next} -> Next;
+                          {complete, Complete} -> {ok, Complete};
+                          {error, _} = Error -> Error
+                      end;
+                  {error, _} = Error -> Error
+              end
+      end, undefined, Pages).
+
+install_generation(Generation) ->
+    try quod_directory:install_generation(Generation)
+    catch exit:_ -> {error, directory_unavailable}
+    end.
+
+send_generation_pages(Pages, SkipKey, S) ->
+    lists:foldl(
+      fun(Page, Acc) ->
+          send_control_frame(generation_frame(Page), SkipKey, Acc)
+      end, S, Pages).
 
 arm_tick(Milliseconds) ->
     _ = erlang:send_after(Milliseconds, self(), directory_tick),
@@ -1097,371 +1166,296 @@ arm_tick(Milliseconds) ->
 %%% signed ingress + dissemination
 %%%===================================================================
 
-accept_signed(SignedRecord, Source, Disseminate, S) ->
-    case quod_directory_record:decode(SignedRecord) of
-        {ok, Record} ->
-            accept_decoded(
-              Record, SignedRecord, Source, Disseminate, S);
-        {error, _} = Error ->
-            Error
-    end.
-
-accept_decoded(Record, SignedRecord, Source, Disseminate, S) ->
-    case source_matches(Record, Source, S) of
-        true ->
-            NodeKey = quod_directory_record:node_key(Record),
-            case install_directory_record(Record) of
-                {ok, ExpiresAt} ->
-                    S1 = cache_installed_record(
-                           NodeKey, SignedRecord, ExpiresAt, S),
-                    case Disseminate of
-                        true ->
-                            {ok,
-                             fanout(
-                               SignedRecord, NodeKey,
-                               source_peer_key(Source), S1)};
-                        false ->
-                            {ok, S1}
-                    end;
-                {error, _} = Error ->
-                    Error
+ingest_generation_page(SignedPage, Source, S) ->
+    case quod_directory_generation:decode(SignedPage) of
+        {ok, Page} ->
+            case generation_source_allowed(Page, Source, S) of
+                true -> assemble_generation_page(Page, SignedPage, Source, S);
+                false -> S
             end;
-        false ->
-            {error, source_mismatch}
+        {error, _} -> S
     end.
 
-install_snapshot_records(SignedRecords, Source, S) ->
-    Prepared =
-        lists:filtermap(
-          fun(SignedRecord) ->
-              case quod_directory_record:decode(SignedRecord) of
-                  {ok, Record} ->
-                      case source_matches(Record, Source, S) of
-                          true -> {true, {SignedRecord, Record}};
-                          false -> false
-                      end;
-                  {error, _} ->
-                      false
-              end
-          end, SignedRecords),
-    case install_directory_records(
-           [directory_record_fields(Record)
-            || {_SignedRecord, Record} <- Prepared]) of
-        {ok, Results} ->
-            cache_snapshot_results(Prepared, Results, S);
-        {error, _} ->
-            S
-    end.
-
-install_directory_records([]) ->
-    {ok, []};
-install_directory_records(Records) ->
-    try quod_directory:install_records(Records)
-    catch exit:_ -> {error, directory_unavailable}
-    end.
-
-directory_record_fields(Record) ->
-    {quod_directory_record:node_key(Record),
-     quod_directory_record:endpoint(Record),
-     quod_directory_record:hosted(Record),
-     quod_directory_record:epoch(Record),
-     quod_directory_record:sequence(Record)}.
-
-cache_snapshot_results(
-  [{SignedRecord, Record} | Prepared],
-  [{ok, ExpiresAt} | Results], S) ->
-    cache_snapshot_results(
-      Prepared, Results,
-      cache_installed_record(
-        quod_directory_record:node_key(Record),
-        SignedRecord, ExpiresAt, S));
-cache_snapshot_results(
-  [_PreparedRecord | Prepared], [{error, _} | Results], S) ->
-    cache_snapshot_results(Prepared, Results, S);
-cache_snapshot_results([], [], S) ->
-    S;
-cache_snapshot_results(_Prepared, _Results, S) ->
-    %% The directory batch API guarantees position-aligned results. Fail
-    %% closed if that internal contract is ever broken.
-    S.
-
-cache_installed_record(NodeKey, SignedRecord, ExpiresAt, S) ->
-    %% Cache the directory owner's exact receiver-local lease deadline;
-    %% control never reconstructs TTL policy.
-    S#s{records =
-            (S#s.records)#{NodeKey => {SignedRecord, ExpiresAt}}}.
-
-install_directory_record(Record) ->
-    try
-        quod_directory:install_record(
-          quod_directory_record:node_key(Record),
-          quod_directory_record:endpoint(Record),
-          quod_directory_record:hosted(Record),
-          quod_directory_record:epoch(Record),
-          quod_directory_record:sequence(Record))
-    catch
-        exit:_ -> {error, directory_unavailable}
-    end.
-
-source_matches(Record, {direct, PeerKey, PeerEndpoint}, _S) ->
-    quod_directory_record:node_key(Record) =:= PeerKey
-        andalso quod_directory_record:endpoint(Record) =:= PeerEndpoint;
-source_matches(
-  _Record, {relay, PeerKey},
-  #s{control_peers = Peers}) ->
-    maps:is_key(PeerKey, Peers);
-source_matches(
-  _Record, {resync, PeerKey, LinkPid}, S) ->
+generation_source_allowed(Page,
+                          {direct_link, PeerKey, PeerEndpoint, _LinkPid},
+                          #s{control_peers = Peers}) ->
+    Direct = quod_directory_generation:node_key(Page) =:= PeerKey andalso
+        quod_directory_generation:endpoint(Page) =:= PeerEndpoint,
+    Direct andalso
+        case quod_directory_generation:author(Page) of
+            {root_bootstrap, _, PeerKey} -> maps:is_key(PeerKey, Peers);
+            {node_actor, _} -> true
+        end;
+generation_source_allowed(_Page, {pinned_link, PeerKey, LinkPid}, S) ->
     control_link_current(PeerKey, LinkPid, S).
 
-source_peer_key({direct, PeerKey, _Endpoint}) ->
-    PeerKey;
-source_peer_key({relay, PeerKey}) ->
-    PeerKey.
-
-fanout(
-  SignedRecord, AuthorKey, SourceKey,
-  S = #s{self_key = SelfKey, control_peers = Peers}) ->
-    case maps:is_key(SelfKey, Peers) of
-        true ->
-            send_control_frame(
-              announce_frame(SignedRecord),
-              AuthorKey, SourceKey, S);
-        false ->
-            S
+assemble_generation_page(Page, SignedPage, Source,
+                         S = #s{assemblies = Assemblies}) ->
+    Author = quod_directory_generation:author(Page),
+    Current = maps:get(Author, Assemblies, undefined),
+    case quod_directory_generation:assemble(Page, assembly_value(Current)) of
+        {pending, Assembly} ->
+            Pages = remember_signed_page(Page, SignedPage, assembly_pages(Current)),
+            S#s{assemblies = Assemblies#{Author =>
+                                             #{assembly => Assembly,
+                                               pages => Pages}}};
+        {complete, Complete} ->
+            Pages = remember_signed_page(Page, SignedPage, assembly_pages(Current)),
+            S1 = S#s{assemblies = maps:remove(Author, Assemblies)},
+            begin_generation_validation(Complete, ordered_signed_pages(Pages),
+                                        source_peer_key_for_wire(Source), S1);
+        {error, _} -> S
     end.
+
+assembly_value(#{assembly := Assembly}) -> Assembly;
+assembly_value(_) -> undefined.
+
+assembly_pages(#{pages := Pages}) -> Pages;
+assembly_pages(_) -> #{}.
+
+remember_signed_page(Page, SignedPage, Pages) ->
+    Pages#{quod_directory_generation:page(Page) => SignedPage}.
+
+ordered_signed_pages(Pages) ->
+    [Page || {_Index, Page} <- lists:keysort(1, maps:to_list(Pages))].
+
+source_peer_key_for_wire({direct_link, PeerKey, _Endpoint, _Pid}) -> PeerKey;
+source_peer_key_for_wire({pinned_link, PeerKey, _Pid}) -> PeerKey.
+
+begin_generation_validation(Complete, Pages, SourceKey,
+                            S = #s{validations = Validations}) ->
+    Author = quod_directory_generation:author(Complete),
+    case maps:get(Author, Validations, undefined) of
+        undefined ->
+            start_generation_validation(Author, Complete, Pages, SourceKey, S);
+        #{complete := Active} = Entry ->
+            case generation_order(Complete, Active) of
+                newer ->
+                    stop_generation_validation(Entry),
+                    S0 = S#s{validations = maps:remove(Author, Validations)},
+                    start_generation_validation(
+                      Author, Complete, Pages, SourceKey, S0);
+                _ -> S
+            end
+    end.
+
+start_generation_validation(Author, Complete, Pages, SourceKey, S) ->
+    Parent = self(), Token = make_ref(),
+    %% Authority is frozen for this validation worker. A concurrent root view
+    %% change governs the next generation; it cannot rewrite work in flight.
+    ControlPeers = S#s.control_peers,
+    {Pid, MRef} = spawn_monitor(fun() ->
+        Result = validate_remote_generation(Complete, ControlPeers),
+        Parent ! {directory_generation_validated, Token, Result}
+    end),
+    Entry = #{pid => Pid, mref => MRef, token => Token,
+              complete => Complete, pages => Pages, source_key => SourceKey},
+    S#s{validations = (S#s.validations)#{Author => Entry}}.
+
+stop_generation_validation(#{pid := Pid, mref := MRef}) ->
+    demonitor(MRef, [flush]),
+    exit(Pid, kill).
+
+generation_order(A, B) ->
+    case {quod_directory_generation:epoch(A),
+          quod_directory_generation:generation(A),
+          quod_directory_generation:epoch(B),
+          quod_directory_generation:generation(B)} of
+        {AE, _AG, BE, _BG} when AE > BE -> newer;
+        {AE, AG, AE, BG} when AG > BG -> newer;
+        _ -> stale
+    end.
+
+validate_remote_generation(Page, ControlPeers) ->
+    case system_catalogue() of
+        {ok, Catalog} ->
+            case quod_directory_generation:author(Page) of
+                {root_bootstrap, _, _} ->
+                    case maps:is_key(
+                           quod_directory_generation:node_key(Page),
+                           ControlPeers) of
+                        true -> quod_directory_generation:validate_projection(
+                                  Page, #{}, Catalog);
+                        false -> {error, unauthorized_generation}
+                    end;
+                {node_actor, Blob} ->
+                    validate_node_generation(Page, Blob, Catalog)
+            end;
+        {error, _} = Error -> Error
+    end.
+
+system_catalogue() ->
+    case quod_system_ontology:catalog() of
+        {ok, _Height, Descriptors, _Rejected} ->
+            {ok, [{maps:get(namespace, D), maps:get(anchor, D)}
+                  || D <- Descriptors]};
+        {error, _} = Error -> Error
+    end.
+
+validate_node_generation(Page, Blob, Catalog) ->
+    case quod_agent_ref:decode(Blob) of
+        {ok, #{identity := Identity}} ->
+            NodeKey = quod_directory_generation:node_key(Page),
+            Endpoint = quod_directory_generation:endpoint(Page),
+            Routes = [{NodeKey, [Endpoint]}],
+            case quod_foreign_log:current(
+                   Routes, Identity, {NodeKey, Endpoint}, 10000) of
+                {ok, _View} ->
+                    validate_followed_node_generation(Page, Identity, Catalog);
+                {error, _} = Error -> Error
+            end;
+        _ -> {error, bad_generation}
+    end.
+
+validate_followed_node_generation(Page, Identity, Catalog) ->
+    case quod_foreign_log:follow(Identity) of
+        {ok, FollowRef} ->
+            try await_node_projection(Page, Identity, FollowRef, Catalog)
+            after quod_foreign_log:unfollow(FollowRef) end;
+        {error, _} = Error -> Error
+    end.
+
+await_node_projection(Page, Identity, FollowRef, Catalog) ->
+    receive
+        {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice} ->
+            ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+            case Notice of
+                {resnapshot, _Height, _Projection, _Freshness} ->
+                    case quod_foreign_log:projection_clauses(
+                           FollowRef, [{agent_key, 3}, {hosts_ontology, 4}],
+                           5000) of
+                        {ok, Clauses} ->
+                            quod_directory_generation:validate_projection(
+                              Page, Clauses, Catalog);
+                        {error, _} = Error -> Error
+                    end;
+                {building, _} ->
+                    await_node_projection(Page, Identity, FollowRef, Catalog);
+                {advanced, _From, _To, _Pubs, _Projection, _Freshness} ->
+                    await_node_projection(Page, Identity, FollowRef, Catalog);
+                {unreachable, Reason, _Height} -> {error, Reason}
+            end
+    after 10000 -> {error, validation_timeout}
+    end.
+
+finish_generation_validation(Token, Result,
+                             S = #s{validations = Validations}) ->
+    case validation_by_token(Token, Validations) of
+        {ok, Author, #{mref := MRef, complete := Complete, pages := Pages,
+                      source_key := SourceKey}} ->
+            demonitor(MRef, [flush]),
+            S0 = S#s{validations = maps:remove(Author, Validations)},
+            case Result of
+                ok ->
+                    case install_generation(Complete) of
+                        {ok, ExpiresAt} ->
+                            Entry = #{pages => Pages, expires_at => ExpiresAt},
+                            S1 = S0#s{generations =
+                                         (S0#s.generations)#{Author => Entry}},
+                            relay_validated_generation(
+                              Pages, SourceKey, S1);
+                        {error, _} -> S0
+                    end;
+                {error, _} -> S0
+            end;
+        error -> S
+    end.
+
+relay_validated_generation(Pages, SourceKey,
+                           S = #s{self_key = SelfKey,
+                                  control_peers = ControlPeers}) ->
+    case maps:is_key(SelfKey, ControlPeers) of
+        true -> send_generation_pages(Pages, SourceKey, S);
+        false -> S
+    end.
+
+validation_by_token(Token, Validations) ->
+    maps:fold(fun(Author, #{token := T} = Entry, error) when T =:= Token ->
+                      {ok, Author, Entry};
+                 (_Author, _Entry, Acc) -> Acc
+              end, error, Validations).
+
+handle_generation_validation_down(MRef, Pid, _Reason,
+                                  S = #s{validations = Validations}) ->
+    case maps:fold(
+           fun(Author, #{pid := P, mref := R}, error)
+                 when P =:= Pid, R =:= MRef -> {ok, Author};
+              (_Author, _Entry, Acc) -> Acc
+           end, error, Validations) of
+        {ok, Author} ->
+            {matched, S#s{validations = maps:remove(Author, Validations)}};
+        error -> unmatched
+    end.
+
+send_cached_generations(Source, S = #s{generations = Generations}) ->
+    {LinkPid, _PeerKey} = source_link_and_key(Source),
+    Live = live_generations(Generations),
+    maps:foreach(
+      fun(_Author, #{pages := Pages}) ->
+          lists:foreach(
+            fun(Page) -> quod_link:send(LinkPid, generation_frame(Page)) end,
+            Pages)
+      end, Live),
+    S#s{generations = Live}.
+
 
 %%%===================================================================
 %%% control-link resync
 %%%===================================================================
 
 send_current_and_resync(LinkPid, S) ->
+    maps:foreach(
+      fun(_Author, #{pages := Pages}) ->
+          lists:foreach(
+            fun(Page) -> quod_link:send(LinkPid, generation_frame(Page)) end,
+            Pages)
+      end, live_generations(S#s.generations)),
+    quod_link:send(LinkPid, resync_request_frame()).
+
+live_generations(Generations) ->
     Now = quod_time:mono_ms(),
-    case maps:get(S#s.self_key, S#s.records, undefined) of
-        {Signed, ExpiresAt}
-          when is_binary(Signed), ExpiresAt > Now ->
-            quod_link:send(LinkPid, announce_frame(Signed));
-        _ ->
-            ok
-    end,
-    quod_link:send(LinkPid, resync_request_frame(0)).
+    maps:filter(
+      fun(_Author, #{expires_at := ExpiresAt}) -> ExpiresAt > Now end,
+      Generations).
 
 inbound(Payload, Source, S) ->
     case decode_control(Payload) of
-        {announce, SignedRecord} ->
-            %% Reject public readers before record decoding/signature work.
-            %% Every legitimate direct author is itself allowlisted somewhere;
-            %% committed root control peers are the only additional relay
-            %% authority.
-            case control_source_allowed(Source, S) of
-                false ->
-                    S;
-                true ->
-                    case quod_directory_record:decode(SignedRecord) of
-                        {ok, Record} ->
-                            RecordSource = record_source(Record, Source),
-                            case accept_decoded(
-                                   Record, SignedRecord, RecordSource,
-                                   true, S) of
-                                {ok, S1} -> S1;
-                                {error, _} -> S
-                            end;
-                        {error, _} ->
-                            S
-                    end
-            end;
-        {resync_request, Cursor} ->
-            maybe_send_snapshot(Source, Cursor, S);
-        {snapshot, Records, Next} ->
-            case control_snapshot_source(Source, S) of
-                error ->
-                    S;
-                {ok, ResyncSource, LinkPid} ->
-                    S1 = install_snapshot_records(
-                           Records, ResyncSource, S),
-                    maybe_request_next(LinkPid, Next),
-                    S1
-            end;
-        error ->
-            S
+        {generation, SignedPage} ->
+            ingest_generation_page(SignedPage, Source, S);
+        resync_request ->
+            send_cached_generations(Source, S);
+        error -> S
     end.
-
-record_source(Record, {direct_link, PeerKey, PeerEndpoint, _LinkPid}) ->
-    case quod_directory_record:node_key(Record) =:= PeerKey
-             andalso quod_directory_record:endpoint(Record)
-                         =:= PeerEndpoint of
-        true -> {direct, PeerKey, PeerEndpoint};
-        false -> {relay, PeerKey}
-    end;
-record_source(_Record, {pinned_link, PeerKey, _LinkPid}) ->
-    {relay, PeerKey}.
-
-control_source_allowed(
-  Source,
-  #s{allowed_keys = AllowedKeys, control_peers = Peers}) ->
-    {_LinkPid, PeerKey} = source_link_and_key(Source),
-    maps:is_key(PeerKey, AllowedKeys) orelse
-        maps:is_key(PeerKey, Peers).
-
-control_snapshot_source(
-  {pinned_link, PeerKey, LinkPid}, S) ->
-    case control_link_current(PeerKey, LinkPid, S) of
-        true -> {ok, {resync, PeerKey, LinkPid}, LinkPid};
-        false -> error
-    end;
-control_snapshot_source(_Source, _S) ->
-    error.
-
-maybe_send_snapshot(Source, Cursor, S) ->
-    {LinkPid, PeerKey} = source_link_and_key(Source),
-    Now = quod_time:mono_ms(),
-    Sessions = active_resync_sessions(Now, S#s.last_resync),
-    %% System routes are intentionally discoverable. The authenticated link
-    %% identifies the reader for the new-resync-session throttle; the
-    %% advertisement allowlist is authority to answer, never a read ACL.
-    case resync_capacity(PeerKey, Sessions)
-             andalso resync_allowed(
-                       Cursor, Now,
-                       maps:get(PeerKey, Sessions, undefined)) of
-        false ->
-            S#s{last_resync = Sessions};
-        true ->
-            ActiveRecords = active_records(Now, S#s.records),
-            {Records, Next} = snapshot_page(
-                                Cursor, ActiveRecords),
-            quod_link:send(LinkPid, snapshot_frame(Records, Next)),
-            Resync1 =
-                case Next of
-                    done ->
-                        Sessions#{PeerKey => {Now, done}};
-                    _ ->
-                        Sessions#{PeerKey => {Now, Next}}
-                end,
-            S#s{records = ActiveRecords,
-                last_resync = Resync1}
-    end.
-
-resync_allowed(0, Now, undefined) ->
-    is_integer(Now);
-resync_allowed(0, Now, {Last, _Expected}) ->
-    Now - Last >= ?RESYNC_MIN_MS;
-resync_allowed(Cursor, _Now, {_Last, Cursor}) when Cursor > 0 ->
-    true;
-resync_allowed(_Cursor, _Now, _Session) ->
-    false.
-
-resync_capacity(PeerKey, Sessions) ->
-    maps:is_key(PeerKey, Sessions) orelse
-        map_size(Sessions) < ?DIRECTORY_MAX_RESYNC_SESSIONS.
-
-active_resync_sessions(Now, Sessions) ->
-    maps:filter(
-      fun(_PeerKey, {Last, _Expected}) ->
-          is_integer(Last) andalso
-              Now - Last < ?RESYNC_SESSION_TTL_MS
-      end, Sessions).
-
-maybe_request_next(_LinkPid, done) ->
-    ok;
-maybe_request_next(LinkPid, Next) when is_integer(Next), Next >= 0 ->
-    quod_link:send(LinkPid, resync_request_frame(Next)).
 
 source_link_and_key({direct_link, PeerKey, _Endpoint, LinkPid}) ->
     {LinkPid, PeerKey};
 source_link_and_key({pinned_link, PeerKey, LinkPid}) ->
     {LinkPid, PeerKey}.
 
-snapshot_page(Cursor, RecordsMap) ->
-    Ordered = lists:keysort(1, maps:to_list(RecordsMap)),
-    Remaining = drop(Cursor, Ordered),
-    {PagePairs, More} = take_page(
-                          Remaining, ?DIRECTORY_MAX_RESYNC_RECORDS,
-                          ?MAX_RESYNC_BYTES, []),
-    Page = [Record || {_NodeKey, {Record, _ExpiresAt}} <-
-                          lists:reverse(PagePairs)],
-    Next = case More of
-               true -> Cursor + length(Page);
-               false -> done
-           end,
-    {Page, Next}.
-
-take_page([], _Count, _BytesLeft, Acc) ->
-    {Acc, false};
-take_page(_Remaining, 0, _BytesLeft, Acc) ->
-    {Acc, true};
-take_page(
-  [{_NodeKey, {Record, _ExpiresAt}} = Pair | Rest],
-  Count, BytesLeft, Acc) ->
-    Size = byte_size(Record) + 16,
-    case Size =< BytesLeft orelse Acc =:= [] of
-        true ->
-            take_page(Rest, Count - 1, BytesLeft - Size,
-                      [Pair | Acc]);
-        false ->
-            {Acc, true}
-    end.
-
-drop(0, List) ->
-    List;
-drop(_Count, []) ->
-    [];
-drop(Count, [_ | Rest]) when Count > 0 ->
-    drop(Count - 1, Rest).
-
-%%%===================================================================
-%%% control wire + config
-%%%===================================================================
-
-announce_frame(SignedRecord) ->
-    term_to_binary(
-      {quod_directory_announce, SignedRecord}, [deterministic]).
-
-resync_request_frame(Cursor) ->
-    term_to_binary(
-      {quod_directory_resync, Cursor}, [deterministic]).
-
-snapshot_frame(Records, Next) ->
-    term_to_binary(
-      {quod_directory_snapshot, Records, Next}, [deterministic]).
-
 decode_control(Payload)
   when is_binary(Payload), byte_size(Payload) =< ?MAX_CONTROL_BYTES ->
     case quod_safe_term:decode(Payload, ?MAX_CONTROL_BYTES) of
-        {ok, {quod_directory_announce, SignedRecord}}
-          when is_binary(SignedRecord),
-               byte_size(Payload) =< ?MAX_ANNOUNCE_FRAME_BYTES ->
-            {announce, SignedRecord};
-        {ok, {quod_directory_resync, Cursor}}
-          when is_integer(Cursor), Cursor >= 0 ->
-            {resync_request, Cursor};
-        {ok, {quod_directory_snapshot, Records, Next}}
-          when is_list(Records),
-               length(Records) =< ?DIRECTORY_MAX_RESYNC_RECORDS,
-               (Next =:= done orelse
-                    (is_integer(Next) andalso Next >= 0)) ->
-            case lists:all(fun is_binary/1, Records) of
-                true -> {snapshot, Records, Next};
-                false -> error
-            end;
-        _ ->
-            error
+        {ok, {quod_directory_generation, SignedPage}}
+          when is_binary(SignedPage),
+               byte_size(SignedPage) =< ?MAX_ANNOUNCE_FRAME_BYTES ->
+            {generation, SignedPage};
+        {ok, quod_directory_generation_resync} -> resync_request;
+        _ -> error
     end;
-decode_control(_) ->
-    error.
+decode_control(_) -> error.
+
+generation_frame(SignedPage) ->
+    term_to_binary({quod_directory_generation, SignedPage}, [deterministic]).
+
+resync_request_frame() ->
+    term_to_binary(quod_directory_generation_resync, [deterministic]).
 
 control_config(Opts) when is_map(Opts) ->
     RenewMs = maps:get(renew_ms, Opts, ?RENEW_MS),
-    case {quod_directory_auth:normalize_allowlist(
-            maps:get(allowlist, Opts, #{})),
-          normalize_root_contacts(
-            maps:get(root_contacts, Opts, []))} of
-        {{ok, Allowlist}, {ok, RootContacts}}
+    case normalize_root_contacts(maps:get(root_contacts, Opts, [])) of
+        {ok, RootContacts}
           when is_integer(RenewMs), RenewMs >= ?RENEW_MS ->
-            {ok, #{allowlist => Allowlist,
-                   allowed_keys =>
-                       quod_directory_auth:node_key_index(
-                         Allowlist),
-                   root_contacts => RootContacts,
+            {ok, #{root_contacts => RootContacts,
                    renew_ms => RenewMs,
                    identity_dir =>
                        maps:get(identity_dir, Opts, undefined)}};
@@ -1473,8 +1467,7 @@ control_config(_) ->
 
 normalize_root_contacts(Contacts) when is_list(Contacts) ->
     Normalized = lists:usort(Contacts),
-    case length(Normalized) =< ?MAX_ROOT_CONTACTS
-         andalso lists:all(
+    case lists:all(
                    fun quod_quic:valid_endpoint/1, Normalized) of
         true -> {ok, Normalized};
         false -> error
@@ -1528,18 +1521,29 @@ recover_tracking_event(S) ->
 
 refresh_manager_snapshot(S = #s{manager_pid = Pid}) when is_pid(Pid) ->
     case catch quod_namespace_manager:hosting_snapshot() of
-        {ok, Revision, Names}
-          when is_integer(Revision), Revision >= 0, is_list(Names) ->
-            S#s{hosting_revision = Revision, hosting_names = Names};
+        {ok, Revision, Projection, Private}
+          when is_integer(Revision), Revision >= 0, is_list(Projection),
+               is_list(Private) ->
+            install_private_projection(Private),
+            S#s{hosting_revision = Revision,
+                hosting_projection = Projection,
+                private_projection = Private};
         _ -> S
     end;
 refresh_manager_snapshot(S) -> S.
 
-observed_hosted(#s{self_key = NodeKey, allowlist = Allowlist,
-                   hosting_names = HostingNames}) ->
+install_private_projection(Private) ->
+    case quod_reg:where({directory, node}) of
+        Pid when is_pid(Pid) ->
+            _ = quod_directory:install_private_projection(Private),
+            ok;
+        undefined -> ok
+    end.
+
+observed_hosted(#s{hosting_projection = Projection}) ->
     case quod_reg:where({quod_ns_sup, node}) of
         Pid when is_pid(Pid) ->
-            normalize_hosted(NodeKey, Allowlist, HostingNames);
+            normalize_hosted(Projection);
         undefined ->
             {error, namespace_supervisor_unavailable}
     end.
@@ -1553,9 +1557,8 @@ reconcile_observed_hosted(S) ->
     end.
 
 recover_directory_state(S) ->
-    %% Peer leases cannot be restored without extending their receiver-local
-    %% expiry. Drop them and obtain fresh authenticated announcements/resync.
-    S1 = maintain_directory_control(S#s{records = #{}}),
+    %% Reinstall only freshly received or locally re-signed generations.
+    S1 = maintain_directory_control(S#s{generations = #{}, assemblies = #{}}),
     case {S1#s.tracking, can_advertise(S1),
           reconcile_observed_hosted(S1)} of
         {true, true, {ok, S2}} ->
@@ -1563,9 +1566,3 @@ recover_directory_state(S) ->
         _ ->
             S1
     end.
-
-active_records(Now, Records) ->
-    maps:filter(
-      fun(_NodeKey, {_SignedRecord, ExpiresAt}) ->
-          is_integer(ExpiresAt) andalso ExpiresAt > Now
-      end, Records).

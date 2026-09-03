@@ -27,7 +27,8 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          signed_effect_operation_submission/1,
          signed_agent_facts/1,
          with_network_identity/2,
-         wait_until/1, wait_until/2]).
+         wait_until/1, wait_until/2,
+         install_directory_generation/5]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
 -export([proof_gate_row/3]).
 
@@ -40,6 +41,16 @@ proof_gate_row(Ready, Generation, BlockingFences)
     Self = <<250:256>>,
     {proof_gate, Ready, Generation, lists:sort(BlockingFences),
      Self, [Self], <<251:256>>, #{}}.
+
+%% Install the already-certified shape expected by the directory owner. Tests
+%% of the control plane itself use signed pages instead.
+install_directory_generation(NodeKey, Endpoint, Hosted, Epoch, Generation) ->
+    Descriptors = [{Ns, Anchor, Role, system}
+                   || {Ns, Anchor, Role} <- Hosted],
+    quod_directory:install_generation(
+      #{author => {root_bootstrap, NodeKey, NodeKey}, node_key => NodeKey,
+        endpoint => Endpoint, epoch => Epoch, generation => Generation,
+        page => 0, last => true, hosted => lists:sort(Descriptors)}).
 
 %% Smallest self-contained valid DTX fixture for consumers that only need to
 %% distinguish a control barrier from content. Foreign-reference semantics are

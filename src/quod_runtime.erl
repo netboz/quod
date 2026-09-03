@@ -1786,7 +1786,7 @@ plan_subscriptions(_Malformed) ->
 
 valid_subscription_clause(
   {{subscribes, Ns, <<_:256>> = Anchor} = Head, {[], false}}) ->
-    case quod_directory_auth:valid_namespace(Ns)
+    case quod_directory_shape:valid_namespace(Ns)
          andalso bounded_term(Head) of
         true  -> {ok, {Ns, Anchor}};
         false -> error
@@ -1877,7 +1877,7 @@ valid_reaction_clause(_) ->
     error.
 
 reaction_pattern({from, Ns, <<_:256>> = Anchor, EventPattern}) ->
-    case quod_directory_auth:valid_namespace(Ns)
+    case quod_directory_shape:valid_namespace(Ns)
          andalso valid_event_pattern(EventPattern) of
         true  -> {ok, {remote, {Ns, Anchor}}, EventPattern};
         false -> error

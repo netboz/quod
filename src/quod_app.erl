@@ -116,7 +116,7 @@ drop_content_env_overrides() ->
 
 %% Load-or-create the node's Ed25519 identity and expose it in the application env
 %% (`node_pubkey`, the DER `identity_cert`, the `identity_key`). The pubkey becomes the
-%% `node_id` and the cert/key drive transport mutual TLS and signed directory records. A node
+%% `node_id` and the cert/key drive transport mutual TLS and signed directory generations. A node
 %% with no identity is useless, so a failure here is fatal — fail-fast like genesis.
 apply_identity(Cfg) ->
     DataDir = content_data_dir(Cfg),
@@ -181,34 +181,12 @@ apply_effect_journal(Cfg) ->
     application:set_env(quod, effect_journal_data_dir, content_data_dir(Cfg)),
     ok.
 
-%% Build the operator-controlled directory configuration. System publication
-%% uses exact namespace/key allowlists; private routes are namespace-scoped
-%% local seeds. Directory control reuses the root ontology's own join contacts
-%% for endpoint discovery; they grant no authority and are not a second
-%% directory-bootstrap configuration.
+%% Root contacts provide only the bottom bootstrap edge. Every ontology route
+%% after root is derived from committed root/node-actor facts.
 apply_directory(Cfg) ->
-    Raw = maps:get(directory, Cfg, #{}),
-    AllowEntries = maps:get(allowlist, Raw, []),
-    DirectEntries = maps:get(direct_seeds, Raw, []),
-    ensure_distinct(
-      directory_allowlist_namespace,
-      [maps:get(namespace, Entry) || Entry <- AllowEntries]),
-    ensure_distinct(
-      directory_direct_namespace,
-      [maps:get(namespace, Entry) || Entry <- DirectEntries]),
-    Allowlist = directory_allowlist(AllowEntries),
-    DirectSeeds =
-        maps:from_list(
-          [{maps:get(namespace, Entry),
-            required_endpoints(
-              {directory_direct_seeds, maps:get(namespace, Entry)},
-              maps:get(seeds, Entry, []))}
-           || Entry <- DirectEntries]),
     application:set_env(
       quod, directory,
-      #{allowlist => Allowlist,
-        direct_seeds => DirectSeeds,
-        root_contacts => root_contacts(Cfg),
+      #{root_contacts => root_contacts(Cfg),
         identity_dir => identity_dir(Cfg)}),
     ok.
 
@@ -224,29 +202,6 @@ root_contacts(Cfg) ->
             recovery_contacts(maps:get(seeds, Root, []));
         _ ->
             error({duplicate_content_namespace, <<"quod:root">>})
-    end.
-
-directory_allowlist(Entries) ->
-    maps:from_list(
-      [{maps:get(namespace, Entry),
-        [decode_node_key(Key) || Key <- maps:get(node_keys, Entry, [])]}
-       || Entry <- Entries]).
-
-decode_node_key(Hex) when is_binary(Hex), byte_size(Hex) =:= 64 ->
-    try
-        <<Key:32/binary>> = binary:decode_hex(Hex),
-        Key
-    catch
-        _:_ -> error({bad_directory_node_key, Hex})
-    end;
-decode_node_key(Value) ->
-    error({bad_directory_node_key, Value}).
-
-required_endpoints(Label, Values) ->
-    Parsed = lists:filtermap(fun parse_seed/1, Values),
-    case length(Parsed) =:= length(Values) of
-        true -> lists:usort(Parsed);
-        false -> error({bad_directory_endpoint, Label})
     end.
 
 %% Root content seeds are operational recovery hints, with the same tolerance
@@ -266,12 +221,6 @@ recovery_contacts(Values) ->
                     false
             end
         end, Values)).
-
-ensure_distinct(Label, Values) ->
-    case length(Values) =:= length(lists:usort(Values)) of
-        true -> ok;
-        false -> error({duplicate_directory_entry, Label})
-    end.
 
 %% Bridge HOCON `node`/`metrics` onto the application env the transport reads.
 apply_transport_env(Cfg) ->

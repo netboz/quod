@@ -47,12 +47,12 @@ directory_host_enumerates_live_system_routes_test() ->
     K1 = key(21),
     K2 = key(22),
     {Goal, Erl0} = with_directory(
-      #{allowlist => #{Ns => [K1, K2]}},
+      #{},
       fun(Pid) ->
-          {ok, _} = quod_directory:install_record(
+          {ok, _} = quod_ct:install_directory_generation(
                  K2, {<<"node-b">>, 4002},
                  [{Ns, anchor(2), observer}], 1, 1),
-          {ok, _} = quod_directory:install_record(
+          {ok, _} = quod_ct:install_directory_generation(
                  K1, {<<"node-a">>, 4001},
                  [{Ns, anchor(1), validator}], 1, 1),
           Erl0 = proof_erlog(<<"quod:root">>),
@@ -90,9 +90,9 @@ directory_host_is_root_only_and_ground_namespace_only_test() ->
     Ns = <<"quod:agent">>,
     Key = key(3),
     with_directory(
-      #{allowlist => #{Ns => [Key]}},
+      #{},
       fun(_Pid) ->
-          {ok, _} = quod_directory:install_record(
+          {ok, _} = quod_ct:install_directory_generation(
                  Key, {<<"node">>, 4003},
                  [{Ns, anchor(3), validator}], 1, 1),
           {fail, _} = erlog:prove(
@@ -103,13 +103,15 @@ directory_host_is_root_only_and_ground_namespace_only_test() ->
                         proof_erlog(<<"quod:root">>))
       end).
 
-private_seed_is_not_visible_to_predicate_test() ->
+private_projection_is_not_visible_to_predicate_test() ->
     Ns = <<"private:arm">>,
     with_directory(
       #{},
       fun(_Pid) ->
-          ok = quod_directory:add_direct_seed(
-                 Ns, {<<"private-node">>, 4004}),
+          HostRef = {agent_instance_ref, <<"quod:host">>, anchor(4), host},
+          ok = quod_directory:install_private_projection(
+                 [#{namespace => Ns, anchor => anchor(5),
+                    host_node_ref => HostRef}]),
           {fail, _} = erlog:prove(
                         {directory_host, Ns, {'A'}, {'K'}, {'H'}, {'P'}},
                         proof_erlog(<<"quod:root">>))

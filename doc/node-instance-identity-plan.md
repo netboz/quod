@@ -323,9 +323,9 @@ ontology history remains authoritative.
 
 ### Slice 4 — measured node policies
 
-**Status: hosting facts and their local projection are implemented by
-`automatic-route-recovery-plan.md` Slice 2; directory publication remains in
-that plan's Slice 4.**
+**Status: hosting facts, their local projection, and fact-backed directory
+publication are implemented through `automatic-route-recovery-plan.md` Slice 4;
+fleet activation remains in Slice 6.**
 
 - Express agent hosting, ontology hosting, or explicit private-node relations
   as ordinary Prolog facts only when their concrete use cases require them.

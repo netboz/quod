@@ -1338,32 +1338,24 @@ pre-Complete handoff.
 Directory routes remain routing hints. They never prove that another ontology
 prepared, finalized, or applied a group phase.
 
-Break the directory record cleanly so every hosted namespace carries its
-32-byte genesis anchor. System authorization is exact over
-`{Namespace, GenesisAnchor, NodeKey}`. A provisional private direct seed keeps
-the existing explicit `{Namespace, Endpoint}` TOFU boundary; its first
-authenticated non-executing identity exchange confirms and pins both `NodeKey` and
-`GenesisAnchor`, after which neither may change in place. Two eligible system
-routes claiming different anchors for one namespace cause `anchor_conflict`;
-neither is selected. A confirmed direct seed keeps its documented local
-override precedence. The namespace->anchor pin/conflict high-water survives
-route expiry and service restart; switching a namespace to another genesis
-requires an explicit operator reset and cannot happen because stale routes aged
-out.
+The directory carries the 32-byte genesis anchor in every hosted descriptor.
+Public advertisements are complete signed generations derived from committed
+`hosts_ontology/4` facts in the advertising node actor. Private contacts derive
+locally from committed `knows_ontology_host/4` facts and the referenced host
+actor's current discoverable self-route; no endpoint, direct seed, TOFU pin, or
+operator override is durable authority. Two eligible routes claiming different
+anchors for one namespace cause `anchor_conflict`; neither is selected.
 
-Replace the namespace-only public projection with
-`directory_host(Namespace, GenesisAnchor, NodeKey, Host, Port)`; remove the old
-`/4` form. During step 3, the advertised validator/observer role is only a route
-hint: the target authoritatively rechecks that its own key is a current, ready
-validator before admitting a potentially writable scope, and the origin tries
-the next pinned route on an observer rejection. Step 4's foreign-ledger
-verifier then lets the resolver independently verify the anchored ontology's
-current committee projection and accept only a route whose `NodeKey` is a
-current validator at the pinned base/committee id. A directory entry remains
-only an endpoint hint in both steps. Observer routes may serve explicit
-`prove_ro`, but are skipped for a potentially writable proof; exhaustion
-returns `ontology_unreachable`. A membership change invalidates the session or
-causes Prepare to abort under the namespace membership lock.
+The public projection is
+`directory_host(Namespace, GenesisAnchor, NodeKey, Host, Port)`. An advertised
+role is only a reachability hint. The target rechecks its own current, ready
+validator role before admitting a potentially writable scope. For a plain
+read, the origin reuses the certified foreign-history projection to keep only
+routes whose `NodeKey` is in the target's current committee, then advances to
+the next eligible route when necessary. Thus an observer or lying advertiser
+cannot answer even if it has a complete local copy. Exhaustion returns
+`ontology_unreachable`; a membership change invalidates the session or causes
+Prepare to abort under the namespace membership lock.
 
 One node-wide, read-only foreign-ledger verifier/cache reuses the existing
 catch-up page format, server bounds, and certificate-validation core, but not
@@ -1917,24 +1909,17 @@ replaces the old QUIC ask protocol outright:
    engine remains the authenticated ingress adapter and owner of the target
    worker monitor, MVCC pin, derivation timer, and lifetime timer. No new OTP
    service, coordinator, or second session registry is introduced.
-6. **Make routing exact before opening a scope.** The directory signed record is
-   hard-broken from a namespace list to bounded hosted descriptors carrying
-   `{Namespace, GenesisAnchor, validator | observer}`. A provisional direct
-   seed first performs one bounded, authenticated, non-executing identity
-   exchange on the namespace channel; no proof worker, scope, monitor, or
-   session entry is created. That exchange confirms and pins both the node key
-   and returned anchor, after which the ordinary fully anchored scope-open wire
-   is used. Eligible system
-   routes for one namespace under different anchors yield `anchor_conflict`
-   before a dial. A confirmed direct seed remains the operator's explicit
-   override, establishes the locally selected identity, and shadows system
-   routes as specified by `network-directory-plan.md`; its pinned anchor can
-   never change in place.
-   Writable selection treats the advertised role only as a hint and the target
-   rechecks that its local key is a current, ready validator before admitting
-   the scope; an observer is skipped/rejected and the next pinned route is
-   tried. Explicit `prove_ro` may select an observer and propagates strict
-   read-only mode through every descendant scope.
+6. **Make routing exact before opening a scope.** The directory's one signed,
+   paged generation carries complete hosted descriptors
+   `{Namespace, GenesisAnchor, validator | observer}` derived from the node
+   actor's committed discoverable hosting facts. Local private contacts derive
+   from committed `knows_ontology_host/4` facts; no direct-seed or TOFU path
+   exists. Eligible routes for one namespace under different anchors yield
+   `anchor_conflict` before a dial. Writable selection treats the advertised
+   role only as a hint and the target rechecks that its local key is a current,
+   ready validator. Plain-read selection additionally filters candidates
+   against the target's certified current committee before opening a scope, so
+   observers and lying advertisers are skipped and the next route is tried.
 7. **Fail and clean up as one proof.** Once a target might have executed, link
    loss, a malformed sequence, target death, or a scope timeout poisons the
    pre-Begin `ProofId`; it is never retried or re-proved elsewhere. Owner death
@@ -2733,10 +2718,10 @@ At minimum:
     cannot create a second group; reusing target attestations under a different
     coordinator admission or coordination nonce is rejected before lock
     mutation.
-14. Two valid eligible system routes advertise one namespace under different
-    anchors; resolution returns `anchor_conflict`, opens no scope, and changes
-    no route high-water. A confirmed direct seed keeps its documented local
-    override precedence and cannot change its pinned anchor.
+14. Two valid eligible routes advertise one namespace under different anchors;
+    resolution returns `anchor_conflict`, opens no scope, and changes no route
+    high-water. A local private contact resolves only through its exact
+    committed `HostNodeRef` and cannot override the target identity.
 15. Any duplicate, stale, or skipped live scope command is rejected without
     executing twice. Separately, an exact duplicate signed durable DTX record
     returns its existing witness or no-ops idempotently; a different digest,

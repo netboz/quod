@@ -1,7 +1,7 @@
 # Automatic ontology-route recovery — implementation plan
 
-**Status: Slices 1 and 2 implemented; Slice 2 review closed.**
-The byte-canonical correction is proceeding as R1–R4. R1 and R2 are reviewed.
+**Status: Slices 1–4 implemented and reviewed.**
+The byte-canonical correction R1–R4 is implemented and reviewed.
 Signed and hashed artifacts now persist and
 travel as the exact canonical bytes produced once at their owning constructor:
 transaction blobs form block payloads, block bytes form the consensus identity,
@@ -12,9 +12,10 @@ decoder or compatibility path. The source identifiers are transaction V13,
 ledger-frame V5, canonical block/entry V1, and DTX-endpoint V9. R3 keeps
 foreign application symbols opaque through catch-up, disk cache, projection,
 and certified-current reads; it also replaces fleet-local catch-up request
-references with binary ids and closes the two bounded `quod_ask_SUITE`
-failures. R4 must still close the committee-filter integration before Slice 4
-can be called complete.
+references with binary ids. R4 proves that the plain-read committee filter
+uses that opaque certified view: observers and lying advertisers cannot answer,
+and resolution continues to an honest current validator without allocating
+the target ontology's vocabulary.
 Versions 0.7.129 and later in this development arc must not be deployed to the
 existing fleet before the coordinated Slice-6 clean re-found: its immutable
 root ledger contains `create_ontology/2`, while this cut deliberately replaces
@@ -354,6 +355,11 @@ intensity and node health instead of polling forever. A root or route becoming
 available wakes only the parked exact work. Advancing time alone never turns a
 failed catalogue into progress.
 
+Directory control retains one pre-existing one-second retry only for failure
+to refresh the root control-peer authority set. This is a root-authority
+liveness fallback, not namespace-route progress polling; successful root
+projection changes remain the normal event-driven wake.
+
 A child start or stop failure is logged and remains pending until a concrete
 supervisor, route, catalogue, hosting, or explicit lifecycle event changes the
 inputs. It is never redriven merely because time passed.
@@ -637,7 +643,7 @@ No later slice starts until the prior review is green.
 
 ### Slice 3 — event-driven bottom-up recovery
 
-**Implemented; awaiting review.**
+**Implemented; review closed.**
 
 - Resume local system ledgers from root catalogue and park missing exact
   identities on directory route properties.
@@ -660,6 +666,8 @@ No later slice starts until the prior review is green.
   progress after advancing time alone.
 
 ### Slice 4 — fact-backed advertisements and one directory wire
+
+**Implemented, including corrections R1–R4; review closed.**
 
 - Replace local allowlist eligibility with the manager's committed-source plus
   ready-runtime projection.
@@ -861,7 +869,10 @@ plan/review arc:
    149 ms at height 80 to about 400 ms at the current height and reset on
    re-found. This is the next optimization milestone after route recovery.
 2. **Cold-start re-verification.** The first request after restart at height
-   about 7,000 took 34.6 s.
+   about 7,000 took 34.6 s. A separate history-compaction plan, written after
+   R2 review and before any implementation, owns this item: it will specify a
+   committee-certified projection checkpoint plus verifiable suffix replay,
+   archival, and committed Prolog policy for checkpoint creation.
 3. **Small opportunistic fixes.** Pin `diff`, `read_check`, and `effects` empty
    in `valid_role_fields` for metadata roles; delete caller-less
    `verify_current/3`; restore the lost `verify_local` committee-era assertion.

@@ -72,7 +72,8 @@ itself owns only projection state, ordering, and replies.
     node_route_waits = #{},
     runtime_waits = #{},
     hosting_revision = 0,
-    ready_content = []
+    ready_content = [],
+    ready_private = []
 }).
 
 start_link() ->
@@ -172,8 +173,9 @@ handle_call({project_node_policy, Namespace, Height, Scope, Projection}, _From, 
         {error, _} = Error -> {reply, Error, S}
     end;
 handle_call(hosting_snapshot, _From,
-            S = #s{hosting_revision = Revision, ready_content = Ready}) ->
-    {reply, {ok, Revision, Ready}, S};
+            S = #s{hosting_revision = Revision, ready_content = Ready,
+                   ready_private = Private}) ->
+    {reply, {ok, Revision, Ready, Private}, S};
 handle_call(Request, From, S) ->
     {noreply, continue_work(enqueue_call(Request, From, S))}.
 
@@ -1285,14 +1287,60 @@ publish_reconcile_storage(StorageAdds) ->
     application:set_env(
       quod, content_storage_dirs, maps:merge(Storage0, StorageAdds)).
 
-install_ready_content(Ready0, S = #s{ready_content = Old}) ->
-    Ready = lists:sort(Ready0),
-    case Ready =:= Old of
+install_ready_content(ReadyNames,
+                      S = #s{ready_content = Old,
+                             ready_private = OldPrivate}) ->
+    Ready = ready_hosting_projection(ReadyNames, S),
+    Private = private_route_projection(S),
+    case Ready =:= Old andalso Private =:= OldPrivate of
         true -> S;
         false ->
             Revision = S#s.hosting_revision + 1,
-            quod_directory_control:hosting_changed(self(), Revision, Ready),
-            S#s{hosting_revision = Revision, ready_content = Ready}
+            quod_directory_control:hosting_changed(
+              self(), Revision, Ready, Private),
+            S#s{hosting_revision = Revision, ready_content = Ready,
+                ready_private = Private}
+    end.
+
+private_route_projection(#s{node_projection = #{contacts := Contacts}})
+  when is_map(Contacts) ->
+    lists:sort(maps:values(Contacts));
+private_route_projection(_) -> [].
+
+ready_hosting_projection(ReadyNames,
+                         #s{bootstrap_content = Bootstrap,
+                            system_content = System,
+                            node_content = Node}) ->
+    lists:sort(
+      lists:filtermap(
+        fun(Ns) ->
+            case ready_hosting_row(Ns, Bootstrap, System, Node) of
+                undefined -> false;
+                Row -> {true, Row}
+            end
+        end, ReadyNames)).
+
+ready_hosting_row(Ns, Bootstrap, System, Node) ->
+    case {Ns =:= ?ROOT_NS, maps:get(Ns, Bootstrap, undefined)} of
+        {true, #{genesis_hash := <<_:256>> = Anchor}} ->
+            #{namespace => Ns, anchor => Anchor, source => bootstrap,
+              visibility => discoverable};
+        _ ->
+            case maps:get(Ns, System, undefined) of
+                #{genesis_hash := <<_:256>> = Anchor} ->
+                    #{namespace => Ns, anchor => Anchor, source => system,
+                      visibility => discoverable};
+                undefined ->
+                    case maps:get(Ns, Node, undefined) of
+                        #{genesis_hash := <<_:256>> = Anchor,
+                          hosting_visibility := Visibility}
+                          when Visibility =:= discoverable;
+                               Visibility =:= private ->
+                            #{namespace => Ns, anchor => Anchor, source => node,
+                              visibility => Visibility};
+                        _ -> undefined
+                    end
+            end
     end.
 
 completed_start_succeeded(content, Ns, Result, Validated) ->

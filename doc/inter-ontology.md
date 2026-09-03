@@ -59,7 +59,7 @@ Everyone will want a `door` ontology. So the name itself disambiguates and shows
 **Resolution rule.** In a qualified name, the longest prefix that names a *known* ontology is
 the ontology; whatever follows is the name inside it. A prefix that names no known ontology is
 the loud `unknown_ontology` error (§8) — never a silent failure. ("Known" = hosted
-locally or present in the live directory/direct-route index; §10.)
+locally or present in the live directory index; §10.)
 
 **Ownership enforcement is NOT in this milestone.** The target actor model
 defines the ontology creator as its owner; contained agent instances do not
@@ -150,9 +150,9 @@ view, whether the scope is local, co-hosted, or remote.
 
 1. **Resolve and pin.** A co-hosted target is pinned to its live genesis anchor. A remote
    target comes from the directory; the transport pins both the advertised endpoint and the
-   authenticated node key. Conflicting anchors fail before any goal runs. A provisional private
-   seed performs only the bounded identity exchange described in §10, then becomes an ordinary
-   pinned route.
+   authenticated node key. Conflicting anchors fail before any goal runs. A private route is
+   derived from a committed `knows_ontology_host/4` fact and the referenced node actor's current
+   public route; the private target itself is never advertised.
 2. **Register and open.** The origin registers the bounded scope before execution. The target
    freezes its committed KB height and opens one shared proof session. The committed KB remains
    a versioned ETS store; a scope holds only its table/height handle and overlay, never a copy of
@@ -404,10 +404,11 @@ content, a lease transaction, a consensus input, or a `quod_runtime` state-handl
 The `::` resolver reads that same index directly rather than recursively asking Prolog how to
 route a Prolog ask.
 
-The first slice has two explicit route sources:
+The directory has two fact-backed route sources:
 
-- root-authorised system hosts publish signed, expiring advertisements;
-- private ontologies are reached through local direct seeds and are never published.
+- ready discoverable hosts publish signed, expiring paged generations;
+- committed `knows_ontology_host/4` facts derive local private contacts through
+  the referenced node actor's current public route and are never published.
 
 Directory-control authority is not configured as static addresses. The
 root-context-only external predicate
@@ -421,16 +422,19 @@ also tried directly. This local root proof does not use `directory_host/5` or
 `::`, so discovery has no directory cycle, and the contact address never
 becomes authority by itself.
 
-A node derives its public advertisement from system namespaces that are
-actually running locally. Every signed hosted descriptor carries the
+A node derives its public advertisement from committed root/system/node-actor
+hosting truth which is actually ready locally. Every signed hosted descriptor carries the
 namespace's immutable 32-byte genesis anchor and current
 `validator | observer` routing hint. Namespace start/stop replaces the complete
-signed set; an empty set withdraws it. Periodic reconciliation repairs missed
-notifications, while any number of private local ontologies remain outside the
-32-name public-advertisement limit.
+signed generation; an empty generation withdraws it. Manager revisions and
+exact route-property wakes drive reconciliation; no progress poll or fixed
+ontology-count limit exists. Private local ontologies stay outside publication.
 
 Every receiver independently verifies an advertisement's original Ed25519 node signature,
-restart-safe epoch/sequence freshness, exact namespace allowlist and bounds. System routes dial
+restart-safe epoch/generation freshness, page bounds, and exact committed
+authority. Node-actor generations must match the actor's certified active key
+and discoverable `hosts_ontology/4` facts; root-bootstrap system rows must match
+the current root catalogue. System routes dial
 the advertised endpoint through a scoped transport operation pinned to the signed node key.
 Pinned and identity-discovery links suppress the ordinary link-header address-cache
 learning through their whole `quod_quic` → `quod_conn` → `quod_link` path, so directory
@@ -452,11 +456,10 @@ target selection remains the directory's job; this contact continuity exists
 for post-scope DTX recovery and certified following, not as a second scope
 resolver.
 
-A route does not certify a read answer. In the first slice, answer integrity rests on the
-operator's exact allowlist of trusted system hosts. Self-managed discoverable ontologies are
-deferred until both advertisement authority and answer authority are designed (for example,
-committee-only answering or certified answers). User-specific hidden discovery also waits for
-authenticated proof subjects; private unlisted routes need neither feature.
+A route does not certify a read answer. Scope opening still verifies the exact
+target identity and current role through certified target history. A plain
+remote read accepts only a current validator route and remains a single-host
+answer, not a quorum-certified result.
 
 The implementation contract, bounds, failure semantics and acceptance tests are in
 `network-directory-plan.md`.
@@ -531,25 +534,12 @@ self-signed certificate requires the explicit `--insecure-tls` /
 inside the selected chaos window; an unfinished remote workload fails the run
 rather than continuing after the local workload ends.
 
-The Nomad job exposes an opt-in two-host demo topology. It is disabled by
-default and leaves quod:root unchanged. Before enabling it, obtain the
-selected existing allocations' persistent keys from their `/api/summary`
-(`.node.pubkey`). Set `directory_node_keys` and the exact
-`directory_public_namespaces` entries for the source and target, then enable
-`cross_ontology_enabled` with distinct source and target allocation indexes.
-The existing root ledger supplies the control peer keys through
-`directory_control_peer/1`; pinned control links disseminate the hosts' current
-endpoints after a port rollover. There is no `directory_bootstraps` option or
-compatibility fallback. After the rolling deployment, pass the source
-allocation explorer endpoint to the script above. The two single-host demo
-ontologies are a directory/ask benchmark, not a second consensus benchmark.
-
-For any existing ontology, add one exact `directory_public_namespaces` entry:
-its namespace and the public keys of hosts allowed to advertise it. The target
-host publishes its own current endpoint through the existing directory-control
-links, so dynamic p2p-port changes do not leave a configured stale address.
-This writes neither ledger facts nor ACLs. Removing that entry and redeploying
-removes the directory route.
+The old Nomad namespace list no longer exists. Create an ontology normally and
+commit its exact `hosts_ontology/4` row in the hosting node actor. When the
+namespace is ready, its signed generation is disseminated through the root
+control peers. Retracting that row withdraws the route. Private contacts use
+`knows_ontology_host/4`; they never enter the public directory. Slice 6 performs
+the coordinated clean re-found and hardware activation of this hard break.
 
 ## 11. Non-goals — deliberately NOT in this milestone
 

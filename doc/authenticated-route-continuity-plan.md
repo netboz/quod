@@ -12,7 +12,7 @@ The failure that motivated it is precise: an origin ontology could reach two
 private participant ontologies, seal their plans, and begin a durable group.
 One participant then received its Prepare but could not verify the certified
 Begin because it had no independently configured route back to the private
-origin. Adding reverse private seeds manually was diagnostic only and is not an
+origin. Adding reverse private contacts manually was diagnostic only and is not an
 acceptable product contract. A later route also failed to wake the already
 retained candidate, exposing a second, generic validation-retry defect.
 
@@ -141,7 +141,7 @@ present in the hint store.
 Candidate sources are:
 
 - current certified directory routes;
-- confirmed private seeds;
+- confirmed private contacts;
 - the authenticated source of a scope or DTX request whose control names that
   exact identity;
 - committee routes learned while folding certified history.
@@ -247,7 +247,7 @@ permits at most one worker for the candidate.
 
 For an origin A writing atomically to private participants B and C:
 
-1. A resolves B and C using public directory data or its local private seeds.
+1. A resolves B and C using public directory data or its fact-derived private contacts.
 2. Mutual TLS authenticates every contacted node. Each side may retain the
    other's advertised node contact as P; the new identity association used by
    this flow is retained only under the foreign-log hint cap.
@@ -444,7 +444,7 @@ remains a release/hardware gate and is not replaced by source-level results.
 ## 12. Explicitly rejected approaches
 
 - keeping proof scopes open until Complete;
-- requiring operators to configure reverse private seeds;
+- requiring operators to configure reverse private contacts;
 - putting endpoints or routes into DTX controls, blocks, or ontology facts;
 - trusting a TLS peer's ontology claim without certified history;
 - accepting one validator's verification on behalf of other voters;

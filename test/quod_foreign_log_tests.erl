@@ -755,14 +755,14 @@ one_peer_can_introduce_many_dormant_bootstrap_identities_test() ->
               quod_foreign_log:observe_candidate(
                 {<<"peer-cap:", (integer_to_binary(N))/binary>>, key(N)},
                 {Peer, {"127.0.0.1", 31000 + N}})
-          end, lists:seq(1, ?DIRECTORY_MAX_NAMESPACES + 1)),
+          end, lists:seq(1, 1200)),
         OtherIdentity = {<<"peer-cap:other">>, key(999)},
         quod_foreign_log:observe_candidate(
           OtherIdentity, {OtherPeer, {"127.0.0.1", 31999}}),
         Stats = quod_foreign_log:stats(),
         ?assertEqual(0,
                      maps:get(histories, Stats)),
-        ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 2,
+        ?assertEqual(1201,
                      maps:get(bootstrap_candidates, Stats)),
         ?assertEqual(0, maps:get(bootstrap_rejected, Stats)),
         ?assertMatch({ok, [{OtherPeer, [_]}]},
@@ -2055,13 +2055,16 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
     Nonce = key(211),
     StaticBridgeHead =
         {directory_host, Ns, key(212), Pub, "127.0.0.1", 19000},
+    AgentKey = {agent_key, {node, one}, Pub, active},
+    Hosting = {hosts_ontology, {node, one}, Ns, key(213), discoverable},
     Genesis = quod_simplex:test_genesis_tx(
                 #{node_id => Pub, mode => create, committee => [],
                   node_addr => {"127.0.0.1", 19000},
                   external_predicate_modules =>
                       [quod_directory_predicates],
                   genesis_diff =>
-                      quod_prolog:terms_to_diff([StaticBridgeHead])},
+                      quod_prolog:terms_to_diff(
+                        [StaticBridgeHead, AgentKey, Hosting])},
                 Ns, Pub, Nonce),
     {ok, Entry} = quod_ledger:new_entry(
                     1, {batch, [Genesis]}, 1, none),
@@ -2087,7 +2090,18 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
         %% is the same static procedure as on validators and is not changed.
         ?assertNot(
            lists:member(
-             StaticBridgeHead, maps:get(changed_heads, Result)))
+             StaticBridgeHead, maps:get(changed_heads, Result))),
+        {ok, Clauses} = quod_foreign_projection:clauses(
+                          Pid, Generation,
+                          [{agent_key, 3}, {hosts_ontology, 4}], 1000),
+        ?assert(lists:any(
+                  fun({Head, {[], false}}) -> Head =:= AgentKey;
+                     (_) -> false
+                  end, maps:get({agent_key, 3}, Clauses))),
+        ?assert(lists:any(
+                  fun({Head, {[], false}}) -> Head =:= Hosting;
+                     (_) -> false
+                  end, maps:get({hosts_ontology, 4}, Clauses)))
     after
         quod_foreign_projection:stop(Pid),
         receive {'DOWN', MRef, process, Pid, _} -> ok after 3000 -> ok end,

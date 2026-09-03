@@ -150,7 +150,7 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.130
+TAG=0.7.131
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
@@ -246,8 +246,8 @@ anchored rolling update.
   DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
   member recovery, bounded per-ontology transaction micro-batches, depth-one pipelining with
   implicit predecessor finality, signed transaction relay, inter-ontology asks,
-  retained-custody ingress, the signed live ontology directory with private
-  direct routes, runtime projection, durable multi-ontology transactions,
+  retained-custody ingress, the signed fact-backed live ontology directory
+  with committed private host knowledge, runtime projection, durable multi-ontology transactions,
   generic agent-signed goals, root-owned ontology creation, root-driven system
   ontologies, engine-local external-predicate ownership, explicit durable
   ontology subscriptions, shared certified foreign projections, local and

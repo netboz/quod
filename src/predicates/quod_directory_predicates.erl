@@ -9,7 +9,7 @@ external predicate: it enumerates the bounded ETS route index directly instead
 of copying moving network membership into the root ontology's consensus log.
 `directory_control_peer(?NodeKey)` projects the canonical public keys from the
 root proof snapshot's committed `peer_admitted/4` facts. Both predicates are
-available only while executing `quod:root`; private direct seeds are excluded
+available only while executing `quod:root`; fact-derived private contacts are excluded
 by `quod_directory:directory_hosts/1`.
 """.
 

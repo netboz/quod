@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.130"
+  default     = "0.7.131"
   description = "Quod image tag in the cluster registry. Routine upgrades resume the existing anchored quod-node host volumes."
 }
 
@@ -68,21 +68,6 @@ variable "detailed_consensus_metrics" {
   type        = bool
   default     = false
   description = "Enable expensive per-event consensus timing and mailbox probes for a short diagnostic run. Keep false during normal operation and throughput tests."
-}
-
-variable "directory_node_keys" {
-  type        = list(string)
-  default     = []
-  description = "Exact Ed25519 node-key allowlist for the discoverable quod:root directory. Supply the persistent fleet keys as 64-character hex strings; empty disables shared publication without weakening validation."
-}
-
-variable "directory_public_namespaces" {
-  type = list(object({
-    namespace = string
-    node_keys = list(string)
-  }))
-  default     = []
-  description = "Exact namespace/node-key allowlists for ontologies advertised through the existing directory control path. Hosts publish their current endpoints; no endpoint is configured or stored durably."
 }
 
 variable "cross_ontology_enabled" {
@@ -306,28 +291,6 @@ client {
   port     = 14570
   certfile = ""
   keyfile  = ""
-}
-directory {
-  allowlist = [
-    {
-      namespace = "quod:root"
-      node_keys = [
-%{for node_key in var.directory_node_keys~}
-        "${node_key}",
-%{endfor~}
-      ]
-    },
-%{for directory_entry in var.directory_public_namespaces~}
-    {
-      namespace = "${directory_entry.namespace}"
-      node_keys = [
-%{for node_key in directory_entry.node_keys~}
-        "${node_key}",
-%{endfor~}
-      ]
-    },
-%{endfor~}
-  ]
 }
 # `content` is a LIST: further ontologies are added as extra entries, each with its own
 # mode/anchor (founded once by a single create deploy, then joined fleet-wide with the
@@ -597,29 +560,6 @@ client {
   port     = 14570
   certfile = ""
   keyfile  = ""
-}
-directory {
-  # Satellites independently validate every directory record they receive.
-  allowlist = [
-    {
-      namespace = "quod:root"
-      node_keys = [
-%{for node_key in var.directory_node_keys~}
-        "${node_key}",
-%{endfor~}
-      ]
-    },
-%{for directory_entry in var.directory_public_namespaces~}
-    {
-      namespace = "${directory_entry.namespace}"
-      node_keys = [
-%{for node_key in directory_entry.node_keys~}
-        "${node_key}",
-%{endfor~}
-      ]
-    },
-%{endfor~}
-  ]
 }
 # `content` is a LIST — extra ontologies join here too (see the quod-node group's note).
 content = [

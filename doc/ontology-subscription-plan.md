@@ -57,7 +57,7 @@ These are not special Erlang dispatch paths. The subscriber's normal
 - **Subscription:** durable semantic interest owned by the subscriber.
 - **Hosting:** `create_ontology`, `join_ontology`, and a future leave operation
   decide which nodes run an ontology.
-- **Routing:** `quod_directory` and private seeds are disposable knowledge of
+- **Routing:** `quod_directory` and fact-derived private contacts are disposable knowledge of
   how to reach current hosts.
 - **Proof scope:** `::` opens a bounded call inside one proof. It needs no
   subscription and creates none.
@@ -132,7 +132,7 @@ disclosure would require a separate cryptographic format and trust review.
 | `subscribes/2` | D | Subscriber ledger |
 | founding-authorized source-qualified `react_on/3` | D | Subscriber ledger |
 | target facts | D | Target ledger only |
-| routes/private seeds | P | Existing local directory |
+| routes/private contacts | P | Existing local directory derived from signed generations and committed node facts |
 | certified target history/cache | P | Node-wide `quod_foreign_log` |
 | materialized foreign facts and MVCC state | P | Shared active target projection |
 | consumer refs, coalesced wake state, freshness, revision | P | Runtime/foreign-log only |
@@ -156,7 +156,7 @@ follow it.
 
 The follower:
 
-1. resolves current hosts through the existing directory/private-seed path;
+1. resolves current hosts through the existing public/private directory path;
 2. obtains the existing bounded certified catch-up pages;
 3. verifies certificates, contiguous history, and committee changes through
    the existing verifier;

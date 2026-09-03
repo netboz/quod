@@ -25,7 +25,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 > #### Signing {: .info }
 >
 > `sign/2` / `verify/3` provide Ed25519 signatures over canonical bytes. Consensus
-> quorum certificates and signed directory records share this node keypair.
+> quorum certificates and signed directory generations share this node keypair.
 """.
 
 -include_lib("public_key/include/public_key.hrl").

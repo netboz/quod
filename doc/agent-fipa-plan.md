@@ -938,8 +938,8 @@ service may map a public name to that anchored identity and decide
 discoverability; it does not become part of the route store. The target
 ontology's ordinary lifecycle policy alone authorizes hosting. Endpoints,
 contacts, leases, and freshness are P-state projected into the sole
-`quod_directory` owner from signed directory-control records and confirmed
-direct seeds over authenticated links. It is not an AID resolver, and neither
+`quod_directory` owner from signed fact-backed generations and local private
+contacts derived through authenticated node-actor routes. It is not an AID resolver, and neither
 a registration nor a contact hint makes a route authoritative.
 
 This is a Quod role, not the FIPA Ontology Agent. The

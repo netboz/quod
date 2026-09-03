@@ -740,8 +740,8 @@ The implementation review must account for at least these concrete seams:
 - `quod_namespace_manager`, `quod_explorer`, `quod_explorer_http`, and
   `quod_explorer_ws`: topology publication, subscription refresh, effect
   details, local status, and authorship labels.
-- `quod_directory`, `quod_directory_control`, their route/anchor allowlists,
-  and directory predicates: preserve distinct `{Namespace, Anchor}` identities
+- `quod_directory`, `quod_directory_control`, their fact-backed route/anchor
+  projections, and directory predicates: preserve distinct `{Namespace, Anchor}` identities
   and return one explicit fail-closed conflict when the same name has competing
   anchors; never pick or merge one.
 
@@ -813,7 +813,7 @@ The implementation review must account for at least these concrete seams:
     and neither fork is silently selected or merged.
 25. A directory-level test supplies competing anchors for one namespace and
     asserts the exact fail-closed conflict from resolution, control, and the
-    rendered route allowlist; input order cannot select a winner.
+    committed hosting projection; input order cannot select a winner.
 
 ### Apply, runtime, and Explorer
 

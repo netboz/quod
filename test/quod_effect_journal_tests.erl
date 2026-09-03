@@ -388,7 +388,9 @@ bound_owner_death_retires_live_unactivated_row_test() ->
     Dir = unique_tmp_dir("quod_effect_bound_owner_"),
     SavedDesired = application:get_env(quod, namespace_desired),
     SavedKey = application:get_env(quod, node_pubkey),
-    {Pub, _Seed} = quod_identity:generate(),
+    {Pub, Seed} = quod_identity:generate(),
+    Identity = #{pubkey => Pub,
+                 key => quod_identity:key_term({Pub, Seed})},
     RootConfig = #{data_dir => Dir,
                    ledger_dir => filename:join(Dir, "ledger")},
     application:set_env(
@@ -407,16 +409,19 @@ bound_owner_death_retires_live_unactivated_row_test() ->
                          Action, Prepared, Pub, {node, Pub}),
         {ok, Goal} = quod_durable_term:encode_goal(Action),
         {ok, Result} = quod_durable_term:encode_result(#{}),
-        Transaction = quod_transaction:bind_id(
-                        {?ROOT_NS, Anchor},
-                        #transaction{origin = {?ROOT_NS, Anchor},
-                                     proof_id = hash(8103),
-                                     plan_digest = hash(8104),
-                                     goal = Goal, result = Result,
-                                     diff = [], read_check = #{},
-                                     effects = [Effect], author = Pub,
-                                     author_seq = 0, submitted_at = 10,
-                                     sig = none}),
+        Unsigned = quod_transaction:bind_id(
+                     {?ROOT_NS, Anchor},
+                     #transaction{origin = {?ROOT_NS, Anchor},
+                                  proof_id = hash(8103),
+                                  plan_digest = hash(8104),
+                                  goal = Goal, result = Result,
+                                  diff = [], read_check = #{},
+                                  effects = [Effect], author = Pub,
+                                  author_seq = 0, submitted_at = 10,
+                                  sig = none}),
+        {ok, Transaction} = quod_transaction:sign(
+                              {?ROOT_NS, Anchor, Admission},
+                              Unsigned, Identity),
         Ref = {transaction, ?ROOT_NS, Anchor,
                Transaction#transaction.tx_id},
         Parent = self(),
@@ -901,23 +906,23 @@ fixture(State) ->
     {ok, Goal} = quod_durable_term:encode_goal(
                    {create_ontology, <<"effect:test">>, []}),
     {ok, Result} = quod_durable_term:encode_result(#{}),
-    Transaction = quod_transaction:bind_id(
-                    {?ROOT_NS, Anchor},
-                    #transaction{origin = {?ROOT_NS, Anchor},
-                                 proof_id = hash(5),
-                                 plan_digest = hash(6),
-                                 goal = Goal, result = Result,
-                                 diff = [], read_check = #{},
-                                 effects = [Effect], author = Pub,
-                                 author_seq = 0, submitted_at = 10,
-                                 sig = none}),
-    TxId = Transaction#transaction.tx_id,
+    Unsigned = quod_transaction:bind_id(
+                 {?ROOT_NS, Anchor},
+                 #transaction{origin = {?ROOT_NS, Anchor},
+                              proof_id = hash(5),
+                              plan_digest = hash(6),
+                              goal = Goal, result = Result,
+                              diff = [], read_check = #{},
+                              effects = [Effect], author = Pub,
+                              author_seq = 0, submitted_at = 10,
+                              sig = none}),
+    TxId = Unsigned#transaction.tx_id,
     Ref = {transaction, ?ROOT_NS, Anchor, TxId},
     Row = {quod_effect_row, 5, quod_effect:effect_id(Effect), Effect,
            ActionBytes, DesiredBytes, PreparedBytes,
-           term_to_binary(Transaction, [deterministic]), Ref, Admission,
+           pending_transaction_bytes(Unsigned, Admission), Ref, Admission,
            State, 0, none},
-    {Effect, Admission, Transaction, Ref, Row}.
+    {Effect, Admission, Unsigned, Ref, Row}.
 
 group_fixture(Pub, Seed, RootAnchor) ->
     Ns = <<"effect:group-test">>,
@@ -996,6 +1001,12 @@ unique_tmp_dir(Prefix) ->
 journal_wire_blob(Term) ->
     {ok, Blob} = quod_wire_term:encode_canonical(Term),
     Blob.
+
+pending_transaction_bytes(
+  Transaction = #transaction{origin = {Ns, Anchor}}, Admission) ->
+    {ok, Bytes} = quod_transaction:bytes(
+                    {Ns, Anchor, Admission}, Transaction),
+    Bytes.
 
 write_snapshot(Dir, Row) ->
     Rows = case Row of

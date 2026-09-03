@@ -10,6 +10,8 @@ are covered by `simplex_SUITE`.
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
+-export([canonical_block_fixture/1]).
+
 %% Every ordinary consensus fixture belongs to one explicit chain domain. Tests
 %% that exercise cross-namespace/genesis replay derive their foreign domains
 %% separately and must never rely on an implicit/default signature context.
@@ -20,9 +22,22 @@ id() ->
     {Pub, Seed} = quod_identity:generate(),
     {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}.
 
-blk(Slot) -> #block{slot = Slot, parent = Slot - 1,
-                    payload = {batch,
-                               [tx([{assert, {{fact, Slot}, true}}])]}}.
+block(Slot, Parent, Payload) -> block(Slot, Parent, Payload, 0).
+
+block(Slot, Parent, Payload, Timestamp) ->
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Parent, Payload, Timestamp),
+    Block.
+
+entry(Index, Data, Timestamp) -> entry(Index, Data, Timestamp, none).
+
+entry(Index, Data, Timestamp, Cert) ->
+    {ok, Entry} = quod_ledger:new_entry(Index, Data, Timestamp, Cert),
+    Entry.
+
+blk(Slot) ->
+    block(Slot, Slot - 1,
+          {batch, [tx([{assert, {{fact, Slot}, true}}])]}).
 
 %%%===================================================================
 %%% quorum
@@ -43,22 +58,68 @@ block_hash_deterministic_test() ->
     ?assertEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(5))),
     ?assertNotEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(6))).
 
+block_bytes_and_hash_match_across_fresh_vms_test() ->
+    Path = code:get_path(),
+    PeerName1 = list_to_atom(
+                  "canonical_block_a_"
+                  ++ integer_to_list(erlang:unique_integer([positive]))),
+    PeerName2 = list_to_atom(
+                  "canonical_block_b_"
+                  ++ integer_to_list(erlang:unique_integer([positive]))),
+    {ok, Peer1, _} = peer:start(
+                       #{name => PeerName1, connection => standard_io,
+                         args => ["-pa" | Path]}),
+    {ok, Peer2, _} = peer:start(
+                       #{name => PeerName2, connection => standard_io,
+                         args => ["-pa" | Path]}),
+    try
+        First = peer:call(Peer1, ?MODULE, canonical_block_fixture, [47]),
+        %% Loading unrelated vocabulary in only one VM must not influence the
+        %% producer's canonical bytes or their consensus hash.
+        _ = peer:call(Peer2, erlang, binary_to_atom,
+                      [<<"canonical_block_unrelated_atom">>, utf8]),
+        Second = peer:call(Peer2, ?MODULE, canonical_block_fixture, [47]),
+        ?assertEqual(First, Second)
+    after
+        _ = peer:stop(Peer1),
+        _ = peer:stop(Peer2)
+    end.
+
+canonical_block_fixture(Salt) ->
+    Block = block(
+              8, 7,
+              {batch,
+               [tx(<<"canonical:vm">>,
+                   [{assert,
+                     {{canonical_fact, Salt, {{pair, a, 1}, [x, y]}},
+                      true}}])]},
+              1234),
+    Bytes = quod_ledger:block_bytes(Block),
+    {Bytes, quod_simplex:block_hash(Block)}.
+
+block_producer_rejects_map_inside_map_key_test() ->
+    Ns = <<"canonical:unstable-key">>,
+    BadMap = #{#{a => 1} => rejected},
+    Genesis = #transaction{
+                 tx_id = <<1:256>>, origin = {Ns, <<0:256>>},
+                 diff = [{assert, {{bad_map_key, BadMap}, true}}],
+                 read_check = #{}, author = <<2:256>>, sig = none},
+    ?assertEqual(
+       {error, bad_block},
+       quod_ledger:new_block(1, 0, {batch, [Genesis]}, 0)).
+
 %% The committee view is the membership set PLUS the exact committed block that adopted it. Boot replay
 %% and catch-up both fold the same per-entry projector, and the live path feeds the same formula with the
 %% engine-captured block hash. Content/noop slots do not invent revisions.
 committee_view_projection_test() ->
     Ns = <<"committee:view">>,
     [A, B, C] = lists:sort(pubs(committee(3))),
-    Genesis = #entry{index = 1,
-                     data = {batch, [tx([pa(B), pa(A)])]}},
-    Content = #entry{index = 2,
-                     data = {batch,
-                             [tx([{assert, {{content, kept}, true}}])]},
-                     timestamp = 123},
-    Skipped = #entry{index = 3, data = noop},
-    AdmitC = #entry{index = 4,
-                    data = {batch, [tx([pa(C)])]},
-                    timestamp = 456},
+    Genesis = entry(1, {batch, [tx(Ns, [pa(B), pa(A)])]}, 0),
+    Content = entry(2,
+                    {batch, [tx(Ns, [{assert, {{content, kept}, true}}])]},
+                    123),
+    Skipped = entry(3, noop, 0),
+    AdmitC = entry(4, {batch, [tx(Ns, [pa(C)])]}, 456),
     {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
     GenesisHash = quod_simplex:block_hash(GenesisBlock),
     ExpectedGenesisId =
@@ -115,9 +176,8 @@ committee_view_projection_test() ->
 
 committee_view_is_not_invented_before_membership_test() ->
     Ns = <<"committee:unfounded">>,
-    Entry = #entry{index = 1,
-                   data = {batch,
-                           [tx([{assert, {{ordinary, fact}, true}}])]}},
+    Entry = entry(1,
+                  {batch, [tx([{assert, {{ordinary, fact}, true}}])]}, 0),
     Projection = quod_simplex:test_log_projection(
                    Ns, [Entry], quod_simplex:history_projection()),
     ?assertEqual(undefined, maps:get(committee_id, Projection)),
@@ -159,21 +219,16 @@ live_state_projection_retains_current_committee_era_start_test() ->
 %% the current view and admission generation.
 committee_view_recurring_set_revision_test() ->
     Ns = <<"committee:recurring">>,
-    [A, B] = lists:sort(pubs(committee(2))),
+    [{A, _AIdentity}, {B, BIdentity}] = lists:sort(committee(2)),
     Entries =
-        [#entry{index = 1,
-                data = {batch, [tx([pa(A), pa(B)])]}},
-         #entry{index = 2,
-                data = {batch,
-                        [(tx([{assert, {{b_wrote, true}, true}}]))#transaction{
-                           author = B, author_seq = 9}]},
-                timestamp = 9},
-         #entry{index = 3,
-                data = {batch, [tx([rm(B)])]},
-                timestamp = 10},
-         #entry{index = 4,
-                data = {batch, [tx([pa(B)])]},
-                timestamp = 11}],
+        [entry(1, {batch, [tx(Ns, [pa(A), pa(B)])]}, 0),
+         entry(2,
+               {batch, [signed_tx_seq(
+                          Ns, <<"b-write">>, 9,
+                          [{assert, {{b_wrote, true}, true}}],
+                          {B, BIdentity})]}, 9),
+         entry(3, {batch, [tx(Ns, [rm(B)])]}, 10),
+         entry(4, {batch, [tx(Ns, [pa(B)])]}, 11)],
     [Genesis, BWrite, Removed, Readded] = Entries,
     Projection1 =
         quod_simplex:test_log_projection(
@@ -206,9 +261,7 @@ committee_view_recurring_set_revision_test() ->
     ?assertNotEqual(maps:get(B, Admissions1), maps:get(B, Admissions3)),
     ?assertNot(maps:is_key(B, maps:get(sequences, Projection2))),
     ?assertEqual(2, map_size(Admissions3)),
-    Reassert = #entry{index = 5,
-                      data = {batch, [tx([pa(B)])]},
-                      timestamp = 12},
+    Reassert = entry(5, {batch, [tx(Ns, [pa(B)])]}, 12),
     Reasserted = quod_simplex:test_log_projection(
                    Ns, [Reassert], Projection3),
     ?assertEqual([A, B], quod_simplex:history_committee(Reasserted)),
@@ -225,16 +278,18 @@ canonical_ledger_payload_test() ->
     ?assertEqual({ok, [Transaction]}, quod_ledger:payload(Data)),
     ?assertEqual(error, quod_ledger:payload(Transaction)),
     ?assertEqual(error, quod_ledger:payload(noop)),
-    ?assertEqual(error, quod_simplex:block_from_entry(#entry{index = 1, data = Transaction})),
+    ?assertEqual(error,
+                 quod_simplex:block_from_entry(
+                   #entry{index = 1, data = Transaction})),
     Fixture = quod_ct:dtx_prepare_fixture(),
     {ok, ControlBlob} = quod_dtx:encode_control(
                           maps:get(prepare_control, Fixture)),
     ControlData = {batch, [{dtx, ControlBlob}]},
-    ?assertEqual(
+    ControlEntry = entry(2, ControlData, 42),
+    ?assertMatch(
        {ok, #block{slot = 2, parent = 1, payload = ControlData,
-                   timestamp = 42}},
-       quod_simplex:block_from_entry(
-         #entry{index = 2, data = ControlData, timestamp = 42})).
+                   timestamp = 42, block_bytes = <<_/binary>>}},
+       quod_simplex:block_from_entry(ControlEntry)).
 
 %%%===================================================================
 %%% gap detector — ahead_cert_ceiling/1 (Slice 1)
@@ -405,8 +460,7 @@ dtx_certificate_cannot_bypass_parent_validation_test() ->
         quod_dtx:sign_control(
           Target, Finalize, Admission, 1, 1, AuthorId),
     {ok, ControlBlob} = quod_dtx:encode_control(Control),
-    Block = #block{slot = 2, parent = 1,
-                   payload = {batch, [{dtx, ControlBlob}]}, timestamp = 0},
+    Block = block(2, 1, {batch, [{dtx, ControlBlob}]}, 0),
     BH = quod_simplex:block_hash(Block),
     Eng0 = quod_simplex:eng_new(Domain, [Author], 1),
     S0 = st(#{ns => Ns, self => Author, id => AuthorId,
@@ -1648,7 +1702,7 @@ dtx_endpoint_local_submit_drives_on_mailbox_edge_test() ->
     {ok, _Identity, RequiredSlot, _Digest} =
         quod_dtx:certified_ref_binding(RequiredRef),
     ValidationSidecar =
-        [{RequiredRef, #entry{index = RequiredSlot, data = noop}}],
+        [{RequiredRef, quod_ledger:noop_entry(RequiredSlot, none)}],
     From = {self(), make_ref()},
     Dir = relay_store_dir("dtx_local_immediate"),
     {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
@@ -1818,11 +1872,12 @@ dtx_semantic_commit_retires_an_equivalent_retained_envelope_test() ->
           maps:get(signer, Fixture)),
     {ok, Envelope} = quod_dtx:encode_control(Committed),
     Payload = {batch, [{dtx, Envelope}]},
-    Block = #block{slot = 2, parent = 1, payload = Payload, timestamp = 0},
+    Block = block(2, 1, Payload, 0),
     BlockHash = quod_simplex:block_hash(Block),
-    Entry = #entry{index = 2, data = Payload,
-                   cert = #cert{kind = commit, slot = 2,
-                                block_hash = BlockHash, sigs = []}},
+    Entry = quod_ledger:entry(
+              Block,
+              #cert{kind = commit, slot = 2,
+                    block_hash = BlockHash, sigs = []}),
     Seeded = quod_simplex:test_seed_dtx_submission(
                Original, [], st(#{ns => Ns, genesis_hash => Anchor})),
     Resolved = quod_simplex:test_resolve_committed_dtx(
@@ -1891,11 +1946,12 @@ dtx_catchup_retires_retained_submission_and_replies_exact_ref_test() ->
     {ok, Envelope} = quod_dtx:encode_control(Committed),
     ?assertNotEqual(OriginalEnvelope, Envelope),
     Payload = {batch, [{dtx, Envelope}]},
-    Block = #block{slot = 1, parent = 0, payload = Payload, timestamp = 0},
+    Block = block(1, 0, Payload, 0),
     BlockHash = quod_simplex:block_hash(Block),
-    Entry = #entry{index = 1, data = Payload,
-                   cert = #cert{kind = commit, slot = 1,
-                                block_hash = BlockHash, sigs = []}},
+    Entry = quod_ledger:entry(
+              Block,
+              #cert{kind = commit, slot = 1,
+                    block_hash = BlockHash, sigs = []}),
     Dir = relay_store_dir("catchup_dtx_submission"),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     try
@@ -2053,15 +2109,16 @@ unsigned_begin_history_replay_does_not_require_root_identity_test() ->
     Control = maps:get(begin_control, Fixture),
     {ok, ControlBlob} = quod_dtx:encode_control(Control),
     Data = {batch, [{dtx, ControlBlob}]},
-    Block = #block{slot = 1, parent = 0, payload = Data, timestamp = 0},
+    Block = block(1, 0, Data, 0),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     #share{sig = Signature} = quod_simplex:make_share(
                                 Domain, commit, 1, BlockHash, Signer),
-    Entry = #entry{index = 1, data = Data, timestamp = 0,
-                   cert = #cert{kind = commit, slot = 1,
-                                block_hash = BlockHash,
-                                sigs = [{Pub, Signature}]}},
+    Entry = quod_ledger:entry(
+              Block,
+              #cert{kind = commit, slot = 1,
+                    block_hash = BlockHash,
+                    sigs = [{Pub, Signature}]}),
     Projection0 =
         (quod_simplex:history_projection(
            [Pub], <<1:256>>, #{Pub => Admission}, #{}, 0))#{
@@ -2095,8 +2152,7 @@ signed_content_history_replay_waits_for_root_identity_test() ->
     Deadline = maps:get(deadline, Fixture),
     Projection0 = quod_simplex:history_projection(
                     [Author], undefined, #{Author => Admission}, #{}, 0),
-    Entry = #entry{index = 2, data = {batch, [Transaction]},
-                   timestamp = Deadline},
+    Entry = entry(2, {batch, [Transaction]}, Deadline),
     without_network_identity(
       fun() ->
           ?assertEqual(
@@ -2122,15 +2178,16 @@ signed_begin_history_replay_waits_for_root_identity_test() ->
     Admission = maps:get(admission, Fixture),
     {ok, ControlBlob} = quod_dtx:encode_control(Control),
     Data = {batch, [{dtx, ControlBlob}]},
-    Block = #block{slot = 1, parent = 0, payload = Data, timestamp = 1},
+    Block = block(1, 0, Data, 1),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     #share{sig = Signature} = quod_simplex:make_share(
                                 Domain, commit, 1, BlockHash, Identity),
-    Entry = #entry{index = 1, data = Data, timestamp = 1,
-                   cert = #cert{kind = commit, slot = 1,
-                                block_hash = BlockHash,
-                                sigs = [{Author, Signature}]}},
+    Entry = quod_ledger:entry(
+              Block,
+              #cert{kind = commit, slot = 1,
+                    block_hash = BlockHash,
+                    sigs = [{Author, Signature}]}),
     Projection0 =
         (quod_simplex:history_projection(
            [Author], <<1:256>>, #{Author => Admission}, #{}, 0))#{
@@ -2697,7 +2754,7 @@ pending_begin_reconciliation_retires_old_admission_in_order_test() ->
         ok = quod_ct:wait_until(
                fun() -> not is_process_alive(CoordinatorPid) end, 1000),
 
-        MembershipEntry = #entry{index = 1, data = noop},
+        MembershipEntry = quod_ledger:noop_entry(1, none),
         ok = quod_prolog:apply_entry(Ns, MembershipEntry, live),
         _ = quod_simplex:test_finish_pending_begins_reconciliation(
               Transition, Stopped),
@@ -2956,7 +3013,7 @@ read_attest_validator_signs_the_exact_current_ledger_anchor_test() ->
     Control = maps:get(begin_control, Fixture),
     {Entry1, _} = committed_dtx_test_entry(Control, 1),
     {Entry2, _} = committed_dtx_test_entry(Control, 2),
-    Noop = #entry{index = 3, data = noop},
+    Noop = quod_ledger:noop_entry(3, none),
     Dir = relay_store_dir("read_attest_validator"),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     {ok, Store3} = quod_ledger_store:append(
@@ -2996,8 +3053,8 @@ read_attest_keeps_the_admitted_snapshot_when_consensus_advances_test() ->
     Control = maps:get(begin_control, Fixture),
     {Entry1, _} = committed_dtx_test_entry(Control, 1),
     {Entry2, _} = committed_dtx_test_entry(Control, 2),
-    Entry3 = #entry{index = 3, data = noop},
-    Entry4 = #entry{index = 4, data = noop},
+    Entry3 = quod_ledger:noop_entry(3, none),
+    Entry4 = quod_ledger:noop_entry(4, none),
     Dir = relay_store_dir("read_attest_advance"),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     {ok, Store4} = quod_ledger_store:append(
@@ -3031,8 +3088,7 @@ read_attest_validator_signs_the_pinned_genesis_anchor_test() ->
     Ns = <<"quod:read-attest-genesis">>,
     Genesis = quod_simplex:test_genesis_tx(
                 #{external_predicate_modules => []}, Ns, Self, <<62:256>>),
-    Entry = #entry{index = 1, data = {batch, [Genesis]},
-                   timestamp = 0, cert = none},
+    Entry = entry(1, {batch, [Genesis]}, 0),
     {ok, Block} = quod_simplex:block_from_entry(Entry),
     Anchor = quod_simplex:block_hash(Block),
     Target = {Ns, Anchor},
@@ -3674,7 +3730,7 @@ catchup_window_publishes_one_wake_only_certified_head_test() ->
            [<<"catchup:certified-head:">>,
             integer_to_binary(erlang:unique_integer([positive]))]),
     Anchor = crypto:hash(sha256, Ns),
-    Entry = #entry{index = 1, data = noop, timestamp = 1},
+    Entry = quod_ledger:noop_entry(1, none),
     Projection = quod_simplex:history_advance(
                    Ns, Entry, quod_simplex:history_projection()),
     Dir = relay_store_dir("catchup_certified_head"),
@@ -4064,7 +4120,7 @@ ready_after_passive_ingest_supports_before_complaining_test() ->
     Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
     Tx = signed_tx(<<"t">>, <<"passive-recovery">>,
                    [{assert, {{recovered, proposal}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {Eng, []} = quod_simplex:eng_offer(
                   {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
@@ -4099,7 +4155,7 @@ supported_proposal_gets_one_redrive_before_complaint_test() ->
     Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
     Tx = signed_tx(<<"t">>, <<"supported-recovery">>,
                    [{assert, {{recovered, supported}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {Eng, []} = quod_simplex:eng_offer(
                   {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
@@ -4134,7 +4190,7 @@ redrive_queues_proposal_for_disconnected_validators_test() ->
     Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
     Tx = signed_tx(<<"t">>, <<"redrive-disconnected">>,
                    [{assert, {{recovered, redrive}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {Eng, []} = quod_simplex:eng_offer(
                   {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
@@ -4150,7 +4206,7 @@ certified_block_request_targets_one_holder_test() ->
     Committee = [{A, IdA} | _] = committee(4),
     Tx = signed_tx(<<"t">>, <<"missing-block">>,
                    [{assert, {{recovered, block}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     {Eng, _} = feed_shares(supports(Block, Committee, 3),
                            quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
     Missing = st(#{self => A, id => IdA, validators => pubs(Committee),
@@ -4168,7 +4224,7 @@ certified_block_request_is_committee_scoped_test() ->
     Committee = [{A, IdA}, {B, _} | _] = committee(4),
     Tx = signed_tx(<<"t">>, <<"serve-certified-block">>,
                    [{assert, {{recovered, served}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {Eng1, _} = quod_simplex:eng_offer(
                   {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
@@ -4188,7 +4244,7 @@ certified_block_from_non_leader_restores_finality_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
     Tx = signed_tx(<<"t">>, <<"non-leader-recovery">>,
                    [{assert, {{recovered, any_holder}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     SupportShares = supports(Block, Committee, 3),
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN, support, 6, BH, SupportShares, pubs(Committee)),
@@ -4213,8 +4269,7 @@ certified_dtx_block_uses_phase_aware_recovery_test() ->
     #{pubkey := Self} = Identity = maps:get(node_identity, Fixture),
     Admission = maps:get(admission, Fixture),
     {ok, Envelope} = quod_dtx:encode_control(Control),
-    Block = #block{slot = 1, parent = 0,
-                   payload = {batch, [{dtx, Envelope}]}, timestamp = 0},
+    Block = block(1, 0, {batch, [{dtx, Envelope}]}, 0),
     BH = quod_simplex:block_hash(Block),
     {ok, Cert} = quod_simplex:form_cert(
                    ?DOMAIN, support, 1, BH,
@@ -4239,7 +4294,7 @@ certified_block_response_requires_outstanding_request_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
     Tx = signed_tx(<<"t">>, <<"unsolicited-certified-block">>,
                    [{assert, {{recovered, requested_only}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     SupportShares = supports(Block, Committee, 3),
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN, support, 6, BH, SupportShares,
@@ -4265,16 +4320,18 @@ certified_block_recovery_accepts_losing_local_support_test() ->
     {Leader, LeaderId} = lists:keyfind(Leader, 1, Committee),
     [{Self, SelfId} | _] = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Leader],
     OtherValidators = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Self],
-    Losing = #block{slot = 6, parent = 5,
-                    payload = {batch,
-                               [signed_tx(<<"t">>, <<"losing-support">>,
-                                          [{assert, {{proposal, losing}, true}}],
-                                          {Leader, LeaderId})]}},
-    Winning = #block{slot = 6, parent = 5,
-                     payload = {batch,
-                                [signed_tx(<<"t">>, <<"winning-support">>,
-                                           [{assert, {{proposal, winning}, true}}],
-                                           hd(OtherValidators))]}},
+    Losing = block(
+               6, 5,
+               {batch,
+                [signed_tx(<<"t">>, <<"losing-support">>,
+                           [{assert, {{proposal, losing}, true}}],
+                           {Leader, LeaderId})]}),
+    Winning = block(
+                6, 5,
+                {batch,
+                 [signed_tx(<<"t">>, <<"winning-support">>,
+                            [{assert, {{proposal, winning}, true}}],
+                            hd(OtherValidators))]}),
     WinningHash = quod_simplex:block_hash(Winning),
     {ok, WinningCert} = quod_simplex:form_cert(?DOMAIN,
                           support, 6, WinningHash,
@@ -4300,11 +4357,11 @@ certified_block_hash_mismatch_is_rejected_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
     Tx = signed_tx(<<"t">>, <<"certified-good">>,
                    [{assert, {{recovered, correct}, true}}], {A, IdA}),
-    Block = #block{slot = 6, parent = 5, payload = {batch, [Tx]}},
+    Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN,
                    support, 6, BH, supports(Block, Committee, 3), pubs(Committee)),
-    Different = Block#block{timestamp = 1},
+    Different = block(6, 5, {batch, [Tx]}, 1),
     DifferentHash = quod_simplex:block_hash(Different),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
              slot => 5, approved => 5,
@@ -4501,7 +4558,7 @@ resume_stale_snapshot_slot_is_skipped_test() ->
             "/tmp", "quod_resume_snapshot_" ++
                     integer_to_list(erlang:unique_integer([positive]))),
     {ok, Store0} = quod_ledger_store:open(<<"t">>, Dir),
-    Prefix = [#entry{index = I, data = noop, timestamp = I} ||
+    Prefix = [quod_ledger:noop_entry(I, none) ||
                  I <- lists:seq(1, 5)],
     {ok, Store1} = quod_ledger_store:append(Store0, Prefix),
     try
@@ -4543,8 +4600,7 @@ resume_membership_notarization_does_not_support_test() ->
     Committee = [{A, IdA}, {_, _}, {_, _}, {_, _}] = committee(4),
     {E, _NewId} = id(),
     Membership = signed_tx(<<"t">>, <<"recovery-membership">>, [pa(E)], {A, IdA}),
-    Block = #block{slot = 6, parent = 5,
-                   payload = {batch, [Membership]}},
+    Block = block(6, 5, {batch, [Membership]}),
     {Eng1, _} = quod_simplex:eng_offer(
                   {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
     {Eng2, _} = feed_shares(supports(Block, Committee, 3), Eng1),
@@ -5178,7 +5234,7 @@ catchup_commit_retires_effect_signing_custody_test() ->
                              Ns, Anchor, Admission, 1,
                              Author, Identity),
     TxId = Signed#transaction.tx_id,
-    Entry = #entry{index = 1, data = {batch, [Signed]}, timestamp = 1},
+    Entry = entry(1, {batch, [Signed]}, 1),
     Projection = quod_simplex:history_projection(
                    [Author], CommitteeId, #{Author => Admission},
                    #{Author => 1}, 1),
@@ -5311,7 +5367,7 @@ amplified_complaint_skips_and_next_slot_commits_test() ->
     Dir = filename:join("/tmp", "quod_finality_continue_" ++
                                 integer_to_list(erlang:unique_integer([positive]))),
     {ok, Store0} = quod_ledger_store:open(<<"t">>, Dir),
-    Prefix = [#entry{index = I, data = noop, timestamp = I}
+    Prefix = [quod_ledger:noop_entry(I, none)
               || I <- lists:seq(1, 5)],
     {ok, Store1} = quod_ledger_store:append(Store0, Prefix),
     {ok, Journal0} = quod_signing_journal:initialize(
@@ -5333,7 +5389,7 @@ amplified_complaint_skips_and_next_slot_commits_test() ->
         Tx7 = signed_tx(<<"t">>, <<"after-amplified-skip">>,
                         [{assert, {{after_skip, live}, true}}],
                         {Leader7, LeaderId}),
-        Block7 = #block{slot = 7, parent = 6, payload = {batch, [Tx7]}},
+        Block7 = block(7, 6, {batch, [Tx7]}),
         Proposed = quod_simplex:dispatch(
                      Leader7, {propose, Block7, []}, Skipped),
         OtherVoters = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Self],
@@ -5377,11 +5433,12 @@ transaction_signature_acceptance_test() ->
     Good = signed_tx(<<"t">>, <<"good">>,
                      [{assert, {{fact, signed}, true}}], {Author, AuthorId}),
     Forged = Good#transaction{sig = flip1(Good#transaction.sig)},
-    Unsigned = Good#transaction{sig = none},
+    Unsigned = Good#transaction{sig = none, signed_bytes = none},
     {ok, NondeterministicId} = quod_transaction:sign(
                                  test_binding(<<"t">>, Author),
                                  Good#transaction{tx_id = <<99:256>>,
-                                                  sig = none},
+                                                  sig = none,
+                                                  signed_bytes = none},
                                  AuthorId),
     WrongNamespace = signed_tx(
                        <<"other">>, <<"wrong-ns">>,
@@ -5662,7 +5719,10 @@ batch_caps_reject_oversized_and_park_test() ->
     Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
              eng => quod_simplex:eng_with_certs(0, [])},   %% a caught-up sole leader
     From = {self(), make_ref()},
-    %% oversized single transaction (> MAX_BLOCK_BYTES = 256 KiB) => too_large, never batched, never parked
+    %% The transaction itself remains within its canonical envelope, while
+    %% the enclosing signed-transaction and block bytes cross MAX_BLOCK_BYTES.
+    %% That keeps this test on the Simplex block-cap seam now that R2 refuses
+    %% an intrinsically oversized transaction before it can be signed.
     Big = bind_test_id(
             #transaction{tx_id = <<>>, origin = {<<"t">>, <<0:256>>},
                          proof_id = <<0:256>>, plan_digest = <<0:256>>,
@@ -5670,7 +5730,8 @@ batch_caps_reject_oversized_and_park_test() ->
                          result = durable_result(),
                          author = Me, sig = none, read_check = #{},
                          diff = [{assert,
-                                  {{blob, binary:copy(<<0>>, 300 * 1024)},
+                                  {{blob,
+                                    binary:copy(<<0>>, 255 * 1024 + 512)},
                                    true}}]}),
     {keep_state, _, A1} =
         quod_simplex:running(
@@ -5795,20 +5856,23 @@ batch_operation_claims_coalesce_aliases_and_reject_conflicts_test() ->
     First0 = maps:get(transaction, Base),
     #{pubkey := Author} = NodeIdentity = maps:get(node_identity, Base),
     Admission = maps:get(admission, Base),
-    First = First0#transaction{author = Author, author_seq = 0, sig = none},
+    First = First0#transaction{author = Author, author_seq = 0,
+                               sig = none, signed_bytes = none},
     AliasFixture = quod_ct:signed_dtx_begin_fixture(
                      #{target => {Ns, Anchor},
                        operation_id => OperationId, key_pair => AgentKey,
                        proof_id => <<210:256>>}),
     Alias = (maps:get(transaction, AliasFixture))#transaction{
-              author = Author, author_seq = 0, sig = none},
+              author = Author, author_seq = 0,
+              sig = none, signed_bytes = none},
     ConflictFixture = quod_ct:signed_dtx_begin_fixture(
                         #{target => {Ns, Anchor},
                           operation_id => OperationId, key_pair => AgentKey,
                           proof_id => <<211:256>>,
                           goal_text => <<"assertz(saved(conflict)).">>}),
     Conflict = (maps:get(transaction, ConflictFixture))#transaction{
-                 author = Author, author_seq = 0, sig = none},
+                 author = Author, author_seq = 0,
+                 sig = none, signed_bytes = none},
     ?assertNotEqual(First#transaction.tx_id, Alias#transaction.tx_id),
     {ok, FirstClaim} = quod_transaction:request_claim(First),
     {ok, AliasClaim} = quod_transaction:request_claim(Alias),
@@ -6083,11 +6147,11 @@ blocked_author_does_not_block_other_authors_test() ->
         [P || {Pub, _} = P <- Committee, Pub =/= Me],
     Filler = signed_tx(
                <<"t">>, <<"batch-filler">>,
-               [{assert, {{blob, binary:copy(<<1>>, 190000)}, true}}],
+               [{assert, {{blob, binary:copy(<<1>>, 220000)}, true}}],
                {FillerAuthor, FillerId}),
     A1 = signed_tx_seq(
            <<"t">>, <<"a-large">>, 10,
-           [{assert, {{blob, binary:copy(<<2>>, 90000)}, true}}],
+           [{assert, {{blob, binary:copy(<<2>>, 120000)}, true}}],
            {AuthorA, IdA}),
     A2 = signed_tx_seq(
            <<"t">>, <<"a-small">>, 11,
@@ -6140,11 +6204,11 @@ drain_rechecks_held_authors_after_route_change_test() ->
         [P || {Pub, _} = P <- Committee, Pub =/= Me],
     Filler = signed_tx(
                <<"t">>, <<"multipass-filler">>,
-               [{assert, {{blob, binary:copy(<<1>>, 190000)}, true}}],
+               [{assert, {{blob, binary:copy(<<1>>, 220000)}, true}}],
                {FillerAuthor, FillerId}),
     A1 = signed_tx_seq(
            <<"t">>, <<"multipass-a-large">>, 10,
-           [{assert, {{blob, binary:copy(<<2>>, 90000)}, true}}],
+           [{assert, {{blob, binary:copy(<<2>>, 120000)}, true}}],
            {AuthorA, IdA}),
     A2 = signed_tx_seq(
            <<"t">>, <<"multipass-a-small">>, 11,
@@ -6387,7 +6451,7 @@ parked_ingress_implies_armed_watchdog_test() ->
     %% watchdog evidence both read the engine, not the state's validator list)
     {MPub, MId} = id(),
     MTx = signed_tx(<<"t">>, <<"barrier">>, [pa(MPub)], {MPub, MId}),
-    MBlock = #block{slot = 4, parent = 3, payload = {batch, [MTx]}},
+    MBlock = block(4, 3, {batch, [MTx]}),
     {EngB0, _} = quod_simplex:eng_offer({block, MBlock},
                                         quod_simplex:eng_new(?DOMAIN, [MPub], 3)),
     {BarrierEng, _} = feed_shares(
@@ -6506,7 +6570,7 @@ route_decision_cells_test() ->
     %% post-adoption schedule is unknowable until the committee block commits
     {MPub, MId} = id(),
     MTx = signed_tx(<<"t">>, <<"mb">>, [pa(MPub)], {MPub, MId}),
-    MBlock = #block{slot = 4, parent = 3, payload = {batch, [MTx]}},
+    MBlock = block(4, 3, {batch, [MTx]}),
     {EngB0, _} = quod_simplex:eng_offer({block, MBlock},
                                         quod_simplex:eng_new(?DOMAIN, [MPub], 3)),
     {BarrierEng, _} = feed_shares(
@@ -7208,11 +7272,11 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
            author = Me, sig = none, read_check = #{},
            diff =
                [{assert,
-                 {{blob, binary:copy(<<1>>, 90000)}, true}}]}),
+                 {{blob, binary:copy(<<1>>, 120000)}, true}}]}),
     Filler =
         signed_tx(
           <<"t">>, <<"ready-order-filler">>,
-          [{assert, {{blob, binary:copy(<<2>>, 190000)}, true}}],
+          [{assert, {{blob, binary:copy(<<2>>, 220000)}, true}}],
           {FillerAuthor, FillerId}),
     Small = bind_test_id(
         #transaction{
@@ -7591,11 +7655,9 @@ destination_restart_reconstructs_committed_result_test() ->
     Dir = relay_store_dir("committed"),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     Entries =
-        [#entry{index = I, data = noop, timestamp = I}
+        [quod_ledger:noop_entry(I, none)
          || I <- lists:seq(1, Slot - 1)]
-        ++ [#entry{index = Slot,
-                   data = {batch, [Transaction]},
-                   timestamp = Slot}],
+        ++ [entry(Slot, {batch, [Transaction]}, Slot)],
     {ok, Store1} = quod_ledger_store:append(Store0, Entries),
     try
         Restarted =
@@ -7651,11 +7713,9 @@ non_author_replay_cannot_poison_or_read_result_cache_test() ->
     Dir = relay_store_dir("non_author_replay"),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     Entries =
-        [#entry{index = I, data = noop, timestamp = I}
+        [quod_ledger:noop_entry(I, none)
          || I <- lists:seq(1, Slot - 1)]
-        ++ [#entry{index = Slot,
-                   data = {batch, [Transaction]},
-                   timestamp = Slot}],
+        ++ [entry(Slot, {batch, [Transaction]}, Slot)],
     {ok, Store1} = quod_ledger_store:append(Store0, Entries),
     try
         Restarted =
@@ -7723,7 +7783,7 @@ invalid_signature_precedes_cache_and_durable_recovery_test() ->
     {ok, Store1} =
         quod_ledger_store:append(
           Store0,
-          [#entry{index = I, data = noop, timestamp = I}
+          [quod_ledger:noop_entry(I, none)
            || I <- lists:seq(1, Slot)]),
     try
         Durable =
@@ -7794,7 +7854,7 @@ destination_restart_reconstructs_excluded_result_test() ->
     {ok, Store1} =
         quod_ledger_store:append(
           Store0,
-          [#entry{index = I, data = noop, timestamp = I}
+          [quod_ledger:noop_entry(I, none)
            || I <- lists:seq(1, Slot)]),
     try
         Restarted =
@@ -7836,7 +7896,7 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
     {ok, Store1} =
         quod_ledger_store:append(
           Store0,
-          [#entry{index = I, data = noop, timestamp = I}
+          [quod_ledger:noop_entry(I, none)
            || I <- lists:seq(1, InboundSlot - 1)]),
     try
         Ready =
@@ -7885,12 +7945,8 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
             decode_submission(Ns, SourceSubmission),
 
         Entries =
-            [#entry{index = 4,
-                    data = {batch, [InboundTx]},
-                    timestamp = 4},
-             #entry{index = 5,
-                    data = {batch, [SourceTx]},
-                    timestamp = 5}],
+            [entry(4, {batch, [InboundTx]}, 4),
+             entry(5, {batch, [SourceTx]}, 5)],
         %% Drop only the source-submission link. The destination's result uses
         %% its independent relay-only link back to the original author.
         SourceOffline =
@@ -9361,24 +9417,20 @@ ordinary_block_equivocation_is_bounded_and_does_not_crash_test() ->
     Validators = pubs(Committee),
     Leader = quod_simplex:leader(6, Validators),
     {Leader, LeaderId} = lists:keyfind(Leader, 1, Committee),
-    First =
-        #block{
-           slot = 6, parent = 5,
-           payload =
-               {batch,
-                [signed_tx(
-                   <<"t">>, <<"equivocation-first">>,
-                   [{assert, {{equivocation, first}, true}}],
-                   {Leader, LeaderId})]}},
-    Second =
-        #block{
-           slot = 6, parent = 5,
-           payload =
+    First = block(
+              6, 5,
+              {batch,
+               [signed_tx(
+                  <<"t">>, <<"equivocation-first">>,
+                  [{assert, {{equivocation, first}, true}}],
+                  {Leader, LeaderId})]}),
+    Second = block(
+               6, 5,
                {batch,
                 [signed_tx(
                    <<"t">>, <<"equivocation-second">>,
                    [{assert, {{equivocation, second}, true}}],
-                   {Leader, LeaderId})]}},
+                   {Leader, LeaderId})]}),
     Initial =
         st(#{self => Leader, id => LeaderId, validators => Validators,
              slot => 5, approved => 5,
@@ -9422,7 +9474,7 @@ eng_certified_alternate_replaces_only_unnotarized_block_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
     Losing = blk(6),
-    Winning = Losing#block{timestamp = 1},
+    Winning = block(6, 5, Losing#block.payload, 1),
     WinningHash = quod_simplex:block_hash(Winning),
     {ok, WinningCert} =
         quod_simplex:form_cert(
@@ -9674,19 +9726,19 @@ validator_routes_follow_the_committee_history_test() ->
     [A, B, _] = [P || {P, _} <- committee(3)],
     Ns = <<"routes:history">>,
     P0 = quod_simplex:history_projection(),
-    E1 = #entry{index = 1,
-                data = {batch, [tx([
+    E1 = entry(1,
+               {batch, [tx(Ns, [
                     {assert, {{peer_admitted, A, "10.0.0.1", 9001, A}, true}},
                     {assert, {{peer_admitted, B, "10.0.0.2", 9002, B}, true}}
-                ])]}},
+                ])]}, 0),
     P1 = quod_simplex:history_advance(Ns, E1, P0),
     ?assertEqual(
        #{A => {"10.0.0.1", 9001}, B => {"10.0.0.2", 9002}},
        quod_simplex:history_validator_routes(P1)),
-    E2 = #entry{index = 2,
-                data = {batch, [tx([
+    E2 = entry(2,
+               {batch, [tx(Ns, [
                     {assert, {{peer_admitted, A, "10.0.0.9", 9009, A}, true}}
-                ])]}},
+                ])]}, 0),
     P2 = quod_simplex:history_advance(Ns, E2, P1),
     ?assertEqual(
        #{A => {"10.0.0.9", 9009}, B => {"10.0.0.2", 9002}},
@@ -9696,11 +9748,11 @@ validator_routes_follow_the_committee_history_test() ->
     ?assertEqual(lists:sort([A, B]), Committee),
     ?assertEqual(maps:get(committee_id, P1), CommitteeId),
     ?assertEqual(quod_simplex:history_validator_routes(P2), RefreshedRoutes),
-    E3 = #entry{index = 3,
-                data = {batch, [tx([
+    E3 = entry(3,
+               {batch, [tx(Ns, [
                     {retract,
                      {{peer_admitted, A, "10.0.0.9", 9009, A}, true}}
-                ])]}},
+                ])]}, 0),
     P3 = quod_simplex:history_advance(Ns, E3, P2),
     ?assertEqual(#{B => {"10.0.0.2", 9002}},
                  quod_simplex:history_validator_routes(P3)),
@@ -9711,19 +9763,19 @@ content_only_catchup_repopulates_verified_validator_routes_test() ->
     Ns = <<"routes:content-only-catchup">>,
     PeerEndpoint = {"10.0.0.2", 9002},
     Admission =
-        #entry{index = 1,
-               data = {batch, [tx([
+        entry(1,
+              {batch, [tx(Ns, [
                    {assert, {{peer_admitted, Self,
                               "10.0.0.1", 9001, Self}, true}},
                    {assert, {{peer_admitted, Peer,
                               element(1, PeerEndpoint),
                               element(2, PeerEndpoint), Peer}, true}}
-               ])]}},
+               ])]}, 0),
     Content =
-        #entry{index = 2,
-               data = {batch, [tx([
+        entry(2,
+              {batch, [tx(Ns, [
                    {assert, {{ordinary_fact, recovered}, true}}
-               ])]}},
+               ])]}, 0),
     P1 = quod_simplex:history_advance(
            Ns, Admission, quod_simplex:history_projection()),
     P2 = quod_simplex:history_advance(Ns, Content, P1),
@@ -9792,8 +9844,8 @@ membership_gate_enforces_validator_cap_test() ->
 %% match would let it through to crash `committee_delta`'s fold during commit/restart.
 membership_gate_improper_list_test() ->
     [A] = pubs(committee(1)),
-    Improper = tx([{assert, {{other, x}, true}} | 2]),
-    NonList  = tx(not_a_list),
+    Improper = raw_tx([{assert, {{other, x}, true}} | 2]),
+    NonList  = raw_tx(not_a_list),
     ?assertNot(quod_simplex:change_acceptable(Improper, [A])),
     ?assertNot(quod_simplex:change_acceptable(NonList, [A])),
     ?assert(quod_simplex:change_acceptable(tx([{assert, {{ok, x}, true}}]), [A])),   %% proper: fine
@@ -9981,12 +10033,12 @@ dtx_admission_variants(Fixture, Count) ->
 committed_dtx_test_entry(Control, Slot) ->
     {ok, Envelope} = quod_dtx:encode_control(Control),
     Payload = {batch, [{dtx, Envelope}]},
-    Block = #block{slot = Slot, parent = Slot - 1,
-                   payload = Payload, timestamp = 0},
+    Block = block(Slot, Slot - 1, Payload, 0),
     BlockHash = quod_simplex:block_hash(Block),
-    {#entry{index = Slot, data = Payload,
-            cert = #cert{kind = commit, slot = Slot,
-                         block_hash = BlockHash, sigs = []}},
+    {quod_ledger:entry(
+       Block,
+       #cert{kind = commit, slot = Slot,
+             block_hash = BlockHash, sigs = []}),
      Payload}.
 
 certified_dtx_test_entry(Identity, Control, Slot) ->
@@ -10268,11 +10320,37 @@ guarded_vote({commit, Sl, BH}, Id, {Cpl, Cmt, {Committed, Complained}}) ->
 %% committee-projection fixtures: a transaction whose diff is a list of peer_admitted asserts/retracts
 pa(Pk)  -> {assert,  {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.
 rm(Pk)  -> {retract, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.
-tx(Ops) -> #transaction{tx_id = <<"t">>, origin = {<<"ns">>, <<0:256>>},
-                        proof_id = <<0:256>>, plan_digest = <<0:256>>,
-                        goal = durable_goal(test), result = durable_result(),
-                        diff = Ops,
-                        read_check = #{}, author = <<1:256>>, sig = none}.
+tx(Ops) -> tx(<<"t">>, Ops).
+
+tx(Ns, Ops) ->
+    Seed = <<16#42:256>>,
+    {Author, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+    Identity = #{pubkey => Author,
+                 key => quod_identity:key_term({Author, Seed})},
+    Anchor = <<0:256>>,
+    Admission = <<7:256>>,
+    Unsigned = quod_transaction:bind_id(
+                 {Ns, Anchor},
+                 #transaction{tx_id = <<>>, origin = {Ns, Anchor},
+                              proof_id = <<0:256>>,
+                              plan_digest = <<0:256>>,
+                              goal = durable_goal(test),
+                              result = durable_result(),
+                              diff = Ops, read_check = #{},
+                              author = Author,
+                              author_seq = erlang:phash2(Ops) + 1,
+                              sig = none}),
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, Anchor, Admission}, Unsigned, Identity),
+    Signed.
+
+raw_tx(Ops) ->
+    #transaction{tx_id = <<"invalid-fixture">>,
+                 origin = {<<"t">>, <<0:256>>},
+                 proof_id = <<0:256>>, plan_digest = <<0:256>>,
+                 goal = durable_goal(test), result = durable_result(),
+                 diff = Ops, read_check = #{},
+                 author = <<1:256>>, sig = none}.
 
 signed_tx(Ns, TxId, Ops, {Pub, Identity}) ->
     signed_tx_seq(Ns, TxId, erlang:phash2(TxId) + 1, Ops,
@@ -10421,7 +10499,8 @@ registered_dormant_operation(Suffix) ->
     Identity = #{pubkey := Author} = maps:get(source_identity, Fixture),
     Admission = maps:get(admission, Fixture),
     SignedClaim = maps:get(claim, Fixture),
-    UnsignedClaim = SignedClaim#transaction{author_seq = 0, sig = none},
+    UnsignedClaim = SignedClaim#transaction{author_seq = 0, sig = none,
+                                             signed_bytes = none},
     TxId = SignedClaim#transaction.tx_id,
     Owner = spawn(fun validation_owner/0),
     Dir = relay_store_dir("dormant_operation_" ++ Suffix),

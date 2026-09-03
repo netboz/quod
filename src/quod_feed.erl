@@ -872,16 +872,40 @@ fanout(Peers) -> quod_brahms:take_random(?PUSH_FANOUT, lists:usort(Peers)).
 %%% wire
 %%%===================================================================
 
-%% Envelope is [safe] (known atoms only); the inner {block, #entry{}} carries a #transaction's Prolog
-%% atoms, so it decodes WITHOUT [safe] — same trusted-fleet posture as quod_simplex/quod_catchup, and
-%% SAFE against tampering because the block is verified against its commit cert before it is applied or
-%% relayed. The split cert/hash/payload verify-before-decode frame (deferred.md §2) is a later slice.
-encode(Ns, Msg) -> term_to_binary({feed, Ns, term_to_binary(Msg)}).
+%% The envelope and inner control shape contain only protocol vocabulary.
+%% A committed entry travels exactly once as the canonical blob owned by
+%% quod_ledger; its decoded record is an endpoint-local view, never a second
+%% wire identity. The split cert/hash/payload verify-before-decode frame
+%% (deferred.md §2) is a later slice.
+encode(Ns, {block, #entry{} = Entry}) ->
+    {ok, EntryBlob} = quod_ledger:encode_entry(Entry),
+    term_to_binary(
+      {feed, Ns, term_to_binary({block_bytes, EntryBlob}, [deterministic])},
+      [deterministic]);
+encode(Ns, Msg) ->
+    term_to_binary({feed, Ns, term_to_binary(Msg, [deterministic])},
+                   [deterministic]).
 
 decode(Payload, Ns) ->
     case outer_envelope(Payload, Ns) of
-        {ok, Bin} -> try binary_to_term(Bin) catch _:_ -> error end;
+        {ok, Bin} -> decode_inner(Bin);
         error -> error
+    end.
+
+decode_inner(Bin) ->
+    try binary_to_term(Bin, [safe]) of
+        {block_bytes, EntryBlob} when is_binary(EntryBlob) ->
+            case quod_ledger:decode_entry(EntryBlob) of
+                {ok, Entry} -> {block, Entry};
+                {error, _} -> error
+            end;
+        {block, _OldRecord} ->
+            %% There is no record-carrying compatibility wire in this cut.
+            error;
+        Message ->
+            Message
+    catch _:_ ->
+        error
     end.
 
 %% Unlike the block codec, recipient control decoding never needs to create

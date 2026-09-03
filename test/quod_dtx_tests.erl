@@ -2502,13 +2502,12 @@ certified_entry_ref_binds_exact_entry_test() ->
     Slot = 9,
     Timestamp = 1234,
     Payload = {batch, [{dtx, Blob}]},
-    Block = #block{slot = Slot, parent = Slot - 1,
-                   payload = Payload, timestamp = Timestamp},
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Slot - 1, Payload, Timestamp),
     BlockHash = quod_simplex:block_hash(Block),
     Cert = #cert{kind = commit, slot = Slot,
                  block_hash = BlockHash, sigs = []},
-    Entry = #entry{index = Slot, data = Payload,
-                   timestamp = Timestamp, cert = Cert},
+    Entry = quod_ledger:entry(Block, Cert),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {ok, Expected} =
         quod_dtx:certified_ref(
@@ -2534,8 +2533,8 @@ certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     Slot = 9,
     Timestamp = 1234,
     Payload = {batch, [{dtx, Blob}]},
-    Block = #block{slot = Slot, parent = Slot - 1,
-                   payload = Payload, timestamp = Timestamp},
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Slot - 1, Payload, Timestamp),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Identities = [begin
@@ -2558,8 +2557,7 @@ certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
            end,
     RefCert = Form([A, B, C]),
     LocalCert = Form([B, C, D]),
-    RefEntry = #entry{index = Slot, data = Payload,
-                      timestamp = Timestamp, cert = RefCert},
+    RefEntry = quod_ledger:entry(Block, RefCert),
     LocalEntry = RefEntry#entry{cert = LocalCert},
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, RefEntry, Control),
     %% This is the live N=4 case: both replicas certified the same immutable
@@ -2587,10 +2585,11 @@ certified_entry_ref_binds_pinned_genesis_test() ->
     Ns = <<"quod:certified-genesis">>,
     Genesis = #transaction{
                  tx_id = <<71:256>>, origin = {Ns, <<0:256>>},
-                 diff = [], read_check = #{}, sig = none},
-    Entry = #entry{index = 1, data = {batch, [Genesis]},
-                   timestamp = 0, cert = none},
-    {ok, Block} = quod_simplex:block_from_entry(Entry),
+                 diff = [], read_check = #{}, author = <<71:256>>,
+                 sig = none},
+    {ok, Block} = quod_ledger:new_block(
+                    1, 0, {batch, [Genesis]}, 0),
+    Entry = quod_ledger:entry(Block, none),
     Anchor = quod_simplex:block_hash(Block),
     Target = {Ns, Anchor},
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Genesis),

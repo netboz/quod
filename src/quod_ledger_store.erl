@@ -24,7 +24,9 @@ Layout, under `LedgerDir/<base64url(Ns)>/`:
 `ledger_dir` can place the replicated block log elsewhere.
 
 Each frame is `<<Magic:32, Len:32, CRC:32, Payload:Len/binary>>` with
-`Payload = term_to_binary(Entry, [deterministic])` and `CRC = erlang:crc32(Payload)`.
+`Payload` is the canonical entry envelope produced once by `quod_ledger`; it
+carries the exact block bytes plus the finality certificate. The store writes
+that envelope verbatim and protects it with `CRC = erlang:crc32(Payload)`.
 Entries are strictly contiguous **from index 1** — a compacted log starting higher is
 deliberately unsupported until compaction lands WITH its committee checkpoint
 (`doc/deferred.md` §3); until then a log not starting at 1 is treated as corruption.
@@ -65,7 +67,8 @@ index to the next worker through an immutable session.
 -define(V1_MAGIC,  16#915106AA). %% certificates were not namespace/genesis-bound
 -define(V2_MAGIC,  16#915106AB). %% consensus-signature format; phash2 OCC read-sets
 -define(V3_MAGIC,  16#915106AC). %% mutation-version OCC tokens; content-only block payload
--define(MAGIC,     16#915106AD). %% V4: shared tagged block/entry payload with DTX controls
+-define(V4_MAGIC,  16#915106AD). %% shared tagged term payload with DTX controls
+-define(MAGIC,     16#915106AE). %% V5: byte-canonical entry/block/transaction envelopes
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
@@ -249,7 +252,7 @@ append(S = #store{log_fd = Fd, base_offset = Off0, cps = Cps0, last_index = LI0}
     {Off1, Cps1, LI1} =
         lists:foldl(
           fun(E = #entry{index = I}, {Off, Cps, _LI}) ->
-                  Payload = term_to_binary(E, [deterministic]),
+                  {ok, Payload} = quod_ledger:encode_entry(E),
                   Frame   = frame(Payload),
                   ok = file:pwrite(Fd, Off, Frame),
                   {Off + byte_size(Frame), checkpoint(I, Off, Cps), I}
@@ -304,9 +307,13 @@ fold_run(_Fd, _Cur, I, To, _Fun, Acc) when I > To -> Acc;
 fold_run(Fd, Cur, I, To, Fun, Acc) ->
     case next_frame(Fd, Cur) of
         {frame, Payload, Cur1} ->
-            case binary_to_term(Payload) of
-                #entry{index = I} = E -> fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc));
-                #entry{index = J}     -> error({corrupt_entry, I, {wrong_index, J}})
+            case quod_ledger:decode_entry(Payload) of
+                {ok, #entry{index = I} = E} ->
+                    fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc));
+                {ok, #entry{index = J}} ->
+                    error({corrupt_entry, I, {wrong_index, J}});
+                {error, Why} ->
+                    error({corrupt_entry, I, Why})
             end;
         {stop, Why, At} -> error({corrupt_entry, I, {Why, At}})
     end.
@@ -369,6 +376,8 @@ next_frame(Fd, {Off, Buf0}) ->
             {stop, {unsupported_format, 2}, Off};
         {short, <<?V3_MAGIC:32, _/binary>>} ->
             {stop, {unsupported_format, 3}, Off};
+        {short, <<?V4_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 4}, Off};
         {short, _}    -> {stop, short, Off};
         {io_error, R} -> {stop, {io_error, R}, Off};
         {ok, Buf1} ->
@@ -379,6 +388,8 @@ next_frame(Fd, {Off, Buf0}) ->
                     {stop, {unsupported_format, 2}, Off};
                 <<?V3_MAGIC:32, _/binary>> ->
                     {stop, {unsupported_format, 3}, Off};
+                <<?V4_MAGIC:32, _/binary>> ->
+                    {stop, {unsupported_format, 4}, Off};
                 <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
                     {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
@@ -424,14 +435,21 @@ scan(Fd, Mode) -> scan(Fd, {0, <<>>}, <<>>, 0, Mode).
 scan(Fd, Cur = {Off, _}, Cps, LastI, Mode) ->
     case next_frame(Fd, Cur) of
         {frame, Payload, Cur1} ->
-            #entry{index = I} = binary_to_term(Payload),
-            %% A CRC-valid frame at the wrong index — including a first frame that is not
-            %% index 1 — means the segment is corrupt from here on (see the moduledoc:
-            %% base-above-1 logs are unsupported until compaction lands with its committee
-            %% checkpoint), so it is handled as bad, never silently indexed.
-            case I =:= LastI + 1 of
-                true  -> scan(Fd, Cur1, checkpoint(I, Off, Cps), I, Mode);
-                false -> scan_bad(Fd, Off, Cps, LastI, {discontinuity, I}, Mode)
+            case quod_ledger:decode_entry(Payload) of
+                {ok, #entry{index = I}} ->
+                    %% A CRC-valid frame at the wrong index — including a first frame that is not
+                    %% index 1 — means the segment is corrupt from here on (see the moduledoc:
+                    %% base-above-1 logs are unsupported until compaction lands with its committee
+                    %% checkpoint), so it is handled as bad, never silently indexed.
+                    case I =:= LastI + 1 of
+                        true ->
+                            scan(Fd, Cur1, checkpoint(I, Off, Cps), I, Mode);
+                        false ->
+                            scan_bad(Fd, Off, Cps, LastI,
+                                     {discontinuity, I}, Mode)
+                    end;
+                {error, Why} ->
+                    scan_bad(Fd, Off, Cps, LastI, Why, Mode)
             end;
         {stop, eof, EndOff} -> {Cps, LastI, EndOff};
         {stop, short, At}   -> scan_torn(Fd, At, Cps, LastI, Mode);
@@ -500,7 +518,7 @@ tail_contains_magic(Fd, Pos, Size) ->
     case file:pread(Fd, Pos, Len) of
         {ok, Bin} when byte_size(Bin) =:= Len ->
             case binary:match(
-                   Bin, [<<?MAGIC:32>>, <<?V3_MAGIC:32>>,
+                   Bin, [<<?MAGIC:32>>, <<?V4_MAGIC:32>>, <<?V3_MAGIC:32>>,
                          <<?V2_MAGIC:32>>, <<?V1_MAGIC:32>>]) of
                 nomatch when Pos + Len >= Size ->
                     false;

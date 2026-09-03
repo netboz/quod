@@ -158,17 +158,15 @@ request(_Change) ->
 
 prepare_request(
   Request = #request{
-               change = Change = #transaction{sig = Sig},
+               change = Change = #transaction{},
                membership = unknown,
                item_bytes = unknown},
   Membership) when is_boolean(Membership) ->
-    EncodedBytes = byte_size(term_to_binary(Change, [deterministic])),
     SignedBytes =
-        EncodedBytes
-        + case Sig of
-              none -> ?SIGNED_GROWTH_BYTES;
-              _ -> 0
-          end,
+        case quod_transaction:encoded_ledger_transaction_size(Change) of
+            {ok, Size} -> Size;
+            {error, _} -> ?MAX_BLOCK_BYTES + 1
+        end,
     Request#request{
       membership = Membership,
       item_bytes = ?BATCH_ENVELOPE_BYTES + SignedBytes};

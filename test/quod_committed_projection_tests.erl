@@ -16,6 +16,9 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
     Projection0 = quod_committed_projection:new(
                     {Ns, Anchor}, 0,
                     quod_committed_projection:new_est(), Outcomes, none),
+    {Author, Seed} = crypto:generate_key(eddsa, ed25519, <<42:256>>),
+    Signer = #{pubkey => Author,
+               key => quod_identity:key_term({Author, Seed})},
     Self = <<0:256>>,
     HostPolicy = quod_simplex:test_genesis_tx(
                    #{node_id => Self, mode => create, committee => [],
@@ -24,11 +27,14 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
                            {can_invoke, {'Goal'}, {'Principal'}, [],
                             {'Namespace'}})},
                    Ns, Self, <<1:256>>),
-    FactTx = change(Ns, diff_for({projection_fact, one}), #{}),
-    ConflictTx = change(
-                   Ns, diff_for({must_not_land, true}),
-                   #{{projection_fact, 1} => never_present}),
-    Author = crypto:hash(sha256, <<"projection-effect-author">>),
+    FactTx = signed_change(
+               {Ns, Anchor},
+               change(Ns, diff_for({projection_fact, one}), #{}), Signer),
+    ConflictTx = signed_change(
+                   {Ns, Anchor},
+                   change(
+                     Ns, diff_for({must_not_land, true}),
+                     #{{projection_fact, 1} => never_present}), Signer),
     Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create,
               crypto:hash(sha256, <<"projection-effect-id">>), Author,
@@ -41,7 +47,7 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
                          {create_ontology,
                           <<"projection:effect-target">>, []}),
     {ok, EffectResult} = quod_durable_term:encode_result(#{}),
-    EffectTx = quod_transaction:bind_id(
+    EffectTx = signed_change(
                  {Ns, Anchor},
                  #transaction{
                     tx_id = <<>>, origin = {Ns, Anchor},
@@ -52,8 +58,10 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
                     goal = EffectGoal, result = EffectResult,
                     diff = [], read_check = #{}, effects = [Effect],
                     author = Author, author_seq = 1, submitted_at = 1,
-                    sig = none}),
-    EventTx = change(Ns, [{event, {alarm, disk}}], #{}),
+                    sig = none}, Signer),
+    EventTx = signed_change(
+                {Ns, Anchor}, change(Ns, [{event, {alarm, disk}}], #{}),
+                Signer),
     try
         {ok, Projection1,
          #{kind := content,
@@ -277,8 +285,10 @@ wrong_genesis_module_digest_keeps_projection_unavailable_test() ->
     end.
 
 project(Index, Data, Projection) ->
+    Timestamp = case Data of noop -> 0; _ -> Index end,
+    {ok, Entry} = quod_ledger:new_entry(Index, Data, Timestamp, none),
     quod_committed_projection:apply_entry(
-      #entry{index = Index, data = Data, timestamp = Index},
+      Entry,
       Index, Projection).
 
 proves(Goal, Projection) ->
@@ -287,13 +297,24 @@ proves(Goal, Projection) ->
         fail -> false
     end.
 
+signed_change({Ns, Anchor} = Target, Transaction0, Signer) ->
+    Author = maps:get(pubkey, Signer),
+    Transaction = quod_transaction:bind_id(
+                    Target,
+                    Transaction0#transaction{tx_id = <<>>, author = Author,
+                                             sig = none,
+                                             signed_bytes = none}),
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, Anchor, Author}, Transaction, Signer),
+    Signed.
+
 dtx_entry(Index, Controls) ->
     Items = [{dtx, begin {ok, Blob} = quod_dtx:encode_control(Control), Blob end}
              || Control <- Controls],
     EmptyCert = #cert{kind = commit, slot = Index,
                       block_hash = <<0:256>>, sigs = []},
-    Entry0 = #entry{index = Index, data = {batch, Items},
-                    timestamp = Index, cert = EmptyCert},
-    {ok, Block} = quod_simplex:block_from_entry(Entry0),
+    {ok, Block} = quod_ledger:new_block(
+                    Index, Index - 1, {batch, Items}, Index),
     Hash = quod_simplex:block_hash(Block),
-    Entry0#entry{cert = EmptyCert#cert{block_hash = Hash}}.
+    quod_ledger:entry(
+      Block, EmptyCert#cert{block_hash = Hash}).

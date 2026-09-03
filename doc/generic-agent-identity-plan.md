@@ -262,7 +262,7 @@ The deployed tree uses one incompatible generation:
 |---|---|
 | browser session challenge | `quod.agent.challenge.v1` |
 | signed request | `quod.agent.goal.v1` / `agent_goal_v1` |
-| transaction bytes | V12 |
+| transaction bytes | V13 |
 | semantic transaction id | V7 |
 | DTX plan | V8 |
 | DTX manifest | V3 |
@@ -274,8 +274,9 @@ The deployed tree uses one incompatible generation:
 | identity certificate | `quod.agent.identity.v1` |
 | identity attestation wire | V2 |
 
-The client-goal endpoint and DTX endpoint still carry their opaque payloads in
-their existing outer versions. Directory records, foreign-cache entries,
+The client-goal endpoint retains its existing outer version; the DTX endpoint
+is V9 so exact entry hints travel only as canonical entry blobs. Directory
+records, foreign-cache entries,
 Simplex shares, and genesis transactions are unchanged.
 
 There is no old-format decoder or forwarding shim. Activation requires the

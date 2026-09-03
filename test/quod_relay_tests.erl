@@ -1,6 +1,7 @@
 -module(quod_relay_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 
 frame_dispatch_test() ->
     Ns = <<"relay:test">>,
@@ -49,6 +50,52 @@ frame_dispatch_test() ->
          quod_relay:encode(Ns, Submit), Ns)),
     OldFrame = term_to_binary({sx, Ns, Inner}, [deterministic]),
     ?assertEqual(error, quod_relay:decode_consensus_frame(OldFrame, Ns)).
+
+canonical_block_and_sidecar_wire_test() ->
+    Ns = <<"relay:canonical">>,
+    Payload = quod_ct:dtx_decision_payload(),
+    {ok, Block} = quod_ledger:new_block(2, 1, Payload, 7),
+    {ok, Ref} = quod_dtx:certified_ref(
+                  <<"quod:hint">>, <<1:256>>, 7,
+                  <<2:256>>, <<3:256>>, <<"qc">>),
+    Entry = quod_ledger:noop_entry(7, none),
+    Hints = [{Ref, Entry}],
+    Frame = quod_relay:encode_consensus_frame(
+              Ns, {propose, Block, Hints}),
+    {sx2, Ns, Inner} = binary_to_term(Frame, [safe]),
+    {propose_bytes, BlockBytes,
+     [{entry_bytes, Ref, EntryBytes}]} = binary_to_term(Inner, [safe]),
+    ?assertEqual(quod_ledger:block_bytes(Block), BlockBytes),
+    ?assert(is_binary(EntryBytes)),
+    ?assertEqual(
+       {consensus, {propose, Block, Hints}},
+       quod_relay:decode_consensus_frame(Frame, Ns)),
+
+    SubmitFrame = quod_relay:encode_consensus_frame(
+                    Ns, {dtx_submit, [<<"control">>], Hints}),
+    {sx2, Ns, SubmitInner} = binary_to_term(SubmitFrame, [safe]),
+    {dtx_submit_bytes, [<<"control">>],
+     [{entry_bytes, Ref, EntryBytes}]} =
+        binary_to_term(SubmitInner, [safe]),
+    ?assertEqual(
+       {consensus, {dtx_submit, [<<"control">>], Hints}},
+       quod_relay:decode_consensus_frame(SubmitFrame, Ns)).
+
+decoded_block_wire_shapes_are_hard_rejected_test() ->
+    Ns = <<"relay:old-record-wire">>,
+    Payload = quod_ct:dtx_decision_payload(),
+    {ok, Block} = quod_ledger:new_block(2, 1, Payload, 7),
+    OldMessages =
+        [{propose, Block, []},
+         {certified_block, Block, none},
+         {dtx_submit, [<<"control">>], []}],
+    lists:foreach(
+      fun(Message) ->
+          Inner = term_to_binary(Message, [deterministic]),
+          Frame = term_to_binary({sx2, Ns, Inner}, [deterministic]),
+          ?assertEqual(error,
+                       quod_relay:decode_consensus_frame(Frame, Ns))
+      end, OldMessages).
 
 bounded_result_cache_test() ->
     Now = quod_time:mono_ms(),

@@ -73,7 +73,8 @@
                  author = none :: node_id() | none,    %% set to the submitting node's pubkey before ingress
                  author_seq = 0 :: non_neg_integer(), %% signed, strictly increasing per author; 0 only before ingress/genesis
                  submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).
-                 sig = none   :: binary() | none}).   %% 64-byte Ed25519 signature; none only for genesis
+                 sig = none   :: binary() | none,     %% 64-byte Ed25519 signature; none only for genesis
+                 signed_bytes = none :: binary() | none}). %% exact canonical bytes covered by `sig`; a derived view never replaces them
 
 %% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
 %% A slot is a consensus height: the leader for slot v proposes one block; validators support
@@ -95,15 +96,17 @@
 %% the previous APPROVED slot it extends (0 = genesis). It may therefore be newer than the durable
 %% committed head while consensus is pipelined.
 %% `timestamp` is the leader's propose wall-clock (ms since Unix epoch) — the canonical block time (cf.
-%% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is hashed with the rest of the block
-%% (`block_hash/1` hashes the whole record), so a committed block's timestamp is covered by its cert. The
+%% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is inside the exact producer-owned
+%% `block_bytes`, so a committed block's timestamp is covered by its cert. The
 %% leader sets it monotonic (≥ the parent block's timestamp); validators reject a proposal that goes
-%% backwards. 0 = genesis/origin; the sole creator fixes it in the anchored slot-1 block. Future hardening: a
+%% backwards. 0 = genesis/origin; the sole creator fixes it in the anchored slot-1 block. The decoded
+%% fields are only a local view of those hashed bytes. Future hardening: a
 %% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
 -record(block, {slot      :: slot(),
                 parent    :: slot(),
                 payload   :: block_payload(),
-                timestamp = 0 :: non_neg_integer()}).
+                timestamp = 0 :: non_neg_integer(),
+                block_bytes = none :: binary() | none}). %% producer-owned canonical identity; other fields are its decoded view
 
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
 %% `complaint` (timeout→skip the slot). `block_hash` binds a support/commit share to a specific
@@ -150,9 +153,10 @@
 %% slot number (commits are strictly in order, one entry per slot).
 -record(entry, {index       :: log_index(),
                 data        :: entry_data(),
-                timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's `timestamp` — quod stores no header, so
-                                                    %% catch-up rebuilds `#block{...}` from the entry and needs this to
-                                                    %% reproduce the block_hash. 0 for a `noop` skip (no block) / genesis.
+                timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's covered timestamp for local consumers;
+                                                    %% the exact block is always reconstructed from `block_bytes`.
+                                                    %% 0 for a `noop` skip (no block) / genesis.
+                block_bytes = none :: binary() | none, %% exact committed block bytes; `none` only for a complaint skip
                 cert = none :: #cert{} | #implicit_cert{} | none}).
 
 -endif.

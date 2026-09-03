@@ -40,8 +40,9 @@ genesis(Pubs) ->
           #{committee => OtherFounders,
             external_predicate_modules => []},
           ?NS, Self, ?GENESIS_NONCE),
-    #entry{index = 1, cert = none,
-           data = {batch, [Transaction]}}.
+    {ok, Block} = quod_ledger:new_block(
+                    1, 0, {batch, [Transaction]}, 0),
+    quod_ledger:entry(Block, none).
 
 %% Build an over-cap record without teaching the canonical founding helper how
 %% to create invalid state.  The verifier must reject this wire/history input.
@@ -52,7 +53,13 @@ oversized_genesis(Pubs) ->
     ExtraAdmission =
         {assert, {{peer_admitted, Extra, undefined, undefined, Extra}, true}},
     Tx1 = Tx0#transaction{diff = Tx0#transaction.diff ++ [ExtraAdmission]},
-    Entry0#entry{data = {batch, [Tx1]}}.
+    entry_with_data(Entry0, {batch, [Tx1]}).
+
+entry_with_data(#entry{index = Index, timestamp = Timestamp,
+                       cert = Cert}, Data) ->
+    {ok, Block} = quod_ledger:new_block(
+                    Index, Index - 1, Data, Timestamp),
+    quod_ledger:entry(Block, Cert).
 
 genesis_hash(C) ->
     gen_hash(genesis(pubs(C))).
@@ -90,23 +97,24 @@ committed_batch(I, Transactions, C, K) ->
 
 committed_batch_in(Domain, I, Transactions, C, K) ->
     Data = {batch, Transactions},
-    BH = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = Data}),
+    {ok, Block} = quod_ledger:new_block(I, I - 1, Data, 0),
+    BH = quod_simplex:block_hash(Block),
     Shares = [quod_simplex:make_share(Domain, commit, I, BH, signer(M))
               || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(Domain, commit, I, BH, Shares, pubs(C)),
-    #entry{index = I, data = Data, cert = Cert}.
+    quod_ledger:entry(Block, Cert).
 
 %% like committed/4 but with an explicit (nonzero) block time on BOTH the hashed block and the entry —
 %% exercises the timestamp threading that committed/4 leaves at the 0 default.
 committed_at(I, D, Ts, C, K) ->
     Domain = domain(C),
-    BH     = quod_simplex:block_hash(
-               #block{slot = I, parent = I - 1,
-                      payload = {batch, [D]}, timestamp = Ts}),
+    {ok, Block} = quod_ledger:new_block(
+                    I, I - 1, {batch, [D]}, Ts),
+    BH = quod_simplex:block_hash(Block),
     Shares = [quod_simplex:make_share(Domain, commit, I, BH, signer(M))
               || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(Domain, commit, I, BH, Shares, pubs(C)),
-    #entry{index = I, data = {batch, [D]}, timestamp = Ts, cert = Cert}.
+    quod_ledger:entry(Block, Cert).
 
 %% a complaint-SKIPPED slot I with a COMPLAINT cert (block_hash=none) signed by the first K of C.
 skipped(I, C, K) ->
@@ -114,7 +122,7 @@ skipped(I, C, K) ->
     Shares = [quod_simplex:make_share(Domain, complaint, I, none, signer(M))
               || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(Domain, complaint, I, none, Shares, pubs(C)),
-    #entry{index = I, data = noop, cert = Cert}.
+    quod_ledger:noop_entry(I, Cert).
 
 tx(I, GC)    ->
     {Author, _} = author(),
@@ -191,35 +199,37 @@ batch_hash_is_verified_test() ->
                  verify_chain(
                    C, [], 1,
                    [genesis(P),
-                    Batch#entry{data = {batch, [tx(21, C), tx(20, C)]}}])).
+                    entry_with_data(
+                      Batch, {batch, [tx(21, C), tx(20, C)]})])).
 
 implicit_parent_commit_test() ->
     C = committee(4), P = pubs(C),
     Domain = domain(C),
     ParentData = {batch, [tx(2, C)]},
-    ParentBlock = #block{slot = 2, parent = 1, payload = ParentData},
+    {ok, ParentBlock} = quod_ledger:new_block(2, 1, ParentData, 0),
     ParentBH = quod_simplex:block_hash(ParentBlock),
     SupportShares = [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
                      || M <- lists:sublist(C, 3)],
     {ok, Support} =
         quod_simplex:form_cert(Domain, support, 2, ParentBH, SupportShares, P),
     ChildData = {batch, [tx(3, C)]},
-    Child = #block{slot = 3, parent = 2, payload = ChildData},
+    {ok, Child} = quod_ledger:new_block(3, 2, ChildData, 0),
     ChildBH = quod_simplex:block_hash(Child),
     CommitShares = [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
                     || M <- lists:sublist(C, 3)],
     {ok, Commit} =
         quod_simplex:form_cert(Domain, commit, 3, ChildBH, CommitShares, P),
-    E2 = #entry{index = 2, data = ParentData,
-                cert = #implicit_cert{support = Support, child = Child, commit = Commit}},
-    E3 = #entry{index = 3, data = ChildData, cert = Commit},
+    E2 = quod_ledger:entry(
+           ParentBlock,
+           #implicit_cert{support = Support, child = Child, commit = Commit}),
+    E3 = quod_ledger:entry(Child, Commit),
     ?assertMatch({ok, [_, _, _], _},
                  verify_chain(C, [], 1, [genesis(P), E2, E3])),
     ?assertEqual({error, {bad_implicit_cert, 2}},
                  verify_chain(
                    C, [], 1,
                    [genesis(P),
-                    E2#entry{data = {batch, [tx(99, C)]}}, E3])).
+                    entry_with_data(E2, {batch, [tx(99, C)]}), E3])).
 
 %% A DTX control is an explicit-finality barrier even though it carries no
 %% committee diff. It cannot be smuggled in as the child proof that implicitly
@@ -229,7 +239,7 @@ implicit_dtx_child_is_rejected_test() ->
     P = pubs(C),
     Domain = domain(C),
     ParentData = {batch, [tx(2, C)]},
-    Parent = #block{slot = 2, parent = 1, payload = ParentData},
+    {ok, Parent} = quod_ledger:new_block(2, 1, ParentData, 0),
     ParentBH = quod_simplex:block_hash(Parent),
     SupportShares =
         [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
@@ -237,16 +247,17 @@ implicit_dtx_child_is_rejected_test() ->
     {ok, Support} = quod_simplex:form_cert(
                       Domain, support, 2, ParentBH, SupportShares, P),
     DtxData = quod_ct:dtx_decision_payload(),
-    Child = #block{slot = 3, parent = 2, payload = DtxData},
+    {ok, Child} = quod_ledger:new_block(3, 2, DtxData, 0),
     ChildBH = quod_simplex:block_hash(Child),
     CommitShares =
         [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
          || M <- lists:sublist(C, 3)],
     {ok, Commit} = quod_simplex:form_cert(
                      Domain, commit, 3, ChildBH, CommitShares, P),
-    E2 = #entry{index = 2, data = ParentData,
-                cert = #implicit_cert{support = Support, child = Child,
-                                      commit = Commit}},
+    E2 = quod_ledger:entry(
+           Parent,
+           #implicit_cert{support = Support, child = Child,
+                          commit = Commit}),
     ?assertEqual(
        {error, {cert_mismatch, 2}},
        verify_chain(C, [], 1, [genesis(P), E2])).
@@ -277,7 +288,8 @@ timestamped_test() ->
 %% A complaint cert (proves "skip slot I") attached to a #transaction is REJECTED — it authorizes no payload.
 complaint_over_tx_rejected_test() ->
     C = committee(4), {X, _} = quod_identity:generate(),
-    Forged = (skipped(2, C, 3))#entry{data = {batch, [admit_tx(X, C)]}},
+    Skipped = skipped(2, C, 3),
+    Forged = entry_with_data(Skipped, {batch, [admit_tx(X, C)]}),
     ?assertEqual({error, {cert_mismatch, 2}},
                  verify_chain(C, [], 1, [genesis(pubs(C)), Forged])).
 
@@ -302,7 +314,7 @@ cert_mismatch_test() ->
                  verify_chain(
                    C, [], 1,
                    [genesis(pubs(C)),
-                    B2#entry{data = {batch, [tx(99, C)]}}])).
+                    entry_with_data(B2, {batch, [tx(99, C)]})])).
 
 %% A MALFORMED cert (non-list sigs from a hostile server) is rejected, never crashes the joiner.
 malformed_cert_rejected_test() ->
@@ -453,7 +465,8 @@ implicit_cross_domain_rejected_test() ->
 implicit_entries(Domain, C) ->
     P = pubs(C),
     ParentTx = tx(2, C),
-    Parent = #block{slot = 2, parent = 1, payload = {batch, [ParentTx]}},
+    {ok, Parent} = quod_ledger:new_block(
+                     2, 1, {batch, [ParentTx]}, 0),
     ParentBH = quod_simplex:block_hash(Parent),
     SupportShares =
         [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
@@ -462,7 +475,8 @@ implicit_entries(Domain, C) ->
         quod_simplex:form_cert(
           Domain, support, 2, ParentBH, SupportShares, P),
     ChildTx = tx(3, C),
-    Child = #block{slot = 3, parent = 2, payload = {batch, [ChildTx]}},
+    {ok, Child} = quod_ledger:new_block(
+                    3, 2, {batch, [ChildTx]}, 0),
     ChildBH = quod_simplex:block_hash(Child),
     CommitShares =
         [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
@@ -470,10 +484,10 @@ implicit_entries(Domain, C) ->
     {ok, Commit} =
         quod_simplex:form_cert(
           Domain, commit, 3, ChildBH, CommitShares, P),
-    {#entry{index = 2, data = {batch, [ParentTx]},
-            cert = #implicit_cert{
-                      support = Support, child = Child, commit = Commit}},
-     #entry{index = 3, data = {batch, [ChildTx]}, cert = Commit}}.
+    {quod_ledger:entry(
+       Parent,
+       #implicit_cert{support = Support, child = Child, commit = Commit}),
+     quod_ledger:entry(Child, Commit)}.
 
 %%%--- catch_up/4 driver (mocked Fetch/Sink — no transport/store) ---
 
@@ -507,8 +521,9 @@ run_catch_up(GenesisHash, Fetch, Sink) ->
 %% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
 gen_hash(#entry{index = 1, data = D}) ->
     {ok, Transactions} = quod_ledger:payload(D),
-    quod_simplex:block_hash(
-      #block{slot = 1, parent = 0, payload = {batch, Transactions}}).
+    {ok, Block} = quod_ledger:new_block(
+                    1, 0, {batch, Transactions}, 0),
+    quod_simplex:block_hash(Block).
 
 %% The driver loops windowed fetches, verifies each, sinks the verified entries in order, and reports the
 %% caught-up height.

@@ -395,13 +395,30 @@ remote_scope_deep_failure_reasons(Config) ->
 
 remote_scope_structural_reason_truncation(Config) ->
     Asker = ?config(asker, Config),
+    %% A deep value at the wire boundary must survive intact.  This makes the
+    %% over-depth assertion below non-vacuous: the recursive builder really is
+    %% compiled and its binding crosses the remote proof boundary.
+    Legal = {'::', ?NS, bounded_reason},
+    {fail, LegalReasons} = peer:call(
+                             Asker, quod_prolog, prove,
+                             [?ASKER_NS, Legal], 60000),
+    {ok, Bottom} = peer:call(
+                     Asker, quod_wire_term, decode,
+                     [{0, <<"deep_bottom">>}]),
+    LegalReason = lists:foldl(
+                    fun(_, Acc) -> [Acc] end, Bottom,
+                    lists:seq(1, 63)),
+    ?assert(lists:member(LegalReason, LegalReasons)),
+    ?assert(quod_wire_term:valid_failure_reason_stack(LegalReasons)),
+
     Remote = {'::', ?NS, deep_reason},
     {fail, Reasons} = peer:call(
                         Asker, quod_prolog, prove,
                         [?ASKER_NS, Remote], 60000),
     ?assertEqual(Remote, hd(Reasons)),
     ?assert(lists:member(deep_reason, Reasons)),
-    ?assert(lists:member(fail_reasons_truncated, Reasons)).
+    ?assert(lists:member(fail_reasons_truncated, Reasons)),
+    ?assert(quod_wire_term:valid_failure_reason_stack(Reasons)).
 
 remote_scope_cancel(Config) ->
     Target = ?config(target, Config),
@@ -1806,9 +1823,16 @@ wrong_key_before(TargetPub) ->
     end.
 
 deep_failure_rules() ->
-    DeepReason = lists:foldl(fun(_, Term) -> [Term] end,
-                             deep_bottom, lists:seq(1, 70)),
     [[io_lib:format("deep_failure(~B) :- deep_failure(~B).~n", [N, N - 1])
       || N <- lists:seq(70, 1, -1)],
      "deep_failure(0) :- fail_with_reason(deep_bottom).\n",
-     io_lib:format("deep_reason :- fail_with_reason(~p).~n", [DeepReason])].
+     %% Build the deliberately over-depth reason at proof time.  Canonical
+     %% ledger material is depth-bounded, so embedding that value as a genesis
+     %% literal would test genesis rejection instead of reply truncation.
+     "bounded_reason :- deep_reason_value(63, deep_bottom, Reason), !, "
+     "fail_with_reason(Reason).\n"
+     "deep_reason :- deep_reason_value(70, deep_bottom, Reason), !, "
+     "fail_with_reason(Reason).\n"
+     "deep_reason_value(0, Acc, Acc).\n"
+     "deep_reason_value(N, Acc, Out) :- N > 0, Next is N - 1, "
+     "deep_reason_value(Next, [Acc], Out).\n"].

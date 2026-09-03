@@ -606,8 +606,9 @@ bind_transaction_row(Effect, Transaction, Ref,
                             reservations = Reservations}) ->
     EffectId = safe_effect_id(Effect),
     case maps:get(EffectId, Rows, undefined) of
-        #row{effect = Effect, commit = Existing, ref = Ref} ->
-            case Existing =:= encode_transaction(Transaction) of
+        #row{effect = Effect, commit = Existing, ref = Ref,
+             admission = Admission} ->
+            case Existing =:= encode_transaction(Transaction, Ref, Admission) of
                 true -> {ok, S};
                 false -> {error, effect_journal_conflict}
             end;
@@ -625,8 +626,9 @@ bind_transaction_row(Effect, Transaction, Ref,
                                     Row = #row{effect = Effect, action = Action,
                                                desired = Desired,
                                                prepared = Prepared,
-                                               commit =
-                                                   encode_transaction(Transaction),
+                                               commit = encode_transaction(
+                                                          Transaction, Ref,
+                                                          Admission),
                                                ref = Ref,
                                                admission = Admission,
                                                state = transaction_bound},
@@ -787,7 +789,10 @@ bind_operation_transaction_row(
         [{EffectId, Row}] ->
             case validate_operation_transaction(Row, Transaction) of
                 ok ->
-                    Bound = Row#row{commit = encode_transaction(Transaction),
+                    Bound = Row#row{
+                                    commit = encode_transaction(
+                                               Transaction, TargetRef,
+                                               Row#row.admission),
                                     ref = TargetRef,
                                     state = transaction_ready},
                     {ok, EffectId,
@@ -830,7 +835,7 @@ attached_operation_matches(
   when State =:= transaction_ready; State =:= transaction_submitted;
        State =:= released; State =:= applied ->
     Target = {TargetNs, TargetAnchor},
-    case quod_safe_term:decode(ExistingBytes, ?QUOD_MAX_DTX_BODY_BYTES) of
+    case decode_transaction(ExistingBytes, TargetRef, Admission) of
         {ok, #transaction{tx_id = TargetTxId, effects = [Effect]}} ->
             quod_transaction:valid_id(Target, Transaction) andalso
                 case quod_transaction:bytes(
@@ -914,9 +919,13 @@ valid_bound_transaction(Effect, #transaction{effects = [Effect]} = Tx,
                                          Tx#transaction.author, [Effect]);
 valid_bound_transaction(_Effect, _Transaction, _Ref) -> false.
 
-encode_transaction(#transaction{} = Transaction) ->
-    term_to_binary(Transaction, [deterministic]);
-encode_transaction(_) -> <<>>.
+encode_transaction(#transaction{} = Transaction,
+                   {transaction, Ns, Anchor, _TxId}, Admission) ->
+    case quod_transaction:bytes({Ns, Anchor, Admission}, Transaction) of
+        {ok, Bytes} -> Bytes;
+        {error, _} -> <<>>
+    end;
+encode_transaction(_Transaction, _Ref, _Admission) -> <<>>.
 
 encode_group_plan(Plan) ->
     quod_dtx:encode(Plan).
@@ -1531,15 +1540,15 @@ valid_row_payload(
     true;
 valid_row_payload(
   #row{state = State, effect = Effect, action = Action,
-       prepared = Prepared, commit = Commit,
-       ref = {transaction, _, _, _}})
+       prepared = Prepared, commit = Commit, admission = Admission,
+       ref = {transaction, _, _, _} = Ref})
   when State =:= transaction_bound; State =:= transaction_ready;
        State =:= transaction_submitted; State =:= released ->
     crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
         crypto:hash(sha256, Prepared) =:=
             quod_effect:prepared_digest(Effect) andalso
         byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
-        decode_transaction(Commit) =/= error;
+        decode_transaction(Commit, Ref, Admission) =/= error;
 valid_row_payload(
   #row{state = State, effect = Effect, action = Action,
        prepared = Prepared, commit = Commit,
@@ -1579,12 +1588,15 @@ valid_group_commit(Commit, Effect, Target, PlanDigest) ->
         {error, _} -> false
     end.
 
-decode_transaction(Bytes) when is_binary(Bytes) ->
-    try binary_to_term(Bytes, [safe]) of
-        #transaction{} = Transaction -> {ok, Transaction};
-        _ -> error
-    catch _:_ -> error
-    end.
+decode_transaction(Bytes, {transaction, Ns, Anchor, _TxId}, Admission)
+  when is_binary(Bytes), is_binary(Ns), is_binary(Anchor),
+       is_binary(Admission) ->
+    case quod_transaction:decode_canonical_transaction(
+           {Ns, Anchor, Admission}, Bytes) of
+        {ok, #transaction{} = Transaction} -> {ok, Transaction};
+        {error, _} -> error
+    end;
+decode_transaction(_Bytes, _Ref, _Admission) -> error.
 
 effect_admission(Effect, {transaction, Ns, Anchor, _TxId}) ->
     effect_admission(Effect, {Ns, Anchor});
@@ -1601,11 +1613,11 @@ effect_admission(_Effect, _Binding) ->
     {error, not_in_charge}.
 
 handoff_row(#row{commit = Bytes, admission = Admission,
-                 ref = {transaction, Ns, _, _}}) ->
-    handoff_row_bytes(Ns, Bytes, Admission).
+                 ref = {transaction, Ns, _, _} = Ref}) ->
+    handoff_row_bytes(Ns, Bytes, Ref, Admission).
 
-handoff_row_bytes(Ns, Bytes, <<_:256>> = Admission) ->
-    case decode_transaction(Bytes) of
+handoff_row_bytes(Ns, Bytes, Ref, <<_:256>> = Admission) ->
+    case decode_transaction(Bytes, Ref, Admission) of
         {ok, #transaction{effects = [_Effect]} = Transaction} ->
             quod_simplex:handoff_effect(Ns, Admission, Transaction);
         error -> {error, corrupt_prepared_effect}

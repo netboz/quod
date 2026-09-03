@@ -184,7 +184,7 @@ read_attest_correlation_binds_the_exact_plan_test() ->
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(5, Response, digest(16)))).
 
-applied_v8_response_carries_signer_and_signature_test() ->
+applied_v9_response_carries_signer_and_signature_test() ->
     Ns = <<"quod:endpoint">>,
     Ref = certified_ref(),
     Request = {applied, id(1), digest(2), Ref, 9, commit},
@@ -199,7 +199,7 @@ applied_v8_response_carries_signer_and_signature_test() ->
        {error, {protocol_error, wrong_version}},
        quod_dtx_endpoint:decode_response(Ns, outer(Ns, 6, Inner))).
 
-cancel_operation_effect_v8_rejects_the_old_tuple_test() ->
+cancel_operation_effect_v9_rejects_the_old_tuple_test() ->
     Ns = <<"quod:endpoint">>,
     RequestId = id(62),
     OldRequest =
@@ -231,6 +231,12 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
     Entry = #entry{index = 7, data = noop},
     Hints = [{Ref, Entry}],
     {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, Hints),
+    {quod_dtx_endpoint, 9, Ns, InnerBinary} =
+        binary_to_term(Frame, [safe]),
+    {Request, [{entry_bytes, Ref, EntryBytes}]} =
+        binary_to_term(InnerBinary, [safe]),
+    ?assert(is_binary(EntryBytes)),
+    ?assertEqual({ok, Entry}, quod_ledger:decode_entry(EntryBytes)),
     ?assertEqual({ok, Request, Hints},
                  quod_dtx_endpoint:decode_request(Ns, Frame)),
     %% The codec deliberately checks only bounded shape.  An uncertified
@@ -243,10 +249,20 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     Request = {phase, id(1), digest(2), prepare},
     Ref = certified_ref(),
     WrongSlot = #entry{index = 8, data = noop},
+    %% V9 never accepts a decoded entry record from the wire. A malformed or
+    %% old-shaped hint disappears without changing the semantic request.
     Inner = term_to_binary({Request, [{Ref, WrongSlot}]}, [deterministic]),
-    Frame = outer(Ns, 8, Inner),
+    Frame = outer(Ns, 9, Inner),
     ?assertEqual({ok, Request, []},
                  quod_dtx_endpoint:decode_request(Ns, Frame)),
+    MalformedInner =
+        term_to_binary(
+          {Request, [{entry_bytes, Ref, <<"not-an-entry">>}]},
+          [deterministic]),
+    ?assertEqual(
+       {ok, Request, []},
+       quod_dtx_endpoint:decode_request(
+         Ns, outer(Ns, 9, MalformedInner))),
     ?assertEqual(
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
@@ -374,7 +390,7 @@ unknown_atoms_are_not_created_test() ->
               118, (byte_size(AtomName)):16, AtomName/binary>>,
     InnerTerm = binary:part(Inner, 1, byte_size(Inner) - 1),
     Wrapped = <<131, 104, 2, InnerTerm/binary, 106>>,
-    Frame = outer(Ns, 8, Wrapped),
+    Frame = outer(Ns, 9, Wrapped),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},

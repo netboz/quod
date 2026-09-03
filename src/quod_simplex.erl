@@ -318,10 +318,13 @@ quorum(N) when is_integer(N), N >= 1 ->
 %%% block hashing + the bytes a share signs
 %%%===================================================================
 
--doc "A block's content hash (sha256 over its deterministic ETF) — what support/commit shares bind to.".
+-doc "A block's content hash over the producer's exact canonical bytes.".
 -spec block_hash(#block{}) -> binary().
-block_hash(#block{} = B) ->
-    crypto:hash(sha256, term_to_binary(B, [deterministic])).
+block_hash(#block{} = Block) ->
+    case quod_ledger:block_bytes(Block) of
+        Bytes when is_binary(Bytes) -> crypto:hash(sha256, Bytes);
+        error -> error(uncanonical_block)
+    end.
 
 -doc """
 Derive the fixed-size signature domain for one consensus chain. It binds both the
@@ -3343,9 +3346,11 @@ prepare_genesis(Cfg, Ns, <<_:256>> = Self)
   when is_map(Cfg), is_binary(Ns), byte_size(Ns) > 0 ->
     try
         Incarnation = crypto:strong_rand_bytes(32),
-        Entry = #entry{index = 1,
-                       data = {batch, [genesis_tx(Cfg, Ns, Self, Incarnation)]},
-                       timestamp = 0},
+        {ok, Block} = quod_ledger:new_block(
+                        1, 0,
+                        {batch, [genesis_tx(Cfg, Ns, Self, Incarnation)]},
+                        0),
+        Entry = quod_ledger:entry(Block, none),
         {ok, Entry, entry_block_hash(Entry)}
     catch
         throw:{genesis_failed, Reason} -> {error, Reason};
@@ -3356,9 +3361,11 @@ prepare_genesis(_Cfg, _Ns, _Self) ->
 
 valid_prepared_genesis(
   #entry{index = 1, timestamp = 0,
-         data = {batch, [#transaction{author = Author} = Tx]}, cert = none},
+         data = {batch, [#transaction{author = Author} = Tx]},
+         block_bytes = Bytes, cert = none},
   Ns, Self) ->
-    Author =:= Self andalso valid_genesis_transaction(Ns, Tx, [Self]);
+    is_binary(Bytes) andalso Author =:= Self
+        andalso valid_genesis_transaction(Ns, Tx, [Self]);
 valid_prepared_genesis(_, _, _) -> false.
 
 entry_block_hash(#entry{} = Entry) ->
@@ -7648,7 +7655,7 @@ find_effect_custody(TxId, Expected, Custody) ->
     end.
 
 unsigned_envelope(Change = #transaction{}) ->
-    Change#transaction{author_seq = 0, sig = none}.
+    Change#transaction{author_seq = 0, sig = none, signed_bytes = none}.
 
 sign_and_retain_effect(Change, S0) ->
     case sign_local_change(Change, S0) of
@@ -8597,9 +8604,9 @@ flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
 
 propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
     Waiters = [From || {From, _Change} <- Items],
-    Block = #block{slot = Slot, parent = Parent,
-                   payload = {batch, Transactions},
-                   timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S))},
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Parent, {batch, Transactions},
+                    max(quod_time:now_ms(), parent_timestamp(Parent, S))),
     BH = block_hash(Block),
     lists:foreach(
       fun({Waiter, _Change}) ->
@@ -8694,9 +8701,9 @@ select_dtx_wave(
 dtx_wave_required_evidence_fits(
   Wave, Payload, S = #s{approved = Parent, ns = Ns}) ->
     Slot = Parent + 1,
-    Block = #block{slot = Slot, parent = Parent, payload = Payload,
-                   timestamp = max(
-                     quod_time:now_ms(), parent_timestamp(Parent, S))},
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Parent, Payload,
+                    max(quod_time:now_ms(), parent_timestamp(Parent, S))),
     Required = [Hint || Hint = {{applied, _, _}, _} <-
                            dtx_wave_validation_sidecar(Wave)],
     byte_size(encode(Ns, {propose, Block, Required})) =<
@@ -8757,10 +8764,10 @@ propose_dtx_wave(Slot, Envelopes, ValidationSidecar0, S = #s{approved = Parent})
         true ->
             {controls, Classified} = quod_ledger:classify(Payload),
             Controls = [Control || {_Kind, Control} <- Classified],
-            Block = #block{slot = Slot, parent = Parent, payload = Payload,
-                           timestamp = max(
-                             quod_time:now_ms(),
-                             parent_timestamp(Parent, S))},
+            {ok, Block} = quod_ledger:new_block(
+                            Slot, Parent, Payload,
+                            max(quod_time:now_ms(),
+                                parent_timestamp(Parent, S))),
             ValidationSidecar = fit_consensus_validation_sidecar(
                            S#s.ns,
                            fun(Hints) -> {propose, Block, Hints} end,
@@ -8836,7 +8843,10 @@ reject_collected_batch(Items, Count, S) ->
     S1#s{collecting = none, r_bad = S1#s.r_bad + Count}.
 
 encoded_change_size(Change) ->
-    byte_size(term_to_binary(Change, [deterministic])).
+    case quod_transaction:encode_ledger_transaction(Change) of
+        {ok, Blob} -> byte_size(Blob);
+        {error, _} -> ?MAX_BLOCK_BYTES + 1
+    end.
 
 consensus_barrier(S) ->
     consensus_barrier(S, include_retained_dtx).
@@ -8955,12 +8965,13 @@ probe_prune(_Sl, S) ->
 %% Persist the committed tagged payload byte-for-byte (durable before we ack), apply it into
 %% quod_prolog, and advance the height. Content commits additionally resolve their batch callers;
 %% DTX control records use their own durable coordinator path.
-commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store = Store, eng = Eng}) ->
+commit_block(Slot, #block{payload = Payload} = Block,
+             S = #s{store = Store, eng = Eng}) ->
     BH = engine_block_hash(Slot, S),
     case persisted_finality(Slot, BH, Eng) of
         none -> weak_cert_wait(commit, Slot, BH, S);   %% Slice E: don't finalize on a sub-quorum cert
         Cert ->
-            E = #entry{index = Slot, data = Payload, timestamp = BlockTs, cert = Cert},
+            E = quod_ledger:entry(Block, Cert),
             {ok, Store1} = timed_step(S, persist,
                                       fun() -> persist_entry(Store, E, Slot, S) end),
             timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
@@ -9324,7 +9335,7 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
     case persisted_cert(complaint, Slot, none, Eng) of   %% minimal complaint cert that skipped this slot
         none -> weak_cert_wait(complaint, Slot, none, S);   %% Slice E: don't skip-finalize on a sub-quorum cert
         Cert ->
-            E = #entry{index = Slot, data = noop, cert = Cert},
+            E = quod_ledger:noop_entry(Slot, Cert),
             {ok, Store1} = persist_entry(Store, E, Slot, S),
             publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
             S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
@@ -9954,8 +9965,10 @@ dispatch(Peer, {dtx_submit, Envelopes, ValidationSidecar}, S) ->
     handle_dtx_submit(Peer, Envelopes, ValidationSidecar, S);
 dispatch(_Peer, _Other, S)                 -> S.
 
-well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) ->
+well_formed_block(#block{slot = Sl, parent = P, payload = Pl,
+                         timestamp = Ts} = Block) ->
     well_formed_block_header(Sl, P, Ts)
+        andalso quod_ledger:valid_block_view(Block)
         andalso well_formed_block_payload(Pl);
 well_formed_block(_) -> false.
 
@@ -9975,7 +9988,10 @@ well_formed_block_payload(Pl) ->
     end.
 
 encoded_block_payload_fits(Payload) ->
-    byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES.
+    case quod_ledger:encoded_payload_size(Payload) of
+        {ok, Bytes} -> Bytes =< ?MAX_BLOCK_BYTES;
+        error -> false
+    end.
 well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
     is_slot(Sl) andalso valid_shape(K, BH) andalso valid_signer_signature(Sg, Sig);
 well_formed_share(_) -> false.
@@ -10093,7 +10109,10 @@ preflight_proposal(
         PotentiallyLive
         andalso is_slot(Sl) andalso Sl >= 1
         andalso leader(Sl, active_validators(S)) =:= Peer,
-    case FromLeader of
+    %% Network ingress already decodes only canonical block bytes. Keep this
+    %% internal boundary total as well: test hooks and future in-VM callers
+    %% must not reach block_hash/1 with a fabricated materialized view.
+    case FromLeader andalso quod_ledger:valid_block_view(Block) of
         false ->
             S;
         true ->
@@ -13047,8 +13066,7 @@ custody_submission_id(_) ->
     error.
 
 encode(Ns, Msg) ->
-    Inner = term_to_binary(Msg, [deterministic]),
-    term_to_binary({sx2, Ns, Inner}, [deterministic]).
+    quod_relay:encode_consensus_frame(Ns, Msg).
 
 %% Optional exact-entry acceleration yields to the transport-frame owner.
 %% Applied certificates are mandatory live-validation evidence for Complete
@@ -14293,24 +14311,10 @@ local_genesis_hash(#s{store = Store}) ->
 %%% helpers
 %%%===================================================================
 
-%% Re-derive the notional #block{} from a persisted #entry{} (quod keeps no block header, so slot/parent
-%% are implicit and the block time is mirrored into the entry). The single reconstruction point — every
-%% cert / genesis-anchor check recomputes `block_hash` through here, so a hash-covered field can only be
-%% added in ONE place. Used by `local_genesis_hash` and `quod_catchup` (verify_entry / anchor_ok).
+%% Decode the canonical block bytes retained by the entry. `#block{}` is only
+%% the engine's in-memory view; the bytes remain the consensus identity.
 -spec block_from_entry(term()) -> {ok, #block{}} | error.
-block_from_entry(#entry{index = I, data = D, timestamp = Ts})
-  when is_integer(I), I >= 1, is_integer(Ts), Ts >= 0 ->
-    case quod_ledger:classify(D) of
-        {content, _Transactions} ->
-            {ok, #block{slot = I, parent = I - 1,
-                        payload = D, timestamp = Ts}};
-        {controls, _Controls} ->
-            {ok, #block{slot = I, parent = I - 1,
-                        payload = D, timestamp = Ts}};
-        noop -> error;
-        invalid -> error
-    end;
-block_from_entry(_) -> error.
+block_from_entry(Entry) -> quod_ledger:block_from_entry(Entry).
 
 %% ONE bounded projection owns every history-derived ordering fact. It is
 %% threaded unchanged through live commit, restart replay, feed and catch-up;
@@ -14519,14 +14523,15 @@ history_advance_payload(
             error(invalid_committed_history)
     end.
 
+entry_history_hash(#entry{data = noop, block_bytes = none} = Entry) ->
+    %% A complaint skip has no block identity. Its canonical entry envelope is
+    %% the sole stable history-head value; never hash a decoded record view.
+    {ok, EntryBytes} = quod_ledger:encode_entry(Entry),
+    crypto:hash(sha256, EntryBytes);
 entry_history_hash(#entry{} = Entry) ->
     case block_from_entry(Entry) of
         {ok, Block} -> block_hash(Block);
-        error ->
-            crypto:hash(
-              sha256,
-              term_to_binary({quod_committed_noop, 1, Entry},
-                             [deterministic]))
+        error -> error(uncanonical_entry)
     end.
 
 -doc "Validate and reduce one certified committed entry with exact DTX history.".

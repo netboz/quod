@@ -13,9 +13,29 @@ decoded term's protocol shape.
 
 -include("quod_term_limits.hrl").
 
--export([decode/2, decode_wrapped/2]).
+-export([encode_canonical/2, decode/2, decode_wrapped/2,
+         validate_canonical/2]).
 
 -type decode_error() :: bad_term | compressed | too_large | trailing_data.
+
+-doc "Encode one bounded term in the canonical ETF subset accepted by decode_wrapped/2.".
+-spec encode_canonical(term(), non_neg_integer()) ->
+          {ok, binary()} | {error, bad_term | too_large}.
+encode_canonical(Term, MaxBytes)
+  when is_integer(MaxBytes), MaxBytes >= 0 ->
+    case stable_term(Term) of
+        true ->
+            try term_to_binary(Term, [deterministic]) of
+                Bytes when byte_size(Bytes) =< MaxBytes -> {ok, Bytes};
+                _Bytes -> {error, too_large}
+            catch
+                _:_ -> {error, bad_term}
+            end;
+        false ->
+            {error, bad_term}
+    end;
+encode_canonical(_Term, _MaxBytes) ->
+    {error, bad_term}.
 
 -spec decode(binary(), non_neg_integer()) ->
           {ok, term()} |
@@ -38,6 +58,18 @@ decode_wrapped(Binary, MaxBytes)
         false -> {error, too_large}
     end;
 decode_wrapped(_, _) ->
+    {error, bad_term}.
+
+-doc "Validate bounded canonical ETF without materializing atoms.".
+-spec validate_canonical(binary(), non_neg_integer()) ->
+          ok | {error, decode_error()}.
+validate_canonical(Binary, MaxBytes)
+  when is_binary(Binary), is_integer(MaxBytes), MaxBytes >= 0 ->
+    case decode_wrapped(Binary, MaxBytes) of
+        {ok, _Term} -> ok;
+        {error, _} = Error -> Error
+    end;
+validate_canonical(_, _) ->
     {error, bad_term}.
 
 decode_bounded(<<131, 80, _/binary>>) ->
@@ -230,6 +262,37 @@ stable_map_key({list, Values, Tail}) ->
     lists:all(fun stable_map_key/1, Values) andalso stable_map_key(Tail);
 stable_map_key({map, _Pairs}) -> false;
 stable_map_key(_Scalar) -> true.
+
+%% Producer-side sibling of the decoder's AST check.  It rejects exactly the
+%% one ETF subset whose deterministic encoding is not stable across fresh OTP
+%% VMs: a map occurring anywhere inside another map's key.  Keeping this here
+%% makes producer and verifier share one representation rule without encoding
+%% twice or introducing a protocol-specific whitelist.
+stable_term(Term) when is_integer(Term); is_float(Term); is_atom(Term);
+                            is_bitstring(Term) ->
+    true;
+stable_term(Term) when is_tuple(Term) ->
+    lists:all(fun stable_term/1, tuple_to_list(Term));
+stable_term([]) ->
+    true;
+stable_term([Head | Tail]) ->
+    stable_term(Head) andalso stable_term(Tail);
+stable_term(Term) when is_map(Term) ->
+    lists:all(
+      fun({Key, Value}) -> stable_term_key(Key) andalso stable_term(Value) end,
+      maps:to_list(Term));
+stable_term(_Term) ->
+    false.
+
+stable_term_key(Term) when is_map(Term) -> false;
+stable_term_key(Term) when is_tuple(Term) ->
+    lists:all(fun stable_term_key/1, tuple_to_list(Term));
+stable_term_key([]) -> true;
+stable_term_key([Head | Tail]) ->
+    stable_term_key(Head) andalso stable_term_key(Tail);
+stable_term_key(Term) when is_integer(Term); is_float(Term); is_atom(Term);
+                                is_bitstring(Term) -> true;
+stable_term_key(_Term) -> false.
 
 %% ETF deterministic map order follows Erlang term order. Compare the AST
 %% directly so unknown atoms keep atom ordering without entering the VM atom

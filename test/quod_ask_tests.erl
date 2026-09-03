@@ -338,6 +338,15 @@ setup() ->
     {ok, _} = application:ensure_all_started(gproc),
     {Pub, Seed} = quod_identity:generate(),
     PreviousDesired = application:get_env(quod, namespace_desired),
+    Dir = unique_tmp_dir("quod_ask_"),
+    try setup_fixture(Pub, Seed, PreviousDesired, Dir)
+    catch
+        Class:Reason:Stacktrace ->
+            cleanup_failed_setup(PreviousDesired, Dir),
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+setup_fixture(Pub, Seed, PreviousDesired, Dir) ->
     Desired0 = application:get_env(quod, namespace_desired, #{}),
     Content0 = maps:get(content, Desired0, #{}),
     NetworkIdentity = crypto:strong_rand_bytes(32),
@@ -349,8 +358,6 @@ setup() ->
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(quod, identity_key, quod_identity:key_term({Pub, Seed})),
     {ok, Router} = quod_ask_router:start_link(),
-    Dir = filename:join("/tmp", "quod_ask_" ++
-                       integer_to_list(erlang:unique_integer([positive]))),
     ok = filelib:ensure_dir(filename:join(Dir, "placeholder")),
     {ok, ForeignLog} = quod_foreign_log:start_link(
                          #{cache_dir => filename:join(Dir, "foreign-log"),
@@ -425,14 +432,37 @@ cleanup(#{dir := Dir, router := Router, foreign_log := ForeignLog,
     _ = catch gen_server:stop(Router),
     application:unset_env(quod, node_pubkey),
     application:unset_env(quod, identity_key),
-    case PreviousDesired of
-        {ok, Desired} ->
-            application:set_env(quod, namespace_desired, Desired);
-        undefined ->
-            application:unset_env(quod, namespace_desired)
-    end,
+    restore_desired(PreviousDesired),
     _ = file:del_dir_r(Dir),
     ok.
+
+cleanup_failed_setup(PreviousDesired, Dir) ->
+    lists:foreach(
+      fun stop_ns/1,
+      [<<"animals">>, <<"pets">>, <<"private">>, <<"slow">>,
+       <<"chain_b">>, <<"chain_c">>]),
+    stop_registered({foreign_log, node}),
+    stop_registered({ask_router, node}),
+    application:unset_env(quod, node_pubkey),
+    application:unset_env(quod, identity_key),
+    restore_desired(PreviousDesired),
+    _ = file:del_dir_r(Dir),
+    ok.
+
+stop_registered(Key) ->
+    case quod_reg:where(Key) of
+        undefined -> ok;
+        Pid -> _ = catch gen_server:stop(Pid), ok
+    end.
+
+restore_desired({ok, Desired}) ->
+    application:set_env(quod, namespace_desired, Desired);
+restore_desired(undefined) ->
+    application:unset_env(quod, namespace_desired).
+
+unique_tmp_dir(Prefix) ->
+    Suffix = binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
+    filename:join("/tmp", Prefix ++ Suffix).
 
 t_single_answer(#{pets := P}) ->
     ?assertMatch({ok, [#{'D' := fish}], _},

@@ -206,9 +206,9 @@ request_size_is_cached_in_queue_accounting_test() ->
     {ok, 1, Queued} =
         quod_ingress_state:enqueue(
           local, waiter, Prepared, 10, State),
-    Expected =
-        byte_size(term_to_binary(Change, [deterministic]))
-        + 96 + ?BATCH_ENVELOPE_BYTES,
+    {ok, EncodedSize} =
+        quod_transaction:encoded_ledger_transaction_size(Change),
+    Expected = EncodedSize + ?BATCH_ENVELOPE_BYTES,
     ?assertEqual(
        #{count => 1, bytes => Expected, authors => #{B => 1}},
        quod_ingress_state:summary(Queued)).
@@ -370,7 +370,20 @@ request(Id, Author, Seq, Sig, Membership) ->
             false ->
                 Change0
         end,
-    quod_ingress_state:request(Change).
+    Bound = quod_transaction:bind_id(
+              {?NS, <<0:256>>}, Change#transaction{tx_id = <<>>}),
+    Final =
+        case Sig of
+            none -> Bound;
+            Signature when is_binary(Signature) ->
+                {ok, Signed} = quod_transaction:sign(
+                                 {?NS, <<0:256>>, <<9:256>>},
+                                 Bound#transaction{sig = none,
+                                                   signed_bytes = none},
+                                 validator_identity(Author)),
+                Signed
+        end,
+    quod_ingress_state:request(Final).
 
 route(Pass, Origin, Request, State) ->
     {Decision, _Prepared} =
@@ -415,4 +428,16 @@ tx(Id, Author, Seq, Sig) ->
        sig = Sig}.
 
 validators() ->
-    [<<1:256>>, <<2:256>>].
+    [Pub || {Pub, _Identity} <- validator_identities()].
+
+validator_identity(Pub) ->
+    {Pub, Identity} = lists:keyfind(Pub, 1, validator_identities()),
+    Identity.
+
+validator_identities() ->
+    [begin
+         Seed = <<N:256>>,
+         {Pub, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+         {Pub, #{pubkey => Pub,
+                 key => quod_identity:key_term({Pub, Seed})}}
+     end || N <- [1, 2]].

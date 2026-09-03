@@ -5,13 +5,15 @@
 -define(V1_MAGIC, 16#915106AA).
 -define(V2_MAGIC, 16#915106AB).
 -define(V3_MAGIC, 16#915106AC).
--define(MAGIC, 16#915106AD).
+-define(V4_MAGIC, 16#915106AD).
+-define(MAGIC, 16#915106AE).
 -define(READ_CHUNK, 262144).
 
 %% Every superseded frame magic must be rejected as an identifiable format, at
 %% its exact offset, without mutating the file. Each legacy case below runs for
 %% all of them.
-legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}, {3, ?V3_MAGIC}].
+legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}, {3, ?V3_MAGIC},
+                     {4, ?V4_MAGIC}].
 
 %%%===================================================================
 %%% fixtures
@@ -61,14 +63,16 @@ store_test_() ->
 %%% helpers
 %%%===================================================================
 
-ent(I) -> #entry{index = I, data = data(I)}.
+ent(I) ->
+    {ok, Entry} = quod_ledger:new_entry(I, data(I), 0, none),
+    Entry.
 
 data(I) -> {batch, [chg(I)]}.
 
 chg(I) ->
     #transaction{tx_id = integer_to_binary(I), origin = {<<"onia:peers">>, <<0:256>>},
             diff = [{assert, {{fact, I}, true}}], read_check = #{},
-            author = {"127.0.0.1", 5000}, sig = none}.
+            author = <<1:256>>, sig = none}.
 
 %%%===================================================================
 %%% tests
@@ -98,14 +102,22 @@ t_append_read({Dir, Ns}) ->
         ok = quod_ledger_store:close(S1)
     end.
 
-%% The store persists an opaque payload unchanged; interpretation belongs to
-%% the ledger layer, not the append-only byte store.
+%% The store persists the ledger's canonical envelope unchanged; application
+%% bytes inside a transaction remain byte-exact across reopen.
 t_opaque_payload_roundtrip({Dir, Ns}) ->
     fun() ->
-        Data = {opaque_test_payload, <<0, 1, 2, 255>>},
-        Entry = #entry{index = 1, data = Data},
+        Opaque = <<0, 1, 2, 255>>,
+        Data = {batch, [(chg(1))#transaction{
+                           diff = [{assert, {{fact, Opaque}, true}}]}]},
+        {ok, Entry} = quod_ledger:new_entry(1, Data, 0, none),
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, [Entry]),
+        {ok, ExpectedEnvelope} = quod_ledger:encode_entry(Entry),
+        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        {ok, <<?MAGIC:32, Length:32, CRC:32, StoredEnvelope:Length/binary>>} =
+            file:read_file(LogPath),
+        ?assertEqual(ExpectedEnvelope, StoredEnvelope),
+        ?assertEqual(CRC, erlang:crc32(StoredEnvelope)),
         {ok, Stored} = quod_ledger_store:read_at(S1, 1),
         ?assertEqual(Data, Stored#entry.data),
         ok = quod_ledger_store:close(S1),
@@ -301,7 +313,7 @@ t_chunked_tail_detects_distant_magic({Dir, Ns}) ->
     end.
 
 %% The scanner overlaps windows by three bytes, covering every possible split
-%% of the current V4 or any recognized V1/V2/V3 marker at a chunk boundary.
+%% of the current V5 or any recognized V1/V2/V3/V4 marker at a chunk boundary.
 t_chunked_tail_detects_split_magic({Dir, Ns}) ->
     fun() ->
         Path = prepare_log_path(Dir, Ns),
@@ -314,7 +326,7 @@ t_chunked_tail_detects_split_magic({Dir, Ns}) ->
                 quod_ledger_store:open(Ns, Dir)),
              ?assertEqual({ok, Bytes}, file:read_file(Path))
          end
-         || Magic <- [?MAGIC, ?V3_MAGIC, ?V2_MAGIC, ?V1_MAGIC],
+         || Magic <- [?MAGIC, ?V4_MAGIC, ?V3_MAGIC, ?V2_MAGIC, ?V1_MAGIC],
             PrefixBytes <- [1, 2, 3]],
         ok
     end.
@@ -398,8 +410,13 @@ t_rejects_wrong_first_index({Dir, Ns}) ->
         LogDir  = filename:join(Dir, base64url(Ns)),
         ok = filelib:ensure_path(LogDir),
         LogPath = filename:join(LogDir, "log.0001"),
-        ok = file:write_file(LogPath, [raw_frame(ent(0)), raw_frame(ent(1))]),
-        ?assertError({log_corruption, {discontinuity, 0}, _}, quod_ledger_store:open(Ns, Dir)),
+        {ok, WrongHead} = quod_safe_term:encode_canonical(
+                            {quod_entry, 1, 0, none, none}, 1024),
+        ok = file:write_file(
+               LogPath, [raw_frame_payload(?MAGIC, WrongHead),
+                         raw_frame(ent(1))]),
+        ?assertError({log_corruption, bad_entry, _},
+                     quod_ledger_store:open(Ns, Dir)),
         ok = file:write_file(LogPath, raw_frame(ent(5))),   %% a lone wrong-index head: torn tail
         {ok, S} = quod_ledger_store:open(Ns, Dir),
         ?assertEqual(0, quod_ledger_store:last(S)),         %% trimmed to empty, nothing served
@@ -537,14 +554,19 @@ t_corrupt_current_before_legacy_fails_without_mutation({Dir, Ns}) ->
 
 %% mirror of quod_ledger_store's frame/1 for hand-crafting log files in tests
 raw_frame(Entry) ->
-    raw_frame(?MAGIC, Entry).
+    {ok, Payload} = quod_ledger:encode_entry(Entry),
+    raw_frame_payload(?MAGIC, Payload).
 
 raw_frame(Magic, Entry) ->
     P = term_to_binary(Entry, [deterministic]),
-    <<Magic:32, (byte_size(P)):32, (erlang:crc32(P)):32, P/binary>>.
+    raw_frame_payload(Magic, P).
+
+raw_frame_payload(Magic, Payload) ->
+    <<Magic:32, (byte_size(Payload)):32,
+      (erlang:crc32(Payload)):32, Payload/binary>>.
 
 bad_crc_raw_frame(Entry) ->
-    P = term_to_binary(Entry, [deterministic]),
+    {ok, P} = quod_ledger:encode_entry(Entry),
     CRC = erlang:crc32(P) bxor 1,
     <<?MAGIC:32, (byte_size(P)):32, CRC:32, P/binary>>.
 

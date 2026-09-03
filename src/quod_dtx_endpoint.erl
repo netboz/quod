@@ -1,6 +1,6 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v8 wire boundary for durable operation and read-attestation traffic.
+Pure v9 wire boundary for durable operation and read-attestation traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
@@ -10,7 +10,9 @@ the responder's anchored identity and applied floor. The separate group-only
 certified-current quorum absence. Applied requests bind one exact Finalize,
 generation, and verdict; each validator response carries its signed vote for
 the caller to combine into the portable certificate owned by
-`quod_dtx_current_view`. Operation-effect cancellation carries the exact
+`quod_dtx_current_view`. Entry hints travel as the canonical ledger entry
+bytes; decoded `#entry{}` records exist only as local views at this boundary.
+Operation-effect cancellation carries the exact
 signed source submission; `quod_transaction` remains its sole semantic decoder.
 The namespace engine remains responsible for
 authenticated-link identity checks, readiness, rate/capacity accounting,
@@ -35,13 +37,14 @@ application. Both enter the existing target signing and consensus machinery.
 -export([channel/1,
          encode_request/3, encode_response/3,
          decode_request/2, decode_response/2,
+         encode_validation_sidecar/1, decode_validation_sidecar/1,
          normalize_sidecar/1,
          request_id/1, response_id/1, correlates/2]).
 -export_type([request/0, response/0, entry_hint/0, validation_item/0,
               public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 8).
+-define(VERSION, 9).
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -129,14 +132,20 @@ encode_direction(Namespace, Inner, Hints, Direction) ->
     case {valid_namespace(Namespace), validate_direction(Inner, Direction),
           valid_validation_sidecar(Hints)} of
         {true, ok, true} ->
-            InnerBinary = term_to_binary({Inner, Hints}, [deterministic]),
-            Envelope = term_to_binary(
-                         {?DOMAIN, ?VERSION, Namespace, InnerBinary},
-                         [deterministic]),
-            case byte_size(Envelope) =<
-                 ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
-                true -> {ok, Envelope};
-                false -> too_large(dtx_endpoint)
+            case encode_validation_sidecar(Hints) of
+                {ok, WireHints} ->
+                    InnerBinary =
+                        term_to_binary({Inner, WireHints}, [deterministic]),
+                    Envelope = term_to_binary(
+                                 {?DOMAIN, ?VERSION, Namespace, InnerBinary},
+                                 [deterministic]),
+                    case byte_size(Envelope) =<
+                         ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+                        true -> {ok, Envelope};
+                        false -> too_large(dtx_endpoint)
+                    end;
+                error ->
+                    protocol_error(bad_hints)
             end;
         {false, _, _} -> protocol_error(bad_namespace);
         {_, {error, _} = Error, _} -> Error;
@@ -209,7 +218,7 @@ decode_inner(Expected, Namespace, InnerBinary, Direction) ->
                             case validate_direction(Inner, Direction) of
                                 ok ->
                                     {ok, Namespace, Inner,
-                                     normalize_sidecar(RawHints)};
+                                     decode_validation_sidecar(RawHints)};
                                 {error, _} = Error -> Error
                             end
                     end;
@@ -232,6 +241,55 @@ valid_validation_sidecar(Hints) when is_list(Hints) ->
     normalize_sidecar(Hints) =:= Hints;
 valid_validation_sidecar(_Hints) ->
     false.
+
+%% The public API uses local decoded views. The wire has one representation
+%% for a committed entry: the exact canonical bytes owned by quod_ledger.
+-doc "Encode local validation views into the one canonical sidecar wire shape.".
+-spec encode_validation_sidecar([validation_item()]) ->
+          {ok, [term()]} | error.
+encode_validation_sidecar(Hints) ->
+    case valid_validation_sidecar(Hints) of
+        true -> encode_sidecar(Hints, []);
+        false -> error
+    end.
+
+encode_sidecar([], Acc) ->
+    {ok, lists:reverse(Acc)};
+encode_sidecar([{Ref, #entry{} = Entry} | Rest], Acc) ->
+    case quod_ledger:encode_entry(Entry) of
+        {ok, EntryBytes} ->
+            encode_sidecar(
+              Rest, [{entry_bytes, Ref, EntryBytes} | Acc]);
+        {error, _} ->
+            error
+    end;
+encode_sidecar([AppliedCertificate | Rest], Acc) ->
+    encode_sidecar(Rest, [AppliedCertificate | Acc]);
+encode_sidecar(_Improper, _Acc) ->
+    error.
+
+-doc "Decode an untrusted canonical sidecar wire shape into local views.".
+-spec decode_validation_sidecar(term()) -> [validation_item()].
+decode_validation_sidecar(RawHints) when is_list(RawHints) ->
+    decode_sidecar(RawHints, []);
+decode_validation_sidecar(_Malformed) ->
+    [].
+
+decode_sidecar([], Acc) ->
+    normalize_sidecar(lists:reverse(Acc));
+decode_sidecar([{entry_bytes, Ref, EntryBytes} | Rest], Acc)
+  when is_binary(EntryBytes) ->
+    case quod_ledger:decode_entry(EntryBytes) of
+        {ok, Entry} -> decode_sidecar(Rest, [{Ref, Entry} | Acc]);
+        {error, _} -> decode_sidecar(Rest, Acc)
+    end;
+decode_sidecar([AppliedCertificate | Rest], Acc) ->
+    case valid_validation_item(AppliedCertificate) of
+        true -> decode_sidecar(Rest, [AppliedCertificate | Acc]);
+        false -> decode_sidecar(Rest, Acc)
+    end;
+decode_sidecar(_Improper, _Acc) ->
+    [].
 
 -doc "Normalize one untrusted bounded validation sidecar; malformed rows disappear.".
 -spec normalize_sidecar(term()) -> [validation_item()].
@@ -274,7 +332,7 @@ valid_validation_item(_Hint) ->
     false.
 
 %% ------------------------------------------------------------------
-%% Fixed v8 operation algebra
+%% Fixed v9 operation algebra
 %% ------------------------------------------------------------------
 
 validate_request({submit, RequestId, RecordBlob}) ->

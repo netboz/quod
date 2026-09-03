@@ -21,7 +21,10 @@ roundtrip_test() ->
     Ns = <<"quod:root">>,
     E  = #entry{index = 7, data = noop, cert = none},
     Payload = quod_feed:encode(Ns, {block, E}),
-    ?assertEqual({block, E}, quod_feed:decode(Payload, Ns)).
+    ?assertEqual({block, E}, quod_feed:decode(Payload, Ns)),
+    {feed, Ns, Inner} = binary_to_term(Payload, [safe]),
+    {block_bytes, EntryBlob} = binary_to_term(Inner, [safe]),
+    ?assertEqual({ok, E}, quod_ledger:decode_entry(EntryBlob)).
 
 decode_wrong_ns_test() ->
     E = #entry{index = 1, data = noop, cert = none},
@@ -34,9 +37,14 @@ decode_garbage_test() ->
 
 progress_signal_checks_only_the_safe_namespace_envelope_test() ->
     Ns = <<"feed:progress">>,
-    Block = quod_feed:encode(
-              Ns, {block, #entry{index = 1, data = {unknown_atom, payload},
-                                 cert = none}}),
+    %% A progress observer deliberately leaves even malformed canonical-entry
+    %% blobs opaque: this signal is only a wake, never evidence.
+    Block = term_to_binary(
+              {feed, Ns,
+               term_to_binary({block_bytes, <<131, 100, 0, 13,
+                                                    "unknown_atom">>},
+                              [deterministic])},
+              [deterministic]),
     Digest = quod_feed:encode(Ns, {digest, 7}),
     ?assert(quod_feed:progress_signal(Block, Ns)),
     ?assert(quod_feed:progress_signal(Digest, Ns)),
@@ -412,8 +420,9 @@ fold_snapshot_test() ->
                          diff = [{assert, {{peer_admitted, B, "h", 1, B}, true}}]},
     Projection = quod_simplex:history_projection(
                    [A], <<3:256>>, #{A => <<4:256>>}, #{}, 0),
-    Noop = #entry{index = 6, data = noop},
-    AdmitEntry = #entry{index = 6, data = {batch, [Admit]}},
+    Noop = quod_ledger:noop_entry(6, none),
+    {ok, AdmitEntry} = quod_ledger:new_entry(
+                         6, {batch, [Admit]}, 0, none),
     %% contiguous content/noop entry: height advances, committee unchanged
     {6, NoopProjection, done} =
         quod_feed:fold_snapshot(<<"n">>, Noop, {5, Projection, done}),
@@ -433,7 +442,8 @@ fold_snapshot_test() ->
                          {5, Projection, done})),
     %% A real, signed DTX control must not enter the content-only projection
     %% fold (which deliberately fails closed without its phase-history index).
-    Dtx = #entry{index = 6, data = quod_ct:dtx_decision_payload()},
+    {ok, Dtx} = quod_ledger:new_entry(
+                  6, quod_ct:dtx_decision_payload(), 0, none),
     ?assertEqual(none, quod_feed:fold_snapshot(
                          <<"n">>, Dtx, {5, Projection, done})),
     %% folding onto an unprimed snapshot stays none (primed later by a status call)

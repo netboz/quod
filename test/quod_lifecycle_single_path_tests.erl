@@ -1225,7 +1225,7 @@ wrong_anchor_child_stops_then_exact_material_restarts(
          ActorNs,
          {transaction, {',', {retract, OldHost}, {assertz, NewHost}}})),
     ok = wait_route_wait({Ns, NewAnchor}, present, 300),
-    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ok = wait_local_state(Ns, not_hosted, 300),
 
     %% Material arrival uses the ordinary lifecycle entry. The parked desired
     %% identity then becomes ready under the replacement anchor.
@@ -1472,6 +1472,15 @@ wait_route_wait(Identity, Expected, N) ->
         _ -> receive after 10 ->
                  wait_route_wait(Identity, Expected, N - 1)
              end
+    end.
+
+wait_local_state(Ns, Expected, 0) ->
+    error({local_state_timeout, Ns, Expected,
+           quod_ontology:local_state(Ns)});
+wait_local_state(Ns, Expected, N) ->
+    case quod_ontology:local_state(Ns) of
+        {ok, Expected} -> ok;
+        _ -> receive after 10 -> wait_local_state(Ns, Expected, N - 1) end
     end.
 
 wait_system_query_idle(0) -> error(system_query_idle_timeout);

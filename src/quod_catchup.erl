@@ -19,9 +19,9 @@ channel, separate from `quod_simplex`'s `{log, Ns}` channel:
   init) drives the loop and **verifies each block's cert** against the committee it reconstructs — the
   server is never trusted (the certificate is the proof).
 
-**Trust (trusted-fleet P1):** the inner record decodes without `[safe]`, like the
-consensus log transport. Trustlessness comes from certificate verification at
-the caller, not from trusting this transport.
+Committed entries cross this channel only as their canonical byte envelopes.
+The endpoint decodes those bytes into local views; trustlessness still comes
+from certificate verification at the caller, never from the serving peer.
 """.
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
@@ -152,12 +152,23 @@ empty_stats() ->
 channel(Ns) when is_binary(Ns) ->
     term_to_binary({catchup, Ns}, [deterministic]).
 
--doc "Encode one existing catch-up request/response frame.".
+-doc "Encode one catch-up frame; committed entries travel only as their canonical blobs.".
 -spec encode_frame(binary(), term()) -> binary().
 encode_frame(Ns, Term) when is_binary(Ns) ->
+    WireTerm = encode_wire_term(Term),
     term_to_binary(
-      {catchup, Ns, term_to_binary(Term, [deterministic])},
+      {catchup, Ns, term_to_binary(WireTerm, [deterministic])},
       [deterministic]).
+
+encode_wire_term({blocks_resp, ReqId, Entries, Height}) when is_list(Entries) ->
+    EntryBlobs =
+        [begin
+             {ok, Blob} = quod_ledger:encode_entry(Entry),
+             Blob
+         end || Entry <- Entries],
+    {blocks_resp_bytes, ReqId, EntryBlobs, Height};
+encode_wire_term(Term) ->
+    Term.
 
 -doc "Decode one existing catch-up frame, returning its inner encoded byte count.".
 -spec decode_frame(binary(), binary()) ->
@@ -169,12 +180,11 @@ decode_frame(Ns, Payload)
         {catchup, Ns, Bin}
           when is_binary(Bin),
                byte_size(Bin) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-            %% This is deliberately the existing catch-up codec/trust model:
-            %% committed ontology vocabulary may contain atoms not yet loaded
-            %% by a joining/foreign verifier VM.  Bounds are applied to the
-            %% containing binary before this decode and to a page immediately
-            %% afterwards.
-            try {ok, binary_to_term(Bin), byte_size(Bin)}
+            %% R2 changes only the committed-entry identity to exact bytes.
+            %% The existing catch-up control grammar still carries Erlang
+            %% references whose node-name atom may be unknown here; R3 owns
+            %% replacing this trusted-fleet decode with the wrapped decoder.
+            try decode_wire_term(binary_to_term(Bin), byte_size(Bin))
             catch _:_ -> {error, bad_frame}
             end;
         _ ->
@@ -184,6 +194,30 @@ decode_frame(Ns, Payload)
     end;
 decode_frame(_Ns, _Payload) ->
     {error, frame_too_large}.
+
+decode_wire_term({blocks_resp_bytes, ReqId, EntryBlobs, Height}, Bytes)
+  when is_list(EntryBlobs) ->
+    case decode_entry_blobs(EntryBlobs, []) of
+        {ok, Entries} ->
+            {ok, {blocks_resp, ReqId, Entries, Height}, Bytes};
+        error ->
+            {error, bad_frame}
+    end;
+decode_wire_term({blocks_resp, _ReqId, _Entries, _Height}, _Bytes) ->
+    %% There is no record-carrying compatibility wire in this format cut.
+    {error, bad_frame};
+decode_wire_term(Term, Bytes) ->
+    {ok, Term, Bytes}.
+
+decode_entry_blobs([Blob | Rest], Acc) when is_binary(Blob) ->
+    case quod_ledger:decode_entry(Blob) of
+        {ok, Entry} -> decode_entry_blobs(Rest, [Entry | Acc]);
+        {error, _} -> error
+    end;
+decode_entry_blobs([], Acc) ->
+    {ok, lists:reverse(Acc)};
+decode_entry_blobs(_Malformed, _Acc) ->
+    error.
 
 -doc "Bound a decoded catch-up page by the shared entry-count and encoded-byte limits.".
 -spec page_stats(term()) ->
@@ -195,10 +229,15 @@ page_stats([], Count, Bytes) ->
     {ok, Count, Bytes};
 page_stats([#entry{} = Entry | Rest], Count, Bytes)
   when Count < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES ->
-    Bytes1 = Bytes + byte_size(term_to_binary(Entry, [deterministic])),
-    case Bytes1 =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
-        true -> page_stats(Rest, Count + 1, Bytes1);
-        false -> {error, page_too_large}
+    case quod_ledger:encode_entry(Entry) of
+        {ok, EntryBytes} ->
+            Bytes1 = Bytes + byte_size(EntryBytes),
+            case Bytes1 =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
+                true -> page_stats(Rest, Count + 1, Bytes1);
+                false -> {error, page_too_large}
+            end;
+        {error, _} ->
+            {error, malformed_page}
     end;
 page_stats([#entry{} | _], _Count, _Bytes) ->
     {error, too_many_entries};
@@ -242,11 +281,12 @@ open_read_view(Ns, DataDir) ->
 %% The longest PREFIX of `Es` whose serialized size stays within ?RESP_BUDGET, so the whole response frame
 %% fits quod_link's 1 MiB cap (it EXITs the link on a larger frame). Always keeps ≥ 1 entry so a joiner
 %% makes progress and loops for the rest. The shared singleton-block ceiling guarantees that one maximum
-%% V4 entry plus its certificate and response framing fits this budget; the boundary test pins that
+%% canonical entry plus its certificate and response framing fits this budget; the boundary test pins that
 %% invariant, so no separate chunking protocol exists.
 cap_bytes([], _Acc) -> [];
 cap_bytes([E | Rest], Acc) ->
-    Acc1 = Acc + byte_size(term_to_binary(E, [deterministic])),
+    {ok, EntryBytes} = quod_ledger:encode_entry(E),
+    Acc1 = Acc + byte_size(EntryBytes),
     case Acc =:= 0 orelse Acc1 =< ?RESP_BUDGET of
         true  -> [E | cap_bytes(Rest, Acc1)];
         false -> []

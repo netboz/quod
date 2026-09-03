@@ -777,12 +777,12 @@ certified_control(Target, Record, Slot,
                       Target, Record, Admission, Slot, Slot, Signer),
     {ok, Blob} = quod_dtx:encode_control(Control),
     Payload = {batch, [{dtx, Blob}]},
-    Block = #block{slot = Slot, parent = Slot - 1,
-                   payload = Payload, timestamp = 0},
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Slot - 1, Payload, 0),
     BlockHash = quod_simplex:block_hash(Block),
-    Entry = #entry{index = Slot, data = Payload,
-                   cert = #cert{kind = commit, slot = Slot,
-                                block_hash = BlockHash, sigs = []}},
+    Entry = quod_ledger:entry(
+              Block, #cert{kind = commit, slot = Slot,
+                           block_hash = BlockHash, sigs = []}),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {Control, Entry, Ref}.
 

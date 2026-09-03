@@ -1,9 +1,9 @@
 # Transaction-author signatures
 
 **Status:** the original signature/relay milestone, the incompatible V8
-signed-request extension, and the current V12 generation are implemented.
-V12 retains the event support introduced in V9 and adds the signed
-read-certificate carrier. It has no
+signed-request extension, and the current V13 generation are implemented.
+V13 retains V12's signed read-certificate carrier and stores material plus
+referenced transactions as canonical byte blobs. It has no
 compatibility decoder; a fleet carrying an older transaction generation must
 activate it through a clean persistence reset and re-found.
 
@@ -51,14 +51,14 @@ non-canonical nested plan is rejected before transaction construction.
 `quod_transaction` owns the only transaction signature format:
 
 ```erlang
-term_to_binary(
-  {quod_transaction, 12,
+quod_safe_term:encode_canonical(
+  {quod_transaction, 13,
    TargetNs, GenesisAnchor, AuthorAdmission,
    TxId, Origin, ProofId, PlanDigest, Goal, Result,
    MaterialWire, EffectsWire, Role, Evidence, ForeignReads,
    RequestAuth, AuthorizationTranscript,
    Author, AuthorSeq, SubmittedAt},
-  [deterministic]).
+  MaxBytes).
 ```
 
 `MaterialWire` is the bounded `quod_wire_term` encoding of
@@ -78,7 +78,7 @@ Both are signed and included in the semantic transaction id. Validators verify
 the request and re-prove the recorded ACL decision against the proposal parent;
 private prepared payloads and executable callbacks are never stored there.
 
-The tuple prefix `{quod_transaction, 12}` is the fixed cryptographic
+The tuple prefix `{quod_transaction, 13}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
 tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current
@@ -92,8 +92,9 @@ read check its canonical term order before the wire encoding.
 record shown by the Explorer. `sig` is the sole excluded field.
 
 V9 introduced ordered `{event, Term}` occurrences in the already-signed
-`MaterialWire` diff alphabet. V11 added `Role` and `Evidence`; the current V12
-also binds `ForeignReads`. Its semantic transaction-id domain is V7 and the signed
+`MaterialWire` diff alphabet. V11 added `Role` and `Evidence`; V12 added
+`ForeignReads`; the current V13 carries material and referenced transactions
+as canonical byte blobs. Its semantic transaction-id domain is V7 and the signed
 DTX-plan domain is V8. Older generations are rejected; they are not translated
 or accepted beside the current generation.
 

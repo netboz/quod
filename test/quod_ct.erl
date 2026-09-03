@@ -379,19 +379,33 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
     Plan = maps:get(plan, Fixture),
     Bundle = {Target, quod_dtx:digest(Plan), maps:get(plan_blob, Fixture),
               maps:get(attestation, Fixture)},
-    Claim = quod_transaction:remote_claim(
-              Origin, maps:get(manifest, Fixture), Bundle,
-              maps:get(auth, Fixture), maps:get(foreign_reads, Overrides, [])),
+    Claim0 = quod_transaction:remote_claim(
+               Origin, maps:get(manifest, Fixture), Bundle,
+               maps:get(auth, Fixture), maps:get(foreign_reads, Overrides, [])),
+    NodeIdentity = maps:get(node_identity, Fixture),
+    NodeKey = maps:get(pubkey, NodeIdentity),
+    Admission = maps:get(admission, Fixture),
     {OriginNs, OriginAnchor} = Origin,
+    {ok, Claim} = quod_transaction:sign(
+                    {OriginNs, OriginAnchor, Admission},
+                    Claim0#transaction{author = NodeKey, author_seq = 1,
+                                       submitted_at = 1},
+                    NodeIdentity),
     ClaimRef = {transaction, OriginNs, OriginAnchor,
                 Claim#transaction.tx_id},
     {ok, CertifiedClaimRef} = quod_dtx:certified_ref(
                                 OriginNs, OriginAnchor, 2, <<213:256>>,
                                 Claim#transaction.tx_id, <<"claim-qc">>),
-    Application0 = quod_transaction:remote_application(ClaimRef, Claim),
-    Application = quod_transaction:attach_evidence(
-                    Application0, CertifiedClaimRef, Claim),
+    Application0 = quod_transaction:attach_evidence(
+                     quod_transaction:remote_application(ClaimRef, Claim),
+                     CertifiedClaimRef, Claim),
     {TargetNs, TargetAnchor} = Target,
+    {ok, Application} = quod_transaction:sign(
+                          {TargetNs, TargetAnchor, Admission},
+                          Application0#transaction{author = NodeKey,
+                                                   author_seq = 1,
+                                                   submitted_at = 1},
+                          NodeIdentity),
     TargetRef = {transaction, TargetNs, TargetAnchor,
                  Application#transaction.tx_id},
     {ok, CertifiedTargetRef} = quod_dtx:certified_ref(

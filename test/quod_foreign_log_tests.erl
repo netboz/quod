@@ -1963,8 +1963,8 @@ verify_local_committee_shrink_never_relabels_historical_entry_test() ->
                   #{committee => tl(MemberKeys),
                     node_addr => {"127.0.0.1", 19000}},
                   Ns, Author, key(shrink_genesis_incarnation)),
-    Genesis = #entry{index = 1, data = {batch, [GenesisTx]},
-                     timestamp = 0, cert = none},
+    {ok, Genesis} = quod_ledger:new_entry(
+                      1, {batch, [GenesisTx]}, 0, none),
     Anchor = entry_hash(Genesis),
     Binding = {Ns, Anchor},
     {ok, [Genesis], GenesisProjection} = quod_catchup:verify_forward(
@@ -2063,8 +2063,8 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
                   genesis_diff =>
                       quod_prolog:terms_to_diff([StaticBridgeHead])},
                 Ns, Pub, Nonce),
-    Entry = #entry{index = 1, data = {batch, [Genesis]}, timestamp = 1,
-                   cert = none},
+    {ok, Entry} = quod_ledger:new_entry(
+                    1, {batch, [Genesis]}, 1, none),
     Anchor = entry_hash(Entry),
     Root = temp_dir("projection-manifest"),
     CacheNs = <<"projection-cache:", Ns/binary>>,
@@ -3065,37 +3065,32 @@ decoded_page_bounds_test() ->
        {error, too_many_entries},
        quod_catchup:page_stats(
          lists:duplicate(?QUOD_MAX_FOREIGN_PAGE_ENTRIES + 1, Tiny))),
-    Huge = #entry{index = 1,
-                  data = {batch,
-                          [#transaction{
-                             tx_id = <<"huge">>, origin = {<<"n">>, key(1)},
-                             diff = [{assert,
-                                      {{blob,
-                                        binary:copy(
-                                          <<0>>,
-                                          ?QUOD_MAX_FOREIGN_PAGE_BYTES)},
-                                       true}}],
-                             read_check = #{}, author = key(2), sig = none}]}},
+    LargePayload = largest_payload(<<"foreign:page-bound">>),
+    Huge = [begin
+                {ok, Entry} = quod_ledger:new_entry(
+                                I, LargePayload, 0, none),
+                Entry
+            end || I <- lists:seq(1, 4)],
     ?assertEqual({error, page_too_large},
-                 quod_catchup:page_stats([Huge])).
+                 quod_catchup:page_stats(Huge)).
 
 worst_case_implicit_entry_frame_stays_below_budget_test() ->
     Ns = <<"foreign:frame-bound">>,
     Payload = largest_payload(Ns),
-    ?assert(byte_size(term_to_binary(Payload, [deterministic]))
-            =< ?MAX_BLOCK_BYTES),
+    {ok, PayloadBytes} = quod_ledger:encoded_payload_size(Payload),
+    ?assert(PayloadBytes =< ?MAX_BLOCK_BYTES),
     Signatures = [{key(I), <<I:512>>} || I <- lists:seq(1, ?MAX_VALIDATORS)],
-    Parent = #block{slot = 2, parent = 1, payload = Payload},
-    Child = #block{slot = 3, parent = 2, payload = Payload},
+    {ok, Parent} = quod_ledger:new_block(2, 1, Payload, 0),
+    {ok, Child} = quod_ledger:new_block(3, 2, Payload, 0),
     Support = #cert{kind = support, slot = 2,
                     block_hash = quod_simplex:block_hash(Parent),
                     sigs = Signatures},
     Commit = #cert{kind = commit, slot = 3,
                    block_hash = quod_simplex:block_hash(Child),
                    sigs = Signatures},
-    Entry = #entry{index = 2, data = Payload,
-                   cert = #implicit_cert{support = Support,
-                                         child = Child, commit = Commit}},
+    Entry = quod_ledger:entry(
+              Parent, #implicit_cert{support = Support,
+                                     child = Child, commit = Commit}),
     Frame = quod_catchup:encode_frame(
               Ns, {blocks_resp, make_ref(), [Entry], 3}),
     ?assert(byte_size(Frame) < ?QUOD_MAX_FOREIGN_PAGE_BYTES),
@@ -3200,7 +3195,8 @@ signed_content_fixture(Ns) ->
                        #{target => {Ns, Anchor}, network => Network,
                          key_pair => ClientKeyPair}),
     Unsigned = (maps:get(transaction, RequestFixture))#transaction{
-                 author = Pub, author_seq = 1, sig = none},
+                 author = Pub, author_seq = 1, sig = none,
+                 signed_bytes = none},
     {ok, Signed} = quod_transaction:sign(
                      {Ns, Anchor, Admission}, Unsigned, Signer),
     Entry = content_entry(Ns, Anchor, Pub, Signer, 2, [Signed]),
@@ -3317,29 +3313,29 @@ fixture_base(Ns, InitialTerms) ->
 
 control_entry(Ns, Anchor, Pub, Signer, Slot, ControlBlob) ->
     Data = {batch, [{dtx, ControlBlob}]},
-    Block = #block{slot = Slot, parent = Slot - 1, payload = Data},
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, Data, 0),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     #share{sig = Signature} = quod_simplex:make_share(
                                 Domain, commit, Slot, BlockHash, Signer),
     Cert = #cert{kind = commit, slot = Slot, block_hash = BlockHash,
                  sigs = [{Pub, Signature}]},
-    #entry{index = Slot, data = Data, cert = Cert}.
+    quod_ledger:entry(Block, Cert).
 
 content_entry(Ns, Anchor, Pub, Signer, Slot, Transactions) ->
     Data = {batch, Transactions},
-    Block = #block{slot = Slot, parent = Slot - 1, payload = Data},
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, Data, 0),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     #share{sig = Signature} = quod_simplex:make_share(
                                 Domain, commit, Slot, BlockHash, Signer),
     Cert = #cert{kind = commit, slot = Slot, block_hash = BlockHash,
                  sigs = [{Pub, Signature}]},
-    #entry{index = Slot, data = Data, cert = Cert}.
+    quod_ledger:entry(Block, Cert).
 
 committee_content_entry(Ns, Anchor, Signers, Slot, Transactions) ->
     Data = {batch, Transactions},
-    Block = #block{slot = Slot, parent = Slot - 1, payload = Data},
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, Data, 0),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Signatures =
@@ -3351,7 +3347,7 @@ committee_content_entry(Ns, Anchor, Signers, Slot, Transactions) ->
          end || {Pub, Signer} <- Signers],
     Cert = #cert{kind = commit, slot = Slot, block_hash = BlockHash,
                  sigs = Signatures},
-    #entry{index = Slot, data = Data, cert = Cert}.
+    quod_ledger:entry(Block, Cert).
 
 genesis(Ns, Pub, InitialTerms) ->
     Nonce = key(44),
@@ -3360,12 +3356,12 @@ genesis(Ns, Pub, InitialTerms) ->
              node_addr => {"127.0.0.1", 19000},
              genesis_diff => quod_prolog:terms_to_diff(InitialTerms)},
            Ns, Pub, Nonce),
-    #entry{index = 1, data = {batch, [Tx]}, cert = none}.
+    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Tx]}, 0, none),
+    Entry.
 
-entry_hash(#entry{index = Slot, data = Data, timestamp = Timestamp}) ->
-    quod_simplex:block_hash(
-      #block{slot = Slot, parent = Slot - 1,
-             payload = Data, timestamp = Timestamp}).
+entry_hash(Entry) ->
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    quod_simplex:block_hash(Block).
 
 chain_fetch(Ns, Chain) ->
     Height = length(Chain),
@@ -3600,23 +3596,33 @@ largest_payload(Ns, Low, High) when Low + 1 >= High ->
 largest_payload(Ns, Low, High) ->
     Mid = (Low + High) div 2,
     Candidate = payload(Ns, Mid),
-    case byte_size(term_to_binary(Candidate, [deterministic]))
-           =< ?MAX_BLOCK_BYTES of
-        true -> largest_payload(Ns, Mid, High);
-        false -> largest_payload(Ns, Low, Mid)
+    case quod_ledger:encoded_payload_size(Candidate) of
+        {ok, Size} when Size =< ?MAX_BLOCK_BYTES ->
+            largest_payload(Ns, Mid, High);
+        _ ->
+            largest_payload(Ns, Low, Mid)
     end.
 
 payload(Ns, Bytes) ->
-    {batch,
-     [#transaction{tx_id = key(250), origin = {Ns, key(251)},
-                   proof_id = key(252), plan_digest = key(253),
-                   goal = <<>>, result = <<>>,
-                   diff = [{assert,
-                            {{large_foreign_value,
-                              binary:copy(<<0>>, Bytes)}, true}}],
-                   read_check = #{}, author = key(254),
-                   author_seq = 1, submitted_at = 1,
-                   sig = <<0:512>>}]}.
+    Target = {Ns, key(251)},
+    Seed = key(254),
+    {Author, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+    Signer = #{pubkey => Author,
+               key => quod_identity:key_term({Author, Seed})},
+    Transaction0 = #transaction{
+                     tx_id = <<>>, origin = Target,
+                     proof_id = key(252), plan_digest = key(253),
+                     goal = <<>>, result = <<>>,
+                     diff = [{assert,
+                              {{large_foreign_value,
+                                binary:copy(<<0>>, Bytes)}, true}}],
+                     read_check = #{}, author = Author,
+                     author_seq = 1, submitted_at = 1,
+                     sig = none},
+    Transaction = quod_transaction:bind_id(Target, Transaction0),
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, element(2, Target), Author}, Transaction, Signer),
+    {batch, [Signed]}.
 
 unique_ns() ->
     <<"foreign:test:",

@@ -17,9 +17,9 @@ setup() ->
     %% exactly what a joiner reads back to verify the block.
     Cert = #cert{kind = commit, slot = 5, block_hash = crypto:hash(sha256, <<"blk5">>),
                  sigs = [{<<1, 2, 3>>, <<4, 5, 6>>}]},
-    Es = [#entry{index = I, data = {batch, [tx(I)]}, cert = none}
+    Es = [entry(I, {batch, [tx(I)]}, 0, none)
           || I <- lists:seq(1, 4)]
-         ++ [#entry{index = 5, data = {batch, [tx(5)]}, cert = Cert}],
+         ++ [entry(5, {batch, [tx(5)]}, 0, Cert)],
     {ok, S1} = quod_ledger_store:append(S0, Es),
     ok = quod_ledger_store:close(S1),
     {Dir, Ns, Cert}.
@@ -29,6 +29,10 @@ cleanup({Dir, _, _}) -> _ = file:del_dir_r(Dir), ok.
 tx(I) -> #transaction{tx_id = integer_to_binary(I), origin = {<<"catchup:test">>, <<0:256>>},
                       diff = [{assert, {{fact, I}, true}}], read_check = #{},
                       author = <<"a">>, sig = none}.
+
+entry(Index, Data, Timestamp, Cert) ->
+    {ok, Entry} = quod_ledger:new_entry(Index, Data, Timestamp, Cert),
+    Entry.
 
 serve_blocks_test_() ->
     {setup, fun setup/0, fun cleanup/1,
@@ -57,18 +61,23 @@ byte_cap_test() ->
     _ = file:del_dir_r(Dir),
     try
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        Es = [#entry{index = I, cert = none,
-                     data = {batch,
-                             [#transaction{tx_id = integer_to_binary(I), origin = {Ns, <<0:256>>},
-                                           diff = [{assert, {{blob, I}, Big}}], read_check = #{},
-                                           author = <<"a">>, sig = none}]}}
+        Es = [entry(I,
+                    {batch,
+                     [#transaction{tx_id = integer_to_binary(I), origin = {Ns, <<0:256>>},
+                                   diff = [{assert, {{blob, I}, Big}}], read_check = #{},
+                                   author = <<"a">>, sig = none}]},
+                    0, none)
               || I <- lists:seq(1, 8)],      %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget
         {ok, S1} = quod_ledger_store:append(S0, Es),
         ok = quod_ledger_store:close(S1),
         {ok, Served, 8} = quod_catchup:serve_blocks(Ns, Dir, 1, 1000),
         ?assert(length(Served) >= 1),      %% always makes progress
         ?assert(length(Served) < 8),       %% but byte-capped below the full window
-        Bytes = lists:sum([byte_size(term_to_binary(E, [deterministic])) || E <- Served]),
+        Bytes = lists:sum(
+                  [begin
+                       {ok, Blob} = quod_ledger:encode_entry(E),
+                       byte_size(Blob)
+                   end || E <- Served]),
         ?assert(Bytes < 1024 * 1024)       %% the served entries fit under quod_link's 1 MiB frame cap
     after
         _ = file:del_dir_r(Dir)
@@ -113,6 +122,12 @@ same_link_response_test() ->
         ?assertEqual(1, maps:get(server_inflight_peak, Stats)),
         receive
             {send_ordered, ResponseFrame} ->
+                {catchup, Ns, Inner} =
+                    binary_to_term(ResponseFrame, [safe]),
+                {blocks_resp_bytes, RequestId, EntryBlobs, 5} =
+                    binary_to_term(Inner, [safe]),
+                ?assertEqual(2, length(EntryBlobs)),
+                ?assert(lists:all(fun is_binary/1, EntryBlobs)),
                 ?assertMatch(
                    {ok, {blocks_resp, RequestId,
                          [#entry{index = 2}, #entry{index = 3}], 5}, _},

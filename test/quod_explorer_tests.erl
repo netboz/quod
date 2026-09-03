@@ -195,6 +195,26 @@ tx(N) ->
 entry(Slot, Txs) ->
     #entry{index = Slot, data = {batch, Txs}, timestamp = 2000 + Slot, cert = none}.
 
+stored_entry(Slot, Target, Txs) ->
+    Signed = [signed_transaction(Target, Tx, {Slot, I})
+              || {Tx, I} <- lists:zip(Txs, lists:seq(1, length(Txs)))],
+    {ok, Entry} = quod_ledger:new_entry(
+                    Slot, {batch, Signed}, 2000 + Slot, none),
+    Entry.
+
+signed_transaction({Ns, Anchor} = Target, Tx0, Salt) ->
+    Seed = crypto:hash(sha256, term_to_binary({explorer_tx, Salt})),
+    {Author, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+    Signer = #{pubkey => Author,
+               key => quod_identity:key_term({Author, Seed})},
+    Tx = quod_transaction:bind_id(
+           Target,
+           Tx0#transaction{tx_id = <<>>, author = Author,
+                           sig = none, signed_bytes = none}),
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, Anchor, Author}, Tx, Signer),
+    Signed.
+
 block_json_distinguishes_non_transaction_slots_test() ->
     Content = quod_explorer_http:block_json(<<"ont:test">>, entry(2, [tx(2)])),
     ?assertEqual(content, maps:get(kind, Content)),
@@ -224,10 +244,13 @@ block_json_distinguishes_non_transaction_slots_test() ->
 
 dtx_control_is_visible_in_paged_history_test() ->
     with_temp_store(fun(Store0) ->
-        DtxEntry = #entry{index = 2, data = quod_ct:dtx_decision_payload(),
-                          timestamp = 2002, cert = none},
+        {ok, DtxEntry} = quod_ledger:new_entry(
+                           2, quod_ct:dtx_decision_payload(), 2002, none),
         {ok, Store} = quod_ledger_store:append(
-                        Store0, [entry(1, [tx(1)]), DtxEntry]),
+                        Store0,
+                        [stored_entry(
+                           1, {<<"ont:test">>, <<0:256>>}, [tx(1)]),
+                         DtxEntry]),
         #{txs := [Row, _Content], height := 2, next_before := null} =
             quod_explorer_http:txs_page(Store, undefined, 10),
         ?assertMatch(#{row_type := control, height := 2, phase := decision,
@@ -323,14 +346,12 @@ finalize_row_reuses_its_certified_prepare_plan_test() ->
     with_temp_store(
       Ns,
       fun(Store0) ->
+          {ok, PrepareEntry} = quod_ledger:new_entry(
+                                 1, {batch, [{dtx, PrepareBlob}]}, 1, none),
+          {ok, FinalizeEntry} = quod_ledger:new_entry(
+                                  2, {batch, [{dtx, FinalizeBlob}]}, 2, none),
           {ok, Store} = quod_ledger_store:append(
-                          Store0,
-                          [#entry{index = 1, timestamp = 1,
-                                  data = {batch, [{dtx, PrepareBlob}]},
-                                  cert = none},
-                           #entry{index = 2, timestamp = 2,
-                                  data = {batch, [{dtx, FinalizeBlob}]},
-                                  cert = none}]),
+                          Store0, [PrepareEntry, FinalizeEntry]),
           #{txs := [FinalizeRow, _PrepareRow]} =
               quod_explorer_http:txs_page(Store, undefined, 10),
           FinalControl = maps:get(control, FinalizeRow),
@@ -352,19 +373,22 @@ indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
     LedgerDir = filename:join(Dir, "ledger"),
     try
         T0 = tx(7),
-        T = quod_transaction:bind_id(
-              {Ns, Anchor},
-              T0#transaction{
-                tx_id = <<>>, origin = {Ns, <<22:256>>},
-                proof_id = <<23:256>>, plan_digest = <<24:256>>,
-                author_seq = 1}),
+        T1 = quod_transaction:bind_id(
+               {Ns, Anchor},
+               T0#transaction{
+                 tx_id = <<>>, origin = {Ns, <<22:256>>},
+                 proof_id = <<23:256>>, plan_digest = <<24:256>>,
+                 author_seq = 1}),
+        T = signed_transaction({Ns, Anchor}, T1, indexed),
         {ok, Store0} = quod_ledger_store:open(Ns, LedgerDir),
         {ok, Store1} = quod_ledger_store:append(
                          Store0,
-                         [#entry{index = 1, data = noop,
-                                 timestamp = 2001, cert = none},
-                          #entry{index = 2, data = {batch, [T]},
-                                 timestamp = 2002, cert = none}]),
+                         [quod_ledger:noop_entry(1, none),
+                          begin
+                              {ok, Entry2} = quod_ledger:new_entry(
+                                               2, {batch, [T]}, 2002, none),
+                              Entry2
+                          end]),
         ok = quod_ledger_store:close(Store1),
         {ok, Index0} = quod_outcome:open(
                          Ns, Anchor,
@@ -391,7 +415,10 @@ indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
 
 paging_test() ->
     with_temp_store(fun(Store0) ->
-        Entries = [entry(S, [tx(S * 10), tx(S * 10 + 1)]) || S <- lists:seq(1, 5)],
+        Entries = [stored_entry(
+                     S, {<<"ont:test">>, <<0:256>>},
+                     [tx(S * 10), tx(S * 10 + 1)])
+                   || S <- lists:seq(1, 5)],
         {ok, Store} = quod_ledger_store:append(Store0, Entries),
         %% first page: newest first; the limit is block-granular (a block's transactions are
         %% never split across pages, so `next_before` stays a plain slot), hence 4 rows for 3

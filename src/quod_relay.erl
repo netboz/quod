@@ -9,7 +9,7 @@ dedicated transport channel's envelope.
 
 -include("quod_ingress_limits.hrl").
 
--export([encode/2, decode_consensus_frame/2,
+-export([encode/2, encode_consensus_frame/2, decode_consensus_frame/2,
          decode_relay_frame/2,
          put_result/3, prune_results/1]).
 
@@ -25,11 +25,64 @@ encode(Ns, Relay) ->
 decode_consensus_frame(Payload, Ns) ->
     case decode_outer(Payload, Ns) of
         {consensus, Inner} ->
-            try {consensus, binary_to_term(Inner)}
+            try decode_consensus_message(binary_to_term(Inner))
             catch _:_ -> error
             end;
         _ ->
             error
+    end.
+
+-doc "Encode a consensus message with blocks represented only by their canonical bytes.".
+-spec encode_consensus_frame(binary(), term()) -> binary().
+encode_consensus_frame(Ns, Message) ->
+    Inner = term_to_binary(encode_consensus_message(Message), [deterministic]),
+    term_to_binary({sx2, Ns, Inner}, [deterministic]).
+
+encode_consensus_message({propose, Block, ValidationSidecar}) ->
+    {ok, WireSidecar} =
+        quod_dtx_endpoint:encode_validation_sidecar(ValidationSidecar),
+    {propose_bytes, required_block_bytes(Block), WireSidecar};
+encode_consensus_message({certified_block, Block, Cert}) ->
+    {certified_block_bytes, required_block_bytes(Block), Cert};
+encode_consensus_message({dtx_submit, Envelopes, ValidationSidecar}) ->
+    {ok, WireSidecar} =
+        quod_dtx_endpoint:encode_validation_sidecar(ValidationSidecar),
+    {dtx_submit_bytes, Envelopes, WireSidecar};
+%% Any future consensus message carrying a block must encode its canonical
+%% bytes here; raw #block{} records are not a wire representation.
+encode_consensus_message(Message) ->
+    Message.
+
+decode_consensus_message({propose_bytes, BlockBytes, WireSidecar}) ->
+    case quod_ledger:decode_block(BlockBytes) of
+        {ok, Block} ->
+            {consensus,
+             {propose, Block,
+              quod_dtx_endpoint:decode_validation_sidecar(WireSidecar)}};
+        {error, _} -> error
+    end;
+decode_consensus_message({certified_block_bytes, BlockBytes, Cert}) ->
+    case quod_ledger:decode_block(BlockBytes) of
+        {ok, Block} -> {consensus, {certified_block, Block, Cert}};
+        {error, _} -> error
+    end;
+decode_consensus_message({dtx_submit_bytes, Envelopes, WireSidecar}) ->
+    {consensus,
+     {dtx_submit, Envelopes,
+      quod_dtx_endpoint:decode_validation_sidecar(WireSidecar)}};
+decode_consensus_message({propose, _Block, _ValidationSidecar}) ->
+    error;
+decode_consensus_message({certified_block, _Block, _Cert}) ->
+    error;
+decode_consensus_message({dtx_submit, _Envelopes, _ValidationSidecar}) ->
+    error;
+decode_consensus_message(Message) ->
+    {consensus, Message}.
+
+required_block_bytes(Block) ->
+    case quod_ledger:block_bytes(Block) of
+        Bytes when is_binary(Bytes) -> Bytes;
+        error -> error(uncanonical_block)
     end.
 
 -doc """

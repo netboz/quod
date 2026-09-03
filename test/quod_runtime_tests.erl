@@ -490,9 +490,12 @@ retracted_founding_reaction_is_loud_test() ->
 %% old catch-all silently turned either into an ontology with no founding
 %% handlers, hiding ledger corruption.
 non_content_founding_payload_is_rejected_test() ->
+    ?assertEqual(
+       {error, bad_entry},
+       quod_ledger:new_entry(1, {batch, []}, 0, none)),
     lists:foreach(
       fun assert_bad_founding/1,
-      [noop, {batch, []}, quod_ct:dtx_decision_payload()]).
+      [noop, quod_ct:dtx_decision_payload()]).
 
 assert_bad_founding(Data) ->
     U = integer_to_list(erlang:unique_integer([positive])),
@@ -500,8 +503,15 @@ assert_bad_founding(Data) ->
     Ns = list_to_binary("rtbad:" ++ U),
     try
         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        Entry = case Data of
+                    noop -> quod_ledger:noop_entry(1, none);
+                    _ ->
+                        {ok, Canonical} = quod_ledger:new_entry(
+                                            1, Data, 0, none),
+                        Canonical
+                end,
         {ok, Store1} = quod_ledger_store:append(
-                         Store0, [#entry{index = 1, data = Data}]),
+                         Store0, [Entry]),
         ok = quod_ledger_store:close(Store1),
         ?assertEqual(
            {error, invalid_genesis_payload},

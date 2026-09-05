@@ -259,7 +259,10 @@ creation_terms(Namespace, InstanceTerm0, PublicKey) ->
                         "  '$quod_project_node_ontology_hosting'(",
                         "Hosts, Contacts, Scope).\n"]),
             {ok, [{terms, Terms},
-                  {source, binary_to_list(Policy)},
+                  %% Source is chardata; retain its compact binary form on the
+                  %% public goal and materialize characters only inside the
+                  %% existing lifecycle parser.
+                  {source, Policy},
                   {external_predicate_modules,
                    [quod_ontology_predicates]}]};
         {error, _} ->

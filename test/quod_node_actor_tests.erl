@@ -1,5 +1,6 @@
 -module(quod_node_actor_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_proof_limits.hrl").
 
 creation_options_are_ordinary_ontology_content_test() ->
     Namespace = <<"node:alpha">>,
@@ -12,9 +13,19 @@ creation_options_are_ordinary_ontology_content_test() ->
               {instance_of, node, {physical_node, alpha}}, Terms)),
     ?assert(lists:member(
               {agent_key, {physical_node, alpha}, PublicKey, active}, Terms)),
-    {ok, PolicyTerms} = erlog_io:read_string_terms(Policy),
+    ?assert(is_binary(Policy)),
+    {ok, PolicyTerms} = erlog_io:read_string_terms(binary_to_list(Policy)),
     ?assert(lists:any(fun is_node_acl/1, PolicyTerms)),
     ?assert(lists:any(fun is_hosting_handler/1, PolicyTerms)).
+
+node_actor_creation_goal_fits_the_shared_proof_bounds_test() ->
+    Namespace = <<"quod:node-actor-0">>,
+    {ok, Options} = quod_node_actor:creation_options(
+                      Namespace, <<"physical_node(node_0).">>, 2, <<7:256>>),
+    Goal = {create_ontology, Namespace, Options, {'Anchor'}},
+    {ok, GoalBytes} = quod_wire_term:encode_canonical(Goal),
+    ?assert(byte_size(GoalBytes) =< ?QUOD_MAX_NESTED_GOAL_BYTES),
+    ?assertMatch({ok, _}, quod_durable_term:encode_goal(Goal)).
 
 creation_options_reject_variables_test() ->
     ?assertEqual(

@@ -912,7 +912,8 @@ part of the same sweep.
 These items are not route-recovery work and must remain in this order after the
 plan/review arc:
 
-1. **Height-growth latency curve.** One-hop c4 p99 is 676 ms against the
+1. **Height-growth latency curve.** The reviewed implementation plan is
+   `certified-history-height-latency-plan.md`. One-hop c4 p99 is 676 ms against the
    <=450 ms absolute gate. Per-request certified-history cost rose from about
    149 ms at height 80 to about 400 ms at the current height and reset on
    re-found. This is the next optimization milestone after route recovery.

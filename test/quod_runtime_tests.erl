@@ -828,6 +828,10 @@ subscription_catalogue_attaches_on_foreign_owner_registration_test_() ->
     {_, Ns, _} = F,
     ForeignDir = temp_runtime_dir("foreign-owner-registration"),
     Targets = 40,
+    stop_route_owners(),
+    {ok, Directory} = quod_directory:start_link(
+                        #{expire_tick_ms => 60000, ttl_ms => 10000}),
+    {ok, DirectoryControl} = quod_directory_control:start_link(#{}),
     try
         ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
         ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0}) -> true;
@@ -864,6 +868,17 @@ subscription_catalogue_attaches_on_foreign_owner_registration_test_() ->
                          when After >= Before + Targets -> true;
                       (_) -> false
                    end),
+            %% Subscription attachment reaches the same exact demand owner as
+            %% proofs, joins and DTX verification; no subscription-only route
+            %% registry or retry loop exists.
+            ok = wait_until(
+                   fun() ->
+                       case quod_directory_control:stats() of
+                           #{route_demands := Targets,
+                             route_demanded := Targets} -> true;
+                           _ -> false
+                       end
+                   end),
             %% Removing the catalogue drops every exact consumer and the
             %% name-follow monitor; no delayed timer may recreate either.
             lists:foreach(
@@ -885,6 +900,9 @@ subscription_catalogue_attaches_on_foreign_owner_registration_test_() ->
         end
     after
         cleanup_founded(F),
+        catch gen_server:stop(DirectoryControl),
+        catch gen_server:stop(Directory),
+        stop_route_owners(),
         _ = file:del_dir_r(ForeignDir)
     end
     end}.
@@ -1685,6 +1703,16 @@ stop_foreign_owner(_Pid, false) -> ok;
 stop_foreign_owner(Pid, true) ->
     unlink(Pid),
     try gen_server:stop(Pid) catch exit:_ -> ok end.
+
+stop_route_owners() ->
+    stop_route_owner({directory, control}),
+    stop_route_owner({directory, node}).
+
+stop_route_owner(Key) ->
+    case quod_reg:where(Key) of
+        Pid when is_pid(Pid) -> catch gen_server:stop(Pid);
+        _ -> ok
+    end.
 
 temp_runtime_dir(Label) ->
     filename:join(

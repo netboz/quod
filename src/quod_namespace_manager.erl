@@ -33,7 +33,7 @@ itself owns only projection state, ordering, and replies.
 -export([start_link/0,
          start_content/2, start_new_content/2, stop_content/1,
          start_brahms/2, stop_brahms/1, adopt_node_actor/0,
-         project_node_policy/4, hosting_snapshot/0]).
+         project_node_policy/4, hosting_snapshot/0, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
 -ifdef(TEST).
@@ -112,6 +112,12 @@ project_node_policy(Namespace, Height, Scope, Projection) ->
 hosting_snapshot() ->
     gen_server:call(quod_reg:via(?KEY), hosting_snapshot, 5000).
 
+-doc "Fixed-cardinality state for node-level hosting observability.".
+stats() ->
+    try gen_server:call(quod_reg:via(?KEY), stats, 1000)
+    catch exit:_ -> undefined
+    end.
+
 start_child(Kind, Ns, Config)
   when is_binary(Ns), is_map(Config) ->
     gen_server:call(
@@ -176,6 +182,21 @@ handle_call(hosting_snapshot, _From,
             S = #s{hosting_revision = Revision, ready_content = Ready,
                    ready_private = Private}) ->
     {reply, {ok, Revision, Ready, Private}, S};
+handle_call(stats, _From,
+            S = #s{hosting_revision = Revision,
+                   bootstrap_content = Bootstrap,
+                   system_content = System, node_content = Node,
+                   ready_private = Private, route_waits = RouteWaits}) ->
+    Desired = hosting_projection(
+                maps:keys(content_projection(Bootstrap, System, Node)), S),
+    {reply,
+     #{hosting_revision => Revision,
+       desired_hosts =>
+           #{discoverable => count_host_visibility(discoverable, Desired),
+             private => count_host_visibility(private, Desired)},
+       private_contacts => length(Private),
+       route_waits => map_size(RouteWaits)},
+     S};
 handle_call(Request, From, S) ->
     {noreply, continue_work(enqueue_call(Request, From, S))}.
 
@@ -1037,6 +1058,11 @@ sync_waits(Kind, Wanted, Current, S) ->
     Added = maps:keys(Wanted) -- maps:keys(Current),
     _ = [catch quod_reg:unsubscribe({Kind, Key}) || Key <- Removed],
     _ = [true = quod_reg:subscribe({Kind, Key}) || Key <- Added],
+    _ = case Kind of
+            directory_route ->
+                [quod_directory:route_needed(Identity) || Identity <- Added];
+            runtime -> []
+        end,
     S1 = case Kind of
              directory_route -> S#s{route_waits = Wanted};
              runtime -> S#s{runtime_waits = Wanted}
@@ -1290,7 +1316,7 @@ publish_reconcile_storage(StorageAdds) ->
 install_ready_content(ReadyNames,
                       S = #s{ready_content = Old,
                              ready_private = OldPrivate}) ->
-    Ready = ready_hosting_projection(ReadyNames, S),
+    Ready = hosting_projection(ReadyNames, S),
     Private = private_route_projection(S),
     case Ready =:= Old andalso Private =:= OldPrivate of
         true -> S;
@@ -1302,15 +1328,18 @@ install_ready_content(ReadyNames,
                 ready_private = Private}
     end.
 
+count_host_visibility(Visibility, Rows) ->
+    length([ok || #{visibility := V} <- Rows, V =:= Visibility]).
+
 private_route_projection(#s{node_projection = #{contacts := Contacts}})
   when is_map(Contacts) ->
     lists:sort(maps:values(Contacts));
 private_route_projection(_) -> [].
 
-ready_hosting_projection(ReadyNames,
-                         #s{bootstrap_content = Bootstrap,
-                            system_content = System,
-                            node_content = Node}) ->
+hosting_projection(Names,
+                   #s{bootstrap_content = Bootstrap,
+                      system_content = System,
+                      node_content = Node}) ->
     lists:sort(
       lists:filtermap(
         fun(Ns) ->
@@ -1318,7 +1347,7 @@ ready_hosting_projection(ReadyNames,
                 undefined -> false;
                 Row -> {true, Row}
             end
-        end, ReadyNames)).
+        end, Names)).
 
 ready_hosting_row(Ns, Bootstrap, System, Node) ->
     case {Ns =:= ?ROOT_NS, maps:get(Ns, Bootstrap, undefined)} of

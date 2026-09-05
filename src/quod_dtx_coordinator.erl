@@ -224,6 +224,7 @@ dormant_operation_init(Owner, Context = #{target := Target}) ->
     %% with link failure is already in this process's mailbox. The signed
     %% cancellation remains the exact same blob on every later wake.
     true = quod_reg:subscribe({directory_route, Target}),
+    ok = quod_directory:route_needed(Target),
     dormant_operation_cancel(Owner, OwnerMonitor, Context).
 
 dormant_operation_cancel(
@@ -1763,6 +1764,7 @@ ensure_route_subscription(
         true -> S;
         false ->
             true = quod_reg:subscribe({directory_route, Identity}),
+            ok = quod_directory:route_needed(Identity),
             S#state{route_subscriptions = Subscriptions#{Identity => true}}
     end.
 

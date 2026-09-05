@@ -30,7 +30,14 @@ ignored by their request token.
 
 Cached generations are served only while their lease is live. Process monitors
 remove dead validation/link work. Timeouts are terminal failure safeguards, not
-progress polling.
+progress polling. An exact `route_needed(Identity)` from an existing consumer
+is deduplicated here and immediately drives the same control-link resync; the
+lease-renewal tick never polls for missing routes. Directory control subscribes
+to root's runtime projection: replay readiness and committed
+`peer_admitted/4` changes refresh the relay-authority set immediately. The
+lease tick maintains only the already-authorized control transports, so a
+quiet node can reconnect after transient network loss without using route
+demand as a polling mechanism.
 
 Configuration contains root contacts, the local node identity, and root's
 founding material. It contains no general namespace/key allowlist. A

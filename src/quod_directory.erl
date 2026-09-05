@@ -25,7 +25,9 @@ data; subscribers always reread this one ordinary projection.
 -include("quod_directory_limits.hrl").
 
 -export([start_link/0, start_link/1]).
--export([resolve/1, validator_routes/2, directory_hosts/1,
+-export([resolve/1, known_identities/1, validator_routes/2,
+         await_validator_routes/2, directory_hosts/1,
+         route_needed/1,
          install_generation/1, install_private_projection/1,
          expire/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -86,6 +88,25 @@ resolve(Ns) when is_binary(Ns) ->
 resolve(_) ->
     unknown.
 
+-doc "Exact anchored identities previously learned for `Namespace`.".
+-spec known_identities(binary()) -> [{binary(), <<_:256>>}].
+known_identities(Ns) when is_binary(Ns) ->
+    try lists:usort([{Ns, Anchor}
+                     || {Ns0, <<_:256>> = Anchor} <- ets:lookup(?KNOWN, Ns),
+                        Ns0 =:= Ns])
+    catch error:badarg -> []
+    end;
+known_identities(_) -> [].
+
+-doc "Signal demand for one exact route; availability is published on its property.".
+-spec route_needed({binary(), <<_:256>>}) -> ok.
+route_needed({Ns, <<_:256>>} = Identity) when is_binary(Ns) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) -> gen_server:cast(Pid, {route_needed, Identity});
+        undefined -> ok
+    end;
+route_needed(_) -> ok.
+
 -doc """
 Return confirmed validator routes for one exact anchored ontology identity.
 
@@ -120,6 +141,39 @@ validator_routes(Ns, <<_:256>> = Anchor) when is_binary(Ns) ->
     end;
 validator_routes(_Ns, _Anchor) ->
     {error, unavailable}.
+
+-doc "Wait for the ordinary exact-route edge, then reread the directory projection.".
+-spec await_validator_routes({binary(), <<_:256>>}, non_neg_integer()) ->
+          {ok, [map()]} | {error, unavailable | anchor_conflict}.
+await_validator_routes({Ns, <<_:256>>} = Identity, TimeoutMs)
+  when is_binary(Ns), is_integer(TimeoutMs), TimeoutMs >= 0 ->
+    true = quod_reg:subscribe({directory_route, Identity}),
+    try
+        ok = route_needed(Identity),
+        await_validator_routes_loop(
+          Identity, quod_time:mono_ms() + TimeoutMs)
+    after
+        _ = catch quod_reg:unsubscribe({directory_route, Identity})
+    end;
+await_validator_routes(_Identity, _TimeoutMs) ->
+    {error, unavailable}.
+
+await_validator_routes_loop({Ns, Anchor} = Identity, Deadline) ->
+    case validator_routes(Ns, Anchor) of
+        {ok, [_ | _]} = Ready -> Ready;
+        {error, anchor_conflict} = Conflict -> Conflict;
+        {error, unavailable} ->
+            case max(0, Deadline - quod_time:mono_ms()) of
+                0 -> {error, unavailable};
+                Remaining ->
+                    receive
+                        {directory_route_available, Identity} ->
+                            await_validator_routes_loop(Identity, Deadline)
+                    after Remaining ->
+                        {error, unavailable}
+                    end
+            end
+    end.
 
 -doc """
 Active public system hosts for the ground namespace, in deterministic key order.
@@ -184,7 +238,7 @@ init(Opts) ->
                                        {read_concurrency, true}]),
             Highwater = ets:new(?HIGHWATER, [named_table, protected, set,
                                              {read_concurrency, true}]),
-            Known = ets:new(?KNOWN, [named_table, protected, set,
+            Known = ets:new(?KNOWN, [named_table, protected, bag,
                                      {read_concurrency, true}]),
             _ = erlang:send_after(Tick, self(), expire_tick),
             {ok, #s{routes = Routes, highwater = Highwater, known = Known,
@@ -208,6 +262,16 @@ handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
 
+handle_cast({route_needed, {Ns, Anchor} = Identity}, S)
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+    case validator_routes(Ns, Anchor) of
+        {ok, [_ | _]} -> ok;
+        {error, _} ->
+            _ = [quod_directory_control:route_needed(Dependency)
+                 || Dependency <- route_demand_identities(Identity, S)],
+            ok
+    end,
+    {noreply, S};
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -262,7 +326,7 @@ install_generation_now(Author, NodeKey, Endpoint, Hosted, Epoch, Sequence,
               || {Ns, Anchor, Role} <- Hosted]),
     lists:foreach(fun(Row) -> true = ets:delete_object(Routes, Row) end,
                   OldRows),
-    true = ets:insert(Known, [{Ns} || {Ns, _, _} <- Hosted]),
+    true = ets:insert(Known, [{Ns, Anchor} || {Ns, Anchor, _} <- Hosted]),
     true = ets:insert(Highwater, {Author, Epoch, Sequence}),
     notify_usable_identities(Namespaces, Hosted, Before, Now, S),
     {S, Expiry}.
@@ -299,8 +363,10 @@ replace_private_projection(Rows, S = #s{routes = Routes, known = Known}) ->
             true = ets:insert(Routes, New),
             lists:foreach(fun(Row) -> true = ets:delete_object(Routes, Row) end,
                           Old -- New),
-            true = ets:insert(Known,
-                              [{maps:get(namespace, Row)} || Row <- Normalized]),
+            true = ets:insert(
+                     Known,
+                     [{maps:get(namespace, Row), maps:get(anchor, Row)}
+                      || Row <- Normalized]),
             notify_usable_identities(Namespaces, [], Before,
                                      quod_time:mono_ms(), S),
             {ok, S};
@@ -354,6 +420,21 @@ private_namespaces_for_author({node_actor, Blob}, Routes) ->
         _ -> []
     end;
 private_namespaces_for_author(_, _Routes) -> [].
+
+route_demand_identities(
+  {Ns, Anchor} = Identity, #s{routes = Routes}) ->
+    HostIdentities =
+        lists:usort(
+          [{HostNs, HostAnchor}
+           || {Ns0, private, _Key,
+               {agent_instance_ref, HostNs, HostAnchor, _}, undefined,
+               confirmed, Anchor0, validator, infinity, 0, 0}
+                  <- ets:lookup(Routes, Ns),
+              Ns0 =:= Ns, Anchor0 =:= Anchor]),
+    case HostIdentities of
+        [] -> [Identity];
+        _ -> HostIdentities
+    end.
 
 notify_usable_identities(Namespaces, Installed, Before, Now,
                          #s{routes = Routes}) ->

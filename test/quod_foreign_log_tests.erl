@@ -1016,6 +1016,35 @@ foreign_log_start_removes_only_disposable_projection_state_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+opening_a_follow_signals_one_exact_directory_demand_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    stop_route_recovery_owners(),
+    Dir = temp_dir("follow-route-demand"),
+    NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
+    {ok, Directory} = quod_directory:start_link(
+                        #{expire_tick_ms => 60000, ttl_ms => 10000}),
+    unlink(Directory),
+    {ok, Control} = quod_directory_control:start_link(#{}),
+    unlink(Control),
+    Pid = start_owner_opts(Dir, NoFetch, #{}),
+    Identity = {unique_ns(), key(100)},
+    try
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        _ = receive_follow(FollowRef, Identity),
+        ok = wait_route_demand(Identity, 100),
+        ?assertEqual(
+           [Identity],
+           maps:get(route_demands,
+                    quod_directory_control:test_control_state())),
+        ok = quod_foreign_log:unfollow(FollowRef)
+    after
+        stop_owner(Pid),
+        catch gen_server:stop(Control),
+        catch gen_server:stop(Directory),
+        stop_route_recovery_owners(),
+        _ = file:del_dir_r(Dir)
+    end.
+
 slow_follow_consumer_coalesces_live_occurrences_to_state_only_test() ->
     Projection1 = key(103),
     Projection2 = key(104),
@@ -3580,6 +3609,24 @@ wait_follow_count(Expected, Left) ->
 stop_owner(Pid) when is_pid(Pid) ->
     unlink(Pid),
     try gen_server:stop(Pid) catch exit:_ -> ok end.
+
+stop_route_recovery_owners() ->
+    _ = [catch gen_server:stop(Pid)
+         || Key <- [{directory, control}, {directory, node}],
+            Pid <- [quod_reg:where(Key)], is_pid(Pid)],
+    ok.
+
+wait_route_demand(Identity, 0) ->
+    error({route_demand_timeout, Identity,
+           quod_directory_control:test_control_state()});
+wait_route_demand(Identity, Left) ->
+    State = quod_directory_control:test_control_state(),
+    case lists:member(Identity, maps:get(route_demands, State)) of
+        true -> ok;
+        false ->
+            receive after 5 -> ok end,
+            wait_route_demand(Identity, Left - 1)
+    end.
 
 restore_application_env(Key, {ok, Value}) ->
     application:set_env(quod, Key, Value);

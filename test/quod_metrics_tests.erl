@@ -38,6 +38,10 @@ renders_without_non_ascii_help_test() ->
        nomatch,
        binary:match(
          Bin, <<"# HELP quod_client_outcome_unknown_total ">>)),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_directory_rebuild_seconds ">>)),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 
@@ -240,6 +244,34 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
              quod_dtx_group_stage_seconds,
              [Ns, <<"attacker_stage">>, <<"ok">>]))
     after
+        Placeholder ! stop
+    end.
+
+directory_rebuild_latency_uses_only_fixed_result_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    ok = quod_metrics:observe_directory_rebuild(ok, 7),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        OneSecond = erlang:convert_time_unit(1, second, native),
+        ok = quod_metrics:observe_directory_rebuild(ok, OneSecond),
+        ok = quod_metrics:observe_directory_rebuild(
+               attacker_controlled_result, OneSecond),
+        {Buckets, Sum} = prometheus_histogram:value(
+                           quod_directory_rebuild_seconds, [<<"ok">>]),
+        ?assertEqual(1.0, Sum),
+        %% Native time is converted by the Prometheus duration metric: a
+        %% one-second sample belongs to a finite bucket, never +Inf only.
+        ?assertEqual(1, lists:sum(Buckets)),
+        ?assertEqual(0, lists:last(Buckets)),
+        ?assertEqual(
+           undefined,
+           prometheus_histogram:value(
+             quod_directory_rebuild_seconds,
+             [<<"attacker_controlled_result">>]))
+    after
+        true = unregister(quod_metrics),
         Placeholder ! stop
     end.
 

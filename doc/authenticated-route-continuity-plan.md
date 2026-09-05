@@ -235,7 +235,8 @@ total state transition:
   and monitor generation and cannot affect a replacement candidate.
 
 While an exact verification lacks a usable route, the existing foreign-log
-owner parks that request and subscribes to the directory identity. The
+owner parks that request, subscribes to the directory identity, and signals
+`route_needed` to the existing directory-control owner. The
 `directory_route_available` message releases the parked request immediately;
 the caller deadline is only the final unavailability safeguard. If verification
 has already returned `abstain`, ordinary consensus recovery may later present

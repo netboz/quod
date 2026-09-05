@@ -450,7 +450,8 @@ The signed one-target foreign path has one exact custody sequence:
 5. Only a correlated target `cancelled` or `not_found` response lets the source
    retire its dormant signed custody. Unavailability proves nothing: the owner
    subscribes to the exact `{directory_route, TargetIdentity}` notification
-   before its first attempt, parks with custody retained, and retries the same
+   and signals `route_needed(TargetIdentity)` before its first attempt, parks
+   with custody retained, and retries the same
    signed cancellation only on `{directory_route_available, TargetIdentity}`.
    Cancellation uses
    the shared monitored TLS-pinned DTX endpoint link and ordered sends; QUIC

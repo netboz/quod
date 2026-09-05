@@ -25,7 +25,8 @@
          remote_signed_queued_occ_abort/1,
          remote_signed_gateway_group_with_root_effect/1,
          remote_signed_group_uses_exact_agent_request/1,
-         remote_group_recovers_after_origin_crash/1]).
+         remote_group_recovers_after_origin_crash/1,
+         remote_four_scope_chain_recovers_empty_routes/1]).
 -export([run_scope_proofs/3]).
 
 -define(TARGET_PORT, 15970).
@@ -35,6 +36,7 @@
 -define(ASKER_NS, <<"pets">>).
 -define(PRIVATE_NS, <<"private">>).
 -define(THIRD_NS, <<"third">>).
+-define(FOURTH_NS, <<"fourth">>).
 -define(ROOT_NS, <<"quod:root">>).
 -define(SCOPE_WAVE_SIZE, 8).
 
@@ -58,7 +60,8 @@ all() -> [remote_plain_read_excludes_live_observer,
           remote_signed_queued_occ_abort,
           remote_signed_gateway_group_with_root_effect,
           remote_signed_group_uses_exact_agent_request,
-          remote_group_recovers_after_origin_crash].
+          remote_group_recovers_after_origin_crash,
+          remote_four_scope_chain_recovers_empty_routes].
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
@@ -85,6 +88,7 @@ init_per_suite(Config) ->
             FilterSymbolName, "(opaque).\n",
             "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n",
             "via_third_failure :- third::third_blocked.\n",
+            "via_fourth(X) :- third::via_fourth(X).\n",
             "dtx_write_chain(X) :- assertz(dtx_animals_mark(X)), "
             "third::dtx_write(X).\n",
             dtx_disjoint_target_rules(),
@@ -103,12 +107,21 @@ init_per_suite(Config) ->
            ThirdGenesis,
            ["can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
             "third_blocked :- fail_with_reason(third_declined).\n"
+            "via_fourth(X) :- fourth::leaf(X).\n"
             "dtx_write(X) :- assertz(dtx_third_mark(X)).\n",
             dtx_disjoint_third_rules()]),
     ThirdAllow = #{?ASKER_NS => [AskerPub],
                    ?NS => [TargetPub]},
     Third = start_node(third, ?THIRD_PORT, ThirdKey, ?THIRD_NS,
                        ThirdGenesis, [], ThirdAllow, Config),
+    FourthGenesis = filename:join(
+                      ?config(priv_dir, Config), "remote_fourth.pl"),
+    ok = file:write_file(
+           FourthGenesis,
+           ["can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
+            "leaf(ok).\n"]),
+    start_namespace(
+      Target, TargetPub, ?FOURTH_NS, FourthGenesis, [], Config),
     PrivateGenesis = filename:join(?config(priv_dir, Config), "remote_private.pl"),
     %% Policy belongs in GENESIS. `can_invoke/4` gates every scope entry —
     %% including a top-level prove on this node — so an ontology born without a
@@ -153,6 +166,8 @@ init_per_suite(Config) ->
                      Target, quod_simplex, genesis_hash, [?NS]),
     ThirdAnchor = peer:call(
                     Third, quod_simplex, genesis_hash, [?THIRD_NS]),
+    FourthAnchor = peer:call(
+                     Target, quod_simplex, genesis_hash, [?FOURTH_NS]),
     AskerAnchor = peer:call(
                      Asker, quod_simplex, genesis_hash, [?ASKER_NS]),
     RootAnchor = peer:call(
@@ -175,6 +190,7 @@ init_per_suite(Config) ->
                 Asker, quod_ct, install_directory_generation,
                 [TargetPub, TargetAddr,
                  [{?NS, TargetAnchor, validator},
+                  {?FOURTH_NS, FourthAnchor, validator},
                   {?ROOT_NS, RootAnchor, validator}], 1, 1]),
     %% DTX phase references are verified independently at every participant.
     %% A therefore needs exact routes to B and C, while B/C each need the
@@ -256,6 +272,7 @@ init_per_suite(Config) ->
      {target_addr, TargetAddr}, {third_pub, ThirdPub},
      {third_addr, ThirdAddr}, {network_id, NetworkId},
      {target_anchor, TargetAnchor}, {third_anchor, ThirdAnchor},
+     {fourth_anchor, FourthAnchor},
      {asker_anchor, AskerAnchor}, {filter_symbol_name, FilterSymbolName},
      {agent_ref, AgentRef},
      {agent_key, AgentKey}, {agent_pub, AgentPub},
@@ -1265,6 +1282,96 @@ remote_group_recovers_after_origin_crash(Config) ->
         _ = peer:call(
               Asker, application, unset_env,
               [quod, dtx_test_phase_barrier])
+    end.
+
+%% A route consumer knows the certified identities but starts with no live
+%% route rows.  Each missing hop parks on the one exact directory property;
+%% installing the ordinary complete generation wakes that same proof.  Four
+%% ontology scopes are involved even though B and D share one physical node.
+remote_four_scope_chain_recovers_empty_routes(Config) ->
+    Asker = ?config(asker, Config),
+    TargetIdentity = {?NS, ?config(target_anchor, Config)},
+    ThirdIdentity = {?THIRD_NS, ?config(third_anchor, Config)},
+    Before = peer:call(Asker, quod_directory_control, stats, []),
+    ok = peer:call(Asker, quod_directory, expire, [1 bsl 60]),
+    ?assertEqual(
+       {known, []}, peer:call(Asker, quod_directory, resolve, [?NS])),
+    ?assertEqual(
+       {known, []}, peer:call(Asker, quod_directory, resolve, [?THIRD_NS])),
+    Parent = self(),
+    ProofRef = make_ref(),
+    _Caller = spawn(
+                fun() ->
+                    Result = peer:call(
+                               Asker, quod_prolog, prove_ro,
+                               [?ASKER_NS,
+                                {'::', ?NS, {via_fourth, {'X'}}}],
+                               60000),
+                    Parent ! {ProofRef, Result}
+                end),
+    try
+        ok = wait_route_demand(Asker, TargetIdentity, 500),
+        ok = install_chain_target_generation(Config, 2),
+        ok = wait_route_demand(Asker, ThirdIdentity, 500),
+        ok = install_chain_third_generation(Config, 2),
+        ?assertMatch(
+           {ok, [#{'X' := _}], _},
+           receive
+               {ProofRef, ProofResult} -> ProofResult
+           after 10000 ->
+               ct:fail(four_scope_route_wake_timeout)
+           end),
+        After = peer:call(Asker, quod_directory_control, stats, []),
+        ?assert(maps:get(route_demanded, After) >=
+                    maps:get(route_demanded, Before) + 2),
+        ?assert(maps:get(route_wakes, After) >=
+                    maps:get(route_wakes, Before) + 2)
+    after
+        %% Restore complete generations even if the assertion failed so this
+        %% suite never leaves a hidden route dependency for later cleanup.
+        _ = install_chain_target_generation(Config, 3),
+        _ = install_chain_third_generation(Config, 3)
+    end.
+
+wait_route_demand(_Peer, Identity, 0) ->
+    ct:fail({route_demand_timeout, Identity});
+wait_route_demand(Peer, Identity, Retries) ->
+    case peer:call(Peer, quod_directory_control, test_control_state, []) of
+        #{route_demands := Demands} ->
+            case lists:member(Identity, Demands) of
+                true -> ok;
+                false ->
+                    timer:sleep(10),
+                    wait_route_demand(Peer, Identity, Retries - 1)
+            end;
+        _ ->
+            timer:sleep(10),
+            wait_route_demand(Peer, Identity, Retries - 1)
+    end.
+
+install_chain_target_generation(Config, Epoch) ->
+    Asker = ?config(asker, Config),
+    case peer:call(
+           Asker, quod_ct, install_directory_generation,
+           [?config(target_pub, Config), ?config(target_addr, Config),
+            [{?NS, ?config(target_anchor, Config), validator},
+             {?FOURTH_NS, ?config(fourth_anchor, Config), validator},
+             {?ROOT_NS, ?config(network_id, Config), validator}],
+            Epoch, 1]) of
+        {ok, _} -> ok;
+        Other -> Other
+    end.
+
+install_chain_third_generation(Config, Epoch) ->
+    Asker = ?config(asker, Config),
+    case peer:call(
+           Asker, quod_ct, install_directory_generation,
+           [?config(third_pub, Config), ?config(third_addr, Config),
+            [{?THIRD_NS, ?config(third_anchor, Config), validator},
+             {?NS, ?config(target_anchor, Config), observer}],
+            Epoch, 1]) of
+        {ok, _} -> ok;
+        Other -> Other
     end.
 
 wait_decision_barrier(ProofRef, Config) ->

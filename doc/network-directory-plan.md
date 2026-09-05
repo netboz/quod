@@ -69,8 +69,11 @@ Root starts from its existing bootstrap contract. Root facts recover system
 ontologies; their ready rows are published. The local node-actor pointer then
 recovers the node ontology, whose committed facts recover ordinary hosted
 ontologies and public/private route projections. Consumers with no route wait
-on exact gproc properties and are woken by directory installation. Deadlines
-bound failed operations but do not discover progress.
+on exact gproc properties, send one deduplicated `route_needed(Identity)`
+signal to the existing directory-control owner, and are woken by directory
+installation. The signal starts the existing signed-generation resync; it
+does not carry or install a route. Deadlines bound failed operations but do
+not discover progress.
 
 Leases and signed epochs prevent stale endpoints from living forever. Renewal
 is a liveness safeguard. High-water state prevents an older generation from

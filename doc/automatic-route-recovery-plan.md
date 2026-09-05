@@ -1,6 +1,6 @@
 # Automatic ontology-route recovery — implementation plan
 
-**Status: Slices 1–4 implemented and reviewed.**
+**Status: Slices 1–5 implemented and reviewed; Slice 6 is the coordinated activation gate.**
 The byte-canonical correction R1–R4 is implemented and reviewed.
 Signed and hashed artifacts now persist and
 travel as the exact canonical bytes produced once at their owning constructor:
@@ -535,6 +535,13 @@ generation transfer. Installation publishes the existing
 `directory_route_available` edge, and the parked owner rereads the sole ETS
 index. No route is carried in the wake-up message, and no caller inserts one.
 
+Relay authority follows root directly: directory control subscribes to the
+root runtime edge, refreshes its proved peer set after replay and committed
+`peer_admitted/4` changes, and coalesces a second read if an older query was
+already running. The lease clock maintains authorized transports after
+transient network loss but never sends a route resync or polls for a missing
+ontology.
+
 The same demand signal is deduplicated by the existing control owner. It is
 not a request retry, proof retry, or timer. If no control link becomes usable,
 the caller's ordinary deadline returns unavailability.
@@ -704,6 +711,8 @@ No later slice starts until the prior review is green.
   authority while resolution advances to an honest coexisting advertiser.
 
 ### Slice 5 — demand wake-up and integration
+
+**Implemented and reviewed.**
 
 - Connect all existing route consumers to one exact `route_needed` + property
   wake path: system materialization, ordinary hosting, foreign follow, proof

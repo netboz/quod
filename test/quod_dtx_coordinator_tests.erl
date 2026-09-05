@@ -661,6 +661,32 @@ dormant_cancel_retires_custody_only_on_explicit_terminal_reply_test() ->
        quod_dtx_coordinator:test_dormant_cancel_disposition(
          Request, malformed)).
 
+dormant_cancel_signals_one_exact_directory_demand_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    stop_route_recovery_owners(),
+    {ok, Directory} = quod_directory:start_link(
+                        #{expire_tick_ms => 60000, ttl_ms => 10000}),
+    unlink(Directory),
+    {ok, Control} = quod_directory_control:start_link(#{}),
+    unlink(Control),
+    Fixture = quod_ct:signed_effect_operation_submission(),
+    {OriginNs, _} = maps:get(origin, Fixture),
+    Target = maps:get(target, Fixture),
+    try
+        {ok, Worker} = quod_dtx_coordinator:start_dormant_operation_monitor(
+                         self(), OriginNs, maps:get(submission, Fixture)),
+        ok = wait_route_demand(Target, 100),
+        ?assertEqual(
+           [Target],
+           maps:get(route_demands,
+                    quod_directory_control:test_control_state())),
+        exit(Worker, kill)
+    after
+        catch gen_server:stop(Control),
+        catch gen_server:stop(Directory),
+        stop_route_recovery_owners()
+    end.
+
 %% Lost endpoint replies and link failures do not synthesize progress from a
 %% foreign-history baseline. Custody remains parked until this exact target's
 %% directory owner publishes a real route edge; that wake rebuilds only the
@@ -801,5 +827,23 @@ applied_certificate(
     ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
               Certificate)),
     Certificate.
+
+stop_route_recovery_owners() ->
+    _ = [catch gen_server:stop(Pid)
+         || Key <- [{directory, control}, {directory, node}],
+            Pid <- [quod_reg:where(Key)], is_pid(Pid)],
+    ok.
+
+wait_route_demand(Identity, 0) ->
+    error({route_demand_timeout, Identity,
+           quod_directory_control:test_control_state()});
+wait_route_demand(Identity, Left) ->
+    State = quod_directory_control:test_control_state(),
+    case lists:member(Identity, maps:get(route_demands, State)) of
+        true -> ok;
+        false ->
+            receive after 5 -> ok end,
+            wait_route_demand(Identity, Left - 1)
+    end.
 
 digest(N) -> <<N:256>>.

@@ -1054,14 +1054,18 @@ parked_hosting_starts_on_exact_directory_route(
     Identity = {Ns, Anchor},
     {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
     Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
-    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
-    ok = wait_route_wait(Identity, present, 300),
     ?assertEqual(undefined, quod_reg:where({directory, node})),
     {ok, Directory} = quod_directory:start_link(
                         #{identity_dir => Dir,
                           expire_tick_ms => 60000, ttl_ms => 10000}),
     unlink(Directory),
+    {ok, Control} = quod_directory_control:start_link(#{}),
+    unlink(Control),
     try
+        ?assertMatch(
+           {ok, [_], _}, quod_prolog:execute(ActorNs, {assertz, Host})),
+        ok = wait_route_wait(Identity, present, 300),
+        ok = wait_directory_demand(Identity, 300),
         %% Installation publishes only the exact identity. The manager rereads
         %% the directory, prepares the ordinary pinned join and starts it.
         {ok, _} = quod_ct:install_directory_generation(
@@ -1074,6 +1078,7 @@ parked_hosting_starts_on_exact_directory_route(
         ?assertMatch({ok, [_], _},
                      quod_prolog:execute(ActorNs, {retract, Host})),
         ok = wait_desired_absent(Ns, 300),
+        stop_process(Control),
         stop_process(Directory)
     end.
 
@@ -1471,6 +1476,18 @@ wait_route_wait(Identity, Expected, N) ->
         _ -> receive after 10 ->
                  wait_route_wait(Identity, Expected, N - 1)
              end
+    end.
+
+wait_directory_demand(Identity, 0) ->
+    error({directory_demand_timeout, Identity,
+           quod_directory_control:test_control_state()});
+wait_directory_demand(Identity, N) ->
+    State = quod_directory_control:test_control_state(),
+    case lists:member(Identity, maps:get(route_demands, State)) of
+        true -> ok;
+        false -> receive after 10 ->
+                     wait_directory_demand(Identity, N - 1)
+                 end
     end.
 
 wait_local_state(Ns, Expected, 0) ->

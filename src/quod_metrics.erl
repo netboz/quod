@@ -49,6 +49,8 @@ Two collection paths:
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
 | `quod_foreign_feed_registrations` | gauge | | live target-validator height-wake registrations owned by the node-wide certified follower |
+| `quod_directory_desired_hosts{visibility}` / `quod_directory_advertisement_generation` / `quod_directory_route_*` | gauge | | fact-derived local hosting, the current signed generation, and exact route demand/wake activity; only fixed visibility labels are used |
+| `quod_directory_rebuild_seconds{result}` | histogram | | exact route demand to directory-availability wake time, using only fixed result labels |
 | `quod_effect_custody_*` | gauge | | node-wide direct-effect rows (including the group-active subset), reservations, and the committed capacity policy projected from root |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
@@ -103,6 +105,7 @@ Two collection paths:
          observe_remote_operation_stage/4,
          observe_dtx_group_stage/4,
          observe_foreign_history_stage/3,
+         observe_directory_rebuild/2,
          observe_runtime_reaction/3,
          observe_ontology_owner_terminal/5,
          observe_node_owner_terminal/4,
@@ -171,6 +174,7 @@ handle_info(refresh, State) ->
     _ = [refresh_catchup_ns(Ns) || Ns <- quod_simplex:namespaces()],
     _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
     _ = refresh_foreign_log(),                                      %% one shared owner per node
+    _ = refresh_directory(),                                        %% one fact-derived route projection per node
     _ = refresh_client_goal_router(),
     _ = refresh_scope_router(),
     _ = refresh_effect_custody(),                                   %% one shared owner per node
@@ -356,6 +360,19 @@ declare(NodeId) ->
     _ = N(quod_foreign_bootstrap_accepted, "Total authenticated foreign route candidate observations accepted into the lazy history owner (only ever goes up)."),
     _ = N(quod_foreign_bootstrap_rejected, "Total authenticated foreign route candidate observations refused by validation (only ever goes up)."),
     _ = N(quod_foreign_bootstrap_evicted, "Total older candidate endpoints evicted by the per-identity source bound (only ever goes up)."),
+    _ = prometheus_gauge:declare(
+          [{name, quod_directory_desired_hosts},
+           {help, "Ontology identities in the node manager's fact-derived desired-host projection, split only by the fixed discoverable/private visibility classes."},
+           {labels, [visibility]}, {constant_labels, CL}]),
+    _ = N(quod_directory_advertisement_generation, "Newest local signed directory generation number. It advances when the committed ready-host projection changes or its lease is renewed."),
+    _ = N(quod_directory_route_demands, "Exact missing-route demands currently retained by the existing directory-control owner."),
+    _ = N(quod_directory_route_demanded, "Total distinct exact missing-route demands accepted since the directory-control owner started."),
+    _ = N(quod_directory_route_wakes, "Total retained exact route demands completed by a directory availability edge since the directory-control owner started."),
+    _ = prometheus_histogram:declare(
+          [{name, quod_directory_rebuild_seconds},
+           {help, "Time from retaining one exact missing-route demand until the ordinary directory availability edge completes it. Result uses a closed vocabulary; identities and endpoints are never labels."},
+           {labels, [result]}, {buckets, ?REMOTE_OPERATION_STAGE_BUCKETS},
+           {constant_labels, CL}]),
     %% One node-wide direct-effect journal. Capacity comes from committed
     %% root policy; the two flags distinguish a real zero capacity from
     %% unlimited or a node that has not received its projection yet.
@@ -683,6 +700,34 @@ refresh_foreign_log() ->
     _ = set_node_owner_bytes(
           foreign_history, maps:get(cache_bytes, Stats, 0)),
     ok.
+
+refresh_directory() ->
+    Manager = quod_namespace_manager:stats(),
+    Desired = case Manager of
+                  #{desired_hosts := Counts} -> Counts;
+                  _ -> #{}
+              end,
+    _ = prometheus_gauge:set(
+          quod_directory_desired_hosts, [<<"discoverable">>],
+          maps:get(discoverable, Desired, 0)),
+    _ = prometheus_gauge:set(
+          quod_directory_desired_hosts, [<<"private">>],
+          maps:get(private, Desired, 0)),
+    Control = quod_directory_control:stats(),
+    _ = set_directory_control_gauge(
+          quod_directory_advertisement_generation, sequence, Control),
+    _ = set_directory_control_gauge(
+          quod_directory_route_demands, route_demands, Control),
+    _ = set_directory_control_gauge(
+          quod_directory_route_demanded, route_demanded, Control),
+    _ = set_directory_control_gauge(
+          quod_directory_route_wakes, route_wakes, Control),
+    ok.
+
+set_directory_control_gauge(Name, Key, Stats) when is_map(Stats) ->
+    prometheus_gauge:set(Name, maps:get(Key, Stats, 0));
+set_directory_control_gauge(Name, _Key, _Stats) ->
+    prometheus_gauge:set(Name, 0).
 
 refresh_client_goal_router() ->
     Stats = quod_client_goal_router:stats(),
@@ -1103,6 +1148,29 @@ foreign_history_stage(cache_open) -> {ok, <<"cache_open">>};
 foreign_history_stage(cache_replay) -> {ok, <<"cache_replay">>};
 foreign_history_stage(page_fetch) -> {ok, <<"page_fetch">>};
 foreign_history_stage(_) -> error.
+
+-doc "Observe one exact route demand completed by the ordinary directory availability edge.".
+-spec observe_directory_rebuild(ok, non_neg_integer()) -> ok.
+observe_directory_rebuild(Result, DurationNative)
+  when is_integer(DurationNative), DurationNative >= 0 ->
+    case {directory_rebuild_result(Result), whereis(?MODULE)} of
+        {{ok, ResultLabel}, Pid} when is_pid(Pid) ->
+            try
+                %% prometheus duration histograms accept native time; the
+                %% `_seconds` suffix converts bounds and exported sums.
+                _ = prometheus_histogram:observe(
+                      quod_directory_rebuild_seconds,
+                      [ResultLabel], DurationNative),
+                ok
+            catch _:_ -> ok
+            end;
+        _ -> ok
+    end;
+observe_directory_rebuild(_Result, _DurationNative) ->
+    ok.
+
+directory_rebuild_result(ok) -> {ok, <<"ok">>};
+directory_rebuild_result(_) -> error.
 
 -doc "Record one row explicitly retired by a live hosted-ontology owner.".
 -spec observe_ontology_owner_terminal(binary(), atom(), atom(), atom(),

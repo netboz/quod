@@ -3147,6 +3147,7 @@ open_progress_signals(Identity = {Ns, _Anchor}, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{progress_signals_open = false} = H0 ->
             true = quod_reg:subscribe({directory_route, Identity}),
+            ok = quod_directory:route_needed(Identity),
             S1 = add_namespace_progress_signals(Ns, S0),
             reconcile_feed_registrations(
               Identity,

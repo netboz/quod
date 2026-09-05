@@ -429,6 +429,10 @@ namespace's immutable 32-byte genesis anchor and current
 signed generation; an empty generation withdraws it. Manager revisions and
 exact route-property wakes drive reconciliation; no progress poll or fixed
 ontology-count limit exists. Private local ontologies stay outside publication.
+When a known exact identity has no usable route, the existing proof/follow/DTX
+owner subscribes to that property and emits one `route_needed` signal. The
+directory-control owner responds through its existing signed-generation
+resynchronization; no proof retry or alternate resolver is introduced.
 
 Every receiver independently verifies an advertisement's original Ed25519 node signature,
 restart-safe epoch/generation freshness, page bounds, and exact committed

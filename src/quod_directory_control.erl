@@ -21,6 +21,7 @@ relayed announcements only from a current root control peer.
 -include("quod_directory_limits.hrl").
 
 -export([start_link/0, start_link/1, start_tracking/0, hosting_changed/4,
+         route_needed/1,
          stats/0, channel/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
@@ -62,6 +63,7 @@ relayed announcements only from a current root control peer.
     pending_contacts = #{},
     control_links = #{},
     peer_query = undefined,
+    peer_refresh_pending = false,
     peer_height = undefined,
     peer_status = never_succeeded,
     renew_ms = ?RENEW_MS,
@@ -71,6 +73,9 @@ relayed announcements only from a current root control peer.
     hosting_revision = -1,
     hosting_projection = [],
     private_projection = [],
+    route_demands = #{},
+    route_demanded = 0,
+    route_wakes = 0,
     tracking = false
 }).
 
@@ -103,6 +108,15 @@ hosting_changed(ManagerPid, Revision, Names, Private)
             ok;
         undefined -> ok
     end.
+
+-doc "Request immediate resynchronization for one missing exact route.".
+-spec route_needed({binary(), <<_:256>>}) -> ok.
+route_needed({Ns, <<_:256>>} = Identity) when is_binary(Ns) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) -> gen_server:cast(Pid, {route_needed, Identity});
+        undefined -> ok
+    end;
+route_needed(_) -> ok.
 
 stats() ->
     try gen_server:call(quod_reg:via(?KEY), stats, 1000)
@@ -138,7 +152,8 @@ test_control_state() ->
       peer_status => S#s.peer_status,
       manager_pid => S#s.manager_pid,
       hosting_revision => S#s.hosting_revision,
-      hosting_projection => S#s.hosting_projection}.
+      hosting_projection => S#s.hosting_projection,
+      route_demands => maps:keys(S#s.route_demands)}.
 
 test_apply_peer_result(Result) ->
     sys:replace_state(
@@ -198,6 +213,7 @@ channel() ->
 init(Opts) ->
     Channel = channel(),
     true = quod_reg:subscribe({channel, Channel}),
+    true = quod_reg:subscribe({runtime, ?ROOT_NS}),
     case control_config(Opts) of
         {ok, Cfg} ->
             Base = #s{channel = Channel,
@@ -250,7 +266,10 @@ handle_call(stats, _From, S) ->
               root_proof_height => S#s.peer_height,
               root_proof_status => S#s.peer_status,
               epoch => S#s.epoch,
-              sequence => S#s.generation}, S};
+              sequence => S#s.generation,
+              route_demands => map_size(S#s.route_demands),
+              route_demanded => S#s.route_demanded,
+              route_wakes => S#s.route_wakes}, S};
 handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
@@ -271,6 +290,8 @@ handle_cast({hosting_changed, ManagerPid, Revision, Names, Private},
     end;
 handle_cast({hosting_changed, _ManagerPid, _Revision, _Names, _Private}, S) ->
     {noreply, S};
+handle_cast({route_needed, Identity}, S) ->
+    {noreply, register_route_demand(Identity, S)};
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -278,6 +299,13 @@ handle_info(directory_tick, S) ->
     {noreply, directory_tick(S)};
 handle_info(refresh_control_peers, S) ->
     {noreply, maybe_start_peer_query(S)};
+handle_info({replay_ready, _Id, _Height}, S) ->
+    {noreply, request_peer_refresh(S)};
+handle_info({applied_live, Envelope}, S) ->
+    case root_control_authority_changed(Envelope) of
+        true -> {noreply, request_peer_refresh(S)};
+        false -> {noreply, S}
+    end;
 handle_info({directory_peer_result, Token, Result}, S) ->
     {noreply, handle_peer_result(Token, Result, S)};
 handle_info({directory_peer_query_timeout, Token}, S) ->
@@ -329,6 +357,8 @@ handle_info({quod_message, {PeerKey, LinkPid}, Channel, Payload},
                 Payload, {pinned_link, PeerKey, LinkPid}, S)};
 handle_info({directory_generation_validated, Token, Result}, S) ->
     {noreply, finish_generation_validation(Token, Result, S)};
+handle_info({directory_route_available, Identity}, S) ->
+    {noreply, clear_route_demand(Identity, S)};
 handle_info({'DOWN', Ref, process, Pid, Reason}, S) ->
     case handle_generation_validation_down(Ref, Pid, Reason, S) of
         {matched, S1} -> {noreply, S1};
@@ -354,6 +384,9 @@ terminate(_Reason, S) ->
     _ = catch quod_reg:demonitor_name(
                 {directory, node}, S#s.directory_ref),
     _ = catch quod_reg:unsubscribe({channel, S#s.channel}),
+    _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
+    _ = [catch quod_reg:unsubscribe({directory_route, Identity})
+         || Identity <- maps:keys(S#s.route_demands)],
     ok.
 
 %%%===================================================================
@@ -381,6 +414,24 @@ maybe_start_peer_query(S = #s{peer_query = undefined}) ->
         peer_status = querying};
 maybe_start_peer_query(S) ->
     S.
+
+request_peer_refresh(S = #s{peer_query = undefined}) ->
+    maybe_start_peer_query(S#s{peer_refresh_pending = false});
+request_peer_refresh(S) ->
+    %% A query which began before this committed root edge may have captured
+    %% the older snapshot. Coalesce another read instead of losing the edge.
+    S#s{peer_refresh_pending = true}.
+
+continue_peer_refresh(
+  S = #s{peer_query = undefined, peer_refresh_pending = true}) ->
+    maybe_start_peer_query(S#s{peer_refresh_pending = false});
+continue_peer_refresh(S) ->
+    S.
+
+root_control_authority_changed(Envelope) when is_map(Envelope) ->
+    quod_diff:touches_functor(
+      maps:get(diff, Envelope, []), {peer_admitted, 4});
+root_control_authority_changed(_) -> false.
 
 root_peer_proof() ->
     Key = {'DirectoryControlKey'},
@@ -431,7 +482,7 @@ handle_peer_result(
     cancel_timer(TimerRef),
     demonitor(MonitorRef, [flush]),
     S0 = S#s{peer_query = undefined},
-    apply_peer_result(Result, S0);
+    continue_peer_refresh(apply_peer_result(Result, S0));
 handle_peer_result(_Token, _Result, S) ->
     S.
 
@@ -454,8 +505,9 @@ handle_peer_query_timeout(
     _ = catch exit(Pid, kill),
     demonitor(MonitorRef, [flush]),
     schedule_peer_retry(),
-    S#s{peer_query = undefined,
-        peer_status = {error, timeout}};
+    continue_peer_refresh(
+      S#s{peer_query = undefined,
+          peer_status = {error, timeout}});
 handle_peer_query_timeout(_Token, S) ->
     S.
 
@@ -465,8 +517,9 @@ handle_peer_query_down(
     cancel_timer(TimerRef),
     schedule_peer_retry(),
     {matched,
-     S#s{peer_query = undefined,
-         peer_status = {error, {worker_down, Reason}}}};
+     continue_peer_refresh(
+       S#s{peer_query = undefined,
+           peer_status = {error, {worker_down, Reason}}})};
 handle_peer_query_down(_MonitorRef, _Pid, _Reason, _S) ->
     unmatched.
 
@@ -699,8 +752,8 @@ handle_directory_link_error(Peer, OpenRef, S) ->
     case take_pending_contact(OpenRef, S) of
         {ok, _Endpoint, S0} ->
             %% Do not immediately redial the failed endpoint in this mailbox
-            %% turn. Other queued key candidates may proceed; the next normal
-            %% control tick retries contacts.
+            %% turn. Other queued key candidates may proceed; later control
+            %% link, authority, or exact-demand events own further progress.
             pump_control_dials(S0);
         error when is_binary(Peer), byte_size(Peer) =:= 32 ->
             handle_control_link_error(Peer, OpenRef, S);
@@ -866,6 +919,55 @@ send_control_resyncs(S = #s{control_links = Links}) ->
       end, Links),
     S.
 
+register_route_demand(Identity, S0) ->
+    case add_route_demand(Identity, S0) of
+        {added, S1} -> maintain_directory_control(S1);
+        {same, S1} -> S1
+    end.
+
+add_route_demand(
+  {Ns, Anchor} = Identity,
+  S = #s{route_demands = Demands})
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+    case maps:is_key(Identity, Demands) orelse route_is_available(Identity) of
+        true ->
+            {same, S};
+        false ->
+            true = quod_reg:subscribe({directory_route, Identity}),
+            %% Close the install-vs-subscribe race. The directory published
+            %% the edge if installation won; the direct reread avoids retaining
+            %% a demand after that already-complete transition.
+            case route_is_available(Identity) of
+                true ->
+                    _ = catch quod_reg:unsubscribe(
+                                {directory_route, Identity}),
+                    {same, S};
+                false ->
+                    {added,
+                     S#s{route_demands =
+                             Demands#{Identity => erlang:monotonic_time()},
+                         route_demanded = S#s.route_demanded + 1}}
+            end
+    end;
+add_route_demand(_Identity, S) ->
+    {same, S}.
+
+clear_route_demand(Identity, S = #s{route_demands = Demands}) ->
+    case maps:take(Identity, Demands) of
+        {StartedAt, Rest} ->
+            _ = catch quod_reg:unsubscribe({directory_route, Identity}),
+            quod_metrics:observe_directory_rebuild(
+              ok, max(0, erlang:monotonic_time() - StartedAt)),
+            S#s{route_demands = Rest, route_wakes = S#s.route_wakes + 1};
+        error -> S
+    end.
+
+route_is_available({Ns, Anchor}) ->
+    case quod_directory:validator_routes(Ns, Anchor) of
+        {ok, [_ | _]} -> true;
+        _ -> false
+    end.
+
 send_control_frame(Frame, SkipKey, S) ->
     send_control_frame(Frame, SkipKey, SkipKey, S).
 
@@ -1003,10 +1105,13 @@ publish_hosted(S) ->
 
 directory_tick(S = #s{renew_ms = RenewMs}) ->
     arm_tick(RenewMs),
-    SControl = maintain_directory_control(S),
-    case SControl#s.tracking andalso can_advertise(SControl) of
-        true -> renew_advertisement(SControl);
-        false -> SControl
+    %% This clock exists only for lease and root-control transport liveness.
+    %% Route discovery and peer-set authority are driven by exact demand and
+    %% committed root-runtime edges respectively; no resync is sent here.
+    S1 = maintain_control_links(S),
+    case S1#s.tracking andalso can_advertise(S1) of
+        true -> renew_advertisement(S1);
+        false -> S1
     end.
 
 renew_advertisement(S) ->
@@ -1506,8 +1611,28 @@ serving_identity(#{identity_dir := IdentityDir}) ->
 %%%===================================================================
 
 recover_lifecycle(S) ->
-    self() ! directory_tick,
-    recover_tracking_event(S).
+    arm_tick(S#s.renew_ms),
+    maintain_directory_control(
+      recover_route_demands(recover_tracking_event(S))).
+
+recover_route_demands(S0) ->
+    Identities = route_waiting_identities(),
+    %% Re-enter through the directory owner: it is the single place that can
+    %% translate a private target into its committed HostNodeRef identity.
+    _ = [quod_directory:route_needed(Identity) || Identity <- Identities],
+    S0.
+
+route_waiting_identities() ->
+    try
+        lists:usort(
+          [Identity
+           || {Ns, Anchor} = Identity <-
+                  gproc:select(
+                    [{{{p, l, {directory_route, '$1'}}, '_', '_'},
+                       [], ['$1']}]),
+              is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32])
+    catch _:_ -> []
+    end.
 
 recover_tracking_event(S) ->
     case application:get_env(quod, directory_tracking, false) of
@@ -1558,7 +1683,9 @@ reconcile_observed_hosted(S) ->
 
 recover_directory_state(S) ->
     %% Reinstall only freshly received or locally re-signed generations.
-    S1 = maintain_directory_control(S#s{generations = #{}, assemblies = #{}}),
+    S1 = recover_route_demands(
+           maintain_directory_control(
+             S#s{generations = #{}, assemblies = #{}})),
     case {S1#s.tracking, can_advertise(S1),
           reconcile_observed_hosted(S1)} of
         {true, true, {ok, S2}} ->

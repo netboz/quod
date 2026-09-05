@@ -2899,6 +2899,206 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 257,
+      "type": "row",
+      "title": "Fact-backed directory recovery",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 276,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 258,
+      "type": "timeseries",
+      "title": "Desired hosts and waiting routes",
+      "description": "Committed hosting projected on each node, split only by discoverable/private, beside exact route demands currently waiting for a signed directory generation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 277,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quod_directory_desired_hosts{node_id=~\"$node\"}",
+          "legendFormat": "desired {{visibility}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_directory_route_demands{node_id=~\"$node\"}",
+          "legendFormat": "waiting routes · {{node_id}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 259,
+      "type": "timeseries",
+      "title": "Advertisement generation",
+      "description": "Newest complete signed directory generation published by each node. Changes come from committed hosting projection or lease renewal, never from an imperative route insertion.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 277,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quod_directory_advertisement_generation{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 260,
+      "type": "timeseries",
+      "title": "Route demand and wake activity",
+      "description": "Distinct exact route demands accepted and completed by a directory-availability edge. A growing gap means route reconstruction is not converging.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 285,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(quod_directory_route_demanded{node_id=~\"$node\"}[$__rate_interval])",
+          "legendFormat": "demanded · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(quod_directory_route_wakes{node_id=~\"$node\"}[$__rate_interval])",
+          "legendFormat": "woken · {{node_id}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 261,
+      "type": "timeseries",
+      "title": "Route reconstruction latency",
+      "description": "Time from one retained exact route demand until its ordinary signed-directory availability edge. Identities and endpoints never become labels.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 285,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, node_id, result) (rate(quod_directory_rebuild_seconds_bucket{node_id=~\"$node\"}[$__rate_interval])))",
+          "legendFormat": "p50 · {{result}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, node_id, result) (rate(quod_directory_rebuild_seconds_bucket{node_id=~\"$node\"}[$__rate_interval])))",
+          "legendFormat": "p99 · {{result}} · {{node_id}}",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }

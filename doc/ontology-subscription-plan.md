@@ -282,7 +282,9 @@ while one wake is unacknowledged it retains only the newest pending height.
 Exact peer, link, registration id, anchor, and height correlation rejects
 crossed or stale controls. Link loss, last `unfollow`, committee replacement,
 or owner shutdown removes the row; directory/certified-history progress
-rebuilds it. The wake remains only a prompt for the one certified follower.
+rebuilds it. On an absent exact route, that follower emits the same deduplicated
+`route_needed` signal used by proofs, joins, and DTX verification. The wake
+remains only a prompt for the one certified follower.
 
 There is no process or connection per subscription fact. One active target has
 one shared verification/materialization owner, one coalesced wake job, and one

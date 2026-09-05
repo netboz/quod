@@ -315,8 +315,32 @@ open_cohosted_scope(Target, Anchor, ScopeId) ->
 open_directory_scope(Target) ->
     case quod_directory:resolve(Target) of
         unknown -> {error, {unknown_ontology, Target}};
-        {known, []} -> {error, {ontology_unreachable, Target}};
-        {known, Routes} -> choose_directory_scope(Target, Routes)
+        {known, []} -> await_known_directory_scope(Target);
+        {known, Routes} ->
+            case [Route || Route = #{status := confirmed, role := validator}
+                               <- Routes] of
+                [] -> await_known_directory_scope(Target);
+                _ -> choose_directory_scope(Target, Routes)
+            end
+    end.
+
+await_known_directory_scope(Target) ->
+    case quod_directory:known_identities(Target) of
+        [{Target, _Anchor} = Identity] ->
+            case execution_remaining_ms() of
+                0 -> {error, current_proof_limit()};
+                RemainingMs ->
+                    case quod_directory:await_validator_routes(
+                           Identity, RemainingMs) of
+                        {ok, Routes} -> choose_directory_scope(Target, Routes);
+                        {error, anchor_conflict} ->
+                            {error, {anchor_conflict, Target}};
+                        {error, unavailable} ->
+                            {error, {ontology_unreachable, Target}}
+                    end
+            end;
+        [] -> {error, {ontology_unreachable, Target}};
+        _ -> {error, {anchor_conflict, Target}}
     end.
 
 choose_directory_scope(Target, Routes) ->

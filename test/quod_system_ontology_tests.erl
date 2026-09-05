@@ -52,6 +52,15 @@ malformed_row_does_not_hide_healthy_identity_test() ->
        [#{namespace => <<"quod:agent">>, anchor => Anchor}], Descriptors),
     assert_one_malformed(Rejected).
 
+catalogue_rebuilding_shapes_share_one_root_not_ready_result_test() ->
+    ?assertEqual(
+       {error, root_not_ready},
+       quod_system_ontology:validate_catalog_proof({error, rebuilding})),
+    ?assertEqual(
+       {error, root_not_ready},
+       quod_system_ontology:validate_catalog_proof(
+         {error, {ontology_rebuilding, <<"quod:root">>}})).
+
 matching_materialized_identity_is_reused_without_reopening_ledger_test() ->
     Ns = <<"quod:cached">>,
     Anchor = <<5:256>>,

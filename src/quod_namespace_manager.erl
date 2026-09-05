@@ -598,7 +598,6 @@ finish_system_query(
 %% root change rather than re-reading the same bad state in a tight loop.
 finish_system_query({error, no_such_namespace}, S) -> S;
 finish_system_query({error, root_not_ready}, S) -> S;
-finish_system_query({error, {ontology_rebuilding, ?ROOT_NS}}, S) -> S;
 finish_system_query({error, malformed_system_catalogue}, S) ->
     log_invalid_system_catalogue(malformed_system_catalogue, S);
 finish_system_query({error, Reason}, _S) ->

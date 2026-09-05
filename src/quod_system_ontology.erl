@@ -12,7 +12,7 @@ configs.
 
 -export([catalog/0, materialize/2]).
 -ifdef(TEST).
--export([materialize/1, validate_rows/1]).
+-export([materialize/1, validate_rows/1, validate_catalog_proof/1]).
 -endif.
 
 -define(ROOT_NS, <<"quod:root">>).
@@ -47,6 +47,12 @@ validate_catalog_proof({ok, [Bindings], Height})
             end;
         error -> {error, malformed_system_catalogue}
     end;
+%% The public proof worker reports this short transient while the local root
+%% engine is still replaying. Catalogue callers need one root-domain answer,
+%% independent of the proof API shape that observed the same boot state.
+validate_catalog_proof({error, rebuilding}) -> {error, root_not_ready};
+validate_catalog_proof(
+  {error, {ontology_rebuilding, ?ROOT_NS}}) -> {error, root_not_ready};
 validate_catalog_proof({error, Reason}) -> {error, Reason};
 validate_catalog_proof(fail) -> {error, root_not_ready};
 validate_catalog_proof({fail, _}) -> {error, root_not_ready};

@@ -27,6 +27,15 @@ root_system_and_node_rows_use_separate_authorities_test() ->
                  quod_directory_control:test_partition_hosted(
                    [Root, System, Node])).
 
+multiple_hosted_rows_are_canonicalized_without_crashing_test() ->
+    Root = {<<"quod:root">>, key(10), validator, bootstrap},
+    System = {<<"quod:node">>, key(11), validator, system},
+    %% Manager projection order is semantic-free.  The directory shape owner
+    %% returns canonical order, which may differ from the observed order.
+    ?assertEqual(
+       {ok, lists:sort([Root, System])},
+       quod_directory_control:test_validate_described_hosted([Root, System])).
+
 root_peer_proof_is_closed_and_exact_test() ->
     K1 = key(1), K2 = key(2),
     ?assertEqual(

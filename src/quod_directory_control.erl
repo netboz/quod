@@ -31,7 +31,7 @@ relayed announcements only from a current root control peer.
          test_install_control_link/3,
          test_set_pending_link/3, test_validate_peer_proof/1,
          test_set_hosting_snapshot/2, test_set_manager_epoch/1,
-         test_partition_hosted/1]).
+         test_partition_hosted/1, test_validate_described_hosted/1]).
 -endif.
 
 -define(KEY, {directory, control}).
@@ -1074,9 +1074,11 @@ describe_hosted([#{namespace := Ns, anchor := Expected,
             {error, {hosted_descriptor_unavailable, Ns}}
     end;
 describe_hosted([], Acc) ->
-    Hosted = lists:reverse(Acc),
+    validate_described_hosted(lists:reverse(Acc)).
+
+validate_described_hosted(Hosted) ->
     case quod_directory_shape:validate_hosted(Hosted) of
-        {ok, Hosted} -> {ok, Hosted};
+        {ok, Normalized} -> {ok, Normalized};
         error -> {error, bad_hosted}
     end.
 
@@ -1184,6 +1186,7 @@ partition_hosted(Hosted) ->
 
 -ifdef(TEST).
 test_partition_hosted(Hosted) -> partition_hosted(Hosted).
+test_validate_described_hosted(Hosted) -> validate_described_hosted(Hosted).
 -endif.
 
 generation_specs(RootRows, NodeRows,

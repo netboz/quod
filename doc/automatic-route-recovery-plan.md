@@ -1,6 +1,6 @@
 # Automatic ontology-route recovery — implementation plan
 
-**Status: Slices 1–5 implemented and reviewed; Slice 6 is the coordinated activation gate.**
+**Status: Slices 1–6 implemented and reviewed; the automatic route-recovery arc is complete on 0.7.135.**
 The byte-canonical correction R1–R4 is implemented and reviewed.
 Signed and hashed artifacts now persist and
 travel as the exact canonical bytes produced once at their owning constructor:
@@ -736,6 +736,45 @@ No later slice starts until the prior review is green.
   slice if new metrics land.
 
 ### Slice 6 — coordinated activation and hardware gate
+
+**Hardware gate completed and reviewed on 0.7.135.** The clean
+re-found used eight physical allocations. Root, `quod:node`, eight node actor
+ontologies, and the four test ontologies were created through ordinary goals;
+the deployment contained no test-ontology namespace entry. B was then moved
+from one node to another through ordinary membership and hosting facts, leaving
+only the new certified route.
+
+Four consecutive simultaneous eight-allocation restarts then recovered root,
+the system ontology, every node actor, the moved A/B/C/D hosts, A's subscription
+to B, and every public route without an operator edit. Every allocation ended
+with exactly four requested restarts and no additional restart; the final log
+sweep contained no warning, error, critical, or
+`system_catalogue_unavailable` entry. The instrumented run observed the entire
+route set and the subscription ready 18.415 seconds after Nomad issued the
+restart signal (an upper bound at the probe's sampling resolution); the last
+container started after 5.623 seconds.
+
+Post-recovery acceptance samples were all successful. The first three rows use
+the trusted in-VM test entry; the last row uses the real browser-equivalent
+challenge, session, signed-goal HTTP, and QUIC path. No node recorded a
+client-visible uncertain outcome.
+
+| entry and operation | requests | p50 | p99 |
+|---|---:|---:|---:|
+| in-VM A -> B plain remote read | 20 | 1.828 ms | 5.622 ms |
+| in-VM A -> B one-writer remote write | 20 | 48.237 ms | 62.714 ms |
+| in-VM A -> B -> C -> D atomic write | 20 | 434.977 ms | 695.101 ms |
+| signed client A -> B -> C -> D atomic write | 20 | 585 ms | 620 ms |
+
+The first four-ontology write after a later complete restart took 940 ms; the
+next five warm writes took 426–469 ms. Exact node-actor identity reads cost
+0.12–0.22 ms at median across the actor ledgers at heights 2–4, with no visible
+height trend in that deliberately small range. Each quiet node retained the
+seven remote actor current views and their lightweight height-wake
+registrations, but `follow_consumers` and `followed_histories` were both zero:
+there is no continuous all-pairs history projection. The higher-ledger
+height-growth curve and cold-start re-verification remain the separate backlog
+items in section 14; this small re-found does not claim to settle either.
 
 - Bump all hard-break formats once, remove old fixtures/assets/comments, and
   perform the coordinated clean re-found. No rolling mixed-wire deployment.

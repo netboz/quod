@@ -1,7 +1,8 @@
 # Finality recovery without sacrificing write throughput — review draft
 
-Status: **terminal-material-era architecture candidate approved; final
-composition/atomic-cut review outstanding; no implementation authority**.
+Status: **terminal-material-era architecture and compact-witness direction
+approved; retained-witness substitution needs focused confirmation (§7.1);
+H1 matrix still owed; no implementation authority**.
 Source reviewed at `b7c497e` / 0.7.143 on
 2026-09-07. Claude withdrew the per-slot rounds recommendation and accepted
 protocol-faithful pipelined Simplex with separate views and ledger heights.
@@ -25,6 +26,12 @@ measured. Review `4a272616-b80e-4b6c-88d0-9c61ba5e47e6` explicitly accepts
 material-only carrier projection and the era-root induction under its named
 premises. It requires the final pass over §§4.1/4.3.10 and §7.1's atomic-cut
 contract before implementation. Evidence retention is not a new stop quorum.
+Review `8fbf4b08-2c15-42de-9d11-91d5e0f35055` accepts the compact witness
+and selected archive custody. The fold below corrects its page-size/append
+claims and exposes one remaining availability interaction: different archive
+holders may select different valid witnesses for the same material entry.
+The proposed correction reuses exact certified-entry verification; it changes
+the supplied-witness contract explicitly, not the consensus vote rule.
 Consensus, DTX and signing-journal code still require review before commit.
 This commit is a plan only: no code, format, release bump or fleet change.
 
@@ -772,16 +779,21 @@ placement and exact DTX references all use this one mapping. The signed parent
 hash of a material block remains its original **protocol parent**; it must not
 be rewritten to the previous material entry. Ancestry evidence explains any gap.
 
-**Exact references: reuse, not equality weakening.** Today
+**Exact references: immutable claim, explicitly reviewed witness selection.** Today
 `quod_dtx:certified_ref_claim/1` binds identity, entry height, block hash and
 record digest, excluding replaceable proof bytes;
 `certified_entry_ref_matches/5` verifies the supplied proof under the slot's
 committee. This is the existing seam to generalize to era-bound ancestor
 finality. Its current producer and finality decoder accept direct same-slot
 commit certificates only: this proposal does **not** already work there.
-Keep every immutable claim check and verify the full supplied witness against
-the committee era of each signed block. No reference to a carrier, equality
-by height alone, certificate-byte-derived era id or second DTX verifier.
+Keep every immutable claim check. §7.1 proposes allowing the existing verified
+entry's selected witness to discharge that same claim instead of requiring
+the issuer's particular descendant head. This is an explicit contract change
+requiring confirmation, not an assertion that current code already substitutes
+witnesses. Whichever witness is used must verify fully against the certified
+era/ancestry; memory residence or matching fields alone never suffice.
+No reference to a carrier, equality by height alone, certificate-byte-derived
+era id or second DTX verifier.
 
 **Performance and simplification claim, strictly structural.**
 
@@ -900,6 +912,13 @@ installing N, or observing that nobody is fetching now does not permit deleting
 it. Non-selected duplicate witnesses need not all be archived forever, but
 only evidence no longer required by either live signed ancestry or a retained
 history witness may be pruned. No second carrier archive/cache is introduced.
+For V6, custody transfers only after the selected proof frames **and their
+referencing material entry** have passed the existing append's `datasync`.
+An unreferenced proof suffix alone cannot release journal custody. The store
+owns the complete-group boundary and orphan-tail recovery specified in §7.1;
+current V5 does not already implement proof-frame grouping. The ref contract
+there must also prevent a discarded alternate witness becoming an issuer-
+specific, permanent availability obligation.
 
 This is not “bounded evidence per contested slot”: arbitrarily many failed
 views before synchrony can lengthen a carrier chain. Count actual proof bytes,
@@ -1079,12 +1098,13 @@ hard breaks, not bumps to files or network state performed by this plan:
 | Family / current source | New cut | Invariant |
 |---|---|---|
 | `quod_ledger`: `{quod_block,1,…}` | Block grammar **2** | Canonical era id, era-local view, exact protocol-parent reference and payload; height is not the view. Empty carriers use a distinct empty payload, never the retired `noop` skip. Their timestamp is derived from the parent, so no proposer-local clock changes carrier bytes for a fixed parent/era/view. |
-| `quod_ledger`: `{quod_entry,1,…}` and direct/immediate-child proof shapes | Entry grammar **2**, one versioned generalized finality-witness grammar | Material index plus original block bytes and verified ancestry evidence. A direct commit is the zero-descendant case of the same witness/verifier. No raw old `#implicit_cert{}` compatibility branch; no carrier-only entry. |
+| `quod_ledger`: `{quod_entry,1,…}` and direct/immediate-child proof shapes | Entry grammar **2**, one versioned generalized finality-witness grammar | Material index, original block bytes, compact finality head/QC and binding to a separately streamed ancestry span. A direct commit is the zero-descendant case. No raw old `#implicit_cert{}` compatibility branch; no carrier-only entry. |
 | `quod_simplex`: `SHARE_DOMAIN_VERSION=2` | Signature-domain/message version **3** | Sign vote kind, ontology incarnation, era, view and exact value; complaints still have no value. Never compare era-local views without their era identity. |
 | `quod_relay`: `{sx2,Ns,Inner}` | **`sx3`** consensus envelope | Same authenticated channel/owner, new era-aware shares/certificates and block bytes; reject old consensus envelope. This module, not a new wire module, owns consensus framing. |
 | `quod_signing_journal`: **QSJ3**, record version 3 | **QSJ4**, record version **4** | One chain-bound journal; per-era/view rows and signing floors, exact supported bytes, final latches and custody. No journal-per-era service or rewriting old votes. |
-| `quod_ledger_store`: **V5**, magic `0x915106AE` | **V6**, magic `0x915106AF` | Existing CRC frame and sparse-index owner, with material entry indexes and the new entry grammar. No H2 backend replacement, snapshot base or carrier side log. |
-| `quod_dtx`: certified ref **2** | Certified ref **3** | Same immutable identity/height/block/record claim, new era-aware finality witness through the shared codec/verifier. No comparison of witness bytes as claim identity and no second exact-reference path. |
+| `quod_ledger_store`: **V5**, magic `0x915106AE` | **V6**, magic `0x915106AF` | Proof-kind frames and complete proof-plus-entry groups at the existing CRC/sparse-index owner; journal custody transfers after sync. No H2 backend replacement, snapshot base or carrier side log. |
+| `quod_catchup`: height-only `blocks_req` / complete-entry `blocks_resp_bytes` | One replacement paged grammar with a bound ancestry-span cursor | Material descriptors and proof parts use the same serving/verification workers and transport. Current height-only pages cannot address unindexed proof suffixes; replace/generalize the grammar, no parallel chunk service or old/new fallback. |
+| `quod_dtx`: certified ref **2** | Certified ref **3** | Same immutable identity/height/block/record claim plus compact era/view/hash head and its commit QC. §7.1 proposes treating the head as a preferred witness, not claim identity or a sole permitted proof. One exact-entry verifier. |
 
 The initial anchored genesis remains the existing sole no-finality-certificate
 case. Its new canonical block uses a fixed genesis-era marker, view 0 and no
@@ -1102,34 +1122,140 @@ any signature. Installing N must not reset same-view latches for an old era
 that could be restored from a stale projection.
 
 Pure wrappers that already carry opaque entry/ref bytes keep their outer
-format unless their own fields change: feed/catch-up framing, DTX endpoint,
+format unless their own fields change: feed/transport framing, DTX endpoint,
 transaction and scope grammars are not independently bumped for marketing.
 Their nested decoders and validation tests MUST accept only the new child
 grammar in this cut. Audit every embedder, including read/identity certificates,
 validation sidecars, effect-journal evidence, genesis tools, Explorer and fixtures;
 adapt actual consumers, not add version forwarding. Old headers may be
 identified solely for a typed format rejection, never decoded for recovery.
+Catch-up's **inner page grammar does change**, as the table states; the current
+opaque `{catchup, Ns, InnerBytes}` outer envelope need not change with it.
 
-**One representation obligation still to close in the final review.** The
-current `quod_dtx:validate_certified_ref/1` bounds embedded `FinalityProof` by
-`QUOD_MAX_DTX_BODY_BYTES` (224 KiB); the existing ledger store also bounds a
-physical frame (64 MiB). Neither establishes a bound on the total number of
-carrier links that Simplex may need before synchrony. Simply embedding an
-arbitrarily long ancestry list in today's one proof/blob would turn a framing
-guard into a permanent liveness bound. Do not approve that representation or
-silently raise the constants.
+**Compact finality witness — accepted direction, explicit premise.** A witness
+for material block B is `commitQC(K)` plus the exact hash-linked block bytes
+from K back to B. The embedded head is `{EraId, KView, KHash}`; the QC signs
+that exact era/view/value under the existing quorum rule. Direct finality is
+K=B with zero descendant links. Intermediate support QCs are **not carried**
+in this finality witness: an honest committer issues its vote only after the
+existing consensus owner has validated K's complete notarized ancestry.
+With the stated fault bound, the commit quorum contains honest signers that
+attest this protocol validity. This premise must hold in live and recovered
+signing paths; hash links alone are not a substitute for it. Reuse validated
+parent state and support evidence, including semantic-barrier validation; do
+not re-run all ancestor Prolog proofs on each commit. Support QCs still belong
+to in-flight notarization/signing custody before finality — their omission
+from the completed witness does not authorize deleting live evidence early.
 
-The proposed direction is compact exact-reference binding plus incremental
-delivery/verification of its required witness through the existing history
-and framed-stream owners, retaining the complete selected evidence in the
-same archive. The final review must pin that representation, including a
-logical witness exceeding one ref/frame and crash-safe custody across its
-parts, without a carrier-count cap, second proof store, new verifier or a
-fallback protocol. All exact ancestry/era/signature checks remain mandatory;
-neither a hash handle nor a transport frame grants authority. §7.1's format
-numbers are proposed, but this part of their field layout is NOT sealed and
-F1 remains blocked until it is. This is a source-identified format obligation,
-not a measured performance defect or an implementation started in this turn.
+For terminal membership M, **every** old-era descendant link is structurally
+empty. For ordinary pipelined finality, a material child/descendant remains
+valid and its bytes must be verified and materialized in order once. Do not
+turn the membership-only empty-suffix rule into a global restriction that
+serializes ordinary writes. Link sizes are therefore not universally tiny.
+
+The compact ref carries the unchanged material claim, one head and one QC,
+not the ancestry list. Its size is independent of chain length; existing
+committee/field bounds still apply. `QUOD_MAX_DTX_BODY_BYTES` (224 KiB) bounds
+that compact object, never the whole logical witness. No new carrier count
+limit or raised constant is proposed.
+
+**Paging at the existing owner — actual source boundary.** Today
+`QUOD_MAX_FOREIGN_PAGE_BYTES` is **900 KiB**, inside the **1 MiB** transport
+frame; **64 MiB** is the store's physical-frame sanity ceiling, not a network
+page size. `quod_catchup:serve_blocks` reads whole entries by material height;
+`cap_bytes` explicitly assumes a whole entry fits a page. It cannot already
+stream a non-indexed carrier span. Generalize that one request/page grammar
+to identify the exact material claim, selected witness head and continuation
+within its archived span. The store serves its selected witness; an issuer's
+preferred head must not force a second archive/index (see the contract below).
+Parts share the existing monitored work, page accounting, authenticated link
+and wrapped decoder. No second transport, service, cache or ordinary polling.
+
+The generalized verifier checks the selected head QC using the certified
+committee of that era, then exact canonical hashes, parent links, era/view
+descent and the terminal-M shape restriction until the exact B hash is reached.
+It obtains the certified prefix/era through the existing forward history
+induction, not a sender's committee declaration. Direct and ancestor cases
+use this same verifier. A backward hash walk needs constant cursor state plus
+one bounded page; ordered material apply and staging still use the existing
+store/projection. Do not advertise O(1) **total** system memory or zero storage
+for a long witness. Verify each required span once per existing work session;
+continuations must not restart from K or refold the whole history per page.
+No intermediate QC fetch round and no additional vote quorum is added.
+
+**V6 complete-group contract — new framing at the same store, not existing
+V5 behavior.** `quod_ledger_store:append/2` currently writes one frame per
+entry and syncs once per batch; its scanner has no proof-kind/orphan-group
+concept. Generalize that owner as follows:
+
+1. Append required proof frames before the material entry descriptors that
+   reference them. Keep span/offset metadata in this same archive and sparse
+   index. Physical offsets are local I/O metadata, never signed authority or
+   transferable references. Entries may reuse an already durable span; do not
+   copy an increasing proof prefix into each newly finalized ancestor.
+2. Only a complete referencing entry/group advances readable material height.
+   Sync the proof-plus-entry batch through the existing `datasync` boundary;
+   only successful sync releases the corresponding journal custody. No extra
+   per-link sync or separate custody acknowledgement protocol.
+3. On writer restart, an incomplete final group — including **complete**
+   orphan proof frames without the referencing entry — is repaired from that
+   group's start. Read-only open/snapshots stop at the last complete group
+   without truncating a live writer. A corrupt referenced span with later
+   completed entries is interior corruption, never permission to erase them.
+4. Preserve sparse **material** seeking: group/span metadata must let a seek
+   skip proof extents without walking every carrier header. The current
+   at-most-255 material-header hops must not silently become unbounded proof
+   scanning. Finalization/serving share the same archive handle/snapshot/index;
+   no global proof-hash lookup service or second backend.
+
+**One focused confirmation: witness choice versus exact claim.** Different
+quorum subsets of one head are already interchangeable. Different **heads**
+add an availability interaction that the selected-only archive rule must close:
+
+1. O has four honest validators. They support/commit M and its empty child K
+   in distinct views before learning the aggregates; no vote is changed.
+2. o1 first receives commitQC(K), selects K→M, and publishes a refs3 for M
+   naming K. Others first receive commitQC(M), select direct M, and enter N.
+3. Under selected-only retirement they may prune unselected K bodies when no
+   remaining live ancestry needs them. o1 then becomes unavailable (one fault).
+4. The remaining archives still hold exact M and valid direct finality for it.
+   N's proof-availability premise is satisfied. Requiring the **offered K**
+   suffix nevertheless cannot complete: the valid certificate names a body
+   that none of those archives still serves. A QC is not its missing body.
+
+This is a conditional retention counterexample, not a fixed-era agreement
+failure or a claim that current deployed code has this proposed wire. A
+bounded signed-evidence check is at
+`/tmp/quod-compact-witness-check.aIQcPs/check.mjs`; it assumes the stated
+retirement policy, not a complete Simplex network/crash model. If another
+custody obligation rules out step 3, the review must name its durable owner
+and release condition; “any archive holder” alone does not establish it.
+
+**Proposed smallest correction:** a ref names an immutable material claim;
+its embedded head/QC is a preferred witness, not the only admissible proof.
+The existing certified-history owner selects/validates its retained or served
+entry witness, and the existing exact-entry seam compares **all** immutable
+claim fields. A selected alternate witness must itself pass the same complete
+quorum/era/ancestry checks. There is no height-only success, unverified cache
+hit, fallback quorum, added acknowledgement or new verifier. This both removes
+issuer-specific proof retention and avoids redundant work when the exact
+entry is already certified at the existing owner.
+
+This explicitly changes `certified_entry_ref_matches/5`'s current requirement
+to validate the *supplied* proof even when the entry has another valid one.
+Do not implement it covertly as an optimization. The carried signed bytes are
+not rewritten, and witness choice never changes the operation/group or claim.
+Outer malformed refs still fail shape checking. If the preferred witness is
+actually used, its QC and full path must verify; an invalid one grants nothing.
+If an independently verified entry discharges the claim, an unused preferred
+hint is not an extra authentication requirement. Test that distinction
+explicitly. If neither selected nor supplied evidence proves the exact claim,
+verification remains unavailable/invalid under the existing result grammar,
+never success or ordinary Prolog failure by timeout.
+
+Keep this single contract amendment open for focused confirmation; do not
+compensate with archive-every-alternate forever, a ref-issuance quorum, or a
+second witness lookup path. F1 is not authorized by this paper fold.
 
 **Journal-to-archive and handover custody contract.** Keep a complete selected
 finality/parent witness in the existing material-entry archive before moving
@@ -1252,13 +1378,33 @@ suffixes is deliberately replaced by material-prefix compatibility:
 - **Retirement with an unfetched new member:** make M's full witness durable,
   install N locally while one new member has not fetched it, and advance the
   journal floor. That member must still fetch and verify M from the retained
-  archive; include restart mid-carrier-chain and mid-era-entry. A successful
+  archive on a different holder from the one that installed N; include restart
+  mid-carrier-chain and mid-era-entry. A successful
   live apply must not conceal a missing persisted witness.
-- **Witness larger than a physical envelope:** once the §7.1 representation
-  is sealed, verify and recover a multi-part witness exceeding the current
-  single-ref bound; missing/reordered/tampered parts cannot authorize a
-  reference or discard retained custody. No logical carrier-count bound may
-  be inferred from a single-frame guard.
+- **Compact direct/ancestor witnesses:** refs3 codec vectors for both through
+  one grammar. No intermediate support QCs in the finality witness, but actual
+  signing/restart tests must require validated notarized ancestry before a
+  final vote. Ordinary implicit finality through a material child must pass;
+  a material child above terminal M must fail.
+- **Witness larger than a physical envelope:** stream one logical witness
+  across multiple 900 KiB network pages and multiple V6 proof frames, including
+  a total larger than the 64 MiB physical-frame ceiling. Keep the compact ref
+  below its existing bound. Missing/reordered/tampered parts cannot authorize
+  it; page continuation must not re-read each earlier prefix. No carrier-count
+  bound, new cache or complete-witness-in-one-blob shortcut.
+- **Proof-plus-entry durability:** crash after a proof frame, mid-suffix,
+  after a complete suffix but before its entry, and around sync/journal-floor
+  movement. Prove writer orphan repair, non-mutating read-only bounds and
+  refusal of interior referenced corruption. Long proof spans must not grow
+  material seek header count or be copied once per finalized ancestor.
+- **Selected witness / lost issuer:** the §7.1 M/K schedule with distinct
+  retained heads and the K issuer unavailable. Under the proposed amendment,
+  the exact M ref succeeds using another holder's independently verified M
+  proof. Pin all identity/height/block/digest mismatches, unverified retained
+  entries, wrong-era/minority/duplicate signatures and broken ancestry. An
+  unused hint is not authority; a used hint must prove the complete claim.
+  Drive DTX exact-reference verification end to end through this same seam,
+  including an ancestor witness with no direct commit QC for the named entry.
 - Keep the historical U/T and classification witnesses as refutations of the
   withdrawn rules, not active taint fields or an alternative lock implementation.
 
@@ -1286,6 +1432,8 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 | `active_validators`, `committee_delta`, history committee views, membership action docs | one ordinary M delta and certified era root, no I/A sequence; old proof suffix verified with O; preserve singleton selection and ordinary durable result semantics |
 | Signing journal moduledoc | crash-safe view decisions, retained evidence, pruning and break |
 | `include/quod_ledger.hrl`, ledger and catch-up docs | proposed material-only append, era-local views, proof-only carrier custody and exact unmodified parent binding; remove old skip/depth-one-only claims |
+| `quod_ledger_store:append/2`, `scan`, `locate/2`; `quod_catchup:serve_blocks`, `cap_bytes` and wire grammar | one V6 complete-group/sparse-material index contract and paged proof spans; delete one-frame-per-complete-entry assumptions, preserve bounded seeks, read-only snapshots and one batch sync |
+| `quod_dtx:certified_entry_ref_matches/5`, `valid_certified_ref_finality`; exact-reference/foreign-history docs | after confirmation, immutable claim verified using the existing owner's selected valid witness; identify the intentional replacement of supplied-proof-only validation, never silently weaken it or rewrite signed references |
 | Ingress and DTX relay comments | one leader projection and custody wake |
 | `doc/content-layer.md` around lines 220–262 | replace terminal-skip/adjacent-vote/camp/grace story with the approved protocol |
 | `doc/deferred.md` around lines 292–302 | close residual only after implementation and fault/hardware proof |
@@ -1333,3 +1481,15 @@ protocol from Quod's adaptation. Neither a scratch model nor the name of a
 published protocol substitutes for proving its actual Quod composition.
 No proposed throughput gain has yet been measured, and the unchanged §6/H1
 gate still applies.
+
+Compact-witness review:
+`/home/yan/.codex/attachments/8fbf4b08-2c15-42de-9d11-91d5e0f35055/pasted-text.txt`.
+Its certificate-elision and archive-owner direction is folded into §7.1;
+64 MiB is corrected to the physical-frame ceiling, with the actual 900 KiB
+page boundary and required inner-grammar change stated. The new bounded
+check at `/tmp/quod-compact-witness-check.aIQcPs/check.mjs` addresses only
+supplied-head availability under selected-only retention and its proposed
+exact-claim resolution; it is not an implementation or another consensus
+proof. That explicit contract amendment needs focused confirmation. H1's
+full matrix remains incomplete; no implementation or fresh performance gate
+is claimed by this documentation work.

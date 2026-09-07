@@ -2713,7 +2713,7 @@ dtx_local_evidence(_Ns, _Ref, _ExpectedPhase) ->
 dtx_local_evidence_at(LedgerRoot, Ref, ExpectedPhase) ->
     local_evidence_result(
       quod_foreign_log:verify_local(
-        LedgerRoot, Ref, ExpectedPhase, ?DTX_FOREIGN_VERIFY_MS)).
+        LedgerRoot, Ref, ExpectedPhase, infinity)).
 
 local_evidence_result({ok, Evidence}) -> {ok, Evidence};
 local_evidence_result({error, phase_mismatch}) -> {error, invalid_request};

@@ -1,8 +1,7 @@
 # Certified-history height-latency correction plan
 
-**Status: reviewed; Slice H1 (observability and attribution) may start. H2 is
-not approved before H1's hardware attribution and backend review. No
-implementation has started.**
+**Status: reviewed; Slice H1 (observability and attribution) is in progress.
+H2 is not approved before H1's hardware attribution and backend review.**
 
 This plan owns one observed defect: a warm signed one-hop write becomes slower
 as the caller ontology's certified history grows. It does not own cold restart,
@@ -206,13 +205,15 @@ another subsystem.
 
 Tests pin that a trace spans the queued worker, stage names are closed, metric
 labels contain no identity data, unchanged resident hits report zero fetch and
-zero phase-store work, and instrumentation cannot change a result. Backend
-operation and byte counters—not elapsed-time assertions—pin that the measured
-work for an unchanged view and one-row advance is structurally independent of
-earlier GroupId count. One request-level test also asserts that the declared
-non-overlapping stage durations sum to approximately the enclosing request
-duration, within only explicitly recorded instrumentation/scheduling residual;
-this pins the arithmetic used by the 95% gate.
+zero phase-store work, and instrumentation cannot change a result. H1 exposes
+backend operation counts and constant-work row/byte extent statistics so the
+hardware table can distinguish elapsed cost from the amount of work requested;
+it does not assert the still-unproven H2 independence property. One
+request-level test also asserts that the declared non-overlapping stage
+durations sum to approximately the enclosing request duration, within only
+explicitly recorded instrumentation/scheduling residual; this pins the
+arithmetic used by the 95% gate. H2's structural-independence tests use backend
+operation and byte counts, never wall-clock thresholds.
 
 ## 7. Slice H2 -- correct the owning derived-state abstraction
 

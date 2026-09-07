@@ -336,13 +336,20 @@ applied_matches_finalize(Target, GroupId, FinalizeRef, Generation, Verdict,
                          #{finalizes := Finalizes},
                          #{group_id := GroupId}) ->
     case maps:get(Target, Finalizes, none) of
-        #{control := Control, ref := FinalizeRef} ->
-            case quod_dtx:recovery_phase(quod_dtx:control_body(Control)) of
-                {ok, #{kind := finalize, verdict := Verdict,
-                       prepare_ref := PrepareRef,
-                       generation := Generation}} ->
-                    PrepareRef =/= none;
-                _ -> false
+        #{control := Control, ref := StoredFinalizeRef} ->
+            case quod_dtx:same_certified_ref(
+                   StoredFinalizeRef, FinalizeRef) of
+                true ->
+                    case quod_dtx:recovery_phase(
+                           quod_dtx:control_body(Control)) of
+                        {ok, #{kind := finalize, verdict := Verdict,
+                               prepare_ref := PrepareRef,
+                               generation := Generation}} ->
+                            PrepareRef =/= none;
+                        _ -> false
+                    end;
+                false ->
+                    false
             end;
         none -> false
     end;
@@ -415,7 +422,7 @@ validate_chain(Begin, Index, Generations, Context) ->
         true ->
             case validate_prepares(Begin, BeginRef, Index, Context) of
                 ok ->
-                    case validate_decision(BeginRef, Index, Context) of
+                    case validate_decision(Begin, BeginRef, Index, Context) of
                         ok ->
                             case validate_finalizes(
                                    Index, Generations, Context) of
@@ -439,61 +446,96 @@ validate_prepares(Begin, BeginRef, #{prepares := Prepares},
                   {true, _} -> {error, invalid_phase_chain};
                   {false, none} -> ok;
                   {false, #{control := Control}} ->
-                      case quod_dtx:new_prepare(
-                             Begin, BeginRef, Target) of
-                          {ok, Expected} ->
-                              case quod_dtx:control_body(Control) =:= Expected
-                                   andalso quod_dtx:prepare_matches_begin(
-                                             Control, Begin) of
-                                  true -> ok;
-                                  false -> {error, invalid_phase_chain}
-                              end;
-                          {error, _} -> {error, invalid_phase_chain}
+                      case quod_dtx:prepare_matches_certified_begin(
+                             Control, Begin, BeginRef) of
+                          true -> ok;
+                          false -> {error, invalid_phase_chain}
                       end
               end
       end, ok, Rows).
 
-validate_decision(_BeginRef, #{decision := none, finalizes := Finalizes,
-                               complete := Complete}, _Context) ->
+validate_decision(_Begin, _BeginRef,
+                  #{decision := none, finalizes := Finalizes,
+                    complete := Complete}, _Context) ->
     case {map_size(Finalizes), Complete} of
         {0, none} -> ok;
         _ -> {error, invalid_phase_chain}
     end;
-validate_decision(BeginRef, #{decision := Decision,
-                              prepares := Prepares},
+validate_decision(Begin, BeginRef,
+                  #{decision := Decision, prepares := Prepares},
                   #{targets := Targets, group_id := GroupId,
                     origin := Origin, source_material := SourceMaterial}) ->
     Control = maps:get(control, Decision),
     Body = quod_dtx:control_body(Control),
     case quod_dtx:recovery_phase(Body) of
         {ok, #{kind := decision, group_id := GroupId,
-               begin_ref := BeginRef, verdict := Verdict,
+               begin_ref := DecisionBeginRef, verdict := Verdict,
                prepare_rows := Rows, reasons := Reasons}} ->
-            KnownRows = prepare_rows(
-                          Targets, Prepares, Origin, BeginRef,
-                          SourceMaterial),
-            ValidRows =
-                case Verdict of
-                    commit -> Rows =:= KnownRows andalso
-                                  length(KnownRows) =:= length(Targets);
-                    abort -> ordered_subset(Rows, KnownRows)
-                end,
+            SameBegin = quod_dtx:same_certified_ref(
+                          DecisionBeginRef, BeginRef),
+            %% A recovering coordinator may learn a certified Decision before
+            %% it has locally re-read every referenced Prepare.  The Decision
+            %% names each exact Prepare, but a certified Begin reference can
+            %% have several equivalent finality proofs, so the Prepare body
+            %% cannot be reconstructed byte-for-byte from our local Begin ref.
+            %% Bind any Prepare already present through its certified evidence;
+            %% `drive/6` fetches every missing referenced Prepare before a
+            %% Finalize can be constructed.
+            ValidRows = valid_decision_prepare_rows(
+                          Begin, DecisionBeginRef, Verdict, Rows, Targets,
+                          Origin, SourceMaterial, Prepares),
             DecisionInput =
                 case {Verdict, Reasons} of
                     {commit, none} -> commit;
                     {abort, [_ | _]} -> {abort, Reasons};
                     _ -> invalid
                 end,
-            case ValidRows andalso DecisionInput =/= invalid of
+            case SameBegin andalso ValidRows andalso
+                 DecisionInput =/= invalid of
                 true ->
                     case quod_dtx:new_decision(
-                           GroupId, BeginRef, DecisionInput, Rows) of
+                           GroupId, DecisionBeginRef, DecisionInput, Rows) of
                         {ok, Body} -> ok;
                         _ -> {error, invalid_phase_chain}
                     end;
                 false -> {error, invalid_phase_chain}
             end;
         _ -> {error, invalid_phase_chain}
+    end.
+
+valid_decision_prepare_rows(Begin, BeginRef, Verdict, Rows, Targets,
+                            Origin, SourceMaterial, Prepares) ->
+    RowTargets = [Target || {Target, _Ref} <- Rows],
+    TargetSetValid =
+        case Verdict of
+            commit -> RowTargets =:= Targets;
+            abort -> ordered_subset(RowTargets, Targets)
+        end,
+    TargetSetValid andalso
+        lists:all(
+          fun({Target, Ref}) ->
+                  valid_decision_prepare_ref(
+                    Begin, BeginRef, Target, Ref, Origin, SourceMaterial,
+                    Prepares)
+          end, Rows).
+
+valid_decision_prepare_ref(_Begin, BeginRef, Origin, Ref,
+                           Origin, true, _Prepares) ->
+    quod_dtx:same_certified_ref(BeginRef, Ref);
+valid_decision_prepare_ref(Begin, BeginRef, Target, Ref,
+                           _Origin, _SourceMaterial, Prepares) ->
+    case {quod_dtx:certified_ref_binding(Ref),
+          maps:get(Target, Prepares, none)} of
+        {{ok, Target, _Slot, _Digest}, none} ->
+            %% Safe only as incomplete planner input.  The decision branch in
+            %% `drive/6` requests this exact Prepare before any later write.
+            true;
+        {{ok, Target, _Slot, _Digest},
+         #{control := Control, ref := StoredRef}} ->
+            quod_dtx:same_certified_ref(StoredRef, Ref) andalso
+                quod_dtx:prepare_matches_certified_begin(
+                  Control, Begin, BeginRef);
+        _ -> false
     end.
 
 validate_finalizes(#{decision := none, finalizes := Finalizes},
@@ -528,17 +570,21 @@ validate_finalize(Target, Body, DecisionRef, DecisionVerdict,
                   Prepares, Generations, GroupId) ->
     case {quod_dtx:recovery_phase(Body), maps:find(Target, Generations)} of
         {{ok, #{kind := finalize, group_id := GroupId,
-                decision_ref := DecisionRef, verdict := DecisionVerdict,
+                decision_ref := FinalizeDecisionRef,
+                verdict := DecisionVerdict,
                 prepare_ref := PrepareRef, generation := AppliedGeneration}},
          {ok, BaseGeneration}} ->
-            case valid_finalize_prepare(
+            case quod_dtx:same_certified_ref(
+                   FinalizeDecisionRef, DecisionRef) andalso
+                 valid_finalize_prepare(
                    Target, DecisionVerdict, PrepareRef, Prepares) of
                 true ->
                     case applied_generation(
                            DecisionVerdict, PrepareRef, BaseGeneration) of
                         {ok, AppliedGeneration} ->
                             case quod_dtx:new_finalize(
-                                   GroupId, DecisionRef, DecisionVerdict,
+                                   GroupId, FinalizeDecisionRef,
+                                   DecisionVerdict,
                                    PrepareRef, AppliedGeneration) of
                                 {ok, Body} -> ok;
                                 _ -> {error, invalid_phase_chain}
@@ -552,11 +598,13 @@ validate_finalize(Target, Body, DecisionRef, DecisionVerdict,
     end.
 
 valid_finalize_prepare(Target, commit, PrepareRef, Prepares) ->
-    evidence_ref(Target, Prepares) =:= PrepareRef andalso PrepareRef =/= none;
+    PrepareRef =/= none andalso quod_dtx:same_certified_ref(
+                                  evidence_ref(Target, Prepares), PrepareRef);
 valid_finalize_prepare(Target, abort, none, Prepares) ->
     not maps:is_key(Target, Prepares);
 valid_finalize_prepare(Target, abort, PrepareRef, Prepares) ->
-    evidence_ref(Target, Prepares) =:= PrepareRef andalso PrepareRef =/= none.
+    PrepareRef =/= none andalso quod_dtx:same_certified_ref(
+                                  evidence_ref(Target, Prepares), PrepareRef).
 
 validate_complete(#{complete := none}, _Generations, _Context) ->
     ok;
@@ -574,22 +622,39 @@ validate_complete(#{decision := Decision, finalizes := Finalizes,
             {ok, #{verdict := Verdict}} =
                 quod_dtx:recovery_phase(
                   quod_dtx:control_body(maps:get(control, Decision))),
-            case finalize_rows(
-                   Targets, Finalizes, Origin, DecisionRef,
-                   Verdict, SourceMaterial, Generations) of
-                {ok, Rows} ->
-                    case quod_dtx:new_complete(GroupId, DecisionRef, Rows) of
-                        {ok, Expected} ->
-                            case quod_dtx:control_body(
-                                   maps:get(control, Complete)) =:= Expected of
-                                true -> ok;
-                                false -> {error, invalid_phase_chain}
-                            end;
-                        _ -> {error, invalid_phase_chain}
+            Body = quod_dtx:control_body(maps:get(control, Complete)),
+            case quod_dtx:recovery_phase(Body) of
+                {ok, #{kind := complete, group_id := GroupId,
+                       decision_ref := CompleteDecisionRef,
+                       finalize_rows := Rows}} ->
+                    case quod_dtx:same_certified_ref(
+                           CompleteDecisionRef, DecisionRef) andalso
+                         valid_complete_rows(
+                           Rows, Targets, Finalizes, Origin, DecisionRef,
+                           Verdict, SourceMaterial, Generations) of
+                        true -> ok;
+                        false -> {error, invalid_phase_chain}
                     end;
-                error -> {error, invalid_phase_chain}
+                _ -> {error, invalid_phase_chain}
             end
     end.
+
+valid_complete_rows(Rows, Targets, Finalizes, Origin, DecisionRef,
+                    Verdict, SourceMaterial, Generations) ->
+    case finalize_rows(
+           Targets, Finalizes, Origin, DecisionRef,
+           Verdict, SourceMaterial, Generations) of
+        {ok, ExpectedRows} -> same_complete_rows(Rows, ExpectedRows);
+        error -> false
+    end.
+
+same_complete_rows([], []) -> true;
+same_complete_rows(
+  [{Target, Ref, Generation} | Rest],
+  [{Target, ExpectedRef, Generation} | ExpectedRest]) ->
+    quod_dtx:same_certified_ref(Ref, ExpectedRef) andalso
+        same_complete_rows(Rest, ExpectedRest);
+same_complete_rows(_, _) -> false.
 
 %% ===================================================================
 %% Recovery command planning
@@ -635,26 +700,41 @@ drive(_Begin, #{decision := Decision, prepares := Prepares,
       #{group_id := GroupId, origin := Origin, targets := Targets,
         source_material := SourceMaterial}) ->
     DecisionRef = maps:get(ref, Decision),
-    {ok, #{verdict := Verdict}} =
+    {ok, #{verdict := Verdict, begin_ref := BeginRef,
+           prepare_rows := PrepareRows}} =
         quod_dtx:recovery_phase(
           quod_dtx:control_body(maps:get(control, Decision))),
-    FinalizeCommands =
-        missing_finalize_commands(
-          Targets, Finalizes, Prepares, Generations,
-          GroupId, DecisionRef, Verdict, Origin),
-    case FinalizeCommands of
-        [_ | _] -> {ok, {independent, finalize, FinalizeCommands}};
+    case missing_decision_prepare_commands(
+           PrepareRows, Prepares, Origin, BeginRef, GroupId) of
+        [_ | _] = MissingPrepares ->
+            {ok, {independent, prepare, MissingPrepares}};
         [] ->
-            AppliedCommands =
-                missing_applied_commands(
-                  Targets, Finalizes, Applied, GroupId),
-            case AppliedCommands of
-                [_ | _] -> {ok, {independent, applied, AppliedCommands}};
-                [] -> complete_command(
-                        Origin, GroupId, DecisionRef, Targets, Index,
-                        Generations, SourceMaterial)
+            FinalizeCommands =
+                missing_finalize_commands(
+                  Targets, Finalizes, Prepares, Generations,
+                  GroupId, DecisionRef, Verdict, Origin),
+            case FinalizeCommands of
+                [_ | _] -> {ok, {independent, finalize, FinalizeCommands}};
+                [] ->
+                    AppliedCommands =
+                        missing_applied_commands(
+                          Targets, Finalizes, Applied, GroupId),
+                    case AppliedCommands of
+                        [_ | _] ->
+                            {ok, {independent, applied, AppliedCommands}};
+                        [] -> complete_command(
+                                Origin, GroupId, DecisionRef, Targets, Index,
+                                Generations, SourceMaterial)
+                    end
             end
     end.
+
+missing_decision_prepare_commands(Rows, Prepares, Origin, BeginRef, GroupId) ->
+    [{phase, Target, GroupId, prepare}
+     || {Target, Ref} <- Rows,
+        not (Target =:= Origin andalso
+             quod_dtx:same_certified_ref(Ref, BeginRef)),
+        not maps:is_key(Target, Prepares)].
 
 prepare_record(Begin, BeginRef, Target) ->
     {ok, Record} = quod_dtx:new_prepare(Begin, BeginRef, Target),

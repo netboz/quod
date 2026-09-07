@@ -11,7 +11,8 @@ import { atom, renderTerm } from '../client/src/prolog-term.js'
 import { authenticateKey, postJson, signedGoal } from '../client/src/signed-client.js'
 
 const defaults = {
-  sourceEndpoints: '', sourceExplorerEndpoints: '', sourceNs: '', targetNs: '', goal: 'true', mode: 'read',
+  sourceEndpoints: '', sourceExplorerEndpoints: '', metricsEndpoints: '',
+  sourceNs: '', targetNs: '', goal: 'true', beforeEachGoal: '', mode: 'read',
   requests: '1000', concurrency: '32', httpTimeout: '35', preflightTimeout: '60',
   duration: '0',
   maxFailures: '0', resultDir: '', agentAnchor: '', agentInstance: '',
@@ -32,6 +33,8 @@ Required:
   --source-endpoints URL[,URL...]  HTTPS client endpoint(s) hosting the source
   --source-explorer-endpoints URL[,URL...]
                                   matching Explorer endpoint(s) for preflight
+  --metrics-endpoints URL[,URL...] optional Prometheus endpoint(s); raw
+                                  before/after scrapes are retained
   --source-ns NAME                 source ontology namespace
   --target-ns NAME                 optional remote target ontology namespace
   --agent-anchor HEX               source agent ontology genesis anchor
@@ -42,6 +45,8 @@ Required:
 Options:
   --goal TEXT                      target-local goal; __QUOD_REQUEST_ID__ is
                                    replaced with a unique atom for each request
+  --before-each-goal TEXT          full goal executed once immediately before
+                                   every measured goal (concurrency must be 1)
   --mode read|execute              signed proof mode (default: read)
   --requests N                     exact number of proofs (default: 1000; ignored with --duration)
   --duration SEC                   run until this deadline instead of a fixed count
@@ -62,8 +67,10 @@ agent instance in SOURCE_NS.`)
 const opt = { ...defaults }
 const names = new Map([
   ['--source-endpoints', 'sourceEndpoints'], ['--source-explorer-endpoints', 'sourceExplorerEndpoints'],
+  ['--metrics-endpoints', 'metricsEndpoints'],
   ['--source-ns', 'sourceNs'],
-  ['--target-ns', 'targetNs'], ['--goal', 'goal'], ['--mode', 'mode'],
+  ['--target-ns', 'targetNs'], ['--goal', 'goal'],
+  ['--before-each-goal', 'beforeEachGoal'], ['--mode', 'mode'],
   ['--requests', 'requests'], ['--concurrency', 'concurrency'],
   ['--duration', 'duration'],
   ['--http-timeout', 'httpTimeout'], ['--preflight-timeout', 'preflightTimeout'],
@@ -102,6 +109,7 @@ if (remote && opt.sourceNs === opt.targetNs) die('source-ns and target-ns must d
 if (!opt.goal) die('goal must not be empty')
 if (!['read', 'execute'].includes(opt.mode)) die('mode must be read or execute')
 if (requests === 0 && duration === 0) die('requests or duration must be positive')
+if (opt.beforeEachGoal && concurrency !== 1) die('before-each-goal requires concurrency 1')
 if (opt.insecureTls) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
 const endpointSet = new Set()
@@ -128,6 +136,16 @@ const explorerEndpoints = [...explorerEndpointSet]
 if (explorerEndpoints.length !== endpoints.length) {
   die('source-endpoints and source-explorer-endpoints must have the same number of endpoints')
 }
+const metricsEndpointSet = new Set()
+for (const raw of opt.metricsEndpoints.split(',').filter(Boolean)) {
+  const endpoint = raw.replace(/\/$/, '')
+  try {
+    const parsed = new URL(endpoint)
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error()
+  } catch { die(`bad metrics endpoint '${raw}'`) }
+  metricsEndpointSet.add(endpoint)
+}
+const metricsEndpoints = [...metricsEndpointSet]
 
 function hexBytes(hex) {
   if (!/^[0-9a-f]{64}$/i.test(hex)) throw new Error('invalid genesis anchor')
@@ -157,6 +175,9 @@ function directGoal(inner) {
 function goalFor(id) {
   const inner = opt.goal.replace(/\.$/, '').replaceAll('__QUOD_REQUEST_ID__', id)
   return remote ? remoteGoal(inner) : directGoal(inner)
+}
+function completeGoal(text, id) {
+  return directGoal(text.replaceAll('__QUOD_REQUEST_ID__', id))
 }
 function endpointPost(base) {
   return (path, body, method = 'POST') => postJson(new URL(path, `${base}/`).href, body, method)
@@ -241,6 +262,26 @@ console.log(`  target:      ${remote ? opt.targetNs : opt.sourceNs}`)
 console.log(`  goal:        ${goalFor('<request-id>')}`)
 console.log(`  mode:        ${opt.mode}`)
 console.log(`  work:        ${duration ? `${duration}s` : `${requests} proofs`} at concurrency ${concurrency}`)
+if (opt.beforeEachGoal) console.log(`  before each: ${completeGoal(opt.beforeEachGoal, '<request-id>')}`)
+
+async function scrapeMetrics(phase) {
+  const manifest = []
+  for (const [index, endpoint] of metricsEndpoints.entries()) {
+    const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(httpTimeout * 1000),
+    })
+    if (!response.ok) throw new Error(`metrics_http_${response.status}`)
+    const filename = `metrics-${phase}-${index + 1}.prom`
+    await writeFile(`${resultDir}/${filename}`, await response.text())
+    manifest.push(`${index + 1}\t${endpoint}\t${filename}`)
+  }
+  if (manifest.length) {
+    await writeFile(`${resultDir}/metrics-${phase}.tsv`, `${manifest.join('\n')}\n`)
+  }
+}
+
+try { await scrapeMetrics('before') }
+catch (error) { die(`could not capture pre-workload metrics: ${outcomeText(error)}`) }
 
 const started = process.hrtime.bigint()
 const rows = []
@@ -253,11 +294,29 @@ async function worker() {
     next += 1
     if (duration === 0 ? number >= requests : Date.now() >= workloadDeadline) return
     const source = sources[number % sources.length]
-    const began = process.hrtime.bigint()
+    const requestId = `${prefix}_${number + 1}`
+    let advanceLatencyMs = 0
+    let startedAtMs = Date.now()
+    let began = process.hrtime.bigint()
     try {
+      if (opt.beforeEachGoal) {
+        const advanceBegan = process.hrtime.bigint()
+        const advanced = await signedGoal(source.identity, {
+          mode: 'execute', agent,
+          goal: completeGoal(opt.beforeEachGoal, requestId),
+        }, { post: source.post, journal: noJournal })
+        advanceLatencyMs = Number((process.hrtime.bigint() - advanceBegan) / 1000000n)
+        if (advanced?.result !== 'ok') {
+          const error = new Error(`advance_failed:${boundedDetail(advanced)}`)
+          error.advanceFailed = true
+          throw error
+        }
+        startedAtMs = Date.now()
+        began = process.hrtime.bigint()
+      }
       const reply = await signedGoal(source.identity, {
         mode: opt.mode, agent,
-        goal: goalFor(`${prefix}_${number + 1}`),
+        goal: goalFor(requestId),
       }, { post: source.post, journal: noJournal })
       const ok = reply?.result === 'ok'
       const detail = boundedDetail(reply)
@@ -269,26 +328,36 @@ async function worker() {
         detail,
         latencyMs: Number((process.hrtime.bigint() - began) / 1000000n),
         succeeded: ok,
+        requestId,
+        startedAtMs,
+        advanceLatencyMs,
       })
     } catch (error) {
       const detail = outcomeText(error)
       rows.push({
         endpoint: source.endpoint,
         status: error?.status ?? 0,
-        category: failureClass(detail, error),
+        category: error?.advanceFailed ? 'advance_failed' : failureClass(detail, error),
         detail,
         latencyMs: Number((process.hrtime.bigint() - began) / 1000000n),
         succeeded: false,
+        requestId,
+        startedAtMs,
+        advanceLatencyMs,
       })
     }
   }
 }
 await Promise.all(Array.from({ length: concurrency }, worker))
 const elapsed = Number((process.hrtime.bigint() - started) / 1000000n)
+try { await scrapeMetrics('after') }
+catch (error) { die(`could not capture post-workload metrics: ${outcomeText(error)}`) }
 await writeFile(
   `${resultDir}/results.tsv`,
   rows.map(row => [row.endpoint, row.status, row.category, row.detail,
-                   row.latencyMs, row.succeeded ? 1 : 0].join('\t')).join('\n') + '\n',
+                   row.latencyMs, row.succeeded ? 1 : 0,
+                   row.requestId, row.startedAtMs,
+                   row.advanceLatencyMs].join('\t')).join('\n') + '\n',
 )
 const okRows = rows.filter(row => row.succeeded)
 const sorted = okRows.map(row => row.latencyMs).sort((a, b) => a - b)

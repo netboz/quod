@@ -226,6 +226,29 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
                Ns, prepare_wave, ok, OneSecond),
         ok = quod_metrics:observe_foreign_history_stage(
                cache_replay, uncertain, OneSecond),
+        ForeignStages =
+            [queue_wait, request_exact, request_current, request_follow,
+             current_total, resident_current_hit, resident_current_miss,
+             owner_mailbox,
+             cache_open, cache_replay, ledger_resume, ledger_open,
+             ledger_suspend, checkpoint_read, projection_validate,
+             phase_resume, phase_open, phase_suspend, page_fetch,
+             page_verify, ledger_append, phase_commit, checkpoint_write,
+             cache_accounting, tip_confirm, result_install, caller_wake,
+             serve_read_total, serve_snapshot_lookup, serve_snapshot_resume,
+             serve_fallback_open, serve_range_read, serve_encode],
+        StageSumsBefore =
+            maps:from_list(
+              [{Stage,
+                histogram_sum_or_zero(
+                  quod_foreign_history_stage_seconds,
+                  [atom_to_binary(Stage, utf8), <<"ok">>])}
+               || Stage <- ForeignStages]),
+        lists:foreach(
+          fun(Stage) ->
+              ok = quod_metrics:observe_foreign_history_stage(
+                     Stage, ok, OneSecond)
+          end, ForeignStages),
         ok = quod_metrics:observe_dtx_group_stage(
                Ns, attacker_stage, ok, OneSecond),
         ok = quod_metrics:observe_foreign_history_stage(
@@ -238,13 +261,32 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
                             [<<"cache_replay">>, <<"uncertain">>]),
         ?assertEqual(1.0, DtxSum),
         ?assertEqual(1.0, ForeignSum),
+        lists:foreach(
+          fun(Stage) ->
+              {_, StageSum} = prometheus_histogram:value(
+                                quod_foreign_history_stage_seconds,
+                                [atom_to_binary(Stage, utf8), <<"ok">>]),
+              ?assert(abs(StageSum - maps:get(Stage, StageSumsBefore) - 1.0)
+                      < 1.0e-9)
+          end, ForeignStages),
         ?assertEqual(
            undefined,
            prometheus_histogram:value(
              quod_dtx_group_stage_seconds,
-             [Ns, <<"attacker_stage">>, <<"ok">>]))
+             [Ns, <<"attacker_stage">>, <<"ok">>])),
+        ?assertEqual(
+           undefined,
+           prometheus_histogram:value(
+             quod_foreign_history_stage_seconds,
+             [<<"page_fetch">>, <<"attacker_result">>]))
     after
         Placeholder ! stop
+    end.
+
+histogram_sum_or_zero(Name, Labels) ->
+    case prometheus_histogram:value(Name, Labels) of
+        undefined -> 0.0;
+        {_Buckets, Sum} -> Sum
     end.
 
 directory_rebuild_latency_uses_only_fixed_result_labels_test() ->

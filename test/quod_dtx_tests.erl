@@ -1555,6 +1555,101 @@ reference_validation_is_exhaustive_and_rejects_cross_group_or_verdict_test() ->
          [{decision, DecisionRef, DecisionControl},
           {prepare, PrepareARef, PrepareAControl}])).
 
+phase_validation_compares_certified_claims_not_quorum_subset_bytes_test() ->
+    F = protocol_fixture(),
+    Signer = maps:get(signer, F),
+    Admission = maps:get(admission, F),
+    Origin = maps:get(origin, F),
+    A = maps:get(target_a, F),
+    B = maps:get(target_b, F),
+    Begin = maps:get(begin_record, F),
+    BeginControl = maps:get(begin_control, F),
+    BeginRef = maps:get(begin_ref, F),
+    AltBeginRef = setelement(8, BeginRef, <<"alternate-begin-quorum">>),
+    ?assert(quod_dtx:same_certified_ref(BeginRef, AltBeginRef)),
+
+    %% Different target coordinators can retain different valid finality
+    %% subsets for the same Begin.  Their Prepare bodies remain one semantic
+    %% phase chain even though their embedded certificate bytes differ.
+    {ok, PrepareA} = quod_dtx:new_prepare(Begin, AltBeginRef, A),
+    PrepareAControl = signed(A, PrepareA, Admission, 81, Signer),
+    PrepareARef = protocol_ref(A, 81, PrepareA),
+    PrepareBControl = maps:get(prepare_b_control, F),
+    PrepareBRef = maps:get(prepare_b_ref, F),
+    Rows = [{B, PrepareBRef}, {A, PrepareARef}],
+    {ok, Decision} = quod_dtx:new_decision(
+                       maps:get(group_id, F), BeginRef, commit, Rows),
+    DecisionControl = signed(Origin, Decision, Admission, 82, Signer),
+    DecisionRef = protocol_ref(Origin, 82, Decision),
+    {ok, #{prepare_rows := CanonicalRows}} =
+        quod_dtx:recovery_phase(Decision),
+    PrepareEvidence =
+        [{prepare, Ref,
+          case Target of
+              A -> PrepareAControl;
+              B -> PrepareBControl
+          end}
+         || {Target, Ref} <- CanonicalRows],
+    ?assertEqual(
+       ok,
+       quod_dtx:validate_references(
+         DecisionControl,
+         [{'begin', BeginRef, BeginControl} | PrepareEvidence])),
+
+    AltDecisionRef =
+        setelement(8, DecisionRef, <<"alternate-decision-quorum">>),
+    AltPrepareARef =
+        setelement(8, PrepareARef, <<"alternate-prepare-quorum">>),
+    {ok, FinalizeA} = quod_dtx:new_finalize(
+                        maps:get(group_id, F), AltDecisionRef, commit,
+                        AltPrepareARef, 2),
+    FinalizeAControl = signed(A, FinalizeA, Admission, 83, Signer),
+    FinalizeARef = protocol_ref(A, 83, FinalizeA),
+    ?assertEqual(
+       ok,
+       quod_dtx:validate_references(
+         FinalizeAControl,
+         [{decision, AltDecisionRef, DecisionControl},
+          {prepare, AltPrepareARef, PrepareAControl}])),
+
+    OtherBlockRef = setelement(6, AltPrepareARef, key(252)),
+    {ok, MisboundFinalize} = quod_dtx:new_finalize(
+                               maps:get(group_id, F), AltDecisionRef, commit,
+                               OtherBlockRef, 2),
+    ?assertEqual(
+       {error, invalid_references},
+       quod_dtx:validate_references(
+         signed(A, MisboundFinalize, Admission, 84, Signer),
+         [{decision, AltDecisionRef, DecisionControl},
+          {prepare, OtherBlockRef, PrepareAControl}])),
+
+    %% Complete has the same rule for its Decision and Finalize references.
+    {ok, FinalizeB} = quod_dtx:new_finalize(
+                        maps:get(group_id, F), DecisionRef, commit,
+                        PrepareBRef, 2),
+    FinalizeBControl = signed(B, FinalizeB, Admission, 86, Signer),
+    FinalizeBRef = protocol_ref(B, 86, FinalizeB),
+    AltFinalizeARef =
+        setelement(8, FinalizeARef, <<"alternate-finalize-quorum">>),
+    {ok, Complete} = quod_dtx:new_complete(
+                       maps:get(group_id, F), AltDecisionRef,
+                       [{B, FinalizeBRef, 2}, {A, AltFinalizeARef, 2}]),
+    {ok, #{finalize_rows := CanonicalFinalizeRows}} =
+        quod_dtx:recovery_phase(Complete),
+    FinalizeEvidence =
+        [{finalize, Ref,
+          case Target of
+              A -> FinalizeAControl;
+              B -> FinalizeBControl
+          end}
+         || {Target, Ref, _Generation} <- CanonicalFinalizeRows],
+    ?assertEqual(
+       ok,
+       quod_dtx:validate_references(
+         signed(Origin, Complete, Admission, 85, Signer),
+         [{decision, AltDecisionRef, DecisionControl} |
+          FinalizeEvidence])).
+
 preview_uses_the_shared_reducer_with_an_exact_candidate_ref_test() ->
     F = protocol_fixture(),
     {Ns, Anchor} = Target = maps:get(origin, F),

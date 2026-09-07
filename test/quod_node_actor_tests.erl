@@ -56,6 +56,25 @@ reconcile_errors_use_a_closed_fatal_identity_set_test() ->
        quod_namespace_manager:test_node_actor_result_class(
          {error, node_actor_anchor_mismatch})).
 
+hosted_runtime_is_not_publishable_before_replay_ready_test() ->
+    Anchor = <<8:256>>,
+    ?assertNot(
+       quod_namespace_manager:test_content_runtime_ready(
+         {ok, Anchor}, #{role => validator, recovery => pulling})),
+    ?assertNot(
+       quod_namespace_manager:test_content_runtime_ready(
+         {ok, Anchor}, #{role => joining, recovery => ready})),
+    ?assertNot(
+       quod_namespace_manager:test_content_runtime_ready(
+         {error, genesis_mismatch},
+         #{role => validator, recovery => ready})),
+    ?assert(
+       quod_namespace_manager:test_content_runtime_ready(
+         {ok, Anchor}, #{role => validator, recovery => ready})),
+    ?assert(
+       quod_namespace_manager:test_content_runtime_ready(
+         {ok, Anchor}, #{role => observer, recovery => ready})).
+
 hosting_projection_rejects_ambiguous_visibility_test() ->
     NodeRef = node_ref(<<1:256>>),
     Anchor = <<2:256>>,

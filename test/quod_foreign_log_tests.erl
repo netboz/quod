@@ -262,9 +262,22 @@ resident_current_view_uses_height_wake_and_verifies_real_delta_test() ->
         %% row. Any fetch would fail this call, and the suspended phase file
         %% proves that no second fold/session was created.
         ok = atomics:put(Mode, 1, 2),
-        ?assertMatch(
-           {ok, #{identity := Identity, slot := 2}},
-           quod_foreign_log:current(Routes, Identity, 5000)),
+        with_foreign_history_metrics(
+          fun() ->
+              Stages = [resident_current_hit, page_fetch, ledger_resume,
+                        phase_resume, phase_suspend],
+              Before = foreign_stage_samples(Stages),
+              ?assertMatch(
+                 {ok, #{identity := Identity, slot := 2}},
+                 quod_foreign_log:current(Routes, Identity, 5000)),
+              Deltas = foreign_stage_deltas(
+                         Before, foreign_stage_samples(Stages)),
+              ?assertMatch({1, _}, maps:get(resident_current_hit, Deltas)),
+              ?assertEqual({0, 0.0}, maps:get(page_fetch, Deltas)),
+              ?assertEqual({0, 0.0}, maps:get(ledger_resume, Deltas)),
+              ?assertEqual({0, 0.0}, maps:get(phase_resume, Deltas)),
+              ?assertEqual({0, 0.0}, maps:get(phase_suspend, Deltas))
+          end),
         ?assertEqual([], collect_resident_current_fetches([])),
         ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
         ?assertEqual(
@@ -300,6 +313,100 @@ resident_current_view_uses_height_wake_and_verifies_real_delta_test() ->
         ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
     after
         Link ! close,
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+current_view_nonoverlapping_stages_explain_enclosing_request_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31988},
+    Routes = route_candidates([{Peer, Endpoint}]),
+    Parent = self(),
+    Gate = atomics:new(1, []),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            case atomics:compare_exchange(Gate, 1, 0, 1) of
+                ok ->
+                    Parent ! {accounted_current_blocked, self()},
+                    receive release_accounted_current -> ok end;
+                _ ->
+                    ok
+            end,
+            BaseFetch(P, E, RequestedNs, From, To)
+        end,
+    Dir = temp_dir("current-stage-accounting"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        with_foreign_history_metrics(
+          fun() ->
+              Before = foreign_stage_samples(
+                         [current_total, owner_mailbox, request_current,
+                          result_install, caller_wake]),
+              Caller = spawn(
+                         fun() ->
+                             Parent !
+                                 {accounted_current_result,
+                                  quod_foreign_log:current(
+                                    Routes, Identity, 5000)}
+                         end),
+              Worker = receive
+                           {accounted_current_blocked, FetchWorker} ->
+                               FetchWorker
+                       after 2000 ->
+                           error(accounted_current_not_started)
+                       end,
+              %% A deliberate dependency hold makes the worker interval
+              %% dominate scheduler noise; it is not a progress poll or a
+              %% production deadline.
+              receive after 25 -> ok end,
+              1 = erlang:trace_pattern(
+                    {quod_trace, add_event, 3}, true, []),
+              1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
+              try
+                  Worker ! release_accounted_current,
+                  receive
+                      {accounted_current_result, Result} ->
+                          ?assertMatch(
+                             {ok, #{identity := Identity}}, Result)
+                  after 5000 ->
+                      exit(Caller, kill),
+                      error(accounted_current_no_result)
+                  end,
+                  receive
+                      {trace, Worker, call,
+                       {quod_trace, add_event,
+                        [TraceCtx,
+                         <<"foreign.current.worker.finished">>,
+                         #{'quod.foreign.retained_height' := 0,
+                           'quod.foreign.verified_suffix' := Suffix}]}} ->
+                          ?assert(TraceCtx =/= undefined),
+                          ?assert(Suffix > 0)
+                  after 2000 ->
+                      error(accounted_current_trace_not_carried)
+                  end
+              after
+                  _ = catch erlang:trace(Worker, false, [call]),
+                  _ = erlang:trace_pattern(
+                        {quod_trace, add_event, 3}, false, [])
+              end,
+              After = foreign_stage_samples(
+                        [current_total, owner_mailbox, request_current,
+                         result_install, caller_wake]),
+              Deltas = foreign_stage_deltas(Before, After),
+              {1, Total} = maps:get(current_total, Deltas),
+              {1, MailboxTime} = maps:get(owner_mailbox, Deltas),
+              {1, WorkerTime} = maps:get(request_current, Deltas),
+              {1, InstallTime} = maps:get(result_install, Deltas),
+              {1, WakeTime} = maps:get(caller_wake, Deltas),
+              Explained = MailboxTime + WorkerTime + InstallTime + WakeTime,
+              ?assert(Explained =< Total * 1.10),
+              ?assert(Explained >= Total * 0.90)
+          end)
+    after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.
@@ -1764,8 +1871,11 @@ verify_exact_reference_and_persisted_cache_test() ->
         ?assertMatch(
            {ok, #{slot := 2, phase := finalize, control := _}},
            quod_foreign_log:verify(Peer, Endpoint, Ref, entry, 5000)),
-        ?assertEqual(
-           {error, retry},
+        %% The serving peer is transport, not authority. Re-reading the exact
+        %% retained reference through an outsider still returns the committee
+        %% certified at that slot; it does not add the outsider to evidence.
+        ?assertMatch(
+           {ok, #{committee := [Peer]}},
            quod_foreign_log:verify(
              key(91), Endpoint, Ref, finalize, 5000))
     after
@@ -1868,6 +1978,54 @@ verify_local_uses_exact_historical_projection_test() ->
         stop_owner(Pid),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(CacheDir)
+    end.
+
+verify_local_recovery_wait_has_no_caller_deadline_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ref = maps:get(ref, Fixture),
+    SourceDir = temp_dir("local-recovery-source"),
+    Parent = self(),
+    Owner = spawn(
+              fun() ->
+                  true = quod_reg:reg({foreign_log, node}),
+                  Parent ! {owner_ready, self()},
+                  receive
+                      {'$gen_call', {Caller, Tag},
+                       {verify_local, SourceDir, Ref, finalize, infinity}} ->
+                          Parent ! {recovery_waiting, self()},
+                          receive release -> Caller ! {Tag, {error, retry}} end
+                  end
+              end),
+    receive {owner_ready, Owner} -> ok after 1000 ->
+        error(owner_registration_timeout)
+    end,
+    Caller = spawn(
+               fun() ->
+                   Parent ! {recovery_result, self(),
+                             quod_foreign_log:verify_local(
+                               SourceDir, Ref, finalize, infinity)}
+               end),
+    try
+        receive {recovery_waiting, Owner} -> ok after 1000 ->
+            error(recovery_request_not_received)
+        end,
+        receive
+            {recovery_result, Caller, Early} ->
+                error({recovery_returned_before_completion, Early})
+        after 50 ->
+            ok
+        end,
+        Owner ! release,
+        receive
+            {recovery_result, Caller, Result} ->
+                ?assertEqual({error, retry}, Result)
+        after 1000 ->
+            error(recovery_result_timeout)
+        end
+    after
+        case is_process_alive(Owner) of true -> exit(Owner, kill); false -> ok end,
+        case is_process_alive(Caller) of true -> exit(Caller, kill); false -> ok end,
+        _ = file:del_dir_r(SourceDir)
     end.
 
 verify_local_reuses_current_committee_entry_without_history_owner_test() ->
@@ -2137,6 +2295,66 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
         _ = file:del_dir_r(Root)
     end.
 
+foreign_projection_large_change_set_becomes_resnapshot_test() ->
+    Ns = unique_ns(),
+    Base = fixture_base(Ns),
+    Pub = maps:get(pub, Base),
+    Signer = maps:get(signer, Base),
+    Anchor = maps:get(anchor, Base),
+    Admission = maps:get(admission, Base),
+    Binding = {Ns, Anchor},
+    MakeTx =
+        fun(Sequence, From, To) ->
+            Tx0 = #transaction{
+                     origin = Binding,
+                     proof_id = key({projection_overflow_proof, Sequence}),
+                     plan_digest = key({projection_overflow_plan, Sequence}),
+                     goal = durable_goal({projection_overflow, Sequence}),
+                     result = durable_result(),
+                     diff = [{assert, {{projection_overflow, I}, true}}
+                             || I <- lists:seq(From, To)],
+                     read_check = #{}, author = Pub,
+                     author_seq = Sequence, submitted_at = Sequence,
+                     sig = none},
+            Tx1 = quod_transaction:bind_id(Binding, Tx0),
+            {ok, Tx} = quod_transaction:sign(
+                         {Ns, Anchor, Admission}, Tx1, Signer),
+            Tx
+        end,
+    Transactions =
+        [MakeTx(1, 1, ?QUOD_MAX_PLAN_DIFF_OPS),
+         MakeTx(2, ?QUOD_MAX_PLAN_DIFF_OPS + 1,
+                ?QUOD_MAX_PLAN_DIFF_OPS + 1)],
+    Entry = content_entry(Ns, Anchor, Pub, Signer, 2, Transactions),
+    Root = temp_dir("projection-large-change-set"),
+    CacheNs = <<"projection-cache:", Ns/binary>>,
+    {ok, Store0} = quod_ledger_store:open(CacheNs, Root),
+    {ok, Store1} = quod_ledger_store:append(
+                     Store0, [maps:get(genesis, Base), Entry]),
+    ok = quod_ledger_store:close(Store1),
+    {Pid, MRef, Generation} = quod_foreign_projection:start_monitor(
+                                self(), {Ns, Anchor}, Root, CacheNs),
+    try
+        ok = quod_foreign_projection:advance(
+               Pid, Generation, 2, {2, entry_hash(Entry)}),
+        Ready = receive
+                    {foreign_projection_ready, {Ns, Anchor}, Generation,
+                     Result} -> Result;
+                    {'DOWN', MRef, process, Pid, Reason} ->
+                        error({foreign_projection_crashed, Reason})
+                after 5000 ->
+                    error(foreign_projection_timeout)
+                end,
+        ?assertEqual(true, maps:get(resnapshot, Ready)),
+        ?assertEqual([], maps:get(changed_heads, Ready)),
+        ?assertEqual([], maps:get(publications, Ready)),
+        ?assert(is_process_alive(Pid))
+    after
+        quod_foreign_projection:stop(Pid),
+        receive {'DOWN', MRef, process, Pid, _} -> ok after 3000 -> ok end,
+        _ = file:del_dir_r(Root)
+    end.
+
 certified_current_view_advances_past_finalize_membership_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Dir = temp_dir("current-membership"),
@@ -2193,6 +2411,118 @@ certified_current_view_advances_past_finalize_membership_test() ->
                      AppliedCertificate, NetworkIdentity, Current)),
         ?assertEqual(
            lists:keysort(1, Routes), maps:get(route_candidates, Current))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+partial_cache_recovers_after_complete_committee_move_test() ->
+    Fixture = complete_committee_move_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Old = maps:get(pub, Fixture),
+    New = maps:get(new_pub, Fixture),
+    OldEndpoint = {"127.0.0.1", 19000},
+    NewEndpoint = {"127.0.0.1", 19101},
+    Prefix = lists:sublist(maps:get(chain, Fixture), 2),
+    FullChain = maps:get(chain, Fixture),
+    Mode = atomics:new(1, []),
+    ok = atomics:put(Mode, 1, 1),
+    TestPid = self(),
+    PrefixFetch = peer_chain_fetch(Ns, Prefix, [Old]),
+    FullFetch = peer_chain_fetch(Ns, FullChain, [New]),
+    Fetch =
+        fun(Peer, Endpoint, RequestedNs, From, To) ->
+            TestPid ! {committee_move_fetch, Peer, From},
+            case {atomics:get(Mode, 1), Peer, Endpoint} of
+                {1, Old, OldEndpoint} ->
+                    PrefixFetch(Peer, Endpoint, RequestedNs, From, To);
+                {2, New, NewEndpoint} ->
+                    FullFetch(Peer, Endpoint, RequestedNs, From, To);
+                _ ->
+                    {error, unavailable}
+            end
+        end,
+    Dir = temp_dir("complete-committee-move"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        %% Prime only the old certified prefix. The retained projection knows
+        %% no current route except Old, exactly as after a node restarts before
+        %% learning the later committee transition.
+        ?assertMatch(
+           {ok, #{slot := 2, committee := [Old]}},
+           quod_foreign_log:verify(
+             Old, OldEndpoint, maps:get(prefix_ref, Fixture), finalize, 5000)),
+        ok = atomics:put(Mode, 1, 2),
+
+        %% Old is now gone. New is merely the authenticated source which
+        %% carried the request; its bytes gain no authority. The one history
+        %% verifier must nevertheless be able to certify the transition and
+        %% the later exact reference from those bytes.
+        ?assertMatch(
+           {ok, #{slot := 5, committee := [New]}},
+           quod_foreign_log:verify_reference(
+             maps:get(final_ref, Fixture), transaction,
+             {New, NewEndpoint}, 5000)),
+        ?assertMatch(
+           {ok, #{slot := 5, committee := [New],
+                  route_candidates := [{New, _}]}},
+           quod_foreign_log:current(
+             route_candidates([{New, NewEndpoint}]), Identity, 5000)),
+        ?assertEqual(
+           {ok, [{New, [NewEndpoint]}]},
+           quod_foreign_log:route_hints(Identity, [])),
+        Calls = collect_committee_move_fetches([]),
+        ?assert(lists:member({New, 3}, Calls))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+current_view_recovers_partial_cache_after_complete_committee_move_test() ->
+    Fixture = complete_committee_move_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Old = maps:get(pub, Fixture),
+    New = maps:get(new_pub, Fixture),
+    OldEndpoint = {"127.0.0.1", 19000},
+    NewEndpoint = {"127.0.0.1", 19101},
+    Prefix = lists:sublist(maps:get(chain, Fixture), 2),
+    FullChain = maps:get(chain, Fixture),
+    Mode = atomics:new(1, []),
+    ok = atomics:put(Mode, 1, 1),
+    PrefixFetch = peer_chain_fetch(Ns, Prefix, [Old]),
+    FullFetch = peer_chain_fetch(Ns, FullChain, [New]),
+    Fetch =
+        fun(Peer, Endpoint, RequestedNs, From, To) ->
+            case {atomics:get(Mode, 1), Peer, Endpoint} of
+                {1, Old, OldEndpoint} ->
+                    PrefixFetch(Peer, Endpoint, RequestedNs, From, To);
+                {2, New, NewEndpoint} ->
+                    FullFetch(Peer, Endpoint, RequestedNs, From, To);
+                _ ->
+                    {error, unavailable}
+            end
+        end,
+    Dir = temp_dir("current-complete-committee-move"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{slot := 2, committee := [Old]}},
+           quod_foreign_log:verify(
+             Old, OldEndpoint, maps:get(prefix_ref, Fixture), finalize, 5000)),
+        ok = atomics:put(Mode, 1, 2),
+        ?assertMatch(
+           {ok, #{slot := 5, committee := [New],
+                  route_candidates := [{New, [NewEndpoint]}]}},
+           quod_foreign_log:current(
+             route_candidates([{New, NewEndpoint}]), Identity, 5000)),
+        %% The fallback supplied history bytes only. It becomes an outward
+        %% route precisely because those bytes certified New as the current
+        %% committee, never merely because New answered the fetch.
+        ?assertEqual(
+           {ok, [{New, [NewEndpoint]}]},
+           quod_foreign_log:route_hints(Identity, []))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -2680,7 +3010,7 @@ long_identity_convergence_survives_caller_timeout() ->
             Dir, Fetch, #{page_timeout_ms => 5000}),
     try
         First = gen_server:send_request(
-                  Pid, {current, Routes, Identity, none, 100}),
+                  Pid, current_request(Routes, Identity, none, 100)),
         Worker = receive
                      {long_current_blocked, FetchWorker} -> FetchWorker
                  after 5000 ->
@@ -2691,7 +3021,7 @@ long_identity_convergence_survives_caller_timeout() ->
            gen_server:wait_response(First, 2000)),
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         Second = gen_server:send_request(
-                   Pid, {current, Routes, Identity, none, 15000}),
+                   Pid, current_request(Routes, Identity, none, 15000)),
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         Worker ! release_long_current,
         ?assertMatch(
@@ -2738,15 +3068,17 @@ identical_current_identity_requests_share_one_verification_test() ->
     Pid = start_owner(Dir, Fetch),
     try
         FirstRequest = gen_server:send_request(
-                         Pid, {current, Routes, Identity, none, 2000}),
+                         Pid, current_request(
+                                Routes, Identity, none, 2000)),
         Worker = receive
                      {shared_current_fetch, FetchWorker} -> FetchWorker
                  after 2000 ->
                      error(shared_current_fetch_not_started)
                  end,
         SecondRequest = gen_server:send_request(
-                          Pid, {current, RoutesWithAnotherHint,
-                                Identity, none, 100}),
+                          Pid, current_request(
+                                 RoutesWithAnotherHint,
+                                 Identity, none, 100)),
         %% This stats call is sent after the second request by the same
         %% process, so it is a deterministic mailbox barrier, not a sleep.
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
@@ -2802,9 +3134,9 @@ queued_identical_callers_expire_without_cancelling_the_job_test() ->
                            error(distinct_work_not_started)
                        end,
         First = gen_server:send_request(
-                  Pid, {current, Routes, Identity, none, 100}),
+                  Pid, current_request(Routes, Identity, none, 100)),
         Second = gen_server:send_request(
-                   Pid, {current, Routes, Identity, none, 150}),
+                   Pid, current_request(Routes, Identity, none, 150)),
         %% Both callers own one queued work item, not duplicate catch-up jobs.
         ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
         ?assertEqual(
@@ -2825,7 +3157,7 @@ queued_identical_callers_expire_without_cancelling_the_job_test() ->
             error(callerless_queued_job_not_started)
         end,
         Third = gen_server:send_request(
-                  Pid, {current, Routes, Identity, none, 2000}),
+                  Pid, current_request(Routes, Identity, none, 2000)),
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         CallerlessWorker ! release_callerless_job,
         ?assertMatch(
@@ -3277,6 +3609,79 @@ membership_after_finalize_fixture(Ns) ->
     Fixture#{chain := maps:get(chain, Fixture) ++ [Entry],
              new_pub => NewPub}.
 
+complete_committee_move_fixture(Ns) ->
+    Fixture = foreign_fixture(Ns),
+    OldPub = maps:get(pub, Fixture),
+    OldSigner = maps:get(signer, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Binding = {Ns, Anchor},
+    {NewPub, NewSeed} = quod_identity:generate(),
+    NewSigner = #{pubkey => NewPub,
+                  key => quod_identity:key_term({NewPub, NewSeed})},
+    Prefix = maps:get(chain, Fixture),
+    Projection1 = quod_simplex:history_advance(
+                    Ns, hd(Prefix), quod_simplex:history_projection()),
+    {ok, OldBinding2} = quod_simplex:history_binding(
+                          Binding, OldPub, Projection1),
+    Add0 = #transaction{
+             origin = Binding,
+             proof_id = key(committee_move_add_proof),
+             plan_digest = key(committee_move_add_plan),
+             goal = durable_goal({admit, NewPub}), result = durable_result(),
+             diff = [{assert,
+                      {{peer_admitted, NewPub,
+                        "127.0.0.1", 19101, NewPub}, true}}],
+             read_check = #{}, author = OldPub, author_seq = 1,
+             submitted_at = 1, sig = none},
+    Add1 = quod_transaction:bind_id(Binding, Add0),
+    {ok, Add} = quod_transaction:sign(OldBinding2, Add1, OldSigner),
+    AddEntry = content_entry(Ns, Anchor, OldPub, OldSigner, 3, [Add]),
+    Projection3 = quod_simplex:history_advance(Ns, AddEntry, Projection1),
+    {ok, OldBinding3} = quod_simplex:history_binding(
+                          Binding, OldPub, Projection3),
+    Remove0 = #transaction{
+                origin = Binding,
+                proof_id = key(committee_move_remove_proof),
+                plan_digest = key(committee_move_remove_plan),
+                goal = durable_goal({remove, OldPub}),
+                result = durable_result(),
+                diff = [{retract,
+                         {{peer_admitted, OldPub,
+                           undefined, undefined, OldPub}, true}}],
+                read_check = #{}, author = OldPub, author_seq = 2,
+                submitted_at = 2, sig = none},
+    Remove1 = quod_transaction:bind_id(Binding, Remove0),
+    {ok, Remove} = quod_transaction:sign(
+                     OldBinding3, Remove1, OldSigner),
+    RemoveEntry = committee_content_entry(
+                    Ns, Anchor,
+                    [{OldPub, OldSigner}, {NewPub, NewSigner}],
+                    4, [Remove]),
+    Projection4 = quod_simplex:history_advance(
+                    Ns, RemoveEntry, Projection3),
+    ?assertEqual([NewPub], quod_simplex:history_committee(Projection4)),
+    {ok, NewBinding4} = quod_simplex:history_binding(
+                          Binding, NewPub, Projection4),
+    Final0 = #transaction{
+               origin = Binding,
+               proof_id = key(committee_move_final_proof),
+               plan_digest = key(committee_move_final_plan),
+               goal = durable_goal(committee_move_final),
+               result = durable_result(),
+               diff = [{assert, {{committee_move_final, true}, true}}],
+               read_check = #{}, author = NewPub, author_seq = 1,
+               submitted_at = 3, sig = none},
+    Final1 = quod_transaction:bind_id(Binding, Final0),
+    {ok, Final} = quod_transaction:sign(NewBinding4, Final1, NewSigner),
+    FinalEntry = content_entry(
+                   Ns, Anchor, NewPub, NewSigner, 5, [Final]),
+    {ok, FinalRef} = quod_dtx:certified_entry_ref(
+                       Binding, FinalEntry, Final),
+    Fixture#{chain := Prefix ++ [AddEntry, RemoveEntry, FinalEntry],
+             prefix_ref => maps:get(ref, Fixture),
+             final_ref => FinalRef,
+             new_pub => NewPub}.
+
 prepared_fixture(Ns) ->
     Base = fixture_base(Ns),
     Pub = maps:get(pub, Base),
@@ -3462,6 +3867,14 @@ collect_identity_current_fetches(Acc) ->
         lists:reverse(Acc)
     end.
 
+collect_committee_move_fetches(Acc) ->
+    receive
+        {committee_move_fetch, Peer, From} ->
+            collect_committee_move_fetches([{Peer, From} | Acc])
+    after 50 ->
+        lists:reverse(Acc)
+    end.
+
 flush_resident_current_fetches() ->
     receive
         {resident_current_fetch, _From} -> flush_resident_current_fetches()
@@ -3541,6 +3954,52 @@ cache_checkpoint(Dir, Identity = {Ns, Anchor}) ->
     {quod_foreign_log_checkpoint, _Version, Ns, Anchor,
      Height, _Bytes, Projection} = binary_to_term(Blob, [safe]),
     {Height, Projection}.
+
+with_foreign_history_metrics(Fun) ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    case whereis(quod_metrics) of
+        undefined ->
+            Placeholder = spawn(fun metrics_placeholder/0),
+            true = register(quod_metrics, Placeholder),
+            try
+                ok = quod_metrics:declare(<<"kp_foreign_log_test">>),
+                Fun()
+            after
+                case whereis(quod_metrics) of
+                    Placeholder -> true = unregister(quod_metrics);
+                    _ -> ok
+                end,
+                Placeholder ! stop
+            end;
+        _Existing ->
+            Fun()
+    end.
+
+metrics_placeholder() ->
+    receive stop -> ok end.
+
+foreign_stage_samples(Stages) ->
+    maps:from_list(
+      [{Stage, foreign_stage_sample(Stage)} || Stage <- Stages]).
+
+foreign_stage_deltas(Before, After) ->
+    maps:map(
+      fun(Stage, {CountAfter, SumAfter}) ->
+          {CountBefore, SumBefore} = maps:get(Stage, Before),
+          {CountAfter - CountBefore, SumAfter - SumBefore}
+      end, After).
+
+foreign_stage_sample(Stage) ->
+    Labels = [atom_to_binary(Stage, utf8), <<"ok">>],
+    case prometheus_histogram:value(
+           quod_foreign_history_stage_seconds, Labels) of
+        undefined -> {0, 0.0};
+        {Buckets, Sum} -> {lists:sum(Buckets), Sum}
+    end.
+
+current_request(Routes, Identity, Contact, TimeoutMs) ->
+    {current, Routes, Identity, Contact, TimeoutMs, undefined,
+     erlang:monotonic_time()}.
 
 start_owner(Dir, Fetch) ->
     start_owner_opts(Dir, Fetch, #{}).

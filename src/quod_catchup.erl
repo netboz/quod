@@ -268,6 +268,12 @@ worker; pure w.r.t. the gen_server (opens/closes its own handle).
 -spec serve_blocks(binary(), file:filename_all(), pos_integer(), log_index()) ->
         {ok, [#entry{}], log_index()} | {error, term()}.
 serve_blocks(Ns, DataDir, From0, To) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = serve_blocks_measured(Ns, DataDir, From0, To),
+    observe_serve_stage(serve_read_total, Result, StartedNative),
+    Result.
+
+serve_blocks_measured(Ns, DataDir, From0, To) ->
     From = max(1, From0),
     case open_read_view(Ns, DataDir) of
         {error, _} = E -> E;
@@ -275,8 +281,14 @@ serve_blocks(Ns, DataDir, From0, To) ->
             try
                 LastI = quod_ledger_store:last(Store),
                 To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
-                {ok, Es} = quod_ledger_store:read_range(Store, From, To1),
-                {ok, cap_bytes(Es, 0), LastI}   %% keep the response within one quod_link frame
+                {ok, Es} = measure_serve_stage(
+                             serve_range_read,
+                             fun() ->
+                                 quod_ledger_store:read_range(
+                                   Store, From, To1)
+                             end),
+                Capped = cap_bytes(Es, 0),
+                {ok, Capped, LastI}   %% keep the response within one quod_link frame
             catch _:R -> {error, R}
             after quod_ledger_store:close(Store)
             end
@@ -287,12 +299,34 @@ serve_blocks(Ns, DataDir, From0, To) ->
 %% The fallback is the same offline/startup reader used before this optimization;
 %% it is not another source of truth and every returned frame is still checked.
 open_read_view(Ns, DataDir) ->
-    case quod_simplex:ledger_read_snapshot(Ns) of
+    SnapshotResult = measure_serve_stage(
+                       serve_snapshot_lookup,
+                       fun() -> quod_simplex:ledger_read_snapshot(Ns) end),
+    case SnapshotResult of
         {ok, Snapshot} ->
-            quod_ledger_store:open_ro_snapshot(Snapshot);
+            measure_serve_stage(
+              serve_snapshot_resume,
+              fun() -> quod_ledger_store:open_ro_snapshot(Snapshot) end);
         {error, not_ready} ->
-            quod_ledger_store:open_ro(Ns, DataDir)
+            measure_serve_stage(
+              serve_fallback_open,
+              fun() -> quod_ledger_store:open_ro(Ns, DataDir) end)
     end.
+
+measure_serve_stage(Stage, Fun) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = Fun(),
+    observe_serve_stage(Stage, Result, StartedNative),
+    Result.
+
+observe_serve_stage(Stage, Result, StartedNative) ->
+    quod_metrics:observe_foreign_history_stage(
+      Stage, serve_stage_result(Result),
+      erlang:monotonic_time() - StartedNative).
+
+serve_stage_result({ok, _}) -> ok;
+serve_stage_result({ok, _, _}) -> ok;
+serve_stage_result({error, _}) -> failed.
 
 %% The longest PREFIX of `Es` whose serialized size stays within ?RESP_BUDGET, so the whole response frame
 %% fits quod_link's 1 MiB cap (it EXITs the link on a larger frame). Always keeps ≥ 1 entry so a joiner
@@ -853,8 +887,12 @@ handle_cast({send_resp, OwnerRef, ReplyLink, Resp, Result}, S0) ->
             %% A certified page is protocol data, not a lossy freshness cue.
             %% Keep it on the request's authenticated link and let QUIC's
             %% send_ready event release transient flow-control pressure.
-            ok = quod_link:send_ordered(
-                   ReplyLink, encode_frame(S0#s.ns, Resp)),
+            {ok, Frame} = measure_serve_stage(
+                            serve_encode,
+                            fun() ->
+                                {ok, encode_frame(S0#s.ns, Resp)}
+                            end),
+            ok = quod_link:send_ordered(ReplyLink, Frame),
             S1 = S0#s{inflight = Inflight1},
             {noreply,
              record_server_terminal(Result, elapsed_ms(StartedMs), S1)};

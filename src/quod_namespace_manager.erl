@@ -40,7 +40,7 @@ itself owns only projection state, ordering, and replies.
 -export([test_node_actor_result_class/1, test_projection_conflicts/3,
          test_install_system_projection/4, test_retired_names/3,
          test_mutation_worker/0, test_recovery_state/0,
-         test_arm_system_query/0]).
+         test_arm_system_query/0, test_content_runtime_ready/2]).
 -endif.
 
 -define(KEY, {namespace_manager, node}).
@@ -120,8 +120,12 @@ stats() ->
 
 start_child(Kind, Ns, Config)
   when is_binary(Ns), is_map(Config) ->
+    %% Ensuring retained state is supervised recovery, not a bounded request.
+    %% In particular, a cold ontology may need longer than any caller-side
+    %% deadline to replay and rejoin; killing the application at that boundary
+    %% removes the very peers needed for quorum recovery.
     gen_server:call(
-      quod_reg:via(?KEY), {start, Kind, Ns, Config}, 15000);
+      quod_reg:via(?KEY), {start, Kind, Ns, Config}, infinity);
 start_child(_Kind, _Ns, _Config) ->
     {error, bad_config}.
 
@@ -1048,9 +1052,28 @@ sync_runtime_waits(S = #s{desired = Desired, node_actor = NodeActor}) ->
 runtime_wait_required(Ns, Config) ->
     case running_pid(content, Ns) of
         Pid when is_pid(Pid) ->
-            started_genesis(Ns, Config) =/= {ok, maps:get(genesis_hash, Config)};
+            not content_runtime_ready(Ns, Config);
         undefined -> false
     end.
+
+%% A started supervisor is not yet a route that this node may advertise. The
+%% runtime first validates the exact retained identity and finishes replay;
+%% its replay_ready edge wakes the manager through runtime_waits above.
+content_runtime_ready(Ns, Config) ->
+    content_runtime_ready_result(
+      started_genesis(Ns, Config), quod_simplex:status(Ns)).
+
+content_runtime_ready_result(
+  {ok, _GenesisHash}, #{role := Role, recovery := ready})
+  when Role =:= validator; Role =:= observer ->
+    true;
+content_runtime_ready_result(_GenesisResult, _Status) ->
+    false.
+
+-ifdef(TEST).
+test_content_runtime_ready(GenesisResult, Status) ->
+    content_runtime_ready_result(GenesisResult, Status).
+-endif.
 
 sync_waits(Kind, Wanted, Current, S) ->
     Removed = maps:keys(Current) -- maps:keys(Wanted),
@@ -1289,12 +1312,12 @@ complete_running_children(content, Desired) ->
           fun(Ns, Config, {Complete0, ValidAcc, DirsAcc}) ->
               case running_pid(content, Ns) of
                   Pid when is_pid(Pid) ->
-                      case started_genesis(Ns, Config) of
-                          {ok, _GenesisHash} ->
+                      case content_runtime_ready(Ns, Config) of
+                          true ->
                               Dirs = content_storage(Config),
                               {Complete0, ValidAcc#{Ns => true},
                                DirsAcc#{Ns => Dirs}};
-                          {error, _} ->
+                          false ->
                               {false, ValidAcc, DirsAcc}
                       end;
                   undefined ->

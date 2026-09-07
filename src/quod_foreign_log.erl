@@ -10,10 +10,12 @@ then a monitored worker pulls the existing catch-up page format over an identity
 connection.  The worker folds the history from the caller-pinned
 `{Namespace, GenesisAnchor}` through `quod_catchup`; no route, peer response,
 cache checkpoint, or reference field is trusted by itself.
-Success additionally requires that `PeerKey` belongs to the committee in the
-verified post-reference-slot projection; a directory `validator` label is only
-a candidate hint.  A non-member is a retryable route failure, never proof that
-the certified reference itself is invalid.
+The node serving history bytes grants no authority: after certified committee
+sources are exhausted, an authenticated live host may supply bytes to the same
+verifier so a retained prefix can cross a complete host or committee move.
+Only the verified chain and its slot-specific committee certify an exact
+reference. Execution routes, current-view quorum replies, and plain reads stay
+restricted to validators in the certified current projection.
 
 The same owner also derives a certificate-verified current committee view for
 an anchored identity. `quod_dtx_current_view` uses that frozen view to select
@@ -117,7 +119,7 @@ before that projection can be reused in memory.
           ref :: reference(),
           from = none :: none |
                   {follow, {binary(), <<_:256>>}, reference()},
-          callers = #{} :: #{gen_server:from() => reference()},
+          callers = #{} :: #{gen_server:from() => reference() | none},
           peer :: term(),
           identity :: {binary(), <<_:256>>},
           work :: term(),
@@ -134,7 +136,8 @@ before that projection can be reused in memory.
 -record(routed_work, {
           supplied = [] :: [{<<_:256>>, term()}],
           contact = none :: none | {<<_:256>>, term()},
-          kind :: term()
+          kind :: term(),
+          trace_ctx = undefined :: undefined | quod_trace:context()
          }).
 
 -record(history, {
@@ -171,7 +174,7 @@ before that projection can be reused in memory.
 -record(request, {
           from = none :: none |
                   {follow, {binary(), <<_:256>>}, reference()},
-          callers = #{} :: #{gen_server:from() => reference()},
+          callers = #{} :: #{gen_server:from() => reference() | none},
           peer :: term(),
           identity :: {binary(), <<_:256>>},
           work :: term(),
@@ -289,7 +292,8 @@ Verify one exact foreign DTX reference through the shared source selector.
 
 Certified directory routes, certified history routes, and bounded authenticated
 bootstrap candidates are transport hints only.  The existing history verifier
-still proves the exact anchor, phase, certificate chain, and serving committee.
+still proves the exact anchor, phase, certificate chain, and committee at the
+referenced slot. The node which supplied the bytes contributes no authority.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
                        entry | transaction | 'begin' | prepare | decision |
@@ -422,15 +426,15 @@ authority.
                    quod_dtx:certified_ref(),
                    entry | transaction | 'begin' | prepare | decision |
                    finalize | complete,
-                   pos_integer()) ->
+                   pos_integer() | infinity) ->
           {ok, map()} | {error, term()}.
 verify_local(
   #{ledger_root := LedgerRoot, snapshot := Snapshot,
     projection := Projection},
   Ref, ExpectedPhase, TimeoutMs)
   when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
-       is_integer(TimeoutMs), TimeoutMs > 0,
-       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+       ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
+         TimeoutMs =< ?MAX_TIMER_MS - 1000) orelse TimeoutMs =:= infinity) ->
     case ExpectedPhase of
         entry ->
             verify_resident_or_historical_local_entry(
@@ -445,14 +449,14 @@ verify_local(
     end;
 verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
   when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
-       is_integer(TimeoutMs), TimeoutMs > 0,
-       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+       ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
+         TimeoutMs =< ?MAX_TIMER_MS - 1000) orelse TimeoutMs =:= infinity) ->
     case quod_reg:where(?KEY) of
         Pid when is_pid(Pid) ->
             try gen_server:call(
                   Pid,
                   {verify_local, LedgerRoot, Ref, ExpectedPhase, TimeoutMs},
-                  TimeoutMs + 1000)
+                  local_call_timeout(TimeoutMs))
             catch exit:_ -> {error, retry}
             end;
         undefined ->
@@ -460,6 +464,9 @@ verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
     end;
 verify_local(_LedgerRoot, _Ref, _ExpectedPhase, _TimeoutMs) ->
     {error, bad_foreign_reference}.
+
+local_call_timeout(infinity) -> infinity;
+local_call_timeout(TimeoutMs) -> TimeoutMs + 1000.
 
 verify_resident_or_historical_local_entry(
   LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection) ->
@@ -570,9 +577,11 @@ cache through certified entries, then requires a full quorum of the resulting
 committee to corroborate the captured durable height.  Supplied routes remain
 identity-pinned fetch hints only.
 
-Before genesis is certified, candidates retain discovery order. Afterwards
-only certified committee keys remain, with live first-party reachability ahead
-of the certified historical endpoint for the same key. The returned view uses
+Before genesis is certified, candidates retain discovery order. Afterwards the
+returned route view contains only certified committee keys, with live
+first-party reachability ahead of the certified historical endpoint for the
+same key. Untrusted hosts may still supply history bytes to cross a committee
+move, but they cannot corroborate the current view. The returned view uses
 `route_candidates`, distinct from exact phase evidence's certified `routes`.
 """.
 -spec current([{<<_:256>>, [term()]}], {binary(), <<_:256>>}, pos_integer()) ->
@@ -598,11 +607,28 @@ current(Routes0, Identity, Contact, TimeoutMs)
         {{ok, [_ | _] = Routes}, true, true} ->
             case quod_reg:where(?KEY) of
                 Pid when is_pid(Pid) ->
-                    try gen_server:call(
-                          Pid, {current, Routes, Identity, Contact, TimeoutMs},
-                          TimeoutMs + 1000)
-                    catch exit:_ -> {error, retry}
-                    end;
+                    StartedNative = erlang:monotonic_time(),
+                    Result = quod_trace:with_span(
+                               quod_trace:context(),
+                               <<"quod.foreign.current">>, internal, #{},
+                               fun(SpanCtx) ->
+                                   TraceCtx = quod_trace:context(),
+                                   EnqueuedNative = erlang:monotonic_time(),
+                                   R =
+                                       try gen_server:call(
+                                             Pid,
+                                             {current, Routes, Identity,
+                                              Contact, TimeoutMs, TraceCtx,
+                                              EnqueuedNative},
+                                             TimeoutMs + 1000)
+                                       catch exit:_ -> {error, retry}
+                                       end,
+                                   _ = quod_trace:result(SpanCtx, R),
+                                   R
+                               end),
+                    observe_foreign_stage(
+                      current_total, foreign_result(Result), StartedNative),
+                    Result;
                 undefined ->
                     {error, retry}
             end;
@@ -1006,13 +1032,15 @@ handle_call(
             {reply, {error, Reason}, S0}
     end;
 handle_call(
-  {current, Routes, Identity, Contact, TimeoutMs}, From, S0) ->
+  {current, Routes, Identity, Contact, TimeoutMs, TraceCtx, EnqueuedNative},
+  From, S0) ->
+    observe_foreign_stage(owner_mailbox, ok, EnqueuedNative),
     case validate_current_identity_request(
            Routes, Identity, TimeoutMs) of
         ok ->
             begin_current_worker(
               Identity, flatten_route_candidates(Routes), Contact, TimeoutMs,
-              {current_identity, Identity},
+              {current_identity, Identity}, TraceCtx,
               From, S0);
         {error, Reason} ->
             {reply, {error, Reason}, S0}
@@ -1134,7 +1162,13 @@ begin_current_worker(Identity, Supplied, TimeoutMs, Kind, From, S0) ->
 
 begin_current_worker(
   Identity, Supplied, Contact, TimeoutMs, Kind, From, S0) ->
-    Work = #routed_work{supplied = Supplied, contact = Contact, kind = Kind},
+    begin_current_worker(
+      Identity, Supplied, Contact, TimeoutMs, Kind, undefined, From, S0).
+
+begin_current_worker(
+  Identity, Supplied, Contact, TimeoutMs, Kind, TraceCtx, From, S0) ->
+    Work = #routed_work{supplied = Supplied, contact = Contact, kind = Kind,
+                        trace_ctx = TraceCtx},
     case start_routed_worker(Identity, TimeoutMs, Work, From, S0) of
         {ok, S1} -> {noreply, S1}
     end.
@@ -1199,13 +1233,15 @@ start_or_park_routed(
 
 resolve_routed_work(Identity, #routed_work{supplied = Supplied,
                                             contact = Contact,
-                                            kind = Kind}, S0) ->
+                                            kind = Kind,
+                                            trace_ctx = TraceCtx}, S0) ->
     case selected_route_sources(Identity, Supplied, S0) of
         {ok, Sources0} ->
             Sources = add_request_contact(Contact, Sources0),
-            case route_candidates(Sources) of
-                [{Peer, _Endpoints} | _] ->
-                    {ready, Peer, routed_worker_work(Kind, Sources)};
+            case routed_source_candidates(Kind, Sources) of
+                [{Peer, _Endpoint} | _] ->
+                    {ready, Peer,
+                     routed_worker_work(Kind, Sources, TraceCtx)};
                 [] ->
                     wait
             end;
@@ -1214,14 +1250,19 @@ resolve_routed_work(Identity, #routed_work{supplied = Supplied,
     end.
 
 routed_worker_work(
-  {exact_reference, Ref, Phase, EntryHint}, Sources) ->
+  {exact_reference, Ref, Phase, EntryHint}, Sources, _TraceCtx) ->
     {exact_routes,
-     flatten_route_candidates(route_candidates(Sources)),
+     history_source_candidates(Sources),
      Ref, Phase, EntryHint};
-routed_worker_work({current_reference, Ref}, Sources) ->
+routed_worker_work({current_reference, Ref}, Sources, _TraceCtx) ->
     {current, Sources, Ref};
-routed_worker_work({current_identity, Identity}, Sources) ->
-    {current_identity, Sources, Identity}.
+routed_worker_work({current_identity, Identity}, Sources, TraceCtx) ->
+    {current_identity, Sources, Identity, TraceCtx}.
+
+routed_source_candidates({exact_reference, _Ref, _Phase, _EntryHint}, Sources) ->
+    history_source_candidates(Sources);
+routed_source_candidates(_CurrentWork, Sources) ->
+    flatten_route_candidates(route_candidates(Sources)).
 
 start_distinct_worker(
   Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
@@ -1265,14 +1306,20 @@ launch_request_owned(RequestRef, Peer, Identity, WorkTimeout,
 launch_request_owned(RequestRef, Peer, Identity, WorkTimeout,
                      RequestWork, WorkerWork, FetchFun,
                      InternalFrom, Callers, S0) ->
-    case resident_current_identity(WorkerWork, Identity, S0) of
+    ResidentStarted = erlang:monotonic_time(),
+    ResidentResult = resident_current_identity(WorkerWork, Identity, S0),
+    case ResidentResult of
         {ok, Evidence} ->
+            observe_foreign_stage(
+              resident_current_hit, ok, ResidentStarted),
+            observe_foreign_stage(
+              request_current, ok, ResidentStarted),
             cancel_caller_timers(Callers),
             reply_request_callers(maps:keys(Callers), {ok, Evidence}),
-            observe_foreign_stage(
-              request_current, ok, erlang:monotonic_time()),
             start_next_request(Identity, touch_history(Identity, S0));
         miss ->
+            observe_foreign_stage(
+              resident_current_miss, ok, ResidentStarted),
             Owner = self(),
             Root = S0#s.root,
             PageTimeout = S0#s.page_timeout_ms,
@@ -1316,10 +1363,14 @@ request_owners(RequestRef, From, TimeoutMs) ->
     {none, add_request_caller(RequestRef, From, TimeoutMs, #{})}.
 
 add_request_caller(RequestRef, From, TimeoutMs, Callers) ->
-    Timer = erlang:send_after(
-              TimeoutMs, self(),
-              {verification_caller_timeout, RequestRef, From}),
+    Timer = request_caller_timer(RequestRef, From, TimeoutMs),
     Callers#{From => Timer}.
+
+request_caller_timer(_RequestRef, _From, infinity) ->
+    none;
+request_caller_timer(RequestRef, From, TimeoutMs) ->
+    erlang:send_after(
+      TimeoutMs, self(), {verification_caller_timeout, RequestRef, From}).
 
 request_work_timer({follow, _, _}, WorkTimeout, RequestRef) ->
     erlang:send_after(
@@ -1345,7 +1396,7 @@ resident_cache(Identity, #s{histories = Histories}) ->
 %% missing row or any newer height falls through to the ordinary certified
 %% fetch and fold below.
 resident_current_identity(
-  {current_identity, Sources, Identity}, Identity,
+  {current_identity, Sources, Identity, _TraceCtx}, Identity,
   S) ->
     resident_confirmed_current(Sources, Identity, S);
 resident_current_identity(
@@ -1613,9 +1664,13 @@ handle_info({foreign_worker_done, RequestRef, Result, Meta0}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
         #request{identity = Identity, work = Work} ->
             Meta = resident_worker_meta(Result, Meta0),
-            S1 = install_worker_meta(
-                   RequestRef, Meta,
-                   record_follow_progress(RequestRef, Meta, S0)),
+            S1 = measure_foreign_ok(
+                   result_install,
+                   fun() ->
+                       install_worker_meta(
+                         RequestRef, Meta,
+                         record_follow_progress(RequestRef, Meta, S0))
+                   end),
             S2 = case maps:get(resident_verified, Meta, false) of
                      true -> release_route_waiters(Identity, S1);
                      false -> S1
@@ -1788,15 +1843,19 @@ validate_local_request(
        is_binary(Ns), byte_size(Ns) > 0,
        byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
        is_integer(Slot), Slot > 0,
-       is_binary(Proof), byte_size(Proof) > 0,
-       is_integer(TimeoutMs), TimeoutMs > 0,
-       TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case valid_phase(Phase) andalso quod_dtx:validate_certified_ref(Ref) of
+       is_binary(Proof), byte_size(Proof) > 0 ->
+    case valid_local_timeout(TimeoutMs) andalso valid_phase(Phase)
+         andalso quod_dtx:validate_certified_ref(Ref) of
         true -> {ok, {Ns, Anchor}};
         false -> {error, bad_foreign_reference}
     end;
 validate_local_request(_LedgerRoot, _Ref, _Phase, _TimeoutMs) ->
     {error, bad_foreign_reference}.
+
+valid_local_timeout(infinity) -> true;
+valid_local_timeout(TimeoutMs) ->
+    is_integer(TimeoutMs) andalso TimeoutMs > 0
+        andalso TimeoutMs =< ?MAX_TIMER_MS - 1000.
 
 validate_current_request([_ | _] = Routes, Ref, TimeoutMs) ->
     case normalize_route_candidates(Routes) of
@@ -1919,6 +1978,24 @@ discovery_route_candidates(Live, Supplied, Bootstrap) ->
                stable_unique_routes(Live ++ Supplied ++ Bootstrap),
                ?MAX_VALIDATORS),
     [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
+
+%% Fetching bytes and trusting an answer are different operations. Certified
+%% committee routes stay first, but the same history verifier may fetch from a
+%% current authenticated contact after every old host has left. The fallback
+%% gains no vote and is never returned by route_hints/2 unless the fetched
+%% history itself later certifies its key as a current validator.
+history_source_candidates(
+  #{live := Live, supplied := Supplied,
+    bootstrap := Bootstrap} = Sources) ->
+    Certified = flatten_route_candidates(route_candidates(Sources)),
+    Discovery = flatten_route_candidates(
+                  discovery_route_candidates(Live, Supplied, Bootstrap)),
+    lists:uniq(Certified ++ Discovery).
+
+history_fallback_sources(Sources, CertifiedHints) ->
+    Certified = flatten_route_candidates(CertifiedHints),
+    [Source || Source <- history_source_candidates(Sources),
+               not lists:member(Source, Certified)].
 
 directory_route_hints(Ns, Anchor) ->
     case quod_directory:validator_routes(Ns, Anchor) of
@@ -2183,7 +2260,12 @@ finish_request(RequestRef, Reply, S0) ->
     end.
 
 reply_request_callers(Callers, Reply) ->
-    lists:foreach(fun(Caller) -> gen_server:reply(Caller, Reply) end, Callers).
+    measure_foreign_ok(
+      caller_wake,
+      fun() ->
+          lists:foreach(
+            fun(Caller) -> gen_server:reply(Caller, Reply) end, Callers)
+      end).
 
 cancel_optional_timer(none) -> ok;
 cancel_optional_timer(Timer) ->
@@ -2193,7 +2275,7 @@ cancel_optional_timer(Timer) ->
 cancel_caller_timers(Callers) ->
     maps:foreach(
       fun(_Caller, Timer) ->
-              _ = erlang:cancel_timer(Timer),
+              cancel_optional_timer(Timer),
               ok
       end, Callers).
 
@@ -3101,17 +3183,32 @@ is_successful_current_outcome(
 is_successful_current_outcome(_) -> false.
 
 finish_phase_session(true, PhaseIndex, {Result, Meta}) ->
-    {Result, Meta#{phase_session => suspend_phase_session(PhaseIndex)}};
+    PhaseStats = phase_session_stats(PhaseIndex),
+    {Result,
+     maps:merge(
+       Meta#{phase_session => suspend_phase_session(PhaseIndex)},
+       PhaseStats)};
 finish_phase_session(false, PhaseIndex, Result) ->
     close_phase_session(PhaseIndex),
     Result.
 
 suspend_phase_session(PhaseIndex) ->
-    case quod_dtx_phase_index:suspend(PhaseIndex) of
+    case measure_foreign_stage(
+           phase_suspend,
+           fun() -> quod_dtx_phase_index:suspend(PhaseIndex) end) of
         {ok, Session} -> Session;
         {error, _} ->
             close_phase_session(PhaseIndex),
             none
+    end.
+
+phase_session_stats(PhaseIndex) ->
+    case quod_dtx_phase_index:stats(PhaseIndex) of
+        {ok, #{rows := Rows, file_bytes := FileBytes}} ->
+            #{phase_index_rows => Rows,
+              phase_index_bytes => FileBytes};
+        {error, _} ->
+            #{}
     end.
 
 record_follow_progress(RequestRef, Meta, S0) when is_map(Meta) ->
@@ -3667,6 +3764,8 @@ verification_worker(
     %% kills every in-flight route fetch. Expected transport exits are
     %% normalized where the dependency is called; an internal fault takes
     %% down this monitored worker and remains visible to the runtime.
+    TraceCtx = verification_trace_context(Work),
+    trace_foreign_event(TraceCtx, <<"foreign.current.worker.started">>, #{}),
     StartedNative = erlang:monotonic_time(),
     Result0 = verification_work(
                 Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
@@ -3675,13 +3774,54 @@ verification_worker(
     Meta = close_worker_cache(Meta0),
     observe_foreign_stage(
       verification_stage(Work), foreign_result(Result), StartedNative),
+    trace_foreign_event(
+      TraceCtx, <<"foreign.current.worker.finished">>,
+      worker_trace_attributes(Resident, Meta)),
     Owner ! {foreign_worker_done, RequestRef, Result, Meta}.
 
 verification_stage({exact, _, _, _, _}) -> request_exact;
 verification_stage({exact_routes, _, _, _, _}) -> request_exact;
 verification_stage({current, _, _}) -> request_current;
-verification_stage({current_identity, _, _}) -> request_current;
+verification_stage({current_identity, _, _, _}) -> request_current;
 verification_stage({follow, _, _}) -> request_follow.
+
+verification_trace_context({current_identity, _, _, TraceCtx}) -> TraceCtx;
+verification_trace_context(_) -> undefined.
+
+trace_foreign_event(undefined, _Name, _Attributes) -> ok;
+trace_foreign_event(TraceCtx, Name, Attributes) ->
+    _ = catch quod_trace:add_event(TraceCtx, Name, Attributes),
+    ok.
+
+worker_trace_attributes(Resident, Meta) ->
+    OldHeight = resident_height(Resident),
+    NewHeight = maps:get(height, Meta, OldHeight),
+    CommitteeSize = trace_committee_size(
+                      maps:get(projection, Meta, undefined)),
+    CommitteeEras = trace_committee_eras(
+                      maps:get(projection, Meta, undefined)),
+    PhaseRows = maps:get(phase_index_rows, Meta, 0),
+    PhaseBytes = maps:get(phase_index_bytes, Meta, 0),
+    #{'quod.foreign.retained_height' => OldHeight,
+      'quod.foreign.verified_suffix' => max(0, NewHeight - OldHeight),
+      'quod.foreign.committee_size' => CommitteeSize,
+      'quod.foreign.committee_eras' => CommitteeEras,
+      'quod.foreign.phase_index_rows' => PhaseRows,
+      'quod.foreign.phase_index_bytes' => PhaseBytes}.
+
+resident_height({verified_session, Height, _Projection,
+                 _PhaseSession, _CacheSession}) -> Height;
+resident_height(_) -> 0.
+
+trace_committee_size(Projection) when is_map(Projection) ->
+    try length(quod_simplex:history_committee(Projection))
+    catch _:_ -> 0
+    end;
+trace_committee_size(_) -> 0.
+
+trace_committee_eras(#{committee_views := Views}) when is_list(Views) ->
+    length(Views);
+trace_committee_eras(_) -> 0.
 
 foreign_result({ok, _}) -> ok;
 foreign_result({error, retry}) -> uncertain;
@@ -3693,12 +3833,38 @@ observe_foreign_stage(Stage, Result, StartedNative)
     quod_metrics:observe_foreign_history_stage(
       Stage, Result, erlang:monotonic_time() - StartedNative).
 
+measure_foreign_stage(Stage, Fun) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = Fun(),
+    observe_foreign_stage(
+      Stage, foreign_stage_result(Result), StartedNative),
+    Result.
+
+measure_foreign_ok(Stage, Fun) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = Fun(),
+    observe_foreign_stage(Stage, ok, StartedNative),
+    Result.
+
+foreign_stage_result(true) -> ok;
+foreign_stage_result(ok) -> ok;
+foreign_stage_result({ok, _}) -> ok;
+foreign_stage_result({ok, _, _}) -> ok;
+foreign_stage_result({ok, _, _, _}) -> ok;
+foreign_stage_result({ok, _, _, _, _}) -> ok;
+foreign_stage_result({ok, _, _, _, _, _}) -> ok;
+foreign_stage_result(false) -> failed;
+foreign_stage_result({error, retry}) -> uncertain;
+foreign_stage_result({error, {unreachable, _}}) -> uncertain;
+foreign_stage_result({error, _}) -> failed;
+foreign_stage_result(_) -> failed.
+
 verification_work(
   {exact, Peer, Endpoint, Ref, Phase}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, _RequestTimeout, Resident) ->
     verify_cached(
       Owner, RequestRef, Peer, Endpoint, Ref, Phase, ref_identity(Ref),
-      Root, FetchFun, PageTimeout, true, false, Resident, none);
+      Root, FetchFun, PageTimeout, false, Resident, none);
 verification_work(
   {exact_routes, Routes, Ref, Phase, EntryHint}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, _RequestTimeout, Resident) ->
@@ -3712,7 +3878,7 @@ verification_work(
       Owner, RequestRef, Sources, Ref, Root, FetchFun, PageTimeout,
       RequestTimeout, Resident);
 verification_work(
-  {current_identity, Sources, Identity}, Owner, RequestRef,
+  {current_identity, Sources, Identity, _TraceCtx}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident) ->
     certified_current_snapshot(
       Owner, RequestRef, Sources, Identity,
@@ -3737,7 +3903,7 @@ verify_exact_routes(
   Root, FetchFun, PageTimeout, Prior, _Meta0, Resident, EntryHint) ->
     case verify_cached(
            Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-           Root, FetchFun, PageTimeout, true, false, Resident, EntryHint) of
+           Root, FetchFun, PageTimeout, false, Resident, EntryHint) of
         {{ok, _} = Result, Meta} ->
             {Result, Meta};
         {{error, Reason}, Meta}
@@ -3762,9 +3928,13 @@ normalize_worker_result({{error, _} = Result, Meta}) when is_map(Meta) ->
 %% its immutable verified index; the next worker reopens the same append owner
 %% in O(1), while a changed file falls back to ordinary recovery.
 close_worker_cache(#{cache_store := Store} = Meta) ->
-    Session = quod_ledger_store:snapshot(Store),
-    _ = quod_ledger_store:close(Store),
-    (maps:remove(cache_store, Meta))#{cache_session => Session};
+    measure_foreign_ok(
+      ledger_suspend,
+      fun() ->
+          Session = quod_ledger_store:snapshot(Store),
+          _ = quod_ledger_store:close(Store),
+          (maps:remove(cache_store, Meta))#{cache_session => Session}
+      end);
 close_worker_cache(Meta) ->
     Meta.
 
@@ -3859,7 +4029,7 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, LedgerRoot,
     end.
 
 verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-              Root, FetchFun, PageTimeout, RequirePeer, Retried, Resident,
+              Root, FetchFun, PageTimeout, Retried, Resident,
               EntryHint) ->
     Slot = ref_slot(Ref),
     case open_cache(Owner, RequestRef, Identity, Root, Slot, Resident) of
@@ -3872,18 +4042,14 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                               {ok, Store1, CacheHeight, CacheProjection,
                                {projection, EvidenceProjection}} ->
                                   {verified,
-                                   verify_reference_source(
-                                     Peer,
-                                     verify_exact_reference(
-                                       Store1, Ref, Phase,
-                                       EvidenceProjection),
-                                     RequirePeer),
+                                   verify_exact_reference(
+                                     Store1, Ref, Phase,
+                                     EvidenceProjection),
                                    Store1, CacheHeight, CacheProjection};
                               {ok, Store1, CacheHeight, CacheProjection,
                                {evidence, Evidence}} ->
                                   {verified,
-                                   verify_reference_source(
-                                     Peer, {ok, Evidence}, RequirePeer),
+                                   {ok, Evidence},
                                    Store1, CacheHeight, CacheProjection};
                               Other -> Other
             end,
@@ -3913,7 +4079,7 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                     retry_corrupt_cache(
                       Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                       Identity, Root, FetchFun, PageTimeout,
-                      RequirePeer, Retried, EntryHint);
+                      Retried, EntryHint);
                 {error, _} ->
                     _ = quod_ledger_store:close(Store0),
                     close_phase_session(PhaseIndex),
@@ -3926,25 +4092,25 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
         {error, cache_corrupt} ->
             retry_corrupt_cache(
               Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-              Root, FetchFun, PageTimeout, RequirePeer, Retried, EntryHint);
+              Root, FetchFun, PageTimeout, Retried, EntryHint);
         {error, _} ->
             {{error, retry}, #{}}
     end.
 
 retry_corrupt_cache(_Owner, _RequestRef, _Peer, _Endpoint, _Ref, _Phase,
                     _Identity, _Root, _FetchFun, _PageTimeout,
-                    _RequirePeer, true, _EntryHint) ->
+                    true, _EntryHint) ->
     {{error, retry}, #{}};
 retry_corrupt_cache(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                     Identity, Root, FetchFun, PageTimeout,
-                    RequirePeer, false, EntryHint) ->
+                    false, EntryHint) ->
     case gen_server:call(Owner, {reset_cache, RequestRef}) of
         ok ->
             _ = file:del_dir_r(
                   cache_dir(Root, cache_namespace(Identity))),
             verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                           Identity, Root, FetchFun, PageTimeout,
-                          RequirePeer, true, none, EntryHint);
+                          true, none, EntryHint);
         {error, _} ->
             {{error, retry}, #{}}
     end.
@@ -3987,7 +4153,7 @@ verify_current_reference(
                                max(1, Remaining div min(2, length(Rest) + 1))),
             case verify_cached(
                    Owner, RequestRef, Peer, Endpoint, Ref, finalize, Identity,
-                   Root, FetchFun, AttemptTimeout, false, false, Resident,
+                   Root, FetchFun, AttemptTimeout, false, Resident,
                    none) of
                 {{ok, _} = Ok, Meta} ->
                     {Ok, Meta};
@@ -4021,7 +4187,7 @@ certified_current_snapshot(
       Root, FetchFun, PageTimeout, RequestTimeout, Resident, to_tip).
 
 certified_current_snapshot(
-  Owner, RequestRef, Sources, Identity = {Ns, Anchor},
+  Owner, RequestRef, Sources, Identity,
   Root, FetchFun, PageTimeout, RequestTimeout, Resident, AdvanceMode) ->
     case open_cache(Owner, RequestRef, Identity, Root, none, Resident) of
         {ok, Store0, Height0, Projection0, PhaseIndex, _RefProjection} ->
@@ -4034,21 +4200,11 @@ certified_current_snapshot(
                            FetchFun, PageTimeout, RequestTimeout,
                            AdvanceMode) of
                         {ok, Store1, Height1, Projection1} ->
-                            ConfirmHints = current_route_candidates(
-                                             Sources, Projection1),
-                            case current_view_confirmed(
-                                   Owner, RequestRef, ConfirmHints, Ns,
-                                   Anchor, Identity, Height1, Projection1,
-                                   PhaseIndex,
-                                   FetchFun, PageTimeout) of
-                                true ->
-                                    {ok, current_view_evidence(
-                                           Identity, Height1, Projection1,
-                                           ConfirmHints),
-                                     Store1, Height1, Projection1};
-                                false ->
-                                    {unconfirmed, Store1, Height1, Projection1}
-                            end;
+                            confirm_current_snapshot(
+                              Owner, RequestRef, Sources, Identity,
+                              Store1, Height1, Projection1, PhaseIndex,
+                              Root, FetchFun, PageTimeout, RequestTimeout,
+                              AdvanceMode, true);
                         {error, _} = Error ->
                             Error
                     end
@@ -4064,6 +4220,53 @@ certified_current_snapshot(
                                       Height0, Projection0));
         {error, _} ->
             {{error, retry}, #{}}
+    end.
+
+confirm_current_snapshot(
+  Owner, RequestRef, Sources, Identity = {Ns, Anchor},
+  Store, Height, Projection, PhaseIndex, Root,
+  FetchFun, PageTimeout, RequestTimeout, AdvanceMode, AllowFallback) ->
+    ConfirmHints = current_route_candidates(Sources, Projection),
+    Confirmed = measure_foreign_stage(
+                  tip_confirm,
+                  fun() ->
+                      current_view_confirmed(
+                        Owner, RequestRef, ConfirmHints, Ns, Anchor,
+                        Identity, Height, Projection, PhaseIndex,
+                        FetchFun, PageTimeout)
+                  end),
+    case {Confirmed, AllowFallback} of
+        {true, _} ->
+            {ok, current_view_evidence(
+                   Identity, Height, Projection, ConfirmHints),
+             Store, Height, Projection};
+        {false, true} ->
+            recover_current_snapshot_from_history_source(
+              Owner, RequestRef, Sources, ConfirmHints, Identity,
+              Store, Height, Projection, PhaseIndex, Root,
+              FetchFun, PageTimeout, RequestTimeout, AdvanceMode);
+        {false, false} ->
+            {unconfirmed, Store, Height, Projection}
+    end.
+
+recover_current_snapshot_from_history_source(
+  Owner, RequestRef, Sources, ConfirmHints,
+  Identity, Store, Height, Projection, PhaseIndex, Root,
+  FetchFun, PageTimeout, RequestTimeout, AdvanceMode) ->
+    Fallback = history_fallback_sources(Sources, ConfirmHints),
+    RouteTimeout = bootstrap_route_timeout(
+                     PageTimeout, RequestTimeout, length(Fallback)),
+    case sequential_snapshot_sources(
+           Fallback, Owner, RequestRef, Identity, Store, Height,
+           Projection, PhaseIndex, Root, FetchFun, RouteTimeout,
+           PageTimeout, AdvanceMode) of
+        {ok, Store1, Height1, Projection1} when Height1 > Height ->
+            confirm_current_snapshot(
+              Owner, RequestRef, Sources, Identity,
+              Store1, Height1, Projection1, PhaseIndex, Root,
+              FetchFun, PageTimeout, RequestTimeout, AdvanceMode, false);
+        _ ->
+            {unconfirmed, Store, Height, Projection}
     end.
 
 current_snapshot_result(
@@ -4098,10 +4301,17 @@ open_cache(Owner, RequestRef, Identity, Root, TargetSlot, Resident) ->
 open_cache_raw(_Owner, _RequestRef, Identity, _Root, TargetSlot,
                {verified_store, Height, Projection, PhaseSession, Store}) ->
     CacheNs = cache_namespace(Identity),
-    case retained_cache_matches(
-           Store, CacheNs, Height, Projection, Identity) of
+    Matches = measure_foreign_stage(
+                projection_validate,
+                fun() ->
+                    retained_cache_matches(
+                      Store, CacheNs, Height, Projection, Identity)
+                end),
+    case Matches of
         true ->
-            case quod_dtx_phase_index:resume(PhaseSession) of
+            case measure_foreign_stage(
+                   phase_resume,
+                   fun() -> quod_dtx_phase_index:resume(PhaseSession) end) of
                 {ok, PhaseIndex} ->
                     {ok, Store, Height, Projection, PhaseIndex,
                      resident_target_projection(
@@ -4120,12 +4330,23 @@ open_cache_raw(Owner, RequestRef, Identity, Root, TargetSlot,
                {verified_session, Height, Projection,
                 PhaseSession, CacheSession}) ->
     CacheNs = cache_namespace(Identity),
-    case quod_ledger_store:resume(CacheSession) of
+    case measure_foreign_stage(
+           ledger_resume,
+           fun() -> quod_ledger_store:resume(CacheSession) end) of
         {ok, Store} ->
-            case retained_cache_matches(
-                   Store, CacheNs, Height, Projection, Identity) of
+            Matches = measure_foreign_stage(
+                        projection_validate,
+                        fun() ->
+                            retained_cache_matches(
+                              Store, CacheNs, Height, Projection, Identity)
+                        end),
+            case Matches of
                 true ->
-                    case quod_dtx_phase_index:resume(PhaseSession) of
+                    case measure_foreign_stage(
+                           phase_resume,
+                           fun() ->
+                               quod_dtx_phase_index:resume(PhaseSession)
+                           end) of
                         {ok, PhaseIndex} ->
                             {ok, Store, Height, Projection, PhaseIndex,
                              resident_target_projection(
@@ -4150,10 +4371,18 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
     ok = cleanup_cache_temps(Dir),
     case ensure_manifest(Owner, RequestRef, Root, Identity, CacheNs) of
         ok ->
-            try quod_ledger_store:open(CacheNs, Root, wrapped) of
+            try measure_foreign_stage(
+                  ledger_open,
+                  fun() -> quod_ledger_store:open(CacheNs, Root, wrapped) end) of
                 {ok, Store} ->
                     Height = quod_ledger_store:last(Store),
-                    case load_checkpoint(Root, Identity, CacheNs, Height) of
+                    Checkpoint = measure_foreign_stage(
+                                   checkpoint_read,
+                                   fun() ->
+                                       load_checkpoint(
+                                         Root, Identity, CacheNs, Height)
+                                   end),
+                    case Checkpoint of
                         {ok, CheckpointProjection} ->
                             open_cache_projection(
                               Root, CacheNs, Ns, Anchor, Store,
@@ -4161,7 +4390,9 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
                               TargetSlot, Resident);
                         new when Height =:= 0 ->
                             discard_resident_phase(Resident),
-                            case fresh_phase_index(Root, CacheNs) of
+                            case measure_foreign_stage(
+                                   phase_open,
+                                   fun() -> fresh_phase_index(Root, CacheNs) end) of
                                 {ok, PhaseIndex} ->
                                     Projection = quod_simplex:history_projection(
                                                    {Ns, Anchor}),
@@ -4214,7 +4445,9 @@ open_cache_projection(
 
 open_replayed_cache(Root, CacheNs, Ns, Anchor, Store, Height,
                     CheckpointProjection, TargetSlot) ->
-    case fresh_phase_index(Root, CacheNs) of
+    case measure_foreign_stage(
+           phase_open,
+           fun() -> fresh_phase_index(Root, CacheNs) end) of
         {ok, PhaseIndex} ->
             Projection0 = quod_simplex:history_projection({Ns, Anchor}),
             StartedNative = erlang:monotonic_time(),
@@ -4247,7 +4480,9 @@ fresh_phase_index(Root, CacheNs) ->
     quod_dtx_phase_index:open(Root, CacheNs).
 
 resume_resident_phase({verified, _Height, _Projection, PhaseSession}) ->
-    quod_dtx_phase_index:resume(PhaseSession);
+    measure_foreign_stage(
+      phase_resume,
+      fun() -> quod_dtx_phase_index:resume(PhaseSession) end);
 resume_resident_phase(_) ->
     {error, bad_phase_index_argument}.
 
@@ -4515,6 +4750,17 @@ fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot,
 prepare_verified_page(
   Ns, Anchor, Identity, Projection0, PhaseIndex,
   From, To, Entries, RemoteHeight) ->
+    measure_foreign_stage(
+      page_verify,
+      fun() ->
+          prepare_verified_page_raw(
+            Ns, Anchor, Identity, Projection0, PhaseIndex,
+            From, To, Entries, RemoteHeight)
+      end).
+
+prepare_verified_page_raw(
+  Ns, Anchor, Identity, Projection0, PhaseIndex,
+  From, To, Entries, RemoteHeight) ->
     case validate_page(Entries, From, To, RemoteHeight) of
         {ok, Count, EntryBytes} ->
             case quod_catchup:verify_forward(
@@ -4548,25 +4794,52 @@ persist_verified_page(
     %% complete maximum before either durable allocation, then reconcile to
     %% the exact persisted bytes after the atomic rename.
     Reservation = StoredBytes + ?QUOD_MAX_FOREIGN_PAGE_BYTES,
-    case gen_server:call(
-           Owner, {reserve_page, RequestRef, Reservation}) of
+    ReservationResult = measure_foreign_stage(
+                          cache_accounting,
+                          fun() ->
+                              gen_server:call(
+                                Owner,
+                                {reserve_page, RequestRef, Reservation})
+                          end),
+    case ReservationResult of
         ok ->
-            try quod_ledger_store:append(Store0, Verified) of
+            try measure_foreign_stage(
+                  ledger_append,
+                  fun() -> quod_ledger_store:append(Store0, Verified) end) of
                 {ok, Store1} ->
-                    case quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) of
+                    PhaseResult = measure_foreign_stage(
+                                    phase_commit,
+                                    fun() ->
+                                        quod_dtx_phase_index:commit_delta(
+                                          PhaseIndex, Delta)
+                                    end),
+                    case PhaseResult of
                         ok ->
                             Height1 = Height0 + Count,
-                            case write_checkpoint(
-                                   Root, Identity, cache_namespace(Identity),
-                                   Height1, Projection1) of
+                            CheckpointResult = measure_foreign_stage(
+                                                 checkpoint_write,
+                                                 fun() ->
+                                                     write_checkpoint(
+                                                       Root, Identity,
+                                                       cache_namespace(
+                                                         Identity),
+                                                       Height1, Projection1)
+                                                 end),
+                            case CheckpointResult of
                                 ok ->
                                     ActualBytes = cache_persisted_bytes(
                                                     Root,
                                                     cache_namespace(Identity)),
-                                    case gen_server:call(
-                                           Owner,
-                                           {set_cache_size, RequestRef,
-                                            ActualBytes}) of
+                                    AccountingResult = measure_foreign_stage(
+                                                         cache_accounting,
+                                                         fun() ->
+                                                             gen_server:call(
+                                                               Owner,
+                                                               {set_cache_size,
+                                                                RequestRef,
+                                                                ActualBytes})
+                                                         end),
+                                    case AccountingResult of
                                         ok ->
                                             {ok, Store1, Height1, Projection1};
                                         {error, _} ->
@@ -4666,7 +4939,7 @@ advance_current_snapshot(
   PhaseIndex, Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode) ->
     case maps:size(quod_simplex:history_validator_routes(Projection0)) of
         0 ->
-            bootstrap_snapshot_sources(
+            sequential_snapshot_sources(
               flatten_route_candidates(Hints),
               Owner, RequestRef, Identity, Store0, Height0,
               Projection0, PhaseIndex, Root, FetchFun,
@@ -4691,20 +4964,21 @@ bootstrap_route_timeout(PageTimeout, RequestTimeout, RouteCount) ->
     PerRoute = erlang:max(1, RequestTimeout div (2 * erlang:max(1, RouteCount))),
     erlang:min(PageTimeout, PerRoute).
 
-%% Before genesis is replayed every route is only a discovery hint. Trying
-%% them concurrently lets contradictory credentials for one address contend
-%% during first contact. Walk the bounded list instead: a source must deliver
-%% a page that passes the ordinary certificate/history fold before it wins.
-bootstrap_snapshot_sources(
+%% Walk discovery and fallback byte sources sequentially. Before genesis this
+%% avoids contradictory first-contact credentials racing. After a complete
+%% host move it avoids parallel fanout to non-authoritative sources. In both
+%% cases a source wins only by supplying a page accepted by the one ordinary
+%% certificate/history fold.
+sequential_snapshot_sources(
   [], _Owner, _RequestRef, _Identity, _Store, _Height, _Projection,
   _PhaseIndex, _Root, _FetchFun, _BootstrapTimeout, _PageTimeout,
   _AdvanceMode) ->
     {error, invalid_history};
-bootstrap_snapshot_sources(
+sequential_snapshot_sources(
   [Source | Rest], Owner, RequestRef,
   Identity, Store0, Height0, Projection0, PhaseIndex,
   Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode) ->
-    case bootstrap_snapshot_source(
+    case sequential_snapshot_source(
            Source, Owner, RequestRef, Identity, Store0, Height0,
            Projection0, PhaseIndex, Root, FetchFun, BootstrapTimeout,
            PageTimeout, AdvanceMode) of
@@ -4715,13 +4989,13 @@ bootstrap_snapshot_sources(
               "foreign history bootstrap source failed identity=~p "
               "source=~p reason=~p",
               [Identity, Source, Reason]),
-            bootstrap_snapshot_sources(
+            sequential_snapshot_sources(
               Rest, Owner, RequestRef, Identity, Store0, Height0,
               Projection0, PhaseIndex, Root, FetchFun, BootstrapTimeout,
               PageTimeout, AdvanceMode)
     end.
 
-bootstrap_snapshot_source(
+sequential_snapshot_source(
   Source = {Peer, Endpoint}, Owner, RequestRef,
   Identity = {Ns, Anchor}, Store0, Height0, Projection0, PhaseIndex,
   Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode) ->
@@ -5174,21 +5448,6 @@ transaction_reference_digest(1, TxId) when is_binary(TxId) ->
     crypto:hash(sha256, TxId);
 transaction_reference_digest(_Slot, TxId) ->
     TxId.
-
-verify_reference_source(Peer, {ok, #{committee := Committee}} = Result,
-                        true) ->
-    case verified_route_peer(Peer, Committee) of
-        true -> Result;
-        false ->
-            %% This is a route failure, not evidence that the certified
-            %% reference is false; callers may try another candidate.
-            {error, retry}
-    end;
-verify_reference_source(_Peer, Result, _RequirePeer) ->
-    Result.
-
-verified_route_peer({local, _Identity}, _Committee) -> true;
-verified_route_peer(Peer, Committee) -> lists:member(Peer, Committee).
 
 %%%===================================================================
 %%% Durable cache

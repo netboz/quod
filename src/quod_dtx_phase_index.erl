@@ -21,7 +21,7 @@ by killed replay/catch-up workers.
 
 -include("quod_proof_limits.hrl").
 
--export([open/2, suspend/1, resume/1, close/1, cleanup/2,
+-export([open/2, suspend/1, resume/1, close/1, cleanup/2, stats/1,
          new_delta/0, preview_batch/4, commit_delta/2,
          apply_batch/3]).
 -export_type([index/0, delta/0]).
@@ -131,6 +131,24 @@ resume(Index = #index{path = Path, state = suspended}) ->
             {error, {phase_index_io, enoent}}
     end;
 resume(_Index) ->
+    {error, bad_phase_index_argument}.
+
+-doc "Return constant-work backend extent statistics for attribution.".
+-spec stats(index()) ->
+          {ok, #{rows := non_neg_integer(), file_bytes := non_neg_integer()}} |
+          {error, index_error()}.
+stats(#index{table = Table, state = open}) ->
+    try {dets:info(Table, size), dets:info(Table, file_size)} of
+        {Rows, FileBytes}
+          when is_integer(Rows), Rows >= 0,
+               is_integer(FileBytes), FileBytes >= 0 ->
+            {ok, #{rows => Rows, file_bytes => FileBytes}};
+        _ ->
+            {error, phase_index_corrupt}
+    catch
+        Class:Reason -> {error, {phase_index_io, {Class, Reason}}}
+    end;
+stats(_Index) ->
     {error, bad_phase_index_argument}.
 
 -doc "Close this session's DETS table and remove only its own scratch file.".

@@ -2,6 +2,23 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+constant_work_extent_stats_follow_committed_rows_test() ->
+    with_index(
+      fun(Index, _DataDir) ->
+          {ok, #{rows := 0, file_bytes := EmptyBytes}} =
+              quod_dtx_phase_index:stats(Index),
+          Signer = signer(),
+          Target = {<<"quod:phase-stats">>, key(800)},
+          Projection = quod_dtx:initial_projection(Target, 0),
+          {Control, Ref} = direct_abort(
+                             Target, key(801), key(802), 1, Signer),
+          {ok, Projection, [_]} = phase_apply(
+                                       Index, Control, Ref, Projection),
+          {ok, #{rows := 1, file_bytes := StoredBytes}} =
+              quod_dtx_phase_index:stats(Index),
+          ?assert(StoredBytes >= EmptyBytes)
+      end).
+
 exact_history_survives_interleaved_windows_test() ->
     with_index(
       fun(Index, _DataDir) ->

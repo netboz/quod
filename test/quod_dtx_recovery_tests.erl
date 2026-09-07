@@ -90,6 +90,37 @@ commit_recovery_reconstructs_every_phase_in_target_order_test() ->
                Begin,
                snapshot(PhaseEvidence, Generations,
                         AlternateApplied, none))),
+
+          %% Applied attestations bind the immutable Finalize claim, not one
+          %% replica's interchangeable quorum-proof subset.  Recovery may
+          %% therefore combine a verified attestation naming another valid
+          %% subset with the certified Finalize entry already in its index.
+          AlternateFinalizeRef =
+              setelement(8, evidence_ref(FinalizeAEvidence),
+                         <<"alternate-finalize-quorum">>),
+          [AppliedA, AppliedB] = Applied,
+          EquivalentAppliedA =
+              setelement(
+                2, AppliedA,
+                setelement(7, element(2, AppliedA), AlternateFinalizeRef)),
+          ?assertMatch(
+             {ok, {ordered, complete, [{submit, Origin, _}]}},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(PhaseEvidence, Generations,
+                        [EquivalentAppliedA, AppliedB], none))),
+          DifferentFinalizeClaim =
+              setelement(6, AlternateFinalizeRef, digest(249)),
+          MisboundAppliedA =
+              setelement(
+                2, AppliedA,
+                setelement(7, element(2, AppliedA), DifferentFinalizeClaim)),
+          ?assertEqual(
+             {error, invalid_applied_evidence},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(PhaseEvidence, Generations,
+                        [MisboundAppliedA, AppliedB], none))),
           CompleteEvidence = evidence(Origin, Complete, 7, F),
           S6 = snapshot(
                  PhaseEvidence ++ [CompleteEvidence], Generations, [], none),
@@ -179,6 +210,127 @@ first_definite_refusal_builds_reasoned_abort_and_direct_tombstone_test() ->
              {ok, {ordered, complete,
                    [{submit, Origin, _Complete}]}},
              quod_dtx_recovery:next(Begin, TerminalSnapshot))
+      end).
+
+%% Several origin replicas may drive the same durable group.  One can certify
+%% a Prepare and commit the abort Decision while another learns that Decision
+%% before it has locally re-read the Prepare.  The Decision's certified row is
+%% durable; the second coordinator's observation order is not.  Recovery must
+%% bind the row to the unique Prepare derived from Begin, then request the
+%% missing target state needed for Finalize instead of rejecting the chain.
+certified_decision_does_not_require_volatile_prepare_observation_test() ->
+    with_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          Origin = maps:get(origin, F),
+          [A, B] = maps:get(targets, F),
+          GroupId = maps:get(group_id, F),
+          BeginEvidence = evidence(Origin, Begin, 20, F),
+          BeginRef = evidence_ref(BeginEvidence),
+          {ok, PrepareA} = quod_dtx:new_prepare(Begin, BeginRef, A),
+          PrepareAEvidence = evidence(A, PrepareA, 21, F),
+          Reasons =
+              [{prepare_refused,
+                {ontology, element(1, B), element(2, B)}},
+               conflict_retry],
+          {ok, Decision} =
+              quod_dtx:new_decision(
+                GroupId, BeginRef, {abort, Reasons},
+                [{A, evidence_ref(PrepareAEvidence)}]),
+          DecisionEvidence = evidence(Origin, Decision, 22, F),
+          Sparse = snapshot(
+                     [BeginEvidence, DecisionEvidence], [], [], none),
+          ?assertEqual(
+             {ok, {independent, prepare,
+                   [{phase, A, GroupId, prepare}]}},
+             quod_dtx_recovery:next(Begin, Sparse)),
+
+          %% A digest alone cannot prove unseen Prepare content, so recovery
+          %% first requests the exact referenced entry.  Once the genuine
+          %% Prepare is present, a Decision naming another digest fails.
+          BadPrepareRef =
+              setelement(7, evidence_ref(PrepareAEvidence), digest(250)),
+          {ok, MismatchedDecision} =
+              quod_dtx:new_decision(
+                GroupId, BeginRef, {abort, Reasons},
+                [{A, BadPrepareRef}]),
+          ?assertMatch(
+             {ok, {independent, prepare, [_]}},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(
+                 [BeginEvidence,
+                  evidence(Origin, MismatchedDecision, 23, F)],
+                 [], [], none))),
+          ?assertEqual(
+             {error, invalid_phase_chain},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(
+                 [BeginEvidence, PrepareAEvidence,
+                  evidence(Origin, MismatchedDecision, 23, F)],
+                 [], [], none)))
+      end).
+
+equivalent_begin_finality_subsets_bind_one_prepare_chain_test() ->
+    with_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          Origin = maps:get(origin, F),
+          [A, B] = Targets = maps:get(targets, F),
+          GroupId = maps:get(group_id, F),
+          BeginEvidence = evidence(Origin, Begin, 24, F),
+          BeginRef = evidence_ref(BeginEvidence),
+          EquivalentBeginRef = setelement(8, BeginRef, <<"other-quorum">>),
+          ?assertNotEqual(BeginRef, EquivalentBeginRef),
+          ?assertEqual(
+             quod_dtx:certified_ref_claim(BeginRef),
+             quod_dtx:certified_ref_claim(EquivalentBeginRef)),
+          {ok, PrepareA} =
+              quod_dtx:new_prepare(Begin, EquivalentBeginRef, A),
+          {ok, PrepareB} = quod_dtx:new_prepare(Begin, BeginRef, B),
+          ?assert(quod_dtx:prepare_matches_certified_begin(
+                    PrepareA, Begin, BeginRef)),
+          PrepareAEvidence = evidence(A, PrepareA, 25, F),
+          PrepareBEvidence = evidence(B, PrepareB, 26, F),
+          AlternatePrepareARef =
+              setelement(8, evidence_ref(PrepareAEvidence),
+                         <<"other-prepare-quorum">>),
+          {ok, Decision} =
+              quod_dtx:new_decision(
+                GroupId, BeginRef, commit,
+                [{A, AlternatePrepareARef},
+                 {B, evidence_ref(PrepareBEvidence)}]),
+          DecisionEvidence = evidence(Origin, Decision, 27, F),
+          {ok, {independent, finalize, Commands}} =
+              quod_dtx_recovery:next(
+                Begin,
+                snapshot(
+                  [BeginEvidence, PrepareAEvidence, PrepareBEvidence,
+                   DecisionEvidence],
+                  [{A, 1}, {B, 1}], [], none)),
+          ?assertEqual(Targets, command_targets(Commands)),
+
+          %% Changing the certified block claim is not an equivalent quorum
+          %% subset and remains a hard phase-chain failure.
+          OtherBlockRef = setelement(6, EquivalentBeginRef, digest(251)),
+          {ok, MisboundPrepare} = quod_dtx:new_prepare(Begin, OtherBlockRef, A),
+          ?assertNot(quod_dtx:prepare_matches_certified_begin(
+                       MisboundPrepare, Begin, BeginRef)),
+          MisboundEvidence = evidence(A, MisboundPrepare, 28, F),
+          {ok, MisboundDecision} =
+              quod_dtx:new_decision(
+                GroupId, BeginRef, commit,
+                [{A, evidence_ref(MisboundEvidence)},
+                 {B, evidence_ref(PrepareBEvidence)}]),
+          ?assertEqual(
+             {error, invalid_phase_chain},
+             quod_dtx_recovery:next(
+               Begin,
+               snapshot(
+                 [BeginEvidence, MisboundEvidence, PrepareBEvidence,
+                  evidence(Origin, MisboundDecision, 29, F)],
+                 [{A, 1}, {B, 1}], [], none)))
       end).
 
 missing_generation_emits_phase_queries_and_statuses_bind_exactly_test() ->

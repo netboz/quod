@@ -88,6 +88,7 @@ replay. Neither transition changes the global proof generation.
          encode_attestation/1, decode_attestation/1,
          certified_ref/6, certified_entry_ref/3,
          certified_entry_ref_matches/5, certified_ref_claim/1,
+         same_certified_ref/2,
          validate_certified_ref/1,
          new_begin/3, new_prepare/3, new_decision/4,
          new_finalize/5, new_complete/3,
@@ -100,7 +101,8 @@ replay. Neither transition changes the global proof generation.
          begin_participant_payload/2,
          request_auth/1,
          request_claim/1, validate_request/4, requires_network_identity/1,
-         prepare_matches_begin/2, validate_references/2, event_context/2,
+         prepare_matches_begin/2, prepare_matches_certified_begin/3,
+         validate_references/2, event_context/2,
          record_digest/1, group_id/1, decision_failure_reasons/1,
          record_kind/1,
          begin_group_ref/1, begin_recovery_rows/1,
@@ -1131,6 +1133,14 @@ certified_ref_claim(
 certified_ref_claim(_Malformed) ->
     error.
 
+-doc "Compare the immutable claim of two certified references, excluding their interchangeable finality-proof subsets.".
+-spec same_certified_ref(certified_ref(), certified_ref()) -> boolean().
+same_certified_ref(Left, Right) ->
+    case {certified_ref_claim(Left), certified_ref_claim(Right)} of
+        {{ok, Claim}, {ok, Claim}} -> true;
+        _ -> false
+    end.
+
 valid_certified_ref_finality(
   _Ns, _Anchor,
   {quod_dtx_ref, ?REF_VERSION, _RefNs, _RefAnchor, 1,
@@ -1559,6 +1569,30 @@ prepare_matches_begin(
 prepare_matches_begin(_, _) ->
     false.
 
+-doc "Verify a Prepare against one exact certified Begin claim, ignoring only equivalent finality-proof subsets.".
+-spec prepare_matches_certified_begin(
+        control() | control_record(), control() | control_record(),
+        certified_ref()) -> boolean().
+prepare_matches_certified_begin(Prepare, Begin, BeginRef) ->
+    case prepare_begin_ref(Prepare) of
+        {ok, PrepareBeginRef} ->
+            prepare_matches_begin(Prepare, Begin) andalso
+                same_certified_ref(PrepareBeginRef, BeginRef);
+        error ->
+            false
+    end.
+
+prepare_begin_ref(
+  {quod_dtx_control, ?CONTROL_VERSION, prepare, _, Prepare,
+   _, _, _, _, _}) ->
+    prepare_begin_ref(Prepare);
+prepare_begin_ref(
+  {quod_dtx_prepare, ?RECORD_VERSION, _GroupId, BeginRef,
+   _Manifest, _PlanDigest, _PlanBlob}) ->
+    {ok, BeginRef};
+prepare_begin_ref(_) ->
+    error.
+
 prepare_matches_valid_begin(
   GroupId, BeginRef, PlanDigest, PlanBlob, Begin, Bundles) ->
     record_digest_unchecked('begin', Begin) =:= GroupId andalso
@@ -1693,12 +1727,13 @@ decision_participants_match(Verdict, PrepareRows, Manifest) ->
 prepare_evidence_matches([], [], _GroupId, _BeginRef, _BeginControl) ->
     true;
 prepare_evidence_matches(
-  [{Target, BeginRef} | RowRest], Evidence,
+  [{Target, RowRef} | RowRest], Evidence,
   GroupId, BeginRef,
   {quod_dtx_control, ?CONTROL_VERSION, 'begin', Target,
    {quod_dtx_begin, ?RECORD_VERSION, _Manifest, _RequestAuth,
     _Bundles} = Begin, _, _, _, _, _} = BeginControl) ->
-    group_id(Begin) =:= GroupId andalso
+    same_certified_ref(RowRef, BeginRef) andalso
+        group_id(Begin) =:= GroupId andalso
         begin_participant_payload(Begin, Target) =/= not_found andalso
         begin_participant_payload(Begin, Target) =/= error andalso
         prepare_evidence_matches(
@@ -1709,10 +1744,11 @@ prepare_evidence_matches(
   GroupId, BeginRef, BeginControl) ->
     case exact_evidence_record(prepare, PrepareRef, PrepareControl) of
         {ok, Target,
-         {quod_dtx_prepare, ?RECORD_VERSION, GroupId, BeginRef,
+         {quod_dtx_prepare, ?RECORD_VERSION, GroupId, PrepareBeginRef,
           _Manifest, _PlanDigest, _PlanBlob}} ->
-            prepare_matches_valid_begin_controls(
-              PrepareControl, BeginControl) andalso
+            same_certified_ref(PrepareBeginRef, BeginRef) andalso
+                prepare_matches_valid_begin_controls(
+                  PrepareControl, BeginControl) andalso
                 prepare_evidence_matches(
                   RowRest, EvidenceRest, GroupId, BeginRef, BeginControl);
         _ ->
@@ -1743,9 +1779,10 @@ finalize_prepare_evidence_matches(
   [{prepare, PrepareRef, PrepareControl}]) ->
     case exact_evidence_record(prepare, PrepareRef, PrepareControl) of
         {ok, Target,
-         {quod_dtx_prepare, ?RECORD_VERSION, GroupId, BeginRef,
+         {quod_dtx_prepare, ?RECORD_VERSION, GroupId, PrepareBeginRef,
           _Manifest, _PlanDigest, _PlanBlob}} ->
-            lists:keyfind(Target, 1, PrepareRows) =:= {Target, PrepareRef};
+            same_certified_ref(PrepareBeginRef, BeginRef) andalso
+                reference_row_matches(Target, PrepareRef, PrepareRows);
         _ ->
             false
     end;
@@ -1757,11 +1794,11 @@ complete_evidence_matches(
   _BeginRef) ->
     true;
 complete_evidence_matches(
-  [{DecisionTarget, DecisionRef, Generation} | RowRest], Evidence,
+  [{DecisionTarget, SourceDecisionRef, Generation} | RowRest], Evidence,
   GroupId, DecisionRef, Verdict, PrepareRows, DecisionTarget, BeginRef)
   when is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64 ->
-    lists:keyfind(DecisionTarget, 1, PrepareRows) =:=
-        {DecisionTarget, BeginRef} andalso
+    same_certified_ref(SourceDecisionRef, DecisionRef) andalso
+        reference_row_matches(DecisionTarget, BeginRef, PrepareRows) andalso
         complete_evidence_matches(
           RowRest, Evidence, GroupId, DecisionRef, Verdict, PrepareRows,
           DecisionTarget, BeginRef);
@@ -1771,10 +1808,12 @@ complete_evidence_matches(
   GroupId, DecisionRef, Verdict, PrepareRows, DecisionTarget, BeginRef) ->
     case exact_evidence_record(finalize, FinalizeRef, FinalizeControl) of
         {ok, Target,
-         {quod_dtx_finalize, ?RECORD_VERSION, GroupId, DecisionRef, Verdict,
+         {quod_dtx_finalize, ?RECORD_VERSION, GroupId,
+          FinalizeDecisionRef, Verdict,
           PrepareRef, Generation}} ->
-            finalize_row_matches_decision(
-              Target, Verdict, PrepareRef, PrepareRows) andalso
+            same_certified_ref(FinalizeDecisionRef, DecisionRef) andalso
+                finalize_row_matches_decision(
+                  Target, Verdict, PrepareRef, PrepareRows) andalso
                 complete_evidence_matches(
                   RowRest, EvidenceRest, GroupId, DecisionRef,
                   Verdict, PrepareRows, DecisionTarget, BeginRef);
@@ -1786,11 +1825,17 @@ complete_evidence_matches(_, _, _, _, _, _, _, _) ->
 
 finalize_row_matches_decision(Target, _Verdict, PrepareRef, PrepareRows)
   when PrepareRef =/= none ->
-    lists:keyfind(Target, 1, PrepareRows) =:= {Target, PrepareRef};
+    reference_row_matches(Target, PrepareRef, PrepareRows);
 finalize_row_matches_decision(_Target, abort, none, _PrepareRows) ->
     true;
 finalize_row_matches_decision(_, _, _, _) ->
     false.
+
+reference_row_matches(Target, Ref, Rows) ->
+    case lists:keyfind(Target, 1, Rows) of
+        {Target, StoredRef} -> same_certified_ref(StoredRef, Ref);
+        false -> false
+    end.
 
 complete_participants_match(commit, PrepareRows, FinalizeRows) ->
     [Target || {Target, _} <- PrepareRows] =:=
@@ -2055,7 +2100,7 @@ begin_recovery_rows(
 begin_recovery_rows(_) ->
     error.
 
--doc "Validated Decision/Finalize fields consumed by the pure recovery driver.".
+-doc "Validated post-Begin phase fields consumed by the pure recovery driver.".
 -spec recovery_phase(control_record()) ->
           {ok, map()} | error.
 recovery_phase(
@@ -2081,6 +2126,17 @@ recovery_phase(
             {ok, #{kind => finalize, group_id => GroupId,
                    decision_ref => DecisionRef, verdict => Verdict,
                    prepare_ref => PrepareRef, generation => Generation}};
+        false ->
+            error
+    end;
+recovery_phase(
+  {quod_dtx_complete, ?RECORD_VERSION, GroupId, DecisionRef,
+   FinalizeRows} = Complete) ->
+    case valid_record(complete, Complete) andalso within_body_limit(Complete) of
+        true ->
+            {ok, #{kind => complete, group_id => GroupId,
+                   decision_ref => DecisionRef,
+                   finalize_rows => FinalizeRows}};
         false ->
             error
     end;
@@ -3183,9 +3239,10 @@ decision_transition(
   Projection) ->
     Active = maps:get(GroupId, maps:get(groups, Projection), none),
     case Active of
-      #{origin := #{phase := begun, begin_ref := BeginRef,
+      #{origin := #{phase := begun, begin_ref := StoredBeginRef,
                     targets := Targets} = Origin} ->
-    case decision_rows_match(Verdict, Rows, Targets) of
+    case same_certified_ref(BeginRef, StoredBeginRef) andalso
+         decision_rows_match(Verdict, Rows, Targets) of
         true ->
             Origin1 = Origin#{phase := {decided, Verdict}, decision_ref => Ref},
             {ok, Verdict, Active#{origin := Origin1}};
@@ -3240,29 +3297,17 @@ finalize_source_in_decision(
     case Group of
       #{participant := #{phase := prepared,
                                  prepare_kind := 'begin',
-                                 prepare_ref := BeginRef,
+                                 prepare_ref := StoredBeginRef,
                                  prepared_generation := PreparedGeneration}} ->
     case lists:keyfind(Source, 1, Rows) of
-        {Source, BeginRef} ->
-            case expected_finalize_generation(Verdict, PreparedGeneration) of
-                {ok, AppliedGeneration} ->
-                    case finalize_prepared(
-                           'begin', GroupId, DecisionRef, Verdict, BeginRef,
-                           AppliedGeneration, DecisionRef,
-                           Records, Projection) of
-                        {ok, Projection1, Effect} ->
-                            case retain_source_application(
-                                   GroupId, DecisionRef, AppliedGeneration,
-                                   Projection1) of
-                                {ok, Projection2} ->
-                                    {ok, Projection2, [Effect]};
-                                {error, _} = Error ->
-                                    Error
-                            end;
-                        {error, _} = Error -> Error
-                    end;
-                {error, _} = Error ->
-                    Error
+        {Source, SuppliedBeginRef} ->
+            case same_certified_ref(SuppliedBeginRef, StoredBeginRef) of
+                false ->
+                    {error, {invalid_transition, bad_participant_set}};
+                true ->
+                    finalize_source_prepared(
+                      Verdict, PreparedGeneration, GroupId, DecisionRef,
+                      StoredBeginRef, Records, Projection)
             end;
         _ ->
             {error, {invalid_transition, bad_participant_set}}
@@ -3273,8 +3318,29 @@ finalize_source_in_decision(
 finalize_source_in_decision(_, _, _, _, _) ->
     {error, {invalid_transition, participant_phase}}.
 
+finalize_source_prepared(Verdict, PreparedGeneration, GroupId, DecisionRef,
+                         BeginRef, Records, Projection) ->
+    case expected_finalize_generation(Verdict, PreparedGeneration) of
+        {ok, AppliedGeneration} ->
+            case finalize_prepared(
+                   'begin', GroupId, DecisionRef, Verdict, BeginRef,
+                   AppliedGeneration, DecisionRef, Records, Projection) of
+                {ok, Projection1, Effect} ->
+                    case retain_source_application(
+                           GroupId, DecisionRef, AppliedGeneration,
+                           Projection1) of
+                        {ok, Projection2} -> {ok, Projection2, [Effect]};
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
 %% Complete carries the source's Decision-as-Finalize generation. Keep that
-%% exact binding in the committed projection until Complete consumes it. A
+%% exact certified claim in the committed projection until Complete consumes
+%% it. A
 %% material write remains blocking until the ordered apply acknowledgement;
 %% abort, read-only, and event-only source plans retain the same marker without
 %% closing proofs. Participant-only Finalize rows are still removed on ack.
@@ -3388,7 +3454,7 @@ complete_transition(
                     decision_ref := StoredDecision,
                     targets := Targets}} ->
     case {decision_history(Records, StoredDecision, GroupId, Verdict),
-          StoredDecision =:= DecisionRef,
+          same_certified_ref(StoredDecision, DecisionRef),
           finalize_row_identities(Rows) =:= Targets} of
         {{ok, ReasonsBlob}, true, true} ->
             case complete_projection(
@@ -3421,23 +3487,28 @@ complete_projection(GroupId, DecisionRef, Rows,
           maps:get(GroupId, Fences, none)} of
         {false, none} ->
             {ok, Projection};
-        {{Source, DecisionRef, Generation},
+        {{Source, SuppliedDecisionRef, Generation},
          #{slot := DecisionSlot, generation := Generation,
            blocking := Blocking}}
           when is_boolean(Blocking) ->
-            {ok, Projection#{
-                   apply_fences := maps:remove(GroupId, Fences)}};
+            case same_certified_ref(SuppliedDecisionRef, DecisionRef) of
+                true ->
+                    {ok, Projection#{
+                           apply_fences := maps:remove(GroupId, Fences)}};
+                false -> error
+            end;
         _ ->
             error
     end.
 
 decision_history(Records, DecisionRef, GroupId, Verdict) ->
     case maps:find(decision, Records) of
-        {ok, #{group_id := GroupId, ref := DecisionRef,
+        {ok, #{group_id := GroupId, ref := StoredDecisionRef,
                record :=
                  {quod_dtx_decision, ?RECORD_VERSION, GroupId, _, Verdict,
                   _, ReasonsBlob} = Decision}} ->
-            case ref_record_digest(DecisionRef) =:= record_digest(Decision) of
+            case same_certified_ref(StoredDecisionRef, DecisionRef) andalso
+                 ref_record_digest(DecisionRef) =:= record_digest(Decision) of
                 true -> {ok, ReasonsBlob};
                 false -> error
             end;
@@ -3484,15 +3555,17 @@ decision_matches_active(
     ref_identity(DecisionRef) =:= ref_identity(BeginRef);
 decision_matches_active(
   #{origin := #{phase := {decided, Verdict}, decision_ref := DecisionRef}},
-  DecisionRef, Verdict) -> true;
+  SuppliedDecisionRef, Verdict) ->
+    same_certified_ref(DecisionRef, SuppliedDecisionRef);
 decision_matches_active(_, _, _) -> false.
 
 direct_decision_matches(Projection, GroupId, DecisionRef) ->
     case maps:get(GroupId, maps:get(groups, Projection), none) of
       none -> true;
       #{origin := #{phase := {decided, abort},
-                            decision_ref := DecisionRef},
-                participant := none} -> true;
+                            decision_ref := StoredDecisionRef},
+                participant := none} ->
+          same_certified_ref(StoredDecisionRef, DecisionRef);
       _ -> false
     end.
 
@@ -3505,13 +3578,15 @@ expected_finalize_generation(abort, Generation) ->
 
 prepared_history_matches(PrepareKind, Records, PrepareRef) ->
     case maps:find(PrepareKind, Records) of
-        {ok, #{ref := StoredRef}} -> StoredRef =:= PrepareRef;
+        {ok, #{ref := StoredRef}} ->
+            same_certified_ref(StoredRef, PrepareRef);
         error -> false
     end.
 
-finalize_prepare_matches(commit, PrepareRef, PrepareRef) -> true;
-finalize_prepare_matches(abort, PrepareRef, PrepareRef) -> true;
-finalize_prepare_matches(_, _, _) -> false.
+finalize_prepare_matches(commit, PrepareRef, StoredPrepareRef) ->
+    same_certified_ref(PrepareRef, StoredPrepareRef);
+finalize_prepare_matches(abort, PrepareRef, StoredPrepareRef) ->
+    same_certified_ref(PrepareRef, StoredPrepareRef).
 
 
 participant_identities(Manifest) ->

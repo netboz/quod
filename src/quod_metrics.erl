@@ -81,7 +81,7 @@ Two collection paths:
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_remote_operation_stage_seconds{namespace,stage,result}` | histogram | | fixed stages of a signed one-target foreign operation; values never become labels |
 | `quod_dtx_group_stage_seconds{namespace,stage,result}` | histogram | | fixed stages of one durable multi-ontology transaction; group ids and participant identities never become labels |
-| `quod_foreign_history_stage_seconds{stage,result}` | histogram | | node-wide certified-history queue, verification, cache, replay, and fetch timing; remote identities never become labels |
+| `quod_foreign_history_stage_seconds{stage,result}` | histogram | | node-wide certified-history queue, resident decision, verification, cache, persistence, caller handoff, and serving timing; remote identities never become labels |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
 | `quod_link_send_drops_total` | counter | `peer`, `channel`, `reason` | frames discarded at the QUIC send gate instead of transmitted; channel is the bounded `log`, `ingress`, or `other` class |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
@@ -440,7 +440,7 @@ declare(NodeId) ->
            {constant_labels, CL}]),
     _ = prometheus_histogram:declare(
           [{name, quod_foreign_history_stage_seconds},
-           {help, "Node-wide time spent queueing, verifying, opening, replaying, or fetching certified foreign history. Remote ontology identities and request values are never labels."},
+           {help, "Node-wide time spent queueing, deciding, verifying, persisting, serving, and handing off certified foreign history. Remote ontology identities and request values are never labels."},
            {labels, [stage, result]},
            {buckets, ?REMOTE_OPERATION_STAGE_BUCKETS},
            {constant_labels, CL}]),
@@ -1144,9 +1144,42 @@ foreign_history_stage(queue_wait) -> {ok, <<"queue_wait">>};
 foreign_history_stage(request_exact) -> {ok, <<"request_exact">>};
 foreign_history_stage(request_current) -> {ok, <<"request_current">>};
 foreign_history_stage(request_follow) -> {ok, <<"request_follow">>};
+foreign_history_stage(current_total) -> {ok, <<"current_total">>};
+foreign_history_stage(owner_mailbox) -> {ok, <<"owner_mailbox">>};
+foreign_history_stage(resident_current_hit) ->
+    {ok, <<"resident_current_hit">>};
+foreign_history_stage(resident_current_miss) ->
+    {ok, <<"resident_current_miss">>};
 foreign_history_stage(cache_open) -> {ok, <<"cache_open">>};
 foreign_history_stage(cache_replay) -> {ok, <<"cache_replay">>};
+foreign_history_stage(ledger_resume) -> {ok, <<"ledger_resume">>};
+foreign_history_stage(ledger_open) -> {ok, <<"ledger_open">>};
+foreign_history_stage(ledger_suspend) -> {ok, <<"ledger_suspend">>};
+foreign_history_stage(checkpoint_read) -> {ok, <<"checkpoint_read">>};
+foreign_history_stage(projection_validate) ->
+    {ok, <<"projection_validate">>};
+foreign_history_stage(phase_resume) -> {ok, <<"phase_resume">>};
+foreign_history_stage(phase_open) -> {ok, <<"phase_open">>};
+foreign_history_stage(phase_suspend) -> {ok, <<"phase_suspend">>};
 foreign_history_stage(page_fetch) -> {ok, <<"page_fetch">>};
+foreign_history_stage(page_verify) -> {ok, <<"page_verify">>};
+foreign_history_stage(ledger_append) -> {ok, <<"ledger_append">>};
+foreign_history_stage(phase_commit) -> {ok, <<"phase_commit">>};
+foreign_history_stage(checkpoint_write) -> {ok, <<"checkpoint_write">>};
+foreign_history_stage(cache_accounting) -> {ok, <<"cache_accounting">>};
+foreign_history_stage(tip_confirm) -> {ok, <<"tip_confirm">>};
+foreign_history_stage(result_install) -> {ok, <<"result_install">>};
+foreign_history_stage(caller_wake) -> {ok, <<"caller_wake">>};
+foreign_history_stage(serve_read_total) -> {ok, <<"serve_read_total">>};
+foreign_history_stage(serve_snapshot_lookup) ->
+    {ok, <<"serve_snapshot_lookup">>};
+foreign_history_stage(serve_snapshot_resume) ->
+    {ok, <<"serve_snapshot_resume">>};
+foreign_history_stage(serve_fallback_open) ->
+    {ok, <<"serve_fallback_open">>};
+foreign_history_stage(serve_range_read) ->
+    {ok, <<"serve_range_read">>};
+foreign_history_stage(serve_encode) -> {ok, <<"serve_encode">>};
 foreign_history_stage(_) -> error.
 
 -doc "Observe one exact route demand completed by the ordinary directory availability edge.".

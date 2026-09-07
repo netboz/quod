@@ -2558,8 +2558,8 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
                        Parent ! {foreign_log_ready, self()},
                        receive
                            {'$gen_call', {Caller, Tag},
-                            {verify_local, Dir, BeginRef, 'begin', Timeout}}
-                             when is_integer(Timeout), Timeout > 0 ->
+                           {verify_local, Dir, BeginRef, 'begin', Timeout}}
+                             when Timeout =:= infinity ->
                                Caller !
                                    {Tag,
                                     {ok, #{phase => 'begin',

@@ -856,6 +856,12 @@ items in section 14; this small re-found does not claim to settle either.
 23. Two hosting rows for the same namespace and anchor with different
     visibility reject the complete node-policy projection; row order cannot
     make a private identity public.
+24. A retained foreign-history prefix whose entire certified committee has
+    moved can fetch its missing suffix from a current authenticated host,
+    verify the committee transition through the ordinary history fold, and
+    resume exact-reference and current-view work. The byte source contributes
+    no vote: returned routes contain only the committee certified by the
+    completed history.
 
 ## 12. D/P/E classification
 

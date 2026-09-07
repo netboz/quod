@@ -289,6 +289,7 @@ merge_publications(resnapshot, _Right, false) -> resnapshot;
 merge_publications(Left, Right, false) -> Left ++ Right.
 
 merge_changed(resnapshot, _Right) -> resnapshot;
+merge_changed(_Left, resnapshot) -> resnapshot;
 merge_changed(_Left, Right) when length(Right) > ?QUOD_MAX_PLAN_DIFF_OPS ->
     resnapshot;
 merge_changed(Left, Right) ->

@@ -1,20 +1,20 @@
 # Finality recovery without sacrificing write throughput — review draft
 
-Status: **approved pipelined baseline; membership-round recommendation under review;
+Status: **approved pipelined baseline; activation-ladder handover blocked on review;
 not approved for implementation**. Source reviewed at `b7c497e` / 0.7.143 on
 2026-09-07. Claude withdrew the per-slot rounds recommendation and accepted
 protocol-faithful pipelined Simplex with separate views and ledger heights.
 Both grandchild and first-observed-finality handover candidates are refuted.
-The reviewer confirms both the temporal-taint and committed-intent classification
-counterexamples. Contract v2 selects grammar from the **parent value**, allows
-activation A to finalize ordinary intent I, and deletes explicit SKIP. These
-simplifications are recorded below; the claimed architectural closure is not.
-§4.3.9 exposes the remaining **same-view competing-parent** obligation: A above
-I and an ordinary bypass above P can each carry valid parent evidence. A value
-unique given I is not yet unique for that view. Permanent per-view support and
-per-round-only support give different unresolved liveness/safety obligations.
-The no-lock journal proposal is conditional on closing that boundary. No custom
-unlock, second mode selector or throughput-reducing global barrier is authorized.
+The reviewer concedes contract v2's typed-complaint deadlock and per-round
+uniqueness gap. Contract v4 removes in-view rounds, locks and typed complaints;
+it proposes deterministic old-era activation rungs using ordinary Simplex
+carriers. Those fixed-committee simplifications hold conditionally, but the
+cross-era claim does not: §4.3.9 reproduces old-rung R versus new-era child G,
+both above the **same A**, with genuine old commitQC(A) carried by G.
+Both certify under the offered-evidence rules, without any equivocation or
+skipped view. This reopens §4.3.3, not a new fixed-era failure. The phrase
+“other old-era children are invalid” needs a portable retirement rule compatible
+with rung recovery; local knowledge of finality cannot be that rule.
 Consensus, DTX and signing-journal code still require review before commit.
 This commit is a plan only: no code, format, release bump or fleet change.
 
@@ -34,9 +34,8 @@ rules within the existing owners, with §4.1's view/height separation. The basel
 choice is closed; its complete Quod adaptation is not yet proved. Review has
 closed the view/height and per-view custody choices and accepted the carrier
 and payload-window direction. The membership boundary and its interactions
-in §4.3 still block implementation. The new recommendation explicitly confines
-rounds to closed membership barriers; it does not authorize rounds underneath
-an open Simplex child pipeline or sequential consensus for ordinary writes.
+in §4.3 still block implementation. In-view rounds are now withdrawn entirely;
+neither the old hybrid nor sequential consensus for ordinary writes is authorized.
 
 Two obligations remain separate: repair permanent consensus stalls without
 slowing healthy writes; then attribute and remove the per-write H1 cost.
@@ -89,16 +88,17 @@ reference, NOT yet a completed DTX/membership adaptation.
 | Sequential per-height Tendermint | Withdrawn as recommendation: sacrifices overlap without a demonstrated compensating gain. |
 | Restore protocol-faithful pipelined Simplex | Approved review baseline, including view/height separation. Finish the membership/era proof before implementation. |
 | Per-height rounds plus current implicit child finality | Claude formally retracts this recommendation: the live split cannot form its round-change certificate; round-in-value bytes changes the locked identity; and multiple round candidates make unchanged slot-bound implicit finality unsound. Parent-value binding and coherent ancestry rules were the decisive reason to select spec-Simplex instead. Do not reintroduce the hybrid. |
-| Sequential membership with in-view rounds | Retain the no-child boundary for activation A only; I remains ordinary intent. Mixed final votes can witness recovery, not select a parent/mode. The former A-or-SKIP lock design is superseded, not a second implementation option. |
+| Sequential membership with in-view rounds | Withdrawn by Claude: mode-typed complaints strand honest voters; per-round latches do not prove per-view uniqueness; a minority commit trigger does not exclude an ordinary complaint quorum. No rounds/locks/typed-complaint branch remains planned. |
 | Complaint-taint mode selection | Withdrawn by Claude after §4.3.7: later knowledge cannot change earlier portable complaint shares. No evidence-field patch or revocation. |
 | Committed-intent entry trigger | Withdrawn after the same-parent classification schedule: ordinary pipelining does not require the parent applied; later finality cannot re-type existing child votes. |
-| Parent-value activation, no SKIP (contract v2) | Fixes that same-parent race and deletes SKIP lifecycle/codec work. Retains intent I plus activation A, using the existing epoch projection seam. Competing parent I versus bypass parent P still needs one same-view safety/liveness rule (§4.3.9); no implementation approval. |
+| Parent-value activation, no SKIP (contract v2) | Superseded by v4 after the reviewer accepted the competing-parent objections; same-parent grammar and SKIP deletion remain useful. |
+| Pinned activation ladder, uniform complaints (contract v4) | Fixed-era escape and rung recovery reuse Simplex; singleton membership payload retained. Cross-era entry through any rung's commit QC reopens old/new descendant overlap even with the same activation base (§4.3.9). Not accepted for implementation. |
 
 Stable leaders and other throughput variants are not folded into this repair.
 Evaluate them separately only if measurements justify their added scope and
 fairness tradeoff. No second engine, verifier or configurable compatibility mode.
-The proposed membership-specific voting discipline is nevertheless additional
-protocol complexity; sharing an owner does not itself prove the composition.
+V4's special payload and handover grammar is still a protocol change; sharing
+the existing votes and owners does not prove its cross-era composition.
 
 ### Recorded reasons for the retraction
 
@@ -133,12 +133,9 @@ bytes as a proposal in another view. Re-sending an existing signed proposal is
 not a new proposal. Parent identity and view belong to the canonical block
 grammar; append height is derived from the finalized ancestry.
 
-**Membership recommendation's explicit extension:** recovery votes also bind
-their in-view round. Re-proposing the exact membership value in another round
-does not change its view, bytes, parent or value hash. Round is vote/proposal
-attempt metadata, never a mutable part of the retained value. Fixed-era views
-retain the reviewed per-view discipline. The shared format must distinguish
-these meanings without a legacy decoder or implicit round alias.
+**No in-view recovery round:** v4's next rung is a new parent-bound value in a
+fresh view, not a re-signing of A in another round. Votes and the journal keep
+the one per-view discipline; no round dimension or legacy round alias is added.
 
 The finalized ancestry appends at contiguous ledger heights. Failed views
 produce neither fact changes nor synthetic terminal entries. A genuinely
@@ -147,11 +144,10 @@ view skipped by complaint evidence. DTX exact references bind **ledger heights,
 not views**, retaining their exact-entry/hash/finality binding. A bare numeric
 height is not a proof. No caller-supplied height/view alias may select an entry.
 
-Fixed-era once-only append uses unique notarization per view. Activation-round
-recovery must establish a unique **decided value** for the whole view, including
-competing ordinary-parent proposals. Per-(view, round) latches alone do not
-establish per-view notarization uniqueness; calling A single-valued given I does
-not supply it (§4.3.9). The ancestry walk deduplicates finalized views
+Fixed-era once-only append uses unique notarization per view. Uniform per-view
+latches restore that premise for competing parents **within one committee**.
+They do not establish quorum intersection between disjoint old/new committees
+authorized by different child evidence (§4.3.9). The ancestry walk deduplicates finalized views
 against the committed prefix; a second descendant cannot re-apply an ancestor.
 The existing codec, store and finalization path own this mapping; no second
 ledger/index owner. §4.3 must establish unique era authority before this
@@ -170,13 +166,12 @@ consensus from exchanging the evidence needed to finish the pending block.
 Effects and facts remain released only through certified, ordered apply.
 
 **Carrier direction for fixed-era barriers:** an empty payload is eligible for
-production when it extends a notarized, unfinalized parent without crossing
-unresolved membership. The shared payload gate retains ordinary semantic
-checks; an unresolved membership **activation** parent admits **no child**,
-empty or non-empty. The proposed intent is ordinary fixed-era content and does
-not activate a committee; its only admissible child is activation A, which may
-carry I's finality. This parent-local rule still needs §4.3.9's competing-parent
-proof. Do not freeze I until direct commit: that would strand its 2/2 split.
+production when it extends a notarized, unfinalized parent. The shared payload
+gate retains ordinary semantic checks. V4 proposes deterministic old-era A
+above intent I and further empty rungs above A, instead of the former no-child
+activation barrier. Each may carry its ancestry's finality. This is recorded
+as the candidate, not permission to remove the current membership fence:
+retiring those old-era descendants before N starts remains unsolved (§4.3.9).
 An empty carrier is
 an ordinary block through the same proposal, votes, journal, verifier and append
 path—not a DTX-only escape, unsigned marker or new certificate family. Eligibility
@@ -200,16 +195,16 @@ A descendant can therefore carry its ancestor's finality without bypassing
 that validation. Apply still walks the finalized ancestry once in order;
 controls, facts, effects and custody are not released from support alone.
 No `if DTX then bypass validation` branch, speculative Prolog apply or second
-executor. The **activation** exclusion survives: A cannot be finalized by a
-descendant. Its round recovery stays within O. I changes desired membership
-facts, not active authority; A may finalize I through this same ancestry walk.
+executor. V4 also proposes ancestor finality for activation values; that change
+is blocked on its handover proof. I changes desired membership facts, not active
+authority. No existing membership exclusion is deleted in production by this plan.
 
 Direct healthy finality needs no carrier to prove the write. That is not a
 promise of zero carrier traffic: the entering-view edge can race final votes
 even on a healthy network. Preserve useful payload overlap, and count actual
-carriers as cost, not useful writes. The old grandchild-handover carrier is
-withdrawn; A-as-I's-carrier is a different, conditional proposal (§4.3.4).
-No carrier above unresolved A is permitted. Historical
+carriers as cost, not useful writes. The old grandchild-handover rule is
+withdrawn; v4 instead requires an old commit QC for new-era entry, but has not
+proved retirement of old rungs (§4.3.9). Historical
 verification cannot depend on the receiver's current lack of a certificate.
 
 ### 4.3 Committee changes are the hardest boundary
@@ -230,13 +225,12 @@ the second counterexample: first *observed* finality is not a chain-derived
 handover boundary, and a globally first certificate is not locally knowable.
 Both directions are withdrawn, not alternative implementations to retain.
 
-The latest recommendation preserves the sequential boundary for an activation
-block A, preceded by an ordinary intent I. O directly finalizes A before **any
-child** of A can be proposed. Contested A recovers in its view using rounds;
-DTX and intent blocks remain fixed-era. This shifts the entry problem to I→A;
-it does not prove that boundary automatically. §4.3.9 records the candidate
-and remaining obligations. The historical schedules below call the actual
-committee-changing block M; they are not descriptions of the new intent I.
+V4 withdraws sequential activation rounds in favor of an old-era ladder above
+ordinary intent I: base A and further rungs, any directly committed rung
+authorizing N. A's hash is the proposed era identity regardless of which rung
+commits. This fixes neither old-rung retirement nor conflicting children above
+that same base; §4.3.9 checks the offered rule explicitly. Historical schedules
+below call the committee-changing block M, not v4's desired-fact intent I.
 No implementation.
 
 #### 4.3.2 Closed counterexample to the withdrawn grandchild rule
@@ -324,7 +318,7 @@ for M alone does not retire in-flight O descendants. An unstated freeze after
 each commit share would instead risk stranding the carrier quorum in the 2/2
 split. Neither patch is retained.
 
-**Focused re-check of sequential membership:** step 2 is refused. O cannot
+**Historical check of the now-withdrawn sequential candidate:** step 2 is refused. O cannot
 support C over unresolved M, irrespective of whether C is empty; once M is
 certifiably committed, the shared verifier selects N for its child. There is
 no O-signed child certificate to race with G. This closes this exact witness;
@@ -333,57 +327,51 @@ it does not prove the proposed in-view recovery or its mode-selection rule.
 Source grounding: today's `implicit_finality` rejects committee barriers
 (`quod_simplex.erl`, around 597–605), and `adopt_history`'s boundary comment
 (around 9387) explicitly relies on **no next-slot proposal before committee
-finality**. That exclusion and boundary comment survive this recommendation;
-they are not stale code to delete. Allowing old-era carriers removed their
-protection. The paper's
+finality**. That is the protection v4 proposes replacing, not dead code already
+safe to delete. Allowing old-era carriers without a proved replacement removes
+it. The paper's
 §2.3.3/§2.4 separates certificate-based commitment from notarization-driven
 view advance; §3.1's quorum intersection assumes one committee. None of these
 is a proof that the proposed overlapping eras are safe.
 
-#### 4.3.4 Candidate boundary: ordinary intent, sequential activation
+#### 4.3.4 V4 candidate: one fixed-era protocol, pinned activation ladder
 
-One payload/ancestry validation seam owns the distinction:
-
-| Parent/work | Progress while its direct finality is unresolved | Authority |
+| Work | Candidate grammar/progress | Authority claim |
 |---|---|---|
-| Ordinary fixed-era content without pending intent | useful payload overlap; carrier if needed | same certified committee |
-| DTX control barrier | empty carrier after deterministic validation; application ordering fenced | same certified committee |
-| Membership intent I | only deterministic A may extend this parent; A may carry I's finality | O; no active-era change at I |
-| Membership activation A | no child of any kind; recover the **same view** in rounds | O until A's direct decision; N only for certified descendants of committed A |
+| Ordinary fixed-era content | useful payload overlap; carrier if needed | current certified committee |
+| DTX control barrier | empty carrier after deterministic validation | same committee; application fenced |
+| Membership intent I | ordinary desired facts; singleton membership payload retained | O |
+| Base A above I; rung R above a ladder tip | deterministic empty, view/parent-bound value; ordinary per-view support/commit/complaint | O, using notarized parent evidence |
+| First new-era child G | carries the tip's genuine old commit QC | N selected by intent; base A hash starts the era |
 
-These are **parent-local** rules, not proof that all proposals in a view share
-the same parent or mode. That remaining boundary is §4.3.9. An empty carrier
-has no escape privilege above unresolved A. A receiver learning A's commit
-later cannot retroactively validate an old-era child. The first descendant's
-append position follows A; its view may have gaps, so do not call it view A+1.
+The first four rows explain recovery **within O**. The last row conflicts with
+the old-rung row unless a portable rule retires those descendants before N may
+sign. V4's clause “any other old-era child above the ladder tip is invalid”
+does not specify that rule consistently with permitting a next rung on a
+merely notarized tip. This is the blocker, not an implementation detail.
 
-Contract v2 deletes explicit SKIP and proposes one activation value for the
-given intent/entry, with round-free value bytes and round-bound votes. A quorum
-of distinct old members' final votes of any kind may witness round recovery,
-so an agreed activation's 2-commit/2-complaint split can progress. Complaints
-are not themselves a decision. This is not a proof that activation complaints
-and ordinary bypass complaints can safely mix; their shared entry/escape
-semantics remain unspecified. No-lock recovery is therefore conditional, not
-an approved signing schema.
+Uniform complaints remove the mode-specific 2-versus-1 escape partition.
+Different views allow fresh votes without changing an old latch. A fixed-era
+rung commit can finalize a stack of 2/2 parents. These conditional properties
+are checked in the bounded witness; they are not a handover proof.
 
-A must be constructible from the **notarized, available I and its validated
-ancestry**, without needing I's commit certificate. Requiring committed I,
-as one sentence in the feedback does, would contradict A's carrier role and
-recreate the intent's latched-split deadlock. A must also remain constructible
-if O is later unable to contact prospective members of N; no new-member vote
-is authority for activating N, nor may liveness assume their cooperation.
+A/rungs must be constructible from notarized, available parent bytes and
+validated ancestry, without requiring that parent committed. Consecutive
+rungs need no gap evidence; a proposed child that skips any views still needs
+the ordinary complaint certificates for those gaps. “No ladder gap evidence”
+cannot silently exempt a non-consecutive proposal from the shared verifier.
 
-The cost is two ledger values I+A per successful change, one extra entry
-relative to a one-stage change, plus sequential recovery at A when contested.
-It is **not necessarily two separate direct commit certificates**: committing
-A can finalize both entries. Measure the actual critical path, votes, journal
-writes and carrier traffic; do not promise a universal additional commit
-delay or zero overhead. Ordinary non-membership overlap remains required.
+No explicit SKIP value, in-view round leader, lock or alternative-vote family.
+Per-view recovery and evidence distribution stay at the existing owners.
+Membership payload selection stays singleton through
+`membership_payload_shape`, not a new cap or pending-intent registry.
 
-O must retain quorum liveness until activation. Losing that quorum means
-unavailability; no timeout, minority, read certificate or N-only vote can
-activate N. Restart must preserve the old-era retained value/evidence and
-all signing obligations before exposing another vote.
+Cost: at least I+A ledger entries for a successful change; additional rungs
+are extra committed entries, votes, verification and journal work. A direct
+commit on one rung can finalize the whole prefix, so the number of entries
+is not the number of sequential direct commit certificates. Do not promise
+that the ladder is cheaper without measurements. Ordinary throughput and
+§6's acceptance gates are unchanged.
 
 #### 4.3.5 Closed one-shot complaint-threshold direction
 
@@ -405,42 +393,40 @@ do not try another threshold. It is not a theorem excluding every possible
 certificate grammar, signing restriction or reconfiguration protocol. Those
 change the premise and require their own reviewed safety/liveness design.
 
-#### 4.3.6 Earlier multi-value round rules — superseded design, retained lessons
+#### 4.3.6 In-view rounds withdrawn — reasons and retained obligations
 
-The former A-or-SKIP recommendation used Tendermint v3 Algorithm 1 as the
-reference for exact prior-round support guards and commit locks. Contract v2
-deletes the alternative SKIP value, so that lock/validValue design is **not an
-active implementation branch**. Its earlier bounded witness stays labelled
-historical; it does not establish the new proposal's lock-free composition.
+Review `bdd87d48-8b0a-4afd-8338-b3409936309e` concedes the two §4.3.9
+objections from contract v2:
 
-Three lessons still bind:
+- Permanent per-view support plus mode-typed complaints strands a,b on A and
+  c on bypass B when z is silent: neither typed escape family reaches q=3.
+- Only per-(view, round) support permits different notarizations across rounds.
+  That alone is not a full fork, but it invalidates the claimed per-view
+  uniqueness premise.
+- An f+1-commit round-entry trigger does not exclude a complaint QC. At N=4,
+  commit shares {a,z} and complaint shares {b,c,z} coexist if z double-votes.
+  Requiring q commit shares instead is already the commit QC and cannot rescue
+  a 2/2 split. This closes that threshold sketch, not all conceivable protocols.
 
-1. A round number alone does not establish safety. Per-round non-equivocation
-   cannot be cited as per-view uniqueness. If competing values are possible,
-   their support, decision and escape rules need an explicit proof; never graft
-   an ad-hoc unlock onto unchanged descendant-finality semantics.
-2. A complaint is not absence of notarization. In the former design z could
-   hide supportQC(M,0), honest voters complain, and a later SKIP decide before
-   that QC appeared. This refuted “skip only if never notarized,” not by itself
-   decision agreement. The same knowledge error matters now: supportQC(I) and
-   complaintQC(I) can coexist. No certificate is revoked by later revelation.
-3. Mixed final-vote evidence is formable, but is recovery evidence, not a
-   decision or a proof of common parent/mode. The temporal-taint boundary below
-   and the committed-intent entry trigger were both withdrawn on that basis.
+Rounds, locks, validValue/validRound, typed complaints and explicit SKIP are
+removed from the planned cut. Historical witnesses remain evidence of why
+those proposals failed, not dormant implementations or alternate formats.
+Tendermint's name or a mixed-vote quorum never supplied a common entry rule.
 
-Progress still requires eventual synchrony, an available old quorum, an honest
-round leader eventually, and sufficient time for evidence/body dissemination
-and validation. The existing readiness-gated head watchdog is the proposed
-failure-detection owner; safety cannot depend on timing. A fixed Delta does
-not automatically inherit an increasing-timeout liveness proof. No success-path
-polling, retry ladder or second pacemaker is authorized.
+V4 keeps the baseline's uniform complaint certificate and fresh-view recovery.
+Safety still cannot depend on the timing of message delivery. Eventual
+synchrony, available eligible quorum and an honest future leader are liveness
+assumptions, not guarantees that a current broadcast has reached everyone.
+The existing readiness-gated watchdog remains the failure-detection owner;
+no success-path polling, retry ladder or second pacemaker.
 
-Map evidence distribution at the existing owners: Simplex's
-`emit_slot_evidence`, transport outboxes and certified-body requests carry
-unfinalized proposals/shares/QCs; `quod_feed` carries **finalized** history,
-not an uncommitted activation proposal. Show that authentic evidence learned
-by one honest validator reaches the others after synchrony despite leader
-loss. Naming those owners is not the proof.
+Unfinalized proposals/shares/QCs travel through Simplex's evidence emission,
+transport outboxes and retained-body requests; `quod_feed` carries finalized
+history. A QC can be assembled by honest nodes when they receive q signatures;
+f+1 honest shares alone are not a q-signature certificate. Withheld Byzantine
+shares may waste views; ordinary complaints permit fixed-era recovery.
+Neither broadcast nor eventual delivery prevents the pre-synchrony handover
+schedule in §4.3.9. Parent/body availability and restart custody remain required.
 
 #### 4.3.7 Counterexample to the complaint-taint boundary
 
@@ -490,143 +476,123 @@ schedule without Byzantine cooperation. No negative-global-knowledge test,
 revocable certificates, arrival-order mode flag, new polling, or lost ordinary
 pipeline overlap. The taint candidate is not accepted for implementation.
 
-#### 4.3.8 SKIP deleted; retained activation-byte and era obligations
+#### 4.3.8 No round/SKIP format; deterministic ladder values
 
-Contract v2 removes explicit SKIP, its codec variant, consumption/gap lifecycle,
-fresh-intent retry and alternative-value journal machinery from the proposed
-cut. The former byte draft is deleted, not parked as a compatibility shape.
-Historical SKIP counterexamples in §4.3.6 describe the withdrawn design only.
-Ordinary Simplex complaint evidence remains; it was never that explicit value.
+V4 removes the in-view round dimension in addition to SKIP and its lifecycle.
+QSJ4 is still the planned clean journal cut for view/height/signing semantics;
+it is **not** a round-based journal. No round alias or alternative decoder.
 
-Use the existing canonical value codec and signing owner. A's exact value
-must be determined by the certified intent, selected entry view/parent and
-old-era context. `A(I)` is shorthand, **not** permission to re-use the same
-view-bound bytes in several views: §4.1 still requires one view per value.
-With that entry fixed, proposers and rounds must produce identical bytes,
-without local timestamps, round numbers or leader choices in the value.
-The actual byte vectors await the still-open entry rule, not a new encoder.
+Use the existing canonical value codec and signing owner. Each A/rung is
+determined by its certified parent, intent/base, own view and old-era context.
+Different proposers in the same view must produce identical pinned ladder
+bytes for that parent. A rung in another view is a **different value**, never
+re-use of a view-bound A. No local timestamp, leader choice or round field
+changes the intended payload. Actual codec vectors remain implementation
+artifacts, not something proved by the scratch model's string identifiers.
 
-Votes for A use O's era-start hash: genesis for the founding era, otherwise
-the canonical activation hash derived from the certified prefix. A's hash
-starts N's domain for **descendants after A commits**, never A's own votes.
-Equivalent quorum signer subsets cannot change that identity. Wrong
-domain/era/view/parent/value binding is rejected by the same verifier.
+A and old rungs bind O's existing era-start hash. V4 proposes base A's canonical
+hash for N's era, independent of certificate signer subsets or the rung that
+directly commits. New-era entry carries an exact old commit QC for its parent.
+These bindings are necessary but not sufficient: both conflicting branches
+in §4.3.9 share the **same base A**. An era label is not a certified cutoff of
+O's authority to sign further children.
 
-#### 4.3.9 Parent-value activation — contract v2 and the remaining boundary
+#### 4.3.9 Pinned activation ladder — same-base handover counterexample
 
-Review `a8418e38-1516-472c-bd37-30de1ac269fe` withdraws the committed-intent
-trigger and proposes the following contract. It is folded here as a
-**candidate**, not accepted as architecturally closed.
+Contract v4 (review `bdd87d48-8b0a-4afd-8338-b3409936309e`) replaces the
+previous entry/mode contract with ordinary per-view complaints and old-era
+empty rungs. It accepts the v2 objections rather than adding another unlock
+or typed escape. The fixed-era positive cases are useful and stay recorded.
+**The claim that this closes reconfiguration is not accepted.**
 
-**What the revision fixes.** Previously an ordinary child C could already
-have votes above notarized I; revealing I's commit then reclassified that same
-ancestry as activation-only. Ordinary readiness does not require that parent
-applied: `proposal_slot`, `valid_proposal` and `may_vote` deliberately permit
-approved-uncommitted parent overlap. The reviewer confirms this counterexample.
-With grammar determined by retained **parent values**, an ordinary C above I
-is invalid before and after I's finality; A is the only child for that parent.
-This closes the same-parent classification race without freezing I.
+**Counterexample: portable entry evidence does not retire old descendants.**
+Take disjoint O={o1,o2,o3,o4}, N={n1,n2,n3,n4}, q=3. All are honest. P is
+finalized; I in view 10 is already committed under O. A is the pinned base
+above I in view 11. This stronger prefix makes intent-bypass exclusion irrelevant.
+Choose the old leader for view 12 among o1/o2/o3; N has its own eligible leader.
+Delay honest broadcasts before synchrony, without losing messages forever.
 
-I remains ordinary content, committing desired facts but changing no active
-committee. A is a directly finalized old-era barrier and may implicitly
-finalize I. Given the same I/entry, no alternative SKIP is needed: complaints
-change the recovery round; leaders re-propose the same A; cancellation of a
-committed change is a later, separately authorized countermanding intent.
-This removes consumption/retry machinery, not ordinary transaction dedup.
-
-**The missing premise: agreement on the parent/mode for the view.** The feedback
-itself permits both A(parent I) and ordinary bypass B(parent P), where I extends
-P and a complaint certificate gaps I's view. Both proposals may be correctly
-leader-signed. Reconstructing the grammar for each parent does not select
-between them. Two assertions in the review do not close this:
-
-- I's **support QC and complaint QC can coexist** under ordinary Simplex.
-  Sign support, delay its assembled QC, then complain; no direct commit vote
-  is needed. SupportQC(I) supplies A's parent; complaintQC(I) permits bypass
-  parent P. Both entry premises certify. ComplaintQC(I) excludes I's *direct
-  same-view commit QC*, not I's **ancestor finality via A**. Indeed the new
-  contract explicitly lets I's complainers commit A.
-- “Per-view support uniqueness” is not established by the proposed
-  **per-(view, round)** latches. A is unique given I, but ordinary B and A are
-  different values for the same view. The fixed-era uniqueness proof cannot
-  silently replace a per-round premise with a per-view one.
-
-The following bounded schedules isolate the two possible latch readings.
-O={a,b,c,z}, q=3, z Byzantine. They do **not** claim a production fork.
-
-| Latch reading | Schedule | Obligation exposed |
+| Step | Evidence and permitted action under v4 | Result |
 |---|---|---|
-| One supported value per view across all rounds | At view V, z sends valid A/I to a,b and valid B/P to c, using the coexisting parent certificates, then goes silent. a,b retain A; c retains B. | A has at most two honest supporters and B one. Activation-only round complaints have two signers; ordinary-only skip complaints one. No stated support or typed-escape quorum forms. Even a later mixed round witness cannot erase permanent per-view choices. |
-| Only per-(view, round) support | B can obtain support by a,b,z in round 0; A can obtain support by a,b,c in round 1, under these latches alone. | Two notarizations of V do not violate same-round non-equivocation. This refutes the asserted uniqueness lemma, **not by itself finality agreement**: a full legal cross-mode round-entry/decision schedule still requires the missing guards. |
+| 1 | O notarizes A. o1/o2/o3 emit commit shares for A and advance on its notarization. Deliver all three shares to o4, then genuine commitQC_O(A) to N. Delay that aggregate and the other A shares to o1/o2/o3. | N can certify the old parent; those three old voters know their own commit share and supportQC(A), but not finality. |
+| 2 | The old leader proposes deterministic rung R at view 12, parent A. Its stated parent premise is supportQC_O(A); there is no gap. o1/o2/o3 support and commit R. | Genuine commitQC_O(R); old history P→I→A→R. |
+| 3 | N proposes different ordinary child G at view 12, parent A, carrying the exact commitQC_O(A) required by v4. n1/n2/n3 support and commit G. | Genuine commitQC_N(G); new history P→I→A→G. |
 
-The first row is a liveness counterexample **to the literal permanent-latch,
-mode-separated escape rules**, not a claim that every possible rule deadlocks.
-The second is a ballot-level counterexample **to latches-alone uniqueness**,
-not an assumption that unspecified cross-mode recovery is already legal.
-Both need a single architectural answer, not a test that supplies common
-entry as an input and calls that agreement.
+Every signer respects one support and one final-vote choice per view.
+Committing A and later R is allowed by the proposed ordinary pipeline;
+no adjacent-view retirement guard was specified. Both committees follow
+their **own offered portable evidence**. There is no Byzantine party,
+complaint certificate, gap, round change, second activation base or differing
+intent. Both children include A and select A as the era-start identity.
+Pinning old R's bytes does not make new-era ordinary G the same value.
 
-**Required closure:** specify the exact same-view rules for support,
-commit/complaint, round entry, ordinary view escape and late certificates
-when the parents select different grammars. Prove safety and post-synchrony
-progress without z, including a QC held privately before reveal. If a guard
-excludes one schedule, state its locally verifiable evidence and show how the
-losing honest voters resume. No vote erasure, absence-of-QC oracle, mutable
-certificate, new selector owner or global ordinary-write serialization.
-Do not repair the gap by restoring arbitrary locks around the rejected
-rounds-plus-unchanged-child-finality hybrid (§3). A different complete boundary
-may be proposed, but must close both safety and liveness before code.
+This checks the literal supportQC-to-old-rung and commitQC-to-new-child
+permissions in v4. It is an abstract signing/evidence counterexample, not a
+deployed fork or exhaustive protocol model. It is the §4.3.3 C/G race with
+**A fixed as the common base**, so choosing A rather than “first observed
+committed rung” does not avoid it.
 
-**One committee projection, no second authority.** Reuse `active_validators`:
-its reserved epoch-snapshot seam is real, but currently returns committed
-membership facts unchanged. `committee_delta` still folds desired facts at
-I in the ordinary live/replay reducer; voting/leading/disseminating authority
-is those facts at the last certified activation A. A activates that snapshot;
-it does not secretly mutate Prolog facts. The epoch reference/snapshot lives
-at the existing consensus/projection owner, not in a new pending registry.
-Local voting, `adopt_history`, `history_committee`, current-view verification,
-catch-up, route eligibility and committee-based authorization must derive the
-same active era from that prefix, not switch early by reading desired facts.
-Ordinary target ACLs are unchanged; “committee-based” is not a new ACL layer.
-A is old-era-signed; only its descendants use N (§4.3.8).
+**Why the proposed exclusion proof does not cover this.** A committed view's
+complaint QC is impossible under the same committee, so a later branch cannot
+gap that view. This is the fixed-era argument against a bypass *omitting* a
+committed rung. R and G both **extend** A, skipping nothing. Old/new quorums
+need not intersect, so same-view uniqueness within O cannot compare R with G
+signed by N. A unique activation fact/base is weaker than a unique descendant
+history. Supplying commitQC(A) authorizes N under the candidate but contains
+no signed promise that O has ceased supporting old descendants.
 
-**Caller and ordering contract.** The original ordinary result is delivered
-at I's commit: it acknowledges desired membership facts, **not necessarily
-that N is already active**. A may have finalized I in the same ancestry walk,
-but two success states must not be conflated. Existing projection/status
-owners expose activation; no second receipt, synthetic abort or automatic
-resubmission. A losing uncommitted I has no successful intent result; retained
-signed work follows ordinary custody. `duplicate_transaction` still prevents
-a committed I from being re-applied as if it were a fresh authorized change.
+**Resolve the conflicting reading explicitly.** If “other old-era children
+above the ladder tip are invalid” means R is always invalid, it contradicts
+the recovery rung rule. If it means R becomes invalid when the receiver learns
+commitQC(A), R can already have committed before that message arrives, as in
+the table; finality cannot be revoked. If it means some additional portable
+evidence forbids R before N starts, name that evidence and its signing rule.
+Proof-carrying new entry alone is not such an exclusion proof.
 
-“No ordinary descendant above I until A” serializes separate intent blocks
-on one branch; it does **not** decide how several intents in one candidate
-payload are selected. Current membership transactions are singleton in
-`membership_payload_shape`/`is_membership_change`. Do not silently remove that payload
-rule when separating the no-child barrier: either retain its existing
-deterministic selection semantics or specify/prove a replacement. This is a
-remaining payload clarification, not a new capacity cap. Two queued intents,
-losing branches and later countermanding facts need explicit live/replay tests.
+A personal “stop old work after signing commit(A)” condition is not a free
+repair: in A's 2-commit/2-complaint split, only two old validators could then
+sign its recovery rung, below q=3. A global “no commit QC exists” check is not
+locally knowable. Do not silently restore either condition or claim broadcast
+makes the race impossible. Eventual delivery does not undo two certified branches.
 
-**Witness scope.** The extension reproduces the coexisting I certificates and
-both latch-reading obligations above. It checks the same-parent refusal and,
-with parent/activation supplied as inputs, lock-free 2/2 round recovery, model
-restore and A-as-carrier. It does not implement parent selection, cryptography,
-actual canonical A bytes, production journal recovery or era projection.
-Deterministic codec vectors, multiple-intent processing and removed-validator
-tests remain required after the entry contract is settled; none is claimed
-passed from this small witness.
+**Architecture boundary for the next review.** Establish one certifiable
+handover cutoff that both (a) excludes incompatible old descendants before
+new authority can certify a child, and (b) remains obtainable after the exact
+latched 2/2 split with a live honest quorum. State the evidence, signed
+obligations and local/catch-up verification rules at the existing owners.
+If this requires a different reconfiguration protocol or a membership-specific
+cost, disclose it and prove it; do not call it “only grammar” while leaving
+retirement undefined. Preserve ordinary-write overlap, the fixed-era Simplex
+baseline and §6. Do not bolt another arrival-order exception onto the ladder.
 
-SKIP removal and owner reuse simplify the proposal. They do not establish
-same-view mode agreement. No source/format/fleet change is authorized; §6's
-throughput and H1 gates are unchanged. The next review must close this precise
-boundary rather than approve a fixed-parent test as the full protocol.
+**Retained application contract.** I writes desired membership facts through
+the ordinary reducer and its result acknowledges that commit, not necessarily
+active N. `membership_payload_shape` singleton selection remains as-is;
+do not remove it when changing the consensus barrier classification.
+Cancellation is a later separately authorized intent; duplicates do not
+re-apply I and uncertain requests are not automatically resubmitted.
+
+Reuse the existing `active_validators` epoch projection, not a pending
+membership registry. Its current implementation is the identity over committed
+facts; actual activation remains future work. Live/history/current-view/
+catch-up/route-eligibility consumers must share the same proved active-era
+boundary. V4's base-hash proposal is recorded, not an already safe epoch rule.
+
+**Witness and limits.** `/tmp/quod-pinned-ladder-proof.iM99TR/check.mjs` checks
+uniform escape after mixed-parent votes, fixed-O recovery through two latched
+splits, and same-O competing-value exclusion in both orders. It also verifies
+every signer/latch/exact-parent-certificate condition in the table and obtains
+both conflicting certificates, plus rejects the naïve local-QC and personal-
+commit freeze fixes. It does not implement actual codecs, networking, production
+journal recovery or a general reconfiguration protocol. Historical v2 tests are
+superseded, not evidence that v4 passed them all. No implementation authority.
 
 ### 4.4 The live window must permit the required progress
 
 **Reviewed rule:** the depth bound governs payload-bearing advancement only.
-Fixed-era empty finality-carriers are exempt and may chain. They cannot cross
-the activation barrier in §4.3; above I, only A is eligible. This is a payload/protocol
+Fixed-era empty finality-carriers are exempt and may chain. V4 proposes using
+that same allowance for old-era activation rungs, but its cross-era termination
+is blocked by §4.3.9. This is a payload/protocol
 distinction at one owner, not a second pipeline, new hard cap or cap increase.
 
 Concrete counterexample to preserving Quod's global depth-one window: committed
@@ -669,31 +635,30 @@ No new author sequence, client request or fabricated abort.
 
 **Closed for the fixed-era baseline:** per-view support and final-vote latches,
 plus supported-body custody, generalize the existing atomic-retention pattern.
-Fixed-era pipeline voting adds no Tendermint lock. Contract v2 proposes only
-round-scoped activation latches and exact supported-body/evidence custody at
-this **same journal owner**. The former SKIP/lock/validValue schema is withdrawn,
-not retained as an optional path. The single-value argument on which lock-free
-recovery relies is still conditional on §4.3.9's same-view parent/mode proof.
-Do not replace that proof with either an extra lock or a “no locks” slogan.
+Fixed-era pipeline voting adds no Tendermint lock. V4 returns membership votes
+to exactly that per-view shape; no rounds, typed complaints, SKIP or validValue
+schema. Supported-body/evidence custody stays at this **same journal owner**.
+Same-era latches do not retire a different committee's authority: §4.3.9's
+handover proof remains required, not something a journal key can invent.
 
 The signing journal remains the sole persist-before-exposure owner. Persist
 the exact supported bytes and support latch atomically; persist the final
 commit-or-complaint latch before exposure. Remove adjacent-view exclusions,
-not fixed-era same-view or membership same-round non-equivocation. **QSJ4
-replaces QSJ3**, without compatibility; the exact membership-round schema is
-part of the pending sign-off, not an approved era-agnostic implementation.
+not same-view non-equivocation. **QSJ4 replaces QSJ3**, without compatibility;
+the bump covers the view/height and signing-semantics cut, not a recovery-round
+dimension. Exact era-bound retirement/custody rules await handover sign-off.
 A decision is terminal; late evidence cannot erase a signing obligation or
 reopen an outcome. Restart retains every outstanding view's required exact
 body/evidence and signing floor. The eventual schema must express the proved
-cross-mode rule, not invent one by choosing its map keys. Reuse exact
+handover rule, not invent one by choosing its map keys. Reuse exact
 byte/parent/era-bound validation in existing candidate state,
 not a new cache. Temporary evidence unavailability is not ordinary Prolog
 failure. Proposer loss cannot strand required bytes.
 
-A membership round change must also re-project its leader and invalidate old
-placement at the existing ingress/custody owners, without changing the request
-bytes or author sequence. No global-view advance is inferred from a round
-change alone. The parent/mode proof in §4.3.9 must close before implementing it.
+A carrier advances the view and hence leader/placement through those same
+owners, without new request bytes or author sequences. There is no additional
+in-view round transition. Handover must also invalidate obsolete authority and
+placement through a proved certificate-bound rule, not a local-finality flag.
 
 ### 4.6 Event-driven implementation
 
@@ -709,11 +674,11 @@ These changes are conditional on closing section 4, not patches to apply now.
 
 | Owner | Keep | Refactor/delete in the atomic cut |
 |---|---|---|
-| `quod_simplex` | one engine, useful fixed-era pipeline, certificate pool, validation workers, ordered finalization | intent ordinary / activation no-child classification at `payload_is_consensus_barrier`; proved parent/mode recovery; activate the existing `active_validators` epoch-projection seam; delete terminal complaint-to-ledger-skip, adjacent-slot exclusions, camp/grace machinery |
-| `quod_signing_journal` | atomic supported-body/vote custody, DTX/content custody | fixed-era per-view latches and reviewed activation-round custody in QSJ4; no explicit SKIP or unproved lock schema; remove adjacent-view exclusions, not equivocation guards |
+| `quod_simplex` | one engine, useful pipeline, certificate pool, validation workers, ordered finalization, singleton membership payload | v4 proposes intent/ladder grammar at the existing payload seam; do not delete membership fence before proving old-era retirement; use `active_validators`; delete terminal complaint-to-ledger-skip, adjacent-slot exclusions, camp/grace machinery in the approved atomic cut |
+| `quod_signing_journal` | atomic supported-body/vote custody, DTX/content custody | one per-view discipline in QSJ4; no round/typed-complaint/SKIP/lock branch; exact old-era retirement remains to be proved before implementation |
 | `quod_ingress_state` and relay custody | existing queues, signed submissions and authenticated delivery | one consensus-derived leader; duplicated leadership calculation and stale placement assumptions |
 | `quod_ledger` and records | canonical bytes, store and codec ownership | view/append-position distinction; complaint-certified synthetic terminal entries |
-| `quod_catchup` | one chain/era/certificate verifier; old-era signature boundary | fixed-era ancestry grammar replaces depth-one-only proof assumptions; direct activation finality and I-as-ancestor use that verifier and the same active-era projection |
+| `quod_catchup` | one chain/era/certificate verifier; exact canonical bytes | fixed-era ancestry grammar replaces depth-one-only assumptions; any new handover must verify the same irrevocable old-era cutoff live and on fresh catch-up |
 | `quod_foreign_log`, DTX references | one certified projection and exact-reference owner | same byte-bound grammar, no second evidence path |
 | Prolog/apply/effects | existing authorization, deterministic truth and effects | preserve semantic fences; remove only fences proved to stop consensus unnecessarily |
 
@@ -776,7 +741,7 @@ grown fixtures. This does not authorize any finality or H2 code now.
    `phase_resume`. Label all these results **pre-cut 0.7.143**. Commit this
    amended plan and return it for architecture review: baseline selection and
    fixed-era §4.1/§4.5 are closed; verify the §4.2/§4.4 mapping and sign off
-   §4.3's membership-round extension, including its effect on those sections.
+   §4.3's membership handover, including its effect on those sections.
    Model schedules without a second production owner; no silently invented
    era-handover, skip or mode-selection exception.
 2. **Then, the finality arc.** Only after the architecture review is green and
@@ -832,29 +797,28 @@ authorizes no fleet mutation. H1 continues only on unaffected fixtures.
 - DTX barrier completes without later user traffic and without premature
   facts/effects/custody release, including contested fixed-era carriers.
 
-Membership tests must exercise distributed entry, not only inject a common
-parent/mode into a unit fixture:
+Membership tests must exercise both fixed-era recovery and handover; shared
+parent/base inputs alone do not prove authority exclusion:
 
 - **Same-parent grammar:** a correctly signed ordinary child above notarized I
   is refused before support, both before and after I's finality. Parent-retained
   restart derives the same answer. No applied-parent assumption or vote retyping.
-- **Competing parents (§4.3.9):** genuine supportQC(I) and complaintQC(I);
-  A/I versus ordinary B/P in the same view. Check both evidence reveal orders,
-  per-view and per-round guards, and late higher-round evidence after bypass
-  children have already received votes. Pin whichever exact rule resolves
-  this case, then show one final chain **and** progress without z.
+- **Competing parents:** genuine supportQC(I) and complaintQC(I); A/I versus
+  ordinary B/P in the same view, both winner orders, one O notarization only.
+  Uniform complaints let honest voters rebase in a fresh view without changing
+  an old vote. Non-consecutive parents still require every ordinary gap QC.
 - **Mixed knowledge / silent leader:** a,b see A/I, c sees B/P, z withholds
-  cooperation. No test may assume a common mode or use z's signature to escape
+  cooperation. No test may assume common parent knowledge or use z's signature to escape
   the two-versus-one honest partition. A lone evidence holder and two distinct
   intent parents must be covered too.
-- **Intent 2/2 then activation 2/2:** A is constructed before I's direct commit,
-  retries only its consensus round, and commits under O; that single direct
-  finality finalizes I+A once. I's complainers can commit A in its different
-  view. No ordinary client resubmission and no extra carrier above A.
-- **Activation barrier:** reject both empty and non-empty old-era children
-  above unresolved A at shared signing and history validation. After O commits
-  A, the first descendant uses N and A's era hash, even with gapped views.
-  Disjoint committees and a removed validator's post-A vote are explicit cases.
+- **Intent 2/2 then base/rung 2/2:** A is constructed from notarized I;
+  a later old-era rung in a fresh view finalizes the prefix once under the
+  proposed ladder rule. No rounds, old-vote changes or client resubmission.
+- **Same-base old/new overlap (§4.3.9):** deliver commitQC_O(A) to N before
+  o1/o2/o3 learn it; old R and proof-carrying new G both extend A at view 12.
+  The finally approved handover must reject at least one BEFORE its support
+  quorum, with portable evidence, and retain 2/2 liveness. No local-finality
+  oracle, forced instant broadcast, or absent-QC assumption in the fixture.
 - **Arrival overlap / hidden evidence:** the earlier §4.3.2/§4.3.3 old/new branch
   schedules must not yield both final chains. Apply their boundary to A, not
   desired intent I. A fresh verifier accepts the same history regardless of
@@ -863,17 +827,16 @@ parent/mode into a unit fixture:
   Byzantine behavior.
 - **Old quorum unavailable:** no N-only activation, minority fallback or timer
   workaround. State liveness assumptions; old authority must become available.
-- **Round safety/custody:** leader loss and restart preserve exact supported
-  bytes, votes and terminal decisions under the finally reviewed cross-parent
-  rule. Wrong domain/era/view/round/value evidence and duplicate signers fail;
-  a new round number alone supplies no unstated authority. Mixed final votes
-  witness recovery only, not a decision. No explicit SKIP producer or decoder.
-- **Activation bytes:** different proposers and rounds construct identical A
-  for the same certified I/entry. View and parent binding cannot be omitted
-  to fake determinism; no timestamp/leader/round-dependent value.
+- **Signing/custody:** leader loss and restart preserve per-view choices,
+  exact bytes and finality obligations. Wrong domain/era/view/value evidence
+  and duplicate signers fail. No round/typed-complaint/SKIP producer or decoder.
+- **Activation/rung bytes:** different proposers construct identical pinned
+  bytes for the same parent/view, but different views have different values.
+  No timestamp/leader/round freedom; pin actual production codec vectors.
 - **One projection:** live apply, fresh catch-up, historical committee,
   current-view verification and route eligibility all retain O through I
-  and derive N from committed A. No raw desired-fact early activation.
+  and derive N from the finally proved handover cutoff, including disjoint
+  committees and removed-member rejection. No raw desired-fact early activation.
 - **Intent ordering and results:** two queued membership transactions, the
   same-block selection rule, later countermanding intent and losing I branch.
   Original result at I acknowledges committed facts, not premature activation.
@@ -885,7 +848,7 @@ Shared crash/delivery requirements:
 
 - Crash around every durable vote/body/send; proposer loss, stale validation
   and live-link replacement; no double signing or lost work.
-- Leader/view/round changes and same-peer revisits re-place retained bytes
+- Leader/view changes and same-peer revisits re-place retained bytes
   without fresh client requests or author sequences.
 - Multiple failed views cannot hit an incidental window bound and deadlock;
   retained proof/body pruning preserves signing and availability obligations.
@@ -901,8 +864,8 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 | Passage | Amendment |
 |---|---|
 | `quod_simplex` moduledoc, vote guards, proposal/finality/barrier comments | coherent view/ancestry rules, useful overlap and application/consensus boundary |
-| `quod_simplex:adopt_history` membership boundary comment | keep direct-finality/no-old-child invariant for activation; document the proved I→A entry and committee projection, **not** refuted park-on-proposal/taint or an applied-parent assumption that breaks ordinary overlap |
-| `active_validators`, `committee_delta`, history committee views, membership action docs | desired facts at I versus active-era snapshot at A; caller result at I does not promise N active; settle batch intent selection; no SKIP lifecycle, second authority or raw fact mutation by an "empty" block |
+| `quod_simplex:adopt_history` membership boundary comment | replace the current no-child protection only with a proved cutoff excluding old descendants; a parent commit QC alone is insufficient; retain ordinary overlap |
+| `active_validators`, `committee_delta`, history committee views, membership action docs | desired facts versus proved activation boundary; distinguish base hash from old-era retirement height/view; caller result at I does not promise N active; preserve singleton selection; no new authority |
 | Signing journal moduledoc | crash-safe view decisions, retained evidence, pruning and break |
 | `include/quod_ledger.hrl`, ledger and catch-up docs | precise view/height/era binding; remove old skip/depth-one-only claims |
 | Ingress and DTX relay comments | one leader projection and custody wake |
@@ -920,16 +883,16 @@ gate exceptions. No implementation gates are claimed for this planning edit.
   implementation branch or approval to replace the fixed-era Simplex pipeline.
 
 Diagnosis and the pipelined view/height baseline are accepted. Review confirmed
-the handover, temporal-taint and committed-intent classification counterexamples.
-Parent-value contract v2 fixes the same-parent classification and deletes SKIP.
-Its fixed-parent single-value recovery is conditional: §4.3.9 still owes the
-same-view competing-parent safety/liveness boundary. No implementation.
-The former witness is retained at `/tmp/quod-handover-proof.uQlvgn/`; the new
-bounded checker and output are at `/tmp/quod-membership-round-proof.Pj4253/`.
-Its historical multi-value cases remain labelled as such. The new extension
-checks the stated parent classifier and ballot/evidence premises, explicitly
-separating fixed-parent positive controls from cross-parent counterexamples.
-It is not a full protocol, availability, transport or mode-selection model.
+the handover, temporal-taint, classification and v2 mode/round objections.
+V4 removes the latter machinery and reuses the fixed-era carrier mechanism.
+Its proposed handover nevertheless permits the same-base old-rung/new-child
+counterexample in §4.3.9. No implementation.
+Historical witnesses remain at `/tmp/quod-handover-proof.uQlvgn/` and
+`/tmp/quod-membership-round-proof.Pj4253/`; they do not describe active round
+implementation work. Current v4 checker/output:
+`/tmp/quod-pinned-ladder-proof.iM99TR/`. It separates fixed-O positive controls
+from the explicit cross-era signing/evidence counterexample. It is not a full
+protocol, cryptography, production codec or persistence model.
 The k-bound attribution in §4.4 distinguishes the published stable-leader
 protocol from Quod's adaptation. Neither a scratch model nor the name of a
 published protocol substitutes for proving its actual Quod composition.

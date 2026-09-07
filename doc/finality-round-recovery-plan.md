@@ -1,8 +1,8 @@
-# Finality recovery without sacrificing write throughput — review draft
+# Finality recovery without sacrificing write throughput — reviewed plan
 
-Status: **terminal-material-era architecture and compact-witness direction
-approved; retained-witness substitution needs focused confirmation (§7.1);
-H1 matrix still owed; no implementation authority**.
+Status: **architecture, compact-witness representation and exact-claim witness
+selection approved in round 9 (review of `6dd1bd5`); F0's paper/confirmation
+gate is closed. H1 matrix still owed; no implementation authority**.
 Source reviewed at `b7c497e` / 0.7.143 on
 2026-09-07. Claude withdrew the per-slot rounds recommendation and accepted
 protocol-faithful pipelined Simplex with separate views and ledger heights.
@@ -24,13 +24,14 @@ requires their **material ledger projections** to remain prefix-compatible.
 Ordinary-write overlap and §6's throughput gate are retained. No gain is yet
 measured. Review `4a272616-b80e-4b6c-88d0-9c61ba5e47e6` explicitly accepts
 material-only carrier projection and the era-root induction under its named
-premises. It requires the final pass over §§4.1/4.3.10 and §7.1's atomic-cut
-contract before implementation. Evidence retention is not a new stop quorum.
+premises. Round 9 closes the final architecture/representation pass over
+§§4.1/4.3.10 and §7.1; production proof obligations remain assigned to F1/F2.
+Evidence retention is not a new stop quorum.
 Review `8fbf4b08-2c15-42de-9d11-91d5e0f35055` accepts the compact witness
 and selected archive custody. The fold below corrects its page-size/append
-claims and exposes one remaining availability interaction: different archive
+claims and identifies the availability interaction: different archive
 holders may select different valid witnesses for the same material entry.
-The proposed correction reuses exact certified-entry verification; it changes
+Round 9 confirms the correction at the existing exact-entry verifier; it changes
 the supplied-witness contract explicitly, not the consensus vote rule.
 Consensus, DTX and signing-journal code still require review before commit.
 This commit is a plan only: no code, format, release bump or fleet change.
@@ -50,9 +51,10 @@ The approved baseline is restoring original Simplex's coherent progress/ancestry
 rules within the existing owners, with §4.1's view/height separation. The baseline
 choice is closed; its complete Quod adaptation is not yet proved. Review has
 closed the view/height and per-view custody choices and accepted the carrier
-and payload-window direction. The membership candidate is now accepted
-conditionally; the final composition, format and custody pass in §7.1 still
-blocks implementation. In-view rounds are now withdrawn entirely;
+and payload-window direction. The membership candidate is accepted under its
+named premises; the final composition, format and custody review in §7.1 is
+closed. Completed/archived H1 evidence remains the F0 prerequisite before F1
+may be authorized. In-view rounds are now withdrawn entirely;
 neither the old hybrid nor sequential consensus for ordinary writes is authorized.
 
 Two obligations remain separate: repair permanent consensus stalls without
@@ -104,14 +106,14 @@ reference, NOT yet a completed DTX/membership adaptation.
 |---|---|
 | Another complaint/grace exception | Reject: leaves the incompatible rules and cannot safely change the permanent locks. |
 | Sequential per-height Tendermint | Withdrawn as recommendation: sacrifices overlap without a demonstrated compensating gain. |
-| Restore protocol-faithful pipelined Simplex | Approved review baseline, including view/height separation. Close the final composition/atomic-cut review before implementation. |
+| Restore protocol-faithful pipelined Simplex | Approved baseline, including view/height separation; final composition/atomic-cut contract confirmed in round 9. H1 evidence and F1 authority still required before implementation. |
 | Per-height rounds plus current implicit child finality | Claude formally retracts this recommendation: the live split cannot form its round-change certificate; round-in-value bytes changes the locked identity; and multiple round candidates make unchanged slot-bound implicit finality unsound. Parent-value binding and coherent ancestry rules were the decisive reason to select spec-Simplex instead. Do not reintroduce the hybrid. |
 | Sequential membership with in-view rounds | Withdrawn by Claude: mode-typed complaints strand honest voters; per-round latches do not prove per-view uniqueness; a minority commit trigger does not exclude an ordinary complaint quorum. No rounds/locks/typed-complaint branch remains planned. |
 | Complaint-taint mode selection | Withdrawn by Claude after §4.3.7: later knowledge cannot change earlier portable complaint shares. No evidence-field patch or revocation. |
 | Committed-intent entry trigger | Withdrawn after the same-parent classification schedule: ordinary pipelining does not require the parent applied; later finality cannot re-type existing child votes. |
 | Parent-value activation, no SKIP (contract v2) | Superseded by v4 after the reviewer accepted the competing-parent objections; same-parent grammar and SKIP deletion remain useful. |
 | Pinned activation ladder, uniform complaints (contract v4) | Fixed-era escape and rung recovery reuse Simplex; singleton membership payload retained. Cross-era entry through any rung's commit QC reopens old/new descendant overlap even with the same activation base (§4.3.9). Not accepted for implementation. |
-| Terminal material era, proof-only empty suffix (§4.3.10) | Architecture candidate accepted by review `4a272616…`: one ordinary membership M ends old material history; existing carriers recover its finality without appending; N roots at M. Carrier/height amendment and conditional induction accepted; final composition/atomic-cut review still required. |
+| Terminal material era, proof-only empty suffix (§4.3.10) | Architecture candidate accepted by review `4a272616…`: one ordinary membership M ends old material history; existing carriers recover its finality without appending; N roots at M. Carrier/height amendment and conditional induction accepted; final composition/atomic-cut contract confirmed in round 9, not yet implemented. |
 
 Stable leaders and other throughput variants are not folded into this repair.
 Evaluate them separately only if measurements justify their added scope and
@@ -626,7 +628,7 @@ superseded, not evidence that v4 passed them all. No implementation authority.
 #### 4.3.10 Accepted architecture candidate: terminal material era, proof-only empty suffix
 
 **Accepted by Claude's review `4a272616-b80e-4b6c-88d0-9c61ba5e47e6`;
-final composition/atomic-cut review still required; not implemented.**
+composition/atomic-cut contract confirmed in round 9; not implemented.**
 The actual safety obligation is to stop O from extending **material history**
 past the handover, not to make every old process stop exchanging proofs at
 the same instant. V4 required both old/new protocol branches to be one ledger
@@ -786,10 +788,10 @@ record digest, excluding replaceable proof bytes;
 committee. This is the existing seam to generalize to era-bound ancestor
 finality. Its current producer and finality decoder accept direct same-slot
 commit certificates only: this proposal does **not** already work there.
-Keep every immutable claim check. §7.1 proposes allowing the existing verified
+Keep every immutable claim check. §7.1 allows the existing verified
 entry's selected witness to discharge that same claim instead of requiring
-the issuer's particular descendant head. This is an explicit contract change
-requiring confirmation, not an assertion that current code already substitutes
+the issuer's particular descendant head. This is the explicit contract change
+confirmed in round 9, not an assertion that current code already substitutes
 witnesses. Whichever witness is used must verify fully against the certified
 era/ancestry; memory residence or matching fields alone never suffice.
 No reference to a carrier, equality by height alone, certificate-byte-derived
@@ -826,10 +828,11 @@ quorum/era/ancestry refusal. It explicitly permits divergent protocol suffixes
 while asserting material-prefix compatibility. It does not implement all
 Simplex view transitions/gap rules, real crypto/bytes, persistence or dynamic
 fault assumptions. The safety argument above is conditional on the fixed-era
-theorem. Claude accepted the induction with its named premises; the final
-review must check their representation and custody in §7.1. Neither that
+theorem. Claude accepted the induction with its named premises and confirmed
+their representation and custody contract in §7.1. Neither that
 acceptance nor these bounded checks constitute real-engine fault/restart or
-performance evidence. No implementation authority until that review is closed.
+performance evidence. No implementation authority follows from this review;
+F0's H1 evidence remains outstanding.
 
 ### 4.4 The live window must permit the required progress
 
@@ -885,7 +888,7 @@ to exactly that per-view shape; no rounds, typed complaints, SKIP or validValue
 schema. Supported-body/evidence custody stays at this **same journal owner**.
 Same-era latches alone do not prove handover: §4.3.10's terminal-material
 restriction and certified-era-root composition are the accepted architectural
-premises; their representation/custody details still require the final review.
+premises; their representation/custody contract is confirmed in round 9.
 
 The signing journal remains the sole persist-before-exposure owner. Persist
 the exact supported bytes and support latch atomically; persist the final
@@ -944,7 +947,8 @@ success-path delay, retry ladder or additional watchdog protocol. A paper's
 
 ## 5. Ownership and intended deletion map
 
-These changes are conditional on closing section 4, not patches to apply now.
+These are the reviewed F1 changes, not patches to apply before F0 closes and
+the atomic cut is authorized.
 
 | Owner | Keep | Refactor/delete in the atomic cut |
 |---|---|---|
@@ -1009,14 +1013,16 @@ The sequencing agreed by Yan is binding because finality and H2 both touch
 catch-up, ledger and phase-index seams, and the finality re-found destroys the
 grown fixtures. This does not authorize any finality or H2 code now.
 
-1. **Now, in parallel: H1 measurement and finality paper.** Finish H1's
+1. **Now: finish H1; the parallel paper review is closed.** Finish H1's
    discriminator matrix on unaffected fixtures, retain raw outputs and deliver
    the >=95%-of-means attribution table, with `phase_suspend` separate from
    `phase_resume`. Label all these results **pre-cut 0.7.143**. Commit this
-   amended plan and return it for architecture review: baseline selection and
-   fixed-era vote/custody choices remain closed; review the explicit §4.1
-   material-only append and era-root amendments, the §4.2/§4.4 mapping and
-   §4.3.10's membership composition. §6 stays unchanged.
+   amended plan; the architecture and focused confirmation are now **closed
+   by round 9**, including §4.1's material-only append and era-root amendments,
+   the §4.2/§4.4 mapping, §4.3.10's membership composition and §7.1's witness
+   selection. No further design round is required by that contract. Finish
+   the still-outstanding H1 campaign before seeking F1 authority.
+   §6 stays unchanged.
    Model schedules without a second production owner; no silently invented
    era-handover, skip or mode-selection exception.
 2. **Then, the finality arc.** Only after the architecture review is green and
@@ -1041,7 +1047,7 @@ gate in §6 is unchanged; an H2 before/after comparison must use the same new
 protocol and freshly grown, comparable fixtures. A re-found resetting height
 is never evidence that the height-growth defect was fixed.
 
-The concrete atomic-cut and format contract for the final review is §7.1.
+The reviewed atomic-cut and format contract is §7.1.
 Foreign ingestion remains wrapped with zero atom allocation; no unrelated
 transaction/scope grammar bump is included without an actual field change.
 
@@ -1051,15 +1057,15 @@ before retirement, never an uncommitted abort/success. Reproduce that fault on
 the new protocol and prove completion there without resubmission. Planning
 authorizes no fleet mutation. H1 continues only on unaffected fixtures.
 
-### 7.1 Implementation slices and format contract — for final focused review
+### 7.1 Implementation slices and format contract — review closed
 
-These are the implementation boundaries requested by review `4a272616…`, not
-authority to start them. One deployable atomic protocol cut replaces the
+These are the implementation boundaries requested by review `4a272616…` and
+confirmed in round 9, not authority to start them. One deployable atomic protocol cut replaces the
 old semantics; it is not a sequence of mixed-format runtime releases.
 
 | Slice | Work and existing owners | Exit/review boundary |
 |---|---|---|
-| F0 — close paper and pre-cut evidence | This final §4.1/§4.3.10/§7.1 review; finish H1 on unaffected 0.7.143 fixtures and archive the discriminator matrix with ≥95%-of-mean-increase attribution. | Architecture review and H1 evidence complete before F1. No consensus/H2 code and no re-found; preserve the old unresolved group. |
+| F0 — close paper and pre-cut evidence | Architecture and focused confirmation **closed in round 9**. Finish H1 on unaffected 0.7.143 fixtures and archive the discriminator matrix with ≥95%-of-mean-increase attribution. | H1 evidence still outstanding before F1 may be authorized. No consensus/H2 code and no re-found; preserve the old unresolved group. |
 | F1 — one atomic source cut | Engine, journal, canonical codec/store, ancestry/history verifier, exact refs and leader/relay projection change together through the owners below. Tests and normative source/doc corrections land with them; delete the old semantics in the same cut. | Whole new tree green under sequential full gates and §8's actual-engine tests; consensus-area review BEFORE commit. No intermediate deploy or compatibility dispatcher. |
 | F2 — fault/restart/throughput acceptance | Exercise that one candidate in isolated new-format fixtures on the existing test/hardware workflow, preserving the old fleet's evidence. Fault, transport/restart, membership and §6 workloads; re-grow comparable histories. | Review measured unique durable writes/s, latency, overhead and failures. Any consensus correction returns to review before commit. No claim of success from acceptance-only responses or wiping history. |
 | F3 — release activation | Separate version/release commit and coordinated clean re-found after F2 approval; archive the preserved old group as unresolved on its old network before retirement. Re-run smoke and representative performance/fault checks on the activated fleet. | No mixed fleet, old-state migration or resubmission. H2 begins only on the new protocol and newly grown baseline; L2 remains gated. |
@@ -1092,7 +1098,7 @@ order, not independently deployable partial implementations:
    comments and tests, and prove the full candidate with §8 before the F1
    commit review. No temporary format flag or duplicate old/new execution tree.
 
-**Format decisions proposed for this review.** These are source-grounded
+**Reviewed format decisions.** These are source-grounded
 hard breaks, not bumps to files or network state performed by this plan:
 
 | Family / current source | New cut | Invariant |
@@ -1104,7 +1110,7 @@ hard breaks, not bumps to files or network state performed by this plan:
 | `quod_signing_journal`: **QSJ3**, record version 3 | **QSJ4**, record version **4** | One chain-bound journal; per-era/view rows and signing floors, exact supported bytes, final latches and custody. No journal-per-era service or rewriting old votes. |
 | `quod_ledger_store`: **V5**, magic `0x915106AE` | **V6**, magic `0x915106AF` | Proof-kind frames and complete proof-plus-entry groups at the existing CRC/sparse-index owner; journal custody transfers after sync. No H2 backend replacement, snapshot base or carrier side log. |
 | `quod_catchup`: height-only `blocks_req` / complete-entry `blocks_resp_bytes` | One replacement paged grammar with a bound ancestry-span cursor | Material descriptors and proof parts use the same serving/verification workers and transport. Current height-only pages cannot address unindexed proof suffixes; replace/generalize the grammar, no parallel chunk service or old/new fallback. |
-| `quod_dtx`: certified ref **2** | Certified ref **3** | Same immutable identity/height/block/record claim plus compact era/view/hash head and its commit QC. §7.1 proposes treating the head as a preferred witness, not claim identity or a sole permitted proof. One exact-entry verifier. |
+| `quod_dtx`: certified ref **2** | Certified ref **3** | Same immutable identity/height/block/record claim plus compact era/view/hash head and its commit QC. The head is a preferred witness, not claim identity or a sole permitted proof. One exact-entry verifier. |
 
 The initial anchored genesis remains the existing sole no-finality-certificate
 case. Its new canonical block uses a fixed genesis-era marker, view 0 and no
@@ -1208,7 +1214,7 @@ concept. Generalize that owner as follows:
    scanning. Finalization/serving share the same archive handle/snapshot/index;
    no global proof-hash lookup service or second backend.
 
-**One focused confirmation: witness choice versus exact claim.** Different
+**Confirmed in round 9: witness choice versus exact claim.** Different
 quorum subsets of one head are already interchangeable. Different **heads**
 add an availability interaction that the selected-only archive rule must close:
 
@@ -1224,14 +1230,15 @@ add an availability interaction that the selected-only archive rule must close:
    that none of those archives still serves. A QC is not its missing body.
 
 This is a conditional retention counterexample, not a fixed-era agreement
-failure or a claim that current deployed code has this proposed wire. A
+failure or a claim that current deployed code has this proposed wire. Round 9
+confirms that this retention schedule is permitted by the selected-only policy. A
 bounded signed-evidence check is at
 `/tmp/quod-compact-witness-check.aIQcPs/check.mjs`; it assumes the stated
-retirement policy, not a complete Simplex network/crash model. If another
-custody obligation rules out step 3, the review must name its durable owner
-and release condition; “any archive holder” alone does not establish it.
+retirement policy, not a complete Simplex network/crash model. The reviewer
+found no existing durable owner/release rule forbidding step 3; blocking it
+would add the rejected archive-every-alternate or receipt-barrier obligation.
 
-**Proposed smallest correction:** a ref names an immutable material claim;
+**Approved correction:** a ref names an immutable material claim;
 its embedded head/QC is a preferred witness, not the only admissible proof.
 The existing certified-history owner selects/validates its retained or served
 entry witness, and the existing exact-entry seam compares **all** immutable
@@ -1240,6 +1247,9 @@ quorum/era/ancestry checks. There is no height-only success, unverified cache
 hit, fallback quorum, added acknowledgement or new verifier. This both removes
 issuer-specific proof retention and avoids redundant work when the exact
 entry is already certified at the existing owner.
+This extends `e409fc3`'s immutable-claim comparison at coordinator/current-view
+consumers to witness selection at the existing verifier; it does not make
+proof bytes part of identity again or grant authority to an unverified claim.
 
 This explicitly changes `certified_entry_ref_matches/5`'s current requirement
 to validate the *supplied* proof even when the entry has another valid one.
@@ -1253,9 +1263,10 @@ explicitly. If neither selected nor supplied evidence proves the exact claim,
 verification remains unavailable/invalid under the existing result grammar,
 never success or ordinary Prolog failure by timeout.
 
-Keep this single contract amendment open for focused confirmation; do not
-compensate with archive-every-alternate forever, a ref-issuance quorum, or a
-second witness lookup path. F1 is not authorized by this paper fold.
+This contract amendment is confirmed; no open representation question remains.
+Do not add archive-every-alternate forever, a ref-issuance quorum, or a second
+witness lookup path. Production codec, store-crash and transport tests remain
+F1/F2 work. F1 is not authorized by this review closure.
 
 **Journal-to-archive and handover custody contract.** Keep a complete selected
 finality/parent witness in the existing material-entry archive before moving
@@ -1398,7 +1409,7 @@ suffixes is deliberately replaced by material-prefix compatibility:
   refusal of interior referenced corruption. Long proof spans must not grow
   material seek header count or be copied once per finalized ancestor.
 - **Selected witness / lost issuer:** the §7.1 M/K schedule with distinct
-  retained heads and the K issuer unavailable. Under the proposed amendment,
+  retained heads and the K issuer unavailable. Under the approved amendment,
   the exact M ref succeeds using another holder's independently verified M
   proof. Pin all identity/height/block/digest mismatches, unverified retained
   entries, wrong-era/minority/duplicate signatures and broken ancestry. An
@@ -1433,7 +1444,7 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 | Signing journal moduledoc | crash-safe view decisions, retained evidence, pruning and break |
 | `include/quod_ledger.hrl`, ledger and catch-up docs | proposed material-only append, era-local views, proof-only carrier custody and exact unmodified parent binding; remove old skip/depth-one-only claims |
 | `quod_ledger_store:append/2`, `scan`, `locate/2`; `quod_catchup:serve_blocks`, `cap_bytes` and wire grammar | one V6 complete-group/sparse-material index contract and paged proof spans; delete one-frame-per-complete-entry assumptions, preserve bounded seeks, read-only snapshots and one batch sync |
-| `quod_dtx:certified_entry_ref_matches/5`, `valid_certified_ref_finality`; exact-reference/foreign-history docs | after confirmation, immutable claim verified using the existing owner's selected valid witness; identify the intentional replacement of supplied-proof-only validation, never silently weaken it or rewrite signed references |
+| `quod_dtx:certified_entry_ref_matches/5`, `valid_certified_ref_finality`; exact-reference/foreign-history docs | in F1, immutable claim verified using the existing owner's selected valid witness; identify the intentional replacement of supplied-proof-only validation, never silently weaken it or rewrite signed references |
 | Ingress and DTX relay comments | one leader projection and custody wake |
 | `doc/content-layer.md` around lines 220–262 | replace terminal-skip/adjacent-vote/camp/grace story with the approved protocol |
 | `doc/deferred.md` around lines 292–302 | close residual only after implementation and fault/hardware proof |
@@ -1458,7 +1469,8 @@ including material-only projection and its conditional era-root induction.
 Both pillars are needed: excluding empty ledger rows alone would not prevent
 §4.3.2's unauthorized N from finalizing a material branch through unfinalized M.
 No implementation, unconditional composition liveness or real-engine proof is
-claimed. Final review scope is §§4.1/4.3.10 plus the concrete §7.1 cut.
+claimed. Round 9 closes the architecture/representation review of
+§§4.1/4.3.10 and the concrete §7.1 cut; F1/F2 must validate their real implementation.
 Historical witnesses remain at `/tmp/quod-handover-proof.uQlvgn/` and
 `/tmp/quod-membership-round-proof.Pj4253/`; they do not describe active round
 implementation work. Historical v4 checker/output:
@@ -1490,6 +1502,10 @@ page boundary and required inner-grammar change stated. The new bounded
 check at `/tmp/quod-compact-witness-check.aIQcPs/check.mjs` addresses only
 supplied-head availability under selected-only retention and its proposed
 exact-claim resolution; it is not an implementation or another consensus
-proof. That explicit contract amendment needs focused confirmation. H1's
+proof. **Round 9 (review of `6dd1bd5`, supplied in the conversation) explicitly
+confirms the witness-selection amendment and closes the representation review.**
+The historical design pointer is commit `e409fc3`, which changed coordinator
+and applied-certificate comparisons to immutable claims; it did not itself
+implement ancestor witnesses or this verifier change. H1's
 full matrix remains incomplete; no implementation or fresh performance gate
 is claimed by this documentation work.

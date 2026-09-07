@@ -91,31 +91,36 @@ The serving side already calls `quod_simplex:ledger_read_snapshot/1` and
 ledger for each page. The foreign cache's ledger session similarly resumes its
 sparse index without a scan.
 
-## 4. Primary hypothesis, not yet a conclusion
+## 4. Phase-index hypothesis: weakened by the corrected diagnostic
 
-The strongest static suspect is `quod_dtx_phase_index`:
+`quod_dtx_phase_index` remains a measured candidate, not an established owner:
 
 - it stores one exact row for every DTX GroupId so an evicted completed group
   remains an authoritative tombstone;
 - its current DETS session is closed by `suspend/1` and reopened by `resume/1`
   for ordered verification workers;
-- therefore a one-entry current-view advance can pay DETS close/open work over
-  all historical groups even though the certified ledger itself resumes in
-  constant work;
-- a local diagnostic with synthetic DETS rows showed that closing after one
-  update can grow to tens of milliseconds as the table grows. Independent
-  review sharpened that result: DETS open/resume stayed roughly flat, while
-  both close and `dets:sync` after one update grew with table size (about 4 ms
-  at 1,000 rows, 23 ms at 10,000, and 166 ms at 100,000 for close in that
-  synthetic run). Therefore the hypothesis predicts growth in the
-  phase-index **suspend/commit** stage, not resume; replacing close with sync
-  is not an escape hatch. Growth elsewhere falsifies this hypothesis;
-- the synthetic estimate at the few-thousand groups expected around height
-  7,000 is only roughly 10--50 ms, well below the observed approximately
-  250 ms increase. Real tables may be larger or fragmented, but H1 must expect
-  and expose a co-owner rather than forcing the full slope onto this suspect.
+- the original suspicion was that closing after one new row rewrote work
+  proportional to all retained groups. That specific inference is withdrawn;
+- the reviewer corrected the earlier probe description: its large close/sync
+  measurements followed a **bulk insertion of N dirty rows**, not a reopened
+  settled table plus one update. The previously cited 4/23/166 ms numbers
+  therefore do not establish a table-size slope for Quod's steady-state path;
+- the existing-API diagnostic on 0.7.143 instead resumes a settled table,
+  inserts one synthetic completed-group row, and suspends it. On local ext4,
+  mean dirty suspend was about 0.169 ms at 80 rows and 0.237 ms at 10,000
+  (20 samples per size, all outliers retained). Resume was 0.215/0.255 ms.
+  The tmpfs and ext4 runs are archived separately in
+  `/tmp/quod-h1-phase-discriminator-XO3RT9/report.md`;
+- those one-phase, roughly 500-byte synthetic rows do not reproduce the
+  large alleged suspend slope. They are not real multi-phase certified fleet
+  histories, and do not prove a universal complexity bound for fragmentation,
+  dirty-byte counts or every DETS workload. The review's dirty-work correction
+  weakens the prior; it does not approve or exonerate any backend.
 
-Those probes support measurement at this seam but are not fleet attribution.
+H1 still separates **phase_suspend/commit** from **phase_resume** and records
+actual changed rows/bytes alongside retained size. If another stage owns the
+increase, name it and return for review instead of replacing the phase index
+on the withdrawn premise. No backend selection before the 95% attribution gate.
 
 Other candidates remain open until measured:
 
@@ -163,6 +168,47 @@ Instrumentation must not enumerate the phase store merely to count it. A count
 used for attribution must already be maintained by the phase-index abstraction
 or be read through a constant-work backend statistic.
 
+The reviewed measurement alternative is a temporary **isolated OTP trace
+session** at these same existing functions, not another production owner or
+metric family. Capture only selected identities' correlation metadata and
+closed numeric stage observations, never raw keys, proof arguments or evidence.
+Destroy the session in `after`; its final cleanup safeguard is not protocol
+polling. Compare traced/untraced runs and report instrumentation uncertainty.
+Node-wide scrape deltas alone cannot separate preserved-group recovery from
+the measured requests. Existing sampled spans do not contain every individual
+phase duration, so increasing the sampler alone cannot fill that gap.
+
+Before full-matrix growth, demonstrate both on one advancing-view cell:
+
+1. `current_total`, emitted in the **caller's** process, is correlated through
+   the existing caller/ref to the owner and worker. An owner-only trace misses
+   it; `request_current` is not a substitute. Keep the same isolated session,
+   with narrowly selected function matches across the required processes.
+2. A one-entry advance actually runs the certified worker, with nonzero
+   `phase_resume`/`phase_suspend` observations and verified suffix accounting.
+   Reconstruct nesting/parallel intervals without double-counting. Prove that
+   background or shared work cannot be attributed to the wrong request.
+
+The 0.7.143 height-4 checkpoint already demonstrated the unchanged-view subset:
+100/100 traced and 100/100 untraced signed reads, means 13.41/13.13 ms, exact
+source association on a non-cohosted validator, and zero worker/fetch/phase
+operations. This is neither the high-height result nor a full attribution gate.
+Raw evidence: `/tmp/quod-h1-precut-audit-znCmzX/HANDOFF.md`.
+
+The subsequent caller/worker capture meets those two feasibility checks:
+100 unchanged reads at h6 and 100 one-entry advances with exact observed
+heights 7–106 all succeeded. Advancing-read client mean was 44.88 ms;
+`current_total` 32.804 ms; `phase_resume`/`phase_suspend` 0.492/0.089 ms.
+Parallel probe durations are enclosed, not summed. Worker time still includes
+2.950 ms mean unassigned, so this is not full stage attribution or a measured
+height-growth slope. The unchanged traced/untraced means were 13.41/12.19 ms,
+an observational difference, not a causal overhead estimate. Committee N=4
+and the certified projection's **four historical committee eras** stayed
+constant; a hosted status row's retained-view count is not that era count.
+Raw per-request stages and summaries:
+`/tmp/quod-h1-precut-capture2-HOFRDN/`. Full growth remains conditional on the
+ordinary-content and genuine-DTX throughput estimate below.
+
 ### 5.2 Controlled discriminator matrix
 
 Use the same N=4 physical topology and the real signed-client path. Preserve
@@ -174,11 +220,42 @@ raw per-request TSV and traces. At heights approximately 80, 500, 1,000, 2,000,
    groups;
 3. a normal application mixture.
 
+Each history-class/starting-height point uses a separately grown source through
+the ordinary signed path. A point is an **exposure window**, not a promise
+that its probes leave the source at one height. Record actual per-request
+source heights and per-case start/end heights, ledger bytes, operation counts
+and completed phase-index GroupIds; match baseline block/byte sizes across
+classes and use the same workload ordering. Regress attribution on **actual
+per-request heights**, never nominal cell/directory labels, separately by
+workload/history class and concurrency. Also report the observed mean deltas
+and residuals; fitting a regression alone does not pass the 95% gate.
+
+One-entry probes necessarily span heights, and write probes grow history too.
+Ordinary L1 `remote_claim`/`remote_complete` metadata is not a
+Begin/Prepare/Decision/Finalize/Complete group. The DTX-heavy class requires
+real completed multi-writer goals, not relabelled L1 traffic. Do not infer
+ledger height from assertion count or count metadata as phase-index rows.
+Do not restore/fork a live anchored ledger to manufacture fixed-height samples.
+
+An earlier archive labelled `h10000` actually began at h1811. Keep that raw
+evidence, but its directory name is not a measurement. The historical inventory
+records the mismatch; no new table may reuse the nominal label as fact.
+
 All three keep the committee membership and committee-era count constant. That
 deliberately excludes era growth as the cause. If H1 evidence points toward
 projection-shape cost despite that control, add a separately labelled
 membership-churn diagnostic run and return for review rather than contaminating
 the three primary fixtures.
+
+For each workload class, prove that the serving validator does not host the
+source and that the intended foreign current-view path actually ran. `::`
+syntax alone does not prove this: a co-hosted source uses its local view.
+
+Before mass growth, measure a small ordinary-path content and genuine completed-
+DTX growth sample and estimate the campaign wall time from actual blocks,
+bytes and groups produced. The full matrix has 126 cells before repeats;
+read latency is not a growth-throughput estimate. Finish/archive pre-cut runs
+before the finality cut; do not risk losing partially grown fixtures at re-found.
 
 At every point run:
 

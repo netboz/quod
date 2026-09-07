@@ -1,13 +1,14 @@
 # Finality recovery without sacrificing write throughput — review draft
 
-Status: **approved review baseline; amended for a second architecture review;
+Status: **approved review baseline; amended after the second architecture review;
 not approved for implementation**. Source reviewed at `b7c497e` / 0.7.143 on
 2026-09-07. Claude withdrew the per-slot rounds recommendation and accepted
 protocol-faithful pipelined Simplex with separate views and ledger heights.
-The membership candidate's proof pass is recorded in §4.3, including its
-counterexample and unresolved carrier-rule interactions. Consensus, DTX and
-signing-journal code still require review before commit. This commit is a plan
-only: no code, format, release bump or fleet change.
+The grandchild candidate is withdrawn. §4.3 records the reviewer's replacement
+(old-era finality-anchored handover), its successful original-schedule re-check,
+and an additional in-flight-child authority overlap that still needs proof.
+Consensus, DTX and signing-journal code still require review before commit.
+This commit is a plan only: no code, format, release bump or fleet change.
 
 ## 1. Throughput is a design requirement
 
@@ -144,10 +145,13 @@ consensus from exchanging the evidence needed to finish the pending block.
 Effects and facts remain released only through certified, ordered apply.
 
 **Carrier direction closed by review.** There is one payload rule: an empty
-payload is eligible exactly when the proposal extends an unfinalized parent;
-non-empty admission retains its existing semantic checks. An empty carrier is
+payload is eligible for production when the proposal extends an unfinalized
+parent; non-empty admission retains its existing semantic checks. An empty carrier is
 an ordinary block through the same proposal, votes, journal, verifier and append
-path—not a DTX-only escape, unsigned marker or new certificate family.
+path—not a DTX-only escape, unsigned marker or new certificate family. Eligibility
+is the leader's liveness-side choice; shared proposal/history validation uses
+the carried ancestry/evidence, not whether this receiver has already learned
+another finality certificate. The committee boundary still needs §4.3's proof.
 
 **Explicit trigger:** entering a view whose selected parent is complete and
 notarized-but-unfinalized wakes the existing proposal owner. Prefer an admissible
@@ -170,8 +174,8 @@ executor. Committee authority is the separate unresolved obligation in §4.3.
 Direct healthy finality needs no carrier to prove the write. That is not a
 promise of zero carrier traffic: the entering-view edge can race final votes
 even on a healthy network. Preserve useful payload overlap, and count actual
-carriers as cost, not useful writes. §4.3.3 records the precise empty-eligibility
-and mandatory-membership-child interaction for the next review; historical
+carriers as cost, not useful writes. The old mandatory-empty-membership-child
+clause is withdrawn; §4.3.4 states the barrier-derived rule. Historical
 verification cannot depend on the receiver's current lack of a certificate.
 
 ### 4.3 Committee changes are the hardest boundary
@@ -181,24 +185,37 @@ cannot gain authority from an unfinalized membership change. A fresh verifier
 must not use the new committee to check an old-committee descendant that
 finalized that change.
 
-#### 4.3.1 Review candidate
+#### 4.3.1 Replacement candidate: finality-anchored handover
 
-Let M change committee O to N. The proposed rule is: M's direct child C is
-always an **old-era-signed empty carrier**; N activates from M's grandchild G
-onward. Child/grandchild are ancestry relationships, not `view+1`/`view+2`:
-complaints can create view gaps. The intended attraction is an ancestry-derived
-boundary rather than activation according to local finality arrival order.
-It would reuse the same carrier machinery when M or C is contested, including
-disjoint committees, and the shared payload gate would reject a non-empty child
-of an unfinalized M before support. It adds no membership-only recovery runner.
+Let M change committee O to N. Review withdrew mandatory empty child plus
+fixed-grandchild activation after confirming §4.3.2, including that no Byzantine
+signer is necessary. Its replacement direction is:
 
-This candidate is **not approved**. The proof pass below refutes automatic
-branch-local activation from a merely notarized C under the stated rules.
+- views remain O-signed until an O commit certificate finalizes a block whose
+  ancestry includes M; call the first such block K;
+- N starts only on descendants of K, with authority derived from that O-certified
+  ancestry, never from notarization alone or N's own descendant;
+- if M directly finalizes, K may be M and there is no mandatory carrier before
+  its new-era child; if M is contested, old-era empty carriers may chain until
+  an old-era descendant obtains finality;
+- O must retain quorum liveness until a safe handover is certified. Losing that
+  quorum is an explicit unavailable boundary, not permission to activate N by
+  timeout. The fixed-era post-synchrony argument applies while O remains live.
 
-#### 4.3.2 Cross-era counterexample: notarization is not a handover
+This is the **replacement review candidate**, not a completed safety proof.
+The requested original-schedule check passes (§4.3.2), but §4.3.3 exposes an
+additional overlap when different parties learn different valid O commit
+certificates first. The exact certificate that ends O's authority, and the
+signing rule preventing a conflicting old-era child, must be determined without
+depending on a receiver's certificate-arrival order. Until then, neither
+"zero additional durable state" nor "era is already a pure function of the
+carried ancestry" is an established cost/safety result. No implementation.
+
+#### 4.3.2 Closed counterexample to the withdrawn grandchild rule
 
 N=4, quorum 3, old committee O = {o1,o2,o3,oz}, new committee
-N = {n1,n2,n3,n4}, disjoint. At most oz is Byzantine; the schedule is before
+N = {n1,n2,n3,n4}, disjoint. All can be honest; oz need only receive evidence
+late (an isolated commit share from oz does not form a quorum). The schedule is before
 network synchrony. P is a finalized old-era parent. Notarization and complaint
 certificates **can coexist**: the exclusion is commit-versus-complaint in one
 view, not support-versus-complaint.
@@ -229,35 +246,90 @@ This is an abstract schedule/quorum check of the candidate, not a reproduced
 production failure or full model check. It is not the preserved 2/2 split:
 those latched votes cannot later form a complaint QC. Testing only two stacked
 2/2 splits can therefore pass while missing this cross-era safety failure.
-Any purported rule that retires O irrevocably earlier must be stated with its
-durable evidence and liveness proof; it is absent from the candidate as given.
+The withdrawn grandchild rule contained no earlier certified retirement of O;
+the replacement is checked separately below.
 
-Keeping every further contested carrier under O until an O commit would block
-this particular self-authorization, but would no longer be the fixed-grandchild
-rule and is **not silently adopted here**. A further architecture review must
-provide a non-circular certified handover/era rule using the existing owner,
-including its exact effect on append/verification and throughput. No joint
-consensus, new lock, or extra protocol phase is implemented or presumed free.
+**Focused re-check against the replacement:** with neither M nor C committed
+under O, no K exists, so G cannot be N-signed. It must use O, whose same-view
+support exclusivity prevents both X and G from getting quorums. The original
+self-authorization schedule is blocked. This establishes that old-era finality
+is necessary; it does not prove unique authority over subsequent children.
 
-#### 4.3.3 Carrier-rule interactions the review must settle
+#### 4.3.3 New overlap: different first commit certificates
 
-1. **Deterministic validity:** lack of locally observed parent finality cannot
-   be a historical validity predicate. A carrier proposed before its parent
-   finalizes can arrive at a validator or replayer after that parent finalizes.
-   Shared validation must not reject the certified history on that account.
-   Distinguish the reviewed *production eligibility* rule from a reproducible
-   proposal/history-validity rule. Do not introduce two validators or silently
-   change the accepted eligibility condition; the exact interpretation needs
-   to be written and reviewed.
-2. **Direct-finalized membership:** if M finalizes directly before its child is
-   produced, “child always empty” and “empty only above an unfinalized parent”
-   leave no eligible child. Skipping failed views does not help: the ancestry
-   parent is still M. The candidate must cover this fault-free case as well
-   as contested M and contested C; the same payload rule must reject the
-   Byzantine non-empty-child attempt without a call-site exception.
-3. **Contested M and contested C:** with the exact two 2/2 splits, reaching G
-   must be possible under §4.4 and no vote may change. This is a liveness test,
-   not a substitute for the cross-era safety schedule in §4.3.2.
+Use disjoint O = {o1,o2,o3,o4}, N = {n1,n2,n3,n4}, quorum 3. All are honest.
+Choose the old leader for view 11 among o1/o2/o3; the new committee has its own
+leader. P is the finalized old parent. The network delays messages before
+synchrony; no signing rule may depend on learning a broadcast instantly.
+
+1. O notarizes membership M at view 10. o1/o2/o3 emit commit shares for M and
+   advance on its notarization, as the pipeline permits. Deliver those commit
+   shares to o4, which assembles QC_O(M), and deliver that evidence to N through
+   ordinary certified-history dissemination. Delay QC_O(M) and the other M
+   commit shares to o1/o2/o3. Each knows its own share, not the quorum.
+2. To o1/o2/o3, M remains notarized but unfinalized. Under the replacement's
+   contested-case rule, O proposes empty child C at view 11, parent M. These
+   three support C; deliver its support quorum and then their C commit shares
+   among them. They obtain QC_O(C) **before** QC_O(M). C finalizes ancestry
+   P→M→C; their first observed handover block is K=C.
+3. N already has QC_O(M). Under K=M activation, it proposes another child G at
+   view 11, parent M, and n1/n2/n3 support and commit G. It finalizes P→M→G.
+   G may carry ordinary work, while C is empty: they are different block values.
+
+No party double-supports a view or signs both commit and complaint. Every
+certificate has three members of the committee selected by its disclosed
+handover evidence. Both branches include M, so the fixed-era argument that
+"no old branch excluding M can finalize" does **not** exclude this fork.
+The missing uniqueness is C versus G, not M versus its old parent.
+
+Calling K the globally earliest O commit does not yet solve the problem:
+QC_O(M) may exist without being present in C's offered history. A fresh verifier
+of P→M→C plus QC_O(C) cannot prove that no earlier certificate was assembled
+elsewhere. Giving it QC_O(M) later must not revoke finality it already accepted.
+Likewise, an old carrier that is merely proposed can become obsolete, but an
+**already finalized** old carrier cannot be discarded as a harmless redundant
+branch: carriers are ledger blocks with append positions under §4.1.
+
+This is a paper counterexample to the replacement **as stated**, not a deployed
+failure or exhaustive model check. If the intended rule forbids step 2 or 3,
+the review must name the exact locally enforceable, restart-retained signing
+condition and the certificate boundary a fresh verifier checks. A finality
+certificate for M alone does not prove all O validators have retired their
+in-flight descendants. Nor can an unstated freeze after every commit share be
+assumed: a 2-commit/2-complaint M would then risk stranding the very old-era
+carrier quorum needed for recovery. Both safety and that split's liveness
+must be shown under the same rule, not repaired with separate exceptions.
+
+Source grounding: today's `implicit_finality` rejects committee barriers
+(`quod_simplex.erl`, around 597–605), and `adopt_history`'s boundary comment
+(around 9387) explicitly relies on **no next-slot proposal before committee
+finality**. Allowing old-era carriers removes that protection. The paper's
+§2.3.3/§2.4 separates certificate-based commitment from notarization-driven
+view advance; §3.1's quorum intersection assumes one committee. None of these
+is a proof that the proposed overlapping eras are safe.
+
+#### 4.3.4 Barrier, liveness and replay requirements
+
+1. **One shared validity function:** production of an empty carrier is a
+   liveness-side choice; later receipt of parent finality is not a reason to
+   reject otherwise valid historical evidence. Live verification and replay
+   must derive the same era boundary from the same evidence. §4.3.3 is the
+   remaining obligation, not permission to make accepted finality revocable.
+2. **Barrier-derived emptiness:** remove the old always-empty-child rule.
+   While membership remains unresolved, ordinary work cannot cross that
+   barrier; empty progress uses the existing carrier path. Once handover is
+   safely certified, ordinary work resumes. A Byzantine non-empty proposal
+   crossing an unresolved barrier is rejected at the shared payload gate.
+3. **K=M fault-free case:** a direct O finality certificate should permit the
+   normal new-era child without an extra mandatory carrier, subject to closing
+   in-flight O authority in §4.3.3. No throughput gain or zero extra cost is
+   promised before that boundary and §6's measurement are proved.
+4. **Contested M and contested C:** old-era carriers must recover both 2/2
+   splits under §4.4, without changing latches or activating N speculatively.
+5. **O loses quorum:** remain unavailable until O's required quorum can
+   participate/recover. No timeout, read quorum, reachable minority or N-only
+   certificate may substitute for the handover authority. This limitation is
+   explicit in tests and operations, not an automatic re-found or repair.
 
 The implementation remains blocked at this boundary. This does not reopen
 the chosen pipelined baseline or authorize sequential per-height consensus.
@@ -464,7 +536,17 @@ authorizes no fleet mutation. H1 continues only on unaffected fixtures.
   proposals, with no membership-only bypass elsewhere.
 - The §4.3.2 support-plus-complaint-QC schedule cannot yield both old-branch X
   and new-branch G finality. Check same-view non-equivocation and signer sets
-  explicitly; a test with only 2/2 splits does not cover this safety boundary.
+  explicitly; under the replacement rule, G cannot use N before an O commit.
+  A test with only 2/2 splits does not cover this safety boundary.
+- **Commit-certificate arrival overlap (§4.3.3):** old voters issue C while
+  QC_O(M) reaches N first. The chosen rule must prevent QC_O(C) and QC_N(G)
+  from finalizing different children, with no same-view signer equivocation.
+  A fresh verifier given either evidence bundle first must reach the same
+  irreversible boundary; receiving an earlier ancestor QC later cannot revoke
+  an already accepted committed carrier.
+- **Old quorum unavailable mid-handover:** no N-only activation or minority
+  fallback. Pin the explicit liveness limitation; recovery resumes only with
+  the required certified old-era authority, not a timer workaround.
 - A directly finalized M still has a valid next step under the chosen payload/
   era rule. A valid carrier delayed until after parent finality still verifies
   at other validators and during history replay. Neither test may depend on
@@ -502,11 +584,17 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 - [Buchman/Kwon/Milosevic, v3 Algorithm 1](https://arxiv.org/pdf/1807.04938v3):
   comparison only, not the selected implementation.
 
-Diagnosis and the pipelined view/height baseline are accepted. The §4.3
-candidate fails the stated ancestry-only activation proof pass; the amended
-plan returns that explicit finding and the carrier interactions for review,
-without adding a new protocol. The quorum witness was checked for signer
-membership and same-view non-equivocation; no exhaustive model or production
-test is claimed. The k-bound attribution in §4.4 distinguishes the published
-stable-leader protocol from Quod's adaptation. No proposed throughput gain has
-yet been measured, and the unchanged §6/H1 gate still applies.
+Diagnosis and the pipelined view/height baseline are accepted. Review confirmed
+the grandchild counterexample and proposed finality-anchored handover. That
+replacement blocks the original schedule but still needs the explicit
+in-flight-old-child closure in §4.3.3. The plan returns that focused finding,
+not an unreviewed retirement lock or second protocol. The paper witnesses
+check signer membership, per-view latches and specified message order; no
+exhaustive model or production test is claimed. A focused ballot/knowledge
+consistency checker and its output are retained at
+`/tmp/quod-handover-proof.uQlvgn/`: it checks the original N-activation refusal,
+old-era same-view conflict, and the new candidate's certificate-arrival witness.
+It is not a full proposal/transport/availability model. The k-bound attribution
+in §4.4 distinguishes the published stable-leader protocol from Quod's adaptation.
+No proposed throughput gain has yet been measured, and the unchanged §6/H1
+gate still applies.

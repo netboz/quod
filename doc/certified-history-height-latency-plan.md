@@ -306,13 +306,52 @@ verification. This is not empty scheduling time, but the existing trace does
 not show the qualifying-candidate count or time inside those calls. Do not
 assign all 2.364 ms to crypto, nor infer the height slope from a one-entry cell.
 
-The smallest next measurement is correlated numeric entry/return timing for
+The next measurement, approved by review and now completed below, used
+correlated numeric entry/return timing for
 `validate_page/4`, an exact `fetch_page/9` entry, `cache_persisted_bytes/2`, and
 `phase_session_stats/1`, through the reviewed isolated trace session. Add
 scheduling/GC trace only if needed to distinguish elapsed from execution time.
 Existing starts reconstructed from observer timestamp minus recorded duration
 also include an unquantified clock-read-to-observer offset. No production
 change or H2 optimization follows from this local seam map.
+
+**Follow-up checkpoint, pre-cut 0.7.143:** the isolated helper trace completed
+100/100 one-entry advances and remote reads at actual source heights 127–226
+(126→226 overall, 264,931→476,299 ledger bytes). No failures, pending results,
+replay or committee changes; N=4 and four historical committee eras, phase rows
+zero. Client-read mean/p50/p99 were 52/52/104 ms; the preceding signed advances
+averaged 115.62 ms. This is another low-height window, not the full matrix.
+
+| Disjoint worker arithmetic | Mean ms |
+|---|---:|
+| Enclosing verification worker | 38.533975 |
+| Previously measured stage/envelope sum | 35.538829 |
+| Candidate `validate_page` work (four one-entry candidates/request) | 2.369043 |
+| Two `cache_persisted_bytes` calls/request | 0.398156 |
+| `phase_session_stats` | 0.028970 |
+| Expanded measured sum | 38.334998 |
+| Still unassigned | 0.198977 |
+
+Thus `38.533975 - 38.334998 = 0.198977 ms`, or 0.5164% of the worker mean.
+The separate suffix-validation observation (0.655534 ms) is **inside**
+`page_verify` and is not added again. Resume/suspend remain distinct at
+0.420441/0.085131 ms. Exact candidate-selection-to-fetch time was 2.395371 ms;
+the four candidate validations explain 2.369043 ms of that, leaving 0.026327 ms.
+This locates real elapsed work in candidate validation, not necessarily all
+signature CPU: its internal crypto/encoding and off-CPU time were not split.
+
+**99.4836% worker coverage is not the >=95% increase-in-mean gate.** There is
+still no controlled low/high comparison, randomized advancing-trace overhead
+control or full campaign table. Observer-derived boundaries differ from exact
+entry marks by several microseconds; retain those offsets and the unassigned
+remainder. Do not infer a height slope or H2/backend choice from this window.
+Raw data, per-request stages, means and cleanup evidence:
+`/tmp/quod-h1-precut-residual3-6lkdzy/HANDOFF.md` and adjacent TSV/JSONL;
+driver stdout/TSV is in
+`/tmp/quod-h1-precut-audit-znCmzX/residual3-advancing-100/`.
+The read-only preflight's 20-entry cache catch-up is excluded, explicitly.
+Both isolated sessions are destroyed; no capture/growth worker remains.
+The preserved old namespaces were untouched, and group4 remains post-cut work.
 
 ## 6. Slice H1 -- observability and reproduced baseline
 

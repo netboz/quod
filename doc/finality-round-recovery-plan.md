@@ -7,8 +7,10 @@ protocol-faithful pipelined Simplex with separate views and ledger heights.
 Both grandchild and first-observed-finality handover candidates are refuted.
 §4.3 now records sequential membership with in-view recovery rounds as the
 reviewer's replacement recommendation. The no-child boundary closes the old
-overlap; the round/skip grammar and composition with ordinary view advancement
-still need the focused architecture sign-off. Do not implement a shorthand
+overlap. Review closed the hidden-notarization question by adopting decided-value
+exclusivity, but its proposed complaint-taint mode boundary fails the temporal
+counterexample in §4.3.7. The SKIP bytes in §4.3.8 are a review candidate, not
+permission to implement the still-unproved composition. Do not implement a shorthand
 "Tendermint-style" lock without its exact voting and evidence rules.
 Consensus, DTX and signing-journal code still require review before commit.
 This commit is a plan only: no code, format, release bump or fleet change.
@@ -343,7 +345,9 @@ of **any** kind for one round. A 2-commit/2-complaint split can supply that
 quorum. Commit votes retain a value/round lock; complaints do not erase it.
 Higher-round re-proposal/relocking must obey the exact support guards below.
 This is proposed additional consensus state, not existing code or a second
-runtime owner. Skip eligibility is not yet settled (§4.3.6).
+runtime owner. SKIP need not exclude old notarizations; it must exclude a
+different decision. The boundary against ordinary view escape is still open
+(§4.3.7); specifying SKIP bytes alone does not close it.
 
 Healthy M can finalize directly in round 0; no mandatory carrier or extra
 network phase is intended. "Round 0 is byte-identical" is not an approved
@@ -376,7 +380,7 @@ do not try another threshold. It is not a theorem excluding every possible
 certificate grammar, signing restriction or reconfiguration protocol. Those
 change the premise and require their own reviewed safety/liveness design.
 
-#### 4.3.6 Focused round-proof obligations, not shorthand inheritance
+#### 4.3.6 Round rules: accepted corrections and proof boundary
 
 The comparison is the actual Tendermint v3 Algorithm 1, not its name. Its
 support/prevote choice consults the retained lock and a verified *earlier-round*
@@ -384,57 +388,154 @@ support certificate; quorum final votes of different kinds advance recovery,
 but do not choose or finalize a value. A nil final vote is not a committed skip.
 The lock and most recent supported value serve different roles.
 
-The recommendation needs the following precise obligations:
+The latest review closes the following distinctions, not the whole composition:
 
 1. **Guard support, not only final votes.** Without prior supporting evidence,
    a locked voter supports only its locked value (or refuses). For a different
    value, the proposal must carry a valid support certificate from round `vr`
-   with `locked_round <= vr < current_round`; equal-round conflicting QCs are
-   themselves impossible under quorum intersection. A numerically higher
+   with `locked_round < vr < current_round`. Algorithm 1 writes `<=` for
+   the lower bound: for a **different** value, a conflicting QC at the lock's
+   own round is already impossible by same-round quorum intersection. These
+   are equivalent on genuine certificates, not two unlock paths. A numerically higher
    round is no permission to help form the very conflicting QC used to unlock.
    Membership, unique signers, view/value/round binding and actual QC validity
    are checked by the existing verifier. Retain the latest supported value/QC
    for re-proposal even if the validator had already complained in that round.
 2. **Complaint is not SKIP.** Three complaints or a mixed final-vote quorum
    prove neither "M never notarized" nor a decision on an explicit SKIP value.
-   The original recommendation's `skip-wins-only-if-never-notarized` claim does
-   not follow from commit-lock voting. Counterexample: Byzantine z receives
+   Claude explicitly withdraws `skip-wins-only-if-never-notarized` and accepts
+   **decided-value exclusivity**. Counterexample: Byzantine z receives
    support(M,0) from a,b and adds its own signature, retaining the QC privately.
    No honest validator sees the QC or locks M. All three honest validators
    complain; in round 1 they can support and commit a separately proposed SKIP
    under ordinary unlocked voting. Revealing QC(M,0) afterwards violates the
    "never notarized" promise, though it does **not** by itself create conflicting
-   finality. Refusing this schedule needs a specified, locally verifiable rule
-   and liveness proof, not a predicate checking globally absent evidence.
-   Alternatively review must explicitly revise the promise to safe decided-
-   value exclusivity. Neither choice is silently adopted by this plan.
-   Any SKIP grammar must preserve §4.1: no synthetic ledger entry or membership
-   change, and no fabricated abort/new submission for the retained transaction.
-3. **One certified view-escape rule.** A validator without the membership body
-   can time out/complain while another knows M is notarized. Specify when these
-   votes move to another *round of this view*, versus ordinary Simplex's next
-   *view*. A mixed-vote quorum alone does not certify which mode/body was chosen.
-   Show that no honest set irrevocably leaves for a later fixed-era view while
-   another remains bound to membership recovery and neither can obtain quorum.
-   Also specify how the selected M is identified if the initial leader
-   equivocates between valid membership bodies before either gets a QC;
-   the witness's fixed input M is not a selection protocol. Classify from
-   validated evidence at the existing owner, never a caller's mode flag or
-   local arrival order. This is a composition proof still owed,
-   not a claimed counterexample to a fully specified protocol.
+   finality. Accept this schedule; no global absence test is required.
+   Before decision, authentic old support evidence may justify a later proposal
+   under the prior-round guards; it does not automatically replace a newer
+   retained value or lock. After decision it cannot reopen the view or revoke
+   its outcome. An explicit SKIP needs its own proposal and support/commit
+   quorums. It appends nothing and does not change the committee; retained
+   unapplied work remains in ordinary custody, with no fabricated abort,
+   new client request, author sequence or uncertain-write resubmission.
+3. **One certified view-escape rule remains missing.** Claude proposed signed
+   membership evidence in complaints, park-on-evidence, and ordinary skip only
+   from an entirely untainted complaint quorum. §4.3.7 refutes the proposed
+   intersection proof even when all evidence is signed and cannot be stripped.
+   Later knowledge cannot change an earlier share. Do not adopt this candidate
+   or silently replace it with an irreversible exit rule. Initial-leader
+   content/membership and M1/M2 equivocation must be included in the eventual
+   composition proof, not dismissed by per-round uniqueness alone.
 4. **Progress and retention.** Define the round leader, same-round final-vote
    exclusion, handling of old valid decisions, supported-body/QC custody,
    restart floors and evidence-driven wake/replacement of placement. Mixed
    final-vote evidence is formable, but formability alone is not a liveness
-   proof. The paper's timeout/gossip assumptions cannot be discarded while
-   inheriting its proof; map actual failure detection into the existing owner,
-   with no success-path polling, delay ladder or second pacemaker process.
+   proof. The existing readiness-gated head watchdog is the proposed failure-
+   detection owner; safety is independent of timing. Liveness needs eventual
+   synchrony, an available old quorum and sufficient time for proposal/evidence
+   dissemination and validation. A fixed configured Delta is not automatically
+   Tendermint's increasing-timeout proof; the sufficient-delay assumption and
+   round-leader progress must be explicit. No success-path polling, delay
+   ladder or second pacemaker process is authorized.
+
+   Map dissemination precisely: Simplex's `emit_slot_evidence`, existing
+   transport outboxes and certified-body request/response own unfinalized
+   proposals/shares/QCs. `quod_feed` disseminates **finalized** history; it
+   does not presently gossip an uncommitted membership proposal or validValue
+   QC. Extending retained evidence at the same owners must show that evidence
+   learned by one honest validator reaches the others after synchrony, including
+   after its leader disappears. Naming the feed/outbox is not that proof.
 
 The bounded witness checks the no-child refusal, 2/2 round-1 recovery under
 these lock guards, rejection of a Byzantine higher-round conflicting proposal,
-and the hidden-notarization/SKIP schedule. Its membership mode and selected M
-are inputs, not a proof of obligation 3. The implementation remains blocked
+and the hidden-notarization/SKIP schedule. The extension below checks immutable
+complaints and delayed evidence. It still takes valid proposals and round
+leadership as inputs, not a proof of distributed mode selection or liveness.
+The implementation remains blocked
 pending this focused sign-off. No ordinary-throughput regression is authorized.
+
+#### 4.3.7 Counterexample to the complaint-taint boundary
+
+This checks the review of `ad44f66`, attachment
+`5459ea3c-9a55-4524-a74d-c3d7687d0103`. Grant its strongest interpretation:
+each complaint's evidence field is signed, immutable and correctly verified;
+membership M is a valid leader-signed proposal for V. O={a,b,c,z}, q=3,
+z Byzantine. All messages shown are for the same old era and view V.
+
+| Step | Evidence/messages | Consequence under the proposed rule |
+|---|---|---|
+| 1 | Before seeing M, a and b complain in round 0 without evidence. z adds an untainted share and privately assembles U={a,b,z}. | U is an ordinary-skip certificate by the taint test. No honest node has to learn U yet. |
+| 2 | c receives M before complaining and attaches it. Assemble T={a,c,z}, reusing a's and z's original shares. | T is tainted and authorizes in-view round change. No share was modified. |
+| 3 | Deliver M and T, but not U, to a,b,c. | All park in V. Their round-0 complaints do not forbid round-1 support/commit under the proposed recovery rules. |
+| 4 | Round 1's leader proposes M; a,b,c support, learn the support QC, and commit it. | QC_commit(M,1) exists, with three distinct old members and no same-round equivocation. |
+| 5 | Reveal the unchanged U. | The same taint test still accepts ordinary skip of V, despite the actual membership commit. |
+
+U and the commit quorum intersect in **a,b**, both honest. They knew M when
+committing in round 1, not when signing their round-0 complaints. The inference
+"an intersecting honest committer therefore attached evidence to its earlier
+complaint" is false. This is not evidence-field stripping, a different era,
+duplicate weight, or a violation of the support/lock guards. A fresh verifier
+cannot invalidate U based on a certificate it has not received.
+
+This bounded witness proves that the proposed boundary accepts both an ordinary
+view-skip certificate and membership finality for V. It does not simulate full
+old/new divergent ledger execution. Their asserted mutual exclusion is already
+refuted; fork prevention cannot be inferred from that proof. The related claim
+that an ignorant next-view quorum is impossible also lacks its premise: a lone
+parked honest c leaves a,b,z, which is a quorum. Any safe rollback/exit rule must
+account for votes that advanced nodes have **already** signed, not just their
+current location.
+
+Re-signing complaints with later evidence cannot retract the retained U. Nor
+can U be accepted only until local M finality arrives: that reintroduces the
+certificate-arrival dependence refuted in §4.3.3. A simple irreversible exit
+on an untainted share is not a free fix either: two honest clean complaints,
+one honest tainted complaint and one silent Byzantine member yield neither a
+clean skip quorum nor three members still permitted to recover in V. A
+different rule allowing some continued votes must prove its own lock/liveness
+composition, not silently inherit this one.
+
+**Required architectural answer:** define one monotone signing/evidence rule
+that excludes incompatible escape and membership decisions over their entire
+lifetimes, while allowing a live old quorum to finish the mixed-knowledge
+schedule without Byzantine cooperation. No negative-global-knowledge test,
+revocable certificates, arrival-order mode flag, new polling, or lost ordinary
+pipeline overlap. The taint candidate is not accepted for implementation.
+
+#### 4.3.8 Explicit SKIP value — byte-level review candidate
+
+Resolve the independent representation question without implying that §4.3.7
+is solved. Propose this closed, fixed-length variant in the **same value codec**:
+
+```erlang
+SkipBytes = <<"quod/simplex/skip", 0, 1:8,
+              Domain:32/binary, EraStartHash:32/binary,
+              View:64/unsigned-big, ParentHash:32/binary>>.
+SkipHash = crypto:hash(sha256, SkipBytes).
+```
+
+`Domain` is existing `consensus_domain(Ns, GenesisHash)`. `EraStartHash` is the
+canonical block hash that activated O (genesis for the founding era), derived
+from the same certified ancestry, never a certificate-signer subset hash or
+the proposed membership M. `ParentHash` is the shared, validated pre-view
+parent selected by the eventual entry rule; another parent cannot create a
+second lock/decision domain in the same era/view. That entry rule must reject
+it, not let a signer vote in both domains. `View` retains the
+existing unsigned-64 representation, now a view rather than an append height.
+No round, timestamp, candidate-M hash, map, optional field or trailing bytes.
+M1/M2 equivocation therefore cannot mint distinct skips for the same instance.
+
+The ordinary proposal/share codec's cut-version domain and vote-kind separation
+bind `(Domain, EraStartHash, View, Round, SkipHash)` just as they bind another
+membership-round value hash. No separate signer/verifier or SKIP-as-complaint
+alias. Membership SKIP is valid only inside a **certifiably entered** instance;
+§4.3.7 still owes that entry rule. A complete old-quorum SKIP decision excludes
+any other decided value for the instance; a complaint quorum does not decide it.
+Retain/carry its certified view-gap evidence through the existing journal and
+history verifier, without a ledger block, content mutation, effect or authority
+change. This does not make the journal's retained decision evidence volatile.
+Reject wrong domain/era/parent/view, alternate encodings and complaint-as-commit.
+This grammar is for focused review only; no producer or parser is implemented.
 
 ### 4.4 The live window must permit the required progress
 
@@ -484,7 +585,8 @@ No new author sequence, client request or fabricated abort.
 **Closed for the fixed-era baseline:** per-view support and final-vote latches,
 plus supported-body custody, generalize the existing atomic-retention pattern.
 Fixed-era pipeline voting adds no Tendermint lock. The membership recommendation
-does add round-scoped latches and value/round lock plus supported-value evidence
+does add round-scoped latches, `lockedValue/lockedRound`, and
+`validValue/validRound` with the latest supported value's exact body and QC
 at this **same journal owner**, conditional on §4.3's proof. Do not hide this
 change behind the old blanket "no locks" sentence or duplicate custody.
 
@@ -494,7 +596,10 @@ commit-or-complaint latch before exposure. Remove adjacent-view exclusions,
 not fixed-era same-view or membership same-round non-equivocation. **QSJ4
 replaces QSJ3**, without compatibility; the exact membership-round schema is
 part of the pending sign-off, not an approved era-agnostic implementation.
-Restart retains every outstanding view's required body/evidence and signing
+The lock and validValue may name different rounds/values: retain both obligations,
+not one "latest" row overwriting a still-required lock. Late evidence cannot
+overwrite a newer validRound; a decision is terminal. Restart retains every
+outstanding view's required body/evidence and signing
 floor. Reuse exact byte/parent/era-bound validation in existing candidate state,
 not a new cache. Temporary evidence unavailability is not ordinary Prolog
 failure. Proposer loss cannot strand required bytes.
@@ -675,6 +780,17 @@ authorizes no fleet mutation. H1 continues only on unaffected fixtures.
   verify, and N activates only after direct O-certified membership finality.
 - Validators disagreeing on receipt of the membership body/QC must not split
   irreversibly between in-view recovery and ordinary next-view advancement.
+- **Temporal taint (§4.3.7):** unchanged U={a,b,z} precedes tainted T={a,c,z}
+  and membership commit by a,b,c in round 1. The replacement rule must reject
+  incompatible certificates regardless of reveal order, without rewriting U.
+  Also require progress with two clean shares, one tainted share and a silent
+  Byzantine member; permanent per-share exit must not hide a new deadlock.
+- A lone parked evidence holder, initial-leader content/M or M1/M2 equivocation,
+  and late proposals after already-signed next-view votes must be covered by
+  the same proved boundary, not only by a known-mode membership fixture.
+- Hidden support QC before decision may supply valid prior-round evidence;
+  after decision it changes nothing. SKIP's canonical byte vectors, cross-
+  domain/era/view/parent refusal, no append and retained custody are pinned.
 - Crash around every durable vote/body/send; proposer loss, stale validation
   and live-link replacement; no double signing or lost work.
 - Leader/view changes and same-peer revisits re-place retained bytes without
@@ -693,6 +809,7 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 | Passage | Amendment |
 |---|---|
 | `quod_simplex` moduledoc, vote guards, proposal/finality/barrier comments | coherent view/ancestry rules, useful overlap and application/consensus boundary |
+| `quod_simplex:adopt_history` membership boundary comment | keep direct-finality/no-old-child invariant; document the eventual proved entry/parking/escape rule, **not** the refuted park-on-proposal/taint candidate as approved behavior |
 | Signing journal moduledoc | crash-safe view decisions, retained evidence, pruning and break |
 | `include/quod_ledger.hrl`, ledger and catch-up docs | precise view/height/era binding; remove old skip/depth-one-only claims |
 | Ingress and DTX relay comments | one leader projection and custody wake |
@@ -711,8 +828,10 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 
 Diagnosis and the pipelined view/height baseline are accepted. Review confirmed
 both handover counterexamples and now recommends sequential membership with
-in-view rounds. The no-child rule closes the old authority overlap; exact
-round/skip/mode composition remains the focused implementation-blocking proof.
+in-view rounds. The no-child rule closes the old authority overlap; decided-value
+exclusivity replaces the withdrawn never-notarized promise. The subsequent
+complaint-taint proposal is refuted by §4.3.7. SKIP bytes are specified for review,
+but exact round/mode composition remains the implementation-blocking proof.
 The former witness is retained at `/tmp/quod-handover-proof.uQlvgn/`; the new
 bounded checker and output are at `/tmp/quod-membership-round-proof.Pj4253/`.
 It assumes a known membership instance and checks the stated ballot/evidence

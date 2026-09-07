@@ -2334,6 +2334,80 @@ dtx_retained_selection_skips_an_older_ineligible_group_test() ->
        2, maps:get(submissions,
                    quod_simplex:test_dtx_endpoint_counts(WithBoth))).
 
+%% Different valid quorum subsets certify the same immutable phase claim but
+%% remain different bytes inside the next signed control. Recovery can retain
+%% both variants after an uncertain response. They are alternatives for one
+%% group transition, never two transitions that may share a block.
+dtx_retained_wave_selects_one_reference_variant_per_group_test() ->
+    F = quod_ct:dtx_prepare_fixture(),
+    Origin = maps:get(origin, F),
+    Target = maps:get(target, F),
+    Begin = maps:get('begin', F),
+    BeginControl = maps:get(begin_control, F),
+    BeginRef = maps:get(begin_ref, F),
+    GroupId = quod_dtx:group_id(Begin),
+    Admission = maps:get(admission, F),
+    Signer = maps:get(signer, F),
+    TargetPrepare = maps:get(prepare, F),
+    TargetPrepareRef = dtx_test_ref(
+                         Target, 2,
+                         quod_dtx:record_digest(TargetPrepare)),
+    H0 = quod_dtx:initial_group_history(),
+    P0 = quod_dtx:initial_projection(Origin, 0),
+    {ok, H1, P1, _} = quod_dtx:reduce(
+                         BeginControl, BeginRef, H0, P0),
+    {ok, Decision} = quod_dtx:new_decision(
+                       GroupId, BeginRef, commit,
+                       [{Origin, BeginRef}, {Target, TargetPrepareRef}]),
+    {ok, DecisionControl} = quod_dtx:sign_control(
+                              Origin, Decision, Admission, 3, 3, Signer),
+    DecisionRef = dtx_test_ref(
+                    Origin, 3, quod_dtx:record_digest(Decision)),
+    {ok, _H2, P2, _} = quod_dtx:reduce(
+                         DecisionControl, DecisionRef, H1, P1),
+    {ok, _Manifest, _OriginDigest, OriginPlanBlob} =
+        quod_dtx:begin_participant_payload(Begin, Origin),
+    {ok, OriginPlan} = quod_dtx:decode(OriginPlanBlob),
+    OriginGeneration = quod_dtx:overlay_generation(OriginPlan),
+    {ok, _TargetManifest, _TargetDigest, TargetPlanBlob} =
+        quod_dtx:prepare_payload(TargetPrepare),
+    {ok, TargetPlan} = quod_dtx:decode(TargetPlanBlob),
+    TargetGeneration = quod_dtx:overlay_generation(TargetPlan),
+    Fences = maps:get(apply_fences, P2),
+    ReadyProjection =
+        P2#{apply_fences :=
+                Fences#{GroupId :=
+                            (maps:get(GroupId, Fences))#{blocking := false}}},
+    TargetFinalizeRef = dtx_test_ref(Target, 4, <<91:256>>),
+    AltDecisionRef = setelement(8, DecisionRef, <<"alternate-decision-proof">>),
+    AltTargetFinalizeRef = setelement(
+                             8, TargetFinalizeRef,
+                             <<"alternate-finalize-proof">>),
+    {ok, Complete1} = quod_dtx:new_complete(
+                        GroupId, DecisionRef,
+                        [{Origin, DecisionRef, OriginGeneration},
+                         {Target, TargetFinalizeRef, TargetGeneration}]),
+    {ok, Complete2} = quod_dtx:new_complete(
+                        GroupId, AltDecisionRef,
+                        [{Origin, AltDecisionRef, OriginGeneration},
+                         {Target, AltTargetFinalizeRef, TargetGeneration}]),
+    {ok, CompleteControl1} = quod_dtx:sign_control(
+                               Origin, Complete1, Admission, 4, 4, Signer),
+    {ok, CompleteControl2} = quod_dtx:sign_control(
+                               Origin, Complete2, Admission, 5, 5, Signer),
+    S0 = st(#{ns => element(1, Origin), genesis_hash => element(2, Origin),
+              dtx_projection => ReadyProjection}),
+    WithFirst = quod_simplex:test_seed_dtx_submission_at(
+                  CompleteControl1, [], 10, S0),
+    WithBoth = quod_simplex:test_seed_dtx_submission_at(
+                 CompleteControl2, [], 20, WithFirst),
+    ?assertNotEqual(
+       quod_dtx:record_digest(Complete1),
+       quod_dtx:record_digest(Complete2)),
+    ?assertEqual(
+       [{quod_dtx:record_digest(Complete1), Complete1}],
+       quod_simplex:test_eligible_dtx_wave(WithBoth)).
+
 %% Retention is governed by phase readiness, not by a compiled row count. The
 %% old nine-row guard would reject this exact tenth insertion with `busy`.
 dtx_retained_registry_has_no_population_cap_test() ->

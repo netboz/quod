@@ -8812,26 +8812,46 @@ eligible_dtx_wave(
                 [Row || {_Digest, #dtx_submission{control = Control}} = Row
                             <- Ordered,
                         quod_dtx:control_kind(Control) =:= Phase],
-            select_dtx_wave(SamePhase, Phase, S, [])
+            select_dtx_wave(SamePhase, Phase, S, #{}, [])
     end.
 
-select_dtx_wave([], _Phase, _S, SelectedRev) ->
+select_dtx_wave([], _Phase, _S, _SelectedGroups, SelectedRev) ->
     lists:reverse(SelectedRev);
 select_dtx_wave(
-  [Candidate | Rest], Phase, S, SelectedRev) ->
-    Proposed = lists:reverse([Candidate | SelectedRev]),
-    Envelopes = [Envelope || {_Digest,
-                              #dtx_submission{envelope = Envelope}}
-                                 <- Proposed],
-    Payload = dtx_wave_payload(Envelopes),
-    Controls = [Control || {_Digest,
-                            #dtx_submission{control = Control}}
+  [{_Digest, #dtx_submission{control = Control}} = Candidate | Rest],
+  Phase, S, SelectedGroups, SelectedRev) ->
+    GroupId = quod_dtx:group_id(Control),
+    case maps:is_key(GroupId, SelectedGroups) of
+        true ->
+            %% Every control advances one group by one phase. Alternative
+            %% certified-reference proof subsets may produce different
+            %% signed records for that same transition, but no reducer can
+            %% apply both against one parent. Keep the canonical retained
+            %% order and let the committed first transition retire the rest.
+            select_dtx_wave(
+              Rest, Phase, S, SelectedGroups, SelectedRev);
+        false ->
+            Proposed = lists:reverse([Candidate | SelectedRev]),
+            Envelopes = [Envelope || {_CandidateDigest,
+                                      #dtx_submission{envelope = Envelope}}
+                                         <- Proposed],
+            Payload = dtx_wave_payload(Envelopes),
+            Controls = [CandidateControl
+                        || {_CandidateDigest,
+                            #dtx_submission{control = CandidateControl}}
                                <- Proposed],
-    case encoded_block_payload_fits(Payload)
-             andalso dtx_wave_required_evidence_fits(Proposed, Payload, S)
-             andalso dtx_wave_compatible(Phase, Controls, S) of
-        true -> select_dtx_wave(Rest, Phase, S, [Candidate | SelectedRev]);
-        false -> select_dtx_wave(Rest, Phase, S, SelectedRev)
+            case encoded_block_payload_fits(Payload)
+                     andalso dtx_wave_required_evidence_fits(
+                               Proposed, Payload, S)
+                     andalso dtx_wave_compatible(Phase, Controls, S) of
+                true ->
+                    select_dtx_wave(
+                      Rest, Phase, S, SelectedGroups#{GroupId => true},
+                      [Candidate | SelectedRev]);
+                false ->
+                    select_dtx_wave(
+                      Rest, Phase, S, SelectedGroups, SelectedRev)
+            end
     end.
 
 dtx_wave_required_evidence_fits(

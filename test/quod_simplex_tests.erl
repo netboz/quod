@@ -501,13 +501,18 @@ dtx_local_and_relayed_controls_share_slot_leader_test() ->
                             quod_simplex:leader(Slot, Validators) =:= B]),
     RelaySlot = hd([Slot || Slot <- lists:seq(1, 32),
                             quod_simplex:leader(Slot, Validators) =/= B]),
-    S = st(#{self => B, validators => Validators}),
+    ExpectedPeer = quod_simplex:leader(RelaySlot, Validators),
+    InLink = spawn(fun() -> receive stop -> ok end end),
+    S = st(#{self => B, validators => Validators,
+             inbound_conns => #{ExpectedPeer => {InLink, make_ref()}},
+             peer_readiness =>
+                 voting_readiness([ExpectedPeer], InLink, RelaySlot - 1)}),
     ?assertEqual(local,
                  quod_simplex:test_dtx_slot_route(LocalSlot, S)),
-    ExpectedPeer = quod_simplex:leader(RelaySlot, Validators),
     ?assertEqual({relay, ExpectedPeer},
                  quod_simplex:test_dtx_slot_route(RelaySlot, S)),
-    ?assert(lists:member(ExpectedPeer, [A, C])).
+    ?assert(lists:member(ExpectedPeer, [A, C])),
+    InLink ! stop.
 
 %% A fully caught-up holder keeps serving historical recovery reads after its
 %% validator admission is retired, but it can no longer accept a signed DTX
@@ -1759,6 +1764,7 @@ dtx_reliable_relay_is_placed_once_per_link_test() ->
     Validators = lists:sort([Peer, Self]),
     Parent = self(),
     FirstLink = spawn(fun() -> receive_ordered_relay(Parent, first_link) end),
+    InboundLink = spawn(fun() -> receive stop -> ok end end),
     From = {self(), make_ref()},
     Dir = relay_store_dir("dtx_reliable_placement"),
     {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
@@ -1772,7 +1778,11 @@ dtx_reliable_relay_is_placed_once_per_link_test() ->
                   history_head => {0, <<0:256>>},
                   eng => quod_simplex:eng_new(?DOMAIN, Validators, 0),
                   store => memory, signing_journal => Journal,
-                  conns => #{Peer => {FirstLink, make_ref()}}}),
+                  conns => #{Peer => {FirstLink, make_ref()}},
+                  inbound_conns =>
+                      #{Peer => {InboundLink, make_ref()}},
+                  peer_readiness =>
+                      voting_readiness([Peer], InboundLink, 0)}),
         {keep_state, Retained, _Actions0} =
             quod_simplex:running(
               {call, From},
@@ -1815,6 +1825,102 @@ dtx_reliable_relay_is_placed_once_per_link_test() ->
               maps:get(rows,
                        quod_simplex:test_retained_dtx_state(Replaced)))
     after
+        InboundLink ! stop,
+        _ = catch quod_signing_journal:close(Journal),
+        _ = file:del_dir_r(Dir)
+    end.
+
+%% A live node-level QUIC link is not proof that the target ontology process
+%% exists.  Retained custody therefore stays unplaced until the elected leader
+%% announces readiness on its exact authenticated consensus generation.  That
+%% incoming message is the wake: the same keep_progress turn sends once, with
+%% no timer, poll, acknowledgement protocol, or duplicate relay owner.
+dtx_relay_waits_for_elected_ontology_readiness_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    #{pubkey := Self} = Signer = maps:get(signer, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Record = maps:get(prepare, Fixture),
+    {ok, RecordBlob} = quod_dtx:encode_record(Record),
+    Request = {submit, <<214:128>>, RecordBlob},
+    Peer = <<0:256>>,
+    ?assertNotEqual(Peer, Self),
+    Validators = lists:sort([Peer, Self]),
+    Parent = self(),
+    OutLink = spawn(fun() -> receive_ordered_relay(Parent, ready_link) end),
+    InLink = spawn(fun() -> receive stop -> ok end end),
+    From = {self(), make_ref()},
+    Dir = relay_store_dir("dtx_readiness_placement"),
+    {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+    try
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Self, id => Signer,
+                  validators => Validators,
+                  author_admissions => #{Self => Admission},
+                  sync => ready, prolog_ready => true,
+                  slot => 0, approved => 0,
+                  history_head => {0, <<0:256>>},
+                  eng => quod_simplex:eng_new(?DOMAIN, Validators, 0),
+                  store => memory, signing_journal => Journal,
+                  conns => #{Peer => {OutLink, make_ref()}},
+                  inbound_conns => #{Peer => {InLink, make_ref()}}}),
+        {keep_state, Retained, _} =
+            quod_simplex:running(
+              {call, From},
+              {dtx_endpoint_local, Request, [], 1000}, S0),
+        receive dtx_drive -> ok
+        after 0 -> error(missing_dtx_mailbox_wake)
+        end,
+        {keep_state, Parked, _} =
+            quod_simplex:running(info, dtx_drive, Retained),
+        [#{relay_placement := none}] =
+            maps:values(
+              maps:get(rows,
+                       quod_simplex:test_retained_dtx_state(Parked))),
+        receive
+            {ready_link, _Premature} -> error(relay_sent_before_readiness)
+        after 0 -> ok
+        end,
+
+        NotReady =
+            quod_simplex:test_state_set(
+              peer_readiness,
+              #{Peer => {InLink, 0, false, quod_time:mono_ms()}},
+              Parked),
+        {keep_state, StillParked, _} =
+            quod_simplex:test_keep_progress_transition(
+              Parked, NotReady),
+        [#{relay_placement := none}] =
+            maps:values(
+              maps:get(rows,
+                       quod_simplex:test_retained_dtx_state(
+                         StillParked))),
+        receive
+            {ready_link, _NotReadyFrame} ->
+                error(relay_sent_for_negative_readiness)
+        after 0 -> ok
+        end,
+
+        Ready =
+            quod_simplex:test_state_set(
+              peer_readiness,
+              voting_readiness([Peer], InLink, 0),
+              StillParked),
+        {keep_state, Placed, _} =
+            quod_simplex:test_keep_progress_transition(
+              StillParked, Ready),
+        ?assertEqual(
+           {relay, Peer},
+           quod_simplex:test_dtx_slot_route(1, Placed)),
+        receive {ready_link, _Frame} -> ok
+        after 1000 -> error(readiness_did_not_wake_relay)
+        end,
+        [#{relay_placement := {Peer, OutLink}}] =
+            maps:values(
+              maps:get(rows,
+                       quod_simplex:test_retained_dtx_state(Placed)))
+    after
+        InLink ! stop,
         _ = catch quod_signing_journal:close(Journal),
         _ = file:del_dir_r(Dir)
     end.

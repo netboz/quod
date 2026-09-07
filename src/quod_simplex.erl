@@ -8909,7 +8909,19 @@ dtx_wave_validation_sidecar(Wave) ->
 dtx_slot_route(Slot, S = #s{self = Self}) ->
     case leader(Slot, active_validators(S)) of
         Self -> local;
-        Peer when is_binary(Peer) -> {relay, Peer};
+        Peer when is_binary(Peer) ->
+            %% The node transport can outlive this ontology process on the
+            %% destination.  Place retained custody only after that exact
+            %% committee peer has announced, on its authenticated inbound
+            %% consensus generation, that it can receive the child slot.
+            %% The readiness frame is also the event that re-drives a parked
+            %% row through keep_progress/3; no relay retry path is needed.
+            case peer_ready_at(
+                   Peer, Slot - 1,
+                   S#s.inbound_conns, S#s.peer_readiness) of
+                true -> {relay, Peer};
+                false -> blocked
+            end;
         none -> blocked
     end.
 

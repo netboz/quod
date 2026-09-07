@@ -282,6 +282,38 @@ stages. Report both the total mean and the explained delta. If the suspected
 phase-index work is not the owner, stop and revise this plan before changing
 another subsystem.
 
+The low-height checkpoint's 2.950 ms mean unassigned worker interval is not
+automatically "instrumentation/scheduling". Decompose it through measured
+boundaries, or substantiate such a category from trace evidence, before using
+the height comparison to evaluate this gate. Carry the residual at **both**
+heights; a growing unassigned interval cannot disappear into the explained
+denominator or be assumed constant from one low-height sample.
+
+Read-only reconstruction of the retained trace localizes that residual:
+
+| Interval | Mean ms | Work present in the source, not yet individually timed |
+|---|---:|---|
+| `advance_snapshot` entry to direct-fetch start | 2.364354 | candidate page validation, canonical decode/re-encode and signature checks, sorting/route flattening |
+| checkpoint observer to second accounting start | 0.223632 | `cache_persisted_bytes/2` file stats plus wrapper/observer work |
+| tip-confirm observer to phase-suspend start | 0.245189 | result construction, file stats, `phase_session_stats/1` DETS stats |
+| ten other inter-stage transitions | 0.117324 | routing, dispatch and observer execution |
+
+The sum reproduces each request's residual, subject to timestamp/rounding
+precision. In particular, `advance_snapshot` calls `validate_page` →
+`quod_catchup:page_stats` → `quod_ledger:encode_entry`; for qualifying signed
+content, canonical decode and re-encode both reach transaction signature
+verification. This is not empty scheduling time, but the existing trace does
+not show the qualifying-candidate count or time inside those calls. Do not
+assign all 2.364 ms to crypto, nor infer the height slope from a one-entry cell.
+
+The smallest next measurement is correlated numeric entry/return timing for
+`validate_page/4`, an exact `fetch_page/9` entry, `cache_persisted_bytes/2`, and
+`phase_session_stats/1`, through the reviewed isolated trace session. Add
+scheduling/GC trace only if needed to distinguish elapsed from execution time.
+Existing starts reconstructed from observer timestamp minus recorded duration
+also include an unquantified clock-read-to-observer offset. No production
+change or H2 optimization follows from this local seam map.
+
 ## 6. Slice H1 -- observability and reproduced baseline
 
 - Add the closed metrics and trace described in section 5 at existing seams.
@@ -397,6 +429,17 @@ as a separate optimization. It must not be hidden by redefining this result.
 
 ## 9. Explicit non-goals and later work
 
+- **Client-outcome delivery, reproduce after the finality cut.** On unchanged
+  0.7.143 the fourth bounded two-writer request returned pending after 504 ms,
+  while all four groups were later verified durably complete on all source
+  and target validators. Client results were 3 clear + 1 pending; response
+  durations 506/417/522/504 ms, all-request mean 487.25 ms. The coordinator's
+  `target_execute` uncertainty counter rose 1→2. No fifth request or resubmission
+  followed. Mechanism remains untraced; neither a 500 ms deadline nor the paper
+  handover race is established as its cause. This is a separate tracked defect,
+  not a reason to divert H1 into a pre-cut result-path rewrite. Evidence:
+  `/tmp/quod-h1-precut-capture2-HOFRDN/HANDOFF.md` and `REPORT.md`, with group
+  `CFABE5DCB8A6552B17F7CAD212DB619D3E6ECBC178CE4817E78289C8A6D121C4`.
 - **Cold-start re-verification remains next.** This plan may measure session
   close/rebuild effects but does not add a checkpoint or skip certified replay.
 - **Ledger compaction remains separate.** A future reviewed plan owns a

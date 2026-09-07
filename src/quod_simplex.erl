@@ -106,6 +106,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -define(SHARE_DOMAIN_VERSION, 2).
 -define(SHARE_DOMAIN_TAG, <<"quod/simplex/domain">>).
 -define(SHARE_MESSAGE_TAG, <<"quod/simplex/share">>).
+-define(SKIPPED_SLOT_TAG, <<"quod/simplex/skipped-slot">>).
+-define(SKIPPED_SLOT_VERSION, 1).
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
 
@@ -9994,10 +9996,62 @@ finish_retained_dtx(Digest, Result, Reply,
 finish_detached_retained_dtx(
   Row = #dtx_submission{control = Control,
                         observation_started_at = StartedAt},
-  Result, Reply, S) ->
+  Result, Reply, S0) ->
+    %% A Begin is the only control whose uncommitted custody is also projected
+    %% as a durable pending group.  Any terminal retirement other than its
+    %% certified commit must remove both representations together; otherwise
+    %% restart resurrects work which this owner already proved cannot commit.
+    %% The signing-journal reconciliation below preserves the exposed sequence
+    %% floor while removing the exact pending body and reuses the existing
+    %% outcome-projection/resolution path.
+    S = retire_uncommitted_begin(Result, Control, S0),
     observe_simplex_owner_terminal(
       S, dtx_control, quod_dtx:control_kind(Control), Result, StartedAt),
     reply_waiters(retained_waiter_tags(Row), Reply, S).
+
+retire_uncommitted_begin(completed, _Control, S) ->
+    %% The commit path removes the pending row only after installing the
+    %% certified Begin projection, preserving apply-before-result ordering.
+    S;
+retire_uncommitted_begin(_Result, Control, S) ->
+    case quod_dtx:control_kind(Control) of
+        'begin' -> retire_uncommitted_begin_state(
+                     quod_dtx:group_id(Control), S);
+        _OtherPhase -> S
+    end.
+
+-ifdef(TEST).
+retire_uncommitted_begin_state(
+  GroupId, S = #s{signing_journal = memory, dtx_pending = Pending}) ->
+    S#s{dtx_pending = maps:remove(GroupId, Pending)};
+retire_uncommitted_begin_state(GroupId, S) ->
+    retire_durable_uncommitted_begin(GroupId, S).
+-else.
+retire_uncommitted_begin_state(GroupId, S) ->
+    retire_durable_uncommitted_begin(GroupId, S).
+-endif.
+
+retire_durable_uncommitted_begin(
+  GroupId,
+  S0 = #s{slot = Slot, signing_journal = Journal0, ns = Ns,
+          dtx_pending = Pending}) ->
+    Before = pending_begins_snapshot(Journal0),
+    S1 = S0#s{dtx_pending = maps:remove(GroupId, Pending)},
+    case maps:is_key(GroupId, Before) of
+        false ->
+            %% A surrounding journal reconciliation may already own this
+            %% retirement. Keep the in-memory projection in step without
+            %% emitting its public transition twice.
+            S1;
+        true ->
+            {ok, Journal1} = reconcile_signing_journal(
+                               Slot, state_projection(S1), Journal0),
+            After = pending_begins_snapshot(Journal1),
+            Transition = pending_begins_reconciliation(Before, After, S1),
+            ok = project_pending_begins(Ns, Journal1),
+            finish_pending_begins_reconciliation(
+              Transition, S1#s{signing_journal = Journal1})
+    end.
 
 abandon_retained_dtx(Reason,
                      S = #s{retained_dtx = Registry}) ->
@@ -14693,11 +14747,16 @@ history_advance_payload(
             error(invalid_committed_history)
     end.
 
-entry_history_hash(#entry{data = noop, block_bytes = none} = Entry) ->
-    %% A complaint skip has no block identity. Its canonical entry envelope is
-    %% the sole stable history-head value; never hash a decoded record view.
-    {ok, EntryBytes} = quod_ledger:encode_entry(Entry),
-    crypto:hash(sha256, EntryBytes);
+entry_history_hash(#entry{index = Slot, data = noop, block_bytes = none}) ->
+    %% A complaint skip's identity is the statement every validator signed,
+    %% not the incidental quorum subset a replica first retained.  The target
+    %% ontology identity accompanies every use of history_head, just as it
+    %% accompanies an ordinary block hash; within that chain the slot uniquely
+    %% identifies this certified no-op transition.
+    crypto:hash(
+      sha256,
+      <<?SKIPPED_SLOT_TAG/binary, 0, ?SKIPPED_SLOT_VERSION:8,
+        Slot:64/unsigned-big>>);
 entry_history_hash(#entry{} = Entry) ->
     case block_from_entry(Entry) of
         {ok, Block} -> block_hash(Block);

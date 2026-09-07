@@ -3571,6 +3571,77 @@ dtx_invalid_finalize_is_released_for_phase_replan_test() ->
     ?assertEqual(0, maps:get(submissions,
                             quod_simplex:test_dtx_endpoint_counts(Done))).
 
+%% A deterministically invalid Begin is terminal before it can enter history.
+%% Retiring only its volatile retained row used to leave the signing journal's
+%% pending row and public group projection behind, so restart resurrected the
+%% rejected work and the outcome remained pending forever.  Drive the real
+%% journal reconciliation and assert its ordered public notifications.
+dtx_invalid_begin_retires_durable_pending_projection_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Begin = maps:get('begin', Fixture),
+    Control = maps:get(begin_control, Fixture),
+    {Ns, Anchor} = maps:get(origin, Fixture),
+    {ok, GroupRef =
+           {group, Ns, Anchor, Coordinator, Admission, GroupId}} =
+        quod_dtx:begin_group_ref(Begin),
+    Meta = quod_dtx:control_metadata(Control),
+    Sequence = maps:get(sequence, Meta),
+    Lane = {Admission, Coordinator},
+    {ok, ControlBlob} = quod_dtx:encode_control(Control),
+    Dir = relay_store_dir("invalid_pending_begin_retirement"),
+    true = quod_reg:reg({quod_prolog, Ns}),
+    try
+        {ok, Journal0} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+        {ok, Journal1, _Envelope} =
+            quod_signing_journal:record_dtx(Journal0, Control),
+        Base = st(#{ns => Ns, genesis_hash => Anchor,
+                    self => Coordinator,
+                    validators => [Coordinator],
+                    author_admissions => #{Coordinator => Admission},
+                    sync => ready, prolog_ready => true, slot => 1,
+                    signing_journal => Journal1,
+                    dtx_pending => #{GroupId => Lane},
+                    dtx_lanes => #{Lane => Sequence}}),
+        Retained = quod_simplex:test_seed_dtx_submission(
+                     Control, [{dtx_endpoint, self()}], Base),
+        Done = quod_simplex:test_retire_invalid_dtx(
+                 {batch, [{dtx, ControlBlob}]}, [expired], Retained),
+        ?assertEqual(
+           #{},
+           quod_signing_journal:pending_begins(
+             quod_simplex:test_signing_journal(Done))),
+        ?assertEqual(
+           #{}, maps:get(dtx_pending,
+                         quod_simplex:test_state_projection(Done))),
+        ?assertEqual(
+           0, maps:get(submissions,
+                       quod_simplex:test_dtx_endpoint_counts(Done))),
+        receive
+            {'$gen_cast', {project_pending_begins, []}} -> ok
+        after 1000 ->
+            error(pending_begin_projection_not_retired)
+        end,
+        receive
+            {'$gen_cast', {dtx_group_resolved, GroupRef}} -> ok
+        after 1000 ->
+            error(retired_group_not_resolved)
+        end,
+        receive
+            {dtx_submit_result, {error, retry}} -> ok
+        after 1000 ->
+            error(invalid_begin_waiter_not_released)
+        end,
+        ok = quod_signing_journal:close(
+               quod_simplex:test_signing_journal(Done)),
+        {ok, Reopened} = quod_signing_journal:recover(Ns, ?DOMAIN, Dir),
+        ?assertEqual(#{}, quod_signing_journal:pending_begins(Reopened)),
+        ok = quod_signing_journal:close(Reopened)
+    after
+        true = gproc:unreg(quod_reg:name({quod_prolog, Ns})),
+        file:del_dir_r(Dir)
+    end.
+
 %% A stale response must not tear down a newer validation for the same slot.
 %% Conversely, an exact response that is unusable because the head/floor moved
 %% discards that obsolete request and candidate together. It is never parked
@@ -9269,6 +9340,43 @@ complaint_cert_test() ->
     Sh   = [quod_simplex:make_share(?DOMAIN, complaint, 2, none, Id) || {_, Id} <- take(3, Ids)],
     {ok, C} = quod_simplex:form_cert(?DOMAIN, complaint, 2, none, Sh, Vals),
     ?assert(quod_simplex:verify_cert(?DOMAIN, C, Vals)).
+
+%% A certificate is proof, not semantic identity: honest replicas may first
+%% retain different valid quorum subsets for the same complaint statement.
+%% Both entries must therefore advance to the same history head.
+complaint_quorum_subsets_have_one_history_head_test() ->
+    Members = committee(4),
+    Validators = pubs(Members),
+    [M1, M2, M3, M4] = Members,
+    Slot = 2,
+    Shares = [complaint_share(Slot, M) || M <- Members],
+    {ok, CertA} = quod_simplex:form_cert(
+                    ?DOMAIN, complaint, Slot, none,
+                    lists:sublist(Shares, 3), Validators),
+    {ok, CertB} = quod_simplex:form_cert(
+                    ?DOMAIN, complaint, Slot, none,
+                    [complaint_share(Slot, M1),
+                     complaint_share(Slot, M2),
+                     complaint_share(Slot, M4)], Validators),
+    ?assertNotEqual(CertA, CertB),
+    EntryA = quod_ledger:noop_entry(Slot, CertA),
+    EntryB = quod_ledger:noop_entry(Slot, CertB),
+    Projection0 =
+        (quod_simplex:history_projection(
+           Validators, <<91:256>>, #{}, #{}, 0))#{
+          history_head => {1, <<92:256>>}},
+    ProjectionA = quod_simplex:history_advance(
+                    <<"quod:complaint-head">>, EntryA, Projection0),
+    ProjectionB = quod_simplex:history_advance(
+                    <<"quod:complaint-head">>, EntryB, Projection0),
+    ?assertEqual(maps:get(history_head, ProjectionA),
+                 maps:get(history_head, ProjectionB)),
+    %% Keep every named member live in the fixture and pin both certificates
+    %% as genuinely valid proofs of the same statement.
+    ?assertMatch([{_, _} | _], CertA#cert.sigs),
+    ?assert(quod_simplex:verify_cert(?DOMAIN, CertA, Validators)),
+    ?assert(quod_simplex:verify_cert(?DOMAIN, CertB, Validators)),
+    ?assertEqual(4, length([M1, M2, M3, M4])).
 
 %%%===================================================================
 %%% f+1 complaint amplification threshold (Slice B: growth liveness)

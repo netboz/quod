@@ -2204,10 +2204,14 @@ Every item below records the group implementation as one hard break.
    recur.
 
    Compaction unconditionally re-emits every DTX sequence high-water plus the
-   semantic body and latest envelope for every pending Begin. Committed history
-   may retire that row only after a matching semantic Begin is durable,
-   regardless of which equivalent outer envelope won, or after its coordinator
-   admission is durably retired first. Every mutating append uses one O(1)
+   semantic body and latest envelope for every pending Begin. A pending row is
+   retired only after a matching semantic Begin is durable, regardless of which
+   equivalent outer envelope won; after its coordinator admission is durably
+   retired first; or when the ordinary candidate validator proves the exact
+   retained Begin deterministically inadmissible before commit. That last
+   retirement removes the journal row and its rebuildable pending projection in
+   the same Simplex transition, so restart cannot resurrect rejected work.
+   Every mutating append uses one O(1)
    `maybe_compact` check, so repeated state changes compact even when no ledger
    slot advances. The shared frame bound covers the maximum signed Begin
    submission plus the fixed journal wrapper, and is tested at boundary and

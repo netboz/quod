@@ -893,6 +893,10 @@ synced before its signature can be sent. A restart reloads those exact decisions
 or switch between commit and skip. One decision table covers both live pipeline slots: for an unlatched
 round, `f+1` visible peer complaints select skip; otherwise a notarized block selects commit, while only the
 head watchdog or an invalid-membership verdict may originate a complaint without amplified evidence.
+The history-head identity of a certified skip is the versioned slot statement
+shared by all of its valid complaint certificates, not the encoded certificate:
+honest replicas may first retain different valid quorum subsets for the same
+statement, and proof bytes are not semantic history identity.
 Complaint amplification remains active after notarization. A validator missing a support-certified block
 rotates one point-to-point request at a time through certificate signers and then other committee members.
 Normal proposals and recovered blocks use one shared timestamp/payload admission predicate after their

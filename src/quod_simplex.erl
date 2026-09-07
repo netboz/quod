@@ -6689,40 +6689,66 @@ validation_sidecar_bytes([]) -> 0;
 validation_sidecar_bytes(Hints) ->
     byte_size(term_to_binary(Hints, [deterministic])).
 
-retain_dtx_record(Record, Waiter, ValidationSidecar,
-                  S = #s{retained_dtx = Registry}) ->
+retain_dtx_record(Record, Waiter, ValidationSidecar, S) ->
     case validated_dtx_record(Record) of
         {ok, Kind, Digest} ->
-            case retention_disposition(Record, S#s.dtx_projection) of
-                {refused, conflict} when Kind =:= prepare ->
-                    invalid_dtx_submission_reply(
-                      prepare, Digest, [conflict],
-                      S#s.dtx_projection, S);
-                stale ->
-                    {error, stale_dtx_submission};
-                _Retained ->
-                    case maps:get(Digest, retained_rows(Registry), undefined) of
-                        Existing = #dtx_submission{} ->
-                            Updated = merge_submission_validation_sidecar(
-                                        Existing, ValidationSidecar),
-                            Registry0 = retained_replace(Updated, Registry),
-                            case retained_attach_waiter(
-                                   Digest, Waiter, Registry0) of
-                                {ok, Registry1} ->
-                                    {ok, schedule_dtx_drive(
-                                           S#s{retained_dtx = Registry1})};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end;
-                        undefined ->
-                            sign_and_retain_dtx(
-                              Kind, Record, Digest, Waiter,
-                              relevant_control_validation_sidecar(
-                                Record, ValidationSidecar), S)
-                    end
-            end;
+            retain_dtx_submission(
+              Kind, Record, Digest, Waiter, ValidationSidecar, sign, S);
         {error, _} ->
             {error, invalid_dtx_submission}
+    end.
+
+%% A consensus relay already carries the original author's authenticated,
+%% canonical control.  Keep those exact bytes in the shared retained owner;
+%% signing them again as the current leader would change their authorship and,
+%% for Begin, violate the coordinator binding the control is meant to prove.
+retain_relayed_dtx_control(Control, Envelope, ValidationSidecar, S)
+  when is_binary(Envelope) ->
+    Record = quod_dtx:control_body(Control),
+    case {validated_dtx_record(Record), quod_dtx:encode_control(Control)} of
+        {{ok, Kind, Digest}, {ok, Envelope}} ->
+            retain_dtx_submission(
+              Kind, Record, Digest, none, ValidationSidecar,
+              {signed, Control, Envelope}, S);
+        _ ->
+            {error, invalid_dtx_submission}
+    end.
+
+retain_dtx_submission(Kind, Record, Digest, Waiter, ValidationSidecar,
+                      NewSubmission,
+                      S = #s{retained_dtx = Registry}) ->
+    case retention_disposition(Record, S#s.dtx_projection) of
+        {refused, conflict} when Kind =:= prepare ->
+            invalid_dtx_submission_reply(
+              prepare, Digest, [conflict], S#s.dtx_projection, S);
+        stale ->
+            {error, stale_dtx_submission};
+        _Retained ->
+            case maps:get(Digest, retained_rows(Registry), undefined) of
+                Existing = #dtx_submission{} ->
+                    Updated = merge_submission_validation_sidecar(
+                                Existing, ValidationSidecar),
+                    Registry0 = retained_replace(Updated, Registry),
+                    case retained_attach_waiter(Digest, Waiter, Registry0) of
+                        {ok, Registry1} ->
+                            {ok, schedule_dtx_drive(
+                                   S#s{retained_dtx = Registry1})};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end;
+                undefined ->
+                    Hints = relevant_control_validation_sidecar(
+                              Record, ValidationSidecar),
+                    case NewSubmission of
+                        sign ->
+                            sign_and_retain_dtx(
+                              Kind, Record, Digest, Waiter, Hints, S);
+                        {signed, Control, Envelope} ->
+                            install_dtx_submission(
+                              Record, Control, Envelope, Digest,
+                              Waiter, Hints, S)
+                    end
+            end
     end.
 
 schedule_dtx_drive(S = #s{dtx_drive_scheduled = true}) ->
@@ -6756,8 +6782,7 @@ validated_dtx_record(Record) ->
 sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
                     S = #s{id = Signer, self = Self,
                            signing_journal = Journal,
-                           dtx_lanes = CommittedFloors,
-                           retained_dtx = Registry}) ->
+                           dtx_lanes = CommittedFloors}) ->
     case current_dtx_binding(S) of
         {ok, {_Ns, _Anchor, Self, Admission}} ->
             Lane = {Admission, Self},
@@ -6777,28 +6802,10 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
                                   Journal, Control),
                             ok = maybe_project_pending_begins(
                                    Kind, S#s.ns, Journal1),
-                            InsertedAt = quod_time:mono_ms(),
-                            Submission =
-                                #dtx_submission{
-                                  record = Record, control = Control,
-                                  envelope = Envelope,
-                                  group_id = quod_dtx:group_id(Record),
-                                  digest = Digest,
-                                  inserted_at = InsertedAt,
-                                  observation_started_at = InsertedAt,
-                                  validation_sidecar = ValidationSidecar,
-                                  placement = retained_placement(
-                                                retention_disposition(
-                                                  Record,
-                                                  S#s.dtx_projection)),
-                                  bytes = byte_size(Envelope) +
-                                      validation_sidecar_bytes(ValidationSidecar),
-                                  waiters = dtx_waiter_set(Waiter)},
-                            {ok, schedule_dtx_drive(
-                                   S#s{signing_journal = Journal1,
-                                       retained_dtx = retained_put_new(
-                                                        Submission,
-                                                        Registry)})};
+                            install_dtx_submission(
+                              Record, Control, Envelope, Digest, Waiter,
+                              ValidationSidecar,
+                              S#s{signing_journal = Journal1});
                         {error, Reason} ->
                             {error, Reason}
                     end;
@@ -6808,6 +6815,25 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
         {error, Reason} ->
             {error, Reason}
     end.
+
+install_dtx_submission(Record, Control, Envelope, Digest, Waiter,
+                       ValidationSidecar,
+                       S = #s{retained_dtx = Registry}) ->
+    InsertedAt = quod_time:mono_ms(),
+    Submission =
+        #dtx_submission{
+          record = Record, control = Control, envelope = Envelope,
+          group_id = quod_dtx:group_id(Record), digest = Digest,
+          inserted_at = InsertedAt,
+          observation_started_at = InsertedAt,
+          validation_sidecar = ValidationSidecar,
+          placement = retained_placement(
+                        retention_disposition(Record, S#s.dtx_projection)),
+          bytes = byte_size(Envelope) +
+              validation_sidecar_bytes(ValidationSidecar),
+          waiters = dtx_waiter_set(Waiter)},
+    {ok, schedule_dtx_drive(
+           S#s{retained_dtx = retained_put_new(Submission, Registry)})}.
 
 -ifdef(TEST).
 pending_begins_snapshot(memory) -> #{};
@@ -8907,22 +8933,20 @@ handle_dtx_submit(_Peer, Envelopes, ValidationSidecar, S) ->
         false -> S;
         true ->
             {controls, Classified} = quod_ledger:classify(Payload),
-            %% A committee relay carries reachability, not a second custody
-            %% form. The authenticated signed controls are checked above;
-            %% their semantic records now enter the exact same local signing
-            %% and retained owner as endpoint submissions. A busy leader
-            %% therefore keeps work for the next legal slot instead of
-            %% silently dropping it.
+            %% The source remains the durable custody owner.  The current
+            %% leader retains each already-authenticated signed control only
+            %% as the transient input to the shared proposal owner; it must
+            %% not replace the source author by signing the record again.
             lists:foldl(
-              fun({_Kind, Control}, Acc) ->
-                      Record = quod_dtx:control_body(Control),
+              fun({{_Kind, Control}, Envelope}, Acc) ->
                       Hints = relevant_control_validation_sidecar(
                                 Control, ValidationSidecar),
-                      case retain_dtx_record(Record, none, Hints, Acc) of
+                      case retain_relayed_dtx_control(
+                             Control, Envelope, Hints, Acc) of
                           {ok, Acc1} -> Acc1;
                           {error, _CurrentStateRefusal} -> Acc
                       end
-              end, S, Classified)
+              end, S, lists:zip(Classified, Envelopes))
     end.
 
 dtx_controls_validation_sidecar(Controls, ValidationSidecar) ->
@@ -9918,8 +9942,15 @@ refresh_dtx_submission(
     case {Lane =:= CurrentLane,
           Sequence =< maps:get(Lane, CommittedFloors, 0)} of
         {false, _} ->
-            retire_dtx_submission(
-              Digest, not_in_charge, S);
+            %% A relayed control keeps its original admitted author.  It is
+            %% live only while that exact author/admission/sequence remains
+            %% acceptable in the current view; locally authored rows whose
+            %% admission changed fail the same check and retire.
+            case dtx_control_acceptable(
+                   Control, S#s.author_admissions, CommittedFloors, S) of
+                true -> S;
+                false -> retire_dtx_submission(Digest, not_in_charge, S)
+            end;
         {true, false} ->
             S;
         {true, true} ->

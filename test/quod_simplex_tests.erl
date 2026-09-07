@@ -1861,6 +1861,54 @@ dtx_relay_received_while_leader_busy_is_retained_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+%% A Begin is authored by its manifest coordinator, not necessarily by the
+%% validator leading the next source-ontology slot.  The leader must propose
+%% the exact authenticated control it received: re-signing the semantic record
+%% as the leader is invalid and used to discard every such relay silently.
+dtx_origin_begin_relay_keeps_its_original_author_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    {Ns, Anchor} = maps:get(origin, Fixture),
+    #{pubkey := Source} = maps:get(node_identity, Fixture),
+    SourceAdmission = maps:get(admission, Fixture),
+    Control = maps:get(begin_control, Fixture),
+    {ok, Envelope} = quod_dtx:encode_control(Control),
+    {Leader, LeaderSeed} = quod_identity:generate(),
+    LeaderIdentity =
+        #{pubkey => Leader,
+          key => quod_identity:key_term({Leader, LeaderSeed})},
+    LeaderAdmission = <<206:256>>,
+    Busy = quod_simplex:test_state_set(
+             collecting, {1, []},
+             st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Leader, id => LeaderIdentity,
+                  validators => [Source, Leader],
+                  author_admissions =>
+                      #{Source => SourceAdmission,
+                        Leader => LeaderAdmission},
+                  sync => ready, prolog_ready => true})),
+    Retained = quod_simplex:dispatch(
+                 Source, {dtx_submit, [Envelope], []}, Busy),
+    #{retained := 1, ready := 1, rows := Rows} =
+        quod_simplex:test_retained_dtx_state(Retained),
+    [#{envelope := Envelope}] = maps:values(Rows),
+    %% Reconciliation keeps a still-current foreign-authored control rather
+    %% than either re-signing or retiring it.
+    Refreshed = quod_simplex:test_refresh_retained_dtx_signatures(Retained),
+    #{retained := 1, rows := RefreshedRows} =
+        quod_simplex:test_retained_dtx_state(Refreshed),
+    [#{envelope := Envelope}] = maps:values(RefreshedRows),
+    %% Removing the original author's admission retires that transient row;
+    %% exact-byte retention is never a way around the current committee view.
+    Revoked = quod_simplex:test_set_author_admissions(
+                #{Leader => LeaderAdmission}, Refreshed),
+    ?assertMatch(
+       #{retained := 0},
+       quod_simplex:test_retained_dtx_state(
+         quod_simplex:test_refresh_retained_dtx_signatures(Revoked))),
+    receive dtx_drive -> ok
+    after 0 -> error(missing_origin_begin_relay_wake)
+    end.
+
 dtx_semantic_commit_retires_an_equivalent_retained_envelope_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
     Begin = maps:get('begin', Fixture),

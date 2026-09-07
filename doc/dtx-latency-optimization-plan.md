@@ -2096,12 +2096,14 @@ recovery functions as every other retained control.
 Admission schedules one self-message rather than driving the first row inside
 its caller's state-machine turn. Every already-admitted control ahead of that
 message can therefore enter the same legal wave without a batching timer. A
-remote leader verifies and re-signs the semantic controls into this same
-registry even while another proposal is active; it no longer drops the relay.
-The sender's retained row marks the exact ordered-link pid after placement, so
-ordinary mailbox traffic cannot duplicate the frame. Link replacement makes
-the marker stale naturally, and an improved validation sidecar explicitly
-clears it. The retained row remains the only reconstructable owner throughout.
+remote leader verifies and retains the exact already-signed controls in this
+same registry even while another proposal is active; it neither replaces the
+original author nor drops the relay. The sender's durable retained row marks
+the exact ordered-link pid after placement, so ordinary mailbox traffic cannot
+duplicate the frame. Link replacement makes the marker stale naturally, and
+an improved validation sidecar explicitly clears it. The sender remains the
+only reconstructable custody owner; the leader's row is transient proposal
+input and disappears with that process.
 
 All consumers use the multi-group projection directly: `valid_projection/1`,
 `origin_recoveries/1`, `proposal_readiness/2`, the transition/batch reducer,

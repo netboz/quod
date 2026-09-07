@@ -45,6 +45,26 @@ renders_without_non_ascii_help_test() ->
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 
+stopped_ontology_consensus_gauges_are_removed_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    ok = quod_metrics:declare(<<"kp_testnode">>),
+    Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
+    Live = <<"metrics:live:", Suffix/binary>>,
+    Stopped = <<"metrics:stopped:", Suffix/binary>>,
+    ok = prometheus_gauge:set(quod_consensus_syncing, [Live], 0),
+    ok = prometheus_gauge:set(quod_consensus_slot, [Live], 7),
+    ok = prometheus_gauge:set(quod_consensus_syncing, [Stopped], 1),
+    ok = prometheus_gauge:set(quod_consensus_slot, [Stopped], 9),
+
+    ok = quod_metrics:test_remove_stale_consensus_metrics([Live]),
+
+    ?assertEqual(0, prometheus_gauge:value(quod_consensus_syncing, [Live])),
+    ?assertEqual(7, prometheus_gauge:value(quod_consensus_slot, [Live])),
+    ?assertEqual(undefined,
+                 prometheus_gauge:value(quod_consensus_syncing, [Stopped])),
+    ?assertEqual(undefined,
+                 prometheus_gauge:value(quod_consensus_slot, [Stopped])).
+
 client_outcome_unknown_uses_only_fixed_producer_labels_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     ok = quod_metrics:count_client_outcome_unknown(target_execute),

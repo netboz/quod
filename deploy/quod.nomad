@@ -405,7 +405,7 @@ EOT
           name     = "consensus-ready"
           type     = "script"
           command  = "/bin/sh"
-          args     = ["-ec", "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { seen=1; if ($2 != 0) bad=1 } END { exit !(seen && !bad) }'"]
+          args     = ["-ec", "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { if ($0 ~ /namespace=\\\"quod:root\\\"/) root=1; if ($2 != 0) bad=1 } END { exit !(root && !bad) }'"]
           interval = "5s"
           timeout  = "5s"
         }
@@ -632,7 +632,7 @@ EOT
           name     = "consensus-ready"
           type     = "script"
           command  = "/bin/sh"
-          args     = ["-ec", "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { seen=1; if ($2 != 0) bad=1 } END { exit !(seen && !bad) }'"]
+          args     = ["-ec", "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { if ($0 ~ /namespace=\\\"quod:root\\\"/) root=1; if ($2 != 0) bad=1 } END { exit !(root && !bad) }'"]
           interval = "5s"
           timeout  = "5s"
         }

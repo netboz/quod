@@ -113,7 +113,8 @@ Two collection paths:
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
--export([consensus_stat_keys/0, declare/1, test_observe_commit/2]).
+-export([consensus_stat_keys/0, declare/1, test_observe_commit/2,
+         test_remove_stale_consensus_metrics/1]).
 -endif.
 
 -include("quod_ledger.hrl").
@@ -169,9 +170,11 @@ handle_call(_Req, _From, State) -> {reply, ok, State}.
 handle_cast(_Msg, State)        -> {noreply, State}.
 
 handle_info(refresh, State) ->
+    SimplexNamespaces = quod_simplex:namespaces(),
+    _ = remove_stale_consensus_metrics(SimplexNamespaces),
     _ = [refresh_ns(Ns)        || Ns <- quod_brahms:namespaces()],
-    _ = [refresh_log_ns(Ns)    || Ns <- quod_simplex:namespaces()],
-    _ = [refresh_catchup_ns(Ns) || Ns <- quod_simplex:namespaces()],
+    _ = [refresh_log_ns(Ns)    || Ns <- SimplexNamespaces],
+    _ = [refresh_catchup_ns(Ns) || Ns <- SimplexNamespaces],
     _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
     _ = refresh_foreign_log(),                                      %% one shared owner per node
     _ = refresh_directory(),                                        %% one fact-derived route projection per node
@@ -179,7 +182,7 @@ handle_info(refresh, State) ->
     _ = refresh_scope_router(),
     _ = refresh_effect_custody(),                                   %% one shared owner per node
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
-    _ = [refresh_feed_ns(Ns)   || Ns <- quod_simplex:namespaces()],   %% feed runs per-ns alongside consensus
+    _ = [refresh_feed_ns(Ns)   || Ns <- SimplexNamespaces],   %% feed runs per-ns alongside consensus
     _ = refresh_transport(),                                          %% per-peer QUIC srtt/cwnd/in-flight
     State1 = subscribe_commits(State),
     erlang:send_after(?REFRESH_MS, self(), refresh),
@@ -880,6 +883,81 @@ refresh_log_ns(Ns) ->
             ok;
         _ -> ok
     end.
+
+%% Consensus gauges describe live per-ontology processes, not retained history.
+%% Prometheus keeps a label row after its producer disappears, so reconcile those
+%% rows against the simplex registry before each refresh.  Reading the registry
+%% instead of remembering a previous process-local set also repairs stale rows
+%% after the metrics process itself restarts.
+remove_stale_consensus_metrics(Namespaces) ->
+    Live = maps:from_keys([label(Ns) || Ns <- Namespaces], true),
+    Rows = prometheus_gauge:values(default, quod_consensus_syncing),
+    lists:foreach(
+      fun({[{_NamespaceLabel, NsLabel}], _Value}) ->
+              case maps:is_key(NsLabel, Live) of
+                  true -> ok;
+                  false -> remove_consensus_metrics(NsLabel)
+              end
+      end, Rows),
+    ok.
+
+remove_consensus_metrics(NsLabel) ->
+    _ = [prometheus_gauge:remove(Name, [NsLabel])
+         || Name <- consensus_gauge_names()],
+    ok.
+
+consensus_gauge_names() ->
+    [quod_consensus_slot,
+     quod_consensus_committed,
+     quod_consensus_approved,
+     quod_consensus_pipeline_gap,
+     quod_consensus_last_applied,
+     quod_consensus_committee_size,
+     quod_consensus_appends,
+     quod_consensus_proposals,
+     quod_consensus_batched_txs,
+     quod_consensus_batch_window_ms,
+     quod_consensus_commits,
+     quod_consensus_submitted,
+     quod_consensus_skips,
+     quod_consensus_pending,
+     quod_consensus_append_busy,
+     quod_consensus_ingress_queued,
+     quod_consensus_ingress_overflow,
+     quod_consensus_ingress_expired,
+     quod_consensus_ingress_forwarded,
+     quod_consensus_custody_depth,
+     quod_consensus_custody_ready,
+     quod_consensus_custody_bytes,
+     quod_dtx_admission_waiting,
+     quod_dtx_admission_dormant,
+     quod_consensus_ingress_retargets,
+     quod_consensus_relay_accepted,
+     quod_consensus_relay_duplicates,
+     quod_consensus_append_redirect,
+     quod_consensus_append_bad,
+     quod_consensus_append_stale,
+     quod_consensus_membership_rejects,
+     quod_consensus_redrives,
+     quod_consensus_progress_slot,
+     quod_consensus_progress_phase,
+     quod_consensus_progress_quorum_ready,
+     quod_consensus_progress_timeouts,
+     quod_consensus_quorum_pauses,
+     quod_consensus_head_support_votes,
+     quod_consensus_head_commit_votes,
+     quod_consensus_head_complaint_votes,
+     quod_consensus_head_complaint_signed,
+     quod_consensus_missing_certified_blocks,
+     quod_consensus_is_validator,
+     quod_consensus_syncing,
+     quod_consensus_weak_cert_waits,
+     quod_consensus_ahead_gap].
+
+-ifdef(TEST).
+test_remove_stale_consensus_metrics(Namespaces) ->
+    remove_stale_consensus_metrics(Namespaces).
+-endif.
 
 %% Ask every live connection process for its QUIC transport stats and surface them
 %% per peer. The conn processes register on the `{connections, local}` property; a

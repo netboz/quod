@@ -3571,6 +3571,60 @@ dtx_invalid_finalize_is_released_for_phase_replan_test() ->
     ?assertEqual(0, maps:get(submissions,
                             quod_simplex:test_dtx_endpoint_counts(Done))).
 
+%% A retained control can be selected while ready and lose that status before
+%% its asynchronously verified candidate is reduced.  Reference verification
+%% still succeeds, but the committed-state preview is then deterministically
+%% stale.  It must retire the exact immutable control; merely voting against
+%% the block leaves it ready and creates an endless propose/reject/skip loop.
+dtx_semantic_preview_rejection_retires_exact_retained_control_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    Origin = {Ns, Anchor} = maps:get(origin, Fixture),
+    Begin = maps:get('begin', Fixture),
+    BeginControl = maps:get(begin_control, Fixture),
+    BeginRef = maps:get(begin_ref, Fixture),
+    GroupId = quod_dtx:group_id(Begin),
+    Projection0 = quod_dtx:initial_projection(Origin, 0),
+    {ok, History1, Projection1, _Effects} =
+        quod_dtx:reduce(
+          BeginControl, BeginRef,
+          quod_dtx:initial_group_history(), Projection0),
+    {ok, Envelope} = quod_dtx:encode_control(BeginControl),
+    Payload = {batch, [{dtx, Envelope}]},
+    Slot = 2,
+    Candidate = block(Slot, Slot - 1, Payload, 0),
+    BlockHash = quod_simplex:block_hash(Candidate),
+    ParentToken = {Slot - 1, <<217:256>>},
+    Owner = spawn(fun validation_owner/0),
+    try
+        Ready = quod_simplex:test_seed_dtx_submission(
+                  BeginControl, [{dtx_endpoint, self()}],
+                  st(#{ns => Ns, genesis_hash => Anchor,
+                       slot => Slot - 1, approved => Slot - 1,
+                       history_head => ParentToken,
+                       dtx_projection => Projection0,
+                       eng => quod_simplex:eng_new(?DOMAIN, [], Slot - 1)})),
+        %% Model the real race without invoking another progress tail: the
+        %% candidate was already selected when the same phase became durable.
+        Stale = quod_simplex:test_state_set(
+                  dtx_projection, Projection1, Ready),
+        {_Monitor, Validating} = quod_simplex:test_latch_dtx_validation(
+                                   Slot, BlockHash, ParentToken, Owner,
+                                   Candidate, Stale),
+        Done = quod_simplex:test_on_dtx_verdict(
+                 Slot, BlockHash, ParentToken, Owner, Slot - 1,
+                 {valid, #{GroupId => History1}}, Validating),
+        ?assertEqual(
+           0, maps:get(submissions,
+                       quod_simplex:test_dtx_endpoint_counts(Done))),
+        receive
+            {dtx_submit_result, {error, retry}} -> ok
+        after 1000 ->
+            error(semantic_rejection_did_not_release_waiter)
+        end
+    after
+        Owner ! stop
+    end.
+
 %% A deterministically invalid Begin is terminal before it can enter history.
 %% Retiring only its volatile retained row used to leave the signing journal's
 %% pending row and public group projection behind, so restart resurrected the

@@ -11121,7 +11121,8 @@ apply_dtx_verdict({valid, Histories}, Payload, Block, Sl, BH, ParentToken,
                                   ParentProjection}}, S),
                     support_validated_dtx(Block, BH, S1);
                 {error, Reason} ->
-                    reject_dtx_candidate(Sl, BH, Reason, S)
+                    reject_invalid_dtx_candidate(
+                      Payload, Sl, BH, Reason, S)
             end;
         _ ->
             reject_dtx_candidate(Sl, BH, malformed_control, S)
@@ -11133,14 +11134,25 @@ apply_dtx_verdict({invalid, Reasons}, Payload, _Block, Sl, BH,
     %% retires the exact semantic record for every phase. Prepare alone has a
     %% public logical refusal; every other phase is released as retryable so
     %% recovery re-reads the now-current certified phase chain and replans.
-    S = retire_invalid_dtx_submission(Payload, Reasons, S0),
-    reject_dtx_candidate(Sl, BH, Reasons, S);
+    reject_invalid_dtx_candidate(Payload, Sl, BH, Reasons, S0);
 apply_dtx_verdict(abstain, _Payload, _Block, Sl, _BH, _ParentToken,
                   S = #s{ns = Ns}) ->
     quod_metrics:count_dtx_validation(Ns, abstain),
     clear_dtx_validation(Sl, S);
 apply_dtx_verdict(_Malformed, _Payload, _Block, Sl, BH, _ParentToken, S) ->
     reject_dtx_candidate(Sl, BH, malformed_verdict, S).
+
+%% Reference verification and the pure committed-state preview are the two
+%% halves of one candidate verdict.  Once either half deterministically
+%% rejects an exact locally retained control, leaving it proposal-ready would
+%% make consensus select and reject the same immutable bytes forever.
+reject_invalid_dtx_candidate(Payload, Sl, BH, Reason, S0) ->
+    Reasons = invalid_dtx_submission_reasons(Reason),
+    S = retire_invalid_dtx_submission(Payload, Reasons, S0),
+    reject_dtx_candidate(Sl, BH, Reason, S).
+
+invalid_dtx_submission_reasons([_ | _] = Reasons) -> Reasons;
+invalid_dtx_submission_reasons(Reason) -> [Reason].
 
 reject_dtx_candidate(Sl, BH, Reason, S) ->
     Round = round_state(Sl, S),

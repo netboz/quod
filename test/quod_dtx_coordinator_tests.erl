@@ -627,6 +627,41 @@ only_submit_death_is_uncertain_and_only_timeout_is_retryable_test() ->
 blocked_worker() ->
     receive stop -> ok end.
 
+source_progress_uses_owner_commit_edge_not_foreign_history_test() ->
+    Origin = {<<"quod:source-progress">>, digest(221)},
+    Remote = {<<"quod:remote-progress">>, digest(222)},
+    SameNameWrongAnchor = {element(1, Origin), digest(223)},
+    ?assertEqual(
+       owner,
+       quod_dtx_coordinator:test_progress_source(Origin, Origin)),
+    ?assertEqual(
+       foreign,
+       quod_dtx_coordinator:test_progress_source(Remote, Origin)),
+    ?assertEqual(
+       foreign,
+       quod_dtx_coordinator:test_progress_source(
+         SameNameWrongAnchor, Origin)).
+
+source_progress_accepts_only_its_existing_commit_stream_test() ->
+    Identity = {<<"quod:source-progress">>, digest(224)},
+    ?assert(
+       quod_dtx_coordinator:test_local_progress_event(
+         {local_dtx_progress, Identity, 7}, Identity)),
+    ?assertNot(
+       quod_dtx_coordinator:test_local_progress_event(
+         {local_dtx_progress,
+          {<<"quod:other">>, element(2, Identity)}, 7}, Identity)),
+    ?assertNot(
+       quod_dtx_coordinator:test_local_progress_event(
+         {local_dtx_progress,
+          {element(1, Identity), digest(225)}, 7}, Identity)),
+    ?assertNot(
+       quod_dtx_coordinator:test_local_progress_event(
+         {local_dtx_progress, Identity, -1}, Identity)),
+    ?assertNot(
+       quod_dtx_coordinator:test_local_progress_event(
+         malformed, Identity)).
+
 invalid_begin_allocates_no_worker_test() ->
     ?assertEqual(
        {error, invalid_begin},

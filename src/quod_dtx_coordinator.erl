@@ -40,7 +40,8 @@ does not cancel or resubmit the uncertain operation.
          test_submit_endpoint_requests/4,
          test_endpoint_request_candidates/5,
          test_spawn_owned_worker/2, test_close_wave/1,
-         test_worker_down_disposition/2]).
+         test_worker_down_disposition/2,
+         test_progress_source/2, test_local_progress_event/2]).
 -endif.
 
 -define(DEFAULT_REQUEST_TIMEOUT_MS, 5000).
@@ -724,6 +725,13 @@ handle_loop_message(
             end;
         _ ->
             loop(S)
+    end;
+handle_loop_message(
+  {local_dtx_progress, _, _} = Message,
+  S = #state{origin = Origin}) ->
+    case local_progress_event(Message, Origin) of
+        true -> loop(request_progress_drive(S));
+        false -> loop(S)
     end;
 handle_loop_message(
   {directory_route_available, Identity},
@@ -1733,10 +1741,30 @@ accepted_phase_result(_Target, _GroupId, _Kind, _Ref, _Source,
                       {fatal, _Reason, _S1} = Fatal) ->
     Fatal.
 
-wait_for_progress(Target, S0) ->
+wait_for_progress(Target, S0 = #state{origin = Origin}) ->
+    case progress_source(Target, Origin) of
+        owner ->
+            %% The owning Simplex supplies source progress directly. Following
+            %% our own ledger as foreign history would only replay certified
+            %% state the owner already has.
+            S0;
+        foreign ->
+            wait_for_foreign_progress(Target, S0)
+    end.
+
+wait_for_foreign_progress(Target, S0) ->
     S = ensure_foreign_log_monitor(
           ensure_route_subscription(Target, S0)),
     attach_follow(Target, S).
+
+progress_source(Target, Target) -> owner;
+progress_source(_Target, _Origin) -> foreign.
+
+local_progress_event({local_dtx_progress, Identity, Slot}, Identity)
+  when is_integer(Slot), Slot >= 0 ->
+    true;
+local_progress_event(_Message, _OwnerNs) ->
+    false.
 
 ensure_foreign_log_monitor(
   S = #state{foreign_log_monitor = Monitor}) when is_reference(Monitor) ->
@@ -2419,6 +2447,10 @@ test_close_wave(Pids) when is_list(Pids) ->
 
 test_worker_down_disposition(Stage, Reason) ->
     worker_down_disposition(Stage, Reason).
+test_progress_source(Target, Origin) ->
+    progress_source(Target, Origin).
+test_local_progress_event(Message, OwnerNs) ->
+    local_progress_event(Message, OwnerNs).
 -endif.
 
 collect_submit_endpoint_results(

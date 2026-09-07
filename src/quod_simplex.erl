@@ -275,6 +275,9 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_drop_dtx_coordinator/4,
          test_dtx_coordinator_state/1,
          test_stop_dtx_coordinator/1,
+         test_seed_running_dtx_coordinator/3,
+         test_activate_dtx_coordinator/2,
+         test_notify_dtx_coordinator_progress/2,
          test_dtx_endpoint_counts/1, test_owner_stats/1,
          test_operation_target_result/2,
          test_operation_wait_before_projection/2,
@@ -1842,6 +1845,15 @@ test_stop_dtx_coordinator(S = #s{dtx_coordinators = Coordinators}) ->
       fun(_GroupId, Owner) -> stop_dtx_coordinator_process(Owner) end,
       Coordinators),
     S#s{dtx_coordinators = #{}}.
+test_seed_running_dtx_coordinator(GroupId, Pid, S)
+  when is_binary(GroupId), is_pid(Pid) ->
+    put_dtx_coordinator(
+      #dtx_coordinator_owner{status = running, group_id = GroupId,
+                             pid = Pid, monitor = make_ref()}, S).
+test_activate_dtx_coordinator(Pid, S) when is_pid(Pid) ->
+    activate_dtx_coordinator(Pid, S).
+test_notify_dtx_coordinator_progress(S0, S1) ->
+    notify_dtx_coordinator_progress(S0, S1).
 test_retire_invalid_dtx(Payload, Reasons, S) ->
     retire_invalid_dtx_submission(Payload, Reasons, S).
 test_dtx_endpoint_counts(
@@ -4783,6 +4795,44 @@ stop_operation_recovery_process(
 reconcile_dtx_coordinator(S) ->
     reconcile_dtx_coordinators(dtx_coordinator_desired(S), S).
 
+%% A source coordinator is a monitored child of this exact ontology owner.
+%% When the owner's committed view or endpoint readiness advances, wake that
+%% child directly through the pid already held in the ownership record. This
+%% is the local counterpart of a remote foreign-follow edge: it carries no
+%% evidence, and the coordinator rechecks the authoritative local snapshot
+%% before making progress.
+notify_dtx_coordinator_progress(
+  S0, S1 = #s{dtx_coordinators = Coordinators}) ->
+    case map_size(Coordinators) > 0 andalso
+         local_dtx_progress_changed(S0, S1) of
+        true ->
+            Identity = target_identity(S1),
+            Slot = S1#s.slot,
+            maps:foreach(
+              fun(_GroupId,
+                  #dtx_coordinator_owner{status = running, pid = Pid})
+                    when is_pid(Pid) ->
+                      send_dtx_coordinator_progress(Pid, Identity, Slot);
+                 (_GroupId, _RecoveringOrMalformed) ->
+                      ok
+              end, Coordinators),
+            ok;
+        false ->
+            ok
+    end.
+
+activate_dtx_coordinator(Pid, S) when is_pid(Pid) ->
+    send_dtx_coordinator_progress(Pid, target_identity(S), S#s.slot).
+
+send_dtx_coordinator_progress(Pid, Identity, Slot) ->
+    Pid ! {local_dtx_progress, Identity, Slot},
+    ok.
+
+local_dtx_progress_changed(S0, S1) ->
+    S1#s.slot > S0#s.slot orelse
+        endpoint_read_ready(S0) =/= endpoint_read_ready(S1) orelse
+        endpoint_write_ready(S0) =/= endpoint_write_ready(S1).
+
 dtx_coordinator_desired(S) ->
     case current_dtx_binding(S) of
         {ok, Binding} ->
@@ -4906,11 +4956,17 @@ start_dtx_coordinator_worker(
     case quod_dtx_coordinator:start_monitor(
            self(), Ns, Begin, BeginEvidence, #{}) of
         {ok, Pid, Monitor} ->
-            put_dtx_coordinator(
-              #dtx_coordinator_owner{
-                status = running, group_id = GroupId,
-                begin_ref = BeginRef, group_ref = GroupRef,
-                pid = Pid, monitor = Monitor}, S);
+            S1 = put_dtx_coordinator(
+                   #dtx_coordinator_owner{
+                     status = running, group_id = GroupId,
+                     begin_ref = BeginRef, group_ref = GroupRef,
+                     pid = Pid, monitor = Monitor}, S),
+            %% Establish the owner-to-child progress stream after recording
+            %% its exact pid. The child's initial drive may already have
+            %% observed a temporarily unavailable local view; this edge makes
+            %% that race self-closing without a timer or a foreign self-follow.
+            ok = activate_dtx_coordinator(Pid, S1),
+            S1;
         {error, Reason} ->
             error({dtx_coordinator_start_failed, Ns, GroupId, Reason})
     end.
@@ -11322,6 +11378,7 @@ keep_progress(S0, S1, Actions, TimerMode) ->
     S2 = track_owner_peaks(
            timed_step(SAdvertised, head_reconcile,
                       fun() -> reconcile_head_progress(SAdvertised) end)),
+    ok = notify_dtx_coordinator_progress(S0, S2),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
                        rearm -> rearm_progress_timer(S2);

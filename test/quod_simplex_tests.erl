@@ -2479,6 +2479,40 @@ dtx_origin_coordinator_is_group_scoped_and_restarts_from_retained_begin_test() -
     _ = quod_simplex:test_stop_dtx_coordinator(Restarted),
     ok.
 
+%% A coordinator waiting on its own ontology must be woken by that owning
+%% Simplex, not by replaying the same ledger through foreign_log. The wake is
+%% only a scheduling edge; the coordinator verifies the local snapshot again.
+dtx_source_commit_wakes_owned_coordinator_directly_test() ->
+    Ns = <<"quod:dtx-local-progress">>,
+    Anchor = crypto:hash(sha256, <<226>>),
+    GroupId = crypto:hash(sha256, <<227>>),
+    S0 = st(#{ns => Ns, genesis_hash => Anchor, slot => 5}),
+    Owned = quod_simplex:test_seed_running_dtx_coordinator(
+              GroupId, self(), S0),
+    %% Installing a coordinator establishes the stream with the owner's
+    %% current view, closing the race where its initial drive parks before the
+    %% parent has recorded the child and no later commit edge occurs.
+    ok = quod_simplex:test_activate_dtx_coordinator(self(), Owned),
+    receive
+        {local_dtx_progress, {Ns, Anchor}, 5} -> ok
+    after 1000 ->
+        error(local_dtx_progress_not_established)
+    end,
+    ok = quod_simplex:test_notify_dtx_coordinator_progress(Owned, Owned),
+    receive
+        {local_dtx_progress, _, _} = Unexpected ->
+            error({unexpected_local_progress, Unexpected})
+    after 0 ->
+        ok
+    end,
+    Advanced = quod_simplex:test_state_set(slot, 6, Owned),
+    ok = quod_simplex:test_notify_dtx_coordinator_progress(Owned, Advanced),
+    receive
+        {local_dtx_progress, {Ns, Anchor}, 6} -> ok
+    after 1000 ->
+        error(local_dtx_progress_not_delivered)
+    end.
+
 %% Certification changes the durable representation, not the recovery owner.
 %% The commit path installs the exact Begin reference into the existing owner
 %% before retiring its retained row; reconciliation must therefore preserve

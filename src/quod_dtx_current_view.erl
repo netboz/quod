@@ -143,28 +143,32 @@ verify_applied_certificate(Certificate, NetworkIdentity,
                            #{identity := Target,
                              committee := Committee,
                              committee_id := CommitteeId} = Evidence) ->
-    case {applied_certificate_binding(Certificate),
-          exact_finalize_binding(Evidence)} of
-        {{ok, #{network_identity := NetworkIdentity,
-                target := Target, committee_id := CommitteeId,
-                group_id := GroupId, finalize_ref := FinalizeRef,
-                generation := Generation, verdict := Verdict,
-                statement := Statement, signatures := Signatures}},
-         {ok, GroupId, FinalizeRef, Generation, Verdict}} ->
-            case quod_quorum:committee_size(Committee) of
-                {ok, N} when N > 0 ->
-                    Needed = applied_threshold(N),
-                    case length(Signatures) =:= Needed of
-                        true ->
-                            case quod_quorum:sanitize_at_least(
-                                   Committee, applied_vote_bytes(Statement),
-                                   Signatures, Needed) of
-                                {ok, Signatures} -> true;
-                                _ -> false
+    case applied_certificate_binding(Certificate) of
+        {ok, #{network_identity := NetworkIdentity,
+               target := Target, committee_id := CommitteeId,
+               group_id := GroupId, finalize_ref := FinalizeRef,
+               generation := Generation, verdict := Verdict,
+               statement := Statement, signatures := Signatures}} ->
+            case exact_finalize_binding(Evidence, FinalizeRef) of
+                {ok, GroupId, FinalizeRef, Generation, Verdict} ->
+                    case quod_quorum:committee_size(Committee) of
+                        {ok, N} when N > 0 ->
+                            Needed = applied_threshold(N),
+                            case length(Signatures) =:= Needed of
+                                true ->
+                                    case quod_quorum:sanitize_at_least(
+                                           Committee,
+                                           applied_vote_bytes(Statement),
+                                           Signatures, Needed) of
+                                        {ok, Signatures} -> true;
+                                        _ -> false
+                                    end;
+                                false -> false
                             end;
-                        false -> false
+                        _ -> false
                     end;
-                _ -> false
+                _ ->
+                    false
             end;
         _ ->
             false
@@ -854,7 +858,7 @@ verify_view(OwnerNs, Source, NetworkIdentity, Target, GroupId, FinalizeRef,
 
 valid_finalize_evidence(Target, GroupId, FinalizeRef, Generation, Verdict,
                         Evidence) ->
-    case {exact_finalize_binding(Evidence),
+    case {exact_finalize_binding(Evidence, FinalizeRef),
           finalize_committee_view(Target, Evidence)} of
         {{ok, GroupId, FinalizeRef, Generation, Verdict},
          {ok, Committee, CommitteeId, Routes}} ->
@@ -864,21 +868,29 @@ valid_finalize_evidence(Target, GroupId, FinalizeRef, Generation, Verdict,
 
 exact_finalize_binding(
   #{identity := Target, phase := finalize, control := Control,
-    entry := Entry}) ->
+    entry := Entry}, FinalizeRef) ->
+    %% Certified-history verification owns proof authority.  The applied
+    %% certificate and this replica's entry may carry different valid quorum
+    %% subsets, but both must name one immutable Finalize claim.
     case {quod_dtx:control_kind(Control),
           quod_dtx:recovery_phase(quod_dtx:control_body(Control)),
           quod_dtx:certified_entry_ref(Target, Entry, Control)} of
         {finalize,
          {ok, #{kind := finalize, group_id := <<_:256>> = GroupId,
                 generation := Generation, verdict := Verdict}},
-         {ok, FinalizeRef}}
+         {ok, EntryRef}}
           when is_integer(Generation), Generation >= 0,
                Generation =< ?MAX_UINT64,
                (Verdict =:= commit orelse Verdict =:= abort) ->
-            {ok, GroupId, FinalizeRef, Generation, Verdict};
+            case quod_dtx:same_certified_ref(EntryRef, FinalizeRef) of
+                true ->
+                    {ok, GroupId, FinalizeRef, Generation, Verdict};
+                false ->
+                    error
+            end;
         _ -> error
     end;
-exact_finalize_binding(_Evidence) ->
+exact_finalize_binding(_Evidence, _FinalizeRef) ->
     error.
 
 finalize_committee_view(

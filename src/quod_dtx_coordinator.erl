@@ -2081,13 +2081,26 @@ valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence)
     true = is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32,
     case signed_phase_binding(Target, GroupId, Kind, Ref, Control) of
         ok ->
-            {ok, Ref} = quod_dtx:certified_entry_ref(
-                          Target, Entry, Control),
-            {ok, Control, Generation,
-             #{identity => Target, phase => Kind, control => Control,
-               ref => Ref, generation => Generation, entry => Entry,
-               committee => Committee, committee_id => CommitteeId,
-               routes => Routes}, Entry};
+            %% The evidence owner already verified Ref's finality proof.  This
+            %% replica may retain another valid quorum subset for the same
+            %% entry, so bind the immutable claim rather than proof bytes.
+            case quod_dtx:certified_entry_ref(Target, Entry, Control) of
+                {ok, EntryRef} ->
+                    case quod_dtx:same_certified_ref(EntryRef, Ref) of
+                        true ->
+                            {ok, Control, Generation,
+                             #{identity => Target, phase => Kind,
+                               control => Control, ref => Ref,
+                               generation => Generation, entry => Entry,
+                               committee => Committee,
+                               committee_id => CommitteeId, routes => Routes},
+                             Entry};
+                        false ->
+                            error
+                    end;
+                {error, _} ->
+                    error
+            end;
         error ->
             error
     end;

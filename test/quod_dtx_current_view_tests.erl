@@ -63,6 +63,42 @@ exact_f_plus_one_finalize_committee_certificate_succeeds_test() ->
               Certificate, maps:get(network_identity, F),
               maps:get(evidence, F))).
 
+applied_certificate_accepts_an_equivalent_finalize_quorum_subset_test() ->
+    F0 = fixture(4),
+    Target = {Ns, Anchor} = maps:get(target, F0),
+    Committee = maps:get(committee, F0),
+    Signers = maps:get(signers, F0),
+    Evidence0 = maps:get(evidence, F0),
+    Control = maps:get(control, Evidence0),
+    Entry0 = maps:get(entry, Evidence0),
+    Slot = Entry0#entry.index,
+    BlockHash = (Entry0#entry.cert)#cert.block_hash,
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Shares = maps:from_list(
+               [{Key, quod_simplex:make_share(
+                        Domain, commit, Slot, BlockHash,
+                        maps:get(Key, Signers))}
+                || Key <- Committee]),
+    [A, B, C, D] = Committee,
+    Form = fun(Keys) ->
+                   {ok, Cert} = quod_simplex:form_cert(
+                                  Domain, commit, Slot, BlockHash,
+                                  [maps:get(Key, Shares) || Key <- Keys],
+                                  Committee),
+                   Cert
+           end,
+    RetainedCert = Form([A, B, C]),
+    SuppliedCert = Form([B, C, D]),
+    Evidence = Evidence0#{entry => Entry0#entry{cert = RetainedCert}},
+    {ok, FinalizeRef} = quod_dtx:certified_entry_ref(
+                          Target, Entry0#entry{cert = SuppliedCert}, Control),
+    Claim = (maps:get(claim, F0))#{finalize_ref => FinalizeRef},
+    F = F0#{claim => Claim, evidence => Evidence},
+    Certificate = certificate(F, [A, B], #{}),
+    ?assertNotEqual(RetainedCert, SuppliedCert),
+    ?assert(quod_dtx_current_view:verify_applied_certificate(
+              Certificate, maps:get(network_identity, F), Evidence)).
+
 insufficient_duplicate_nonmember_and_bad_signatures_fail_test() ->
     F = fixture(4),
     [A, B | _] = maps:get(committee, F),

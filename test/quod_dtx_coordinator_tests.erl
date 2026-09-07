@@ -318,6 +318,54 @@ phase_evidence_structure_fails_loudly_test() ->
                maps:remove(routes, Evidence)))
       end).
 
+phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
+    with_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          Target = maps:get(origin, F),
+          {Control, Entry0, _LocalRef} =
+              certified_control(Target, Begin, 2, F),
+          {Ns, Anchor} = Target,
+          BlockHash = (Entry0#entry.cert)#cert.block_hash,
+          Domain = quod_simplex:consensus_domain(Ns, Anchor),
+          Validators =
+              [begin
+                   {Pub, Seed} = quod_identity:generate(),
+                   {Pub, #{pubkey => Pub,
+                           key => quod_identity:key_term({Pub, Seed})}}
+               end || _ <- lists:seq(1, 4)],
+          Committee = lists:sort([Pub || {Pub, _} <- Validators]),
+          Shares = maps:from_list(
+                     [{Pub, quod_simplex:make_share(
+                              Domain, commit, 2, BlockHash, Signer)}
+                      || {Pub, Signer} <- Validators]),
+          [A, B, C, D] = Committee,
+          Form = fun(Keys) ->
+                         {ok, Cert} = quod_simplex:form_cert(
+                                        Domain, commit, 2, BlockHash,
+                                        [maps:get(Key, Shares)
+                                         || Key <- Keys],
+                                        Committee),
+                         Cert
+                 end,
+          RetainedCert = Form([A, B, C]),
+          SuppliedCert = Form([B, C, D]),
+          Entry = Entry0#entry{cert = RetainedCert},
+          SuppliedEntry = Entry0#entry{cert = SuppliedCert},
+          {ok, Ref} = quod_dtx:certified_entry_ref(
+                        Target, SuppliedEntry, Control),
+          Evidence =
+              #{identity => Target, phase => 'begin', generation => 0,
+                control => Control, ref => Ref, entry => Entry,
+                committee => Committee, committee_id => digest(212),
+                routes => #{}},
+          ?assertNotEqual(RetainedCert, SuppliedCert),
+          ?assertMatch(
+             {ok, Control, 0, #{ref := Ref, entry := Entry}, Entry},
+             quod_dtx_coordinator:test_valid_phase_evidence(
+               Target, quod_dtx:group_id(Begin), 'begin', Ref, Evidence))
+      end).
+
 snapshot_rows_are_canonical_idempotent_and_conflict_closed_test() ->
     with_fixture(
       fun(F) ->

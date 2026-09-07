@@ -269,17 +269,18 @@ stages, not carried forward:
   the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
-- **~~Vote-latch persistence across restart~~ — DONE (2026-07-22; generalized since Step 4).**
-  `quod_signing_journal` now owns the QSJ2 `signing.0001` file per namespace. It
+- **~~Vote-latch and supported-block persistence across restart~~ — DONE (2026-09-07).**
+  `quod_signing_journal` now owns the QSJ3 `signing.0001` file per namespace. It
   retains vote latches, DTX signing floors, every exact pending Begin by GroupId,
-  and retained signed content submissions. The only constructor
-  for a new runtime share first appends a
-  CRC-framed `{support|commit|complaint, Slot, BlockHash}` decision and calls `datasync`; only then may the
-  signature enter the engine or transport. Boot reloads live decisions before recovery can vote, exact
+  retained signed content submissions, and the exact canonical block attached to each live support latch.
+  The only constructor for a new runtime share first appends either the block plus support decision or a
+  final-vote decision and calls `datasync`; only then may the signature enter the engine or transport. Boot
+  reloads the live blocks and decisions through the ordinary consensus engine before recovery can vote, exact
   repeats are idempotent, and conflicting support hashes or final votes fail-stop. Finalization removes the
-  slot from memory; at 1 MiB the remaining live decisions are rewritten and atomically renamed. No block,
-  proposal, transaction, or KB data is copied. The restart tests exercise both complaint and commit through
-  record → close → reopen → opposing evidence. The sync latency is exported as
+  slot and block; at 1 MiB the remaining live state is rewritten and atomically renamed. This is bounded by
+  the consensus pipeline, not ledger height; no KB snapshot or second proposal store exists. The restart tests
+  exercise block custody and both final camps through record → close → reopen → opposing evidence. The sync
+  latency is exported as
   `quod_consensus_signing_journal_vote_sync_seconds`, so its real finality cost is visible rather than assumed.
   Recovery trims only an incomplete final frame. A complete checksum/magic failure fail-stops even at EOF,
   deliberately stricter than the committed ledger's torn-append policy: a vote may already be visible to
@@ -288,18 +289,17 @@ stages, not carried forward:
   remove their load-bearing policy difference.
   Diskless reconstruction was rejected because peer echoes can prove that a vote happened but never prove
   that no unseen vote happened.
-- **Finality view change + in-flight block availability (post-journal residual).** The current evidence rule
+- **Finality view change (post-journal residual).** The current evidence rule
   directs an unlatched validator to skip when it sees `f+1` peer complaints and otherwise to commit a
   notarized block. One decision table owns notarization, ready recovery, complaint ingestion, and timeout
   triggers for both slots in the depth-one pipeline. This resolves the live slot-6180 shape once evidence is
   exchanged, but a sub-Delta photo finish can still put
   at least `f+1` validators on each final-vote side before either side sees the other's threshold. Durable
   latches correctly prevent switching, so resolving that already-formed split requires an explicit
-  view/epoch recovery protocol, not another exception in the timeout FSM. Separately, certified-block
-  anti-entropy reconstructs an in-flight block from any surviving holder; if every holder disappears after
-  enough validators have commit-latched the block, no node can safely recreate its payload. A later
-  availability layer (DispersedSimplex dispersal/erasure fragments or durable proposal storage) must close
-  that bound. Do not claim unconditional liveness for arbitrary `>f` crash schedules until both are solved.
+  view/epoch recovery protocol, not another exception in the timeout FSM. In-flight block availability is
+  now closed separately: every support latch atomically owns its exact block until commit, and restart
+  restores it through the ordinary engine. Do not claim unconditional liveness for arbitrary `>f` crash
+  schedules until the final-vote split is solved.
 - **Ontology actors and system bootstrap — planned architecture migration.**
   `doc/ontology-actor-architecture.md` replaces the old split user/agent/AP
   identity model. Governed external-predicate ownership and root-driven

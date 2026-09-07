@@ -4,16 +4,21 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--define(MAGIC, 16#51534A32). %% "QSJ2"
+-define(MAGIC, 16#51534A33). %% "QSJ3"
 -define(HDR_BYTES, 12).
 
 persists_votes_and_dtx_floor_test() ->
     with_dir(
       fun(Ns, Dir) ->
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
-          H1 = hash(1),
+          Block = supported_block(6, 1),
+          H1 = quod_simplex:block_hash(Block),
           H2 = hash(2),
-          {ok, J1} = quod_signing_journal:record_vote(J0, support, 6, H1),
+          {ok, J1} = quod_signing_journal:record_support(J0, Block),
+          SizeAfterSupport = filelib:file_size(journal_path(Ns, Dir)),
+          {ok, J1} = quod_signing_journal:record_support(J1, Block),
+          ?assertEqual(SizeAfterSupport,
+                       filelib:file_size(journal_path(Ns, Dir))),
           %% Support and final votes are independent protocol decisions.
           {ok, J1a} = quod_signing_journal:record_vote(J1, commit, 6, H2),
           {ok, J1b} = quod_signing_journal:record_vote(
@@ -29,21 +34,51 @@ persists_votes_and_dtx_floor_test() ->
           ?assertEqual(#{6 => #{support => H1, final => {commit, H2}},
                          7 => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J3)),
+          ?assertEqual(#{6 => Block},
+                       quod_signing_journal:supported_blocks(J3)),
           ?assertEqual(7, quod_signing_journal:dtx_floor(J3, Lane)),
           ?assertEqual(#{}, quod_signing_journal:pending_begins(J3)),
-          ok = quod_signing_journal:close(J3)
+          J4 = quod_signing_journal:compact(J3),
+          ok = quod_signing_journal:close(J4),
+          {ok, J5} = quod_signing_journal:recover(Ns, domain(1), Dir),
+          ?assertEqual(#{6 => Block},
+                       quod_signing_journal:supported_blocks(J5)),
+          ok = quod_signing_journal:close(J5)
+      end).
+
+malformed_supported_block_is_rejected_without_mutation_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          ok = quod_signing_journal:close(J0),
+          Path = journal_path(Ns, Dir),
+          Offset = filelib:file_size(Path),
+          Block = supported_block(6, 1),
+          Bytes = quod_ledger:block_bytes(Block),
+          Payload = term_to_binary(
+                      {quod_signing_support, 3, 7, Bytes},
+                      [deterministic]),
+          ok = file:write_file(
+                 Path, quod_signing_journal:test_frame(Payload), [append]),
+          {ok, Before} = file:read_file(Path),
+          ?assertError(
+             {signing_journal_bad_supported_block, Offset},
+             quod_signing_journal:recover(Ns, domain(1), Dir)),
+          ?assertEqual({ok, Before}, file:read_file(Path))
       end).
 
 conflicting_votes_fail_stop_test() ->
     with_dir(
       fun(Ns, Dir) ->
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
-          H1 = hash(1),
-          H2 = hash(2),
-          {ok, J1} = quod_signing_journal:record_vote(J0, support, 6, H1),
+          Block1 = supported_block(6, 1),
+          Block2 = supported_block(6, 2),
+          H1 = quod_simplex:block_hash(Block1),
+          H2 = quod_simplex:block_hash(Block2),
+          {ok, J1} = quod_signing_journal:record_support(J0, Block1),
           ?assertError(
              {vote_conflict, 6, {support, H1}, {support, H2}},
-             quod_signing_journal:record_vote(J1, support, 6, H2)),
+             quod_signing_journal:record_support(J1, Block2)),
           {ok, J2} = quod_signing_journal:record_vote(
                        J1, complaint, 6, none),
           ok = quod_signing_journal:close(J2),
@@ -60,8 +95,8 @@ unused_header_is_replaceable_but_used_compacted_header_is_not_test() ->
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
           ok = quod_signing_journal:close(J0),
           {ok, J1} = quod_signing_journal:initialize(Ns, domain(2), Dir),
-          {ok, J2} = quod_signing_journal:record_vote(
-                       J1, support, 1, hash(1)),
+          {ok, J2} = quod_signing_journal:record_support(
+                       J1, supported_block(1, 1)),
           %% Reconcile removes the only live latch.  Compaction must still
           %% retain the sticky evidence that a signature once existed.
           {ok, J3} = quod_signing_journal:reconcile(
@@ -108,12 +143,16 @@ superseded_signing_magic_fails_explicitly_without_mutation_test() ->
       fun(Ns, Dir) ->
           Path = journal_path(Ns, Dir),
           ok = filelib:ensure_dir(Path),
-          Bytes = <<16#51534A31:32>>,
-          ok = file:write_file(Path, Bytes),
-          ?assertError(
-             {unsupported_signing_journal_format, 1, 0},
-             quod_signing_journal:recover(Ns, domain(1), Dir)),
-          ?assertEqual({ok, Bytes}, file:read_file(Path))
+          lists:foreach(
+            fun({Version, Magic}) ->
+                Bytes = <<Magic:32>>,
+                ok = file:write_file(Path, Bytes),
+                ?assertError(
+                   {unsupported_signing_journal_format, Version, 0},
+                   quod_signing_journal:recover(Ns, domain(1), Dir)),
+                ?assertEqual({ok, Bytes}, file:read_file(Path))
+            end,
+            [{1, 16#51534A31}, {2, 16#51534A32}])
       end).
 
 legacy_magic_in_tail_is_not_trimmed_test() ->
@@ -154,8 +193,8 @@ torn_final_frame_is_trimmed_after_domain_validation_test() ->
     with_dir(
       fun(Ns, Dir) ->
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
-          {ok, J1} = quod_signing_journal:record_vote(
-                       J0, support, 6, hash(1)),
+          Block = supported_block(6, 1),
+          {ok, J1} = quod_signing_journal:record_support(J0, Block),
           ok = quod_signing_journal:close(J1),
           Path = journal_path(Ns, Dir),
           {ok, Complete} = file:read_file(Path),
@@ -167,7 +206,8 @@ torn_final_frame_is_trimmed_after_domain_validation_test() ->
                        J2, complaint, 7, none),
           ok = quod_signing_journal:close(J3),
           {ok, J4} = quod_signing_journal:recover(Ns, domain(1), Dir),
-          ?assertEqual(#{6 => #{support => hash(1), final => none},
+          ?assertEqual(#{6 => #{support => quod_simplex:block_hash(Block),
+                                final => none},
                          7 => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J4)),
           ok = quod_signing_journal:close(J4)
@@ -194,8 +234,8 @@ complete_crc_corruption_fails_without_mutation_test() ->
     with_dir(
       fun(Ns, Dir) ->
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
-          {ok, J1} = quod_signing_journal:record_vote(
-                       J0, support, 6, hash(1)),
+          {ok, J1} = quod_signing_journal:record_support(
+                       J0, supported_block(6, 1)),
           ok = quod_signing_journal:close(J1),
           Path = journal_path(Ns, Dir),
           {ok, Bytes0} = file:read_file(Path),
@@ -214,8 +254,8 @@ reconcile_uses_only_the_validated_summary_test() ->
     with_dir(
       fun(Ns, Dir) ->
           {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
-          {ok, J1} = quod_signing_journal:record_vote(
-                       J0, support, 5, hash(5)),
+          {ok, J1} = quod_signing_journal:record_support(
+                       J0, supported_block(5, 5)),
           {ok, J2} = quod_signing_journal:record_vote(
                        J1, complaint, 6, none),
           {Signer1, Admission1, Control1} = finalize_control(11, 4),
@@ -228,6 +268,7 @@ reconcile_uses_only_the_validated_summary_test() ->
                        J4, summary(5, #{Lane2 => 7}, #{})),
           ?assertEqual(#{6 => #{support => none, final => complaint}},
                        quod_signing_journal:rounds(J5)),
+          ?assertEqual(#{}, quod_signing_journal:supported_blocks(J5)),
           ?assertEqual(0, quod_signing_journal:dtx_floor(J5, Lane1)),
           ?assertEqual(9, quod_signing_journal:dtx_floor(J5, Lane2)),
           ?assertError(
@@ -769,7 +810,7 @@ dormant_transaction_activation_record_is_rejected_on_recovery_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Payload = term_to_binary(
-                      {quod_signing_transaction_activated, 2, TxId},
+                      {quod_signing_transaction_activated, 3, TxId},
                       [deterministic]),
           ok = file:write_file(
                  Path, quod_signing_journal:test_frame(Payload), [append]),
@@ -805,9 +846,11 @@ unknown_atom_record_is_rejected_without_atom_creation_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Canonical = term_to_binary(
-                        {quod_signing_vote, 2, support, 8, hash(8)},
+                        {quod_signing_final_vote, 3,
+                         complaint, 8, none},
                         [deterministic]),
-          Unknown = binary:replace(Canonical, <<"support">>, <<"qzxqvjk">>),
+          Unknown = binary:replace(
+                      Canonical, <<"complaint">>, <<"qzxqvjklm">>),
           ?assertNotEqual(Canonical, Unknown),
           Frame = quod_signing_journal:test_frame(Unknown),
           ok = file:write_file(Path, Frame, [append]),
@@ -823,7 +866,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Body = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
     Envelope = binary:copy(<<0>>, ?QUOD_MAX_DTX_CONTROL_BYTES),
     AtLimit = term_to_binary(
-                {quod_signing_pending_begin, 2, Fixed, Fixed,
+                {quod_signing_pending_begin, 3, Fixed, Fixed,
                  16#FFFFFFFFFFFFFFFF, Fixed, Body, Envelope},
                 [deterministic]),
     ?assertEqual(quod_signing_journal:test_max_frame_payload_bytes(),
@@ -831,7 +874,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Frame = quod_signing_journal:test_frame(AtLimit),
     ?assertEqual(byte_size(AtLimit) + ?HDR_BYTES, byte_size(Frame)),
     Over = term_to_binary(
-             {quod_signing_pending_begin, 2, Fixed, Fixed,
+             {quod_signing_pending_begin, 3, Fixed, Fixed,
               16#FFFFFFFFFFFFFFFF, Fixed, Body,
              <<Envelope/binary, 0>>},
              [deterministic]),
@@ -846,9 +889,8 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
 
 with_dir(Fun) ->
     Ns = <<"journal:test">>,
-    Name = lists:concat(
-             ["quod_signing_journal_",
-              integer_to_list(erlang:unique_integer([positive]))]),
+    Name = "quod_signing_journal_" ++
+           binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
     Dir = filename:join("/tmp", Name),
     try Fun(Ns, Dir)
     after
@@ -1019,8 +1061,15 @@ pending_term(Fixture) ->
     #{lane := {Admission, Author}, sequence := Sequence,
       group_id := GroupId, body := Body, envelope := Envelope} =
         pending_fixture(Fixture),
-    {quod_signing_pending_begin, 2, Admission, Author, Sequence,
+    {quod_signing_pending_begin, 3, Admission, Author, Sequence,
      GroupId, Body, Envelope}.
+
+supported_block(Slot, Variant) ->
+    {_Signer, _Admission, Control} = finalize_control(10000 + Variant, 1),
+    {ok, ControlBytes} = quod_dtx:encode_control(Control),
+    {ok, Block} = quod_ledger:new_block(
+                    Slot, Slot - 1, {batch, [{dtx, ControlBytes}]}, 0),
+    Block.
 
 frame_count(Bytes) -> frame_count(Bytes, 0).
 

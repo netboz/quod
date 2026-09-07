@@ -3,8 +3,10 @@
 Crash-durable signing state for one ontology on one validator.
 
 The journal is the sole local anti-equivocation authority for consensus votes
-and DTX sequence allocation.  It also retains every locally-coordinated Begin
-whose exact signed envelope may need redriving after a crash.  Every new
+and DTX sequence allocation. A support decision retains the exact canonical
+block in the same synced frame until that slot commits, so restart cannot lose
+the body named by the durable latch. It also retains every locally-coordinated
+Begin whose exact signed envelope may need redriving after a crash. Every new
 decision is persisted and datasync'd before its signature may be exposed.
 
 Initialization and recovery are deliberately separate.  `initialize/3` is
@@ -19,9 +21,9 @@ accepts only the compact result of an already-validated history fold.
 -include("quod_ledger.hrl").
 
 -export([initialize/3, recover/3, reconcile/2, close/1,
-         rounds/1, dtx_floor/2, pending_begins/1,
+         rounds/1, supported_blocks/1, dtx_floor/2, pending_begins/1,
          pending_transactions/1,
-         record_vote/4, record_dtx/2, record_transaction/4,
+         record_support/2, record_vote/4, record_dtx/2, record_transaction/4,
          bind_transaction/2,
          activate_transaction/2, retire_transaction/2]).
 -export_type([handle/0, round/0, final_vote/0, lane/0,
@@ -38,14 +40,15 @@ accepts only the compact result of an already-validated history fold.
 -define(QVJ2_MAGIC, 16#51564A32). %% "QVJ2"
 -define(QVJ3_MAGIC, 16#51564A33). %% "QVJ3"
 -define(QSJ1_MAGIC, 16#51534A31). %% "QSJ1"
--define(MAGIC,      16#51534A32). %% "QSJ2"
--define(FORMAT_VERSION, 2).
+-define(QSJ2_MAGIC, 16#51534A32). %% "QSJ2"
+-define(MAGIC,      16#51534A33). %% "QSJ3"
+-define(FORMAT_VERSION, 3).
 -define(HDR_BYTES, 12).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(COMPACT_BYTES, (1024 * 1024)).
 
 %% Exact deterministic-ETF overhead of
-%% {quod_signing_pending_begin,2,Admission,Author,MaxU64,Group,Body,Envelope}
+%% {quod_signing_pending_begin,3,Admission,Author,MaxU64,Group,Body,Envelope}
 %% outside the two variable blobs.  The boundary therefore follows the shared
 %% DTX limits automatically instead of duplicating their current values.
 -define(PENDING_WRAPPER_BYTES, 165).
@@ -148,7 +151,21 @@ close(#journal{fd = Fd}) ->
 
 -doc "Return the currently retained consensus vote latches.".
 -spec rounds(handle()) -> rounds().
-rounds(#journal{rounds = Rounds}) -> Rounds.
+rounds(#journal{rounds = Rounds}) ->
+    maps:map(
+      fun(_Slot, #{support := Support, final := Final}) ->
+              #{support => Support, final => Final}
+      end, Rounds).
+
+-doc "Return exact blocks retained with this validator's live support latches.".
+-spec supported_blocks(handle()) -> #{pos_integer() => #block{}}.
+supported_blocks(#journal{rounds = Rounds}) ->
+    maps:fold(
+      fun(Slot, #{block := #block{} = Block}, Acc) ->
+              Acc#{Slot => Block};
+         (_Slot, _Round, Acc) ->
+              Acc
+      end, #{}, Rounds).
 
 -doc "Return the safe floor: max(local allocation, reconciled committed floor).".
 -spec dtx_floor(handle(), lane()) -> non_neg_integer().
@@ -167,8 +184,29 @@ pending_begins(#journal{pending_begins = PendingBegins}) -> PendingBegins.
                 body := binary(), envelope := binary()}}.
 pending_transactions(#journal{transactions = Transactions}) -> Transactions.
 
--doc "Persist one consensus vote latch before its signature is exposed.".
--spec record_vote(handle(), support | commit | complaint, pos_integer(),
+-doc "Persist the exact block and its support latch atomically before signing.".
+-spec record_support(handle(), #block{}) -> {ok, handle()}.
+record_support(J = #journal{rounds = Rounds}, #block{} = Block) ->
+    case supported_block(Block) of
+        {ok, Slot, BH, Bytes} ->
+            {Changed, Rounds1} = apply_support(Block, BH, Rounds),
+            case Changed of
+                false -> {ok, maybe_compact(J)};
+                true ->
+                    Term = {quod_signing_support, ?FORMAT_VERSION,
+                            Slot, Bytes},
+                    {ok, persist_mutation(
+                           Term, J#journal{rounds = Rounds1,
+                                          ever_used = true})}
+            end;
+        error ->
+            error(invalid_supported_block)
+    end;
+record_support(_J, _Block) ->
+    error(invalid_supported_block).
+
+-doc "Persist one final-vote latch before its signature is exposed.".
+-spec record_vote(handle(), commit | complaint, pos_integer(),
                   block_hash() | none) -> {ok, handle()}.
 record_vote(J = #journal{rounds = Rounds}, Kind, Slot, BH) ->
     ok = valid_vote(Kind, Slot, BH),
@@ -176,7 +214,8 @@ record_vote(J = #journal{rounds = Rounds}, Kind, Slot, BH) ->
     case Changed of
         false -> {ok, maybe_compact(J)};
         true ->
-            Term = {quod_signing_vote, ?FORMAT_VERSION, Kind, Slot, BH},
+            Term = {quod_signing_final_vote,
+                    ?FORMAT_VERSION, Kind, Slot, BH},
             {ok, persist_mutation(Term, J#journal{rounds = Rounds1,
                                                   ever_used = true})}
     end.
@@ -468,7 +507,31 @@ canonical_transaction_identity(Body, TxId, Sequence, Author) ->
 %%% vote state
 %%%===================================================================
 
-empty_round() -> #{support => none, final => none}.
+empty_round() -> #{support => none, final => none, block => none}.
+
+supported_block(#block{slot = Slot, block_bytes = Bytes} = Block)
+  when is_integer(Slot), Slot >= 1, Slot =< ?MAX_SLOT,
+       is_binary(Bytes),
+       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
+    case quod_ledger:valid_block_view(Block) of
+        true -> {ok, Slot, crypto:hash(sha256, Bytes), Bytes};
+        false -> error
+    end;
+supported_block(_) ->
+    error.
+
+apply_support(Block = #block{slot = Slot}, BH, Rounds) ->
+    Round = maps:get(Slot, Rounds, empty_round()),
+    Round1 = apply_round_vote(support, Slot, BH, Round),
+    Round2 =
+        case maps:get(block, Round1, none) of
+            none -> Round1#{block => Block};
+            #block{block_bytes = Bytes} when Bytes =:= Block#block.block_bytes ->
+                Round1;
+            #block{} ->
+                error({supported_block_conflict, Slot})
+        end,
+    {Round2 =/= Round, Rounds#{Slot => Round2}}.
 
 apply_vote(Kind, Slot, BH, Rounds) ->
     Round = maps:get(Slot, Rounds, empty_round()),
@@ -494,9 +557,6 @@ apply_round_vote(complaint, _Slot, none, #{final := complaint} = Round) ->
 apply_round_vote(complaint, Slot, none, #{final := Other}) ->
     error({vote_conflict, Slot, Other, complaint}).
 
-valid_vote(support, Slot, BH) when is_integer(Slot), Slot >= 1,
-                                   Slot =< ?MAX_SLOT, is_binary(BH),
-                                   byte_size(BH) =:= 32 -> ok;
 valid_vote(commit, Slot, BH) when is_integer(Slot), Slot >= 1,
                                   Slot =< ?MAX_SLOT, is_binary(BH),
                                   byte_size(BH) =:= 32 -> ok;
@@ -596,6 +656,7 @@ legacy_version(<<?QVJ1_MAGIC:32, _/binary>>) -> {vote, 1};
 legacy_version(<<?QVJ2_MAGIC:32, _/binary>>) -> {vote, 2};
 legacy_version(<<?QVJ3_MAGIC:32, _/binary>>) -> {vote, 3};
 legacy_version(<<?QSJ1_MAGIC:32, _/binary>>) -> {signing, 1};
+legacy_version(<<?QSJ2_MAGIC:32, _/binary>>) -> {signing, 2};
 legacy_version(_) -> none.
 
 torn_tail(_Fd, Offset, strict) ->
@@ -628,7 +689,16 @@ decode_canonical(Payload, Offset) ->
             error({signing_journal_bad_record, Reason, Offset})
     end.
 
-apply_record({quod_signing_vote, ?FORMAT_VERSION, Kind, Slot, BH},
+apply_record({quod_signing_support, ?FORMAT_VERSION, Slot, Bytes},
+             Rounds, Floors, PendingBegins, Transactions, Offset) ->
+    case decoded_supported_block(Slot, Bytes) of
+        {ok, Block, BH} ->
+            {_Changed, Rounds1} = apply_support(Block, BH, Rounds),
+            {Rounds1, Floors, PendingBegins, Transactions};
+        error ->
+            error({signing_journal_bad_supported_block, Offset})
+    end;
+apply_record({quod_signing_final_vote, ?FORMAT_VERSION, Kind, Slot, BH},
              Rounds, Floors, PendingBegins, Transactions, _Offset) ->
     ok = valid_vote(Kind, Slot, BH),
     {_Changed, Rounds1} = apply_vote(Kind, Slot, BH, Rounds),
@@ -693,6 +763,22 @@ apply_record({quod_signing_transaction_retired, ?FORMAT_VERSION,
     end;
 apply_record(Other, _Rounds, _Floors, _Pending, _Effects, Offset) ->
     error({signing_journal_bad_record, Other, Offset}).
+
+decoded_supported_block(Slot, Bytes)
+  when is_integer(Slot), Slot >= 1, Slot =< ?MAX_SLOT,
+       is_binary(Bytes),
+       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
+    case quod_ledger:decode_block(Bytes) of
+        {ok, #block{slot = Slot} = Block} ->
+            case supported_block(Block) of
+                {ok, Slot, BH, Bytes} -> {ok, Block, BH};
+                _ -> error
+            end;
+        _ ->
+            error
+    end;
+decoded_supported_block(_Slot, _Bytes) ->
+    error.
 
 valid_recorded_sequence(Lane, Sequence, Floors, Offset) ->
     case valid_lane(Lane) andalso valid_sequence(Sequence) andalso
@@ -879,30 +965,26 @@ transaction_terms(Transactions) ->
 
 round_terms(Rounds, Tail) ->
     lists:foldr(
-      fun({Slot, #{support := Support, final := Final}}, Acc) ->
-              case {Support, Final} of
-                  {none, none} -> Acc;
-                  {SupportBH, none} ->
-                      [{quod_signing_vote, ?FORMAT_VERSION,
-                        support, Slot, SupportBH} | Acc];
-                  {none, complaint} ->
-                      [{quod_signing_vote, ?FORMAT_VERSION,
-                        complaint, Slot, none} | Acc];
-                  {SupportBH, complaint} ->
-                      [{quod_signing_vote, ?FORMAT_VERSION,
-                        support, Slot, SupportBH},
-                       {quod_signing_vote, ?FORMAT_VERSION,
-                        complaint, Slot, none} | Acc];
-                  {none, {commit, CommitBH}} ->
-                      [{quod_signing_vote, ?FORMAT_VERSION,
-                        commit, Slot, CommitBH} | Acc];
-                  {SupportBH, {commit, CommitBH}} ->
-                      [{quod_signing_vote, ?FORMAT_VERSION,
-                        support, Slot, SupportBH},
-                       {quod_signing_vote, ?FORMAT_VERSION,
-                        commit, Slot, CommitBH} | Acc]
-              end
+      fun({Slot, #{support := Support, final := Final,
+                   block := Block}}, Acc) ->
+              support_term(Slot, Support, Block,
+                           final_vote_terms(Slot, Final, Acc))
       end, Tail, lists:sort(maps:to_list(Rounds))).
+
+support_term(_Slot, none, none, Tail) -> Tail;
+support_term(Slot, SupportBH,
+             #block{block_bytes = Bytes} = Block, Tail)
+  when is_binary(SupportBH), is_binary(Bytes) ->
+    {ok, Slot, SupportBH, Bytes} = supported_block(Block),
+    [{quod_signing_support, ?FORMAT_VERSION, Slot, Bytes} | Tail].
+
+final_vote_terms(_Slot, none, Tail) -> Tail;
+final_vote_terms(Slot, complaint, Tail) ->
+    [{quod_signing_final_vote, ?FORMAT_VERSION,
+      complaint, Slot, none} | Tail];
+final_vote_terms(Slot, {commit, CommitBH}, Tail) ->
+    [{quod_signing_final_vote, ?FORMAT_VERSION,
+      commit, Slot, CommitBH} | Tail].
 
 floor_terms(Floors, PendingBegins, Tail) ->
     PendingFloors = maps:fold(

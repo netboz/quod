@@ -2076,9 +2076,10 @@ Every item below records the group implementation as one hard break.
 
 3. **Transfer hand-off ownership before closing proof scopes.** Refactor the
    former `quod_vote_journal` into `quod_signing_journal`: one hard-break file/library,
-   with no old module or wrapper, that retains both consensus vote latches and
-   the local DTX sequence floor and each pending semantic Begin body with its
-   latest exact envelope, protected by the same persist-before-exposure rule.
+   with no old module or wrapper, that retains consensus vote latches, the exact
+   canonical block belonging to each live support latch, the local DTX sequence
+   floor, and each pending semantic Begin body with its latest exact envelope,
+   protected by the same persist-before-exposure rule.
    Simplex remains its sole opener and writer.
    DTX controls have a distinct sequence lane keyed locally by
    `{AuthorAdmission, Author}`, separate from ordinary transactions. One
@@ -2240,7 +2241,7 @@ Every item below records the group implementation as one hard break.
    opened store exposes its structurally valid tail and Simplex independently
    reconstructs and validates the slot-1 anchor. It then calls a recovery-only
    `quod_signing_journal:recover/3`: scan and domain-check the journal and recover
-   vote latches, DTX local-allocation floors, and the pending Begin, but never use
+   vote latches and their live supported blocks, DTX local-allocation floors, and the pending Begin, but never use
    the raw ledger tail to prune, retire, or compact a complete journal record.
    Repairing the journal's own torn final frame is the only permitted pre-fold
    mutation. This deliberately replaces the former `quod_vote_journal:open/4`

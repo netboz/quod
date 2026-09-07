@@ -239,14 +239,15 @@ agrees on every change.
   A recovering validator processes a valid proposal it retained through the ordinary
   support or membership-check path. If it already has a notarization certificate, it
   resumes only the missing final vote and never invents support that bypasses validation.
-  Before sending any support, commit, or skip signature, it records that small decision
-  durably; restarting cannot make it vote differently. One final-vote rule covers both
+  Before sending support, it atomically records both the decision and the exact canonical
+  block; before sending a commit or skip signature, it records that final decision. Restarting
+  therefore cannot vote differently or forget the body it supported. One final-vote rule covers both
   live pipeline slots: if enough peers already chose skip, an uncommitted validator joins
   them even when the block was approved meanwhile; otherwise a notarized block selects commit.
   A node that has the approval certificate but not the block asks one candidate holder at a
   time, trying certificate signers before the rest of the committee, and verifies both block
-  and certificate before using them; no knowledge-base or full proposal copy is written to
-  this journal.
+  and certificate before using them. The journal retains only supported blocks in the bounded
+  live consensus window; it is neither a knowledge-base snapshot nor a second ledger.
   A final certificate beyond the block frontier also makes the node stop voting and recover
   the missing committed entry from the durable log, including when it is only one block behind.
   When quorum returns before notarization, a validator that already supported the proposal

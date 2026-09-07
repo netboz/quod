@@ -4650,6 +4650,50 @@ restart_preserves_complaint_latch_test() ->
         file:del_dir_r(Dir)
     end.
 
+%% Supporting a block transfers custody of its exact canonical bytes to the
+%% existing anti-equivocation journal. A restart restores both the body and
+%% this validator's share through the ordinary engine, and the durable latch
+%% keeps a restarted leader from proposing a different body for that slot.
+restart_restores_supported_block_and_prevents_competing_proposal_test() ->
+    Committee = [{A, IdA} | _] = committee(4),
+    Block = blk(6),
+    BH = quod_simplex:block_hash(Block),
+    Dir = filename:join(
+            "/tmp", "quod_simplex_support_restart_" ++
+                    binary_to_list(
+                      binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    try
+        {ok, Journal0} = quod_signing_journal:initialize(
+                           <<"t">>, ?DOMAIN, Dir),
+        {ok, Journal1} = quod_signing_journal:record_support(
+                           Journal0, Block),
+        ok = quod_signing_journal:close(Journal1),
+        {ok, Journal2} = quod_signing_journal:recover(
+                           <<"t">>, ?DOMAIN, Dir),
+        EmptyEng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5),
+        Loaded = quod_simplex:restore_signing_state(
+                   st(#{self => A, id => IdA,
+                        consensus_domain => ?DOMAIN,
+                        validators => pubs(Committee), slot => 5,
+                        approved => 5, eng => EmptyEng,
+                        sync => unconfirmed,
+                        signing_journal => Journal2})),
+        ?assertEqual({BH, false, false},
+                     quod_simplex:test_round(6, Loaded)),
+        ?assertEqual(blocked, quod_simplex:proposal_slot(Loaded)),
+        {_, _, _, _, undefined} = quod_simplex:test_dtx_round(6, Loaded),
+
+        Restored = quod_simplex:restore_signing_engine(Loaded),
+        {_, _, _, _, Block} = quod_simplex:test_dtx_round(6, Restored),
+        ?assertMatch(#{share_buckets := 1, seen_votes := 1},
+                     quod_simplex:test_engine_pool_sizes(Restored)),
+        ?assertEqual(blocked, quod_simplex:proposal_slot(Restored)),
+        ok = quod_signing_journal:close(
+               quod_simplex:test_signing_journal(Restored))
+    after
+        file:del_dir_r(Dir)
+    end.
+
 %% The opposite final camp is equally durable. Once recovery commit-signs a notarized block, reopening the
 %% journal must keep later amplified complaint evidence from moving this validator to the skip side.
 restart_preserves_commit_latch_test() ->
@@ -9986,7 +10030,8 @@ relay_store_dir(Suffix) ->
     filename:join(
       "/tmp",
       "quod_relay_restart_" ++ Suffix ++ "_"
-      ++ integer_to_list(erlang:unique_integer([positive]))).
+      ++ binary_to_list(
+           binary:encode_hex(crypto:strong_rand_bytes(8)))).
 
 with_dtx_admission_fixture(Fun) when is_function(Fun, 4) ->
     {ok, _} = application:ensure_all_started(gproc),

@@ -826,10 +826,11 @@ independent on the same QUIC connection.
 ## 3. Persistence (`quod_ledger_store`)
 
 > **Historical Raft persistence.** This section is not the current disk contract. Today
-> `quod_ledger_store` owns `log.0001`, while `quod_signing_journal` owns the QSJ2 `signing.0001`
-> journal that durably records validator vote latches, DTX sequence floors,
+> `quod_ledger_store` owns `log.0001`, while `quod_signing_journal` owns the QSJ3 `signing.0001`
+> journal that durably records validator vote latches, each live support latch's exact canonical block, DTX sequence floors,
 > every pending Begin body plus its exact signed envelope by GroupId, and
-> retained signed content submissions before exposure. Neither stores a KB copy.
+> retained signed content submissions before exposure. The supported blocks are pruned with their committed slots;
+> neither store contains a separate KB copy.
 
 `quod_ledger_store` was the only quod code that touched disk. A **plain library module** (no process, no reg, no
 supervisor child), called synchronously in-line from inside the `quod_ledger` `gen_statem` callbacks so an

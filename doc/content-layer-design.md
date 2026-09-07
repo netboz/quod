@@ -897,7 +897,9 @@ Complaint amplification remains active after notarization. A validator missing a
 rotates one point-to-point request at a time through certificate signers and then other committee members.
 Normal proposals and recovered blocks use one shared timestamp/payload admission predicate after their
 distinct position and certificate checks, so recovery cannot accept content that live voting would reject.
-Full proposals are not persisted and non-leaders do not flood them.
+The exact proposal named by each live local support latch is retained in the
+signing journal until that slot commits; proposals without a local support
+decision are not persisted, and non-leaders do not flood them.
 A verified final certificate beyond the local approved frontier immediately revokes voting capability. Live
 blocks and votes are retained only for the durable head's two-slot depth-one window; a farther finalizer is
 reduced to one bounded recovery hint rather than retaining its peer-controlled certificate. If the finalized

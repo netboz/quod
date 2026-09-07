@@ -77,12 +77,12 @@ corresponding block rotates point-to-point requests through certificate signers 
 members, and accepts a response only after checking the certificate, block hash, parent, timestamp, payload,
 and local final-vote compatibility.
 
-These rules recover the observed mixed-camp and proposer-loss outages without copying the KB or
-persisting full proposals. The Byzantine safety model remains `<=f`; durable latches additionally
+These rules recover the observed mixed-camp and proposer-loss outages without copying the KB. A
+support decision atomically retains that exact canonical block until its slot commits; this bounded
+live-window custody lets any restarting supporter serve the body again. The Byzantine safety model remains `<=f`; durable latches additionally
 preserve honest voting behavior across any number of process restarts. Recovery after a temporary
 `>f` crash outage is a liveness extension, not an unconditional theorem: a final-vote split formed
-before either side's `f+1` evidence becomes visible still needs a future view-change protocol, and a
-commit side cannot reconstruct a lost block unless at least one holder survives.
+before either side's `f+1` evidence becomes visible still needs a future view-change protocol.
 
 The same engine handles N=1 and multi-validator namespaces, complaint-certified skips,
 trustless catch-up, observer promotion, live member recovery, and deterministic Prolog apply.
@@ -167,7 +167,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          recovery_failed/1, may_sink/2, reset_pace/0, approve_block/2, finalize/2,
          catchup_origin/1,
          test_state/1, test_arm/1, test_sync/1,
-         restore_signing_state/1,
+         restore_signing_state/1, restore_signing_engine/1,
          proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
          reconcile_head_progress/1, resume_ready_rounds/1,
          on_progress_timeout/2, progress_timer_actions/2, watch_requested/2,
@@ -181,7 +181,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_local_history_current_view/3,
          test_consensus_barrier/1, test_dtx_consensus_barrier/2,
          test_requested/1,
-         test_progress_counts/1, test_committed_store/1, test_link_peers/1,
+         test_progress_counts/1, test_engine_pool_sizes/1,
+         test_committed_store/1, test_link_peers/1,
          test_retired_inbound/1,
          test_relay_link_peers/1, test_relay_chan/1,
          test_prune_relay_links/1,
@@ -1587,6 +1588,7 @@ test_progress_rearms(#s{head_progress = idle}) -> 0;
 test_progress_rearms(#s{head_progress = #head_progress{quorum_rearms = Rearms}}) -> Rearms.
 test_support_grace(#s{head_progress = idle}) -> false;
 test_support_grace(#s{head_progress = #head_progress{support_grace_used = Used}}) -> Used.
+test_engine_pool_sizes(#s{eng = Eng}) -> eng_pool_sizes(Eng).
 test_round(Slot, S) ->
     R = round_state(Slot, S),
     {R#round.supporting, round_committed(R), round_complained(R)}.
@@ -3012,7 +3014,8 @@ init_store(Ns, Cfg, Id) ->
             %% boots `unconfirmed`, so `should_sync` arms its catch-up at the first tick.
             {ok, running,
              S2#s{last_applied = 0, approved = Committed, eng = Eng},
-             [tick_timeout()]}
+             [{next_event, internal, restore_signing_engine},
+              tick_timeout()]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
@@ -3021,6 +3024,59 @@ restore_signing_state(S = #s{signing_journal = Journal}) ->
     restore_pending_transactions(
       restore_pending_dtx(
         S#s{rounds = signing_rounds(Journal)}, Journal), Journal).
+
+%% Rebuild the volatile engine from the exact block and vote decisions owned by
+%% the signing journal.  Feed them through the ordinary engine ingestion path:
+%% restart is not a second consensus path, and any certificate/finality that
+%% becomes derivable is handled by the same event reducer as live traffic.
+-ifdef(TEST).
+restore_signing_engine(S = #s{signing_journal = memory}) ->
+    S;
+restore_signing_engine(S = #s{signing_journal = Journal}) ->
+    restore_signing_engine_from_journal(Journal, S).
+-else.
+restore_signing_engine(S = #s{signing_journal = Journal}) ->
+    restore_signing_engine_from_journal(Journal, S).
+-endif.
+restore_signing_engine_from_journal(Journal, S = #s{slot = Committed}) ->
+    Blocks = [{Slot, Block}
+              || {Slot, Block} <- maps:to_list(
+                                    quod_signing_journal:supported_blocks(
+                                      Journal)),
+                 Slot > Committed],
+    S1 = engine_step(
+           [{block, block_hash(Block), Block}
+            || {_Slot, Block} <- lists:sort(Blocks)], S),
+    Shares = lists:flatmap(
+               fun({Slot, #round{supporting = Support,
+                                 final = Final}}) ->
+                       restored_own_shares(Slot, Support, Final, S1)
+               end,
+               lists:sort(maps:to_list(S1#s.rounds))),
+    engine_step([{share, Share} || Share <- Shares], S1).
+
+restored_own_shares(Slot, Support, Final, S) ->
+    SupportShares =
+        case Support of
+            none -> [];
+            SupportBH ->
+                {ok, SupportShare} =
+                    latched_share(support, Slot, SupportBH, S),
+                [SupportShare]
+        end,
+    FinalShares =
+        case Final of
+            none -> [];
+            complaint ->
+                {ok, ComplaintShare} =
+                    latched_share(complaint, Slot, none, S),
+                [ComplaintShare];
+            {commit, CommitBH} ->
+                {ok, CommitShare} =
+                    latched_share(commit, Slot, CommitBH, S),
+                [CommitShare]
+        end,
+    SupportShares ++ FinalShares.
 
 -ifdef(TEST).
 restore_pending_transactions(S, memory) -> S;
@@ -3578,6 +3634,8 @@ running_impl({call, From}, {append, Change, TraceCtx}, S0) ->
                     Waiter, Change,
                     S0#s{submitted = S0#s.submitted + 1}),
     keep_progress(S0, S1, Reply);
+running_impl(internal, restore_signing_engine, S0) ->
+    keep_progress(S0, restore_signing_engine(S0), []);
 running_impl({call, From}, {handoff_effect, Admission, Change}, S0) ->
     case handoff_effect_change(Admission, Change, S0) of
         {ok, S1} ->
@@ -8444,21 +8502,24 @@ put_pending_relay(AttemptId,
 %% A depth-one pipeline permits proposing H+2 after H+1 is approved but before it
 %% commits. It stops there until commit catches up. Membership blocks are barriers,
 %% and a complaint-finalized slot waiting behind an earlier commit is not reopened.
+%% A durable support latch also keeps a restarted leader on its exact retained
+%% proposal; proposal construction may never compete with its own prior signature.
 proposal_slot(S = #s{}) ->
     proposal_slot(S, consensus_barrier(S)).
 
 proposal_slot_for_dtx(Records, S = #s{}) when is_list(Records) ->
     proposal_slot(S, dtx_consensus_barrier(Records, S)).
 
-proposal_slot(#s{slot = Committed, approved = Approved,
-                 collecting = Collecting,
-                 local_proposals = Local, commit_buf = Buf},
+proposal_slot(S = #s{slot = Committed, approved = Approved,
+                     collecting = Collecting,
+                     local_proposals = Local, commit_buf = Buf},
               ConsensusBarrier) ->
     Next = Approved + 1,
     HasBatch = case Collecting of #batch{slot = Next} -> true; _ -> false end,
     Open = live_pipeline_slot(Next, Committed)
            andalso (HasBatch orelse not maps:is_key(Next, Local))
            andalso not maps:is_key(Next, Buf)
+           andalso not proposal_visible(Next, S)
            andalso not ConsensusBarrier,
     case Open of true -> {ok, Next}; false -> blocked end.
 
@@ -9926,10 +9987,10 @@ support_block(Block, BH, S) ->
     end.
 
 support_block_ready(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;
-support_block_ready(#block{slot = Sl}, BH, S) ->
+support_block_ready(#block{slot = Sl} = Block, BH, S) ->
     Round = round_state(Sl, S),
     case Round#round.supporting of
-        none -> case record_share(support, Sl, BH, S) of
+        none -> case record_share(support, Sl, BH, Block, S) of
                     blocked -> S;
                     {ok, Share, S1} ->
                         engine_step([{share, Share}],
@@ -11831,7 +11892,7 @@ notarized_hash(_V, _S) ->
     none.
 
 emit_final_vote(Kind, V, BH, S) ->
-    case record_share(Kind, V, BH, S) of
+    case record_share(Kind, V, BH, none, S) of
         blocked -> S;
         {ok, Share, S1} ->
             %% The durable latch is installed before the share enters either the engine or transport. If this
@@ -11842,7 +11903,8 @@ emit_final_vote(Kind, V, BH, S) ->
 %% The sole constructor for NEW runtime consensus evidence. The decision is durable before the
 %% signature can become network-visible; an I/O failure fail-stops this validator before it can
 %% equivocate. Redrive reconstructs an identical Ed25519 share only from the resulting latch.
-record_share(Kind, Slot, BlockHash, S = #s{signing_journal = Journal}) ->
+record_share(Kind, Slot, BlockHash, Block,
+             S = #s{signing_journal = Journal}) ->
     case may_vote(S) of
         false ->
             blocked;
@@ -11854,7 +11916,9 @@ record_share(Kind, Slot, BlockHash, S = #s{signing_journal = Journal}) ->
                                  'quod.consensus.slot' => Slot,
                                  'quod.vote.kind' => atom_to_binary(Kind, utf8)},
                                fun() ->
-                                   record_vote(S#s.ns, Journal, Kind, Slot, BlockHash)
+                                   record_signing_decision(
+                                     S#s.ns, Journal, Kind, Slot,
+                                     BlockHash, Block)
                                end),
             Round = round_state(Slot, S),
             Round1 = case Kind of
@@ -11867,16 +11931,31 @@ record_share(Kind, Slot, BlockHash, S = #s{signing_journal = Journal}) ->
     end.
 
 -ifdef(TEST).
-record_vote(_Ns, memory, _Kind, _Slot, _BlockHash) -> {ok, memory};
-record_vote(Ns, Journal, Kind, Slot, BlockHash) ->
-    record_vote_journal(Ns, Journal, Kind, Slot, BlockHash).
+record_signing_decision(_Ns, memory, _Kind, _Slot, _BlockHash, _Block) ->
+    {ok, memory};
+record_signing_decision(Ns, Journal, Kind, Slot, BlockHash, Block) ->
+    record_signing_decision_journal(
+      Ns, Journal, Kind, Slot, BlockHash, Block).
 -else.
-record_vote(Ns, Journal, Kind, Slot, BlockHash) ->
-    record_vote_journal(Ns, Journal, Kind, Slot, BlockHash).
+record_signing_decision(Ns, Journal, Kind, Slot, BlockHash, Block) ->
+    record_signing_decision_journal(
+      Ns, Journal, Kind, Slot, BlockHash, Block).
 -endif.
-record_vote_journal(_Ns, undefined, Kind, Slot, BlockHash) ->
+record_signing_decision_journal(
+  _Ns, undefined, Kind, Slot, BlockHash, _Block) ->
     error({signing_journal_unavailable, Kind, Slot, BlockHash});
-record_vote_journal(Ns, Journal, Kind, Slot, BlockHash) ->
+record_signing_decision_journal(
+  Ns, Journal, support, Slot, BlockHash,
+  #block{slot = Slot} = Block) ->
+    true = block_hash(Block) =:= BlockHash,
+    Started = erlang:monotonic_time(),
+    Result = quod_signing_journal:record_support(Journal, Block),
+    quod_metrics:observe_signing_journal_vote_sync(
+      Ns, erlang:monotonic_time() - Started),
+    Result;
+record_signing_decision_journal(
+  Ns, Journal, Kind, Slot, BlockHash, none)
+  when Kind =:= commit; Kind =:= complaint ->
     Started = erlang:monotonic_time(),
     Result = quod_signing_journal:record_vote(
                Journal, Kind, Slot, BlockHash),
@@ -11887,10 +11966,21 @@ record_vote_journal(Ns, Journal, Kind, Slot, BlockHash) ->
 %% Reconstruct already-durable evidence for retransmission. The latch check is part of this function,
 %% so no caller can turn it into an unjournaled share constructor by supplying arbitrary arguments.
 %% Tests and certificate verification use `make_share/5` directly; normal first emission must pass
-%% through `record_share/4` above.
-own_share(Kind, Slot, BlockHash, #s{id = Id, consensus_domain = Domain} = S) ->
-    case may_vote(S) andalso vote_is_latched(Kind, BlockHash, round_state(Slot, S)) of
-        true  -> {ok, make_share(Domain, Kind, Slot, BlockHash, Id)};
+%% through `record_share/5` above.
+own_share(Kind, Slot, BlockHash, S = #s{}) ->
+    case may_vote(S) of
+        true -> latched_share(Kind, Slot, BlockHash, S);
+        false -> blocked
+    end.
+
+%% Recovery may reconstruct an identical already-exposed signature before tip
+%% corroboration, but it can never create a new decision: the durable latch is
+%% still the sole authority. The share enters the ordinary engine locally;
+%% normal readiness gates continue to own outbound evidence and fresh votes.
+latched_share(Kind, Slot, BlockHash,
+              #s{id = Id, consensus_domain = Domain} = S) ->
+    case vote_is_latched(Kind, BlockHash, round_state(Slot, S)) of
+        true -> {ok, make_share(Domain, Kind, Slot, BlockHash, Id)};
         false -> blocked
     end.
 
@@ -14221,14 +14311,15 @@ reseat_engine(NewHead, S) ->
 
 reseat_engine(NewHead, S, Included) ->
     S1 = prune_consensus_links(nack_inflight(S, NewHead, Included)),
-    S1#s{eng             = eng_new(S1#s.consensus_domain,
-                                    active_validators(S1), NewHead),
-          approved        = NewHead,
-          commit_buf      = #{},
-          block_requests  = #{},
-          requested_slot  = none,
-          head_progress   = idle,
-          rounds          = signing_rounds(S1#s.signing_journal)}.
+    restore_signing_engine(
+      S1#s{eng             = eng_new(S1#s.consensus_domain,
+                                      active_validators(S1), NewHead),
+            approved        = NewHead,
+            commit_buf      = #{},
+            block_requests  = #{},
+            requested_slot  = none,
+            head_progress   = idle,
+            rounds          = signing_rounds(S1#s.signing_journal)}).
 
 %% A recovery re-seat intentionally discards the whole volatile consensus window.
 %% Its fresh engine cannot safely retain proposals or votes from the old base.

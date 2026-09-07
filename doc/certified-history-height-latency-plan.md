@@ -1,7 +1,20 @@
 # Certified-history height-latency correction plan
 
 **Status: reviewed; Slice H1 (observability and attribution) is in progress.
-H2 is not approved before H1's hardware attribution and backend review.**
+H2 waits for completed H1 attribution, the reviewed finality cut and coordinated
+re-found, and a fresh post-cut baseline/backend review. No H2 implementation
+before that cut.**
+
+Sequencing agreed by Yan: H1 measurements on unaffected 0.7.143 fixtures run
+alongside the paper-only finality review. Finish and archive the full H1 matrix
+before finality code starts; no measurement may still be running when the cut
+or re-found destroys its fixture. All such data are **pre-cut 0.7.143**. After
+the cut/re-found, re-grow fixtures and establish a separate new-protocol baseline
+before H2. Do not pool or compare results across the protocol change to claim
+an H2 improvement. See `finality-round-recovery-plan.md` §7. The stuck group
+`6FDDFDBA6A0D61C5E779593F08F5416F35ABCBE39FA7E2C8D20C1D2A6D231B6D`
+and its ontology remain excluded from measurement until the scheduled re-found;
+its evidence is then archived as unresolved-on-the-old-network.
 
 This plan owns one observed defect: a warm signed one-hop write becomes slower
 as the caller ontology's certified history grows. It does not own cold restart,
@@ -217,9 +230,13 @@ operation and byte counts, never wall-clock thresholds.
 
 ## 7. Slice H2 -- correct the owning derived-state abstraction
 
-H2 is conditional on H1. If H1 confirms the current DETS phase-session lifecycle
-as the dominant owner, refactor **`quod_dtx_phase_index` itself**, keeping its
-public semantic API and its sole use by certified-history reduction.
+H2 is conditional on H1, the finality cut/re-found, and post-cut re-baselining.
+Do not implement against the old catch-up/ledger/phase-index seams that finality
+will rewrite. Carry H1's attribution table into backend review, confirm the
+identified owner on the new protocol, then build the fix once. If the evidence
+confirms the DETS phase-session lifecycle as the dominant owner, refactor
+**`quod_dtx_phase_index` itself**, keeping its public semantic API and its sole
+use by certified-history reduction.
 
 The required behavior is:
 

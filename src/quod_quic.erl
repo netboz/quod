@@ -286,7 +286,8 @@ start_listener(Port, ALPN, {Pubkey0, Addr} = Self, Cert, Key) ->
     %% from config via `liveness_opts/0`. This quic build enforces each side's OWN
     %% idle_timeout (no RFC min negotiation), so `quod_conn` dials with the SAME opts
     %% (both call `liveness_opts/0`) for symmetric detection in both directions.
-    ServerOpts = maps:merge(#{cert => Cert, key => Key, verify => true, alpn => ALPN,
+    ServerOpts = maps:merge(#{cert => Cert, key => quod_identity:tls_key(Key),
+                              verify => true, alpn => ALPN,
                               connection_handler => Handler}, liveness_opts()),
     case quic:start_server(?SERVER, Port, ServerOpts) of
         {ok, _} ->
@@ -497,8 +498,9 @@ id_str(Other)                         -> io_lib:format("~p", [Other]).
 
 %% The node's transport cert+key, as `{ok, {Cert, Key}}` or a clean `{error, Reason}`.
 %% Production: the per-node Ed25519 identity, set in the app env by `quod_app:apply_identity`
-%% (DER cert + `#'ECPrivateKey'{}` key). Explicit PEM-configured boots fall back to the
-%% `certfile`/`keyfile` pair — a missing/empty file is reported, not badmatched, so
+%% (DER cert + opaque key handle, unwrapped only at the TLS call). Explicit
+%% PEM-configured boots fall back to the `certfile`/`keyfile` pair — a missing/empty
+%% file is reported, not badmatched, so
 %% `init/1` can `{stop, _}` with a readable reason instead of crashing the transport at boot.
 identity_certkey() ->
     %% get_env yields the bare atom `undefined` when unset, so an absent key misses the

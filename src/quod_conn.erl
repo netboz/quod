@@ -57,7 +57,8 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy, Owner) ->
         %% config via `quod_quic:liveness_opts/0` — the SAME source the server listener uses, so
         %% both directions detect symmetrically (the fork's RFC 9000 §10.1 fix makes idle fire even
         %% while WE keep sending; it enforces each side's own idle timeout, no RFC min negotiation).
-        Opts = maps:merge(#{verify => false, cert => Cert, key => Key, alpn => ALPN},
+        Opts = maps:merge(#{verify => false, cert => Cert,
+                           key => quod_identity:tls_key(Key), alpn => ALPN},
                           quod_quic:liveness_opts()),
         case quic:connect(Host, Port, Opts, self()) of
             {ok, Conn} ->

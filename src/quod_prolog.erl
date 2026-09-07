@@ -67,7 +67,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          request_content_verdict/6, request_dtx_verdict/6,
          stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         format_status/1]).
 -export([prove_est/2]).
 %% Prove against a raw #est{} handle for the runtime projection.
 -ifdef(TEST).
@@ -3912,6 +3913,11 @@ cancel_dtx_handoff(Ref,
                 requests = Requests1};
         _ -> S
     end.
+
+%% Defense in depth for explicit injected identities and transient diagnostic
+%% fields; loaded node keys already travel as opaque identity handles.
+format_status(Status) ->
+    quod_log_formatter:redact(Status).
 
 terminate(_Reason, #s{ns = Ns, workers = W,
                       waiting_workers = Waiting,

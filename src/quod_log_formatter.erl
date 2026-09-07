@@ -20,6 +20,12 @@ One line per event:
 
 - `msg` is truncated at 4096 bytes before encoding — BEAM crash reports can
   exceed Loki's `max_line_size`, and a dropped line helps no one.
+- Private-key records and labelled secret fields are removed from structured
+  reports, arguments and metadata BEFORE rendering. TLS libraries still need
+  raw key terms even though Quod's loaded node identity is an opaque handle.
+  Stack frames retain module/function/arity/location, never argument values.
+  This cannot recover secrecy from an already-formatted string: callers must
+  never interpolate secrets before submitting a logger event.
 - `ts` is ISO-8601 UTC, microsecond precision, from the event's own `time`.
 - Metadata that is not JSON-safe (pids, refs, ports, funs, non-UTF-8 binaries)
   round-trips through `~p`, so the formatter can never crash the handler — a
@@ -30,18 +36,61 @@ Wired as the `default` handler's formatter in `config/sys.config`; `node_id`
 arrives via the primary logger metadata that `m:quod_app` stamps at boot.
 """.
 
--export([format/2]).
+-export([format/2, redact/1]).
 
 -define(MSG_MAX_BYTES, 4096).
 
 -spec format(logger:log_event(), logger:formatter_config()) -> unicode:chardata().
-format(#{level := Level, msg := Msg, meta := Meta}, _Config) ->
+format(#{level := Level, msg := RawMsg, meta := RawMeta}, _Config) ->
+    Msg = redact(RawMsg),
+    Meta = redact(RawMeta),
     %% Base fields win over metadata of the same name (merge Base last).
     Base = #{ts    => iso8601(maps:get(time, Meta, erlang:system_time(microsecond))),
              level => atom_to_binary(Level, utf8),
              msg   => truncate(render_msg(Msg))},
     Event = maps:merge(safe_meta(Meta), Base),
     [encode(Event, Base), $\n].
+
+%% The same data-level sanitation is used by OTP status callbacks. Do not
+%% stringify first: private records may sit inside state, child arguments,
+%% exception stacks, dictionaries, map keys, or report metadata.
+-spec redact(term()) -> term().
+redact(Term) when is_tuple(Term), tuple_size(Term) > 0,
+                  (element(1, Term) =:= 'ECPrivateKey' orelse
+                   element(1, Term) =:= 'RSAPrivateKey' orelse
+                   element(1, Term) =:= 'DSAPrivateKey' orelse
+                   element(1, Term) =:= 'PrivateKeyInfo' orelse
+                   element(1, Term) =:= 'OneAsymmetricKey' orelse
+                   element(1, Term) =:= ed_pri) ->
+    redacted_private_key;
+redact({Module, Function, Args, Location})
+  when is_atom(Module), is_atom(Function), length(Args) >= 0, is_list(Location) ->
+    {Module, Function, length(Args), redact(Location)};
+redact({Name, Value}) ->
+    {redact(Name), redact_field(Name, Value)};
+redact(Term) when is_tuple(Term) ->
+    list_to_tuple([redact(Value) || Value <- tuple_to_list(Term)]);
+redact(Term) when is_map(Term) ->
+    maps:from_list([{redact(Name), redact_field(Name, Value)}
+                   || {Name, Value} <- maps:to_list(Term)]);
+redact([Head | Tail]) -> [redact(Head) | redact(Tail)];
+redact(Term) -> Term.
+
+redact_field(Name, Value) when is_atom(Name) ->
+    redact_field(atom_to_binary(Name, utf8), Value);
+redact_field(Name, Value) when is_binary(Name) ->
+    %% No atom allocation from untrusted metadata names.
+    case Name of
+        <<"key">> -> redacted_private_key;
+        <<"identity_key">> -> redacted_private_key;
+        <<"private_key">> -> redacted_private_key;
+        <<"privateKey">> -> redacted_private_key;
+        <<"client_private_key">> -> redacted_private_key;
+        <<"server_private_key">> -> redacted_private_key;
+        <<"tls_private_key">> -> redacted_private_key;
+        _ -> redact(Value)
+    end;
+redact_field(_Name, Value) -> redact(Value).
 
 %% Encode, but never let a bad term crash the handler: fall back to a minimal
 %% line that still carries ts/level and names the failure.

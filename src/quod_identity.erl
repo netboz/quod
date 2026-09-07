@@ -33,9 +33,10 @@ chain, so a self-signed per-node cert authenticates cleanly.
 -export([ensure/1, advance_directory_epoch/1,
          load_node_actor_pointer/1, store_node_actor_pointer/2,
          generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
-         sign/2, verify/3, write_atomic/3]).
+         sign/2, verify/3, tls_key/1, write_atomic/3]).
 
--export_type([pubkey/0, seed/0, keypair/0, key_term/0, signer/0, identity/0]).
+-export_type([pubkey/0, seed/0, keypair/0, key_term/0, key_handle/0,
+              signer/0, identity/0]).
 
 -type pubkey()  :: binary().   %% 32-byte Ed25519 public key == the node_id
 -type seed()    :: binary().   %% 32-byte Ed25519 private seed (the only persisted secret)
@@ -43,10 +44,11 @@ chain, so a self-signed per-node cert authenticates cleanly.
 %% The private-key term `public_key:pkix_sign/2` and `quic` (`convert_private_key`)
 %% both sign with: the standard `#'ECPrivateKey'{}` carrying the Ed25519 namedCurve.
 -type key_term() :: #'ECPrivateKey'{}.
+-opaque key_handle() :: fun(() -> key_term()).
 %% The signing subset used by consensus does not need the TLS certificate.
--type signer() :: #{pubkey := pubkey(), key := key_term()}.
+-type signer() :: #{pubkey := pubkey(), key := key_handle() | key_term()}.
 %% A loaded identity adds the DER certificate used by the transport.
--type identity() :: #{pubkey := pubkey(), cert := binary(), key := key_term()}.
+-type identity() :: #{pubkey := pubkey(), cert := binary(), key := key_handle()}.
 
 -define(KEYFILE, "node.key").
 -define(DIRECTORY_EPOCH_FILE, "directory.epoch").
@@ -59,7 +61,11 @@ chain, so a self-signed per-node cert authenticates cleanly.
 -doc """
 Load this node's identity from `Dir`, generating + persisting a fresh keypair on
 first boot (no `node.key` yet). Returns the derived public key (the `node_id`), the
-self-signed cert, and the signing key term — see `t:identity/0`.
+self-signed cert, and an opaque signing-key handle — see `t:identity/0`.
+The closure prints as a function, not as private bytes, in process state,
+application environment, and supervisor child arguments. It is protection
+against accidental diagnostics, not a security boundary against code running
+inside this VM (which can inspect a closure). Never serialize a key handle.
 """.
 -spec ensure(file:filename_all()) -> {ok, identity()} | {error, term()}.
 ensure(Dir) ->
@@ -201,11 +207,21 @@ against the signer's public key (== its `node_id`). This is the primitive the
 DispersedSimplex support/commit/complaint shares and the commit certificate are
 built from.
 """.
--spec sign(iodata(), signer() | key_term()) -> binary().
+-spec sign(iodata(), signer() | key_handle() | key_term()) -> binary().
 sign(Msg, #{key := KeyTerm}) ->
     sign(Msg, KeyTerm);
+sign(Msg, Key) when is_function(Key, 0) ->
+    sign(Msg, Key());
 sign(Msg, #'ECPrivateKey'{privateKey = Seed}) ->
-    crypto:sign(eddsa, none, Msg, [Seed, ed25519]).
+    try crypto:sign(eddsa, none, Msg, [Seed, ed25519])
+    catch error:_ -> error(signing_failed)
+    end.
+
+-doc "Unwrap a node key only at the TLS adapter, whose API requires the raw key record.".
+-spec tls_key(term()) -> term().
+tls_key(Key) when is_function(Key, 0) -> Key();
+%% Explicit PEM configurations also use the transport's native key formats.
+tls_key(Key) -> Key.
 
 -doc """
 Verify an Ed25519 `Sig` over `Msg` against `PubKey` (a peer's `node_id`). `false` on
@@ -234,7 +250,8 @@ short(Pub) when is_binary(Pub) ->
 
 from_seed(Seed) ->
     {Pub, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
-    #{pubkey => Pub, cert => mint_cert({Pub, Seed}), key => key_term({Pub, Seed})}.
+    Key = key_term({Pub, Seed}),
+    #{pubkey => Pub, cert => mint_cert({Pub, Seed}), key => fun() -> Key end}.
 
 read_seed(Path) ->
     case file:read_file(Path) of

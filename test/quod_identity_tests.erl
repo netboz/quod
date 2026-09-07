@@ -157,6 +157,39 @@ short_format_test() ->
     %% kp_ + 8 hex chars (first 4 bytes)
     ?assertEqual(11, byte_size(S)).
 
+loaded_signing_key_is_opaque_in_state_and_still_signs_test() ->
+    Dir = tmp_dir(),
+    try
+        {ok, Identity = #{key := Key, pubkey := Pub}} = quod_identity:ensure(Dir),
+        ?assert(is_function(Key, 0)),
+        {ok, Seed} = file:read_file(filename:join(Dir, "node.key")),
+        Raw = quod_identity:key_term({Pub, Seed}),
+        Msg = <<"opaque-key-regression">>,
+        Signature = quod_identity:sign(Msg, Identity),
+        ?assertEqual(quod_identity:sign(Msg, Raw), Signature),
+        ?assert(quod_identity:verify(Signature, Msg, Pub)),
+        ?assertEqual(Raw, quod_identity:tls_key(Key)),
+        %% Production supervisor config and application-env values contain a
+        %% function handle. Standard term printing never expands its closure.
+        Printed = iolist_to_binary(io_lib:format("~p", [#{state => Identity,
+                         child => {quod_prolog, start_link, [<<"test">>, Identity]}}])),
+        ?assertEqual(nomatch, binary:match(Printed, <<"ECPrivateKey">>)),
+        ?assertEqual(nomatch, binary:match(Printed,
+                          iolist_to_binary(io_lib:format("~p", [Seed])))),
+        ?assertEqual(nomatch, binary:match(Printed, binary:encode_hex(Seed)))
+    after rm_rf(Dir) end.
+
+signing_errors_do_not_export_crypto_key_arguments_test() ->
+    {Pub, Seed} = quod_identity:generate(),
+    try quod_identity:sign(not_iodata, quod_identity:key_term({Pub, Seed})) of
+        _ -> error(invalid_signing_input_accepted)
+    catch
+        error:signing_failed:Stack ->
+            Printed = iolist_to_binary(io_lib:format("~p", [Stack])),
+            ?assertEqual(nomatch, binary:match(Printed,
+                          iolist_to_binary(io_lib:format("~p", [Seed]))))
+    end.
+
 %% --- helpers ---
 
 agent_blob(Ns, Anchor, InstanceText) ->

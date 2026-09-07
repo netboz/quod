@@ -66,16 +66,19 @@ init_per_suite(Config) ->
     application:set_env(quod, effect_journal_data_dir, EffectJournalDir),
     %% the node's per-node Ed25519 identity cert — the production transport cert that
     %% quod_quic presents and verifies under mutual TLS (verify => true).
-    {Pub, _} = KP = quod_identity:generate(),
-    Cert = quod_identity:mint_cert(KP),
-    Key  = quod_identity:key_term(KP),
+    {ok, #{pubkey := Pub, cert := Cert, key := Key}} = quod_identity:ensure(
+        filename:join(?config(priv_dir, Config), "node-identity")),
+    true = is_function(Key, 0),
     application:set_env(quod, listen_port, ?PORT),
     application:set_env(quod, node_addr, ?SELF),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(quod, identity_cert, Cert),
     application:set_env(quod, identity_key, Key),
     {ok, _} = application:ensure_all_started(quod),
-    [{cert_der, Cert}, {key_term, Key}, {self_pubkey, Pub} | Config].
+    %% The app retains the opaque loaded key; synthetic peers below call the
+    %% native TLS library directly and therefore need its native key term.
+    [{cert_der, Cert}, {key_term, quod_identity:tls_key(Key)},
+     {self_pubkey, Pub} | Config].
 
 end_per_suite(_Config) ->
     _ = application:stop(quod),
@@ -88,6 +91,14 @@ end_per_suite(_Config) ->
 
 %% Opening a link to our own listener over loopback yields a usable link pid.
 open_link_succeeds(_Config) ->
+    {ok, Key} = application:get_env(quod, identity_key),
+    true = is_function(Key, 0),
+    %% Real OTP status, not just a hand-built report. Both listener and dialer
+    %% must still complete mutual TLS from the same loaded opaque identity.
+    Transport = quod_reg:where({transport, node}),
+    true = is_pid(Transport),
+    Status = iolist_to_binary(io_lib:format("~p", [sys:get_status(Transport)])),
+    nomatch = binary:match(Status, <<"ECPrivateKey">>),
     ok = quod_quic:open_link(?SELF, <<"chan-a">>),
     receive
         {link_up, ?SELF, <<"chan-a">>, LinkPid} when is_pid(LinkPid) -> ok

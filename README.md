@@ -239,6 +239,8 @@ until explicitly admitted. Each compute allocation has its own dynamic host
 volume mounted at `/quod/data`. A single task group makes `max_parallel=1`
 fleet-wide, and Nomad waits for consensus recovery before advancing an ordinary
 anchored rolling update.
+Health gates must also inspect Erlang supervisor restart logs/metrics: child
+restart loops do not increment Nomad's task-restart counter.
 
 ## Status / next steps
 

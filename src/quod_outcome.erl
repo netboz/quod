@@ -545,7 +545,7 @@ set_once(Key, Value, Row) ->
 
 capture_terminal(CompleteRef, DecisionRef, FinalizeRows, History, Row) ->
     case {history_record(decision, History),
-          DecisionRef =:= history_ref(decision, History),
+          exact_history_ref(decision, DecisionRef, History),
           participant_slots(FinalizeRows), maps:get(result, Row)} of
         {{quod_dtx_decision, 3, _, _, commit, _, none}, true,
          {ok, Slots}, Result} when is_binary(Result) ->
@@ -753,7 +753,8 @@ projection_holds_plan(
           #{prepare_kind := PrepareKind, prepare_ref := StoredRef,
             manifest := Manifest,
             plan_digest := PlanDigest, plan := PlanBlob,
-            prepared_generation := Generation}} -> Ref =:= StoredRef;
+            prepared_generation := Generation}} ->
+          quod_dtx:same_certified_ref(Ref, StoredRef);
       _ -> false
     end;
 projection_holds_plan(_, _, _, _, _, _, _, _) -> false.
@@ -1577,7 +1578,10 @@ history_record(Kind, #{records := Records}) ->
     maps:get(record, maps:get(Kind, Records)).
 
 exact_history_ref(Kind, Ref, History) ->
-    history_ref(Kind, History) =:= Ref.
+    %% References have already passed finality verification. Independently
+    %% assembled quorum subsets identify the same committed occurrence;
+    %% history_extends still pins the reducer's retained rows exactly.
+    quod_dtx:same_certified_ref(history_ref(Kind, History), Ref).
 
 certified_ref_identity(
   {quod_dtx_ref, 2, Ns, Anchor, _, _, _, _}) -> {Ns, Anchor}.

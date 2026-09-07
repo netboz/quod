@@ -468,6 +468,22 @@ as a separate optimization. It must not be hidden by redefining this result.
 
 ## 9. Explicit non-goals and later work
 
+- **Narrow pre-cut replay repair, separately reviewed.** Subsequent evidence
+  on 0.7.143 proved a validator replay loop at `capture_terminal`: the carried
+  and retained Decision references name the same entry with two independently
+  valid 3-of-4 finality proofs. The outcome projection must compare that claim
+  through the existing `same_certified_ref/2`, not proof bytes (the `e409fc3`
+  equivalence rule). The repair's implementation review is closed; it does not
+  change authentication, retained-history equality, the result path, or the
+  future finality protocol. `projection_holds_plan` receives the same comparison
+  as a prepared-effect consistency contract; it is **not** the incoming-Finalize
+  path or a second demonstrated live failure. After review and deployment,
+  0.7.144 measurements form a separately labelled pre-cut baseline; never pool
+  them with `b7c497e` / 0.7.143. Evidence:
+  `/tmp/quod-h1-matrix-resume.Mjzz6i/REPORT.md`. This repair neither explains the
+  earlier 504 ms pending below nor authorizes F1/H2, a re-found, an index reset,
+  or resubmission of either preserved group. Signing-key diagnostic protection
+  is a separate reviewed change, not part of this outcome-semantics repair.
 - **Client-outcome delivery, reproduce after the finality cut.** On unchanged
   0.7.143 the fourth bounded two-writer request returned pending after 504 ms,
   while all four groups were later verified durably complete on all source

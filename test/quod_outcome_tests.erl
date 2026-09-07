@@ -788,6 +788,244 @@ outcome_format_break_resets_the_whole_rebuildable_projection_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+different_valid_decision_quorums_publish_complete_test_() ->
+    [{atom_to_list(Backend) ++ " " ++ atom_to_list(Verdict),
+      fun() ->
+          with_certified_group(Verdict,
+            fun(F) ->
+                {Ns, Anchor} = maps:get(target, F),
+                Dir = outcome_dir("equivalent-quorums"),
+                Config = #{data_dir => Dir, outcome_backend => Backend},
+                try
+                    {ok, I0} = quod_outcome:open(Ns, Anchor, Config),
+                    try certified_complete_replay(I0, F)
+                    after quod_outcome:close(I0) end,
+                    case Backend of
+                        disk ->
+                            {ok, R0} = quod_outcome:open(Ns, Anchor, Config),
+                            try
+                                ?assertEqual(0, quod_outcome:applied_floor(R0)),
+                                ?assertMatch({not_found, _},
+                                  quod_outcome:lookup_group(R0, maps:get(group_id, F))),
+                                certified_complete_replay(R0, F)
+                            after quod_outcome:close(R0) end;
+                        memory -> ok
+                    end
+                after file:del_dir_r(Dir) end
+            end)
+      end} || Backend <- [memory, disk], Verdict <- [commit, abort]].
+
+prepared_projection_compares_claims_and_keeps_plan_pins_test() ->
+    with_certified_group(commit,
+      fun(F) ->
+          Phase = maps:get(prepare, F),
+          Control = maps:get(control, Phase),
+          Target = {Ns, Anchor} = quod_dtx:control_target(Control),
+          GroupId = maps:get(group_id, F),
+          Ref = maps:get(ref, Phase),
+          {ok, H, P, Effects} = quod_dtx:reduce(
+                                 Control, Ref, quod_dtx:initial_group_history(),
+                                 quod_dtx:initial_projection(Target, 0)),
+          {ok, I} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+          try
+              %% A contract test of the prepared-effect consistency seam:
+              %% the current reducer emits the SAME Ref into both outputs.
+              %% Supply its other fully verified representation here. This is
+              %% not an incoming-Finalize path or a claimed second live bug.
+              Groups = maps:get(groups, P),
+              Group = maps:get(GroupId, Groups),
+              Participant = maps:get(participant, Group),
+              Replace = fun(Part) ->
+                            P#{groups := Groups#{GroupId :=
+                                                   Group#{participant := Part}}}
+                        end,
+              Equivalent = Participant#{prepare_ref := maps:get(alternate_ref, Phase)},
+              ?assertMatch({ok, _, none}, quod_outcome:apply_dtx(
+                             I, 2, Control, H, Replace(Equivalent), Effects)),
+              Pins = [{prepare_kind, 'begin'},
+                      {manifest, maps:get(manifest, Participant)},
+                      {plan_digest, <<99:256>>}, {plan, <<"different">>},
+                      {prepared_generation, 2}],
+              %% Manifest is a tuple; change an existing field without
+              %% changing any other plan pin.
+              BadManifest = setelement(3, maps:get(manifest, Participant), <<98:256>>),
+              lists:foreach(
+                fun({Field, Value}) ->
+                    BadP = Replace(Equivalent#{Field := Value}),
+                    ?assertMatch({error, _},
+                      quod_outcome:apply_dtx(I, 2, Control, H, BadP, Effects))
+                end, lists:keyreplace(manifest, 1, Pins, {manifest, BadManifest})),
+              [{prepared, GroupId, Ref, Manifest, Digest, Blob, Generation}] = Effects,
+              lists:foreach(
+                fun(BadRef) ->
+                    ?assertMatch({error, _}, quod_outcome:apply_dtx(
+                      I, 2, Control, H, P,
+                      [{prepared, GroupId, BadRef, Manifest, Digest, Blob, Generation}]))
+                end, changed_reference_claims(Ref))
+          after quod_outcome:close(I) end
+      end).
+
+remote_finalize_accepts_another_valid_prepare_quorum_test_() ->
+    [{atom_to_list(Verdict), fun() ->
+        with_certified_group(Verdict,
+          fun(F) ->
+              Prepare = maps:get(prepare, F), Finalize = maps:get(finalize, F),
+              Target = {Ns, Anchor} = quod_dtx:control_target(maps:get(control, Prepare)),
+              {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+              try
+                  {I1, H1, P1} = apply_group_control(
+                    I0, 2, maps:get(control, Prepare), maps:get(alternate_ref, Prepare),
+                    quod_dtx:initial_group_history(), quod_dtx:initial_projection(Target, 0)),
+                  Control = maps:get(control, Finalize), Ref = maps:get(ref, Finalize),
+                  {ok, H2, P2, Effects} = quod_dtx:reduce(Control, Ref, H1, P1),
+                  GroupId = maps:get(group_id, F),
+                  Generation = maps:get(applied_generation, F),
+                  {ok, I2, Ack} = quod_outcome:apply_dtx(I1, 3, Control, H2, P2, Effects),
+                  ?assertEqual({finalize_applied, GroupId, 3, Generation}, Ack),
+                  {{ok, Row}, _} = quod_outcome:lookup_group(I2, GroupId),
+                  ?assertMatch(#{verdict := Verdict, generation := Generation},
+                               maps:get(applied, Row)),
+                  Body = quod_dtx:control_body(Control),
+                  WrongGeneration = setelement(7, Body, Generation + 1),
+                  BadControl = fixture_control(Target, WrongGeneration, 2, F),
+                  BadPhase = certified_phase(Target, BadControl, 3, maps:get(signers, F)),
+                  ?assertEqual({error, {invalid_transition, bad_applied_generation}},
+                    quod_dtx:reduce(BadControl, maps:get(ref, BadPhase), H1, P1))
+              after quod_outcome:close(I0) end
+          end)
+      end} || Verdict <- [commit, abort]].
+
+equivalent_quorums_do_not_relax_retained_outcome_bytes_test() ->
+    with_certified_group(commit,
+      fun(F) ->
+          {Ns, Anchor} = maps:get(target, F),
+          {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+          try
+              {I1, H1, P1} = certified_source_begin(I0, F),
+              Phase = maps:get(decision, F), Control = maps:get(control, Phase),
+              Ref = maps:get(alternate_ref, Phase),
+              {ok, H2, P2, Effects} = quod_dtx:reduce(Control, Ref, H1, P1),
+              [{decided, G, commit, Ref}, Apply] = Effects,
+              ?assertEqual({error, outcome_index_conflict},
+                quod_outcome:apply_dtx(I1, 3, Control, H2, P2,
+                                      [{decided, G, abort, Ref}, Apply])),
+              %% Even a different valid proof cannot rewrite a retained row.
+              Records = maps:get(records, H2), Begin = maps:get('begin', Records),
+              ChangedHistory = H2#{records := Records#{'begin' :=
+                Begin#{ref := maps:get(alternate_ref, maps:get('begin', F))}}},
+              ?assertEqual({error, outcome_index_conflict},
+                quod_outcome:apply_dtx(I1, 3, Control, ChangedHistory, P2, Effects)),
+              {ok, Blob} = quod_durable_term:encode_result(#{'X' => changed}),
+              BeginControl = maps:get(control, maps:get('begin', F)),
+              BeginBody = quod_dtx:control_body(BeginControl),
+              ChangedManifest = setelement(9, maps:get(manifest, F), Blob),
+              BadBody = setelement(3, BeginBody, ChangedManifest),
+              %% Re-signing is deliberately not used to conceal the changed
+              %% signed result: the existing structural validator refuses it.
+              BadBegin = setelement(5, BeginControl, BadBody),
+              ?assertMatch({error, _}, quod_outcome:apply_dtx(
+                I1, 2, BadBegin, H1, P1, []))
+          after quod_outcome:close(I0) end
+      end).
+
+certified_complete_replay(I0, F) ->
+    {I1, H1, P1} = certified_source_begin(I0, F),
+    D = maps:get(decision, F),
+    {I2, H2, P2, _Ack} = apply_group_control_with_deferred_ack(
+      I1, 3, maps:get(control, D), maps:get(alternate_ref, D), H1, P1),
+    {ok, I3a} = quod_outcome:advance_applied(I2, 3),
+    {ok, I3} = quod_outcome:flush(I3a),
+    C = maps:get(complete, F),
+    {I4, _H3, _P3} = apply_group_control(
+      I3, 4, maps:get(control, C), maps:get(ref, C), H2, P2),
+    {ok, I5} = quod_outcome:advance_applied(I4, 4),
+    {{ok, Before}, I6} = quod_outcome:lookup_ref(I5, maps:get(group_ref, F)),
+    ?assertMatch({ok, #{status := pending, phase := publication}},
+                 quod_outcome:public(Before)),
+    ?assertEqual(3, quod_outcome:applied_floor(I6)),
+    {ok, I7} = quod_outcome:flush(I6),
+    {{ok, After}, _} = quod_outcome:lookup_ref(I7, maps:get(group_ref, F)),
+    {ok, Public} = quod_outcome:public(After),
+    case maps:get(verdict, F) of
+        commit -> ?assertMatch(#{status := committed, bindings := [{<<"X">>, linked}]}, Public);
+        abort -> ?assertMatch(#{status := aborted, reasons := [{test_abort, quorum}]}, Public)
+    end,
+    ?assertEqual(4, quod_outcome:applied_floor(I7)).
+
+certified_source_begin(I0, F) ->
+    {ok, I0a} = quod_outcome:advance_applied(I0, 1),
+    {ok, I0b} = quod_outcome:flush(I0a),
+    B = maps:get('begin', F),
+    {I1, H1, P1} = apply_group_control(
+      I0b, 2, maps:get(control, B), maps:get(ref, B),
+      quod_dtx:initial_group_history(), quod_dtx:initial_projection(maps:get(target, F), 0)),
+    {ok, I2a} = quod_outcome:advance_applied(I1, 2),
+    {ok, I2} = quod_outcome:flush(I2a),
+    {I2, H1, P1}.
+
+changed_reference_claims(Ref) ->
+    [setelement(3, Ref, <<"quod:another-identity">>),
+     setelement(4, Ref, <<91:256>>), setelement(5, Ref, ref_slot(Ref) + 1),
+     setelement(6, Ref, <<92:256>>), setelement(7, Ref, <<93:256>>)].
+
+with_certified_group(Verdict, Fun) ->
+    with_group_identity(fun(Pub, Signer) ->
+        Target = {Ns, Anchor} = {<<"quod:group-origin">>, <<81:256>>},
+        Other = {<<"quod:group-b">>, <<32:256>>},
+        Choice = case Verdict of commit -> commit; abort -> {abort, [{test_abort, quorum}]} end,
+        Base = group_fixture(Ns, Anchor, Pub, Signer, Choice),
+        Signers = [Signer | [begin
+          {P, Seed} = quod_identity:generate(),
+          #{pubkey => P, key => quod_identity:key_term({P, Seed})}
+        end || _ <- lists:seq(1, 3)]],
+        F0 = Base#{target => Target, signer => Signer, signers => Signers, verdict => Verdict},
+        Begin = maps:get(begin_record, Base),
+        B = certified_phase(Target, maps:get(begin_control, Base), 2, Signers),
+        BeginRef = maps:get(ref, B),
+        {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Other),
+        P = certified_phase(Other, fixture_control(Other, Prepare, 1, F0), 2, Signers),
+        Rows = case Verdict of commit -> [{Target, BeginRef}, {Other, maps:get(ref, P)}];
+                               abort -> [{Target, BeginRef}] end,
+        {ok, Decision} = quod_dtx:new_decision(maps:get(group_id, Base), BeginRef, Choice, Rows),
+        D = certified_phase(Target, fixture_control(Target, Decision, 2, F0), 3, Signers),
+        Generation = case Verdict of commit -> 2; abort -> 1 end,
+        {ok, Finalize} = quod_dtx:new_finalize(maps:get(group_id, Base), maps:get(ref, D),
+                                             Verdict, maps:get(ref, P), Generation),
+        Z = certified_phase(Other, fixture_control(Other, Finalize, 2, F0), 3, Signers),
+        {ok, Complete} = quod_dtx:new_complete(maps:get(group_id, Base), maps:get(ref, D),
+          [{Target, maps:get(ref, D), Generation}, {Other, maps:get(ref, Z), Generation}]),
+        C = certified_phase(Target, fixture_control(Target, Complete, 3, F0), 4, Signers),
+        Fun(F0#{'begin' => B, prepare => P, decision => D, finalize => Z, complete => C,
+                applied_generation => Generation})
+    end).
+
+fixture_control(Target, Record, Sequence, F) ->
+    signed_control(Target, Record, maps:get(admission, F), Sequence, maps:get(signer, F)).
+
+certified_phase(Target = {Ns, Anchor}, Control, Slot, Signers) ->
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Blob}]}, Slot),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Hash = quod_simplex:block_hash(Block),
+    Committee = lists:sort([maps:get(pubkey, S) || S <- Signers]),
+    Shares = maps:from_list([{maps:get(pubkey, S),
+               quod_simplex:make_share(Domain, commit, Slot, Hash, S)} || S <- Signers]),
+    [A, B, C, D] = Committee,
+    Make = fun(Keys) ->
+        {ok, Cert} = quod_simplex:form_cert(Domain, commit, Slot, Hash,
+                       [maps:get(K, Shares) || K <- Keys], Committee),
+        Entry = quod_ledger:entry(Block, Cert),
+        {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
+        {Entry, Ref}
+    end,
+    {Entry, Ref} = Make([A, B, C]), {OtherEntry, OtherRef} = Make([B, C, D]),
+    ?assertNotEqual(Ref, OtherRef),
+    ?assert(quod_dtx:same_certified_ref(Ref, OtherRef)),
+    ?assert(quod_dtx:certified_entry_ref_matches(Target, Entry, Control, OtherRef, Committee)),
+    ?assert(quod_dtx:certified_entry_ref_matches(Target, OtherEntry, Control, Ref, Committee)),
+    #{control => Control, entry => Entry, ref => Ref, alternate_ref => OtherRef,
+      committee => Committee}.
+
 transaction(Ns, Anchor, Digest) ->
     {ok, Goal} = quod_durable_term:encode_goal(
                    {assertz, {made, true}}),
@@ -805,7 +1043,7 @@ transaction(Ns, Anchor, Digest) ->
 outcome_dir(Suffix) ->
     filename:join(
       "/tmp", "quod-outcome-" ++ Suffix ++ "-" ++
-          integer_to_list(erlang:unique_integer([positive]))).
+          binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))).
 
 with_group_identity(Fun) ->
     Saved = [{K, application:get_env(quod, K)}

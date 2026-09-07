@@ -3300,6 +3300,48 @@ tampered_reference_and_phase_are_rejected_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+equivalent_claim_does_not_authorize_invalid_signature_or_wrong_era_test() ->
+    Fixture = complete_committee_move_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Ref = maps:get(prefix_ref, Fixture),
+    {quod_dtx_ref, 2, Ns, Anchor, Slot, Hash, _, Proof} = Ref,
+    Cert = binary_to_term(Proof, [safe]),
+    [{OldPub, _}] = Cert#cert.sigs,
+    BadSig = setelement(8, Ref, term_to_binary(
+        Cert#cert{sigs = [{OldPub, <<0:512>>}]}, [deterministic])),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    NewPub = maps:get(new_pub, Fixture),
+    NewShare = quod_simplex:make_share(
+        Domain, commit, Slot, Hash, maps:get(new_signer, Fixture)),
+    {ok, NewCert} = quod_simplex:form_cert(
+        Domain, commit, Slot, Hash, [NewShare], [NewPub]),
+    ?assert(quod_simplex:verify_cert(Domain, NewCert, [NewPub])),
+    WrongEra = setelement(8, Ref, term_to_binary(NewCert, [deterministic])),
+    Dir = temp_dir("exact-reference-era"),
+    Pid = start_owner(Dir, chain_fetch(Ns, maps:get(chain, Fixture))),
+    Endpoint = {"127.0.0.1", 19092},
+    try
+        %% Advance through the real certified committee replacement first.
+        %% The old entry must still be judged by its old era, not the head's.
+        ?assertMatch({ok, #{committee := [NewPub]}},
+            quod_foreign_log:verify(NewPub, Endpoint,
+                                   maps:get(final_ref, Fixture), transaction, 5000)),
+        ?assertMatch({ok, #{committee := [OldPub]}},
+            quod_foreign_log:verify(NewPub, Endpoint, Ref, finalize, 5000)),
+        lists:foreach(fun(BadRef) ->
+            %% Claim equality deliberately confers no authentication. The
+            %% existing exact-history verifier refuses before returning any
+            %% usable evidence to consensus validation / the outcome reducer.
+            ?assert(quod_dtx:same_certified_ref(Ref, BadRef)),
+            ?assertEqual({error, invalid_foreign_reference},
+                quod_foreign_log:verify(NewPub, Endpoint, BadRef, finalize, 5000))
+        end, [BadSig, WrongEra])
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 prepared_reference_reports_post_slot_generation_test() ->
     Fixture = prepared_fixture(unique_ns()),
     Dir = temp_dir("prepare-generation"),
@@ -3728,7 +3770,7 @@ complete_committee_move_fixture(Ns) ->
     Fixture#{chain := Prefix ++ [AddEntry, RemoveEntry, FinalEntry],
              prefix_ref => maps:get(ref, Fixture),
              final_ref => FinalRef,
-             new_pub => NewPub}.
+             new_pub => NewPub, new_signer => NewSigner}.
 
 prepared_fixture(Ns) ->
     Base = fixture_base(Ns),

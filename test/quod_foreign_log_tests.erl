@@ -2065,6 +2065,54 @@ verify_local_reuses_current_committee_entry_without_history_owner_test() ->
         _ = file:del_dir_r(SourceDir)
     end.
 
+verify_local_reuses_current_committee_control_without_history_owner_test() ->
+    Ns = unique_ns(),
+    Base = fixture_base(Ns),
+    Anchor = maps:get(anchor, Base),
+    Binding = {Ns, Anchor},
+    BeginFixture = quod_ct:signed_dtx_begin_fixture(
+                     #{target => Binding,
+                       participant_target =>
+                           {<<"resident-local-control-target">>, key(903)},
+                       node_identity => maps:get(signer, Base),
+                       admission => maps:get(admission, Base),
+                       proof_id => key(904)}),
+    Control = maps:get(begin_control, BeginFixture),
+    {ok, ControlBlob} = quod_dtx:encode_control(Control),
+    Entry = control_entry(
+              Ns, Anchor, maps:get(pub, Base), maps:get(signer, Base),
+              2, ControlBlob),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Binding, Entry, Control),
+    Genesis = maps:get(genesis, Base),
+    Chain = [Genesis, Entry],
+    {ok, [Genesis], Projection1} = quod_catchup:verify_forward(
+                                      Ns, Anchor,
+                                      quod_simplex:history_projection(Binding),
+                                      1, [Genesis]),
+    %% The live owner has already validated and applied slot 2. This test
+    %% models that owned projection directly because the seam under test is
+    %% exact-reference verification, not a second replay of DTX semantics.
+    Projection = Projection1#{history_head => {2, entry_hash(Entry)},
+                              timestamp => 2},
+    SourceDir = temp_dir("resident-local-control-source"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(Store0, Chain),
+    Source = #{ledger_root => SourceDir,
+               snapshot => quod_ledger_store:snapshot(Store1),
+               projection => Projection},
+    try
+        %% The owning consensus projection already certifies this committee
+        %% era. No foreign-history owner may be needed to read its exact
+        %% committed control from the immutable local snapshot.
+        ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
+        ?assertMatch(
+           {ok, #{phase := 'begin', control := Control, entry := _}},
+           verify_local_in_worker(Source, Ref, 'begin'))
+    after
+        quod_ledger_store:close(Store1),
+        _ = file:del_dir_r(SourceDir)
+    end.
+
 verify_local_in_worker(Source, Ref, Phase) ->
     Caller = self(),
     Tag = make_ref(),

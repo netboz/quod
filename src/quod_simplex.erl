@@ -2695,9 +2695,9 @@ dtx_local_evidence(Ns, Ref, ExpectedPhase)
         case gen_statem:call(
                quod_reg:via({quod_simplex, Ns}),
                {dtx_local_evidence_source, Ref, ExpectedPhase}, 1000) of
-            {ok, LedgerRoot} ->
+            {ok, LocalSource} ->
                 dtx_local_evidence_at(
-                  LedgerRoot, Ref, ExpectedPhase);
+                  LocalSource, Ref, ExpectedPhase);
             {error, _} = Error ->
                 Error
         end
@@ -2706,14 +2706,14 @@ dtx_local_evidence(Ns, Ref, ExpectedPhase)
 dtx_local_evidence(_Ns, _Ref, _ExpectedPhase) ->
     {error, invalid_request}.
 
-%% A coordinator recovered by this Simplex already has the immutable ledger
-%% root in its owner state.  Passing that capability to the existing verifier
-%% avoids asking the busy owner process to return data it just supplied to the
-%% worker.  External callers still resolve and validate the source above.
-dtx_local_evidence_at(LedgerRoot, Ref, ExpectedPhase) ->
+%% A coordinator recovered by this Simplex receives one immutable snapshot and
+%% its matching verified projection from the owner. Current-era evidence is
+%% read directly; only an older committee era enters the shared historical
+%% verifier. The worker never calls back into the busy owner that spawned it.
+dtx_local_evidence_at(LocalSource, Ref, ExpectedPhase) ->
     local_evidence_result(
       quod_foreign_log:verify_local(
-        LedgerRoot, Ref, ExpectedPhase, infinity)).
+        LocalSource, Ref, ExpectedPhase, infinity)).
 
 local_evidence_result({ok, Evidence}) -> {ok, Evidence};
 local_evidence_result({error, phase_mismatch}) -> {error, invalid_request};
@@ -2725,7 +2725,7 @@ local_evidence_result({error, _Unavailable}) -> {error, not_ready}.
 
 -doc "Return the verified local-ledger source for an exact Finalize reference.".
 -spec dtx_applied_source(binary(), quod_dtx:certified_ref()) ->
-          {ok, {local, file:filename_all()}} |
+          {ok, {local, map()}} |
           {error, not_ready | not_found | invalid_request}.
 dtx_applied_source(Ns, FinalizeRef)
   when is_binary(Ns), byte_size(Ns) > 0 ->
@@ -2733,7 +2733,9 @@ dtx_applied_source(Ns, FinalizeRef)
         case gen_statem:call(
                quod_reg:via({quod_simplex, Ns}),
                {dtx_local_evidence_source, FinalizeRef, finalize}, 1000) of
-            {ok, LedgerRoot} -> {ok, {local, LedgerRoot}};
+            {ok, LocalSource = #{ledger_root := _, snapshot := _,
+                                 projection := _}} ->
+                {ok, {local, LocalSource}};
             {error, _} = Error -> Error
         end
     catch exit:_ -> {error, not_ready}
@@ -4878,36 +4880,25 @@ start_dtx_coordinator(
       S);
 start_dtx_coordinator(
   {reference, GroupId, BeginRef},
-  S = #s{ledger_root = LedgerRoot}) ->
-    %% The certified-history owner has one writer per ontology identity.  Feed
-    %% historical Begin checks into that existing lane one at a time instead
-    %% of starting calls whose final deadlines would expire while queued
-    %% behind the same local ledger scan.  Completion below immediately wakes
-    %% the next bootstrap; live coordinators remain independent and concurrent.
-    case dtx_coordinator_bootstrap_active(S) of
-        true ->
-            S;
-        false ->
-            Owner = self(),
-            {Pid, Monitor} =
-                spawn_monitor(
-                  fun() ->
-                      Result = dtx_local_evidence_at(
-                                 LedgerRoot, BeginRef, 'begin'),
-                      Owner ! {dtx_coordinator_bootstrap, self(),
-                               GroupId, BeginRef, Result}
-                  end),
-            put_dtx_coordinator(
-              #dtx_coordinator_owner{
-                status = recovering, group_id = GroupId,
-                begin_ref = BeginRef, pid = Pid, monitor = Monitor}, S)
-    end.
-
-dtx_coordinator_bootstrap_active(#s{dtx_coordinators = Coordinators}) ->
-    lists:any(
-      fun(#dtx_coordinator_owner{status = recovering}) -> true;
-         (#dtx_coordinator_owner{}) -> false
-      end, maps:values(Coordinators)).
+  S) ->
+    %% Each worker receives its own immutable snapshot. Current-era controls
+    %% are independent reads; references from older committee eras fall back
+    %% inside the shared certified-history owner, which already serializes
+    %% work for one identity.
+    Owner = self(),
+    LocalSource = local_reference_source(S),
+    {Pid, Monitor} =
+        spawn_monitor(
+          fun() ->
+              Result = dtx_local_evidence_at(
+                         LocalSource, BeginRef, 'begin'),
+              Owner ! {dtx_coordinator_bootstrap, self(),
+                       GroupId, BeginRef, Result}
+          end),
+    put_dtx_coordinator(
+      #dtx_coordinator_owner{
+        status = recovering, group_id = GroupId,
+        begin_ref = BeginRef, pid = Pid, monitor = Monitor}, S).
 
 start_dtx_coordinator_worker(
   GroupId, Begin, GroupRef, BeginRef, BeginEvidence,
@@ -10779,9 +10770,9 @@ local_dtx_evidence_source(
     case {local_history_source(TargetIdentity, any, S),
           valid_dtx_phase(ExpectedPhase),
           quod_dtx:certified_ref_binding(Ref)} of
-        {{ok, LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
+        {{ok, _LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
           when Slot =< Committed ->
-            {ok, LedgerRoot};
+            {ok, local_reference_source(S)};
         {{ok, _LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
           when Slot > Committed ->
             {error, not_found};

@@ -51,8 +51,12 @@ keeps the plan vocabulary opaque.
 -define(APPLIED_VOTE_VERSION, 1).
 
 -type identity() :: {binary(), <<_:256>>}.
+-type local_source() ::
+        file:filename_all() |
+        #{ledger_root := file:filename_all(),
+          snapshot := term(), projection := map()}.
 -type source() ::
-        {local, file:filename_all()} |
+        {local, local_source()} |
         {remote, [{<<_:256>>, [term()]}]}.
 -type claim() ::
         #{target := identity(),
@@ -426,7 +430,7 @@ lookup_outcome_with(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
 
 production_dependencies() ->
     #{view =>
-          fun({local, _LedgerRoot}, {identity, Identity}, _Timeout) ->
+          fun({local, _LocalSource}, {identity, Identity}, _Timeout) ->
                   quod_simplex:history_current_view(Identity, validator);
              ({remote, Routes}, {identity, Identity}, Timeout) ->
                   quod_foreign_log:current(Routes, Identity, Timeout)
@@ -442,15 +446,26 @@ production_dependencies() ->
                     Owner, TargetNs, PeerKey, Endpoint, Request, [], Timeout)
           end,
       exact_entry =>
-          fun({local, LedgerRoot}, Ref, Timeout) ->
+          fun({local, #{ledger_root := _, snapshot := _, projection := _} =
+                        LocalSource}, Ref, Timeout) ->
                   quod_foreign_log:verify_local(
-                    LedgerRoot, Ref, entry, Timeout);
+                    LocalSource, Ref, entry, Timeout);
+             ({local, _LedgerRoot}, Ref, _Timeout) ->
+                  local_exact_entry(Ref);
              ({remote, _Routes}, Ref, Timeout) ->
                   quod_foreign_log:verify_reference(Ref, entry, Timeout)
           end,
       resolve => fun quod_quic:resolve/1,
       node_key => fun node_key/0,
       network_identity => fun quod_ontology:network_identity/0}.
+
+local_exact_entry(Ref) ->
+    case quod_dtx:certified_ref_binding(Ref) of
+        {ok, {Ns, _Anchor}, _Slot, _Digest} ->
+            quod_simplex:dtx_local_evidence(Ns, Ref, entry);
+        error ->
+            {error, invalid_request}
+    end.
 
 certify_applied_with(
   OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
@@ -784,6 +799,11 @@ resolve_quorum_absence(
   _OwnerNs, _Sources, _Committee, _Claim, _Deadline, _Dependencies) ->
     {error, retry}.
 
+valid_source(
+  {local, #{ledger_root := LedgerRoot,
+            snapshot := _Snapshot, projection := Projection}}) ->
+    (is_list(LedgerRoot) orelse is_binary(LedgerRoot)) andalso
+        is_map(Projection);
 valid_source({local, LedgerRoot}) ->
     is_list(LedgerRoot) orelse is_binary(LedgerRoot);
 valid_source({remote, Routes}) when is_list(Routes), Routes =/= [],

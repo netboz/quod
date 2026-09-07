@@ -2527,11 +2527,9 @@ dtx_committed_begin_is_adopted_by_live_coordinator_test() ->
     _ = quod_simplex:test_stop_dtx_coordinator(Reconciled),
     ok.
 
-%% Historical-Begin recovery already runs under the Simplex owner that holds
-%% the immutable ledger root.  It must verify that ledger directly rather than
-%% call back into the same statem and turn a busy startup mailbox into
-%% `not_ready`.  No Simplex is registered for Ns here, so the former callback
-%% path necessarily returned not_ready while the owner-provided path succeeds.
+%% Recovery already runs under the Simplex owner that holds the immutable
+%% store and its verified projection. It must read a current-era Begin from
+%% that snapshot rather than replay its own ledger through foreign_log.
 dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Fixture = quod_ct:dtx_prepare_fixture(),
@@ -2540,48 +2538,47 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
     Origin = {Ns, Anchor} = maps:get(origin, Fixture),
     {ok, {group, Ns, Anchor, Coordinator, Admission, GroupId}} =
         quod_dtx:begin_group_ref(Begin),
-    {_Entry, _Payload, BeginRef} =
-        certified_dtx_test_entry(Origin, BeginControl, 1),
-    {ok, _History, Projection, _} = quod_dtx:reduce(
-                                      BeginControl, BeginRef,
-                                      quod_dtx:initial_group_history(),
-                                      quod_dtx:initial_projection(Origin, 0)),
+    {Entry, BeginRef} = signed_certified_dtx_test_entry(
+                          Origin, BeginControl, 2,
+                          maps:get(signer, Fixture)),
+    {ok, _History, DtxProjection, _} = quod_dtx:reduce(
+                                         BeginControl, BeginRef,
+                                         quod_dtx:initial_group_history(),
+                                         quod_dtx:initial_projection(Origin, 0)),
     Dir = relay_store_dir("committed_begin_owned_source"),
     case quod_reg:where({foreign_log, node}) of
         Existing when is_pid(Existing) -> gen_server:stop(Existing);
         undefined -> ok
     end,
-    Parent = self(),
-    ForeignLog = spawn(
-                   fun() ->
-                       true = quod_reg:reg({foreign_log, node}),
-                       Parent ! {foreign_log_ready, self()},
-                       receive
-                           {'$gen_call', {Caller, Tag},
-                           {verify_local, Dir, BeginRef, 'begin', Timeout}}
-                             when Timeout =:= infinity ->
-                               Caller !
-                                   {Tag,
-                                    {ok, #{phase => 'begin',
-                                           control => BeginControl}}},
-                               receive stop -> ok end
-                       end
-                   end),
-    receive {foreign_log_ready, ForeignLog} -> ok after 1000 ->
-        error(foreign_log_registration_timeout)
-    end,
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store1} = quod_ledger_store:append(
+                     Store0, [quod_ledger:noop_entry(1, none), Entry]),
+    CommitteeId = crypto:hash(sha256, <<"owned-source-committee">>),
+    Projection =
+        (quod_simplex:history_projection(
+           [Coordinator], CommitteeId, #{Coordinator => Admission},
+           #{Coordinator => 1}, 0))#{
+          committee_views => [{1, [Coordinator], CommitteeId, #{}}],
+          dtx => DtxProjection,
+          dtx_lanes => #{{Admission, Coordinator} => 1},
+          history_head => {2, element(6, BeginRef)}},
     try
         undefined = quod_reg:where({quod_simplex, Ns}),
-        Base = st(#{ns => Ns, genesis_hash => Anchor,
-                    ledger_root => Dir, slot => 1,
-                    self => Coordinator, validators => [Coordinator],
-                    author_admissions => #{Coordinator => Admission},
-                    sync => ready, prolog_ready => true,
-                    dtx_projection => Projection}),
+        Base0 = st(#{ns => Ns, genesis_hash => Anchor,
+                     ledger_root => Dir, store => Store1, slot => 2,
+                     self => Coordinator, validators => [Coordinator],
+                     author_admissions => #{Coordinator => Admission},
+                     sync => ready, prolog_ready => true,
+                     dtx_projection => DtxProjection,
+                     dtx_lanes => #{{Admission, Coordinator} => 1},
+                     author_seqs => #{Coordinator => 1},
+                     history_head => {2, element(6, BeginRef)}}),
+        Base = quod_simplex:test_install_projection(Projection, Base0),
         Recovering = quod_simplex:test_reconcile_dtx_coordinator(Base),
         #{status := recovering, pid := Worker} =
             maps:get(GroupId,
                      quod_simplex:test_dtx_coordinator_state(Recovering)),
+        ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
         receive
             {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef,
              {ok, #{phase := 'begin', control := BeginControl}}} ->
@@ -2593,17 +2590,14 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
         end,
         _ = quod_simplex:test_stop_dtx_coordinator(Recovering)
     after
-        ForeignLog ! stop,
+        quod_ledger_store:close(Store1),
         file:del_dir_r(Dir)
     end.
 
-%% One ontology's certified-history cache has one writer.  Starting every
-%% historical Begin check together only moves that same-identity work into the
-%% verifier queue, where their caller deadlines expire together.  Recovery
-%% must admit one check and let its completion message start the next; this
-%% fixture holds the first verifier call open and proves no second call or
-%% recovery owner is created meanwhile.
-dtx_committed_begin_bootstrap_respects_foreign_history_lane_test() ->
+%% Current-era Begin checks own separate immutable snapshots. They must not be
+%% serialized by the obsolete self-replay gate; only an actual historical-era
+%% fallback enters foreign_log's existing per-identity lane.
+dtx_committed_begin_bootstraps_use_independent_snapshots_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Fixture = quod_ct:dtx_prepare_fixture(),
     Begin = maps:get('begin', Fixture),
@@ -2617,54 +2611,23 @@ dtx_committed_begin_bootstrap_respects_foreign_history_lane_test() ->
     Desired =
         #{GroupId1 => {reference, GroupId1, BeginRef},
           GroupId2 => {reference, GroupId2, BeginRef}},
-    Dir = relay_store_dir("committed_begin_history_lane"),
-    case quod_reg:where({foreign_log, node}) of
-        Existing when is_pid(Existing) -> gen_server:stop(Existing);
-        undefined -> ok
-    end,
-    Parent = self(),
-    ForeignLog = spawn(
-                   fun() ->
-                       true = quod_reg:reg({foreign_log, node}),
-                       Parent ! {foreign_log_ready, self()},
-                       foreign_log_hold_verifications(Parent, Dir, BeginRef)
-                   end),
-    receive {foreign_log_ready, ForeignLog} -> ok after 1000 ->
-        error(foreign_log_registration_timeout)
-    end,
+    Dir = relay_store_dir("committed_begin_snapshots"),
+    {ok, Store} = quod_ledger_store:open(Ns, Dir),
     try
         Base = st(#{ns => Ns, genesis_hash => Anchor,
-                    ledger_root => Dir, slot => 1,
+                    ledger_root => Dir, store => Store, slot => 1,
                     self => Coordinator, validators => [Coordinator],
                     author_admissions => #{Coordinator => Admission},
                     sync => ready, prolog_ready => true}),
         Recovering = quod_simplex:test_reconcile_dtx_coordinators(
                        Desired, Base),
         ?assertEqual(
-           1,
+           2,
            map_size(quod_simplex:test_dtx_coordinator_state(Recovering))),
-        receive {verify_local_started, ForeignLog} -> ok after 1000 ->
-            error(first_begin_bootstrap_not_started)
-        end,
-        receive
-            {verify_local_started, ForeignLog} ->
-                error(second_begin_bootstrap_started_concurrently)
-        after 100 ->
-            ok
-        end,
         _ = quod_simplex:test_stop_dtx_coordinator(Recovering)
     after
-        ForeignLog ! stop,
+        quod_ledger_store:close(Store),
         file:del_dir_r(Dir)
-    end.
-
-foreign_log_hold_verifications(Parent, Dir, BeginRef) ->
-    receive
-        {'$gen_call', _From,
-         {verify_local, Dir, BeginRef, 'begin', _Timeout}} ->
-            Parent ! {verify_local_started, self()},
-            foreign_log_hold_verifications(Parent, Dir, BeginRef);
-        stop -> ok
     end.
 
 %% The generic state builder has one dependency: `validators` supplies default
@@ -10045,6 +10008,23 @@ certified_dtx_test_entry(Identity, Control, Slot) ->
     {Entry, Payload} = committed_dtx_test_entry(Control, Slot),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Control),
     {Entry, Payload, Ref}.
+
+signed_certified_dtx_test_entry(
+  {Ns, Anchor} = Identity, Control, Slot,
+  #{pubkey := Pubkey} = Signer) ->
+    {ok, Envelope} = quod_dtx:encode_control(Control),
+    Block = block(Slot, Slot - 1, {batch, [{dtx, Envelope}]}, 0),
+    BlockHash = quod_simplex:block_hash(Block),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    #share{sig = Signature} = quod_simplex:make_share(
+                                Domain, commit, Slot, BlockHash, Signer),
+    Entry = quod_ledger:entry(
+              Block,
+              #cert{kind = commit, slot = Slot,
+                    block_hash = BlockHash,
+                    sigs = [{Pubkey, Signature}]}),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Control),
+    {Entry, Ref}.
 
 start_registered_prolog_sink(Ns) ->
     Parent = self(),

@@ -435,18 +435,8 @@ verify_local(
   when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
        ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
          TimeoutMs =< ?MAX_TIMER_MS - 1000) orelse TimeoutMs =:= infinity) ->
-    case ExpectedPhase of
-        entry ->
-            verify_resident_or_historical_local_entry(
-              LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection);
-        transaction ->
-            verify_resident_or_historical_local_entry(
-              LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection);
-        _ControlPhase ->
-            %% Control evidence also carries the exact historical DTX
-            %% generation. Keep it on the phase-index-backed verifier.
-            verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
-    end;
+    verify_resident_or_historical_local_reference(
+      LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection);
 verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs)
   when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
        ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
@@ -468,9 +458,9 @@ verify_local(_LedgerRoot, _Ref, _ExpectedPhase, _TimeoutMs) ->
 local_call_timeout(infinity) -> infinity;
 local_call_timeout(TimeoutMs) -> TimeoutMs + 1000.
 
-verify_resident_or_historical_local_entry(
+verify_resident_or_historical_local_reference(
   LedgerRoot, Snapshot, Ref, ExpectedPhase, TimeoutMs, Projection) ->
-    case verify_resident_local_entry(
+    case verify_resident_local_reference(
            Snapshot, Ref, ExpectedPhase, Projection) of
         {error, historical_committee} ->
             verify_local(LedgerRoot, Ref, ExpectedPhase, TimeoutMs);
@@ -482,7 +472,7 @@ verify_resident_or_historical_local_entry(
 %% Its live projection retains the exact start of the current committee era;
 %% only references in that era may reuse it. Older eras retain the full
 %% historical verifier above.
-verify_resident_local_entry(Snapshot, Ref, ExpectedPhase, Projection) ->
+verify_resident_local_reference(Snapshot, Ref, ExpectedPhase, Projection) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, Identity = {Ns, Anchor}, Slot, _Digest} ->
             case valid_projection(Projection, Identity) of

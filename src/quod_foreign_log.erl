@@ -1556,11 +1556,15 @@ join_waiting_request(Work, From, TimeoutMs, Identity,
                      #history{waiting = Waiting0} = History, S) ->
     case join_waiting_item(
            Work, From, TimeoutMs, Identity, queue:to_list(Waiting0)) of
-        {joined, Waiting1} ->
-            {joined,
-             put_history(
-               Identity,
-               History#history{waiting = queue:from_list(Waiting1)}, S)};
+        {joined, Waiting1, Wake} ->
+            S1 = put_history(
+                   Identity,
+                   History#history{waiting = queue:from_list(Waiting1)}, S),
+            S2 = case Wake of
+                     true -> start_next_request(Identity, S1);
+                     false -> S1
+                 end,
+            {joined, S2};
         no ->
             no
     end.
@@ -1574,11 +1578,19 @@ join_waiting_item(
                    parked = Parked} = Queued | Rest]) ->
     case shareable_waiting_work(
            Work, QueuedWork, Parked, Identity) of
+        wake ->
+            {joined,
+             [Queued#queued_request{
+                callers = add_request_caller(
+                            RequestRef, From, TimeoutMs, Callers),
+                parked = false} | Rest],
+             true};
         true ->
             {joined,
              [Queued#queued_request{
                 callers = add_request_caller(
-                            RequestRef, From, TimeoutMs, Callers)} | Rest]};
+                            RequestRef, From, TimeoutMs, Callers)} | Rest],
+             false};
         false ->
             prepend_join_waiting_item(
               Queued,
@@ -1590,15 +1602,24 @@ join_waiting_item(Work, From, TimeoutMs, Identity, [Queued | Rest]) ->
       Queued,
       join_waiting_item(Work, From, TimeoutMs, Identity, Rest)).
 
-prepend_join_waiting_item(Queued, {joined, Rest}) ->
-    {joined, [Queued | Rest]};
+prepend_join_waiting_item(Queued, {joined, Rest, Wake}) ->
+    {joined, [Queued | Rest], Wake};
 prepend_join_waiting_item(_Queued, no) ->
     no.
 
 %% Route lists are not semantic identity for an active certified job, but a
-%% parked row has no job yet. A later row with a different supplied/contact
-%% hint must be allowed to run instead of donating its only route to the
-%% older wait.
+%% parked row has no job yet. A new request arriving over the same currently
+%% authenticated contact is a concrete availability edge: wake the one shared
+%% row and verify again. A different supplied/contact hint keeps its own row so
+%% it can run instead of donating its only route to the older wait.
+shareable_waiting_work(
+  #routed_work{contact = {Peer, Endpoint}, kind = Kind1},
+  #routed_work{contact = {Peer, Endpoint}, kind = Kind2},
+  true, Identity) ->
+    case shareable_routed_kind(Kind1, Kind2, Identity) of
+        true -> wake;
+        false -> false
+    end;
 shareable_waiting_work(
   #routed_work{} = Work, #routed_work{} = Work, true, _Identity) ->
     true;

@@ -1780,6 +1780,71 @@ parked_route_does_not_block_later_request_contact_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+authenticated_repeat_wakes_shared_parked_current_request_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31996},
+    Routes = route_candidates([{Peer, Endpoint}]),
+    Contact = {Peer, Endpoint},
+    TestPid = self(),
+    Attempts = atomics:new(1, []),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch =
+        fun(P, E, RequestedNs, From, To) ->
+            Attempt = atomics:add_get(Attempts, 1, 1),
+            case Attempt of
+                1 ->
+                    TestPid ! {authenticated_repeat_fetch, 1},
+                    {error, unavailable};
+                2 ->
+                    TestPid ! {authenticated_repeat_fetch, 2, self()},
+                    receive release_authenticated_repeat -> ok end,
+                    BaseFetch(P, E, RequestedNs, From, To);
+                _ -> BaseFetch(P, E, RequestedNs, From, To)
+            end
+        end,
+    Dir = temp_dir("authenticated-repeat-wake"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        First = gen_server:send_request(
+                  Pid,
+                  current_request(Routes, Identity, Contact, 3000)),
+        receive
+            {authenticated_repeat_fetch, 1} -> ok
+        after 1000 ->
+            error(first_authenticated_fetch_not_started)
+        end,
+        ok = wait_foreign_work(0, 1, 1000),
+
+        %% This is a new authenticated arrival from the same live endpoint,
+        %% not a timer or a route-table change.  It must wake the one shared
+        %% parked verification rather than merely add a caller to it asleep.
+        Second = gen_server:send_request(
+                   Pid,
+                   current_request(Routes, Identity, Contact, 3000)),
+        SecondFetch = receive
+            {authenticated_repeat_fetch, 2, FetchWorker} -> FetchWorker
+        after 1000 ->
+            error(authenticated_repeat_did_not_wake_parked_work)
+        end,
+        ?assertMatch(#{pending := 1, queued := 0},
+                     quod_foreign_log:stats()),
+        SecondFetch ! release_authenticated_repeat,
+        ?assertMatch(
+           {reply, {ok, #{identity := Identity, slot := 2}}},
+           gen_server:wait_response(First, 3000)),
+        ?assertMatch(
+           {reply, {ok, #{identity := Identity, slot := 2}}},
+           gen_server:wait_response(Second, 3000)),
+        ?assertMatch(#{pending := 0, queued := 0},
+                     quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 uncertified_feed_progress_does_not_wake_parked_exact_verification_test() ->
     Ns = unique_ns(),
     Identity = {Ns, key(31998)},
@@ -4188,6 +4253,18 @@ wait_follow_count(Expected, Left) ->
         Expected -> ok;
         _ -> receive after 10 -> ok end,
              wait_follow_count(Expected, Left - 10)
+    end.
+
+wait_foreign_work(ExpectedPending, ExpectedQueued, Left) when Left =< 0 ->
+    Stats = quod_foreign_log:stats(),
+    error({foreign_work_timeout, ExpectedPending, ExpectedQueued, Stats});
+wait_foreign_work(ExpectedPending, ExpectedQueued, Left) ->
+    Stats = quod_foreign_log:stats(),
+    case {maps:get(pending, Stats), maps:get(queued, Stats)} of
+        {ExpectedPending, ExpectedQueued} -> ok;
+        _ ->
+            receive after 10 -> ok end,
+            wait_foreign_work(ExpectedPending, ExpectedQueued, Left - 10)
     end.
 
 stop_owner(Pid) when is_pid(Pid) ->

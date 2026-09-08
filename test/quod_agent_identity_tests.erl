@@ -61,6 +61,75 @@ certificate_is_bound_to_proof_request_committee_and_expiry_test() ->
          Certificate, Evidence, ?PROOF_ID, View,
          quod_agent_identity:not_after_ms(Certificate) + 1)).
 
+fully_replaced_committee_cannot_authorize_fresh_request_test() ->
+    F = fixture(4),
+    OldView = maps:get(view, F),
+    OldKeys = maps:get(keys, F),
+    OldCommitteeId = maps:get(committee_id, OldView),
+    NewKeys = [quod_identity:generate() || _ <- lists:seq(1, 4)],
+    NewCommittee = lists:sort([Key || {Key, _Seed} <- NewKeys]),
+    NewCommitteeId = <<16#c1:256>>,
+    %% Unit verifier boundary: the caller supplies the certified current view.
+    %% These maps model complete replacement, not a live history transition.
+    CurrentView = OldView#{committee => NewCommittee,
+                          committee_id => NewCommitteeId},
+    ?assertEqual([], ordsets:intersection(maps:get(committee, OldView),
+                                         NewCommittee)),
+
+    %% After replacement, retained old keys sign a new request and ProofId.
+    %% Its future expiry rules out rejecting a mere expired-certificate replay.
+    Now = maps:get(not_after, F) + 1,
+    NotAfter = Now + 5000,
+    FreshProofId = crypto:strong_rand_bytes(32),
+    AgentKeyPair = quod_identity:generate(),
+    {AgentKey, _} = AgentKeyPair,
+    OldEvidence = maps:get(evidence, F),
+    OldRequest = maps:get(request, OldEvidence),
+    FreshRequest = OldRequest#{signing_public_key => AgentKey,
+                              operation_id => <<16#c3:256>>,
+                              not_after_ms => NotAfter},
+    {ok, RequestBytes} = quod_client_goal:encode(FreshRequest),
+    RequestSignature = quod_identity:sign(
+                         RequestBytes, quod_identity:key_term(AgentKeyPair)),
+    {ok, Evidence} = quod_client_goal:verify(RequestBytes, RequestSignature),
+    ?assertNotEqual(maps:get(request_digest, OldEvidence),
+                    maps:get(request_digest, Evidence)),
+    ?assertNotEqual(?PROOF_ID, FreshProofId),
+    {ok, OldStatement} = quod_agent_identity:statement(
+                           Evidence, FreshProofId, OldCommitteeId, NotAfter),
+    {ok, RetiredCertificate} = quod_agent_identity:certificate(
+                                OldStatement, sign_with(OldStatement, OldKeys), []),
+    ?assertEqual(OldCommitteeId,
+                 quod_agent_identity:committee_id(RetiredCertificate)),
+    ?assert(quod_agent_identity:not_after_ms(RetiredCertificate) > Now),
+    %% Real signatures form an unexpired quorum under the historic view.
+    ?assertEqual(
+       ok,
+       quod_agent_identity:verify(
+         RetiredCertificate, Evidence, FreshProofId, OldView, Now)),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_agent_identity:verify(
+         RetiredCertificate, Evidence, FreshProofId, CurrentView, Now)),
+
+    {ok, CurrentStatement} = quod_agent_identity:statement(
+                               Evidence, FreshProofId, NewCommitteeId, NotAfter),
+    {ok, CurrentCertificate} = quod_agent_identity:certificate(
+                                CurrentStatement,
+                                sign_with(CurrentStatement, NewKeys), []),
+    ?assertEqual(
+       ok,
+       quod_agent_identity:verify(
+         CurrentCertificate, Evidence, FreshProofId, CurrentView, Now)),
+    %% Retired keys cannot recover authority by signing the current ID either.
+    {ok, RelabelledCertificate} = quod_agent_identity:certificate(
+                                   CurrentStatement,
+                                   sign_with(CurrentStatement, OldKeys), []),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_agent_identity:verify(
+         RelabelledCertificate, Evidence, FreshProofId, CurrentView, Now)).
+
 request_and_response_wire_are_closed_and_correlated_test() ->
     F = fixture(1),
     Evidence = maps:get(evidence, F),

@@ -484,7 +484,26 @@ as a separate optimization. It must not be hidden by redefining this result.
   earlier 504 ms pending below nor authorizes F1/H2, a re-found, an index reset,
   or resubmission of either preserved group. Signing-key diagnostic protection
   is a separate reviewed change, not part of this outcome-semantics repair.
-- **Client-outcome delivery, reproduce after the finality cut.** On unchanged
+- **Bounded pre-cut single-writer delivery correction, separately reviewed.**
+  The 0.7.144 non-co-hosted one-hop run returned 85 pending replies out of 100
+  even though later read-only resolution found all 100 exact target
+  transactions committed. Source inspection exposed normal completion and
+  unresolved-snapshot cleanup cancelling local result delivery; late callers
+  also lacked reconstruction after terminal-owner removal. The correction is
+  scoped by `operation-completion-lifecycle-plan.md`: the existing operation
+  owner reads the existing source row, keeps pending delivery through receipt
+  and snapshot transitions, and resolves terminal targets through the existing
+  outcome verifier without resubmission. No format, protocol, cache, timer,
+  finality, or H2 change is authorized by this exception. The aggregate 85
+  observations are not an individual branch trace. Review precedes commit;
+  later benchmark versions remain separate baselines. Evidence:
+  `/tmp/quod-h1-144.qF9eqa/`. This repair must make the measurement run reliable,
+  not claim the still-unmet 95% height-growth attribution gate. The driver's
+  batch-end reporting revealed the 85 pending replies only after the run;
+  a stop-on-uncertainty driver option remains measurement-infrastructure work,
+  not part of this lifecycle correction.
+- **Earlier two-writer client-outcome delivery, reproduce after the finality
+  cut unless independently traced.** On unchanged
   0.7.143 the fourth bounded two-writer request returned pending after 504 ms,
   while all four groups were later verified durably complete on all source
   and target validators. Client results were 3 clear + 1 pending; response
@@ -492,7 +511,7 @@ as a separate optimization. It must not be hidden by redefining this result.
   `target_execute` uncertainty counter rose 1→2. No fifth request or resubmission
   followed. Mechanism remains untraced; neither a 500 ms deadline nor the paper
   handover race is established as its cause. This is a separate tracked defect,
-  not a reason to divert H1 into a pre-cut result-path rewrite. Evidence:
+  not closed by the later single-writer completion correction above. Evidence:
   `/tmp/quod-h1-precut-capture2-HOFRDN/HANDOFF.md` and `REPORT.md`, with group
   `CFABE5DCB8A6552B17F7CAD212DB619D3E6ECBC178CE4817E78289C8A6D121C4`.
 - **Cold-start re-verification remains next.** This plan may measure session
@@ -506,6 +525,9 @@ as a separate optimization. It must not be hidden by redefining this result.
   assertion) do not belong to H1 or H2. They may be folded into H3 only if they
   touch the same final files and remain separate commits; otherwise they stay
   in the backlog.
+- Small documentation cleanup carried from the completion-lifecycle review:
+  `quod_explorer_ws` still says every committed transaction emits a material
+  runtime outcome; metadata does not. Its behavior is correct and unchanged.
 - L2 / write-lanes slices 6--8 remain parked.
 
 ## 10. Documentation amendments when implementation is reviewed

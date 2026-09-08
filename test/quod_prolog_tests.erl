@@ -473,12 +473,12 @@ t_pending_begins_projection_is_atomic_and_clearable({Ns, _Pid}) ->
            {ok, #{applied_floor => 0,
                   outcome => #{status => pending, phase => pending_begin,
                                ref => GroupRef}}},
-           quod_prolog:outcome_snapshot(Ns, GroupRef)),
+           quod_prolog:outcome_snapshot(Ns, GroupRef, 1000)),
         ?assertMatch(
            {ok, #{outcome := #{status := pending,
                                phase := pending_begin,
                                ref := OtherGroupRef}}},
-           quod_prolog:outcome_snapshot(Ns, OtherGroupRef)),
+           quod_prolog:outcome_snapshot(Ns, OtherGroupRef, 1000)),
         ?assertEqual(
            {ok, #{history => none, applied => none,
                   applied_floor => 0, generation => 0}},
@@ -486,15 +486,15 @@ t_pending_begins_projection_is_atomic_and_clearable({Ns, _Pid}) ->
         ok = quod_prolog:project_pending_begins(Ns, [OtherPending]),
         ?assertEqual(
            {ok, #{applied_floor => 0, outcome => not_found}},
-           quod_prolog:outcome_snapshot(Ns, GroupRef)),
+           quod_prolog:outcome_snapshot(Ns, GroupRef, 1000)),
         ?assertMatch(
            {ok, #{outcome := #{status := pending,
                                phase := pending_begin}}},
-           quod_prolog:outcome_snapshot(Ns, OtherGroupRef)),
+           quod_prolog:outcome_snapshot(Ns, OtherGroupRef, 1000)),
         ok = quod_prolog:project_pending_begins(Ns, []),
         ?assertEqual(
            {ok, #{applied_floor => 0, outcome => not_found}},
-           quod_prolog:outcome_snapshot(Ns, OtherGroupRef))
+           quod_prolog:outcome_snapshot(Ns, OtherGroupRef, 1000))
     end.
 
 %% The one submission primitive refuses anything that is not this node's own
@@ -998,7 +998,34 @@ runtime_event_test_() ->
       fun t_live_reject_emits_event/1,
       fun t_replay_no_event/1,
       fun t_replay_reentry/1,
-      fun t_no_boundary_without_advance/1]}.
+      fun t_no_boundary_without_advance/1,
+      fun t_projection_progress_includes_non_material_blocks/1]}.
+
+t_projection_progress_includes_non_material_blocks({Ns, Engine}) ->
+    fun() ->
+        true = quod_reg:subscribe({runtime, Ns}),
+        try
+            %% Neither block creates a material runtime event. Nevertheless
+            %% readers waiting for the exact applied floor must wake for both
+            %% live and replay, including the final quiet replay block.
+            ok = ae(Ns, 1, noop, live),
+            ?assertEqual(1, quod_prolog:applied(Ns)),
+            ?assertEqual({projection_advanced, Engine, 1},
+                         recv_rt(projection_advanced)),
+            ok = ae(Ns, 2, noop, replay),
+            ?assertEqual(2, quod_prolog:applied(Ns)),
+            ?assertEqual({projection_advanced, Engine, 2},
+                         recv_rt(projection_advanced)),
+            ok = refute_rt(applied_live),
+            %% Already-applied entries and gaps are not progress.
+            ok = ae(Ns, 2, noop, live),
+            ok = ae(Ns, 4, noop, live),
+            ?assertEqual(2, quod_prolog:applied(Ns)),
+            ok = refute_rt(projection_advanced)
+        after
+            true = quod_reg:unsubscribe({runtime, Ns})
+        end
+    end.
 
 %%%===================================================================
 %%% helpers

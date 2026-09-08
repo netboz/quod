@@ -541,6 +541,15 @@ result. The client compares that digest with its persisted signed request
 before accepting the result. Absence is not reported as safe-to-retry while an
 admission could still be in flight.
 
+For a foreign single-writer operation, source completion bookkeeping and
+delivery of the verified target result are distinct. A `remote_complete`
+receipt must not cancel waiting callers or be treated as a successful target
+verdict. The existing operation owner reconstructs late callers from the
+source row; a terminal row resolves its exact target through the existing
+outcome verifier, without a new target submission or another receipt. See
+`operation-completion-lifecycle-plan.md` for the completion/restart contract
+and its implementation review gate.
+
 Proposal preview, consensus validation, ordered apply, replay, and catch-up all
 use the same rules in certified order:
 

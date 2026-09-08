@@ -53,6 +53,204 @@ remote_operation_temporary_reply_parks_on_progress_test() ->
        quod_dtx_coordinator:test_operation_target_response_disposition(
          Request, malformed)).
 
+%% These run the actual operation worker and the current-view quorum
+%% collector. Only the existing owner process interfaces are stubs: every
+%% call is exposed to the test, so a terminal recovery that loads/re-applies
+%% the claim or submits another receipt fails rather than silently passing.
+terminal_operation_recovers_committed_result_without_resubmission_test() ->
+    with_operation_fixture(
+      fun(F) ->
+          with_operation_worker(F,
+            fun(Worker, Monitor) ->
+                reply_operation_source(F, terminal_operation_row(F)),
+                certify_operation_result(F, Worker, committed),
+                assert_operation_result(F, Worker, Monitor, committed)
+            end)
+      end).
+
+terminal_operation_recovers_rejected_result_without_resubmission_test() ->
+    with_operation_fixture(
+      fun(F) ->
+          with_operation_worker(F,
+            fun(Worker, Monitor) ->
+                reply_operation_source(F, terminal_operation_row(F)),
+                certify_operation_result(F, Worker, {rejected, conflict_retry}),
+                assert_operation_result(
+                  F, Worker, Monitor, {rejected, conflict_retry})
+            end)
+      end).
+
+unknown_operation_waits_for_its_source_projection_edge_test() ->
+    with_operation_fixture(
+      fun(F = #{operation_ref := OperationRef}) ->
+          with_operation_worker(F,
+            fun(Worker, Monitor) ->
+                reply_operation_source(F, {error, not_found}),
+                %% Send the edge after the failed source read. It is retained
+                %% in the worker mailbox even if it arrives before parking.
+                Worker ! {operation_wake, OperationRef},
+                reply_operation_source(F, terminal_operation_row(F)),
+                certify_operation_result(F, Worker, committed),
+                assert_operation_result(F, Worker, Monitor, committed)
+            end)
+      end).
+
+terminal_operation_rejects_mismatched_source_reference_test() ->
+    with_operation_fixture(
+      fun(F = #{operation_ref := OperationRef}) ->
+          with_operation_worker(F,
+            fun(Worker, Monitor) ->
+                {ok, Row} = terminal_operation_row(F),
+                WrongRef = setelement(5, OperationRef, digest(254)),
+                reply_operation_source(F, {ok, Row#{ref => WrongRef}}),
+                assert_operation_error(
+                  F, Worker, Monitor, invalid_operation_claim)
+            end)
+      end).
+
+operation_source_index_corruption_is_reported_not_parked_test() ->
+    with_operation_fixture(
+      fun(F) ->
+          with_operation_worker(F,
+            fun(Worker, Monitor) ->
+                reply_operation_source(F, {error, outcome_index_corrupt}),
+                assert_operation_error(F, Worker, Monitor, outcome_index_corrupt)
+            end)
+      end).
+
+terminal_operation_uses_remote_committee_when_local_cannot_vote_test_() ->
+    [{atom_to_list(Reason),
+      fun() ->
+          with_operation_fixture(
+            fun(F) ->
+                with_operation_follow_owner(
+                  fun(_ForeignOwner) ->
+                      with_operation_worker(F,
+                        fun(Worker, Monitor) ->
+                            reply_operation_source(F, terminal_operation_row(F)),
+                            certify_operation_remote_result(F, Worker, Reason),
+                            assert_operation_result(F, Worker, Monitor, committed)
+                        end)
+                  end)
+            end)
+      end} || Reason <- [read_certificate_unavailable, not_ready]].
+
+terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
+    with_operation_fixture(
+      fun(F = #{target := Target, target_ref := TargetRef}) ->
+          with_operation_follow_owner(
+            fun(_ForeignOwner) ->
+                with_operation_worker(F,
+                  fun(Worker, Monitor) ->
+                      Pending = #{status => pending, ref => TargetRef},
+                      reply_operation_source(F, terminal_operation_row(F)),
+                      certify_operation_result(F, Worker, Pending),
+                      FollowRef = attach_operation_follow(F, Worker),
+                      %% add_follow emits building immediately. A second
+                      %% acknowledged status is a mailbox barrier: if the
+                      %% first status erroneously re-drives work, the worker
+                      %% blocks on our unanswered source call and cannot ack
+                      %% the second one. No time-based quiet-period assertion.
+                      operation_status_notices(F, Worker, FollowRef),
+                      send_operation_follow_notice(
+                        Target, Worker, FollowRef,
+                        {resnapshot, 3, digest(250), #{}}),
+                      reply_operation_source(F, terminal_operation_row(F)),
+                      certify_operation_result(F, Worker, Pending),
+                      %% Still unavailable after real progress: retain this
+                      %% exact follow, without unfollow/follow/refresh churn.
+                      operation_status_notices(F, Worker, FollowRef),
+                      wake_operation_follow(F, Worker, FollowRef),
+                      reply_operation_source(F, terminal_operation_row(F)),
+                      certify_operation_result(F, Worker, committed),
+                      assert_operation_result(F, Worker, Monitor, committed)
+                  end)
+            end)
+      end).
+
+terminal_operation_refuses_wrong_result_and_follows_owner_replacement_test() ->
+    with_operation_fixture(
+      fun(F = #{target := Target, target_ref := TargetRef}) ->
+          with_operation_follow_owner(
+            fun(ForeignOwner) ->
+                with_operation_worker(F,
+                  fun(Worker, Monitor) ->
+                      reply_operation_source(F, terminal_operation_row(F)),
+                      WrongRef = setelement(4, TargetRef, digest(254)),
+                      certify_operation_result(
+                        F, Worker, #{status => committed, height => 3,
+                                     ref => WrongRef}),
+                      %% The existing quorum collector refuses the mismatched
+                      %% ref. It grants no result; the worker waits on the
+                      %% existing follower rather than re-applying the claim.
+                      OldFollowRef = attach_operation_follow(F, Worker),
+                      assert_no_target_result(Worker),
+                      ForeignMonitor = quod_reg:monitor_name(
+                                         {foreign_log, node}, follow),
+                      exit(ForeignOwner, kill),
+                      receive {gproc, unreg, ForeignMonitor, _} -> ok
+                      after 1000 -> error(foreign_owner_not_unregistered)
+                      end,
+                      quod_reg:demonitor_name(
+                        {foreign_log, node}, ForeignMonitor),
+                      with_operation_follow_owner(
+                        fun(_Replacement) ->
+                            FollowRef = attach_operation_follow(F, Worker),
+                            %% Replacement invalidates the old follow even if
+                            %% its final ready notice arrives late. It gets no
+                            %% ack on the replacement owner's registration.
+                            Worker ! {quod_foreign_follow, OldFollowRef,
+                                      make_ref(), Target,
+                                      operation_follow_progress()},
+                            operation_status_notices(F, Worker, FollowRef),
+                            %% The correct follow with the wrong anchored
+                            %% identity is also status-only, never progress.
+                            WrongTarget = {element(1, Target), digest(251)},
+                            send_operation_follow_notice(
+                              WrongTarget, Worker, FollowRef,
+                              operation_follow_progress()),
+                            operation_status_notices(F, Worker, FollowRef),
+                            wake_operation_follow(F, Worker, FollowRef),
+                            reply_operation_source(
+                              F, terminal_operation_row(F)),
+                            certify_operation_result(F, Worker, committed),
+                            assert_operation_result(
+                              F, Worker, Monitor, committed)
+                        end)
+                  end)
+            end)
+      end).
+
+parked_operation_worker_exits_when_its_owner_dies_test() ->
+    with_operation_fixture(
+      fun(F = #{source_ns := Ns, operation_ref := OperationRef}) ->
+          Test = self(),
+          Owner = spawn(
+                    fun() ->
+                        {ok, Worker, _Monitor} =
+                            quod_dtx_coordinator:start_operation_monitor(
+                              self(), Ns, OperationRef, #{}),
+                        Test ! {operation_test_worker, self(), Worker},
+                        receive stop -> ok end
+                    end),
+          Worker = receive {operation_test_worker, Owner, Pid} -> Pid
+                   after 1000 -> error(operation_worker_not_started)
+                   end,
+          Monitor = monitor(process, Worker),
+          try
+              reply_operation_source(F, {error, not_found}),
+              exit(Owner, kill),
+              receive {'DOWN', Monitor, process, Worker, _} -> ok
+              after 1000 -> error(operation_worker_survived_owner)
+              end,
+              assert_no_operation_stub_calls()
+          after
+              exit(Owner, kill),
+              exit(Worker, kill),
+              erlang:demonitor(Monitor, [flush])
+          end
+      end).
+
 cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
     with_fixture(
       fun(F) ->
@@ -809,6 +1007,275 @@ dormant_cancel_retries_exact_submission_only_on_target_route_edge_test() ->
        {cancel_operation_effect, <<234:128>>, SignedSubmission}, Request1),
     ?assertMatch(
        {cancel_operation_effect, <<235:128>>, SignedSubmission}, Request2).
+
+%% ------------------------------------------------------------------
+%% Operation recovery owner-interface fixtures
+%% ------------------------------------------------------------------
+
+with_operation_fixture(Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
+    Ns = <<"quod:operation-result-source-", Suffix/binary>>,
+    TargetNs = <<"quod:operation-result-target-", Suffix/binary>>,
+    Anchor = digest(242),
+    Target = {TargetNs, digest(243)},
+    {ok, #{blob := AgentRef}} =
+        quod_agent_ref:from_text(Ns, Anchor, <<"recovery_worker.">>, 2),
+    OperationRef = {operation, Ns, Anchor, AgentRef, digest(244)},
+    TargetRef = {transaction, TargetNs, element(2, Target), digest(245)},
+    NodeKey = digest(246),
+    CommitteeId = digest(247),
+    View = #{identity => Target, slot => 3, generation => 0,
+             committee => [NodeKey], committee_id => CommitteeId,
+             route_candidates => []},
+    SavedNodeKey = application:get_env(quod, node_pubkey),
+    Stubs = [start_operation_stub(source, {quod_prolog, Ns}),
+             start_operation_stub(source_consensus, {quod_simplex, Ns}),
+             start_operation_stub(target, {quod_simplex, TargetNs})],
+    application:set_env(quod, node_pubkey, NodeKey),
+    try
+        Fun(#{source_ns => Ns, operation_ref => OperationRef,
+              target => Target, target_ref => TargetRef,
+              request_digest => digest(248), view => View})
+    after
+        [stop_operation_stub(Pid) || Pid <- Stubs],
+        case SavedNodeKey of
+            {ok, Value} -> application:set_env(quod, node_pubkey, Value);
+            undefined -> application:unset_env(quod, node_pubkey)
+        end
+    end.
+
+start_operation_stub(Role, Key) ->
+    Test = self(),
+    Pid = spawn(
+            fun() ->
+                true = quod_reg:reg(Key),
+                Test ! {operation_stub_started, self()},
+                operation_stub_loop(Test, Role)
+            end),
+    receive {operation_stub_started, Pid} -> Pid
+    after 1000 ->
+        exit(Pid, kill),
+        error({operation_stub_not_started, Role})
+    end.
+
+operation_stub_loop(Test, Role) ->
+    receive
+        {'$gen_call', From, Request} ->
+            Test ! {operation_stub_call, Role, From, Request},
+            operation_stub_loop(Test, Role);
+        {'$gen_cast', Request} ->
+            Test ! {operation_stub_cast, Role, Request},
+            operation_stub_loop(Test, Role);
+        stop -> ok;
+        Message ->
+            Test ! {unexpected_operation_stub_message, Role, Message},
+            operation_stub_loop(Test, Role)
+    end.
+
+stop_operation_stub(Pid) ->
+    Monitor = monitor(process, Pid),
+    Pid ! stop,
+    receive {'DOWN', Monitor, process, Pid, _} -> ok
+    after 1000 ->
+        exit(Pid, kill),
+        erlang:demonitor(Monitor, [flush])
+    end.
+
+with_operation_worker(#{source_ns := Ns, operation_ref := OperationRef}, Fun) ->
+    {ok, Worker, Monitor} = quod_dtx_coordinator:start_operation_monitor(
+                              self(), Ns, OperationRef, #{}),
+    try Fun(Worker, Monitor)
+    after
+        exit(Worker, kill),
+        erlang:demonitor(Monitor, [flush])
+    end.
+
+with_operation_follow_owner(Fun) ->
+    ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
+    Pid = start_operation_stub(foreign, {foreign_log, node}),
+    try Fun(Pid)
+    after stop_operation_stub(Pid)
+    end.
+
+attach_operation_follow(#{target := Target}, Worker) ->
+    From = expect_operation_stub_call(foreign, {follow, Target}),
+    FollowRef = make_ref(),
+    gen_server:reply(From, {ok, FollowRef}),
+    receive
+        {operation_stub_cast, foreign, {refresh, FollowRef, Worker}} -> ok
+    after 1000 -> error(missing_foreign_follow_refresh)
+    end,
+    FollowRef.
+
+wake_operation_follow(#{target := Target}, Worker, FollowRef) ->
+    send_operation_follow_notice(
+      Target, Worker, FollowRef, operation_follow_progress()).
+
+operation_follow_progress() ->
+    {advanced, 2, 3, digest(250), #{}, [], []}.
+
+operation_status_notices(#{target := Target}, Worker, FollowRef) ->
+    send_operation_follow_notice(Target, Worker, FollowRef, {building, 3}),
+    send_operation_follow_notice(
+      Target, Worker, FollowRef, {unreachable, unavailable, 3}),
+    assert_no_target_result(Worker),
+    assert_no_operation_stub_calls().
+
+send_operation_follow_notice(Target, Worker, FollowRef, Notice) ->
+    NoticeRef = make_ref(),
+    Worker ! {quod_foreign_follow, FollowRef, NoticeRef, Target, Notice},
+    receive
+        {operation_stub_cast, foreign, {ack, FollowRef, NoticeRef, Worker}} -> ok
+    after 1000 -> error(missing_foreign_follow_ack)
+    end.
+
+assert_no_target_result(Worker) ->
+    receive
+        {dtx_coordinator, Worker, _, {target_result, _, _}} ->
+            error(unverified_operation_result)
+    after 0 -> ok
+    end.
+
+terminal_operation_row(#{operation_ref := OperationRef,
+                         request_digest := Digest,
+                         target_ref := TargetRef}) ->
+    {ok, #{status => claimed, operation_state => terminal,
+           ref => OperationRef, request_digest => Digest,
+           outcome_ref => TargetRef, height => 2}}.
+
+reply_operation_source(#{operation_ref := OperationRef}, Reply) ->
+    From = expect_operation_stub_call(source, {outcome, OperationRef}),
+    gen_server:reply(From, Reply).
+
+expect_operation_stub_call(Role, Request) ->
+    receive
+        {operation_stub_call, Role, From, Request} -> From;
+        {operation_stub_call, OtherRole, _From, OtherRequest} ->
+            error({unexpected_operation_call, OtherRole, OtherRequest});
+        {unexpected_operation_stub_message, OtherRole, Message} ->
+            error({unexpected_operation_message, OtherRole, Message})
+    after 1000 ->
+        error({missing_operation_call, Role, Request})
+    end.
+
+certify_operation_result(F = #{target_ref := TargetRef}, Worker, committed) ->
+    certify_operation_result(
+      F, Worker, #{status => committed, height => 3, ref => TargetRef});
+certify_operation_result(F = #{target_ref := TargetRef}, Worker,
+                         {rejected, Reason}) ->
+    certify_operation_result(
+      F, Worker, #{status => rejected, reason => Reason,
+                   height => 3, ref => TargetRef});
+certify_operation_result(
+  F = #{target := Target, target_ref := TargetRef,
+        view := #{committee_id := CommitteeId} = View}, Worker, Outcome) ->
+    assert_terminal_operation_binding(F, Worker),
+    SourceFrom = expect_operation_stub_call(
+                   target, {history_source, Target, validator}),
+    gen_server:reply(SourceFrom, {ok, "/tmp/unused-operation-test-ledger"}),
+    ViewFrom = expect_operation_stub_call(
+                 target, {history_current_view, Target, validator}),
+    gen_server:reply(ViewFrom, {ok, View}),
+    receive
+        {operation_stub_call, target, From,
+         {dtx_endpoint_local,
+          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout}} ->
+            ?assert(Timeout > 0),
+            gen_server:reply(
+              From, {ok, {outcome, RequestId, Target, CommitteeId, 3,
+                          Outcome}, []});
+        {operation_stub_call, Role, _From, Request} ->
+            error({unexpected_operation_call, Role, Request})
+    after 1000 -> error(missing_current_committee_outcome_probe)
+    end.
+
+certify_operation_remote_result(
+  F = #{target := {TargetNs, _} = Target, target_ref := TargetRef,
+        view := #{committee_id := CommitteeId} = View0}, Worker, LocalReason) ->
+    assert_terminal_operation_binding(F, Worker),
+    SourceFrom = expect_operation_stub_call(
+                   target, {history_source, Target, validator}),
+    gen_server:reply(SourceFrom, {error, LocalReason}),
+    Peer = digest(249),
+    Endpoint = {"127.0.0.1", 34249},
+    Routes = [{Peer, [Endpoint]}],
+    View = View0#{committee => [Peer], route_candidates => Routes},
+    RoutesFrom = expect_operation_stub_call(
+                   foreign, {route_hints, Target, []}),
+    gen_server:reply(RoutesFrom, {ok, Routes}),
+    receive
+        {operation_stub_call, foreign, ViewFrom,
+         {current, Routes, Target, none, Timeout, _TraceCtx, _EnqueuedNative}} ->
+            ?assert(Timeout > 0),
+            gen_server:reply(ViewFrom, {ok, View});
+        {operation_stub_call, Role, _From, Request} ->
+            error({unexpected_operation_call, Role, Request})
+    after 1000 -> error(missing_certified_remote_current_view)
+    end,
+    %% A local observer has no vote: only the member returned by the
+    %% certified view receives the ordinary outcome request. An accidental
+    %% local probe or any apply/submit request takes the failure branch.
+    receive
+        {operation_stub_call, source_consensus, From,
+         {dtx_endpoint_request, TargetNs, Peer, Endpoint,
+          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout2}} ->
+            ?assert(Timeout2 > 0),
+            gen_server:reply(
+              From, {ok, {outcome, RequestId, Target, CommitteeId, 3,
+                          #{status => committed, height => 3, ref => TargetRef}},
+                     []});
+        {operation_stub_call, Role2, _From2, Request2} ->
+            error({unexpected_operation_call, Role2, Request2})
+    after 1000 -> error(missing_certified_remote_outcome_probe)
+    end.
+
+assert_terminal_operation_binding(
+  #{operation_ref := OperationRef, request_digest := Digest,
+    target_ref := TargetRef}, Worker) ->
+    receive
+        {dtx_coordinator, Worker, OperationRef,
+         {claim_state, terminal, 2, Digest, TargetRef}} -> ok
+    after 1000 -> error(missing_terminal_operation_binding)
+    end.
+
+assert_operation_result(#{operation_ref := OperationRef,
+                          target_ref := TargetRef}, Worker, Monitor, Result) ->
+    receive
+        {dtx_coordinator, Worker, OperationRef,
+         {target_result, Result, TargetRef}} -> ok
+    after 1000 -> error(missing_verified_operation_result)
+    end,
+    receive
+        {dtx_coordinator, Worker, OperationRef, {done, OperationRef}} -> ok
+    after 1000 -> error(missing_operation_completion)
+    end,
+    receive {'DOWN', Monitor, process, Worker, normal} -> ok
+    after 1000 -> error(operation_worker_did_not_finish)
+    end,
+    assert_no_operation_stub_calls().
+
+assert_operation_error(#{operation_ref := OperationRef}, Worker, Monitor,
+                       Reason) ->
+    receive
+        {dtx_coordinator, Worker, OperationRef, {error, Reason}} -> ok
+    after 1000 -> error({missing_operation_error, Reason})
+    end,
+    receive {'DOWN', Monitor, process, Worker, normal} -> ok
+    after 1000 -> error(operation_worker_did_not_finish)
+    end,
+    assert_no_operation_stub_calls().
+
+assert_no_operation_stub_calls() ->
+    receive
+        {operation_stub_call, Role, _From, Request} ->
+            error({unexpected_operation_call, Role, Request});
+        {operation_stub_cast, Role, Request} ->
+            error({unexpected_operation_cast, Role, Request});
+        {unexpected_operation_stub_message, Role, Message} ->
+            error({unexpected_operation_message, Role, Message})
+    after 0 -> ok
+    end.
 
 %% ------------------------------------------------------------------
 %% Exact two-participant Begin fixture

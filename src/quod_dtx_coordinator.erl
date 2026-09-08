@@ -21,7 +21,7 @@ does not cancel or resubmit the uncertain operation.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_monitor/5, start_operation_monitor/5,
+-export([start_monitor/5, start_operation_monitor/4,
          start_dormant_operation_monitor/3]).
 
 -ifdef(TEST).
@@ -143,35 +143,35 @@ start_monitor(_Owner, _OwnerNs, _Begin, _BeginEvidence, _Options) ->
     {error, invalid_coordinator_start}.
 
 -doc """
-Start recovery for one already-committed one-target foreign claim.
+Start the one recovery/result worker for an exact foreign operation.
 
-The worker owns no durable state.  It reconstructs the exact target
-transaction from certified local claim evidence, submits that deterministic
-transaction through the shared endpoint owner, and appends the deterministic
-completion receipt.  Temporary target unavailability is driven by the shared
+The worker owns no durable state. The existing local outcome index decides
+whether the claim still needs target/receipt recovery or only certified result
+delivery. A completed operation is resolved read-only, never reapplied. An
+unresolved claim reconstructs its exact target transaction from certified local
+evidence and uses the existing endpoint and receipt path. Unavailability uses
+the shared
 foreign-history follower's messages; source progress is supplied by the
 owning Simplex.  No retry polling loop is created here.
 """.
--spec start_operation_monitor(pid(), binary(), pos_integer(), term(), map()) ->
+-spec start_operation_monitor(pid(), binary(), term(), map()) ->
           {ok, pid(), reference()} | {error, term()}.
-start_operation_monitor(Owner, OwnerNs, ClaimSlot, OperationRef, Options)
+start_operation_monitor(Owner, OwnerNs, OperationRef, Options)
   when is_pid(Owner), Owner =:= self(),
        is_binary(OwnerNs), byte_size(OwnerNs) > 0,
-       is_integer(ClaimSlot), ClaimSlot > 0,
        is_map(Options), map_size(Options) =:= 0 ->
     case valid_operation_ref(OwnerNs, OperationRef) of
         true ->
             {Pid, Monitor} = spawn_monitor(
                                fun() ->
                                    operation_init(
-                                     Owner, OwnerNs, ClaimSlot,
-                                     OperationRef)
+                                     Owner, OwnerNs, OperationRef)
                                end),
             {ok, Pid, Monitor};
         false ->
             {error, invalid_operation_start}
     end;
-start_operation_monitor(_Owner, _OwnerNs, _ClaimSlot, _OperationRef,
+start_operation_monitor(_Owner, _OwnerNs, _OperationRef,
                         _Options) ->
     {error, invalid_operation_start}.
 
@@ -311,26 +311,121 @@ valid_operation_ref(
 valid_operation_ref(_Ns, _OperationRef) ->
     false.
 
-operation_init(Owner, OwnerNs, ClaimSlot, OperationRef) ->
+operation_init(Owner, OwnerNs, OperationRef) ->
     OwnerMonitor = erlang:monitor(process, Owner),
-    operation_load_claim(
-      Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef).
+    operation_refresh(
+      Owner, OwnerMonitor,
+      #{owner_ns => OwnerNs, operation_ref => OperationRef,
+        state => claim, follow => none, foreign_monitor => none}).
 
-operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef) ->
+%% Source publication can precede the waiter, or follow a relay reply. Read
+%% the same durable index on start and on a real progress edge; absence is not
+%% completion and a completion receipt is not the target's verdict.
+operation_refresh(Owner, OwnerMonitor,
+                  #{owner_ns := OwnerNs, operation_ref := OperationRef} = Context) ->
+    case quod_prolog:local_outcome(OwnerNs, OperationRef) of
+        {ok, #{status := claimed, ref := OperationRef,
+               operation_state := ClaimState, height := Slot,
+               request_digest := <<_:256>> = Digest,
+               outcome_ref := {transaction, TargetNs, <<_:256>> = Anchor,
+                               <<_:256>>} = TargetRef}}
+          when (ClaimState =:= unresolved orelse ClaimState =:= terminal),
+               is_integer(Slot), Slot > 0,
+               is_binary(TargetNs), byte_size(TargetNs) > 0 ->
+            Owner ! {dtx_coordinator, self(), OperationRef,
+                     {claim_state, ClaimState, Slot, Digest, TargetRef}},
+            Bound = Context#{target => {TargetNs, Anchor},
+                             target_ref => TargetRef, request_digest => Digest},
+            case {ClaimState, map_get(state, Context)} of
+                {terminal, source} ->
+                    %% This worker already delivered the verified result.
+                    operation_stop(Owner, OperationRef, done);
+                {terminal, _} ->
+                    operation_resolve_target(
+                      Owner, OwnerMonitor, Bound#{state => resolve});
+                {unresolved, claim} ->
+                    operation_load_claim(
+                      Owner, OwnerMonitor, OwnerNs, Slot, OperationRef, Bound);
+                {unresolved, resolve} ->
+                    %% Replay can temporarily expose an earlier source row.
+                    %% Once terminal was observed, this worker stays read-only.
+                    operation_resolve_target(Owner, OwnerMonitor, Bound);
+                {unresolved, _} ->
+                    operation_drive(Owner, OwnerMonitor, Bound)
+            end;
+        {error, not_found} ->
+            operation_wait(Owner, OwnerMonitor, Context);
+        {error, {outcome_unknown, OperationRef}} ->
+            operation_wait(Owner, OwnerMonitor, Context);
+        {error, {ontology_unreachable, OwnerNs}} ->
+            operation_wait(Owner, OwnerMonitor, Context);
+        {error, {ontology_rebuilding, OwnerNs}} ->
+            operation_wait(Owner, OwnerMonitor, Context);
+        {error, Reason} ->
+            operation_stop(Owner, OperationRef, Reason);
+        _ ->
+            operation_stop(Owner, OperationRef, invalid_operation_claim)
+    end.
+
+operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef,
+                     Bound = #{target_ref := TargetRef, request_digest := Digest}) ->
     case quod_simplex:operation_claim_evidence(
            OwnerNs, ClaimSlot, OperationRef) of
         {ok, ClaimRef, Claim} ->
             case operation_context(OwnerNs, OperationRef, ClaimRef, Claim) of
-                {ok, Context} ->
+                {ok, #{target_ref := TargetRef, request_digest := Digest} = Context} ->
                     operation_drive(
-                      Owner, OwnerMonitor, Context#{claim_ref => ClaimRef,
+                      Owner, OwnerMonitor,
+                      (maps:merge(Bound, Context))#{claim_ref => ClaimRef,
                                                    claim => Claim});
+                {ok, _WrongBinding} ->
+                    operation_stop(Owner, OperationRef, invalid_operation_claim);
                 {error, Reason} ->
                     operation_stop(Owner, OperationRef, Reason)
             end;
+        {error, not_ready} ->
+            operation_wait(Owner, OwnerMonitor, Bound);
         {error, Reason} ->
             operation_stop(Owner, OperationRef, Reason)
     end.
+
+operation_resolve_target(
+  Owner, OwnerMonitor,
+  #{owner_ns := OwnerNs, operation_ref := OperationRef,
+    target := Target, target_ref := TargetRef} = Context) ->
+    case operation_outcome_source(Target) of
+        {ok, Source} ->
+            case quod_dtx_current_view:lookup_outcome(
+                   OwnerNs, Source, TargetRef, ?DEFAULT_REQUEST_TIMEOUT_MS) of
+                {ok, #{ref := TargetRef, status := committed}} ->
+                    operation_deliver_resolved(Owner, OperationRef, committed, TargetRef);
+                {ok, #{ref := TargetRef, status := rejected, reason := Reason}}
+                  when is_atom(Reason) ->
+                    operation_deliver_resolved(
+                      Owner, OperationRef, {rejected, Reason}, TargetRef);
+                _ ->
+                    operation_wait_target(Owner, OwnerMonitor, Context)
+            end;
+        {error, _} ->
+            operation_wait_target(Owner, OwnerMonitor, Context)
+    end.
+
+operation_outcome_source(Target) ->
+    %% A co-hosted observer is a byte source, not a voting source. If the
+    %% local validator is unavailable, use the ordinary certified routes.
+    case quod_simplex:history_source(Target, validator) of
+        {ok, Root} -> {ok, {local, Root}};
+        {error, _} ->
+            case routes(Target) of
+                [] -> {error, retry};
+                Rows -> {ok, {remote, Rows}}
+            end
+    end.
+
+operation_deliver_resolved(Owner, OperationRef, Result, TargetRef) ->
+    Owner ! {dtx_coordinator, self(), OperationRef,
+             {target_result, Result, TargetRef}},
+    operation_stop(Owner, OperationRef, done).
 
 operation_context(
   OwnerNs, OperationRef,
@@ -526,7 +621,7 @@ operation_wait_target(Owner, OwnerMonitor,
                       Context = #{target := Target}) ->
     operation_wait(
       Owner, OwnerMonitor,
-      operation_attach_follow(Context#{state => target}, Target)).
+      operation_attach_follow(Context, Target)).
 
 operation_wait_source(Owner, OwnerMonitor, Context) ->
     operation_wait(Owner, OwnerMonitor, Context#{state => source}).
@@ -544,19 +639,21 @@ operation_wait(Owner, OwnerMonitor,
               Owner, OwnerMonitor, Context#{follow => none});
         {gproc, registered, ForeignMonitor, _Key}
           when is_reference(ForeignMonitor),
-               map_get(state, Context) =:= target ->
+               (map_get(state, Context) =:= target orelse
+                map_get(state, Context) =:= resolve) ->
             operation_wait_target(Owner, OwnerMonitor, Context);
-        {operation_wake, OperationRef}
-          when map_get(state, Context) =:= source ->
-            operation_drive(
-              Owner, OwnerMonitor, operation_clear_follow(Context));
         {operation_wake, OperationRef} ->
-            operation_wait(Owner, OwnerMonitor, Context);
-        {quod_foreign_follow, FollowRef, NoticeRef, _Identity, _Notice}
+            operation_refresh(Owner, OwnerMonitor, Context);
+        {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice}
           when is_reference(FollowRef) ->
             ok = quod_foreign_log:ack(FollowRef, NoticeRef),
-            operation_drive(
-              Owner, OwnerMonitor, operation_clear_follow(Context));
+            case Identity =:= maps:get(target, Context, none) andalso
+                 foreign_progress_notice(Notice) andalso
+                 (map_get(state, Context) =:= target orelse
+                  map_get(state, Context) =:= resolve) of
+                true -> operation_refresh(Owner, OwnerMonitor, Context);
+                false -> operation_wait(Owner, OwnerMonitor, Context)
+            end;
         _Other ->
             operation_wait(Owner, OwnerMonitor, Context)
     end.
@@ -585,11 +682,6 @@ operation_ensure_foreign_monitor(
 operation_ensure_foreign_monitor(Context) ->
     ForeignMonitor = quod_reg:monitor_name({foreign_log, node}, follow),
     Context#{foreign_monitor => ForeignMonitor}.
-
-operation_clear_follow(Context = #{follow := none}) -> Context;
-operation_clear_follow(Context = #{follow := FollowRef}) ->
-    operation_cleanup_follow(FollowRef),
-    Context#{follow => none}.
 
 operation_cleanup_follow(none) -> ok;
 operation_cleanup_follow(FollowRef) ->
@@ -715,13 +807,9 @@ handle_loop_message(
     case maps:get(Identity, Follows, undefined) of
         FollowRef ->
             ok = quod_foreign_log:ack(FollowRef, NoticeRef),
-            case Notice of
-                {advanced, _, _, _, _, _, _} ->
-                    loop(request_progress_drive(S));
-                {resnapshot, _, _, _} ->
-                    loop(request_progress_drive(S));
-                _ ->
-                    loop(S)
+            case foreign_progress_notice(Notice) of
+                true -> loop(request_progress_drive(S));
+                false -> loop(S)
             end;
         _ ->
             loop(S)
@@ -1759,6 +1847,14 @@ wait_for_foreign_progress(Target, S0) ->
 
 progress_source(Target, Target) -> owner;
 progress_source(_Target, _Origin) -> foreign.
+
+%% Both operation and group recovery consume the same follower contract.
+%% Building/unreachable are status, not progress. In particular a new follow
+%% emits building immediately: treating it as a retry can manufacture a loop
+%% without any network or ledger change.
+foreign_progress_notice({advanced, _, _, _, _, _, _}) -> true;
+foreign_progress_notice({resnapshot, _, _, _}) -> true;
+foreign_progress_notice(_) -> false.
 
 local_progress_event({local_dtx_progress, Identity, Slot}, Identity)
   when is_integer(Slot), Slot >= 0 ->

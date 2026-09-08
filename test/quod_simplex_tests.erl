@@ -514,14 +514,15 @@ dtx_local_and_relayed_controls_share_slot_leader_test() ->
     ?assert(lists:member(ExpectedPeer, [A, C])),
     InLink ! stop.
 
-%% A fully caught-up holder keeps serving historical recovery reads after its
-%% validator admission is retired, but it can no longer accept a signed DTX
-%% submission.  This is the liveness distinction needed after committee churn.
+%% A retired holder still serves historical phase/applied evidence, but cannot
+%% accept signed work or answer a current-committee outcome query. The latter
+%% already fails at current_outcome_snapshot; refuse it before parking a worker.
 dtx_endpoint_reads_survive_validator_retirement_test() ->
     {Self, _SelfId} = id(),
     {Other, _OtherId} = id(),
     Ns = <<"quod:dtx-retired-holder">>,
     S = st(#{ns => Ns, self => Self, validators => [Other],
+             committee_id => <<24:256>>,
              sync => ready, prolog_ready => true, store => memory}),
     Ref = dtx_test_ref({Ns, <<0:256>>}, 2, <<21:256>>),
     GroupId = <<22:256>>,
@@ -532,9 +533,19 @@ dtx_endpoint_reads_survive_validator_retirement_test() ->
     ?assert(
        quod_simplex:test_dtx_endpoint_ready(
          {phase, <<2:128>>, GroupId, finalize}, S)),
-    ?assert(
+    ?assertNot(
        quod_simplex:test_dtx_endpoint_ready(
          {outcome, <<3:128>>, GroupRef, <<24:256>>, 1}, S)),
+    ?assertNot(
+       quod_simplex:test_dtx_endpoint_ready(
+         {outcome_barrier, <<5:128>>, GroupRef, <<24:256>>, 1}, S)),
+    Active = quod_simplex:test_state_set(validators, [Self], S),
+    ?assert(
+       quod_simplex:test_dtx_endpoint_ready(
+         {outcome, <<3:128>>, GroupRef, <<24:256>>, 1}, Active)),
+    ?assert(
+       quod_simplex:test_dtx_endpoint_ready(
+         {outcome_barrier, <<5:128>>, GroupRef, <<24:256>>, 1}, Active)),
     ?assert(
        quod_simplex:test_dtx_endpoint_ready(
          {applied, <<4:128>>, GroupId, Ref, 3, commit}, S)).
@@ -599,7 +610,7 @@ operation_waiter_survives_relay_reply_before_claim_projection_test() ->
     Claim = maps:get(
               claim, quod_ct:remote_operation_fixture(#{})),
     ?assertEqual(
-       #{waiting_status => awaiting_projection,
+       #{waiting_status => pending,
          waiting_count => 1,
          abandoned_present => false,
          projected_status => pending,

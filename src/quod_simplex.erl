@@ -155,6 +155,12 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
+-export([apply_operation_projection/3, await_operation_recovery/4,
+         cancel_operation_waiter/4,
+         finish_operation_target_result/5, install_operation_snapshot/2,
+         drop_operation_recovery_owner/4, drop_operation_waiter/3,
+         settle_operation_recovery/3, reconcile_operation_recoveries/1,
+         test_operation_recoveries/1, test_seed_operation_worker/3]).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([append/2, history_binding/3,
          form_cert/6,
@@ -254,6 +260,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_waiting_applied_key/2,
          test_seed_dtx_worker/5,
          test_finish_dtx_worker/3,
+         test_start_local_dtx_endpoint_request/5,
+         test_wake_dtx_snapshot_workers/2,
          test_drop_dtx_endpoint_owner/3,
          test_close_dtx_endpoint/1,
          test_seed_dtx_submission/3,
@@ -1143,6 +1151,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     contact = none :: none | {node_id(), term()},
     request :: quod_dtx_endpoint:request(),
     attestation = none :: none | term(),
+    snapshot_resampled = -1 :: integer(),
     destination :: {link, pid()} | {caller, term()},
     started_at = undefined :: undefined | integer()
 }).
@@ -1159,24 +1168,24 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     monitor = none :: none | reference()
 }).
 
-%% One volatile driver per still-unresolved durable one-target claim. A
-%% relayed commit acknowledgement may briefly park its caller here before this
-%% replica applies the claim projection. The durable claim remains the source;
-%% the map is rebuilt from Prolog's projection and completed history retains no
-%% process.
+%% One volatile worker for durable claim recovery OR outstanding result
+%% delivery. Completing the source receipt ends the first obligation, not the
+%% second. The existing outcome index reconstructs late callers; terminal
+%% history with no waiting caller retains neither a worker nor a result cache.
 -record(operation_recovery_owner, {
     operation_ref :: term(),
+    claim_state = unknown :: unknown | unresolved | terminal,
     claim_slot = none :: none | pos_integer(),
     claim_tx_id = none :: none | <<_:256>>,
     target_ref = none :: none | term(),
     request_digest = none :: none | <<_:256>>,
     status = pending ::
-        awaiting_projection | pending | running | blocked | settling,
+        pending | running | blocked | settling,
     pid = none :: none | pid(),
     monitor = none :: none | reference(),
     target_result = pending ::
       pending | {committed, term()} | {{rejected, atom()}, term()},
-    waiters = #{} :: #{reference() => gen_statem:from()}
+    waiters = #{} :: #{reference() => {gen_statem:from(), reference()}}
 }).
 
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
@@ -1750,6 +1759,10 @@ test_seed_dtx_worker(Pid, Peer, Request, Destination,
                       started_at = quod_time:mono_ms()}}})}.
 test_finish_dtx_worker(Pid, Result, S) ->
     finish_dtx_server_worker(Pid, Result, S).
+test_start_local_dtx_endpoint_request(Request, Hints, Timeout, From, S) ->
+    start_local_dtx_endpoint_request(Request, Hints, Timeout, From, S).
+test_wake_dtx_snapshot_workers(S0, S1) ->
+    wake_dtx_snapshot_workers(S0, S1).
 test_drop_dtx_endpoint_owner(Ref, Pid, S) ->
     drop_dtx_endpoint_owner(Ref, Pid, worker_down, S).
 test_close_dtx_endpoint(
@@ -1876,6 +1889,7 @@ test_operation_target_result(Result, TargetRef) ->
     OperationRef = {operation, <<"quod:test">>, <<0:256>>},
     Owner = #operation_recovery_owner{
                operation_ref = OperationRef,
+               claim_state = unresolved,
                claim_slot = 1,
                target_ref = TargetRef,
                request_digest = <<0:256>>,
@@ -1884,7 +1898,7 @@ test_operation_target_result(Result, TargetRef) ->
     S0 = #s{operation_recoveries = #{OperationRef => Owner}},
     Tag = make_ref(),
     {wait, S1} = await_operation_recovery(
-                   {self(), Tag}, OperationRef, S0),
+                   {self(), Tag}, make_ref(), OperationRef, S0),
     {true, SFinished} = finish_operation_target_result(
                           self(), OperationRef, Result, TargetRef, S1),
     Reply = receive
@@ -1902,9 +1916,10 @@ test_operation_wait_before_projection(Slot, Claim = #transaction{}) ->
     {ok, #{operation_ref := OperationRef}} =
         quod_transaction:request_claim(Claim),
     Tag = make_ref(),
-    S0 = #s{operation_recoveries = #{}},
+    {OriginNs, _} = Claim#transaction.origin,
+    S0 = #s{ns = OriginNs, operation_recoveries = #{}},
     {wait, S1} = await_operation_recovery(
-                   {self(), Tag}, OperationRef, S0),
+                   {self(), Tag}, make_ref(), OperationRef, S0),
     Waiting = maps:get(OperationRef, S1#s.operation_recoveries),
     [Monitor] = maps:keys(Waiting#operation_recovery_owner.waiters),
     {true, Abandoned} = drop_operation_waiter(Monitor, self(), S1),
@@ -1918,6 +1933,22 @@ test_operation_wait_before_projection(Slot, Claim = #transaction{}) ->
       projected_slot => Projected#operation_recovery_owner.claim_slot,
       projected_waiters =>
           map_size(Projected#operation_recovery_owner.waiters)}.
+test_operation_recoveries(#s{operation_recoveries = Recoveries}) ->
+    maps:map(
+      fun(_Ref, #operation_recovery_owner{
+                  claim_state = State, status = Status, claim_slot = Slot,
+                  target_ref = Target, request_digest = Digest, pid = Pid,
+                  monitor = Monitor, target_result = Result, waiters = Waiters}) ->
+          #{claim_state => State, status => Status, slot => Slot,
+            target_ref => Target, digest => Digest, pid => Pid,
+            monitor => Monitor, result => Result, waiters => Waiters}
+      end, Recoveries).
+test_seed_operation_worker(Ref, Pid, S = #s{operation_recoveries = Recoveries}) ->
+    Owner = maps:get(Ref, Recoveries),
+    S#s{operation_recoveries = Recoveries#{
+          Ref => Owner#operation_recovery_owner{
+                   status = running, pid = Pid,
+                   monitor = erlang:monitor(process, Pid)}}}.
 test_endpoint_terminal_result(Result) -> endpoint_terminal_result(Result).
 test_dtx_worker_terminal_result(Result, Response) ->
     dtx_worker_terminal_result(Result, Response).
@@ -2391,7 +2422,7 @@ operation_projection(
     %% feeding replay entries to Prolog. On a locally executed live submit,
     %% Prolog sends this cast before releasing the parked submit_role caller,
     %% so mailbox order installs the owner first. A relayed leader reply may
-    %% overtake this replica's apply; await_operation_recovery/3 parks that
+    %% overtake this replica's apply; await_operation_recovery/4 parks that
     %% waiter in the same owner until this cast arrives.
     gen_statem:cast(
       quod_reg:via({quod_simplex, Ns}),
@@ -2403,11 +2434,21 @@ operation_projection(
           {error, {outcome_unknown, term()}}.
 await_operation_result(Ns, OperationRef, TimeoutMs)
   when is_binary(Ns), is_integer(TimeoutMs), TimeoutMs > 0 ->
+    WaitRef = make_ref(),
+    %% Bind cleanup to this exact owner incarnation, caller and request. A
+    %% timeout expires the call alias, not the caller PID; its monitor alone
+    %% therefore cannot release result-only work for a long-lived caller.
+    Server = quod_reg:where({quod_simplex, Ns}),
     try gen_statem:call(
-          quod_reg:via({quod_simplex, Ns}),
-          {await_operation_result, OperationRef}, TimeoutMs)
+          Server, {await_operation_result, WaitRef, OperationRef}, TimeoutMs)
     catch
         exit:_ -> {error, {outcome_unknown, OperationRef}}
+    after
+        case is_pid(Server) of
+            true -> gen_statem:cast(
+                      Server, {cancel_operation_wait, self(), WaitRef, OperationRef});
+            false -> ok
+        end
     end;
 await_operation_result(_Ns, OperationRef, _TimeoutMs) ->
     {error, {outcome_unknown, OperationRef}}.
@@ -3774,7 +3815,8 @@ running_impl(
         PrologPid ->
             SProjected = install_operation_snapshot(Unresolved, S0),
             S1 = refresh_proof_gate(
-                   S0, SProjected#s{prolog_ready = true}),
+                   S0, wake_operation_recoveries(
+                         SProjected#s{prolog_ready = true})),
             keep_progress(S0, S1, []);
         _Other ->
             {keep_state, S0}
@@ -3782,13 +3824,18 @@ running_impl(
 running_impl(cast, {prolog_ready, _PrologPid, _Height, _Unresolved}, S) ->
     {keep_state, S};
 running_impl(
-  {call, From}, {await_operation_result, OperationRef}, S0) ->
-    case await_operation_recovery(From, OperationRef, S0) of
+  {call, From}, {await_operation_result, WaitRef, OperationRef}, S0)
+  when is_reference(WaitRef) ->
+    case await_operation_recovery(From, WaitRef, OperationRef, S0) of
         {reply, Reply, S1} ->
             {keep_state, S1, [{reply, From, Reply}]};
         {wait, S1} ->
-            {keep_state, S1}
+            keep_progress(S0, S1, [])
     end;
+running_impl(
+  cast, {cancel_operation_wait, Caller, WaitRef, OperationRef}, S0) ->
+    S1 = cancel_operation_waiter(Caller, WaitRef, OperationRef, S0),
+    keep_progress(S0, S1, []);
 running_impl(
   cast,
   {operation_projection, Slot, #transaction{} = Change}, S0) ->
@@ -3905,6 +3952,22 @@ running_impl(
     S1 = finish_dtx_coordinator_bootstrap(
            Pid, GroupId, BeginRef, Result, S0),
     keep_progress(S0, S1, []);
+running_impl(
+  info,
+  {dtx_coordinator, Pid,
+   {operation, _, _, _, _} = OperationRef,
+   {claim_state, ClaimState, Slot, Digest, TargetRef}}, S0) ->
+    case maps:get(OperationRef, S0#s.operation_recoveries, undefined) of
+        Owner = #operation_recovery_owner{pid = Pid, status = running} ->
+            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRef),
+            Updated = Bound#operation_recovery_owner{
+                        claim_state = merge_operation_claim_state(
+                                        Bound#operation_recovery_owner.claim_state,
+                                        ClaimState)},
+            S1 = put_operation_owner(Updated, S0),
+            keep_progress(S0, S1, []);
+        _ -> {keep_state, S0}
+    end;
 running_impl(
   info,
   {dtx_coordinator, Pid,
@@ -4534,80 +4597,83 @@ apply_operation_projection(
         {ok, #{operation_ref := OperationRef,
                digest := <<_:256>> = Digest}} ->
             TargetRef = {transaction, TargetNs, TargetAnchor, TargetTxId},
-            Owner = #operation_recovery_owner{
-                       operation_ref = OperationRef,
-                       claim_slot = Slot, claim_tx_id = ClaimTxId,
-                       target_ref = TargetRef, request_digest = Digest},
-            case maps:get(OperationRef, Recoveries, undefined) of
-                undefined ->
-                    S#s{operation_recoveries = Recoveries#{
-                          OperationRef => Owner}};
-                #operation_recovery_owner{
-                   status = awaiting_projection, waiters = Waiters} ->
-                    %% A relayed submit reply can reach a non-leading gateway
-                    %% just before that gateway applies the same committed
-                    %% claim.  Preserve the already-parked result waiter and
-                    %% let this one ordinary projection install the durable
-                    %% recovery owner; no retry or second outcome path exists.
-                    S#s{operation_recoveries = Recoveries#{
-                          OperationRef => Owner#operation_recovery_owner{
-                                            waiters = Waiters}}};
-                #operation_recovery_owner{
-                   claim_slot = Slot, claim_tx_id = ClaimTxId,
-                   target_ref = TargetRef, request_digest = Digest} ->
-                    S;
-                _Conflict ->
-                    error({operation_recovery_conflict, Ns, OperationRef})
-            end;
+            Owner = maps:get(
+                      OperationRef, Recoveries,
+                      #operation_recovery_owner{operation_ref = OperationRef}),
+            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRef),
+            case Bound#operation_recovery_owner.claim_tx_id of
+                Old when Old =:= none; Old =:= ClaimTxId -> ok;
+                _ -> error({operation_recovery_conflict, Ns, OperationRef})
+            end,
+            Projected = Bound#operation_recovery_owner{
+                          claim_tx_id = ClaimTxId,
+                          claim_state = merge_operation_claim_state(
+                                          Bound#operation_recovery_owner.claim_state,
+                                          unresolved)},
+            put_operation_owner(wake_operation_owner(Projected), S);
         _ ->
             error({invalid_operation_projection, Ns, Slot})
     end;
 apply_operation_projection(
   _Slot,
-  #transaction{role = {remote_complete, OperationRef, _, _}},
+  #transaction{role = {remote_complete, OperationRef, Digest, TargetRef}},
   S = #s{operation_recoveries = Recoveries}) ->
-    case maps:take(OperationRef, Recoveries) of
-        {Owner, Rest} ->
-            stop_operation_recovery_process(Owner),
-            S#s{operation_recoveries = Rest};
-        error ->
+    case maps:get(OperationRef, Recoveries, undefined) of
+        Owner = #operation_recovery_owner{claim_slot = Slot} ->
+            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRef),
+            %% A different validator may append the receipt before this
+            %% replica's worker finishes. Keep result custody for its callers.
+            Completed = Bound#operation_recovery_owner{claim_state = terminal},
+            put_operation_owner(wake_operation_owner(Completed), S);
+        undefined ->
             S
     end;
 apply_operation_projection(_Slot, #transaction{}, S) ->
     S.
 
 await_operation_recovery(
-  From, OperationRef,
+  From, WaitRef, OperationRef,
   S = #s{operation_recoveries = Recoveries}) ->
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{target_result = pending,
                                            waiters = _Waiters} ->
-            park_operation_waiter(From, OperationRef, Owner, S);
+            park_operation_waiter(From, WaitRef, OperationRef, Owner, S);
         #operation_recovery_owner{target_result = Result} ->
             {reply, Result, S};
         undefined ->
-            %% A local submit applies its projection before replying. A
-            %% relayed submit, however, can return from the leader before this
-            %% gateway consumes the committed block. Park in the same recovery
-            %% map and let apply_operation_projection/3 wake normal ownership.
-            %% This is deliberately optimistic: if this replica already
-            %% removed a terminal owner, the existing caller deadline returns
-            %% outcome_unknown rather than adding a second outcome lookup.
+            %% The claim may be ahead of local apply OR already completed.
+            %% The same worker reads the outcome index to distinguish them;
+            %% a late caller never waits for an already-consumed event.
             Owner = #operation_recovery_owner{
-                       operation_ref = OperationRef,
-                       status = awaiting_projection},
-            park_operation_waiter(From, OperationRef, Owner, S)
+                       operation_ref = OperationRef},
+            park_operation_waiter(From, WaitRef, OperationRef, Owner, S)
     end.
 
 park_operation_waiter(
-  From = {Caller, _Tag}, OperationRef,
+  From = {Caller, _Tag}, WaitRef, OperationRef,
   Owner = #operation_recovery_owner{waiters = Waiters},
   S = #s{operation_recoveries = Recoveries}) ->
     Monitor = erlang:monitor(process, Caller),
     {wait,
      S#s{operation_recoveries = Recoveries#{
            OperationRef => Owner#operation_recovery_owner{
-             waiters = Waiters#{Monitor => From}}}}}.
+             waiters = Waiters#{Monitor => {From, WaitRef}}}}}}.
+
+cancel_operation_waiter(
+  Caller, WaitRef, OperationRef,
+  S = #s{operation_recoveries = Recoveries}) ->
+    case maps:get(OperationRef, Recoveries, undefined) of
+        Owner = #operation_recovery_owner{waiters = Waiters} ->
+            Remaining = maps:filter(
+              fun(Monitor, {{Pid, _Tag}, Ref})
+                    when Pid =:= Caller, Ref =:= WaitRef ->
+                      _ = erlang:demonitor(Monitor, [flush]),
+                      false;
+                 (_Monitor, _Waiter) -> true
+              end, Waiters),
+            put_operation_owner(Owner#operation_recovery_owner{waiters = Remaining}, S);
+        undefined -> S
+    end.
 
 finish_operation_target_result(
   Pid, OperationRef, Result0, TargetRef,
@@ -4620,10 +4686,9 @@ finish_operation_target_result(
                   waiters = Waiters}
           when Result =/= error ->
             reply_operation_waiters(Waiters, Result),
-            {true,
-             S#s{operation_recoveries = Recoveries#{
-                   OperationRef => Owner#operation_recovery_owner{
-                     target_result = Result, waiters = #{}}}}};
+            {true, put_operation_owner(
+                     Owner#operation_recovery_owner{
+                       target_result = Result, waiters = #{}}, S)};
         #operation_recovery_owner{
            status = Status, pid = Pid, target_ref = TargetRef,
            target_result = Result}
@@ -4643,7 +4708,7 @@ operation_target_result(_Result, _TargetRef) ->
 
 reply_operation_waiters(Waiters, Reply) ->
     maps:foreach(
-      fun(Monitor, From) ->
+      fun(Monitor, {From, _WaitRef}) ->
           _ = erlang:demonitor(Monitor, [flush]),
           gen_statem:reply(From, Reply)
       end, Waiters).
@@ -4655,19 +4720,15 @@ drop_operation_waiter(
           Owner = #operation_recovery_owner{waiters = Waiters},
           {Found0, Acc}) ->
           case maps:get(Monitor, Waiters, undefined) of
-              {Pid, _Tag} ->
+              {{Pid, _Tag}, _WaitRef} ->
                   Remaining = maps:remove(Monitor, Waiters),
-                  case {Owner#operation_recovery_owner.status,
-                        map_size(Remaining)} of
-                      {awaiting_projection, 0} ->
-                          %% No durable claim has reached this replica and no
-                          %% caller remains. Do not retain volatile residue.
+                  Updated = Owner#operation_recovery_owner{waiters = Remaining},
+                  case operation_owner_needed(Updated) of
+                      false ->
+                          stop_operation_recovery_process(Updated),
                           {true, Acc};
-                      _ ->
-                          {true,
-                           Acc#{OperationRef =>
-                                  Owner#operation_recovery_owner{
-                                    waiters = Remaining}}}
+                      true ->
+                          {true, Acc#{OperationRef => Updated}}
                   end;
               _ ->
                   {Found0, Acc#{OperationRef => Owner}}
@@ -4696,7 +4757,7 @@ operation_owner_from_row(
     first_slot := Slot, state := unresolved})
   when is_integer(Slot), Slot > 0 ->
     #operation_recovery_owner{
-       operation_ref = OperationRef, claim_slot = Slot,
+       operation_ref = OperationRef, claim_state = unresolved, claim_slot = Slot,
        target_ref = TargetRef, request_digest = Digest};
 operation_owner_from_row(Ns, Row) ->
     error({invalid_unresolved_operation_projection, Ns, Row}).
@@ -4706,32 +4767,38 @@ install_operation_desired(
     Desired = maps:map(
                 fun(OperationRef, Owner) ->
                     case maps:get(OperationRef, Existing, undefined) of
-                        #operation_recovery_owner{
-                           claim_slot = Slot, target_ref = TargetRef,
-                           request_digest = Digest} = Current
-                          when Slot =:= Owner#operation_recovery_owner.claim_slot,
-                               TargetRef =:= Owner#operation_recovery_owner.target_ref,
-                               Digest =:= Owner#operation_recovery_owner.request_digest ->
-                            Current;
-                        #operation_recovery_owner{
-                           status = awaiting_projection,
-                           waiters = Waiters} ->
-                            Owner#operation_recovery_owner{waiters = Waiters};
+                        #operation_recovery_owner{} = Current ->
+                            (bind_operation_claim(
+                               Current, Owner#operation_recovery_owner.claim_slot,
+                               Owner#operation_recovery_owner.request_digest,
+                               Owner#operation_recovery_owner.target_ref)
+                            )#operation_recovery_owner{
+                                claim_state = merge_operation_claim_state(
+                                                Current#operation_recovery_owner.claim_state,
+                                                unresolved)};
                         undefined ->
-                            Owner;
-                        _ ->
-                            error({operation_recovery_snapshot_conflict,
-                                   OperationRef})
+                            Owner
                     end
                 end, Desired0),
-    maps:foreach(
-      fun(OperationRef, Owner) ->
+    Retained = maps:fold(
+      fun(OperationRef, Owner, Acc) ->
           case maps:is_key(OperationRef, Desired) of
-              true -> ok;
-              false -> stop_operation_recovery_process(Owner)
+              true -> Acc;
+              false ->
+                  %% Missing from *unresolved* is not cancellation of result
+                  %% delivery. Re-read the durable row under the same worker.
+                  State = case Owner#operation_recovery_owner.claim_state of
+                              terminal -> terminal;
+                              _ -> unknown
+                          end,
+                  Retiring = Owner#operation_recovery_owner{claim_state = State},
+                  case operation_owner_needed(Retiring) of
+                      true -> Acc#{OperationRef => wake_operation_owner(Retiring)};
+                      false -> stop_operation_recovery_process(Retiring), Acc
+                  end
           end
-      end, Existing),
-    S#s{operation_recoveries = Desired}.
+      end, Desired, Existing),
+    S#s{operation_recoveries = Retained}.
 
 reconcile_operation_recoveries(
   S = #s{sync = ready, prolog_ready = true,
@@ -4746,11 +4813,11 @@ reconcile_operation_recoveries(S) ->
 
 start_operation_recovery(
   Owner = #operation_recovery_owner{
-            status = pending, claim_slot = ClaimSlot,
+            status = pending,
             operation_ref = OperationRef},
   #s{ns = Ns}) ->
     case quod_dtx_coordinator:start_operation_monitor(
-           self(), Ns, ClaimSlot, OperationRef, #{}) of
+           self(), Ns, OperationRef, #{}) of
         {ok, Pid, Monitor} ->
             Owner#operation_recovery_owner{
               status = running, pid = Pid, monitor = Monitor};
@@ -4805,46 +4872,79 @@ drop_operation_recovery_owner(
                 <- maps:to_list(Recoveries),
             OwnerPid =:= Pid, OwnerMonitor =:= Monitor],
     case Matches of
-        [{OperationRef, Owner}] ->
-            Status = case Reason of normal -> settling; _ -> blocked end,
-            {true,
-             S#s{operation_recoveries = Recoveries#{
-                   OperationRef => Owner#operation_recovery_owner{
-                     status = Status, pid = none, monitor = none}}}};
+        [{_OperationRef, Owner}] ->
+            %% Operational termination is itself a wake. A programming fault
+            %% is instead loud and blocked: repeatedly spawning the same
+            %% crashing function is not recovery or progress.
+            Status = case {Reason, Owner#operation_recovery_owner.target_result} of
+                         {normal, Result} when Result =/= pending -> settling;
+                         {Signal, _} when Signal =:= killed; Signal =:= shutdown;
+                                          Signal =:= noproc -> pending;
+                         _ ->
+                             logger:error(
+                               "quod[~ts]: operation worker failed for ~p: ~p",
+                               [S#s.ns, Owner#operation_recovery_owner.operation_ref,
+                                Reason]),
+                             blocked
+                     end,
+            {true, put_operation_owner(
+                     Owner#operation_recovery_owner{
+                       status = Status, pid = none, monitor = none}, S)};
         [] -> false
     end.
 
 wake_operation_recoveries(
   S = #s{operation_recoveries = Recoveries}) ->
     Recoveries1 = maps:map(
-                    fun(OperationRef,
-                        Owner = #operation_recovery_owner{
-                                  status = running, pid = Pid}) ->
-                            Pid ! {operation_wake, OperationRef},
-                            Owner;
-                       (_OperationRef,
-                        Owner = #operation_recovery_owner{status = blocked}) ->
-                            Owner#operation_recovery_owner{status = pending};
-                       (_OperationRef, Owner) ->
-                            Owner
-                    end, Recoveries),
+                    fun(_Ref, Owner) -> wake_operation_owner(Owner) end, Recoveries),
     S#s{operation_recoveries = Recoveries1}.
 
+wake_operation_owner(Owner = #operation_recovery_owner{
+                              operation_ref = Ref, status = running, pid = Pid}) ->
+    Pid ! {operation_wake, Ref},
+    Owner;
+wake_operation_owner(Owner = #operation_recovery_owner{status = blocked}) ->
+    Owner#operation_recovery_owner{status = pending};
+wake_operation_owner(Owner) -> Owner.
+
+bind_operation_claim(Owner = #operation_recovery_owner{
+                              operation_ref = Ref, claim_slot = OldSlot,
+                              request_digest = OldDigest, target_ref = OldTarget},
+                     Slot, Digest, TargetRef) ->
+    case (OldSlot =:= none orelse OldSlot =:= Slot) andalso
+         (OldDigest =:= none orelse OldDigest =:= Digest) andalso
+         (OldTarget =:= none orelse OldTarget =:= TargetRef) of
+        true -> Owner#operation_recovery_owner{
+                  claim_slot = Slot, request_digest = Digest, target_ref = TargetRef};
+        false -> error({operation_recovery_binding_conflict, Ref})
+    end.
+
+merge_operation_claim_state(terminal, _State) -> terminal;
+merge_operation_claim_state(_Old, State)
+  when State =:= unresolved; State =:= terminal -> State.
+
+operation_owner_needed(#operation_recovery_owner{claim_state = unresolved}) -> true;
+operation_owner_needed(#operation_recovery_owner{waiters = Waiters}) ->
+    map_size(Waiters) > 0.
+
+put_operation_owner(Owner = #operation_recovery_owner{operation_ref = Ref},
+                    S = #s{operation_recoveries = Recoveries}) ->
+    case operation_owner_needed(Owner) of
+        true -> S#s{operation_recoveries = Recoveries#{Ref => Owner}};
+        false ->
+            stop_operation_recovery_process(Owner),
+            S#s{operation_recoveries = maps:remove(Ref, Recoveries)}
+    end.
+
 stop_operation_recovery_process(
-  #operation_recovery_owner{operation_ref = OperationRef,
-                            pid = Pid, monitor = Monitor,
-                            waiters = Waiters})
+  #operation_recovery_owner{pid = Pid, monitor = Monitor, waiters = Waiters})
   when is_pid(Pid), is_reference(Monitor) ->
-    reply_operation_waiters(
-      Waiters, {error, {outcome_unknown, OperationRef}}),
+    0 = map_size(Waiters),
     _ = erlang:demonitor(Monitor, [flush]),
     exit(Pid, shutdown),
     ok;
-stop_operation_recovery_process(
-  #operation_recovery_owner{operation_ref = OperationRef,
-                            waiters = Waiters}) ->
-    reply_operation_waiters(
-      Waiters, {error, {outcome_unknown, OperationRef}}),
+stop_operation_recovery_process(#operation_recovery_owner{waiters = Waiters}) ->
+    0 = map_size(Waiters),
     ok.
 
 %% Recovery coordination is volatile but its source is not: before each Begin
@@ -5576,22 +5676,81 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     S#s{dtx_workers = Workers#{Pid => Worker}}.
 
 run_dtx_endpoint_worker(Parent, Ns, Peer, Request, Deadline) ->
-    Remaining = max(1, Deadline - quod_time:mono_ms()),
-    Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining),
-    case waiting_applied_key(Request, Result) of
-        {wait, Key} ->
-            Remaining1 = max(0, Deadline - quod_time:mono_ms()),
-            receive
-                {dtx_finalize_applied, Key} ->
-                    run_dtx_endpoint_worker(
-                      Parent, Ns, Peer, Request, Deadline)
-            after Remaining1 ->
-                Parent ! {dtx_endpoint_worker_result,
-                          self(), {error, timeout}}
-            end;
-        ready ->
-            Parent ! {dtx_endpoint_worker_result, self(), Result}
+    ParentMonitor = erlang:monitor(process, Parent),
+    IsSnapshot = outcome_request_claim(Request) =/= none,
+    %% Subscribe before reading: committed-height feed notices can precede
+    %% Prolog apply/replay readiness, including at an otherwise quiet head.
+    IsSnapshot andalso quod_reg:subscribe({runtime, Ns}),
+    Context = {Parent, ParentMonitor, Ns, Peer, Request, Deadline},
+    try run_dtx_endpoint_query(Context)
+    after
+        _ = erlang:demonitor(ParentMonitor, [flush]),
+        IsSnapshot andalso quod_reg:unsubscribe({runtime, Ns})
     end.
+
+run_dtx_endpoint_query(
+  Context = {Parent, _ParentMonitor, Ns, Peer, Request, Deadline}) ->
+    case max(0, Deadline - quod_time:mono_ms()) of
+        0 -> endpoint_worker_expired(Parent);
+        Remaining ->
+            Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining),
+            case waiting_applied_key(Request, Result) of
+                {wait, Key} ->
+                    wait_dtx_endpoint_progress(Context, {applied, Key});
+                ready ->
+                    Parent ! {dtx_endpoint_worker_result, self(), Result},
+                    case outcome_request_claim(Request) of
+                        none -> ok;
+                        _ -> wait_dtx_snapshot_decision(
+                               Context, outcome_snapshot_floor(Result))
+                    end
+            end
+    end.
+
+%% A snapshot is not terminal merely because the helper obtained it. The
+%% consensus owner accepts it against its current era/head or retains this
+%% same worker. Runtime messages stay queued until that serialized decision.
+wait_dtx_snapshot_decision(
+  Context = {Parent, ParentMonitor, _Ns, _Peer, _Request, Deadline}, Floor) ->
+    Remaining = max(0, Deadline - quod_time:mono_ms()),
+    receive
+        {dtx_snapshot_decision, Parent, done} -> ok;
+        {dtx_snapshot_decision, Parent, resample} ->
+            run_dtx_endpoint_query(Context);
+        {dtx_snapshot_decision, Parent, wait} ->
+            wait_dtx_endpoint_progress(Context, {snapshot, Floor});
+        {'DOWN', ParentMonitor, process, Parent, _Reason} -> ok
+    after Remaining -> endpoint_worker_expired(Parent)
+    end.
+
+wait_dtx_endpoint_progress(
+  Context = {Parent, ParentMonitor, _Ns, _Peer, _Request, Deadline}, Requirement) ->
+    Remaining = max(0, Deadline - quod_time:mono_ms()),
+    receive
+        {'DOWN', ParentMonitor, process, Parent, _Reason} -> ok;
+        {dtx_snapshot_decision, Parent, done} -> ok;
+        {dtx_finalize_applied, Key} when Requirement =:= {applied, Key} ->
+            run_dtx_endpoint_query(Context);
+        {dtx_snapshot_progress, Parent} when element(1, Requirement) =:= snapshot ->
+            run_dtx_endpoint_query(Context);
+        {projection_advanced, _Engine, Height}
+          when element(1, Requirement) =:= snapshot,
+               Height > element(2, Requirement) ->
+            run_dtx_endpoint_query(Context);
+        {replay_ready, _ReplayId, _Height}
+          when element(1, Requirement) =:= snapshot ->
+            run_dtx_endpoint_query(Context);
+        _Unrelated -> wait_dtx_endpoint_progress(Context, Requirement)
+    after Remaining -> endpoint_worker_expired(Parent)
+    end.
+
+endpoint_worker_expired(Parent) ->
+    Parent ! {dtx_endpoint_worker_result, self(), {error, timeout}},
+    ok.
+
+outcome_snapshot_floor({outcome_state, #{applied_floor := Floor}})
+  when is_integer(Floor), Floor >= 0 -> Floor;
+outcome_snapshot_floor(_Result) -> -1.
 
 waiting_applied_key(
   {applied, _RequestId, GroupId, FinalizeRef, Generation, Verdict},
@@ -5769,10 +5928,10 @@ dtx_endpoint_operation_ready({cancel_operation_effect, _, _}, S) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready({phase, _, _, _}, S) ->
     endpoint_read_ready(S);
-dtx_endpoint_operation_ready({outcome, _, _, _, _}, S) ->
-    endpoint_read_ready(S);
-dtx_endpoint_operation_ready({outcome_barrier, _, _, _, _}, S) ->
-    endpoint_read_ready(S);
+dtx_endpoint_operation_ready({outcome, _, _, _, _} = Request, S) ->
+    outcome_request_binding(Request, S);
+dtx_endpoint_operation_ready({outcome_barrier, _, _, _, _} = Request, S) ->
+    outcome_request_binding(Request, S);
 dtx_endpoint_operation_ready({read_attest, _, _}, S) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready({applied, _, _, _, _, _}, S) ->
@@ -5801,12 +5960,12 @@ execute_dtx_endpoint_request(
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome, _RequestId, OutcomeRef, _CommitteeId,
-       _MinimumSlot}, _TimeoutMs) ->
-    execute_outcome_snapshot(Ns, OutcomeRef);
+       _MinimumSlot}, TimeoutMs) ->
+    execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs);
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
-       _MinimumSlot}, _TimeoutMs) ->
-    execute_outcome_snapshot(Ns, GroupRef);
+       _MinimumSlot}, TimeoutMs) ->
+    execute_outcome_snapshot(Ns, GroupRef, TimeoutMs);
 execute_dtx_endpoint_request(
   Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs) ->
     case quod_dtx:decode(PlanBlob) of
@@ -5981,12 +6140,13 @@ claimed_application_evidence(Ns, Slot, TxId, Result) ->
             {error, not_ready}
     end.
 
-execute_outcome_snapshot(Ns, OutcomeRef) ->
+execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs) ->
     case quod_outcome:ref_identity(OutcomeRef) of
         {ok, {Ns, _Anchor}} ->
-            case quod_prolog:outcome_snapshot(Ns, OutcomeRef) of
+            case quod_prolog:outcome_snapshot(Ns, OutcomeRef, TimeoutMs) of
                 {ok, Snapshot} -> {outcome_state, Snapshot};
                 {error, bad_outcome_ref} -> {error, invalid_request};
+                {error, timeout} -> {error, timeout};
                 {error, _} -> {error, not_ready}
             end;
         _ ->
@@ -5995,12 +6155,93 @@ execute_outcome_snapshot(Ns, OutcomeRef) ->
 
 finish_dtx_server_worker(
   Pid, Result, S = #s{dtx_workers = Workers}) ->
+    case maps:get(Pid, Workers, undefined) of
+        #dtx_server_worker{request = Request} = Worker ->
+            case outcome_snapshot_wait(Request, Result, S) of
+                wait ->
+                    Floor = outcome_snapshot_floor(Result),
+                    Slot = S#s.slot,
+                    Resampled = Worker#dtx_server_worker.snapshot_resampled,
+                    case endpoint_read_ready(S) andalso Slot > Floor andalso
+                         Slot > Resampled of
+                        true ->
+                            %% A newer committed head is a concrete edge, not
+                            %% permission to spin on the same stale snapshot.
+                            Pid ! {dtx_snapshot_decision, self(), resample},
+                            {S#s{dtx_workers = Workers#{
+                                  Pid => Worker#dtx_server_worker{
+                                           snapshot_resampled = Slot}}}, []};
+                        false ->
+                            Pid ! {dtx_snapshot_decision, self(), wait},
+                            {S, []}
+                    end;
+                ready -> complete_dtx_server_worker(Pid, Result, S)
+            end;
+        undefined -> {S, []}
+    end.
+
+outcome_snapshot_wait(Request, Result, S) ->
+    case outcome_request_claim(Request) of
+        {OutcomeRef, CommitteeId, MinimumSlot} ->
+            case {outcome_request_binding(Request, S), Result} of
+                {true, {outcome_state,
+                        #{applied_floor := Floor, outcome := _} = Snapshot}}
+                  when map_size(Snapshot) =:= 2,
+                       is_integer(Floor), Floor >= 0, Floor =< S#s.slot ->
+                    case current_outcome_snapshot(
+                           OutcomeRef, CommitteeId, MinimumSlot, Snapshot, S) of
+                        {ok, _, _, _} -> ready;
+                        error -> wait
+                    end;
+                {true, {error, not_ready}} -> wait;
+                _ -> ready
+            end;
+        none -> ready
+    end.
+
+outcome_request_claim({Kind, _RequestId, Ref, CommitteeId, MinimumSlot})
+  when Kind =:= outcome; Kind =:= outcome_barrier ->
+    {Ref, CommitteeId, MinimumSlot};
+outcome_request_claim(_Request) -> none.
+
+outcome_request_binding(Request, S = #s{committee_id = CommitteeId, self = Self}) ->
+    case outcome_request_claim(Request) of
+        {Ref, CommitteeId, MinimumSlot}
+          when is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+               is_integer(MinimumSlot), MinimumSlot >= 0 ->
+            quod_outcome:ref_identity(Ref) =:= {ok, target_identity(S)} andalso
+                lists:member(Self, active_validators(S));
+        _ -> false
+    end.
+
+%% The existing request map is also the wait registry. Do not infer apply
+%% readiness from a feed height: local replay can become ready at the same
+%% committed head. Committee changes wake old requests to refuse their stale
+%% binding, rather than retaining them until an unrelated new block.
+wake_dtx_snapshot_workers(S0, S1 = #s{dtx_workers = Workers}) ->
+    case endpoint_read_ready(S0) =/= endpoint_read_ready(S1) orelse
+         S0#s.committee_id =/= S1#s.committee_id orelse
+         S1#s.slot > S0#s.slot of
+        true ->
+            maps:foreach(
+              fun(Pid, #dtx_server_worker{request = Request}) ->
+                  case outcome_request_claim(Request) of
+                      none -> ok;
+                      _ -> Pid ! {dtx_snapshot_progress, self()}
+                  end
+              end, Workers);
+        false -> ok
+    end.
+
+complete_dtx_server_worker(
+  Pid, Result, S = #s{dtx_workers = Workers}) ->
     case maps:take(Pid, Workers) of
         {#dtx_server_worker{monitor = Monitor, request = Request,
                             owner_mref = OwnerMRef,
                             attestation = Attestation,
                             destination = Destination,
                             started_at = StartedAt}, Rest} ->
+            Pid ! {dtx_snapshot_decision, self(), done},
             _ = erlang:demonitor(Monitor, [flush]),
             demonitor_if_set(OwnerMRef),
             S1 = detach_dtx_endpoint_waiter(
@@ -11569,6 +11810,7 @@ keep_progress(S0, S1, Actions, TimerMode) ->
            timed_step(SAdvertised, head_reconcile,
                       fun() -> reconcile_head_progress(SAdvertised) end)),
     ok = notify_dtx_coordinator_progress(S0, S2),
+    ok = wake_dtx_snapshot_workers(S0, S2),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
                        rearm -> rearm_progress_timer(S2);

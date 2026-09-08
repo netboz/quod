@@ -56,7 +56,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          execute/2, execute_signed/3,
          open_cursor/5, cancel_cursor/3,
          submit_plan/4, submit_role/4, outcome/1,
-         local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
+         local_outcome/2, outcome_snapshot/3, dtx_group_state/2,
          validate_read_plan/3,
          effect_resolution/4,
          project_pending_begins/2,
@@ -712,16 +712,20 @@ outcome_not_found(_Ref, _AppliedFloor) ->
     {error, not_found}.
 
 -doc "Read one locally-applied outcome and its atomic publication floor.".
--spec outcome_snapshot(binary(), term()) ->
+-spec outcome_snapshot(binary(), term(), pos_integer()) ->
           {ok, #{applied_floor := non_neg_integer(),
                  outcome := not_found | map()}} |
           {error, term()}.
-outcome_snapshot(Ns, Ref) when is_binary(Ns), byte_size(Ns) > 0 ->
+outcome_snapshot(Ns, Ref, TimeoutMs)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
     try gen_server:call(
-          quod_reg:via({quod_prolog, Ns}), {outcome_snapshot, Ref}, 1000)
-    catch exit:_ -> {error, {ontology_unavailable, Ns}}
+          quod_reg:via({quod_prolog, Ns}), {outcome_snapshot, Ref}, TimeoutMs)
+    catch
+        exit:{timeout, _} -> {error, timeout};
+        exit:_ -> {error, {ontology_unavailable, Ns}}
     end;
-outcome_snapshot(_Ns, _Ref) ->
+outcome_snapshot(_Ns, _Ref, _TimeoutMs) ->
     {error, bad_outcome_ref}.
 
 -doc "Read exact bounded local DTX history, applied row, and publication floor.".
@@ -1438,7 +1442,17 @@ handle_cast({apply_entry, #entry{} = Entry, Origin}, S0) ->
     %% Drive the replay lifecycle from whether the apply ACTUALLY advanced the committed height, not
     %% from the raw origin: an already-applied no-op (`Index =< applied`) or a forward gap
     %% (`Index > applied+1`, which bails to rebuild) must never emit a false boundary.
-    {noreply, note_origin(Origin, S1#s.applied > S0#s.applied, S0#s.applied, S1)};
+    Advanced = S1#s.applied > S0#s.applied,
+    S2 = note_origin(Origin, Advanced, S0#s.applied, S1),
+    %% P progress is independent of material E publications: metadata,
+    %% rejected/duplicate content and no-op blocks advance the atomic outcome
+    %% floor too. Waiting readers re-query that floor; this signal is not a
+    %% reaction event and supplies no evidence or authority of its own.
+    case Advanced of
+        true -> publish_runtime(S2#s.ns, {projection_advanced, self(), S2#s.applied});
+        false -> ok
+    end,
+    {noreply, S2};
 %% Workers report through the engine so exactly one process owns reply and lifecycle state.
 handle_cast({proof_result, Ref, Result}, S) ->
     {noreply, finish_proof(Ref, Result, S)};
@@ -6706,7 +6720,9 @@ oldest_snapshot(Current, #s{workers = Workers,
 %% effect-only transaction with an empty D diff), `{rejected_live,
 %% Env}` (one per live transaction that committed but was OCC-rejected at apply), and the
 %% `{replay_started, Id, From}` / `{replay_ready, Id, Height}` boundaries of a replay run (`Id` is
-%% `boot` for the quiet-boot ready edge). The ATTACHED runtime (`attach_runtime/1`) additionally
+%% `boot` for the quiet-boot ready edge). `{projection_advanced, EnginePid, Height}` reports
+%% every successfully advanced P floor, including metadata/no-op/replay blocks; it is only a
+%% snapshot-read wake, never an E event or reaction input. The ATTACHED runtime (`attach_runtime/1`) additionally
 %% receives each applied envelope as a direct `{applied_live, Env, Est}` carrying the post-commit
 %% snapshot handle — see publish_outcome/2 for why the handle is never broadcast. The pre-apply
 %% `{committed, Ns}` publication (quod_simplex → feed/metrics) is untouched and is deliberately NOT the

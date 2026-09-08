@@ -1586,11 +1586,13 @@ an authentic correctly bound claim whose existing authorization transcript
 re-proof, current target policy, or OCC check fails is `reject` with the
 existing bounded reasons. No caller maps these classes a second time.
 
-`remote_complete` binds the operation identity, exact B transaction reference,
-and B's certified applied-or-rejected result. It changes only A's existing
-operation/outcome projection from unresolved to terminal. Duplicate exact
-receipts are idempotent; a different target, result, or request digest is a
-consensus-invalid conflict.
+`remote_complete` binds the operation identity, request digest, and exact B
+transaction reference, carrying certified transaction evidence. It changes
+only A's existing operation/outcome projection from unresolved to terminal.
+The receipt does not itself carry B's committed-versus-rejected verdict;
+delivery obtains that classification through the existing target-result
+verification path. Duplicate exact receipts are idempotent; a different target
+or request digest is a consensus-invalid conflict.
 
 This is a coordinated format break. Change transaction construction, canonical
 bytes, safe decode, ledger classification, Simplex batch validation,
@@ -1664,6 +1666,16 @@ record. The owner never re-proves, changes the participant set, allocates a new
 operation id, or invents a new transaction. Multiple A validators may race to
 submit the same semantic B transaction; B's existing transaction id and
 outcome projection converge them on one result.
+
+An unresolved claim needs durable recovery; a terminal claim may still need
+live result delivery. Receipt apply and unresolved-snapshot reconstruction
+must not cancel the latter. Late callers enter the same operation owner,
+whose worker re-reads the existing source outcome row. A terminal source row
+selects read-only resolution of its exact target via the existing certified
+outcome verifier, never another application or receipt. Finished terminal
+operations retain no permanent runtime owner/result cache. The bounded
+completion-lifecycle correction and review gates are specified in
+`operation-completion-lifecycle-plan.md`.
 
 Duplicate-T admission is part of that contract, not an error shortcut. The
 existing custody/outcome admission seam returns the stored terminal outcome
@@ -2286,8 +2298,10 @@ stale, replay, and crash cases.
   with another digest is invalid in proposal preview, vote validation, ordered
   apply, replay, and catch-up. A claim racing an existing local operation is
   arbitrated by the one origin operation projection.
-- Replay with thousands of terminal operations schedules none of them. It
-  schedules exactly the claims without a valid completion receipt. A duplicate
+- Replay with thousands of terminal operations and no waiting callers schedules
+  none of them. Durable recovery schedules exactly the claims without a valid
+  completion receipt; outstanding callers retain only their result-delivery
+  work through the same owner. A duplicate
   exact receipt is idempotent; a conflicting receipt cannot change a terminal
   operation.
 - A foreign singleton direct effect uses the same claim/ordinary-target/receipt

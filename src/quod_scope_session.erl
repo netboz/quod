@@ -69,11 +69,21 @@ start(<<_:128>> = ScopeId, <<_:256>> = ProofId, Origin,
     true = quod_dtx:valid_principal(Principal),
     true = quod_client_goal:valid_request_binding(RequestBinding),
     Ref = make_ref(),
+    %% The engine mailbox and this worker do not inherit the caller's context.
+    %% Keep the received context only for this proof-owned process lifetime.
+    TraceCtx = case maps:get(trace_ctx, Opts, undefined) of
+                   undefined -> otel_ctx:new();
+                   Context -> Context
+               end,
     MaxHeapWords = bytes_to_heap_words(?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES),
     {Pid, WorkerMRef} =
         spawn_opt(
-          fun() -> init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
-                        Est, Engine, Ref, Opts) end,
+          fun() ->
+              quod_trace:with_context(TraceCtx, fun() ->
+                  init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
+                       Est, Engine, Ref, Opts)
+              end)
+          end,
           [monitor,
            {max_heap_size,
             #{size => MaxHeapWords, kill => true, error_logger => true}}]),
@@ -1211,14 +1221,17 @@ loop() ->
 dispatch_message({scope_invoke_open, Origin, ProofId, Ref,
                   RequestRef, InvocationId, Goal, Chain, Selection}) ->
     case valid_command(Origin, ProofId, Ref) of
-        true -> handle_open(
-                  RequestRef, InvocationId, Goal, Chain, Selection);
+        true -> trace_invocation(<<"quod.scope.invoke_open">>, fun() ->
+                    handle_open(RequestRef, InvocationId, Goal, Chain, Selection)
+                end);
         false -> handled
     end;
 dispatch_message({scope_invoke_next, Origin, ProofId, Ref,
                   RequestRef, InvocationId, ExpectedSeq}) ->
     case valid_command(Origin, ProofId, Ref) of
-        true -> handle_next(RequestRef, InvocationId, ExpectedSeq);
+        true -> trace_invocation(<<"quod.scope.invoke_next">>, fun() ->
+                    handle_next(RequestRef, InvocationId, ExpectedSeq)
+                end);
         false -> handled
     end;
 dispatch_message({scope_invoke_cancel, Origin, ProofId, Ref, InvocationId}) ->
@@ -1305,6 +1318,12 @@ dispatch_message({scope_close, Origin, ProofId, Ref}) ->
     end;
 dispatch_message(_) ->
     unhandled.
+
+trace_invocation(Name, Fun) ->
+    quod_trace:with_span(
+      quod_trace:context(), Name, server,
+      #{'quod.namespace' => (runtime())#runtime.namespace},
+      fun(_SpanCtx) -> Fun() end).
 
 handle_open(RequestRef, InvocationId, Goal, Chain, Selection) ->
     Runtime0 = runtime(),

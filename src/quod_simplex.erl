@@ -133,7 +133,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -export_type([history_projection/0]).
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
--export([start_link/2, rebuild/1, prolog_ready/4, operation_projection/3,
+-export([start_link/2, rebuild/1, prolog_ready/4, operation_projection/4,
          await_operation_result/3,
          finalize_applied/4,
          handoff_effect/3,
@@ -1174,6 +1174,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 %% history with no waiting caller retains neither a worker nor a result cache.
 -record(operation_recovery_owner, {
     operation_ref :: term(),
+    %% Live request ancestry only; reconstructed history has no trace parent.
+    trace_ctx = #{} :: quod_trace:context(),
     claim_state = unknown :: unknown | unresolved | terminal,
     claim_slot = none :: none | pos_integer(),
     claim_tx_id = none :: none | <<_:256>>,
@@ -2413,9 +2415,10 @@ prolog_ready(Ns, PrologPid, Height, Unresolved)
     end.
 
 -doc "Project one committed one-target claim/completion into recovery custody.".
--spec operation_projection(binary(), pos_integer(), #transaction{}) -> ok.
+-spec operation_projection(binary(), pos_integer(), #transaction{},
+                           quod_trace:context()) -> ok.
 operation_projection(
-  Ns, Slot, #transaction{} = Change)
+  Ns, Slot, #transaction{} = Change, TraceCtx)
   when is_binary(Ns), is_integer(Slot), Slot > 0 ->
     %% Projection remains asynchronous for both live apply and replay.  A
     %% synchronous callback into Simplex would deadlock while Simplex is
@@ -2426,7 +2429,7 @@ operation_projection(
     %% waiter in the same owner until this cast arrives.
     gen_statem:cast(
       quod_reg:via({quod_simplex, Ns}),
-      {operation_projection, Slot, Change}).
+      {operation_projection, Slot, Change, TraceCtx}).
 
 -doc "Wait for the one durable recovery owner to certify the target result.".
 -spec await_operation_result(binary(), term(), pos_integer()) ->
@@ -2440,7 +2443,8 @@ await_operation_result(Ns, OperationRef, TimeoutMs)
     %% therefore cannot release result-only work for a long-lived caller.
     Server = quod_reg:where({quod_simplex, Ns}),
     try gen_statem:call(
-          Server, {await_operation_result, WaitRef, OperationRef}, TimeoutMs)
+          Server, {await_operation_result, WaitRef, OperationRef,
+                   quod_trace:context()}, TimeoutMs)
     catch
         exit:_ -> {error, {outcome_unknown, OperationRef}}
     after
@@ -2545,7 +2549,7 @@ dtx_endpoint_request(
     try gen_statem:call(
           quod_reg:via({quod_simplex, OwnerNs}),
           {dtx_endpoint_request, TargetNs, PeerKey, Endpoint,
-           Request, ValidationSidecar, TimeoutMs},
+           Request, ValidationSidecar, TimeoutMs, quod_trace:context()},
           infinity)
     catch
         exit:_ -> {error, not_ready}
@@ -2567,7 +2571,8 @@ dtx_endpoint_local(Ns, Request, ValidationSidecar, TimeoutMs)
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
     try gen_statem:call(
           quod_reg:via({quod_simplex, Ns}),
-          {dtx_endpoint_local, Request, ValidationSidecar, TimeoutMs}, infinity)
+          {dtx_endpoint_local, Request, ValidationSidecar, TimeoutMs,
+           quod_trace:context()}, infinity)
     catch
         exit:_ -> {error, not_ready}
     end;
@@ -2672,10 +2677,18 @@ operation_claim_evidence(_Ns, _Slot, _OperationRef) ->
     {error, invalid_request}.
 
 operation_claim_evidence_at(Ns, Root, Identity, Slot, OperationRef) ->
-    case quod_ledger_store:open_ro(Ns, Root) of
+    case quod_trace:with_optional_span(
+           quod_trace:context(), <<"quod.evidence.ledger_open">>, internal,
+           #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
+             'quod.evidence.kind' => <<"claim">>},
+           fun() -> quod_ledger_store:open_ro(Ns, Root) end) of
         {ok, Store} ->
             try
-                case quod_ledger_store:read_at(Store, Slot) of
+                case quod_trace:with_optional_span(
+                       quod_trace:context(), <<"quod.evidence.read_at">>, internal,
+                       #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
+                         'quod.evidence.kind' => <<"claim">>},
+                       fun() -> quod_ledger_store:read_at(Store, Slot) end) of
                     {ok, #entry{data = {batch, Transactions}} = Entry} ->
                         operation_claim_in_entry(
                           Identity, Entry, Transactions, OperationRef);
@@ -2710,10 +2723,18 @@ operation_ref_matches(Claim, OperationRef) ->
     end.
 
 transaction_evidence_at(Ns, Root, Identity, Slot, TxId) ->
-    case quod_ledger_store:open_ro(Ns, Root) of
+    case quod_trace:with_optional_span(
+           quod_trace:context(), <<"quod.evidence.ledger_open">>, internal,
+           #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
+             'quod.evidence.kind' => <<"application">>},
+           fun() -> quod_ledger_store:open_ro(Ns, Root) end) of
         {ok, Store} ->
             try
-                case quod_ledger_store:read_at(Store, Slot) of
+                case quod_trace:with_optional_span(
+                       quod_trace:context(), <<"quod.evidence.read_at">>, internal,
+                       #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
+                         'quod.evidence.kind' => <<"application">>},
+                       fun() -> quod_ledger_store:read_at(Store, Slot) end) of
                     {ok, #entry{data = {batch, Transactions}} = Entry} ->
                         case [T || #transaction{tx_id = Id} = T <- Transactions,
                                    Id =:= TxId] of
@@ -3725,20 +3746,24 @@ running_impl(
 running_impl(
   {call, From},
   {dtx_endpoint_request, TargetNs, PeerKey, Endpoint, Request, ValidationSidecar,
-   TimeoutMs},
+   TimeoutMs, TraceCtx},
   S0) ->
-    case start_dtx_endpoint_request(
-           TargetNs, PeerKey, Endpoint, Request, ValidationSidecar, TimeoutMs,
-           From, S0) of
+    case quod_trace:with_context(TraceCtx, fun() ->
+             start_dtx_endpoint_request(
+               TargetNs, PeerKey, Endpoint, Request, ValidationSidecar, TimeoutMs,
+               From, S0)
+         end) of
         {ok, S1} ->
             {keep_state, S1};
         {error, Reason} ->
             {keep_state, S0, [{reply, From, {error, Reason}}]}
     end;
 running_impl(
-  {call, From}, {dtx_endpoint_local, Request, ValidationSidecar, TimeoutMs}, S0) ->
-    case start_local_dtx_endpoint_request(
-           Request, ValidationSidecar, TimeoutMs, From, S0) of
+  {call, From}, {dtx_endpoint_local, Request, ValidationSidecar, TimeoutMs, TraceCtx}, S0) ->
+    case quod_trace:with_context(TraceCtx, fun() ->
+             start_local_dtx_endpoint_request(
+               Request, ValidationSidecar, TimeoutMs, From, S0)
+         end) of
         {ok, S1} ->
             %% A local submit retains the same semantic DTX record as remote
             %% endpoint ingress. Drive it in this callback instead of leaving
@@ -3824,9 +3849,11 @@ running_impl(
 running_impl(cast, {prolog_ready, _PrologPid, _Height, _Unresolved}, S) ->
     {keep_state, S};
 running_impl(
-  {call, From}, {await_operation_result, WaitRef, OperationRef}, S0)
+  {call, From}, {await_operation_result, WaitRef, OperationRef, TraceCtx}, S0)
   when is_reference(WaitRef) ->
-    case await_operation_recovery(From, WaitRef, OperationRef, S0) of
+    case quod_trace:with_context(TraceCtx, fun() ->
+             await_operation_recovery(From, WaitRef, OperationRef, S0)
+         end) of
         {reply, Reply, S1} ->
             {keep_state, S1, [{reply, From, Reply}]};
         {wait, S1} ->
@@ -3838,8 +3865,10 @@ running_impl(
     keep_progress(S0, S1, []);
 running_impl(
   cast,
-  {operation_projection, Slot, #transaction{} = Change}, S0) ->
-    S1 = apply_operation_projection(Slot, Change, S0),
+  {operation_projection, Slot, #transaction{} = Change, TraceCtx}, S0) ->
+    S1 = quod_trace:with_context(TraceCtx, fun() ->
+             apply_operation_projection(Slot, Change, S0)
+         end),
     keep_progress(S0, S1, []);
 %% Prolog emits this only after the finalized plan's outcome index has been
 %% flushed and its MVCC revision published.  Every exact waiter is woken and
@@ -4599,7 +4628,8 @@ apply_operation_projection(
             TargetRef = {transaction, TargetNs, TargetAnchor, TargetTxId},
             Owner = maps:get(
                       OperationRef, Recoveries,
-                      #operation_recovery_owner{operation_ref = OperationRef}),
+                      #operation_recovery_owner{operation_ref = OperationRef,
+                                                trace_ctx = quod_trace:context()}),
             Bound = bind_operation_claim(Owner, Slot, Digest, TargetRef),
             case Bound#operation_recovery_owner.claim_tx_id of
                 Old when Old =:= none; Old =:= ClaimTxId -> ok;
@@ -4607,6 +4637,7 @@ apply_operation_projection(
             end,
             Projected = Bound#operation_recovery_owner{
                           claim_tx_id = ClaimTxId,
+                          trace_ctx = operation_trace_context(Bound),
                           claim_state = merge_operation_claim_state(
                                           Bound#operation_recovery_owner.claim_state,
                                           unresolved)},
@@ -4645,9 +4676,16 @@ await_operation_recovery(
             %% The same worker reads the outcome index to distinguish them;
             %% a late caller never waits for an already-consumed event.
             Owner = #operation_recovery_owner{
-                       operation_ref = OperationRef},
+                       operation_ref = OperationRef,
+                       trace_ctx = quod_trace:context()},
             park_operation_waiter(From, WaitRef, OperationRef, Owner, S)
     end.
+
+operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx})
+  when map_size(TraceCtx) =:= 0 ->
+    quod_trace:context();
+operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx}) ->
+    TraceCtx.
 
 park_operation_waiter(
   From = {Caller, _Tag}, WaitRef, OperationRef,
@@ -4814,10 +4852,12 @@ reconcile_operation_recoveries(S) ->
 start_operation_recovery(
   Owner = #operation_recovery_owner{
             status = pending,
-            operation_ref = OperationRef},
+            operation_ref = OperationRef, trace_ctx = TraceCtx},
   #s{ns = Ns}) ->
-    case quod_dtx_coordinator:start_operation_monitor(
-           self(), Ns, OperationRef, #{}) of
+    case quod_trace:with_context(TraceCtx, fun() ->
+             quod_dtx_coordinator:start_operation_monitor(
+               self(), Ns, OperationRef, #{})
+         end) of
         {ok, Pid, Monitor} ->
             Owner#operation_recovery_owner{
               status = running, pid = Pid, monitor = Monitor};
@@ -5430,9 +5470,11 @@ handle_dtx_endpoint_frame(
                       Peer, InLink, Response, ValidationSidecar, S);
                 {error, _} ->
                     case quod_dtx_endpoint:decode_request(TargetNs, Payload) of
-                        {ok, Request, ValidationSidecar} ->
-                            admit_dtx_endpoint_request(
-                              PeerIdentity, InLink, Request, ValidationSidecar, S);
+                        {ok, Request, ValidationSidecar, Carrier} ->
+                            quod_trace:with_context(quod_trace:extract(Carrier), fun() ->
+                                admit_dtx_endpoint_request(
+                                  PeerIdentity, InLink, Request, ValidationSidecar, S)
+                            end);
                         {error, _} ->
                             {S, []}
                     end
@@ -5660,11 +5702,18 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     Peer = endpoint_peer(PeerIdentity),
     Parent = self(),
     OwnerMRef = dtx_worker_owner_monitor(Destination),
+    TraceCtx = quod_trace:context(),
     {Pid, Monitor} = spawn_monitor(
                        fun() ->
-                           run_dtx_endpoint_worker(
-                             Parent, Ns, Peer, Request,
-                             quod_time:mono_ms() + TimeoutMs)
+                           quod_trace:with_optional_span(
+                             TraceCtx, <<"quod.dtx.endpoint.serve">>, server,
+                             #{'quod.namespace' => Ns,
+                               'quod.endpoint.kind' => atom_to_binary(element(1, Request), utf8)},
+                             fun() ->
+                                 run_dtx_endpoint_worker(
+                                   Parent, Ns, Peer, Request,
+                                   quod_time:mono_ms() + TimeoutMs)
+                             end)
                        end),
     Worker = #dtx_server_worker{
                pid = Pid, monitor = Monitor, owner_mref = OwnerMRef,
@@ -6830,7 +6879,8 @@ relevant_validation_sidecar(_Request, _ValidationSidecar) ->
     [].
 
 encode_dtx_request_with_hints(Ns, Request, ValidationSidecar) ->
-    case quod_dtx_endpoint:encode_request(Ns, Request, ValidationSidecar) of
+    case quod_dtx_endpoint:encode_request(
+           Ns, Request, ValidationSidecar, quod_trace:inject(quod_trace:context())) of
         {ok, Frame} -> {ok, Frame, ValidationSidecar};
         {error, {too_large, dtx_endpoint}} when ValidationSidecar =/= [] ->
             case drop_optional_entry_hint(ValidationSidecar) of

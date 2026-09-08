@@ -149,7 +149,13 @@ wrapped_decode_depth_bound_test() ->
                  quod_safe_term:decode_wrapped(RefusedBlob,
                                                byte_size(RefusedBlob))).
 
-wrapped_decode_loaded_and_unloaded_vms_compare_identically_test() ->
+wrapped_decode_loaded_and_unloaded_vms_compare_identically_test_() ->
+    %% Two peer boots (15 s each), three RPCs (5 s each), and two
+    %% shutdowns (5 s each) already have a 55 s aggregate bound. EUnit's
+    %% default 5 s must not kill the owner before those bounds can report.
+    {timeout, 60, fun wrapped_decode_loaded_and_unloaded_vms_compare_identically/0}.
+
+wrapped_decode_loaded_and_unloaded_vms_compare_identically() ->
     Name = fresh_name(<<"loaded_unloaded">>),
     Blob = atom_blob(Name),
     Path = code:get_path(),
@@ -159,25 +165,28 @@ wrapped_decode_loaded_and_unloaded_vms_compare_identically_test() ->
     PeerName2 = list_to_atom(
                   "safe_term_loaded_"
                   ++ integer_to_list(erlang:unique_integer([positive]))),
-    {ok, UnloadedPeer, _} = peer:start(
+    {ok, UnloadedPeer, _} = peer:start_link(
                               #{name => PeerName1, connection => standard_io,
                                 args => ["-pa" | Path]}),
-    {ok, LoadedPeer, _} = peer:start(
-                            #{name => PeerName2, connection => standard_io,
-                              args => ["-pa" | Path]}),
     try
-        {ok, Wrapped} = peer:call(
-                          UnloadedPeer, quod_safe_term, decode_wrapped,
-                          [Blob, byte_size(Blob)]),
-        _ = peer:call(LoadedPeer, erlang, binary_to_atom, [Name, utf8]),
-        {ok, Loaded} = peer:call(
-                         LoadedPeer, quod_safe_term, decode_wrapped,
-                         [Blob, byte_size(Blob)]),
-        ?assertEqual({{'$quod_symbol', Name}, {'$quod_symbol', Name}},
-                     quod_wire_term:normalize_answer_symbols(Wrapped, Loaded))
+        {ok, LoadedPeer, _} = peer:start_link(
+                                #{name => PeerName2, connection => standard_io,
+                                  args => ["-pa" | Path]}),
+        try
+            {ok, Wrapped} = peer:call(
+                              UnloadedPeer, quod_safe_term, decode_wrapped,
+                              [Blob, byte_size(Blob)]),
+            _ = peer:call(LoadedPeer, erlang, binary_to_atom, [Name, utf8]),
+            {ok, Loaded} = peer:call(
+                             LoadedPeer, quod_safe_term, decode_wrapped,
+                             [Blob, byte_size(Blob)]),
+            ?assertEqual({{'$quod_symbol', Name}, {'$quod_symbol', Name}},
+                         quod_wire_term:normalize_answer_symbols(Wrapped, Loaded))
+        after
+            _ = peer:stop(LoadedPeer)
+        end
     after
-        _ = peer:stop(UnloadedPeer),
-        _ = peer:stop(LoadedPeer)
+        _ = peer:stop(UnloadedPeer)
     end.
 
 wrapped_decode_unknown_nested_canonical_test() ->

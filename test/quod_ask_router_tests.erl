@@ -205,7 +205,7 @@ pending_precedes_send_and_scope_is_reused_test() ->
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
           OpenCommand = receive_command(request),
           {scope_command, Binding, 1, RequestId, 30000,
-           {scope_open, node}} = OpenCommand,
+           {scope_open, node, []}} = OpenCommand,
           ReturnLink = fake_link(TestPid, return),
           send_event(Router, TargetKey, ReturnLink, Binding,
                      1, RequestId, 1, 0, false, {scope_opened, 42}),
@@ -234,6 +234,27 @@ pending_precedes_send_and_scope_is_reused_test() ->
           stop_link(ReturnLink)
       end).
 
+scope_open_carries_caller_context_across_router_mailbox_test() ->
+    with_router(fun(Router, TestPid, OriginKey, TargetKey) ->
+        Carrier = [{<<"traceparent">>,
+                    <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>}],
+        Binding = binding(OriginKey, TargetKey, 1, <<"quod:target">>, 11),
+        OpenRef = quod_trace:with_context(quod_trace:extract(Carrier), fun() ->
+            pending_ref(quod_ask_router:ensure_scope(
+                          Router, endpoint(), Binding, node, 30000), Router)
+        end),
+        %% Link establishment runs after the caller has detached its context.
+        {OpenRef, Channel} = receive_open(TargetKey),
+        RequestLink = fake_link(TestPid, request),
+        try
+            Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
+            ?assertMatch(
+               {scope_command, Binding, 1, _, 30000, {scope_open, node, Carrier}},
+               receive_command(request))
+        after stop_link(RequestLink)
+        end
+    end).
+
 signed_authentication_is_carried_unchanged_on_remote_open_test() ->
     with_router(
       fun(Router, TestPid, OriginKey, TargetKey) ->
@@ -248,7 +269,7 @@ signed_authentication_is_carried_unchanged_on_remote_open_test() ->
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
           {scope_command, Binding, 1, RequestId, 30000,
-           {scope_open, Authentication}} = receive_command(request),
+           {scope_open, Authentication, []}} = receive_command(request),
 
           %% The router binds the exact opaque authentication bytes.  Their
           %% signature and principal are verified independently by the target.
@@ -861,7 +882,7 @@ owner_death_queues_close_and_reaps_exact_entry_test() ->
           end,
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
-          {scope_command, Binding, 1, RequestId, _, {scope_open, node}} =
+          {scope_command, Binding, 1, RequestId, _, {scope_open, node, []}} =
               receive_command(request),
           ReturnLink = fake_link(TestPid, return),
           send_event(Router, TargetKey, ReturnLink, Binding,
@@ -891,7 +912,7 @@ owner_death_after_open_send_closes_still_pending_scope_test() ->
           end,
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
-          {scope_command, Binding, 1, _OpenRequestId, _, {scope_open, node}} =
+          {scope_command, Binding, 1, _OpenRequestId, _, {scope_open, node, []}} =
               receive_command(request),
           exit(Owner, kill),
           {scope_command, Binding, 2, _CloseId, 0, scope_close} =
@@ -1028,7 +1049,7 @@ with_open_scope(Fun) ->
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
           {scope_command, Binding, 1, RequestId, 30000,
-           {scope_open, node}} =
+           {scope_open, node, []}} =
               receive_command(request),
           ReturnLink = fake_link(TestPid, return),
           send_event(Router, TargetKey, ReturnLink, Binding,

@@ -13,6 +13,7 @@ signature validation.
 -export([init/2]).
 -ifdef(TEST).
 -export([signed_goal_result/1]).
+-export([test_trace_request/3]).
 -endif.
 
 -include("quod_client_goal_limits.hrl").
@@ -21,12 +22,47 @@ signature validation.
 -define(MAX_SIGNED_GOAL_BODY,
         ((((?QUOD_CLIENT_GOAL_REQUEST_BYTES + 2) div 3) * 4) + 1024)).
 
-init(Req0, health) ->
+init(Req0, State)
+  when State =:= signed_goal_read; State =:= signed_goal_execute;
+       State =:= signed_goal_cursor; State =:= signed_goal_outcome;
+       State =:= signed_cursor_next; State =:= signed_cursor_accept;
+       State =:= signed_cursor_stop ->
+    trace_request(Req0, State, fun() -> dispatch(Req0, State) end);
+init(Req0, State) ->
+    dispatch(Req0, State).
+
+%% Only W3C tracing headers cross this boundary; authentication headers, goal
+%% bytes and response bodies never become span attributes. The SDK restores
+%% the caller's context and ends this span even when dispatch raises.
+trace_request(Req, State, Dispatch) ->
+    Carrier = [{Name, Value}
+               || Name <- [<<"traceparent">>, <<"tracestate">>],
+                  Value <- [cowboy_req:header(Name, Req)],
+                  is_binary(Value)],
+    quod_trace:with_span(
+      quod_trace:extract(Carrier), <<"quod.client.request">>, server,
+      #{'quod.client.route' => atom_to_binary(State, utf8)},
+      fun(SpanCtx) ->
+          try Dispatch()
+          catch Class:Reason:Stack ->
+              %% A fixed classification preserves useful failure status without
+              %% exporting arbitrary exception terms or argument-bearing frames.
+              _ = quod_trace:result(SpanCtx, {error, http_dispatch}),
+              erlang:raise(Class, Reason, Stack)
+          end
+      end).
+
+-ifdef(TEST).
+test_trace_request(Req, State, Dispatch) ->
+    trace_request(Req, State, Dispatch).
+-endif.
+
+dispatch(Req0, health) ->
     {ok, text_reply(200, <<"ok\n">>, Req0), health};
 %% Cowboy considers the paths with and without a trailing slash equivalent
 %% during dispatch. One handler must therefore distinguish them; two route
 %% entries make the redirect shadow the index page.
-init(Req0, explorer_index) ->
+dispatch(Req0, explorer_index) ->
     case cowboy_req:path(Req0) of
         <<"/explorer">> ->
             {ok, cowboy_req:reply(
@@ -35,27 +71,27 @@ init(Req0, explorer_index) ->
         <<"/explorer/">> ->
             {ok, explorer_index_reply(Req0), explorer_index}
     end;
-init(Req0, auth_challenge) ->
+dispatch(Req0, auth_challenge) ->
     post_json(Req0, auth_challenge, ?MAX_AUTH_BODY, fun auth_challenge/2);
-init(Req0, auth_complete) ->
+dispatch(Req0, auth_complete) ->
     post_json(Req0, auth_complete, ?MAX_AUTH_BODY, fun auth_complete/2);
-init(Req0, signed_goal_read) ->
+dispatch(Req0, signed_goal_read) ->
     post_json(Req0, signed_goal_read, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(read, Body, Req) end);
-init(Req0, signed_goal_execute) ->
+dispatch(Req0, signed_goal_execute) ->
     post_json(Req0, signed_goal_execute, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(execute, Body, Req) end);
-init(Req0, signed_goal_cursor) ->
+dispatch(Req0, signed_goal_cursor) ->
     post_json(Req0, signed_goal_cursor, ?MAX_SIGNED_GOAL_BODY,
               fun(Body, Req) -> signed_goal(cursor, Body, Req) end);
-init(Req0, signed_goal_outcome) ->
+dispatch(Req0, signed_goal_outcome) ->
     post_json(Req0, signed_goal_outcome, ?MAX_SIGNED_GOAL_BODY,
               fun signed_goal_outcome/2);
-init(Req0, signed_cursor_next) ->
+dispatch(Req0, signed_cursor_next) ->
     cursor_command(Req0, <<"POST">>, next);
-init(Req0, signed_cursor_accept) ->
+dispatch(Req0, signed_cursor_accept) ->
     cursor_command(Req0, <<"POST">>, accept);
-init(Req0, signed_cursor_stop) ->
+dispatch(Req0, signed_cursor_stop) ->
     cursor_command(Req0, <<"DELETE">>, stop).
 
 explorer_index_reply(Req0) ->

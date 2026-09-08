@@ -1,6 +1,6 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v9 wire boundary for durable operation and read-attestation traffic.
+Pure v10 wire boundary for durable operation and read-attestation traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
@@ -28,6 +28,8 @@ them: `quod_foreign_log` verifies entries and `quod_dtx_current_view` verifies
 certificates. A one-target remote application carries one canonical certified claim
 owned by `quod_transaction`; the target reconstructs its deterministic
 application. Both enter the existing target signing and consensus machinery.
+The outer request also carries W3C trace context. It is transient metadata,
+outside the semantic request, evidence, signatures and correlation checks.
 """.
 
 -include("quod_ledger.hrl").
@@ -35,7 +37,7 @@ application. Both enter the existing target signing and consensus machinery.
 -include("quod_transport_limits.hrl").
 
 -export([channel/1,
-         encode_request/3, encode_response/3,
+         encode_request/3, encode_request/4, encode_response/3,
          decode_request/2, decode_response/2,
          encode_validation_sidecar/1, decode_validation_sidecar/1,
          normalize_sidecar/1,
@@ -44,7 +46,7 @@ application. Both enter the existing target signing and consensus machinery.
               public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 9).
+-define(VERSION, 10).
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -121,14 +123,25 @@ channel(Namespace) when is_binary(Namespace), byte_size(Namespace) > 0 ->
 -spec encode_request(binary(), request(), [validation_item()]) ->
           {ok, binary()} | wire_error().
 encode_request(Namespace, Request, Hints) ->
-    encode_direction(Namespace, Request, Hints, request).
+    encode_request(Namespace, Request, Hints, []).
+
+-spec encode_request(binary(), request(), [validation_item()],
+                     [{binary(), binary()}]) -> {ok, binary()} | wire_error().
+encode_request(Namespace, Request, Hints, TraceCarrier) ->
+    encode_direction(Namespace, Request, Hints, TraceCarrier, request).
 
 -spec encode_response(binary(), response(), [validation_item()]) ->
           {ok, binary()} | wire_error().
 encode_response(Namespace, Response, Hints) ->
-    encode_direction(Namespace, Response, Hints, response).
+    encode_direction(Namespace, Response, Hints, [], response).
 
-encode_direction(Namespace, Inner, Hints, Direction) ->
+encode_direction(Namespace, Inner, Hints, TraceCarrier, Direction) ->
+    case quod_trace:valid_carrier(TraceCarrier) of
+        true -> encode_traced_direction(Namespace, Inner, Hints, TraceCarrier, Direction);
+        false -> protocol_error(bad_trace_context)
+    end.
+
+encode_traced_direction(Namespace, Inner, Hints, TraceCarrier, Direction) ->
     case {valid_namespace(Namespace), validate_direction(Inner, Direction),
           valid_validation_sidecar(Hints)} of
         {true, ok, true} ->
@@ -137,7 +150,7 @@ encode_direction(Namespace, Inner, Hints, Direction) ->
                     InnerBinary =
                         term_to_binary({Inner, WireHints}, [deterministic]),
                     Envelope = term_to_binary(
-                                 {?DOMAIN, ?VERSION, Namespace, InnerBinary},
+                                 {?DOMAIN, ?VERSION, Namespace, InnerBinary, TraceCarrier},
                                  [deterministic]),
                     case byte_size(Envelope) =<
                          ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
@@ -154,7 +167,7 @@ encode_direction(Namespace, Inner, Hints, Direction) ->
 
 -doc "Decode a request only for the exact subscribed namespace.".
 -spec decode_request(binary(), binary()) ->
-          {ok, request(), [validation_item()]} | wire_error().
+          {ok, request(), [validation_item()], [{binary(), binary()}]} | wire_error().
 decode_request(Namespace, Envelope) ->
     decode_expected(Namespace, Envelope, request).
 
@@ -168,7 +181,11 @@ decode_expected(Namespace, Envelope, Direction) ->
     case valid_namespace(Namespace) of
         true ->
             case decode_direction({expected, Namespace}, Envelope, Direction) of
-                {ok, Namespace, Inner, Hints} -> {ok, Inner, Hints};
+                {ok, Namespace, Inner, Hints, Carrier} when Direction =:= request ->
+                    {ok, Inner, Hints, Carrier};
+                {ok, Namespace, Inner, Hints, []} when Direction =:= response ->
+                    {ok, Inner, Hints};
+                {ok, _, _, _, _} -> protocol_error(bad_trace_context);
                 {error, _} = Error -> Error
             end;
         false ->
@@ -180,16 +197,24 @@ decode_direction(Expected, Envelope, Direction)
        byte_size(Envelope) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES ->
     case quod_safe_term:decode(
            Envelope, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
-        {ok, {?DOMAIN, ?VERSION, Namespace, InnerBinary} = Outer} ->
+        {ok, {?DOMAIN, ?VERSION, Namespace, InnerBinary, Carrier} = Outer} ->
             case term_to_binary(Outer, [deterministic]) =:= Envelope of
-                true -> decode_inner(
-                          Expected, Namespace, InnerBinary, Direction);
+                true ->
+                    case quod_trace:valid_carrier(Carrier) of
+                        true ->
+                            case decode_inner(Expected, Namespace, InnerBinary, Direction) of
+                                {ok, Namespace, Inner, Hints} ->
+                                    {ok, Namespace, Inner, Hints, Carrier};
+                                {error, _} = Error -> Error
+                            end;
+                        false -> protocol_error(bad_trace_context)
+                    end;
                 false -> protocol_error(non_canonical)
             end;
-        {ok, {?DOMAIN, Version, _Namespace, _InnerBinary}}
+        {ok, {?DOMAIN, Version, _Namespace, _InnerBinary, _Carrier}}
           when Version =/= ?VERSION ->
             protocol_error(wrong_version);
-        {ok, {Domain, _Version, _Namespace, _InnerBinary}}
+        {ok, {Domain, _Version, _Namespace, _InnerBinary, _Carrier}}
           when Domain =/= ?DOMAIN ->
             protocol_error(bad_domain);
         {ok, _Other} ->

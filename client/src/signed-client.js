@@ -237,12 +237,16 @@ export function assertCrypto() {
 
 // Exported for non-browser callers that need to supply an absolute URL while
 // retaining the client's one HTTP error/uncertain-outcome boundary.
-export async function postJson(url, body, method = 'POST') {
+// Optional traceparent is transport metadata, never part of the signed body.
+export async function postJson(url, body, method = 'POST', { traceparent } = {}) {
   let response
   try {
     response = await fetch(url, {
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(traceparent ? { traceparent } : {}),
+      },
       body: JSON.stringify(body),
     })
   } catch (cause) {

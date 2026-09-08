@@ -13,7 +13,7 @@ Only W3C Trace Context is propagated between validators; baggage is deliberately
 excluded from the authenticated relay surface.
 """.
 
--export([context/0, with_span/5, with_optional_span/5,
+-export([context/0, with_context/2, with_span/5, with_span/6, with_optional_span/5,
          start_span/4, finish_span/2,
          set_attributes/2, add_event/3, inject/1, extract/1,
          valid_carrier/1, tx_id/1, result/2]).
@@ -28,10 +28,25 @@ excluded from the authenticated relay surface.
 -spec context() -> context().
 context() -> otel_ctx:get_current().
 
+-doc "Attach transient request context for one callback without creating a span.".
+-spec with_context(context(), fun(() -> T)) -> T.
+with_context(Ctx, Fun) ->
+    Token = otel_ctx:attach(Ctx),
+    try Fun()
+    after otel_ctx:detach(Token)
+    end.
+
 -spec with_span(context(), binary(), atom(), map(), fun((span_ctx()) -> T)) -> T.
 with_span(Ctx, Name, Kind, Attributes, Fun) ->
+    with_span(Ctx, Name, Kind, Attributes, [], Fun).
+
+-doc "Trace shared work once, with SDK links to the other participating spans.".
+-spec with_span(context(), binary(), atom(), map(), [opentelemetry:link()],
+                fun((span_ctx()) -> T)) -> T.
+with_span(Ctx, Name, Kind, Attributes, Links, Fun) ->
     otel_tracer:with_span(
-      Ctx, tracer(), Name, #{kind => Kind, attributes => Attributes}, Fun).
+      Ctx, tracer(), Name,
+      #{kind => Kind, attributes => Attributes, links => Links}, Fun).
 
 -spec with_optional_span(context() | undefined, binary(), atom(), map(),
                          fun(() -> T)) -> T.

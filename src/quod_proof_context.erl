@@ -117,22 +117,26 @@ request_binding_of(Evidence) ->
 -spec stop(fun((term()) -> term()), fun(({actor(), term()}) -> term())) -> ok.
 stop(CloseScopeFun, CloseProxyFun)
   when is_function(CloseScopeFun, 1), is_function(CloseProxyFun, 1) ->
-    case erase(?KEY) of
-        #ctx{router = Router, scopes = Scopes, proxies = Proxies} ->
-            maps:foreach(
-              fun(_Ref, Proxy) ->
-                  try CloseProxyFun(Proxy) catch _:_ -> ok end
-              end, Proxies),
-            maps:foreach(
-              fun(_Identity, #scope{handle = Scope, mref = MRef}) ->
-                  try CloseScopeFun(Scope) catch _:_ -> ok end,
-                  demonitor_scope(MRef)
-              end, Scopes),
-            demonitor_router(Router),
-            ok;
-        undefined ->
-            ok
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.proof_context.cleanup">>, internal, #{},
+      fun(_Span) ->
+          case erase(?KEY) of
+              #ctx{router = Router, scopes = Scopes, proxies = Proxies} ->
+                  maps:foreach(
+                    fun(_Ref, Proxy) ->
+                        try CloseProxyFun(Proxy) catch _:_ -> ok end
+                    end, Proxies),
+                  maps:foreach(
+                    fun(_Identity, #scope{handle = Scope, mref = MRef}) ->
+                        try CloseScopeFun(Scope) catch _:_ -> ok end,
+                        demonitor_scope(MRef)
+                    end, Scopes),
+                  demonitor_router(Router),
+                  ok;
+              undefined ->
+                  ok
+          end
+      end).
 
 -spec proof_id() -> <<_:256>>.
 proof_id() -> (context())#ctx.proof_id.
@@ -258,23 +262,27 @@ commit-side seal failure takes precedence over a close failure.
 """.
 -spec finalize(commit | abort) -> ok | {error, term()}.
 finalize(Mode) when Mode =:= commit; Mode =:= abort ->
-    Ctx0 = context(),
-    case Ctx0#ctx.finalization of
-        open ->
-            SealResult = finalize_seal(Mode),
-            %% Re-fetch: remote sealing may have bound the router meanwhile.
-            Ctx1 = context(),
-            CloseResult = finalize_scopes(
-                            Ctx1#ctx.scopes, Ctx1#ctx.router,
-                            Ctx1#ctx.proof_id),
-            Result = case SealResult of
-                         ok -> CloseResult;
-                         {error, _} -> SealResult
-                     end,
-            put_context((context())#ctx{finalization = Result}),
-            Result;
-        Result -> Result
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.proof_context.finalize">>, internal, #{},
+      fun(_Span) ->
+          Ctx0 = context(),
+          case Ctx0#ctx.finalization of
+              open ->
+                  SealResult = finalize_seal(Mode),
+                  %% Re-fetch: sealing may have bound the router meanwhile.
+                  Ctx1 = context(),
+                  CloseResult = finalize_scopes(
+                                  Ctx1#ctx.scopes, Ctx1#ctx.router,
+                                  Ctx1#ctx.proof_id),
+                  Result = case SealResult of
+                               ok -> CloseResult;
+                               {error, _} -> SealResult
+                           end,
+                  put_context((context())#ctx{finalization = Result}),
+                  Result;
+              Result -> Result
+          end
+      end).
 
 finalize_seal(commit) ->
     case seal_plans() of
@@ -300,7 +308,9 @@ seal_plans() ->
         {open, {error, _} = Error} ->
             Error;
         {open, open} ->
-            {SealResult, Plans} = seal_material_scopes(Ctx0),
+            {SealResult, Plans} = quod_trace:with_span(
+              quod_trace:context(), <<"quod.proof_context.seal">>, internal,
+              #{}, fun(_Span) -> seal_material_scopes(Ctx0) end),
             case SealResult of
                 ok ->
                     Result = {ok, Plans},

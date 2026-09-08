@@ -3,11 +3,13 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 -include("quod_ledger.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([remote_plain_read_excludes_live_observer/1,
          remote_plain_read_rejects_lying_validator/1,
-         remote_scope_solutions/1, remote_scope_symbol_safety/1,
+         remote_scope_solutions/1, remote_scope_trace_parentage/1,
+         remote_scope_symbol_safety/1,
          remote_signed_fresh_nested_symbol/1,
          remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
          remote_scope_nested_failure_reasons/1,
@@ -42,7 +44,8 @@
 
 all() -> [remote_plain_read_excludes_live_observer,
           remote_plain_read_rejects_lying_validator,
-          remote_scope_solutions, remote_scope_symbol_safety,
+          remote_scope_solutions, remote_scope_trace_parentage,
+          remote_scope_symbol_safety,
           remote_signed_fresh_nested_symbol,
           remote_scope_chain_policy, remote_scope_failure_reasons,
           remote_scope_nested_failure_reasons,
@@ -381,6 +384,38 @@ remote_scope_solutions(Config) ->
     ?assertMatch({ok, [#{'L' := [{'$quod_symbol', <<"kibble">>},
                                   {'$quod_symbol', <<"meat">>}]}], _},
                  peer:call(Asker, quod_prolog, prove, [?ASKER_NS, All], 60000)).
+
+remote_scope_trace_parentage(Config) ->
+    Target = ?config(target, Config),
+    Asker = ?config(asker, Config),
+    %% These peers use standard_io, not Erlang distribution to the CT VM.
+    %% All trace collection and monitoring stay on the owning peer; neither
+    %% target loads this suite's intentionally caller-only vocabulary.
+    Collector = peer:call(Target, quod_trace_fixture, start, []),
+    try
+        {Result, Public, Open} = peer:call(
+                                  Asker, quod_trace_fixture, prove,
+                                  [?ASKER_NS, {'::', ?NS, {diet, dog, {'D'}}}],
+                                  60000),
+        ?assertMatch({ok, [#{'D' := {'$quod_symbol', <<"kibble">>}}], _}, Result),
+        ?assertEqual(Public#span.trace_id, Open#span.trace_id),
+        Auth = peer:call(Target, quod_trace_fixture, take_span,
+                         [Collector, <<"quod.scope.authenticate">>]),
+        InvokeOpen = peer:call(Target, quod_trace_fixture, take_span,
+                              [Collector, <<"quod.scope.invoke_open">>]),
+        InvokeNext = peer:call(Target, quod_trace_fixture, take_span,
+                              [Collector, <<"quod.scope.invoke_next">>]),
+        %% These spans are emitted by the actual remote authentication worker
+        %% and target invocation worker, not by a codec-only fixture.
+        lists:foreach(fun(Span) ->
+            ?assertEqual(Public#span.trace_id, Span#span.trace_id),
+            ?assertEqual(Open#span.span_id, Span#span.parent_span_id),
+            ?assert(Span#span.parent_span_is_remote),
+            ?assert(Span#span.end_time >= Span#span.start_time)
+        end, [Auth, InvokeOpen, InvokeNext])
+    after
+        ok = peer:call(Target, quod_trace_fixture, stop, [Collector])
+    end.
 
 remote_scope_symbol_safety(Config) ->
     Target = ?config(target, Config),

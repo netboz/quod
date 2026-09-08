@@ -3,6 +3,30 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
+
+operation_and_quorum_workers_keep_the_request_trace_test() ->
+    with_operation_fixture(fun(F) ->
+        quod_trace_tests:with_tracer(fun() ->
+            quod_trace:with_span(otel_ctx:new(), <<"operation.test.parent">>, internal, #{},
+              fun(_) ->
+                  with_operation_worker(F, fun(Worker, Monitor) ->
+                      reply_operation_source(F, terminal_operation_row(F)),
+                      certify_operation_result(F, Worker, committed),
+                      assert_operation_result(F, Worker, Monitor, committed)
+                  end)
+              end),
+            Parent = quod_trace_tests:take_span(<<"operation.test.parent">>),
+            Worker = quod_trace_tests:take_span(<<"quod.operation.recover">>),
+            Resolve = quod_trace_tests:take_span(<<"quod.operation.resolve_outcome">>),
+            Probe = quod_trace_tests:take_span(<<"quod.dtx.quorum.probe">>),
+            ?assertEqual(Parent#span.trace_id, Worker#span.trace_id),
+            ?assertEqual(Parent#span.span_id, Worker#span.parent_span_id),
+            ?assertEqual(Worker#span.span_id, Resolve#span.parent_span_id),
+            ?assertEqual(Resolve#span.trace_id, Probe#span.trace_id),
+            ?assertEqual(Resolve#span.span_id, Probe#span.parent_span_id)
+        end)
+    end).
 
 options_are_strict_and_share_the_endpoint_deadline_test() ->
     ?assertMatch({ok, _}, quod_dtx_coordinator:test_options(#{})),
@@ -1180,7 +1204,7 @@ certify_operation_result(
     receive
         {operation_stub_call, target, From,
          {dtx_endpoint_local,
-          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout}} ->
+          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout, _TraceCtx}} ->
             ?assert(Timeout > 0),
             gen_server:reply(
               From, {ok, {outcome, RequestId, Target, CommitteeId, 3,
@@ -1219,7 +1243,7 @@ certify_operation_remote_result(
     receive
         {operation_stub_call, source_consensus, From,
          {dtx_endpoint_request, TargetNs, Peer, Endpoint,
-          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout2}} ->
+          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout2, _ProbeTraceCtx}} ->
             ?assert(Timeout2 > 0),
             gen_server:reply(
               From, {ok, {outcome, RequestId, Target, CommitteeId, 3,

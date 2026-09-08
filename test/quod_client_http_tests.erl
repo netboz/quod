@@ -13,6 +13,7 @@ assertions include the absence of crash reports, not only the responses.
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_client_goal_limits.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 
 %% The logger handler used by collect_crashes/1.
 -export([log/2]).
@@ -72,6 +73,54 @@ signed_goal_busy_is_not_misreported_as_cursor_contention_test() ->
        {404, #{error => cursor_not_found}},
        quod_client_http:signed_goal_result({error, cursor_not_found})).
 
+signed_dispatch_parent_and_cleanup_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        Before = quod_trace:context(),
+        Req = #{headers =>
+                  #{<<"traceparent">> => trace_parent(),
+                    <<"baggage">> => <<"private=must-not-be-carried">>,
+                    <<"authorization">> => <<"private-authentication">>}},
+        Result = quod_client_http:test_trace_request(
+            Req, signed_goal_execute,
+            fun() ->
+                Carrier = quod_trace:inject(quod_trace:context()),
+                ?assertNot(lists:keymember(<<"baggage">>, 1, Carrier)),
+                quod_trace:with_span(
+                  quod_trace:context(), <<"http.child">>, internal, #{},
+                  fun(_) -> {ok, unchanged} end)
+            end),
+        ?assertEqual({ok, unchanged}, Result),
+        ?assertEqual(Before, quod_trace:context()),
+        Span = quod_trace_tests:take_span(<<"quod.client.request">>),
+        Child = quod_trace_tests:take_span(<<"http.child">>),
+        ?assertEqual(16#4bf92f3577b34da6a3ce929d0e0e4736,
+                     Span#span.trace_id),
+        ?assertEqual(16#00f067aa0ba902b7, Span#span.parent_span_id),
+        ?assertEqual(server, Span#span.kind),
+        ?assertEqual(Span#span.span_id, Child#span.parent_span_id),
+        ?assertEqual(
+           #{'quod.client.route' => <<"signed_goal_execute">>},
+           otel_attributes:map(Span#span.attributes))
+    end).
+
+signed_dispatch_exception_preserves_reply_semantics_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        Before = quod_trace:context(),
+        Req = #{headers => #{<<"traceparent">> => trace_parent()}},
+        Reason = {private_failure, <<"never-export-this-payload">>},
+        ?assertThrow(Reason,
+          quod_client_http:test_trace_request(
+            Req, signed_goal_read, fun() -> throw(Reason) end)),
+        ?assertEqual(Before, quod_trace:context()),
+        Span = quod_trace_tests:take_span(<<"quod.client.request">>),
+        ?assert(Span#span.end_time >= Span#span.start_time),
+        ?assertEqual(
+           #{'quod.client.route' => <<"signed_goal_read">>,
+             'quod.outcome' => <<"http_dispatch">>},
+           otel_attributes:map(Span#span.attributes)),
+        ?assertEqual(opentelemetry:status(error), Span#span.status)
+    end).
+
 client_http_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Port) ->
@@ -86,7 +135,9 @@ client_http_test_() ->
           {"a non-POST is refused",
            fun() -> method_is_enforced(Port) end},
           {"security headers are present",
-           fun() -> security_headers_present(Port) end}]
+           fun() -> security_headers_present(Port) end},
+          {"sampled HTTP parent reaches the signed request span",
+           fun() -> signed_http_parent_is_carried(Port) end}]
      end}.
 
 %% Two requests on ONE connection: cowboy tears the connection down when a
@@ -162,6 +213,32 @@ security_headers_present(Port) ->
     ?assertMatch(#{<<"content-security-policy">> := _}, Headers),
     ?assertEqual(<<"nosniff">>, maps:get(<<"x-content-type-options">>, Headers)),
     close(Connection).
+
+signed_http_parent_is_carried(Port) ->
+    quod_trace_tests:with_tracer(fun() ->
+        {ok, Connection} = connect(Port),
+        try
+            %% Malformed goal JSON still follows the real signed HTTP dispatch:
+            %% validation refusal must finish the same incoming-parent span.
+            ?assertMatch({400, _, _},
+              request(Connection, post, "/api/goals/execute", <<"{}">>,
+                      [[<<"traceparent: ">>, trace_parent(), <<"\r\n">>],
+                       <<"baggage: private=not-a-trace-attribute\r\n">>])),
+            Span = quod_trace_tests:take_span(<<"quod.client.request">>),
+            ?assertEqual(16#4bf92f3577b34da6a3ce929d0e0e4736,
+                         Span#span.trace_id),
+            ?assertEqual(16#00f067aa0ba902b7, Span#span.parent_span_id),
+            ?assertEqual(true, Span#span.parent_span_is_remote),
+            ?assertEqual(server, Span#span.kind),
+            ?assertNot(Span#span.is_recording),
+            ?assert(Span#span.end_time >= Span#span.start_time),
+            ?assertMatch({200, _, _}, request(Connection, get, "/health", <<>>))
+        after close(Connection)
+        end
+    end).
+
+trace_parent() ->
+    <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>.
 
 %% ======================================================================
 %% harness
@@ -253,9 +330,13 @@ connect(Port) ->
 close(Socket) -> ssl:close(Socket).
 
 request(Socket, Method, Path, Body) ->
+    request(Socket, Method, Path, Body, []).
+
+request(Socket, Method, Path, Body, TraceHeaders) ->
     Verb = case Method of get -> <<"GET">>; post -> <<"POST">> end,
     Request = [Verb, <<" ">>, Path, <<" HTTP/1.1\r\nhost: localhost\r\n">>,
                <<"content-type: application/json\r\n">>,
+               TraceHeaders,
                <<"content-length: ">>, integer_to_binary(byte_size(Body)),
                <<"\r\n\r\n">>, Body],
     ok = ssl:send(Socket, Request),

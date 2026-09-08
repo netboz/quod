@@ -776,7 +776,7 @@ dtx_endpoint_request_sends_only_after_exact_pinned_link_up_test() ->
         quod_simplex:test_dtx_correlation_link_up(
           OpenRef, Peer, Channel, self(), Opening),
     SentFrame = receive_ordered_frame(),
-    {ok, Request, []} = quod_dtx_endpoint:decode_request(TargetNs, SentFrame),
+    {ok, Request, [], _Carrier} = quod_dtx_endpoint:decode_request(TargetNs, SentFrame),
     Response = {phase, RequestId, 9, pending},
     {ok, ResponseFrame} =
         quod_dtx_endpoint:encode_response(TargetNs, Response, []),
@@ -1735,7 +1735,7 @@ dtx_endpoint_local_submit_drives_on_mailbox_edge_test() ->
         {keep_state, Retained, _Actions0} =
             quod_simplex:running(
               {call, From},
-              {dtx_endpoint_local, Request, ValidationSidecar, 1000}, S0),
+              {dtx_endpoint_local, Request, ValidationSidecar, 1000, otel_ctx:new()}, S0),
         try
             ?assertEqual(
                0, maps:get(proposals, quod_simplex:stats_map(Retained))),
@@ -1797,7 +1797,7 @@ dtx_reliable_relay_is_placed_once_per_link_test() ->
         {keep_state, Retained, _Actions0} =
             quod_simplex:running(
               {call, From},
-              {dtx_endpoint_local, Request, [], 1000}, S0),
+              {dtx_endpoint_local, Request, [], 1000, otel_ctx:new()}, S0),
         receive dtx_drive -> ok
         after 0 -> error(missing_dtx_mailbox_wake)
         end,
@@ -1878,7 +1878,7 @@ dtx_relay_waits_for_elected_ontology_readiness_test() ->
         {keep_state, Retained, _} =
             quod_simplex:running(
               {call, From},
-              {dtx_endpoint_local, Request, [], 1000}, S0),
+              {dtx_endpoint_local, Request, [], 1000, otel_ctx:new()}, S0),
         receive dtx_drive -> ok
         after 0 -> error(missing_dtx_mailbox_wake)
         end,

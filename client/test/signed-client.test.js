@@ -2,12 +2,54 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   encodeGoalRequest,
+  postJson,
   resolveSignedOperations,
   signedCursorCommand,
   signedGoal,
 } from '../src/signed-client.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { SIGNED_GOAL_LIMITS } from '../src/protocol-limits.js'
+
+test('optional traceparent changes only HTTP metadata, not signed request bytes', async () => {
+  const previousFetch = globalThis.fetch
+  const calls = []
+  const body = { session_id: 'session', request: 'signed-request', signature: 'signature' }
+  const traceparent = '00-123456789abcdef0123456789abcdef0-123456789abcdef0-01'
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, ...init })
+    return jsonResponse(200, { result: 'ok' })
+  }
+  try {
+    assert.equal((await postJson('/api/goals/execute', body)).result, 'ok')
+    assert.equal((await postJson('/api/goals/execute', body, 'POST', { traceparent })).result, 'ok')
+    assert.deepEqual(calls[0].headers, { 'content-type': 'application/json' })
+    assert.deepEqual(calls[1].headers, { 'content-type': 'application/json', traceparent })
+    assert.equal(calls[1].body, calls[0].body)
+    assert.equal(calls[1].body, JSON.stringify(body))
+    assert.equal(calls[1].method, calls[0].method)
+    assert.equal(calls[1].url, calls[0].url)
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('traced HTTP transport errors retain uncertainty and do not retry', async () => {
+  const previousFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async (_url, init) => {
+    calls += 1
+    assert.equal(init.headers.traceparent, '00-123456789abcdef0123456789abcdef0-123456789abcdef0-01')
+    throw new TypeError('connection lost')
+  }
+  try {
+    await assert.rejects(postJson('/api/goals/execute', { request: 'same-request' }, 'POST', {
+      traceparent: '00-123456789abcdef0123456789abcdef0-123456789abcdef0-01',
+    }), error => error.outcomeUnknown === true)
+    assert.equal(calls, 1)
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
 
 test('signed goal bytes match the Erlang browser fixture', () => {
   const bytes = encodeGoalRequest({

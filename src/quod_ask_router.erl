@@ -171,9 +171,11 @@ ensure_scope(Endpoint, Binding, Authentication, RemainingMs) ->
                    quod_scope_wire:authentication(), non_neg_integer()) ->
           {ok, remote_handle()} | pending() | {error, term()}.
 ensure_scope(Router, Endpoint, Binding, Authentication, RemainingMs) ->
+    TraceCarrier = quod_trace:inject(quod_trace:context()),
     guarded_call(
       Router,
-      {ensure_scope, self(), Endpoint, Binding, Authentication, RemainingMs}).
+      {ensure_scope, self(), Endpoint, Binding, Authentication, RemainingMs,
+       TraceCarrier}).
 
 -spec identify(term(), binary(), non_neg_integer()) ->
           pending() | {error, term()}.
@@ -333,10 +335,12 @@ handle_call({identify, Owner, Endpoint, Namespace, RemainingMs}, _From, S0) ->
         {error, _} = Error -> {reply, Error, S0}
     end;
 handle_call(
-  {ensure_scope, Owner, Endpoint, Binding, Authentication, RemainingMs},
+  {ensure_scope, Owner, Endpoint, Binding, Authentication, RemainingMs,
+   TraceCarrier},
   _From, S0) ->
     case validate_open(
-           Owner, Endpoint, Binding, Authentication, RemainingMs, S0) of
+           Owner, Endpoint, Binding, Authentication, RemainingMs,
+           TraceCarrier, S0) of
         {reuse, #scope{status = active} = Scope} ->
             {reply, {ok, handle(Scope, S0)}, S0};
         {reuse, #scope{open_ref = OpenRef}} ->
@@ -1062,7 +1066,7 @@ add_identity_signature(
   _Signer, _Signature, _StatementBytes, _Committee, Signatures) ->
     Signatures.
 
-validate_open(Owner, Endpoint, Binding, Authentication, RemainingMs,
+validate_open(Owner, Endpoint, Binding, Authentication, RemainingMs, TraceCarrier,
               #s{origin_key = OriginKey, reuse = Reuse, scopes = Scopes})
   when is_pid(Owner) ->
     case open_fields(Binding, Authentication, OriginKey) of
@@ -1083,18 +1087,20 @@ validate_open(Owner, Endpoint, Binding, Authentication, RemainingMs,
                     end;
                 undefined ->
                     validate_new_open(
-                      Endpoint, Binding, Authentication, RemainingMs,
+                      Endpoint, Binding, Authentication, RemainingMs, TraceCarrier,
                       Fields#{reuse_key => ReuseKey})
             end;
         {error, _} = Error -> Error
     end;
-validate_open(_Owner, _Endpoint, _Binding, _Authentication, _RemainingMs, _S) ->
+validate_open(_Owner, _Endpoint, _Binding, _Authentication, _RemainingMs,
+              _TraceCarrier, _S) ->
     {error, invalid_owner}.
 
-validate_new_open(Endpoint, Binding, Authentication, RemainingMs, Fields) ->
+validate_new_open(Endpoint, Binding, Authentication, RemainingMs,
+                  TraceCarrier, Fields) ->
     RequestId = new_id(),
     Command = {scope_command, Binding, 1, RequestId, RemainingMs,
-               {scope_open, Authentication}},
+               {scope_open, Authentication, TraceCarrier}},
     case {quod_quic:valid_endpoint(Endpoint),
           quod_scope_wire:encode_command(Command)} of
         {false, _} -> {error, invalid_endpoint};
@@ -1259,7 +1265,8 @@ retained_owner_transition(Same, Same, Count) -> Count.
 %% ------------------------------------------------------------------
 
 build_active_command(
-  #scope{status = active}, _RemainingMs, {scope_open, _Authentication}) ->
+  #scope{status = active}, _RemainingMs,
+  {scope_open, _Authentication, _TraceCarrier}) ->
     {error, {protocol_error, unexpected_scope_command}};
 build_active_command(
   Scope = #scope{status = active, next_command_seq = CommandSeq,

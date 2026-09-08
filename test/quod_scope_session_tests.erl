@@ -2,6 +2,37 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_proof_limits.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
+
+invocation_worker_retains_received_trace_context_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        Parent = <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>,
+        Ctx = quod_trace:extract([{<<"traceparent">>, Parent}]),
+        ProofId = key(91),
+        {Handle, MRef} = quod_scope_session:start(
+          id(90), ProofId, self(), <<"quod:trace-scope">>, key(92), 0,
+          committed([]), self(),
+          #{principal => {node, key(89)}, request_binding => none,
+            trace_ctx => Ctx, deadline_ms => quod_time:mono_ms() + 5000}),
+        {quod_scope_session, Worker, _, ProofId, SessionRef, _, _} = Handle,
+        try
+            %% An ordinary typed refusal still emits a finished span. The
+            %% caller has no attached trace: only start/9's explicit metadata
+            %% can give this independent worker its remote parent.
+            {ok, Ref} = quod_scope_session:invoke_next(Handle, id(93), 1),
+            ?assertEqual({error, {protocol_error, request_binding}, false},
+                         receive_scope_reply(Worker, ProofId, SessionRef, Ref)),
+            Span = quod_trace_tests:take_span(<<"quod.scope.invoke_next">>),
+            ?assertEqual(16#4bf92f3577b34da6a3ce929d0e0e4736, Span#span.trace_id),
+            ?assertEqual(16#00f067aa0ba902b7, Span#span.parent_span_id),
+            ?assert(Span#span.end_time >= Span#span.start_time)
+        after
+            ok = quod_scope_session:close(Handle),
+            receive {'DOWN', MRef, process, Worker, _} -> ok
+            after 1000 -> error(scope_trace_worker_not_stopped)
+            end
+        end
+    end).
 
 committed_submit_reply_is_bound_to_expected_transaction_test() ->
     Expected = key(97),
@@ -1293,8 +1324,11 @@ setup_read_identity() ->
     #{pubkey => Pubkey, signer => Signer}.
 
 setup_read_certificate_target() ->
+    setup_read_certificate_target(fun(_Fixture) -> ok end).
+
+setup_read_certificate_target(AfterStart) ->
     {ok, _} = application:ensure_all_started(gproc),
-    Unique = integer_to_binary(erlang:unique_integer([positive])),
+    Unique = binary:encode_hex(crypto:strong_rand_bytes(8)),
     Dir = filename:join(
             "/tmp", "quod_scope_read_certificate_" ++ binary_to_list(Unique)),
     Ns = <<"quod:root">>,
@@ -1308,36 +1342,84 @@ setup_read_certificate_target() ->
     Cfg = #{node_id => Pubkey, identity => Signer, data_dir => Dir,
             mode => create,
             genesis_diff => quod_prolog:terms_to_diff(InitialFacts)},
-    {ok, Pid} = quod_ns:start_link(Ns, Cfg),
-    unlink(Pid),
-    {ok, [#{}], 2} =
-        quod_prolog:prove(Ns, {assertz, {certificate_anchor, ok}}),
-    Anchor = quod_simplex:genesis_hash(Ns),
-    ForeignCache = filename:join(Dir, "foreign-cache"),
-    {ForeignLog, OwnForeignLog} =
-        case quod_foreign_log:start_link(#{cache_dir => ForeignCache}) of
-            {ok, ForeignLogPid} ->
-                unlink(ForeignLogPid),
-                {ForeignLogPid, true};
-            {error, {already_started, ForeignLogPid}} ->
-                {ForeignLogPid, false}
+    Fixture = #{dir => Dir, ns => Ns, pid => undefined, signer => Signer,
+                origin => {<<"quod:scope-read-origin">>, key(313)},
+                facts => Facts, saved_node_pubkey => SavedNodePubkey,
+                foreign_log => undefined, own_foreign_log => false},
+    %% Supervisor start is not the engine's readiness handshake. Subscribe
+    %% before starting it so a fast replay cannot lose the readiness edge.
+    true = quod_reg:subscribe({runtime, Ns}),
+    try
+        Started = try quod_ns:start_link(Ns, Cfg)
+                  catch StartClass:StartReason:StartStack ->
+                      cleanup_read_certificate_target(Fixture),
+                      erlang:raise(StartClass, StartReason, StartStack)
+                  end,
+        case Started of
+            {ok, Pid} ->
+                unlink(Pid),
+                finish_read_certificate_setup(Fixture#{pid => Pid}, AfterStart);
+            {error, Reason} ->
+                cleanup_read_certificate_target(Fixture),
+                error({read_certificate_fixture_start, Reason})
+        end
+    after
+        true = quod_reg:unsubscribe({runtime, Ns}),
+        flush_read_certificate_ready()
+    end.
+
+finish_read_certificate_setup(#{ns := Ns, dir := Dir} = Fixture, AfterStart) ->
+    try
+        AfterStart(Fixture),
+        receive
+            {replay_ready, _RecoveryId, 1} -> ok
+        after 5000 -> error(read_certificate_fixture_not_ready)
         end,
-    #{dir => Dir, ns => Ns, pid => Pid, signer => Signer,
-      target => {Ns, Anchor},
-      origin => {<<"quod:scope-read-origin">>, key(313)},
-      facts => Facts, saved_node_pubkey => SavedNodePubkey,
-      foreign_log => ForeignLog, own_foreign_log => OwnForeignLog}.
+        %% The ordinary write is submitted exactly once, after readiness.
+        {ok, [#{}], 2} =
+            quod_prolog:prove(Ns, {assertz, {certificate_anchor, ok}}),
+        Anchor = quod_simplex:genesis_hash(Ns),
+        ForeignCache = filename:join(Dir, "foreign-cache"),
+        {ForeignLog, OwnForeignLog} =
+            case quod_foreign_log:start_link(#{cache_dir => ForeignCache}) of
+                {ok, ForeignLogPid} ->
+                    unlink(ForeignLogPid),
+                    {ForeignLogPid, true};
+                {error, {already_started, ForeignLogPid}} ->
+                    {ForeignLogPid, false}
+            end,
+        Fixture#{target => {Ns, Anchor}, foreign_log => ForeignLog,
+                 own_foreign_log => OwnForeignLog}
+    catch Class:Reason:Stack ->
+        cleanup_read_certificate_target(Fixture),
+        erlang:raise(Class, Reason, Stack)
+    end.
+
+read_certificate_failed_setup_releases_its_root_and_environment_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Before = application:get_env(quod, node_pubkey),
+    ?assertEqual(undefined, quod_reg:where({quod_ns, <<"quod:root">>})),
+    ?assertError(read_certificate_setup_injected_failure,
+      setup_read_certificate_target(fun(#{pid := Pid, dir := Dir}) ->
+          self() ! {failed_read_fixture, Pid, Dir},
+          error(read_certificate_setup_injected_failure)
+      end)),
+    receive
+        {failed_read_fixture, Pid, Dir} ->
+            ?assertNot(is_process_alive(Pid)),
+            ?assertNot(filelib:is_dir(Dir))
+    after 1000 -> error(read_certificate_fixture_not_started)
+    end,
+    ?assertEqual(undefined, quod_reg:where({quod_ns, <<"quod:root">>})),
+    ?assertEqual(Before, application:get_env(quod, node_pubkey)),
+    ?assertNot(lists:member(
+                 self(), gproc:lookup_pids(
+                           quod_reg:prop({runtime, <<"quod:root">>})))).
 
 cleanup_read_certificate_target(
   #{dir := Dir, pid := Pid, saved_node_pubkey := SavedNodePubkey,
     foreign_log := ForeignLog, own_foreign_log := OwnForeignLog}) ->
-    MRef = monitor(process, Pid),
-    exit(Pid, shutdown),
-    receive
-        {'DOWN', MRef, process, Pid, _} -> ok
-    after 5000 ->
-        ok
-    end,
+    stop_read_certificate_process(Pid),
     _ = file:del_dir_r(Dir),
     case OwnForeignLog of
         true ->
@@ -1356,6 +1438,24 @@ cleanup_read_certificate_target(
         undefined -> application:unset_env(quod, node_pubkey)
     end,
     ok.
+
+stop_read_certificate_process(undefined) -> ok;
+stop_read_certificate_process(Pid) ->
+    MRef = monitor(process, Pid),
+    exit(Pid, shutdown),
+    receive
+        {'DOWN', MRef, process, Pid, _} -> ok
+    after 5000 -> error(read_certificate_fixture_stop_timeout)
+    end.
+
+%% A failed post-start setup may have queued its own ready edge before its
+%% captured namespace was stopped. Do not let that fixture message masquerade
+%% as the next root incarnation's readiness in the same EUnit process.
+flush_read_certificate_ready() ->
+    receive
+        {replay_ready, _RecoveryId, _Height} -> flush_read_certificate_ready()
+    after 0 -> ok
+    end.
 
 sealed_read_session(Ctx, ProofId) ->
     Target = maps:get(target, Ctx),

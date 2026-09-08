@@ -542,9 +542,16 @@ publish(Index, Floor,
                         outcomes = Outcomes0}, Result) ->
     case quod_outcome:advance_applied(Outcomes0, Index) of
         {ok, OutcomesStaged} ->
-            case quod_outcome:flush(OutcomesStaged) of
+            Flushed = trace_publication(
+                        <<"quod.outcome.flush">>,
+                        fun() -> quod_outcome:flush(OutcomesStaged) end),
+            case Flushed of
                 {ok, Outcomes1} ->
-                    Ref1 = quod_erlog_db_mvcc:commit(Ref0, Index, Floor),
+                    Ref1 = trace_publication(
+                             <<"quod.mvcc.publish">>,
+                             fun() ->
+                                 quod_erlog_db_mvcc:commit(Ref0, Index, Floor)
+                             end),
                     Projection1 = Projection0#projection{
                                     est = Est#est{db = Db#db{ref = Ref1}},
                                     outcomes = Outcomes1, applied = Index},
@@ -554,6 +561,16 @@ publish(Index, Floor,
             end;
         {error, Reason} ->
             {error, {outcome_index, Reason}}
+    end.
+
+%% Local apply supplies one live block context; foreign projections inherit
+%% their existing worker context. Uncorrelated replay must not invent a request.
+trace_publication(Name, Publish) ->
+    Context = quod_trace:context(),
+    case otel_span:is_valid(otel_tracer:current_span_ctx(Context)) of
+        true -> quod_trace:with_span(
+                  Context, Name, internal, #{}, fun(_Span) -> Publish() end);
+        false -> Publish()
     end.
 
 validation_context(

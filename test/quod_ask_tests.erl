@@ -1,5 +1,6 @@
 -module(quod_ask_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 
 -define(WAIT_RETRIES, 200).
 
@@ -282,6 +283,7 @@ ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
          [?_test(t_single_answer(Ctx)),
+          ?_test(t_scope_trace_covers_open_and_answer(Ctx)),
           ?_test(t_backtracking_all_answers(Ctx)),
           ?_test(t_cursor_backtracks_across_ontology(Ctx)),
           ?_test(t_default_link_following(Ctx)),
@@ -325,6 +327,26 @@ ask_test_() ->
           ?_test(t_frozen_scope_view(Ctx)),
           ?_test(t_workers_are_reaped(Ctx))]
      end}.
+
+t_scope_trace_covers_open_and_answer(#{pets := Ns}) ->
+    quod_trace_tests:with_tracer(fun() ->
+        ?assertMatch({ok, [#{}], _}, prove(Ns, {'::', private, {secret, 42}})),
+        Invocation = quod_trace_tests:take_span(<<"quod.prolog.invocation">>),
+        Open = quod_trace_tests:take_span(<<"quod.ask.open">>),
+        Next = quod_trace_tests:take_span(<<"quod.ask.stream_next">>),
+        Authentication = quod_trace_tests:take_span(
+                           <<"quod.scope.authenticate">>),
+        ?assertEqual(Open#span.trace_id, Authentication#span.trace_id),
+        ?assertEqual(Open#span.span_id, Authentication#span.parent_span_id),
+        lists:foreach(
+          fun(Child) ->
+              ?assertEqual(Invocation#span.trace_id, Child#span.trace_id),
+              ?assertEqual(Invocation#span.span_id, Child#span.parent_span_id),
+              ?assert(Invocation#span.start_time =< Child#span.start_time),
+              ?assert(Child#span.end_time =< Invocation#span.end_time)
+          end, [Open, Next]),
+        ?assert(Open#span.end_time =< Next#span.start_time)
+    end).
 
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -719,7 +741,8 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
                                      Anchor, false,
                                      quod_proof_context:deadline_ms(),
                                      OriginIdentity,
-                                     quod_proof_context:principal(), node}) of
+                                     quod_proof_context:principal(), node,
+                                     quod_trace:context()}) of
                                  {ok, Opened} ->
                                      {ok, quod_scope_session:pid(Opened), Opened};
                                  {error, _} = Error ->
@@ -1206,7 +1229,7 @@ open_test_scope(Ns, ReadOnly, Id) ->
 
 scope_open_request(Ns, ScopeId, ProofId, Anchor, ReadOnly) ->
     {scope_open, ScopeId, ProofId, Anchor, ReadOnly, test_deadline(),
-     {Ns, Anchor}, {node, test_node_key()}, node}.
+     {Ns, Anchor}, {node, test_node_key()}, node, quod_trace:context()}.
 
 test_node_key() ->
     {ok, NodeKey} = application:get_env(quod, node_pubkey),

@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 10).
+-define(VERSION, 11).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -59,7 +59,7 @@ renew the scope lifetime.
          identity(), identity(), read_write | read_only,
          quod_dtx:principal(), <<_:256>>}.
 -type command_operation() ::
-        {scope_open, authentication()} | scope_close | scope_seal |
+        {scope_open, authentication(), list()} | scope_close | scope_seal |
         {scope_attest, binary()} | certify_reads |
         {bind_group_effects, term(), <<_:256>>} |
         {bind_operation_effect, binary()} |
@@ -453,8 +453,12 @@ payload_limit(_) -> error.
 %% Fixed operation shapes
 %% ------------------------------------------------------------------
 
-validate_command_operation({scope_open, Authentication}) ->
-    validate_authentication(Authentication);
+validate_command_operation({scope_open, Authentication, TraceCarrier}) ->
+    %% Transient transport metadata, outside the signed request and binding.
+    case quod_trace:valid_carrier(TraceCarrier) of
+        true -> validate_authentication(Authentication);
+        false -> protocol_error(bad_payload)
+    end;
 validate_command_operation(scope_close) -> ok;
 validate_command_operation(scope_seal) -> ok;
 validate_command_operation({scope_attest, ManifestBlob}) ->

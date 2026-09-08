@@ -208,38 +208,45 @@ ask_error(Reason) -> throw({quod_ask_error, Reason}).
 %% scope map. Raw snapshot adapters have no origin authority and are rejected
 %% here before directory resolution, dialing, or target-worker allocation.
 open(_Self, Target, GoalTerm, Chain, St) ->
-    St1 = publish_session(St),
-    case session_metadata(St1) of
-        {origin, {quod_proof_context, _ProofId, Origin}} when Origin =:= self() ->
-            %% Authority is established before activating distributed
-            %% transaction state. A raw adapter therefore reaches the exact
-            %% typed selector refusal below without creating controller state.
-            ok = quod_transaction_scope:activate(St1),
-            Actor = quod_transaction_scope:current_actor(),
-            Selection = quod_transaction_scope:current_selection(St1),
-            case origin_open(Target, GoalTerm, Chain, Actor, Selection) of
-                {ok, Stream} -> {ok, Stream, refresh_session(St1)};
-                {error, _} = Error -> Error
-            end;
-        {scope, ProofId, Origin, _SessionRef, ScopeId}
-          when is_pid(Origin), is_binary(ScopeId), byte_size(ScopeId) =:= 16 ->
-            ok = quod_transaction_scope:activate(St1),
-            Actor = quod_transaction_scope:current_actor(),
-            Selection = quod_transaction_scope:current_selection(St1),
-            case Actor of
-                {ScopeId, _InvocationId} ->
-                    case nested_open(
-                           Origin, ProofId, Target, GoalTerm, Chain,
-                           Actor, Selection) of
-                        {ok, Stream} -> {ok, Stream, refresh_session(St1)};
-                        {error, _} = Error -> Error
-                    end;
-                _ ->
-                    {error, {protocol_error, session_binding}}
-            end;
-        _ ->
-            {error, {ask_requires_anchored_proof, Target}}
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ask.open">>, internal,
+      #{'quod.namespace' => Target},
+      fun(_Span) ->
+          St1 = publish_session(St),
+          case session_metadata(St1) of
+              {origin, {quod_proof_context, _ProofId, Origin}}
+                when Origin =:= self() ->
+                  %% Authority precedes controller activation. Raw adapters
+                  %% reach the typed refusal without creating controller state.
+                  ok = quod_transaction_scope:activate(St1),
+                  Actor = quod_transaction_scope:current_actor(),
+                  Selection = quod_transaction_scope:current_selection(St1),
+                  case origin_open(Target, GoalTerm, Chain, Actor, Selection) of
+                      {ok, Stream} -> {ok, Stream, refresh_session(St1)};
+                      {error, _} = Error -> Error
+                  end;
+              {scope, ProofId, Origin, _SessionRef, ScopeId}
+                when is_pid(Origin), is_binary(ScopeId),
+                     byte_size(ScopeId) =:= 16 ->
+                  ok = quod_transaction_scope:activate(St1),
+                  Actor = quod_transaction_scope:current_actor(),
+                  Selection = quod_transaction_scope:current_selection(St1),
+                  case Actor of
+                      {ScopeId, _InvocationId} ->
+                          case nested_open(
+                                 Origin, ProofId, Target, GoalTerm, Chain,
+                                 Actor, Selection) of
+                              {ok, Stream} ->
+                                  {ok, Stream, refresh_session(St1)};
+                              {error, _} = Error -> Error
+                          end;
+                      _ ->
+                          {error, {protocol_error, session_binding}}
+                  end;
+              _ ->
+                  {error, {ask_requires_anchored_proof, Target}}
+          end
+      end).
 
 origin_open(Target, Goal, Chain, OwnerActor, Selection) ->
     case origin_scope(Target) of
@@ -296,7 +303,7 @@ open_cohosted_scope(Target, Anchor, ScopeId) ->
                                    quod_proof_context:deadline_ms(),
                                    quod_proof_context:origin_identity(),
                                    quod_proof_context:principal(),
-                                   Authentication},
+                                   Authentication, quod_trace:context()},
                                   RemainingMs) of
                                 {ok, Handle} ->
                                     {ok, quod_scope_session:pid(Handle),
@@ -677,29 +684,33 @@ cancel_scope_invocation(
     quod_proof_session:cancel(Session, InvocationId).
 
 stream_next(Stream, St) ->
-    St1 = publish_session(St),
-    Actor = quod_transaction_scope:current_actor(),
-    Selection = quod_transaction_scope:current_selection(St1),
-    Result =
-        case Stream of
-            {origin_scope_stream, Ref, Expected} ->
-                origin_advance(Ref, Actor, Selection, Expected);
-            {nested_scope_stream, Origin, ProofId, Ref,
-             Actor, _StreamSelection, Expected} ->
-                nested_advance(
-                  Origin, ProofId, Ref, Actor, Selection, Expected);
-            _ ->
-                {error, {protocol_error, session_binding}}
-        end,
-    St2 = refresh_session(St1),
-    case Result of
-        {solution, Solution, NextStream} ->
-            {solution, Solution, NextStream, St2};
-        {complete, Reasons} ->
-            {complete, Reasons, St2};
-        {error, Reason} ->
-            {error, Reason, St2}
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ask.stream_next">>, internal, #{},
+      fun(_Span) ->
+          St1 = publish_session(St),
+          Actor = quod_transaction_scope:current_actor(),
+          Selection = quod_transaction_scope:current_selection(St1),
+          Result =
+              case Stream of
+                  {origin_scope_stream, Ref, Expected} ->
+                      origin_advance(Ref, Actor, Selection, Expected);
+                  {nested_scope_stream, Origin, ProofId, Ref,
+                   Actor, _StreamSelection, Expected} ->
+                      nested_advance(
+                        Origin, ProofId, Ref, Actor, Selection, Expected);
+                  _ ->
+                      {error, {protocol_error, session_binding}}
+              end,
+          St2 = refresh_session(St1),
+          case Result of
+              {solution, Solution, NextStream} ->
+                  {solution, Solution, NextStream, St2};
+              {complete, Reasons} ->
+                  {complete, Reasons, St2};
+              {error, Reason} ->
+                  {error, Reason, St2}
+          end
+      end).
 
 origin_advance(Ref, OwnerActor, OwnerSelection, Expected) ->
     Result = case quod_proof_context:proxy(Ref, OwnerActor) of

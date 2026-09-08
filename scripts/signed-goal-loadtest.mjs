@@ -16,7 +16,7 @@ const defaults = {
   requests: '1000', concurrency: '32', httpTimeout: '35', preflightTimeout: '60',
   duration: '0',
   maxFailures: '0', resultDir: '', agentAnchor: '', agentInstance: '',
-  keyBundle: '', keyPassphraseEnv: '', insecureTls: false,
+  keyBundle: '', keyPassphraseEnv: '', insecureTls: false, trace: false,
 }
 
 function die(message) { console.error(`signed-goal-loadtest: ${message}`); process.exit(2) }
@@ -56,6 +56,8 @@ Options:
   --max-failures N                 fail above this many failed proofs (default: 0)
   --result-dir PATH                retain preflight/results TSV files
   --insecure-tls                   accept a development self-signed certificate
+  --trace                          sample each measured request; append trace_id
+                                   as results.tsv column 10 and print its mapping
   --help                           show this help
 
 An execute goal is submitted once. An uncertain result is recorded as failed;
@@ -82,6 +84,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
   const arg = process.argv[i]
   if (arg === '--help' || arg === '-h') { usage(); process.exit(0) }
   if (arg === '--insecure-tls') { opt.insecureTls = true; continue }
+  if (arg === '--trace') { opt.trace = true; continue }
   const [flag, inline] = arg.split('=', 2)
   const key = names.get(flag)
   if (!key) die(`unknown option: ${arg}`)
@@ -179,8 +182,10 @@ function goalFor(id) {
 function completeGoal(text, id) {
   return directGoal(text.replaceAll('__QUOD_REQUEST_ID__', id))
 }
-function endpointPost(base) {
-  return (path, body, method = 'POST') => postJson(new URL(path, `${base}/`).href, body, method)
+function endpointPost(base, traceparent) {
+  return (path, body, method = 'POST') => postJson(
+    new URL(path, `${base}/`).href, body, method, { traceparent },
+  )
 }
 async function summary(base) {
   const response = await fetch(new URL('/api/summary', `${base}/`), { signal: AbortSignal.timeout(httpTimeout * 1000) })
@@ -263,6 +268,7 @@ console.log(`  goal:        ${goalFor('<request-id>')}`)
 console.log(`  mode:        ${opt.mode}`)
 console.log(`  work:        ${duration ? `${duration}s` : `${requests} proofs`} at concurrency ${concurrency}`)
 if (opt.beforeEachGoal) console.log(`  before each: ${completeGoal(opt.beforeEachGoal, '<request-id>')}`)
+if (opt.trace) console.log('  tracing:     sampled measured requests only; trace_id is results.tsv column 10')
 
 async function scrapeMetrics(phase) {
   const manifest = []
@@ -296,6 +302,7 @@ async function worker() {
     const source = sources[number % sources.length]
     const requestId = `${prefix}_${number + 1}`
     let advanceLatencyMs = 0
+    let traceId = ''
     let startedAtMs = Date.now()
     let began = process.hrtime.bigint()
     try {
@@ -314,10 +321,16 @@ async function worker() {
         startedAtMs = Date.now()
         began = process.hrtime.bigint()
       }
+      // The carrier is HTTP metadata only: signing and the original request
+      // body are unchanged. UUID version bits ensure both W3C ids are nonzero.
+      traceId = opt.trace ? crypto.randomUUID().replaceAll('-', '') : ''
+      const traceparent = traceId
+        ? `00-${traceId}-${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}-01`
+        : undefined
       const reply = await signedGoal(source.identity, {
         mode: opt.mode, agent,
         goal: goalFor(requestId),
-      }, { post: source.post, journal: noJournal })
+      }, { post: traceId ? endpointPost(source.endpoint, traceparent) : source.post, journal: noJournal })
       const ok = reply?.result === 'ok'
       const detail = boundedDetail(reply)
       const category = ok ? (opt.mode === 'execute' ? 'committed' : 'read_ok') : failureClass(detail)
@@ -331,6 +344,7 @@ async function worker() {
         requestId,
         startedAtMs,
         advanceLatencyMs,
+        traceId,
       })
     } catch (error) {
       const detail = outcomeText(error)
@@ -344,6 +358,7 @@ async function worker() {
         requestId,
         startedAtMs,
         advanceLatencyMs,
+        traceId,
       })
     }
   }
@@ -357,7 +372,7 @@ await writeFile(
   rows.map(row => [row.endpoint, row.status, row.category, row.detail,
                    row.latencyMs, row.succeeded ? 1 : 0,
                    row.requestId, row.startedAtMs,
-                   row.advanceLatencyMs].join('\t')).join('\n') + '\n',
+                   row.advanceLatencyMs, ...(opt.trace ? [row.traceId] : [])].join('\t')).join('\n') + '\n',
 )
 const okRows = rows.filter(row => row.succeeded)
 const sorted = okRows.map(row => row.latencyMs).sort((a, b) => a - b)
@@ -377,6 +392,11 @@ if (opt.mode === 'execute') {
   console.log('  queue wait: scrape quod_dtx_admission_wait_ms for the source namespace (dashboard row: Distributed transaction admission)')
 }
 console.log(`  raw data:   ${resultDir}/results.tsv`)
+if (opt.trace) {
+  for (const row of rows) {
+    console.log(`  trace: request_id=${row.requestId} trace_id=${row.traceId || 'none'} outcome=${row.category} latency_ms=${row.latencyMs}`)
+  }
+}
 const cursorBusy = categories.get('cursor_busy') || 0
 if (failures <= maxFailures && cursorBusy === 0) { console.log('PASS'); process.exit(0) }
 if (cursorBusy > 0) console.error(`FAIL: cursor_busy=${cursorBusy}; distributed-write contention must queue before Begin`)

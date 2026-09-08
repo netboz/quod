@@ -223,6 +223,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           binding      :: quod_scope_wire:binding(),
           request_binding = none :: quod_client_goal:request_binding(),
           request_auth = none :: none | quod_client_goal:request_auth(),
+          trace_ctx = undefined :: undefined | quod_trace:context(),
           peer_key     :: <<_:256>>,
           request_link :: pid(),
           request_mref :: reference(),
@@ -540,15 +541,23 @@ public_proof(Engine, Ns, Kind, Goal, TraceCtx, Principal, ExpectedAnchor) ->
 
 public_proof(Engine, Ns, Kind, Goal, TraceCtx, Principal, ExpectedAnchor,
              RequestEvidence) ->
-    CallRef = make_ref(),
-    MRef = monitor(process, Engine),
-    Request = proof_request(
-                TraceCtx, Principal, ExpectedAnchor, RequestEvidence),
-    gen_server:cast(
-      Engine, {public_proof, self(), CallRef, Kind, Goal, Request}),
-    try await_public_proof(Engine, MRef, CallRef, Ns, none)
-    after demonitor(MRef, [flush])
-    end.
+    %% This caller-owned interval includes admission and the engine's result
+    %% handoff, unlike the child span which starts in the admitted worker.
+    quod_trace:with_span(
+      TraceCtx, <<"quod.prolog.public_proof">>, internal,
+      #{'quod.namespace' => Ns},
+      fun(_Span) ->
+          CallRef = make_ref(),
+          MRef = monitor(process, Engine),
+          Request = proof_request(
+                      quod_trace:context(), Principal, ExpectedAnchor,
+                      RequestEvidence),
+          gen_server:cast(
+            Engine, {public_proof, self(), CallRef, Kind, Goal, Request}),
+          try await_public_proof(Engine, MRef, CallRef, Ns, none)
+          after demonitor(MRef, [flush])
+          end
+      end).
 
 await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint) ->
     receive
@@ -1274,12 +1283,12 @@ handle_call(sync, _From, S) -> {reply, ok, S};   %% replay backpressure barrier 
 %% The origin pid is derived from `From`; it is never accepted from the payload.
 handle_call(
   {scope_open, _ScopeId, _ProofId, _Anchor, _ReadOnly, _DeadlineMs,
-   _OriginIdentity, _Principal, _Authentication}, _From,
+   _OriginIdentity, _Principal, _Authentication, _TraceCtx}, _From,
   S = #s{ready = false, ns = Ns}) ->
     {reply, {error, {ontology_rebuilding, Ns}}, S};
 handle_call(
   {scope_open, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
-   OriginIdentity, Principal, Authentication}, From,
+   OriginIdentity, Principal, Authentication, TraceCtx}, From,
   S = #s{self = OriginKey})
   when is_binary(ScopeId), byte_size(ScopeId) =:= 16,
        is_binary(ProofId), byte_size(ProofId) =:= 32,
@@ -1291,15 +1300,22 @@ handle_call(
         ok ->
             case quod_scope_wire:authentication_digest(Authentication) of
                 {ok, AuthenticationDigest} ->
-                    case scope_authentication_reason(
-                           Authentication, OriginKey, OriginIdentity,
-                           Principal, AuthenticationDigest, ProofId,
-                           max(0, DeadlineMs - quod_time:mono_ms()),
-                           S#s.ns, none) of
+                    AuthenticationResult = quod_trace:with_span(
+                      TraceCtx, <<"quod.scope.authenticate">>, server,
+                      #{'quod.namespace' => S#s.ns},
+                      fun(_Span) ->
+                          scope_authentication_reason(
+                            Authentication, OriginKey, OriginIdentity,
+                            Principal, AuthenticationDigest, ProofId,
+                            max(0, DeadlineMs - quod_time:mono_ms()),
+                            S#s.ns, none)
+                      end),
+                    case AuthenticationResult of
                         {ok, RequestContext} ->
                             open_scope_session(
                               Origin, ScopeId, ProofId, Anchor, ReadOnly,
-                              DeadlineMs, Principal, RequestContext, S);
+                              DeadlineMs, Principal,
+                              RequestContext#{trace_ctx => TraceCtx}, S);
                         {error, Reason} ->
                             {reply, {error, Reason}, S}
                     end;
@@ -1311,7 +1327,7 @@ handle_call(
     end;
 handle_call(
   {scope_open, _ScopeId, _ProofId, _Anchor, _ReadOnly, _DeadlineMs,
-   _OriginIdentity, _Principal, _Authentication}, _From, S) ->
+   _OriginIdentity, _Principal, _Authentication, _TraceCtx}, _From, S) ->
     {reply, {error, bad_request}, S};
 
 %% Runtime attach (attach_runtime/1). Ready+live only — see the API doc for why a pin must
@@ -1871,7 +1887,7 @@ open_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
 
 start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                         Principal,
-                        #{request_binding := RequestBinding},
+                        #{request_binding := RequestBinding} = RequestContext,
                         S = #s{ns = Ns, est = Est, applied = Height,
                                scope_sessions = Sessions}) ->
     case quod_dtx:valid_principal(Principal) of
@@ -1888,6 +1904,9 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                                      #{read_only => ReadOnly,
                                        principal => Principal,
                                        request_binding => RequestBinding,
+                                       trace_ctx => maps:get(
+                                         trace_ctx, RequestContext,
+                                         otel_ctx:new()),
                                        signer => S#s.signer,
                                        deadline_ms => ScopeDeadline}),
             Pid = quod_scope_session:pid(Handle),
@@ -1965,9 +1984,10 @@ handle_scope_command(
   {scope_command, Binding, CommandSeq, RequestId, RemainingMs, Operation},
   S = #s{remote_scopes = Remote}) ->
     case {maps:find(Binding, Remote), Operation} of
-        {error, {scope_open, Authentication}} ->
+        {error, {scope_open, Authentication, TraceCarrier}} ->
             handle_remote_scope_open(
               PeerKey, Endpoint, RequestLink, Binding, Authentication,
+              TraceCarrier,
               CommandSeq, RequestId, RemainingMs, S);
         {error, _OtherOperation} ->
             reject_unknown_scope(
@@ -1983,7 +2003,7 @@ handle_remote_scope_open(
   Binding = {scope_binding, OriginKey, TargetKey, ProofId, _ScopeId,
              OriginIdentity, {Ns, Anchor}, Mode,
              Principal, AuthenticationDigest},
-  Authentication,
+  Authentication, TraceCarrier,
   CommandSeq, RequestId, RemainingMs,
   S = #s{ns = Ns, self = TargetKey}) ->
     case PeerKey =:= OriginKey andalso
@@ -1994,16 +2014,17 @@ handle_remote_scope_open(
         true ->
             begin_remote_scope_authentication(
               PeerKey, Endpoint, RequestLink, Binding, Authentication,
+              TraceCarrier,
               OriginKey, OriginIdentity, Principal, AuthenticationDigest,
               ProofId, RequestId, RemainingMs, Mode, Anchor, S)
     end;
 handle_remote_scope_open(
-  _PeerKey, _Endpoint, _RequestLink, _Binding, _Authentication,
+  _PeerKey, _Endpoint, _RequestLink, _Binding, _Authentication, _TraceCarrier,
   _CommandSeq, _RequestId, _RemainingMs, S) ->
     S.
 
 begin_remote_scope_authentication(
-  PeerKey, Endpoint, RequestLink, Binding, Authentication,
+  PeerKey, Endpoint, RequestLink, Binding, Authentication, TraceCarrier,
   OriginKey, OriginIdentity, Principal, AuthenticationDigest,
   ProofId, RequestId, RemainingMs, Mode, Anchor,
   S = #s{ns = Ns, remote_authenticators = Authenticators,
@@ -2016,17 +2037,30 @@ begin_remote_scope_authentication(
             S;
         false ->
             Engine = self(),
+            TraceCtx = quod_trace:extract(TraceCarrier),
             Deadline = quod_time:mono_ms() + RemainingMs,
             {Pid, MRef} = spawn_monitor(
                             fun() ->
                                 receive
                                     {scope_authenticator_start, WorkerRef} ->
-                                        Result = scope_authentication_reason(
-                                                   Authentication, OriginKey,
-                                                   OriginIdentity, Principal,
-                                                   AuthenticationDigest,
-                                                   ProofId, RemainingMs, Ns,
-                                                   {PeerKey, Endpoint}),
+                                        AuthResult = quod_trace:with_span(
+                                          TraceCtx,
+                                          <<"quod.scope.authenticate">>, server,
+                                          #{'quod.namespace' => Ns},
+                                          fun(_Span) ->
+                                              scope_authentication_reason(
+                                                Authentication, OriginKey,
+                                                OriginIdentity, Principal,
+                                                AuthenticationDigest,
+                                                ProofId, RemainingMs, Ns,
+                                                {PeerKey, Endpoint})
+                                          end),
+                                        Result = case AuthResult of
+                                            {ok, RequestContext} ->
+                                                {ok, RequestContext#{
+                                                       trace_ctx => TraceCtx}};
+                                            {error, _} = Error -> Error
+                                        end,
                                         _ = gen_server:call(
                                               Engine,
                                               {scope_authenticator_complete,
@@ -2292,7 +2326,7 @@ scope_admission_reason(Mode, Anchor,
 
 begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
                         #{request_binding := RequestBinding,
-                          request_auth := RequestAuth},
+                          request_auth := RequestAuth} = RequestContext,
                         RequestId, RemainingMs,
                         S = #s{scope_timeout_ms = ScopeTimeout,
                                remote_scopes = Remote,
@@ -2310,6 +2344,7 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
     Scope = #remote_scope{
                binding = Binding, request_binding = RequestBinding,
                request_auth = RequestAuth,
+               trace_ctx = maps:get(trace_ctx, RequestContext, otel_ctx:new()),
                peer_key = PeerKey,
                request_link = RequestLink, request_mref = RequestMRef,
                return_channel = ReturnChannel, open_ref = OpenRef,
@@ -2422,7 +2457,8 @@ binding_admission_reason(
     scope_admission_reason(Mode, Anchor, S).
 
 execute_remote_scope_command(
-  Binding, {scope_open, _Authentication}, RequestId, CommandSeq, S) ->
+  Binding, {scope_open, _Authentication, _TraceCarrier},
+  RequestId, CommandSeq, S) ->
     poison_remote_scope(
       Binding, RequestId, CommandSeq,
       {protocol_error, unexpected_scope_command}, S);
@@ -2897,6 +2933,7 @@ start_admitted_remote_scope_session(
                              #{read_only => ReadOnly,
                                principal => Principal,
                                request_binding => RequestBinding,
+                               trace_ctx => Scope#remote_scope.trace_ctx,
                                signer => S#s.signer,
                                deadline_ms => Scope#remote_scope.deadline_ms}),
     Pid = quod_scope_session:pid(Handle),
@@ -4323,7 +4360,9 @@ test_finalize_pinned_result(Result) -> finalize_pinned_result(Result).
 %% does not ask A to authorize B's predicate, while B still executes its normal
 %% `can_invoke/4` path. Local goals (including `A::Goal`) are authorized by A.
 run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
-    Verdict = authorization_verdict(Origin, Goal),
+    Verdict = quod_trace:with_span(
+                quod_trace:context(), <<"quod.prolog.authorization">>, internal,
+                #{}, fun(_Span) -> authorization_verdict(Origin, Goal) end),
     run_authorized_pinned_goal(Kind, Origin, Goal, Verdict).
 
 %% Keep the requested goal intact for the authorization transcript. The proof
@@ -4405,7 +4444,11 @@ valid_proof_auth(_Principal, _RequestEvidence) -> false.
 
 run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
     Result = normalize_read_only_result(
-               Kind, run_origin_invocation(Origin, Goal, Verdict)),
+               Kind,
+               quod_trace:with_span(
+                 quod_trace:context(), <<"quod.prolog.invocation">>, internal,
+                 #{},
+                 fun(_Span) -> run_origin_invocation(Origin, Goal, Verdict) end)),
     finish_pinned_proof(Kind, Origin, Goal, Result).
 
 %% A successful writable proof seals every scope while all sessions are still
@@ -4569,7 +4612,9 @@ certify_read_plans([]) ->
     {ok, []};
 certify_read_plans(Rows) ->
     Started = erlang:monotonic_time(),
-    Result =
+    Result = quod_trace:with_span(
+      quod_trace:context(), <<"quod.prolog.read_certification">>, internal, #{},
+      fun(_Span) ->
         case read_certification_rows(Rows, []) of
             {ok, CertificationRows} ->
                 case quod_scope_session:certify_reads_many(
@@ -4579,7 +4624,8 @@ certify_read_plans(Rows) ->
                     {error, _} = Error -> Error
                 end;
             {error, _} = Error -> Error
-        end,
+        end
+      end),
     ok = observe_read_certification(Result, Started),
     Result.
 
@@ -4655,7 +4701,13 @@ submit_signed_foreign_manifest(
   ForeignReads, Bindings) ->
     case quod_dtx:new_manifest(ManifestInput) of
         {ok, Manifest} ->
-            case quod_scope_session:attest_plan(Handle, Plan, Manifest) of
+            AttestationResult = quod_trace:with_span(
+              quod_trace:context(), <<"quod.prolog.plan_attestation">>,
+              internal, #{},
+              fun(_Span) ->
+                  quod_scope_session:attest_plan(Handle, Plan, Manifest)
+              end),
+            case AttestationResult of
                 {ok, Attestation} ->
                     Bundle = {Target, quod_dtx:digest(Plan),
                               PlanBlob, Attestation},
@@ -4694,9 +4746,14 @@ submit_unbound_foreign_claim(
         {ok, #{operation_ref := OperationRef}} ->
             ok = checkpoint_and_release_origin_snapshot(Origin, OperationRef),
             Started = erlang:monotonic_time(),
-            Submission = quod_prolog:submit_role(
-                           OriginNs, Claim, [],
-                           max(1, quod_proof_context:remaining_ms())),
+            Submission = quod_trace:with_span(
+              quod_trace:context(), <<"quod.prolog.source_claim">>, internal,
+              #{},
+              fun(_Span) ->
+                  quod_prolog:submit_role(
+                    OriginNs, Claim, [],
+                    max(1, quod_proof_context:remaining_ms()))
+              end),
             ok = quod_metrics:observe_remote_operation_stage(
                    OriginNs, source_claim,
                    remote_submission_metric_result(Submission),
@@ -4794,9 +4851,14 @@ cancel_dormant_effect_claim(OriginNs, ClaimTxId, OperationRef) ->
 
 await_recovered_foreign_application(
   OriginNs, ClaimTxId, OperationRef, Bindings) ->
-    case quod_simplex:await_operation_result(
-           OriginNs, OperationRef,
-           max(1, quod_proof_context:remaining_ms())) of
+    Outcome = quod_trace:with_span(
+      quod_trace:context(), <<"quod.prolog.operation_result">>, internal, #{},
+      fun(_Span) ->
+          quod_simplex:await_operation_result(
+            OriginNs, OperationRef,
+            max(1, quod_proof_context:remaining_ms()))
+      end),
+    case Outcome of
         {committed,
          {transaction, _TargetNs, <<_:256>>, <<_:256>>} = TargetRef} ->
             {committed, Bindings, TargetRef};
@@ -4822,10 +4884,14 @@ remote_activation_metric_result({error, _}) -> uncertain.
 
 checkpoint_and_release_origin_snapshot(
   #pinned_origin{engine = Engine, worker_ref = WorkerRef}, OutcomeRef) ->
-    gen_server:call(
-      Engine,
-      {checkpoint_and_release_proof_snapshot, WorkerRef, OutcomeRef},
-      infinity).
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.prolog.checkpoint_release">>, internal, #{},
+      fun(_Span) ->
+          gen_server:call(
+            Engine,
+            {checkpoint_and_release_proof_snapshot, WorkerRef, OutcomeRef},
+            infinity)
+      end).
 
 checkpoint_bound_effect(
   #pinned_origin{engine = Engine, worker_ref = WorkerRef},
@@ -5914,7 +5980,7 @@ accept_bound_effect_submission(
 admit_bound_effect_plan(From, Change, ReplyBindings, TraceCtx, Ref,
                         Outcomes0, Parked, S) ->
     Tx = Change#transaction.tx_id,
-    case quod_outcome:admit(Outcomes0, Change) of
+    case trace_outcome_admission(TraceCtx, Outcomes0, Change) of
         {{terminal, Stored}, Outcomes1} ->
             {reply, terminal_submission_reply(Stored, ReplyBindings),
              S#s{outcomes = Outcomes1}};
@@ -6041,7 +6107,7 @@ submit_plan_envelope(From, Plan, Material, GoalBlob, ReplyBindings, ResultBlob,
 admit_bound_plan(From, Change, ReplyBindings, Diff, TraceCtx, Ref,
                  Outcomes0, Parked, S) ->
     Tx = Change#transaction.tx_id,
-    case quod_outcome:admit(Outcomes0, Change) of
+    case trace_outcome_admission(TraceCtx, Outcomes0, Change) of
         {{terminal, Stored}, Outcomes1} ->
             {reply, terminal_submission_reply(Stored, ReplyBindings),
              S#s{outcomes = Outcomes1}};
@@ -6060,6 +6126,11 @@ admit_bound_plan(From, Change, ReplyBindings, Diff, TraceCtx, Ref,
         {error, Reason} ->
             outcome_index_error(Reason, Ref, S)
     end.
+
+trace_outcome_admission(TraceCtx, Outcomes, Change) ->
+    quod_trace:with_span(
+      TraceCtx, <<"quod.outcome.admission">>, internal, #{},
+      fun(_Span) -> quod_outcome:admit(Outcomes, Change) end).
 
 terminal_submission_reply(
   Stored, ReplyBindings) ->
@@ -6361,7 +6432,13 @@ apply_step(#entry{index = Index}, _Origin, S = #s{ns = Ns, applied = A}) when In
 apply_step(#entry{index = Index} = Entry, Origin, S0) ->
     Projection0 = committed_projection(S0),
     Floor = oldest_snapshot(Index, S0),
-    case quod_committed_projection:apply_entry(Entry, Floor, Projection0) of
+    Reduced = trace_committed_apply(
+                Entry, S0,
+                fun() ->
+                    quod_committed_projection:apply_entry(
+                      Entry, Floor, Projection0)
+                end),
+    case Reduced of
         {ok, Projection1, Result} ->
             finish_projection_result(
               Result, Index, Origin,
@@ -6375,6 +6452,41 @@ apply_step(#entry{index = Index} = Entry, Origin, S0) ->
             predicate_modules_unavailable(Reason, S0);
         {error, Reason} ->
             error(Reason)
+    end.
+
+%% A block is reduced once even when it releases several independently traced
+%% requests. Prefer a recording parent so an earlier unsampled request cannot
+%% hide the shared work; the other exact live transactions are SDK links.
+trace_committed_apply(_Entry, #s{parked = Parked}, Apply)
+  when map_size(Parked) =:= 0 ->
+    Apply();
+trace_committed_apply(#entry{index = Index,
+                             data = {batch, [#transaction{} | _]} = Data},
+                      #s{ns = Ns, parked = Parked}, Apply) ->
+    Spans = case quod_ledger:classify(Data) of
+                {content, Changes} ->
+                    [Span || #transaction{tx_id = Tx} <- Changes,
+                             Span <- [parked_trace_span(Tx, Parked)],
+                             otel_span:is_valid(Span)];
+                _ -> []
+            end,
+    {Recording, Unrecorded} = lists:partition(
+                               fun otel_span:is_recording/1, lists:uniq(Spans)),
+    case Recording ++ Unrecorded of
+        [] -> Apply();
+        [Parent | Links] ->
+            quod_trace:with_span(
+              otel_tracer:set_current_span(otel_ctx:new(), Parent),
+              <<"quod.prolog.apply">>, internal,
+              #{'quod.namespace' => Ns, 'quod.ledger.slot' => Index},
+              opentelemetry:links(Links), fun(_Span) -> Apply() end)
+    end;
+trace_committed_apply(_Entry, _S, Apply) -> Apply().
+
+parked_trace_span(Tx, Parked) ->
+    case maps:get(Tx, Parked, undefined) of
+        #parked_write{span_ctx = SpanCtx} -> SpanCtx;
+        undefined -> undefined
     end.
 
 committed_projection(
@@ -6444,14 +6556,14 @@ content_post_apply(
     applied_ops := AppliedOps},
   Index, Origin, S) ->
     #transaction{tx_id = Tx} = Change,
-    notify_operation_projection(S#s.ns, Height, Change),
+    notify_operation_projection(S, Height, Change),
     {outcome_applied(Change, AppliedOps, Index, Origin, S),
      {committed, Tx, Height}};
 content_post_apply(
   #{status := rejected, change := Change, reason := Reason,
     height := Height}, Index, Origin, S) ->
     #transaction{tx_id = Tx} = Change,
-    notify_operation_projection(S#s.ns, Height, Change),
+    notify_operation_projection(S, Height, Change),
     {outcome_rejected(Change, Index, Origin, S),
      {rejected, Tx, Reason, Height}};
 content_post_apply(
@@ -6464,12 +6576,19 @@ content_post_apply(
     {none, {rejected, Tx, Reason}}.
 
 notify_operation_projection(
-  Ns, Height, #transaction{role = {remote_claim, _, _, _}} = Change) ->
-    quod_simplex:operation_projection(Ns, Height, Change);
-notify_operation_projection(
-  Ns, Height, #transaction{role = {remote_complete, _, _, _}} = Change) ->
-    quod_simplex:operation_projection(Ns, Height, Change);
-notify_operation_projection(_Ns, _Height, #transaction{}) ->
+  #s{ns = Ns, parked = Parked}, Height,
+  #transaction{tx_id = Tx, role = {Role, _, _, _}} = Change)
+  when Role =:= remote_claim; Role =:= remote_complete ->
+    %% The applying engine has no caller context. Only the exact live write
+    %% already parked at this owner can supply transient trace ancestry;
+    %% replay/recovery without that caller deliberately starts uncorrelated.
+    TraceCtx = case parked_trace_span(Tx, Parked) of
+                   SpanCtx when SpanCtx =/= undefined ->
+                       otel_tracer:set_current_span(otel_ctx:new(), SpanCtx);
+                   undefined -> otel_ctx:new()
+               end,
+    quod_simplex:operation_projection(Ns, Height, Change, TraceCtx);
+notify_operation_projection(_S, _Height, #transaction{}) ->
     ok.
 
 add_projection_stats(

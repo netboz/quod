@@ -619,15 +619,18 @@ certify_applied_many_with(_OwnerNs, _Requests, _TimeoutMs, _Dependencies) ->
 
 certify_applied_many_requests(OwnerNs, Requests, TimeoutMs, Dependencies) ->
     Parent = self(),
+    TraceCtx = quod_trace:context(),
     VerifyRef = make_ref(),
     Pending =
         lists:foldl(
           fun({Index, {Source, Claim, Evidence}}, Acc) ->
                   {Pid, Monitor} = spawn_opt(
                     fun() ->
-                        Result = certify_applied_with(
-                                   OwnerNs, Source, Claim, Evidence,
-                                   TimeoutMs, Dependencies),
+                        Result = quod_trace:with_optional_span(
+                                   TraceCtx, <<"quod.dtx.applied.verify">>, internal, #{},
+                                   fun() -> certify_applied_with(
+                                              OwnerNs, Source, Claim, Evidence,
+                                              TimeoutMs, Dependencies) end),
                         Parent ! {dtx_current_view_many, VerifyRef, self(),
                                   Index, Result}
                     end, [link, monitor]),
@@ -1074,12 +1077,16 @@ collect_outcomes(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
 
 collect_quorum(Tag, Sources, Needed, Deadline, Probe) ->
     Parent = self(),
+    TraceCtx = quod_trace:context(),
     ProbeRef = make_ref(),
     Pending = lists:foldl(
                 fun({Key, Source}, Acc) ->
                     {Pid, Monitor} = spawn_opt(
                       fun() ->
-                          Result = Probe(Key, Source),
+                          Result = quod_trace:with_optional_span(
+                                     TraceCtx, <<"quod.dtx.quorum.probe">>, client,
+                                     #{'quod.probe.family' => atom_to_binary(Tag, utf8)},
+                                     fun() -> Probe(Key, Source) end),
                           Parent ! {Tag, ProbeRef, self(), Key, Result}
                       end, [link, monitor]),
                     Acc#{Pid => {Monitor, Key}}

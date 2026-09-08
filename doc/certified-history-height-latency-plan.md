@@ -137,6 +137,13 @@ No implementation choice is approved merely by this hypothesis.
 
 ### 5.1 One correlated request
 
+The September 8 trace-completion work is documented in
+[single-write-trace-attribution.md](single-write-trace-attribution.md). Use the
+existing OpenTelemetry → Tempo → Grafana path first. It adds the missing
+source phases and cross-node context propagation without changing the H1/H2
+sequencing or the attribution gate below. A parent span or a node-wide scrape
+alone does not establish where a request spent its time.
+
 Extend the existing `quod_foreign_history_stage_seconds` owner rather than
 creating another metric family. Add only closed stage/result values needed to
 separate:
@@ -528,6 +535,14 @@ as a separate optimization. It must not be hidden by redefining this result.
 - Small documentation cleanup carried from the completion-lifecycle review:
   `quod_explorer_ws` still says every committed transaction emits a material
   runtime outcome; metadata does not. Its behavior is correct and unchanged.
+- The diagnostic-protection review also carries `quod_client_tls`'s raw
+  `ECPrivateKey` material as a later opaque-key-handle follow-up. The shared
+  structural log sanitizer already covers it; this is not a new H1 change.
+- Keep the README health-gate rule explicit in every fleet report: inspect
+  Erlang supervisor child restarts as well as Nomad task restarts. A zero
+  Nomad restart count does not establish a crash-free run. Any missing
+  child-restart metric belongs to that separately scoped health gate, not a
+  latency hypothesis.
 - L2 / write-lanes slices 6--8 remain parked.
 
 ## 10. Documentation amendments when implementation is reviewed

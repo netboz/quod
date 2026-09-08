@@ -387,7 +387,7 @@ public_wait_timeout_cancels_the_exact_wait_without_caller_death_test() ->
                      quod_simplex:await_operation_result(Ns, Ref, 1)),
         WaitRef = receive
             {timed_wait_call, Fake, {Test, _ReplyTag},
-             {await_operation_result, W, Ref}} when is_reference(W) -> W
+             {await_operation_result, W, Ref, _TraceCtx}} when is_reference(W) -> W
         after 1000 -> error(tagged_wait_request_missing)
         end,
         receive

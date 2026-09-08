@@ -162,10 +162,14 @@ start_operation_monitor(Owner, OwnerNs, OperationRef, Options)
        is_map(Options), map_size(Options) =:= 0 ->
     case valid_operation_ref(OwnerNs, OperationRef) of
         true ->
+            TraceCtx = quod_trace:context(),
             {Pid, Monitor} = spawn_monitor(
                                fun() ->
-                                   operation_init(
-                                     Owner, OwnerNs, OperationRef)
+                                   quod_trace:with_optional_span(
+                                     TraceCtx, <<"quod.operation.recover">>, internal,
+                                     #{'quod.namespace' => OwnerNs,
+                                       'quod.operation.id' => quod_trace:tx_id(element(5, OperationRef))},
+                                     fun() -> operation_init(Owner, OwnerNs, OperationRef) end)
                                end),
             {ok, Pid, Monitor};
         false ->
@@ -369,8 +373,10 @@ operation_refresh(Owner, OwnerMonitor,
 
 operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef,
                      Bound = #{target_ref := TargetRef, request_digest := Digest}) ->
-    case quod_simplex:operation_claim_evidence(
-           OwnerNs, ClaimSlot, OperationRef) of
+    case quod_trace:with_optional_span(
+           quod_trace:context(), <<"quod.operation.claim_evidence">>, internal,
+           #{'quod.namespace' => OwnerNs, 'quod.ledger.slot' => ClaimSlot},
+           fun() -> quod_simplex:operation_claim_evidence(OwnerNs, ClaimSlot, OperationRef) end) of
         {ok, ClaimRef, Claim} ->
             case operation_context(OwnerNs, OperationRef, ClaimRef, Claim) of
                 {ok, #{target_ref := TargetRef, request_digest := Digest} = Context} ->
@@ -395,8 +401,11 @@ operation_resolve_target(
     target := Target, target_ref := TargetRef} = Context) ->
     case operation_outcome_source(Target) of
         {ok, Source} ->
-            case quod_dtx_current_view:lookup_outcome(
-                   OwnerNs, Source, TargetRef, ?DEFAULT_REQUEST_TIMEOUT_MS) of
+            case quod_trace:with_optional_span(
+                   quod_trace:context(), <<"quod.operation.resolve_outcome">>, internal,
+                   #{'quod.namespace' => element(1, Target)},
+                   fun() -> quod_dtx_current_view:lookup_outcome(
+                              OwnerNs, Source, TargetRef, ?DEFAULT_REQUEST_TIMEOUT_MS) end) of
                 {ok, #{ref := TargetRef, status := committed}} ->
                     operation_deliver_resolved(Owner, OperationRef, committed, TargetRef);
                 {ok, #{ref := TargetRef, status := rejected, reason := Reason}}
@@ -471,9 +480,12 @@ operation_drive(Owner, OwnerMonitor,
         {ok, ClaimEvidence} ->
             Request = {apply_claim, RequestId, ClaimEvidence},
             Started = erlang:monotonic_time(),
-            Submission = quod_dtx_current_view:submit_claim_application(
-                           OwnerNs, Target, Claim, Request,
-                           ?DEFAULT_REQUEST_TIMEOUT_MS),
+            Submission = quod_trace:with_optional_span(
+                           quod_trace:context(), <<"quod.operation.target_application">>, client,
+                           #{'quod.namespace' => element(1, Target)},
+                           fun() -> quod_dtx_current_view:submit_claim_application(
+                                      OwnerNs, Target, Claim, Request,
+                                      ?DEFAULT_REQUEST_TIMEOUT_MS) end),
             ok = quod_metrics:observe_remote_operation_stage(
                    element(1, Target), target_application,
                    operation_target_metric_result(Submission),
@@ -588,8 +600,11 @@ operation_submit_complete(
         Complete = quod_transaction:attach_evidence(
                      Complete0, TargetCertifiedRef, TargetTransaction),
         Started = erlang:monotonic_time(),
-        Submission = quod_prolog:submit_role(
-                       OwnerNs, Complete, [], ?DEFAULT_REQUEST_TIMEOUT_MS),
+        Submission = quod_trace:with_optional_span(
+                       quod_trace:context(), <<"quod.operation.receipt">>, internal,
+                       #{'quod.namespace' => OwnerNs},
+                       fun() -> quod_prolog:submit_role(
+                                  OwnerNs, Complete, [], ?DEFAULT_REQUEST_TIMEOUT_MS) end),
         ok = quod_metrics:observe_remote_operation_stage(
                OwnerNs, completion,
                operation_completion_metric_result(Submission),

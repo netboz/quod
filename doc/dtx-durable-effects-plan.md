@@ -433,8 +433,8 @@ hard-break allocation:
 - `ATTESTATION_VERSION = 2`;
 - ordinary transaction wire V12;
 - scope wire V8 in that cut, including group and operation effect binding;
-  the current write-lanes Slice 4 source is V10 and carries certified reads
-  into ordinary target submission;
+  write-lanes Slice 4 advanced it to V10 for certified reads into ordinary
+  target submission; the later tracing cut uses V11 for transient W3C context;
 - process-free DTX endpoint V8, including exact signed operation
   cancellation and signed applied responses; and
 - effect-journal snapshot V6 / row V5.

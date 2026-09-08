@@ -268,7 +268,7 @@ The deployed tree uses one incompatible generation:
 | DTX manifest | V3 |
 | DTX control envelope | V2 |
 | DTX record family | V3 |
-| scope wire | deployed V8 in that review; current source V10 |
+| scope wire | deployed V8 in that review; V10 for read certification; V11 adds transient tracing metadata only |
 | scope authorization domain | V5 |
 | direct effect descriptor | V2 |
 | identity certificate | `quod.agent.identity.v1` |

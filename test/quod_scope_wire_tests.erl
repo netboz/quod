@@ -4,6 +4,23 @@
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_proof_limits.hrl").
 
+scope_open_trace_metadata_is_transient_and_fail_closed_test() ->
+    Carrier = [{<<"traceparent">>,
+                <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>}],
+    Authentication = signed_auth(<<"request">>, <<7:512>>),
+    Command = command({scope_open, Authentication, Carrier}),
+    {ok, Encoded} = quod_scope_wire:encode_command(Command),
+    ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Encoded)),
+    ?assertEqual(element(2, command({scope_open, Authentication, []})),
+                 element(2, Command)),
+    lists:foreach(fun(Operation) ->
+        ?assertMatch({error, {protocol_error, _}},
+                     quod_scope_wire:encode_command(command(Operation))),
+        ?assertMatch({error, {protocol_error, _}},
+                     quod_scope_wire:decode_request(raw_frame(command(Operation))))
+    end, [{scope_open, Authentication},
+          {scope_open, Authentication, [{<<"baggage">>, <<"private">>}]}]).
+
 all_command_shapes_roundtrip_deterministically_test() ->
     Goal = payload(goal, {lookup, item}),
     Answer = payload(answer, {item, found}),
@@ -12,8 +29,8 @@ all_command_shapes_roundtrip_deterministically_test() ->
     Manifest = payload(manifest, manifest()),
     GroupRef = group_ref(),
     Operations =
-        [{scope_open, node},
-         {scope_open, signed_auth(<<"request">>, <<7:512>>)},
+        [{scope_open, node, []},
+         {scope_open, signed_auth(<<"request">>, <<7:512>>), []},
          scope_close,
          scope_seal,
          {scope_attest, Manifest},
@@ -68,7 +85,7 @@ scope_v5_authentication_digest_is_exact_and_bounded_test() ->
        quod_scope_wire:authentication_digest(missing)).
 
 scope_v5_binding_rejects_principal_and_authentication_substitution_test() ->
-    Command = command({scope_open, node}),
+    Command = command({scope_open, node, []}),
     {scope_command, Binding, Seq, RequestId, Budget, Operation} = Command,
     ?assertMatch({ok, _}, quod_scope_wire:encode_command(Command)),
     ?assertEqual(
@@ -297,11 +314,11 @@ scope_namespace_uses_directory_bound_test() ->
     MaxNamespace =
         binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
     AtLimit = command_with_binding(
-                {scope_open, node}, binding_with_origin(MaxNamespace)),
+                {scope_open, node, []}, binding_with_origin(MaxNamespace)),
     ?assertMatch({ok, _}, quod_scope_wire:encode_command(AtLimit)),
     OversizedNamespace = <<MaxNamespace/binary, "n">>,
     TooLarge = command_with_binding(
-                 {scope_open, node},
+                 {scope_open, node, []},
                  binding_with_origin(OversizedNamespace)),
     ?assertEqual(
        {error, {protocol_error, bad_identity}},
@@ -475,7 +492,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
     Command = {scope_command,
                binding_with_origin(
                  binary:copy(<<"x">>, ?DIRECTORY_MAX_NAMESPACE_BYTES)),
-               1, id(1), 30000, {scope_open, node}},
+               1, id(1), 30000, {scope_open, node, []}},
     {ok, Encoded} = quod_scope_wire:encode_command(Command),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -496,7 +513,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, lists:seq(1, 7)),
+      end, lists:seq(1, 10)),
     WrongDomain = term_to_binary({<<"other.scope">>, 5, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
@@ -823,7 +840,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 10, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 11, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

@@ -8,8 +8,9 @@ transaction blobs form block payloads, block bytes form the consensus identity,
 and canonical entry envelopes carry those bytes plus finality evidence. Decoded
 records are local views, never a second identity. This is a ledger and wire
 format break folded into the coordinated Slice-6 clean re-found; there is no old
-decoder or compatibility path. The source identifiers are transaction V13,
-ledger-frame V5, canonical block/entry V1, and DTX-endpoint V9. R3 keeps
+decoder or compatibility path. That cut's identifiers are transaction V13,
+ledger-frame V5, canonical block/entry V1, and DTX-endpoint V9 (the later
+tracing-only transport cut advances the endpoint to V10). R3 keeps
 foreign application symbols opaque through catch-up, disk cache, projection,
 and certified-current reads; it also replaces fleet-local catch-up request
 references with binary ids. R4 proves that the plain-read committee filter

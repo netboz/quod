@@ -319,7 +319,8 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
         {ok, Handle} = gen_server:call(
                          Pid,
                          {scope_open, ScopeId, ProofId, Anchor, false,
-                          Deadline, {Ns, Anchor}, {node, Pubkey}, node}),
+                          Deadline, {Ns, Anchor}, {node, Pubkey}, node,
+                          otel_ctx:new()}),
         InvocationId = <<50:128>>,
         {ok, OpenRef} = quod_scope_session:invoke_open(
                           Handle, InvocationId,

@@ -1893,6 +1893,11 @@ replaces the old QUIC ask protocol outright:
    dirty field fails closed. Pids, references, interpreter state, overlays, and
    diffs never cross the wire. Live-scope duplicates are rejected; no replay
    cache or accepted-command redrive path is introduced.
+   V11 also carries bounded W3C trace context on scope opening, reusing the
+   existing `quod_trace` codec. It is transient transport metadata outside the
+   authentication binding and signed goal; target authentication and the
+   existing scope worker attach it explicitly for cross-node traces. It grants
+   no authority and creates no durable field or second channel.
 4. **Register before execution.** The origin router records a bounded pending
    open before sending it. The target opens the shared `quod_scope_session`,
    returns `opened`, and waits for the first explicit demand. Only after the

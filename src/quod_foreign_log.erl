@@ -1982,29 +1982,30 @@ selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
                     #history{projection = P, bootstrap_hints = B} -> {P, B};
                     undefined -> {undefined, bootstrap_hints(Identity, S)}
                 end,
-            {ok, #{live => Directory, supplied => Supplied,
+            {ok, #{request => [], live => Directory, supplied => Supplied,
                    bootstrap => Bootstrap, projection => Projection}}
     end.
 
 add_request_contact(none, Sources) ->
     Sources;
-add_request_contact({Peer, Endpoint}, #{live := Live} = Sources) ->
+add_request_contact({Peer, Endpoint}, Sources) ->
     %% The TLS-authenticated contact carrying this request is the freshest
-    %% first-party endpoint for its key. Keep it only in this work item: failed
-    %% ontology authentication must leave no remembered identity or address.
-    Sources#{live := [{Peer, Endpoint}
-                      | lists:keydelete(Peer, 1, Live)]}.
+    %% first-party endpoint for its key. Keep its provenance distinct and only
+    %% in this work item: failed ontology authentication must leave no
+    %% remembered identity or address, while both initial fetch and current-tip
+    %% confirmation can still prefer the exact contact over stale stored hints.
+    Sources#{request := [{Peer, Endpoint}]}.
 
-route_candidates(#{live := Live, supplied := Supplied,
+route_candidates(#{request := Request, live := Live, supplied := Supplied,
                    bootstrap := Bootstrap, projection := Projection} = Sources) ->
     case is_map(Projection) of
         true -> current_route_candidates(Sources, Projection);
-        false -> discovery_route_candidates(Live, Supplied, Bootstrap)
+        false -> discovery_route_candidates(Request, Live, Supplied, Bootstrap)
     end.
 
-discovery_route_candidates(Live, Supplied, Bootstrap) ->
+discovery_route_candidates(Request, Live, Supplied, Bootstrap) ->
     Routes = lists:sublist(
-               stable_unique_routes(Live ++ Supplied ++ Bootstrap),
+               stable_unique_routes(Request ++ Live ++ Supplied ++ Bootstrap),
                ?MAX_VALIDATORS),
     [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
 
@@ -2014,11 +2015,12 @@ discovery_route_candidates(Live, Supplied, Bootstrap) ->
 %% gains no vote and is never returned by route_hints/2 unless the fetched
 %% history itself later certifies its key as a current validator.
 history_source_candidates(
-  #{live := Live, supplied := Supplied,
+  #{request := Request, live := Live, supplied := Supplied,
     bootstrap := Bootstrap} = Sources) ->
     Certified = flatten_route_candidates(route_candidates(Sources)),
     Discovery = flatten_route_candidates(
-                  discovery_route_candidates(Live, Supplied, Bootstrap)),
+                  discovery_route_candidates(
+                    Request, Live, Supplied, Bootstrap)),
     lists:uniq(Certified ++ Discovery).
 
 history_fallback_sources(Sources, CertifiedHints) ->
@@ -4930,11 +4932,11 @@ persist_verified_page(
     end.
 
 current_route_candidates(
-  #{live := Live, supplied := Supplied,
+  #{request := Request, live := Live, supplied := Supplied,
     bootstrap := Bootstrap}, Projection) ->
     Committee = quod_simplex:history_committee(Projection),
     case Committee of
-        [] -> discovery_route_candidates(Live, Supplied, Bootstrap);
+        [] -> discovery_route_candidates(Request, Live, Supplied, Bootstrap);
         [_ | _] ->
             Certified = quod_simplex:history_validator_routes(Projection),
             CertifiedEndpoints = maps:from_keys(
@@ -4942,7 +4944,7 @@ current_route_candidates(
             lists:filtermap(
               fun(Peer) ->
                   Endpoints = current_peer_endpoints(
-                                Peer, Bootstrap, Live, Supplied,
+                                Peer, Request, Bootstrap, Live, Supplied,
                                 Certified, CertifiedEndpoints),
                   case Endpoints of
                       [] -> false;
@@ -4951,20 +4953,22 @@ current_route_candidates(
               end, Committee)
     end.
 
-current_peer_endpoints(Peer, Bootstrap, Live, Supplied,
+current_peer_endpoints(Peer, Request, Bootstrap, Live, Supplied,
                        Certified, CertifiedEndpoints) ->
+    RequestEndpoint = first_peer_endpoint(Peer, Request),
     Historical = maps:get(Peer, Certified, none),
     LiveEndpoint = first_live_endpoint(Peer, Bootstrap, Live),
     ThirdParty = permitted_supplied_endpoint(
                    Peer, Historical, Supplied, CertifiedEndpoints),
     lists:sublist(
       lists:uniq(
-        [Endpoint || Endpoint <- [LiveEndpoint, Historical, ThirdParty],
+        [Endpoint || Endpoint <- [RequestEndpoint, LiveEndpoint,
+                                  Historical, ThirdParty],
                      Endpoint =/= none]),
       2).
 
 empty_route_sources() ->
-    #{live => [], supplied => [], bootstrap => [],
+    #{request => [], live => [], supplied => [], bootstrap => [],
       projection => undefined}.
 
 first_live_endpoint(Peer, Bootstrap, Directory) ->

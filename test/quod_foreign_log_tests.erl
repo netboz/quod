@@ -3127,6 +3127,50 @@ request_scoped_contact_is_preferred_and_not_retained_on_failure_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+request_scoped_contact_precedes_stale_bootstrap_at_tip_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Stale = {"127.0.0.1", 19303},
+    Live = {"127.0.0.1", 19304},
+    TestPid = self(),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch = fun(P, Endpoint, RequestedNs, From, To) ->
+                    TestPid ! {request_tip_fetch, Endpoint},
+                    case Endpoint of
+                        Live -> BaseFetch(P, Endpoint, RequestedNs, From, To);
+                        _ -> {error, unavailable}
+                    end
+            end,
+    Dir = temp_dir("request-contact-tip"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        %% A retained contact can name the peer's previous allocation.  The
+        %% authenticated endpoint carrying this request must win both while
+        %% fetching genesis and while corroborating the resulting current tip.
+        quod_foreign_log:observe_candidate(Identity, {Peer, Stale}),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 2}},
+           quod_foreign_log:current(
+             route_candidates([{Peer, Stale}]), Identity,
+             {Peer, Live}, 5000)),
+        Calls = collect_request_tip_fetches([]),
+        ?assert(length(Calls) >= 2),
+        ?assert(lists:all(fun(Endpoint) -> Endpoint =:= Live end, Calls))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+collect_request_tip_fetches(Acc) ->
+    receive
+        {request_tip_fetch, Endpoint} ->
+            collect_request_tip_fetches([Endpoint | Acc])
+    after 0 ->
+        lists:reverse(Acc)
+    end.
+
 long_identity_convergence_survives_caller_timeout_test_() ->
     {timeout, 30,
      fun long_identity_convergence_survives_caller_timeout/0}.

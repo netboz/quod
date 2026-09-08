@@ -175,6 +175,16 @@ scope_authentication() ->
 -spec ensure_scope_authentication() ->
           {ok, quod_scope_wire:authentication()} | {error, term()}.
 ensure_scope_authentication() ->
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.scope.authentication_material">>,
+      internal, #{},
+      fun(SpanCtx) ->
+          Result = ensure_scope_authentication_inner(),
+          _ = quod_trace:result(SpanCtx, Result),
+          Result
+      end).
+
+ensure_scope_authentication_inner() ->
     Ctx0 = context(),
     case {Ctx0#ctx.request_evidence, Ctx0#ctx.agent_identity} of
         {none, none} -> {ok, node};

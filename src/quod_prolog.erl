@@ -4215,7 +4215,10 @@ run_origin_proof(
   Engine, Ref, Kind, ProofId, Deadline, Goal,
   #proof_request{expected_anchor = ExpectedAnchor} = Request,
   Ns, Applied, Est, Signer) ->
-    case quod_simplex:genesis_hash(Ns) of
+    case quod_trace:with_span(
+           quod_trace:context(), <<"quod.prolog.pin_origin">>, internal,
+           #{'quod.namespace' => Ns},
+           fun(_SpanCtx) -> quod_simplex:genesis_hash(Ns) end) of
         <<_:256>> = Anchor
           when ExpectedAnchor =:= any; ExpectedAnchor =:= Anchor ->
             run_pinned_origin(
@@ -4292,9 +4295,13 @@ run_pinned_origin(
                         undefined -> proof_principal(Signer);
                         _ -> Principal
                     end,
-    OriginHandle = quod_proof_context:start(
-                     ProofId, ReadOnly, OriginIdentity, Deadline,
-                     AuthPrincipal, RequestEvidence),
+    OriginHandle = quod_trace:with_span(
+      quod_trace:context(), <<"quod.prolog.context_start">>, internal, #{},
+      fun(_SpanCtx) ->
+          quod_proof_context:start(
+            ProofId, ReadOnly, OriginIdentity, Deadline,
+            AuthPrincipal, RequestEvidence)
+      end),
     OverlayOpts = #{read_set => true,
                     read_only => ReadOnly,
                     signer => Signer,
@@ -4304,14 +4311,19 @@ run_pinned_origin(
     try
         {ok, ScopeId,
          {local_scope, ScopeId, Ns, Anchor, Applied, Session}} =
-            quod_proof_context:get_or_open_scope(
-              OriginIdentity,
-              fun(NewScopeId) ->
-                  NewSession = quod_proof_session:start(
-                                 Est, OverlayOpts#{scope_id => NewScopeId}),
-                  {ok, self(),
-                   {local_scope, NewScopeId, Ns, Anchor,
-                    Applied, NewSession}}
+            quod_trace:with_span(
+              quod_trace:context(), <<"quod.prolog.origin_scope_open">>,
+              internal, #{},
+              fun(_SpanCtx) ->
+                  quod_proof_context:get_or_open_scope(
+                    OriginIdentity,
+                    fun(NewScopeId) ->
+                        NewSession = quod_proof_session:start(
+                          Est, OverlayOpts#{scope_id => NewScopeId}),
+                        {ok, self(),
+                         {local_scope, NewScopeId, Ns, Anchor,
+                          Applied, NewSession}}
+                    end)
               end),
         Origin = #pinned_origin{
                     engine = Engine, worker_ref = Ref,
@@ -4321,7 +4333,10 @@ run_pinned_origin(
                     namespace = Ns, anchor = Anchor, height = Applied,
                     context = Context, session = Session},
         try finalize_pinned_result(RunFun(Origin))
-        after quod_proof_session:stop(Session)
+        after
+            quod_trace:with_span(
+              quod_trace:context(), <<"quod.prolog.session_stop">>, internal,
+              #{}, fun(_SpanCtx) -> quod_proof_session:stop(Session) end)
         end
     after
         quod_proof_context:stop(
@@ -4472,9 +4487,14 @@ finish_pinned_proof(_Kind, _Origin, _Goal, Result) ->
 
 submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
     OriginIdentity = quod_proof_context:origin_identity(),
-    Route = route_plans(
-              Plans, OriginIdentity,
-              quod_proof_context:request_auth() =/= none),
+    Route = quod_trace:with_span(
+      quod_trace:context(), <<"quod.prolog.route_plans">>, internal,
+      #{'quod.plan.count' => map_size(Plans)},
+      fun(_SpanCtx) ->
+          route_plans(
+            Plans, OriginIdentity,
+            quod_proof_context:request_auth() =/= none)
+      end),
     RemoteClaim = case Route of
                       {remote_claim, _, _} -> true;
                       _ -> false

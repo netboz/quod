@@ -1,7 +1,9 @@
 # Single-write trace attribution
 
 Status: base instrumentation deployed in 0.7.146; aggregate ledger-open scan
-profiling added for 0.7.147 before the clean-ledger comparison.
+profiling deployed in 0.7.147. The temporary deep diagnostic hierarchy is
+implemented for the next coordinated deployment before the retained/clean
+ledger comparison.
 Baseline: 0.7.145, HEAD `8fdd2d2`, retained N=4 development fleet.
 
 ## Why this work
@@ -28,19 +30,31 @@ alongside the raw TSVs and driver stdout.
 | Span family | What its elapsed time covers |
 |---|---|
 | `quod.client.request` | Signed HTTP dispatch, including body admission and response formatting; not client-side network transit |
+| `quod.client.http_body` → `json_decode` → `dispatch` → `response_encode` | Request-body delivery, JSON parsing, application dispatch, and response serialization as separate HTTP-owner costs |
+| `quod.client.session_admission` / `decode_and_bind` / `gateway_signature_verify` | Browser-session admission, signed envelope decode/binding, and the gateway trust-boundary check |
+| `quod.client.local_target_lookup` / `gateway_route_lookup` / `forward_attempt` | Local ownership decision, directory lookup, and the exact forwarded attempt including its result handoff |
+| `quod.client.request_decode` / `request_crypto_verify` / `goal_decode` / `goal_materialize` / `target_execute` | Target-side trust-boundary decode, signature/network validation, atom-safe goal materialization, and entry into the one proof engine |
 | `quod.prolog.public_proof` | Source engine request, admission/scheduling, worker and result handoff |
 | `quod.prolog.prove` | Existing source proof worker lifetime |
-| Source proof children | Authorization, actual invocation, sealing, read certification, attestation, checkpoint/release, source claim and operation-result wait |
+| `quod.prolog.pin_origin` / `context_start` / `origin_scope_open` | Immutable origin identity lookup, proof-context allocation, and origin session allocation |
+| `quod.prolog.authorization` → `agent_key_check` / `acl_check` | Signed-agent key verification and the ontology's ordinary `can_invoke` proof, kept below the one authorization owner |
+| `quod.prolog.invocation` → `quod.proof_session.*` → `quod.erlog.*` | Session open/advance/publication, actual Erlog step, result interpretation, exposure guard, and binding materialization. External predicates such as `::` remain children of the Erlog step. |
+| Remaining source proof children | Sealing, read certification, attestation, checkpoint/release, source claim and operation-result wait |
 | `quod.outcome.admission` | Existing durable outcome-index admission before the transaction span starts |
 | `quod.prolog.apply` | One execution of the shared committed-block reducer for the exact locally parked writes |
 | `quod.outcome.flush` / `quod.mvcc.publish` | Outcome-index persistence versus publication of the committed state, inside the existing reducer |
 | `quod.ask.open` / `quod.ask.stream_next` | Remote scope opening and actual answer wait (not merely invoke acknowledgement) |
+| `quod.ask.directory_resolve` / `route_wait` / `verify_target_committee` | Directory read, event-driven route parking, and certified target-committee verification |
+| `quod.ask.remote_scope_open` / `invoke_open_request` / `bind_answer` | Remote scope transport open, invocation request, and returned-variable unification against the retained caller goal |
 | `quod.scope.authenticate` / scope invocation children | Target authentication and execution under the incoming request's trace context |
+| `quod.scope.authentication_material` | Reuse or construction of the signed agent authentication material carried to a foreign scope |
+| `quod.identity.certificate_collect` → route/build/open/collect children | Identity statement construction, route selection, signer opening, and quorum collection; no identity or peer value becomes a trace attribute |
 | `quod.operation.recover` and children | Existing operation worker, claim evidence, application request, terminal outcome resolution and asynchronous source receipt |
 | `quod.evidence.ledger_open` / `quod.evidence.read_at` | Existing full read-only ledger open versus the subsequent exact-slot read, distinguished as claim/application evidence |
 | `quod.ledger.file_open` / `quod.ledger.index_scan` / `quod.ledger.read_at` | File-descriptor open, full integrity/index scan, and exact sparse-index read. The single scan span reports entry/byte counts and aggregate framing/decode time; it deliberately does not emit one span per historical entry. |
 | `quod.dtx.endpoint.serve` / `quod.dtx.quorum.probe` | Existing target endpoint worker and parallel committee probes |
-| `quod.foreign.current` | Existing certified-history queue and verifier work, including H1 phase-index events |
+| `quod.foreign.current` → `owner_request` → `verification_worker` → `quod.foreign.<stage>` | The parked owner request crosses the gen_server and worker boundary with one context. Exclusive `owner_request` time identifies mailbox/park/wake delay; cache, ledger, projection, phase-index, page-fetch and quorum work are nested below the verifier. |
+| `quod.ledger.append_batch` → `datasync` | Canonical entry encoding/write time (aggregate attributes) and the authoritative ledger durability barrier |
 | `quod.proof_context.finalize` / `quod.proof_context.cleanup` | Proof-resource cleanup after the result is determined |
 
 The HTTP carrier is extracted at the HTTP owner. It crosses the existing

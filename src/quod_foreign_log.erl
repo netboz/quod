@@ -98,6 +98,7 @@ before that projection can be reused in memory.
 -define(MANIFEST_RESERVE_BYTES, 4096).
 -define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
 -define(MAX_CHANGED_HEADS, ?QUOD_MAX_PLAN_DIFF_OPS).
+-define(TRACE_STAGE_ACTIVE, {?MODULE, trace_stage_active}).
 
 -record(consumer, {
           pid :: pid(),
@@ -598,21 +599,15 @@ current(Routes0, Identity, Contact, TimeoutMs)
             case quod_reg:where(?KEY) of
                 Pid when is_pid(Pid) ->
                     StartedNative = erlang:monotonic_time(),
+                    {Ns, _Anchor} = Identity,
                     Result = quod_trace:with_span(
                                quod_trace:context(),
-                               <<"quod.foreign.current">>, internal, #{},
+                               <<"quod.foreign.current">>, internal,
+                               #{'quod.namespace' => Ns},
                                fun(SpanCtx) ->
-                                   TraceCtx = quod_trace:context(),
-                                   EnqueuedNative = erlang:monotonic_time(),
-                                   R =
-                                       try gen_server:call(
-                                             Pid,
-                                             {current, Routes, Identity,
-                                              Contact, TimeoutMs, TraceCtx,
-                                              EnqueuedNative},
-                                             TimeoutMs + 1000)
-                                       catch exit:_ -> {error, retry}
-                                       end,
+                                   R = foreign_current_owner_request(
+                                         Pid, Routes, Identity, Contact,
+                                         TimeoutMs),
                                    _ = quod_trace:result(SpanCtx, R),
                                    R
                                end),
@@ -627,6 +622,29 @@ current(Routes0, Identity, Contact, TimeoutMs)
     end;
 current(_Routes, _Identity, _Contact, _TimeoutMs) ->
     {error, bad_foreign_reference}.
+
+foreign_current_owner_request(Pid, Routes, Identity, Contact, TimeoutMs) ->
+    {Ns, _Anchor} = Identity,
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.foreign.owner_request">>, internal,
+      #{'quod.namespace' => Ns},
+      fun(SpanCtx) ->
+          %% The child context crosses the gen_server mailbox.  The verifier
+          %% worker and all of its fetch/fold children therefore sit below
+          %% this span; its exclusive time is the parked owner/mailbox wait.
+          TraceCtx = quod_trace:context(),
+          EnqueuedNative = erlang:monotonic_time(),
+          Result =
+              try gen_server:call(
+                    Pid,
+                    {current, Routes, Identity, Contact, TimeoutMs, TraceCtx,
+                     EnqueuedNative},
+                    TimeoutMs + 1000)
+              catch exit:_ -> {error, retry}
+              end,
+          _ = quod_trace:result(SpanCtx, Result),
+          Result
+      end).
 
 -doc "Start one monitored consumer of the shared certified target projection.".
 -spec follow({binary(), <<_:256>>}) ->
@@ -3757,9 +3775,13 @@ verification_worker(
     TraceCtx = verification_trace_context(Work),
     trace_foreign_event(TraceCtx, <<"foreign.current.worker.started">>, #{}),
     StartedNative = erlang:monotonic_time(),
-    Result0 = verification_work(
-                Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
-                RequestTimeout, Resident),
+    Result0 = traced_verification_work(
+                TraceCtx, Work,
+                fun() ->
+                    verification_work(
+                      Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
+                      RequestTimeout, Resident)
+                end),
     {Result, Meta0} = normalize_worker_result(Result0),
     Meta = close_worker_cache(Meta0),
     observe_foreign_stage(
@@ -3782,6 +3804,30 @@ trace_foreign_event(undefined, _Name, _Attributes) -> ok;
 trace_foreign_event(TraceCtx, Name, Attributes) ->
     _ = catch quod_trace:add_event(TraceCtx, Name, Attributes),
     ok.
+
+traced_verification_work(undefined, _Work, Fun) ->
+    Fun();
+traced_verification_work(TraceCtx, Work, Fun) ->
+    quod_trace:with_span(
+      TraceCtx, <<"quod.foreign.verification_worker">>, internal,
+      #{'quod.namespace' => verification_namespace(Work),
+        'quod.foreign.work' => atom_to_binary(verification_stage(Work), utf8)},
+      fun(SpanCtx) ->
+          Previous = put(?TRACE_STAGE_ACTIVE, true),
+          try
+              Result = Fun(),
+              _ = quod_trace:result(SpanCtx, Result),
+              Result
+          after
+              restore_trace_stage(Previous)
+          end
+      end).
+
+restore_trace_stage(undefined) -> erase(?TRACE_STAGE_ACTIVE);
+restore_trace_stage(Previous) -> put(?TRACE_STAGE_ACTIVE, Previous).
+
+verification_namespace({current_identity, _, {Ns, _Anchor}, _TraceCtx}) -> Ns;
+verification_namespace(_) -> <<"unknown">>.
 
 worker_trace_attributes(Resident, Meta) ->
     OldHeight = resident_height(Resident),
@@ -3825,16 +3871,30 @@ observe_foreign_stage(Stage, Result, StartedNative)
 
 measure_foreign_stage(Stage, Fun) ->
     StartedNative = erlang:monotonic_time(),
-    Result = Fun(),
+    Result = trace_foreign_stage(Stage, Fun),
     observe_foreign_stage(
       Stage, foreign_stage_result(Result), StartedNative),
     Result.
 
 measure_foreign_ok(Stage, Fun) ->
     StartedNative = erlang:monotonic_time(),
-    Result = Fun(),
+    Result = trace_foreign_stage(Stage, Fun),
     observe_foreign_stage(Stage, ok, StartedNative),
     Result.
+
+trace_foreign_stage(Stage, Fun) ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true ->
+            Name = <<"quod.foreign.", (atom_to_binary(Stage, utf8))/binary>>,
+            quod_trace:with_span(
+              quod_trace:context(), Name, internal, #{},
+              fun(SpanCtx) ->
+                  Result = Fun(),
+                  _ = quod_trace:result(SpanCtx, Result),
+                  Result
+              end);
+        _ -> Fun()
+    end.
 
 foreign_stage_result(true) -> ok;
 foreign_stage_result(ok) -> ok;

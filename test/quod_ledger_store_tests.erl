@@ -50,6 +50,7 @@ store_test_() ->
       fun t_chunked_marker_free_tail_trims/1,
       fun t_open_ro_reads/1,
       fun t_traced_open_profiles_scan_without_per_entry_spans/1,
+      fun t_traced_append_separates_encode_write_and_sync/1,
       fun t_open_ro_non_truncating/1,
       fun t_checkpointed_reads/1,
       fun t_trim_across_checkpoints/1,
@@ -288,6 +289,7 @@ t_traced_open_profiles_scan_without_per_entry_spans({Dir, Ns}) ->
                   ?assertEqual(Parent#span.span_id, Child#span.parent_span_id)
               end, [FileOpen, Scan, Read]),
             Attrs = otel_attributes:map(Scan#span.attributes),
+            ?assertEqual(Ns, maps:get('quod.namespace', Attrs)),
             ?assertEqual(3, maps:get('quod.ledger.entries', Attrs)),
             ?assert(maps:get('quod.ledger.bytes', Attrs) > 0),
             ?assert(maps:get('quod.ledger.framing_us', Attrs) >= 0),
@@ -297,6 +299,31 @@ t_traced_open_profiles_scan_without_per_entry_spans({Dir, Ns}) ->
                     error(per_entry_scan_span)
             after 0 -> ok
             end
+        end)
+    end.
+
+t_traced_append_separates_encode_write_and_sync({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        quod_trace_tests:with_tracer(fun() ->
+            quod_trace:with_span(
+              otel_ctx:new(), <<"ledger.append.parent">>, internal, #{},
+              fun(_Parent) ->
+                  {ok, S1} = quod_ledger_store:append(S0, [ent(1)]),
+                  ok = quod_ledger_store:close(S1)
+              end),
+            Parent = quod_trace_tests:take_span(<<"ledger.append.parent">>),
+            Append = quod_trace_tests:take_span(
+                       <<"quod.ledger.append_batch">>),
+            Sync = quod_trace_tests:take_span(<<"quod.ledger.datasync">>),
+            ?assertEqual(Parent#span.span_id, Append#span.parent_span_id),
+            ?assertEqual(Append#span.span_id, Sync#span.parent_span_id),
+            Attrs = otel_attributes:map(Append#span.attributes),
+            ?assertEqual(Ns, maps:get('quod.namespace', Attrs)),
+            ?assertEqual(1, maps:get('quod.ledger.entries', Attrs)),
+            ?assert(maps:get('quod.ledger.bytes', Attrs) > 0),
+            ?assert(maps:get('quod.ledger.encode_us', Attrs) >= 0),
+            ?assert(maps:get('quod.ledger.write_us', Attrs) >= 0)
         end)
     end.
 

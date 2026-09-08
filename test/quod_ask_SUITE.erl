@@ -393,12 +393,20 @@ remote_scope_trace_parentage(Config) ->
     %% target loads this suite's intentionally caller-only vocabulary.
     Collector = peer:call(Target, quod_trace_fixture, start, []),
     try
-        {Result, Public, Open} = peer:call(
-                                  Asker, quod_trace_fixture, prove,
-                                  [?ASKER_NS, {'::', ?NS, {diet, dog, {'D'}}}],
-                                  60000),
+        {Result, Public, Open, Directory, ScopeOpen, Request} = peer:call(
+                                                                 Asker,
+                                                                 quod_trace_fixture,
+                                                                 prove,
+                                                                 [?ASKER_NS,
+                                                                  {'::', ?NS,
+                                                                   {diet, dog,
+                                                                    {'D'}}}],
+                                                                 60000),
         ?assertMatch({ok, [#{'D' := {'$quod_symbol', <<"kibble">>}}], _}, Result),
         ?assertEqual(Public#span.trace_id, Open#span.trace_id),
+        ?assertEqual(Open#span.span_id, Directory#span.parent_span_id),
+        ?assertEqual(Directory#span.span_id, ScopeOpen#span.parent_span_id),
+        ?assertEqual(Open#span.span_id, Request#span.parent_span_id),
         Auth = peer:call(Target, quod_trace_fixture, take_span,
                          [Collector, <<"quod.scope.authenticate">>]),
         InvokeOpen = peer:call(Target, quod_trace_fixture, take_span,
@@ -409,7 +417,7 @@ remote_scope_trace_parentage(Config) ->
         %% and target invocation worker, not by a codec-only fixture.
         lists:foreach(fun(Span) ->
             ?assertEqual(Public#span.trace_id, Span#span.trace_id),
-            ?assertEqual(Open#span.span_id, Span#span.parent_span_id),
+            ?assertEqual(ScopeOpen#span.span_id, Span#span.parent_span_id),
             ?assert(Span#span.parent_span_is_remote),
             ?assert(Span#span.end_time >= Span#span.start_time)
         end, [Auth, InvokeOpen, InvokeNext])

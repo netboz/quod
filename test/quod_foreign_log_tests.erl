@@ -1,6 +1,7 @@
 -module(quod_foreign_log_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
@@ -406,6 +407,40 @@ current_view_nonoverlapping_stages_explain_enclosing_request_test() ->
               ?assert(Explained =< Total * 1.10),
               ?assert(Explained >= Total * 0.90)
           end)
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+current_view_trace_crosses_owner_and_worker_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Routes = route_candidates([{Peer, {"127.0.0.1", 31989}}]),
+    Dir = temp_dir("current-trace-parentage"),
+    Pid = start_owner(Dir, peer_chain_fetch(
+                             Ns, maps:get(chain, Fixture), [Peer])),
+    try
+        quod_trace_tests:with_tracer(fun() ->
+            ?assertMatch({ok, #{identity := Identity}},
+                         quod_foreign_log:current(
+                           Routes, Identity, 5000)),
+            Current = quod_trace_tests:take_span(
+                        <<"quod.foreign.current">>),
+            OwnerRequest = quod_trace_tests:take_span(
+                             <<"quod.foreign.owner_request">>),
+            Verification = quod_trace_tests:take_span(
+                             <<"quod.foreign.verification_worker">>),
+            ?assertEqual(Current#span.trace_id,
+                         OwnerRequest#span.trace_id),
+            ?assertEqual(Current#span.span_id,
+                         OwnerRequest#span.parent_span_id),
+            ?assertEqual(OwnerRequest#span.trace_id,
+                         Verification#span.trace_id),
+            ?assertEqual(OwnerRequest#span.span_id,
+                         Verification#span.parent_span_id)
+        end)
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)

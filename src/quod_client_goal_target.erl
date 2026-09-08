@@ -23,16 +23,22 @@ does not classify predicates or authorize goals.
           {ok, quod_client_goal:evidence()} | {error, term()}.
 verify_request(RequestBytes, Signature) ->
     Started = erlang:monotonic_time(),
-    case quod_client_goal:decode(RequestBytes) of
+    case trace_stage(
+           <<"quod.client.request_decode">>, internal,
+           fun() -> quod_client_goal:decode(RequestBytes) end) of
         {ok, #{agent_namespace := Ns,
                agent_genesis_anchor := Anchor}} ->
-            Result = case network_identity() of
-                         {ok, Network} ->
-                             quod_client_goal:verify_for(
-                               RequestBytes, Signature, Network, {Ns, Anchor},
-                               quod_time:now_ms());
-                         {error, _} = Error -> Error
-                     end,
+            Result = trace_stage(
+              <<"quod.client.request_crypto_verify">>, internal,
+              fun() ->
+                  case network_identity() of
+                      {ok, Network} ->
+                          quod_client_goal:verify_for(
+                            RequestBytes, Signature, Network, {Ns, Anchor},
+                            quod_time:now_ms());
+                      {error, _} = Error -> Error
+                  end
+              end),
             ok = quod_metrics:observe_remote_operation_stage(
                    Ns, gateway_verification, metric_result(Result),
                    erlang:monotonic_time() - Started),
@@ -124,10 +130,16 @@ prepare_materialized(
     case valid_mode_binding(Mode, CursorBinding) of
         false -> {error, invalid_request};
         true ->
-            case quod_durable_term:decode_goal(GoalBlob) of
+            case trace_stage(
+                   <<"quod.client.goal_decode">>, internal,
+                   fun() -> quod_durable_term:decode_goal(GoalBlob) end) of
                 {ok, OwnerGoal} ->
-                    case quod_client_auth:materialize_request(
-                           SigningKey, Peer, AgentRef, OwnerGoal) of
+                    case trace_stage(
+                           <<"quod.client.goal_materialize">>, internal,
+                           fun() ->
+                               quod_client_auth:materialize_request(
+                                 SigningKey, Peer, AgentRef, OwnerGoal)
+                           end) of
                         {ok, _MaterializedAgentRef, Goal} ->
                             {ok, {Evidence, Goal, {agent, AgentRef}, Owner}};
                         {error, _} = Error -> Error
@@ -152,15 +164,30 @@ valid_mode_binding(_, _) -> false.
                   operation_conflict}.
 execute(#{request := #{mode := cursor}} = Evidence, Goal, Principal,
         Owner, <<_:256>> = CursorId) ->
-    normalized(
-      Evidence,
-      quod_client_cursor:open(Owner, CursorId, Evidence, Goal, Principal));
+    trace_stage(
+      <<"quod.client.target_execute">>, internal,
+      fun() ->
+          normalized(
+            Evidence,
+            quod_client_cursor:open(
+              Owner, CursorId, Evidence, Goal, Principal))
+      end);
 execute(#{request := #{mode := read}} = Evidence, Goal, Principal,
         _Owner, none) ->
-    normalized(Evidence, quod_prolog:execute_signed(Evidence, Goal, Principal));
+    trace_stage(
+      <<"quod.client.target_execute">>, internal,
+      fun() ->
+          normalized(
+            Evidence, quod_prolog:execute_signed(Evidence, Goal, Principal))
+      end);
 execute(#{request := #{mode := execute}} = Evidence, Goal, Principal,
         _Owner, none) ->
-    normalized(Evidence, quod_prolog:execute_signed(Evidence, Goal, Principal)).
+    trace_stage(
+      <<"quod.client.target_execute">>, internal,
+      fun() ->
+          normalized(
+            Evidence, quod_prolog:execute_signed(Evidence, Goal, Principal))
+      end).
 
 normalized(Evidence, {ok, Evidence, Raw}) ->
     observe_target_outcome(Evidence, Raw),
@@ -197,3 +224,12 @@ network_identity() ->
         {ok, <<_:256>> = Network} -> {ok, Network};
         _ -> {error, signed_goal_unavailable}
     end.
+
+trace_stage(Name, Kind, Fun) ->
+    quod_trace:with_span(
+      quod_trace:context(), Name, Kind, #{},
+      fun(SpanCtx) ->
+          Result = Fun(),
+          _ = quod_trace:result(SpanCtx, Result),
+          Result
+      end).

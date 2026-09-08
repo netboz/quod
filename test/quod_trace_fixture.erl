@@ -55,5 +55,8 @@ prove(Namespace, Goal) ->
         Result = quod_prolog:prove(Namespace, Goal),
         {Result,
          quod_trace_tests:take_span(<<"quod.prolog.public_proof">>),
-         quod_trace_tests:take_span(<<"quod.ask.open">>)}
+         quod_trace_tests:take_span(<<"quod.ask.open">>),
+         quod_trace_tests:take_span(<<"quod.ask.directory_resolve">>),
+         quod_trace_tests:take_span(<<"quod.ask.remote_scope_open">>),
+         quod_trace_tests:take_span(<<"quod.ask.invoke_open_request">>)}
     end).

@@ -150,8 +150,9 @@ open(Ns, DataDir, SymbolMode)
     Dir = ns_dir(DataDir, Ns),
     ok = filelib:ensure_path(Dir),
     LogPath = filename:join(Dir, "log.0001"),
-    {ok, Fd} = traced_file_open(LogPath, [read, write, raw, binary], read_write),
-    {Cps, LastI, BaseOff} = scan(Fd, trim, SymbolMode),
+    {ok, Fd} = traced_file_open(
+                 LogPath, [read, write, raw, binary], read_write, Ns),
+    {Cps, LastI, BaseOff} = scan(Fd, trim, SymbolMode, Ns),
     {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                 last_index = LastI, base_offset = BaseOff,
                 symbol_mode = SymbolMode}}.
@@ -174,10 +175,11 @@ open_ro(Ns, DataDir, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     Dir = ns_dir(DataDir, Ns),
     case traced_file_open(
-           filename:join(Dir, "log.0001"), [read, raw, binary], read_only) of
+           filename:join(Dir, "log.0001"), [read, raw, binary], read_only,
+           Ns) of
         {ok, Fd} ->
             try
-                {Cps, LastI, BaseOff} = scan(Fd, stop, SymbolMode),
+                {Cps, LastI, BaseOff} = scan(Fd, stop, SymbolMode, Ns),
                 {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                             last_index = LastI, base_offset = BaseOff,
                             symbol_mode = SymbolMode}}
@@ -213,7 +215,8 @@ resume(#session{dir = Dir, ns = Ns, cps = Cps,
                 last_index = LastIndex, base_offset = BaseOffset,
                 symbol_mode = SymbolMode}) ->
     LogPath = filename:join(Dir, "log.0001"),
-    case file:open(LogPath, [read, write, raw, binary]) of
+    case traced_file_open(
+           LogPath, [read, write, raw, binary], read_write, Ns) of
         {ok, Fd} ->
             case file:position(Fd, eof) of
                 {ok, BaseOffset} ->
@@ -243,7 +246,7 @@ open_ro_snapshot(#session{dir = Dir, ns = Ns, cps = Cps,
                 last_index = LastIndex, base_offset = BaseOffset,
                 symbol_mode = SymbolMode}) ->
     LogPath = filename:join(Dir, "log.0001"),
-    case file:open(LogPath, [read, raw, binary]) of
+    case traced_file_open(LogPath, [read, raw, binary], read_only, Ns) of
         {ok, Fd} ->
             case file:position(Fd, eof) of
                 {ok, CurrentSize} when CurrentSize >= BaseOffset ->
@@ -273,19 +276,41 @@ batch; returns only after it completes (the entries are durable before
 """.
 -spec append(handle(), [#entry{}]) -> {ok, handle()}.
 append(S, []) -> {ok, S};
-append(S = #store{log_fd = Fd, base_offset = Off0, cps = Cps0,
+append(S = #store{ns = Ns, log_fd = Fd, base_offset = Off0, cps = Cps0,
                   last_index = LI0}, Entries) ->
     ok = assert_contiguous(LI0, Entries),
-    {Off1, Cps1, LI1} =
-        lists:foldl(
-          fun(E = #entry{index = I}, {Off, Cps, _LI}) ->
-                  {ok, Payload} = quod_ledger:encode_entry(E),
-                  Frame   = frame(Payload),
-                  ok = file:pwrite(Fd, Off, Frame),
-                  {Off + byte_size(Frame), checkpoint(I, Off, Cps), I}
-          end, {Off0, Cps0, LI0}, Entries),
-    ok = file:datasync(Fd),
-    {ok, S#store{base_offset = Off1, cps = Cps1, last_index = LI1}}.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ledger.append_batch">>, internal,
+      #{'quod.namespace' => Ns,
+        'quod.ledger.entries' => length(Entries)},
+      fun(SpanCtx) ->
+          {Off1, Cps1, LI1, EncodeNative, WriteNative} =
+              lists:foldl(
+                fun(E = #entry{index = I},
+                    {Off, Cps, _LI, Encode0, Write0}) ->
+                        EncodeStarted = erlang:monotonic_time(),
+                        {ok, Payload} = quod_ledger:encode_entry(E),
+                        Frame = frame(Payload),
+                        Encode1 = Encode0 +
+                                  erlang:monotonic_time() - EncodeStarted,
+                        WriteStarted = erlang:monotonic_time(),
+                        ok = file:pwrite(Fd, Off, Frame),
+                        Write1 = Write0 +
+                                 erlang:monotonic_time() - WriteStarted,
+                        {Off + byte_size(Frame), checkpoint(I, Off, Cps), I,
+                         Encode1, Write1}
+                end, {Off0, Cps0, LI0, 0, 0}, Entries),
+          _ = quod_trace:set_attributes(
+                SpanCtx,
+                #{'quod.ledger.bytes' => Off1 - Off0,
+                  'quod.ledger.encode_us' => native_us(EncodeNative),
+                  'quod.ledger.write_us' => native_us(WriteNative)}),
+          ok = quod_trace:with_span(
+                 quod_trace:context(), <<"quod.ledger.datasync">>, internal,
+                 #{'quod.namespace' => Ns},
+                 fun(_SyncSpan) -> file:datasync(Fd) end),
+          {ok, S#store{base_offset = Off1, cps = Cps1, last_index = LI1}}
+      end).
 
 %% Record entry `I`'s frame offset in the sparse index when it opens a checkpoint stride
 %% (entries are contiguous from 1, so strides begin at 1, 257, 513, …).
@@ -299,10 +324,10 @@ checkpoint(_I, _Off, Cps)                             -> Cps.
 -doc "Read the entry at `Index`, verifying its CRC and its identity (`#entry.index =:= Index`).".
 -spec read_at(handle(), pos_integer()) -> {ok, #entry{}} | not_found.
 read_at(#store{last_index = LI}, Index) when Index < 1; Index > LI -> not_found;
-read_at(S, Index) ->
+read_at(S = #store{ns = Ns}, Index) ->
     quod_trace:with_optional_span(
       quod_trace:context(), <<"quod.ledger.read_at">>, internal,
-      #{'quod.ledger.slot' => Index},
+      #{'quod.namespace' => Ns, 'quod.ledger.slot' => Index},
       fun() ->
           {ok, [E]} = read_range(S, Index, Index),
           {ok, E}
@@ -463,10 +488,11 @@ fill(Fd, Off, Buf, Need) ->
 %% contiguity from index 1. `Mode` decides what a bad tail does: the WRITER (`trim`)
 %% recovers/fail-stops; a READ-ONLY view (`stop`) only bounds itself — it must never
 %% mutate the live writer's file.
-scan(Fd, Mode, SymbolMode) ->
+scan(Fd, Mode, SymbolMode, Ns) ->
     quod_trace:with_span(
       quod_trace:context(), <<"quod.ledger.index_scan">>, internal,
-      #{'quod.ledger.open_mode' => open_mode(Mode)},
+      #{'quod.namespace' => Ns,
+        'quod.ledger.open_mode' => open_mode(Mode)},
       fun(SpanCtx) ->
           {Cps, LastI, BaseOff, Frames, FramingNative, DecodeNative} =
               scan(Fd, {0, <<>>}, <<>>, 0, Mode, SymbolMode, 0, 0, 0),
@@ -532,10 +558,11 @@ scan(Fd, Cur = {Off, _}, Cps, LastI, Mode, SymbolMode,
 with_scan_stats({Cps, LastI, BaseOff}, Frames, FramingNative, DecodeNative) ->
     {Cps, LastI, BaseOff, Frames, FramingNative, DecodeNative}.
 
-traced_file_open(Path, Options, Mode) ->
+traced_file_open(Path, Options, Mode, Ns) ->
     quod_trace:with_optional_span(
       quod_trace:context(), <<"quod.ledger.file_open">>, internal,
-      #{'quod.ledger.open_mode' => atom_to_binary(Mode)},
+      #{'quod.namespace' => Ns,
+        'quod.ledger.open_mode' => atom_to_binary(Mode)},
       fun() -> file:open(Path, Options) end).
 
 open_mode(trim) -> <<"read_write">>;

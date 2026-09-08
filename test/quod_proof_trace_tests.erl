@@ -13,6 +13,22 @@ ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test() ->
             Authorization = quod_trace_tests:take_span(
                               <<"quod.prolog.authorization">>),
             Invocation = quod_trace_tests:take_span(<<"quod.prolog.invocation">>),
+            PinOrigin = quod_trace_tests:take_span(<<"quod.prolog.pin_origin">>),
+            ContextStart = quod_trace_tests:take_span(
+                             <<"quod.prolog.context_start">>),
+            OriginOpen = quod_trace_tests:take_span(
+                           <<"quod.prolog.origin_scope_open">>),
+            SessionOpen = quod_trace_tests:take_span(
+                            <<"quod.proof_session.open">>),
+            FirstResult = quod_trace_tests:take_span(
+                            <<"quod.proof_session.first_result">>),
+            Advance = quod_trace_tests:take_span(
+                        <<"quod.proof_session.advance">>),
+            ErlogStep = quod_trace_tests:take_span(<<"quod.erlog.step">>),
+            Interpret = quod_trace_tests:take_span(
+                          <<"quod.erlog.interpret_result">>),
+            Exposure = quod_trace_tests:take_span(
+                         <<"quod.erlog.exposure_guard">>),
             Seal = quod_trace_tests:take_span(<<"quod.proof_context.seal">>),
             Finalize = quod_trace_tests:take_span(
                          <<"quod.proof_context.finalize">>),
@@ -20,7 +36,13 @@ ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test() ->
                         <<"quod.proof_context.cleanup">>),
             assert_child(Public, Worker),
             lists:foreach(fun(Child) -> assert_child(Worker, Child) end,
-                          [Authorization, Invocation, Seal, Finalize, Cleanup]),
+                          [PinOrigin, ContextStart, OriginOpen, Authorization,
+                           Invocation, Seal, Finalize, Cleanup]),
+            assert_child(Invocation, SessionOpen),
+            assert_child(Invocation, FirstResult),
+            assert_child(FirstResult, Advance),
+            lists:foreach(fun(Child) -> assert_child(Advance, Child) end,
+                          [ErlogStep, Interpret, Exposure]),
             %% A seal span must not accidentally wrap downstream submission or
             %% final cleanup. Cached finalize(commit) must not seal a second time.
             ordered([Authorization, Invocation, Seal, Finalize, Cleanup]),

@@ -259,15 +259,30 @@ next_checked(Handle, InvocationId, State0) ->
         {ok, active} ->
             {error, invocation_active};
         {ok, {idle, Scope0, Selection0}} ->
-            Scope1 = quod_proof_scope:rebase(
-                       Scope0, State0#session_state.current),
+            Scope1 = quod_trace:with_span(
+                       quod_trace:context(),
+                       <<"quod.proof_session.rebase">>, internal, #{},
+                       fun(_SpanCtx) ->
+                           quod_proof_scope:rebase(
+                             Scope0, State0#session_state.current)
+                       end),
             mark_active(Handle, InvocationId, State0),
             Metadata = context(quod_proof_scope:state(Scope1)),
-            {Step, Selection1} = quod_transaction_scope:with_invocation(
-                                   {State0#session_state.scope_id, InvocationId},
-                                   Selection0, Metadata,
-                                   fun() -> quod_proof_scope:next(Scope1) end),
-            finish_step(Handle, InvocationId, Step, Selection1)
+            {Step, Selection1} = quod_trace:with_span(
+              quod_trace:context(), <<"quod.proof_session.advance">>, internal,
+              #{},
+              fun(_SpanCtx) ->
+                  quod_transaction_scope:with_invocation(
+                    {State0#session_state.scope_id, InvocationId},
+                    Selection0, Metadata,
+                    fun() -> quod_proof_scope:next(Scope1) end)
+              end),
+            quod_trace:with_span(
+              quod_trace:context(), <<"quod.proof_session.publish_step">>,
+              internal, #{},
+              fun(_SpanCtx) ->
+                  finish_step(Handle, InvocationId, Step, Selection1)
+              end)
     end.
 
 -doc "Discard one continuation without rolling back staged ontology writes.".
@@ -761,8 +776,18 @@ run_first_with_dependencies(Goal, #est{} = Est, OverlayOpts)
                  quod_transaction_scope:selection()) ->
           {ok, map(), list(), map()} | {fail, [term()]} | {error, term()}.
 open_first(Handle, InvocationId, Goal, Verdict, Context, Selection) ->
-    case open(Handle, InvocationId, Goal, Verdict, Context, Selection) of
-        ok -> first_result(Handle, InvocationId);
+    OpenResult = quod_trace:with_span(
+                   quod_trace:context(), <<"quod.proof_session.open">>,
+                   internal, #{},
+                   fun(_SpanCtx) ->
+                       open(Handle, InvocationId, Goal, Verdict,
+                            Context, Selection)
+                   end),
+    case OpenResult of
+        ok -> quod_trace:with_span(
+                quod_trace:context(), <<"quod.proof_session.first_result">>,
+                internal, #{},
+                fun(_SpanCtx) -> first_result(Handle, InvocationId) end);
         {error, _} = Error -> Error
     end.
 

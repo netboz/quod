@@ -154,15 +154,19 @@ emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
     end.
 
 bind_answer(GoalTerm, Sol, Bs, Vn) ->
-    {Grafted, Vn1} = graft(Sol, Vn),
-    %% Atom and opaque spellings denote one Prolog symbol. The caller's
-    %% retained goal spelling wins; any remaining mismatch is a protocol error.
-    {NormalizedGoal, NormalizedAnswer} =
-        quod_wire_term:normalize_answer_symbols(GoalTerm, Grafted),
-    case erlog_int:unify(NormalizedGoal, NormalizedAnswer, Bs) of
-        {succeed, Bs1} -> {ok, Bs1, Vn1};
-        fail -> {error, {protocol_error, answer_binding}}
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ask.bind_answer">>, internal, #{},
+      fun(_SpanCtx) ->
+          {Grafted, Vn1} = graft(Sol, Vn),
+          %% Atom and opaque spellings denote one Prolog symbol. The caller's
+          %% retained goal spelling wins; any remaining mismatch is a protocol error.
+          {NormalizedGoal, NormalizedAnswer} =
+              quod_wire_term:normalize_answer_symbols(GoalTerm, Grafted),
+          case erlog_int:unify(NormalizedGoal, NormalizedAnswer, Bs) of
+              {succeed, Bs1} -> {ok, Bs1, Vn1};
+              fail -> {error, {protocol_error, answer_binding}}
+          end
+      end).
 
 -ifdef(TEST).
 test_bind_answer(Goal, Answer) ->
@@ -320,16 +324,21 @@ open_cohosted_scope(Target, Anchor, ScopeId) ->
     end.
 
 open_directory_scope(Target) ->
-    case quod_directory:resolve(Target) of
-        unknown -> {error, {unknown_ontology, Target}};
-        {known, []} -> await_known_directory_scope(Target);
-        {known, Routes} ->
-            case [Route || Route = #{status := confirmed, role := validator}
-                               <- Routes] of
-                [] -> await_known_directory_scope(Target);
-                _ -> choose_directory_scope(Target, Routes)
-            end
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ask.directory_resolve">>, internal,
+      #{'quod.namespace' => Target},
+      fun(_SpanCtx) ->
+          case quod_directory:resolve(Target) of
+              unknown -> {error, {unknown_ontology, Target}};
+              {known, []} -> await_known_directory_scope(Target);
+              {known, Routes} ->
+                  case [Route || Route = #{status := confirmed,
+                                           role := validator} <- Routes] of
+                      [] -> await_known_directory_scope(Target);
+                      _ -> choose_directory_scope(Target, Routes)
+                  end
+          end
+      end).
 
 await_known_directory_scope(Target) ->
     case quod_directory:known_identities(Target) of
@@ -337,8 +346,13 @@ await_known_directory_scope(Target) ->
             case execution_remaining_ms() of
                 0 -> {error, current_proof_limit()};
                 RemainingMs ->
-                    case quod_directory:await_validator_routes(
-                           Identity, RemainingMs) of
+                    case quod_trace:with_span(
+                           quod_trace:context(), <<"quod.ask.route_wait">>,
+                           internal, #{'quod.namespace' => Target},
+                           fun(_SpanCtx) ->
+                               quod_directory:await_validator_routes(
+                                 Identity, RemainingMs)
+                           end) of
                         {ok, Routes} -> choose_directory_scope(Target, Routes);
                         {error, anchor_conflict} ->
                             {error, {anchor_conflict, Target}};
@@ -386,24 +400,32 @@ verified_plain_read_routes(Target, Anchor, Routes) ->
     end.
 
 verify_target_committee_routes(Target, Anchor, Routes) ->
-    case execution_remaining_ms() of
-        0 -> {error, current_proof_limit()};
-        RemainingMs ->
-            Sources = [{Key, [Endpoint]}
-                       || #{node_key := <<_:256>> = Key,
-                            endpoint := Endpoint} <- Routes,
-                          quod_quic:valid_endpoint(Endpoint)],
-            case quod_foreign_log:current(
-                   Sources, {Target, Anchor}, RemainingMs) of
-                {ok, Projection} ->
-                    Committee = quod_simplex:history_committee(Projection),
-                    case committee_routes(Routes, Committee) of
-                        [] -> {error, {ontology_unreachable, Target}};
-                        Verified -> {ok, Verified}
-                    end;
-                {error, _} -> {error, {ontology_unreachable, Target}}
-            end
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ask.verify_target_committee">>, internal,
+      #{'quod.namespace' => Target,
+        'quod.route.candidates' => length(Routes)},
+      fun(_SpanCtx) ->
+          case execution_remaining_ms() of
+              0 -> {error, current_proof_limit()};
+              RemainingMs ->
+                  Sources = [{Key, [Endpoint]}
+                             || #{node_key := <<_:256>> = Key,
+                                  endpoint := Endpoint} <- Routes,
+                                quod_quic:valid_endpoint(Endpoint)],
+                  case quod_foreign_log:current(
+                         Sources, {Target, Anchor}, RemainingMs) of
+                      {ok, Projection} ->
+                          Committee =
+                              quod_simplex:history_committee(Projection),
+                          case committee_routes(Routes, Committee) of
+                              [] -> {error, {ontology_unreachable, Target}};
+                              Verified -> {ok, Verified}
+                          end;
+                      {error, _} ->
+                          {error, {ontology_unreachable, Target}}
+                  end
+          end
+      end).
 
 committee_routes(Routes, Committee) ->
     [Route || Route = #{node_key := Key} <- Routes,
@@ -432,7 +454,12 @@ open_remote_routes(Target, Anchor, ScopeId,
                    quod_proof_context:proof_id(), ScopeId,
                    quod_proof_context:origin_identity(), {Target, Anchor}, Mode,
                    quod_proof_context:principal(), AuthenticationDigest},
-        case ensure_remote_scope(Endpoint, Binding, Authentication) of
+        case quod_trace:with_span(
+               quod_trace:context(), <<"quod.ask.remote_scope_open">>, client,
+               #{'quod.namespace' => Target},
+               fun(_SpanCtx) ->
+                   ensure_remote_scope(Endpoint, Binding, Authentication)
+               end) of
         {ok, Handle} ->
             {ok, quod_scope_session:pid(Handle), Handle};
         {error, Reason} ->
@@ -606,7 +633,14 @@ execution_remaining_ms() ->
         error -> quod_proof_context:remaining_ms()
     end.
 
-open_scope_invocation(
+open_scope_invocation(Handle, Goal, Chain, Selection) ->
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ask.invoke_open_request">>, client, #{},
+      fun(_SpanCtx) ->
+          open_scope_invocation_impl(Handle, Goal, Chain, Selection)
+      end).
+
+open_scope_invocation_impl(
   {local_scope, ScopeId, Ns, Anchor, Height, Session},
   Goal, Chain, Selection) ->
     InvocationId = crypto:strong_rand_bytes(16),
@@ -618,7 +652,7 @@ open_scope_invocation(
                  InvocationId, Selection, 1});
         {error, TargetReason} -> {error, TargetReason}
     end;
-open_scope_invocation(Handle, Goal, Chain, Selection) ->
+open_scope_invocation_impl(Handle, Goal, Chain, Selection) ->
     InvocationId = crypto:strong_rand_bytes(16),
     case quod_scope_session:invoke_open(
            Handle, InvocationId, Goal, Chain, Selection) of
@@ -1397,7 +1431,13 @@ authenticate_agent(Principal = {agent, _}, SigningKey,
             #est{db = #db{ref = ReadOverlay}} = Wrapped,
             try case agent_key_goal(Identity, Principal, SigningKey) of
                     {ok, KeyGoal} ->
-                        case prove_bool(KeyGoal, Wrapped) of
+                        case quod_trace:with_span(
+                               quod_trace:context(),
+                               <<"quod.prolog.agent_key_check">>, internal,
+                               #{'quod.namespace' => Ns},
+                               fun(_SpanCtx) ->
+                                   prove_bool(KeyGoal, Wrapped)
+                               end) of
                             true ->
                                 {true,
                                  quod_erlog_db_local_prove:get_read_set(
@@ -1430,7 +1470,11 @@ authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
     #est{db = #db{ref = PolicyOverlay}} = Wrapped,
         try case authorization_goal(
                {Ns, Anchor}, Goal, Principal, Chain) of
-            {ok, PolicyGoal} -> prove_bool(PolicyGoal, Wrapped);
+            {ok, PolicyGoal} ->
+                quod_trace:with_span(
+                  quod_trace:context(), <<"quod.prolog.acl_check">>,
+                  internal, #{'quod.namespace' => Ns},
+                  fun(_SpanCtx) -> prove_bool(PolicyGoal, Wrapped) end);
             error -> false
         end
     after

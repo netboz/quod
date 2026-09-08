@@ -253,7 +253,8 @@ identity(Evidence, <<_:256>> = ProofId, RemainingMs)
       fun(Router) ->
           guarded_call(
             Router,
-            {identity, self(), Evidence, ProofId, RemainingMs})
+            {identity, self(), Evidence, ProofId, RemainingMs,
+             quod_trace:context()})
       end);
 identity(_Evidence, _ProofId, _RemainingMs) ->
     {error, invalid_request}.
@@ -359,10 +360,10 @@ handle_call(
             {reply, Error, S0}
     end;
 handle_call(
-  {identity, Owner, Evidence, ProofId, RemainingMs}, _From, S0)
+  {identity, Owner, Evidence, ProofId, RemainingMs, TraceCtx}, _From, S0)
   when is_pid(Owner) ->
     case ensure_identity(
-           Owner, Evidence, ProofId, RemainingMs, S0) of
+           Owner, Evidence, ProofId, RemainingMs, TraceCtx, S0) of
         {{ok, Certificate}, S1} ->
             {reply, {ok, Certificate}, S1};
         {{pending, Ref}, S1} ->
@@ -551,7 +552,7 @@ probe_owner_admission(#owner{poison = {poisoned, Reason}}) ->
     {error, {proof_poisoned, Reason}};
 probe_owner_admission(#owner{}) -> ok.
 
-ensure_identity(Owner, Evidence, ProofId, RemainingMs,
+ensure_identity(Owner, Evidence, ProofId, RemainingMs, TraceCtx,
                      S = #s{owners = Owners}) ->
     case maps:get(Owner, Owners, undefined) of
         #owner{proof_id = ProofId,
@@ -563,16 +564,16 @@ ensure_identity(Owner, Evidence, ProofId, RemainingMs,
         #owner{} = Existing ->
             case owner_admission(Existing, ProofId) of
                 ok -> start_identity_collection(
-                        Owner, Evidence, ProofId, RemainingMs, S);
+                        Owner, Evidence, ProofId, RemainingMs, TraceCtx, S);
                 {error, _} = Error -> {Error, S}
             end;
         undefined ->
             start_identity_collection(
-              Owner, Evidence, ProofId, RemainingMs, S)
+              Owner, Evidence, ProofId, RemainingMs, TraceCtx, S)
     end.
 
 start_identity_collection(
-  Owner, Evidence, ProofId, RemainingMs,
+  Owner, Evidence, ProofId, RemainingMs, TraceCtx,
   S = #s{owners = Owners, owner_refs = OwnerRefs})
   when RemainingMs > 0 ->
     case agent_identity_collection_input(Evidence, ProofId, RemainingMs) of
@@ -582,8 +583,16 @@ start_identity_collection(
             StartedAt = quod_time:mono_ms(),
             {Pid, MRef} = spawn_monitor(
                             fun() ->
-                                Result = collect_agent_identity(
-                                           Router, Ref, Input),
+                                Result = quod_trace:with_span(
+                                  TraceCtx,
+                                  <<"quod.identity.certificate_collect">>,
+                                  internal, #{},
+                                  fun(SpanCtx) ->
+                                      R = collect_agent_identity(
+                                            Router, Ref, Input),
+                                      _ = quod_trace:result(SpanCtx, R),
+                                      R
+                                  end),
                                 gen_server:cast(
                                   Router,
                                   {identity_result, Owner, ProofId,
@@ -613,7 +622,7 @@ start_identity_collection(
         {error, _} = Error -> {Error, S}
     end;
 start_identity_collection(
-  _Owner, _Evidence, _ProofId, _RemainingMs, S) ->
+  _Owner, _Evidence, _ProofId, _RemainingMs, _TraceCtx, S) ->
     {{error, timeout}, S}.
 
 agent_identity_collection_input(
@@ -787,35 +796,62 @@ collect_agent_identity(
                      route_candidates := InitialRoutes}}) ->
     true = quod_reg:subscribe({channel, ?AGENT_IDENTITY_CHANNEL}),
     try
-        Routes = case quod_foreign_log:route_hints(Identity, InitialRoutes) of
-                     {ok, Hints} -> Hints;
-                     {error, _} -> InitialRoutes
-                 end,
-        {ok, Statement} = quod_agent_identity:statement(
-                            Evidence, ProofId, CommitteeId, NotAfter),
-        {ok, StatementBytes} =
-            quod_agent_identity:statement_bytes(Statement),
-        RequestId = new_id(),
-        Request = {agent_identity_request, RequestId, ProofId,
-                   maps:get(request_bytes, Evidence),
-                   maps:get(signature, Evidence), NotAfter},
-        {ok, Frame} = quod_agent_identity:encode_request(Request),
+        Routes = quod_trace:with_span(
+          quod_trace:context(), <<"quod.identity.route_hints">>, internal,
+          #{},
+          fun(_SpanCtx) ->
+              case quod_foreign_log:route_hints(Identity, InitialRoutes) of
+                  {ok, Hints} -> Hints;
+                  {error, _} -> InitialRoutes
+              end
+          end),
+        {Statement, StatementBytes, RequestId, Request, Frame} =
+            quod_trace:with_span(
+              quod_trace:context(), <<"quod.identity.build_request">>,
+              internal, #{},
+              fun(_SpanCtx) ->
+                  {ok, BuiltStatement} = quod_agent_identity:statement(
+                                           Evidence, ProofId, CommitteeId,
+                                           NotAfter),
+                  {ok, BuiltStatementBytes} =
+                      quod_agent_identity:statement_bytes(BuiltStatement),
+                  BuiltRequestId = new_id(),
+                  BuiltRequest =
+                      {agent_identity_request, BuiltRequestId, ProofId,
+                       maps:get(request_bytes, Evidence),
+                       maps:get(signature, Evidence), NotAfter},
+                  {ok, BuiltFrame} =
+                      quod_agent_identity:encode_request(BuiltRequest),
+                  {BuiltStatement, BuiltStatementBytes, BuiltRequestId,
+                   BuiltRequest, BuiltFrame}
+              end),
         quod_prolog:request_agent_attestation(
           element(1, Identity), Request, self(),
           {agent_identity_collection, Ref, Self}),
-        {Opens, RemoteWaiting} = open_identity_routes(
-                                   Committee -- [Self], Routes, #{}),
+        {Opens, RemoteWaiting} = quod_trace:with_span(
+          quod_trace:context(), <<"quod.identity.open_signers">>, client,
+          #{'quod.identity.committee_size' => length(Committee)},
+          fun(_SpanCtx) ->
+              open_identity_routes(Committee -- [Self], Routes, #{})
+          end),
         %% The local attestation is asynchronous too.  Count it among the
         %% replies that can still satisfy quorum, then remove it on either
         %% success or refusal just like a remote committee member.
         Waiting = RemoteWaiting#{Self => true},
         Deadline = quod_time:mono_ms() + RemainingMs,
-        collect_agent_identity_loop(
-          #identity_collection{
-             ref = Ref, request_id = RequestId,
-             statement = Statement, statement_bytes = StatementBytes,
-             committee = Committee, routes = Routes, frame = Frame,
-             deadline = Deadline, opens = Opens, waiting = Waiting})
+        quod_trace:with_span(
+          quod_trace:context(), <<"quod.identity.collect_votes">>, internal,
+          #{'quod.identity.committee_size' => length(Committee)},
+          fun(SpanCtx) ->
+              Result = collect_agent_identity_loop(
+                #identity_collection{
+                   ref = Ref, request_id = RequestId,
+                   statement = Statement, statement_bytes = StatementBytes,
+                   committee = Committee, routes = Routes, frame = Frame,
+                   deadline = Deadline, opens = Opens, waiting = Waiting}),
+              _ = quod_trace:result(SpanCtx, Result),
+              Result
+          end)
     after
         _ = try quod_reg:unsubscribe({channel, ?AGENT_IDENTITY_CHANNEL})
             catch _:_ -> ok

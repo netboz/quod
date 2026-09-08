@@ -338,15 +338,30 @@ t_scope_trace_covers_open_and_answer(#{pets := Ns}) ->
                            <<"quod.scope.authenticate">>),
         ?assertEqual(Open#span.trace_id, Authentication#span.trace_id),
         ?assertEqual(Open#span.span_id, Authentication#span.parent_span_id),
+        %% A selection now exposes its real Erlog/session nesting instead of
+        %% presenting open/next as synthetic direct invocation children.
+        ?assertEqual(Open#span.parent_span_id, Next#span.parent_span_id),
+        Step = take_test_span_id(Open#span.parent_span_id),
+        ?assertEqual(<<"quod.erlog.step">>, Step#span.name),
+        Advance = take_test_span_id(Step#span.parent_span_id),
+        ?assertEqual(<<"quod.proof_session.advance">>, Advance#span.name),
+        First = take_test_span_id(Advance#span.parent_span_id),
+        ?assertEqual(<<"quod.proof_session.first_result">>, First#span.name),
+        ?assertEqual(Invocation#span.span_id, First#span.parent_span_id),
         lists:foreach(
           fun(Child) ->
               ?assertEqual(Invocation#span.trace_id, Child#span.trace_id),
-              ?assertEqual(Invocation#span.span_id, Child#span.parent_span_id),
               ?assert(Invocation#span.start_time =< Child#span.start_time),
               ?assert(Child#span.end_time =< Invocation#span.end_time)
           end, [Open, Next]),
         ?assert(Open#span.end_time =< Next#span.start_time)
     end).
+
+take_test_span_id(SpanId) ->
+    receive
+        {quod_test_span, Span = #span{span_id = SpanId}} -> Span
+    after 2000 -> error({missing_span_id, SpanId})
+    end.
 
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),

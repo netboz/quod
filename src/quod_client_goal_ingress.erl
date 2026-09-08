@@ -30,7 +30,9 @@ each target applies its ordinary `can_invoke/4` policy to that principal.
 submit(ExpectedMode, SessionId, RequestBytes, Signature, Peer)
   when ExpectedMode =:= read; ExpectedMode =:= execute;
        ExpectedMode =:= cursor ->
-    case quod_client_auth:admit_goal(SessionId, Peer) of
+    case trace_stage(
+           <<"quod.client.session_admission">>, internal,
+           fun() -> quod_client_auth:admit_goal(SessionId, Peer) end) of
         {ok, Session} ->
             admitted(ExpectedMode, SessionId, Session, RequestBytes,
                      Signature, Peer);
@@ -70,7 +72,9 @@ admitted(ExpectedMode, SessionId,
          #{public_key := PublicKey,
            expires_ms := SessionExpires},
          RequestBytes, Signature, Peer) ->
-    case quod_client_goal:decode(RequestBytes) of
+    case trace_stage(
+           <<"quod.client.decode_and_bind">>, internal,
+           fun() -> quod_client_goal:decode(RequestBytes) end) of
         {ok, Request} ->
             case request_session_binding(
                    Request, ExpectedMode, PublicKey, SessionExpires) of
@@ -144,7 +148,11 @@ resolved_operation(_Evidence, _Digest, _OperationRef, {ok, _BadClaim}) ->
     {error, outcome_index_corrupt}.
 
 verified_gateway(SessionId, RequestBytes, Signature, PublicKey, Peer) ->
-    case quod_client_goal_target:verify_request(RequestBytes, Signature) of
+    case trace_stage(
+           <<"quod.client.gateway_signature_verify">>, internal,
+           fun() ->
+               quod_client_goal_target:verify_request(RequestBytes, Signature)
+           end) of
         {ok, #{request := #{signing_public_key := PublicKey},
                agent_ref_blob := AgentRef} = Evidence} ->
             Principal = {agent, AgentRef},
@@ -163,7 +171,9 @@ execute_gateway(
                  agent_genesis_anchor := Anchor}} = Evidence,
   RequestBytes, Signature, Principal, _PublicKey, Peer, Owner) ->
     CursorBinding = cursor_binding(Mode),
-    case quod_client_goal_target:available({Ns, Anchor}) of
+    case trace_stage(
+           <<"quod.client.local_target_lookup">>, internal,
+           fun() -> quod_client_goal_target:available({Ns, Anchor}) end) of
         ok ->
             case quod_client_goal_target:prepare_local(
                    Evidence, Peer, Owner, CursorBinding) of
@@ -187,7 +197,9 @@ forward_gateway(
   #{request := #{agent_namespace := Ns,
                  agent_genesis_anchor := Anchor}} = Evidence,
   RequestBytes, Signature, Owner, CursorBinding) ->
-    case quod_directory:validator_routes(Ns, Anchor) of
+    case trace_stage(
+           <<"quod.client.gateway_route_lookup">>, internal,
+           fun() -> quod_directory:validator_routes(Ns, Anchor) end) of
         {ok, Routes} when Routes =/= [] ->
             TraceCarrier = quod_trace:inject(quod_trace:context()),
             ExpiresMs = maps:get(not_after_ms, maps:get(request, Evidence)),
@@ -215,8 +227,12 @@ forward_routes([], _Evidence, _RequestBytes, _Signature, _Owner,
 forward_routes([Route | Rest], Evidence, RequestBytes, Signature, Owner,
                CursorBinding, TraceCarrier, ExpiresMs, Submit) ->
     TimeoutMs = request_timeout(ExpiresMs),
-    case Submit(Route, Owner, Evidence, RequestBytes, Signature, CursorBinding,
-                TraceCarrier, ExpiresMs, TimeoutMs) of
+    case trace_stage(
+           <<"quod.client.forward_attempt">>, client,
+           fun() ->
+               Submit(Route, Owner, Evidence, RequestBytes, Signature,
+                      CursorBinding, TraceCarrier, ExpiresMs, TimeoutMs)
+           end) of
         {ok, Evidence, {normalized, _} = Normalized} ->
             {ok, Evidence, Normalized};
         {error, pre_send} ->
@@ -314,6 +330,15 @@ forwarded_cursor_command(Owner, CursorId, Command) ->
 
 local_owner(SessionId, <<_:256>> = SigningKey) ->
     {session, SessionId, SigningKey}.
+
+trace_stage(Name, Kind, Fun) ->
+    quod_trace:with_span(
+      quod_trace:context(), Name, Kind, #{},
+      fun(SpanCtx) ->
+          Result = Fun(),
+          _ = quod_trace:result(SpanCtx, Result),
+          Result
+      end).
 
 network_identity() ->
     case quod_ontology:network_identity() of

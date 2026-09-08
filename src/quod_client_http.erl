@@ -112,8 +112,19 @@ explorer_index_reply(Req0) ->
 post_json(Req0, State, MaxBody, Handler) ->
     case cowboy_req:method(Req0) of
         <<"POST">> ->
-            {Code, Reply, Req} = read_json(Req0, MaxBody, Handler),
-            {ok, json_reply(Code, Reply, Req), State};
+            {Code, Reply, Req} = quod_trace:with_span(
+              quod_trace:context(), <<"quod.client.http_body">>, internal,
+              #{},
+              fun(SpanCtx) ->
+                  Result = read_json(Req0, MaxBody, Handler),
+                  _ = quod_trace:result(SpanCtx, Result),
+                  Result
+              end),
+            Encoded = quod_trace:with_span(
+              quod_trace:context(), <<"quod.client.response_encode">>,
+              internal, #{'http.response.status_code' => Code},
+              fun(_SpanCtx) -> json_reply(Code, Reply, Req) end),
+            {ok, Encoded, State};
         _ ->
             {ok, json_reply(405, #{error => method_not_allowed}, Req0), State}
     end.
@@ -124,8 +135,16 @@ read_json(Req0, MaxBody, Handler) ->
         %% that arrives in one piece is delivered whole however large it is. The
         %% cap is this size check, not the read option.
         {ok, Body, Req} when byte_size(Body) =< MaxBody ->
-            Decoded = try json:decode(Body) catch _:_ -> bad_json end,
-            {Code, Reply} = Handler(Decoded, Req),
+            Decoded = quod_trace:with_span(
+              quod_trace:context(), <<"quod.client.json_decode">>, internal,
+              #{'quod.http.body_bytes' => byte_size(Body)},
+              fun(_SpanCtx) ->
+                  try json:decode(Body) catch _:_ -> bad_json end
+              end),
+            {Code, Reply} = quod_trace:with_span(
+              quod_trace:context(), <<"quod.client.dispatch">>, internal,
+              #{},
+              fun(_SpanCtx) -> Handler(Decoded, Req) end),
             {Code, Reply, Req};
         {ok, _Oversized, Req} ->
             {413, #{error => body_too_large}, Req};

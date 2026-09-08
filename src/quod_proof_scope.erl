@@ -33,9 +33,14 @@ open_wrapped(Goal, #est{} = Wrapped) ->
           scope().
 open_invocation(Goal, Shared, Context, CheckpointDepth)
   when is_integer(CheckpointDepth), CheckpointDepth >= 0 ->
-    Fresh0 = quod_erlog_db_local_prove:fresh_proof_state(Shared),
-    Fresh = Fresh0#est{checkpoint_depth = CheckpointDepth},
-    open_wrapped(Goal, set_context(Fresh, Context)).
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.erlog.open_invocation">>, internal,
+      #{'quod.proof.checkpoint_depth' => CheckpointDepth},
+      fun(_SpanCtx) ->
+          Fresh0 = quod_erlog_db_local_prove:fresh_proof_state(Shared),
+          Fresh = Fresh0#est{checkpoint_depth = CheckpointDepth},
+          open_wrapped(Goal, set_context(Fresh, Context))
+      end).
 
 -doc "Derive the next solution, or report logical exhaustion or a bounded error.".
 -spec next(scope()) ->
@@ -47,9 +52,17 @@ next(#scope{goal = Goal, state = St, phase = Phase} = Scope) ->
         {error, Reason} ->
             {error, Reason, Scope, keep_current};
         ok ->
-            Result = run_step(Phase, Goal, St),
-            Driven = drive(Result, Goal, Scope),
-            guard_exposure(Driven)
+            Result = quod_trace:with_span(
+                       quod_trace:context(), <<"quod.erlog.step">>, internal,
+                       #{'quod.proof.step' => atom_to_binary(Phase, utf8)},
+                       fun(_SpanCtx) -> run_step(Phase, Goal, St) end),
+            Driven = quod_trace:with_span(
+                       quod_trace:context(), <<"quod.erlog.interpret_result">>,
+                       internal, #{},
+                       fun(_SpanCtx) -> drive(Result, Goal, Scope) end),
+            quod_trace:with_span(
+              quod_trace:context(), <<"quod.erlog.exposure_guard">>, internal,
+              #{}, fun(_SpanCtx) -> guard_exposure(Driven) end)
     end.
 
 -doc "Rebase a suspended continuation onto its session's current overlay revision.".
@@ -65,10 +78,15 @@ state(#scope{state = St}) -> St.
 -doc "Return the invocation's current variable bindings as a map.".
 -spec bindings(scope()) -> map().
 bindings(#scope{vars = Vars, state = #est{} = St}) ->
-    case quod_erlog_db_local_prove:check_access(St) of
-        ok -> bindings_map(erlog_int:dderef(Vars, St#est.bs));
-        {error, Reason} -> throw({quod_ask_error, Reason})
-    end.
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.erlog.materialize_bindings">>, internal,
+      #{},
+      fun(_SpanCtx) ->
+          case quod_erlog_db_local_prove:check_access(St) of
+              ok -> bindings_map(erlog_int:dderef(Vars, St#est.bs));
+              {error, Reason} -> throw({quod_ask_error, Reason})
+          end
+      end).
 
 run_step(fresh, Goal, St) ->
     guarded(fun() -> erlog_int:prove_goal(Goal, St) end);

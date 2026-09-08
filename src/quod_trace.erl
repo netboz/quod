@@ -46,7 +46,8 @@ with_span(Ctx, Name, Kind, Attributes, Fun) ->
 with_span(Ctx, Name, Kind, Attributes, Links, Fun) ->
     otel_tracer:with_span(
       Ctx, tracer(), Name,
-      #{kind => Kind, attributes => Attributes, links => Links}, Fun).
+      #{kind => Kind, attributes => trace_attributes(Attributes), links => Links},
+      Fun).
 
 -spec with_optional_span(context() | undefined, binary(), atom(), map(),
                          fun(() -> T)) -> T.
@@ -60,7 +61,7 @@ with_optional_span(Ctx, Name, Kind, Attributes, Fun) ->
 start_span(Ctx, Name, Kind, Attributes) ->
     SpanCtx = otel_tracer:start_span(
                 Ctx, tracer(), Name,
-                #{kind => Kind, attributes => Attributes}),
+                #{kind => Kind, attributes => trace_attributes(Attributes)}),
     {otel_tracer:set_current_span(Ctx, SpanCtx), SpanCtx}.
 
 -spec finish_span(span_ctx(), term()) -> ok.
@@ -82,11 +83,12 @@ result(SpanCtx, Result) ->
 
 -spec set_attributes(span_ctx(), map()) -> boolean().
 set_attributes(SpanCtx, Attributes) ->
-    otel_span:set_attributes(SpanCtx, Attributes).
+    otel_span:set_attributes(SpanCtx, trace_attributes(Attributes)).
 
 -spec add_event(context(), binary(), map()) -> boolean().
 add_event(Ctx, Name, Attributes) ->
-    otel_span:add_event(otel_tracer:current_span_ctx(Ctx), Name, Attributes).
+    otel_span:add_event(
+      otel_tracer:current_span_ctx(Ctx), Name, trace_attributes(Attributes)).
 
 -doc "Encode only W3C traceparent/tracestate for a relay envelope.".
 -spec inject(context()) -> [{binary(), binary()}].
@@ -116,6 +118,22 @@ valid_carrier(_Carrier) ->
 tx_id(Id) when is_binary(Id) -> binary:encode_hex(Id, lowercase).
 
 tracer() -> opentelemetry:get_application_tracer(?MODULE).
+
+%% OpenTelemetry binary attributes are UTF-8 strings, while Quod identifiers
+%% are arbitrary bytes. Keep that representation rule at the tracing boundary
+%% so instrumentation can never turn a valid ledger/cache operation into a
+%% failure. Human-readable UTF-8 values remain unchanged; opaque bytes have
+%% one deterministic lowercase hexadecimal representation.
+trace_attributes(Attributes) when is_map(Attributes) ->
+    maps:map(fun(_Key, Value) -> trace_attribute(Value) end, Attributes).
+
+trace_attribute(Value) when is_binary(Value) ->
+    case unicode:characters_to_binary(Value, utf8, utf8) of
+        Value -> Value;
+        _ -> <<"hex:", (binary:encode_hex(Value, lowercase))/binary>>
+    end;
+trace_attribute(Value) ->
+    Value.
 
 valid_carrier_field({Key, Value})
   when is_binary(Key), is_binary(Value),

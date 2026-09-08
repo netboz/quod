@@ -180,3 +180,21 @@ bounded_trace_carrier_test() ->
 invalid_carrier_extracts_empty_context_test() ->
     ?assertEqual(otel_ctx:new(),
                  quod_trace:extract([{<<"baggage">>, <<"secret">>}])).
+
+opaque_binary_attributes_are_encoded_at_the_trace_boundary_test() ->
+    with_tracer(fun() ->
+        Opaque = <<16#80, 0, 16#ff>>,
+        ok = quod_trace:with_span(
+               otel_ctx:new(), <<"opaque_attribute">>, internal,
+               #{'quod.namespace' => Opaque},
+               fun(SpanCtx) ->
+                   true = quod_trace:set_attributes(
+                            SpanCtx, #{'quod.cache' => Opaque}),
+                   ok
+               end),
+        Span = take_span(<<"opaque_attribute">>),
+        Attributes = otel_attributes:map(Span#span.attributes),
+        ?assertEqual(<<"hex:8000ff">>,
+                     maps:get('quod.namespace', Attributes)),
+        ?assertEqual(<<"hex:8000ff">>, maps:get('quod.cache', Attributes))
+    end).

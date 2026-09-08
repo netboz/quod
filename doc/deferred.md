@@ -322,9 +322,12 @@ stages, not carried forward:
   semantics and per-node re-arming (silent-fail + height-divergence hazards, DA2 C-B).
   (3) *Erlang heavy-job kinds + non-coalescable jobs*: heavy jobs are Prolog goals against the
   newest snapshot, always coalescable; per-worker declarations arrive with the first real
-  worker (world/mesh, client-world-direction.md). (4) *Founding read cost*: `open_ro` rescans
-  the whole log to read slot 1 (re-paid per KB restart); bound it store-side (checkpointed
-  first-entry read) when compaction lands.
+  worker (world/mesh, client-world-direction.md). (4) *Founding read cost*:
+  `open_ro` rescans the whole log to read slot 1 (re-paid per runtime/KB
+  restart). This is now part of Performance Roadmap Phase 1A: runtime borrows
+  the live Simplex owner's immutable indexed snapshot and reads slot 1 exactly.
+  Cold ontology restart without a live owner remains in the later certified
+  snapshot/compaction work.
 - **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,
   0.6.38–0.6.39).** A committee member that fell several slots behind the head could stall: it relied on the
   per-message redrive (Slice B) + dial-tick retransmit to refill, but had no member-side *bulk* catch-up, and
@@ -343,9 +346,21 @@ stages, not carried forward:
   loadtest confirmed recovery (over-f churn, no ghost); Slice 4 was the atomic enum cutover. Plan:
   `~/.claude/plans/serene-churning-pike.md`. Remaining tail: the bounded ahead-buffer (Slice 5) closes the
   moving-*tail* residual (buffer verified ahead blocks, pull the holes) and the vote-flood cap (Slice 6).
-- **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
-  store keeps the full block archive). **When it lands it must preserve the committee:** the validator set is
-  now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log
+- **Snapshot / compaction** — planned in `performance-roadmap.md` Phase 4;
+  nothing compacts yet (apply-and-forget keeps the KB projection, the store
+  keeps the full block archive). The contract is reviewed before the finality
+  F1 format freezes, so any required committed recovery-state root shares that
+  one cut/re-found; storage machinery lands later. There remains one ledger
+  truth with current materialized state, certified recovery snapshots and
+  optional historical segments — not two incompatible ledgers. Archive/pruned
+  roles are selected by committed, ACL-controlled node-agent/ontology facts and
+  the existing state-handler tier, with no config registry or hard-coded
+  retention count. The older `local_history(Node)` direction in
+  `content-layer-design.md` is retained as the declarative precedent; its exact
+  generic node-agent vocabulary is settled in that review.
+
+  **When it lands it must preserve the committee:** the validator set is now
+  re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log
   (`quod_simplex:log_projection/2`), so a snapshot that truncates the log must carry the `peer_admitted`
   facts as of the snapshot height (or a committee checkpoint) — otherwise the re-fold drops members.
   (The Raft-shaped snapshot stub — `read_snapshot`/`write_snapshot`/`install_snapshot` + `snap_cfg` —
@@ -354,8 +369,8 @@ stages, not carried forward:
   `[node_id()]` shape was wrong for the `peer_admitted`-derived committee anyway.) Note: the store
   now deliberately hard-codes **base index 1** (a log starting higher is treated as corruption — the
   earlier half-support was an untested trap), so compaction must introduce its base marker and the
-  committee checkpoint TOGETHER, plus consumers that read from `first` instead of 1. No non-voting
-  tier exists yet.
+  committee checkpoint TOGETHER, plus consumers that read from `first` instead of 1. No archive/pruned
+  runtime tier exists yet; the roadmap is a reviewed design gate, not an implementation claim.
 
 **From the 2a/2b/2c reviews — landed:**
 

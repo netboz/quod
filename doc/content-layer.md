@@ -318,6 +318,13 @@ deliberate exception, because everything else can be rebuilt from it. The rule i
 *save the history; rebuild the rest from it.*) Trimming old history to save space is
 an option we can add later; by default we keep everything.
 
+The current implementation still does exactly that. The future storage design
+is tracked in [Performance Roadmap Phase 4](performance-roadmap.md#7-phase-4--compaction-and-cold-start): it keeps one ledger truth while
+separating hot materialized state, certified recovery snapshots, and explicit
+archive/pruned host roles. Pruning is never an age/count limit; it is permitted
+only after recovery, outstanding-reference/transaction custody, and archive
+availability have been proved from committed facts.
+
 For now the history lives only on the committee members. Later, an ontology will be
 able to name extra computers that should also keep a full copy — again, just by
 stating it as a fact.

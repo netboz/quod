@@ -39,8 +39,8 @@ option to the same fixture command; do not replace the workload or retry it.
 
 The scope V11 / DTX endpoint V10 tracing cut requires a coordinated node
 update, not a rolling mixed-version fleet. It changes no ledger format and
-requires no re-found. Until deployed, older nodes still have the partial trace
-coverage described in [the attribution note](../../doc/single-write-trace-attribution.md).
+requires no re-found. The implemented hierarchy and measured attribution are
+described in [the write-latency anatomy](../../doc/write-latency-anatomy.md).
 
 An operation reconstructed after restart has no historical trace context; it
 starts a new recovery trace with its existing public operation id. A recovery

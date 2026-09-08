@@ -771,6 +771,17 @@ reads the history straight off any committee member. *Trimming old history* (kee
 only a recent snapshot + changes since, to bound size) is an **option we add
 later** — default is keep everything.
 
+> **Storage-plan update (2026-09-08).** The implementation still keeps the
+> complete archive. The reviewed design boundary for future cold-start and
+> compaction work is now [Performance Roadmap Phase 4](performance-roadmap.md#7-phase-4--compaction-and-cold-start): one ledger protocol,
+> current materialized state, certified recovery snapshots, and explicit
+> archive/pruned storage roles. A pruned host may discard nothing until
+> certified recovery, exact-reference/DTX custody, and independent archive
+> availability are proved. The `local_history(Node)` facts below remain the
+> declarative precedent; the compaction review will align them once with the
+> generic node-agent hosting vocabulary. No config registry, second ledger
+> truth, timer poll, or hard-coded retention count is planned.
+
 **Who holds it — first cut: only the committee.** Each committee member keeps the
 full block list; read-copies hold current facts only, not the history. *Later
 (opt-in):* a `local_history(Node)` predicate in the ontology adds extra

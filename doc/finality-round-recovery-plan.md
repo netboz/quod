@@ -1,8 +1,11 @@
 # Finality recovery without sacrificing write throughput — reviewed plan
 
 Status: **architecture, compact-witness representation and exact-claim witness
-selection approved in round 9 (review of `6dd1bd5`); F0's paper/confirmation
-gate is closed. H1 matrix still owed; no implementation authority**.
+selection approved in round 9 (review of `6dd1bd5`); F0's core
+paper/confirmation and H1 attribution gates are closed. Performance Roadmap
+Phase 1A and review of the adjacent outcome/recovery-state commitments precede
+this cut. F1 remains blocked until both contracts are complete; no
+implementation authority**.
 Source reviewed at `b7c497e` / 0.7.143 on
 2026-09-07. Claude withdrew the per-slot rounds recommendation and accepted
 protocol-faithful pipelined Simplex with separate views and ledger heights.
@@ -53,12 +56,12 @@ choice is closed; its complete Quod adaptation is not yet proved. Review has
 closed the view/height and per-view custody choices and accepted the carrier
 and payload-window direction. The membership candidate is accepted under its
 named premises; the final composition, format and custody review in §7.1 is
-closed. Completed/archived H1 evidence remains the F0 prerequisite before F1
-may be authorized. In-view rounds are now withdrawn entirely;
+closed. The completed H1 evidence and reviewed Phase-1 boundary remain the F0
+prerequisite before F1 may be authorized. In-view rounds are now withdrawn entirely;
 neither the old hybrid nor sequential consensus for ordinary writes is authorized.
 
 Two obligations remain separate: repair permanent consensus stalls without
-slowing healthy writes; then attribute and remove the per-write H1 cost.
+slowing healthy writes, and remove the now-attributed live ledger-view cost.
 Resolving a stall is not, by itself, a throughput measurement.
 
 ## 2. Established failure and evidence
@@ -106,7 +109,7 @@ reference, NOT yet a completed DTX/membership adaptation.
 |---|---|
 | Another complaint/grace exception | Reject: leaves the incompatible rules and cannot safely change the permanent locks. |
 | Sequential per-height Tendermint | Withdrawn as recommendation: sacrifices overlap without a demonstrated compensating gain. |
-| Restore protocol-faithful pipelined Simplex | Approved baseline, including view/height separation; final composition/atomic-cut contract confirmed in round 9. H1 evidence and F1 authority still required before implementation. |
+| Restore protocol-faithful pipelined Simplex | Approved baseline, including view/height separation; final composition/atomic-cut contract confirmed in round 9. H1 evidence is complete; Phase 1 and F1 authority remain required before implementation. |
 | Per-height rounds plus current implicit child finality | Claude formally retracts this recommendation: the live split cannot form its round-change certificate; round-in-value bytes changes the locked identity; and multiple round candidates make unchanged slot-bound implicit finality unsound. Parent-value binding and coherent ancestry rules were the decisive reason to select spec-Simplex instead. Do not reintroduce the hybrid. |
 | Sequential membership with in-view rounds | Withdrawn by Claude: mode-typed complaints strand honest voters; per-round latches do not prove per-view uniqueness; a minority commit trigger does not exclude an ordinary complaint quorum. No rounds/locks/typed-complaint branch remains planned. |
 | Complaint-taint mode selection | Withdrawn by Claude after §4.3.7: later knowledge cannot change earlier portable complaint shares. No evidence-field patch or revocation. |
@@ -818,7 +821,8 @@ as written. The main simplification is deleting a separate I/A activation
 sequence and any shutdown-vote mechanism, by making the already planned
 view/height distinction meaningful for all protocol-only carriers. The cost is
 a deliberate ledger/finality representation change across the existing atomic
-cut, not a small readiness fix. It belongs before H2, never inside H1 numbers.
+cut, not a small readiness fix. It is separate from the measured ledger-view
+correction and never belongs inside the archived H1 numbers.
 
 **Review boundary / bounded evidence.**
 `/tmp/quod-terminal-era-proof.Vust6d/check.mjs` checks structural old material
@@ -831,8 +835,9 @@ fault assumptions. The safety argument above is conditional on the fixed-era
 theorem. Claude accepted the induction with its named premises and confirmed
 their representation and custody contract in §7.1. Neither that
 acceptance nor these bounded checks constitute real-engine fault/restart or
-performance evidence. No implementation authority follows from this review;
-F0's H1 evidence remains outstanding.
+performance evidence. No implementation authority follows from this review.
+F0's H1 evidence is closed; the reviewed Performance Roadmap Phase-1
+correction remains the gate before F1.
 
 ### 4.4 The live window must permit the required progress
 
@@ -927,8 +932,9 @@ This is not “bounded evidence per contested slot”: arbitrarily many failed
 views before synchrony can lengthen a carrier chain. Count actual proof bytes,
 I/O and verification; a successful commit collapses live work, not the proof
 obligation of the selected durable ancestry. The later compaction work is
-explicitly separate: [height-latency plan §9](certified-history-height-latency-plan.md#9-explicit-non-goals-and-later-work)
-and [deferred.md, Snapshot / compaction](deferred.md). Those passages call for
+explicitly separate: [performance roadmap](performance-roadmap.md),
+[height-latency plan](certified-history-height-latency-plan.md), and
+[deferred.md, Snapshot / compaction](deferred.md). Those passages call for
 committee-certified checkpoints, verifiable suffixes and archival; they are
 backlog cross-references, not approval to implement compaction in this cut.
 
@@ -963,7 +969,7 @@ the atomic cut is authorized.
 Wholesale deletion of the pipeline/implicit finality is not approved. Fewer
 conflicting rules, not fewer useful concurrent operations, is the objective.
 
-## 6. Performance acceptance and independent H1 work
+## 6. Performance acceptance and measured H1 baseline
 
 Count **unique durably completed user writes/s**, not acceptance responses,
 votes, candidate blocks or progress-only empties. For a fixed workload:
@@ -991,42 +997,42 @@ improvement. Preserve existing latency goals: one-hop c4 p99 <=450 ms and the
 requested sub-500 ms remote-write objective. Neither is satisfied by a paper's
 network-step count, a selected favorable run, or a freshly wiped ledger.
 
-H1 remains separate and necessary:
+The completed H1 attribution remains the pre-cut evidence baseline:
 
-1. `verify_resident_local_snapshot` opens a snapshot per exact reference.
-   Measure repeated opens/checks inside a validation job before deciding what
-   the existing owner can safely reuse.
-2. `quod_ledger_store:locate/2` uses a sparse index: `skip_frames` performs at
-   most 255 header preads, not a full-height scan. Compare reference count,
-   position modulo 256, old-era fallback, storage and phase-index work.
-3. Explain >=95% of the increase in MEAN latency from per-request sums/means.
-   Distinguish `phase_suspend` and `phase_resume`; no marginal-quantile sums.
+1. 0.7.151 representative one-hop traces explain 99.65--99.92% of request
+   time from non-overlapping intervals.
+2. `quod_ledger_store:locate/2` on an existing sparse index performs at most
+   255 header preads. The measured growth instead comes from rebuilding that
+   index through two complete `open_ro` scans per request.
+3. `phase_suspend` and `phase_resume` are flat and do not own the slope. The
+   discarded phase-index backend hypothesis must not return without new
+   evidence.
 
 One lost overlap does not explain the earlier 11–17 s chains. Neither
-algorithm restoration nor replacement proves that cost gone. H1 may continue
-on unaffected fixtures; preserve the stuck group. Cold start, compaction and
+algorithm restoration nor replacement proves the measured scan cost gone.
+Preserve the archived H1 traces and the stuck group. Cold start, compaction and
 carried small fixes stay separate. L2 remains gated; Yan's lane files untouched.
 
 ## 7. Review and implementation sequence
 
-The sequencing agreed by Yan is binding because finality and H2 both touch
-catch-up, ledger and phase-index seams, and the finality re-found destroys the
-grown fixtures. This does not authorize any finality or H2 code now.
+The sequencing in `performance-roadmap.md` is binding because finality shares
+ledger and certified-history seams with the measured height-latency work, and
+the finality re-found destroys grown fixtures. This does not authorize finality
+or performance code.
 
-1. **Now: finish H1; the parallel paper review is closed.** Finish H1's
-   discriminator matrix on unaffected fixtures, retain raw outputs and deliver
-   the >=95%-of-means attribution table, with `phase_suspend` separate from
-   `phase_resume`. Label all these results **pre-cut 0.7.143**. Commit this
-   amended plan; the architecture and focused confirmation are now **closed
-   by round 9**, including §4.1's material-only append and era-root amendments,
-   the §4.2/§4.4 mapping, §4.3.10's membership composition and §7.1's witness
-   selection. No further design round is required by that contract. Finish
-   the still-outstanding H1 campaign before seeking F1 authority.
+1. **Now: close Performance Roadmap Phase 1.** H1 is complete: 0.7.151 traces
+   attribute 99.65--99.92% of representative requests and name the two live
+   ledger rescans as the continuing slope. Preserve its raw archive and keep
+   it separate from post-cut data. Review and close the Phase-1 local-source
+   snapshot/current-identity boundary before seeking F1 authority. The finality
+   architecture remains **closed by round 9**, including §4.1's material-only
+   append and era-root amendments, the §4.2/§4.4 mapping, §4.3.10's membership
+   composition and §7.1's witness selection.
    §6 stays unchanged.
    Model schedules without a second production owner; no silently invented
    era-handover, skip or mode-selection exception.
-2. **Then, the finality arc.** Only after the architecture review is green and
-   the H1 campaign has finished and its evidence is archived, make the atomic
+2. **Then, the finality arc.** Only after the Phase-1 review/gates are green and
+   H1 evidence remains archived, make the atomic
    engine/journal/codec/finality/ingress/catch-up cut. Never combine new
    producers with old trust semantics. Delete superseded rules/comments/tests,
    with no compatibility switch. Run fault, restart and throughput gates and
@@ -1034,16 +1040,14 @@ grown fixtures. This does not authorize any finality or H2 code now.
    Separately bump and perform the reviewed coordinated clean re-found, never
    a mixed-fleet rolling protocol. **No H1 run remains in flight at the cut or
    re-found.** The old fixtures must not be silently lost halfway through a run.
-3. **Only after the finality cut and re-found: H2.** Re-grow fixtures on the
-   new ledger and establish the post-cut baseline before implementation or
-   conclusions about the height fix. Bring backend selection to review with
-   the completed H1 attribution table, and revalidate its owner on the new
-   protocol. Build H2 once against the final catch-up/ledger/phase-index seams,
-   not once before the cut and again after it.
+3. **After the finality cut and re-found:** re-grow fixtures and establish a
+   separately labelled new-protocol baseline. The old phase-index H2 candidate
+   is retired because H1 named the evidence-ledger scans instead. Any new
+   post-cut slope returns to attribution before another backend is selected.
 
 Keep pre-cut and post-cut datasets separate: do not pool them or subtract a
-post-cut result from 0.7.143 to claim an H2 gain. The endorsed finality throughput
-gate in §6 is unchanged; an H2 before/after comparison must use the same new
+post-cut result from 0.7.151 to claim a gain. The endorsed finality throughput
+gate in §6 is unchanged; any new before/after comparison must use the same
 protocol and freshly grown, comparable fixtures. A re-found resetting height
 is never evidence that the height-growth defect was fixed.
 
@@ -1055,7 +1059,7 @@ A re-found DOES NOT recover the preserved old group. Keep it intact until that
 re-found is scheduled; archive its evidence as **unresolved-on-the-old-network**
 before retirement, never an uncommitted abort/success. Reproduce that fault on
 the new protocol and prove completion there without resubmission. Planning
-authorizes no fleet mutation. H1 continues only on unaffected fixtures.
+authorizes no fleet mutation. H1 measurement is complete and archived.
 
 ### 7.1 Implementation slices and format contract — review closed
 
@@ -1065,10 +1069,10 @@ old semantics; it is not a sequence of mixed-format runtime releases.
 
 | Slice | Work and existing owners | Exit/review boundary |
 |---|---|---|
-| F0 — close paper and pre-cut evidence | Architecture and focused confirmation **closed in round 9**. Finish H1 on unaffected 0.7.143 fixtures and archive the discriminator matrix with ≥95%-of-mean-increase attribution. | H1 evidence still outstanding before F1 may be authorized. No consensus/H2 code and no re-found; preserve the old unresolved group. |
+| F0 — close paper and pre-cut evidence | Core finality architecture and focused confirmation **closed in round 9**. H1 closed on 0.7.151: request traces attribute 99.65--99.92%, and the two live evidence-ledger scans own the continuing slope. See `write-latency-anatomy.md` and `performance-roadmap.md`. | Finish/review Performance Roadmap Phase 1 and close the certified transaction-outcome plus recovery-state commitment questions before F1 authorization. No consensus code or re-found; preserve the old unresolved group. |
 | F1 — one atomic source cut | Engine, journal, canonical codec/store, ancestry/history verifier, exact refs and leader/relay projection change together through the owners below. Tests and normative source/doc corrections land with them; delete the old semantics in the same cut. | Whole new tree green under sequential full gates and §8's actual-engine tests; consensus-area review BEFORE commit. No intermediate deploy or compatibility dispatcher. |
 | F2 — fault/restart/throughput acceptance | Exercise that one candidate in isolated new-format fixtures on the existing test/hardware workflow, preserving the old fleet's evidence. Fault, transport/restart, membership and §6 workloads; re-grow comparable histories. | Review measured unique durable writes/s, latency, overhead and failures. Any consensus correction returns to review before commit. No claim of success from acceptance-only responses or wiping history. |
-| F3 — release activation | Separate version/release commit and coordinated clean re-found after F2 approval; archive the preserved old group as unresolved on its old network before retirement. Re-run smoke and representative performance/fault checks on the activated fleet. | No mixed fleet, old-state migration or resubmission. H2 begins only on the new protocol and newly grown baseline; L2 remains gated. |
+| F3 — release activation | Separate version/release commit and coordinated clean re-found after F2 approval; archive the preserved old group as unresolved on its old network before retirement. Re-run smoke and representative performance/fault checks on the activated fleet. | No mixed fleet, old-state migration or resubmission. Rebaseline only on the new protocol and newly grown fixtures; L2 remains gated. |
 
 F2 must not wipe or overwrite the old network merely to obtain its first
 throughput comparison. A separate data root/network identity for the candidate
@@ -1103,12 +1107,12 @@ hard breaks, not bumps to files or network state performed by this plan:
 
 | Family / current source | New cut | Invariant |
 |---|---|---|
-| `quod_ledger`: `{quod_block,1,…}` | Block grammar **2** | Canonical era id, era-local view, exact protocol-parent reference and payload; height is not the view. Empty carriers use a distinct empty payload, never the retired `noop` skip. Their timestamp is derived from the parent, so no proposer-local clock changes carrier bytes for a fixed parent/era/view. |
+| `quod_ledger`: `{quod_block,1,…}` | Block grammar **2** | Canonical era id, era-local view, exact protocol-parent reference and payload; height is not the view. Empty carriers use a distinct empty payload, never the retired `noop` skip. Their timestamp is derived from the parent, so no proposer-local clock changes carrier bytes for a fixed parent/era/view. This grammar must not freeze until two separate reviewed contracts define (a) deterministic per-transaction outcome computation/verification against the exact parent, including same-block OCC and pipelined proposals, and (b) the minimum canonical recovery-state commitment, atomic installation and custody/archive proof. Reserving unexplained fields is not closure. |
 | `quod_ledger`: `{quod_entry,1,…}` and direct/immediate-child proof shapes | Entry grammar **2**, one versioned generalized finality-witness grammar | Material index, original block bytes, compact finality head/QC and binding to a separately streamed ancestry span. A direct commit is the zero-descendant case. No raw old `#implicit_cert{}` compatibility branch; no carrier-only entry. |
 | `quod_simplex`: `SHARE_DOMAIN_VERSION=2` | Signature-domain/message version **3** | Sign vote kind, ontology incarnation, era, view and exact value; complaints still have no value. Never compare era-local views without their era identity. |
 | `quod_relay`: `{sx2,Ns,Inner}` | **`sx3`** consensus envelope | Same authenticated channel/owner, new era-aware shares/certificates and block bytes; reject old consensus envelope. This module, not a new wire module, owns consensus framing. |
 | `quod_signing_journal`: **QSJ3**, record version 3 | **QSJ4**, record version **4** | One chain-bound journal; per-era/view rows and signing floors, exact supported bytes, final latches and custody. No journal-per-era service or rewriting old votes. |
-| `quod_ledger_store`: **V5**, magic `0x915106AE` | **V6**, magic `0x915106AF` | Proof-kind frames and complete proof-plus-entry groups at the existing CRC/sparse-index owner; journal custody transfers after sync. No H2 backend replacement, snapshot base or carrier side log. |
+| `quod_ledger_store`: **V5**, magic `0x915106AE` | **V6**, magic `0x915106AF` | Proof-kind frames and complete proof-plus-entry groups at the existing CRC/sparse-index owner; journal custody transfers after sync. No unrelated phase-index backend replacement or carrier side log. Before F1, the compaction contract must define canonical recovery encoding/root, atomic install, exact-reference/DTX/finality-carrier custody, archive availability and dormant recovery. Do not force a second format/re-found by deciding after the cut. |
 | `quod_catchup`: height-only `blocks_req` / complete-entry `blocks_resp_bytes` | One replacement paged grammar with a bound ancestry-span cursor | Material descriptors and proof parts use the same serving/verification workers and transport. Current height-only pages cannot address unindexed proof suffixes; replace/generalize the grammar, no parallel chunk service or old/new fallback. |
 | `quod_dtx`: certified ref **2** | Certified ref **3** | Same immutable identity/height/block/record claim plus compact era/view/hash head and its commit QC. The head is a preferred witness, not claim identity or a sole permitted proof. One exact-entry verifier. |
 
@@ -1289,7 +1293,7 @@ and its job state own that reuse. Carriers still incur journal sync, signatures,
 bytes and archive growth; instrumentation must expose their actual cost.
 The normal message graph/quorum count is preserved relative to the accepted
 pipelined baseline, **not byte-identical to today's wire or broken slot rules**.
-The finality repair is not H1/H2's height-cost optimization and claims no
+The finality repair is not the ledger-view height-cost correction and claims no
 unchanged byte volume or premeasured latency improvement.
 
 Each F1/F2 review includes an exact kept/refactored/deleted call-path map.
@@ -1483,16 +1487,17 @@ Its positive checks establish only the stated supplied-evidence schedules
 and material-projection invariants, not the fixed-era theorem or its full
 dynamic-committee composition.
 Permanent selected carrier evidence remains part of the verifiable archive
-even without a ledger position. The future committee-certified checkpoint/
-archival work is tracked in [height-latency plan §9](certified-history-height-latency-plan.md#9-explicit-non-goals-and-later-work)
-and [deferred.md, Snapshot / compaction](deferred.md); it is neither implemented
+even without a ledger position. Future certified checkpoint/archival work is
+tracked in [performance roadmap](performance-roadmap.md),
+[height-latency plan](certified-history-height-latency-plan.md), and
+[deferred.md, Snapshot / compaction](deferred.md); it is neither implemented
 nor folded into this cut. No fixed carrier count/byte bound follows from the
 review or liveness theorem; pre-synchrony recovery evidence may grow.
 The k-bound attribution in §4.4 distinguishes the published stable-leader
 protocol from Quod's adaptation. Neither a scratch model nor the name of a
 published protocol substitutes for proving its actual Quod composition.
-No proposed throughput gain has yet been measured, and the unchanged §6/H1
-gate still applies.
+No proposed finality throughput gain has yet been measured, and the unchanged
+§6 gate still applies.
 
 Compact-witness review:
 `/home/yan/.codex/attachments/8fbf4b08-2c15-42de-9d11-91d5e0f35055/pasted-text.txt`.
@@ -1506,6 +1511,6 @@ proof. **Round 9 (review of `6dd1bd5`, supplied in the conversation) explicitly
 confirms the witness-selection amendment and closes the representation review.**
 The historical design pointer is commit `e409fc3`, which changed coordinator
 and applied-certificate comparisons to immutable claims; it did not itself
-implement ancestor witnesses or this verifier change. H1's
-full matrix remains incomplete; no implementation or fresh performance gate
-is claimed by this documentation work.
+implement ancestor witnesses or this verifier change. H1 is complete and
+archived; no finality implementation or fresh performance gate is claimed by
+this documentation work.

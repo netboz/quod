@@ -1,5 +1,6 @@
 -module(quod_ledger_store_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 
 -define(V1_MAGIC, 16#915106AA).
@@ -48,6 +49,7 @@ store_test_() ->
       fun t_chunked_tail_detects_split_magic/1,
       fun t_chunked_marker_free_tail_trims/1,
       fun t_open_ro_reads/1,
+      fun t_traced_open_profiles_scan_without_per_entry_spans/1,
       fun t_open_ro_non_truncating/1,
       fun t_checkpointed_reads/1,
       fun t_trim_across_checkpoints/1,
@@ -257,6 +259,45 @@ t_open_ro_reads({Dir, Ns}) ->
         ?assertMatch({ok, #entry{index = 2}}, quod_ledger_store:read_at(RO, 2)),
         ok = quod_ledger_store:close(RO),
         ?assertEqual({error, no_log}, quod_ledger_store:open_ro(<<"never:opened">>, Dir))
+    end.
+
+%% One aggregate scan span gives a traced caller enough depth to separate file
+%% open, framing/index rebuild and canonical decode without exporting one span
+%% per historical entry (which would perturb long-ledger measurements).
+t_traced_open_profiles_scan_without_per_entry_spans({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
+        ok = quod_ledger_store:close(S1),
+        quod_trace_tests:with_tracer(fun() ->
+            quod_trace:with_span(
+              otel_ctx:new(), <<"ledger.profile.parent">>, internal, #{},
+              fun(_Parent) ->
+                  {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
+                  ?assertMatch({ok, #entry{index = 2}},
+                               quod_ledger_store:read_at(RO, 2)),
+                  ok = quod_ledger_store:close(RO)
+              end),
+            Parent = quod_trace_tests:take_span(<<"ledger.profile.parent">>),
+            FileOpen = quod_trace_tests:take_span(<<"quod.ledger.file_open">>),
+            Scan = quod_trace_tests:take_span(<<"quod.ledger.index_scan">>),
+            Read = quod_trace_tests:take_span(<<"quod.ledger.read_at">>),
+            lists:foreach(
+              fun(Child) ->
+                  ?assertEqual(Parent#span.trace_id, Child#span.trace_id),
+                  ?assertEqual(Parent#span.span_id, Child#span.parent_span_id)
+              end, [FileOpen, Scan, Read]),
+            Attrs = otel_attributes:map(Scan#span.attributes),
+            ?assertEqual(3, maps:get('quod.ledger.entries', Attrs)),
+            ?assert(maps:get('quod.ledger.bytes', Attrs) > 0),
+            ?assert(maps:get('quod.ledger.framing_us', Attrs) >= 0),
+            ?assert(maps:get('quod.ledger.decode_us', Attrs) >= 0),
+            receive
+                {quod_test_span, #span{name = <<"quod.ledger.index_scan">>}} ->
+                    error(per_entry_scan_span)
+            after 0 -> ok
+            end
+        end)
     end.
 
 %% open_ro is NON-TRUNCATING: a torn tail (a frame the live writer is mid-appending) bounds the readable

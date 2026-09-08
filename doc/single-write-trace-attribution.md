@@ -1,7 +1,7 @@
 # Single-write trace attribution
 
-Status: instrumentation implemented and local gates green; review pending,
-not committed or deployed.
+Status: base instrumentation deployed in 0.7.146; aggregate ledger-open scan
+profiling added for 0.7.147 before the clean-ledger comparison.
 Baseline: 0.7.145, HEAD `8fdd2d2`, retained N=4 development fleet.
 
 ## Why this work
@@ -38,6 +38,7 @@ alongside the raw TSVs and driver stdout.
 | `quod.scope.authenticate` / scope invocation children | Target authentication and execution under the incoming request's trace context |
 | `quod.operation.recover` and children | Existing operation worker, claim evidence, application request, terminal outcome resolution and asynchronous source receipt |
 | `quod.evidence.ledger_open` / `quod.evidence.read_at` | Existing full read-only ledger open versus the subsequent exact-slot read, distinguished as claim/application evidence |
+| `quod.ledger.file_open` / `quod.ledger.index_scan` / `quod.ledger.read_at` | File-descriptor open, full integrity/index scan, and exact sparse-index read. The single scan span reports entry/byte counts and aggregate framing/decode time; it deliberately does not emit one span per historical entry. |
 | `quod.dtx.endpoint.serve` / `quod.dtx.quorum.probe` | Existing target endpoint worker and parallel committee probes |
 | `quod.foreign.current` | Existing certified-history queue and verifier work, including H1 phase-index events |
 | `quod.proof_context.finalize` / `quod.proof_context.cleanup` | Proof-resource cleanup after the result is determined |

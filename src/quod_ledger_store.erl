@@ -150,7 +150,7 @@ open(Ns, DataDir, SymbolMode)
     Dir = ns_dir(DataDir, Ns),
     ok = filelib:ensure_path(Dir),
     LogPath = filename:join(Dir, "log.0001"),
-    {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
+    {ok, Fd} = traced_file_open(LogPath, [read, write, raw, binary], read_write),
     {Cps, LastI, BaseOff} = scan(Fd, trim, SymbolMode),
     {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                 last_index = LastI, base_offset = BaseOff,
@@ -173,7 +173,8 @@ open_ro(Ns, DataDir) ->
 open_ro(Ns, DataDir, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     Dir = ns_dir(DataDir, Ns),
-    case file:open(filename:join(Dir, "log.0001"), [read, raw, binary]) of
+    case traced_file_open(
+           filename:join(Dir, "log.0001"), [read, raw, binary], read_only) of
         {ok, Fd} ->
             try
                 {Cps, LastI, BaseOff} = scan(Fd, stop, SymbolMode),
@@ -299,8 +300,13 @@ checkpoint(_I, _Off, Cps)                             -> Cps.
 -spec read_at(handle(), pos_integer()) -> {ok, #entry{}} | not_found.
 read_at(#store{last_index = LI}, Index) when Index < 1; Index > LI -> not_found;
 read_at(S, Index) ->
-    {ok, [E]} = read_range(S, Index, Index),
-    {ok, E}.
+    quod_trace:with_optional_span(
+      quod_trace:context(), <<"quod.ledger.read_at">>, internal,
+      #{'quod.ledger.slot' => Index},
+      fun() ->
+          {ok, [E]} = read_range(S, Index, Index),
+          {ok, E}
+      end).
 
 -doc """
 Read entries `From..To` (clamped to the live tail), in index order — one checkpoint
@@ -458,12 +464,32 @@ fill(Fd, Off, Buf, Need) ->
 %% recovers/fail-stops; a READ-ONLY view (`stop`) only bounds itself — it must never
 %% mutate the live writer's file.
 scan(Fd, Mode, SymbolMode) ->
-    scan(Fd, {0, <<>>}, <<>>, 0, Mode, SymbolMode).
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.ledger.index_scan">>, internal,
+      #{'quod.ledger.open_mode' => open_mode(Mode)},
+      fun(SpanCtx) ->
+          {Cps, LastI, BaseOff, Frames, FramingNative, DecodeNative} =
+              scan(Fd, {0, <<>>}, <<>>, 0, Mode, SymbolMode, 0, 0, 0),
+          _ = quod_trace:set_attributes(
+                SpanCtx,
+                #{'quod.ledger.entries' => Frames,
+                  'quod.ledger.bytes' => BaseOff,
+                  'quod.ledger.framing_us' => native_us(FramingNative),
+                  'quod.ledger.decode_us' => native_us(DecodeNative)}),
+          {Cps, LastI, BaseOff}
+      end).
 
-scan(Fd, Cur = {Off, _}, Cps, LastI, Mode, SymbolMode) ->
-    case next_frame(Fd, Cur) of
+scan(Fd, Cur = {Off, _}, Cps, LastI, Mode, SymbolMode,
+     Frames, FramingNative0, DecodeNative0) ->
+    FrameStarted = erlang:monotonic_time(),
+    Next = next_frame(Fd, Cur),
+    FramingNative = FramingNative0 + erlang:monotonic_time() - FrameStarted,
+    case Next of
         {frame, Payload, Cur1} ->
-            case quod_ledger:decode_entry(Payload, SymbolMode) of
+            DecodeStarted = erlang:monotonic_time(),
+            Decoded = quod_ledger:decode_entry(Payload, SymbolMode),
+            DecodeNative = DecodeNative0 + erlang:monotonic_time() - DecodeStarted,
+            case Decoded of
                 {ok, #entry{index = I}} ->
                     %% A CRC-valid frame at the wrong index — including a first frame that is not
                     %% index 1 — means the segment is corrupt from here on (see the moduledoc:
@@ -472,21 +498,51 @@ scan(Fd, Cur = {Off, _}, Cps, LastI, Mode, SymbolMode) ->
                     case I =:= LastI + 1 of
                         true ->
                             scan(Fd, Cur1, checkpoint(I, Off, Cps), I, Mode,
-                                 SymbolMode);
+                                 SymbolMode, Frames + 1,
+                                 FramingNative, DecodeNative);
                         false ->
-                            scan_bad(Fd, Off, Cps, LastI,
-                                     {discontinuity, I}, Mode)
+                            with_scan_stats(
+                              scan_bad(Fd, Off, Cps, LastI,
+                                       {discontinuity, I}, Mode),
+                              Frames, FramingNative, DecodeNative)
                     end;
                 {error, Why} ->
-                    scan_bad(Fd, Off, Cps, LastI, Why, Mode)
+                    with_scan_stats(
+                      scan_bad(Fd, Off, Cps, LastI, Why, Mode),
+                      Frames, FramingNative, DecodeNative)
             end;
-        {stop, eof, EndOff} -> {Cps, LastI, EndOff};
-        {stop, short, At}   -> scan_torn(Fd, At, Cps, LastI, Mode);
+        {stop, eof, EndOff} ->
+            {Cps, LastI, EndOff, Frames, FramingNative, DecodeNative0};
+        {stop, short, At}   ->
+            with_scan_stats(
+              scan_torn(Fd, At, Cps, LastI, Mode),
+              Frames, FramingNative, DecodeNative0);
         {stop, {unsupported_format, Version}, At} ->
             error({unsupported_ledger_format, Version, At});
-        {stop, {io_error, R}, At} -> scan_io_error(At, Cps, LastI, R, Mode);
-        {stop, Why, At}     -> scan_bad(Fd, At, Cps, LastI, Why, Mode)   %% bad_magic | bad_crc | frame_too_big
+        {stop, {io_error, R}, At} ->
+            with_scan_stats(
+              scan_io_error(At, Cps, LastI, R, Mode),
+              Frames, FramingNative, DecodeNative0);
+        {stop, Why, At} ->
+            with_scan_stats(
+              scan_bad(Fd, At, Cps, LastI, Why, Mode),
+              Frames, FramingNative, DecodeNative0)   %% bad_magic | bad_crc | frame_too_big
     end.
+
+with_scan_stats({Cps, LastI, BaseOff}, Frames, FramingNative, DecodeNative) ->
+    {Cps, LastI, BaseOff, Frames, FramingNative, DecodeNative}.
+
+traced_file_open(Path, Options, Mode) ->
+    quod_trace:with_optional_span(
+      quod_trace:context(), <<"quod.ledger.file_open">>, internal,
+      #{'quod.ledger.open_mode' => atom_to_binary(Mode)},
+      fun() -> file:open(Path, Options) end).
+
+open_mode(trim) -> <<"read_write">>;
+open_mode(stop) -> <<"read_only">>.
+
+native_us(Native) ->
+    erlang:convert_time_unit(Native, native, microsecond).
 
 %% A SHORT frame (incomplete header/payload at EOF) is the torn tail of a crashed append:
 %% the writer trims it (it was never acknowledged); a reader bounds its view before it.

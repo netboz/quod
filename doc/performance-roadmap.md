@@ -8,8 +8,12 @@ single-producer page-credit grammar and lifecycle, and the original-budget
 capture correction in the page-credit plan §6.1. The A1/A2 code review is
 closed (1756/0 EUnit, both CT suites 26/26); the completed A1–A4 cut is
 reviewed and approved, with independently reproduced source gates (1799/0
-EUnit, both CT suites 26/26, xref and dialyzer). Commit, bump and coordinated
-development deployment for the Phase-1A hardware gate are authorized. This
+EUnit, both CT suites 26/26, xref and dialyzer). The cut was committed and
+deployed as 0.7.152; Claude independently approved its hardware evidence
+(400/400 committed, live scans eliminated in the measured sample). The
+absolute latency gate remains unmet. Phase 1B Cut 1 is now authorized and
+implemented and independently reviewed green. Yan authorized its commit and
+continuation to Cut 2, which needs its own implementation review; Cut 3 remains gated. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source
 lag remains the explicit limitation in §6.2: consume-once progress alone does not
@@ -69,7 +73,7 @@ claim.
 
 | area | disposition | consequence |
 |---|---|---|
-| Phase 1A owner views and production open-site inventory | completed A1–A4 cut reviewed | commit/bump and development hardware gate authorized |
+| Phase 1A owner views and production open-site inventory | A1–A4 source and 0.7.152 hardware evidence reviewed | live scans removed in the sample; absolute latency gate unmet; Phase 1B requires its own review |
 | path-based foreign-cache replay | confirmed worse than linear across pages | one cold owner open, then session-based pages only |
 | fixed 32 catch-up workers with silent drop | rejected | replace at the existing link/owner with message-driven pressure and terminal replies, not another cap or unbounded spawn |
 | historical-committee identity shortcut | rejected as unsafe after committee replacement | retain latest-head/current-committee verification |
@@ -602,8 +606,11 @@ traces, and 99.756% / 99.901% per-request-means server attribution at c1/c4.
 Serial one-hop p50 improves 1156→544 ms and c4 3723→1609 ms; the strong
 within-run linear slope is no longer visible in this sample. The ≤300 ms
 serial target is **not met**, and flat work through 10,000 entries is **not
-measured**. `foreign.current` remains the largest measured owner; no next-phase
-implementation or release-safety gate is opened by this result.
+measured**. Claude independently reproduced and approved the raw results,
+trace attribution and durable receipts. `foreign.current` remains the largest
+measured owner; no next-phase implementation or release-safety gate is opened
+by this result. The next proposal is the
+[Phase-1B current-view review brief](phase-1b-current-view-review.md).
 
 N=4 gate: no evidence `index_scan` in live one-hop traces; evidence work flat
 through at least 10,000 entries; c1 p50 at most 300 ms. Measure c4, but its
@@ -649,8 +656,9 @@ separate cryptographic review proves one of these clean properties without a
 second authority or heuristic:
 
 - current-era validators endorse the exact proof at use time;
-- committee signing keys are forward-secure or key-evolving so retired eras
-  cannot produce new signatures; or
+- an explicitly specified key-evolution/erasure and authenticated-period
+  contract prevents retired keys from authorizing new requests; the label
+  “forward-secure” alone does not establish this property; or
 - certificate issuance is bound to a certified, non-backdateable current-state
   event with equivalent security.
 
@@ -659,6 +667,25 @@ members sign a new request after retirement with a valid old `committee_id` and
 unexpired `not_after`, and require rejection. Until a design passes that test,
 keep the current certified-history owner hot and optimize its existing suffix
 work only where measurement justifies it; do not weaken freshness.
+
+The [Phase-1B review brief](phase-1b-current-view-review.md) separates that
+cryptographic redesign from a semantics-preserving cleanup of the existing
+verifier's execution. Claude approved the cleanup direction and all three
+detailed cut contracts. After Cut 1's implementation review closed, Yan
+authorized its commit and continuation to **Cut 2**. The
+[shared artifact and pull contract](phase-1b-codec-and-pull-contract.md) is
+reviewed; its shared artifact cut is explicitly consensus-facing. Each cut
+requires fresh sequential gates and review before commit; Cut 3 still awaits
+Yan's go. Cut 1 removes owner-side page decoding while retaining the
+existing page lifecycle. Broader response
+reuse remains unapproved. Suffix reuse already exists. The audit
+found owner-mailbox page decoding on 0.7.152, repeated canonical-byte work and all-reply
+probe barriers; their individual latency contributions are not yet fully
+attributed. Neither contract approval nor hardware approval starts their
+implementation automatically.
+The brief also distinguishes rejecting a retired committee after its
+replacement is known from discovering a concealed replacement; do not claim
+the existing unit regression or key evolution proves both.
 
 ## 5. Phase 2 — finality cut and coordinated re-found
 

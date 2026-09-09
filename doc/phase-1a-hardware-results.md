@@ -11,6 +11,15 @@ this sample. The absolute latency gate is **not met**: serial one-hop p50 is
 544 ms, above 300 ms. Behavior at 10,000 entries is **not measured** here.
 This is development evidence, not closure of the separate release-safety gates.
 
+**Independent hardware review closed:** Claude reproduced the four raw TSVs,
+the 0.7.151 baseline, all 200 one-hop traces, slope calculations and durable
+receipts, and approved these results as development evidence. The absolute
+latency gate remains unmet. This hardware approval did **not itself** authorize
+Phase 1B. The subsequent [contract review](phase-1b-codec-and-pull-contract.md)
+is closed; Cut 1's implementation review also passed with independently
+reproduced gates. Yan authorized its commit and continuation to Cut 2.
+That later work does not alter this 0.7.152 hardware baseline.
+
 ## 1. Deployment and fixture
 
 - Image: `192.168.1.11:5000/quod:0.7.152`; registry digest

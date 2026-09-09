@@ -61,6 +61,502 @@ page_credit_shares_pinned_binding_fifo_across_anchors_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+page_error_returns_successor_credit_to_queued_pull_test_() ->
+    [{atom_to_list(Reason), fun() -> page_error_returns_successor_credit(Reason) end}
+     || Reason <- [not_ready, server_error]].
+
+page_error_returns_successor_credit(Reason) ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, second := B} = C,
+          #{first_call := First, second_call := Second, binding := Binding,
+            grant := Grant, first_id := Req1, second_id := Req2} =
+              begin_queued_page_pair(C),
+          NextGrant = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link, Binding, Grant, Req1,
+                   {error, Reason}, NextGrant},
+          %% A terminal server refusal is not a malformed page. It returns
+          %% the successor credit without a decode or a replacement link.
+          ?assertEqual(Req2, receive_page_request(Link, Binding, NextGrant)),
+          ?assert(is_process_alive(Link)),
+          receive {page_test_open, _, _, _, _, _} -> error(error_reopened_link)
+          after 0 -> ok end,
+          ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+          Owner ! {catchup_page, Link, Binding, NextGrant, Req2,
+                   {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+          ?assertMatch({reply, {ok, #{phase := finalize}}},
+                       gen_server:wait_response(Second, 3000)),
+          assert_page_owner_drained()
+      end).
+
+page_decode_does_not_block_another_identity_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link1, link2 := Link2,
+            first := A, second := B, peer := Peer, ns := Ns} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_decode),
+          #{call := First, binding := Binding1, grant := Grant1, req_id := Req1} =
+              begin_single_page(C),
+          NextGrant = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link1, Binding1, Grant1, Req1,
+                   {ok, fixture_entry_blobs(A), 2}, NextGrant},
+          {Worker, _Key} = receive_page_decode_gate(before_decode, Token),
+          try
+              Rows = gen_server:call(Owner, test_page_rows),
+              ?assertMatch(#{caller := Worker,
+                             turn := {decoding, Link1, Binding1, Grant1, NextGrant}},
+                           maps:get(Req1, Rows)),
+              OtherEndpoint = {"127.0.0.1", 32142},
+              Second = page_verify_request(Owner, Peer, OtherEndpoint, B),
+              {Lease2, Owner} = receive_page_open(Peer, OtherEndpoint, Ns),
+              Binding2 = install_page_test_link(Owner, Lease2, Peer, Ns, Link2),
+              Grant2 = crypto:strong_rand_bytes(16),
+              Owner ! {catchup_credit, Link2, Binding2, Grant2},
+              Req2 = receive_page_request(Link2, Binding2, Grant2),
+              Owner ! {catchup_page, Link2, Binding2, Grant2, Req2,
+                       {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(Second, 3000)),
+              %% The first worker is still held: this cannot pass if the
+              %% node-wide owner is the process doing the page decode.
+              ?assert(maps:is_key(Req1, gen_server:call(Owner, test_page_rows))),
+              ?assertEqual(timeout, gen_server:wait_response(First, 0)),
+              Worker ! {continue_foreign_page_decode, Token},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(First, 3000)),
+              assert_page_owner_drained()
+          after
+              Worker ! {continue_foreign_page_decode, Token}
+          end
+      end).
+
+page_decode_worker_death_closes_link_and_preserves_queued_deadline_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link1, link2 := Link2,
+            first := A, second := B, peer := Peer, endpoint := Endpoint, ns := Ns} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_completion),
+          #{first_call := First, second_call := Second, lease := Lease1,
+            binding := Binding, grant := Grant1, first_id := Req1,
+            second_id := Req2, queued := Queued} = begin_queued_page_pair(C),
+          #{caller := Worker} = maps:get(Req1, gen_server:call(Owner, test_page_rows)),
+          MonitorsBefore = page_owner_monitor_count(Owner, Worker),
+          ?assert(MonitorsBefore >= 2),
+          NextGrant = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link1, Binding, Grant1, Req1,
+                   {ok, fixture_entry_blobs(A), 2}, NextGrant},
+          {Worker, Key} = receive_page_decode_gate(before_completion, Token),
+          try
+              ?assertEqual(MonitorsBefore, page_owner_monitor_count(Owner, Worker)),
+              ?assertMatch(#{from_pending := false,
+                             turn := {decoding, Link1, Binding, Grant1, NextGrant}},
+                           maps:get(Req1, gen_server:call(Owner, test_page_rows))),
+              ?assertMatch(#{active := Req1, credit := none, retiring := false},
+                           page_binding_state(Owner, Binding)),
+              receive {page_test_request, Link1, _, _, _, _, _, _} ->
+                          error(successor_spent_before_decode_acceptance)
+              after 0 -> ok end,
+              exit(Worker, kill),
+              ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+              {Lease2, Owner} = receive_page_open(Peer, Endpoint, Ns),
+              ?assertNotEqual(Lease1, Lease2),
+              ?assertNot(is_process_alive(Link1)),
+              ?assertEqual(#{Req2 => Queued}, gen_server:call(Owner, test_page_rows)),
+              ?assertEqual(0, page_owner_monitor_count(Owner, Worker)),
+              ?assertEqual(Binding, install_page_test_link(Owner, Lease2, Peer, Ns, Link2)),
+              Grant2 = crypto:strong_rand_bytes(16),
+              Owner ! {catchup_credit, Link2, Binding, Grant2},
+              ?assertEqual(Req2, receive_page_request(Link2, Binding, Grant2)),
+              BeforeLate = page_binding_state(Owner, Binding),
+              Owner ! {catchup_page, Link1, Binding, Grant1, Req1,
+                       {ok, fixture_entry_blobs(A), 2}, NextGrant},
+              ?assertEqual({error, retry},
+                           gen_server:call(Owner, {complete_page_decode, Key, decoded})),
+              ?assertEqual(BeforeLate, page_binding_state(Owner, Binding)),
+              ?assertEqual(1, maps:get(pulls, quod_foreign_log:stats())),
+              Owner ! {catchup_page, Link2, Binding, Grant2, Req2,
+                       {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(Second, 3000)),
+              assert_page_owner_drained()
+          after
+              exit(Worker, kill)
+          end
+      end).
+
+page_decode_wrong_completion_keys_cannot_release_credit_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, link2 := OtherLink, first := A} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_completion),
+          #{call := First, binding := Binding, grant := Grant, req_id := ReqId} =
+              begin_single_page(C),
+          NextGrant = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                   {ok, fixture_entry_blobs(A), 2}, NextGrant},
+          {Worker, Key} = receive_page_decode_gate(before_completion, Token),
+          try
+              Rows = gen_server:call(Owner, test_page_rows),
+              State = page_binding_state(Owner, Binding),
+              ?assertEqual({error, retry},
+                           gen_server:call(Owner, {complete_page_decode, Key, decoded})),
+              %% These calls originate in the real retained puller, so the
+              %% key negatives cannot pass merely through the PID guard.
+              WrongKeys = [{self(), ReqId, Binding, Link, Grant},
+                           {Owner, crypto:strong_rand_bytes(16), Binding, Link, Grant},
+                           {Owner, ReqId, make_ref(), Link, Grant},
+                           {Owner, ReqId, Binding, OtherLink, Grant},
+                           {Owner, ReqId, Binding, Link, crypto:strong_rand_bytes(16)}],
+              lists:foreach(
+                fun(WrongKey) ->
+                    ?assertEqual({error, retry},
+                                 page_gate_complete(Worker, Token, WrongKey, decoded)),
+                    ?assertEqual(Rows, gen_server:call(Owner, test_page_rows)),
+                    ?assertEqual(State, page_binding_state(Owner, Binding))
+                end, WrongKeys),
+              %% An identical wire response is equally inert while decoding.
+              Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                       {ok, fixture_entry_blobs(A), 2}, NextGrant},
+              ?assertEqual(Rows, gen_server:call(Owner, test_page_rows)),
+              ?assertEqual(timeout, gen_server:wait_response(First, 0)),
+              Worker ! {continue_foreign_page_decode, Token},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(First, 3000)),
+              assert_page_owner_drained()
+          after
+              Worker ! {continue_foreign_page_decode, Token}
+          end
+      end).
+
+page_decode_duplicate_completion_and_stale_timeout_are_inert_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, after_accept),
+          #{call := First, binding := Binding, grant := Grant, req_id := ReqId} =
+              begin_single_page(C),
+          #{caller := Worker} = maps:get(ReqId, gen_server:call(Owner, test_page_rows)),
+          MonitorCount = page_owner_monitor_count(Owner, Worker),
+          NextGrant = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                   {ok, fixture_entry_blobs(A), 2}, NextGrant},
+          {Worker, Key} = receive_page_decode_gate(after_accept, Token),
+          try
+              ?assertEqual(#{}, gen_server:call(Owner, test_page_rows)),
+              ?assertEqual(MonitorCount - 1, page_owner_monitor_count(Owner, Worker)),
+              State = page_binding_state(Owner, Binding),
+              ?assertMatch(#{active := none, credit := NextGrant, retiring := false}, State),
+              ?assertEqual({error, retry}, page_gate_complete(Worker, Token, Key, decoded)),
+              Owner ! {pull_timeout, ReqId},
+              Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                       {ok, fixture_entry_blobs(A), 2}, crypto:strong_rand_bytes(16)},
+              ?assertEqual(State, page_binding_state(Owner, Binding)),
+              ?assertEqual(timeout, gen_server:wait_response(First, 0)),
+              Worker ! {continue_foreign_page_decode, Token},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(First, 3000)),
+              assert_page_owner_drained()
+          after
+              Worker ! {continue_foreign_page_decode, Token}
+          end
+      end).
+
+page_decode_acceptance_allows_the_same_worker_next_page_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A} = C,
+          [Genesis, Finalize] = fixture_entry_blobs(A),
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_completion),
+          #{call := First, binding := Binding, grant := Grant1, req_id := Req1} =
+              begin_single_page(C),
+          Grant2 = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link, Binding, Grant1, Req1, {ok, [Genesis], 2}, Grant2},
+          {Worker, _Key} = receive_page_decode_gate(before_completion, Token),
+          try
+              ?assertEqual(timeout, gen_server:wait_response(First, 0)),
+              Worker ! {continue_foreign_page_decode, Token},
+              Req2 = receive_page_request_range(Link, Binding, Grant2, 2, 2),
+              ?assertMatch(#{caller := Worker},
+                           maps:get(Req2, gen_server:call(Owner, test_page_rows))),
+              ?assertEqual(timeout, gen_server:wait_response(First, 0)),
+              Owner ! {catchup_page, Link, Binding, Grant2, Req2,
+                       {ok, [Finalize], 2}, crypto:strong_rand_bytes(16)},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(First, 3000)),
+              assert_page_owner_drained()
+          after
+              Worker ! {continue_foreign_page_decode, Token}
+          end
+      end).
+
+page_decode_malformed_page_closes_link_and_rebinds_queued_work_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link1, link2 := Link2, second := B,
+            peer := Peer, endpoint := Endpoint, ns := Ns} = C,
+          #{first_call := First, second_call := Second, lease := Lease1,
+            binding := Binding, grant := Grant1, first_id := Req1,
+            second_id := Req2, queued := Queued} = begin_queued_page_pair(C),
+          %% Valid page framing, invalid entry bytes: exercise worker-side
+          %% wrapped decoding, not a rejection by the link's frame grammar.
+          Owner ! {catchup_page, Link1, Binding, Grant1, Req1,
+                   {ok, [<<"not-an-entry">>], 2}, crypto:strong_rand_bytes(16)},
+          ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+          {Lease2, Owner} = receive_page_open(Peer, Endpoint, Ns),
+          ?assertNotEqual(Lease1, Lease2),
+          ?assertNot(is_process_alive(Link1)),
+          ?assertEqual(#{Req2 => Queued}, gen_server:call(Owner, test_page_rows)),
+          ?assertEqual(Binding, install_page_test_link(Owner, Lease2, Peer, Ns, Link2)),
+          Grant2 = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_credit, Link2, Binding, Grant2},
+          ?assertEqual(Req2, receive_page_request(Link2, Binding, Grant2)),
+          Owner ! {catchup_page, Link2, Binding, Grant2, Req2,
+                   {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+          ?assertMatch({reply, {ok, #{phase := finalize}}},
+                       gen_server:wait_response(Second, 3000)),
+          assert_page_owner_drained()
+      end).
+
+page_decode_queued_completion_cannot_renew_expired_deadline_test() ->
+    with_page_decode_fixture(
+      #{page_timeout_ms => 500},
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_completion),
+          #{call := First, binding := Binding, grant := Grant, req_id := ReqId} =
+              begin_single_page(C),
+          Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                   {ok, fixture_entry_blobs(A), 2}, crypto:strong_rand_bytes(16)},
+          {Worker, Key} = receive_page_decode_gate(before_completion, Token),
+          try
+              #{deadline := Deadline} = maps:get(ReqId, gen_server:call(Owner, test_page_rows)),
+              ok = sys:suspend(Owner),
+              1 = erlang:trace(Worker, true, [send, {tracer, self()}]),
+              Worker ! {test_complete_foreign_page, Token, Key, decoded},
+              receive
+                  {trace, Worker, send,
+                   {'$gen_call', _, {complete_page_decode, Key, decoded}}, Owner} -> ok
+              after 1000 -> error(decode_completion_not_queued)
+              end,
+              1 = erlang:trace(Worker, false, [send]),
+              ?assert(Deadline > quod_time:mono_ms()),
+              {messages, Queued} = process_info(Owner, messages),
+              ?assert(lists:any(
+                        fun({'$gen_call', _, {complete_page_decode, QueuedKey, decoded}}) ->
+                                QueuedKey =:= Key;
+                           (_) -> false
+                        end, Queued)),
+              ?assertNot(lists:member({pull_timeout, ReqId}, Queued)),
+              %% The completion was sent before the timeout message, but
+              %% admission occurs after the unchanged absolute deadline.
+              receive after max(0, Deadline - quod_time:mono_ms()) + 20 -> ok end,
+              ok = sys:resume(Owner),
+              receive
+                  {foreign_page_completion, Token, {error, retry}} -> ok
+              after 1000 -> error(expired_decode_completion_was_accepted)
+              end,
+              Worker ! {continue_foreign_page_decode, Token},
+              ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+              ?assertNot(is_process_alive(Link)),
+              assert_page_owner_drained()
+          after
+              _ = catch erlang:trace(Worker, false, [send]),
+              _ = catch sys:resume(Owner),
+              Worker ! {continue_foreign_page_decode, Token}
+          end
+      end).
+
+page_decode_link_death_before_completion_refuses_late_verdict_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_completion),
+          #{call := First, binding := Binding, grant := Grant, req_id := ReqId} =
+              begin_single_page(C),
+          Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                   {ok, fixture_entry_blobs(A), 2}, crypto:strong_rand_bytes(16)},
+          {Worker, Key} = receive_page_decode_gate(before_completion, Token),
+          try
+              Link ! close,
+              %% Lease release comes from the owner's exact link-DOWN
+              %% transition, not merely from observing the link's death.
+              receive {page_test_release, _, _, _, {Owner, _}} -> ok
+              after 1000 -> error(dead_decode_link_not_retired)
+              end,
+              ?assertEqual(#{}, gen_server:call(Owner, test_page_rows)),
+              ?assertEqual({error, retry}, page_gate_complete(Worker, Token, Key, decoded)),
+              ?assertEqual(timeout, gen_server:wait_response(First, 0)),
+              Worker ! {continue_foreign_page_decode, Token},
+              ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+              assert_page_owner_drained()
+          after
+              Worker ! {continue_foreign_page_decode, Token}
+          end
+      end).
+
+page_decode_worker_death_after_acceptance_keeps_successor_work_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A, second := B} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, after_accept),
+          #{first_call := First, second_call := Second, binding := Binding,
+            grant := Grant1, first_id := Req1, second_id := Req2} =
+              begin_queued_page_pair(C),
+          Grant2 = crypto:strong_rand_bytes(16),
+          Owner ! {catchup_page, Link, Binding, Grant1, Req1,
+                   {ok, fixture_entry_blobs(A), 2}, Grant2},
+          {Worker, _Key} = receive_page_decode_gate(after_accept, Token),
+          try
+              ?assertEqual(Req2, receive_page_request(Link, Binding, Grant2)),
+              exit(Worker, kill),
+              ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+              ?assert(is_process_alive(Link)),
+              ?assertMatch(#{active := Req2, retiring := false}, page_binding_state(Owner, Binding)),
+              Owner ! {catchup_page, Link, Binding, Grant2, Req2,
+                       {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(Second, 3000)),
+              assert_page_owner_drained()
+          after
+              exit(Worker, kill)
+          end
+      end).
+
+page_decode_runs_once_in_the_requesting_worker_never_in_owner_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A} = C,
+          #{call := First, binding := Binding, grant := Grant, req_id := ReqId} =
+              begin_single_page(C),
+          #{caller := Worker} = maps:get(ReqId, gen_server:call(Owner, test_page_rows)),
+          1 = erlang:trace_pattern({quod_catchup, decode_entries, 2}, true, [local]),
+          1 = erlang:trace(Owner, true, [call, {tracer, self()}]),
+          1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
+          try
+              Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                       {ok, fixture_entry_blobs(A), 2}, crypto:strong_rand_bytes(16)},
+              ?assertMatch({reply, {ok, #{phase := finalize}}},
+                           gen_server:wait_response(First, 3000)),
+              Barrier = erlang:trace_delivered(all),
+              Calls = collect_page_decode_calls(Barrier, #{}),
+              %% The worker call is the positive control for the zero owner
+              %% count; retaining an owner-side decode is a real failure.
+              ?assertEqual(#{{Worker, wrapped} => 1}, Calls),
+              assert_page_owner_drained()
+          after
+              _ = catch erlang:trace(Owner, false, [call]),
+              _ = catch erlang:trace(Worker, false, [call]),
+              1 = erlang:trace_pattern({quod_catchup, decode_entries, 2}, false, [local])
+          end
+      end).
+
+page_decode_owner_replacement_cannot_accept_old_page_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := A} = C,
+          Token = make_ref(),
+          ok = hold_next_page_decode(Owner, Token, before_completion),
+          #{call := First, binding := Binding, grant := Grant, req_id := ReqId} =
+              begin_single_page(C),
+          Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                   {ok, fixture_entry_blobs(A), 2}, crypto:strong_rand_bytes(16)},
+          {Worker, _Key} = receive_page_decode_gate(before_completion, Token),
+          WorkerMonitor = monitor(process, Worker),
+          try
+              stop_owner(Owner),
+              ?assertMatch({error, {normal, Owner}}, gen_server:wait_response(First, 1000)),
+              ReplacementDir = temp_dir("page-decode-new-owner"),
+              Replacement = start_owner_opts(ReplacementDir, undefined, #{page_timeout_ms => 5000}),
+              try
+                  ?assertEqual(Replacement, quod_reg:where({foreign_log, node})),
+                  1 = erlang:trace(Replacement, true, ['receive', {tracer, self()}]),
+                  Worker ! {continue_foreign_page_decode, Token},
+                  receive {'DOWN', WorkerMonitor, process, Worker, normal} -> ok
+                  after 2000 -> error(old_page_worker_did_not_finish)
+                  end,
+                  Barrier = erlang:trace_delivered(all),
+                  assert_no_page_completion_to_replacement(Replacement, Barrier),
+                  ?assertEqual(#{}, gen_server:call(Replacement, test_page_rows)),
+                  ?assertEqual(#{}, gen_server:call(Replacement, test_page_binding)),
+                  ?assertMatch(#{pending := 0, histories := 0}, quod_foreign_log:stats())
+              after
+                  _ = catch erlang:trace(Replacement, false, ['receive']),
+                  stop_owner(Replacement),
+                  _ = file:del_dir_r(ReplacementDir)
+              end
+          after
+              exit(Worker, kill),
+              _ = demonitor(WorkerMonitor, [flush])
+          end
+      end).
+
+page_decode_trace_crosses_real_owner_and_confirmation_probe_test() ->
+    with_page_decode_fixture(
+      fun(C) ->
+          #{owner := Owner, link1 := Link, first := Fixture,
+            peer := Peer, ns := Ns} = C,
+          %% Use the address committed by genesis: tip confirmation follows
+          %% certified committee routes, not the initial bootstrap contact.
+          Endpoint = {"127.0.0.1", 19000},
+          Identity = {Ns, maps:get(anchor, Fixture)},
+          Routes = route_candidates([{Peer, Endpoint}]),
+          quod_trace_tests:with_tracer(fun() ->
+              TestPid = self(),
+              Tag = make_ref(),
+              {Caller, CallerMonitor} = spawn_monitor(fun() ->
+                  Result = quod_foreign_log:current(Routes, Identity, 5000),
+                  TestPid ! {page_trace_current_result, Tag, Result}
+              end),
+              try
+                  {Lease, Owner} = receive_page_open(Peer, Endpoint, Ns),
+                  [#{caller := VerificationWorker}] = maps:values(gen_server:call(Owner, test_page_rows)),
+                  VerificationMonitor = monitor(process, VerificationWorker),
+                  try
+                      Binding = install_page_test_link(Owner, Lease, Peer, Ns, Link),
+                      Owner ! {catchup_credit, Link, Binding, crypto:strong_rand_bytes(16)},
+                      ?assertMatch({ok, #{identity := Identity}},
+                                   serve_page_trace_current(Owner, Link, Binding, Fixture, Tag)),
+                      Current = quod_trace_tests:take_span(<<"quod.foreign.current">>),
+                      Confirmation = quod_trace_tests:take_span(<<"quod.foreign.tip_confirm">>),
+                      %% Select the page belonging to the spawned confirmation
+                      %% probe, not an earlier bootstrap page in its parent.
+                      Page = take_page_child_span(<<"quod.foreign.page_fetch">>, Confirmation),
+                      lists:foreach(
+                        fun(Name) ->
+                            Span = take_page_child_span(Name, Page),
+                            ?assertEqual(Current#span.trace_id, Span#span.trace_id)
+                        end,
+                        [<<"quod.foreign.page_wait">>, <<"quod.foreign.page_decode">>,
+                         <<"quod.foreign.page_completion">>, <<"quod.foreign.page_delivery">>,
+                         <<"quod.foreign.page_completion_owner">>]),
+                      ?assertEqual(Current#span.trace_id, Page#span.trace_id),
+                      assert_page_owner_drained()
+                  after
+                      exit(VerificationWorker, kill),
+                      receive {'DOWN', VerificationMonitor, process, VerificationWorker, _} -> ok
+                      after 1000 -> error(trace_verification_worker_survived_cleanup)
+                      end,
+                      wait_foreign_work(0, 0, 1000)
+                  end
+              after
+                  exit(Caller, kill),
+                  receive {'DOWN', CallerMonitor, process, Caller, _} -> ok
+                  after 1000 -> error(trace_caller_survived_cleanup)
+                  end,
+                  stop_owner(Owner),
+                  flush_page_trace_spans()
+              end
+          end)
+      end).
+
 page_credit_worker_death_resets_sent_page_and_rebinds_unsent_deadline_test() ->
     Ns = unique_ns(),
     A = foreign_fixture(Ns),
@@ -227,6 +723,140 @@ page_credit_cancelled_open_and_new_open_failure_leave_no_binding_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+with_page_decode_fixture(Fun) ->
+    with_page_decode_fixture(#{}, Fun).
+
+with_page_decode_fixture(Options, Fun) ->
+    Ns = unique_ns(),
+    A = foreign_fixture(Ns),
+    B = foreign_fixture(Ns),
+    Dir = temp_dir("page-decode"),
+    Owner = start_owner_opts(Dir, undefined, maps:merge(#{page_timeout_ms => 5000}, Options)),
+    try
+        Transport = start_page_test_transport(self()),
+        Parent = self(),
+        Link1 = spawn(fun() -> page_test_link(Parent) end),
+        Link2 = spawn(fun() -> page_test_link(Parent) end),
+        try
+            Fun(#{owner => Owner, first => A, second => B, ns => Ns,
+                  peer => maps:get(pub, A), endpoint => {"127.0.0.1", 32141},
+                  link1 => Link1, link2 => Link2})
+        after
+            Link1 ! close,
+            Link2 ! close,
+            stop_page_test_transport(Transport)
+        end
+    after
+        stop_owner(Owner),
+        _ = file:del_dir_r(Dir)
+    end.
+
+page_verify_request(Owner, Peer, Endpoint, Fixture) ->
+    gen_server:send_request(
+      Owner, {verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000}).
+
+begin_single_page(#{owner := Owner, first := A, ns := Ns, peer := Peer,
+                    endpoint := Endpoint, link1 := Link}) ->
+    Call = page_verify_request(Owner, Peer, Endpoint, A),
+    {Lease, Owner} = receive_page_open(Peer, Endpoint, Ns),
+    Binding = install_page_test_link(Owner, Lease, Peer, Ns, Link),
+    Grant = crypto:strong_rand_bytes(16),
+    Owner ! {catchup_credit, Link, Binding, Grant},
+    ReqId = receive_page_request(Link, Binding, Grant),
+    #{call => Call, lease => Lease, binding => Binding, grant => Grant, req_id => ReqId}.
+
+begin_queued_page_pair(C = #{owner := Owner, second := B, peer := Peer,
+                             endpoint := Endpoint}) ->
+    #{call := First, lease := Lease, binding := Binding,
+      grant := Grant, req_id := Req1} = begin_single_page(C),
+    Second = page_verify_request(Owner, Peer, Endpoint, B),
+    wait_page_pull_count(2, 2000),
+    Rows = gen_server:call(Owner, test_page_rows),
+    [{Req2, Queued}] = maps:to_list(maps:remove(Req1, Rows)),
+    #{first_call => First, second_call => Second, lease => Lease,
+      binding => Binding, grant => Grant, first_id => Req1,
+      second_id => Req2, queued => Queued}.
+
+install_page_test_link(Owner, Lease, Peer, Ns, Link) ->
+    Owner ! {link_up, Lease, Peer, quod_catchup:channel(Ns), Link},
+    receive {page_test_bound, Link, Owner, Binding} -> Binding
+    after 1000 -> error(page_binding_not_installed)
+    end.
+
+hold_next_page_decode(Owner, Token, Stage) ->
+    gen_server:call(Owner, {test_hold_next_page_decode, self(), Token, Stage}).
+
+receive_page_decode_gate(Stage, Token) ->
+    receive
+        {foreign_page_decode, Stage, Token, Worker, Key} -> {Worker, Key}
+    after 2000 -> error({page_decode_gate_not_reached, Stage})
+    end.
+
+page_gate_complete(Worker, Token, Key, Verdict) ->
+    Worker ! {test_complete_foreign_page, Token, Key, Verdict},
+    receive
+        {foreign_page_completion, Token, Result} -> Result
+    after 2000 -> error(page_completion_gate_timeout)
+    end.
+
+page_binding_state(Owner, Binding) ->
+    maps:get(Binding, gen_server:call(Owner, test_page_binding)).
+
+page_owner_monitor_count(Owner, Worker) ->
+    {monitors, Monitors} = process_info(Owner, monitors),
+    length([Pid || {process, Pid} <- Monitors, Pid =:= Worker]).
+
+assert_page_owner_drained() ->
+    ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0},
+                 quod_foreign_log:stats()).
+
+serve_page_trace_current(Owner, Link, Binding, Fixture, Tag) ->
+    receive
+        {page_test_request, Link, Owner, Binding, Grant, ReqId, From, To} ->
+            Chain = maps:get(chain, Fixture),
+            Blobs = [begin {ok, Blob} = quod_ledger:encode_entry(Entry), Blob end
+                     || Entry = #entry{index = Height} <- Chain,
+                        Height >= From, Height =< To],
+            Owner ! {catchup_page, Link, Binding, Grant, ReqId,
+                     {ok, Blobs, length(Chain)}, crypto:strong_rand_bytes(16)},
+            serve_page_trace_current(Owner, Link, Binding, Fixture, Tag);
+        {page_trace_current_result, Tag, Result} -> Result
+    after 6000 -> error(page_trace_current_did_not_complete)
+    end.
+
+take_page_child_span(Name, #span{span_id = ParentId}) ->
+    receive
+        {quod_test_span, Span = #span{name = Name, parent_span_id = ParentId}} -> Span
+    after 2000 -> error({missing_page_child_span, Name})
+    end.
+
+flush_page_trace_spans() ->
+    %% All producers are stopped before this drain. Leave no unconsumed
+    %% bootstrap/owner spans for the next fixture's name-based selector.
+    receive
+        {quod_test_span, _} -> flush_page_trace_spans()
+    after 0 -> ok
+    end.
+
+collect_page_decode_calls(Barrier, Acc) ->
+    receive
+        {trace, Pid, call, {quod_catchup, decode_entries, [_Blobs, Mode]}} ->
+            Key = {Pid, Mode},
+            collect_page_decode_calls(Barrier, maps:update_with(Key, fun(N) -> N + 1 end, 1, Acc));
+        {trace_delivered, all, Barrier} -> Acc
+    after 2000 -> error(page_decode_trace_barrier_timeout)
+    end.
+
+assert_no_page_completion_to_replacement(Replacement, Barrier) ->
+    receive
+        {trace, Replacement, 'receive', {'$gen_call', _, {complete_page_decode, _, _}}} ->
+            error(page_completion_re_resolved_the_owner);
+        {trace, Replacement, 'receive', _} ->
+            assert_no_page_completion_to_replacement(Replacement, Barrier);
+        {trace_delivered, all, Barrier} -> ok
+    after 2000 -> error(replacement_trace_barrier_timeout)
+    end.
+
 start_page_test_transport(Parent) ->
     ?assertEqual(undefined, quod_reg:where({transport, node})),
     {Pid, MRef} = spawn_monitor(fun() ->
@@ -275,7 +905,10 @@ receive_page_open(Peer, Endpoint, Ns) ->
     end.
 
 receive_page_request(Link, Binding, Grant) ->
-    receive {page_test_request, Link, _, Binding, Grant, ReqId, 1, 2} -> ReqId
+    receive_page_request_range(Link, Binding, Grant, 1, 2).
+
+receive_page_request_range(Link, Binding, Grant, From, To) ->
+    receive {page_test_request, Link, _, Binding, Grant, ReqId, From, To} -> ReqId
     after 2000 -> error(page_request_not_sent)
     end.
 

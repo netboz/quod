@@ -140,7 +140,11 @@ already return references; add a tagged ordinary open through the same
 
 The link delivers initial credit and terminal results directly to its bound
 producer. That producer consumes one credit for one submitted row, then waits
-for its terminal response before sending the next. No channel-wide credit
+for its page-decode completion before sending the next. In foreign-log, raw
+response delivery starts decoding in the existing requesting worker; the owner
+keeps the active row, original deadline, caller monitor and reserved successor
+grant until the exact worker's local completion is accepted. Wire errors need
+no decode turn and return successor credit immediately. No channel-wide credit
 broadcast, offer/accept round trip, local offer timer, or request data in a link
 interest map is needed. The link still checks exact producer/link/grant
 correlation. Requests use its ordered fail-closed send path, not fire-and-forget
@@ -182,11 +186,14 @@ waiter process. `send_reliable/3` has the right success point after
 behavior are not the contract to reuse.
 
 The requester must receive the response to learn its unpredictable next grant;
-local acceptance need not pretend to be peer acknowledgement. Its producer
-decodes each entry blob **once**, in its existing local/wrapped-symbol reader,
+local acceptance need not pretend to be peer acknowledgement. The existing
+requesting verifier/probe worker (not the shared foreign-log owner) decodes each
+entry blob **once**, in its existing local/wrapped-symbol reader,
 and uses the existing verifier. Neither link nor envelope codec decodes entries
 again for validation. Credit return does not await or replace semantic
-verification.
+verification. The [Phase-1B Cut-1 contract](phase-1b-codec-and-pull-contract.md#1-page-interpretation-one-retained-pull-two-local-handoff-steps)
+specifies this local handoff and its cancellation races. No wire ACK or second
+decoder was added; the borrowed-local-snapshot path remains unchanged.
 
 ## 5. Ownership, cancellation, and failure
 

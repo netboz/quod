@@ -27,6 +27,11 @@ committee evidence.
 perspective. The gen_server never waits for network, disk replay, certificate
 verification, or crypto; DTX validation callers invoke them from their existing
 asynchronous verdict/recovery worker boundary.
+Incoming pages are decoded by the requesting verifier or its existing probe
+child, not by this shared gen_server. The owner retains the page deadline,
+caller monitor and exact link credit until it accepts that worker's local
+decode completion. Raw delivery is neither page completion nor evidence;
+only the ordinary forward verifier can establish history authority.
 
 Long-lived ontology follows are another consumer of this same owner and cache.
 They add no verifier or history path: a short monitored verification worker
@@ -184,12 +189,15 @@ before that projection can be reused in memory.
          }).
 
 -record(pull, {
-          from :: gen_server:from(),
+          from :: none | gen_server:from(),
+          caller :: pid(),
           request_ref :: reference(),
           binding :: reference(),
           range :: {pos_integer(), pos_integer()},
           deadline :: integer(),
-          submitted = none :: none | {pid(), reference(), binary()},
+          turn = queued :: queued | {sent, pid(), reference(), binary()} |
+                           {decoding, pid(), reference(), binary(), binary()},
+          trace_ctx = undefined :: term(),
           mref :: reference(),
           timer :: reference()
          }).
@@ -1040,15 +1048,18 @@ handle_call(
             {reply, {error, Reason}, S0}
     end;
 handle_call(
-  {pull_page, RequestRef, Peer, Endpoint, Ns, FromIndex, ToIndex, Deadline}, From,
+  {pull_page, RequestRef, Peer, Endpoint, Ns, FromIndex, ToIndex, Deadline, TraceCtx}, From,
   S = #s{fetch_fun = undefined}) ->
     case maps:get(RequestRef, S#s.pending, undefined) of
         #request{identity = {Ns, _Anchor} = Identity, work = Work} ->
             admit_pull(RequestRef, Identity, Work, Peer, Endpoint,
-                       FromIndex, ToIndex, Deadline, From, S);
+                       FromIndex, ToIndex, Deadline, TraceCtx, From, S);
         _ ->
             {reply, {error, retry}, S}
     end;
+handle_call({complete_page_decode, Key, Verdict}, {Caller, _}, S0) ->
+    {Reply, S1} = complete_page_decode(Key, Verdict, Caller, S0),
+    {reply, Reply, S1};
 handle_call({borrow_local_view, RequestRef, View}, {Worker, _Tag}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
         #request{worker = Worker, identity = Identity, source = none,
@@ -1090,6 +1101,12 @@ handle_call(Request, From, S) ->
     handle_private_call(Request, From, S).
 
 -ifdef(TEST).
+handle_private_call({test_hold_next_page_decode, TestPid, Token, Stage}, _From, S)
+  when is_pid(TestPid), is_reference(Token),
+       (Stage =:= before_decode orelse Stage =:= before_completion orelse
+        Stage =:= after_accept) ->
+    put({?MODULE, page_decode_gate}, {TestPid, Token, Stage}),
+    {reply, ok, S};
 handle_private_call({test_hold_next_local_worker, TestPid, Token}, _From, S)
   when is_pid(TestPid), is_reference(Token) ->
     put({?MODULE, local_worker_gate}, {TestPid, Token}),
@@ -1104,11 +1121,19 @@ handle_private_call({test_follow_attempt_state, Identity}, _From, S) ->
               inflight => H#history.follow_inflight, dirty => H#history.follow_dirty,
               token => H#history.follow_token}, S};
 handle_private_call(test_page_rows, _From, S) ->
-    Rows = maps:map(fun(_ReqId, #pull{from = {Caller, _}, binding = Binding,
-                                     deadline = Deadline, submitted = Submitted}) ->
+    Rows = maps:map(fun(_ReqId, #pull{from = From, caller = Caller, binding = Binding,
+                                     deadline = Deadline, turn = Turn}) ->
                         #{caller => Caller, binding => Binding, deadline => Deadline,
-                          submitted => Submitted}
+                          turn => Turn, from_pending => From =/= none}
                     end, S#s.pulls),
+    {reply, Rows, S};
+handle_private_call(test_page_binding, _From, S) ->
+    Rows = maps:map(fun(Ref, B) ->
+                       #{ref => Ref, link => B#page_binding.link,
+                         active => B#page_binding.active, credit => B#page_binding.credit,
+                         retiring => B#page_binding.retiring,
+                         waiting => queue:to_list(B#page_binding.waiting)}
+                   end, S#s.page_bindings),
     {reply, Rows, S};
 handle_private_call(
   {test_install_feed_registration,
@@ -3856,7 +3881,7 @@ invalidate_current_view(Identity, S0) ->
     end.
 
 admit_pull(RequestRef, Identity = {Ns, _}, Work, Peer, Endpoint,
-           FromIndex, ToIndex, Deadline0, From = {Caller, _}, S0) ->
+           FromIndex, ToIndex, Deadline0, TraceCtx, From = {Caller, _}, S0) ->
     Deadline = case Work of
                    {follow, _, _, WorkDeadline} -> min(Deadline0, WorkDeadline);
                    _ -> Deadline0
@@ -3869,7 +3894,8 @@ admit_pull(RequestRef, Identity = {Ns, _}, Work, Peer, Endpoint,
             Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
                                       self(), {pull_timeout, ReqId}),
             MRef = erlang:monitor(process, Caller, [{tag, {catchup_page_owner_down, ReqId}}]),
-            Pull = #pull{from = From, request_ref = RequestRef, binding = BindingRef,
+            Pull = #pull{from = From, caller = Caller, trace_ctx = TraceCtx,
+                         request_ref = RequestRef, binding = BindingRef,
                          range = {FromIndex, ToIndex}, deadline = Deadline,
                          mref = MRef, timer = Timer},
             B = maps:get(BindingRef, S1#s.page_bindings),
@@ -3970,7 +3996,7 @@ drive_page_binding(Ref, S0) ->
                             {From, To} = Pull#pull.range,
                             quod_link:request_page(Link, Ref, Grant, ReqId, From, To),
                             put_page_binding(B#page_binding{credit = none, active = ReqId, waiting = Rest},
-                              S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{submitted = {Link, Ref, Grant}}}})
+                              S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{turn = {sent, Link, Ref, Grant}}}})
                     end
             end;
         _ -> S0
@@ -3978,8 +4004,8 @@ drive_page_binding(Ref, S0) ->
 
 accept_page_result(Link, Ref, Grant, ReqId, Result, NextGrant, S0) ->
     case {maps:get(Ref, S0#s.page_bindings, undefined), maps:get(ReqId, S0#s.pulls, undefined)} of
-        {#page_binding{link = Link, active = ReqId, retiring = false},
-         #pull{binding = Ref, submitted = {Link, Ref, Grant}, deadline = Deadline}} ->
+        {#page_binding{link = Link, active = ReqId, credit = none, retiring = false},
+         #pull{binding = Ref, turn = {sent, Link, Ref, Grant}, deadline = Deadline}} ->
             case Deadline > quod_time:mono_ms() of
                 false -> cancel_pull(ReqId, S0);
                 true -> accept_live_page_result(Link, Ref, Grant, ReqId, Result, NextGrant, S0)
@@ -3987,29 +4013,60 @@ accept_page_result(Link, Ref, Grant, ReqId, Result, NextGrant, S0) ->
         _ -> S0
     end.
 
-accept_live_page_result(_Link, Ref, _Grant, ReqId, Result, NextGrant, S0) ->
-            Reply = case Result of
-                        {ok, Blobs, Height} ->
-                            case quod_catchup:decode_entries(Blobs, wrapped) of
-                                {ok, Entries} -> {ok, Entries, Height};
-                                {error, _} -> malformed
-                            end;
-                        {error, Reason} -> {error, Reason}
-                    end,
-            case Reply of
-                malformed -> cancel_pull(ReqId, S0);
-                _ ->
-                    S1 = complete_pull(ReqId, Reply, S0),
-                    B1 = maps:get(Ref, S1#s.page_bindings),
-                    drive_page_binding(Ref, put_page_binding(B1#page_binding{credit = NextGrant}, S1))
-            end.
+accept_live_page_result(Link, Ref, Grant, ReqId, {ok, Blobs, Height}, NextGrant, S0) ->
+    Pull = maps:get(ReqId, S0#s.pulls),
+    %% Raw delivery consumes the call alias, not page custody. The original
+    %% monitor/deadline and active binding survive until this worker completes
+    %% decoding. No successor may overtake that completion.
+    Key = {self(), ReqId, Ref, Link, Grant},
+    Gate = take_page_decode_gate(),
+    traced_page_owner(Pull#pull.trace_ctx, page_delivery,
+      fun() ->
+          gen_server:reply(Pull#pull.from,
+                           {decode_page, Key, Blobs, Height, Pull#pull.deadline, Gate}),
+          S0#s{pulls = (S0#s.pulls)#{ReqId => Pull#pull{
+                    from = none, turn = {decoding, Link, Ref, Grant, NextGrant}}}}
+      end);
+accept_live_page_result(_Link, Ref, _Grant, ReqId, {error, _} = Error, NextGrant, S0) ->
+    %% Wire errors are terminal without a decode turn, but still return credit.
+    finish_page_turn(ReqId, Ref, Error, NextGrant, S0).
+
+complete_page_decode({Owner, ReqId, Ref, Link, Grant}, Verdict, Caller, S0)
+  when Owner =:= self(), (Verdict =:= decoded orelse Verdict =:= malformed) ->
+    case {maps:get(ReqId, S0#s.pulls, undefined),
+          maps:get(Ref, S0#s.page_bindings, undefined)} of
+        {#pull{from = none, caller = Caller, binding = Ref, deadline = Deadline,
+               turn = {decoding, Link, Ref, Grant, NextGrant}, trace_ctx = TraceCtx},
+         #page_binding{ref = Ref, link = Link, active = ReqId,
+                       credit = none, retiring = false}} ->
+            traced_page_owner(TraceCtx, page_completion_owner,
+              fun() ->
+                  case Verdict =:= decoded andalso Deadline > quod_time:mono_ms() of
+                      true -> {ok, finish_page_turn(ReqId, Ref, ok, NextGrant, S0)};
+                      false -> {{error, retry}, cancel_pull(ReqId, S0)}
+                  end
+              end);
+        _ -> {{error, retry}, S0}
+    end;
+complete_page_decode(_Key, _Verdict, _Caller, S) ->
+    {{error, retry}, S}.
+
+finish_page_turn(ReqId, Ref, Reply, NextGrant, S0) ->
+    S1 = complete_pull(ReqId, Reply, S0),
+    B1 = maps:get(Ref, S1#s.page_bindings),
+    drive_page_binding(Ref, put_page_binding(B1#page_binding{credit = NextGrant}, S1)).
+
+traced_page_owner(undefined, _Stage, Fun) -> Fun();
+traced_page_owner(TraceCtx, Stage, Fun) ->
+    quod_trace:with_span(TraceCtx, <<"quod.foreign.", (atom_to_binary(Stage))/binary>>,
+                         internal, #{}, fun(_) -> Fun() end).
 
 complete_pull(ReqId, Reply, S0) ->
     case maps:take(ReqId, S0#s.pulls) of
         {#pull{from = From, timer = Timer, mref = MRef, binding = Ref}, Pulls} ->
             _ = erlang:cancel_timer(Timer),
             _ = erlang:demonitor(MRef, [flush]),
-            gen_server:reply(From, Reply),
+            reply_page_caller(From, Reply),
             B = maps:get(Ref, S0#s.page_bindings),
             B1 = case B#page_binding.active of
                      ReqId -> B#page_binding{active = none};
@@ -4019,6 +4076,9 @@ complete_pull(ReqId, Reply, S0) ->
         error -> S0
     end.
 
+reply_page_caller(none, _Reply) -> ok;
+reply_page_caller(From, Reply) -> gen_server:reply(From, Reply).
+
 cancel_pull(ReqId, S0) ->
     case maps:get(ReqId, S0#s.pulls, undefined) of
         #pull{binding = Ref} -> drive_page_binding(Ref, cancel_pull_owned(ReqId, S0));
@@ -4027,9 +4087,10 @@ cancel_pull(ReqId, S0) ->
 
 cancel_pull_owned(ReqId, S0) ->
     case maps:get(ReqId, S0#s.pulls, undefined) of
-        #pull{submitted = none} ->
+        #pull{turn = queued} ->
             complete_pull(ReqId, {error, retry}, S0);
-        #pull{binding = Ref, submitted = {Link, Ref, _Grant}} ->
+        #pull{binding = Ref, turn = Turn} ->
+            Link = spent_page_link(Turn),
             S1 = complete_pull(ReqId, {error, retry}, S0),
             B = maps:get(Ref, S1#s.page_bindings),
             quod_link:close(Link),
@@ -4037,6 +4098,9 @@ cancel_pull_owned(ReqId, S0) ->
             put_page_binding(B#page_binding{credit = none, retiring = true}, S1);
         undefined -> S0
     end.
+
+spent_page_link({sent, Link, _Ref, _Grant}) -> Link;
+spent_page_link({decoding, Link, _Ref, _Grant, _NextGrant}) -> Link.
 
 retire_page_binding(Ref, S0) ->
     case maps:get(Ref, S0#s.page_bindings, undefined) of
@@ -5292,11 +5356,19 @@ probe_page_endpoints(Endpoints, Owner, RequestRef, Peer, Ns,
 parallel_probes(Items, Probe, TimeoutMs) ->
     Parent = self(),
     Tag = make_ref(),
+    TraceCtx = quod_trace:context(),
+    TraceStages = get(?TRACE_STAGE_ACTIVE),
     Pending = lists:foldl(
                 fun(Item, Acc) ->
                     {Pid, MRef} = spawn_opt(
                                     fun() ->
-                                        Result = Probe(Item),
+                                        Result = quod_trace:with_context(TraceCtx,
+                                          fun() ->
+                                              Previous = put(?TRACE_STAGE_ACTIVE, TraceStages),
+                                              try Probe(Item)
+                                              after restore_trace_stage(Previous)
+                                              end
+                                          end),
                                         Parent ! {foreign_probe, Tag, self(),
                                                   Item, Result}
                                     end, [link, monitor]),
@@ -5540,25 +5612,103 @@ current_view_evidence(Identity, Height, Projection, Routes) ->
 fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
            PageTimeout) ->
     StartedNative = erlang:monotonic_time(),
-    Result = fetch_page_raw(
+    Result = trace_foreign_stage(page_fetch, fun() -> fetch_page_raw(
                Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
-               PageTimeout),
+               PageTimeout) end),
     observe_foreign_stage(page_fetch, cache_result(Result), StartedNative),
     Result.
 
 fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, From, To, undefined,
                PageTimeout) ->
     Deadline = quod_time:mono_ms() + PageTimeout,
-    try gen_server:call(
-          Owner, {pull_page, RequestRef, Peer, Endpoint, Ns, From, To, Deadline},
-          infinity)
-    catch exit:_ -> {error, retry}
+    TraceCtx = page_trace_context(),
+    Raw = trace_foreign_stage(page_wait,
+            fun() ->
+                page_owner_call(Owner,
+                  {pull_page, RequestRef, Peer, Endpoint, Ns, From, To, Deadline,
+                   TraceCtx}, Deadline)
+            end),
+    case Raw of
+        {decode_page, Key, Blobs, Height, PullDeadline, Gate} ->
+            decode_pulled_page(Owner, Key, Blobs, Height,
+                               min(Deadline, PullDeadline), Gate);
+        {error, _} = Error -> Error
     end;
 fetch_page_raw(_Owner, _RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
                _PageTimeout) ->
     try FetchFun(Peer, Endpoint, Ns, From, To)
     catch exit:_ -> {error, retry}
     end.
+
+%% This is the requesting verifier/probe, never the node-wide owner. Local
+%% snapshot fetchers above already return decoded entries and do not use a
+%% remote page grant. The decoder's own faults must escape to worker-DOWN
+%% cleanup; only the owner call's transport exit is normalized to retry.
+decode_pulled_page(Owner, Key, Blobs, Height, Deadline, Gate) ->
+    page_decode_gate(before_decode, Gate, Key),
+    case Deadline > quod_time:mono_ms() of
+        false -> {error, retry};
+        true ->
+            Decoded = trace_foreign_stage(page_decode,
+                        fun() -> quod_catchup:decode_entries(Blobs, wrapped) end),
+            Verdict = case Decoded of {ok, _} -> decoded; {error, _} -> malformed end,
+            page_decode_gate(before_completion, Gate, Key),
+            Completion = trace_foreign_stage(page_completion,
+                           fun() -> page_owner_call(Owner,
+                             {complete_page_decode, Key, Verdict}, Deadline) end),
+            case {Completion, Decoded} of
+                {ok, {ok, Entries}} ->
+                    page_decode_gate(after_accept, Gate, Key),
+                    case Deadline > quod_time:mono_ms() of
+                        true -> {ok, Entries, Height};
+                        false -> {error, retry}
+                    end;
+                _ -> {error, retry}
+            end
+    end.
+
+page_trace_context() ->
+    case get(?TRACE_STAGE_ACTIVE) of
+        true -> quod_trace:context();
+        _ -> undefined
+    end.
+
+page_owner_call(Owner, Request, Deadline) ->
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            %% Both local calls share the page's original absolute budget.
+            %% In particular, an owner stalled after removing the row cannot
+            %% leave the completion caller waiting on an already-cancelled timer.
+            Reply = try gen_server:call(Owner, Request, Remaining)
+                    catch exit:_ -> {error, retry}
+                    end,
+            case Deadline > quod_time:mono_ms() of
+                true -> Reply;
+                false -> {error, retry}
+            end;
+        _ -> {error, retry}
+    end.
+
+-ifdef(TEST).
+take_page_decode_gate() -> erase({?MODULE, page_decode_gate}).
+
+page_decode_gate(Stage, {TestPid, Token, Stage}, Key = {Owner, _, _, _, _}) ->
+    TestPid ! {foreign_page_decode, Stage, Token, self(), Key},
+    wait_page_decode_gate(TestPid, Token, Owner);
+page_decode_gate(_Stage, _Gate, _Key) -> ok.
+
+wait_page_decode_gate(TestPid, Token, Owner) ->
+    receive
+        {continue_foreign_page_decode, Token} -> ok;
+        {test_complete_foreign_page, Token, Key, Verdict} ->
+            Result = gen_server:call(Owner, {complete_page_decode, Key, Verdict}),
+            TestPid ! {foreign_page_completion, Token, Result},
+            wait_page_decode_gate(TestPid, Token, Owner)
+    end.
+-else.
+take_page_decode_gate() -> undefined.
+page_decode_gate(_Stage, _Gate, _Key) -> ok.
+-endif.
 
 cache_result({ok, _}) -> ok;
 cache_result({ok, _, _}) -> ok;

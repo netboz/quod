@@ -581,8 +581,9 @@ must still be reported separately.
 
 ### 3.7 Measurement and documentation closure
 
-**Source gate, 2026-09-09:** the completed, uncommitted A1–A4 tree at base
-`a300d51` passed a clean-build, sequential unsandboxed EUnit (1799/0),
+**Source gate, 2026-09-09:** the completed A1–A4 tree at base `a300d51`
+(subsequently committed as `45678f5`, version bump `d51503a` / 0.7.152)
+passed a clean-build, sequential unsandboxed EUnit (1799/0),
 `quod_ask_SUITE` (26/26), `quod_quic_SUITE` (26/26), xref and dialyzer,
 all with exit 0 on the first run. Logs are
 `/tmp/quod-a1-a4-final-{eunit,ask,quic,xref,dialyzer}.log`.
@@ -594,6 +595,15 @@ correctness results, not a measured write-latency improvement. Claude reproduced
 these gates on the fingerprint-matched tree and approved the complete cut for
 commit, bump and coordinated development deployment. The result-authentication
 design, Q4, Phase 1B, finality, L2 and compaction gates remain separate.
+
+**Hardware, 2026-09-09:** [the 0.7.152 report](phase-1a-hardware-results.md)
+records 400/400 committed writes, zero full scans across all 200 one-hop
+traces, and 99.756% / 99.901% per-request-means server attribution at c1/c4.
+Serial one-hop p50 improves 1156→544 ms and c4 3723→1609 ms; the strong
+within-run linear slope is no longer visible in this sample. The ≤300 ms
+serial target is **not met**, and flat work through 10,000 entries is **not
+measured**. `foreign.current` remains the largest measured owner; no next-phase
+implementation or release-safety gate is opened by this result.
 
 N=4 gate: no evidence `index_scan` in live one-hop traces; evidence work flat
 through at least 10,000 entries; c1 p50 at most 300 ms. Measure c4, but its

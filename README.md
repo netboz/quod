@@ -159,15 +159,15 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.151
+TAG=0.7.152
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
 
-# 0.7.125 hard-breaks signed read certificates from V2 to V3. Stop all
-# allocations before this upgrade, do not mix versions, and use the clean
-# founding procedure below because existing histories can contain V2 evidence.
+# 0.7.152 changes the catch-up channel to page-credit frames. Stop every home
+# and cloud allocation before the upgrade; never mix the old/new wire.
+# Persisted ledger formats are unchanged: preserve the anchored volumes.
 nomad job stop quod
 
 # STEADY-STATE REDEPLOY — use this only when the release declares no persisted

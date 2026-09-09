@@ -2,8 +2,9 @@
 
 **Status: direction and all three detailed cut contracts approved;
 Cut 1 independently reviewed and committed (`e4ad3e1`, 0.7.153);
-Cut 2 independently reviewed SAFE TO COMMIT, with all gates reproduced green.
-Cut 3 remains gated.**
+Cut 2 independently reviewed and committed (`8ca87e8`, 0.7.154).
+Cut 3 implemented and independently reviewed with green sequential gates.
+All three implementation reviews closed; deployment and measurement remain.**
 Source baseline: `d48cd89` on `claude/next`, deployed 0.7.152. Phase 1A's
 source and hardware reviews are closed; its absolute latency gate is not.
 This document proposes an alternative to weakening identity freshness:
@@ -80,7 +81,7 @@ new workload or replacement baseline.
 This table records the `d48cd89` / 0.7.152 diagnosis, not present-tense claims
 about the working tree. Committed Cut 1 removes its first row's owner-side
 decoder; the Cut-2 implementation addresses the three entry-consumer rows.
-The last row belongs to still-gated Cut 3. New page spans
+The last row belongs to the now-reviewed Cut 3. New page spans
 separate wait, decode and local completion; no new hardware saving is claimed.
 
 | Owner/seam | Baseline work | Disposition |
@@ -244,6 +245,9 @@ collector abstraction, not a second implementation for the optimized case.
 Claude confirmed the final-confirmation predicate is monotone for that fixed
 post-advance committee. The [collector contract](phase-1b-codec-and-pull-contract.md#3-final-confirmation-collector-contract)
 pins distinct-peer counting, impossibility and monitor-driven cancellation.
+Cut 3 now implements this rule through the existing collector, with the
+confirmation predicate unchanged; its implementation checkpoint and gate
+status are recorded in that contract. Broader response reuse is not included.
 
 Broader probe/suffix/confirmation reuse is a **candidate, not an approved
 one-wave contract**. The current reply carries blobs and a captured height,

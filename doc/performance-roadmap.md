@@ -13,8 +13,11 @@ deployed as 0.7.152; Claude independently approved its hardware evidence
 (400/400 committed, live scans eliminated in the measured sample). The
 absolute latency gate remains unmet. Phase 1B Cut 1 is reviewed and committed
 as `e4ad3e1`, with the separate 0.7.153 bump `43bd48c`. Yan authorized
-continuation to Cut 2, now independently reviewed SAFE TO COMMIT with every
-gate reproduced green; Cut 3 remains gated. This
+continuation to Cut 2, independently reviewed and committed as `8ca87e8`
+(separate 0.7.154 bump `dd98f53`). Cut 3 is independently reviewed SAFE TO
+COMMIT with reproduced sequential gates (EUnit 1850/0, ask and QUIC CT 26/26
+each, xref and Dialyzer). All three implementation reviews are closed;
+coordinated development deployment and matched N=4 measurement are next. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source
 lag remains the explicit limitation in §6.2: consume-once progress alone does not
@@ -672,12 +675,12 @@ work only where measurement justifies it; do not weaken freshness.
 The [Phase-1B review brief](phase-1b-current-view-review.md) separates that
 cryptographic redesign from a semantics-preserving cleanup of the existing
 verifier's execution. Claude approved the cleanup direction and all three
-detailed cut contracts. After Cut 1's implementation review closed, Yan
-authorized its commit and continuation to **Cut 2**. The
+detailed cut contracts. Cuts 1 and 2 passed implementation review and were
+committed; Yan then authorized **Cut 3** implementation. The
 [shared artifact and pull contract](phase-1b-codec-and-pull-contract.md) is
 reviewed; its shared artifact cut is explicitly consensus-facing. Each cut
-requires fresh sequential gates and review before commit; Cut 3 still awaits
-Yan's go. Cut 1 removes owner-side page decoding while retaining the
+requires fresh sequential gates and review before commit. Cut 1 removes
+owner-side page decoding while retaining the
 existing page lifecycle. Broader response
 reuse remains unapproved. Suffix reuse already exists. The audit
 found owner-mailbox page decoding on 0.7.152, repeated canonical-byte work and all-reply

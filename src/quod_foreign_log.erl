@@ -87,7 +87,8 @@ before that projection can be reused in memory.
          test_install_feed_registration/5,
          test_install_feed_opening/5,
          test_install_feed_projection/3,
-         test_corrupt_resident_height/3]).
+         test_corrupt_resident_height/3,
+         test_parallel_probes/4, test_confirmation_candidates/2]).
 -endif.
 
 -define(KEY, {foreign_log, node}).
@@ -1116,6 +1117,10 @@ handle_private_call({test_hold_next_follow_worker, TestPid, Token}, _From, S)
   when is_pid(TestPid), is_reference(Token) ->
     put({?MODULE, follow_worker_gate}, {TestPid, Token}),
     {reply, ok, S};
+handle_private_call({test_hold_next_confirmation, TestPid, Token}, _From, S)
+  when is_pid(TestPid), is_reference(Token) ->
+    put({?MODULE, confirmation_gate}, {TestPid, Token}),
+    {reply, ok, S};
 handle_private_call({test_follow_attempt_state, Identity}, _From, S) ->
     H = maps:get(Identity, S#s.histories),
     {reply, #{height => H#history.height, hint => H#history.hinted_height,
@@ -1409,8 +1414,16 @@ spawn_verification_worker(RequestRef, Work, Fun) ->
                {follow, _, _, _} -> {follow, erase({?MODULE, follow_worker_gate})};
                _ -> undefined
            end,
+    ConfirmationGate = case Work of
+                           #routed_work{kind = {current_identity, _}} ->
+                               erase({?MODULE, confirmation_gate});
+                           {current_identity, _, _, _} ->
+                               erase({?MODULE, confirmation_gate});
+                           _ -> undefined
+                       end,
     spawn_opt(
       fun() ->
+          put({?MODULE, confirmation_gate}, ConfirmationGate),
           case Gate of
               {local, {TestPid, Token}} ->
                   TestPid ! {local_worker_held, Token, RequestRef, self()},
@@ -5359,6 +5372,12 @@ probe_page_endpoints(Endpoints, Owner, RequestRef, Peer, Ns,
       {error, retry}).
 
 parallel_probes(Items, Probe, TimeoutMs) ->
+    parallel_probes(Items, Probe, TimeoutMs, all).
+
+%% Initial discovery needs every result for maximum-height selection. Only
+%% final confirmation selects a threshold, over one worker per committee key.
+%% Both policies share correlation, the absolute deadline and child cleanup.
+parallel_probes(Items, Probe, TimeoutMs, Completion) ->
     Parent = self(),
     Tag = make_ref(),
     TraceCtx = quod_trace:context(),
@@ -5380,33 +5399,62 @@ parallel_probes(Items, Probe, TimeoutMs) ->
                     Acc#{Pid => {MRef, Item}}
                 end, #{}, Items),
     Deadline = quod_time:mono_ms() + TimeoutMs,
-    collect_probes(Tag, Pending, Deadline, []).
+    Collection = case Completion of
+                     all -> {all, []};
+                     {threshold, Needed} when is_integer(Needed), Needed > 0 ->
+                         {threshold, Needed, #{}}
+                 end,
+    collect_probes(Tag, Pending, Deadline, Collection).
 
-collect_probes(_Tag, Pending, _Deadline, Acc)
-  when map_size(Pending) =:= 0 ->
-    lists:reverse(Acc);
-collect_probes(Tag, Pending, Deadline, Acc) ->
-    Wait = max(0, Deadline - quod_time:mono_ms()),
-    receive
-        {foreign_probe, Tag, Pid, Item, Result}
-          when is_map_key(Pid, Pending) ->
-            {{MRef, Item}, Pending1} = maps:take(Pid, Pending),
-            _ = erlang:demonitor(MRef, [flush]),
-            collect_probes(
-              Tag, Pending1, Deadline, [{Item, Result} | Acc]);
-        {'DOWN', MRef, process, Pid, _Reason}
-          when is_map_key(Pid, Pending) ->
-            case maps:get(Pid, Pending) of
-                {MRef, _Item} ->
-                    collect_probes(
-                      Tag, maps:remove(Pid, Pending), Deadline, Acc);
-                _ ->
-                    collect_probes(Tag, Pending, Deadline, Acc)
+collect_probes(Tag, Pending, Deadline, Collection) ->
+    case probe_collection_complete(Collection, map_size(Pending)) of
+        true ->
+            stop_current_probes(Pending),
+            probe_collection_result(Collection);
+        false ->
+            Wait = max(0, Deadline - quod_time:mono_ms()),
+            receive
+                {foreign_probe, Tag, Pid, Item, Result}
+                  when is_map_key(Pid, Pending) ->
+                    case maps:get(Pid, Pending) of
+                        {MRef, Item} ->
+                            _ = erlang:demonitor(MRef, [flush]),
+                            collect_probes(
+                              Tag, maps:remove(Pid, Pending), Deadline,
+                              collect_probe_result(Collection, Item, Result));
+                        _ ->
+                            collect_probes(Tag, Pending, Deadline, Collection)
+                    end;
+                {'DOWN', MRef, process, Pid, _Reason}
+                  when is_map_key(Pid, Pending) ->
+                    case maps:get(Pid, Pending) of
+                        {MRef, _Item} ->
+                            collect_probes(
+                              Tag, maps:remove(Pid, Pending), Deadline, Collection);
+                        _ ->
+                            collect_probes(Tag, Pending, Deadline, Collection)
+                    end
+            after Wait ->
+                stop_current_probes(Pending),
+                probe_collection_result(Collection)
             end
-    after Wait ->
-        stop_current_probes(Pending),
-        lists:reverse(Acc)
     end.
+
+probe_collection_complete({all, _Results}, Remaining) -> Remaining =:= 0;
+probe_collection_complete({threshold, Needed, Confirmed}, Remaining) ->
+    Count = map_size(Confirmed),
+    Count >= Needed orelse Count + Remaining < Needed.
+
+collect_probe_result({all, Results}, Item, Result) ->
+    {all, [{Item, Result} | Results]};
+collect_probe_result({threshold, Needed, Confirmed}, {Peer, _Endpoints}, true) ->
+    {threshold, Needed, Confirmed#{Peer => true}};
+collect_probe_result({threshold, _, _} = Collection, _Item, _Result) ->
+    Collection.
+
+probe_collection_result({all, Results}) -> lists:reverse(Results);
+probe_collection_result({threshold, Needed, Confirmed}) ->
+    map_size(Confirmed) >= Needed.
 
 stop_current_probes(Pending) ->
     maps:foreach(
@@ -5533,11 +5581,9 @@ current_view_confirmed(
 current_committee_confirmed(
   Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity, Height,
   Projection, PhaseIndex, FetchFun, PageTimeout) ->
-    Candidates = [{Peer, Endpoints}
-                  || {Peer, Endpoints} <- Hints,
-                     lists:member(Peer, Committee)],
+    Candidates = confirmation_candidates(Hints, Committee),
     Needed = quod_simplex:quorum(length(Committee)),
-    Results = parallel_probes(
+    Confirmed = parallel_probes(
                 Candidates,
                 fun({Peer, Endpoints}) ->
                     probe_confirmed_endpoint(
@@ -5545,9 +5591,47 @@ current_committee_confirmed(
                       Anchor, Identity, Projection, PhaseIndex,
                       FetchFun, PageTimeout)
                 end,
-                PageTimeout),
-    Confirmed = [Peer || {{Peer, _Endpoints}, true} <- Results],
-    length(Confirmed) >= Needed.
+                PageTimeout, {threshold, Needed}),
+    confirmation_collected(Confirmed).
+
+%% Reachability rows can repeat; neither another endpoint nor another hint is
+%% another possible confirmer. Preserve the existing first-seen endpoint walk.
+confirmation_candidates(Hints, Committee) ->
+    Members = maps:from_keys(Committee, true),
+    {Order, Grouped} = lists:foldl(
+      fun({Peer, Endpoints}, {Keys, Rows} = Acc) ->
+          case maps:is_key(Peer, Members) of
+              false -> Acc;
+              true ->
+                  case maps:find(Peer, Rows) of
+                      error -> {[Peer | Keys], Rows#{Peer => Endpoints}};
+                      {ok, Prior} -> {Keys, Rows#{Peer := Prior ++ Endpoints}}
+                  end
+          end
+      end, {[], #{}}, Hints),
+    [{Peer, lists:uniq(maps:get(Peer, Grouped))}
+     || Peer <- lists:reverse(Order)].
+
+-ifdef(TEST).
+test_parallel_probes(Items, Probe, TimeoutMs, Completion) ->
+    parallel_probes(Items, Probe, TimeoutMs, Completion).
+
+test_confirmation_candidates(Hints, Committee) ->
+    confirmation_candidates(Hints, Committee).
+
+%% Pause after the real collector, while the enclosing request is still live.
+%% Whole-request cancellation must not conceal a leaked immediate-puller row.
+confirmation_collected(Result) ->
+    case erase({?MODULE, confirmation_gate}) of
+        {TestPid, Token} ->
+            TestPid ! {foreign_confirmation_returned, Token, self(), Result},
+            receive {release_foreign_confirmation, Token} -> ok end;
+        _ -> ok
+    end,
+    Result.
+-else.
+confirmation_collected(Result) -> Result.
+-endif.
 
 probe_confirmed_endpoint(
   Endpoints, Owner, RequestRef, Peer, Ns, Height,

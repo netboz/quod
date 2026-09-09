@@ -923,6 +923,551 @@ wait_page_pull_count(Expected, Left) when Left > 0 ->
     end;
 wait_page_pull_count(Expected, _Left) -> error({page_pull_count_timeout, Expected}).
 
+final_confirmation_reaps_held_pull_before_worker_done_test_() ->
+    [{atom_to_list(Stage), fun() -> final_confirmation_reaps_held_pull(Stage) end}
+     || Stage <- [sent, decoding]].
+
+final_confirmation_reaps_held_pull(Stage) ->
+    with_confirmation_fixture(
+      fun(C) ->
+          #{owner := Owner, peers := [A, B, D, Held], links := Links} = C,
+          {Call, Token, Pulls} = begin_confirmation_wave(C),
+          #{id := HeldId, caller := Child} = maps:get(Held, Pulls),
+          HeldLink = maps:get(Held, Links),
+          ChildMonitor = erlang:monitor(process, Child),
+          LinkMonitor = erlang:monitor(process, HeldLink),
+          case Stage of
+              sent -> ok;
+              decoding ->
+                  DecodeToken = make_ref(),
+                  ok = hold_next_page_decode(Owner, DecodeToken, before_completion),
+                  reply_confirmation_pull(C, maps:get(Held, Pulls), {ok, [], 2}),
+                  {Child, _} = receive_page_decode_gate(before_completion, DecodeToken)
+          end,
+          HeldRow = maps:get(HeldId, gen_server:call(Owner, test_page_rows)),
+          ?assert(maps:get(deadline, HeldRow) > quod_time:mono_ms()),
+          ?assertEqual(1, page_owner_monitor_count(Owner, Child)),
+          lists:foreach(
+            fun(Peer) -> reply_confirmation_pull(C, maps:get(Peer, Pulls), {ok, [], 2}) end,
+            [A, B, D]),
+          %% No response/continue message is ever sent to the held peer.
+          %% A collect-all implementation cannot reach this barrier while
+          %% that peer and its original page budget remain unresolved.
+          Worker = receive_confirmation_return(Token, true),
+          assert_confirmation_pull_reaped(
+            C, Call, Worker, HeldId, Child, ChildMonitor, HeldLink, LinkMonitor),
+          ?assertMatch(#{pending := 1, pulls := 0}, quod_foreign_log:stats()),
+          Worker ! {release_foreign_confirmation, Token},
+          ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Call, 3000))
+      end).
+
+final_confirmation_impossible_reaps_two_held_pulls_before_worker_done_test() ->
+    with_confirmation_fixture(
+      fun(C) ->
+          #{peers := [A, B, Held1, Held2], links := Links} = C,
+          {Call, Token, Pulls} = begin_confirmation_wave(C),
+          Held = [begin
+                      #{id := Id, caller := Child} = maps:get(Peer, Pulls),
+                      Link = maps:get(Peer, Links),
+                      {Id, Child, erlang:monitor(process, Child),
+                       Link, erlang:monitor(process, Link)}
+                  end || Peer <- [Held1, Held2]],
+          reply_confirmation_pull(C, maps:get(A, Pulls), {error, not_ready}),
+          reply_confirmation_pull(C, maps:get(B, Pulls), {error, server_error}),
+          Worker = receive_confirmation_return(Token, false),
+          lists:foreach(
+            fun({Id, Child, CM, Link, LM}) ->
+                assert_confirmation_pull_reaped(C, Call, Worker, Id, Child, CM, Link, LM)
+            end, Held),
+          ?assertMatch(#{pending := 1, pulls := 0}, quod_foreign_log:stats()),
+          cancel_held_confirmation(Worker, Call)
+      end).
+
+final_confirmation_exhausts_peer_endpoints_before_counting_failure_test() ->
+    with_confirmation_fixture(
+      fun(C0) ->
+          #{owner := Owner, peers := [A, B, D, E], routes := Routes, ns := Ns} = C0,
+          [{A, [Primary]} | Rest] = Routes,
+          Alternative = {"127.0.0.1", 19114},
+          %% A real authenticated current contact precedes the certified
+          %% historical endpoint. Arbitrary extra supplied addresses cannot
+          %% create this alternative for an already-certified validator.
+          C = C0#{routes := [{A, [Alternative, Primary]} | Rest],
+                   contact => {A, Alternative}},
+          Parent = self(),
+          AlternativeLink = spawn(fun() -> page_test_link(Parent) end),
+          try
+              {Call, Token, Pulls} = begin_confirmation_wave(C),
+              reply_confirmation_pull(C, maps:get(B, Pulls), {ok, [], 2}),
+              reply_confirmation_pull(C, maps:get(D, Pulls), {ok, [], 2}),
+              reply_confirmation_pull(C, maps:get(E, Pulls), {error, not_ready}),
+              reply_confirmation_pull(C, maps:get(A, Pulls), {error, server_error}),
+              {Lease, Owner} = receive_page_open(A, Primary, Ns),
+              Binding = install_page_test_link(Owner, Lease, A, Ns, AlternativeLink),
+              Owner ! {catchup_credit, AlternativeLink, Binding, crypto:strong_rand_bytes(16)},
+              AlternativePull = receive_confirmation_pull(Owner, AlternativeLink, 3, 3),
+              ?assertEqual(maps:get(caller, maps:get(A, Pulls)), maps:get(caller, AlternativePull)),
+              reply_confirmation_pull(C, AlternativePull, {ok, [], 2}),
+              Worker = receive_confirmation_return(Token, true),
+              Worker ! {release_foreign_confirmation, Token},
+              ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Call, 3000))
+          after
+              AlternativeLink ! close
+          end
+      end).
+
+final_confirmation_duplicate_owner_probe_reply_cannot_supply_third_peer_test() ->
+    with_confirmation_fixture(
+      fun(C) ->
+          #{peers := [A, B, D, E]} = C,
+          {Call, Token, Pulls} = begin_confirmation_wave(C),
+          #{caller := ChildA} = maps:get(A, Pulls),
+          #{caller := ChildB} = maps:get(B, Pulls),
+          1 = erlang:trace(ChildA, true, [send, {tracer, self()}]),
+          1 = erlang:trace(ChildB, true, [send, {tracer, self()}]),
+          reply_confirmation_pull(C, maps:get(A, Pulls), {ok, [], 2}),
+          {Worker, Message} = receive
+                                  {trace, ChildA, send,
+                                   {foreign_probe, _, ChildA, {A, _}, true} = Sent, Collector} ->
+                                      {Collector, Sent}
+                              after 2000 -> error(real_confirmation_result_not_observed)
+                              end,
+          Worker ! Message,
+          Worker ! Message,
+          reply_confirmation_pull(C, maps:get(B, Pulls), {ok, [], 2}),
+          receive
+              {trace, ChildB, send, {foreign_probe, _, ChildB, {B, _}, true}, Worker} -> ok
+          after 2000 -> error(second_real_confirmation_result_not_observed)
+          end,
+          reply_confirmation_pull(C, maps:get(D, Pulls), {error, not_ready}),
+          reply_confirmation_pull(C, maps:get(E, Pulls), {error, server_error}),
+          %% These messages came from actual owner pulls and the actual tip
+          %% verifier. Replaying A's authentic result still supplies only A.
+          Worker = receive_confirmation_return(Token, false),
+          ?assertEqual(timeout, gen_server:wait_response(Call, 0)),
+          cancel_held_confirmation(Worker, Call)
+      end).
+
+initial_probe_waits_for_delayed_highest_before_final_confirmation_test() ->
+    with_confirmation_fixture(
+      fun(C) ->
+          #{owner := Owner, peers := [A, B, D, Highest], links := Links,
+            fixture := Fixture} = C,
+          Token = make_ref(),
+          ok = gen_server:call(Owner, {test_hold_next_confirmation, self(), Token}),
+          Call = confirmation_current_request(C),
+          Initial = receive_initial_confirmation_pulls(C),
+          lists:foreach(
+            fun(Peer) -> reply_confirmation_pull(C, maps:get(Peer, Initial), {ok, [], 2}) end,
+            [A, B, D]),
+          %% Completion of these real decodes is observable without sleeps.
+          lists:foreach(
+            fun(Peer) -> await_confirmation_child_result(maps:get(Peer, Initial)) end,
+            [A, B, D]),
+          ?assertEqual(timeout, gen_server:wait_response(Call, 0)),
+          receive
+              {foreign_confirmation_returned, Token, _, _} -> error(initial_probe_short_circuited);
+              {page_test_request, _, Owner, _, _, _, _, _} -> error(initial_probe_advanced_early)
+          after 0 -> ok end,
+          [_, _, Entry3, _] = maps:get(chain, Fixture),
+          {ok, Blob3} = quod_ledger:encode_entry(Entry3),
+          reply_confirmation_pull(C, maps:get(Highest, Initial), {ok, [Blob3], 4}),
+          await_confirmation_child_result(maps:get(Highest, Initial)),
+          HighLink = maps:get(Highest, Links),
+          Advance = receive_confirmation_pull(Owner, HighLink, 3, 4),
+          reply_confirmation_pull(C, Advance, {ok, lists:nthtail(2, fixture_entry_blobs(Fixture)), 4}),
+          Final = maps:from_list(
+                    [{Peer, receive_confirmation_pull(Owner, maps:get(Peer, Links), 5, 5)}
+                     || Peer <- [A, B, D, Highest]]),
+          lists:foreach(
+            fun(Peer) -> reply_confirmation_pull(C, maps:get(Peer, Final), {ok, [], 4}) end,
+            [A, B, D]),
+          Worker = receive_confirmation_return(Token, true),
+          Worker ! {release_foreign_confirmation, Token},
+          ?assertMatch({reply, {ok, #{slot := 4}}}, gen_server:wait_response(Call, 3000))
+      end).
+
+confirmation_candidates_group_distinct_members_in_endpoint_order_test() ->
+    [A, B, C, D, Outsider] = [key({confirmation_peer, I}) || I <- lists:seq(1, 5)],
+    E1 = {"127.0.0.1", 19111},
+    E2 = {"127.0.0.1", 19112},
+    E3 = {"127.0.0.1", 19113},
+    Hints = [{A, [E1, E1]}, {Outsider, [E1]}, {B, [E3]},
+             {A, [E2, E1]}, {B, [E3]}, {C, [E1]}, {D, [E1]}],
+    Candidates = quod_foreign_log:test_confirmation_candidates(Hints, [A, B, C, D]),
+    ?assertEqual([{A, [E1, E2]}, {B, [E3]}, {C, [E1]}, {D, [E1]}], Candidates),
+    ?assertEqual([], quod_foreign_log:test_confirmation_candidates([{Outsider, [E1]}], [A, B, C, D])).
+
+confirmation_duplicate_and_mismatched_results_do_not_inflate_quorum_test() ->
+    Items = confirmation_collector_items(),
+    with_controlled_confirmation_collector(
+      Items, {threshold, 3},
+      fun(Collector, Token, Children) ->
+          [A, B, C, D] = Items,
+          ChildA = maps:get(A, Children),
+          1 = erlang:trace(ChildA, true, [send, {tracer, self()}]),
+          ChildA ! {confirmation_probe_reply, Token, true},
+          Message = receive
+                        {trace, ChildA, send, {foreign_probe, _, ChildA, A, true} = Sent, Collector} -> Sent
+                    after 2000 -> error(confirmation_probe_result_not_observed)
+                    end,
+          {foreign_probe, Tag, ChildA, A, true} = Message,
+          %% Replay the real tag/PID/item after that exact peer has replied.
+          Collector ! Message,
+          Collector ! Message,
+          ChildB = maps:get(B, Children),
+          ChildC = maps:get(C, Children),
+          1 = erlang:trace(Collector, true, ['receive', {tracer, self()}]),
+          Collector ! {foreign_probe, Tag, self(), A, true},
+          Collector ! {foreign_probe, make_ref(), ChildB, B, true},
+          Mismatch = {foreign_probe, Tag, ChildC, {key(noncommittee), []}, true},
+          Collector ! Mismatch,
+          receive {trace, Collector, 'receive', Mismatch} -> ok
+          after 2000 -> error(mismatched_confirmation_not_delivered)
+          end,
+          ChildB ! {confirmation_probe_reply, Token, true},
+          ChildC ! {confirmation_probe_reply, Token, false},
+          maps:get(D, Children) ! {confirmation_probe_reply, Token, false},
+          %% All genuine replies are only two distinct successes. This final
+          %% false assertion also detects a premature true, not just absence
+          %% observed before the collector has had a chance to run.
+          ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token))
+      end).
+
+confirmation_wrong_down_monitor_does_not_consume_live_peer_test() ->
+    Items = confirmation_collector_items(),
+    with_controlled_confirmation_collector(
+      Items, {threshold, 3},
+      fun(Collector, Token, Children) ->
+          [A, B, C, D] = Items,
+          ChildC = maps:get(C, Children),
+          1 = erlang:trace(Collector, true, ['receive', {tracer, self()}]),
+          WrongDown = {'DOWN', make_ref(), process, ChildC, normal},
+          Collector ! WrongDown,
+          receive {trace, Collector, 'receive', WrongDown} -> ok
+          after 2000 -> error(wrong_monitor_down_not_delivered)
+          end,
+          maps:get(A, Children) ! {confirmation_probe_reply, Token, true},
+          maps:get(B, Children) ! {confirmation_probe_reply, Token, true},
+          maps:get(D, Children) ! {confirmation_probe_reply, Token, false},
+          ChildC ! {confirmation_probe_reply, Token, true},
+          ?assertEqual(true, receive_controlled_confirmation_result(Collector, Token))
+      end).
+
+confirmation_normal_child_down_makes_quorum_impossible_test() ->
+    Items = confirmation_collector_items(),
+    with_controlled_confirmation_collector(
+      Items, {threshold, 3},
+      fun(Collector, Token, Children) ->
+          [A, B, C, D] = Items,
+          Held = [{Child, erlang:monitor(process, Child)}
+                  || Item <- [C, D], Child <- [maps:get(Item, Children)]],
+          maps:get(A, Children) ! {confirmation_probe_exit, Token},
+          maps:get(B, Children) ! {confirmation_probe_exit, Token},
+          ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token)),
+          lists:foreach(
+            fun({Child, Monitor}) ->
+                receive {'DOWN', Monitor, process, Child, killed} -> ok
+                after 2000 -> error(impossible_confirmation_did_not_kill_child)
+                end
+            end, Held)
+      end).
+
+confirmation_responses_preserve_original_collector_deadline_test() ->
+    Items = confirmation_collector_items(),
+    with_controlled_confirmation_collector(
+      Items, {threshold, 3},
+      fun(Collector, Token, Children) ->
+          1 = erlang:trace_pattern({quod_foreign_log, collect_probes, 4}, true, [local]),
+          1 = erlang:trace(Collector, true, [call, {tracer, self()}]),
+          try
+              [A, B, C, D] = Items,
+              maps:get(A, Children) ! {confirmation_probe_reply, Token, true},
+              Deadline = receive_confirmation_collector_deadline(Collector, 3, 1),
+              %% Deliver B in a later monotonic millisecond. Without this
+              %% test-only scheduling, a reset-to-now bug could accidentally
+              %% produce the same deadline for back-to-back responses.
+              _ = erlang:send_after(5, maps:get(B, Children), {confirmation_probe_reply, Token, true}),
+              ?assertEqual(Deadline, receive_confirmation_collector_deadline(Collector, 2, 2)),
+              maps:get(C, Children) ! {confirmation_probe_reply, Token, false},
+              ?assertEqual(Deadline, receive_confirmation_collector_deadline(Collector, 1, 2)),
+              maps:get(D, Children) ! {confirmation_probe_reply, Token, false},
+              ?assertEqual(false, receive_controlled_confirmation_result(Collector, Token))
+          after
+              _ = erlang:trace_pattern({quod_foreign_log, collect_probes, 4}, false, [local])
+          end
+      end).
+
+receive_confirmation_collector_deadline(Collector, PendingCount, ConfirmedCount) ->
+    receive
+        {trace, Collector, call,
+         {quod_foreign_log, collect_probes,
+          [_, Pending, Deadline, {threshold, 3, Confirmed}]}}
+          when map_size(Pending) =:= PendingCount,
+               map_size(Confirmed) =:= ConfirmedCount -> Deadline
+    after 2000 -> error(confirmation_collector_deadline_not_observed)
+    end.
+
+confirmation_collect_all_and_threshold_agree_across_response_orders_test_() ->
+    {timeout, 30, fun() ->
+        Orders = confirmation_permutations([1, 2, 3, 4]),
+        lists:foreach(
+          fun(Outcomes) ->
+              Expected = length([ok || true <- Outcomes]) >= 3,
+              lists:foreach(
+                fun(Order) ->
+                    ?assertEqual(Expected, ordered_confirmation_result(Outcomes, Order, all)),
+                    ?assertEqual(Expected, ordered_confirmation_result(Outcomes, Order, {threshold, 3}))
+                end, Orders)
+          end, [[true, true, true, true], [true, true, true, false],
+                [true, true, false, false], [true, false, false, false],
+                [false, false, false, false]])
+    end}.
+
+ordered_confirmation_result(Outcomes, Order, Completion) ->
+    Items = confirmation_collector_items(),
+    OrderedItems = [lists:nth(I, Items) || I <- Order],
+    Parent = self(),
+    Token = make_ref(),
+    %% Continue each child only after observing the collector receive the
+    %% previous result: response order is not assumed from scheduling.
+    Probe = fun(Item) ->
+                Parent ! {confirmation_order_child, Token, Item, self()},
+                receive {confirmation_order_reply, Token, Value} -> Value end
+            end,
+    {Collector, Monitor} = spawn_monitor(
+                             fun() ->
+                                 Result = quod_foreign_log:test_parallel_probes(Items, Probe, 10000, Completion),
+                                 Parent ! {confirmation_order_result, Token, self(), Result}
+                             end),
+    Children = maps:from_list(
+                 [receive {confirmation_order_child, Token, Item, Child} -> {Item, Child}
+                  after 2000 -> error(confirmation_order_child_not_started)
+                  end || Item <- Items]),
+    try
+        1 = erlang:trace(Collector, true, ['receive', {tracer, self()}]),
+        lists:foreach(
+          fun(Item) ->
+              Child = maps:get(Item, Children),
+              Position = proplists:get_value(Item, lists:zip(Items, lists:seq(1, 4))),
+              Child ! {confirmation_order_reply, Token, lists:nth(Position, Outcomes)},
+              receive
+                  {trace, Collector, 'receive', {foreign_probe, _, Child, Item, _}} -> ok;
+                  {confirmation_order_result, Token, Collector, Result} ->
+                      throw({confirmation_order_done, Result})
+              after 2000 -> error(confirmation_order_not_consumed)
+              end
+          end, OrderedItems),
+        receive {confirmation_order_result, Token, Collector, Result} -> confirmation_boolean(Completion, Result)
+        after 2000 -> error(confirmation_order_no_result)
+        end
+    catch
+        throw:{confirmation_order_done, EarlyResult} -> confirmation_boolean(Completion, EarlyResult)
+    after
+        _ = erlang:demonitor(Monitor, [flush]),
+        exit(Collector, kill),
+        maps:foreach(fun(_, Child) -> exit(Child, kill) end, Children),
+        flush_confirmation_traces(Collector)
+    end.
+
+confirmation_boolean(all, Results) -> length([ok || {_, true} <- Results]) >= 3;
+confirmation_boolean({threshold, 3}, Result) -> Result.
+
+confirmation_permutations([]) -> [[]];
+confirmation_permutations(Items) ->
+    [[Item | Rest] || Item <- Items, Rest <- confirmation_permutations(Items -- [Item])].
+
+confirmation_collector_items() -> [{key({confirmation_collector, I}), [I]} || I <- lists:seq(1, 4)].
+
+with_controlled_confirmation_collector(Items, Completion, Fun) ->
+    Parent = self(),
+    Token = make_ref(),
+    Probe = fun(Item) ->
+                Parent ! {confirmation_probe_started, Token, Item, self()},
+                receive
+                    {confirmation_probe_reply, Token, Result} -> Result;
+                    {confirmation_probe_exit, Token} -> exit(normal)
+                end
+            end,
+    {Collector, Monitor} = spawn_monitor(
+                             fun() ->
+                                 Result = quod_foreign_log:test_parallel_probes(Items, Probe, 10000, Completion),
+                                 Parent ! {confirmation_probe_collected, Token, self(), Result}
+                             end),
+    Children = maps:from_list(
+                 [receive {confirmation_probe_started, Token, Item, Child} -> {Item, Child}
+                  after 2000 -> error(confirmation_probe_not_started)
+                  end || Item <- Items]),
+    try Fun(Collector, Token, Children)
+    after
+        _ = erlang:demonitor(Monitor, [flush]),
+        exit(Collector, kill),
+        maps:foreach(fun(_, Child) -> exit(Child, kill) end, Children),
+        flush_confirmation_traces(Collector)
+    end.
+
+receive_controlled_confirmation_result(Collector, Token) ->
+    receive {confirmation_probe_collected, Token, Collector, Result} -> Result
+    after 2000 -> error(controlled_confirmation_did_not_finish)
+    end.
+
+flush_confirmation_traces(Collector) ->
+    receive
+        {trace, Collector, _, _} -> flush_confirmation_traces(Collector);
+        {trace, _, send, _, Collector} -> flush_confirmation_traces(Collector)
+    after 0 -> ok end.
+
+with_confirmation_fixture(Fun) ->
+    Fixture = four_member_confirmation_fixture(unique_ns()),
+    Peers = maps:get(peers, Fixture),
+    Routes = maps:get(routes, Fixture),
+    Dir = temp_dir("threshold-confirmation"),
+    Owner = start_owner_opts(Dir, undefined, #{page_timeout_ms => 30000}),
+    Transport = start_page_test_transport(self()),
+    Parent = self(),
+    Links = maps:from_list([{Peer, spawn(fun() -> page_test_link(Parent) end)} || Peer <- Peers]),
+    C = #{owner => Owner, fixture => Fixture, peers => Peers, routes => Routes,
+          links => Links, ns => maps:get(ns, Fixture)},
+    try
+        [First | _] = Peers,
+        [{First, [Endpoint]} | _] = Routes,
+        Seed = gen_server:send_request(
+                 Owner, {verify, First, Endpoint, maps:get(ref, Fixture), transaction, 10000}),
+        Link = maps:get(First, Links),
+        open_confirmation_link(C, First, Endpoint),
+        SeedPull = receive_confirmation_pull(Owner, Link, 1, 2),
+        reply_confirmation_pull(C, SeedPull, {ok, lists:sublist(fixture_entry_blobs(Fixture), 2), 2}),
+        ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Seed, 3000)),
+        assert_page_owner_drained(),
+        Fun(C)
+    after
+        stop_owner(Owner),
+        maps:foreach(fun(_, Link) -> Link ! close end, Links),
+        stop_page_test_transport(Transport),
+        _ = file:del_dir_r(Dir)
+    end.
+
+confirmation_current_request(C = #{owner := Owner, fixture := Fixture, routes := Routes, ns := Ns}) ->
+    gen_server:send_request(
+      Owner, current_request(Routes, {Ns, maps:get(anchor, Fixture)}, maps:get(contact, C, none), 10000)).
+
+begin_confirmation_wave(C = #{owner := Owner, peers := Peers, links := Links}) ->
+    Token = make_ref(),
+    ok = gen_server:call(Owner, {test_hold_next_confirmation, self(), Token}),
+    Call = confirmation_current_request(C),
+    Initial = receive_initial_confirmation_pulls(C),
+    lists:foreach(
+      fun(Peer) -> reply_confirmation_pull(C, maps:get(Peer, Initial), {ok, [], 2}) end, Peers),
+    lists:foreach(fun(Peer) -> await_confirmation_child_result(maps:get(Peer, Initial)) end, Peers),
+    Pulls = maps:from_list(
+              [{Peer, receive_confirmation_pull(Owner, maps:get(Peer, Links), 3, 3)}
+               || Peer <- Peers]),
+    {Call, Token, Pulls}.
+
+receive_initial_confirmation_pulls(C = #{owner := Owner, routes := Routes, links := Links}) ->
+    lists:foreach(fun({Peer, [Endpoint | _]}) -> open_confirmation_link(C, Peer, Endpoint) end, Routes),
+    maps:from_list(
+      [{Peer, monitor_confirmation_pull(receive_confirmation_pull(Owner, maps:get(Peer, Links), 3, 3))}
+       || {Peer, _} <- Routes]).
+
+open_confirmation_link(#{owner := Owner, ns := Ns, links := Links}, Peer, Endpoint) ->
+    {Lease, Owner} = receive_page_open(Peer, Endpoint, Ns),
+    Link = maps:get(Peer, Links),
+    Binding = install_page_test_link(Owner, Lease, Peer, Ns, Link),
+    Owner ! {catchup_credit, Link, Binding, crypto:strong_rand_bytes(16)}.
+
+receive_confirmation_pull(Owner, Link, From, To) ->
+    receive
+        {page_test_request, Link, Owner, Binding, Grant, Id, From, To} ->
+            #{caller := Caller, deadline := Deadline} =
+                maps:get(Id, gen_server:call(Owner, test_page_rows)),
+            #{id => Id, caller => Caller, link => Link, binding => Binding,
+              grant => Grant, deadline => Deadline}
+    after 3000 -> error({confirmation_pull_not_sent, From, To})
+    end.
+
+monitor_confirmation_pull(Pull = #{caller := Child}) ->
+    Pull#{monitor => erlang:monitor(process, Child)}.
+
+await_confirmation_child_result(#{caller := Child, monitor := Monitor}) ->
+    receive {'DOWN', Monitor, process, Child, normal} -> ok
+    after 2000 -> error(initial_confirmation_child_not_done)
+    end.
+
+reply_confirmation_pull(#{owner := Owner},
+                        #{link := Link, binding := Binding, grant := Grant, id := Id}, Result) ->
+    Owner ! {catchup_page, Link, Binding, Grant, Id, Result, crypto:strong_rand_bytes(16)}.
+
+receive_confirmation_return(Token, Expected) ->
+    receive
+        {foreign_confirmation_returned, Token, Worker, Result} ->
+            ?assertEqual(Expected, Result),
+            Worker
+    after 2000 -> error({confirmation_did_not_short_circuit, Expected})
+    end.
+
+cancel_held_confirmation(Worker, Call) ->
+    %% The collector's false has already been observed. Routed current work
+    %% normally parks for a later route/history event after it returns retry;
+    %% terminate the still-held worker only for fixture cleanup, after every
+    %% assertion that must precede whole-request cancellation.
+    exit(Worker, kill),
+    ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 3000)),
+    assert_page_owner_drained().
+
+assert_confirmation_pull_reaped(#{owner := Owner}, Call, Worker,
+                               Id, Child, ChildMonitor, Link, LinkMonitor) ->
+    receive {'DOWN', ChildMonitor, process, Child, killed} -> ok
+    after 2000 -> error(held_confirmation_child_survived)
+    end,
+    %% Link closure is caused by the owner's immediate-puller DOWN handler.
+    %% Waiting on that local event orders the read after cancellation without
+    %% requiring a transport acknowledgement or polling owner state.
+    receive {'DOWN', LinkMonitor, process, Link, normal} -> ok
+    after 2000 -> error(held_confirmation_link_not_closed)
+    end,
+    ?assert(is_process_alive(Worker)),
+    ?assertEqual(timeout, gen_server:wait_response(Call, 0)),
+    ?assertNot(maps:is_key(Id, gen_server:call(Owner, test_page_rows))),
+    ?assertEqual(0, page_owner_monitor_count(Owner, Child)),
+    ?assertMatch(#{pending := 1}, quod_foreign_log:stats()).
+
+four_member_confirmation_fixture(Ns) ->
+    Members = lists:sort(
+                [begin
+                     {Pub, Seed} = quod_identity:generate(),
+                     {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}
+                 end || _ <- lists:seq(1, 4)]),
+    [{Author, Signer} | _] = Members,
+    Peers = [Pub || {Pub, _} <- Members],
+    Routes = [{Peer, [{"127.0.0.1", 19000 + I}]} || {Peer, I} <- lists:zip(Peers, lists:seq(0, 3))],
+    GenesisTx = quod_simplex:test_genesis_tx(
+                  #{committee => [{Peer, Host, Port} || {Peer, [{Host, Port}]} <- tl(Routes)],
+                    node_addr => {"127.0.0.1", 19000}},
+                  Ns, Author, key(confirmation_genesis_incarnation)),
+    {ok, Genesis} = quod_ledger:new_entry(1, {batch, [GenesisTx]}, 0, none),
+    Anchor = entry_hash(Genesis),
+    Identity = {Ns, Anchor},
+    {ok, [Genesis], Projection} = quod_catchup:verify_forward(
+                                   Ns, Anchor, quod_simplex:history_projection(Identity), 1, [Genesis]),
+    ?assertEqual(Peers, quod_simplex:history_committee(Projection)),
+    {ok, Binding} = quod_simplex:history_binding(Identity, Author, Projection),
+    Entries = [begin
+                   Tx0 = #transaction{
+                            origin = Identity, proof_id = key({confirmation_proof, Slot}),
+                            plan_digest = key({confirmation_plan, Slot}),
+                            goal = durable_goal({confirmation_content, Slot}), result = durable_result(),
+                            diff = [{assert, {{confirmation_content, Slot}, true}}],
+                            read_check = #{}, author = Author, author_seq = Slot - 1,
+                            submitted_at = Slot - 1, sig = none},
+                   {ok, Tx} = quod_transaction:sign(Binding, quod_transaction:bind_id(Identity, Tx0), Signer),
+                   {committee_content_entry(Ns, Anchor, Members, Slot, [Tx]), Tx}
+               end || Slot <- lists:seq(2, 4)],
+    [{ReferencedEntry, Referenced} | _] = Entries,
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, ReferencedEntry, Referenced),
+    #{ns => Ns, anchor => Anchor, ref => Ref, peers => Peers, routes => Routes,
+      chain => [Genesis | [Entry || {Entry, _} <- Entries]]}.
+
 required_references_is_exhaustive_test() ->
     A = {<<"a">>, key(1)},
     B = {<<"b">>, key(2)},

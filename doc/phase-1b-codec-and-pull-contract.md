@@ -1,13 +1,15 @@
 # Phase 1B — shared artifact and page-handoff contract
 
 **Status: all three cut contracts approved; Cut 1 reviewed and committed as
-`e4ad3e1`, version 0.7.153 (`43bd48c`). Cut 2 implemented and independently
-reviewed SAFE TO COMMIT; final gates reproduced green.**
+`e4ad3e1`, version 0.7.153 (`43bd48c`). Cut 2 reviewed and committed as
+`8ca87e8`, with the separate 0.7.154 bump `dd98f53`. Cut 3 is implemented
+and independently reviewed SAFE TO COMMIT; all three cuts' reviews are closed.
+Coordinated development deployment and matched hardware measurement are next.**
 Baseline `d48cd89` / 0.7.152. Claude verified and approved the completed
 owner-decode, shared-artifact and final-confirmation contracts. His three
 small clarifications are folded in below: exact binding re-check at decode
 completion, error-response successor-credit coverage, and nullable `from`
-typing. Cut 2 is authorized; Cut 3 still requires implementation authorization. Every cut
+typing. Cut 3 was implemented under Yan's subsequent authorization. Every cut
 requires fresh sequential gates and review before commit; cut 2 is consensus-facing. Broader
 probe-response reuse and cryptographic redesign remain closed.
 
@@ -449,7 +451,8 @@ saving is inferred from these functional tests. The next review is of the
 authorized implementation and its test evidence, not another review of the
 now-approved contract. Following Cut 1's clean implementation review, Yan
 authorized its commit and continuation to Cut 2. Cut 2's implementation review
-is now closed and its commit is approved; Cut 3 and deployment remain gated.
+is now closed and it is committed. Yan subsequently authorized Cut 3's
+implementation; its commit and deployment remain gated on review.
 
 ### Cut-1 implementation checkpoint — 2026-09-09
 
@@ -467,8 +470,8 @@ Logs, fingerprints, the negative control and the review request are archived at
 sandboxed peer-listener failure are disclosed in that handoff. Claude independently
 reproduced all gates and source fingerprints and closed review with no findings.
 Cut 1 was committed as `e4ad3e1`, with the separate 0.7.153 bump `43bd48c`.
-No deployment or hardware saving is claimed. Cut 2 is now implemented;
-Cut 3 is not implemented or authorized.
+No deployment or hardware saving is claimed. Cut 2 subsequently passed review
+and was committed; Cut 3's current authorization is recorded in the status above.
 
 ### Cut-2 implementation checkpoint — 2026-09-09
 
@@ -522,5 +525,45 @@ both the archived pre-cut codec and the new codec, and closed the review as
 **SAFE TO COMMIT**, with no blocker or required correction. Sidecar size
 accounting now measures the actual wire form rather than the native term;
 this deliberate accounting correction changes no wire bytes or authority.
-No deployment or performance saving is claimed by this checkpoint. Cut 3 and
-the other roadmap gates remain closed.
+Cut 2 was committed as `8ca87e8`, followed by the separate 0.7.154 bump
+`dd98f53`. No deployment or performance saving is claimed by this checkpoint.
+Cut 3's subsequent implementation authorization changes none of the other
+roadmap gates.
+
+### Cut-3 implementation checkpoint — 2026-09-09
+
+Only `quod_foreign_log` and its tests change in source. The existing
+`parallel_probes/3` selects collect-all; its generalized `/4` carries the
+completion policy through the same result/DOWN loop and absolute deadline.
+Only `current_committee_confirmed` selects threshold completion. Its
+request-local grouping preserves first-seen committee-peer and endpoint order;
+confirmed keys and unresolved workers count distinct peers. Both terminal
+booleans invoke unchanged `stop_current_probes`. The confirmation predicate,
+post-advance committee, quorum calculation, transport and verifier are unchanged.
+
+The 12 new tests cover held sent/decoding pulls reaped before the enclosing
+worker completes; early impossibility; endpoint fallback on the same child;
+real-owner duplicate reply replay; candidate grouping and exact result/DOWN
+correlation; normal child death; the original deadline across distinct
+monotonic milliseconds; delayed highest-height discovery; and agreement of
+all/threshold results across 120 response-order/outcome combinations.
+The original-budget trace matches exact post-response pending/confirmed counts,
+so a trace of the collector's initial entry cannot satisfy a later assertion.
+The false-confirmation tests deliberately stop at the collector boundary:
+the enclosing request retains its existing history-recovery fallback.
+
+An isolated old-behavior control restores collect-all only at the final
+confirmation call. Both held-success tests fail with precisely
+`{confirmation_did_not_short_circuit, true}` while the working implementation
+passes them. The focused suite passes **119/0**. Final clean-build sequential
+gates pass: EUnit **1850/0**, ask CT **26/26**, QUIC CT **26/26**, xref,
+Dialyzer and diff-check, all exit 0. Evidence and the three corrected fixture
+assumptions are archived
+in `/tmp/quod-phase1b-cut3-G9C2s6/HANDOFF.md` with the adjacent review request.
+Claude independently reproduced every gate on the fingerprint-matched tree,
+verified all twelve claims and closed the review as **SAFE TO COMMIT**, with
+no blocker or required correction. The test-gate plumbing follows its existing
+local convention and is inert in production; no cosmetic source change was
+folded into the reviewed cut. All three implementation reviews are now closed.
+No hardware performance claim is made before coordinated deployment and the
+matched N=4 re-measurement against the retained 0.7.152 baseline.

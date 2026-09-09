@@ -23,8 +23,14 @@ committed, one-hop mean 381.50 ms serial / 874.46 ms c4. The
 absolute latency gates remain unmet, and the 1.625-second serial outlier's
 approval stall is localized but its triggering event is not yet established.
 The c4 result-return stage regressed 14.81%; both findings are the subject of
-the [trace-only diagnosis cut](consensus-result-tracing.md), not authorization
-for a duplicate-receipt validation bypass. This
+the [trace-only diagnosis cut](consensus-result-tracing.md), independently
+reviewed and deployed as 0.7.156. Its [retained-ledger capture](consensus-tracing-hardware-results.md)
+committed 400/400 writes, with one-hop p50/p99 371/422 ms c1 and 857/1167 ms c4;
+neither absolute gate passes. A covered source block waits 288.780 ms after
+local durable support, and result delivery waits 22.817 ms mean at the source
+owner under c4. Neither is yet an exclusive root-cause attribution; the old
+mixed-receipt outlier did not recur. This is not authorization for a
+duplicate-receipt validation bypass. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source
 lag remains the explicit limitation in §6.2: consume-once progress alone does not

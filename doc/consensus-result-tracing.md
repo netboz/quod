@@ -3,7 +3,10 @@
 Status: diagnostic implementation and independent consensus-area review
 complete; approved for commit and preserved-ledger deployment. Both gate
 runs passed EUnit 1867/0, ask/QUIC CT 26/26, Simplex CT 12/12, xref,
-Dialyzer and diff-check. Hardware reproduction is still owed.
+Dialyzer and diff-check. Deployed as 0.7.156 with preserved ledgers;
+[hardware capture](consensus-tracing-hardware-results.md) completed with
+400/400 measured writes committed. The original mixed-receipt outlier was
+not reproduced; the result and support-wait diagnosis remains open.
 Base: `49f3759`, Quod 0.7.155, branch `claude/next`. Yan authorized adding
 the necessary traces. Claude approved the [hardware evidence](phase-1b-hardware-results.md),
 not a behavior change. Consensus/DTX changes retain review-before-commit.

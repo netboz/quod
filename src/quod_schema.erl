@@ -49,6 +49,9 @@ fields(node) ->
     %% path. Keep `keepalive_ms` well below `idle_timeout_ms` (else a healthy link false-closes).
     , {idle_timeout_ms, hoconsc:mk(integer(), #{default => 2000})}
     , {keepalive_ms,    hoconsc:mk(integer(), #{default => 500})}
+      %% Local diagnostic policy applies to every hosted ontology, including
+      %% dynamically-created and recovered ones absent from the content list.
+    , {consensus_owner_tracing, hoconsc:mk(boolean(), #{default => false})}
     ];
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}

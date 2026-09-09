@@ -4,6 +4,104 @@
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 
+owner_turns_cover_real_statem_calls_casts_and_info_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        Ns = <<"trace:owner:", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
+        State = quod_simplex:test_state(#{ns => Ns, trace_owner_turns => true}),
+        %% Enter the production callback module, not a synthetic tracing callback.
+        %% The three events below have ordinary inert/read-only production arms.
+        Owner = proc_lib:spawn(fun() ->
+            gen_statem:enter_loop(quod_simplex, [], running, State)
+        end),
+        Monitor = monitor(process, Owner),
+        try
+            ?assertEqual([], gen_statem:call(Owner, get_committee)),
+            Call = take_owner_turn(Ns),
+            gen_statem:cast(Owner, {sync_done, self(), unused}),
+            Cast = take_owner_turn(Ns),
+            Owner ! dtx_drive,
+            Info = take_owner_turn(Ns),
+            ?assertEqual([<<"call">>, <<"cast">>, <<"other">>],
+                         [owner_attribute('quod.owner.event', S) || S <- [Call, Cast, Info]]),
+            ?assertEqual([1, 2, 3],
+                         [owner_attribute('quod.owner.sequence', S) || S <- [Call, Cast, Info]]),
+            ?assertEqual(1, length(lists:usort(
+                         [owner_attribute('quod.owner.incarnation', S) || S <- [Call, Cast, Info]]))),
+            ?assert(Call#span.end_time =< Cast#span.start_time),
+            ?assert(Cast#span.end_time =< Info#span.start_time),
+            %% The SDK diagnostic context never leaks into the protocol state.
+            ?assertEqual({running, State}, sys:get_state(Owner))
+        after
+            exit(Owner, kill),
+            receive {'DOWN', Monitor, process, Owner, _} -> ok
+            after 2000 -> error(owner_did_not_stop)
+            end
+        end
+    end).
+
+owner_turn_disabled_preserves_callback_and_emits_nothing_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        Ns = <<"trace:owner-off:", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
+        State = quod_simplex:test_state(#{ns => Ns}),
+        From = {self(), make_ref()},
+        ?assertEqual({keep_state, State, [{reply, From, []}]},
+                     quod_simplex:running({call, From}, get_committee, State)),
+        ?assertEqual({keep_state, State},
+                     quod_simplex:running(info, dtx_drive, State)),
+        receive
+            {quod_test_span, #span{name = <<"quod.consensus.owner_turn">>}} ->
+                error(disabled_owner_trace_emitted)
+        after 0 -> ok
+        end
+    end).
+
+owner_turn_covers_keep_progress_steps_and_timeout_actions_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    quod_trace_tests:with_tracer(fun() ->
+        Ns = <<"trace:owner-timeout:", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
+        Domain = quod_simplex:consensus_domain(Ns, <<0:256>>),
+        State = quod_simplex:test_state(#{ns => Ns, consensus_domain => Domain,
+                    eng => quod_simplex:eng_new(Domain, [], 0)}),
+        %% A stale batch event still takes the real keep_progress path. Compare
+        %% complete results/actions with diagnostics disabled, not a shape oracle.
+        Expected = quod_simplex:running({timeout, batch}, {flush_batch, 1}, State),
+        TracedState = quod_simplex:test_state_set(trace_owner_turns, true, State),
+        {keep_state, TracedResult, Actions} =
+            quod_simplex:running({timeout, batch}, {flush_batch, 1}, TracedState),
+        ?assertEqual(Expected, {keep_state,
+            quod_simplex:test_state_set(trace_owner_turns, false, TracedResult), Actions}),
+        Turn = take_owner_turn(Ns),
+        ?assertEqual(<<"timeout_batch">>, owner_attribute('quod.owner.event', Turn)),
+        Steps = take_owner_steps(Turn#span.trace_id, []),
+        Names = [owner_attribute('quod.owner.step', S) || S <- Steps],
+        lists:foreach(fun(Name) -> ?assert(lists:member(Name, Names)) end,
+                      [<<"readiness">>, <<"operation_recovery">>, <<"drain">>, <<"head_reconcile">>]),
+        lists:foreach(fun(S) ->
+            ?assertEqual(Turn#span.span_id, S#span.parent_span_id),
+            ?assert(S#span.start_time >= Turn#span.start_time),
+            ?assert(S#span.end_time =< Turn#span.end_time)
+        end, Steps)
+    end).
+
+take_owner_turn(Ns) ->
+    receive
+        {quod_test_span, S = #span{name = <<"quod.consensus.owner_turn">>}} ->
+            case owner_attribute('quod.namespace', S) of
+                Ns -> S;
+                _ -> take_owner_turn(Ns)
+            end
+    after 2000 -> error({missing_owner_turn, Ns})
+    end.
+
+take_owner_steps(TraceId, Acc) ->
+    receive
+        {quod_test_span, S = #span{name = <<"quod.consensus.owner_step">>, trace_id = TraceId}} ->
+            take_owner_steps(TraceId, [S | Acc])
+    after 0 -> lists:reverse(Acc)
+    end.
+
+owner_attribute(Key, Span) -> maps:get(Key, otel_attributes:map(Span#span.attributes)).
+
 mixed_receipt_claim_block_uses_recording_parent_once_test() ->
     with_request_spans(fun(Unsampled, Sampled, Parent) ->
         Slot = 23,

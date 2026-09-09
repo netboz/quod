@@ -1319,6 +1319,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             relay_timeout_ms = 31000 :: pos_integer(),
             batch_window_ms = 25 :: 0..1000,
             detailed_metrics = false :: boolean(),
+            trace_owner_turns = false :: boolean(),
             author_admissions = #{} :: #{node_id() => binary()},
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
             dtx_projection = undefined :: undefined | quod_dtx:projection(),
@@ -1548,6 +1549,7 @@ test_state_set(relay_dialing, V, S) -> S#s{relay_dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
+test_state_set(trace_owner_turns, V, S) -> S#s{trace_owner_turns = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
 test_state_set(dtx_chan, V, S) -> S#s{dtx_chan = V};
 test_state_set(retained_dtx, empty, S) ->
@@ -3065,7 +3067,10 @@ init_store(Ns, Cfg, Id) ->
             chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
             relay_timeout_ms = RelayTimeout,
             batch_window_ms = maps:get(batch_window_ms, Cfg),
-            detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false)},
+            detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false),
+            %% Node-local diagnostics must not ride a prepared lifecycle config
+            %% into a journal or committed hosting fact. Read once at owner boot.
+            trace_owner_turns = application:get_env(quod, consensus_owner_tracing, false)},
     %% Storage recovery owns one strict order: establish the immutable anchor,
     %% bind/recover the signing journal, validate the full ledger projection,
     %% then reconcile retained signing state. A fresh founder creates the
@@ -3679,11 +3684,24 @@ self_addr(Cfg) ->
 %%% running
 %%%===================================================================
 
-%% Detailed per-event probes are diagnostic-only. They synchronously update several
-%% Prometheus histograms from this serial process, so production keeps them disabled.
-running(EventType, Content, S = #s{detailed_metrics = false}) ->
-    running_impl(EventType, Content, S);
+%% One boundary covers decode, dispatch and keep_progress, including autonomous
+%% receipt work with no live request context. No protocol turn or OTP action is
+%% added. Tracing is independent of the expensive synchronous metric probes.
+running(EventType, Content, S = #s{trace_owner_turns = true}) ->
+    quod_trace:with_owner_turn(
+      #{'quod.namespace' => S#s.ns,
+        'quod.owner.event' => atom_to_binary(event_class(EventType, Content)),
+        'quod.owner.committed_height_at_entry' => S#s.slot,
+        'quod.owner.approved_height_at_entry' => S#s.approved},
+      fun() -> running_measured(EventType, Content, S) end);
 running(EventType, Content, S) ->
+    running_measured(EventType, Content, S).
+
+%% These pre-existing Prometheus probes are independently diagnostic-only: they
+%% update histograms synchronously inside the serial process, unlike OTLP export.
+running_measured(EventType, Content, S = #s{detailed_metrics = false}) ->
+    running_impl(EventType, Content, S);
+running_measured(EventType, Content, S) ->
     {message_queue_len, QLen} = process_info(self(), message_queue_len),
     T0 = erlang:monotonic_time(microsecond),
     Result = running_impl(EventType, Content, S),
@@ -3692,11 +3710,16 @@ running(EventType, Content, S) ->
       erlang:monotonic_time(microsecond) - T0, QLen),
     Result.
 
-%% Time one named sub-step of a handler; the step histogram is the slow-handler
-%% decomposition (which seam inside a 200ms handler actually holds the time).
-timed_step(#s{detailed_metrics = false}, _Step, Fun) ->
+%% Reuse the named synchronous seams for both diagnostic views: nested owner
+%% spans locate a slow turn; aggregate histograms remain independently opt-in.
+timed_step(S = #s{trace_owner_turns = true}, Step, Fun) ->
+    quod_trace:with_owner_step(Step, fun() -> measured_step(S, Step, Fun) end);
+timed_step(S, Step, Fun) ->
+    measured_step(S, Step, Fun).
+
+measured_step(#s{detailed_metrics = false}, _Step, Fun) ->
     Fun();
-timed_step(#s{ns = Ns}, Step, Fun) ->
+measured_step(#s{ns = Ns}, Step, Fun) ->
     T0 = erlang:monotonic_time(microsecond),
     Result = Fun(),
     quod_metrics:observe_consensus_step(

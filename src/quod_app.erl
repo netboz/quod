@@ -222,7 +222,7 @@ recovery_contacts(Values) ->
             end
         end, Values)).
 
-%% Bridge HOCON `node`/`metrics` onto the application env the transport reads.
+%% Bridge local node/listener policy onto its existing application environment.
 apply_transport_env(Cfg) ->
     Node = maps:get(node, Cfg),
     Ip   = binary_to_list(maps:get(ip, Node)),
@@ -248,6 +248,8 @@ apply_transport_env(Cfg) ->
     application:set_env(quod, node_id, {Ip, Port}),     %% Brahms' address-flavoured id (distinct from node_pubkey)
     application:set_env(quod, quic_idle_timeout_ms, maps:get(idle_timeout_ms, Node)),  %% dead-peer detection tuning
     application:set_env(quod, quic_keepalive_ms, maps:get(keepalive_ms, Node)),
+    application:set_env(quod, consensus_owner_tracing,
+                        maps:get(consensus_owner_tracing, Node, false)),
     ok.
 
 %% Parse a configured bind IP (`explorer.ip`) into an inet address tuple; loopback on anything

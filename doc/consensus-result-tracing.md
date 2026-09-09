@@ -7,6 +7,11 @@ Dialyzer and diff-check. Deployed as 0.7.156 with preserved ledgers;
 [hardware capture](consensus-tracing-hardware-results.md) completed with
 400/400 measured writes committed. The original mixed-receipt outlier was
 not reproduced; the result and support-wait diagnosis remains open.
+Claude independently approved the 0.7.156 evidence, not gate closure. The next
+instrument is [source-owner occupied-turn tracing](consensus-owner-turn-tracing.md),
+with no protocol or remote trace-carrier change. Keep the serial result-stage
+regression (+18.4%, 161.396 → 191.334 ms) and the unlocated c4 source/endpoint
+duration difference (137.462 ms) visible; neither is resolved by instrumentation.
 Base: `49f3759`, Quod 0.7.155, branch `claude/next`. Yan authorized adding
 the necessary traces. Claude approved the [hardware evidence](phase-1b-hardware-results.md),
 not a behavior change. Consensus/DTX changes retain review-before-commit.

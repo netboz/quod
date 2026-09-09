@@ -33,6 +33,7 @@ defaults_test() ->
     C = check(<<"content = [{ namespace = \"quod:root\" }]\n">>),
     ?assertEqual(<<"127.0.0.1">>, deep(C, [node, ip])),
     ?assertEqual(14567,           deep(C, [node, port])),
+    ?assertEqual(false,           deep(C, [node, consensus_owner_tracing])),
     ?assertEqual(14568,           deep(C, [metrics, port])),
     ?assertEqual(<<"">>,          deep(C, [identity, dir])),
     ?assertEqual(#{},             maps:get(directory, C)),
@@ -67,6 +68,23 @@ batch_window_parse_test() ->
 explorer_read_budget_parse_test() ->
     C = check(<<"explorer { read_budget_ms = 1234 }\n">>),
     ?assertEqual(1234, deep(C, [explorer, read_budget_ms])).
+
+owner_tracing_node_policy_parse_test() ->
+    C = check(<<"node { consensus_owner_tracing = true }\n">>),
+    ?assertEqual(true, deep(C, [node, consensus_owner_tracing])),
+    ?assertNot(maps:is_key(consensus_owner_tracing, content1(C))),
+    ?assertEqual(false, maps:get(detailed_consensus_metrics, content1(C))).
+
+owner_tracing_content_policy_rejected_test() ->
+    ?assertException(
+       throw, {quod_schema, [#{reason := unknown_fields,
+                              unknown := "consensus_owner_tracing"}]},
+       check(<<"content = [{ consensus_owner_tracing = true }]\n">>)).
+
+owner_tracing_invalid_node_policy_test() ->
+    ?assertException(
+       throw, {quod_schema, _},
+       check(<<"node { consensus_owner_tracing = \"invalid\" }\n">>)).
 
 explorer_read_budget_invalid_test_() ->
     [?_assertException(throw, {quod_schema, _},
@@ -170,6 +188,55 @@ directory_boot_conversion_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+%% Boot publishes node policy for every local Simplex init, not a field in a
+%% namespace's prepared/retained config. The same resume builder is used by
+%% committed hosting recovery; it must not freeze this local diagnostic flag.
+owner_tracing_boot_reaches_dynamic_resume_test() ->
+    _ = application:load(quod),
+    Dir = tmp_dir(),
+    SavedEnv = application:get_all_env(quod),
+    SavedConf = os:getenv("QUOD_CONF"),
+    SavedPrefix = os:getenv("HOCON_ENV_OVERRIDE_PREFIX"),
+    SavedOverride = os:getenv("QUOD_NODE__CONSENSUS_OWNER_TRACING"),
+    try
+        os:unsetenv("QUOD_NODE__CONSENSUS_OWNER_TRACING"),
+        ConfPath = write_boot_conf(Dir, ""),
+        {ok, DefaultConfig} = file:read_file(ConfPath),
+        ok = file:write_file(
+               ConfPath, [DefaultConfig, "node.consensus_owner_tracing = true\n"]),
+        os:putenv("QUOD_CONF", ConfPath),
+        Blocks = quod_app:load_config(),
+        ?assertEqual({ok, true}, application:get_env(quod, consensus_owner_tracing)),
+        ?assert(lists:all(fun(Block) ->
+            not maps:is_key(consensus_owner_tracing, Block)
+        end, Blocks)),
+        Dynamic = <<"trace:dynamic-resume">>,
+        ?assertNot(lists:any(fun(Block) ->
+            maps:get(namespace, Block) =:= Dynamic
+        end, Blocks)),
+        Anchor = crypto:strong_rand_bytes(32),
+        Resumed = quod_ontology:local_resume_config(Dynamic, Anchor, Dir),
+        ?assertNot(maps:is_key(consensus_owner_tracing, Resumed)),
+        ?assertEqual(false, maps:get(detailed_consensus_metrics, Resumed)),
+        %% Reloading the ordinary default clears the local diagnostic policy;
+        %% it never survives through an ontology fact or an old desired config.
+        ok = file:write_file(ConfPath, DefaultConfig),
+        _ = quod_app:load_config(),
+        ?assertEqual({ok, false}, application:get_env(quod, consensus_owner_tracing)),
+        FreshResume = quod_ontology:local_resume_config(Dynamic, Anchor, Dir),
+        ?assertEqual(Resumed, FreshResume)
+    after
+        SavedKeys = [Key || {Key, _} <- SavedEnv],
+        CurrentKeys = [Key || {Key, _} <- application:get_all_env(quod)],
+        _ = [application:unset_env(quod, Key) || Key <- CurrentKeys -- SavedKeys],
+        _ = [application:set_env(quod, Key, Value) || {Key, Value} <- SavedEnv,
+              application:get_env(quod, Key) =/= {ok, Value}],
+        restore_os_env("QUOD_CONF", SavedConf),
+        restore_os_env("HOCON_ENV_OVERRIDE_PREFIX", SavedPrefix),
+        restore_os_env("QUOD_NODE__CONSENSUS_OWNER_TRACING", SavedOverride),
+        _ = file:del_dir_r(Dir)
+    end.
+
 %% --- env overrides individual keys, file stays primary -------------------
 
 env_override_test_() ->
@@ -250,7 +317,11 @@ deep(Map, Path) -> lists:foldl(fun(K, M) -> maps:get(K, M) end, Map, Path).
 %% --- boot-test helpers ---------------------------------------------------
 
 tmp_dir() ->
-    filename:join("/tmp", "quod_boot_id_" ++ integer_to_list(erlang:unique_integer([positive]))).
+    filename:join("/tmp", "quod_boot_id_" ++
+      binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8), lowercase))).
+
+restore_os_env(Name, false) -> os:unsetenv(Name);
+restore_os_env(Name, Value) -> os:putenv(Name, Value).
 
 %% Write a minimal HOCON config into Dir (with content.data_dir = Dir). IdDir = "" omits
 %% the identity block (default resolution); a non-empty IdDir pins `identity.dir`.
@@ -274,4 +345,5 @@ clear_identity_env() ->
 reset_boot_env() ->
     os:unsetenv("QUOD_CONF"),
     os:unsetenv("HOCON_ENV_OVERRIDE_PREFIX"),
+    application:unset_env(quod, consensus_owner_tracing),
     clear_identity_env().

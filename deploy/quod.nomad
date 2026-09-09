@@ -70,6 +70,12 @@ variable "detailed_consensus_metrics" {
   description = "Enable expensive per-event consensus timing and mailbox probes for a short diagnostic run. Keep false during normal operation and throughput tests."
 }
 
+variable "consensus_owner_tracing" {
+  type        = bool
+  default     = false
+  description = "Node-wide short all-turn Simplex OTLP diagnostic capture, including dynamic ontologies and autonomous work. Requires complete sampling/export for absence claims; leave false in normal operation. Does not enable synchronous detailed metrics."
+}
+
 variable "cross_ontology_enabled" {
   type        = bool
   default     = false
@@ -272,6 +278,7 @@ node {
   ip        = "{{ env "attr.unique.network.ip-address" }}"
   port      = {{ env "NOMAD_HOST_PORT_p2p" }}
   bind_port = 14567
+  consensus_owner_tracing = ${var.consensus_owner_tracing}
 }
 metrics { port = 14568 }
 # The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet
@@ -542,6 +549,7 @@ node {
   ip        = "{{ env "attr.unique.network.ip-address" }}"
   port      = {{ env "NOMAD_HOST_PORT_p2p" }}
   bind_port = 14567
+  consensus_owner_tracing = ${var.consensus_owner_tracing}
 }
 metrics { port = 14568 }
 # Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public

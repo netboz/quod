@@ -15,12 +15,15 @@ excluded from the authenticated relay surface.
 
 -export([context/0, shared_context/1,
          with_context/2, with_span/5, with_span/6, with_optional_span/5,
+         with_owner_turn/2, with_owner_step/2,
          start_span/4, finish_span/2,
          set_attributes/2, add_event/3, inject/1, extract/1,
          valid_carrier/1, tx_id/1, result/2]).
 
 -define(MAX_CARRIER_FIELDS, 2).
 -define(MAX_CARRIER_VALUE_BYTES, 512).
+-define(OWNER_SEQUENCE, {?MODULE, owner_sequence}).
+-define(OWNER_CONTEXT, {?MODULE, owner_context}).
 
 -type context() :: otel_ctx:t().
 -type span_ctx() :: opentelemetry:span_ctx().
@@ -75,6 +78,73 @@ with_optional_span(undefined, _Name, _Kind, _Attributes, Fun) ->
     Fun();
 with_optional_span(Ctx, Name, Kind, Attributes, Fun) ->
     with_span(Ctx, Name, Kind, Attributes, fun(_SpanCtx) -> Fun() end).
+
+-doc """
+Opt-in synchronous owner occupancy, independent of request sampling/parenting.
+
+The caller gates this diagnostic. One root per callback also covers autonomous
+work. Its incarnation and sequence are process-local, constant-space diagnostics,
+not consensus state; sequence gaps expose sampled/dropped turns. The active
+diagnostic context is scoped with try/after and NEVER attached to the SDK ambient
+context: existing request parenting and asynchronous propagation stay unchanged.
+Wall duration includes descheduling; reductions are not CPU time. OTP actions
+returned by the callback, internal event queues and time outside it are excluded.
+""".
+-spec with_owner_turn(map(), fun(() -> T)) -> T.
+with_owner_turn(Attributes, Fun) ->
+    {Incarnation, Sequence} = case get(?OWNER_SEQUENCE) of
+        undefined -> {binary:encode_hex(crypto:strong_rand_bytes(16), lowercase), 1};
+        {Id, Previous} -> {Id, Previous + 1}
+    end,
+    put(?OWNER_SEQUENCE, {Incarnation, Sequence}),
+    Before = owner_observation(),
+    {Ctx, Span} = start_span(otel_ctx:new(), <<"quod.consensus.owner_turn">>, internal,
+        Attributes#{'quod.owner.incarnation' => Incarnation,
+                    'quod.owner.sequence' => Sequence,
+                    'quod.owner.pid' => list_to_binary(pid_to_list(self()))}),
+    PreviousContext = put(?OWNER_CONTEXT, Ctx),
+    try Fun()
+    after
+        After = owner_observation(),
+        restore_owner_context(PreviousContext),
+        _ = set_attributes(Span, owner_observation_attributes(Before, After)),
+        %% No result/error payload is inspected or serialized, even on an exit.
+        _ = otel_span:end_span(Span)
+    end.
+
+-doc "A synchronous substep of the current diagnostic turn, not a request span.".
+-spec with_owner_step(atom(), fun(() -> T)) -> T.
+with_owner_step(Step, Fun) ->
+    case get(?OWNER_CONTEXT) of
+        undefined -> Fun();
+        Parent ->
+            {Ctx, Span} = start_span(Parent, <<"quod.consensus.owner_step">>, internal,
+                                    #{'quod.owner.step' => atom_to_binary(Step)}),
+            put(?OWNER_CONTEXT, Ctx),
+            try Fun()
+            after
+                restore_owner_context(Parent),
+                _ = otel_span:end_span(Span)
+            end
+    end.
+
+restore_owner_context(undefined) -> erase(?OWNER_CONTEXT);
+restore_owner_context(Ctx) -> put(?OWNER_CONTEXT, Ctx).
+
+owner_observation() ->
+    Time = erlang:monotonic_time(nanosecond),
+    [{message_queue_len, Queue}, {reductions, Reductions}] =
+        process_info(self(), [message_queue_len, reductions]),
+    {Time, Queue, Reductions}.
+
+owner_observation_attributes({Start, QueueBefore, ReductionsBefore},
+                             {End, QueueAfter, ReductionsAfter}) ->
+    #{'quod.owner.start_monotonic_ns' => Start,
+      'quod.owner.end_monotonic_ns' => End,
+      'quod.owner.wall_ns' => End - Start,
+      'quod.owner.queue_before' => QueueBefore,
+      'quod.owner.queue_after' => QueueAfter,
+      'quod.owner.reductions' => ReductionsAfter - ReductionsBefore}.
 
 -doc "Start a span that another callback will finish; returns its child context.".
 -spec start_span(context(), binary(), atom(), map()) -> {context(), span_ctx()}.

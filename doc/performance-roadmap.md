@@ -30,6 +30,12 @@ neither absolute gate passes. A covered source block waits 288.780 ms after
 local durable support, and result delivery waits 22.817 ms mean at the source
 owner under c4. Neither is yet an exclusive root-cause attribution; the old
 mixed-receipt outlier did not recur. This is not authorization for a
+protocol change: the next [owner-turn diagnostic](consensus-owner-turn-tracing.md)
+is local instrumentation, independently reviewed and approved for commit and
+preserved-ledger diagnostic deployment (EUnit 1885/0, ask/QUIC 26/26,
+Simplex 12/12, xref and dialyzer clean). The 0.7.156 serial
+result-stage regression (+18.4%) and 137.462 ms c4 source/endpoint duration gap
+remain open. This is not authorization for a
 duplicate-receipt validation bypass. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source

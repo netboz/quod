@@ -71,7 +71,8 @@ t_genesis_seeds_content(Cfg) ->
     ?assertEqual(1, maps:get(committed, St)),
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{data = {batch, [Tx]}}} = quod_ledger_store:read_at(Store, 1),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 1),
+        #entry{data = {batch, [Tx]}} = quod_ledger:entry_view(Entry),
         {ok, Incarnation} = decode_genesis_id(Ns, Tx#transaction.tx_id),
         ?assertEqual(
            [Incarnation],
@@ -112,8 +113,10 @@ t_append_commits_and_persists(Cfg) ->
     %% block timestamps are populated + monotonic non-decreasing across slots
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{timestamp = T2}} = quod_ledger_store:read_at(Store, 2),
-        {ok, #entry{timestamp = T3}} = quod_ledger_store:read_at(Store, 3),
+        {ok, E2} = quod_ledger_store:read_at(Store, 2),
+        {ok, E3} = quod_ledger_store:read_at(Store, 3),
+        #entry{timestamp = T2} = quod_ledger:entry_view(E2),
+        #entry{timestamp = T3} = quod_ledger:entry_view(E3),
         ?assert(T2 > 0),
         ?assert(T3 >= T2)
     after quod_ledger_store:close(Store) end.
@@ -137,8 +140,8 @@ t_restart_replays(Cfg) ->
     ?assertEqual({ok, 4}, quod_simplex:append(Ns, tx(Ns, Self, <<"c">>))),
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{data = {batch, [T]}}} =
-            quod_ledger_store:read_at(Store, 4),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 4),
+        #entry{data = {batch, [T]}} = quod_ledger:entry_view(Entry),
         ?assertEqual(3, T#transaction.author_seq)
     after quod_ledger_store:close(Store) end.
 
@@ -182,8 +185,9 @@ t_genesis_hash_is_lock_free_and_lifetime_bound(Cfg) ->
     ?assertEqual(undefined, quod_simplex:genesis_hash(Ns)).
 
 %% Signature enforcement also applies while rebuilding the node's own durable
-%% log. Replacing a valid slot with an otherwise-identical unsigned transaction
-%% must fail the restart; unsigned history is not silently grandfathered.
+%% log. An unsigned submitted transaction cannot become an artifact at all.
+%% A canonical genesis-shaped unsigned payload in a later, properly certified
+%% slot still reaches recovery's semantic check and must fail the restart.
 t_unsigned_history_rejected(Cfg) ->
     Ns = ?config(ns, Cfg),
     Dir = ?config(dir, Cfg),
@@ -193,23 +197,36 @@ t_unsigned_history_rejected(Cfg) ->
     stop(Ns),
     {ok, Source} = quod_ledger_store:open(Ns, Dir),
     {ok, Genesis} = quod_ledger_store:read_at(Source, 1),
-    {ok, #entry{data = {batch, [Signed]}} = E2} =
-        quod_ledger_store:read_at(Source, 2),
+    {ok, E2} = quod_ledger_store:read_at(Source, 2),
+    #entry{data = {batch, [Signed]}, timestamp = T2, cert = Cert2} =
+        quod_ledger:entry_view(E2),
     ok = quod_ledger_store:close(Source),
     ok = file:del_dir_r(quod_ledger_store:ns_dir(Dir, Ns)),
     {ok, Rewritten0} = quod_ledger_store:open(Ns, Dir),
     Unsigned = Signed#transaction{sig = none},
+    ?assertEqual({error, bad_entry}, quod_ledger:new_entry(
+                                      2, {batch, [Unsigned]}, T2, Cert2)),
+    #entry{data = {batch, [GenesisTx]}} = quod_ledger:entry_view(Genesis),
+    {ok, UnsignedBlock} = quod_ledger:new_block(2, 1, {batch, [GenesisTx]}, T2),
+    {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
+    GenesisHash = quod_simplex:block_hash(GenesisBlock),
+    Domain = quod_simplex:consensus_domain(Ns, GenesisHash),
+    UnsignedHash = quod_simplex:block_hash(UnsignedBlock),
+    Share = quod_simplex:make_share(
+              Domain, commit, 2, UnsignedHash,
+              maps:get(identity, ?config(base_cfg, Cfg))),
+    {ok, UnsignedCert} = quod_simplex:form_cert(
+                           Domain, commit, 2, UnsignedHash, [Share], [Self]),
+    UnsignedEntry = quod_ledger:entry(UnsignedBlock, UnsignedCert),
     {ok, Rewritten1} = quod_ledger_store:append(
                          Rewritten0,
-                         [Genesis, E2#entry{data = {batch, [Unsigned]}}]),
+                         [Genesis, UnsignedEntry]),
     ok = quod_ledger_store:close(Rewritten1),
     %% Existing storage must have the new, domain-bound signing journal before
     %% recovery reaches the deliberately malformed ledger payload below.
-    {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
-    GenesisHash = quod_simplex:block_hash(GenesisBlock),
     {ok, Journal} = quod_signing_journal:initialize(
                       Ns,
-                      quod_simplex:consensus_domain(Ns, GenesisHash),
+                      Domain,
                       Dir),
     ok = quod_signing_journal:close(Journal),
     ?assertEqual({error, {invalid_transaction_history, 2}},
@@ -237,9 +254,11 @@ t_commit_carries_cert(Cfg) ->
     ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{cert = none}} = quod_ledger_store:read_at(Store, 1),   %% genesis: the anchor, no cert
-        {ok, #entry{data = {batch, [#transaction{}]}, timestamp = Ts, cert = Cert} = E2} =
-            quod_ledger_store:read_at(Store, 2),
+        {ok, E1} = quod_ledger_store:read_at(Store, 1),
+        #entry{cert = none} = quod_ledger:entry_view(E1), %% pinned genesis
+        {ok, E2} = quod_ledger_store:read_at(Store, 2),
+        #entry{data = {batch, [#transaction{}]}, timestamp = Ts, cert = Cert} =
+            quod_ledger:entry_view(E2),
         ?assertMatch(#cert{kind = commit, slot = 2}, Cert),
         ?assert(Ts > 0),                              %% leader stamped a real wall-clock block time (not the 0 default)
         %% the cert BINDS this specific block: block_from_entry/1 rebuilds the exact #block{} (timestamp
@@ -267,7 +286,8 @@ t_concurrent_appends_batch(Cfg) ->
     ?assertEqual([{N, {ok, 2}} || N <- lists:seq(1, Count)], lists:sort(Results)),
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+        #entry{data = {batch, Transactions}} = quod_ledger:entry_view(Entry),
         ?assertEqual(Count, length(Transactions)),
         ?assertEqual(lists:seq(1, Count),
                      lists:sort([T#transaction.author_seq

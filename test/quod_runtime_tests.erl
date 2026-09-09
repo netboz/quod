@@ -22,7 +22,7 @@ subscription_clause(Ns, Anchor) ->
 
 ae(Ns, Index, Data, Origin) ->
     quod_prolog:apply_entry(
-      Ns, #entry{index = Index, data = Data}, Origin).
+      Ns, quod_ct:committed_entry(Ns, Index, Data), Origin).
 
 %% Erlog's vars_in/1 deliberately skips `_`; projection jobs must reject it just like every
 %% other unbound variable, because a queue entry must be stable and fully ground.

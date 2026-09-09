@@ -251,7 +251,7 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
     Ns = <<"quod:endpoint">>,
     Request = {phase, id(1), digest(2), prepare},
     Ref = certified_ref(),
-    Entry = #entry{index = 7, data = noop},
+    Entry = quod_ledger:noop_entry(7, none),
     Hints = [{Ref, Entry}],
     {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, Hints),
     {quod_dtx_endpoint, 10, Ns, InnerBinary, []} =
@@ -265,7 +265,7 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
     %% The codec deliberately checks only bounded shape.  An uncertified
     %% entry survives transport so the one foreign-log verifier, rather than
     %% this framing module, remains responsible for rejecting or importing it.
-    ?assertEqual(none, Entry#entry.cert).
+    ?assertEqual(none, (quod_ledger:entry_view(Entry))#entry.cert).
 
 malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     Ns = <<"quod:endpoint">>,
@@ -290,11 +290,40 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
          Ns, Request, [{Ref, WrongSlot}])),
-    Entry = #entry{index = 7, data = noop},
+    Entry = quod_ledger:noop_entry(7, none),
+    %% Even a genuine local artifact is not a wire capability: copying its
+    %% private tuple into the fallback must not bypass the canonical decoder.
+    ArtifactInner = term_to_binary({Request, [{Ref, Entry}]}, [deterministic]),
+    ?assertEqual({ok, Request, [], []},
+                 quod_dtx_endpoint:decode_request(
+                   Ns, outer(Ns, 10, ArtifactInner))),
     ?assertEqual(
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
          Ns, Request, [{Ref, Entry}, {Ref, Entry}])).
+
+entry_sidecar_keeps_foreign_symbols_wrapped_test() ->
+    Ns = <<"quod:endpoint">>,
+    Ref = certified_ref(),
+    Name = <<"cut2_sidecar_foreign_", (integer_to_binary(
+                                      erlang:unique_integer([positive])))/binary>>,
+    Symbol = {'$quod_symbol', Name},
+    ?assertError(badarg, binary_to_existing_atom(Name, utf8)),
+    Transaction = #transaction{tx_id = <<1:256>>, origin = {Ns, <<0:256>>},
+                                author = <<1:256>>, read_check = #{},
+                                diff = [{assert, {{Symbol, value}, true}}]},
+    {ok, TxBytes} = quod_transaction:encode_ledger_transaction(Transaction),
+    BlockBytes = term_to_binary(
+                   {quod_block, 1, 7, 6,
+                    {batch, [{transaction, TxBytes}]}, 0}, [deterministic]),
+    EntryBytes = term_to_binary(
+                   {quod_entry, 1, 7, BlockBytes, none}, [deterministic]),
+    [{Ref, Entry}] = quod_dtx_endpoint:decode_validation_sidecar(
+                      [{entry_bytes, Ref, EntryBytes}]),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:encode_entry(Entry)),
+    #entry{data = {batch, [Decoded]}} = quod_ledger:entry_view(Entry),
+    ?assertEqual(Transaction#transaction.diff, Decoded#transaction.diff),
+    ?assertError(badarg, binary_to_existing_atom(Name, utf8)).
 
 outcome_view_and_floor_correlation_are_exact_test() ->
     GroupRef = group_ref(),

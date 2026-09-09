@@ -357,7 +357,7 @@ correctness path.
 -spec verify_reference(quod_dtx:certified_ref(),
                        entry | transaction | 'begin' | prepare | decision |
                        finalize | complete,
-                       none | {<<_:256>>, term()}, none | #entry{},
+                       none | {<<_:256>>, term()}, none | quod_ledger:entry_artifact(),
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, Contact, EntryHint0, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
@@ -557,7 +557,8 @@ verify_resident_local_snapshot(
 verify_resident_local_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
     case {quod_ledger_store:read_at(Store, Slot),
           reference_projection(Slot, Slot, Projection)} of
-        {{ok, #entry{index = Slot} = Entry}, {ok, EvidenceProjection}} ->
+        {{ok, Entry}, {ok, EvidenceProjection}} ->
+            #entry{index = Slot} = quod_ledger:entry_view(Entry),
             verify_exact_reference_entry(
               Ref, ExpectedPhase, Entry, EvidenceProjection);
         {not_found, _} ->
@@ -1745,7 +1746,7 @@ handle_info({{catchup_binding_down, BindingRef}, MRef, process, Link, _Reason}, 
 %% The same live-finality edge that drives the local feed is the reliable wake
 %% for a co-hosted followed ontology.  The entry itself is never evidence here:
 %% every interested identity still advances through the one certified follower.
-handle_info({committed, Ns, Slot, #entry{}}, S) ->
+handle_info({committed, Ns, Slot, _Entry}, S) ->
     {noreply, wake_namespace_progress(Ns, Slot, S)};
 handle_info({certified_head, Ns, Slot}, S) ->
     {noreply, wake_namespace_progress(Ns, Slot, S)};
@@ -1877,13 +1878,11 @@ validate_reference_request(Ref, Phase, TimeoutMs) ->
             Error
     end.
 
-normalize_entry_hint(#entry{} = Entry) ->
+normalize_entry_hint(Entry) ->
     case quod_catchup:page_stats([Entry]) of
         {ok, 1, _Bytes} -> Entry;
         {error, _} -> none
-    end;
-normalize_entry_hint(_Hint) ->
-    none.
+    end.
 
 validate_route_request(
   <<_:256>>, Endpoint,
@@ -4905,8 +4904,8 @@ fetch_exact_reference(
   Store0, Height0, Projection0, SlotProjection0, PhaseIndex,
   Root, FetchFun, PageTimeout, EntryHint) ->
     Slot = ref_slot(Ref),
-    case EntryHint of
-        #entry{index = Slot} when Height0 < Slot ->
+    case entry_index(EntryHint) of
+        Slot when Height0 < Slot ->
             case fetch_hint_parent(
                    Owner, RequestRef, Peer, Endpoint, Slot, Identity,
                    Store0, Height0, Projection0, PhaseIndex, Root,
@@ -4960,9 +4959,19 @@ fetch_hint_parent(
     end.
 
 import_exact_entry_hint(
+  Owner, RequestRef, Ref, Phase, Identity,
+  Store0, Height0, Projection0, PhaseIndex, Root, Entry) ->
+    Slot = Height0 + 1,
+    case entry_index(Entry) of
+        Slot -> import_next_entry_hint(
+                  Owner, RequestRef, Ref, Phase, Identity,
+                  Store0, Height0, Projection0, PhaseIndex, Root, Entry, Slot);
+        _ -> fallback
+    end.
+
+import_next_entry_hint(
   Owner, RequestRef, Ref, Phase, Identity = {Ns, Anchor},
-  Store0, Height0, Projection0, PhaseIndex, Root,
-  #entry{index = Slot} = Entry) when Height0 =:= Slot - 1 ->
+  Store0, Height0, Projection0, PhaseIndex, Root, Entry, Slot) ->
     case prepare_verified_page(
            Ns, Anchor, Identity, Projection0, PhaseIndex,
            Slot, Slot, [Entry], Slot) of
@@ -4985,11 +4994,7 @@ import_exact_entry_hint(
             end;
         {error, _} ->
             fallback
-    end;
-import_exact_entry_hint(
-  _Owner, _RequestRef, _Ref, _Phase, _Identity,
-  _Store, _Height, _Projection, _PhaseIndex, _Root, _Entry) ->
-    fallback.
+    end.
 
 fetch_exact_from_cache(
   Owner, RequestRef, Peer, Endpoint, Slot, Identity,
@@ -5730,15 +5735,20 @@ validate_page(Entries, From, To, RemoteHeight) ->
     end.
 
 page_indices([], _Next, _To) -> true;
-page_indices([#entry{index = Next} | Rest], Next, To) when Next =< To ->
-    page_indices(Rest, Next + 1, To);
+page_indices([Entry | Rest], Next, To) when Next =< To ->
+    entry_index(Entry) =:= Next andalso page_indices(Rest, Next + 1, To);
 page_indices(_, _Next, _To) -> false.
+
+entry_index(Entry) ->
+    try (quod_ledger:entry_view(Entry))#entry.index
+    catch error:_ -> error
+    end.
 
 verify_exact_reference(Store, Ref, ExpectedPhase, Projection) ->
     Slot = ref_slot(Ref),
     case {quod_ledger_store:read_at(Store, Slot),
           reference_projection(Slot, Slot, Projection)} of
-        {{ok, #entry{} = Entry}, {ok, EvidenceProjection}} ->
+        {{ok, Entry}, {ok, EvidenceProjection}} ->
             verify_exact_reference_entry(
               Ref, ExpectedPhase, Entry, EvidenceProjection);
         {not_found, _} ->
@@ -5748,7 +5758,8 @@ verify_exact_reference(Store, Ref, ExpectedPhase, Projection) ->
     end.
 
 verify_exact_reference_entry(
-  Ref, ExpectedPhase, #entry{data = Data} = Entry, Projection) ->
+  Ref, ExpectedPhase, Entry, Projection) ->
+    #entry{data = Data} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
         {content, Transactions}
           when ExpectedPhase =:= transaction; ExpectedPhase =:= entry ->

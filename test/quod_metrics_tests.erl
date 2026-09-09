@@ -396,15 +396,20 @@ foreign_commit_metrics_use_target_namespace_test() ->
     Origin = <<"metrics:origin:",
                (integer_to_binary(
                   erlang:unique_integer([positive])))/binary>>,
-    Author = <<19:256>>,
+    Seed = <<19:256>>,
+    {Author, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
     Tx = #transaction{tx_id = <<20:256>>,
                       origin = {Origin, <<21:256>>},
                       proof_id = <<22:256>>, plan_digest = <<23:256>>,
                       goal = <<>>, result = <<>>,
                       diff = [{assert, {{metric_fact, true}, true}}],
                       read_check = #{}, author = Author},
-    ok = quod_metrics:test_observe_commit(
-           Target, #entry{index = 1, data = {batch, [Tx]}}),
+    Bound = quod_transaction:bind_id({Target, <<0:256>>}, Tx),
+    {ok, Signed} = quod_transaction:sign(
+                     {Target, <<0:256>>, Author}, Bound,
+                     #{pubkey => Author, key => quod_identity:key_term({Author, Seed})}),
+    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Signed]}, 0, none),
+    ok = quod_metrics:test_observe_commit(Target, Entry),
     AuthorLabel = quod_identity:short(Author),
     ?assertEqual(1, prometheus_counter:value(
                       quod_tx_committed_total, [Target, AuthorLabel])),
@@ -419,16 +424,15 @@ dtx_commits_are_counted_by_phase_test() ->
            (integer_to_binary(
               erlang:unique_integer([positive])))/binary>>,
     ok = quod_metrics:test_observe_commit(
-           Ns, #entry{index = 1, data = noop}),
-    ok = quod_metrics:test_observe_commit(
-           Ns, #entry{index = 2, data = {batch, []}}),
+           Ns, quod_ledger:noop_entry(1, none)),
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:new_entry(2, {batch, []}, 0, none)),
     ?assertEqual(
        undefined,
        prometheus_counter:value(
          quod_dtx_committed_total, [Ns, <<"decision">>])),
-    ok = quod_metrics:test_observe_commit(
-           Ns, #entry{index = 3,
-                      data = quod_ct:dtx_decision_payload()}),
+    {ok, Entry} = quod_ledger:new_entry(3, quod_ct:dtx_decision_payload(), 0, none),
+    ok = quod_metrics:test_observe_commit(Ns, Entry),
     ?assertEqual(
        1,
        prometheus_counter:value(

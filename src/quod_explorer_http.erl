@@ -487,7 +487,8 @@ durable_submission_json(
 terminal_outcome_json(Outcome, GoalJson, ResultJson) ->
     (outcome_json(Outcome))#{goal => GoalJson, bindings => ResultJson}.
 
-entry_txs(#entry{data = Data}) ->
+entry_txs(Entry) ->
+    #entry{data = Data} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
         {content, Txs} -> Txs;
         {controls, _Controls} -> [];
@@ -499,10 +500,11 @@ entry_txs(#entry{data = Data}) ->
 %% same-phase DTX-control batch. Keeping this projection beside block_json/2
 %% makes paged history and the live WebSocket describe the same committed
 %% ledger; every control gets its own row while sharing the committed slot.
-entry_rows(Ns, #entry{} = E) ->
+entry_rows(Ns, E) ->
     entry_rows(none, Ns, E).
 
-entry_rows(Store, Ns, #entry{data = Data} = E) ->
+entry_rows(Store, Ns, E) ->
+    #entry{data = Data} = quod_ledger:entry_view(E),
     case quod_ledger:classify(Data) of
         {content, Txs} -> [tx_json(Ns, T, E) || T <- Txs];
         {controls, Controls} ->
@@ -522,7 +524,8 @@ tx_json(Ns, #transaction{tx_id = Id,
                      goal = G, author = A,
                      author_seq = AuthorSeq, submitted_at = Sub,
                      diff = Diff, effects = Effects},
-        #entry{index = Slot, timestamp = Ts}) ->
+        Entry) ->
+    #entry{index = Slot, timestamp = Ts} = quod_ledger:entry_view(Entry),
     (tx_json_decoded(
       Ns, Id, durable_goal_text(G), A, AuthorSeq, Sub,
       Diff, Effects, Slot, Ts))#{role => role_name(Role),
@@ -552,8 +555,9 @@ tx_json_full_decoded(
                submitted_at = SubmittedAt, diff = Diff,
                read_check = RC, effects = Effects, sig = Sig,
                request_auth = RequestAuth} = T,
-  #entry{index = Slot, timestamp = Timestamp} = E,
+  E,
   GoalJson, ResultJson) ->
+    #entry{index = Slot, timestamp = Timestamp} = quod_ledger:entry_view(E),
     (tx_json_decoded(
        Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
        Diff, Effects, Slot, Timestamp))#{
@@ -703,15 +707,18 @@ local_effect_result(Result) -> prolog_text(Result).
 signature_json(Sig) when is_binary(Sig) -> binary:encode_hex(Sig, lowercase);
 signature_json(none) -> null.
 
-signature_status(#transaction{sig = none}, #entry{index = 1}) -> genesis;
-signature_status(#transaction{sig = none}, _Entry) -> unsigned;
+signature_status(#transaction{sig = none}, Entry) ->
+    case quod_ledger:entry_view(Entry) of
+        #entry{index = 1} -> genesis;
+        _ -> unsigned
+    end;
 signature_status(#transaction{sig = Sig}, _Entry)
   when is_binary(Sig), byte_size(Sig) =:= 64 ->
     verified;
 signature_status(_Transaction, _Entry) ->
     invalid.
 
-block_json(Ns, #entry{} = E) ->
+block_json(Ns, E) ->
     %% The live stream has no store handle.  Open the same read-only ledger
     %% view used by history so a just-committed Finalize can show the exact
     %% referenced Prepare plan too. The event has one read deadline; an
@@ -724,7 +731,8 @@ block_json(Ns, #entry{} = E) ->
         Block -> Block
     end.
 
-block_json(Store, Ns, #entry{data = Data} = E) ->
+block_json(Store, Ns, E) ->
+    #entry{data = Data} = quod_ledger:entry_view(E),
     case quod_ledger:classify(Data) of
         {content, Txs} ->
             (block_meta(content, E))#{
@@ -740,8 +748,8 @@ dtx_block_meta(Store, Controls, E) ->
       controls => [control_json(Store, Control)
                    || {_Phase, Control} <- Controls]}.
 
-control_row(Store, Ns, Phase, Control,
-            #entry{index = Slot, timestamp = Timestamp}) ->
+control_row(Store, Ns, Phase, Control, Entry) ->
+    #entry{index = Slot, timestamp = Timestamp} = quod_ledger:entry_view(Entry),
     ControlJson = control_json(Store, Control),
     Digest = maps:get(record_digest, ControlJson),
     #{row_type => control,
@@ -826,7 +834,8 @@ finalized_prepare_plan(Store, Target, PrepareRef) ->
     case quod_dtx:certified_ref_binding(PrepareRef) of
         {ok, Target, Slot, Digest} ->
             case quod_ledger_store:read_at(Store, Slot) of
-                {ok, #entry{data = Data}} ->
+                {ok, Entry} ->
+                    #entry{data = Data} = quod_ledger:entry_view(Entry),
                     case quod_ledger:classify(Data) of
                         {controls, Controls} ->
                             case [PrepareControl
@@ -959,13 +968,15 @@ decision_reasons_json(Record) ->
         {ok, Reasons} -> [prolog_text(Reason) || Reason <- Reasons]
     end.
 
-block_meta(#entry{} = E) ->
+block_meta(E) ->
     block_meta(entry_kind(E), E).
 
-block_meta(Kind, #entry{index = Slot, timestamp = Ts, cert = Cert}) ->
+block_meta(Kind, Entry) ->
+    #entry{index = Slot, timestamp = Ts, cert = Cert} = quod_ledger:entry_view(Entry),
     #{slot => Slot, time => Ts, kind => Kind, cert => cert_json(Cert)}.
 
-entry_kind(#entry{data = Data}) ->
+entry_kind(Entry) ->
+    #entry{data = Data} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
         {content, _Txs} -> content;
         {controls, _Controls} -> dtx_batch;

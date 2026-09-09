@@ -10,7 +10,7 @@ evidence_reads_borrow_one_view_without_scanning_test() ->
     with_owner(
       fun(Owner, Ns, Identity, Entry, Claim, OperationRef) ->
           {ok, ExpectedRef} = quod_dtx:certified_entry_ref(Identity, Entry, Claim),
-          Slot = Entry#entry.index,
+          Slot = (quod_ledger:entry_view(Entry))#entry.index,
           Parent = self(),
           Reader = spawn(fun() ->
               receive go -> ok end,
@@ -51,7 +51,7 @@ captured_view_is_bounded_and_cannot_recapture_from_replacement_test() ->
           Deadline = quod_time:mono_ms() + 3000,
           {ok, View = #{snapshot := Snapshot, slot := Height}} =
               quod_simplex:history_view(Identity, committed, Deadline),
-          ?assertEqual(Entry#entry.index, Height),
+          ?assertEqual((quod_ledger:entry_view(Entry))#entry.index, Height),
           ?assert(quod_simplex:history_view_live(View)),
           Owner ! {append_noop, self()},
           receive {appended, Owner, Next} -> ?assertEqual(Height + 1, Next)

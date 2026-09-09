@@ -49,14 +49,16 @@ genesis(Pubs) ->
 oversized_genesis(Pubs) ->
     Founding = lists:sublist(Pubs, ?MAX_VALIDATORS),
     Extra = lists:nth(?MAX_VALIDATORS + 1, Pubs),
-    #entry{data = {batch, [Tx0]}} = Entry0 = genesis(Founding),
+    Entry0 = genesis(Founding),
+    #entry{data = {batch, [Tx0]}} = quod_ledger:entry_view(Entry0),
     ExtraAdmission =
         {assert, {{peer_admitted, Extra, undefined, undefined, Extra}, true}},
     Tx1 = Tx0#transaction{diff = Tx0#transaction.diff ++ [ExtraAdmission]},
     entry_with_data(Entry0, {batch, [Tx1]}).
 
-entry_with_data(#entry{index = Index, timestamp = Timestamp,
-                       cert = Cert}, Data) ->
+entry_with_data(Entry, Data) ->
+    #entry{index = Index, timestamp = Timestamp, cert = Cert} =
+        quod_ledger:entry_view(Entry),
     {ok, Block} = quod_ledger:new_block(
                     Index, Index - 1, Data, Timestamp),
     quod_ledger:entry(Block, Cert).
@@ -160,8 +162,25 @@ durable_result() ->
 happy_test() ->
     C = committee(4), P = pubs(C),
     Chain = [genesis(P), committed(2, tx(2, C), C, 3), committed(3, tx(3, C), C, 4)],
-    {ok, [_, _, _], Final} = verify_chain(C, [], 1, Chain),
+    {ok, Chain, Final} = verify_chain(C, [], 1, Chain),
     ?assertEqual(P, Final).
+
+canonical_page_artifacts_survive_verify_and_forward_test() ->
+    C = committee(4), P = pubs(C),
+    Chain = [genesis(P), committed(2, tx(2, C), C, 3)],
+    Blobs = [begin {ok, Bytes} = quod_ledger:encode_entry(E), Bytes end || E <- Chain],
+    {ok, Chain, P} = verify_chain(C, [], 1, Chain),
+    %% The verifier returns precisely its input artifacts. Sizing and feed
+    %% forwarding consume those same objects, not rebuilt semantic records.
+    ?assertEqual({ok, 2, lists:sum([byte_size(B) || B <- Blobs])},
+                 quod_catchup:page_stats(Chain)),
+    lists:foreach(fun({Entry, Bytes}) ->
+        Frame = quod_feed:encode(?NS, {block, Entry}),
+        {feed, ?NS, Inner} = binary_to_term(Frame, [safe]),
+        ?assertEqual({block_bytes, Bytes}, binary_to_term(Inner, [safe])),
+        ?assertEqual({block, Entry}, quod_feed:decode(Frame, ?NS))
+    end, lists:zip(Chain, Blobs)),
+    ?assertEqual({ok, Chain}, quod_catchup:decode_entries(Blobs, materialized)).
 
 %% The same checked history fold serves catch-up and restart. A committee at
 %% the shared limit verifies; an oversized founding set and an otherwise-valid,
@@ -279,11 +298,11 @@ timestamped_test() ->
                         committed_at(3, tx(3, C), 1750000000500, C, 4)],
     ?assertMatch({ok, [_, _, _], _}, verify_chain(C, [], 1, Good)),
     %% tamper the stored timestamp while keeping the cert (signed over the original Ts) ⇒ block_hash mismatch
-    [G, E2, E3] = Good,
-    ?assertMatch({error, _},
-                 verify_chain(
-                   C, [], 1,
-                   [G, E2#entry{timestamp = 1750000009999}, E3])).
+    [_, E2, _] = Good,
+    View = quod_ledger:entry_view(E2),
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:from_entry_view(
+                   View#entry{timestamp = 1750000009999})).
 
 %% A complaint cert (proves "skip slot I") attached to a #transaction is REJECTED — it authorizes no payload.
 complaint_over_tx_rejected_test() ->
@@ -303,9 +322,10 @@ bad_cert_test() ->
 %% A non-genesis entry with no cert is rejected (a committed slot MUST carry its proof).
 missing_cert_test() ->
     C = committee(4), B2 = committed(2, tx(2, C), C, 3),
+    {ok, Block} = quod_ledger:block_from_entry(B2),
     ?assertEqual({error, {missing_cert, 2}},
                  verify_chain(
-                   C, [], 1, [genesis(pubs(C)), B2#entry{cert = none}])).
+                   C, [], 1, [genesis(pubs(C)), quod_ledger:entry(Block, none)])).
 
 %% A cert that does not BIND the block (the entry's data was swapped) is rejected on block_hash.
 cert_mismatch_test() ->
@@ -319,13 +339,17 @@ cert_mismatch_test() ->
 %% A MALFORMED cert (non-list sigs from a hostile server) is rejected, never crashes the joiner.
 malformed_cert_rejected_test() ->
     C = committee(4), B2 = committed(2, tx(2, C), C, 3),
-    Bad = B2#entry{cert = (B2#entry.cert)#cert{sigs = not_a_list}},
-    ?assertEqual({error, {bad_cert, 2}},
-                 verify_chain(C, [], 1, [genesis(pubs(C)), Bad])),
-    [First | _] = (B2#entry.cert)#cert.sigs,
-    Improper = B2#entry{cert = (B2#entry.cert)#cert{sigs = [First | bad_tail]}},
-    ?assertEqual({error, {bad_cert, 2}},
-                 verify_chain(C, [], 1, [genesis(pubs(C)), Improper])).
+    View = quod_ledger:entry_view(B2),
+    Cert = View#entry.cert,
+    [First | _] = Cert#cert.sigs,
+    lists:foreach(fun(Sigs) ->
+        Bad = View#entry{cert = Cert#cert{sigs = Sigs}},
+        %% Canonical envelope construction grants no finality. A malformed
+        %% certificate must still be refused by the existing forward verifier.
+        {ok, Artifact} = quod_ledger:from_entry_view(Bad),
+        ?assertEqual({error, {bad_cert, 2}},
+                     verify_chain(C, [], 1, [genesis(pubs(C)), Artifact]))
+    end, [not_a_list, [First | bad_tail]]).
 
 %% A GAP (a dropped intermediate entry) is rejected — the fold must be complete + contiguous, so a server
 %% cannot omit a committee-changing block to shift verification onto a stale committee.
@@ -338,24 +362,21 @@ noncontiguous_rejected_test() ->
     ?assertMatch({error, {noncontiguous, 5, 2}},
                  verify_chain(C, P, 5, [committed(2, tx(2, C), C, 3)])).
 
-%% A non-#entry element from a hostile server is rejected, not crashed.
+%% A non-artifact element is refused; corrupted views fail at checked import.
 malformed_entry_rejected_test() ->
     C = committee(4),
     ?assertMatch({error, {malformed_entry, 2}},
                  verify_chain(
                    C, [], 1, [genesis(pubs(C)), {not_an_entry, 2}])),
     B2 = committed(2, tx(2, C), C, 3),
-    ?assertEqual({error, {malformed_entry, 2}},
-                 verify_chain(
-                   C, [], 1,
-                   [genesis(pubs(C)),
-                    B2#entry{data = {batch, [tx(2, C) | bad_tail]}}])),
+    View = quod_ledger:entry_view(B2),
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:from_entry_view(
+                   View#entry{data = {batch, [tx(2, C) | bad_tail]}})),
     BadTx = (tx(2, C))#transaction{diff = [not_an_operation]},
-    ?assertEqual({error, {malformed_entry, 2}},
-                 verify_chain(
-                   C, [], 1,
-                   [genesis(pubs(C)),
-                    B2#entry{data = {batch, [BadTx]}}])),
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:from_entry_view(
+                   View#entry{data = {batch, [BadTx]}})),
     ?assertEqual({error, {malformed_entry, 2}},
                  verify_chain(C, [], 1, [genesis(pubs(C)) | bad_tail])).
 
@@ -363,9 +384,9 @@ malformed_entry_rejected_test() ->
 %% value would raise the restart timestamp floor and could freeze future proposals.
 skip_timestamp_must_be_zero_test() ->
     C = committee(4),
-    Bad = (skipped(2, C, 3))#entry{timestamp = 9999999999999},
-    ?assertEqual({error, {cert_mismatch, 2}},
-                 verify_chain(C, [], 1, [genesis(pubs(C)), Bad])).
+    View = quod_ledger:entry_view(skipped(2, C, 3)),
+    Bad = View#entry{timestamp = 9999999999999},
+    ?assertEqual({error, bad_entry}, quod_ledger:from_entry_view(Bad)).
 
 %% A mid-chain window: the caller threads Committee0 (as of From>1); no genesis in the window.
 midchain_window_test() ->
@@ -607,10 +628,9 @@ direct_abort_entry(Slot, C) ->
     quod_ledger:entry(Block, Cert).
 
 %% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
-gen_hash(#entry{index = 1, data = D}) ->
-    {ok, Transactions} = quod_ledger:payload(D),
-    {ok, Block} = quod_ledger:new_block(
-                    1, 0, {batch, Transactions}, 0),
+gen_hash(Entry) ->
+    #entry{index = 1} = quod_ledger:entry_view(Entry),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
     quod_simplex:block_hash(Block).
 
 %% The driver loops windowed fetches, verifies each, sinks the verified entries in order, and reports the

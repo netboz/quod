@@ -11,7 +11,7 @@ certified-current quorum absence. Applied requests bind one exact Finalize,
 generation, and verdict; each validator response carries its signed vote for
 the caller to combine into the portable certificate owned by
 `quod_dtx_current_view`. Entry hints travel as the canonical ledger entry
-bytes; decoded `#entry{}` records exist only as local views at this boundary.
+bytes; checked entry artifacts carry their local views at this boundary.
 Operation-effect cancellation carries the exact
 signed source submission; `quod_transaction` remains its sole semantic decoder.
 The namespace engine remains responsible for
@@ -65,7 +65,7 @@ outside the semantic request, evidence, signatures and correlation checks.
 -type outcome_ref() :: transaction_ref() | group_ref() | operation_ref().
 -type phase_kind() :: 'begin' | prepare | decision | finalize | complete.
 -type verdict() :: commit | abort.
--type entry_hint() :: {quod_dtx:certified_ref(), #entry{}}.
+-type entry_hint() :: {quod_dtx:certified_ref(), quod_ledger:entry_artifact()}.
 -type validation_item() ::
         entry_hint() |
         {{applied, identity(), quod_dtx:certified_ref()},
@@ -280,7 +280,9 @@ encode_validation_sidecar(Hints) ->
 
 encode_sidecar([], Acc) ->
     {ok, lists:reverse(Acc)};
-encode_sidecar([{Ref, #entry{} = Entry} | Rest], Acc) ->
+encode_sidecar([{{applied, _, _}, _} = AppliedCertificate | Rest], Acc) ->
+    encode_sidecar(Rest, [AppliedCertificate | Acc]);
+encode_sidecar([{Ref, Entry} | Rest], Acc) ->
     case quod_ledger:encode_entry(Entry) of
         {ok, EntryBytes} ->
             encode_sidecar(
@@ -288,8 +290,6 @@ encode_sidecar([{Ref, #entry{} = Entry} | Rest], Acc) ->
         {error, _} ->
             error
     end;
-encode_sidecar([AppliedCertificate | Rest], Acc) ->
-    encode_sidecar(Rest, [AppliedCertificate | Acc]);
 encode_sidecar(_Improper, _Acc) ->
     error.
 
@@ -304,15 +304,22 @@ decode_sidecar([], Acc) ->
     normalize_sidecar(lists:reverse(Acc));
 decode_sidecar([{entry_bytes, Ref, EntryBytes} | Rest], Acc)
   when is_binary(EntryBytes) ->
-    case quod_ledger:decode_entry(EntryBytes) of
+    %% These are acceleration hints for foreign-reference verification, not
+    %% target-owned execution. Local references use the owner's ledger view;
+    %% no sidecar may allocate a foreign ontology's callable vocabulary.
+    case quod_ledger:decode_entry(EntryBytes, wrapped) of
         {ok, Entry} -> decode_sidecar(Rest, [{Ref, Entry} | Acc]);
         {error, _} -> decode_sidecar(Rest, Acc)
     end;
-decode_sidecar([AppliedCertificate | Rest], Acc) ->
+decode_sidecar([{{applied, _, _}, _} = AppliedCertificate | Rest], Acc) ->
     case valid_validation_item(AppliedCertificate) of
         true -> decode_sidecar(Rest, [AppliedCertificate | Acc]);
         false -> decode_sidecar(Rest, Acc)
     end;
+decode_sidecar([_Invalid | Rest], Acc) ->
+    %% Entry artifacts are local data, never another accepted wire shape.
+    %% Only entry_bytes above may mint one from an untrusted sidecar.
+    decode_sidecar(Rest, Acc);
 decode_sidecar(_Improper, _Acc) ->
     [].
 
@@ -333,7 +340,13 @@ normalize_sidecar([Hint = {Key, _Value} | Rest], Seen, Acc) ->
 normalize_sidecar(_Improper, _Seen, _Acc) ->
     [].
 
-valid_entry_hint({Ref, #entry{index = Slot} = Entry}) ->
+valid_entry_hint({Ref, Entry}) ->
+    View = try quod_ledger:entry_view(Entry)
+           catch error:_ -> invalid
+           end,
+    valid_entry_hint_view(Ref, Entry, View).
+
+valid_entry_hint_view(Ref, Entry, #entry{index = Slot}) ->
     quod_dtx:validate_certified_ref(Ref) andalso
         case quod_dtx:certified_ref_binding(Ref) of
             {ok, _Identity, Slot, _Digest} ->
@@ -343,18 +356,17 @@ valid_entry_hint({Ref, #entry{index = Slot} = Entry}) ->
                 end;
             _ ->
                 false
-        end.
+        end;
+valid_entry_hint_view(_Ref, _Entry, _View) -> false.
 
-valid_validation_item({Ref, #entry{}} = Hint) ->
-    quod_dtx:validate_certified_ref(Ref) andalso valid_entry_hint(Hint);
 valid_validation_item(
   {{applied, Target, FinalizeRef}, Certificate}) ->
     case quod_dtx_current_view:applied_certificate_binding(Certificate) of
         {ok, #{target := Target, finalize_ref := FinalizeRef}} -> true;
         _ -> false
     end;
-valid_validation_item(_Hint) ->
-    false.
+valid_validation_item({Ref, _Entry} = Hint) ->
+    quod_dtx:validate_certified_ref(Ref) andalso valid_entry_hint(Hint).
 
 %% ------------------------------------------------------------------
 %% Fixed v9 operation algebra

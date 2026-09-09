@@ -11,9 +11,10 @@ reviewed and approved, with independently reproduced source gates (1799/0
 EUnit, both CT suites 26/26, xref and dialyzer). The cut was committed and
 deployed as 0.7.152; Claude independently approved its hardware evidence
 (400/400 committed, live scans eliminated in the measured sample). The
-absolute latency gate remains unmet. Phase 1B Cut 1 is now authorized and
-implemented and independently reviewed green. Yan authorized its commit and
-continuation to Cut 2, which needs its own implementation review; Cut 3 remains gated. This
+absolute latency gate remains unmet. Phase 1B Cut 1 is reviewed and committed
+as `e4ad3e1`, with the separate 0.7.153 bump `43bd48c`. Yan authorized
+continuation to Cut 2, now independently reviewed SAFE TO COMMIT with every
+gate reproduced green; Cut 3 remains gated. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source
 lag remains the explicit limitation in §6.2: consume-once progress alone does not

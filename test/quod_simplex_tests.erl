@@ -35,6 +35,10 @@ entry(Index, Data, Timestamp, Cert) ->
     {ok, Entry} = quod_ledger:new_entry(Index, Data, Timestamp, Cert),
     Entry.
 
+stored_entry_view(Store, Slot) ->
+    {ok, Entry} = quod_ledger_store:read_at(Store, Slot),
+    quod_ledger:entry_view(Entry).
+
 blk(Slot) ->
     block(Slot, Slot - 1,
           {batch, [tx([{assert, {{fact, Slot}, true}}])]}).
@@ -1109,10 +1113,10 @@ dtx_submission_shares_one_envelope_between_waiters_test() ->
         {Entry, Payload} = committed_dtx_test_entry(Control, 1),
         Done = quod_simplex:test_resolve_committed_dtx(
                  Entry, Payload, Shared),
-        receive {dtx_waiter_probe, first, {ok, _, #entry{}}} -> ok after 1000 ->
+        receive {dtx_waiter_probe, first, {ok, _, Entry}} -> ok after 1000 ->
             error(missing_first_dtx_waiter_reply)
         end,
-        receive {dtx_waiter_probe, second, {ok, _, #entry{}}} -> ok after 1000 ->
+        receive {dtx_waiter_probe, second, {ok, _, Entry}} -> ok after 1000 ->
             error(missing_second_dtx_waiter_reply)
         end,
         ?assertEqual(0, quod_simplex:test_dtx_submission_waiters(Done))
@@ -1583,7 +1587,7 @@ dtx_unverified_endpoint_contacts_are_never_retained_test() ->
 %% reverse) merely because both requirements use the same map key.
 content_reference_seen_reuse_is_type_safe_test() ->
     Ref = {certified, <<74:256>>, 2, <<75:256>>, <<76:256>>},
-    EntryEvidence = #{entry => #entry{index = 2, data = noop}},
+    EntryEvidence = #{entry => quod_ledger:noop_entry(2, none)},
     TransactionEvidence = #{transaction => #transaction{}},
     ?assertMatch(
        {valid, _},
@@ -4144,7 +4148,7 @@ catchup_window_publishes_one_wake_only_certified_head_test() ->
         %% Catch-up exposes only the newest durable height. It must never
         %% replay the historical entry as a live commit/event.
         receive
-            {committed, Ns, 1, #entry{}} ->
+            {committed, Ns, 1, _HistoricalEntry} ->
                 error(catchup_rebroadcast_historical_entry)
         after 0 ->
             ok
@@ -4963,10 +4967,8 @@ resume_stale_snapshot_slot_is_skipped_test() ->
                      commit_buf => #{7 => {commit, B7}}}),
         Resumed = quod_simplex:resume_ready_rounds(Ready),
         {7, FinalStore} = quod_simplex:test_committed_store(Resumed),
-        ?assertMatch({ok, #entry{index = 6}},
-                     quod_ledger_store:read_at(FinalStore, 6)),
-        ?assertMatch({ok, #entry{index = 7}},
-                     quod_ledger_store:read_at(FinalStore, 7))
+        ?assertMatch(#entry{index = 6}, stored_entry_view(FinalStore, 6)),
+        ?assertMatch(#entry{index = 7}, stored_entry_view(FinalStore, 7))
     after
         quod_ledger_store:close(Store1),
         file:del_dir_r(Dir)
@@ -5820,8 +5822,7 @@ amplified_complaint_skips_and_next_slot_commits_test() ->
         Skipped = quod_simplex:dispatch(
                     element(1, SecondComplainer), {share, SecondShare}, Split),
         {6, Store2} = quod_simplex:test_committed_store(Skipped),
-        ?assertMatch({ok, #entry{index = 6, data = noop}},
-                     quod_ledger_store:read_at(Store2, 6)),
+        ?assertMatch(#entry{index = 6, data = noop}, stored_entry_view(Store2, 6)),
 
         Leader7 = quod_simplex:leader(7, Validators),
         {Leader7, LeaderId} = lists:keyfind(Leader7, 1, Committee),
@@ -5835,8 +5836,7 @@ amplified_complaint_skips_and_next_slot_commits_test() ->
         Supported = dispatch_shares(supports(Block7, OtherVoters, 2), Proposed),
         Final = dispatch_shares(commits(Block7, OtherVoters, 2), Supported),
         {7, FinalStore} = quod_simplex:test_committed_store(Final),
-        ?assertMatch({ok, #entry{index = 7}},
-                     quod_ledger_store:read_at(FinalStore, 7))
+        ?assertMatch(#entry{index = 7}, stored_entry_view(FinalStore, 7))
     after
         quod_signing_journal:close(Journal0),
         quod_ledger_store:close(Store1),
@@ -8416,8 +8416,7 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
         {5, DurableStore} =
             quod_simplex:test_committed_store(Recovered),
         ?assertMatch(
-           {ok, #entry{index = 5}},
-           quod_ledger_store:read_at(DurableStore, 5)),
+           #entry{index = 5}, stored_entry_view(DurableStore, 5)),
         ?assertNotEqual(InboundSubmissionId, SourceSubmissionId)
     after
         quod_ledger_store:close(Store1),

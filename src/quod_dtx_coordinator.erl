@@ -85,7 +85,7 @@ does not cancel or resubmit the uncertain operation.
     %% Exact entries retained only after the shared local/foreign evidence
     %% verifier accepted their certified references.  They are acceleration
     %% material for the next semantic phase, never a second source of truth.
-    phase_entries = #{} :: #{quod_dtx:certified_ref() => #entry{}},
+    phase_entries = #{} :: #{quod_dtx:certified_ref() => quod_ledger:entry_artifact()},
     %% Exact certified Finalize evidence is retained for the one applied-vote
     %% collector. Its historical committee fixes who may sign; routes remain
     %% reachability hints only. At most one row per participant.
@@ -2231,8 +2231,9 @@ valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence)
 valid_phase_evidence(_Target, _GroupId, _Kind, _Ref, _Evidence) ->
     error.
 
-put_phase_entry(Ref, Entry = #entry{},
+put_phase_entry(Ref, Entry,
                 S = #state{phase_entries = Entries}) ->
+    #entry{} = quod_ledger:entry_view(Entry),
     case maps:get(Ref, Entries, undefined) of
         undefined -> S#state{phase_entries = Entries#{Ref => Entry}};
         Entry -> S;

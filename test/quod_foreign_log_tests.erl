@@ -815,7 +815,7 @@ serve_page_trace_current(Owner, Link, Binding, Fixture, Tag) ->
         {page_test_request, Link, Owner, Binding, Grant, ReqId, From, To} ->
             Chain = maps:get(chain, Fixture),
             Blobs = [begin {ok, Blob} = quod_ledger:encode_entry(Entry), Blob end
-                     || Entry = #entry{index = Height} <- Chain,
+                     || Entry <- Chain, Height <- [entry_index(Entry)],
                         Height >= From, Height =< To],
             Owner ! {catchup_page, Link, Binding, Grant, ReqId,
                      {ok, Blobs, length(Chain)}, crypto:strong_rand_bytes(16)},
@@ -1628,7 +1628,7 @@ bad_accepted_entry_hint_is_inert_and_falls_back_to_certified_fetch_test() ->
              prepare, 5000)),
         [SessionFile] = phase_session_files(Dir, Identity),
         FinalizeEntry = lists:last(maps:get(chain, Fixture)),
-        BadHint = FinalizeEntry#entry{cert = none},
+        BadHint = without_entry_cert(FinalizeEntry),
 
         %% Previewing a bad hint mutates neither the durable cache nor the
         %% phase index.  The same worker therefore continues from slot 2 and
@@ -2165,7 +2165,7 @@ follow_progress_is_message_driven_and_cleanup_is_exact_test() ->
         %% below proves the entry was not consumed as trusted evidence.
         _ = quod_reg:publish(
               {committed, Ns},
-              {committed, Ns, 1, #entry{index = 1, data = noop}}),
+              {committed, Ns, 1, quod_ledger:noop_entry(1, none)}),
         Unreachable4 = receive_follow(Follow1, Identity),
         ?assertMatch({unreachable, unavailable, 0}, element(2, Unreachable4)),
         ok = quod_foreign_log:ack(Follow1, element(1, Unreachable4)),
@@ -2541,7 +2541,7 @@ local_commit_progress_subscription_is_namespace_refcounted_test() ->
         ok = wait_follow_count(1, 2000),
         _ = quod_reg:publish(
               {committed, Ns},
-              {committed, Ns, 2, #entry{index = 2, data = noop}}),
+              {committed, Ns, 2, quod_ledger:noop_entry(2, none)}),
         Woken2 = receive_follow(Follow2, Identity2),
         ?assertMatch({unreachable, unavailable, 0}, element(2, Woken2)),
         ok = quod_foreign_log:ack(Follow2, element(1, Woken2)),
@@ -2554,7 +2554,7 @@ local_commit_progress_subscription_is_namespace_refcounted_test() ->
         Wakes = maps:get(follow_wakes, quod_foreign_log:stats()),
         _ = quod_reg:publish(
               {committed, Ns},
-              {committed, Ns, 3, #entry{index = 3, data = noop}}),
+              {committed, Ns, 3, quod_ledger:noop_entry(3, none)}),
         ?assertEqual(Wakes,
                      maps:get(follow_wakes, quod_foreign_log:stats()))
     after
@@ -2993,8 +2993,8 @@ foreign_exact_reference_accepts_only_the_pinned_genesis_entry_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Anchor = maps:get(anchor, Fixture),
-    [#entry{data = {batch, [Genesis]}} = GenesisEntry | _] =
-        maps:get(chain, Fixture),
+    [GenesisEntry | _] = maps:get(chain, Fixture),
+    #entry{data = {batch, [Genesis]}} = quod_ledger:entry_view(GenesisEntry),
     {ok, GenesisRef} = quod_dtx:certified_entry_ref(
                          {Ns, Anchor}, GenesisEntry, Genesis),
     Dir = temp_dir("exact-pinned-genesis"),
@@ -3022,8 +3022,8 @@ generic_entry_reference_accepts_certified_content_test() ->
     Fixture = long_identity_fixture(unique_ns(), 2),
     Ns = maps:get(ns, Fixture),
     Anchor = maps:get(anchor, Fixture),
-    [_, #entry{data = {batch, [Transaction]}} = Entry] =
-        maps:get(chain, Fixture),
+    [_, Entry] = maps:get(chain, Fixture),
+    #entry{data = {batch, [Transaction]}} = quod_ledger:entry_view(Entry),
     {ok, Ref} = quod_dtx:certified_entry_ref(
                   {Ns, Anchor}, Entry, Transaction),
     Dir = temp_dir("generic-content-entry"),
@@ -3478,7 +3478,8 @@ verify_local_reuses_current_committee_entry_without_history_owner_test() ->
     Anchor = maps:get(anchor, Fixture),
     Binding = {Ns, Anchor},
     Chain = maps:get(chain, Fixture),
-    #entry{data = {batch, [Transaction]}} = Entry = lists:last(Chain),
+    Entry = lists:last(Chain),
+    #entry{data = {batch, [Transaction]}} = quod_ledger:entry_view(Entry),
     {ok, Ref} = quod_dtx:certified_entry_ref(Binding, Entry, Transaction),
     {ok, Chain, Projection} = quod_catchup:verify_forward(
                                 Ns, Anchor,
@@ -3513,8 +3514,8 @@ verify_local_newer_reference_remains_unavailable_test() ->
     Ns = maps:get(ns, Fixture),
     Anchor = maps:get(anchor, Fixture),
     Identity = {Ns, Anchor},
-    [Genesis, Prior, #entry{data = {batch, [Transaction]}} = Newer] =
-        maps:get(chain, Fixture),
+    [Genesis, Prior, Newer] = maps:get(chain, Fixture),
+    #entry{data = {batch, [Transaction]}} = quod_ledger:entry_view(Newer),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Newer, Transaction),
     {ok, [Genesis, Prior], Projection} = quod_catchup:verify_forward(
                                          Ns, Anchor,
@@ -3638,8 +3639,8 @@ verify_local_current_entry_falls_back_for_historical_committee_test() ->
     Ns = maps:get(ns, Fixture),
     Anchor = maps:get(anchor, Fixture),
     Binding = {Ns, Anchor},
-    [Genesis, #entry{data = {batch, [Referenced]}} = ReferencedEntry] =
-        maps:get(chain, Fixture),
+    [Genesis, ReferencedEntry] = maps:get(chain, Fixture),
+    #entry{data = {batch, [Referenced]}} = quod_ledger:entry_view(ReferencedEntry),
     {ok, Ref} = quod_dtx:certified_entry_ref(
                   Binding, ReferencedEntry, Referenced),
     OldPub = maps:get(pub, Fixture),
@@ -3912,7 +3913,7 @@ foreign_projection_large_change_set_becomes_resnapshot_test() ->
 projection_test_view(Store, Identity, Entry) ->
     #{owner => self(), identity => Identity, slot => quod_ledger_store:last(Store),
       snapshot => quod_ledger_store:snapshot(Store),
-      projection => #{history_head => {Entry#entry.index, entry_hash(Entry)}}}.
+      projection => #{history_head => {entry_index(Entry), entry_hash(Entry)}}}.
 
 certified_current_view_advances_past_finalize_membership_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
@@ -4329,14 +4330,14 @@ identity_current_view_rejects_stale_malformed_and_uncertified_history_test() ->
           fun(_P, _E, RequestedNs, From, To) ->
                   page_reply(
                     RequestedNs, Ns,
-                    [Genesis, Finalize, Membership#entry{index = 4}],
+                    [Genesis, Finalize, entry_at(Membership, 4)],
                     From, To, 4)
           end},
          {identity_uncertified,
           fun(_P, _E, RequestedNs, From, To) ->
                   page_reply(
                     RequestedNs, Ns,
-                    [Genesis, Finalize, Membership#entry{cert = none}],
+                    [Genesis, Finalize, without_entry_cert(Membership)],
                     From, To, 3)
           end}],
     lists:foreach(
@@ -4401,7 +4402,7 @@ current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
                                        RequestedNs, Ns,
                                        [Genesis, Finalize], From, To, 2);
                              false ->
-                                 {ok, [Membership#entry{index = 4}], 4}
+                                 {ok, [entry_at(Membership, 4)], 4}
                          end
                      end},
          {uncertified, fun(_P, _E, RequestedNs, From, To) ->
@@ -4410,7 +4411,7 @@ current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
                                          RequestedNs, Ns,
                                          [Genesis, Finalize], From, To, 2);
                                false ->
-                                   {ok, [Membership#entry{cert = none}], 3}
+                                   {ok, [without_entry_cert(Membership)], 3}
                            end
                        end}],
     lists:foreach(
@@ -5082,7 +5083,7 @@ assert_fetch_failure_reason(Expected, Actual) ->
     error({unexpected_fetch_failure_reason, Expected, Actual}).
 
 decoded_page_bounds_test() ->
-    Tiny = #entry{index = 1, data = noop},
+    Tiny = quod_ledger:noop_entry(1, none),
     ?assertEqual(
        {error, too_many_entries},
        quod_catchup:page_stats(
@@ -5461,10 +5462,21 @@ entry_hash(Entry) ->
     {ok, Block} = quod_ledger:block_from_entry(Entry),
     quod_simplex:block_hash(Block).
 
+entry_index(Entry) -> (quod_ledger:entry_view(Entry))#entry.index.
+
+without_entry_cert(Entry) ->
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    quod_ledger:entry(Block, none).
+
+entry_at(Entry, Index) ->
+    #entry{data = Data, timestamp = Timestamp, cert = Cert} = quod_ledger:entry_view(Entry),
+    {ok, Changed} = quod_ledger:new_entry(Index, Data, Timestamp, Cert),
+    Changed.
+
 chain_fetch(Ns, Chain) ->
     Height = length(Chain),
     fun(_Peer, _Endpoint, RequestedNs, From, To) when RequestedNs =:= Ns ->
-            Page = [Entry || #entry{index = I} = Entry <- Chain,
+            Page = [Entry || Entry <- Chain, I <- [entry_index(Entry)],
                              I >= From, I =< To],
             {ok, Page, Height};
        (_Peer, _Endpoint, _RequestedNs, _From, _To) ->
@@ -5482,7 +5494,7 @@ peer_chain_fetch(Ns, Chain, Peers) ->
 
 page_reply(RequestedNs, Ns, Chain, From, To, Height)
   when RequestedNs =:= Ns ->
-    {ok, [Entry || #entry{index = Index} = Entry <- Chain,
+    {ok, [Entry || Entry <- Chain, Index <- [entry_index(Entry)],
                    Index >= From, Index =< To], Height};
 page_reply(_RequestedNs, _Ns, _Chain, _From, _To, _Height) ->
     {error, wrong_namespace}.

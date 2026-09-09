@@ -194,7 +194,7 @@ tx(N) ->
                  author = <<N:256>>, submitted_at = 1000 + N, sig = none}.
 
 entry(Slot, Txs) ->
-    #entry{index = Slot, data = {batch, Txs}, timestamp = 2000 + Slot, cert = none}.
+    stored_entry(Slot, {<<"ont:test">>, <<0:256>>}, Txs).
 
 stored_entry(Slot, Target, Txs) ->
     Signed = [signed_transaction(Target, Tx, {Slot, I})
@@ -221,14 +221,12 @@ block_json_distinguishes_non_transaction_slots_test() ->
     ?assertEqual(content, maps:get(kind, Content)),
     ?assertEqual(1, length(maps:get(txs, Content))),
     Noop = quod_explorer_http:block_json(
-             <<"ont:test">>, #entry{index = 3, data = noop}),
+             <<"ont:test">>, quod_ledger:noop_entry(3, none)),
     ?assertEqual(noop, maps:get(kind, Noop)),
     ?assertEqual([], maps:get(txs, Noop)),
-    Invalid = quod_explorer_http:block_json(
-                <<"ont:test">>, #entry{index = 4, data = {batch, []}}),
-    ?assertEqual(invalid, maps:get(kind, Invalid)),
-    ?assertEqual([], maps:get(txs, Invalid)),
-    DtxEntry = #entry{index = 5, data = quod_ct:dtx_decision_payload()},
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:new_entry(4, {batch, []}, 0, none)),
+    {ok, DtxEntry} = quod_ledger:new_entry(5, quod_ct:dtx_decision_payload(), 0, none),
     Dtx = quod_explorer_http:block_json(<<"ont:test">>, DtxEntry),
     ?assertEqual(dtx_batch, maps:get(kind, Dtx)),
     ?assertEqual([], maps:get(txs, Dtx)),
@@ -261,7 +259,7 @@ dtx_control_is_visible_in_paged_history_test() ->
 
 websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
     Ns = <<"ont:test">>,
-    DtxEntry = #entry{index = 5, data = quod_ct:dtx_decision_payload()},
+    {ok, DtxEntry} = quod_ledger:new_entry(5, quod_ct:dtx_decision_payload(), 0, none),
     {reply, {text, Frame}, state} =
         quod_explorer_ws:websocket_info(
           {committed, Ns, 5, DtxEntry}, state),
@@ -269,12 +267,9 @@ websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
     ?assertEqual(
        {ok, state},
        quod_explorer_ws:websocket_info(
-         {committed, Ns, 6, #entry{index = 6, data = noop}}, state)),
-    ?assertEqual(
-       {ok, state},
-       quod_explorer_ws:websocket_info(
-         {committed, Ns, 7,
-          #entry{index = 7, data = {batch, []}}}, state)).
+         {committed, Ns, 6, quod_ledger:noop_entry(6, none)}, state)),
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:new_entry(7, {batch, []}, 0, none)).
 
 websocket_refreshes_namespace_subscriptions_without_reconnect_test() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -309,7 +304,8 @@ malformed_effect_renders_as_invalid_without_crashing_test() ->
     Ns = <<"ont:test">>,
     T0 = tx(91),
     T = T0#transaction{effects = [{malformed_effect, 1}]},
-    E = #entry{index = 91, data = {batch, [T]}, timestamp = 91},
+    %% Exercise the formatter's malformed argument, not a codec bypass.
+    E = entry(91, [T0]),
     Json = quod_explorer_http:tx_json_full(Ns, T, E),
     ?assertEqual([invalid], maps:get(effect_operations, Json)),
     [Effect] = maps:get(effects, Json),
@@ -836,8 +832,10 @@ effect_tx_json_is_explicit_and_does_not_claim_root_diff_test() ->
               {agent, AgentRef}, {<<"ont:new">>, <<3:256>>},
               <<4:256>>, <<5:256>>},
     T = (tx(9))#transaction{diff = [], effects = [Effect]},
+    %% The formatter's effect shape is independent of ledger authentication;
+    %% supply a codec-built slot for the metadata it reads.
     J = quod_explorer_http:tx_json_full(
-          <<"ont:root">>, T, entry(4, [T])),
+          <<"ont:root">>, T, entry(4, [tx(9)])),
     ?assertEqual(false, maps:get(root_facts_changed, J)),
     ?assertEqual(1, maps:get(effect_count, J)),
     ?assertEqual([create], maps:get(effect_operations, J)),
@@ -871,7 +869,7 @@ signed_agent_intent_is_rendered_from_the_transaction_test() ->
     {Ns, Anchor} = maps:get(target, Fixture),
     Transaction = maps:get(transaction, Fixture),
     Json = quod_explorer_http:tx_json_full(
-             Ns, Transaction, entry(2, [Transaction])),
+             Ns, Transaction, stored_entry(2, {Ns, Anchor}, [Transaction])),
     Request = maps:get(request, Json),
     ?assertEqual(verified, maps:get(status, Request)),
     ?assertMatch(
@@ -901,10 +899,9 @@ signed_agent_intent_is_rendered_once_from_the_origin_begin_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     Control = maps:get(begin_control, Fixture),
     {ok, Blob} = quod_dtx:encode_control(Control),
+    {ok, Entry} = quod_ledger:new_entry(2, {batch, [{dtx, Blob}]}, 2, none),
     Json = quod_explorer_http:block_json(
-             element(1, maps:get(target, Fixture)),
-             #entry{index = 2, timestamp = 2,
-                    data = {batch, [{dtx, Blob}]}}),
+             element(1, maps:get(target, Fixture)), Entry),
     [RenderedControl] = maps:get(controls, Json),
     Request = maps:get(request, RenderedControl),
     ?assertEqual('begin', maps:get(kind, RenderedControl)),
@@ -995,10 +992,8 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
     {ok, Control} = quod_dtx:sign_control(
                       Target, Begin, <<116:256>>, 1, 1, Signer),
     {ok, ControlBlob} = quod_dtx:encode_control(Control),
-    Json = quod_explorer_http:block_json(
-             element(1, Target),
-             #entry{index = 1, timestamp = 1,
-                    data = {batch, [{dtx, ControlBlob}]}}),
+    {ok, Entry} = quod_ledger:new_entry(1, {batch, [{dtx, ControlBlob}]}, 1, none),
+    Json = quod_explorer_http:block_json(element(1, Target), Entry),
     [RenderedControl] = maps:get(controls, Json),
     [Participant] =
         [Row || Row <- maps:get(participants, RenderedControl),

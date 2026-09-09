@@ -81,10 +81,11 @@ t_write_read({Dir, Ns, Cfg}) ->
         %% sealed-plan submission stamps the client submit time on the tx
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
         try
-            {ok, #entry{data = {batch, [#transaction{
+            {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+            #entry{data = {batch, [#transaction{
                                               tx_id = TxId,
-                                              submitted_at = Sub}]}}} =
-                quod_ledger_store:read_at(Store, 2),
+                                              submitted_at = Sub}]}} =
+                quod_ledger:entry_view(Entry),
             ?assert(Sub > 0),
             %% The proof reply is sent only after the outcome row and MVCC
             %% snapshot are published, so an immediate lookup is terminal.
@@ -115,7 +116,8 @@ t_concurrent_writes_batch({Dir, Ns, Cfg}) ->
              Results)),
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
         try
-            {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
+            {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+            #entry{data = {batch, Transactions}} = quod_ledger:entry_view(Entry),
             ?assertEqual(Count, length(Transactions))
         after quod_ledger_store:close(Store) end,
         [ ?assertMatch({ok, [#{}], 2}, rp(Ns, {batch_fact, N}))
@@ -155,8 +157,9 @@ t_restart_reload({Dir, Ns, Cfg}) ->
         {ok, _, _} = rp(Ns, {assertz, {parent, ann, eve}}),
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
         Ref = try
-            {ok, #entry{data = {batch, [#transaction{tx_id = TxId}]}}} =
-                quod_ledger_store:read_at(Store, 2),
+            {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+            #entry{data = {batch, [#transaction{tx_id = TxId}]}} =
+                quod_ledger:entry_view(Entry),
             {transaction, Ns, quod_simplex:genesis_hash(Ns), TxId}
         after quod_ledger_store:close(Store) end,
         ExpectedOutcome =

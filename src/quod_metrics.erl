@@ -187,7 +187,7 @@ handle_info(refresh, State) ->
     State1 = subscribe_commits(State),
     erlang:send_after(?REFRESH_MS, self(), refresh),
     {noreply, State1};
-handle_info({committed, Ns, _Slot, #entry{} = Entry}, State) ->
+handle_info({committed, Ns, _Slot, Entry}, State) ->
     _ = observe_commit(Ns, Entry),
     {noreply, State};
 handle_info(_Info, State) ->
@@ -1063,7 +1063,8 @@ subscribe_commits(State = #{subs := Subs}) ->
 %% proposer's wall clock (ratcheted to the fleet maximum) and `submitted_at` is the author's, so their
 %% difference measures clock skew as much as processing time. Latency is observed at the SUBMITTING
 %% node instead (`observe_tx_latency/2`, called by quod_prolog when the parked write resolves).
-observe_commit(Ns, #entry{data = Data}) ->
+observe_commit(Ns, Entry) ->
+    #entry{data = Data} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             lists:foreach(fun(T) -> observe_transaction(Ns, T) end,

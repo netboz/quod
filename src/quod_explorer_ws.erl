@@ -52,7 +52,7 @@ websocket_handle(_Frame, State) -> {ok, State}.
 
 %% A finalized block carries its target ontology explicitly. A proof origin may
 %% differ for a foreign write and is never used to route or attribute the block.
-websocket_info({committed, Ns, _Slot, #entry{} = E}, State) ->
+websocket_info({committed, Ns, _Slot, E}, State) ->
     Block = quod_explorer_http:block_json(Ns, E),
     case maps:get(kind, Block) of
         content -> committed_block_frame(Ns, Block, State);

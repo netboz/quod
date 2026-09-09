@@ -293,8 +293,9 @@ applied_certificate_accepts_an_equivalent_finalize_quorum_subset_test() ->
     Evidence0 = maps:get(evidence, F0),
     Control = maps:get(control, Evidence0),
     Entry0 = maps:get(entry, Evidence0),
-    Slot = Entry0#entry.index,
-    BlockHash = (Entry0#entry.cert)#cert.block_hash,
+    #entry{index = Slot, cert = #cert{block_hash = BlockHash}} =
+        quod_ledger:entry_view(Entry0),
+    {ok, Block} = quod_ledger:block_from_entry(Entry0),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = maps:from_list(
                [{Key, quod_simplex:make_share(
@@ -311,9 +312,9 @@ applied_certificate_accepts_an_equivalent_finalize_quorum_subset_test() ->
            end,
     RetainedCert = Form([A, B, C]),
     SuppliedCert = Form([B, C, D]),
-    Evidence = Evidence0#{entry => Entry0#entry{cert = RetainedCert}},
+    Evidence = Evidence0#{entry => quod_ledger:entry(Block, RetainedCert)},
     {ok, FinalizeRef} = quod_dtx:certified_entry_ref(
-                          Target, Entry0#entry{cert = SuppliedCert}, Control),
+                          Target, quod_ledger:entry(Block, SuppliedCert), Control),
     Claim = (maps:get(claim, F0))#{finalize_ref => FinalizeRef},
     F = F0#{claim => Claim, evidence => Evidence},
     Certificate = certificate(F, [A, B], #{}),

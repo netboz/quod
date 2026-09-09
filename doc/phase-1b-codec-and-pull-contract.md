@@ -1,7 +1,8 @@
 # Phase 1B — shared artifact and page-handoff contract
 
-**Status: all three cut contracts approved; Cut 1 implementation review closed,
-safe to commit. Yan authorized its commit and continuation to Cut 2.**
+**Status: all three cut contracts approved; Cut 1 reviewed and committed as
+`e4ad3e1`, version 0.7.153 (`43bd48c`). Cut 2 implemented and independently
+reviewed SAFE TO COMMIT; final gates reproduced green.**
 Baseline `d48cd89` / 0.7.152. Claude verified and approved the completed
 owner-decode, shared-artifact and final-confirmation contracts. His three
 small clarifications are folded in below: exact binding re-check at decode
@@ -287,8 +288,10 @@ just a hypothetical risk. `quod_ontology:prepare_create` places Entry inside
 `quod_prepared_lifecycle`. Those bytes are hashed by `prepared_effect` and
 retained by the effect journal. Replacing that native entry with an artifact
 would change both private durable bytes and the certified effect's prepared
-hash. An unadapted recovery is worse: `quod_simplex:genesis_entry` currently
-recognizes `#entry{}` and otherwise falls into fresh genesis generation.
+hash. An unadapted recovery is worse: the pre-Cut-2
+`quod_simplex:genesis_entry` recognized `#entry{}` and otherwise fell into
+fresh genesis generation. The Cut-2 implementation replaces that dispatch
+with the presence-and-validation rule below.
 
 Pin the boundary for **all** new preparation and recovery, not a compatibility
 branch recognizing two stored formats:
@@ -445,8 +448,8 @@ tests unchanged. Re-measure only after review/commit authority; no latency
 saving is inferred from these functional tests. The next review is of the
 authorized implementation and its test evidence, not another review of the
 now-approved contract. Following Cut 1's clean implementation review, Yan
-authorized its commit and continuation to Cut 2. Cut 2 still requires its own
-implementation review before commit; Cut 3 and deployment remain gated.
+authorized its commit and continuation to Cut 2. Cut 2's implementation review
+is now closed and its commit is approved; Cut 3 and deployment remain gated.
 
 ### Cut-1 implementation checkpoint — 2026-09-09
 
@@ -463,4 +466,61 @@ Logs, fingerprints, the negative control and the review request are archived at
 `/tmp/quod-phase1b-cut1-2w6QNe/`. Development fixture corrections and the
 sandboxed peer-listener failure are disclosed in that handoff. Claude independently
 reproduced all gates and source fingerprints and closed review with no findings.
-No deployment or hardware saving is claimed; Cuts 2 and 3 are still unimplemented.
+Cut 1 was committed as `e4ad3e1`, with the separate 0.7.153 bump `43bd48c`.
+No deployment or hardware saving is claimed. Cut 2 is now implemented;
+Cut 3 is not implemented or authorized.
+
+### Cut-2 implementation checkpoint — 2026-09-09
+
+The existing ledger codec now privately owns `entry_artifact()` with exact
+envelope bytes, entry view and block view. Its single mint is reached only by
+checked constructors/import or the existing byte decoder. All append/read,
+page/feed/sidecar, certified-reference, reducer, runtime and Explorer consumers
+carry that artifact; no raw entry branch remains at append or byte ingress.
+The sole native import is the prepared-genesis descriptor, whose serialized
+entry, preparation digest and fixed incarnation remain byte-identical.
+
+This does not remove authentication work from the forward verifier.
+`well_formed_block` still checks its original header ranges, payload bounds
+and semantics; slot-era finality, signature and reference checks remain at
+their existing owners. The removed work is reconstruction at the entry accessor
+and repeated encoding/signature checks merely to count, frame, store or send.
+Proposal/transaction encoders and the signing journal are unchanged.
+
+Foreign entry sidecars explicitly select wrapped decoding. Simplex's local
+reference arm ignores sidecars and uses its owner snapshot; only its foreign
+reference arm consumes those hints through the existing wrapped history
+verifier. The applied-certificate sidecar family cannot admit serialized
+artifacts. Constructor checks also refuse slot-zero entries, wire-only
+implicit certificates supplied as native views, and malformed child wire
+values, so the artifact's view cannot change when its bytes are read again.
+
+The new production AST inventory pins exact mint/constructor/import/ingress
+and append sites and counts. The prior live-open inventory and MVCC/proof
+engine tests remain unchanged. Frozen pre-cut codec vectors cover existing
+envelopes and CRC frames; process tracing proves valid construction/ingress
+does perform checks, while materialized and wrapped consumer operations do
+none of that repeated work. An isolated negative codec restored the decode
+inside `encode_entry`: all byte goldens still passed, while the consumer
+regression failed on **46 repeated decodes and 38 signature checks**.
+
+Final clean-build sequential gates passed: EUnit **1838/0**, ask CT **26/26**,
+QUIC CT **26/26**, additional Simplex CT **12/12**, xref, Dialyzer and
+diff-check, all exit 0. The two-gateway CT initially failed on both this tree
+and an isolated unchanged baseline because its local observer had not yet
+applied the target result. The fixture now waits on that projection's existing
+events before its single public resolve. Production deadlines and feed behavior
+are unchanged; there is no resubmission, and the result/exactly-once assertions
+remain. Three helper tests pin subscription ordering, real wake-up, owner
+death and cleanup.
+
+Evidence, source fingerprints and all development failures are recorded in
+`/tmp/quod-phase1b-cut2-UDxm1s/HANDOFF.md`; the adjacent `CLAUDE-REVIEW.md`
+is the implementation-review request. Claude independently reproduced every
+gate on the fingerprint-matched tree, verified the frozen vectors against
+both the archived pre-cut codec and the new codec, and closed the review as
+**SAFE TO COMMIT**, with no blocker or required correction. Sidecar size
+accounting now measures the actual wire form rather than the native term;
+this deliberate accounting correction changes no wire bytes or authority.
+No deployment or performance saving is claimed by this checkpoint. Cut 3 and
+the other roadmap gates remain closed.

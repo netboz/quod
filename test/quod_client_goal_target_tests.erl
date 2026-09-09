@@ -144,7 +144,7 @@ setup() ->
                   committee => [], genesis_diff => Diff},
                 Ns, GenesisAuthor, <<16#56:256>>),
     ok = quod_prolog:apply_entry(
-           Ns, #entry{index = 1, data = {batch, [Genesis]}}, live),
+           Ns, quod_ct:committed_entry(Ns, 1, {batch, [Genesis]}), live),
     ok = quod_prolog:mark_ready(Ns),
     {ok, Auth} = quod_client_auth:start_link(
                    #{network_id => ?NETWORK, node_key => ?FORWARDER}),

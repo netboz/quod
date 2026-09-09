@@ -1,7 +1,7 @@
 -module(quod_ledger_store).
 -moduledoc """
 Durable on-disk store for one namespace's **DispersedSimplex block log** — the
-append-only list of committed `#entry{}` records, each a block plus the quorum
+append-only list of canonical entry envelopes, each a block plus the quorum
 certificate that finalized its slot.
 
 This module exclusively owns the committed block log. It is a plain library (no process,
@@ -18,13 +18,13 @@ Layout, under `LedgerDir/<base64url(Ns)>/`:
 
 | file       | holds                                                     |
 | ---------- | --------------------------------------------------------- |
-| `log.0001` | append-only CRC-framed `#entry{}` records — the block log |
+| `log.0001` | append-only CRC-framed canonical entry envelopes — the block log |
 
 `m:quod_signing_journal` separately owns `signing.0001` under the configured
 **data** root. The roots may coincide, as they do in the Nomad deployment, but
 `ledger_dir` can place the replicated block log elsewhere.
 
-Each frame is `<<Magic:32, Len:32, CRC:32, Payload:Len/binary>>` with
+Each frame is `<<Magic:32, Len:32, CRC:32, Payload:Len/binary>>` where
 `Payload` is the canonical entry envelope produced once by `quod_ledger`; it
 carries the exact block bytes plus the finality certificate. The store writes
 that envelope verbatim and protects it with `CRC = erlang:crc32(Payload)`.
@@ -277,7 +277,7 @@ Append contiguous entries (indices `last_index+1 ..`). One `datasync` for the
 batch; returns only after it completes (the entries are durable before
 `m:quod_simplex` counts them toward commit).
 """.
--spec append(handle(), [#entry{}]) -> {ok, handle()}.
+-spec append(handle(), [quod_ledger:entry_artifact()]) -> {ok, handle()}.
 append(S, []) -> {ok, S};
 append(S = #store{ns = Ns, log_fd = Fd, base_offset = Off0, cps = Cps0,
                   last_index = LI0}, Entries) ->
@@ -289,9 +289,12 @@ append(S = #store{ns = Ns, log_fd = Fd, base_offset = Off0, cps = Cps0,
       fun(SpanCtx) ->
           {Off1, Cps1, LI1, EncodeNative, WriteNative} =
               lists:foldl(
-                fun(E = #entry{index = I},
+                fun(E,
                     {Off, Cps, _LI, Encode0, Write0}) ->
+                        #entry{index = I} = quod_ledger:entry_view(E),
                         EncodeStarted = erlang:monotonic_time(),
+                        %% Envelope extraction and CRC framing only: the
+                        %% existing codec established bytes/view binding once.
                         {ok, Payload} = quod_ledger:encode_entry(E),
                         Frame = frame(Payload),
                         Encode1 = Encode0 +
@@ -325,7 +328,7 @@ checkpoint(_I, _Off, Cps)                             -> Cps.
 %%%===================================================================
 
 -doc "Read the entry at `Index`, verifying its CRC and its identity (`#entry.index =:= Index`).".
--spec read_at(handle(), pos_integer()) -> {ok, #entry{}} | not_found.
+-spec read_at(handle(), pos_integer()) -> {ok, quod_ledger:entry_artifact()} | not_found.
 read_at(#store{last_index = LI}, Index) when Index < 1; Index > LI -> not_found;
 read_at(S = #store{ns = Ns}, Index) ->
     quod_trace:with_optional_span(
@@ -341,7 +344,7 @@ Read entries `From..To` (clamped to the live tail), in index order — one check
 seek, then a sequential streamed read. Each entry is CRC- and index-verified; a
 mismatch raises `{corrupt_entry, Index, Why}` rather than ever returning a wrong block.
 """.
--spec read_range(handle(), pos_integer(), log_index()) -> {ok, [#entry{}]}.
+-spec read_range(handle(), pos_integer(), log_index()) -> {ok, [quod_ledger:entry_artifact()]}.
 read_range(S = #store{last_index = LI}, From, To0) ->
     case min(To0, LI) of
         To when From > To -> {ok, []};
@@ -355,7 +358,8 @@ re-fold and the KB replay run through here). `To` past the live tail is an ERROR
 silent partial fold: a caller that believes more is committed than the store holds must
 fail loudly (`{fold_beyond_tail, To, Last}`), never act on a truncated view.
 """.
--spec fold(handle(), pos_integer(), log_index(), fun((#entry{}, Acc) -> Acc), Acc) -> Acc
+-spec fold(handle(), pos_integer(), log_index(),
+           fun((quod_ledger:entry_artifact(), Acc) -> Acc), Acc) -> Acc
               when Acc :: term().
 fold(_S, From, To, _Fun, Acc) when From > To -> Acc;
 fold(#store{last_index = LI}, _From, To, _Fun, _Acc) when To > LI ->
@@ -368,11 +372,14 @@ fold_run(Fd, Cur, I, To, Fun, Acc, SymbolMode) ->
     case next_frame(Fd, Cur) of
         {frame, Payload, Cur1} ->
             case quod_ledger:decode_entry(Payload, SymbolMode) of
-                {ok, #entry{index = I} = E} ->
-                    fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc),
-                             SymbolMode);
-                {ok, #entry{index = J}} ->
-                    error({corrupt_entry, I, {wrong_index, J}});
+                {ok, E} ->
+                    case quod_ledger:entry_view(E) of
+                        #entry{index = I} ->
+                            fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc),
+                                     SymbolMode);
+                        #entry{index = J} ->
+                            error({corrupt_entry, I, {wrong_index, J}})
+                    end;
                 {error, Why} ->
                     error({corrupt_entry, I, Why})
             end;
@@ -519,7 +526,8 @@ scan(Fd, Cur = {Off, _}, Cps, LastI, Mode, SymbolMode,
             Decoded = quod_ledger:decode_entry(Payload, SymbolMode),
             DecodeNative = DecodeNative0 + erlang:monotonic_time() - DecodeStarted,
             case Decoded of
-                {ok, #entry{index = I}} ->
+                {ok, Entry} ->
+                    #entry{index = I} = quod_ledger:entry_view(Entry),
                     %% A CRC-valid frame at the wrong index — including a first frame that is not
                     %% index 1 — means the segment is corrupt from here on (see the moduledoc:
                     %% base-above-1 logs are unsupported until compaction lands with its committee
@@ -652,7 +660,7 @@ tail_contains_magic(Fd, Pos, Size) ->
 
 assert_contiguous(LastI, Entries) ->
     Want = lists:seq(LastI + 1, LastI + length(Entries)),
-    Got  = [I || #entry{index = I} <- Entries],
+    Got  = [(quod_ledger:entry_view(E))#entry.index || E <- Entries],
     case Got of
         Want -> ok;
         _    -> error({non_contiguous_append, LastI, Got})

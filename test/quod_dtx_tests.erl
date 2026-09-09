@@ -2603,6 +2603,7 @@ certified_entry_ref_binds_exact_entry_test() ->
     Cert = #cert{kind = commit, slot = Slot,
                  block_hash = BlockHash, sigs = []},
     Entry = quod_ledger:entry(Block, Cert),
+    View = quod_ledger:entry_view(Entry),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
     {ok, Expected} =
         quod_dtx:certified_ref(
@@ -2611,14 +2612,15 @@ certified_entry_ref_binds_exact_entry_test() ->
     ?assertEqual(Expected, Ref),
     %% Every hash-covered entry field and the certificate's own slot binding
     %% are checked; neither can be replaced while retaining the same ref.
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:from_entry_view(
+                   View#entry{timestamp = Timestamp + 1})),
+    ?assertEqual({error, invalid_certified_entry},
+                 quod_dtx:certified_entry_ref(Target, View, Control)),
     ?assertEqual(
        {error, invalid_certified_entry},
        quod_dtx:certified_entry_ref(
-         Target, Entry#entry{timestamp = Timestamp + 1}, Control)),
-    ?assertEqual(
-       {error, invalid_certified_entry},
-       quod_dtx:certified_entry_ref(
-         Target, Entry#entry{cert = Cert#cert{slot = Slot + 1}}, Control)).
+         Target, quod_ledger:entry(Block, Cert#cert{slot = Slot + 1}), Control)).
 
 certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     F = protocol_fixture(),
@@ -2653,7 +2655,7 @@ certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     RefCert = Form([A, B, C]),
     LocalCert = Form([B, C, D]),
     RefEntry = quod_ledger:entry(Block, RefCert),
-    LocalEntry = RefEntry#entry{cert = LocalCert},
+    LocalEntry = quod_ledger:entry(Block, LocalCert),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, RefEntry, Control),
     %% This is the live N=4 case: both replicas certified the same immutable
     %% block, but each retained a different valid three-of-four proof.
@@ -2699,10 +2701,13 @@ certified_entry_ref_binds_pinned_genesis_test() ->
        {error, invalid_certified_entry},
        quod_dtx:certified_entry_ref(
          {Ns, <<72:256>>}, Entry, Genesis)),
-    ?assertEqual(
-       {error, invalid_certified_entry},
-       quod_dtx:certified_entry_ref(
-         Target, Entry#entry{timestamp = 1}, Genesis)).
+    ?assertEqual({error, bad_entry},
+                 quod_ledger:from_entry_view(
+                   (quod_ledger:entry_view(Entry))#entry{timestamp = 1})),
+    {ok, OtherBlock} = quod_ledger:new_block(1, 0, {batch, [Genesis]}, 1),
+    ?assertEqual({error, invalid_certified_entry},
+                 quod_dtx:certified_entry_ref(
+                   Target, quod_ledger:entry(OtherBlock, none), Genesis)).
 
 %% ------------------------------------------------------------------
 %% V1 control fixtures

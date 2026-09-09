@@ -71,6 +71,11 @@ ent(I) ->
     {ok, Entry} = quod_ledger:new_entry(I, data(I), 0, none),
     Entry.
 
+entry_index(Entry) -> (quod_ledger:entry_view(Entry))#entry.index.
+entry_data(Entry) -> (quod_ledger:entry_view(Entry))#entry.data.
+read_view({ok, Entry}) -> {ok, quod_ledger:entry_view(Entry)};
+read_view(Other) -> Other.
+
 data(I) -> {batch, [chg(I)]}.
 
 chg(I) ->
@@ -96,11 +101,11 @@ t_append_read({Dir, Ns}) ->
         {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
         ?assertEqual(3, quod_ledger_store:last(S1)),
         {ok, [E1, E2, E3]} = quod_ledger_store:read_range(S1, 1, 3),
-        ?assertEqual(1, E1#entry.index),
-        ?assertEqual(2, E2#entry.index),
-        ?assertEqual(3, E3#entry.index),
+        ?assertEqual(1, entry_index(E1)),
+        ?assertEqual(2, entry_index(E2)),
+        ?assertEqual(3, entry_index(E3)),
         {ok, E2b} = quod_ledger_store:read_at(S1, 2),
-        ?assertEqual(data(2), E2b#entry.data),
+        ?assertEqual(data(2), entry_data(E2b)),
         %% a non-contiguous append is rejected (the store is append-only, in slot order)
         ?assertError({non_contiguous_append, 3, [5]}, quod_ledger_store:append(S1, [ent(5)])),
         ok = quod_ledger_store:close(S1)
@@ -123,11 +128,11 @@ t_opaque_payload_roundtrip({Dir, Ns}) ->
         ?assertEqual(ExpectedEnvelope, StoredEnvelope),
         ?assertEqual(CRC, erlang:crc32(StoredEnvelope)),
         {ok, Stored} = quod_ledger_store:read_at(S1, 1),
-        ?assertEqual(Data, Stored#entry.data),
+        ?assertEqual(Data, entry_data(Stored)),
         ok = quod_ledger_store:close(S1),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
         {ok, Reopened} = quod_ledger_store:read_at(S2, 1),
-        ?assertEqual(Data, Reopened#entry.data),
+        ?assertEqual(Data, entry_data(Reopened)),
         ok = quod_ledger_store:close(S2)
     end.
 
@@ -147,8 +152,9 @@ t_wrapped_foreign_store_never_materializes_symbols({Dir, Ns}) ->
                              {quod_block, 1, 1, 0,
                               {batch, [{transaction, TransactionBytes}]}, 0},
                              1024 * 1024),
-        Entry = #entry{index = 1, data = {batch, [Transaction]},
-                       timestamp = 0, block_bytes = BlockBytes, cert = none},
+        {ok, Entry} = quod_ledger:from_entry_view(
+                       #entry{index = 1, data = {batch, [Transaction]},
+                              timestamp = 0, block_bytes = BlockBytes, cert = none}),
         ?assertException(error, badarg,
                          binary_to_existing_atom(Name, utf8)),
         {ok, S0} = quod_ledger_store:open(Ns, Dir, wrapped),
@@ -163,7 +169,7 @@ t_wrapped_foreign_store_never_materializes_symbols({Dir, Ns}) ->
                       [#transaction{
                          diff = [{assert,
                                   {{Symbol, value}, {[], false}}}]}]}}},
-           quod_ledger_store:read_at(S2, 1)),
+           read_view(quod_ledger_store:read_at(S2, 1))),
         ok = quod_ledger_store:close(S2),
         ?assertException(error, badarg,
                          binary_to_existing_atom(Name, utf8))
@@ -191,7 +197,7 @@ t_read_snapshot_preserves_verified_index({Dir, Ns}) ->
         ?assertEqual(Ns, quod_ledger_store:namespace(S2)),
         ?assertEqual(3, quod_ledger_store:last(S2)),
         ?assertMatch({ok, #entry{index = 2}},
-                     quod_ledger_store:read_at(S2, 2)),
+                     read_view(quod_ledger_store:read_at(S2, 2))),
         ok = quod_ledger_store:close(S2),
         ok = quod_ledger_store:close(S1)
     end.
@@ -229,7 +235,7 @@ t_resume_snapshot_appends_without_rescan({Dir, Ns}) ->
         ?assertEqual(2, quod_ledger_store:last(S2)),
         {ok, S3} = quod_ledger_store:append(S2, [ent(3)]),
         ?assertMatch({ok, #entry{index = 3}},
-                     quod_ledger_store:read_at(S3, 3)),
+                     read_view(quod_ledger_store:read_at(S3, 3))),
         ok = quod_ledger_store:close(S3)
     end.
 
@@ -257,7 +263,7 @@ t_open_ro_reads({Dir, Ns}) ->
         {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
         ?assertEqual(3, quod_ledger_store:last(RO)),
         ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(RO, 1, 3)),
-        ?assertMatch({ok, #entry{index = 2}}, quod_ledger_store:read_at(RO, 2)),
+        ?assertMatch({ok, #entry{index = 2}}, read_view(quod_ledger_store:read_at(RO, 2))),
         ok = quod_ledger_store:close(RO),
         ?assertEqual({error, no_log}, quod_ledger_store:open_ro(<<"never:opened">>, Dir))
     end.
@@ -276,7 +282,7 @@ t_traced_open_profiles_scan_without_per_entry_spans({Dir, Ns}) ->
               fun(_Parent) ->
                   {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
                   ?assertMatch({ok, #entry{index = 2}},
-                               quod_ledger_store:read_at(RO, 2)),
+                               read_view(quod_ledger_store:read_at(RO, 2))),
                   ok = quod_ledger_store:close(RO)
               end),
             Parent = quod_trace_tests:take_span(<<"ledger.profile.parent">>),
@@ -462,23 +468,23 @@ t_checkpointed_reads({Dir, Ns}) ->
         {ok, S1} = quod_ledger_store:append(S0, [ent(I) || I <- lists:seq(1, N)]),
         ?assertEqual(N, quod_ledger_store:last(S1)),
         {ok, E256} = quod_ledger_store:read_at(S1, 256),   %% farthest from its checkpoint (255 hops)
-        ?assertEqual(data(256), E256#entry.data),
+        ?assertEqual(data(256), entry_data(E256)),
         {ok, E257} = quod_ledger_store:read_at(S1, 257),   %% exactly on a checkpoint (0 hops)
-        ?assertEqual(data(257), E257#entry.data),
+        ?assertEqual(data(257), entry_data(E257)),
         {ok, Es} = quod_ledger_store:read_range(S1, 250, 520),   %% one run across two boundaries
-        ?assertEqual(lists:seq(250, 520), [E#entry.index || E <- Es]),
-        Sum = quod_ledger_store:fold(S1, 1, N, fun(#entry{index = I}, Acc) -> Acc + I end, 0),
+        ?assertEqual(lists:seq(250, 520), [entry_index(E) || E <- Es]),
+        Sum = quod_ledger_store:fold(S1, 1, N, fun(E, Acc) -> Acc + entry_index(E) end, 0),
         ?assertEqual(N * (N + 1) div 2, Sum),
         ok = quod_ledger_store:close(S1),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),        %% reopen: the scan rebuilds the checkpoints
         %% exercise EVERY rebuilt checkpoint word, not just the last: reads served via word 0
         %% (index 2), word 1 (index 300), word 2 (index 600), plus a full-log fold.
-        ?assertMatch({ok, #entry{index = 2}},   quod_ledger_store:read_at(S2, 2)),
-        ?assertMatch({ok, #entry{index = 300}}, quod_ledger_store:read_at(S2, 300)),
-        ?assertMatch({ok, #entry{index = 600}}, quod_ledger_store:read_at(S2, 600)),
+        ?assertMatch({ok, #entry{index = 2}},   read_view(quod_ledger_store:read_at(S2, 2))),
+        ?assertMatch({ok, #entry{index = 300}}, read_view(quod_ledger_store:read_at(S2, 300))),
+        ?assertMatch({ok, #entry{index = 600}}, read_view(quod_ledger_store:read_at(S2, 600))),
         ?assertEqual(not_found, quod_ledger_store:read_at(S2, 601)),
         ?assertEqual(N * (N + 1) div 2,
-                     quod_ledger_store:fold(S2, 1, N, fun(#entry{index = I}, A) -> A + I end, 0)),
+                     quod_ledger_store:fold(S2, 1, N, fun(E, A) -> A + entry_index(E) end, 0)),
         ok = quod_ledger_store:close(S2)
     end.
 
@@ -497,14 +503,14 @@ t_trim_across_checkpoints({Dir, Ns}) ->
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),        %% trims the torn tail, keeps 1..300
         ?assertEqual(300, quod_ledger_store:last(S2)),
-        ?assertMatch({ok, #entry{index = 256}}, quod_ledger_store:read_at(S2, 256)),   %% word 0, max hops
-        ?assertMatch({ok, #entry{index = 257}}, quod_ledger_store:read_at(S2, 257)),   %% word 1, 0 hops
+        ?assertMatch({ok, #entry{index = 256}}, read_view(quod_ledger_store:read_at(S2, 256))),   %% word 0, max hops
+        ?assertMatch({ok, #entry{index = 257}}, read_view(quod_ledger_store:read_at(S2, 257))),   %% word 1, 0 hops
         {ok, Run} = quod_ledger_store:read_range(S2, 250, 300),                        %% crosses the boundary
-        ?assertEqual(lists:seq(250, 300), [E#entry.index || E <- Run]),
+        ?assertEqual(lists:seq(250, 300), [entry_index(E) || E <- Run]),
         {ok, S3} = quod_ledger_store:append(S2, [ent(I) || I <- lists:seq(301, 600)]), %% resumes; cps at 513
-        ?assertMatch({ok, #entry{index = 513}}, quod_ledger_store:read_at(S3, 513)),
+        ?assertMatch({ok, #entry{index = 513}}, read_view(quod_ledger_store:read_at(S3, 513))),
         {ok, Run2} = quod_ledger_store:read_range(S3, 500, 520),
-        ?assertEqual(lists:seq(500, 520), [E#entry.index || E <- Run2]),
+        ?assertEqual(lists:seq(500, 520), [entry_index(E) || E <- Run2]),
         ok = quod_ledger_store:close(S3)
     end.
 
@@ -665,7 +671,9 @@ raw_frame(Entry) ->
     raw_frame_payload(?MAGIC, Payload).
 
 raw_frame(Magic, Entry) ->
-    P = term_to_binary(Entry, [deterministic]),
+    %% Legacy fixture bytes remain the old native view, never the transient
+    %% artifact wrapper. Their exact recognizable framing is unchanged.
+    P = term_to_binary(quod_ledger:entry_view(Entry), [deterministic]),
     raw_frame_payload(Magic, P).
 
 raw_frame_payload(Magic, Payload) ->

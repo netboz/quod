@@ -145,10 +145,13 @@
 %% so a new kind cannot be silently folded as nothing at a forgotten consumer.
 -type entry_data() :: block_payload() | noop.
 
-%% A committed log entry. `data` is the exact tagged block payload, or the atom
+%% The native view of a committed log entry. Live readers/transport/store carry
+%% quod_ledger:entry_artifact(); obtain this view through entry_view/1. The
+%% record shape is retained in prepared lifecycle descriptors, not as a second
+%% append API. `data` is the exact tagged block payload, or the atom
 %% `noop` for a complaint-skipped slot. Genesis is a `{batch, [GenesisTx]}`.
-%% `cert` is the quorum certificate that finalized the slot —
-%% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
+%% `cert` is claimed finality evidence, not a codec authentication verdict —
+%% after verification, a COMMIT cert (direct or implicit), a COMPLAINT cert for a `noop` skip, or `none` for the
 %% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each
 %% entry against its `cert` (trustless replay). Membership is NOT a distinct entry kind: the committee
 %% is the set of `peer_admitted` facts (`quod_simplex:log_projection/2`). `index` doubles as the
@@ -156,9 +159,10 @@
 -record(entry, {index       :: log_index(),
                 data        :: entry_data(),
                 timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's covered timestamp for local consumers;
-                                                    %% the exact block is always reconstructed from `block_bytes`.
+                                                    %% the artifact retains the block view bound to `block_bytes`.
                                                     %% 0 for a `noop` skip (no block) / genesis.
                 block_bytes = none :: binary() | none, %% exact committed block bytes; `none` only for a complaint skip
-                cert = none :: #cert{} | #implicit_cert{} | none}).
+                cert = none :: term()}). %% A decoded view is not a finality verdict;
+                                        %% the forward verifier checks certificate shape/signatures.
 
 -endif.

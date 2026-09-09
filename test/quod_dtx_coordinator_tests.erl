@@ -548,7 +548,9 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
           {Control, Entry0, _LocalRef} =
               certified_control(Target, Begin, 2, F),
           {Ns, Anchor} = Target,
-          BlockHash = (Entry0#entry.cert)#cert.block_hash,
+          #entry{cert = #cert{block_hash = BlockHash}} =
+              quod_ledger:entry_view(Entry0),
+          {ok, Block} = quod_ledger:block_from_entry(Entry0),
           Domain = quod_simplex:consensus_domain(Ns, Anchor),
           Validators =
               [begin
@@ -572,8 +574,8 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
                  end,
           RetainedCert = Form([A, B, C]),
           SuppliedCert = Form([B, C, D]),
-          Entry = Entry0#entry{cert = RetainedCert},
-          SuppliedEntry = Entry0#entry{cert = SuppliedCert},
+          Entry = quod_ledger:entry(Block, RetainedCert),
+          SuppliedEntry = quod_ledger:entry(Block, SuppliedCert),
           {ok, Ref} = quod_dtx:certified_entry_ref(
                         Target, SuppliedEntry, Control),
           Evidence =

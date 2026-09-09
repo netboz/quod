@@ -124,7 +124,8 @@ full_open_calls(Calls) ->
 view(Store, Identity, Entry) ->
     #{owner => self(), identity => Identity, slot => quod_ledger_store:last(Store),
       snapshot => quod_ledger_store:snapshot(Store),
-      projection => #{history_head => {Entry#entry.index, entry_hash(Entry)}}}.
+      projection => #{history_head =>
+                        {(quod_ledger:entry_view(Entry))#entry.index, entry_hash(Entry)}}}.
 
 material_entry(Identity = {Ns, Anchor}, Pub, Signer, AuthorBinding, Slot, Sequence) ->
     {ok, Goal} = quod_durable_term:encode_goal({materializer_append, Sequence}),

@@ -1,8 +1,9 @@
 # Phase 1B — current-view work and freshness review
 
 **Status: direction and all three detailed cut contracts approved;
-Cut 1 implemented and independently reviewed green; its commit and continuation
-to Cut 2 are authorized. Cut 3 remains gated.**
+Cut 1 independently reviewed and committed (`e4ad3e1`, 0.7.153);
+Cut 2 independently reviewed SAFE TO COMMIT, with all gates reproduced green.
+Cut 3 remains gated.**
 Source baseline: `d48cd89` on `claude/next`, deployed 0.7.152. Phase 1A's
 source and hardware reviews are closed; its absolute latency gate is not.
 This document proposes an alternative to weakening identity freshness:
@@ -77,15 +78,16 @@ new workload or replacement baseline.
 ## 2. Source-confirmed repeated work
 
 This table records the `d48cd89` / 0.7.152 diagnosis, not present-tense claims
-about the Cut-1 working tree. Cut 1 removes its first row's owner-side decoder;
-the remaining rows belong to separately gated Cuts 2 and 3. New page spans
+about the working tree. Committed Cut 1 removes its first row's owner-side
+decoder; the Cut-2 implementation addresses the three entry-consumer rows.
+The last row belongs to still-gated Cut 3. New page spans
 separate wait, decode and local completion; no new hardware saving is claimed.
 
-| Owner/seam | Current work | Proposed disposition |
+| Owner/seam | Baseline work | Disposition |
 |---|---|---|
 | foreign_log `accept_live_page_result/7` | decodes all entry blobs synchronously in the node-wide gen_server | move interpretation to existing requesting verification/probe workers; retain correlation and lifecycle in the owner |
 | catchup `page_stats/1` | calls `ledger:encode_entry/1` to count bytes | count carried canonical entry bytes, after the existing ingress bounds check |
-| ledger `block_from_entry_view/1`, transaction `encode_ledger_transaction/1` | decode/re-encode record views and verify transaction signatures during encoding | establish bytes/view binding at the actual construction/decoding boundary, carry that result within the existing operation |
+| baseline ledger `block_from_entry_view/1`, transaction `encode_ledger_transaction/1` | decode/re-encode record views and verify transaction signatures during encoding | Cut 2 removes consumer reconstruction via canonical artifacts; transaction encoder and forward-verifier validation remain unchanged |
 | ledger_store `append/2` | calls the checked entry encoder again after history verification | persist the same verified canonical artifact; preserve contiguous-index checks, framing and sync |
 | foreign_log `probe_pages` → advance → `current_committee_confirmed` | one-entry probes, then suffix fetch, then tip probes; both probe rounds wait for all replies | first remove unnecessary all-reply waiting where the unchanged acceptance predicate is already satisfied; broader response reuse needs the proof in §5 |
 
@@ -93,7 +95,7 @@ For N=4, the ordinary changed-head shape is 4 + 1 + 4 page requests per
 worker. One-entry probing deliberately limits fan-out byte retention; replacing
 it with four full pages is not automatically an improvement. Encoding accounts
 for about 8.87 / 53.84 ms per foreign append worker before its storage sync.
-Existing traces do not isolate owner-side decode, every probe, or the time
+Baseline traces do not isolate owner-side decode, every probe, or the time
 waiting for replies after a sufficient quorum: add that granularity at these
 existing seams before claiming their millisecond savings.
 

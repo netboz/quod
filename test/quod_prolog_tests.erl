@@ -1086,7 +1086,7 @@ ab(Ns, Index, Change) -> ae(Ns, Index, Change, live).
 
 ae(Ns, Index, Data, Origin) ->
     quod_prolog:apply_entry(
-      Ns, #entry{index = Index, data = Data}, Origin).
+      Ns, quod_ct:committed_entry(Ns, Index, Data), Origin).
 
 %% These bare-engine tests do not run Simplex slot 1, so include the same
 %% unconditional host-entry policy that founding injects into every real
@@ -1227,11 +1227,12 @@ t_batch_apply({Ns, _}) ->
         ?assertEqual(3, maps:get(applies, Stats)),
         %% An improper batch is rejected as a whole: no prefix transaction can leak into the KB.
         Partial = change(Ns, diff_for({must_not_apply, x}), #{}),
-        ok = ab(Ns, 2, {batch, [Partial | bad_tail]}),
+        ?assertEqual({error, bad_entry},
+                     quod_ledger:new_entry(2, {batch, [Partial | bad_tail]}, 0, none)),
         ?assertMatch({fail, [_ | _]},
                      quod_prolog:prove(Ns, {must_not_apply, x})),
         Stats2 = quod_prolog:stats(Ns),
-        ?assertEqual(2, maps:get(applied, Stats2)),
+        ?assertEqual(1, maps:get(applied, Stats2)),
         ?assertEqual(3, maps:get(applies, Stats2))
     end.
 

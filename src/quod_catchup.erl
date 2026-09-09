@@ -8,7 +8,7 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 channel, separate from `quod_simplex`'s `{log, Ns}` channel:
 
 - **Server** (any Member holding the durable log): asks the existing consensus owner for a copy of its
-  already-verified sparse ledger index, then reads the committed `#entry{}` range through a separate
+  already-verified sparse ledger index, then reads the committed artifact range through a separate
   **read-only** handle. The worker never shares the writer's raw descriptor and never rescans the full
   log. One authenticated link grant admits one reader through ordered response
   acceptance. Concurrent logical requests remain in their producer's rows;
@@ -120,7 +120,7 @@ contacts(Ns, Limit) when is_integer(Limit), Limit > 0 ->
 
 -doc "Pull committed entries `[From, To]` from a node id or `{Host, Port}` contact. Returns the entries + the server's height.".
 -spec pull(binary(), pos_integer(), log_index(), node_id() | endpoint()) ->
-        {ok, [#entry{}], log_index()} | {error, term()}.
+        {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
 pull(Ns, From, To, Contact) ->
     Started = quod_time:mono_ms(),
     case quod_reg:where({quod_catchup, Ns}) of
@@ -214,7 +214,7 @@ valid_blob_page(_, _, _) -> false.
 %% The transport validates only opaque blob bounds. The receiving reader owns
 %% this one decode, selecting local or wrapped vocabulary before verification.
 -spec decode_entries([binary()], materialized | wrapped) ->
-          {ok, [#entry{}]} | {error, bad_frame}.
+          {ok, [quod_ledger:entry_artifact()]} | {error, bad_frame}.
 decode_entries(Blobs, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     case valid_blob_page(Blobs, 0, 0) of
@@ -240,7 +240,7 @@ page_stats(Entries) ->
 
 page_stats([], Count, Bytes) ->
     {ok, Count, Bytes};
-page_stats([#entry{} = Entry | Rest], Count, Bytes)
+page_stats([Entry | Rest], Count, Bytes)
   when Count < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES ->
     case quod_ledger:encode_entry(Entry) of
         {ok, EntryBytes} ->
@@ -252,18 +252,21 @@ page_stats([#entry{} = Entry | Rest], Count, Bytes)
         {error, _} ->
             {error, malformed_page}
     end;
-page_stats([#entry{} | _], _Count, _Bytes) ->
-    {error, too_many_entries};
+page_stats([Entry | _], _Count, _Bytes) ->
+    case quod_ledger:encode_entry(Entry) of
+        {ok, _EnvelopeBytes} -> {error, too_many_entries};
+        {error, _} -> {error, malformed_page}
+    end;
 page_stats(_Malformed, _Count, _Bytes) ->
     {error, malformed_page}.
 
 -doc """
-Read the committed `#entry{}` range `[From, To]` (capped to `?MAX_BLOCKS` and the readable height) from a
+Read the committed artifact range `[From, To]` (capped to `?MAX_BLOCKS` and the readable height) from a
 READ-ONLY store view. Returns the entries + the snapshot's captured committed height. Used by the server
 worker; pure w.r.t. the gen_server (opens/closes its own handle).
 """.
 -spec serve_blocks(binary(), quod_ledger_store:session(), non_neg_integer(), log_index()) ->
-        {ok, [#entry{}], log_index()} | {error, term()}.
+        {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
 serve_blocks(Ns, Snapshot, From, To) ->
     StartedNative = erlang:monotonic_time(),
     Result = serve_blocks_measured(Ns, Snapshot, From, To),
@@ -288,7 +291,7 @@ serve_blocks_measured(Ns, Snapshot, From, To) ->
 %% Cold cache recovery already owns an opened store. It uses this same bounded
 %% page reader directly, not a new open (and index scan) for each replay page.
 -spec read_blocks(quod_ledger_store:handle(), non_neg_integer(), log_index()) ->
-          {ok, [#entry{}], log_index()} | {error, term()}.
+          {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
 read_blocks(Store, From0, To) ->
     From = max(1, From0),
     try
@@ -353,7 +356,7 @@ Verify a pulled chain **by induction** — the joiner trusts nothing the server 
 it derives the consensus signature domain; neither value is accepted from the
 serving peer. `Projection0` contains the committee and admission state AS OF
 slot `From`; `Entries` MUST be a CONTIGUOUS ascending run starting at
-`From` (a gap, reorder, or non-`#entry{}` element is a forged/incomplete history and is rejected — so a
+`From` (a gap, reorder, or non-artifact element is a forged/incomplete history and is rejected — so a
 malicious server cannot drop a committee-changing block to shift the fold, nor prepend a fake genesis to a
 mid-chain window). For each entry, verify its finalizing certificate against the committee AS-OF-that-slot,
 then advance the shared history projection. Returns `{ok, Verified, Projection1}` or `{error, Reason}` at
@@ -370,8 +373,8 @@ be finalized implicitly. The genesis block (slot 1) uses the canonical batch enc
 `(kind, slot, block_hash)`, or one that fails the `⅔` check against the committee-as-of-slot is rejected.
 """.
 -spec verify_forward(binary(), binary(), quod_simplex:history_projection(),
-                     pos_integer(), [#entry{}]) ->
-        {ok, [#entry{}], quod_simplex:history_projection()} | {error, term()}.
+                     pos_integer(), [quod_ledger:entry_artifact()]) ->
+        {ok, [quod_ledger:entry_artifact()], quod_simplex:history_projection()} | {error, term()}.
 verify_forward(Ns, GenesisHash, Projection0, From, Entries)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
@@ -397,9 +400,9 @@ The catch-up driver commits it only after the same window and its resulting
 projection have been accepted by the ledger sink.
 """.
 -spec verify_forward(binary(), binary(), quod_simplex:history_projection(),
-                     pos_integer(), [#entry{}],
+                     pos_integer(), [quod_ledger:entry_artifact()],
                      quod_dtx_phase_index:index()) ->
-        {ok, [#entry{}], quod_simplex:history_projection(),
+        {ok, [quod_ledger:entry_artifact()], quod_simplex:history_projection(),
          quod_dtx_phase_index:delta()} |
         {error, term()}.
 verify_forward(Ns, GenesisHash, Projection0, From, Entries, PhaseIndex)
@@ -422,60 +425,60 @@ verify_forward(_Ns, _GenesisHash, _Projection0, _From, _Entries, _PhaseIndex) ->
 
 verify_forward_phase(_Binding, Projection, _Next, [], _PhaseIndex, Delta, Acc) ->
     {ok, lists:reverse(Acc), Projection, Delta};
-verify_forward_phase(Binding, Projection, Next,
-                     [#entry{index = Next} = Entry | Rest],
+verify_forward_phase(Binding, Projection, Next, [Entry | Rest],
                      PhaseIndex, Delta0, Acc) ->
-    case quod_simplex:history_preview_advance(
-           Binding, Entry, Projection, PhaseIndex, Delta0) of
-        {ok, Projection1, _Effects, Delta1} ->
-            verify_forward_phase(
-              Binding, Projection1, Next + 1, Rest,
-              PhaseIndex, Delta1, [Entry | Acc]);
-        {error, _} = Error ->
-            Error
+    case entry_index(Entry) of
+        Next ->
+            case quod_simplex:history_preview_advance(
+                   Binding, Entry, Projection, PhaseIndex, Delta0) of
+                {ok, Projection1, _Effects, Delta1} ->
+                    verify_forward_phase(
+                      Binding, Projection1, Next + 1, Rest,
+                      PhaseIndex, Delta1, [Entry | Acc]);
+                {error, _} = Error -> Error
+            end;
+        I when is_integer(I) -> {error, {noncontiguous, Next, I}};
+        error -> {error, {malformed_entry, Next}}
     end;
-verify_forward_phase(_Binding, _Projection, Next,
-                     [#entry{index = I} | _], _PhaseIndex, _Delta, _Acc) ->
-    {error, {noncontiguous, Next, I}};
-verify_forward_phase(_Binding, _Projection, Next, [_NotAnEntry | _],
-                     _PhaseIndex, _Delta, _Acc) ->
-    {error, {malformed_entry, Next}};
 verify_forward_phase(_Binding, _Projection, Next, _ImproperTail,
                      _PhaseIndex, _Delta, _Acc) ->
     {error, {malformed_entry, Next}}.
 
 verify_forward_domain(_Binding, _Domain, Projection, _Next, [], Acc) ->
     {ok, lists:reverse(Acc), Projection};
-verify_forward_domain(Binding, Domain, Projection, Next,
-                      [#entry{index = Next} = E | Rest], Acc) ->
-    case verify_entry(Binding, Domain, E, Projection) of
-        ok ->
-            case quod_simplex:history_validate_advance(
-                   Binding, E, Projection) of
-                {ok, Projection1} ->
-                    verify_forward_domain(
-                      Binding, Domain, Projection1,
-                      Next + 1, Rest, [E | Acc]);
-                {error, _} = Error -> Error
+verify_forward_domain(Binding, Domain, Projection, Next, [E | Rest], Acc) ->
+    case entry_index(E) of
+        Next ->
+            case verify_entry(Binding, Domain, E, Projection) of
+                ok ->
+                    case quod_simplex:history_validate_advance(
+                           Binding, E, Projection) of
+                        {ok, Projection1} ->
+                            verify_forward_domain(
+                              Binding, Domain, Projection1,
+                              Next + 1, Rest, [E | Acc]);
+                        {error, _} = Error -> Error
+                    end;
+                Error -> Error
             end;
-        Error ->
-            Error
+        I when is_integer(I) -> {error, {noncontiguous, Next, I}};
+        error -> {error, {malformed_entry, Next}}
     end;
-verify_forward_domain(_Binding, _Domain, _Projection, Next,
-                      [#entry{index = I} | _], _Acc) ->
-    {error, {noncontiguous, Next, I}};   %% a gap/reorder — the server dropped or misordered an entry
-verify_forward_domain(_Binding, _Domain, _Projection, Next, [_NotAnEntry | _], _Acc) ->
-    {error, {malformed_entry, Next}};    %% a non-#entry element from a hostile server
 verify_forward_domain(_Binding, _Domain, _Projection, Next, _ImproperTail, _Acc) ->
     {error, {malformed_entry, Next}}.    %% a hostile improper list after an otherwise-valid prefix
 
-entry_data(#entry{data = Data}) -> Data.
+entry_index(Entry) ->
+    try (quod_ledger:entry_view(Entry))#entry.index
+    catch error:_ -> error
+    end.
+
+entry_data(Entry) -> (quod_ledger:entry_view(Entry))#entry.data.
 
 -doc "Verify one persisted entry's local finality against its parent projection.".
--spec verify_entry({binary(), <<_:256>>}, #entry{},
+-spec verify_entry({binary(), <<_:256>>}, quod_ledger:entry_artifact(),
                    quod_simplex:history_projection()) ->
           ok | {error, term()}.
-verify_entry({Ns, <<_:256>> = Anchor} = Binding, #entry{} = Entry,
+verify_entry({Ns, <<_:256>> = Anchor} = Binding, Entry,
              Projection) when is_binary(Ns) ->
     verify_entry(
       Binding, quod_simplex:consensus_domain(Ns, Anchor), Entry, Projection).
@@ -484,33 +487,34 @@ verify_entry({Ns, <<_:256>> = Anchor} = Binding, #entry{} = Entry,
 %% payload): a complaint cert finalizes a `noop` SKIP; a commit cert finalizes a tagged content/DTX block.
 %% A complaint cert over non-`noop` data, or any other cert shape, is rejected — a complaint proves
 %% "skip slot I" and authorizes no payload.
-verify_entry(Binding, Domain, #entry{} = E, Projection) ->
+verify_entry(Binding, Domain, E, Projection) ->
     Committee = quod_simplex:history_committee(Projection),
-    case verify_entry_finality(Binding, Domain, E, Committee, Projection) of
+    case verify_entry_finality(
+           Binding, Domain, E, quod_ledger:entry_view(E), Committee, Projection) of
         ok -> ok;
         {error, _} = Error ->
             Error
     end.
 
-verify_entry_finality(_Binding, _Domain, #entry{index = 1, cert = none} = E,
+verify_entry_finality(_Binding, _Domain, E, #entry{index = 1, cert = none},
                       _Committee, _Projection) ->
     case entry_block(E) of
         {ok, _Block} -> ok;   %% genesis is pinned out of band, but must still be structurally valid
         error -> {error, {malformed_entry, 1}}
     end;
-verify_entry_finality(_Binding, _Domain, #entry{index = I, cert = none},
+verify_entry_finality(_Binding, _Domain, _E, #entry{index = I, cert = none},
                       _Committee, _Projection) ->
     {error, {missing_cert, I}};   %% a non-genesis committed slot MUST carry a cert
-verify_entry_finality(_Binding, Domain, #entry{index = I, data = noop, timestamp = 0,
+verify_entry_finality(_Binding, Domain, _E, #entry{index = I, data = noop, timestamp = 0,
                                           cert = #cert{kind = complaint} = Cert},
                       Committee, _Projection) ->
     verify_finalizer(Domain, Cert, complaint, I, none, Committee);
-verify_entry_finality(Binding, Domain,
-                      #entry{index = I, cert = #implicit_cert{} = Proof} = E,
+verify_entry_finality(Binding, Domain, E,
+                      #entry{index = I, cert = #implicit_cert{} = Proof},
                       Committee, Projection) ->
     verify_implicit(Binding, Domain, E, I, Proof, Committee, Projection);
-verify_entry_finality(_Binding, Domain,
-                      #entry{index = I, cert = #cert{kind = commit} = Cert} = E,
+verify_entry_finality(_Binding, Domain, E,
+                      #entry{index = I, cert = #cert{kind = commit} = Cert},
                       Committee, _Projection) ->
     case entry_block(E) of
         {ok, Block} ->
@@ -519,7 +523,7 @@ verify_entry_finality(_Binding, Domain,
         error ->
             {error, {malformed_entry, I}}
     end;
-verify_entry_finality(_Binding, _Domain, #entry{index = I},
+verify_entry_finality(_Binding, _Domain, _E, #entry{index = I},
                       _Committee, _Projection) ->
     {error, {cert_mismatch, I}}.   %% complaint cert over non-noop data, a support cert, a non-#cert, …
 
@@ -582,10 +586,10 @@ implicit_content(Data) ->
     end.
 
 entry_block(E) ->
-    case quod_simplex:block_from_entry(E) of
+    case quod_ledger:block_from_entry(E) of
         {ok, #block{} = Block} ->
             case quod_simplex:well_formed_block(Block) of
-                true  -> {ok, Block};
+                true -> {ok, Block};
                 false -> error
             end;
         error -> error
@@ -631,8 +635,8 @@ at that point. `catch_up/5` starts at slot 1 and checks the genesis anchor.
 -spec catch_up(
         binary(), binary(),
         fun((pos_integer()) ->
-                {ok, [#entry{}], log_index()} | {error, term()}),
-        fun(([#entry{}], quod_simplex:history_projection()) ->
+                {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}),
+        fun(([quod_ledger:entry_artifact()], quod_simplex:history_projection()) ->
                 {ok, quod_simplex:history_view()} | {error, term()}),
         #{ledger_root := file:filename_all()}) ->
           {ok, log_index()} | {error, term()}.
@@ -649,8 +653,8 @@ catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _Options) ->
 -spec catch_up(
         binary(), binary(),
         fun((pos_integer()) ->
-                {ok, [#entry{}], log_index()} | {error, term()}),
-        fun(([#entry{}], quod_simplex:history_projection()) ->
+                {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}),
+        fun(([quod_ledger:entry_artifact()], quod_simplex:history_projection()) ->
                 {ok, quod_simplex:history_view()} | {error, term()}),
         pos_integer(), quod_simplex:history_projection(),
         #{ledger_root := file:filename_all(),
@@ -767,7 +771,7 @@ catch_up_phase_window(Ns, GenesisHash, Fetch, Sink, Context,
 %% This is source coherence, not a second certificate check: verify_forward
 %% remains the one verifier, and the writer remains the one append owner.
 sink_window(Sink, Verified, Projection, {Scratch, Previous}, Identity) ->
-    Height = (lists:last(Verified))#entry.index,
+    Height = (quod_ledger:entry_view(lists:last(Verified)))#entry.index,
     Head = maps:get(history_head, Projection),
     case Sink(Verified, Projection) of
         {ok, #{owner := Owner, identity := Identity, slot := Height,
@@ -798,15 +802,14 @@ continue_catch_up(Ns, GenesisHash, Fetch, Sink, Context,
               Next, Projection, Target, PhaseIndex)
     end.
 
-window_has_dtx([#entry{data = Data} | Rest]) ->
-    case quod_ledger:classify(Data) of
+window_has_dtx([Entry | Rest]) ->
+    try quod_ledger:classify(entry_data(Entry)) of
         {controls, _Controls} -> true;
         {content, _} -> window_has_dtx(Rest);
         noop -> window_has_dtx(Rest);
         invalid -> window_has_dtx(Rest)
+    catch error:_ -> window_has_dtx(Rest)
     end;
-window_has_dtx([_Malformed | Rest]) ->
-    window_has_dtx(Rest);
 window_has_dtx(_) ->
     false.
 
@@ -885,10 +888,10 @@ backfill_phase_windows(Store, Ns, GenesisHash, From, PrefixHeight,
 %% HASH to the pinned genesis hash — pinning its full content (committee AND root ontology), so a server
 %% can't forge a genesis that merely derives the right committee. Later windows are trusted through the
 %% committee threaded from the (anchored) verified prefix.
-anchor_ok(1, [#entry{index = 1} = E | _], GenesisHash) ->
-    case entry_block(E) of
-        {ok, Block} -> quod_simplex:block_hash(Block) =:= GenesisHash;
-        error       -> false
+anchor_ok(1, [E | _], GenesisHash) ->
+    case {entry_index(E), entry_block(E)} of
+        {1, {ok, Block}} -> quod_simplex:block_hash(Block) =:= GenesisHash;
+        _ -> false
     end;
 anchor_ok(1, _Verified, _GenesisHash) -> false;   %% From=1 but the first entry isn't genesis
 anchor_ok(_From, _Verified, _GenesisHash) -> true. %% mid-chain window

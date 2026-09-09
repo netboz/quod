@@ -17,9 +17,10 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 -export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
-         peer_prove/3,
+         peer_prove/3, await_applied/3,
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
+         committed_entry/3,
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
          remote_operation_fixture/1,
@@ -634,6 +635,104 @@ ordinary_write_does_not_retry_slot_closure_test() ->
         error:{unsafe_retry, {ordinary_write_failed, {error, skipped}}} ->
             ok
     end.
+
+await_applied_waits_for_projection_or_replay_test() ->
+    lists:foreach(fun(Event) ->
+        with_applied_wait_fixture(steady, fun(Ns, Owner, Waiter) ->
+            ?assert(lists:member(Waiter, gproc:lookup_pids({p, l, {runtime, Ns}}))),
+            Owner ! {advance, Event},
+            ?assertEqual(ok, applied_wait_result(Waiter)),
+            assert_applied_wait_cleanup(Ns, Waiter)
+        end)
+    end, [projection_advanced, replay_ready]).
+
+await_applied_subscribes_before_read_test() ->
+    %% The fixture publishes progress before replying with its old height.
+    %% Subscribe-after-read would lose that one edge and park until timeout.
+    with_applied_wait_fixture(advance_during_read, fun(Ns, _Owner, Waiter) ->
+        ?assertEqual(ok, applied_wait_result(Waiter)),
+        assert_applied_wait_cleanup(Ns, Waiter)
+    end).
+
+await_applied_owner_death_releases_waiter_test() ->
+    with_applied_wait_fixture(steady, fun(Ns, Owner, Waiter) ->
+        exit(Owner, kill),
+        ?assertEqual({error, {await_applied_owner_down, Ns, killed}},
+                     applied_wait_result(Waiter)),
+        assert_applied_wait_cleanup(Ns, Waiter)
+    end).
+
+with_applied_wait_fixture(Mode, Fun) ->
+    {ok, Started} = application:ensure_all_started(gproc),
+    Ns = <<"quod:applied-wait-", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
+    Parent = self(),
+    {Owner, OwnerMon} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_prolog, Ns}),
+        Parent ! {applied_wait_ready, self()},
+        applied_wait_engine(Ns, Parent, Mode, 0, 0)
+    end),
+    try
+        receive {applied_wait_ready, Owner} -> ok
+        after 1000 -> error(applied_wait_fixture_start_timeout)
+        end,
+        {Waiter, WaiterMon} = spawn_monitor(fun() ->
+            Result = try await_applied(Ns, 1, 3000)
+                     catch error:R -> {error, R}
+                     end,
+            Parent ! {applied_wait_result, self(), Result},
+            receive stop -> ok end
+        end),
+        try
+            receive
+                {applied_wait_first_read, Owner, Waiter, Subscribed} ->
+                    ?assert(Subscribed)
+            after 1000 -> error(applied_wait_fixture_read_timeout)
+            end,
+            Fun(Ns, Owner, Waiter)
+        after
+            exit(Waiter, kill),
+            receive {'DOWN', WaiterMon, process, Waiter, _} -> ok end
+        end
+    after
+        exit(Owner, kill),
+        receive {'DOWN', OwnerMon, process, Owner, _} -> ok end,
+        lists:foreach(fun application:stop/1, lists:reverse(Started))
+    end.
+
+applied_wait_engine(Ns, Parent, Mode, Height, Reads) ->
+    receive
+        {'$gen_call', From = {Caller, _}, get_stats} ->
+            Subscribed = lists:member(Caller, gproc:lookup_pids({p, l, {runtime, Ns}})),
+            NextHeight = case {Mode, Reads} of
+                {advance_during_read, 0} ->
+                    quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 1}),
+                    1;
+                _ -> Height
+            end,
+            gen_server:reply(From, #{applied => Height}),
+            case Reads of
+                0 -> Parent ! {applied_wait_first_read, self(), Caller, Subscribed};
+                _ -> ok
+            end,
+            applied_wait_engine(Ns, Parent, Mode, NextHeight, Reads + 1);
+        {advance, projection_advanced} ->
+            quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 1}),
+            applied_wait_engine(Ns, Parent, Mode, 1, Reads);
+        {advance, replay_ready} ->
+            quod_reg:publish({runtime, Ns}, {replay_ready, boot, 1}),
+            applied_wait_engine(Ns, Parent, Mode, 1, Reads)
+    end.
+
+applied_wait_result(Waiter) ->
+    receive {applied_wait_result, Waiter, Result} -> Result
+    after 1000 -> error(applied_wait_fixture_result_timeout)
+    end.
+
+assert_applied_wait_cleanup(Ns, Waiter) ->
+    %% The waiter is deliberately still alive, so process-exit cleanup cannot
+    %% conceal a leaked subscription or the captured engine monitor.
+    ?assertNot(lists:member(Waiter, gproc:lookup_pids({p, l, {runtime, Ns}}))),
+    ?assertEqual({monitors, []}, process_info(Waiter, monitors)).
 -endif.
 
 %% peer:call/4 defaults to five seconds, shorter than quod_prolog's 30-second
@@ -641,6 +740,64 @@ ordinary_write_does_not_retry_slot_closure_test() ->
 %% otherwise a test poll can resubmit a write that is still able to commit.
 peer_prove(Peer, Ns, Goal) ->
     peer:call(Peer, quod_prolog, prove, [Ns, Goal], 35000).
+
+%% Fixture synchronization, not a recovery drive: observe the exact engine's
+%% committed projection and wait for its ordinary events. A remote public
+%% outcome can be ready before a local observer has applied that same slot.
+%% Register before the first read so progress in the read/wait gap is retained.
+await_applied(Ns, Height, TimeoutMs)
+  when is_binary(Ns), is_integer(Height), Height >= 0,
+       is_integer(TimeoutMs), TimeoutMs > 0 ->
+    Deadline = erlang:monotonic_time(millisecond) + TimeoutMs,
+    Topic = {runtime, Ns},
+    true = quod_reg:subscribe(Topic),
+    try
+        case quod_reg:where({quod_prolog, Ns}) of
+            Owner when is_pid(Owner) ->
+                Monitor = monitor(process, Owner),
+                try await_applied_read(Owner, Monitor, Ns, Height, Deadline)
+                after demonitor(Monitor, [flush])
+                end;
+            undefined -> error({await_applied_unavailable, Ns})
+        end
+    after
+        quod_reg:unsubscribe(Topic)
+    end.
+
+await_applied_read(Owner, Monitor, Ns, Height, Deadline) ->
+    Remaining = applied_wait_budget(Ns, Height, Deadline),
+    Stats = try gen_server:call(Owner, get_stats, Remaining)
+            catch
+                exit:{timeout, _} -> error({await_applied_timeout, Ns, Height});
+                exit:Reason -> error({await_applied_owner_down, Ns, Reason})
+            end,
+    _ = applied_wait_budget(Ns, Height, Deadline),
+    case Stats of
+        #{applied := Applied} when is_integer(Applied), Applied >= Height -> ok;
+        #{applied := Applied} when is_integer(Applied) ->
+            await_applied_event(Owner, Monitor, Ns, Height, Deadline);
+        Other -> error({await_applied_bad_stats, Ns, Other})
+    end.
+
+await_applied_event(Owner, Monitor, Ns, Height, Deadline) ->
+    Remaining = applied_wait_budget(Ns, Height, Deadline),
+    receive
+        {projection_advanced, Owner, _Height} ->
+            await_applied_read(Owner, Monitor, Ns, Height, Deadline);
+        {replay_ready, _Id, _Height} ->
+            %% This namespace's replay boundary is only a wake. The answer
+            %% still comes from the captured PID, never a replacement name.
+            await_applied_read(Owner, Monitor, Ns, Height, Deadline);
+        {'DOWN', Monitor, process, Owner, Reason} ->
+            error({await_applied_owner_down, Ns, Reason})
+    after Remaining -> error({await_applied_timeout, Ns, Height})
+    end.
+
+applied_wait_budget(Ns, Height, Deadline) ->
+    case Deadline - erlang:monotonic_time(millisecond) of
+        Remaining when Remaining > 0 -> Remaining;
+        _ -> error({await_applied_timeout, Ns, Height})
+    end.
 
 %% A per-port data_dir under the suite's private dir.
 datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
@@ -719,6 +876,38 @@ change(Ns, Diff, RC) ->
                    author = {"127.0.0.1", 5000}, sig = none}).
 
 batch(Tx) -> {batch, [Tx]}.
+
+%% Bare-engine fixtures still enter through the real canonical ledger codec.
+%% Seal their unsigned local submissions as Simplex would; the semantic id
+%% excludes the transport author/signature, so result correlations stay exact.
+committed_entry(Ns, Index, Data) ->
+    Payload = case quod_ledger:classify(Data) of
+                  {content, Txs} ->
+                      {batch, [committed_transaction(Ns, Tx) || Tx <- Txs]};
+                  _ -> Data
+              end,
+    {ok, Entry} = quod_ledger:new_entry(Index, Payload, 0, none),
+    Entry.
+
+committed_transaction(_Ns, #transaction{sig = Sig} = Tx) when Sig =/= none -> Tx;
+committed_transaction(_Ns, #transaction{proof_id = none, plan_digest = none,
+                                        goal = undefined, result = undefined,
+                                        author = Author} = Tx) ->
+    case is_binary(Author) of
+        true -> Tx;
+        false -> Tx#transaction{author = <<1:256>>}
+    end;
+committed_transaction(Ns, Tx) ->
+    Seed = <<1:256>>,
+    {Author, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
+    Signer = #{pubkey => Author, key => quod_identity:key_term({Author, Seed})},
+    Anchor = case quod_simplex:genesis_hash(Ns) of
+                 <<_:256>> = Hash -> Hash;
+                 undefined -> <<0:256>>
+             end,
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, Anchor, Author}, Tx#transaction{author = Author}, Signer),
+    Signed.
 
 %% Poll `F` (a boolean condition, side effects allowed) every 50 ms until true; error out
 %% after `N` tries. The eunit sibling of `eventually/2`.

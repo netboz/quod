@@ -491,8 +491,12 @@ prepare_create(Ns, InitialDiff, Modules) ->
                         {error, _} = Error ->
                             Error;
                         {ok, Entry, Anchor} ->
+                            %% The private journal descriptor predates codec
+                            %% artifacts. Keep its exact native entry shape so
+                            %% prepared bytes, hashes and effect IDs are stable.
                             FrozenConfig =
-                                Config#{prepared_genesis_entry => Entry,
+                                Config#{prepared_genesis_entry =>
+                                            quod_ledger:entry_view(Entry),
                                         genesis_hash => Anchor},
                             prepare_create_existing(
                               Ns, Anchor, FrozenConfig, created)
@@ -857,7 +861,7 @@ existing_ledger(Ns, Config) ->
 
 existing_ledger_anchor(Store) ->
     case quod_ledger_store:read_at(Store, 1) of
-        {ok, #entry{} = Entry} ->
+        {ok, Entry} ->
             case quod_simplex:block_from_entry(Entry) of
                 {ok, Block} -> {resumed, quod_simplex:block_hash(Block)};
                 error -> {error, {ledger_read_failed, invalid_genesis}}

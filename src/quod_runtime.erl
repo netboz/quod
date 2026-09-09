@@ -1744,7 +1744,9 @@ read_founding(Ns, Deadline) ->
             Result = case quod_ledger_store:open_ro_snapshot(Snapshot) of
                 {ok, Store} ->
                     try quod_ledger_store:read_at(Store, 1) of
-                        {ok, #entry{data = Data}} -> founding_payload(Data);
+                        {ok, Entry} ->
+                            #entry{data = Data} = quod_ledger:entry_view(Entry),
+                            founding_payload(Data);
                         not_found -> {error, missing_genesis}
                     catch
                         error:{corrupt_entry, _, _} = Reason -> {error, Reason}

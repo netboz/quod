@@ -898,8 +898,9 @@ It is decided by the `quod_simplex` path that obtained the block, never inferred
 apply publishes the post-apply `applied_live` runtime publication (`doc/agent-fipa-plan.md` §7), a `replay` apply
 rebuilds D only. Replay runs also emit `replay_started`/`replay_ready` lifecycle boundaries.
 """.
--spec apply_entry(binary(), #entry{}, live | replay) -> ok.
-apply_entry(Ns, #entry{} = Entry, Origin) ->
+-spec apply_entry(binary(), quod_ledger:entry_artifact(), live | replay) -> ok.
+apply_entry(Ns, Entry, Origin) ->
+    _ = quod_ledger:entry_view(Entry),
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_entry, Entry, Origin}).
 
 -doc "Signal that the initial rebuild is complete and proves may be served.".
@@ -1448,12 +1449,12 @@ handle_cast({dtx_group_resolved, GroupRef}, S) ->
     {noreply, release_group_waiter(GroupRef, S)};
 handle_cast({dtx_group_terminal, GroupRef, Terminal}, S) ->
     {noreply, release_group_waiter_terminal(GroupRef, Terminal, S)};
-handle_cast({apply_entry, #entry{}, _Origin},
+handle_cast({apply_entry, _Entry, _Origin},
             S = #s{apply_dependency = {network_identity, _}}) ->
     %% Simplex owns the durable history and will replay it from the current
     %% applied floor. Do not grow a second in-memory entry queue here.
     {noreply, S};
-handle_cast({apply_entry, #entry{} = Entry, Origin}, S0) ->
+handle_cast({apply_entry, Entry, Origin}, S0) ->
     S1 = apply_committed(Entry, Origin, S0),
     %% Drive the replay lifecycle from whether the apply ACTUALLY advanced the committed height, not
     %% from the raw origin: an already-applied no-op (`Index =< applied`) or a forward gap
@@ -6424,8 +6425,9 @@ mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
 %% applied-advancing path — resolve membership or Prepare verdicts parked for
 %% the parent height just reached.  A content commit, DTX phase, or noop must
 %% all release the same bounded validation lifecycle.
-apply_committed(#entry{} = Entry, Origin, S) ->
-    resolve_validations(apply_step(Entry, Origin, S)).
+apply_committed(Entry, Origin, S) ->
+    #entry{index = Index} = quod_ledger:entry_view(Entry),
+    resolve_validations(apply_step(Index, Entry, Origin, S)).
 
 %% Each clause returns the new #s{}. Index is the committed entry's log index; entries
 %% arrive in order on the (FIFO) cast channel from quod_simplex. `Origin` (live|replay) reaches
@@ -6433,11 +6435,11 @@ apply_committed(#entry{} = Entry, Origin, S) ->
 %% event. Both are delivered only after the block snapshot is durable and visible.
 %%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
-apply_step(#entry{index = Index}, _Origin, S = #s{applied = A}) when Index =< A ->
+apply_step(Index, _Entry, _Origin, S = #s{applied = A}) when Index =< A ->
     S;
 %% Forward gap: quod_simplex is ahead of us (we restarted, or missed a cast). Don't apply out
 %% of order — ask quod_simplex to re-drive from the snapshot so we receive a contiguous run.
-apply_step(#entry{index = Index}, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
+apply_step(Index, _Entry, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     _ = try quod_simplex:rebuild(Ns) catch _:_ -> ok end,
     S;
 %% Index == applied+1. Every committed entry kind is enumerated here. A recognized
@@ -6449,7 +6451,7 @@ apply_step(#entry{index = Index}, _Origin, S = #s{ns = Ns, applied = A}) when In
 %% before returning them. A successful API reply can therefore be followed
 %% immediately by a terminal outcome lookup or a read of the committed state.
 %% All envelopes in a block share that block-final snapshot.
-apply_step(#entry{index = Index} = Entry, Origin, S0) ->
+apply_step(Index, Entry, Origin, S0) ->
     Projection0 = committed_projection(S0),
     Floor = oldest_snapshot(Index, S0),
     Reduced = trace_committed_apply(
@@ -6480,7 +6482,10 @@ apply_step(#entry{index = Index} = Entry, Origin, S0) ->
 trace_committed_apply(_Entry, #s{parked = Parked}, Apply)
   when map_size(Parked) =:= 0 ->
     Apply();
-trace_committed_apply(#entry{index = Index,
+trace_committed_apply(Entry, S, Apply) ->
+    trace_committed_view(quod_ledger:entry_view(Entry), S, Apply).
+
+trace_committed_view(#entry{index = Index,
                              data = {batch, [#transaction{} | _]} = Data},
                       #s{ns = Ns, parked = Parked}, Apply) ->
     Spans = case quod_ledger:classify(Data) of
@@ -6501,7 +6506,7 @@ trace_committed_apply(#entry{index = Index,
               #{'quod.namespace' => Ns, 'quod.ledger.slot' => Index},
               opentelemetry:links(Links), fun(_Span) -> Apply() end)
     end;
-trace_committed_apply(_Entry, _S, Apply) -> Apply().
+trace_committed_view(_Entry, _S, Apply) -> Apply().
 
 parked_trace_span(Tx, Parked) ->
     case maps:get(Tx, Parked, undefined) of

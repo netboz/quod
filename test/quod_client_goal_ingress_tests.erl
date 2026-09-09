@@ -286,7 +286,7 @@ operation_resolution_follows_the_existing_claim(
                   submitted_at => 2}),
     Transaction = maps:get(transaction, Fixture),
     ok = quod_prolog:apply_entry(
-           Ns, #entry{index = 2, data = {batch, [Transaction]}}, live),
+           Ns, quod_ct:committed_entry(Ns, 2, {batch, [Transaction]}), live),
     ?assertMatch(
        {ok, _Evidence,
         {operation_outcome,
@@ -346,7 +346,7 @@ setup() ->
                   committee => [], genesis_diff => GenesisDiff},
                 Ns, GenesisAuthor, <<16#77:256>>),
     ok = quod_prolog:apply_entry(
-           Ns, #entry{index = 1, data = {batch, [Genesis]}}, live),
+           Ns, quod_ct:committed_entry(Ns, 1, {batch, [Genesis]}), live),
     ok = quod_prolog:mark_ready(Ns),
     1 = quod_prolog:applied(Ns),
     {ok, AuthPid} = quod_client_auth:start_link(

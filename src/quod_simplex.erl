@@ -2737,9 +2737,13 @@ evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
                        quod_trace:context(), <<"quod.evidence.read_at">>, internal,
                        Attributes,
                        fun() -> quod_ledger_store:read_at(Store, Slot) end) of
-                    {ok, #entry{data = {batch, Transactions}} = Entry} ->
-                        evidence_in_entry(
-                          Identity, Entry, Transactions, Selection);
+                    {ok, Entry} ->
+                        case quod_ledger:entry_view(Entry) of
+                            #entry{data = {batch, Transactions}} ->
+                                evidence_in_entry(
+                                  Identity, Entry, Transactions, Selection);
+                            _ -> {error, not_found}
+                        end;
                     _ ->
                         {error, not_found}
                 end
@@ -3342,7 +3346,8 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
         try
             quod_ledger_store:fold(
               Store, 1, Last,
-              fun(E = #entry{data = Data}, {Acc, PendingEffects}) ->
+              fun(E, {Acc, PendingEffects}) ->
+                      #entry{data = Data} = quod_ledger:entry_view(E),
                       {checked_log_projection_step(
                          Binding, E, Acc, PhaseIndex),
                        remove_committed_effect_ids(Data, PendingEffects)}
@@ -3467,11 +3472,17 @@ initial_sync(#s{self = Self} = S) ->
 %% The caller binds the signing journal to the resulting anchor before append.
 %% Loading or compiling initial content may throw `{genesis_failed,_}` before
 %% either durable file changes.
-genesis_entry(#{prepared_genesis_entry := #entry{} = Entry},
+genesis_entry(#{prepared_genesis_entry := View} = Cfg,
               #s{ns = Ns, self = Self}) ->
-    case valid_prepared_genesis(Entry, Ns, Self) of
-        true -> Entry;
-        false -> throw({genesis_failed, invalid_prepared_genesis})
+    Anchor = maps:get(genesis_hash, Cfg, undefined),
+    case quod_ledger:from_entry_view(View) of
+        {ok, Entry} ->
+            case valid_prepared_genesis(View, Ns, Self) andalso
+                 entry_block_hash(Entry) =:= Anchor of
+                true -> Entry;
+                false -> throw({genesis_failed, invalid_prepared_genesis})
+            end;
+        {error, _} -> throw({genesis_failed, invalid_prepared_genesis})
     end;
 genesis_entry(Cfg, #s{ns = Ns, self = Self}) ->
     {ok, Entry, _Anchor} = prepare_genesis(Cfg, Ns, Self),
@@ -3479,7 +3490,7 @@ genesis_entry(Cfg, #s{ns = Ns, self = Self}) ->
 
 -doc "Freeze and hash the exact slot-1 genesis entry used by runtime creation.".
 -spec prepare_genesis(map(), binary(), binary()) ->
-          {ok, #entry{}, <<_:256>>} | {error, term()}.
+          {ok, quod_ledger:entry_artifact(), <<_:256>>} | {error, term()}.
 prepare_genesis(Cfg, Ns, <<_:256>> = Self)
   when is_map(Cfg), is_binary(Ns), byte_size(Ns) > 0 ->
     try
@@ -3506,7 +3517,7 @@ valid_prepared_genesis(
         andalso valid_genesis_transaction(Ns, Tx, [Self]);
 valid_prepared_genesis(_, _, _) -> false.
 
-entry_block_hash(#entry{} = Entry) ->
+entry_block_hash(Entry) ->
     {ok, Block} = block_from_entry(Entry),
     block_hash(Block).
 
@@ -6339,7 +6350,7 @@ dtx_endpoint_result_response(
   {submit, RequestId, RecordBlob}, {submit_result, Digest, Result}, S) ->
     TargetIdentity = target_identity(S),
     case Result of
-        {ok, Ref, #entry{} = Entry} ->
+        {ok, Ref, Entry} ->
             case quod_dtx:certified_ref_binding(Ref) of
                 {ok, TargetIdentity, _Slot, Digest} ->
                     {{accepted, RequestId, Digest, Ref}, [{Ref, Entry}]};
@@ -6634,7 +6645,8 @@ read_certificate_anchor(_Store, _Target, Slot) when Slot < 1 ->
     {error, unavailable};
 read_certificate_anchor(Store, Target, Slot) ->
     case quod_ledger_store:read_at(Store, Slot) of
-        {ok, #entry{data = Data} = Entry} ->
+        {ok, Entry} ->
+            #entry{data = Data} = quod_ledger:entry_view(Entry),
             case quod_ledger:classify(Data) of
                 noop -> read_certificate_anchor(Store, Target, Slot - 1);
                 {content, [Transaction | _]} ->
@@ -6950,10 +6962,10 @@ drop_optional_entry_hint(Hints) ->
 
 drop_optional_entry_hint([], _Prefix) ->
     error;
-drop_optional_entry_hint([{_Ref, #entry{}} | Rest], Prefix) ->
-    {ok, lists:reverse(Rest) ++ lists:reverse(Prefix)};
-drop_optional_entry_hint([Hint | Rest], Prefix) ->
-    drop_optional_entry_hint(Rest, [Hint | Prefix]).
+drop_optional_entry_hint([{{applied, _, _}, _} = Hint | Rest], Prefix) ->
+    drop_optional_entry_hint(Rest, [Hint | Prefix]);
+drop_optional_entry_hint([{_Ref, _Entry} | Rest], Prefix) ->
+    {ok, lists:reverse(Rest) ++ lists:reverse(Prefix)}.
 
 merge_submission_validation_sidecar(
   Row = #dtx_submission{record = Record, validation_sidecar = Existing,
@@ -6989,7 +7001,8 @@ merge_validation_sidecars(Existing0, New0) ->
 
 validation_sidecar_bytes([]) -> 0;
 validation_sidecar_bytes(Hints) ->
-    byte_size(term_to_binary(Hints, [deterministic])).
+    {ok, WireHints} = quod_dtx_endpoint:encode_validation_sidecar(Hints),
+    byte_size(term_to_binary(WireHints, [deterministic])).
 
 retain_dtx_record(Record, Waiter, ValidationSidecar, S) ->
     case validated_dtx_record(Record) of
@@ -9631,7 +9644,7 @@ resolve_committed_dtx_control(Entry, Control, Identity, Registry, S) ->
                       Digest, completed, {ok, Ref, Entry}, S1);
                 {error, Reason} ->
                     error({invalid_committed_dtx_reference,
-                           Entry#entry.index, Reason})
+                           (quod_ledger:entry_view(Entry))#entry.index, Reason})
             end;
         false ->
             S
@@ -9692,12 +9705,13 @@ engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
 %% after the next round had started. The facts are a pure function of the committed prefix and every node
 %% crosses the boundary at the same logical point. The delta folds via the SAME
 %% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
-adopt_history(#entry{} = Entry, S = #s{ns = Ns}) ->
+adopt_history(Entry, S = #s{ns = Ns}) ->
     Projection1 = history_advance(Ns, Entry, state_projection(S)),
     adopt_projection(Entry, Projection1, S).
 
-adopt_projection(#entry{data = Change}, Projection1,
+adopt_projection(Entry, Projection1,
                  S = #s{validators = V, self = Self, eng = Eng}) ->
+    #entry{data = Change} = quod_ledger:entry_view(Entry),
     V1 = history_committee(Projection1),
     SProjected = install_projection(Projection1, S),
     case V1 =:= V of
@@ -9722,8 +9736,9 @@ adopt_projection(#entry{data = Change}, Projection1,
     end.
 
 committed_projection(
-  Entry = #entry{index = Slot, data = Payload}, BH,
+  Entry, BH,
   Round, S = #s{ns = Ns}) ->
+    #entry{index = Slot, data = Payload} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Payload) of
         {content, _Transactions} ->
             history_advance_known(Ns, Entry, BH, state_projection(S));
@@ -9739,10 +9754,11 @@ committed_projection(
     end.
 
 live_dtx_projection(
-  Controls, Entry = #entry{index = Slot}, BH,
+  Controls, Entry, BH,
   #round{dtx_parent = {BH, ParentToken, Histories, ParentDtx}},
   S = #s{ns = Ns, genesis_hash = Anchor,
          history_head = ParentToken, dtx_projection = ParentDtx}) ->
+    #entry{index = Slot} = quod_ledger:entry_view(Entry),
     Projection0 = state_projection(S),
     case validated_dtx_entries(
            {Ns, Anchor}, Entry, Controls, Projection0) of
@@ -9759,7 +9775,8 @@ live_dtx_projection(
         error ->
             error({invalid_committed_dtx, Slot})
     end;
-live_dtx_projection(_Controls, #entry{index = Slot}, _BH, _Round, _S) ->
+live_dtx_projection(_Controls, Entry, _BH, _Round, _S) ->
+    #entry{index = Slot} = quod_ledger:entry_view(Entry),
     error({missing_dtx_parent_validation, Slot}).
 
 validated_dtx_entries(Binding, Entry, Controls, Projection0) ->
@@ -10930,8 +10947,11 @@ verify_content_requirements(_Malformed, _LocalIdentity, _LedgerRoot,
 
 reference_evidence_satisfies(transaction,
                              #{transaction := #transaction{}}) -> true;
-reference_evidence_satisfies(entry,
-                             #{entry := #entry{}}) -> true;
+reference_evidence_satisfies(entry, #{entry := Entry}) ->
+    try quod_ledger:entry_view(Entry) of
+        #entry{} -> true
+    catch error:_ -> false
+    end;
 reference_evidence_satisfies(_Phase, _Evidence) -> false.
 
 verify_content_reference_binding(Transaction, Rest,
@@ -13338,7 +13358,8 @@ durable_relay_result(
   #s{store = Store, slot = DurableHead})
   when TargetSlot =< DurableHead ->
     case catch quod_ledger_store:read_at(Store, TargetSlot) of
-        {ok, #entry{data = Data}} ->
+        {ok, Entry} ->
+            #entry{data = Data} = quod_ledger:entry_view(Entry),
             case quod_ledger:classify(Data) of
                 {content, Transactions} ->
                     case payload_has_submission(SubmissionId, Transactions) of
@@ -14101,7 +14122,8 @@ invalidate_relay_generation(
 %% shared `{committed, Ns}` property.  This full-entry shape is emitted only
 %% from the live finality points, never from replay or catch-up, so history is
 %% not re-broadcast and event consumers cannot re-fire old occurrences.
-publish_feed(Slot, #entry{} = Entry, #s{ns = Ns}) ->
+publish_feed(Slot, Entry, #s{ns = Ns}) ->
+    #entry{} = quod_ledger:entry_view(Entry),
     _ = quod_reg:publish({committed, Ns}, {committed, Ns, Slot, Entry}),
     ok.
 
@@ -14117,14 +14139,17 @@ publish_certified_head(Slot, #s{ns = Ns}) ->
 %% Apply a freshly-committed block using the IN-HAND certified entry — no read-back of what we just wrote.
 %% Only when quod_prolog is up AND we are contiguous (last_applied == Slot-1); otherwise leave it and
 %% let the rebuild handshake re-drive the gap from the store (apply_committed/1).
-apply_live(#entry{index = Slot} = Entry,
-           S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 1 ->
+apply_live(Entry, S) ->
+    apply_live_view(Entry, quod_ledger:entry_view(Entry), S).
+
+apply_live_view(Entry, #entry{index = Slot},
+                S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 1 ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
         _         -> ok = quod_prolog:apply_entry(Ns, Entry, live),
                      S#s{last_applied = Slot}
     end;
-apply_live(_Entry, S) -> S.
+apply_live_view(_Entry, _View, S) -> S.
 
 %% Apply committed-but-unapplied blocks into quod_prolog, in slot order — STREAMED from the store
 %% (this process keeps no in-memory log, and re-applying already-counted commits must not recount them).
@@ -14147,7 +14172,7 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}, Ori
         _ ->
             try
                 _ = quod_ledger_store:fold(Store, LA + 1, C,
-                                           fun(#entry{} = Entry, N) ->
+                                           fun(Entry, N) ->
                                                ok = quod_prolog:apply_entry(Ns, Entry, Origin),
                                                N rem ?APPLY_SYNC_EVERY =:= 0
                                                    andalso (ok = quod_prolog:sync(Ns)),
@@ -14532,17 +14557,17 @@ apply_catchup_window(
     %% instead of detaching that projection by trimming an already-durable
     %% prefix. Recovery resumes from a fresh snapshot.
     Next = quod_ledger_store:last(Store) + 1,
-    case Es of
-        [#entry{index = First} | _]
-          when First =/= Next ->
+    #entry{index = First} = quod_ledger:entry_view(hd(Es)),
+    case First =:= Next of
+        false ->
             {S, {error, stale_window}};
-        _ ->
+        true ->
     case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
             Included = committed_submission_slots(Es),
             learn_validator_routes(Projection1, S#s.self),
-            Slot = (lists:last(Es))#entry.index,
+            #entry{index = Slot} = quod_ledger:entry_view(lists:last(Es)),
             %% Re-seat the engine UNCONDITIONALLY at the new head (committee-as-of-new-head + reset every stale
             %% live-slot latch). For a VOTING member gap-filling this is load-bearing (its engine was pinned to
             %% the stale head); for a joiner/observer the resets are no-ops. The following
@@ -14580,7 +14605,8 @@ catchup_origin(_)            -> replay.
 
 committed_submission_slots(Entries) ->
     lists:foldl(
-      fun(#entry{index = Slot, data = Data}, Acc0) ->
+      fun(Entry, Acc0) ->
+              #entry{index = Slot, data = Data} = quod_ledger:entry_view(Entry),
               case quod_ledger:classify(Data) of
                   {content, Transactions} ->
                       lists:foldl(
@@ -14598,13 +14624,15 @@ committed_submission_slots(Entries) ->
 
 entry_effect_transaction_ids(Entries) ->
     lists:foldl(
-      fun(#entry{data = Data}, Acc) ->
+      fun(Entry, Acc) ->
+              #entry{data = Data} = quod_ledger:entry_view(Entry),
               maps:merge(Acc, payload_transaction_ids(Data))
       end, #{}, Entries).
 
 settle_recovery_dtx(Entries, S) ->
     lists:foldl(
-      fun(#entry{data = Payload} = Entry, Acc) ->
+      fun(Entry, Acc) ->
+              #entry{data = Payload} = quod_ledger:entry_view(Entry),
               resolve_committed_dtx(Entry, Payload, Acc)
       end, S, Entries).
 
@@ -14840,7 +14868,7 @@ decode_verified_submission(S, Author, Submission) ->
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of
-        {ok, #entry{} = E} -> case block_from_entry(E) of
+        {ok, E} -> case block_from_entry(E) of
                                   {ok, Block} -> block_hash(Block);
                                   error       -> undefined
                               end;
@@ -14851,7 +14879,7 @@ local_genesis_hash(#s{store = Store}) ->
 %%% helpers
 %%%===================================================================
 
-%% Decode the canonical block bytes retained by the entry. `#block{}` is only
+%% Read the already-bound block view retained by the entry. `#block{}` is only
 %% the engine's in-memory view; the bytes remain the consensus identity.
 -spec block_from_entry(term()) -> {ok, #block{}} | error.
 block_from_entry(Entry) -> quod_ledger:block_from_entry(Entry).
@@ -15025,7 +15053,7 @@ history_binding({Ns, Anchor}, Author, #{admissions := Admissions}) ->
 -endif.
 
 -ifdef(TEST).
--spec log_projection(binary(), [#entry{}], history_projection()) ->
+-spec log_projection(binary(), [quod_ledger:entry_artifact()], history_projection()) ->
         history_projection().
 log_projection(Ns, Entries, Seed) ->
     lists:foldl(fun(Entry, Acc) -> history_advance(Ns, Entry, Acc) end,
@@ -15037,20 +15065,21 @@ log_projection(Ns, Entries, Seed) ->
 %% admission map and perform only the bounded sequence fold; membership blocks
 %% additionally retain the intersection, mint IDs for newly admitted keys and
 %% prune sequence floors for departed keys.
--spec history_advance(binary(), #entry{}, history_projection()) ->
+-spec history_advance(binary(), quod_ledger:entry_artifact(), history_projection()) ->
         history_projection().
 history_advance(
-  Ns, #entry{} = Entry, Projection) ->
+  Ns, Entry, Projection) ->
     history_advance_known(Ns, Entry, entry_history_hash(Entry), Projection).
 
 history_advance_known(
-  Ns, #entry{index = Slot} = Entry, HeadHash, Projection) ->
+  Ns, Entry, HeadHash, Projection) ->
+    #entry{index = Slot} = quod_ledger:entry_view(Entry),
     Projection1 = history_advance_payload(Ns, Entry, Projection),
     Projection1#{history_head => {Slot, HeadHash}}.
 
 history_advance_payload(
-  Ns, #entry{data = Data, timestamp = T} = Entry,
-  Projection) ->
+  Ns, Entry, Projection) ->
+    #entry{data = Data, timestamp = T} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
         {content, _Transactions} ->
             history_advance_content(Ns, Entry, Projection);
@@ -15063,7 +15092,10 @@ history_advance_payload(
             error(invalid_committed_history)
     end.
 
-entry_history_hash(#entry{index = Slot, data = noop, block_bytes = none}) ->
+entry_history_hash(Entry) ->
+    entry_history_hash_view(Entry, quod_ledger:entry_view(Entry)).
+
+entry_history_hash_view(_Entry, #entry{index = Slot, data = noop, block_bytes = none}) ->
     %% A complaint skip's identity is the statement every validator signed,
     %% not the incidental quorum subset a replica first retained.  The target
     %% ontology identity accompanies every use of history_head, just as it
@@ -15073,14 +15105,14 @@ entry_history_hash(#entry{index = Slot, data = noop, block_bytes = none}) ->
       sha256,
       <<?SKIPPED_SLOT_TAG/binary, 0, ?SKIPPED_SLOT_VERSION:8,
         Slot:64/unsigned-big>>);
-entry_history_hash(#entry{} = Entry) ->
+entry_history_hash_view(Entry, #entry{}) ->
     case block_from_entry(Entry) of
         {ok, Block} -> block_hash(Block);
         error -> error(uncanonical_entry)
     end.
 
 -doc "Validate and reduce one certified committed entry with exact DTX history.".
--spec history_advance({binary(), <<_:256>>}, #entry{}, history_projection(),
+-spec history_advance({binary(), <<_:256>>}, quod_ledger:entry_artifact(), history_projection(),
                       quod_dtx_phase_index:index()) ->
           {ok, history_projection(), list()} |
           {error, {invalid_transaction, pos_integer()} |
@@ -15089,11 +15121,12 @@ history_advance(Binding, Entry, Projection, PhaseIndex) ->
     history_validate_advance(Binding, Entry, Projection, PhaseIndex).
 
 history_advance_content(
-  Ns, #entry{index = Slot, data = Data, timestamp = T} = Entry,
+  Ns, Entry,
   #{committee := V,
     validator_routes := Routes,
     admissions := Admissions, sequences := Seqs,
     timestamp := Ts} = Projection) ->
+    #entry{index = Slot, data = Data, timestamp = T} = quod_ledger:entry_view(Entry),
     Seqs0 = advance_author_seqs(Data, Seqs),
     Routes0 = advance_validator_routes(Data, Routes),
     case committee_delta(Data) of
@@ -15217,7 +15250,8 @@ admission_id(Ns, Slot, BlockHash, Pubkey) ->
         [deterministic])).
 
 checked_log_projection_step(
-  Binding, #entry{index = I} = Entry, Projection) ->
+  Binding, Entry, Projection) ->
+    #entry{index = I} = quod_ledger:entry_view(Entry),
     case history_validate_advance(Binding, Entry, Projection) of
         {ok, Projection1} -> Projection1;
         {error, {unavailable, network_identity, Reason}} ->
@@ -15226,7 +15260,8 @@ checked_log_projection_step(
     end.
 
 checked_log_projection_step(
-  Binding, #entry{index = I} = Entry, Projection, PhaseIndex) ->
+  Binding, Entry, Projection, PhaseIndex) ->
+    #entry{index = I} = quod_ledger:entry_view(Entry),
     case history_validate_advance(Binding, Entry, Projection, PhaseIndex) of
         {ok, Projection1, _Effects} -> Projection1;
         {error, {unavailable, network_identity, Reason}} ->
@@ -15235,13 +15270,14 @@ checked_log_projection_step(
     end.
 
 -doc "Validate one historical entry and advance the projection atomically on success.".
--spec history_validate_advance({binary(), binary()}, #entry{},
+-spec history_validate_advance({binary(), binary()}, quod_ledger:entry_artifact(),
                                history_projection()) ->
         {ok, history_projection()} |
         {error, {invalid_transaction, pos_integer()} |
                 {unavailable, network_identity, term()}}.
 history_validate_advance(
-  Binding, #entry{index = I} = Entry, Projection) ->
+  Binding, Entry, Projection) ->
+    #entry{index = I} = quod_ledger:entry_view(Entry),
     case history_projection_before_entry(I, Projection) of
         {ok, Projection1} ->
             history_validate_content(Binding, Entry, Projection1);
@@ -15251,10 +15287,11 @@ history_validate_advance(
 
 history_validate_content(
   {Ns, _Anchor} = Binding,
-  #entry{index = I, data = Data} = Entry,
+  Entry,
   #{sequences := Seqs} = Projection) ->
+    #entry{index = I, data = Data, timestamp = Timestamp} = quod_ledger:entry_view(Entry),
     case history_entry_verdict(
-           Binding, I, Data, Entry#entry.timestamp, Projection, verify_id) of
+           Binding, I, Data, Timestamp, Projection, verify_id) of
         valid ->
             case historical_sequences_ok(I, Data, Seqs) of
                 true -> {ok, history_advance(Ns, Entry, Projection)};
@@ -15291,14 +15328,15 @@ history_entry_verdict(Binding, I, Data, Timestamp, Projection, IdMode) ->
     end.
 
 -doc "Verify local finality, then advance content or exact DTX history.".
--spec history_validate_advance({binary(), binary()}, #entry{},
+-spec history_validate_advance({binary(), binary()}, quod_ledger:entry_artifact(),
                                history_projection(),
                                quod_dtx_phase_index:index()) ->
         {ok, history_projection(), list()} |
         {error, {invalid_transaction, pos_integer()} |
                 {unavailable, network_identity, term()}}.
 history_validate_advance(
-  Binding, #entry{index = I} = Entry, Projection, PhaseIndex) ->
+  Binding, Entry, Projection, PhaseIndex) ->
+    #entry{index = I} = quod_ledger:entry_view(Entry),
     case history_projection_before_entry(I, Projection) of
         {ok, Projection1} ->
             case quod_catchup:verify_entry(Binding, Entry, Projection1) of
@@ -15324,7 +15362,8 @@ history_projection_before_entry(_NextSlot, _Projection) ->
 %% the semantic reducer separate avoids repeating quorum cryptography on the
 %% commit hot path; startup/catch-up enter only through the public checked API.
 history_advance_verified(
-  Binding, #entry{index = I, data = Data} = Entry, Projection, PhaseIndex) ->
+  Binding, Entry, Projection, PhaseIndex) ->
+    #entry{index = I, data = Data} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Data) of
         {content, _Transactions} ->
             case history_validate_content(Binding, Entry, Projection) of
@@ -15346,8 +15385,9 @@ history_advance_verified(
     end.
 
 history_advance_dtx_batch(
-  Binding, #entry{index = I} = Entry, Controls,
+  Binding, Entry, Controls,
   #{dtx := Dtx0} = Projection, PhaseIndex) ->
+    #entry{index = I} = quod_ledger:entry_view(Entry),
     case valid_dtx_history_requests(Binding, Entry, Controls) of
         valid ->
             case validated_dtx_entries(
@@ -15386,7 +15426,8 @@ dtx_batch_effects(Items) ->
     lists:flatmap(fun(#{effects := Effects}) -> Effects end, Items).
 
 valid_dtx_history_request(
-  Binding, #entry{timestamp = Timestamp}, Control) ->
+  Binding, Entry, Control) ->
+    #entry{timestamp = Timestamp} = quod_ledger:entry_view(Entry),
     case quod_dtx:control_kind(Control) of
         'begin' ->
             case quod_ontology:network_identity(
@@ -15426,9 +15467,10 @@ validated_dtx_entry(
     end.
 
 project_dtx_transition(
-  Control, #entry{timestamp = Timestamp}, Dtx1, Lane, Sequence,
+  Control, Entry, Dtx1, Lane, Sequence,
   #{dtx_lanes := Lanes0, timestamp := Timestamp0,
     dtx_pending := Pending0} = Projection) ->
+    #entry{timestamp = Timestamp} = quod_ledger:entry_view(Entry),
     Projection#{dtx := Dtx1,
                 dtx_lanes := Lanes0#{Lane => Sequence},
                 dtx_pending := dtx_pending_after(Control, Pending0),
@@ -15436,14 +15478,15 @@ project_dtx_transition(
 
 -doc "Preview one catch-up entry against an uncommitted phase-index delta.".
 -spec history_preview_advance(
-        {binary(), binary()}, #entry{}, history_projection(),
+        {binary(), binary()}, quod_ledger:entry_artifact(), history_projection(),
         quod_dtx_phase_index:index(), quod_dtx_phase_index:delta()) ->
           {ok, history_projection(), list(), quod_dtx_phase_index:delta()} |
           {error, {invalid_transaction, pos_integer()} |
                   {unavailable, network_identity, term()}}.
 history_preview_advance(
-  Binding, #entry{index = I, data = Data} = Entry,
+  Binding, Entry,
   Projection, PhaseIndex, Delta0) ->
+    #entry{index = I, data = Data} = quod_ledger:entry_view(Entry),
     case history_projection_before_entry(I, Projection) of
         {ok, Projection1} ->
             case quod_catchup:verify_entry(Binding, Entry, Projection1) of
@@ -15477,8 +15520,9 @@ preview_content(Binding, Entry, Projection, Delta) ->
         {error, _} = Error -> Error
     end.
 
-preview_dtx_batch(Binding, #entry{index = I} = Entry, Controls,
+preview_dtx_batch(Binding, Entry, Controls,
                   #{dtx := Dtx0} = Projection, PhaseIndex, Delta0) ->
+    #entry{index = I} = quod_ledger:entry_view(Entry),
     case valid_dtx_history_requests(Binding, Entry, Controls) of
         valid ->
             case validated_dtx_entries(

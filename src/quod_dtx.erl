@@ -1005,12 +1005,18 @@ evidence and binds the semantic control digest. This is the single pure seam
 used by consensus history and ordered Prolog apply; neither consumer rebuilds
 or encodes the certificate independently.
 """.
--spec certified_entry_ref({binary(), <<_:256>>}, #entry{},
+-spec certified_entry_ref({binary(), <<_:256>>}, quod_ledger:entry_artifact(),
                           control() | #transaction{}) ->
           {ok, certified_ref()} | {error, invalid_certified_entry}.
-certified_entry_ref(
+certified_entry_ref(Identity, Entry, Record) ->
+    View = try quod_ledger:entry_view(Entry)
+           catch error:_ -> invalid
+           end,
+    certified_entry_ref_view(Identity, Entry, View, Record).
+
+certified_entry_ref_view(
   {Ns, <<_:256>> = Anchor},
-  #entry{index = 1, data = {batch, [Transaction]}, cert = none} = Entry,
+  Entry, #entry{index = 1, data = {batch, [Transaction]}, cert = none},
   #transaction{tx_id = TxId, sig = none,
                origin = {Ns, <<0:256>>}, proof_id = none,
                plan_digest = none} = Transaction)
@@ -1033,11 +1039,11 @@ certified_entry_ref(
         error ->
             {error, invalid_certified_entry}
     end;
-certified_entry_ref(
+certified_entry_ref_view(
   {Ns, <<_:256>> = Anchor},
-  #entry{index = Slot, data = {batch, Transactions},
+  Entry, #entry{index = Slot, data = {batch, Transactions},
          cert = #cert{kind = commit, slot = Slot,
-                      block_hash = BlockHash} = Cert} = Entry,
+                      block_hash = BlockHash} = Cert},
   #transaction{tx_id = <<_:256>> = TxId} = Transaction)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(BlockHash), byte_size(BlockHash) =:= 32,
@@ -1060,11 +1066,11 @@ certified_entry_ref(
         _ ->
             {error, invalid_certified_entry}
     end;
-certified_entry_ref(
+certified_entry_ref_view(
   {Ns, <<_:256>> = Anchor},
-  #entry{index = Slot,
+  Entry, #entry{index = Slot,
          cert = #cert{kind = commit, slot = Slot,
-                      block_hash = BlockHash} = Cert} = Entry,
+                      block_hash = BlockHash} = Cert},
   {quod_dtx_control, ?CONTROL_VERSION, _, _, _, _, _, _, _, _} = Control)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(BlockHash), byte_size(BlockHash) =:= 32 ->
@@ -1085,7 +1091,7 @@ certified_entry_ref(
         error ->
             {error, invalid_certified_entry}
     end;
-certified_entry_ref(_, _, _) ->
+certified_entry_ref_view(_, _, _, _) ->
     {error, invalid_certified_entry}.
 
 -doc """
@@ -1098,7 +1104,7 @@ verifies its own supplied finality proof against the committee for that slot;
 it never requires that proof to equal the certificate bytes retained locally.
 """.
 -spec certified_entry_ref_matches(
-        identity(), #entry{}, control() | #transaction{},
+        identity(), quod_ledger:entry_artifact(), control() | #transaction{},
         certified_ref(), [<<_:256>>]) -> boolean().
 certified_entry_ref_matches(
   Identity = {Ns, <<_:256>> = Anchor}, Entry, Record, Ref, Committee)

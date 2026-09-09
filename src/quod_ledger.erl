@@ -17,8 +17,15 @@ explicitly, with no catch-all. A future variant is therefore introduced here onc
 and fails loudly at every site that has not yet decided what it means, instead of
 folding silently as nothing.
 
-Malformed data is a separate, expected case: catch-up windows and replay walk
-untrusted payloads, so `invalid` is a tolerated classification, not a crash.
+Malformed input is a separate classification, not a crash. Checked entry
+construction and byte ingress refuse it before it becomes an artifact.
+
+Committed entries carry their exact existing envelope bytes and decoded views
+in a private, process-local artifact. Consumers read views or extract bytes;
+they do not reconstruct an entry or authenticate it by serializing it again.
+Finality, slot-era authority and replay semantics remain with their existing
+verifiers. The native prepared-genesis descriptor is the sole checked view
+import; artifacts themselves never cross a wire or persistence boundary.
 """.
 
 -include("quod_ledger.hrl").
@@ -30,9 +37,17 @@ untrusted payloads, so `invalid` is a tolerated classification, not a crash.
          new_block/4, decode_block/1, decode_block/2,
          block_bytes/1, valid_block_view/1,
          new_entry/4, entry/2, noop_entry/2, block_from_entry/1,
+         entry_view/1, from_entry_view/1,
          encode_entry/1, decode_entry/1, decode_entry/2]).
 
--export_type([kind/0]).
+-export_type([kind/0, entry_artifact/0]).
+
+%% One canonical envelope and the interpretations established at its checked
+%% construction/decoding boundary. This is process-local data, never a wire or
+%% disk term, and carries no assertion of finality or committee authority.
+-record(canonical_entry, {bytes :: binary(), view :: #entry{},
+                          block :: #block{} | none}).
+-opaque entry_artifact() :: #canonical_entry{}.
 
 -type control_kind() :: 'begin' | prepare | decision | finalize | complete.
 -type kind() :: {content, [#transaction{}]}
@@ -247,51 +262,75 @@ decode_payload(Payload = {batch, [{dtx, Blob} | _]}, _SymbolMode)
 decode_payload(_, _SymbolMode) ->
     error.
 
--spec entry(#block{}, term()) -> #entry{}.
+-spec entry(#block{}, term()) -> entry_artifact().
 entry(#block{block_bytes = Bytes} = Block, Cert)
   when is_binary(Bytes) ->
     true = valid_block_view(Block),
-    entry_from_validated_block(Block, Cert).
+    {ok, Artifact} = encode_entry_view(entry_view_from_block(Block, Cert), Block),
+    Artifact.
 
-entry_from_validated_block(
+entry_view_from_block(
   #block{slot = Slot, payload = Payload, timestamp = Timestamp,
          block_bytes = Bytes}, Cert) ->
     #entry{index = Slot, data = Payload, timestamp = Timestamp,
            block_bytes = Bytes, cert = Cert}.
 
--doc "Build one canonical committed-entry view from payload fields.".
+-doc "Build one checked canonical committed-entry artifact from payload fields.".
 -spec new_entry(pos_integer(), block_payload() | noop,
                 non_neg_integer(), term()) ->
-          {ok, #entry{}} | {error, bad_entry}.
+          {ok, entry_artifact()} | {error, bad_entry}.
 new_entry(Index, noop, 0, Cert)
   when is_integer(Index), Index >= 1 ->
-    {ok, noop_entry(Index, Cert)};
+    encode_entry_view(#entry{index = Index, data = noop, cert = Cert}, none);
 new_entry(Index, Payload, Timestamp, Cert)
   when is_integer(Index), Index >= 1,
        is_integer(Timestamp), Timestamp >= 0 ->
     case new_block(Index, Index - 1, Payload, Timestamp) of
-        {ok, Block} -> {ok, entry(Block, Cert)};
+        {ok, Block} -> encode_entry_view(entry_view_from_block(Block, Cert), Block);
         {error, bad_block} -> {error, bad_entry}
     end;
 new_entry(_Index, _Payload, _Timestamp, _Cert) ->
     {error, bad_entry}.
 
--spec noop_entry(pos_integer(), term()) -> #entry{}.
+-spec noop_entry(pos_integer(), term()) -> entry_artifact().
 noop_entry(Index, Cert) when is_integer(Index), Index >= 1 ->
-    #entry{index = Index, data = noop, timestamp = 0,
-           block_bytes = none, cert = Cert}.
+    {ok, Artifact} = encode_entry_view(
+                       #entry{index = Index, data = noop, cert = Cert}, none),
+    Artifact.
+
+-doc "Read the already-bound interpretation; never reconstruct or authenticate it.".
+-spec entry_view(entry_artifact()) -> #entry{}.
+entry_view(#canonical_entry{view = View}) -> View.
 
 -spec block_from_entry(term()) -> {ok, #block{}} | error.
-block_from_entry(Entry) ->
-    block_from_entry_view(Entry).
+block_from_entry(#canonical_entry{block = #block{} = Block}) -> {ok, Block};
+block_from_entry(_) -> error.
 
-block_from_entry_view(
+-doc """
+Checked import of the native prepared-genesis view retained in lifecycle
+descriptors. This is a constructor, not a raw-record append or fast path.
+The caller still verifies the prepared identity, author and genesis anchor.
+""".
+-spec from_entry_view(term()) -> {ok, entry_artifact()} | {error, bad_entry}.
+from_entry_view(#entry{index = Index, data = noop, timestamp = 0,
+                       block_bytes = none} = View)
+  when is_integer(Index), Index >= 1 ->
+    encode_entry_view(View, none);
+from_entry_view(#entry{index = Index} = View)
+  when is_integer(Index), Index >= 1 ->
+    case import_entry_block(View) of
+        {ok, Block} -> encode_entry_view(View, Block);
+        error -> {error, bad_entry}
+    end;
+from_entry_view(_) -> {error, bad_entry}.
+
+import_entry_block(
   #entry{index = Index, data = Data, timestamp = Timestamp,
          block_bytes = Bytes})
   when is_binary(Bytes) ->
-    %% Decode only to recover the parent carried by the canonical bytes.  The
-    %% entry's payload may be the materialized or opaque view of those same
-    %% bytes, so validate it by re-encoding rather than term equality.
+    %% Only the checked native-view import needs to recover a parent this way.
+    %% Re-encoding binds either symbol interpretation to the same bytes; the
+    %% public block accessor above never repeats these checks.
     case decode_block(Bytes, wrapped) of
         {ok, #block{slot = Index, parent = Parent,
                     timestamp = Timestamp}} ->
@@ -304,25 +343,28 @@ block_from_entry_view(
         _ ->
             error
     end;
-block_from_entry_view(_) -> error.
+import_entry_block(_) -> error.
 
--spec encode_entry(#entry{}) -> {ok, binary()} | {error, bad_entry}.
-encode_entry(#entry{index = Index, data = noop, timestamp = 0,
-                    block_bytes = none, cert = Cert})
-  when is_integer(Index), Index >= 1 ->
-    encode_entry_term({quod_entry, 1, Index, none, cert_wire(Cert)});
-encode_entry(#entry{index = Index, block_bytes = Bytes,
-                    cert = Cert} = Entry)
-  when is_integer(Index), Index >= 1, is_binary(Bytes) ->
-    case block_from_entry(Entry) of
-        {ok, _Block} ->
-            encode_entry_term(
-              {quod_entry, 1, Index, Bytes, cert_wire(Cert)});
-        error ->
-            {error, bad_entry}
-    end;
+-doc "Return the exact checked envelope, without encoding or signature work.".
+-spec encode_entry(entry_artifact()) -> {ok, binary()} | {error, bad_entry}.
+encode_entry(#canonical_entry{bytes = Bytes}) -> {ok, Bytes};
 encode_entry(_) ->
     {error, bad_entry}.
+
+encode_entry_view(#entry{index = Index, block_bytes = BlockBytes, cert = Cert} = View,
+                  Block) when is_integer(Index), Index >= 1 ->
+    case cert_wire(Cert) of
+        {ok, CertWire} ->
+            case encode_entry_term({quod_entry, 1, Index, BlockBytes, CertWire}) of
+                {ok, Bytes} -> {ok, mint_artifact(Bytes, View, Block)};
+                {error, _} = Error -> Error
+            end;
+        error -> {error, bad_entry}
+    end;
+encode_entry_view(_, _) -> {error, bad_entry}.
+
+mint_artifact(Bytes, View, Block) ->
+    #canonical_entry{bytes = Bytes, view = View, block = Block}.
 
 encode_entry_term(Term) ->
     case quod_safe_term:encode_canonical(
@@ -331,12 +373,12 @@ encode_entry_term(Term) ->
         {error, _} -> {error, bad_entry}
     end.
 
--spec decode_entry(binary()) -> {ok, #entry{}} | {error, bad_entry}.
+-spec decode_entry(binary()) -> {ok, entry_artifact()} | {error, bad_entry}.
 decode_entry(Bytes) ->
     decode_entry(Bytes, materialized).
 
 -spec decode_entry(binary(), materialized | wrapped) ->
-          {ok, #entry{}} | {error, bad_entry}.
+          {ok, entry_artifact()} | {error, bad_entry}.
 decode_entry(Bytes, SymbolMode)
   when is_binary(Bytes),
        byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES,
@@ -348,7 +390,9 @@ decode_entry(Bytes, SymbolMode)
         {ok, {ok, {quod_entry, 1, Index, none, CertWire}}}
           when is_integer(Index), Index >= 1 ->
             case decode_cert_wire(CertWire, SymbolMode) of
-                {ok, Cert} -> {ok, noop_entry(Index, Cert)};
+                {ok, Cert} ->
+                    {ok, mint_artifact(Bytes, #entry{index = Index, data = noop,
+                                                    cert = Cert}, none)};
                 error -> {error, bad_entry}
             end;
         {ok, {ok, {quod_entry, 1, Index, BlockBytes, CertWire}}}
@@ -356,10 +400,10 @@ decode_entry(Bytes, SymbolMode)
             case {decode_block(BlockBytes, SymbolMode),
                   decode_cert_wire(CertWire, SymbolMode)} of
                 {{ok, #block{slot = Index} = Block}, {ok, Cert}} ->
-                    %% decode_block/1 has already proved that this view is the
-                    %% canonical interpretation of BlockBytes.  Do not decode
-                    %% the same bytes again on the replay/fold hot path.
-                    {ok, entry_from_validated_block(Block, Cert)};
+                    %% Both parent and implicit child have been decoded at
+                    %% this boundary. Retain the exact envelope, not a new
+                    %% serialization of their selected symbol interpretation.
+                    {ok, mint_artifact(Bytes, entry_view_from_block(Block, Cert), Block)};
                 _ ->
                     {error, bad_entry}
             end;
@@ -370,11 +414,15 @@ decode_entry(_, _SymbolMode) ->
     {error, bad_entry}.
 
 cert_wire(#implicit_cert{support = Support,
-                         child = #block{block_bytes = ChildBytes},
-                         commit = Commit})
-  when is_binary(ChildBytes) ->
-    {implicit, Support, ChildBytes, Commit};
-cert_wire(Cert) -> Cert.
+                         child = Child, commit = Commit}) ->
+    case valid_block_view(Child) of
+        true -> {ok, {implicit, Support, Child#block.block_bytes, Commit}};
+        false -> error
+    end;
+%% This is the wire-only form. Accepting it as a native certificate view
+%% would change that view on the first disk/wire decode of the same bytes.
+cert_wire({implicit, _, _, _}) -> error;
+cert_wire(Cert) -> {ok, Cert}.
 
 decode_cert_wire({implicit, Support, ChildBytes, Commit}, SymbolMode)
   when is_binary(ChildBytes) ->
@@ -384,4 +432,8 @@ decode_cert_wire({implicit, Support, ChildBytes, Commit}, SymbolMode)
                                 child = Child, commit = Commit}};
         {error, _} -> error
     end;
+%% An implicit child arrives only as bytes through the grammar above. Never
+%% accept a serialized native child view as if this decoder had established it.
+decode_cert_wire(#implicit_cert{}, _SymbolMode) -> error;
+decode_cert_wire({implicit, _, _, _}, _SymbolMode) -> error;
 decode_cert_wire(Cert, _SymbolMode) -> {ok, Cert}.

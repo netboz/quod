@@ -19,7 +19,7 @@ classify_test_() ->
 
 roundtrip_test() ->
     Ns = <<"quod:root">>,
-    E  = #entry{index = 7, data = noop, cert = none},
+    E = quod_ledger:noop_entry(7, none),
     Payload = quod_feed:encode(Ns, {block, E}),
     ?assertEqual({block, E}, quod_feed:decode(Payload, Ns)),
     {feed, Ns, Inner} = binary_to_term(Payload, [safe]),
@@ -27,7 +27,7 @@ roundtrip_test() ->
     ?assertEqual({ok, E}, quod_ledger:decode_entry(EntryBlob)).
 
 decode_wrong_ns_test() ->
-    E = #entry{index = 1, data = noop, cert = none},
+    E = quod_ledger:noop_entry(1, none),
     Payload = quod_feed:encode(<<"a">>, {block, E}),
     ?assertEqual(error, quod_feed:decode(Payload, <<"b">>)).
 
@@ -435,10 +435,10 @@ fold_snapshot_test() ->
                  quod_simplex:history_committee(AdmitProjection)),
     %% NON-contiguous (gap or behind) → reset to none, so the next use refetches real status [DA#5]
     ?assertEqual(none, quod_feed:fold_snapshot(
-                         <<"n">>, Noop#entry{index = 8},
+                         <<"n">>, quod_ledger:noop_entry(8, none),
                          {5, Projection, done})),
     ?assertEqual(none, quod_feed:fold_snapshot(
-                         <<"n">>, Noop#entry{index = 5},
+                         <<"n">>, quod_ledger:noop_entry(5, none),
                          {5, Projection, done})),
     %% A real, signed DTX control must not enter the content-only projection
     %% fold (which deliberately fails closed without its phase-history index).

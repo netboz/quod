@@ -21,6 +21,8 @@ lifecycle_single_path_test_() ->
           {timeout, 60, ?_test(create_and_host_is_one_ordinary_goal(Fixture))},
           {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
           {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
+          {timeout, 30, ?_test(prepared_genesis_survives_journal_restart(Fixture))},
+          {timeout, 30, ?_test(malformed_present_prepared_genesis_fails_closed(Fixture))},
           {timeout, 30, ?_test(action_timeout_returns_exact_outcome(Fixture))},
           {timeout, 30, ?_test(effect_completion_survives_journal_restart(Fixture))},
           {timeout, 30, ?_test(effect_execution_uses_its_generic_descriptor(Fixture))},
@@ -200,8 +202,8 @@ create_is_one_normal_effect_transaction(#{root_config := RootConfig}) ->
     {ok, Store} = quod_ledger_store:open_ro(
                     ?ROOT_NS, quod_ledger_store:ledger_dir(RootConfig)),
     try
-        {ok, #entry{data = {batch, Transactions}}} =
-            quod_ledger_store:read_at(Store, Height),
+        {ok, Entry} = quod_ledger_store:read_at(Store, Height),
+        #entry{data = {batch, Transactions}} = quod_ledger:entry_view(Entry),
         ?assert(lists:any(
                   fun(#transaction{diff = [], effects = [_]}) -> true;
                      (_) -> false
@@ -462,6 +464,135 @@ prepared_source_is_used_exactly_once(#{dir := Dir}) ->
                  quod_prolog:prove_ro(Ns, {prepared_value, original})),
     ?assertMatch({fail, _},
                  quod_prolog:prove_ro(Ns, {prepared_value, changed})).
+
+%% Frozen using the pre-Cut2 codec, with an already-chosen incarnation. This
+%% fixture binds the native journal shape independently of artifact internals.
+prepared_genesis_native_format_golden_test() ->
+    Ns = <<"quod:cut2-prepared">>,
+    Executor = <<17:256>>,
+    Config0 = #{committee => [], genesis_diff => []},
+    %% Ambient node_addr must not enter the frozen vector. Pin only the
+    %% generation input; the legacy serialized descriptor remains Config0.
+    Genesis = quod_simplex:test_genesis_tx(
+                Config0#{node_addr => undefined}, Ns, Executor, <<34:256>>),
+    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Genesis]}, 0, none),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    Anchor = quod_simplex:block_hash(Block),
+    ?assertEqual(
+       <<36,83,239,105,93,33,234,105,204,127,87,236,1,107,203,145,
+         145,230,115,192,144,212,83,158,68,253,33,143,5,232,123,254>>,
+       Anchor),
+    Native = quod_ledger:entry_view(Entry),
+    Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},
+    Prepared = {prepared_lifecycle, create, Ns, Anchor, Config, created},
+    {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+    ?assertEqual(1777, byte_size(Bytes)),
+    ?assertEqual(
+       <<193,64,158,152,140,33,222,168,22,44,67,68,184,241,97,190,
+         68,213,145,224,40,105,56,46,160,46,56,15,160,231,197,214>>,
+       crypto:hash(sha256, Bytes)),
+    ?assertEqual({ok, Prepared}, quod_ontology:decode_prepared(Bytes)),
+    ?assertEqual({ok, Entry}, quod_ledger:from_entry_view(Native)),
+    ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Native)),
+    Action = {create_ontology, Ns, []},
+    {ok, Effect0} = quod_ontology:prepared_effect(
+                      Action, Prepared, Executor, {node, Executor}),
+    %% Effect IDs are independently chosen, not derived from the preparation.
+    Effect = setelement(6, Effect0, <<51:256>>),
+    ?assert(quod_effect:validate(Effect)),
+    ?assertEqual(<<51:256>>, quod_effect:effect_id(Effect)),
+    ?assertEqual(Executor, quod_effect:executor(Effect)),
+    ?assertEqual(crypto:hash(sha256, Bytes), quod_effect:prepared_digest(Effect)),
+    ?assertEqual({Ns, Anchor}, quod_effect:target(Effect)).
+
+prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
+    Ns = unique_ns(<<"prepared-journal-native">>),
+    Action = {create_ontology, Ns, []},
+    {ok, Structural} = quod_ontology:validate_action(Action),
+    {ok, Prepared0} = quod_ontology:prepare_action(Structural),
+    {prepared_lifecycle, create, Ns, _InitialAnchor, Config0, created} = Prepared0,
+    %% Ordinary preparation itself must freeze a native entry, not an artifact.
+    ?assertMatch(#entry{}, maps:get(prepared_genesis_entry, Config0)),
+    {ok, Executor} = application:get_env(quod, node_pubkey),
+    Incarnation = <<68:256>>,
+    Genesis = quod_simplex:test_genesis_tx(Config0, Ns, Executor, Incarnation),
+    {ok, Entry} = quod_ledger:new_entry(1, {batch, [Genesis]}, 0, none),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    Anchor = quod_simplex:block_hash(Block),
+    Native = quod_ledger:entry_view(Entry),
+    Config = Config0#{prepared_genesis_entry => Native, genesis_hash => Anchor},
+    Prepared = {prepared_lifecycle, create, Ns, Anchor, Config, created},
+    {ok, Bytes} = quod_ontology:prepared_bytes(Prepared),
+    {ok, Effect} = quod_ontology:prepared_effect(
+                     Action, Prepared, Executor, {node, Executor}),
+    EffectId = quod_effect:effect_id(Effect),
+    {ok, GoalBlob} = quod_durable_term:encode_goal(Action),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
+    Change = quod_transaction:bind_id(
+               {?ROOT_NS, RootAnchor},
+               #transaction{origin = {?ROOT_NS, RootAnchor},
+                            proof_id = crypto:strong_rand_bytes(32),
+                            plan_digest = crypto:strong_rand_bytes(32),
+                            goal = GoalBlob, result = ResultBlob,
+                            diff = [], read_check = #{}, effects = [Effect],
+                            author = Executor}),
+    Ref = {transaction, ?ROOT_NS, RootAnchor, Change#transaction.tx_id},
+    {ok, Reservation} = quod_effect_journal:reserve(self()),
+    ok = quod_effect_journal:stage(
+           Reservation, Action, {ontology_hosted, Ns}, Effect, Prepared),
+    ok = quod_effect_journal:bind_transaction(Effect, Change, Ref),
+    %% Activation retains durable custody across restart; an unactivated row
+    %% is intentionally retired by recovery and cannot exercise this contract.
+    ok = quod_effect_journal:activate(EffectId),
+    OldJournal = quod_reg:where({quod_effect_journal, node}),
+    ok = gen_server:stop(OldJournal),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    {ok, NewJournal} = quod_effect_journal:start_link(#{data_dir => Dir}),
+    unlink(NewJournal),
+    ?assertMatch({ok, #{effect_id := EffectId, target := {Ns, Anchor}}},
+                 quod_effect_journal:status(EffectId)),
+    %% The existing ordered-apply release event activates the restored row.
+    quod_effect_journal:release_applied(2, [Effect]),
+    ok = wait_ready(Ns, 300),
+    ok = wait_effect_target_state(Ns, applied, 300),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    ?assertMatch({ok, [#{'Incarnation' := Incarnation}], _},
+                 quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Incarnation'}})),
+    ?assertEqual(crypto:hash(sha256, Bytes), quod_effect:prepared_digest(Effect)),
+    ?assertMatch({ok, #{effect_id := EffectId, state := applied}},
+                 quod_effect_journal:status(EffectId)).
+
+malformed_present_prepared_genesis_fails_closed(_Fixture) ->
+    lists:foreach(
+      fun(Mutation) ->
+          Ns = unique_ns(<<"bad-prepared-native">>),
+          {ok, Structural} = quod_ontology:validate_action({create_ontology, Ns, []}),
+          {ok, Prepared} = quod_ontology:prepare_action(Structural),
+          {prepared_lifecycle, create, Ns, _Anchor, Config, created} = Prepared,
+          BadConfig = Mutation(Config),
+          ?assertMatch({error, _}, quod_ontology:execute_prepared(
+                                    setelement(5, Prepared, BadConfig))),
+          ?assertEqual(undefined, quod_simplex:genesis_hash(Ns)),
+          ?assertEqual(undefined, quod_reg:where({quod_simplex, Ns})),
+          {ok, Store} = quod_ledger_store:open_ro(
+                          Ns, quod_ledger_store:ledger_dir(Config)),
+          try ?assertEqual(0, quod_ledger_store:last(Store))
+          after ok = quod_ledger_store:close(Store)
+          end
+      end,
+      [fun(C) -> C#{prepared_genesis_entry => malformed} end,
+       fun(C) ->
+           View = maps:get(prepared_genesis_entry, C),
+           C#{prepared_genesis_entry => View#entry{timestamp = 1}}
+       end,
+       fun(C) ->
+           {ok, Artifact} = quod_ledger:from_entry_view(
+                              maps:get(prepared_genesis_entry, C)),
+           C#{prepared_genesis_entry => Artifact}
+       end,
+       fun(C) -> maps:remove(genesis_hash, C) end,
+       fun(C) -> C#{genesis_hash => <<85:256>>} end]).
 
 action_timeout_returns_exact_outcome(#{manager := Manager}) ->
     Ns = unique_ns(<<"action-timeout">>),

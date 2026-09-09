@@ -306,7 +306,7 @@ handle_cast(_Msg, S) -> {noreply, S}.
 %% already hold it). Fires only on the live commit path (quod_simplex publishes here from commit_block/
 %% skip_block), never on rebuild/catch-up, so history is never re-broadcast. Also folds the snapshot
 %% forward (this is how a MEMBER keeps its cache fresh between rounds without any status call).
-handle_info({committed, Ns, Slot, #entry{} = Entry}, S = #s{ns = Ns}) ->
+handle_info({committed, Ns, Slot, Entry}, S = #s{ns = Ns}) ->
     S1 = local_head_advanced(
            Slot, Entry, S#s{pushed = S#s.pushed + 1}),
     {noreply, eager_push(Entry, S1)};
@@ -384,7 +384,7 @@ inbound(Peer, InLink, Payload, S0) ->
 
 inbound_gossip(Peer, Payload, S) ->
     case decode(Payload, S#s.ns) of
-        {block, #entry{} = Entry}      -> on_block(Entry, S);
+        {block, Entry}                -> on_block(Entry, S);
         {digest, Hi} when is_integer(Hi), Hi >= 0 ->
             %% record the sender's liveness FIRST — every node keeps the table (a committee member is
             %% exactly the judge that never gets past the follows/eligibility gates below).
@@ -401,8 +401,9 @@ inbound_gossip(Peer, Payload, S) ->
 %%   2. the cert is the proof: verify it against the committee AS-OF-its-slot (for the fast path,
 %%      slot = H+1, that IS our current validator set) before we apply or re-push.
 %% Never applies out of order — a gap is left for anti-entropy (F2).
-on_block(#entry{index = Slot} = Entry,
+on_block(Entry,
          S0 = #s{ns = Ns, genesis_hash = GenesisHash, self = Self}) ->
+    #entry{index = Slot} = quod_ledger:entry_view(Entry),
     {{Height, Projection, Syncing}, S} = current(S0),
     Committee = quod_simplex:history_committee(Projection),
     case follows(Self, Committee, Syncing, Height) of
@@ -573,10 +574,10 @@ newest_height(Height, Existing) -> max(Height, Existing).
 %% feed's cached consensus view.  A live commit carries the exact entry needed
 %% to fold that view.  Catch-up carries only a certified height, so invalidate
 %% the cache and let current/1 refresh it from Simplex on the next read.
-local_head_advanced(Height, #entry{} = Entry, S) ->
-    recipient_committed(Height, fold_snap(Entry, S));
 local_head_advanced(Height, certified, S) ->
-    recipient_committed(Height, S#s{snap = none}).
+    recipient_committed(Height, S#s{snap = none});
+local_head_advanced(Height, Entry, S) ->
+    recipient_committed(Height, fold_snap(Entry, S)).
 
 recipient_down(MRef, Pid,
                S = #s{recipient_mrefs = MonitorRefs,
@@ -666,17 +667,21 @@ fold_snap(Entry, S = #s{ns = Ns}) ->
 %% a block is verified against the FROZEN active set, not the per-commit facts — this fold and the meaning
 %% of `status.committee` must migrate together, or the feed's cached committee would drift from the
 %% verifying set. Fail-closed until then (a drifted snapshot mis-classifies → repull, never mis-verifies).
-fold_snapshot(Ns, #entry{index = Slot} = Entry,
-              {SnapSlot, Projection, Syncing}) when Slot =:= SnapSlot + 1 ->
-    case quod_ledger:classify(Entry#entry.data) of
-        {content, _} ->
-            {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
-             Syncing};
-        noop ->
-            {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
-             Syncing};
-        {controls, _Controls} -> none;
-        invalid -> none
+fold_snapshot(Ns, Entry, {SnapSlot, Projection, Syncing}) ->
+    #entry{index = Slot, data = Data} = quod_ledger:entry_view(Entry),
+    case Slot =:= SnapSlot + 1 of
+        true ->
+            case quod_ledger:classify(Data) of
+                {content, _} ->
+                    {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
+                     Syncing};
+                noop ->
+                    {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
+                     Syncing};
+                {controls, _Controls} -> none;
+                invalid -> none
+            end;
+        false -> none
     end;
 fold_snapshot(_Ns, _Entry, _Snap) -> none.
 
@@ -864,7 +869,7 @@ finish_pull_replay(Owner) ->
 %% `quod_brahms:sample/1` — source selection is where an eclipse would bias what we ACCEPT; pushing a
 %% self-verifying block out is safe to anyone). The view is address-based and may be empty (no overlay /
 %% degraded) — then this is a no-op, exactly right for a solo/founder node.
-eager_push(#entry{} = Entry, S = #s{ns = Ns, chan = Chan}) ->
+eager_push(Entry, S = #s{ns = Ns, chan = Chan}) ->
     Frame = encode(Ns, {block, Entry}),
     case byte_size(Frame) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
         false ->
@@ -890,7 +895,7 @@ fanout(Peers) -> quod_brahms:take_random(?PUSH_FANOUT, lists:usort(Peers)).
 %% quod_ledger; its decoded record is an endpoint-local view, never a second
 %% wire identity. The split cert/hash/payload verify-before-decode frame
 %% (deferred.md §2) is a later slice.
-encode(Ns, {block, #entry{} = Entry}) ->
+encode(Ns, {block, Entry}) ->
     {ok, EntryBlob} = quod_ledger:encode_entry(Entry),
     term_to_binary(
       {feed, Ns, term_to_binary({block_bytes, EntryBlob}, [deterministic])},

@@ -18,8 +18,13 @@ setup() ->
     {ok, S0} = quod_ledger_store:open(Ns, Dir),
     %% entry 5 carries a real #cert{} — proving the cert (de)serializes through the store frame, which is
     %% exactly what a joiner reads back to verify the block.
-    Cert = #cert{kind = commit, slot = 5, block_hash = crypto:hash(sha256, <<"blk5">>),
-                 sigs = [{<<1, 2, 3>>, <<4, 5, 6>>}]},
+    {Pub, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    Domain = quod_simplex:consensus_domain(Ns, <<0:256>>),
+    {ok, LastBlock} = quod_ledger:new_block(5, 4, {batch, [tx(5)]}, 0),
+    Hash = quod_simplex:block_hash(LastBlock),
+    Share = quod_simplex:make_share(Domain, commit, 5, Hash, Signer),
+    {ok, Cert} = quod_simplex:form_cert(Domain, commit, 5, Hash, [Share], [Pub]),
     Es = [entry(I, {batch, [tx(I)]}, 0, none)
           || I <- lists:seq(1, 4)]
          ++ [entry(5, {batch, [tx(5)]}, 0, Cert)],
@@ -38,20 +43,26 @@ entry(Index, Data, Timestamp, Cert) ->
     {ok, Entry} = quod_ledger:new_entry(Index, Data, Timestamp, Cert),
     Entry.
 
+entry_views({ok, Entries, Height}) ->
+    {ok, [quod_ledger:entry_view(E) || E <- Entries], Height};
+entry_views({ok, Entries}) ->
+    {ok, [quod_ledger:entry_view(E) || E <- Entries]};
+entry_views(Error) -> Error.
+
 serve_blocks_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun({_Dir, Ns, Cert, Snapshot}) ->
          [ %% a sub-range in index order, with the server's committed height
            ?_assertMatch({ok, [#entry{index = 2}, #entry{index = 3}, #entry{index = 4}], 5},
-                         quod_catchup:serve_blocks(Ns, Snapshot, 2, 4)),
+                         entry_views(quod_catchup:serve_blocks(Ns, Snapshot, 2, 4))),
            %% To is clamped to the committed height
-           ?_assertMatch({ok, [#entry{index = 1} | _], 5}, quod_catchup:serve_blocks(Ns, Snapshot, 1, 1000)),
+           ?_assertMatch({ok, [#entry{index = 1} | _], 5}, entry_views(quod_catchup:serve_blocks(Ns, Snapshot, 1, 1000))),
            ?_assertEqual(5, length(element(2, quod_catchup:serve_blocks(Ns, Snapshot, 1, 1000)))),
            %% From beyond the tail ⇒ empty (nothing to send); From clamped to ≥ 1
            ?_assertMatch({ok, [], 5}, quod_catchup:serve_blocks(Ns, Snapshot, 10, 20)),
-           ?_assertMatch({ok, [#entry{index = 1} | _], 5}, quod_catchup:serve_blocks(Ns, Snapshot, 0, 3)),
+           ?_assertMatch({ok, [#entry{index = 1} | _], 5}, entry_views(quod_catchup:serve_blocks(Ns, Snapshot, 0, 3))),
            %% the persisted cert round-trips intact through the store frame
-           ?_assertMatch({ok, [#entry{index = 5, cert = Cert}], 5}, quod_catchup:serve_blocks(Ns, Snapshot, 5, 5)),
+           ?_assertMatch({ok, [#entry{index = 5, cert = Cert}], 5}, entry_views(quod_catchup:serve_blocks(Ns, Snapshot, 5, 5))),
            %% A snapshot for another namespace is never a serving capability.
            ?_assertEqual({error, wrong_namespace}, quod_catchup:serve_blocks(<<"nope:x">>, Snapshot, 1, 1)) ]
      end}.
@@ -100,7 +111,7 @@ count_cap_serves_a_contiguous_prefix_test() ->
         {ok, Page, Height} = quod_catchup:serve_blocks(
                               Ns, quod_ledger_store:snapshot(Store), 1, Height),
         ?assertEqual(lists:seq(1, ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-                     [E#entry.index || E <- Page])
+                     [(quod_ledger:entry_view(E))#entry.index || E <- Page])
     after
         quod_ledger_store:close(Store0),
         _ = file:del_dir_r(Dir)
@@ -182,8 +193,9 @@ foreign_response_keeps_unknown_vocabulary_opaque_test() ->
     {ok, TransactionBytes} = quod_transaction:encode_ledger_transaction(Transaction),
     {ok, BlockBytes} = quod_safe_term:encode_canonical(
       {quod_block, 1, 1, 0, {batch, [{transaction, TransactionBytes}]}, 0}, 1024 * 1024),
-    Entry = #entry{index = 1, data = {batch, [Transaction]}, timestamp = 0,
-                   block_bytes = BlockBytes, cert = none},
+    {ok, Entry} = quod_ledger:from_entry_view(
+                   #entry{index = 1, data = {batch, [Transaction]}, timestamp = 0,
+                          block_bytes = BlockBytes, cert = none}),
     {ok, Blob} = quod_ledger:encode_entry(Entry),
     Grant = <<1:128>>, ReqId = <<2:128>>, Next = <<3:128>>,
     Frame = quod_catchup:encode_frame(
@@ -193,7 +205,7 @@ foreign_response_keeps_unknown_vocabulary_opaque_test() ->
         quod_catchup:decode_frame(Ns, Frame),
     {ok, [Decoded]} = quod_catchup:decode_entries(Blobs, wrapped),
     ?assertMatch(#entry{data = {batch, [#transaction{
-      diff = [{assert, {{Symbol, value}, {[], false}}}]}]}}, Decoded),
+      diff = [{assert, {{Symbol, value}, {[], false}}}]}]}}, quod_ledger:entry_view(Decoded)),
     ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
     ?assertEqual({error, bad_frame},
                  quod_catchup:decode_entries([<<Blob/binary, 0>>], wrapped)),
@@ -215,7 +227,7 @@ same_link_response_waits_for_reader_down_and_send_acceptance_test() ->
             Worker ! {release_reader, Op},
             {ok, Blobs, 5} = expect_complete(Link, Endpoint, Op),
             ?assertMatch({ok, [#entry{index = 2}, #entry{index = 3}]},
-                         quod_catchup:decode_entries(Blobs, materialized)),
+                         entry_views(quod_catchup:decode_entries(Blobs, materialized))),
             ?assertNot(is_process_alive(Worker)),
             ?assertMatch(#{worker := none}, maps:get(Op, readers(Endpoint))),
             ?assertEqual(1, maps:get(server_inflight, quod_catchup:stats(Ns))),

@@ -99,20 +99,27 @@ est(#projection{est = Est}) -> Est.
 -spec outcomes(projection()) -> quod_outcome:index().
 outcomes(#projection{outcomes = Outcomes}) -> Outcomes.
 
--spec apply_entry(#entry{}, non_neg_integer(), projection()) ->
+-spec apply_entry(quod_ledger:entry_artifact(), non_neg_integer(), projection()) ->
           {ok, projection(), result()} |
           {wait, network_identity, term(), projection()} |
           {error, term()}.
-apply_entry(#entry{index = Index}, _Floor,
+apply_entry(Entry, Floor, Projection) ->
+    %% Only extraction is caught; failures in the `of` body remain loud.
+    try quod_ledger:entry_view(Entry) of
+        View -> apply_entry_view(View, Entry, Floor, Projection)
+    catch error:function_clause -> {error, bad_projection_entry}
+    end.
+
+apply_entry_view(#entry{index = Index}, _Entry, _Floor,
             Projection = #projection{applied = Applied})
   when Index =< Applied ->
     {ok, Projection, result(already_applied)};
-apply_entry(#entry{index = Index}, _Floor,
+apply_entry_view(#entry{index = Index}, _Entry, _Floor,
             #projection{applied = Applied})
   when Index =/= Applied + 1 ->
     {error, {projection_gap, Applied, Index}};
-apply_entry(#entry{index = Index, data = Data,
-                   timestamp = Timestamp} = Entry,
+apply_entry_view(#entry{index = Index, data = Data,
+                        timestamp = Timestamp}, Entry,
             Floor, Projection0) when Floor >= 0, Floor =< Index ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
@@ -128,7 +135,7 @@ apply_entry(#entry{index = Index, data = Data,
             publish(Index, Floor, Projection0,
                     (result(unexpected))#{payload => Data})
     end;
-apply_entry(_Entry, _Floor, _Projection) ->
+apply_entry_view(_View, _Entry, _Floor, _Projection) ->
     {error, bad_projection_entry}.
 
 apply_content_entry(Transactions, Timestamp, Index, Floor, Projection0) ->
@@ -357,9 +364,8 @@ record_terminal(_Change, Index, Verdict, Prior,
             {error, {outcome_index, Reason}}
     end.
 
-apply_dtx_batch_entry(Controls,
-                      #entry{index = Index, timestamp = Timestamp} = Entry,
-                      Floor, Projection0) ->
+apply_dtx_batch_entry(Controls, Entry, Floor, Projection0) ->
+    #entry{index = Index, timestamp = Timestamp} = quod_ledger:entry_view(Entry),
     case validate_dtx_batch(
            Controls, Entry, Timestamp, Index, Projection0, [], #{}) of
         {ok, ControlRefs, Histories, Projection1} ->

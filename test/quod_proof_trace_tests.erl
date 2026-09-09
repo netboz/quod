@@ -96,7 +96,7 @@ uncorrelated_apply_does_not_create_request_spans_test() ->
         quod_trace_tests:with_tracer(fun() ->
             Change = quod_ct:change(Ns, quod_ct:diff_for(untraced_fact), #{}),
             ok = quod_prolog:apply_entry(
-                   Ns, #entry{index = 2, data = {batch, [Change]}}, live),
+                   Ns, quod_ct:committed_entry(Ns, 2, {batch, [Change]}), live),
             ok = quod_prolog:sync(Ns),
             ?assertEqual(2, quod_prolog:applied(Ns)),
             ?assertEqual([], completed_spans())
@@ -119,7 +119,7 @@ traced_committed_batch(Contexts) ->
                       gen_statem:reply(From, {ok, 2})
                   end, TracedRows),
                 ok = quod_prolog:apply_entry(
-                       Ns, #entry{index = 2, data = {batch, Changes}}, live),
+                       Ns, quod_ct:committed_entry(Ns, 2, {batch, Changes}), live),
                 lists:foreach(fun await_batch_result/1, TracedRows),
                 ok = quod_prolog:sync(Ns),
                 Spans = completed_spans(),
@@ -238,7 +238,7 @@ with_engine(Fun) ->
                     proof_id = none, plan_digest = none,
                     goal = undefined, result = undefined},
         ok = quod_prolog:apply_entry(
-               Ns, #entry{index = 1, data = {batch, [Change]}}, live),
+               Ns, quod_ct:committed_entry(Ns, 1, {batch, [Change]}), live),
         ok = quod_prolog:mark_ready(Ns),
         ?assertEqual(1, quod_prolog:applied(Ns)),
         Fun(Ns)

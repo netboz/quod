@@ -257,8 +257,9 @@ valid_functor(_) -> false.
 
 apply_entries([], Projection, Changed, Publications) ->
     {ok, Projection, Changed, Publications};
-apply_entries([#entry{index = Index} = Entry | Rest], Projection0,
+apply_entries([Entry | Rest], Projection0,
               Changed0, Publications0) ->
+    #entry{index = Index} = quod_ledger:entry_view(Entry),
     case quod_committed_projection:apply_entry(Entry, Index, Projection0) of
         {ok, Projection1, Result} ->
             apply_entries(

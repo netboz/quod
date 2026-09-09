@@ -930,7 +930,7 @@ remote_signed_two_gateway_race(Config) ->
           ?assertEqual(RequestBytes, maps:get(request_bytes, Ev)),
           ?assertEqual(Signature, maps:get(signature, Ev))
       end, Evidences),
-    {transaction, ?NS, TargetAnchor, _} =
+    OutcomeRef = {transaction, ?NS, TargetAnchor, _} =
         completed_remote_operation(Asker, OperationRef, 600),
     ?assertEqual(
        TargetAnchor,
@@ -946,13 +946,22 @@ remote_signed_two_gateway_race(Config) ->
        wait_remote_operation(
          Asker, maps:get(session_id, AskerSession), RequestBytes,
          Signature, ClientPeer, 8)),
+    {ok, #{status := committed, height := OutcomeHeight, ref := OutcomeRef}} =
+        peer:call(Target, quod_prolog, outcome, [OutcomeRef]),
+    %% Third is an observer of the target ontology. A remote result at Asker
+    %% does not mean Third's local projection has consumed the target block.
+    %% Wait for that actual event; do not resubmit, nudge the feed, or replace
+    %% the fixture's ordering requirement with a short repeated resolve loop.
+    ok = peer:call(Third, quod_ct, await_applied,
+                   [?NS, OutcomeHeight, 10000], 15000),
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
                 #{status := committed}}},
-       wait_remote_operation(
-         Third, maps:get(session_id, ThirdSession), RequestBytes,
-         Signature, ClientPeer, 8)),
+       peer:call(
+         Third, quod_client_goal_ingress, resolve_operation,
+         [maps:get(session_id, ThirdSession), RequestBytes,
+          Signature, ClientPeer], 10000)),
     assert_fact_once(Target, ?NS, gateway_race_mark, Tag).
 
 %% A signed agent stored in A reaches B and then C through the same nested

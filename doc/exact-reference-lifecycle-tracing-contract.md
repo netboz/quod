@@ -10,7 +10,14 @@ exclusion is refuted at the same cache ledger inode. The resulting
 reviewed and approved for this same cut, including the registry failure
 boundary and session-specific cleanup corrections. Claude reproduced EUnit
 1937/0, ask/QUIC 26/26, Simplex 12/12, xref, Dialyzer, production release and
-diff-check on the exact tree. Hardware acceptance remains outstanding.
+diff-check on the exact tree. The cut was committed as `f415644`, separately
+bumped/deployed as 0.7.158 (`5e3ab21`), preserving all 40 namespace states.
+The [cold-read evidence](exact-reference-owner-hardware-results.md) is
+independently accepted: retained-history replay/open now accounts for the
+observed worker time, but the read exceeded the client budget and did not
+exercise an exact-reference job. Hardware lifecycle/performance acceptance
+remains outstanding; the classifier-only follow-up's separate implementation
+review closed on 2026-09-10, without a hardware or performance claim.
 Source baseline: `5c374c5`, Quod 0.7.157. Claude's 0.7.157 evidence review
 accepts the off measurements and the limited cold/warm diagnostic, not the
 failed on capture or closure of any performance gate. Yan permits a genuine

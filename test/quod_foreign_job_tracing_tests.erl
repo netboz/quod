@@ -7,6 +7,132 @@
 %% byte source and span exporter are the existing local test substitutes.
 %% Worker completion is the export barrier, never a sleep or inferred zero.
 
+page_wait_normal_result_is_successful_observation_test() ->
+    assert_stage_result(page_wait, normal_page_reply(), ok, <<"ok">>),
+    assert_stage_result(page_wait, {decode_page, malformed}, error, <<"unclassified">>),
+    {decode_page, Key, _, Height, Deadline, Gate} = normal_page_reply(),
+    assert_stage_result(page_wait, {decode_page, Key, not_blobs, Height, Deadline, Gate},
+                        error, <<"unclassified">>).
+
+probe_collection_normal_result_is_successful_observation_test() ->
+    assert_stage_result(probe_collection, [], ok, <<"ok">>),
+    assert_stage_result(probe_collection, [{peer, {error, retry}}], ok, <<"ok">>),
+    assert_stage_result(probe_collection, #{unexpected => result}, error, <<"unclassified">>),
+    assert_stage_result(probe_collection, false, error, <<"rejected">>).
+
+ledger_suspend_normal_result_is_successful_observation_test() ->
+    %% The session remains opaque here; actual cold/warm cache tests below
+    %% also drive this result through snapshot/close with the real store.
+    assert_stage_result(ledger_suspend, #{cache_session => opaque_session}, ok, <<"ok">>),
+    assert_stage_result(ledger_suspend, #{missing => session}, error, <<"unclassified">>),
+    assert_stage_result(ledger_suspend, #{cache_session => opaque_session, cache_store => live},
+                        error, <<"unclassified">>).
+
+normal_helper_shapes_are_not_generic_successes_test() ->
+    Shapes = [{page_wait, normal_page_reply()},
+              {probe_collection, []},
+              {ledger_suspend, #{cache_session => opaque_session}}],
+    lists:foreach(fun({OwningStage, Result}) ->
+        lists:foreach(fun(Stage) ->
+            assert_stage_result(Stage, Result, error, <<"unclassified">>)
+        end, [Stage || Stage <- [page_wait, probe_collection, ledger_suspend, exact_validate],
+                       Stage =/= OwningStage])
+    end, Shapes).
+
+stage_error_vocabulary_is_unchanged_test() ->
+    lists:foreach(fun(Stage) ->
+        lists:foreach(fun({Result, Reason}) ->
+            assert_stage_result(Stage, Result, error, Reason)
+        end, [{{error, retry}, <<"retry">>},
+              {{error, {unreachable, unavailable}}, <<"unreachable">>},
+              {{error, invalid_history}, <<"invalid_history">>},
+              {{error, unknown_private_reason}, <<"unclassified">>},
+              {unexpected_shape, <<"unclassified">>}])
+    end, [page_wait, probe_collection, ledger_suspend]).
+
+probe_collection_success_does_not_claim_successful_votes_test() ->
+    with_stage_trace(fun(TraceId) ->
+        Results = quod_foreign_log:test_parallel_probes(
+                    [first, second], fun(_) -> {error, retry} end, 1000, all),
+        ?assertEqual([{first, {error, retry}}, {second, {error, retry}}], lists:sort(Results)),
+        Collection = quod_trace_tests:take_span(<<"quod.foreign.probe_collection">>, TraceId),
+        assert_span_result(Collection, ok, <<"ok">>),
+        Probes = [quod_trace_tests:take_span(<<"quod.foreign.probe_worker">>, TraceId) || _ <- [1, 2]],
+        lists:foreach(fun(Probe) -> assert_span_result(Probe, error, <<"retry">>) end, Probes),
+        ?assertEqual(false, quod_foreign_log:test_parallel_probes(
+                              [{peer, []}], fun(_) -> false end, 1000, {threshold, 1})),
+        Rejected = quod_trace_tests:take_span(<<"quod.foreign.probe_collection">>, TraceId),
+        assert_span_result(Rejected, error, <<"rejected">>),
+        assert_span_result(quod_trace_tests:take_span(<<"quod.foreign.probe_worker">>, TraceId),
+                           error, <<"rejected">>)
+    end).
+
+stage_result_selection_is_trace_correlated_test() ->
+    with_stage_trace(fun(TraceId) ->
+        {OtherContext, OtherParent} = quod_trace:start_span(
+          otel_ctx:new(), <<"test.foreign.stage.other">>, internal, #{}),
+        OtherTrace = otel_span:trace_id(OtherParent),
+        Name = <<"quod.foreign.page_wait">>,
+        try
+            ?assertNotEqual(TraceId, OtherTrace),
+            ?assertEqual({error, retry}, quod_trace:with_context(OtherContext,
+              fun() -> quod_foreign_log:measure_foreign_stage(
+                         page_wait, fun() -> {error, retry} end)
+              end)),
+            Result = normal_page_reply(),
+            ?assertEqual(Result, quod_foreign_log:measure_foreign_stage(
+                                   page_wait, fun() -> Result end)),
+            %% The unrelated same-named failure is queued first. Exact trace
+            %% selection must leave it untouched, not fake a stage regression.
+            assert_span_result(quod_trace_tests:take_span(Name, TraceId), ok, <<"ok">>),
+            assert_span_result(quod_trace_tests:take_span(Name, OtherTrace), error, <<"retry">>)
+        after
+            quod_trace:finish_span(OtherParent, ok),
+            _ = quod_trace_tests:take_span(<<"test.foreign.stage.other">>, OtherTrace)
+        end
+    end).
+
+normal_page_reply() ->
+    Key = {self(), <<1:128>>, make_ref(), self(), <<2:128>>},
+    {decode_page, Key, [<<"opaque entry bytes">>], 2, quod_time:mono_ms() + 5000, undefined}.
+
+assert_stage_result(Stage, Result, Status, Reason) ->
+    with_stage_trace(fun(TraceId) ->
+        %% Exercise the actual metric/SDK wrapper, not a classifier copy.
+        %% The helper's result must remain byte-for-byte unchanged.
+        ?assertEqual(Result, quod_foreign_log:measure_foreign_stage(Stage, fun() -> Result end)),
+        Span = quod_trace_tests:take_span(<<"quod.foreign.", (atom_to_binary(Stage))/binary>>, TraceId),
+        assert_span_result(Span, Status, Reason),
+        ?assertEqual(#{stage_started => 1, stage_completed => 1},
+                     get({quod_foreign_log, trace_counts}))
+    end).
+
+assert_span_result(Span, Status, Reason) ->
+    ?assertEqual(opentelemetry:status(Status), Span#span.status),
+    ?assertEqual(Reason, maps:get('quod.foreign.reason', attrs(Span))),
+    ?assertEqual(case Status of ok -> <<"ok">>; error -> Reason end,
+                 maps:get('quod.outcome', attrs(Span))).
+
+with_stage_trace(Fun) ->
+    quod_trace_tests:with_tracer(fun() ->
+        ActiveKey = {quod_foreign_log, trace_stage_active},
+        CountsKey = {quod_foreign_log, trace_counts},
+        Previous = [{Key, get(Key)} || Key <- [ActiveKey, CountsKey]],
+        put(ActiveKey, true),
+        put(CountsKey, #{}),
+        {Context, Parent} = quod_trace:start_span(
+          otel_ctx:new(), <<"test.foreign.stage">>, internal, #{}),
+        TraceId = otel_span:trace_id(Parent),
+        try quod_trace:with_context(Context, fun() -> Fun(TraceId) end)
+        after
+            lists:foreach(fun({Key, undefined}) -> erase(Key);
+                             ({Key, Value}) -> put(Key, Value)
+                          end, Previous),
+            quod_trace:finish_span(Parent, ok),
+            _ = quod_trace_tests:take_span(<<"test.foreign.stage">>, TraceId)
+        end
+    end).
+
 exact_cold_and_warm_cache_trace_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
@@ -30,6 +156,7 @@ exact_cold_and_warm_cache_trace_test() ->
                 [cache_open, cache_reconstruction, cache_replay,
                  checkpoint_compare, phase_suspend, ledger_suspend,
                  exact_lookup, exact_validate, worker_handoff]),
+              assert_successful_stage(ledger_suspend, ColdSpans),
               {WarmResult, Warm, WarmSpans} = traced_request(
                 <<"test.foreign.exact.warm">>, fun() -> explicit(Fixture) end),
               ?assertMatch({ok, #{phase := finalize}}, WarmResult),
@@ -41,7 +168,8 @@ exact_cold_and_warm_cache_trace_test() ->
                 [cache_open, ledger_resume, phase_resume, phase_suspend,
                  ledger_suspend, exact_lookup, exact_validate, worker_handoff]),
               assert_no_stage(cache_reconstruction, WarmSpans),
-              assert_no_stage(cache_replay, WarmSpans)
+              assert_no_stage(cache_replay, WarmSpans),
+              assert_successful_stage(ledger_suspend, WarmSpans)
           after
               quod_foreign_log_tests:stop_owner(Restarted)
           end
@@ -192,6 +320,8 @@ current_cold_replay_is_not_network_advance_test() ->
                  checkpoint_compare, tip_confirm, phase_suspend,
                  ledger_suspend, worker_handoff]),
               Probes = named(<<"quod.foreign.probe_worker">>, Spans),
+              assert_successful_stage(probe_collection, Spans),
+              assert_successful_stage(ledger_suspend, Spans),
               ?assertEqual(maps:get('quod.foreign.probe_children_started', Attributes),
                            length(Probes)),
               lists:foreach(fun(Probe) ->
@@ -333,6 +463,7 @@ page_success_has_one_owner_terminal_despite_stale_messages_test() ->
             {Page, Terminal} = assert_page_terminal(ReqId, completed, decoding, false, Spans),
             ?assert(Terminal#span.end_time =< Page#span.end_time),
             assert_stages(WorkerSpan, Spans, [page_fetch, page_wait, page_decode, page_completion]),
+            assert_successful_stage(page_wait, Spans),
             quod_foreign_log_tests:assert_page_owner_drained()
         after
             Worker ! {continue_foreign_page_decode, Token}
@@ -551,3 +682,8 @@ assert_stages(Worker, Spans, Required) ->
 
 assert_no_stage(Stage, Spans) ->
     ?assertEqual([], named(<<"quod.foreign.", (atom_to_binary(Stage))/binary>>, Spans)).
+
+assert_successful_stage(Stage, Spans) ->
+    Found = named(<<"quod.foreign.", (atom_to_binary(Stage))/binary>>, Spans),
+    ?assertNotEqual([], Found),
+    lists:foreach(fun(Span) -> assert_span_result(Span, ok, <<"ok">>) end, Found).

@@ -109,6 +109,7 @@ before that projection can be reused in memory.
          test_install_feed_projection/3,
          test_corrupt_resident_height/3,
          test_lifecycle_state/0,
+         measure_foreign_stage/2,
          test_parallel_probes/4, test_confirmation_candidates/2]).
 -endif.
 
@@ -4672,7 +4673,7 @@ measure_foreign_stage(Stage, Fun) ->
     StartedNative = erlang:monotonic_time(),
     Result = trace_foreign_stage(Stage, Fun),
     observe_foreign_stage(
-      Stage, foreign_stage_result(Result), StartedNative),
+      Stage, foreign_stage_result(foreign_stage_observation(Stage, Result)), StartedNative),
     Result.
 
 measure_foreign_ok(Stage, Fun) ->
@@ -4696,7 +4697,7 @@ trace_foreign_stage(Stage, Attributes, Fun) ->
               fun(SpanCtx) ->
                   try
                       Result = Fun(),
-                      trace_foreign_result(SpanCtx, Result),
+                      trace_foreign_result(SpanCtx, foreign_stage_observation(Stage, Result)),
                       Result
                   catch Class:Reason:Stack ->
                       %% Closed labels only; preserve the exact production
@@ -4810,6 +4811,17 @@ foreign_stage_result({error, retry}) -> uncertain;
 foreign_stage_result({error, {unreachable, _}}) -> uncertain;
 foreign_stage_result({error, _}) -> failed;
 foreign_stage_result(_) -> failed.
+
+%% Normalize only observation, never the helper's return value. These shapes
+%% mean completion at their named stage, not successful verification: an all-
+%% probe collection can contain refusals, and a suspended session stays opaque
+%% to this layer. Other stages and unknown shapes keep the failing catch-all.
+foreign_stage_observation(page_wait, {decode_page, {_, _, _, _, _}, Blobs, Height, Deadline, _})
+  when is_list(Blobs), is_integer(Height), Height >= 0, is_integer(Deadline) -> ok;
+foreign_stage_observation(probe_collection, Results) when is_list(Results) -> ok;
+foreign_stage_observation(ledger_suspend, #{cache_session := _} = Meta)
+  when not is_map_key(cache_store, Meta) -> ok;
+foreign_stage_observation(_Stage, Result) -> Result.
 
 verification_work(
   {local_exact, #{identity := Identity}, Ref, Phase}, Owner, RequestRef,

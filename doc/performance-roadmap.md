@@ -48,14 +48,14 @@ The cold-start item is still open. Serial `operation_result` has risen
 18.4% then another 2.27%, now 195.679 ms. The source/endpoint residual is now
 58.302/152.248 ms at c1/c4 (the previous c4 gap was 137.462 ms), and c4
 source-owner delivery rose 22.817→26.909 ms. All remain unlocated or only
-partially attributed. The next approved owner cut is the
+partially attributed. The approved owner cut is the
 [exact-reference lifecycle/trace contract](exact-reference-lifecycle-tracing-contract.md)
 at the existing foreign-log owner: caller versus shared-work lifetime,
 context-independent coalescing, queue/park/wake ordering and full cold-rebuild
 coverage. Claude approved diagnostics and the specified lifecycle refactoring
 as one coherent cut, conditional on fail-before wake evidence and a same-cache-
-file restart-custody proof; final implementation review remains required before
-commit/deploy.
+file restart-custody proof; those conditions and final implementation review
+have since closed as recorded below.
 The fail-before tests now reproduce deadline, sharing and wake-order defects;
 the actual same-inode append test also refutes watcher-only restart exclusion.
 The resulting [cache-writer custody extension](foreign-cache-writer-custody-contract.md)
@@ -67,8 +67,17 @@ fail-before controls and permanent lifecycle, file-custody and real-SDK
 regressions. Claude reproduced EUnit 1937/0, ask/QUIC 26/26, Simplex 12/12,
 xref, Dialyzer and the production release build. Its
 [implementation checkpoint](exact-reference-lifecycle-tracing-contract.md#implementation-checkpoint--2026-09-09)
-records the exact scope and local gate archive. Commit and preserved-ledger
-deployment are approved; no new benchmark or hardware closure is claimed here.
+records the exact scope and local gate archive. The cut is committed as
+`f415644`, separately bumped/deployed as 0.7.158 (`5e3ab21`). Its independently
+accepted [cold-read evidence](exact-reference-owner-hardware-results.md) proves
+all 40 namespace states retained and locates 30.062 seconds in certified cache
+replay plus 6.174 seconds in ledger opening across two sequential current-view
+workers. The one cold read exceeded the unchanged 35-second HTTP budget;
+its failure and `BENCH_STOP` remain intact. No write was submitted. A small
+stage-classification correction is independently reviewed and approved; a subsequent
+explicitly warm-labeled multi-writer baseline needs a fresh measurement go.
+Cold and warm observations must not be averaged. No exact-reference/outlier,
+absolute-latency, checkpoint/compaction or other architecture gate closes here.
 This is not authorization for a
 duplicate-receipt validation bypass. This
 does not close the separate result-authentication design or authorize a

@@ -7,7 +7,8 @@ certificate that finalized its slot.
 This module exclusively owns the committed block log. It is a plain library (no process,
 no registration): every function is synchronous and completes its required `fsync`
 before returning, and the handle is threaded by the caller — the writer is
-`m:quod_simplex`; `m:quod_catchup` opens a read-only view via `open_ro/2` to serve
+`m:quod_simplex`; `m:quod_catchup` borrows its immutable index through
+`open_ro_snapshot/1` to serve
 a joiner. The separate `m:quod_signing_journal` stores this validator's bounded
 in-flight vote decisions, DTX signing floors, and exact pending Begins by group;
 it never
@@ -45,8 +46,9 @@ At `open/2` a truncated FINAL frame (a crash mid-append that never `fsync`'d) is
 trimmed, which is safe because such an entry was never acknowledged. Corruption that is
 provably interior (an intact frame follows it) fail-stops, and a real `pread` I/O error
 fail-stops too — committed entries are never silently discarded on either. `open_ro/2`
-opens a concurrent, **non-truncating** read-only view for the catch-up/feed server,
-bounding the readable tail at the last complete contiguous entry.
+reconstructs a **non-truncating** index for cold/offline inspection, bounding
+the readable tail at the last complete contiguous entry. Live page readers
+instead reuse the owning process's verified index and captured boundary.
 
 Compaction is deferred (`doc/deferred.md` §3). An ordinary recovery open scans
 the full log; a live sole writer may instead hand its already-verified sparse
@@ -158,9 +160,10 @@ open(Ns, DataDir, SymbolMode)
                 symbol_mode = SymbolMode}}.
 
 -doc """
-Open a READ-ONLY handle for a concurrent reader (the catch-up/feed server) alongside the live writer.
-NEVER truncates: a torn / short / discontinuous tail — a frame the writer is mid-appending — simply
-bounds the readable index, so the reader sees up to the last complete, CRC-valid, contiguous entry.
+Reconstruct a READ-ONLY index for cold recovery or explicit stopped-ledger inspection.
+Live readers borrow the owner's session through `open_ro_snapshot/1` instead.
+NEVER truncates: a torn / short / discontinuous tail bounds the reconstructed
+index at the last complete, CRC-valid, contiguous entry.
 `read_at`, `read_range`, `fold`, `last` work on it unchanged; do NOT `append` through it. Errors if
 the log does not exist yet.
 """.

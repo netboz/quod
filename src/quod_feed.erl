@@ -27,7 +27,7 @@ holds no state the others need). It has two halves:
 - **Anti-entropy** (the completeness guarantee): every `?ANTI_ENTROPY_MS` a follower advertises its
   height (`{digest, Hi}`) to one `quod_brahms:sample/1` peer AND to every committee member; a behind
   node PULLs the gap, an ahead node replies its height so the sender pulls. The pull is the SAME
-  trustless driver as cold-start catch-up (`quod_catchup:catch_up/6`) sourced from a live peer, so a
+  trustless driver as cold-start catch-up (`quod_catchup:catch_up/7`) sourced from a live peer, so a
   block missed by eager push (loss, an out-of-fanout peer, a transient ingest error) is always
   recovered — and because members are always-known contacts, a caught-up observer keeps tracking the
   head even with no overlay.
@@ -416,9 +416,9 @@ on_block(#entry{index = Slot} = Entry,
                            Ns, GenesisHash, Projection, Slot, [Entry]) of
                         {ok, [_], Projection1} ->
                             case ingest(
-                                   Ns, [Entry], Projection1,
+                                   quod_reg:via({quod_simplex, Ns}), [Entry], Projection1,
                                    ?INGEST_MS, live) of
-                                ok         -> %% our height advanced to Slot — fold the snapshot forward too
+                                {ok, _View} -> %% our height advanced to Slot — fold the snapshot forward too
                                               S1 = fold_snap(Entry, S),
                                               eager_push(Entry, S1#s{ingested = S1#s.ingested + 1});
                                 {error, _} -> drop(ingest_busy, S)   %% verified but consensus busy; anti-entropy re-pulls
@@ -689,10 +689,10 @@ invalidate_transient(S) -> S.
 %% rejected there and surfaces as {error, _}. A verified next-block push is `live` for this settled
 %% observer and drives P incrementally. An anti-entropy gap window is `replay`: P reconciles once at
 %% its explicit ready edge, so best-effort effects are not reconstructed from missed history.
-ingest(Ns, Entries, Projection, Timeout, Mode)
+ingest(Server, Entries, Projection, Timeout, Mode)
   when Mode =:= live; Mode =:= replay ->
     Source = {feed, Mode},
-    try gen_server:call(quod_reg:via({quod_simplex, Ns}),
+    try gen_server:call(Server,
                         {sink_catchup, Source, Entries, Projection}, Timeout)
     catch exit:_ -> {error, unavailable} end.
 
@@ -768,7 +768,7 @@ on_digest(Peer, PeerHi, S0 = #s{ns = Ns, self = Self, chan = Chan}) ->
     if
         Height < PeerHi ->
             case S#s.pulling =:= false andalso follows(Self, Committee, Syncing, Height) of
-                true  -> start_pull(Peer, Height + 1, Projection, S);
+                true  -> start_pull(Peer, S);
                 false -> S   %% already pulling, or not an eligible follower
             end;
         Height > PeerHi -> _ = quod_quic:send(Peer, Chan, encode(Ns, {digest, Height})), S;   %% let them pull from us
@@ -813,30 +813,43 @@ digest_counts(Table) ->
 %% (the sole writer, contiguity-checked). `From > 1` here (a follower is past genesis), but the pinned
 %% anchor still derives the signature domain for every mid-chain certificate. One worker
 %% at a time (`pulling`); its `DOWN` clears the latch.
-start_pull(Peer, From, Projection,
-           S = #s{ns = Ns, genesis_hash = GenesisHash,
+start_pull(Peer, S = #s{ns = Ns, genesis_hash = GenesisHash,
                   ledger_root = LedgerRoot}) ->
+    %% The initial capture uses the existing pull-window budget, starting
+    %% before worker scheduling. This is not a new deadline for the entire
+    %% multi-page recovery: fetch and sink windows keep their own bounds.
+    %% Later sinks return their view, with no per-page recapture/path discovery.
+    Deadline = quod_time:mono_ms() + ?PULL_SINK_MS,
+    Owner = quod_reg:where({quod_simplex, Ns}),
+    Feed = self(),
     {Pid, _Ref} = spawn_monitor(
         fun() ->
+            _ = quod_process:kill_when_owner_dies(Feed, self()),
             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
             Sink  = fun(Es, Projection1) ->
-                        ingest(Ns, Es, Projection1,
+                        ingest(Owner, Es, Projection1,
                                ?PULL_SINK_MS, replay)
                     end,
-            try
-                quod_catchup:catch_up(
-                  Ns, GenesisHash, Fetch, Sink, From, Projection,
-                  #{ledger_root => LedgerRoot})
-            after
-                %% Close even a failed or partial pull at its valid durable prefix. Simplex sent
-                %% every Prolog apply cast, so its ready edge cannot overtake the final apply.
-                _ = finish_pull_replay(Ns)
+            case quod_simplex:history_view(
+                       {Owner, {Ns, GenesisHash}}, committed, Deadline) of
+                    {ok, #{slot := Height, projection := Projection} = View} ->
+                        _ = quod_process:kill_when_owner_dies(Owner, self()),
+                        try
+                            quod_catchup:catch_up(
+                              Ns, GenesisHash, Fetch, Sink, Height + 1, Projection,
+                              #{ledger_root => LedgerRoot, history_view => View})
+                        after
+                            %% Close only the same writer's replay, including a
+                            %% partial pull. A replacement receives no stale completion.
+                            _ = finish_pull_replay(Owner)
+                        end;
+                    {error, _} = Error -> Error
             end
         end),
     S#s{pulling = Pid, pulled = S#s.pulled + 1}.
 
-finish_pull_replay(Ns) ->
-    try gen_statem:call(quod_reg:via({quod_simplex, Ns}),
+finish_pull_replay(Owner) ->
+    try gen_statem:call(Owner,
                         finish_feed_replay, ?PULL_SINK_MS)
     catch exit:_ -> {error, unavailable}
     end.

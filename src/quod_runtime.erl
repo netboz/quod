@@ -74,7 +74,9 @@ layer reads.
 ## Failure model
 
 A founding configuration error (cycle / missing dependency / retracted or nonground
-declaration / unreadable founding block) is a **permanent** unhealthy. An execution failure
+declaration / verified malformed founding block) is a **permanent** unhealthy. An unavailable
+ledger owner leaves founding pending until its registration or a runtime publication edge;
+it does not start a retry clock. An execution failure
 (handler failed/staged D/budget kill, in either the tier or a reconcile) COLLAPSES pending
 work into one reconciliation at the newest snapshot: kill the runner, drop the queue
 (counted), clear P bookkeeping, re-attach, reconcile. Repeated consecutive execution
@@ -142,7 +144,8 @@ observers therefore maintain current P without reconstructing best-effort effect
             %% Cached slot-1 declarations. Reactions retain exact compiled
             %% clauses because their intentional variables require
             %% alpha-normalized full-clause authority checks.
-            founding = unknown :: unknown | {ok, map()},
+            founding = unknown :: unknown | {ok, map(), map()},
+            ledger_monitor :: reference(),
             subscriptions = [] :: [{binary(), binary()}],
             reactions = [] :: [tuple()],
             reaction_index = #{} :: #{tuple() => [tuple()]},
@@ -277,7 +280,9 @@ init({Ns, Config}) ->
     %% Subscribe BEFORE the (deferred) attach attempt: any ready edge published after the
     %% attach answer lands in our mailbox, so the boot race has no window.
     true = quod_reg:subscribe({runtime, Ns}),
-    {ok, #s{ns = Ns, config = Config}, {continue, try_attach}}.
+    LedgerMonitor = quod_reg:monitor_name({quod_simplex, Ns}, follow),
+    {ok, #s{ns = Ns, config = Config, ledger_monitor = LedgerMonitor},
+     {continue, try_attach}}.
 
 %% The restart-while-ready case: a runtime-only restart sees no ready edge (the KB is already
 %% live), so probe once here. `infinity` deliberately — a bounded call into a replay-flooded
@@ -293,6 +298,8 @@ handle_continue(try_attach, S) ->
 
 handle_call(get_stats, _From, S) ->
     {reply, #{mode => mode_tag(S#s.mode), height => S#s.height,
+              founding_ready => S#s.founding =/= unknown,
+              runner_active => S#s.runner =/= none,
               handlers_active => map_size(S#s.handlers),
               subscriptions_active => length(S#s.subscriptions),
               reactions_active => length(S#s.reactions),
@@ -369,6 +376,17 @@ handle_heavy_enqueue(Resource, Rev, Job, _From, S) ->
             {reply, {error, oversized}, S#s{heavy_rejected = S#s.heavy_rejected + 1}}
     end.
 
+handle_cast({founding_captured, Ref, Binding, Founding},
+            S = #s{runner = {reconcile, _Pid, _MRef, Ref, _TRef}}) ->
+    %% The same runner sends this before declaration discovery or executing a
+    %% handler. Cache immutable founding authority, and distinguish a capture
+    %% budget kill from the existing handler execution-failure policy.
+    case quod_simplex:history_view_live(Binding) of
+        true -> {noreply, S#s{founding = {ok, Binding, Founding}}};
+        false -> {noreply, S}
+    end;
+handle_cast({founding_captured, _StaleRef, _Binding, _Founding}, S) ->
+    {noreply, S};
 handle_cast({runner_done, Ref, Outcome}, S = #s{runner = {Kind, _Pid, MRef, Ref, TRef}}) ->
     _ = erlang:cancel_timer(TRef),
     erlang:demonitor(MRef, [flush]),
@@ -412,6 +430,8 @@ handle_cast(_Msg, S) -> {noreply, S}.
 %% ready transition). Reconcile exactly once per edge; a `boot` edge counts only while booting.
 handle_info({replay_ready, boot, _H}, S = #s{mode = booting}) ->
     {noreply, replace_snapshot_and_reconcile(boot, S)};
+handle_info({replay_ready, boot, _H}, S = #s{founding = unknown}) ->
+    {noreply, founding_wake(S)};
 handle_info({replay_ready, boot, _H}, S) ->
     {noreply, S};
 handle_info({replay_ready, Id, _H}, S = #s{last_recovery = Id}) ->
@@ -436,6 +456,10 @@ handle_info({source_follow_attach, Token},
      run_source_attach(S0#s{source_attach_token = none})};
 handle_info({source_follow_attach, _StaleToken}, S) ->
     {noreply, S};
+handle_info({gproc, registered, MRef, _Name}, S = #s{ledger_monitor = MRef}) ->
+    {noreply, founding_wake(S)};
+handle_info({gproc, unreg, MRef, _Name}, S = #s{ledger_monitor = MRef}) ->
+    {noreply, founding_pending(S)};
 handle_info(
   {gproc, registered, MRef, _Name},
   S = #s{foreign_log_monitor = MRef}) ->
@@ -466,6 +490,10 @@ handle_info({applied_live, Env, Est}, S = #s{mode = {reconciling, _}}) ->
         true ->
             Pending = case S1#s.pending_edge of
                           none -> {collapse, make_ref()};
+                          %% Founding readiness alone is discarded after a
+                          %% successful capture; dropped post-snapshot work
+                          %% needs the stronger fresh-snapshot obligation.
+                          {founding, _} -> {collapse, make_ref()};
                           Id   -> Id
                       end,
             {noreply, drop_queue(S1#s{pending_edge = Pending,
@@ -476,12 +504,20 @@ handle_info({applied_live, Env, Est}, S = #s{mode = {reconciling, _}}) ->
     end;
 handle_info({applied_live, _Env, _Est}, S) ->
     %% booting/replaying/unhealthy: the next reconcile rebuilds from a newer snapshot anyway
-    {noreply, S#s{events_seen = S#s.events_seen + 1,
-                  dropped_events = S#s.dropped_events + 1}};
+    {noreply, founding_wake(S#s{events_seen = S#s.events_seen + 1,
+                               dropped_events = S#s.dropped_events + 1})};
 %% Property copies (est-free applied/rejected): the explorer's feed, not ours — the direct
-%% 3-tuple above is our only event channel (the double-delivery contract).
-handle_info({applied_live, _Env}, S) -> {noreply, S};
+%% 3-tuple above is our only event channel (the double-delivery contract). While
+%% founding is unavailable, a publication is also a genuine readiness wake.
+handle_info({applied_live, _Env}, S) -> {noreply, founding_wake(S)};
 handle_info({rejected_live, _Env}, S) -> {noreply, S};
+handle_info({projection_advanced, _Owner, _H}, S) ->
+    {noreply, founding_wake(S)};
+handle_info({'DOWN', MRef, process, Pid, killed},
+            S = #s{founding = unknown,
+                   runner = {reconcile, Pid, MRef, _Ref, TRef}}) ->
+    _ = erlang:cancel_timer(TRef),
+    {noreply, reconcile_finished({pending, founding_unavailable}, S#s{runner = none})};
 handle_info({'DOWN', MRef, process, Pid, Reason},
             S = #s{runner = {Kind, Pid, MRef, _Ref, TRef}}) ->
     %% runner died without reporting (crash or budget kill)
@@ -528,7 +564,8 @@ handle_info(_Info, S) -> {noreply, S}.
 %% with us), an orphan executing a looping goal would burn a scheduler unbounded while its
 %% snapshot pin is released out from under it.
 terminate(_Reason, S) ->
-    _ = stop_source_views(kill_runner(S)), ok.
+    _ = stop_source_views(kill_runner(S)),
+    ok = quod_reg:demonitor_name({quod_simplex, S#s.ns}, S#s.ledger_monitor).
 
 %%%===================================================================
 %%% reconciliation
@@ -565,32 +602,46 @@ safe_attach(Ns) ->
 %% executes in the killable runner: everything after the attach is bounded by the budget, so
 %% writer-controlled declaration volume can never stall this server. Queued envelopes are
 %% NOT dropped here: those above the snapshot height still carry fresh state (drained after).
-start_reconcile(Id, Est, H, S0 = #s{ns = Ns, config = Config, founding = Cached}) ->
+start_reconcile(Id, Est, H, S0 = #s{ns = Ns, founding = Cached}) ->
     S = S0#s{est = Est, height = H, last_recovery = Id, pending_edge = none,
              mode = {reconciling, Id}},
     Budget = application:get_env(quod, runtime_reconcile_budget_ms, ?RECONCILE_BUDGET_MS),
     spawn_runner(reconcile, Budget,
-                 fun() -> run_reconcile(Ns, Config, Cached, Est, H) end, S).
+                 fun(Deadline, Report) ->
+                     run_reconcile(Ns, Cached, Est, H, Deadline, Report)
+                 end, S).
 
 spawn_runner(Kind, Budget, Fun, S) ->
     Server = self(),
     Ref = make_ref(),
+    Deadline = erlang:monotonic_time(millisecond) + Budget,
     {Pid, MRef} = spawn_monitor(fun() ->
-                                        gen_server:cast(Server, {runner_done, Ref, Fun()})
+                                        Report = fun(Binding, Founding) ->
+                                            gen_server:cast(Server,
+                                              {founding_captured, Ref, Binding, Founding})
+                                        end,
+                                        gen_server:cast(Server,
+                                          {runner_done, Ref, Fun(Deadline, Report)})
                                 end),
-    TRef = erlang:send_after(Budget, self(), {runner_kill, Ref}),
+    TRef = erlang:send_after(max(0, Deadline - erlang:monotonic_time(millisecond)),
+                             self(), {runner_kill, Ref}),
     S#s{runner = {Kind, Pid, MRef, Ref, TRef}}.
 
-%% Runner body (reconcile). Returns {ok, FoundingCache, Plan} | {error, Reason}.
-run_reconcile(Ns, Config, Cached, Est, H) ->
+%% Founding capture spends the same original budget as the rest of this
+%% reconcile, including owner mailbox wait. No independent read timeout.
+run_reconcile(Ns, Cached, Est, H, Deadline, Report) ->
     try
-        {FoundingCache, Founding} =
+        {Binding, Founding} =
             case Cached of
-                {ok, Fc} -> {keep, Fc};
+                {ok, Bc, Fc} ->
+                    case quod_simplex:history_view_live(Bc) of
+                        true -> {Bc, Fc};
+                        false -> throw(founding_unavailable)
+                    end;
                 unknown  ->
-                    case read_founding(Ns, Config) of
-                        {ok, Fr}     -> {{cache, Fr}, Fr};
-                        no_log       -> {keep, empty_founding()};
+                    case read_founding(Ns, Deadline) of
+                        {ok, Br, Fr} -> Report(Br, Fr), {Br, Fr};
+                        pending     -> throw(founding_unavailable);
                         {error, R0}  -> throw({founding_read_failed, R0})
                     end
             end,
@@ -608,31 +659,28 @@ run_reconcile(Ns, Config, Cached, Est, H) ->
                                       #handler{goal = Goal} = maps:get(Id, Hs),
                                       converge(Ns, Est, H, Id, Goal, all)
                               end, Order),
-                {ok, FoundingCache, Plan};
+                {ok, Binding, Plan};
             {error, R3} ->
                 throw(R3)
         end
-    catch throw:R -> {error, R}
+    catch
+        throw:founding_unavailable -> {pending, founding_unavailable};
+        throw:R -> {error, R}
     end.
 
-reconcile_finished({ok, FoundingCache,
-                    Plan = #{handlers := Hs, order := Order, index := Index,
-                             dependents := Dependents}},
-                    S0 = #s{height = H}) ->
-    Base = S0#s{handlers = Hs, order = Order, index = Index, dependents = Dependents,
-                founding = case FoundingCache of
-                               {cache, F} -> {ok, F};
-                               keep       -> S0#s.founding
-                           end,
-                p_height = H, e_frontier = H,
-                reconciles = S0#s.reconciles + 1,
-                exec_failures = 0},
-    S1 = install_catalog_update(Plan, Base),
-    _ = reconcile_direct_effects(),
-    case S1#s.pending_edge of
-        none -> maybe_run_events(drop_stale_queue(
-                                   pump_heavy(release_ready_waiters(S1#s{mode = live}))));
-        Id   -> replace_snapshot_and_reconcile(Id, S1)
+reconcile_finished({ok, Binding, Plan}, S) ->
+    case quod_simplex:history_view_live(Binding) of
+        true -> reconcile_publish(Plan, S);
+        false -> reconcile_finished({pending, founding_unavailable}, S)
+    end;
+reconcile_finished({pending, founding_unavailable}, S0) ->
+    %% Keep an edge that crossed this failed capture. A failed attempt itself
+    %% never schedules another attempt or enters handler collapse/backoff.
+    Pending = S0#s.pending_edge,
+    S = founding_pending(S0),
+    case Pending of
+        none -> S;
+        Id -> replace_snapshot_and_reconcile(Id, S)
     end;
 reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
     S1 = S0#s{reconcile_failures = S0#s.reconcile_failures + 1},
@@ -649,6 +697,44 @@ reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
                            "newer ready edge", [Ns, Reason]),
             replace_snapshot_and_reconcile(Id, S1)
     end.
+
+reconcile_publish(
+                    Plan = #{handlers := Hs, order := Order, index := Index,
+                             dependents := Dependents},
+                    S0 = #s{height = H}) ->
+    Base = S0#s{handlers = Hs, order = Order, index = Index, dependents = Dependents,
+                p_height = H, e_frontier = H,
+                reconciles = S0#s.reconciles + 1,
+                exec_failures = 0},
+    %% An initial boot/owner/publication wake only retries an unavailable
+    %% capture. Successful founding already consumed that readiness edge;
+    %% direct live envelopes remain queued normally, without double delivery.
+    S1 = install_catalog_update(Plan,
+           case Base#s.pending_edge of
+               {founding, _} -> Base#s{pending_edge = none};
+               _ -> Base
+           end),
+    _ = reconcile_direct_effects(),
+    case S1#s.pending_edge of
+        none -> maybe_run_events(drop_stale_queue(
+                                   pump_heavy(release_ready_waiters(S1#s{mode = live}))));
+        Id   -> replace_snapshot_and_reconcile(Id, S1)
+    end.
+
+founding_wake(S = #s{founding = unknown, mode = booting}) ->
+    replace_snapshot_and_reconcile({founding, make_ref()}, S);
+founding_wake(S = #s{founding = unknown, runner = {reconcile, _, _, _, _},
+                     pending_edge = none}) ->
+    S#s{pending_edge = {founding, make_ref()}};
+founding_wake(S) -> S.
+
+founding_pending(S0) ->
+    S = kill_runner(stop_source_views(S0)),
+    ok = quod_prolog:runtime_detach(S#s.ns),
+    drop_queue(S#s{mode = booting, founding = unknown, pending_edge = none,
+                   last_recovery = undefined,
+                   est = undefined, handlers = #{}, order = [], index = #{},
+                   dependents = #{}}).
 
 reconcile_direct_effects() ->
     quod_effect_journal:reconcile().
@@ -719,14 +805,14 @@ maybe_run_events(
                reaction_index = Reactions, source_interests = SourceInterests,
                subscriptions = Subscriptions, founding = FoundingCache} = S,
             Founding = case FoundingCache of
-                           {ok, F} -> F;
+                           {ok, _Binding, F} -> F;
                            unknown -> empty_founding()
                        end,
             Self = maps:get(node_id, Config),
             Acks = event_ack_refs(Items),
             spawn_runner(
               events, Budget,
-              fun() -> run_events(
+              fun(_Deadline, _Report) -> run_events(
                          Ns, Work, Handlers, Order, Index, Deps,
                          Reactions, SourceInterests,
                          maps:from_keys(Subscriptions, true),
@@ -1647,22 +1733,36 @@ converge(Ns, Est, H, Id, Goal, Scope) ->
 %%% discovery — the founding set (slot 1) and the stored set (snapshot)
 %%%===================================================================
 
-%% {ok, Heads} (cacheable) | no_log (retry later, UNCACHED) | {error, Reason} (unhealthy).
-%% no_log covers both a missing file AND an empty/slot-1-less log: quod_simplex creates the
-%% log file eagerly at init, so an empty read is the same "not founded yet" case as enoent —
-%% caching it would silently disable this node's handlers forever once slot 1 arrives.
-read_founding(Ns, Config) ->
-    case quod_ledger_store:open_ro(Ns, quod_ledger_store:ledger_dir(Config)) of
-        {ok, Store} ->
-            try quod_ledger_store:read_at(Store, 1) of
-                {ok, #entry{data = Data}} -> founding_payload(Data);
-                not_found -> no_log
-            after quod_ledger_store:close(Store)
+%% The verified owner grants byte availability before Prolog is ready, so
+%% root-first replay cannot wait on itself. An empty committed prefix or an
+%% unavailable incarnation stays uncached and waits for a genuine owner/KB
+%% edge. Only a present, verified malformed founding entry is terminal.
+read_founding(Ns, Deadline) ->
+    case quod_simplex:history_view(Ns, committed, Deadline) of
+        {ok, #{slot := 0}} -> pending;
+        {ok, View = #{snapshot := Snapshot}} ->
+            Result = case quod_ledger_store:open_ro_snapshot(Snapshot) of
+                {ok, Store} ->
+                    try quod_ledger_store:read_at(Store, 1) of
+                        {ok, #entry{data = Data}} -> founding_payload(Data);
+                        not_found -> {error, missing_genesis}
+                    catch
+                        error:{corrupt_entry, _, _} = Reason -> {error, Reason}
+                    after quod_ledger_store:close(Store)
+                    end;
+                {error, _Unavailable} -> pending
+            end,
+            case quod_simplex:history_view_live(View)
+                 andalso erlang:monotonic_time(millisecond) < Deadline of
+                false -> pending;
+                true ->
+                    case Result of
+                        {ok, Founding} ->
+                            {ok, maps:with([owner, identity], View), Founding};
+                        _ -> Result
+                    end
             end;
-        {error, no_log} ->
-            no_log;
-        {error, Reason} ->
-            {error, Reason}
+        {error, _Unavailable} -> pending
     end.
 
 %% Slot 1 defines the ontology's founding truth and is necessarily one content
@@ -1677,7 +1777,7 @@ founding_payload(Data) ->
     end.
 
 -ifdef(TEST).
-test_read_founding(Ns, Config) -> read_founding(Ns, Config).
+test_read_founding(Ns, Deadline) -> read_founding(Ns, Deadline).
 -endif.
 
 empty_founding() -> #{handlers => [], reactions => []}.

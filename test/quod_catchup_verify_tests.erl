@@ -489,7 +489,7 @@ implicit_entries(Domain, C) ->
        #implicit_cert{support = Support, child = Child, commit = Commit}),
      quod_ledger:entry(Child, Commit)}.
 
-%%%--- catch_up/4 driver (mocked Fetch/Sink — no transport/store) ---
+%%%--- catch_up/5,/7 driver (mocked transport, real writer snapshots) ---
 
 %% a Fetch serving a pre-built Chain (entries 1..H) in windows of W; From > H ⇒ empty.
 mock_fetch(Chain, W) ->
@@ -510,13 +510,101 @@ sunk() ->
     lists:reverse(get(sink)).
 
 catchup_options() ->
-    Unique = integer_to_list(erlang:unique_integer([positive, monotonic])),
+    Unique = binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8))),
     #{ledger_root => filename:join(
                         "/tmp", "quod_catchup_verify_" ++ Unique)}.
 
 run_catch_up(GenesisHash, Fetch, Sink) ->
-    quod_catchup:catch_up(
-      ?NS, GenesisHash, Fetch, Sink, catchup_options()).
+    with_disk_sink(GenesisHash, [], Sink,
+      fun(DurableSink, _View, Options) ->
+          quod_catchup:catch_up(
+            ?NS, GenesisHash, Fetch, DurableSink, Options)
+      end).
+
+with_disk_sink(GenesisHash, Prefix, Sink, Fun) ->
+    Options = #{ledger_root := Scratch} = catchup_options(),
+    %% Intentionally different from scratch: the backfill must consume the
+    %% captured writer session, not reconstruct a path from its output root.
+    LedgerRoot = Scratch ++ "-ledger",
+    Key = make_ref(),
+    {ok, Empty} = quod_ledger_store:open(?NS, LedgerRoot),
+    put(Key, Empty),
+    try
+        {ok, Store} = quod_ledger_store:append(Empty, Prefix),
+        put(Key, Store),
+        Identity = {?NS, GenesisHash},
+        Projection0 = quod_simplex:history_projection(Identity),
+        Projection = case Prefix of
+            [] -> Projection0;
+            _ ->
+                {ok, Prefix, VerifiedProjection} = quod_catchup:verify_forward(
+                    ?NS, GenesisHash, Projection0, 1, Prefix),
+                VerifiedProjection
+        end,
+        View = sink_view(Store, Identity, Projection),
+        DurableSink = fun(Entries, Projection1) ->
+            case Sink(Entries, Projection1) of
+                ok ->
+                    {ok, Next} = quod_ledger_store:append(get(Key), Entries),
+                    put(Key, Next),
+                    {ok, sink_view(Next, Identity, Projection1)};
+                {error, _} = Error -> Error
+            end
+        end,
+        Fun(DurableSink, View, Options)
+    after
+        quod_ledger_store:close(erase(Key)),
+        _ = file:del_dir_r(Scratch),
+        _ = file:del_dir_r(LedgerRoot)
+    end.
+
+sink_view(Store, Identity, Projection) ->
+    Height = quod_ledger_store:last(Store),
+    #{owner => self(), identity => Identity, slot => Height, applied => Height,
+      snapshot => quod_ledger_store:snapshot(Store), projection => Projection}.
+
+phase_backfill_uses_sink_snapshot_not_scratch_path_test() ->
+    C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
+    Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
+    Finalize = direct_abort_entry(258, C),
+    Chain = Prefix ++ [Finalize],
+    %% The first DTX control arrives after successful content-only sink turns;
+    %% its phase backfill uses the view returned with the preceding sink.
+    ?assertEqual({ok, 258}, run_catch_up(GH, mock_fetch(Chain, 128), sink())),
+    ?assertEqual(Chain, sunk()).
+
+resumed_phase_backfill_uses_initial_owner_snapshot_test() ->
+    C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
+    Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
+    Finalize = direct_abort_entry(258, C),
+    with_disk_sink(GH, Prefix, sink(),
+      fun(Sink, View = #{projection := Projection}, Options) ->
+          ?assertEqual({ok, 258}, quod_catchup:catch_up(
+              ?NS, GH, mock_fetch(Prefix ++ [Finalize], 128), Sink,
+              258, Projection, Options#{history_view => View})),
+          ?assertEqual([Finalize], sunk()),
+          ?assertEqual({error, bad_catchup_options}, quod_catchup:catch_up(
+              ?NS, GH, fun(_) -> error(mismatched_view_fetched) end, Sink,
+              258, Projection, Options#{history_view => View#{slot => 256}}))
+      end).
+
+direct_abort_entry(Slot, C) ->
+    Target = {?NS, genesis_hash(C)},
+    {Pub, _} = author(),
+    {ok, {?NS, _, Admission}} = quod_simplex:history_binding(
+                                  Target, Pub, projection_after_genesis(C)),
+    {ok, DecisionRef} = quod_dtx:certified_ref(
+        <<"foreign-origin">>, <<60:256>>, 7, <<61:256>>, <<62:256>>, <<"qc">>),
+    {ok, Record} = quod_dtx:new_finalize(<<63:256>>, DecisionRef, abort, none, 0),
+    {ok, Control} = quod_dtx:sign_control(Target, Record, Admission, 1, 1,
+                                         signer(author())),
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Blob}]}, 0),
+    Hash = quod_simplex:block_hash(Block),
+    Shares = [quod_simplex:make_share(domain(C), commit, Slot, Hash, signer(M))
+              || M <- lists:sublist(C, 3)],
+    {ok, Cert} = quod_simplex:form_cert(domain(C), commit, Slot, Hash, Shares, pubs(C)),
+    quod_ledger:entry(Block, Cert).
 
 %% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
 gen_hash(#entry{index = 1, data = D}) ->
@@ -563,6 +651,156 @@ catch_up_committee_change_across_windows_test() ->
     Fetch = fun(1) -> {ok, [G, B2], 3}; (3) -> {ok, [B3], 3}; (_) -> {ok, [], 3} end,
     ?assertEqual({ok, 3}, run_catch_up(gen_hash(G), Fetch, Sink)),
     ?assertEqual([G, B2, B3], sunk()).
+
+catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    C4 = committee(4), G = genesis(pubs(C4)), GH = gen_hash(G),
+    {P5, _} = New = quod_identity:generate(), C5 = C4 ++ [New],
+    B2 = committed(2, admit_tx(P5, C4), C4, 3),
+    B3 = committed_in(domain(C4), 3, tx(3, C4), C5, 4),
+    Options = #{ledger_root := Scratch} = catchup_options(),
+    LedgerRoot = Scratch ++ "-writer",
+    StateKey = make_ref(), ViewsKey = make_ref(),
+    try
+        {ok, Store} = quod_ledger_store:open(?NS, LedgerRoot),
+        try
+            %% Use the actual sink callback and its actual same-turn capture,
+            %% not the disk fixture's handwritten echo of the input projection.
+            State0 = quod_simplex:test_state(
+                       #{ns => ?NS, genesis_hash => GH,
+                         consensus_domain => domain(C4), store => Store,
+                         eng => quod_simplex:eng_with_certs(0, []),
+                         sync => {pulling, self()}}),
+            put(StateKey, State0),
+            put(ViewsKey, []),
+            Sink = fun(Entries, VerifiedProjection) ->
+                From = {self(), make_ref()},
+                {keep_state, State1, Actions} = quod_simplex:running(
+                    {call, From},
+                    {sink_catchup, {recovery, self()}, Entries, VerifiedProjection},
+                    get(StateKey)),
+                put(StateKey, State1),
+                [{reply, From, {ok, View}}] =
+                    [A || {reply, F, _} = A <- Actions, F =:= From],
+                put(ViewsKey, [{VerifiedProjection, View} | get(ViewsKey)]),
+                {ok, View}
+            end,
+            Fetch = fun(1) -> {ok, [G, B2], 3};
+                       (3) -> {ok, [B3], 3}
+                    end,
+            ?assertEqual({ok, 3}, quod_catchup:catch_up(
+                                   ?NS, GH, Fetch, Sink, Options)),
+            [{Verified2, View2}, {Verified3, View3}] = lists:reverse(get(ViewsKey)),
+            lists:foreach(
+              fun({Verified, #{owner := Owner, projection := Published}}) ->
+                  ?assertEqual(self(), Owner),
+                  ?assertEqual(2, length(maps:get(committee_views, Verified))),
+                  ?assertEqual(1, length(maps:get(committee_views, Published))),
+                  ?assertNotEqual(Verified, Published),
+                  ?assertEqual(maps:get(history_head, Verified),
+                               maps:get(history_head, Published)),
+                  ?assertEqual(pubs(C5), quod_simplex:history_committee(Published))
+              end, [{Verified2, View2}, {Verified3, View3}]),
+            ?assertEqual(2, maps:get(slot, View2)),
+            ?assertEqual(3, maps:get(slot, View3)),
+            {3, DurableStore} = quod_simplex:test_committed_store(get(StateKey)),
+            ?assertEqual({ok, [G, B2, B3]},
+                         quod_ledger_store:read_range(DurableStore, 1, 3)),
+            %% The earlier writer acknowledgement remains a bounded prefix.
+            {ok, Reader} = quod_ledger_store:open_ro_snapshot(maps:get(snapshot, View2)),
+            try ?assertEqual(not_found, quod_ledger_store:read_at(Reader, 3))
+            after quod_ledger_store:close(Reader)
+            end
+        after
+            erase(StateKey), erase(ViewsKey),
+            quod_ledger_store:close(Store)
+        end
+    after
+        _ = file:del_dir_r(Scratch),
+        _ = file:del_dir_r(LedgerRoot)
+    end.
+
+recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Options = #{ledger_root := Root} = catchup_options(),
+    Ns = iolist_to_binary([<<"recovery:owner-death:">>,
+                          binary:encode_hex(crypto:strong_rand_bytes(8))]),
+    Anchor = crypto:hash(sha256, Ns),
+    Parent = self(),
+    {Endpoint, EndpointRef} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_catchup, Ns}),
+        Parent ! {blocked_recovery_endpoint, self()},
+        blocked_recovery_endpoint(Parent)
+    end),
+    try
+        receive {blocked_recovery_endpoint, Endpoint} -> ok
+        after 1000 -> error(recovery_endpoint_not_started)
+        end,
+        {Owner, OwnerRef} = spawn_monitor(fun() ->
+            {ok, Store} = quod_ledger_store:open(Ns, Root),
+            try
+                true = quod_reg:reg({quod_simplex, Ns}),
+                State0 = quod_simplex:test_state(
+                           #{ns => Ns, genesis_hash => Anchor, store => Store,
+                             ledger_root => maps:get(ledger_root, Options),
+                             eng => quod_simplex:eng_with_certs(0, []),
+                             sync => unconfirmed}),
+                %% The production tick arms the real monitored recovery worker.
+                {keep_state, State1, _Actions} =
+                    quod_simplex:running({timeout, tick}, tick, State0),
+                {pulling, Worker} = quod_simplex:test_sync(State1),
+                Parent ! {recovery_worker_started, self(), Worker},
+                recovery_capture_owner(State1)
+            after quod_ledger_store:close(Store)
+            end
+        end),
+        try
+            Worker = receive {recovery_worker_started, Owner, Pid} -> Pid
+                     after 1000 -> error(recovery_worker_not_started)
+                     end,
+            WorkerRef = monitor(process, Worker),
+            try
+                %% The fake transport boundary withholds the reply. This is
+                %% the worker's real pull/4 call, not a test-owned parked loop.
+                receive {recovery_pull_blocked, Worker, 1} -> ok
+                after 1000 -> error(recovery_worker_not_in_pull)
+                end,
+                ?assert(is_process_alive(Worker)),
+                exit(Owner, kill),
+                receive {'DOWN', WorkerRef, process, Worker, killed} -> ok
+                after 1000 -> error(recovery_worker_outlived_owner)
+                end
+            after
+                demonitor(WorkerRef, [flush]),
+                exit(Worker, kill)
+            end
+        after
+            exit(Owner, kill),
+            receive {'DOWN', OwnerRef, process, Owner, _} -> ok after 1000 -> ok end
+        end
+    after
+        exit(Endpoint, kill),
+        receive {'DOWN', EndpointRef, process, Endpoint, _} -> ok after 1000 -> ok end,
+        _ = file:del_dir_r(Root)
+    end.
+
+blocked_recovery_endpoint(Parent) ->
+    receive
+        {'$gen_call', From, contact} ->
+            gen:reply(From, {"127.0.0.1", 19000}),
+            blocked_recovery_endpoint(Parent);
+        {'$gen_call', {Worker, _}, {pull, From, _To, _Contact, _Started}} ->
+            Parent ! {recovery_pull_blocked, Worker, From},
+            blocked_recovery_endpoint(Parent)
+    end.
+
+recovery_capture_owner(State) ->
+    receive
+        {'$gen_call', From, {history_view, _, _, _} = Request} ->
+            {keep_state, State1, Actions} = quod_simplex:running({call, From}, Request, State),
+            lists:foreach(fun({reply, To, Reply}) -> gen:reply(To, Reply) end, Actions),
+            recovery_capture_owner(State1)
+    end.
 
 %% A contact that REGRESSES its claimed height below what it already served is treated as stalled (the target
 %% is the MAX height seen), not falsely "caught up" — so the joiner fails over instead of truncating.

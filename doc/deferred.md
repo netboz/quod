@@ -65,13 +65,18 @@ vote, rebuild, and catch-up. Remaining, gated:
   refresh below), and rot-recovery stays Consul seeds + inbound headers + Brahms. The N=4 founding CT
   still pre-seeds its isolated loopback resolver so the sole creator can reach the three pinned joiners;
   this is transport setup, not a second genesis path.
-- **~~Catch-up/feed duplicated transport link bookkeeping~~ — DONE (`send` verb).**
+- **~~Catch-up/feed duplicated transport link bookkeeping~~ — historical `send` consolidation.**
   The copy-pasted per-endpoint `send`/`conns`/`outbox`/`link_up`/`link_error`/`DOWN` skeleton is GONE:
   the transport now exposes **`quod_quic:send/3`** (fire-and-forget send to a target on a channel), backed
   by a per-channel frame buffer in `quod_conn` (dial on demand, buffer until the link is up, flush, reuse —
   the connection owns the link lifecycle). `quod_catchup` and `quod_feed` dropped their
   link bookkeeping and just call `send/3`; peer-random selection reuses `quod_brahms:take_random/2` (promoted
   to public). Endpoints that must monitor the link themselves (Brahms, consensus) keep `open_link/2`.
+  **Phase-1A update (in progress, not deployed):** catch-up page requests now
+  need exact link-generation/credit ownership, not fire-and-forget delivery;
+  [the reviewed page-credit cut](catchup-page-credit-plan.md) replaces its
+  `send/3` use. Connection pooling and ordered sending remain transport-owned;
+  producer rows hold semantic requests, never a second encoded-frame outbox.
 - **Restarted-peer feed lag (~1–3 min) — DIAGNOSED; self-heals, fast-drop deferred.**
   A peer that restarts — even at the SAME address (a Nomad task restart keeps the port) — is not delivered to
   for ~1–3 min (reproduced: the reconnected node sits at its pre-restart slot while the founder climbs, then
@@ -200,7 +205,7 @@ stages, not carried forward:
 - **Join cold-start + trustless catch-up** — **DONE (Stage 3 / Simplex 4, S1–S5a):** the machinery
   (`quod_catchup`: persist each block's finalizing cert, an off-consensus catch-up server, the inductive
   forward-verifier, and the driver loop) plus the `mode=join` wiring in `quod_simplex`. A `mode=join` node
-  boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives `catch_up/4` from
+  boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives the shared catch-up driver from
   a sampled bootstrap contact, then reconciles a member against every available current-committee source:
   pull a window → `verify_forward` each cert against the committee it reconstructs → hand
   the verified window back to the statem (`sink_catchup`) to append + **replay into the KB as it lands** →
@@ -213,8 +218,9 @@ stages, not carried forward:
   `mode=join` node re-enters catch-up on EVERY boot (empty OR partial log) via the unified `start_sync_worker`,
   which RESUMES from the persisted height (`slot+1`, committee-as-of-that-slot) — so a crash/redeploy
   mid-catch-up never re-appends its on-disk prefix (the store's `assert_contiguous` would throw) nor treats a
-  partial log as complete (`maybe_mark_ready` stays gated on recovery reaching `ready`). `catch_up/6` is the resume entry
-  (skips the genesis anchor past slot 1). `is_participant/1` is now FACTS-ONLY, so a window that folds the
+  partial log as complete (`maybe_mark_ready` stays gated on recovery reaching `ready`). `catch_up/7` is the resume entry,
+  carrying the initial owner view (and checking genesis when resuming an empty prefix).
+  `catch_up/5` is the fresh-driver entry. `is_participant/1` is now FACTS-ONLY, so a window that folds the
   joiner's OWN pubkey does flip it to a participant — but the explicit recovery enum remains `unconfirmed` /
   `pulling` until distinct current-committee observations at the exact final height, together with self, form
   a certificate quorum. Only `ready` grants `may_vote`/`may_lead`. A raw `{ok,0}` from an empty/stale contact
@@ -323,9 +329,10 @@ stages, not carried forward:
   (3) *Erlang heavy-job kinds + non-coalescable jobs*: heavy jobs are Prolog goals against the
   newest snapshot, always coalescable; per-worker declarations arrive with the first real
   worker (world/mesh, client-world-direction.md). (4) *Founding read cost*:
-  `open_ro` rescans the whole log to read slot 1 (re-paid per runtime/KB
-  restart). This is now part of Performance Roadmap Phase 1A: runtime borrows
-  the live Simplex owner's immutable indexed snapshot and reads slot 1 exactly.
+  the former `open_ro` rescan to read slot 1 is removed in the uncommitted
+  Performance Roadmap Phase-1A cut: runtime borrows the live Simplex owner's
+  immutable indexed snapshot and reads slot 1 exactly. Owner unavailability
+  remains pending on registration/publication edges, not a disk fallback.
   Cold ontology restart without a live owner remains in the later certified
   snapshot/compaction work.
 - **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,

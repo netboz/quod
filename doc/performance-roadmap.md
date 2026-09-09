@@ -3,9 +3,17 @@
 **Status: proposed sequencing based on the measured 0.7.151 write anatomy.
 Claude confirmed the Phase-1A owner model and complete open-site inventory.
 The backtracking contract below preserves pinned proofs across ordinary
-appends. A2's per-link pressure recommendation requires the caller/transport
-closure in §3.3 before implementation; one active request per shared link is
-not an existing protocol invariant.
+appends. The architecture audit is recorded in §3.6. Claude has endorsed A2's
+single-producer page-credit grammar and lifecycle, and the original-budget
+capture correction in the page-credit plan §6.1. The A1/A2 code review is
+closed (1756/0 EUnit, both CT suites 26/26); the completed A1–A4 cut is
+reviewed and approved, with independently reproduced source gates (1799/0
+EUnit, both CT suites 26/26, xref and dialyzer). Commit, bump and coordinated
+development deployment for the Phase-1A hardware gate are authorized. This
+does not close the separate result-authentication design or authorize a
+release-safety claim. After-terminal quiet-source
+lag remains the explicit limitation in §6.2: consume-once progress alone does not
+guarantee eventual fetch, and the proposed feed-semantics change is deferred.
 Phase 1B's historical-committee shortcut was rejected as unsafe. The result
 commitment and recovery commitment remain design gates before F1. This
 document authorizes no implementation. Every behavioral phase requires
@@ -47,8 +55,8 @@ Every touched wait must therefore be classified in review:
 - **poll/retry clock** — periodically asks whether ordinary progress happened;
   forbidden and deleted rather than retuned.
 
-The current catch-up server's fixed-worker overflow is a direct violation: it
-silently drops an admitted request and makes the requester discover that fact
+The pre-cut catch-up server's fixed-worker overflow was a direct violation: it
+silently dropped an admitted request and made the requester discover that fact
 through its deadline. Phase 1A removes that behavior. The existing Simplex
 pacemaker/sync pacing is outside the ledger-view cut, but the Phase-2 finality
 review must prove that its timers are failure-detection/pacemaker clocks and
@@ -61,11 +69,11 @@ claim.
 
 | area | disposition | consequence |
 |---|---|---|
-| Phase 1A owner views and production open-site inventory | accepted | next implementation candidate after Claude review |
+| Phase 1A owner views and production open-site inventory | completed A1–A4 cut reviewed | commit/bump and development hardware gate authorized |
 | path-based foreign-cache replay | confirmed worse than linear across pages | one cold owner open, then session-based pages only |
 | fixed 32 catch-up workers with silent drop | rejected | replace at the existing link/owner with message-driven pressure and terminal replies, not another cap or unbounded spawn |
 | historical-committee identity shortcut | rejected as unsafe after committee replacement | retain latest-head/current-committee verification |
-| block-committed result receipts | direction accepted, computation contract incomplete | deployment stays blocked; F1 cannot freeze it yet |
+| block-committed result receipts | direction accepted, computation contract incomplete | release-safety claim stays blocked; the approved Phase-1A development measurement does not close this gate or let F1 freeze it |
 | snapshot/recovery commitment | three storage roles accepted, custody/root/install contract incomplete | F1 cannot freeze it yet and no pruning is authorized |
 
 ## 2. Phase 0 — measurement and correctness
@@ -113,8 +121,10 @@ reply can claim an unauthenticated status. Any Simplex/DTX correction returns
 to review before commit.
 
 Exit: these documents reviewed, and the result-authority defect closed or
-explicitly blocking deployment. Measurement spans stay only while later gates
-use them.
+explicitly blocking a release-safety claim. The completed-cut review expressly
+permits the Phase-1A development deployment and measurement with that defect
+carried openly, not repaired or waived. Measurement spans stay only while
+later gates use them.
 
 ## 3. Phase 1A — one live ledger-view architecture
 
@@ -142,8 +152,25 @@ the exact incarnation and requested readiness, then captures the immutable
 ledger session and its matching verified projection. Every live consumer uses
 that object. It contains the anchored identity, committed height, immutable
 session and matching projection; it contains no ledger path or raw file handle.
-The final API name is chosen during implementation; there must be one shape and
-one owner, not a forwarding compatibility layer.
+The A1 API in this cut is `history_view/3`, with the operation's original
+absolute deadline; there must be one shape and one
+owner, not a forwarding compatibility layer. Capture committed height and the
+owner's apply-sent frontier separately. Neither an apply-sent height nor the
+history projection proves that the Prolog MVCC store has acknowledged apply;
+existing application/visibility checks retain that job.
+
+Byte availability and execution readiness are different requirements on this
+same view. Boot and catch-up may borrow an already-verified committed prefix
+before Prolog replay completes; they must not require the readiness whose
+construction needs those bytes. Read-ready/validator consumers retain their
+existing stricter admission checks. This is one accessor with explicit
+requirements, not an alternate execution or verification path.
+
+For fresh recovery, `committed` can capture a zero-length prefix from an
+already-created writer with a pinned identity. No genesis is thereby verified
+and no read-ready/validator capability is granted; runtime founding remains
+pending until slot 1 exists. This removes the separate status-based recovery
+capture rather than creating a bootstrap-only history accessor.
 
 Current-era evidence uses `open_ro_snapshot/1` plus exact `read_at/2`. An
 older-era reference still uses the existing historical verifier because its
@@ -167,10 +194,18 @@ view, and reject replies belonging to a replaced worker or owner. Close each
 opened reader handle on termination; a session value itself owns no file
 descriptor and is simply discarded when no longer referenced.
 
-Snapshot refusal or owner death returns the existing typed unavailable result.
+Snapshot refusal or owner death returns the existing typed unavailable result
+at a live request boundary. Owner liveness is not certificate authority: losing
+an owner does not falsify an already-verified historical entry, and ordinary
+append does not invalidate its bounded snapshot. A stale owner reply cannot
+establish current readiness or replace a current publication. The existing
+request/job owner must handle the exact source incarnation's death while work
+is parked; checking liveness only before and after a blocking call is not a
+wake mechanism. Release that request through its existing cancellation and
+monitor path, without cancelling another caller's shared verification job.
 The existing route, monitor, committed-height, and projection messages wake
 the owning operation. Do not fall through to a path scan, poll, or delayed
-retry.
+retry, including an immediate self-message loop after an unsuccessful read.
 
 Owner unavailability is transient at live consumers. In particular, runtime
 founding must not translate `not_ready` or an owner replacement into a
@@ -180,7 +215,10 @@ runtime publication edges re-drive transient owner readiness.
 
 ### 3.2 Complete production sweep
 
-| current site | present behavior | required disposition |
+This table records the pre-cut defects and their required replacement; it is
+not a claim that deleted paths remain in the implementation candidate.
+
+| pre-cut site | pre-cut behavior | required disposition |
 |---|---|---|
 | `quod_simplex:operation_claim_evidence_at/5` and `transaction_evidence_at/5` | `open_ro` scans the complete hosted ledger for each result | use the one owner view, exact indexed read; delete both path-based helpers |
 | `quod_catchup:open_read_view/2` | uses an owner snapshot, but silently full-scans when the live owner is late or busy | live network serving requires the owner snapshot; return typed not-ready and let the caller use another certified route/event wake; delete the transparent fallback |
@@ -192,6 +230,30 @@ runtime publication edges re-drive transient owner readiness.
 | `quod_runtime:read_founding/2` | runtime reconciliation rescans the ledger to read slot 1 | use the same Simplex view and exact read; runtime cannot be healthy without that owner |
 | `quod_catchup:backfill_phase_index/5` | a recovery attempt semantically replays the already-sunk prefix when it first encounters DTX | classify as cold/gap recovery, not a live request. Open its input from an owner snapshot now; eliminate the semantic replay later with a certified recovery snapshot |
 | `quod_ontology:existing_ledger/2`, Simplex restore, first foreign-cache open | deliberately reconstruct state before the live owner/session exists | retain one named index reconstruction per cold owner recovery until compaction replaces prefix replay; the subsequent semantic fold must reuse that handle |
+
+**Recovery backfill source.** The ordinary `sink_catchup` acknowledgement now
+returns the same writer-turn immutable view after the verified window is
+appended. The driver carries that view to the next window; on its first DTX
+control, the phase index reads its prior prefix using `open_ro_snapshot`.
+The scratch root identifies only phase-index output, never input history.
+Initial resumed recovery captures the same `history_view/3`; there is no
+second snapshot/status accessor and no extra recapture between pages.
+
+The acknowledgement binds original owner PID, anchored identity, committed
+height and exact history head. It deliberately does not compare complete
+projection maps: the recovery verifier retains historical committee-era rows,
+whereas the live writer retains only the current era. The verifier continues
+with its own verified projection; the borrowed snapshot supplies bytes only.
+Preview → accepted sink → phase-delta commit remains unchanged.
+
+Recovery and feed-gap workers reuse `quod_process:kill_when_owner_dies/2`,
+already used by proof/coordinator workers, so losing the source terminates a
+worker even while it is blocked in a page pull. Feed sink and replay completion
+are pinned to that exact Simplex PID, never a replacement registration.
+Recovery capture retains its existing five-second operation budget; the feed's
+initial capture uses its existing pull-window budget, beginning before spawn.
+Individual fetch/sink windows keep their existing bounds; no new clock governs
+the entire multi-page recovery and no timeout starts another ordinary attempt.
 
 After the cut, production `open_ro` callers must be a short allowlist of named
 cold recovery owners plus explicit offline inspection. A source scan in a live
@@ -213,11 +275,12 @@ boundaries, not deployable compatibility stages:
    consume an immutable session. Convert network serving, co-hosted follow,
    foreign-cache replay and the existing materializer advance message; delete
    live fallback opens and raw-path materializer state. Delete the fixed
-   32-worker/silent-drop branch. Claude recommends serial read service per
-   authenticated link, with terminal busy/not-ready answers to excess
-   requests. Record that as the service direction, subject to the pressure
-   contract below: legitimate concurrent requests already share links, so
-   rejecting all but the first cannot be treated as a behavior-neutral fix.
+   32-worker/silent-drop branch. The reviewed direction is page credit on the
+   authenticated link: legitimate concurrent requests remain owned and parked,
+   rather than rejected as busy. The earlier busy-refusal recommendation was
+   withdrawn because request expiry does not cancel the server read and no
+   busy-clear message exists. The concrete wire grammar returns for review
+   before implementation (now approved in the page-credit plan).
    Keep waiting work at existing owners and wake it from completion/credit
    messages; no silent drop, timer retry, unbounded spawn, or duplicate queue.
 3. **A3 — local observers.** Convert runtime founding and Explorer to the same
@@ -226,12 +289,27 @@ boundaries, not deployable compatibility stages:
    branch. Runtime has no offline path.
 4. **A4 — closure.** Classify every remaining production path open as cold
    recovery, add a guard/sweep test, delete superseded helpers, comments,
-   metrics and tests, then run the hardware gate.
+   metrics and tests, then run the complete sequential source gates and return
+   the completed cut for review. Hardware follows that review and deployment
+   authority; it is not authorized by the A1/A2 checkpoint.
+
+**A3 deadline policy (approved by Yan).** Explorer receives a configurable
+30-second history-read deadline, captured at operation admission and shared by
+owner capture, indexed lookup and enrichment. It answers as soon as the read
+completes; expiration is terminal, never a poll or retry trigger. No live
+failure switches to a full disk scan. Cowboy's header/connection clocks are
+not this operation deadline, and the shared accessor does not gain `infinity`.
+Finalize enrichment remains available. Explicit `mode=offline` selects the
+existing stopped-ledger inspection, not a fallback from live owner failure.
+The deadline is checked before and after synchronous I/O and rendering; it
+refuses late results but cannot interrupt an operating-system read in flight.
+Handles close on completion or exception. It is not a promise that a stalled
+disk system call is forcibly interrupted at exactly 30 seconds.
 
 No intermediate slice adds a new route or authority; if an intermediate tree
 needs both source representations to compile, it is not committed.
 
-**A2 pressure closure.** A transport link and a logical pull are distinct.
+**A2 pressure closure (pre-cut diagnosis and approved replacement).** A transport link and a logical pull are distinct.
 `quod_catchup` accepts multiple pending pulls, and the foreign-history owner
 can run independent jobs through shared pinned links. The existing wire has
 only `{blocks_err, ReqId}`, which becomes `server_error` or `retry`; it has no
@@ -252,34 +330,53 @@ reviewed demand grammar used by every sender. No second scheduler/cache/owner
 or benchmark exception is authorized by this paragraph. The implementation
 review must close this contract rather than invent it at the busy call site.
 
-The concrete review candidate is a page grant on the existing authenticated
+The endorsed mechanism is a page grant on the existing authenticated
 catch-up link. Both producer owners retain unsent range/endpoint/deadline data
-in their existing pending rows. The link grants a send turn to exactly one
-registered owner at a time; owner interest is coalesced, not a second queue of
-requests. A received terminal page response carries the next grant. This
-paces serving while preserving multiple admitted logical operations. Before
-accepting the candidate, review these mandatory details:
+in their existing pending rows. A received terminal page response carries the
+next grant. This paces serving while preserving multiple admitted logical
+operations.
+
+The architecture audit found that the producers do not share a production
+link today: catch-up uses the ordinary or identified endpoint pool;
+foreign-history pages use the pinned endpoint pool. The simpler proposed contract
+therefore binds a link to one existing producer process, which services its
+own pending rows in order. No cross-producer ticket/offer/fairness scheduler is
+needed. Same-namespace/different-anchor foreign jobs still share that
+producer's link and queue correctly. Keep the connection pools unchanged.
+Claude's subsequent review explicitly endorsed this narrower contract in place
+of generic coalesced-interest arbitration.
+The concrete grammar is in
+[catchup-page-credit-plan.md](catchup-page-credit-plan.md); it must satisfy
+these mandatory review details:
 
 - initial and successor grants are unique, directional and bound to that
   authenticated link incarnation; a broadcast grant cannot be spent twice;
-- all senders use the same grant rule, and owner selection is fair. Request
-  state remains in existing producer rows, with monitor-based cleanup;
+- all senders use the same grant rule; one producer's pending rows cannot be
+  starved by repeated reuse of the link. Request state remains in those rows,
+  with monitor-based cleanup, not a duplicate link-owned request queue;
 - caller expiry/cancellation never mints a new grant while the old server read
   still exists; a terminal response or exact link teardown releases the turn;
 - the existing link reports ordered response acceptance asynchronously. Its
   synchronous `send_reliable` API cannot run inside a gen_server, and its
   drop-and-continue failure mode cannot let a next grant overtake a failed
-  page. One response-plus-grant frame or equivalent fail-closed ordering is
-  required, with one reader lifecycle through that acceptance;
+  page. The terminal page response itself returns the grant, with one reader
+  lifecycle through ordered acceptance; no separate acknowledgement round;
 - a peer exceeding its grant is rejected before application publication,
-  without an unbounded stream of busy replies. Prove that protocol-violation
-  reset plus existing transport buffering is sufficient, or couple receive
-  consumption to credit at the existing transport owners. Application grants
-  alone do not bound bytes already delivered into their mailboxes.
+  without an unbounded stream of busy replies. A credit violation is fatal to
+  that exact link before application publication. The accepted transport
+  posture is prompt reset plus the existing framing/buffering, not a change
+  to receive-credit accounting in the pinned QUIC fork. Application grants
+  do not claim a new absolute bound on bytes already delivered into mailboxes.
 
-This candidate changes the catch-up wire and admission contract, even though
+One grant per link is a protocol service invariant, not a population cap on
+logical requests, identities or proof workers. Pending ranges stay in their
+existing producer rows. Individual upstream verifier-caller detachment does
+not cancel the shared page job; only expiry/death of the immediate page owner
+tears down that exact page turn.
+
+This mechanism changes the catch-up wire and admission contract, even though
 it adds no ledger format or authority. It is a focused review item before A2,
-not an already-approved property of QUIC or a reason to implement a busy
+not an already-implemented property of QUIC or a reason to implement a busy
 exception in the proof engine.
 
 ### 3.4 Ownership after the cut
@@ -310,7 +407,10 @@ Required tests:
   different bytes at the same path and size; Phase 1 pins the current
   append-only/no-replacement premise, while Phase 4 must add store-owned
   generation binding before replacement exists;
-- owner absence/death returns `not_ready`, never stale evidence;
+- owner absence/death returns typed unavailability at the live boundary;
+  stale owner replies cannot establish a current view, and a parked request
+  is released by its existing owner/monitor path without waiting for a
+  before/after liveness check to run;
 - corrupt frames and identity/slot/id mismatches retain typed failures;
 - current and older-era live verification perform no path-only fallback open,
   resubmission, poll, or timer;
@@ -354,10 +454,17 @@ Re-entry into an already-selected ontology keeps the saved bindings and
 continuation and uses that scope's current staged overlay. Existing DTX
 generation/visibility-fence checks still determine whether that proof may
 return or commit. Do not replace those checks with latest-height equality.
-Likewise, read certification retains its admitted anchor/committee, and agent
-attestation checks the consulted OCC tokens; an unrelated later block must not
-cause a false refusal. Identity-certificate currency remains the separate
-current-committee verification described in §4.
+Likewise, read certification retains the sealed plan, its proof base and the
+committee admitted for that collection; agent attestation checks the consulted
+OCC tokens. The certificate's `AnchorRef` may name a later block at which the
+validators checked that same plan. If this quorum-selected anchor lies beyond
+the initially borrowed byte session, capture a sufficient committed byte view
+once from the same owner PID and exact anchored identity, then use the existing
+exact-reference verifier. Do not refresh the proof, change the committee or
+loop until a height appears. Insufficient verified votes cannot trigger that
+capture; an insufficient/replaced owner returns existing typed unavailability.
+An unrelated later block must not cause a false refusal. Identity-certificate
+currency remains the separate current-committee verification described in §4.
 
 Ordinary backtracking restores bindings, not database writes. The existing
 `transaction/1` is the explicit rollback boundary: it restores failed
@@ -398,8 +505,11 @@ scope fixtures and message barriers rather than sleeps:
    restored staged changes; strict read-only prerequisites still backtrack
    normally. Cuts neither release needed shared scopes nor trigger effects.
 4. Repeated sealing returns the same bytes; post-seal continuation/savepoint
-   commands remain rejected. A later append cannot replace an admitted read
-   certificate's anchor or invalidate an attestation whose OCC tokens match.
+   commands remain rejected. A later append cannot replace the admitted proof
+   base or invalidate an attestation whose OCC tokens match. Cover a valid
+   quorum selecting a later anchor: exactly one byte-view capture at the same
+   owner/identity, no new capture for an in-range anchor or invalid votes, and
+   refusal rather than recapture from a replacement process.
 5. Owner replacement, cancellation, and late replies close opened readers once
    and follow existing typed-error rules. Invocation cancellation discards its
    continuation without rolling back ordinary staged writes; whole-proof
@@ -407,6 +517,83 @@ scope fixtures and message barriers rather than sleeps:
 6. Trace evidence reads and proof redo/rollback together: zero full index scans,
    no new proof bases or per-choicepoint history fetch, and no leaked MVCC pins
    after durable handoff or final cancellation.
+
+### 3.6 Architecture conformance audit — 2026-09-08
+
+Read the current actor, distributed-proof, inter-ontology and subscription
+specifications together with the approved finality plan. Historical Raft and
+early content-layer sketches are not competing normative architectures;
+`content-layer-design.md` explicitly labels itself historical. This audit
+changes the plan, not production behavior, and does not waive the A2 wire or
+later current-view optimization reviews.
+
+| requirement and source | binding consequence for Phase 1A |
+|---|---|
+| Prolog owns policy and durable intent — actor architecture §§1, 3–4; distributed-proof §§2–4, 6 | no new Prolog execution, ACL, action, effect release or consensus path; the selected sealed plan and ordinary validators remain decisive |
+| One local and one foreign history owner — distributed-proof §§8–9 | one local `history_view/3` under the operation's original deadline; one retained foreign session/projection; borrowed sessions are capabilities to read bytes, never new certificate authority |
+| Root-first bootstrap — actor architecture §2; namespace-manager contract | committed bytes can precede Prolog readiness; no circular requirement that replay be ready before its own history can be read; no hosting/directory authority change |
+| Frozen scope and savepoint semantics — inter-ontology §4; distributed-proof §§4.1, 6 | ledger session, MVCC base, and overlay checkpoint remain distinct; a later certificate anchor does not refresh the proof or rerun Prolog |
+| Exact historical era versus current identity authority — distributed-proof §8; roadmap §4 | an old entry uses its certified slot-era committee; fresh identity checks still require the current committee; a route, wake or resident row never substitutes for either proof |
+| Owned cancellation and shared work — distributed-proof §4.2 and foreign verification caller-detach contract | gproc identifies the exact existing process; monitors/cancellation release its waiters; one caller's departure does not kill work another caller still needs |
+| Subscription state versus occurrences — inter-ontology §5; subscription plan | the existing follower/materializer retains the verified prefix; coalescing/rebuilds remain state-only and do not replay `react_on` occurrences |
+| Progress is event-driven — actor directory contract; roadmap §1.1 | no ordinary timeout discovery, busy retry or failed-read self-wake loop; credit, owner death, verified advance and route/property events are the wake sources |
+| One durable history; future pruning preserves obligations — finality plan §7.1; roadmap Phase 4 | no format change or compaction now; later generation replacement preserves borrowed sessions/MVCC pins and exact-reference/finality custody; no second ledger truth |
+
+Three concrete closure checks were exposed by this audit. They are required
+at existing owners, not grounds for adding infrastructure:
+
+1. An owner-liveness predicate alone cannot release historical verification
+   parked in a call with an infinite timeout. The existing borrowing
+   request/worker row monitors the view's exact source PID; `DOWN` retires that
+   borrow and returns typed unavailability, with worker cleanup at the existing
+   lane-release boundary. Prove queued and active cleanup, including an
+   untrappable owner kill and unrelated shared callers; do not claim that
+   before/after checks provide this guarantee.
+2. Foreign follow currently retains an advertised high hint after a failed
+   refresh. Its continuation must not repeatedly treat that unchanged hint as
+   new progress. Attempt permission is consume-once; the informational height
+   is not erased to conceal remaining work. The accepted Q2 matrix and Q3
+   capture-on-original-budget contract are in page-credit plan §6/§6.1. Recovery
+   within the real operation deadline completes that original request; after a
+   true terminal failure a quiet source may leave known lag until the next real
+   commit/restart/route/demand edge. This cut adopts that explicit boundary.
+   The alternative proposed ACK-on-verified plus anti-entropy resend is a
+   separate feed-semantics candidate requiring focused review, not authorized
+   A2 work. Current anti-entropy does not resend validator recipient wakes;
+   adding periodic retries conflicts with the standing no-progress-polling
+   rule. Exact advertised ACK heights, certified versus materialized floors,
+   and demand-only watches must be resolved by any future proposal (§6.2).
+3. Compaction cannot invalidate snapshots still needed by admitted proofs.
+   Preserve their store-owned generations until release, refuse accidental
+   attachment to replacement bytes, and keep volatile continuations out of
+   recovery snapshots. The contrary sentence in the height-latency plan is
+   corrected with this audit.
+
+The source audit also found two pre-existing documentation contradictions:
+the general content guide allowed plain remote reads from arbitrary copies,
+whereas distributed-proof §8 requires a certified current-validator route;
+and the old foreign-verification 32/4 capacity row contradicted §8's existing
+uncapped caller-owned queue. Correct those descriptions, not the implemented
+trust/admission rules. The catch-up 32-worker row was kept visible at that
+audit; A2 has now removed the branch and marked its capacity-table row as
+historical. The implementation is reviewed; deployment and hardware results
+must still be reported separately.
+
+### 3.7 Measurement and documentation closure
+
+**Source gate, 2026-09-09:** the completed, uncommitted A1–A4 tree at base
+`a300d51` passed a clean-build, sequential unsandboxed EUnit (1799/0),
+`quod_ask_SUITE` (26/26), `quod_quic_SUITE` (26/26), xref and dialyzer,
+all with exit 0 on the first run. Logs are
+`/tmp/quod-a1-a4-final-{eunit,ask,quic,xref,dialyzer}.log`.
+The production-AST inventory guard pins the remaining cold/offline opens;
+runtime and Explorer have no live path-open fallback. The runtime combined
+readiness-wake/queue-overflow regression also fails with the old overflow
+branch restored in an isolated test module. These are structural and local
+correctness results, not a measured write-latency improvement. Claude reproduced
+these gates on the fingerprint-matched tree and approved the complete cut for
+commit, bump and coordinated development deployment. The result-authentication
+design, Q4, Phase 1B, finality, L2 and compaction gates remain separate.
 
 N=4 gate: no evidence `index_scan` in live one-hop traces; evidence work flat
 through at least 10,000 entries; c1 p50 at most 300 ms. Measure c4, but its

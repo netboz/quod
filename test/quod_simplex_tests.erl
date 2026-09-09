@@ -2237,7 +2237,15 @@ dtx_catchup_complete_promotes_fifo_on_a_quiet_namespace_test() ->
               {call, SinkFrom},
               {sink_catchup, {recovery, self()}, [CompleteEntry], Projection},
               Pulling),
-        ?assert(lists:member({reply, SinkFrom, ok}, Actions)),
+        [{reply, SinkFrom, {ok, SinkView}}] =
+            [A || {reply, F, _} = A <- Actions, F =:= SinkFrom],
+        ?assertMatch(#{owner := _, slot := 3, projection := Projection}, SinkView),
+        {ok, SinkReader} = quod_ledger_store:open_ro_snapshot(
+                             maps:get(snapshot, SinkView)),
+        try ?assertEqual({ok, CompleteEntry},
+                         quod_ledger_store:read_at(SinkReader, 3))
+        after quod_ledger_store:close(SinkReader)
+        end,
         ?assertNot(lists:member(
                      {reply, IntentFrom, {accepted, Intent}}, Actions)),
         ?assertEqual(
@@ -2837,6 +2845,10 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
           history_head => {2, element(6, BeginRef)}},
     try
         undefined = quod_reg:where({quod_simplex, Ns}),
+        %% The test process owns Store1 and invokes the private owner turn.
+        %% Register that exact incarnation so the borrower exercises the same
+        %% liveness guard as a real Simplex recovery worker.
+        true = quod_reg:reg({quod_simplex, Ns}),
         Base0 = st(#{ns => Ns, genesis_hash => Anchor,
                      ledger_root => Dir, store => Store1, slot => 2,
                      self => Coordinator, validators => [Coordinator],
@@ -2848,21 +2860,26 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
                      history_head => {2, element(6, BeginRef)}}),
         Base = quod_simplex:test_install_projection(Projection, Base0),
         Recovering = quod_simplex:test_reconcile_dtx_coordinator(Base),
-        #{status := recovering, pid := Worker} =
-            maps:get(GroupId,
-                     quod_simplex:test_dtx_coordinator_state(Recovering)),
-        ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
-        receive
-            {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef,
-             {ok, #{phase := 'begin', control := BeginControl}}} ->
-                ok;
-            {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef, Other} ->
-                error({unexpected_begin_bootstrap_result, Other})
-        after 5000 ->
-            error(committed_begin_bootstrap_timeout)
-        end,
-        _ = quod_simplex:test_stop_dtx_coordinator(Recovering)
+        try
+            #{status := recovering, pid := Worker} =
+                maps:get(GroupId,
+                         quod_simplex:test_dtx_coordinator_state(Recovering)),
+            ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
+            receive
+                {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef,
+                 {ok, #{phase := 'begin', control := BeginControl}}} ->
+                    ok;
+                {dtx_coordinator_bootstrap, Worker, GroupId, BeginRef, Other} ->
+                    error({unexpected_begin_bootstrap_result, Other})
+            after 5000 ->
+                error(committed_begin_bootstrap_timeout)
+            end,
+            ?assertEqual(undefined, quod_reg:where({foreign_log, node}))
+        after
+            _ = quod_simplex:test_stop_dtx_coordinator(Recovering)
+        end
     after
+        _ = catch gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         quod_ledger_store:close(Store1),
         file:del_dir_r(Dir)
     end.
@@ -3156,50 +3173,67 @@ read_attest_observer_returns_typed_unavailable_without_signing_test() ->
          {read_attest, RequestId, PlanBlob},
          {read_plan_valid, Plan, Applied}, State)).
 
-history_source_role_requirement_is_checked_by_the_consensus_owner_test() ->
+history_view_role_and_readiness_are_checked_by_the_consensus_owner_test() ->
     Ns = <<"quod:history-role">>,
     Anchor = crypto:hash(sha256, <<1501:64>>),
     Self = crypto:hash(sha256, <<1502:64>>),
-    LedgerRoot = <<"/tmp/quod-history-role">>,
-    Base = quod_simplex:test_state(
-             #{ns => Ns, self => Self, genesis_hash => Anchor,
-               ledger_root => LedgerRoot, store => ready,
-               sync => ready, prolog_ready => true, validators => []}),
-    Identity = {Ns, Anchor},
-    ?assertEqual(
-       {ok, LedgerRoot},
-       quod_simplex:test_local_history_source(Identity, any, Base)),
-    ?assertEqual(
-       {error, read_certificate_unavailable},
-       quod_simplex:test_local_history_source(Identity, validator, Base)),
-    Validator = quod_simplex:test_state_set(validators, [Self], Base),
-    ?assertEqual(
-       {ok, LedgerRoot},
-       quod_simplex:test_local_history_source(
-         Identity, validator, Validator)),
-    CommitteeId = crypto:hash(sha256, <<1503:64>>),
-    Current = quod_simplex:test_state_set(
-                committee_id, CommitteeId,
-                quod_simplex:test_state_set(
-                  last_applied, 7,
-                  quod_simplex:test_state_set(slot, 8, Validator))),
-    ?assertEqual(
-       {ok, #{identity => Identity, slot => 7, generation => 0,
-              committee => [Self], committee_id => CommitteeId,
-              route_candidates => []}},
-       quod_simplex:test_local_history_current_view(
-         Identity, validator, Current)),
-    ?assertEqual(
-       {error, invalid_identity},
-       quod_simplex:test_local_history_current_view(
-         {Ns, crypto:hash(sha256, <<1504:64>>)}, validator, Current)),
-    ?assertEqual(
-       {error, read_certificate_unavailable},
-       quod_simplex:test_local_history_current_view(
-         Identity, validator,
-         quod_simplex:test_state_set(
-           last_applied, 7,
-           quod_simplex:test_state_set(slot, 8, Base)))).
+    Dir = relay_store_dir("history_role"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store} = quod_ledger_store:append(
+                    Store0, [entry(I, noop, 0) || I <- lists:seq(1, 8)]),
+    try
+        Identity = {Ns, Anchor},
+        Base = st(#{ns => Ns, self => Self, genesis_hash => Anchor,
+                    store => Store, slot => 8, last_applied => 7,
+                    sync => ready, prolog_ready => true, validators => []}),
+        ?assertMatch(
+           {ok, #{identity := Identity, slot := 8, applied := 7}},
+           quod_simplex:test_local_history_view(Identity, any, Base)),
+        ?assertEqual(
+           {error, read_certificate_unavailable},
+           quod_simplex:test_local_history_view(Identity, validator, Base)),
+        CommitteeId = crypto:hash(sha256, <<1503:64>>),
+        Current = quod_simplex:test_state_set(
+                    committee_id, CommitteeId,
+                    quod_simplex:test_state_set(validators, [Self], Base)),
+        {ok, View} = quod_simplex:test_local_history_view(
+                       Identity, validator, Current),
+        ?assertEqual(
+           [applied, identity, owner, projection, slot, snapshot],
+           lists:sort(maps:keys(View))),
+        ?assertMatch(
+           #{identity := Identity, slot := 8, applied := 7,
+             projection := #{committee := [Self], committee_id := CommitteeId}},
+           View),
+        ?assertEqual(self(), maps:get(owner, View)),
+        ?assertEqual(
+           {error, invalid_identity},
+           quod_simplex:test_local_history_view(
+             {Ns, crypto:hash(sha256, <<1504:64>>)}, validator, Current)),
+        Replaying = quod_simplex:test_state_set(prolog_ready, false, Current),
+        ?assertEqual({error, not_ready},
+                     quod_simplex:test_local_history_view(Identity, any, Replaying)),
+        ?assertMatch({ok, #{slot := 8}},
+                     quod_simplex:test_local_history_view(
+                       Identity, committed, Replaying)),
+        ?assertEqual({error, not_ready},
+                     quod_simplex:test_local_history_view(
+                       Identity, committed,
+                       quod_simplex:test_state_set(slot, 9, Current))),
+        %% The borrowed prefix remains bounded when the owner advances. Its
+        %% apply frontier and committee projection do not silently change.
+        {ok, _Store9} = quod_ledger_store:append(Store, [entry(9, noop, 0)]),
+        {ok, Reader} = quod_ledger_store:open_ro_snapshot(maps:get(snapshot, View)),
+        try
+            ?assertEqual(8, quod_ledger_store:last(Reader)),
+            ?assertEqual(not_found, quod_ledger_store:read_at(Reader, 9)),
+            ?assertEqual(7, maps:get(applied, View))
+        after quod_ledger_store:close(Reader)
+        end
+    after
+        quod_ledger_store:close(Store),
+        _ = file:del_dir_r(Dir)
+    end.
 
 read_attest_stale_token_refusal_remains_typed_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(

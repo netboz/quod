@@ -9,6 +9,7 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
+         tagged_catchup_open_preserves_pools/1,
          channel_stream_reset_isolated/1,
          ordered_send_waits_for_send_ready_fifo/1,
          connection_death_resolves_pending_waiters/1,
@@ -33,6 +34,7 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 -define(SELF, {"127.0.0.1", ?PORT}).
 
 all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
+          tagged_catchup_open_preserves_pools,
           channel_stream_reset_isolated,
           ordered_send_waits_for_send_ready_fifo,
           connection_death_resolves_pending_waiters,
@@ -106,8 +108,68 @@ open_link_succeeds(_Config) ->
         ct:fail(no_link_up)
     end.
 
-%% A payload sent on the outbound link arrives at the inbound link and is
-%% published on the channel property as {quod_message, {Peer, _}, Channel, _}.
+%% Real pooled catch-up streams use direct owner controls, not channel fanout.
+tagged_catchup_open_preserves_pools(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Ns = <<"catchup-credit-pools">>,
+    Channel = quod_catchup:channel(Ns),
+    true = quod_reg:reg({quod_catchup, Ns}),
+    true = quod_reg:subscribe({channel, Channel}),
+    ok = quod_quic:learn(Pub, ?SELF),
+    OrdinaryRef = quod_quic:open_link_tagged(Pub, Channel),
+    Ordinary = receive {link_up, OrdinaryRef, Pub, Channel, L0} -> L0
+               after 5000 -> ct:fail(no_tagged_ordinary_link) end,
+    ReuseRef = quod_quic:open_link_tagged(Pub, Channel),
+    receive {link_up, ReuseRef, Pub, Channel, Ordinary} -> ok
+    after 5000 -> ct:fail(tagged_open_did_not_reuse) end,
+    IdentifiedRef = quod_quic:open_link_identified(?SELF, Channel),
+    Identified = receive {link_up, IdentifiedRef, Pub, Channel, L1} -> L1
+                 after 5000 -> ct:fail(no_identified_credit_link) end,
+    PinnedRef = quod_quic:open_link_pinned_lease(Pub, ?SELF, Channel),
+    Pinned = receive {link_up, PinnedRef, Pub, Channel, L2} -> L2
+             after 5000 -> ct:fail(no_pinned_credit_link) end,
+    try
+        3 = length(lists:usort([Ordinary, Identified, Pinned])),
+        Binding = make_ref(),
+        ok = quod_link:bind_catchup(Ordinary, Binding),
+        Grant = receive {catchup_credit, Ordinary, Binding, G} -> G
+                after 5000 -> ct:fail(no_loopback_credit) end,
+        ReqId = <<60:128>>,
+        ok = quod_link:request_page(Ordinary, Binding, Grant, ReqId, 1, 1),
+        {ServingLink, Operation} =
+            receive {catchup_request, InLink, Op, 1, 1, StartedMs}
+                      when is_integer(StartedMs) -> {InLink, Op}
+            after 5000 -> ct:fail(no_direct_catchup_request) end,
+        ok = quod_link:test_fail_next_ordered(ServingLink, send_queue_full),
+        ok = quod_link:complete_page(ServingLink, Operation, {ok, [], 0}),
+        {ok, {Conn, Sid}} = quod_link:test_transport(ServingLink),
+        receive
+            {catchup_page_sent, ServingLink, Operation} -> ct:fail(premature_send_acceptance);
+            {catchup_page, Ordinary, _, _, _, _, _} -> ct:fail(page_overtook_refusal)
+        after 30 -> ok end,
+        {links, [ConnOwner]} = process_info(ServingLink, links),
+        ConnOwner ! {quic, Conn, {send_ready, Sid}},
+        receive {catchup_page_sent, ServingLink, Operation} -> ok
+        after 5000 -> ct:fail(no_page_send_acceptance) end,
+        Next = receive
+                   {catchup_page, Ordinary, Binding, Grant, ReqId, {ok, [], 0}, N} -> N
+               after 5000 -> ct:fail(no_loopback_page) end,
+        true = Next =/= Grant,
+        receive {quod_message, _, Channel, _} -> ct:fail(catchup_fanout_survived)
+        after 0 -> ok end,
+        Missing = <<255:256>>,
+        MissingRef = quod_quic:open_link_tagged(Missing, Channel),
+        receive {link_error, MissingRef, Missing, Channel} -> ok
+        after 5000 -> ct:fail(no_tagged_unresolved_error) end
+    after
+        quod_link:close(Ordinary),
+        quod_link:close(Identified),
+        quod_quic:release_link_pinned(Pub, ?SELF, Channel, PinnedRef),
+        quod_reg:unsubscribe({channel, Channel}),
+        gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+    end.
+
+%% Ordinary payloads still arrive through the existing channel property.
 message_roundtrip(_Config) ->
     true = quod_reg:subscribe({channel, <<"chan-b">>}),
     ok = quod_quic:open_link(?SELF, <<"chan-b">>),

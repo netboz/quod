@@ -132,6 +132,15 @@ the same UI at `/explorer`; after challenge-response login its backtracking
 console submits ordinary signed goals. Frontend source lives in `ui/`; its
 built bundle is committed under `priv/explorer/` — see `ui/README.md`.
 
+Explorer history uses the running ontology's committed snapshot. Stopped-ledger
+inspection requires `?mode=offline` on `/api/txs`, `/api/tx/:ns/:id`, or
+`/api/block/:ns/:slot`; it refuses a running ontology. Live-owner failure returns
+HTTP 503, never an automatic disk scan. `explorer.read_budget_ms` configures one
+read deadline (default 30 seconds), including WebSocket Finalize enrichment.
+Synchronous disk I/O is not forcibly interrupted: if it finishes after the
+deadline, the read is refused and its handle closed. This is not a hard bound on
+HTTP completion time.
+
 > #### `+Q` is not optional in a container {: .warning }
 >
 > The BEAM sizes its port table from `ulimit -n`. Container runtimes default

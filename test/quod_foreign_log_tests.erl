@@ -10,6 +10,286 @@
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
 
+page_credit_shares_pinned_binding_fifo_across_anchors_test() ->
+    Ns = unique_ns(),
+    A = foreign_fixture(Ns),
+    B = foreign_fixture(Ns),
+    Peer = maps:get(pub, A),
+    Endpoint = {"127.0.0.1", 32121},
+    Dir = temp_dir("page-credit-two-anchors"),
+    Pid = start_owner_opts(Dir, undefined, #{page_timeout_ms => 5000}),
+    Transport = start_page_test_transport(self()),
+    Parent = self(),
+    Link = spawn(fun() -> page_test_link(Parent) end),
+    try
+        First = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000}),
+        {Lease, Producer} = receive_page_open(Peer, Endpoint, Ns),
+        Second = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000}),
+        wait_page_pull_count(2, 2000),
+        ?assertEqual(1, maps:get(page_bindings, quod_foreign_log:stats())),
+        receive {page_test_open, _, _, _, _, _} -> error(duplicate_pinned_open)
+        after 0 -> ok
+        end,
+        Producer ! {link_up, Lease, Peer, quod_catchup:channel(Ns), Link},
+        Binding = receive {page_test_bound, Link, Producer, Ref} -> Ref
+                  after 1000 -> error(page_binding_not_installed)
+                  end,
+        Grant1 = crypto:strong_rand_bytes(16),
+        Producer ! {catchup_credit, Link, Binding, Grant1},
+        Req1 = receive_page_request(Link, Binding, Grant1),
+        %% Both callers are admitted, but only the head may spend one credit.
+        ?assertEqual(2, maps:get(pulls, quod_foreign_log:stats())),
+        receive {page_test_request, Link, _, _, _, _, _, _} -> error(second_page_spent_same_credit)
+        after 0 -> ok
+        end,
+        Grant2 = crypto:strong_rand_bytes(16),
+        Producer ! {catchup_page, Link, Binding, Grant1, Req1,
+                    {ok, fixture_entry_blobs(A), 2}, Grant2},
+        ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(First, 3000)),
+        Req2 = receive_page_request(Link, Binding, Grant2),
+        Producer ! {catchup_page, Link, Binding, Grant2, Req2,
+                    {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+        ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(Second, 3000)),
+        ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0}, quod_foreign_log:stats()),
+        receive {page_test_release, Peer, Endpoint, _, {Producer, Lease}} -> ok
+        after 1000 -> error(final_page_lease_not_released)
+        end
+    after
+        Link ! close,
+        stop_owner(Pid),
+        stop_page_test_transport(Transport),
+        _ = file:del_dir_r(Dir)
+    end.
+
+page_credit_worker_death_resets_sent_page_and_rebinds_unsent_deadline_test() ->
+    Ns = unique_ns(),
+    A = foreign_fixture(Ns),
+    B = foreign_fixture(Ns),
+    Peer = maps:get(pub, A),
+    Endpoint = {"127.0.0.1", 32122},
+    Dir = temp_dir("page-credit-cancel-sent"),
+    Pid = start_owner_opts(Dir, undefined, #{page_timeout_ms => 5000}),
+    Transport = start_page_test_transport(self()),
+    Parent = self(),
+    Link1 = spawn(fun() -> page_test_link(Parent) end),
+    Link2 = spawn(fun() -> page_test_link(Parent) end),
+    try
+        First = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000}),
+        {Lease1, Pid} = receive_page_open(Peer, Endpoint, Ns),
+        Second = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000}),
+        wait_page_pull_count(2, 2000),
+        Pid ! {link_up, Lease1, Peer, quod_catchup:channel(Ns), Link1},
+        Binding = receive {page_test_bound, Link1, Pid, Ref} -> Ref
+                  after 1000 -> error(page_binding_not_installed)
+                  end,
+        Grant1 = crypto:strong_rand_bytes(16),
+        Pid ! {catchup_credit, Link1, Binding, Grant1},
+        Req1 = receive_page_request(Link1, Binding, Grant1),
+        Rows = gen_server:call(Pid, test_page_rows),
+        #{caller := PageOwner} = maps:get(Req1, Rows),
+        [{Req2, Unsent}] = maps:to_list(maps:remove(Req1, Rows)),
+        exit(PageOwner, kill),
+        ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+        {Lease2, Pid} = receive_page_open(Peer, Endpoint, Ns),
+        ?assert(Lease1 =/= Lease2),
+        ?assertNot(is_process_alive(Link1)),
+        ?assertEqual(#{Req2 => Unsent}, gen_server:call(Pid, test_page_rows)),
+        Pid ! {link_up, Lease2, Peer, quod_catchup:channel(Ns), Link2},
+        receive {page_test_bound, Link2, Pid, Binding} -> ok
+        after 1000 -> error(replacement_page_binding_not_installed)
+        end,
+        Grant2 = crypto:strong_rand_bytes(16),
+        Pid ! {catchup_credit, Link2, Binding, Grant2},
+        ?assertEqual(Req2, receive_page_request(Link2, Binding, Grant2)),
+        Pid ! {catchup_page, Link1, Binding, Grant1, Req1,
+               {ok, fixture_entry_blobs(A), 2}, crypto:strong_rand_bytes(16)},
+        ?assertEqual(1, maps:get(pulls, quod_foreign_log:stats())),
+        ?assert(is_process_alive(Link2)),
+        Pid ! {catchup_page, Link2, Binding, Grant2, Req2,
+               {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
+        ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(Second, 3000)),
+        ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0}, quod_foreign_log:stats())
+    after
+        Link1 ! close,
+        Link2 ! close,
+        stop_owner(Pid),
+        stop_page_test_transport(Transport),
+        _ = file:del_dir_r(Dir)
+    end.
+
+page_credit_caller_timeout_does_not_cancel_shared_page_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 32123},
+    Ref = maps:get(ref, Fixture),
+    Dir = temp_dir("page-credit-caller-detach"),
+    Pid = start_owner_opts(Dir, undefined, #{page_timeout_ms => 5000}),
+    Transport = start_page_test_transport(self()),
+    Parent = self(),
+    Link = spawn(fun() -> page_test_link(Parent) end),
+    try
+        Short = gen_server:send_request(Pid, {verify, Peer, Endpoint, Ref, finalize, 30}),
+        {Lease, Pid} = receive_page_open(Peer, Endpoint, Ns),
+        Long = gen_server:send_request(Pid, {verify, Peer, Endpoint, Ref, finalize, 5000}),
+        ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+        Pid ! {link_up, Lease, Peer, quod_catchup:channel(Ns), Link},
+        Binding = receive {page_test_bound, Link, Pid, BRef} -> BRef
+                  after 1000 -> error(page_binding_not_installed)
+                  end,
+        Grant = crypto:strong_rand_bytes(16),
+        Pid ! {catchup_credit, Link, Binding, Grant},
+        ReqId = receive_page_request(Link, Binding, Grant),
+        ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Short, 2000)),
+        ?assertMatch(#{pending := 1, pulls := 1, page_bindings := 1}, quod_foreign_log:stats()),
+        ?assert(is_process_alive(Link)),
+        Pid ! {catchup_page, Link, Binding, Grant, ReqId,
+               {ok, fixture_entry_blobs(Fixture), 2}, crypto:strong_rand_bytes(16)},
+        ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(Long, 3000)),
+        ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0}, quod_foreign_log:stats())
+    after
+        Link ! close,
+        stop_owner(Pid),
+        stop_page_test_transport(Transport),
+        _ = file:del_dir_r(Dir)
+    end.
+
+page_credit_late_terminal_cannot_beat_queued_deadline_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 32124},
+    Dir = temp_dir("page-credit-late-result"),
+    Pid = start_owner_opts(Dir, undefined, #{page_timeout_ms => 300}),
+    Transport = start_page_test_transport(self()),
+    Parent = self(),
+    Link = spawn(fun() -> page_test_link(Parent) end),
+    try
+        Request = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000}),
+        {Lease, Pid} = receive_page_open(Peer, Endpoint, Ns),
+        Pid ! {link_up, Lease, Peer, quod_catchup:channel(Ns), Link},
+        Binding = receive {page_test_bound, Link, Pid, Ref} -> Ref
+                  after 1000 -> error(page_binding_not_installed)
+                  end,
+        Grant = crypto:strong_rand_bytes(16),
+        ReqId = begin Pid ! {catchup_credit, Link, Binding, Grant}, receive_page_request(Link, Binding, Grant) end,
+        #{deadline := Deadline} = maps:get(ReqId, gen_server:call(Pid, test_page_rows)),
+        ok = sys:suspend(Pid),
+        %% Queue a valid terminal before the timer message, but process both
+        %% only after expiry. Mailbox order cannot grant a new page budget.
+        Pid ! {catchup_page, Link, Binding, Grant, ReqId,
+               {ok, fixture_entry_blobs(Fixture), 2}, crypto:strong_rand_bytes(16)},
+        receive after max(0, Deadline - quod_time:mono_ms()) + 20 -> ok end,
+        ok = sys:resume(Pid),
+        ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Request, 2000)),
+        ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0}, quod_foreign_log:stats())
+    after
+        _ = catch sys:resume(Pid),
+        Link ! close,
+        stop_owner(Pid),
+        stop_page_test_transport(Transport),
+        _ = file:del_dir_r(Dir)
+    end.
+
+page_credit_cancelled_open_and_new_open_failure_leave_no_binding_test() ->
+    Ns = unique_ns(),
+    A = foreign_fixture(Ns),
+    B = foreign_fixture(Ns),
+    C = foreign_fixture(Ns),
+    Peer = maps:get(pub, A),
+    Endpoint = {"127.0.0.1", 32125},
+    Dir = temp_dir("page-credit-opening-failure"),
+    Pid = start_owner_opts(Dir, undefined, #{page_timeout_ms => 5000}),
+    Transport = start_page_test_transport(self()),
+    try
+        First = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000}),
+        {Lease1, Pid} = receive_page_open(Peer, Endpoint, Ns),
+        [#{caller := PageOwner}] = maps:values(gen_server:call(Pid, test_page_rows)),
+        exit(PageOwner, kill),
+        ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+        ?assertEqual(0, maps:get(page_bindings, quod_foreign_log:stats())),
+        Second = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000}),
+        {Lease2, Pid} = receive_page_open(Peer, Endpoint, Ns),
+        Third = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, C), finalize, 5000}),
+        wait_page_pull_count(2, 1000),
+        Pid ! {link_error, Lease1, Peer, quod_catchup:channel(Ns)},
+        ?assertMatch(#{pulls := 2, page_bindings := 1}, quod_foreign_log:stats()),
+        Pid ! {link_error, Lease2, Peer, quod_catchup:channel(Ns)},
+        ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Second, 1000)),
+        ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Third, 1000)),
+        ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0}, quod_foreign_log:stats()),
+        receive {page_test_open, _, _, _, _, _} -> error(open_failure_reopened_itself)
+        after 0 -> ok
+        end
+    after
+        stop_owner(Pid),
+        stop_page_test_transport(Transport),
+        _ = file:del_dir_r(Dir)
+    end.
+
+start_page_test_transport(Parent) ->
+    ?assertEqual(undefined, quod_reg:where({transport, node})),
+    {Pid, MRef} = spawn_monitor(fun() ->
+        true = quod_reg:reg({transport, node}),
+        Parent ! {page_test_transport_ready, self()},
+        page_test_transport_loop(Parent)
+    end),
+    receive {page_test_transport_ready, Pid} -> {Pid, MRef}
+    after 1000 -> error(page_test_transport_timeout)
+    end.
+
+page_test_transport_loop(Parent) ->
+    receive
+        {'$gen_cast', {open_link_pinned_lease, Peer, Endpoint, Chan, {Producer, Lease}}} ->
+            Parent ! {page_test_open, Peer, Endpoint, Chan, Producer, Lease},
+            page_test_transport_loop(Parent);
+        {'$gen_cast', {release_link_pinned, Peer, Endpoint, Chan, Lease}} ->
+            Parent ! {page_test_release, Peer, Endpoint, Chan, Lease},
+            page_test_transport_loop(Parent);
+        stop -> ok;
+        _ -> page_test_transport_loop(Parent)
+    end.
+
+stop_page_test_transport({Pid, MRef}) ->
+    Pid ! stop,
+    receive {'DOWN', MRef, process, Pid, _} -> ok
+    after 1000 -> exit(Pid, kill), error(page_test_transport_stop_timeout)
+    end.
+
+page_test_link(Observer) ->
+    receive
+        {observer, Parent} -> page_test_link(Parent);
+        {bind_catchup, Producer, Binding} ->
+            Observer ! {page_test_bound, self(), Producer, Binding},
+            page_test_link(Observer);
+        {request_page, Producer, Binding, Grant, ReqId, From, To} ->
+            Observer ! {page_test_request, self(), Producer, Binding, Grant, ReqId, From, To},
+            page_test_link(Observer);
+        close -> ok
+    end.
+
+receive_page_open(Peer, Endpoint, Ns) ->
+    Chan = quod_catchup:channel(Ns),
+    receive {page_test_open, Peer, Endpoint, Chan, Producer, Lease} -> {Lease, Producer}
+    after 2000 -> error(page_open_not_requested)
+    end.
+
+receive_page_request(Link, Binding, Grant) ->
+    receive {page_test_request, Link, _, Binding, Grant, ReqId, 1, 2} -> ReqId
+    after 2000 -> error(page_request_not_sent)
+    end.
+
+fixture_entry_blobs(Fixture) ->
+    [begin {ok, Blob} = quod_ledger:encode_entry(Entry), Blob end
+     || Entry <- maps:get(chain, Fixture)].
+
+wait_page_pull_count(Expected, Left) when Left > 0 ->
+    case maps:get(pulls, quod_foreign_log:stats()) of
+        Expected -> ok;
+        _ -> receive after 5 -> ok end, wait_page_pull_count(Expected, Left - 5)
+    end;
+wait_page_pull_count(Expected, _Left) -> error({page_pull_count_timeout, Expected}).
+
 required_references_is_exhaustive_test() ->
     A = {<<"a">>, key(1)},
     B = {<<"b">>, key(2)},
@@ -81,49 +361,50 @@ invalid_public_timeout_is_rejected_without_owner_test() ->
        quod_foreign_log:verify_reference(
          ref({<<"timeout">>, key(9)}, 1, 10), finalize, invalid)).
 
-resident_projection_reuses_verified_frontier_and_phase_index_test() ->
-    Identity = {<<"resident">>, key(8)},
-    Committee = [key(9)],
-    CommitteeId = key(10),
-    Projection = (quod_simplex:history_projection(Identity))#{
-                   committee => Committee,
-                   committee_id => CommitteeId,
-                   committee_views =>
-                       [{1, Committee, CommitteeId, #{}}],
-                   history_head => {7, key(11)}},
-    Checkpoint = maps:remove(committee_views, Projection),
-    Resident = {verified, 7, Projection, phase_session},
-    ?assertEqual(
-       {ok, Projection, Projection},
-       quod_foreign_log:test_resident_projection(
-         Resident, 7, Checkpoint, 7, Identity)),
-    ?assertEqual(
-       {ok, Projection, undefined},
-       quod_foreign_log:test_resident_projection(
-         Resident, 7, Checkpoint, 8, Identity)),
-    %% A restart-loaded row or changed durable height must replay.  An exact
-    %% historical reference inside this owner's already-certified prefix does
-    %% not: the retained entry binds its slot/hash/digest and committee-era
-    %% routing metadata comes from this resident projection. An unfinished DTX
-    %% group likewise keeps using the phase index suspended with that projection.
-    ?assertEqual(
-       replay,
-       quod_foreign_log:test_resident_projection(
-         none, 7, Checkpoint, 7, Identity)),
-    ?assertEqual(
-       replay,
-       quod_foreign_log:test_resident_projection(
-         Resident, 8, Checkpoint, 7, Identity)),
-    ?assertEqual(
-       {ok, Projection, Projection},
-       quod_foreign_log:test_resident_projection(
-         Resident, 7, Checkpoint, 3, Identity)),
-    Pending = Projection#{dtx_pending => {pending, key(99)}},
-    ?assertEqual(
-       {ok, Pending, undefined},
-       quod_foreign_log:test_resident_projection(
-         {verified, 7, Pending, phase_session},
-         7, maps:remove(committee_views, Pending), 8, Identity)).
+restart_checkpoint_projection_mismatch_refetches_certified_prefix_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Ref = maps:get(ref, Fixture),
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31979},
+    Dir = temp_dir("checkpoint-projection-mismatch"),
+    BaseFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    Pid = start_owner(Dir, BaseFetch),
+    try
+        ?assertMatch({ok, #{identity := Identity, phase := finalize}},
+                     quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000))
+    after
+        stop_owner(Pid)
+    end,
+    CacheNs = quod_foreign_log:cache_namespace(Identity),
+    Path = filename:join(quod_ledger_store:ns_dir(Dir, CacheNs), "checkpoint.term"),
+    {ok, Blob} = file:read_file(Path),
+    Checkpoint = binary_to_term(Blob, [safe]),
+    Projection = element(7, Checkpoint),
+    %% Keep a structurally valid checkpoint with the same identity and height.
+    %% Only replaying its certified ledger reveals that its timestamp differs;
+    %% disk presence must not manufacture a warm verified-session authority.
+    ForgedProjection = Projection#{timestamp := maps:get(timestamp, Projection) + 1},
+    ?assert(quod_foreign_log:valid_projection(ForgedProjection, Identity)),
+    ok = file:write_file(Path, term_to_binary(setelement(7, Checkpoint, ForgedProjection))),
+    Parent = self(),
+    Fetch = fun(P, E, RequestedNs, From, To) ->
+                Parent ! {checkpoint_mismatch_refetch, From},
+                BaseFetch(P, E, RequestedNs, From, To)
+            end,
+    Pid2 = start_owner(Dir, Fetch),
+    try
+        ?assertMatch({ok, #{identity := Identity, phase := finalize}},
+                     quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        receive {checkpoint_mismatch_refetch, 1} -> ok
+        after 1000 -> error(inconsistent_checkpoint_was_trusted)
+        end,
+        ?assertEqual({2, Projection}, cache_checkpoint(Dir, Identity))
+    after
+        stop_owner(Pid2),
+        _ = file:del_dir_r(Dir)
+    end.
 
 dtx_batch_projection_keeps_each_controls_changes_separate_test() ->
     FirstOps = [{assert, {{first_control, one}, true}}],
@@ -194,8 +475,8 @@ warm_exact_and_current_reuse_one_verified_phase_session_test() ->
         ok = atomics:put(Mode, 1, 3),
         ?assertMatch(
            {ok, #{identity := Identity, slot := 2}},
-           quod_foreign_log:verify_current(
-             route_candidates([{Peer, Endpoint}]), Ref, 5000)),
+           quod_foreign_log:current(
+             route_candidates([{Peer, Endpoint}]), {Ns, maps:get(anchor, Fixture)}, 5000)),
         ?assert(atomics:get(Mode, 2) > 0),
         ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
     after
@@ -446,7 +727,7 @@ current_view_trace_crosses_owner_and_worker_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-resident_current_reference_uses_same_height_wake_without_fetch_test() ->
+resident_current_after_exact_uses_same_height_wake_without_fetch_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
@@ -472,8 +753,11 @@ resident_current_reference_uses_same_height_wake_without_fetch_test() ->
     Link = spawn(fun() -> fake_feed_link(TestPid) end),
     try
         ?assertMatch(
+           {ok, #{phase := finalize}},
+           quod_foreign_log:verify_reference(Ref, finalize, {Peer, Endpoint}, 5000)),
+        ?assertMatch(
            {ok, #{identity := Identity, slot := 2}},
-           quod_foreign_log:verify_current(Routes, Ref, 5000)),
+           quod_foreign_log:current(Routes, {Ns, maps:get(anchor, Fixture)}, 5000)),
         [SessionFile] = phase_session_files(Dir, Identity),
         flush_resident_current_reference_fetches(),
 
@@ -493,7 +777,7 @@ resident_current_reference_uses_same_height_wake_without_fetch_test() ->
         ok = atomics:put(Mode, 1, 2),
         ?assertMatch(
            {ok, #{identity := Identity, slot := 2}},
-           quod_foreign_log:verify_current(Routes, Ref, 5000)),
+           quod_foreign_log:current(Routes, {Ns, maps:get(anchor, Fixture)}, 5000)),
         ?assertEqual([], collect_resident_current_reference_fetches([])),
         ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
     after
@@ -806,7 +1090,7 @@ inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
         ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
         ?assertEqual(1, maps:get(resident_verified,
                                 quod_foreign_log:stats())),
-        ?assertEqual(0, maps:get(channels, quod_foreign_log:stats())),
+        ?assertEqual(0, maps:get(page_bindings, quod_foreign_log:stats())),
         stop_owner(Pid1),
 
         %% Restart does not scan or materialize dormant caches. The next
@@ -821,7 +1105,7 @@ inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
             ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
             ?assertEqual(1, maps:get(resident_verified,
                                     quod_foreign_log:stats())),
-            ?assertEqual(0, maps:get(channels, quod_foreign_log:stats()))
+            ?assertEqual(0, maps:get(page_bindings, quod_foreign_log:stats()))
         after
             stop_owner(Pid2)
         end
@@ -841,11 +1125,12 @@ byte_large_verified_cache_reopens_through_canonical_pages_test() ->
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(
                      Store0, maps:get(chain, Fixture)),
+    Snapshot = quod_ledger_store:snapshot(Store1),
     ok = quod_ledger_store:close(Store1),
     Fetch =
         fun(_RoutePeer, _RouteEndpoint, RequestedNs, From, To)
               when RequestedNs =:= Ns ->
-                quod_catchup:serve_blocks(Ns, SourceDir, From, To);
+                quod_catchup:serve_blocks(Ns, Snapshot, From, To);
            (_RoutePeer, _RouteEndpoint, _RequestedNs, _From, _To) ->
                 {error, wrong_namespace}
         end,
@@ -1017,8 +1302,8 @@ authenticated_live_endpoint_precedes_certified_history_with_fallback_test() ->
              Identity, [{Peer, [Supplied]}])),
         ?assertMatch(
            {ok, #{identity := Identity}},
-           quod_foreign_log:verify_current(
-             [{Peer, [Live, Historical]}], Ref, 5000)),
+           quod_foreign_log:current(
+             [{Peer, [Live, Historical]}], {Ns, maps:get(anchor, Fixture)}, 5000)),
         Calls = collect_route_rotation_fetches([]),
         ?assert(lists:member(Live, Calls)),
         ?assert(lists:member(Historical, Calls))
@@ -1033,7 +1318,6 @@ cross_key_live_endpoint_cannot_displace_certified_fallback_test() ->
     Identity = {Ns, maps:get(anchor, Fixture)},
     Old = maps:get(pub, Fixture),
     New = maps:get(new_pub, Fixture),
-    Ref = maps:get(ref, Fixture),
     OldEndpoint = {"127.0.0.1", 19000},
     NewEndpoint = {"127.0.0.1", 19101},
     Initial = route_candidates(
@@ -1056,7 +1340,7 @@ cross_key_live_endpoint_cannot_displace_certified_fallback_test() ->
     try
         ?assertMatch(
            {ok, #{committee := [_, _]}},
-           quod_foreign_log:verify_current(Initial, Ref, 5000)),
+           quod_foreign_log:current(Initial, {Ns, maps:get(anchor, Fixture)}, 5000)),
         %% A live hint may be stale or wrongly associated. It is tried only
         %% under Old's key and cannot remove Old's certified address.
         quod_foreign_log:observe_candidate(
@@ -1070,7 +1354,7 @@ cross_key_live_endpoint_cannot_displace_certified_fallback_test() ->
            proplists:get_value(New, Candidates)),
         ?assertMatch(
            {ok, #{committee := [_, _]}},
-           quod_foreign_log:verify_current(Candidates, Ref, 5000)),
+           quod_foreign_log:current(Candidates, {Ns, maps:get(anchor, Fixture)}, 5000)),
         Calls = collect_cross_key_fetches([]),
         ?assert(lists:member({Old, NewEndpoint}, Calls)),
         ?assert(lists:member({Old, OldEndpoint}, Calls))
@@ -1101,7 +1385,6 @@ bootstrap_hints_preserve_current_committee_contacts_test() ->
     Identity = {Ns, maps:get(anchor, Fixture)},
     Old = maps:get(pub, Fixture),
     New = maps:get(new_pub, Fixture),
-    Ref = maps:get(ref, Fixture),
     OldHistorical = {"127.0.0.1", 19000},
     NewHistorical = {"127.0.0.1", 19101},
     OldLive = {"127.0.0.1", 19980},
@@ -1113,10 +1396,9 @@ bootstrap_hints_preserve_current_committee_contacts_test() ->
     try
         ?assertMatch(
            {ok, #{committee := [_, _]}},
-           quod_foreign_log:verify_current(
+           quod_foreign_log:current(
              route_candidates(
-               [{Old, OldHistorical}, {New, NewHistorical}]),
-             Ref, 5000)),
+               [{Old, OldHistorical}, {New, NewHistorical}]), {Ns, maps:get(anchor, Fixture)}, 5000)),
         quod_foreign_log:observe_candidate(Identity, {Old, OldLive}),
         quod_foreign_log:observe_candidate(Identity, {New, NewLive}),
         lists:foreach(
@@ -1647,6 +1929,83 @@ local_commit_progress_subscription_is_namespace_refcounted_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+follow_attempt_permission_is_consumed_without_erasing_known_lag_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 32131},
+    Mode = atomics:new(1, []),
+    BaseFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    Fetch = fun(P, E, N, F, T) ->
+                case atomics:get(Mode, 1) of
+                    0 -> BaseFetch(P, E, N, F, T);
+                    1 -> {error, not_ready}
+                end
+            end,
+    Dir = temp_dir("follow-consume-permission"),
+    Pid = start_owner(Dir, Fetch),
+    Parent = self(),
+    Link = spawn(fun() -> fake_feed_link(Parent) end),
+    Registration = crypto:strong_rand_bytes(16),
+    try
+        ?assertMatch({ok, _}, quod_foreign_log:verify(Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        atomics:put(Mode, 1, 1),
+        Token1 = make_ref(),
+        ok = gen_server:call(Pid, {test_hold_next_follow_worker, self(), Token1}),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        Worker1 = receive_follow_worker(Token1),
+        ok = quod_foreign_log:test_install_feed_registration(Pid, Identity, Peer, Link, Registration),
+        Registered = quod_feed:encode(Ns, {recipient_registered, 1, Registration, element(2, Identity), 3}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Registered},
+        ?assertMatch({ack, Registration, _, 3}, quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
+        Token2 = make_ref(),
+        ok = gen_server:call(Pid, {test_hold_next_follow_worker, self(), Token2}),
+        Wake = quod_feed:encode(Ns, {recipient_wake, 1, Registration, element(2, Identity), 4}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Wake},
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Wake},
+        ?assertMatch({ack, Registration, _, 4}, quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
+        _ = receive_fake_feed_send(Link, 1000),
+        Worker1 ! {release_follow_worker, Token1},
+        Worker2 = receive_follow_worker(Token2),
+        ?assertMatch(#{height := 2, hint := 4}, gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        Token3 = make_ref(),
+        ok = gen_server:call(Pid, {test_hold_next_follow_worker, self(), Token3}),
+        Worker2 ! {release_follow_worker, Token2},
+        wait_follow_attempt_idle(Pid, Identity, 2000),
+        ?assertEqual(2, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertMatch(#{height := 2, hint := 4, dirty := false, token := none},
+                     gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        %% Quiet same-PID recovery is not a new edge. An explicit caller
+        %% refresh may spend one attempt, but unchanged success cannot loop.
+        atomics:put(Mode, 1, 0),
+        ?assertEqual(2, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ok = quod_foreign_log:refresh(FollowRef),
+        Worker3 = receive_follow_worker(Token3),
+        Worker3 ! {release_follow_worker, Token3},
+        wait_follow_attempt_idle(Pid, Identity, 2000),
+        ?assertEqual(3, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertMatch(#{height := 2, hint := 4, dirty := false, token := none},
+                     gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        ok = quod_foreign_log:unfollow(FollowRef)
+    after
+        Link ! close,
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+receive_follow_worker(Token) ->
+    receive {follow_worker_held, Token, _RequestRef, Worker} -> Worker
+    after 2000 -> error(follow_worker_not_held)
+    end.
+
+wait_follow_attempt_idle(Pid, Identity, Left) when Left > 0 ->
+    case gen_server:call(Pid, {test_follow_attempt_state, Identity}) of
+        #{inflight := false, token := none} -> ok;
+        _ -> receive after 5 -> ok end, wait_follow_attempt_idle(Pid, Identity, Left - 5)
+    end;
+wait_follow_attempt_idle(_Pid, _Identity, _Left) -> error(follow_attempt_did_not_park).
+
 follow_wakes_coalesce_while_certified_work_is_inflight_test() ->
     Dir = temp_dir("follow-wake-coalesce"),
     Parent = self(),
@@ -2063,27 +2422,37 @@ verify_local_uses_exact_historical_projection_test() ->
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(
                      Store0, maps:get(chain, Fixture)),
+    Source = local_fixture_view(Store1, Fixture),
     ok = quod_ledger_store:close(Store1),
     NoNetwork = fun(_, _, _, _, _) -> {error, network_used} end,
     Pid = start_owner(CacheDir, NoNetwork),
     try
         {ok, Evidence} = quod_foreign_log:verify_local(
-                           SourceDir, Ref, finalize, 5000),
+                           Source, Ref, finalize, 5000),
         ?assertEqual(finalize, maps:get(phase, Evidence)),
         ?assertEqual(0, maps:get(generation, Evidence)),
         ?assertEqual(
            #{maps:get(pub, Fixture) => {"127.0.0.1", 19000}},
            maps:get(routes, Evidence))
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(CacheDir)
     end.
 
 verify_local_recovery_wait_has_no_caller_deadline_test() ->
-    Fixture = foreign_fixture(unique_ns()),
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
     Ref = maps:get(ref, Fixture),
     SourceDir = temp_dir("local-recovery-source"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(Store0, maps:get(chain, Fixture)),
+    FullView = local_fixture_view(Store1, Fixture),
+    FullProjection = maps:get(projection, FullView),
+    [CurrentEra | _] = maps:get(committee_views, FullProjection),
+    Source = FullView#{projection := FullProjection#{committee_views := [CurrentEra]}},
+    ok = quod_ledger_store:close(Store1),
     Parent = self(),
     Owner = spawn(
               fun() ->
@@ -2091,7 +2460,7 @@ verify_local_recovery_wait_has_no_caller_deadline_test() ->
                   Parent ! {owner_ready, self()},
                   receive
                       {'$gen_call', {Caller, Tag},
-                       {verify_local, SourceDir, Ref, finalize, infinity}} ->
+                       {verify_local, Source, Ref, finalize, infinity}} ->
                           Parent ! {recovery_waiting, self()},
                           receive release -> Caller ! {Tag, {error, retry}} end
                   end
@@ -2103,7 +2472,7 @@ verify_local_recovery_wait_has_no_caller_deadline_test() ->
                fun() ->
                    Parent ! {recovery_result, self(),
                              quod_foreign_log:verify_local(
-                               SourceDir, Ref, finalize, infinity)}
+                               Source, Ref, finalize, infinity)}
                end),
     try
         receive {recovery_waiting, Owner} -> ok after 1000 ->
@@ -2123,9 +2492,351 @@ verify_local_recovery_wait_has_no_caller_deadline_test() ->
             error(recovery_result_timeout)
         end
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         case is_process_alive(Owner) of true -> exit(Owner, kill); false -> ok end,
         case is_process_alive(Caller) of true -> exit(Caller, kill); false -> ok end,
         _ = file:del_dir_r(SourceDir)
+    end.
+
+verify_local_infinite_borrow_source_kill_retires_only_its_worker_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Ref = maps:get(ref, Fixture),
+    SourceDir = temp_dir("local-borrow-kill-source"),
+    CacheDir = temp_dir("local-borrow-kill-cache"),
+    RemoteGate = make_ref(),
+    Fetch = gated_local_borrow_fetch(Fixture, self(), RemoteGate),
+    Pid = start_owner(CacheDir, Fetch),
+    {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
+    try
+        Borrow = {Caller, Worker, WorkerMRef, RequestRef, _Token} =
+            hold_local_borrow(Pid, Source, Ref),
+        try
+            %% The public infinity call has a real admitted reader and one
+            %% source monitor. Distinct remote work must remain independent.
+            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
+            Remote = gen_server:send_request(
+                       Pid, {verify, maps:get(pub, Fixture),
+                             {"127.0.0.1", 19000}, Ref, finalize, 5000}),
+            ?assertMatch(#{pending := 1, queued := 1}, quod_foreign_log:stats()),
+            exit(SourcePid, kill),
+            ?assertEqual({error, retry}, receive_local_borrow_result(Caller)),
+            receive
+                {'DOWN', WorkerMRef, process, Worker, killed} -> ok
+            after 2000 -> error(local_borrow_reader_survived_source)
+            end,
+            RemoteWorker = receive
+                               {remote_borrow_worker_held, RemoteGate, W} -> W
+                           after 2000 -> error(independent_request_not_started)
+                           end,
+            try
+                ?assertNot(is_process_alive(Worker)),
+                ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid)),
+                %% A completion from the retired request cannot install a
+                %% result into the next writer for this same identity.
+                Pid ! {foreign_worker_done, RequestRef, {ok, stale},
+                       #{identity => {Ns, maps:get(anchor, Fixture)},
+                         height => 999, resident_verified => true}},
+                ?assertMatch(#{pending := 1, queued := 0,
+                               resident_verified := 0}, quod_foreign_log:stats()),
+                RemoteWorker ! {release_remote_borrow_worker, RemoteGate},
+                ?assertMatch({reply, {ok, #{phase := finalize}}},
+                             gen_server:wait_response(Remote, 3000)),
+                ?assertMatch(#{pending := 0, queued := 0, pulls := 0},
+                             quod_foreign_log:stats())
+            after
+                exit(RemoteWorker, kill)
+            end
+        after
+            stop_held_local_borrow(Borrow)
+        end
+    after
+        stop_local_borrow_source(SourcePid, SourceMRef),
+        stop_owner(Pid),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
+local_follow_capture_uses_original_operation_budget_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+    SourceDir = temp_dir("local-follow-capture-source"),
+    CacheDir = temp_dir("local-follow-capture-cache"),
+    Pid = start_owner_opts(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end,
+                           #{page_timeout_ms => 1000}),
+    {SourcePid, SourceMRef, _Source} = start_local_borrow_source(SourceDir, Fixture),
+    try
+        hold_source_capture(SourcePid),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        Deadline = receive {local_capture_held, SourcePid, D} -> D
+                   after 1000 -> error(local_capture_not_started)
+                   end,
+        %% This same live source remains busy beyond the removed independent
+        %% one-second cutoff, but within the existing three-second operation.
+        receive after 1100 -> ok end,
+        ?assert(Deadline > quod_time:mono_ms()),
+        ?assertMatch(#{inflight := true}, gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        SourcePid ! release_capture,
+        {_NoticeRef, {resnapshot, 3, _, _}} = receive_follow_resnapshot(FollowRef, Identity),
+        ?assertEqual(1, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assert(is_process_alive(SourcePid)),
+        ok = quod_foreign_log:unfollow(FollowRef)
+    after
+        stop_local_borrow_source(SourcePid, SourceMRef),
+        stop_owner(Pid),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
+local_follow_terminal_borrow_admission_expiry_keeps_lag_until_fresh_request_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    SourceDir = temp_dir("local-follow-expired-source"),
+    CacheDir = temp_dir("local-follow-expired-cache"),
+    InitialChain = lists:sublist(maps:get(chain, Fixture), 2),
+    Pid = start_owner_opts(CacheDir, chain_fetch(Ns, InitialChain),
+                           #{page_timeout_ms => 100}),
+    {SourcePid, SourceMRef, _Source} = start_local_borrow_source(SourceDir, Fixture),
+    Parent = self(),
+    Link = spawn(fun() -> fake_feed_link(Parent) end),
+    Registration = crypto:strong_rand_bytes(16),
+    try
+        %% A real current-view interest opens the feed path before a follow
+        %% exists, so ACKing H=3 records lag without creating a dirty attempt.
+        ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:current(
+                       route_candidates([{Peer, {"127.0.0.1", 19000}}]), Identity, 5000)),
+        ok = quod_foreign_log:test_install_feed_registration(Pid, Identity, Peer, Link, Registration),
+        Registered = quod_feed:encode(Ns, {recipient_registered, 1, Registration, element(2, Identity), 3}),
+        Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Registered},
+        ?assertMatch({ack, Registration, _, 3}, quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
+        hold_source_capture(SourcePid),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        Deadline = receive {local_capture_held, SourcePid, D} -> D
+                   after 1000 -> error(local_capture_not_started)
+                   end,
+        %% Capture completes inside budget, but borrower admission is delayed
+        %% at its existing owner. That queued call must not authorize a cache
+        %% read after the same operation's deadline has elapsed.
+        ok = sys:suspend(Pid),
+        SourcePid ! release_capture,
+        wait_queued_local_borrow(Pid, 500),
+        receive after max(0, Deadline - quod_time:mono_ms()) + 20 -> ok end,
+        ok = sys:resume(Pid),
+        wait_follow_attempt_idle(Pid, Identity, 2000),
+        ?assertMatch(#{height := 2, hint := 3, token := none, dirty := false},
+                     gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        %% A barrier through the same source proves it has really recovered.
+        ?assertMatch({ok, _}, quod_simplex:history_view(Identity, any, quod_time:mono_ms() + 1000)),
+        ?assertEqual(1, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertMatch(#{height := 2, hint := 3, token := none},
+                     gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        ok = quod_foreign_log:refresh(FollowRef),
+        wait_follow_attempt_idle(Pid, Identity, 2000),
+        ?assertMatch(#{height := 3}, gen_server:call(Pid, {test_follow_attempt_state, Identity})),
+        ok = quod_foreign_log:unfollow(FollowRef)
+    after
+        Link ! close,
+        _ = catch sys:resume(Pid),
+        stop_local_borrow_source(SourcePid, SourceMRef),
+        stop_owner(Pid),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
+wait_queued_local_borrow(Pid, Left) when Left > 0 ->
+    {messages, Messages} = process_info(Pid, messages),
+    case lists:any(fun({'$gen_call', _, {borrow_local_view, _, _}}) -> true;
+                      (_) -> false
+                   end, Messages) of
+        true -> ok;
+        false -> receive after 5 -> ok end, wait_queued_local_borrow(Pid, Left - 5)
+    end;
+wait_queued_local_borrow(_Pid, _Left) -> error(local_borrow_was_not_queued).
+
+hold_source_capture(SourcePid) ->
+    SourcePid ! {hold_capture, self()},
+    receive {local_capture_gate_ready, SourcePid} -> ok
+    after 1000 -> error(local_capture_gate_timeout)
+    end.
+
+verify_local_queued_infinite_borrow_source_kill_removes_its_row_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ref = maps:get(ref, Fixture),
+    SourceDir = temp_dir("local-queued-borrow-source"),
+    CacheDir = temp_dir("local-queued-borrow-cache"),
+    RemoteGate = make_ref(),
+    Pid = start_owner(CacheDir, gated_local_borrow_fetch(Fixture, self(), RemoteGate)),
+    {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
+    try
+        Remote = gen_server:send_request(
+                   Pid, {verify, maps:get(pub, Fixture),
+                         {"127.0.0.1", 19000}, Ref, finalize, 5000}),
+        RemoteWorker = receive
+                           {remote_borrow_worker_held, RemoteGate, W} -> W
+                       after 2000 -> error(remote_request_not_started)
+                       end,
+        try
+            Local = gen_server:send_request(
+                      Pid, {verify_local, Source, Ref, finalize, infinity}),
+            ?assertMatch(#{pending := 1, queued := 1}, quod_foreign_log:stats()),
+            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
+            exit(SourcePid, kill),
+            ?assertEqual({reply, {error, retry}},
+                         gen_server:wait_response(Local, 2000)),
+            ?assert(is_process_alive(RemoteWorker)),
+            ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid)),
+            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+            RemoteWorker ! {release_remote_borrow_worker, RemoteGate},
+            ?assertMatch({reply, {ok, #{phase := finalize}}},
+                         gen_server:wait_response(Remote, 3000)),
+            ?assertMatch(#{pending := 0, queued := 0, pulls := 0},
+                         quod_foreign_log:stats())
+        after
+            exit(RemoteWorker, kill)
+        end
+    after
+        stop_local_borrow_source(SourcePid, SourceMRef),
+        stop_owner(Pid),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
+verify_local_shared_borrow_caller_timeout_keeps_source_monitor_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ref = maps:get(ref, Fixture),
+    SourceDir = temp_dir("local-shared-borrow-source"),
+    CacheDir = temp_dir("local-shared-borrow-cache"),
+    Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
+    {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
+    try
+        Borrow = {Caller, Worker, _WorkerMRef, _RequestRef, Token} =
+            hold_local_borrow(Pid, Source, Ref),
+        try
+            Short = gen_server:send_request(
+                      Pid, {verify_local, Source, Ref, finalize, 20}),
+            %% Same-sender stats is an admission barrier for the short caller:
+            %% identical views share the held reader, not a second queue row.
+            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
+            ?assertEqual({reply, {error, retry}},
+                         gen_server:wait_response(Short, 2000)),
+            ?assert(is_process_alive(Worker)),
+            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
+            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+            Worker ! {release_local_worker, Token},
+            ?assertMatch({ok, #{phase := finalize}}, receive_local_borrow_result(Caller)),
+            ?assertMatch(#{pending := 0, queued := 0, pulls := 0},
+                         quod_foreign_log:stats()),
+            ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid))
+        after
+            stop_held_local_borrow(Borrow)
+        end
+    after
+        stop_local_borrow_source(SourcePid, SourceMRef),
+        stop_owner(Pid),
+        _ = file:del_dir_r(SourceDir),
+        _ = file:del_dir_r(CacheDir)
+    end.
+
+%% A separate registered source owns the real ledger snapshot. Removing old
+%% committee views forces the public verifier into its historical-owner path;
+%% the source can then be killed without relying on terminate/2 cleanup.
+start_local_borrow_source(Dir, Fixture) ->
+    Parent = self(),
+    {SourcePid, SourceMRef} = spawn_monitor(
+      fun() ->
+          {ok, Store0} = quod_ledger_store:open(maps:get(ns, Fixture), Dir),
+          {ok, Store} = quod_ledger_store:append(Store0, maps:get(chain, Fixture)),
+          FullView = local_fixture_view(Store, Fixture),
+          Projection = maps:get(projection, FullView),
+          [CurrentEra | _] = maps:get(committee_views, Projection),
+          View = FullView#{projection := Projection#{committee_views := [CurrentEra]}},
+          Parent ! {local_borrow_source, self(), View},
+          local_borrow_source_loop(View, none),
+          quod_ledger_store:close(Store)
+      end),
+    receive
+        {local_borrow_source, SourcePid, View} -> {SourcePid, SourceMRef, View};
+        {'DOWN', SourceMRef, process, SourcePid, Reason} ->
+            error({local_borrow_source_failed, Reason})
+    after 2000 ->
+        exit(SourcePid, kill),
+        error(local_borrow_source_timeout)
+    end.
+
+local_borrow_source_loop(View = #{identity := Identity}, Gate) ->
+    receive
+        {hold_capture, Parent} ->
+            Parent ! {local_capture_gate_ready, self()},
+            local_borrow_source_loop(View, Parent);
+        {'$gen_call', From, {history_view, Identity, any, Deadline}} ->
+            case Gate of
+                none -> ok;
+                Parent ->
+                    Parent ! {local_capture_held, self(), Deadline},
+                    receive release_capture -> ok end
+            end,
+            Reply = case Deadline > quod_time:mono_ms() of
+                        true -> {ok, View};
+                        false -> {error, timeout}
+                    end,
+            gen_statem:reply(From, Reply),
+            local_borrow_source_loop(View, none);
+        stop -> ok
+    end.
+
+stop_local_borrow_source(SourcePid, SourceMRef) ->
+    exit(SourcePid, kill),
+    receive {'DOWN', SourceMRef, process, SourcePid, _} -> ok
+    after 2000 -> error(local_borrow_source_stop_timeout)
+    end.
+
+hold_local_borrow(Pid, Source, Ref) ->
+    Token = make_ref(),
+    ok = gen_server:call(Pid, {test_hold_next_local_worker, self(), Token}),
+    Parent = self(),
+    Caller = spawn(fun() ->
+                       Parent ! {local_borrow_result, self(),
+                                 quod_foreign_log:verify_local(
+                                   Source, Ref, finalize, infinity)}
+                   end),
+    receive
+        {local_worker_held, Token, RequestRef, Worker} ->
+            WorkerMRef = erlang:monitor(process, Worker),
+            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+            {Caller, Worker, WorkerMRef, RequestRef, Token}
+    after 2000 ->
+        exit(Caller, kill),
+        error(local_borrow_worker_not_started)
+    end.
+
+stop_held_local_borrow({Caller, Worker, WorkerMRef, _RequestRef, _Token}) ->
+    exit(Caller, kill),
+    exit(Worker, kill),
+    _ = erlang:demonitor(WorkerMRef, [flush]),
+    ok.
+
+receive_local_borrow_result(Caller) ->
+    receive {local_borrow_result, Caller, Result} -> Result
+    after 3000 -> error(local_borrow_result_timeout)
+    end.
+
+local_borrow_monitor_count(Pid, SourcePid) ->
+    {monitors, Monitors} = process_info(Pid, monitors),
+    length([ok || {process, Target} <- Monitors, Target =:= SourcePid]).
+
+gated_local_borrow_fetch(Fixture, Parent, Token) ->
+    BaseFetch = chain_fetch(maps:get(ns, Fixture), maps:get(chain, Fixture)),
+    fun(Peer, Endpoint, Ns, From, To) ->
+        case put(Token, held) of
+            undefined ->
+                Parent ! {remote_borrow_worker_held, Token, self()},
+                receive {release_remote_borrow_worker, Token} -> ok end;
+            held -> ok
+        end,
+        BaseFetch(Peer, Endpoint, Ns, From, To)
     end.
 
 verify_local_reuses_current_committee_entry_without_history_owner_test() ->
@@ -2143,9 +2854,7 @@ verify_local_reuses_current_committee_entry_without_history_owner_test() ->
     SourceDir = temp_dir("resident-local-source"),
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(Store0, Chain),
-    Source = #{ledger_root => SourceDir,
-               snapshot => quod_ledger_store:snapshot(Store1),
-               projection => Projection},
+    Source = local_test_view(Store1, Projection),
     try
         %% No quod_foreign_log owner is running. Success therefore proves the
         %% current certified entry was read directly instead of replayed. The
@@ -2161,6 +2870,44 @@ verify_local_reuses_current_committee_entry_without_history_owner_test() ->
            {error, invalid_foreign_reference},
            verify_local_in_worker(Source, BadRef, transaction))
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+        quod_ledger_store:close(Store1),
+        _ = file:del_dir_r(SourceDir)
+    end.
+
+verify_local_newer_reference_remains_unavailable_test() ->
+    Fixture = long_identity_fixture(unique_ns(), 3),
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Identity = {Ns, Anchor},
+    [Genesis, Prior, #entry{data = {batch, [Transaction]}} = Newer] =
+        maps:get(chain, Fixture),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Newer, Transaction),
+    {ok, [Genesis, Prior], Projection} = quod_catchup:verify_forward(
+                                         Ns, Anchor,
+                                         quod_simplex:history_projection(Identity),
+                                         1, [Genesis, Prior]),
+    SourceDir = temp_dir("local-newer-reference"),
+    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
+    {ok, Store1} = quod_ledger_store:append(Store0, [Genesis, Prior]),
+    Source = local_test_view(Store1, Projection),
+    try
+        %% A valid future reference is unavailable, never invalid authority.
+        ?assertEqual({error, retry},
+                     quod_foreign_log:verify_local(Source, Ref, transaction, 5000)),
+        {ok, Store2} = quod_ledger_store:append(Store1, [Newer]),
+        %% An ordinary append leaves the original read capability bounded.
+        ?assertEqual({error, retry},
+                     quod_foreign_log:verify_local(Source, Ref, transaction, 5000)),
+        {ok, [Newer], Projection2} = quod_catchup:verify_forward(
+                                      Ns, Anchor, Projection, 3, [Newer]),
+        Current = Source#{slot := 3, applied := 3,
+                          snapshot := quod_ledger_store:snapshot(Store2),
+                          projection := Projection2},
+        ?assertMatch({ok, #{phase := transaction, transaction := Transaction}},
+                     quod_foreign_log:verify_local(Current, Ref, transaction, 5000))
+    after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         quod_ledger_store:close(Store1),
         _ = file:del_dir_r(SourceDir)
     end.
@@ -2197,9 +2944,7 @@ verify_local_reuses_current_committee_control_without_history_owner_test() ->
     SourceDir = temp_dir("resident-local-control-source"),
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(Store0, Chain),
-    Source = #{ledger_root => SourceDir,
-               snapshot => quod_ledger_store:snapshot(Store1),
-               projection => Projection},
+    Source = local_test_view(Store1, Projection),
     try
         %% The owning consensus projection already certifies this committee
         %% era. No foreign-history owner may be needed to read its exact
@@ -2209,9 +2954,37 @@ verify_local_reuses_current_committee_control_without_history_owner_test() ->
            {ok, #{phase := 'begin', control := Control, entry := _}},
            verify_local_in_worker(Source, Ref, 'begin'))
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         quod_ledger_store:close(Store1),
         _ = file:del_dir_r(SourceDir)
     end.
+
+local_fixture_view(Store, Fixture) ->
+    Ns = maps:get(ns, Fixture),
+    Anchor = maps:get(anchor, Fixture),
+    Chain = maps:get(chain, Fixture),
+    PhaseDir = temp_dir("local-fixture-phase-index"),
+    {ok, PhaseIndex} = quod_dtx_phase_index:open(PhaseDir, Ns),
+    try
+        {ok, Chain, Projection, _Delta} = quod_catchup:verify_forward(
+                                           Ns, Anchor,
+                                           quod_simplex:history_projection({Ns, Anchor}),
+                                           1, Chain, PhaseIndex),
+        local_test_view(Store, Projection)
+    after
+        ok = quod_dtx_phase_index:close(PhaseIndex),
+        _ = file:del_dir_r(PhaseDir)
+    end.
+
+%% These verifier-boundary fixtures stand in for the registered live owner;
+%% they do not run consensus or manufacture a second production view API.
+local_test_view(Store, Projection) ->
+    Ns = quod_ledger_store:namespace(Store),
+    true = quod_reg:reg({quod_simplex, Ns}),
+    Height = quod_ledger_store:last(Store),
+    #{owner => self(), identity => maps:get(target, maps:get(dtx, Projection)),
+      slot => Height, applied => Height,
+      snapshot => quod_ledger_store:snapshot(Store), projection => Projection}.
 
 verify_local_in_worker(Source, Ref, Phase) ->
     Caller = self(),
@@ -2266,9 +3039,7 @@ verify_local_current_entry_falls_back_for_historical_committee_test() ->
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(Store0, Chain),
     Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    Source = #{ledger_root => SourceDir,
-               snapshot => quod_ledger_store:snapshot(Store1),
-               projection => Projection},
+    Source = local_test_view(Store1, Projection),
     try
         %% Ref was certified by the former committee. The current projection
         %% must not be substituted; the existing historical verifier supplies
@@ -2278,6 +3049,7 @@ verify_local_current_entry_falls_back_for_historical_committee_test() ->
            quod_foreign_log:verify_local(
              Source, Ref, transaction, 5000))
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),
         quod_ledger_store:close(Store1),
         _ = file:del_dir_r(SourceDir),
@@ -2367,9 +3139,7 @@ verify_local_committee_shrink_never_relabels_historical_entry_test() ->
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(Store0, Chain),
     Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    Source = #{ledger_root => SourceDir,
-               snapshot => quod_ledger_store:snapshot(Store1),
-               projection => CurrentProjection},
+    Source = local_test_view(Store1, CurrentProjection),
     try
         ?assertMatch(
            {ok, #{phase := transaction,
@@ -2378,6 +3148,7 @@ verify_local_committee_shrink_never_relabels_historical_entry_test() ->
            quod_foreign_log:verify_local(
              Source, Ref, transaction, 5000))
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),
         quod_ledger_store:close(Store1),
         _ = file:del_dir_r(SourceDir),
@@ -2408,12 +3179,13 @@ foreign_projection_loads_genesis_pinned_predicates_test() ->
     CacheNs = <<"projection-cache:", Ns/binary>>,
     {ok, Store0} = quod_ledger_store:open(CacheNs, Root),
     {ok, Store1} = quod_ledger_store:append(Store0, [Entry]),
+    View = projection_test_view(Store1, {Ns, Anchor}, Entry),
     ok = quod_ledger_store:close(Store1),
     {Pid, MRef, Generation} = quod_foreign_projection:start_monitor(
-                                self(), {Ns, Anchor}, Root, CacheNs),
+                                self(), {Ns, Anchor}, filename:join(Root, "scratch"), View),
     try
         ok = quod_foreign_projection:advance(
-               Pid, Generation, 1, {1, entry_hash(Entry)}),
+               Pid, Generation, View),
         Result = receive
                      {foreign_projection_ready, {Ns, Anchor}, Generation,
                       Ready} -> Ready
@@ -2479,12 +3251,13 @@ foreign_projection_large_change_set_becomes_resnapshot_test() ->
     {ok, Store0} = quod_ledger_store:open(CacheNs, Root),
     {ok, Store1} = quod_ledger_store:append(
                      Store0, [maps:get(genesis, Base), Entry]),
+    View = projection_test_view(Store1, {Ns, Anchor}, Entry),
     ok = quod_ledger_store:close(Store1),
     {Pid, MRef, Generation} = quod_foreign_projection:start_monitor(
-                                self(), {Ns, Anchor}, Root, CacheNs),
+                                self(), {Ns, Anchor}, filename:join(Root, "scratch"), View),
     try
         ok = quod_foreign_projection:advance(
-               Pid, Generation, 2, {2, entry_hash(Entry)}),
+               Pid, Generation, View),
         Ready = receive
                     {foreign_projection_ready, {Ns, Anchor}, Generation,
                      Result} -> Result;
@@ -2503,6 +3276,11 @@ foreign_projection_large_change_set_becomes_resnapshot_test() ->
         _ = file:del_dir_r(Root)
     end.
 
+projection_test_view(Store, Identity, Entry) ->
+    #{owner => self(), identity => Identity, slot => quod_ledger_store:last(Store),
+      snapshot => quod_ledger_store:snapshot(Store),
+      projection => #{history_head => {Entry#entry.index, entry_hash(Entry)}}}.
+
 certified_current_view_advances_past_finalize_membership_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Dir = temp_dir("current-membership"),
@@ -2518,8 +3296,8 @@ certified_current_view_advances_past_finalize_membership_test() ->
         {ok, Historical} = quod_foreign_log:verify(
                              Old, {"127.0.0.1", 19000},
                              maps:get(ref, Fixture), finalize, 5000),
-        {ok, Current} = quod_foreign_log:verify_current(
-                          Routes, maps:get(ref, Fixture), 5000),
+        {ok, Current} = quod_foreign_log:current(
+                          Routes, {Ns, maps:get(anchor, Fixture)}, 5000),
         %% The current-view call advanced the resident cache past a committee
         %% rotation. Re-reading the older exact Finalize must still return the
         %% committee that was certified at its own slot, independently of the
@@ -2693,8 +3471,8 @@ restart_rebuilds_committee_eras_for_old_exact_references_test() ->
             {ok, Historical0} = quod_foreign_log:verify(
                                   Old, {"127.0.0.1", 19000},
                                   maps:get(ref, Fixture), finalize, 5000),
-            {ok, Current0} = quod_foreign_log:verify_current(
-                               Routes, maps:get(ref, Fixture), 5000),
+            {ok, Current0} = quod_foreign_log:current(
+                               Routes, {Ns, maps:get(anchor, Fixture)}, 5000),
             {_Height, Checkpoint} = cache_checkpoint(Dir, Identity),
             ?assertEqual(false, maps:is_key(committee_views, Checkpoint)),
             {Historical0, Current0}
@@ -2705,8 +3483,8 @@ restart_rebuilds_committee_eras_for_old_exact_references_test() ->
     try
         {ok, HistoricalAgain} = quod_foreign_log:verify_reference(
                                   maps:get(ref, Fixture), finalize, 5000),
-        {ok, CurrentAgain} = quod_foreign_log:verify_current(
-                               Routes, maps:get(ref, Fixture), 5000),
+        {ok, CurrentAgain} = quod_foreign_log:current(
+                               Routes, {Ns, maps:get(anchor, Fixture)}, 5000),
         ?assertEqual(maps:get(committee, Historical),
                      maps:get(committee, HistoricalAgain)),
         ?assertEqual(maps:get(committee_id, Historical),
@@ -2974,7 +3752,6 @@ current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
     Ns = maps:get(ns, Fixture),
     Peer = maps:get(pub, Fixture),
     Routes = route_candidates([{Peer, {"127.0.0.1", 19000}}]),
-    Ref = maps:get(ref, Fixture),
     [Genesis, Finalize, Membership] = maps:get(chain, Fixture),
     Cases =
         [{stale, fun(_P, _E, RequestedNs, From, To) ->
@@ -3010,7 +3787,7 @@ current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
           try
               ?assertEqual(
                  {error, retry},
-                 quod_foreign_log:verify_current(Routes, Ref, 100))
+                 quod_foreign_log:current(Routes, {Ns, maps:get(anchor, Fixture)}, 100))
           after
               stop_owner(Pid),
               _ = file:del_dir_r(Dir)
@@ -3028,9 +3805,8 @@ nonmember_route_cannot_corroborate_current_view_test() ->
     try
         ?assertEqual(
            {error, retry},
-           quod_foreign_log:verify_current(
-             route_candidates([{Outsider, {"127.0.0.1", 19102}}]),
-             maps:get(ref, Fixture), 100))
+           quod_foreign_log:current(
+             route_candidates([{Outsider, {"127.0.0.1", 19102}}]), {Ns, maps:get(anchor, Fixture)}, 100))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -3066,7 +3842,8 @@ current_view_caller_timeout_detaches_without_killing_shared_work_test() ->
         flush_fetches(),
         ok = atomics:put(Gate, 1, 1),
         First = gen_server:send_request(
-                  Pid, {verify_current, Routes, Ref, 100}),
+                  Pid, {current, Routes, {Ns, maps:get(anchor, Fixture)}, none,
+                        100, undefined, erlang:monotonic_time()}),
         Worker = receive
                      {current_fetch_blocked, FetchWorker} -> FetchWorker
                  after 2000 ->
@@ -3079,7 +3856,8 @@ current_view_caller_timeout_detaches_without_killing_shared_work_test() ->
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
         Second = gen_server:send_request(
-                   Pid, {verify_current, Routes, Ref, 2000}),
+                   Pid, {current, Routes, {Ns, maps:get(anchor, Fixture)}, none,
+                         2000, undefined, erlang:monotonic_time()}),
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         Worker ! release_current_fetch,
         ?assertMatch(
@@ -3511,6 +4289,7 @@ local_prepared_reference_uses_the_same_exact_verifier_test() ->
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(
                      Store0, maps:get(chain, Fixture)),
+    Source = local_fixture_view(Store1, Fixture),
     ok = quod_ledger_store:close(Store1),
     Pid = start_owner(
             CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
@@ -3518,8 +4297,9 @@ local_prepared_reference_uses_the_same_exact_verifier_test() ->
         ?assertMatch(
            {ok, #{phase := prepare, generation := 0}},
            quod_foreign_log:verify_local(
-             SourceDir, maps:get(ref, Fixture), prepare, 5000))
+             Source, maps:get(ref, Fixture), prepare, 5000))
     after
+        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(CacheDir)
@@ -3700,8 +4480,11 @@ worst_case_implicit_entry_frame_stays_below_budget_test() ->
     Entry = quod_ledger:entry(
               Parent, #implicit_cert{support = Support,
                                      child = Child, commit = Commit}),
+    {ok, Blob} = quod_ledger:encode_entry(Entry),
     Frame = quod_catchup:encode_frame(
-              Ns, {blocks_resp, crypto:strong_rand_bytes(16), [Entry], 3}),
+              Ns, {blocks_resp_bytes, crypto:strong_rand_bytes(16),
+                   crypto:strong_rand_bytes(16), [Blob], 3,
+                   crypto:strong_rand_bytes(16)}),
     ?assert(byte_size(Frame) < ?QUOD_MAX_FOREIGN_PAGE_BYTES),
     ?assertMatch({ok, 1, _}, quod_catchup:page_stats([Entry])).
 

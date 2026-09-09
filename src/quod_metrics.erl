@@ -1253,8 +1253,6 @@ foreign_history_stage(serve_snapshot_lookup) ->
     {ok, <<"serve_snapshot_lookup">>};
 foreign_history_stage(serve_snapshot_resume) ->
     {ok, <<"serve_snapshot_resume">>};
-foreign_history_stage(serve_fallback_open) ->
-    {ok, <<"serve_fallback_open">>};
 foreign_history_stage(serve_range_read) ->
     {ok, <<"serve_range_read">>};
 foreign_history_stage(serve_encode) -> {ok, <<"serve_encode">>};

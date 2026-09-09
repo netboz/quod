@@ -738,23 +738,29 @@ certify_session_reads(Ns, Target, Session, ExpectedPlan) ->
     normalize_read_certificate_result(Result).
 
 certify_local_read_plan(Ns, Target, Plan) ->
-    RemainingMs = min(command_remaining_ms(),
-                      ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
-    case RemainingMs of
-        0 ->
+    Now = quod_time:mono_ms(),
+    ProofDeadline = case get(?RUNTIME) of
+                        #runtime{deadline_ms = DeadlineMs} -> DeadlineMs;
+                        undefined ->
+                            try quod_proof_context:deadline_ms()
+                            catch error:no_proof_context -> Now
+                            end
+                    end,
+    Deadline = min(ProofDeadline, Now + ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS),
+    case Deadline =< Now of
+        true ->
             {error, current_execution_limit()};
-        _ ->
-            certify_local_read_plan(
-              Ns, Target, Plan, RemainingMs)
+        false ->
+            certify_local_read_plan(Ns, Target, Plan, Deadline)
     end.
 
-certify_local_read_plan(Ns, Target, Plan, RemainingMs) ->
+certify_local_read_plan(Ns, Target, Plan, Deadline) ->
     case quod_dtx:encode(Plan) of
         {ok, PlanBlob} ->
-            case quod_simplex:history_source(Target, validator) of
-                {ok, LedgerRoot} ->
+            case quod_simplex:history_view(Target, validator, Deadline) of
+                {ok, View} ->
                     quod_dtx_current_view:certify_reads(
-                      Ns, {{local, LedgerRoot}, PlanBlob}, RemainingMs);
+                      Ns, {{local, View}, PlanBlob}, Deadline);
                 {error, _} ->
                     {error, read_certificate_unavailable}
             end;

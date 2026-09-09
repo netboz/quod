@@ -1183,6 +1183,15 @@ expect_operation_stub_call(Role, Request) ->
         error({missing_operation_call, Role, Request})
     end.
 
+expect_operation_history_capture(Target) ->
+    receive
+        {operation_stub_call, target, From,
+         {history_view, Target, validator, Deadline}} ->
+            ?assert(Deadline > quod_time:mono_ms()),
+            {From, Deadline}
+    after 1000 -> error(missing_operation_history_capture)
+    end.
+
 certify_operation_result(F = #{target_ref := TargetRef}, Worker, committed) ->
     certify_operation_result(
       F, Worker, #{status => committed, height => 3, ref => TargetRef});
@@ -1195,17 +1204,24 @@ certify_operation_result(
   F = #{target := Target, target_ref := TargetRef,
         view := #{committee_id := CommitteeId} = View}, Worker, Outcome) ->
     assert_terminal_operation_binding(F, Worker),
-    SourceFrom = expect_operation_stub_call(
-                   target, {history_source, Target, validator}),
-    gen_server:reply(SourceFrom, {ok, "/tmp/unused-operation-test-ledger"}),
-    ViewFrom = expect_operation_stub_call(
-                 target, {history_current_view, Target, validator}),
-    gen_server:reply(ViewFrom, {ok, View}),
+    {SourceFrom, Deadline} = expect_operation_history_capture(Target),
+    #{slot := Applied, generation := Generation,
+      committee := Committee} = View,
+    Source = #{owner => quod_reg:where({quod_simplex, element(1, Target)}),
+               identity => Target, slot => Applied, applied => Applied,
+               snapshot => unused,
+               projection => #{committee => Committee,
+                               committee_id => CommitteeId,
+                               validator_routes => #{},
+                               dtx => #{generation => Generation}}},
+    RemainingAfterCapture = max(0, Deadline - quod_time:mono_ms()),
+    gen_server:reply(SourceFrom, {ok, Source}),
     receive
         {operation_stub_call, target, From,
          {dtx_endpoint_local,
           {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout, _TraceCtx}} ->
             ?assert(Timeout > 0),
+            ?assert(Timeout =< RemainingAfterCapture),
             gen_server:reply(
               From, {ok, {outcome, RequestId, Target, CommitteeId, 3,
                           Outcome}, []});
@@ -1218,8 +1234,7 @@ certify_operation_remote_result(
   F = #{target := {TargetNs, _} = Target, target_ref := TargetRef,
         view := #{committee_id := CommitteeId} = View0}, Worker, LocalReason) ->
     assert_terminal_operation_binding(F, Worker),
-    SourceFrom = expect_operation_stub_call(
-                   target, {history_source, Target, validator}),
+    {SourceFrom, Deadline} = expect_operation_history_capture(Target),
     gen_server:reply(SourceFrom, {error, LocalReason}),
     Peer = digest(249),
     Endpoint = {"127.0.0.1", 34249},
@@ -1227,11 +1242,13 @@ certify_operation_remote_result(
     View = View0#{committee => [Peer], route_candidates => Routes},
     RoutesFrom = expect_operation_stub_call(
                    foreign, {route_hints, Target, []}),
+    RemainingAfterCapture = max(0, Deadline - quod_time:mono_ms()),
     gen_server:reply(RoutesFrom, {ok, Routes}),
     receive
         {operation_stub_call, foreign, ViewFrom,
          {current, Routes, Target, none, Timeout, _TraceCtx, _EnqueuedNative}} ->
             ?assert(Timeout > 0),
+            ?assert(Timeout =< RemainingAfterCapture),
             gen_server:reply(ViewFrom, {ok, View});
         {operation_stub_call, Role, _From, Request} ->
             error({unexpected_operation_call, Role, Request})

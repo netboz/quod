@@ -498,11 +498,11 @@ non_content_founding_payload_is_rejected_test() ->
       [noop, quod_ct:dtx_decision_payload()]).
 
 assert_bad_founding(Data) ->
+    {ok, _} = application:ensure_all_started(gproc),
     U = integer_to_list(erlang:unique_integer([positive])),
     Dir = filename:join("/tmp", "quod_rt_bad_genesis_" ++ U),
     Ns = list_to_binary("rtbad:" ++ U),
     try
-        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
         Entry = case Data of
                     noop -> quod_ledger:noop_entry(1, none);
                     _ ->
@@ -510,19 +510,264 @@ assert_bad_founding(Data) ->
                                             1, Data, 0, none),
                         Canonical
                 end,
-        {ok, Store1} = quod_ledger_store:append(
-                         Store0, [Entry]),
-        ok = quod_ledger_store:close(Store1),
-        ?assertEqual(
-           {error, invalid_genesis_payload},
-           quod_runtime:test_read_founding(Ns, #{data_dir => Dir}))
+        Owner = start_founding_source(Ns, Dir, [Entry], ready),
+        try
+            ?assertEqual(
+               {error, invalid_genesis_payload},
+               quod_runtime:test_read_founding(
+                 Ns, erlang:monotonic_time(millisecond) + 5000))
+        after stop_founding_source(Owner)
+        end
     after
         _ = file:del_dir_r(Dir)
     end.
 
 %%%===================================================================
-%%% lifecycle against a bare kb (no store on disk => founding = ∅)
+%%% lifecycle against a bare kb and an owned, non-handler founding entry
 %%%===================================================================
+
+%% The engine is already ready before runtime starts. A missing owner cannot
+%% turn an empty founding guess into a permanently live or unhealthy runtime;
+%% its later registration, with no new commit, supplies the only wake.
+missing_founding_owner_registration_wakes_runtime_test() ->
+    with_founding_runtime(absent, fun(#{ns := Ns, dir := Dir}) ->
+        ok = wait_founding_pending(Ns),
+        Owner = start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], ready),
+        try
+            _ = expect_founding_capture(Owner),
+            ok = wait_runtime_live(Ns),
+            ?assertEqual(0, maps:get(reconcile_failures, quod_runtime:stats(Ns)))
+        after stop_founding_source(Owner)
+        end
+    end).
+
+same_founding_owner_publication_wakes_pending_runtime_test() ->
+    with_founding_runtime(unavailable, fun(#{ns := Ns, owner := Owner}) ->
+        _ = expect_founding_capture(Owner),
+        ok = wait_founding_pending(Ns),
+        assert_no_founding_capture(Owner),
+        set_founding_mode(Owner, ready),
+        _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
+        _ = expect_founding_capture(Owner),
+        ok = wait_runtime_live(Ns),
+        ?assertEqual(0, maps:get(collapses, quod_runtime:stats(Ns)))
+    end).
+
+%% The publication is consumed while the first real capture remains blocked.
+%% Its not-ready response must use that one parked edge, not lose it or create
+%% an idle retry. A successful capture does not replay the notification again.
+founding_publication_crossing_failed_capture_is_not_lost_test() ->
+    with_founding_runtime({hold, unavailable},
+      fun(#{ns := Ns, owner := Owner, runtime := Runtime}) ->
+        {_Worker, _Deadline, Token} = expect_founding_capture(Owner),
+        _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
+        _ = gen_server:call(Runtime, get_stats),
+        Owner ! {release_founding_capture, Token},
+        _ = expect_founding_capture(Owner),
+        ok = wait_runtime_live(Ns),
+        assert_no_founding_capture(Owner),
+        ?assertEqual(1, maps:get(reconciles, quod_runtime:stats(Ns)))
+      end).
+
+%% Merely starting a reconcile does not consume its recovery ID if founding
+%% was unavailable. A later delivery of that exact ready edge must still be
+%% able to reconcile; it is not a duplicate of completed work.
+pending_founding_does_not_deduplicate_unfinished_recovery_test() ->
+    with_founding_runtime(unavailable,
+      fun(#{ns := Ns, owner := Owner, runtime := Runtime}) ->
+        _ = expect_founding_capture(Owner),
+        ok = wait_founding_pending(Ns),
+        Recovery = make_ref(),
+        Runtime ! {replay_ready, Recovery, 0},
+        _ = expect_founding_capture(Owner),
+        ok = wait_founding_pending(Ns),
+        set_founding_mode(Owner, ready),
+        Runtime ! {replay_ready, Recovery, 0},
+        _ = expect_founding_capture(Owner),
+        ok = wait_runtime_live(Ns),
+        ?assertEqual(1, maps:get(reconciles, quod_runtime:stats(Ns)))
+      end).
+
+%% Real apply publication parks a founding-only wake before its direct
+%% envelope overflows the queue. That weak wake cannot replace the fresh
+%% snapshot needed for work dropped while the old snapshot was pinned.
+founding_wake_cannot_hide_post_snapshot_overflow_test() ->
+    with_founding_runtime({hold, ready}, #{runtime_max_queued_events => 1},
+      fun(#{ns := Ns, owner := Owner}) ->
+        {_Worker, _Deadline, Token} = expect_founding_capture(Owner),
+        ?assertEqual(0, maps:get(height, quod_runtime:stats(Ns))),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for({during_founding, 1}))), live),
+        ok = ae(Ns, 2, batch(change(Ns, diff_for({during_founding, 2}))), live),
+        ?assertEqual(2, quod_prolog:applied(Ns)),
+        ok = wait_stats(Ns,
+               fun(#{mode := reconciling, runner_active := true,
+                     founding_ready := false, collapses := 1,
+                     events_seen := 2, queue_len := 0}) -> true;
+                  (_) -> false end),
+        Owner ! {release_founding_capture, Token},
+        ok = wait_stats(Ns,
+               fun(#{mode := live, runner_active := false}) -> true;
+                  (_) -> false end),
+        Stats = quod_runtime:stats(Ns),
+        ?assertEqual(2, maps:get(reconciles, Stats)),
+        ?assertEqual(2, maps:get(height, Stats)),
+        ?assertEqual(2, maps:get(p_height, Stats)),
+        ?assertEqual(2, maps:get(e_frontier, Stats)),
+        ?assertEqual(1, maps:get(dropped_events, Stats)),
+        assert_no_founding_capture(Owner)
+      end).
+
+%% A quiet same-PID owner may stay busy beyond the retired one-second reader
+%% cutoff. The already-owned reconcile budget is the sole bound.
+busy_founding_owner_uses_original_reconcile_budget_test_() ->
+    {timeout, 10, fun() ->
+        with_reconcile_budget(4000, fun() ->
+            with_founding_runtime({hold, ready},
+              fun(#{ns := Ns, owner := Owner}) ->
+                {Worker, Deadline, Token} = expect_founding_capture(Owner),
+                receive after 1100 -> ok end,
+                ?assert(is_process_alive(Worker)),
+                ?assert(Deadline > erlang:monotonic_time(millisecond)),
+                Owner ! {release_founding_capture, Token},
+                ok = wait_runtime_live(Ns),
+                assert_no_founding_capture(Owner)
+              end)
+        end)
+    end}.
+
+expired_founding_capture_waits_for_event_without_collapse_test() ->
+    with_reconcile_budget(100, fun() ->
+        with_founding_runtime({hold, ready},
+          fun(#{ns := Ns, owner := Owner}) ->
+            {Worker, _Deadline, Token} = expect_founding_capture(Owner),
+            MRef = erlang:monitor(process, Worker),
+            receive {'DOWN', MRef, process, Worker, _} -> ok
+            after 2000 -> error(capture_outlived_reconcile)
+            end,
+            ok = wait_founding_pending(Ns),
+            Owner ! {release_founding_capture, Token},
+            set_founding_mode(Owner, ready),
+            assert_no_founding_capture(Owner),
+            ?assertEqual(0, maps:get(collapses, quod_runtime:stats(Ns))),
+            ?assertEqual(0, maps:get(reconcile_failures, quod_runtime:stats(Ns))),
+            _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
+            _ = expect_founding_capture(Owner),
+            ok = wait_runtime_live(Ns)
+          end)
+    end).
+
+founding_owner_replacement_cancels_old_capture_and_wakes_test() ->
+    with_founding_runtime({hold, ready},
+      fun(#{ns := Ns, dir := Dir, owner := OldOwner}) ->
+        {Worker, _Deadline, _Token} = expect_founding_capture(OldOwner),
+        MRef = erlang:monitor(process, Worker),
+        stop_founding_source(OldOwner),
+        receive {'DOWN', MRef, process, Worker, _} -> ok
+        after 2000 -> error(old_founding_reader_survived)
+        end,
+        ok = wait_founding_pending(Ns),
+        ?assertEqual(0, maps:get(reconciles, quod_runtime:stats(Ns))),
+        Owner = start_founding_source(Ns, Dir, [], ready),
+        try
+            _ = expect_founding_capture(Owner),
+            ok = wait_runtime_live(Ns),
+            ?assertEqual(1, maps:get(reconciles, quod_runtime:stats(Ns)))
+        after stop_founding_source(Owner)
+        end
+      end).
+
+cached_founding_is_invalidated_on_owner_replacement_test() ->
+    with_founding_runtime(ready, fun(#{ns := Ns, dir := Dir, owner := OldOwner}) ->
+        _ = expect_founding_capture(OldOwner),
+        ok = wait_runtime_live(Ns),
+        stop_founding_source(OldOwner),
+        ok = wait_founding_pending(Ns),
+        Owner = start_founding_source(Ns, Dir, [], ready),
+        try
+            _ = expect_founding_capture(Owner),
+            ok = wait_stats(Ns, fun(#{mode := live, reconciles := 2}) -> true;
+                                   (_) -> false end),
+            assert_no_founding_capture(Owner)
+        after stop_founding_source(Owner)
+        end
+    end).
+
+%% Force the completed result to precede the owner's unregistration notice in
+%% runtime's mailbox. Publication must inspect the captured owner itself, not
+%% rely on eventually consuming that monitor callback.
+founding_result_cannot_publish_after_source_death_test() ->
+    with_founding_runtime({hold, ready},
+      fun(#{ns := Ns, dir := Dir, owner := OldOwner, runtime := Runtime}) ->
+        {Worker, _Deadline, Token} = expect_founding_capture(OldOwner),
+        ok = sys:suspend(Runtime),
+        try
+            MRef = erlang:monitor(process, Worker),
+            OldOwner ! {release_founding_capture, Token},
+            receive {'DOWN', MRef, process, Worker, normal} -> ok
+            after 2000 -> error(founding_result_not_completed)
+            end,
+            stop_founding_source(OldOwner)
+        after sys:resume(Runtime)
+        end,
+        ok = wait_founding_pending(Ns),
+        ?assertEqual(0, maps:get(reconciles, quod_runtime:stats(Ns))),
+        Owner = start_founding_source(Ns, Dir, [], ready),
+        try
+            _ = expect_founding_capture(Owner),
+            ok = wait_runtime_live(Ns)
+        after stop_founding_source(Owner)
+        end
+      end).
+
+verified_malformed_founding_is_unhealthy_not_pending_test() ->
+    with_founding_runtime(malformed, fun(#{ns := Ns, owner := Owner}) ->
+        _ = expect_founding_capture(Owner),
+        ok = wait_stats(Ns, fun(#{mode := unhealthy, reconcile_failures := 1,
+                                 reconciles := 0}) -> true;
+                               (_) -> false end),
+        assert_no_founding_capture(Owner)
+    end).
+
+empty_committed_founding_prefix_stays_pending_until_publication_test() ->
+    with_founding_runtime(empty, fun(#{ns := Ns, owner := Owner}) ->
+        _ = expect_founding_capture(Owner),
+        ok = wait_founding_pending(Ns),
+        Owner ! {append_founding, bare_founding_entry(Ns), self()},
+        receive {founding_appended, Owner} -> ok
+        after 2000 -> error(founding_not_appended)
+        end,
+        _ = quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 0}),
+        _ = expect_founding_capture(Owner),
+        ok = wait_runtime_live(Ns)
+    end).
+
+runtime_founding_uses_one_snapshot_and_exact_slot_without_full_open_test() ->
+    with_founding_runtime({hold, ready},
+      fun(#{ns := Ns, owner := Owner, runtime := Runtime}) ->
+        {Worker, _Deadline, Token} = expect_founding_capture(Owner),
+        MFAs = [{quod_ledger_store, open, 2}, {quod_ledger_store, open, 3},
+                {quod_ledger_store, open_ro, 2}, {quod_ledger_store, open_ro, 3},
+                {quod_ledger_store, open_ro_snapshot, 1},
+                {quod_ledger_store, read_at, 2}],
+        lists:foreach(fun(MFA) -> 1 = erlang:trace_pattern(MFA, true, []) end, MFAs),
+        1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
+        1 = erlang:trace(Runtime, true, [call, set_on_spawn, {tracer, self()}]),
+        try
+            Owner ! {release_founding_capture, Token},
+            ok = wait_runtime_live(Ns),
+            quod_runtime:reconcile_now(Ns),
+            ok = wait_stats(Ns, fun(#{mode := live, reconciles := 2}) -> true;
+                                   (_) -> false end),
+            TraceRef = erlang:trace_delivered(all),
+            ?assertEqual(#{scans => 0, snapshots => 1, slots => [1]},
+                         founding_trace_counts(TraceRef,
+                           #{scans => 0, snapshots => 0, slots => []})),
+            assert_no_founding_capture(Owner)
+        after
+            _ = erlang:trace(Runtime, false, [call, set_on_spawn]),
+            lists:foreach(fun(MFA) -> erlang:trace_pattern(MFA, false, []) end, MFAs)
+        end
+      end).
 
 setup_bare() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -530,12 +775,16 @@ setup_bare() ->
     {ok, Kb} = quod_prolog:start_link(
                  Ns, #{node_id => {"127.0.0.1", 5000},
                        outcome_backend => memory}),
+    Dir = temp_runtime_dir("quod_rt_bare"),
+    Owner = start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], ready),
     {ok, Rt} = quod_runtime:start_link(Ns, #{}),
-    {Ns, Kb, Rt}.
+    {Ns, Kb, Rt, Owner, Dir}.
 
-cleanup_bare({_Ns, Kb, Rt}) ->
+cleanup_bare({_Ns, Kb, Rt, Owner, Dir}) ->
     [case is_process_alive(P) of true -> gen_server:stop(P); false -> ok end
      || P <- [Rt, Kb]],
+    stop_founding_source(Owner),
+    _ = file:del_dir_r(Dir),
     ok.
 
 bare_lifecycle_test_() ->
@@ -554,7 +803,7 @@ bare_lifecycle_test_() ->
                fun t_overflow_collapses_and_converges/1]]}.
 
 %% booting until the kb's ready edge, then attach + reconcile (zero handlers) => live
-t_boot_edge_reconciles_to_live({Ns, _Kb, _Rt}) ->
+t_boot_edge_reconciles_to_live({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     fun() ->
         ?assertEqual(booting, maps:get(mode, quod_runtime:stats(Ns))),
         ok = quod_prolog:mark_ready(Ns),
@@ -564,7 +813,7 @@ t_boot_edge_reconciles_to_live({Ns, _Kb, _Rt}) ->
     end.
 
 %% a runtime-only restart re-attaches via the handle_continue probe (no ready edge comes)
-t_restart_reattaches_while_ready({Ns, Kb, Rt}) ->
+t_restart_reattaches_while_ready({Ns, Kb, Rt, _Owner, _Dir}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -579,7 +828,7 @@ t_restart_reattaches_while_ready({Ns, Kb, Rt}) ->
     end.
 
 %% live commits reach the attached runtime as direct est-carrying envelopes
-t_direct_envelopes_counted({Ns, _Kb, _Rt}) ->
+t_direct_envelopes_counted({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -589,7 +838,7 @@ t_direct_envelopes_counted({Ns, _Kb, _Rt}) ->
 
 %% a replay run re-triggers reconciliation on its ready edge — EXACTLY once per edge — and a
 %% dynamically-written declaration is discovered there and refused (counted), staying live
-t_replay_cycle_reconciles_and_rejects_dynamic({Ns, _Kb, _Rt}) ->
+t_replay_cycle_reconciles_and_rejects_dynamic({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -606,7 +855,7 @@ t_replay_cycle_reconciles_and_rejects_dynamic({Ns, _Kb, _Rt}) ->
 %% Inc 3: with zero handlers the tier is trivially complete — the frontier follows every
 %% live commit, and (the review's leak regression) the floor follows too: KB history never
 %% accumulates behind the runtime's pin
-t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt}) ->
+t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -629,7 +878,7 @@ t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt}) ->
 
 %% A resource with no pending work needs no synthetic no-op job for every block: its derived
 %% state is current through the ordered tier's frontier, and revision waiters release there.
-t_no_job_resource_follows_frontier({Ns, _Kb, _Rt}) ->
+t_no_job_resource_follows_frontier({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -641,7 +890,7 @@ t_no_job_resource_follows_frontier({Ns, _Kb, _Rt}) ->
 
 %% A failed full rebuild is explicit missing work. Later unrelated events must not make its
 %% revision barrier look satisfied; a successful rebuild clears the block and catches up.
-t_failed_job_blocks_frontier({Ns, _Kb, _Rt}) ->
+t_failed_job_blocks_frontier({Ns, _Kb, _Rt, _Owner, _Dir}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
@@ -660,7 +909,7 @@ t_failed_job_blocks_frontier({Ns, _Kb, _Rt}) ->
 
 %% Pending resources and retained job terms are independently bounded. Updating the one
 %% admitted resource coalesces in place and does not consume another queue slot.
-t_heavy_queue_is_bounded({Ns, _Kb, Rt}) ->
+t_heavy_queue_is_bounded({Ns, _Kb, Rt, _Owner, _Dir}) ->
     fun() ->
         ok = gen_server:stop(Rt),
         {ok, Rt2} = quod_runtime:start_link(
@@ -682,7 +931,7 @@ t_heavy_queue_is_bounded({Ns, _Kb, Rt}) ->
 
 %% Inc 3: a zero-capacity queue makes every envelope overflow — each collapses to a fresh
 %% reconciliation and the runtime still converges to the applied height
-t_overflow_collapses_and_converges({Ns, _Kb, Rt}) ->
+t_overflow_collapses_and_converges({Ns, _Kb, Rt, _Owner, _Dir}) ->
     fun() ->
         ok = gen_server:stop(Rt),
         {ok, Rt2} = quod_runtime:start_link(Ns, #{runtime_max_queued_events => 0}),
@@ -1661,6 +1910,160 @@ ready_without_started_quiesces_snapshot_readers_test_() ->
 %%%===================================================================
 %%% helpers
 %%%===================================================================
+
+bare_founding_entry(Ns) ->
+    Tx = #transaction{tx_id = <<"runtime-founding">>, origin = {Ns, <<0:256>>},
+                      author = <<"runtime-fixture">>, read_check = #{},
+                      diff = diff_for({founding_marker, true})},
+    {ok, Entry} = quod_ledger:new_entry(
+                    1, batch(Tx), 0, none),
+    Entry.
+
+with_founding_runtime(Mode, Fun) ->
+    with_founding_runtime(Mode, #{}, Fun).
+
+with_founding_runtime(Mode, RuntimeConfig, Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"rt-owned:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Dir = temp_runtime_dir("quod_rt_owned"),
+    {ok, Kb} = quod_prolog:start_link(
+                 Ns, #{node_id => {"127.0.0.1", 5000}, outcome_backend => memory}),
+    Owner = case Mode of
+        absent -> undefined;
+        empty -> start_founding_source(Ns, Dir, [], ready);
+        malformed -> start_founding_source(Ns, Dir, [quod_ledger:noop_entry(1, none)], ready);
+        _ -> start_founding_source(Ns, Dir, [bare_founding_entry(Ns)], Mode)
+    end,
+    try
+        ok = quod_prolog:mark_ready(Ns),
+        _ = quod_prolog:applied(Ns),
+        {ok, Runtime} = quod_runtime:start_link(Ns, RuntimeConfig),
+        try Fun(#{ns => Ns, dir => Dir, owner => Owner, runtime => Runtime})
+        after gen_server:stop(Runtime)
+        end
+    after
+        gen_server:stop(Kb),
+        stop_founding_source(Owner),
+        _ = file:del_dir_r(Dir)
+    end.
+
+with_reconcile_budget(Budget, Fun) ->
+    Previous = application:get_env(quod, runtime_reconcile_budget_ms),
+    application:set_env(quod, runtime_reconcile_budget_ms, Budget),
+    try Fun()
+    after
+        case Previous of
+            undefined -> application:unset_env(quod, runtime_reconcile_budget_ms);
+            {ok, Value} -> application:set_env(quod, runtime_reconcile_budget_ms, Value)
+        end
+    end.
+
+wait_founding_pending(Ns) ->
+    wait_stats(Ns, fun(#{mode := booting, founding_ready := false,
+                         runner_active := false}) -> true;
+                      (_) -> false end).
+
+wait_runtime_live(Ns) ->
+    wait_stats(Ns, fun(#{mode := live, founding_ready := true}) -> true;
+                      (_) -> false end).
+
+start_founding_source(Ns, Dir, Entries, Mode) ->
+    Observer = self(),
+    {Owner, MRef} = spawn_monitor(fun() ->
+        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        {ok, Store} = quod_ledger_store:append(Store0, Entries),
+        try
+            true = quod_reg:reg({quod_simplex, Ns}),
+            Observer ! {founding_source_ready, self()},
+            founding_source_loop(Ns, Store, Mode, Observer)
+        catch throw:stop_founding_source -> ok
+        after quod_ledger_store:close(Store)
+        end
+    end),
+    receive
+        {founding_source_ready, Owner} -> erlang:demonitor(MRef, [flush]), Owner;
+        {'DOWN', MRef, process, Owner, Reason} -> error({founding_source_failed, Reason})
+    after 3000 -> exit(Owner, kill), error(founding_source_not_ready)
+    end.
+
+founding_source_loop(Ns, Store, Mode, Observer) ->
+    receive
+        {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
+            Token = make_ref(),
+            Observer ! {founding_capture, self(), element(1, From), Deadline, Token},
+            ReplyMode = case Mode of
+                {hold, AfterHold} ->
+                    receive
+                        {release_founding_capture, Token} -> AfterHold;
+                        stop -> throw(stop_founding_source)
+                    end;
+                Other -> Other
+            end,
+            Reply = case ReplyMode of
+                unavailable -> {error, not_ready};
+                ready ->
+                    %% The actual owner constructor enforces identity, lifetime,
+                    %% prefix and deadline; this fixture grants no fake pathname.
+                    State = quod_simplex:test_state(
+                              #{ns => Ns, genesis_hash => <<0:256>>, store => Store,
+                                slot => quod_ledger_store:last(Store), last_applied => 0,
+                                sync => ready, prolog_ready => false}),
+                    quod_simplex:test_local_history_view(
+                      Identity, Requirement, Deadline, State)
+            end,
+            gen:reply(From, Reply),
+            NextMode = case Mode of {hold, _} -> ready; _ -> Mode end,
+            founding_source_loop(Ns, Store, NextMode, Observer);
+        {set_founding_mode, NewMode, Caller} ->
+            Caller ! {founding_mode_set, self()},
+            founding_source_loop(Ns, Store, NewMode, Observer);
+        {append_founding, Entry, Caller} ->
+            {ok, Store1} = quod_ledger_store:append(Store, [Entry]),
+            Caller ! {founding_appended, self()},
+            founding_source_loop(Ns, Store1, Mode, Observer);
+        stop -> ok;
+        _Other -> founding_source_loop(Ns, Store, Mode, Observer)
+    end.
+
+set_founding_mode(Owner, Mode) ->
+    Owner ! {set_founding_mode, Mode, self()},
+    receive {founding_mode_set, Owner} -> ok
+    after 2000 -> error(founding_mode_not_set)
+    end.
+
+expect_founding_capture(Owner) ->
+    receive
+        {founding_capture, Owner, Worker, Deadline, Token} -> {Worker, Deadline, Token}
+    after 2000 -> error(founding_capture_not_started)
+    end.
+
+assert_no_founding_capture(Owner) ->
+    receive {founding_capture, Owner, _, _, _} -> error(unexpected_founding_retry)
+    after 100 -> ok
+    end.
+
+stop_founding_source(undefined) -> ok;
+stop_founding_source(Owner) ->
+    MRef = erlang:monitor(process, Owner),
+    Owner ! stop,
+    receive {'DOWN', MRef, process, Owner, _Reason} -> ok
+    after 2000 -> exit(Owner, kill),
+                  receive {'DOWN', MRef, process, Owner, _} -> ok end
+    end.
+
+founding_trace_counts(TraceRef, Counts) ->
+    receive
+        {trace, _Pid, call, {quod_ledger_store, F, _Args}}
+          when F =:= open; F =:= open_ro ->
+            founding_trace_counts(TraceRef, Counts#{scans := maps:get(scans, Counts) + 1});
+        {trace, _Pid, call, {quod_ledger_store, open_ro_snapshot, [_Snapshot]}} ->
+            founding_trace_counts(TraceRef,
+              Counts#{snapshots := maps:get(snapshots, Counts) + 1});
+        {trace, _Pid, call, {quod_ledger_store, read_at, [_Store, Slot]}} ->
+            founding_trace_counts(TraceRef, Counts#{slots := [Slot | maps:get(slots, Counts)]});
+        {trace_delivered, all, TraceRef} -> Counts
+    after 2000 -> error(founding_trace_not_delivered)
+    end.
 
 with_reaction_est(Fun) ->
     with_reaction_est([], Fun).

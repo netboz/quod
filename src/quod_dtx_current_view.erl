@@ -41,6 +41,8 @@ keeps the plan vocabulary opaque.
 -export([test_certify_applied/6, test_certify_applied_many/4,
          test_certify_reads/4,
          test_lookup_outcome/5,
+         test_production_dependencies/0,
+         test_read_anchor_source/4,
          test_endpoint_failure_disposition/2,
          test_submit_operation_candidates/2]).
 -endif.
@@ -51,10 +53,7 @@ keeps the plan vocabulary opaque.
 -define(APPLIED_VOTE_VERSION, 1).
 
 -type identity() :: {binary(), <<_:256>>}.
--type local_source() ::
-        file:filename_all() |
-        #{ledger_root := file:filename_all(),
-          snapshot := term(), projection := map()}.
+-type local_source() :: quod_simplex:history_view().
 -type source() ::
         {local, local_source()} |
         {remote, [{<<_:256>>, [term()]}]}.
@@ -391,13 +390,13 @@ certify_applied_many(OwnerNs, Requests, TimeoutMs) ->
     certify_applied_many_with(
       OwnerNs, Requests, TimeoutMs, production_dependencies()).
 
--doc "Build one `f + 1` certificate for an opaque sealed read-only plan.".
--spec certify_reads(binary(), {source(), binary()}, pos_integer()) ->
+-doc "Build one `f + 1` certificate within the original absolute monotonic deadline.".
+-spec certify_reads(binary(), {source(), binary()}, integer()) ->
           {ok, quod_read_certificate:certificate()} |
           {error, invalid_request | conflict_retry | retry}.
-certify_reads(OwnerNs, Request, TimeoutMs) ->
+certify_reads(OwnerNs, Request, Deadline) ->
     certify_reads_with(
-      OwnerNs, Request, TimeoutMs, production_dependencies()).
+      OwnerNs, Request, Deadline, production_dependencies()).
 
 -doc """
 Resolve one anchored public outcome through a frozen certified current view.
@@ -407,18 +406,29 @@ current-validator replies. After a group is absent from that quorum snapshot,
 the certified view may prove its coordinator retired; if that key is still
 current, only its exact admission-bound coordinator barrier may decide local
 pre-Begin state. Ordinary absence is never made definitive by this API and
-remains `retry`.
+remains `retry`. The absolute monotonic deadline includes any initial local
+history capture performed by the caller.
 """.
--spec lookup_outcome(binary(), source(), term(), pos_integer()) ->
+-spec lookup_outcome(binary(), source(), term(), integer()) ->
           outcome_result().
-lookup_outcome(OwnerNs, Source, OutcomeRef, TimeoutMs) ->
+lookup_outcome(OwnerNs, Source, OutcomeRef, Deadline) ->
     lookup_outcome_with(
-      OwnerNs, Source, OutcomeRef, TimeoutMs, production_dependencies()).
+      OwnerNs, Source, OutcomeRef, Deadline, production_dependencies()).
 
-lookup_outcome_with(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
+lookup_outcome_with(OwnerNs, Source, OutcomeRef, Deadline, Dependencies)
+  when is_integer(Deadline) ->
+    case remaining(Deadline) of
+        0 -> {error, retry};
+        TimeoutMs -> lookup_outcome_before_deadline(
+                       OwnerNs, Source, OutcomeRef, TimeoutMs, Deadline, Dependencies)
+    end;
+lookup_outcome_with(_OwnerNs, _Source, _OutcomeRef, _Deadline, _Dependencies) ->
+    {error, invalid_request}.
+
+lookup_outcome_before_deadline(
+  OwnerNs, Source, OutcomeRef, TimeoutMs, Deadline, Dependencies) ->
     case valid_outcome_request(OwnerNs, Source, OutcomeRef, TimeoutMs) of
         {ok, Target} ->
-            Deadline = quod_time:mono_ms() + TimeoutMs,
             case call_current_view(
                    Source, {identity, Target}, Deadline, Dependencies) of
                 {ok, View} ->
@@ -434,8 +444,8 @@ lookup_outcome_with(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
 
 production_dependencies() ->
     #{view =>
-          fun({local, _LocalSource}, {identity, Identity}, _Timeout) ->
-                  quod_simplex:history_current_view(Identity, validator);
+          fun({local, LocalSource}, {identity, Identity}, _Timeout) ->
+                  local_current_view(LocalSource, Identity);
              ({remote, Routes}, {identity, Identity}, Timeout) ->
                   quod_foreign_log:current(Routes, Identity, Timeout)
           end,
@@ -450,12 +460,9 @@ production_dependencies() ->
                     Owner, TargetNs, PeerKey, Endpoint, Request, [], Timeout)
           end,
       exact_entry =>
-          fun({local, #{ledger_root := _, snapshot := _, projection := _} =
-                        LocalSource}, Ref, Timeout) ->
+          fun({local, LocalSource}, Ref, Timeout) ->
                   quod_foreign_log:verify_local(
                     LocalSource, Ref, entry, Timeout);
-             ({local, _LedgerRoot}, Ref, _Timeout) ->
-                  local_exact_entry(Ref);
              ({remote, _Routes}, Ref, Timeout) ->
                   quod_foreign_log:verify_reference(Ref, entry, Timeout)
           end,
@@ -463,13 +470,56 @@ production_dependencies() ->
       node_key => fun node_key/0,
       network_identity => fun quod_ontology:network_identity/0}.
 
-local_exact_entry(Ref) ->
-    case quod_dtx:certified_ref_binding(Ref) of
-        {ok, {Ns, _Anchor}, _Slot, _Digest} ->
-            quod_simplex:dtx_local_evidence(Ns, Ref, entry);
-        error ->
-            {error, invalid_request}
-    end.
+%% Current-view admission uses the same owner turn as its byte source. The
+%% apply-sent frontier is deliberately distinct from the committed ledger tip;
+%% this map does not introduce a Prolog MVCC snapshot or acknowledgement.
+local_current_view(
+  #{identity := Identity, applied := Applied,
+    projection := #{committee := Committee, committee_id := CommitteeId,
+                    validator_routes := Routes, dtx := Dtx}} = Source,
+  Identity) when Applied > 0, Committee =/= [] ->
+    case quod_simplex:history_view_live(Source) of
+        true ->
+            {ok, #{identity => Identity, slot => Applied,
+                   generation => maps:get(generation, Dtx),
+                   committee => Committee, committee_id => CommitteeId,
+                   route_candidates => lists:keysort(
+                     1, [{Peer, [Endpoint]}
+                         || Peer <- Committee,
+                            {ok, Endpoint} <- [maps:find(Peer, Routes)],
+                            quod_quic:valid_endpoint(Endpoint)])}};
+        false -> {error, not_ready}
+    end;
+local_current_view(_Source, _Identity) ->
+    {error, not_ready}.
+
+%% Validators may attest a newer anchor while the initial source is pinned.
+%% Borrow that exact reference's bytes once from the original owner, without
+%% changing the admitted committee, sealed plan, or proof snapshot. A later
+%% retirement cannot invalidate an already-admitted read certificate, so this
+%% byte-only capture requires committed history, not current validator role.
+read_anchor_source(
+  {local, #{identity := Identity, slot := Height}} = Source,
+  Identity, {Slot, _BlockHash, _RecordDigest}, _Deadline) when Slot =< Height ->
+    {ok, Source};
+read_anchor_source(
+  {local, #{owner := Owner, identity := Identity} = View},
+  Identity, {Slot, _BlockHash, _RecordDigest}, Deadline) ->
+    case quod_simplex:history_view_live(View) of
+        true ->
+            case quod_simplex:history_view({Owner, Identity}, committed, Deadline) of
+                {ok, #{owner := Owner, identity := Identity,
+                       slot := CurrentHeight} = Current}
+                  when Slot =< CurrentHeight ->
+                    {ok, {local, Current}};
+                _ -> {error, not_ready}
+            end;
+        false -> {error, not_ready}
+    end;
+read_anchor_source({remote, _Routes} = Source, _Identity, _Claim, _Deadline) ->
+    {ok, Source};
+read_anchor_source(_Source, _Identity, _Claim, _Deadline) ->
+    {error, invalid_request}.
 
 certify_applied_with(
   OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
@@ -489,10 +539,20 @@ certify_applied_with(
             {error, invalid_request}
     end.
 
-certify_reads_with(OwnerNs, {Source, PlanBlob}, TimeoutMs, Dependencies) ->
+certify_reads_with(OwnerNs, {Source, PlanBlob}, Deadline, Dependencies)
+  when is_integer(Deadline) ->
+    case remaining(Deadline) of
+        0 -> {error, retry};
+        TimeoutMs -> certify_reads_before_deadline(
+                       OwnerNs, Source, PlanBlob, TimeoutMs, Deadline, Dependencies)
+    end;
+certify_reads_with(_OwnerNs, _Request, _Deadline, _Dependencies) ->
+    {error, invalid_request}.
+
+certify_reads_before_deadline(
+  OwnerNs, Source, PlanBlob, TimeoutMs, Deadline, Dependencies) ->
     case valid_read_request(OwnerNs, Source, PlanBlob, TimeoutMs) of
         {ok, Plan, Target} ->
-            Deadline = quod_time:mono_ms() + TimeoutMs,
             case call_current_view(
                    Source, {identity, Target}, Deadline, Dependencies) of
                 {ok, View} ->
@@ -504,9 +564,7 @@ certify_reads_with(OwnerNs, {Source, PlanBlob}, TimeoutMs, Dependencies) ->
             end;
         error ->
             {error, invalid_request}
-    end;
-certify_reads_with(_OwnerNs, _Request, _TimeoutMs, _Dependencies) ->
-    {error, invalid_request}.
+    end.
 
 valid_read_request(OwnerNs, Source, PlanBlob, TimeoutMs)
   when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
@@ -807,12 +865,13 @@ resolve_quorum_absence(
     {error, retry}.
 
 valid_source(
-  {local, #{ledger_root := LedgerRoot,
+  {local, #{owner := Owner, identity := {Ns, <<_:256>>},
+            slot := Slot, applied := Applied,
             snapshot := _Snapshot, projection := Projection}}) ->
-    (is_list(LedgerRoot) orelse is_binary(LedgerRoot)) andalso
+    is_pid(Owner) andalso is_binary(Ns) andalso byte_size(Ns) > 0 andalso
+        is_integer(Slot) andalso Slot > 0 andalso
+        is_integer(Applied) andalso Applied >= 0 andalso Applied =< Slot andalso
         is_map(Projection);
-valid_source({local, LedgerRoot}) ->
-    is_list(LedgerRoot) orelse is_binary(LedgerRoot);
 valid_source({remote, Routes}) when is_list(Routes), Routes =/= [],
                                     length(Routes) =< ?MAX_VALIDATORS ->
     quod_foreign_log:valid_route_candidates(Routes);
@@ -1176,10 +1235,22 @@ verified_read_anchor(Source, Target, Claim, Rows, Deadline, Dependencies) ->
     %% committee era; proof-subset bytes are neither identity nor authority by
     %% themselves. This is the same exact-reference verifier used downstream.
     Candidates = lists:uniq([Ref || {_Signer, _Signature, Ref} <- Rows]),
-    case verify_read_anchor_candidates(
-           Source, Target, Claim, Candidates, Deadline, Dependencies) of
-        {ok, AnchorRef} -> {ok, AnchorRef, signed_rows(Rows)};
-        error -> error
+    %% Equivalent finality proofs all witness the same claim. Capture newer
+    %% local bytes once, before trying those proofs, rather than once per
+    %% candidate or after any invalid proof.
+    ExactSourceResult = case remaining(Deadline) of
+                            0 -> {error, retry};
+                            _ -> read_anchor_source(Source, Target, Claim, Deadline)
+                        end,
+    case ExactSourceResult of
+        {ok, ExactSource} ->
+            case verify_read_anchor_candidates(
+                   ExactSource, Target, Claim, Candidates, Deadline,
+                   Dependencies) of
+                {ok, AnchorRef} -> {ok, AnchorRef, signed_rows(Rows)};
+                error -> error
+            end;
+        {error, _} -> error
     end.
 
 verify_read_anchor_candidates(
@@ -1615,12 +1686,17 @@ test_certify_applied_many(OwnerNs, Requests, TimeoutMs, Dependencies) ->
     certify_applied_many_with(
       OwnerNs, Requests, TimeoutMs, Dependencies).
 
-test_certify_reads(OwnerNs, Request, TimeoutMs, Dependencies) ->
-    certify_reads_with(OwnerNs, Request, TimeoutMs, Dependencies).
+test_certify_reads(OwnerNs, Request, Deadline, Dependencies) ->
+    certify_reads_with(OwnerNs, Request, Deadline, Dependencies).
 
-test_lookup_outcome(OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies) ->
+test_lookup_outcome(OwnerNs, Source, OutcomeRef, Deadline, Dependencies) ->
     lookup_outcome_with(
-      OwnerNs, Source, OutcomeRef, TimeoutMs, Dependencies).
+      OwnerNs, Source, OutcomeRef, Deadline, Dependencies).
+
+test_production_dependencies() -> production_dependencies().
+
+test_read_anchor_source(Source, Target, Claim, Deadline) ->
+    read_anchor_source(Source, Target, Claim, Deadline).
 
 test_endpoint_failure_disposition(Request, Reason) ->
     endpoint_failure_disposition(Request, Reason).

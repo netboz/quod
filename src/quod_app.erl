@@ -237,6 +237,7 @@ apply_transport_env(Cfg) ->
     application:set_env(quod, explorer_enabled, maps:get(enabled, Ex, false)),
     application:set_env(quod, explorer_ip, parse_ip(maps:get(ip, Ex, <<"127.0.0.1">>))),
     application:set_env(quod, explorer_port, maps:get(port, Ex)),
+    application:set_env(quod, explorer_read_budget_ms, maps:get(read_budget_ms, Ex)),
     Client = maps:get(client, Cfg),
     application:set_env(quod, client_enabled, maps:get(enabled, Client, false)),
     application:set_env(quod, client_ip, parse_ip(maps:get(ip, Client, <<"127.0.0.1">>))),

@@ -61,6 +61,8 @@ fields(explorer) ->
     [ {enabled, hoconsc:mk(boolean(), #{default => false})}
     , {ip,      hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
     , {port,    hoconsc:mk(integer(), #{default => 14569})}
+    , {read_budget_ms,
+       hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
     ];
 fields(client) ->
     %% Static bootstrap, fixed challenge-response authentication, and bounded

@@ -4,6 +4,7 @@
 %% and history paging over a real (temp-dir) ledger store. The listener/WS processes are
 %% exercised live — they are thin cowboy glue over these functions.
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 
 %%%===================================================================
@@ -325,6 +326,330 @@ with_temp_store(Ns, Fun) ->
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     try Fun(Store0) after file:del_dir_r(Dir) end.
 
+explicit_history_mode_test() ->
+    ?assertEqual({ok, live}, quod_explorer_http:history_mode(#{})),
+    ?assertEqual({ok, live}, quod_explorer_http:history_mode(#{<<"mode">> => <<"live">>})),
+    ?assertEqual({ok, offline}, quod_explorer_http:history_mode(#{<<"mode">> => <<"offline">>})),
+    ?assertEqual({error, bad_mode}, quod_explorer_http:history_mode(#{<<"mode">> => true})),
+    ?assertEqual({error, bad_mode}, quod_explorer_http:history_mode(#{<<"mode">> => <<"auto">>})).
+
+configured_history_deadline_is_captured_once_test() ->
+    with_explorer_budget(1234, fun() ->
+        Before = quod_time:mono_ms(),
+        Deadline = quod_explorer_http:read_deadline(),
+        ?assert(Deadline >= Before + 1234),
+        ?assert(Deadline =< quod_time:mono_ms() + 1234)
+    end).
+
+history_http_modes_and_status_contract_test() ->
+    with_history_source(fun(Ns, Owner) ->
+        {Results, Names} = trace_history_reads(fun() ->
+            [history_http(txs, <<"ns=", Ns/binary>>, #{}),
+             history_http(block, <<>>, #{ns => Ns, slot => <<"2">>})]
+        end),
+        ?assertMatch([{200, #{<<"height">> := 2}}, {200, #{<<"slot">> := 2}}], Results),
+        ?assertEqual(2, length([ok || <<"quod.ledger.file_open">> <- Names])),
+        ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names)),
+        ?assertMatch({503, #{<<"error">> := <<"ontology_unreachable">>}},
+                     history_http(block, <<"mode=offline">>, #{ns => Ns, slot => <<"2">>})),
+        ?assertMatch({400, #{<<"error">> := <<"bad_mode">>}},
+                     history_http(txs, <<"ns=", Ns/binary, "&mode=auto">>, #{})),
+        stop_history_source(Owner),
+        ?assertMatch({503, #{<<"error">> := <<"ontology_unreachable">>}},
+                     history_http(txs, <<"ns=", Ns/binary>>, #{})),
+        ?assertMatch({200, #{<<"height">> := 2}},
+                     history_http(txs, <<"ns=", Ns/binary, "&mode=offline">>, #{})),
+        ?assertMatch({404, #{<<"error">> := <<"not_found">>}},
+                     history_http(block, <<"mode=offline">>, #{ns => Ns, slot => <<"99">>}))
+    end).
+
+http_owner_wait_uses_configured_deadline_test() ->
+    with_explorer_budget(40, fun() ->
+        with_history_source(fun(Ns, Owner) ->
+            history_source_command(Owner, hold),
+            ?assertMatch({503, #{<<"error">> := <<"ontology_unreachable">>}},
+                         history_http(block, <<>>, #{ns => Ns, slot => <<"2">>})),
+            receive {history_capture, Owner, _, _} -> ok
+            after 1000 -> error(http_did_not_borrow_owner)
+            end
+        end)
+    end).
+
+expired_render_result_is_refused_and_handle_closed_test() ->
+    with_history_source(fun(Ns, _Owner) ->
+        Deadline = quod_time:mono_ms() + 40,
+        Result = quod_explorer_http:with_history_store(
+          Ns, live, Deadline,
+          fun(Store) ->
+              self() ! {borrowed_history_store, Store},
+              receive after max(0, Deadline - quod_time:mono_ms() + 1) -> rendered end
+          end, no_store),
+        ?assertEqual({error, ontology_unreachable}, Result),
+        receive {borrowed_history_store, Closed} ->
+            ?assertMatch({'EXIT', _}, catch quod_ledger_store:read_at(Closed, 1))
+        after 1000 -> error(reader_never_opened)
+        end
+    end).
+
+history_http(Op, Qs, Bindings) ->
+    {ok, _} = application:ensure_all_started(cowboy),
+    Ref = make_ref(),
+    Req = #{method => <<"GET">>, pid => self(), streamid => Ref,
+            qs => Qs, bindings => Bindings},
+    {ok, _, Op} = quod_explorer_http:init(Req, Op),
+    Pid = self(),
+    receive {{Pid, Ref}, {response, Status, _Headers, Body}} -> {Status, json:decode(Body)}
+    after 1000 -> error(http_response_missing)
+    end.
+
+with_explorer_budget(Budget, Fun) ->
+    Before = application:get_env(quod, explorer_read_budget_ms),
+    application:set_env(quod, explorer_read_budget_ms, Budget),
+    try Fun() after restore_explorer_env(explorer_read_budget_ms, Before) end.
+
+restore_explorer_env(Key, undefined) -> application:unset_env(quod, Key);
+restore_explorer_env(Key, {ok, Value}) -> application:set_env(quod, Key, Value).
+
+live_history_reads_owner_snapshots_without_index_scans_test() ->
+    with_history_source(fun(Ns, _Owner) ->
+        {Pages, Names} = trace_history_reads(fun() ->
+            [history_page(Ns, live, quod_time:mono_ms() + 1000) || _ <- lists:seq(1, 3)]
+        end),
+        ?assertEqual([2, 2, 2], [maps:get(height, Page) || Page <- Pages]),
+        ?assertEqual(3, length([ok || <<"quod.ledger.file_open">> <- Names])),
+        ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names))
+    end).
+
+live_history_snapshot_stays_bounded_across_append_test() ->
+    with_history_source(fun(Ns, Owner) ->
+        Page = quod_explorer_http:with_history_store(
+          Ns, live, quod_time:mono_ms() + 1000,
+          fun(Store) ->
+              history_source_command(Owner, append),
+              ?assertEqual(2, quod_ledger_store:last(Store)),
+              ?assertEqual(not_found, quod_ledger_store:read_at(Store, 3)),
+              quod_explorer_http:txs_page(Store, undefined, 10)
+          end, no_store),
+        ?assertMatch(#{height := 2}, Page),
+        ?assertMatch(#{height := 3}, history_page(Ns, live, quod_time:mono_ms() + 1000))
+    end).
+
+busy_history_owner_never_falls_back_to_disk_test() ->
+    with_history_source(fun(Ns, Owner) ->
+        history_source_command(Owner, hold),
+        {Result, Names} = trace_history_reads(fun() ->
+            history_page(Ns, live, quod_time:mono_ms() + 40)
+        end),
+        ?assertEqual({error, ontology_unreachable}, Result),
+        ?assertNot(lists:member(<<"quod.ledger.file_open">>, Names)),
+        receive {history_capture, Owner, _From, _View} -> ok
+        after 1000 -> error(capture_not_attempted)
+        end
+    end).
+
+replaced_history_owner_cannot_publish_old_view_test() ->
+    with_history_source(fun(Ns, Owner) ->
+        history_source_command(Owner, hold),
+        Parent = self(),
+        {Reader, MRef} = spawn_monitor(fun() ->
+            Parent ! {history_result, self(),
+                      trace_history_reads(fun() ->
+                          history_page(Ns, live, quod_time:mono_ms() + 2000)
+                      end)}
+        end),
+        receive
+            {history_capture, Owner, From, View} ->
+                history_source_command(Owner, unregister),
+                Replacement = spawn(fun() ->
+                    true = quod_reg:reg({quod_simplex, Ns}),
+                    Parent ! {replacement_ready, self()},
+                    receive stop -> ok end
+                end),
+                try
+                    receive {replacement_ready, Replacement} -> ok
+                    after 1000 -> error(replacement_not_ready)
+                    end,
+                    Owner ! {reply_capture, From, View},
+                    receive
+                        {history_result, Reader, {Result, Names}} ->
+                            ?assertEqual({error, ontology_unreachable}, Result),
+                            ?assertNot(lists:member(<<"quod.ledger.file_open">>, Names))
+                    after 1000 -> error(stale_capture_not_released)
+                    end,
+                    receive {'DOWN', MRef, process, Reader, normal} -> ok
+                    after 1000 -> error(reader_not_reclaimed)
+                    end
+                after stop_history_source(Replacement)
+                end
+        after 1000 -> error(capture_not_held)
+        end
+    end).
+
+history_owner_death_releases_parked_reader_test() ->
+    with_history_source(fun(Ns, Owner) ->
+        history_source_command(Owner, hold),
+        Parent = self(),
+        {Reader, MRef} = spawn_monitor(fun() ->
+            Parent ! {history_result, self(), history_page(Ns, live, quod_time:mono_ms() + 60000)}
+        end),
+        receive {history_capture, Owner, _, _} -> ok
+        after 1000 -> error(capture_not_held)
+        end,
+        stop_history_source(Owner),
+        receive {history_result, Reader, Result} ->
+            ?assertEqual({error, ontology_unreachable}, Result)
+        after 1000 -> error(owner_death_waited_for_deadline)
+        end,
+        receive {'DOWN', MRef, process, Reader, normal} -> ok
+        after 1000 -> error(reader_not_reclaimed)
+        end
+    end).
+
+offline_history_is_explicit_and_refuses_running_owner_test() ->
+    with_history_source(fun(Ns, Owner) ->
+        {Refused, LiveNames} = trace_history_reads(fun() ->
+            history_page(Ns, offline, quod_time:mono_ms() + 1000)
+        end),
+        ?assertEqual({error, ontology_unreachable}, Refused),
+        ?assertNot(lists:member(<<"quod.ledger.file_open">>, LiveNames)),
+        stop_history_source(Owner),
+        {Missing, MissingNames} = trace_history_reads(fun() ->
+            history_page(Ns, live, quod_time:mono_ms() + 1000)
+        end),
+        ?assertEqual({error, ontology_unreachable}, Missing),
+        ?assertNot(lists:member(<<"quod.ledger.file_open">>, MissingNames)),
+        {Page, OfflineNames} = trace_history_reads(fun() ->
+            history_page(Ns, offline, quod_time:mono_ms() + 1000)
+        end),
+        ?assertMatch(#{height := 2}, Page),
+        ?assertEqual(1, length([ok || <<"quod.ledger.index_scan">> <- OfflineNames]))
+    end).
+
+expired_history_read_opens_nothing_test() ->
+    with_history_source(fun(Ns, _Owner) ->
+        {Results, Names} = trace_history_reads(fun() ->
+            [history_page(Ns, Mode, quod_time:mono_ms() - 1) || Mode <- [live, offline]]
+        end),
+        ?assertEqual([{error, ontology_unreachable}, {error, ontology_unreachable}], Results),
+        ?assertNot(lists:member(<<"quod.ledger.file_open">>, Names))
+    end).
+
+history_reader_closes_snapshot_on_renderer_failure_test() ->
+    with_history_source(fun(Ns, _Owner) ->
+        ?assertError(deliberate_render_failure,
+          quod_explorer_http:with_history_store(
+            Ns, live, quod_time:mono_ms() + 1000,
+            fun(Store) -> self() ! {borrowed_history_store, Store}, error(deliberate_render_failure) end,
+            no_store)),
+        receive
+            {borrowed_history_store, Closed} ->
+                ?assertMatch({'EXIT', _}, catch quod_ledger_store:read_at(Closed, 1))
+        after 1000 -> error(reader_never_opened)
+        end
+    end).
+
+history_page(Ns, Mode, Deadline) ->
+    quod_explorer_http:with_history_store(
+      Ns, Mode, Deadline, fun(Store) -> quod_explorer_http:txs_page(Store, undefined, 10) end,
+      #{txs => [], height => 0, next_before => null}).
+
+trace_history_reads(Fun) ->
+    quod_trace_tests:with_tracer(fun() ->
+        Result = quod_trace:with_span(
+                   otel_ctx:new(), <<"explorer.history.test">>, internal, #{},
+                   fun(_) -> Fun() end),
+        {Result, history_span_names([])}
+    end).
+
+history_span_names(Acc) ->
+    receive {quod_test_span, #span{name = Name}} -> history_span_names([Name | Acc])
+    after 0 -> lists:reverse(Acc)
+    end.
+
+with_history_source(Fun) ->
+    Suffix = integer_to_list(erlang:unique_integer([positive])),
+    Ns = list_to_binary("ont:explorer-history:" ++ Suffix),
+    with_history_source({Ns, <<0:256>>},
+      [quod_ledger:noop_entry(I, none) || I <- [1, 2]], Fun).
+
+with_history_source({Ns, _Anchor} = Identity, Entries, Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Suffix = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_explorer_history_" ++ Suffix),
+    Previous = application:get_env(quod, content_storage_dirs),
+    Storage = application:get_env(quod, content_storage_dirs, #{}),
+    application:set_env(quod, content_storage_dirs,
+                        Storage#{Ns => #{data => Dir, ledger => Dir}}),
+    Parent = self(),
+    Owner = spawn(fun() ->
+        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        {ok, Store} = quod_ledger_store:append(Store0, Entries),
+        try
+            true = quod_reg:reg({quod_simplex, Ns}),
+            Parent ! {history_source_ready, self()},
+            history_source_loop(Identity, Store, Parent, ready)
+        after quod_ledger_store:close(Store)
+        end
+    end),
+    try
+        receive {history_source_ready, Owner} -> ok
+        after 2000 -> error(history_source_not_ready)
+        end,
+        Fun(Ns, Owner)
+    after
+        stop_history_source(Owner),
+        case Previous of
+            undefined -> application:unset_env(quod, content_storage_dirs);
+            {ok, Value} -> application:set_env(quod, content_storage_dirs, Value)
+        end,
+        _ = file:del_dir_r(Dir)
+    end.
+
+history_source_loop({Ns, Anchor} = SourceIdentity, Store, Parent, Mode) ->
+    receive
+        {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
+            State = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+              store => Store, slot => quod_ledger_store:last(Store), last_applied => 0,
+              sync => ready, prolog_ready => false}),
+            View = quod_simplex:test_local_history_view(Identity, Requirement, Deadline, State),
+            case Mode of
+                ready -> gen:reply(From, View);
+                hold -> Parent ! {history_capture, self(), From, View}
+            end,
+            history_source_loop(SourceIdentity, Store, Parent, ready);
+        {reply_capture, From, View} ->
+            gen:reply(From, View),
+            history_source_loop(SourceIdentity, Store, Parent, Mode);
+        {history_command, Caller, Ref, hold} ->
+            Caller ! {history_command_done, Ref},
+            history_source_loop(SourceIdentity, Store, Parent, hold);
+        {history_command, Caller, Ref, unregister} ->
+            true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+            Caller ! {history_command_done, Ref},
+            history_source_loop(SourceIdentity, Store, Parent, Mode);
+        {history_command, Caller, Ref, append} ->
+            {ok, Next} = quod_ledger_store:append(
+                           Store, [quod_ledger:noop_entry(quod_ledger_store:last(Store) + 1, none)]),
+            Caller ! {history_command_done, Ref},
+            history_source_loop(SourceIdentity, Next, Parent, Mode);
+        stop -> ok
+    end.
+
+history_source_command(Owner, Command) ->
+    Ref = make_ref(),
+    Owner ! {history_command, self(), Ref, Command},
+    receive {history_command_done, Ref} -> ok
+    after 1000 -> error({history_command_timeout, Command})
+    end.
+
+stop_history_source(Owner) ->
+    MRef = erlang:monitor(process, Owner),
+    Owner ! stop,
+    receive {'DOWN', MRef, process, Owner, _} -> ok
+    after 1000 -> exit(Owner, kill),
+                 receive {'DOWN', MRef, process, Owner, _} -> ok end
+    end.
+
 finalize_row_reuses_its_certified_prepare_plan_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
     {Ns, Anchor} = Target = maps:get(target, Fixture),
@@ -343,55 +668,77 @@ finalize_row_reuses_its_certified_prepare_plan_test() ->
                               2, 2, maps:get(signer, Fixture)),
     {ok, PrepareBlob} = quod_dtx:encode_control(PrepareControl),
     {ok, FinalizeBlob} = quod_dtx:encode_control(FinalizeControl),
-    with_temp_store(
-      Ns,
-      fun(Store0) ->
-          {ok, PrepareEntry} = quod_ledger:new_entry(
-                                 1, {batch, [{dtx, PrepareBlob}]}, 1, none),
-          {ok, FinalizeEntry} = quod_ledger:new_entry(
-                                  2, {batch, [{dtx, FinalizeBlob}]}, 2, none),
-          {ok, Store} = quod_ledger_store:append(
-                          Store0, [PrepareEntry, FinalizeEntry]),
+    {ok, PrepareEntry} = quod_ledger:new_entry(1, {batch, [{dtx, PrepareBlob}]}, 1, none),
+    {ok, FinalizeEntry} = quod_ledger:new_entry(2, {batch, [{dtx, FinalizeBlob}]}, 2, none),
+    with_history_source(Target, [PrepareEntry, FinalizeEntry],
+      fun(Ns0, Owner) ->
           #{txs := [FinalizeRow, _PrepareRow]} =
-              quod_explorer_http:txs_page(Store, undefined, 10),
+              history_page(Ns0, live, quod_time:mono_ms() + 1000),
           FinalControl = maps:get(control, FinalizeRow),
           ?assertEqual(commit, maps:get(verdict, FinalControl)),
           AppliedPlan = maps:get(applied_plan, FinalControl),
           ?assertEqual(
              [#{op => assert, clause => <<"dtx_fixture(target)">>}],
              maps:get(diff, AppliedPlan)),
+          {{reply, {text, Frame}, state}, Names} = trace_history_reads(fun() ->
+              quod_explorer_ws:websocket_info({committed, Ns0, 2, FinalizeEntry}, state)
+          end),
+          #{<<"controls">> := [WsControl]} = json:decode(Frame),
+          ?assertMatch(#{<<"applied_plan">> := #{<<"diff">> := [_]}}, WsControl),
+          ?assertEqual(1, length([ok || <<"quod.ledger.file_open">> <- Names])),
+          ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names)),
+          stop_history_source(Owner),
+          {{reply, {text, UnavailableFrame}, state}, MissingNames} = trace_history_reads(fun() ->
+              quod_explorer_ws:websocket_info({committed, Ns0, 2, FinalizeEntry}, state)
+          end),
+          #{<<"controls">> := [MissingControl]} = json:decode(UnavailableFrame),
+          ?assertNot(maps:is_key(<<"applied_plan">>, MissingControl)),
+          ?assertNot(lists:member(<<"quod.ledger.file_open">>, MissingNames)),
           ok
       end).
+
+pending_outcome_requires_same_anchored_owner_without_opening_reader_test() ->
+    Ns = <<"ont:indexed-pending">>,
+    IndexAnchor = <<21:256>>,
+    T = quod_transaction:bind_id(
+          {Ns, IndexAnchor}, (tx(8))#transaction{tx_id = <<>>, plan_digest = <<24:256>>}),
+    IdText = binary:encode_hex(T#transaction.tx_id, lowercase),
+    lists:foreach(fun(SourceAnchor) ->
+        with_history_source({Ns, SourceAnchor}, [quod_ledger:noop_entry(1, none)],
+          fun(Ns0, _Owner) ->
+              #{Ns0 := #{ledger := Dir}} = application:get_env(quod, content_storage_dirs, #{}),
+              {ok, Index0} = quod_outcome:open(Ns0, IndexAnchor,
+                #{data_dir => Dir, ledger_dir => Dir, outcome_backend => disk}),
+              {new, Index} = quod_outcome:admit(Index0, T),
+              try
+                  {Result, Names} = trace_history_reads(fun() ->
+                      history_http(tx, <<>>, #{ns => Ns0, id => IdText})
+                  end),
+                  case SourceAnchor of
+                      IndexAnchor -> ?assertMatch({202, #{<<"outcome">> := #{<<"status">> := <<"pending">>}}}, Result);
+                      _ -> ?assertMatch({503, #{<<"error">> := <<"ontology_unreachable">>}}, Result)
+                  end,
+                  ?assertNot(lists:member(<<"quod.ledger.file_open">>, Names))
+              after quod_outcome:close(Index)
+              end
+          end)
+    end, [IndexAnchor, <<22:256>>]).
 
 indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
     Ns = <<"ont:indexed">>,
     Anchor = <<21:256>>,
-    Dir = filename:join(
-            "/tmp", "quod_explorer_indexed_" ++
-                integer_to_list(erlang:unique_integer([positive]))),
-    DataDir = filename:join(Dir, "data"),
-    LedgerDir = filename:join(Dir, "ledger"),
-    try
-        T0 = tx(7),
-        T1 = quod_transaction:bind_id(
-               {Ns, Anchor},
-               T0#transaction{
-                 tx_id = <<>>, origin = {Ns, <<22:256>>},
-                 proof_id = <<23:256>>, plan_digest = <<24:256>>,
-                 author_seq = 1}),
-        T = signed_transaction({Ns, Anchor}, T1, indexed),
-        {ok, Store0} = quod_ledger_store:open(Ns, LedgerDir),
-        {ok, Store1} = quod_ledger_store:append(
-                         Store0,
-                         [quod_ledger:noop_entry(1, none),
-                          begin
-                              {ok, Entry2} = quod_ledger:new_entry(
-                                               2, {batch, [T]}, 2002, none),
-                              Entry2
-                          end]),
-        ok = quod_ledger_store:close(Store1),
+    T0 = tx(7),
+    T1 = quod_transaction:bind_id(
+           {Ns, Anchor}, T0#transaction{tx_id = <<>>, origin = {Ns, <<22:256>>},
+             proof_id = <<23:256>>, plan_digest = <<24:256>>, author_seq = 1}),
+    T = signed_transaction({Ns, Anchor}, T1, indexed),
+    {ok, Entry2} = quod_ledger:new_entry(2, {batch, [T]}, 2002, none),
+    with_history_source({Ns, Anchor}, [quod_ledger:noop_entry(1, none), Entry2],
+      fun(Ns0, Owner) ->
+        #{Ns0 := #{data := DataDir, ledger := LedgerDir}} =
+            application:get_env(quod, content_storage_dirs, #{}),
         {ok, Index0} = quod_outcome:open(
-                         Ns, Anchor,
+                         Ns0, Anchor,
                          #{data_dir => DataDir, ledger_dir => LedgerDir,
                            outcome_backend => disk}),
         {new, Candidate, Index0a} = quod_outcome:classify(Index0, T),
@@ -400,18 +747,27 @@ indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
                                    {new, Candidate}),
         {ok, Index2} = quod_outcome:flush(Index1),
         IdText = binary:encode_hex(T#transaction.tx_id, lowercase),
-        {ok, terminal, Detail} =
-            quod_explorer_http:test_transaction_outcome(
-              Ns, IdText, LedgerDir, LedgerDir),
-        ?assertMatch(
-           #{outcome := #{status := committed, height := 2,
-                          goal := <<"assertz(fact(7))">>},
-             tx := #{height := 2}, block := #{slot := 2}},
-           Detail),
-        ok = quod_outcome:close(Index2)
-    after
-        _ = file:del_dir_r(Dir)
-    end.
+        try
+            {{ok, terminal, Detail}, Names} = trace_history_reads(fun() ->
+                quod_explorer_http:transaction_outcome(
+                  Ns0, IdText, live, quod_time:mono_ms() + 1000)
+            end),
+            ?assertMatch(
+               #{outcome := #{status := committed, height := 2,
+                              goal := <<"assertz(fact(7))">>},
+                 tx := #{height := 2}, block := #{slot := 2}}, Detail),
+            ?assertEqual(1, length([ok || <<"quod.ledger.file_open">> <- Names])),
+            ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names)),
+            ?assertMatch({200, #{<<"tx">> := #{<<"height">> := 2}}},
+                         history_http(tx, <<>>, #{ns => Ns0, id => IdText})),
+            stop_history_source(Owner),
+            ?assertMatch({503, #{<<"error">> := <<"ontology_unreachable">>}},
+                         history_http(tx, <<>>, #{ns => Ns0, id => IdText})),
+            ?assertMatch({200, #{<<"tx">> := #{<<"height">> := 2}}},
+                         history_http(tx, <<"mode=offline">>, #{ns => Ns0, id => IdText}))
+        after quod_outcome:close(Index2)
+        end
+      end).
 
 paging_test() ->
     with_temp_store(fun(Store0) ->

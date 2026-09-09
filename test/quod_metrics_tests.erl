@@ -256,7 +256,7 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
              page_verify, ledger_append, phase_commit, checkpoint_write,
              cache_accounting, tip_confirm, result_install, caller_wake,
              serve_read_total, serve_snapshot_lookup, serve_snapshot_resume,
-             serve_fallback_open, serve_range_read, serve_encode],
+             serve_range_read, serve_encode],
         StageSumsBefore =
             maps:from_list(
               [{Stage,

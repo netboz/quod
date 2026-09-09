@@ -36,6 +36,7 @@ defaults_test() ->
     ?assertEqual(14568,           deep(C, [metrics, port])),
     ?assertEqual(<<"">>,          deep(C, [identity, dir])),
     ?assertEqual(#{},             maps:get(directory, C)),
+    ?assertEqual(30000,           deep(C, [explorer, read_budget_ms])),
     B = content1(C),
     ?assertEqual(create,          maps:get(mode, B)),
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
@@ -62,6 +63,15 @@ two_ontologies_test() ->
 batch_window_parse_test() ->
     C = check(<<"content = [{ namespace = \"quod:root\", batch_window_ms = 40 }]\n">>),
     ?assertEqual(40, maps:get(batch_window_ms, content1(C))).
+
+explorer_read_budget_parse_test() ->
+    C = check(<<"explorer { read_budget_ms = 1234 }\n">>),
+    ?assertEqual(1234, deep(C, [explorer, read_budget_ms])).
+
+explorer_read_budget_invalid_test_() ->
+    [?_assertException(throw, {quod_schema, _},
+        check(iolist_to_binary(["explorer { read_budget_ms = ", Value, " }\n"])))
+     || Value <- ["0", "-1", "false", "\"invalid\"", "1.5"]].
 
 removed_directory_authority_fields_rejected_test_() ->
     [?_assertException(
@@ -106,6 +116,7 @@ boot_identity_test() ->
         os:putenv("QUOD_CONF", ConfPath),
         clear_identity_env(),
         _ = quod_app:load_config(),
+        ?assertEqual({ok, 30000}, application:get_env(quod, explorer_read_budget_ms)),
         {ok, Pub} = application:get_env(quod, node_pubkey),
         ?assertEqual(32, byte_size(Pub)),
         %% the keypair was persisted under <data_dir>/identity, and the cert carries it

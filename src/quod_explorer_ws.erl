@@ -19,6 +19,11 @@ two commit-side seams:
 Frames: `hello` (summary, on connect) · `block` (content or DTX batch) ·
 `applied` · `rejected` · `sync`.
 
+A block event's optional Finalize/Prepare enrichment borrows the live Simplex
+snapshot under one `explorer.read_budget_ms` deadline. An unavailable owner
+leaves that optional display field absent; it never opens a stopped ledger or
+retries on a timer. The committed event itself remains available for display.
+
 The namespace manager publishes each validated local topology change. This
 socket updates its committed/runtime subscriptions in place and emits `sync`,
 so the browser refreshes its namespace list without reconnecting.

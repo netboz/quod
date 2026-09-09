@@ -11,8 +11,9 @@ process holding the connection pid may send). A link:
 - **frames** an opener's first write as a **header** (`<<NLen:16, NodeId,
   CLen:16, Channel, LearnHint:8>>`), then length-prefixed payloads
   (`<<PLen:32, Payload>>`),
-- **publishes** each payload as `{quod_message, {Peer, self()}, Channel, Payload}`
-  on the gproc property `{channel, Channel}`,
+- **publishes** ordinary payloads as `{quod_message, {Peer, self()}, Channel, Payload}`
+  on `{channel, Channel}`; catch-up instead gates page credit and delivers
+  raw controls directly to the exact serving/producing owner,
 - **dies** when its stream/connection drops — its death *is* the disconnect
   signal its holder `erlang:monitor`s.
 
@@ -28,12 +29,15 @@ holder gets `link_error` (never a phantom `link_up`). The receiver asks the
 connection owner to bind the claimed header key to the TLS certificate before
 it ACKs or publishes any coalesced payload bytes. This makes a link to a
 dead, unreachable, or wrongly authenticated peer fail to come up.
+Catch-up additionally requires the initial page grant before `link_up`. ACK
+and grant share one absolute bootstrap deadline; partial bytes cannot renew it.
 """.
 
 -include("quod_transport_limits.hrl").
 
 -export([start_outbound/7, start_inbound/3, peer_key/1,
-         send/2, send_ordered/2, send_reliable/3, close/1]).
+         send/2, send_ordered/2, send_reliable/3, close/1,
+         bind_catchup/2, request_page/6, complete_page/3]).
 
 -ifdef(TEST).
 -export([header/3, parse_header/1, frame/1, parse/1,
@@ -45,9 +49,13 @@ dead, unreachable, or wrongly authenticated peer fail to come up.
 -type send_item() ::
         {best_effort, binary()}
       | {ordered, binary()}
+      | {ordered, binary(), term()}
       | {reliable, pid(), reference(), binary(), integer()}.
 -type send_queue() :: {[send_item()], [send_item()]}.
+-record(credit, {ns, role, grant = none, owner = none,
+                 binding = none, pending = none}).
 -record(s, {conn, sid, channel, peer, direction, buf = <<>>,
+            catchup = none :: none | #credit{},
             %% One mailbox-ordered send FIFO. An ordered/reliable frame at its
             %% head parks until quod_conn forwards QUIC's exact send_ready for
             %% this stream; successors cannot pass it.
@@ -94,34 +102,58 @@ to the holder) — a write alone is never treated as liveness.
                      learn | no_learn) -> pid().
 start_outbound(Conn, Sid, Peer, Channel, Self, ConnProc, LearnHint) ->
     spawn(fun() ->
+        Deadline = erlang:monotonic_time(millisecond) + ?ACK_TIMEOUT_MS,
         _ = quic:send_data(Conn, Sid, header(Self, Channel, LearnHint), false),
-        await_ack(ConnProc, <<>>,
+        await_ack(ConnProc, ack, Deadline,
                   #s{conn = Conn, sid = Sid, channel = Channel,
-                     peer = Peer, direction = out})
+                     peer = Peer, direction = out,
+                     catchup = catchup_channel(Channel, requester)})
     end).
 
 %% Wait for the peer's first frame (its ACK that it authenticated our header)
-%% before announcing link_up. The ACK is consumed here; any frames already past it
-%% are real payloads and are published. No ACK within the timeout ⇒ exit so the
+%% before announcing link_up (catch-up also consumes its initial grant here).
+%% The original deadline covers every partial read. No ACK within it ⇒ exit so the
 %% holder sees `link_error` (quod_conn fail_pending), NOT a phantom link_up.
-await_ack(ConnProc, Acc, S = #s{channel = Channel, peer = Peer}) ->
+await_ack(ConnProc, Stage, Deadline, S = #s{buf = Acc}) ->
+    Remaining = max(0, Deadline - erlang:monotonic_time(millisecond)),
     receive
         {data, Bin, _Fin} ->
-            Buf = <<Acc/binary, Bin/binary>>,
-            case parse(Buf) of
-                {error, oversized} -> exit({frame_too_large, Channel});
-                {[], _}            -> await_ack(ConnProc, Buf, S);   %% ACK frame still partial
-                {[<<>> | Msgs], Rest} ->                            %% first frame MUST be the empty ACK
-                    ConnProc ! {link_up, Channel, Peer, self(), out},   %% WE opened this stream
-                    lists:foreach(
-                      fun(Payload) -> publish(Peer, Channel, Payload) end,
-                      Msgs),
-                    loop(S#s{buf = Rest});
-                {[_NonEmpty | _], _} -> exit(unexpected_first_frame) %% not an ACK -> fail the link
-            end;
-        close -> exit(normal)
-    after ?ACK_TIMEOUT_MS -> exit(no_ack)
+            bootstrap_frames(ConnProc, Stage, Deadline,
+                             S#s{buf = <<Acc/binary, Bin/binary>>});
+        close -> protocol_failed(normal, S)
+    after Remaining -> protocol_failed(no_ack, S)
     end.
+
+bootstrap_frames(ConnProc, Stage, Deadline, S = #s{buf = Buf}) ->
+    case erlang:monotonic_time(millisecond) >= Deadline of
+        true -> protocol_failed(no_ack, S);
+        false ->
+            case parse_one(Buf) of
+                more -> await_ack(ConnProc, Stage, Deadline, S);
+                {error, oversized} -> protocol_failed(frame_too_large, S);
+                {ok, Payload, Rest} ->
+                    bootstrap_frame(ConnProc, Stage, Deadline, Payload,
+                                    S#s{buf = Rest})
+            end
+    end.
+
+bootstrap_frame(ConnProc, ack, _Deadline, <<>>, S = #s{catchup = none}) ->
+    announce_outbound(ConnProc, S);
+bootstrap_frame(ConnProc, ack, Deadline, <<>>, S) ->
+    bootstrap_frames(ConnProc, credit, Deadline, S);
+bootstrap_frame(ConnProc, credit, _Deadline, Payload,
+                S = #s{catchup = C = #credit{ns = Ns}}) ->
+    case quod_catchup:decode_frame(Ns, Payload) of
+        {ok, {blocks_credit, Grant}, _Bytes} ->
+            announce_outbound(ConnProc, S#s{catchup = C#credit{grant = Grant}});
+        _ -> protocol_failed(invalid_initial_credit, S)
+    end;
+bootstrap_frame(_ConnProc, _Stage, _Deadline, _Payload, S) ->
+    protocol_failed(unexpected_first_frame, S).
+
+announce_outbound(ConnProc, S = #s{channel = Channel, peer = Peer, buf = Rest}) ->
+    ConnProc ! {link_up, Channel, Peer, self(), out},
+    loop(loop_msgs(Rest, S#s{buf = <<>>})).
 
 -doc "A peer opened `Sid`; read its header (from forwarded data) to learn (peer, channel).".
 -spec start_inbound(pid(), non_neg_integer(), pid()) -> pid().
@@ -145,6 +177,26 @@ state. The timer detects terminal silence; it never discovers normal progress.
 -spec send_ordered(pid(), iodata()) -> ok.
 send_ordered(LinkPid, Payload) ->
     LinkPid ! {send_ordered, iolist_to_binary(Payload)},
+    ok.
+
+-doc "Bind this outbound catch-up link to its existing producer incarnation.".
+-spec bind_catchup(pid(), reference()) -> ok.
+bind_catchup(Link, BindingRef) when is_pid(Link), is_reference(BindingRef) ->
+    Link ! {bind_catchup, self(), BindingRef},
+    ok.
+
+-doc "Spend one catch-up grant; the producer retains all unsent request rows.".
+-spec request_page(pid(), reference(), binary(), binary(), pos_integer(),
+                   pos_integer()) -> ok.
+request_page(Link, BindingRef, Grant, ReqId, From, To) ->
+    Link ! {request_page, self(), BindingRef, Grant, ReqId, From, To},
+    ok.
+
+-doc "Finish an admitted server page after reader DOWN; acceptance is asynchronous.".
+-spec complete_page(pid(), reference(), {ok, [binary()], non_neg_integer()} |
+                    {error, not_ready | server_error}) -> ok.
+complete_page(Link, OperationRef, Result) ->
+    Link ! {complete_page, self(), OperationRef, Result},
     ok.
 
 -ifdef(TEST).
@@ -228,18 +280,31 @@ read_header(Conn, Sid, ConnProc, Acc) ->
                 error -> exit(bad_header);
                 more  -> read_header(Conn, Sid, ConnProc, Buf)
             end;
-        close -> exit(normal)
+        close ->
+            _ = catch quic:reset_stream(Conn, Sid, 0),
+            exit(normal)
     after ?HEADER_TIMEOUT_MS -> exit(header_timeout)
     end.
 
 await_header_auth(Conn, Sid, ConnProc, Ref, Peer, Channel, Rest) ->
     receive
         {link_authenticated, ConnProc, Ref} ->
-            _ = quic:send_data(Conn, Sid, ack_frame(), false),
             S = #s{conn = Conn, sid = Sid, channel = Channel,
-                   peer = Peer, direction = in},
-            loop(loop_msgs(Rest, S));
+                   peer = Peer, direction = in,
+                   catchup = catchup_channel(Channel, server)},
+            S1 = case S#s.catchup of
+                     none ->
+                         _ = quic:send_data(Conn, Sid, ack_frame(), false),
+                         S;
+                     #credit{ns = Ns} ->
+                         Grant = fresh_grant(none),
+                         Payload = quod_catchup:encode_frame(Ns, {blocks_credit, Grant}),
+                         Frames = <<(ack_frame())/binary, (frame(Payload))/binary>>,
+                         enqueue_send({ordered, Frames, {initial_credit, Grant}}, S)
+                 end,
+            loop(loop_msgs(Rest, S1));
         close ->
+            _ = catch quic:reset_stream(Conn, Sid, 0),
             exit(normal)
     after ?HEADER_TIMEOUT_MS ->
         exit(header_auth_timeout)
@@ -249,11 +314,26 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
     receive
         {data, Bin, _Fin} ->
             loop(loop_msgs(Bin, S));
+        {bind_catchup, Producer, BindingRef} ->
+            loop(bind_producer(Producer, BindingRef, S));
+        {request_page, Producer, BindingRef, Grant, ReqId, From, To} ->
+            loop(submit_page(Producer, BindingRef, Grant, ReqId, From, To, S));
+        {complete_page, Owner, OperationRef, Result} ->
+            loop(complete_server_page(Owner, OperationRef, Result, S));
+        {'DOWN', MRef, process, Owner, _Reason}
+          when S#s.catchup =/= none ->
+            case (S#s.catchup)#credit.owner of
+                {Owner, MRef} -> protocol_failed(catchup_owner_down, S);
+                _ -> loop(S)
+            end;
         {send, Payload} ->
+            require_generic_channel(S),
             loop(enqueue_send({best_effort, frame(Payload)}, S));
         {send_ordered, Payload} ->
+            require_generic_channel(S),
             loop(enqueue_send({ordered, frame(Payload)}, S));
         {send_reliable, From, Ref, Payload, Deadline} ->
+            require_generic_channel(S),
             loop(enqueue_send(
                    {reliable, From, Ref, frame(Payload), Deadline}, S));
         {send_ready, Sid} ->
@@ -304,9 +384,8 @@ drain_sends(S = #s{sendq = Q0}) ->
         {value, Item, Q} ->
             case send_item(Item, S) of
                 ok ->
-                    sent_item(Item),
                     Q1 = sendq_drop(Q),
-                    drain_sends(S#s{sendq = Q1});
+                    drain_sends(sent_item(Item, S#s{sendq = Q1}));
                 {blocked, best_effort, Reason} ->
                     count_drop(Reason, S),
                     Q1 = sendq_drop(Q),
@@ -347,6 +426,8 @@ sendq_to_list({Front, Rear}) ->
 
 send_item({ordered, Frame}, #s{conn = Conn, sid = Sid}) ->
     classify_send(ordered, ?ORDERED_SEND_RESULT(Conn, Sid, Frame));
+send_item({ordered, Frame, _Receipt}, #s{conn = Conn, sid = Sid}) ->
+    classify_send(ordered, ?ORDERED_SEND_RESULT(Conn, Sid, Frame));
 send_item({best_effort, Frame}, #s{conn = Conn, sid = Sid}) ->
     classify_send(best_effort, send_once(Conn, Sid, Frame));
 send_item({reliable, _From, _Ref, Frame, Deadline},
@@ -372,11 +453,13 @@ classify_send(Kind, {error, send_queue_full}) ->
 classify_send(Kind, {error, Reason}) ->
     {error, Kind, Reason}.
 
-sent_item({reliable, From, Ref, _Frame, _Deadline}) ->
+sent_item({reliable, From, Ref, _Frame, _Deadline}, S) ->
     From ! {Ref, ok},
-    ok;
-sent_item(_Item) ->
-    ok.
+    S;
+sent_item({ordered, _Frame, Receipt}, S) ->
+    catchup_send_accepted(Receipt, S);
+sent_item(_Item, S) ->
+    S.
 
 reliable_result({reliable, From, Ref, _Frame, _Deadline}, Result) ->
     From ! {Ref, Result},
@@ -395,6 +478,8 @@ send_silence_timeout({ordered, _Frame}) ->
     %% this link through send_ready; this is only the final silent-transport
     %% safeguard and must not become a short polling/retry cadence.
     maps:get(idle_timeout, quod_quic:liveness_opts());
+send_silence_timeout({ordered, _Frame, _Receipt}) ->
+    maps:get(idle_timeout, quod_quic:liveness_opts());
 send_silence_timeout({reliable, _From, _Ref, _Frame, Deadline}) ->
     max(0, Deadline - erlang:monotonic_time(millisecond)).
 
@@ -406,6 +491,9 @@ resume_sends(S) ->
 
 send_deadline(Token, S = #s{send_wait = {Token, _TimerRef}, sendq = Q0}) ->
     case sendq_head(Q0) of
+        {value, {ordered, _Frame, _Receipt}, Q} ->
+            ordered_send_failed(backpressure_timeout,
+                                S#s{sendq = Q, send_wait = none});
         {value, {ordered, _Frame}, Q} ->
             ordered_send_failed(backpressure_timeout,
                                 S#s{sendq = Q, send_wait = none});
@@ -445,6 +533,8 @@ cancel_send_timer(#s{send_wait = none}) ->
     ok.
 
 %% append bytes, publish every complete payload frame, keep the remainder
+loop_msgs(Data, S = #s{buf = Buf, catchup = #credit{}}) ->
+    catchup_frames(S#s{buf = <<Buf/binary, Data/binary>>});
 loop_msgs(Data, S = #s{buf = Buf, peer = Peer, channel = Ch}) ->
     case parse(<<Buf/binary, Data/binary>>) of
         {error, oversized} -> exit({frame_too_large, Ch});
@@ -454,6 +544,137 @@ loop_msgs(Data, S = #s{buf = Buf, peer = Peer, channel = Ch}) ->
               Frames),
             S#s{buf = Buf1}
     end.
+
+%% Catch-up gates one frame before parsing/publication of its successor. A
+%% malicious batch can therefore admit only the one granted operation.
+catchup_frames(S = #s{buf = Buf, catchup = #credit{ns = Ns}}) ->
+    case parse_one(Buf) of
+        more -> S;
+        {error, oversized} -> protocol_failed(frame_too_large, S);
+        {ok, Payload, Rest} ->
+            case quod_catchup:decode_frame(Ns, Payload) of
+                {ok, Control, _Bytes} ->
+                    catchup_frames(catchup_control(Control, S#s{buf = Rest}));
+                {error, _} -> protocol_failed(invalid_catchup_frame, S)
+            end
+    end.
+
+catchup_channel(Channel, Role) ->
+    case quod_safe_term:decode_wrapped(Channel, 16#FFFF) of
+        {ok, {catchup, Ns}} when is_binary(Ns), byte_size(Ns) > 0 ->
+            #credit{ns = Ns, role = Role};
+        _ -> none
+    end.
+
+require_generic_channel(#s{catchup = none}) -> ok;
+require_generic_channel(S) -> protocol_failed(uncredited_local_send, S).
+
+bind_producer(Producer, BindingRef,
+              S = #s{catchup = C = #credit{role = requester, owner = none}})
+  when is_pid(Producer), is_reference(BindingRef) ->
+    MRef = erlang:monitor(process, Producer),
+    Producer ! {catchup_credit, self(), BindingRef, C#credit.grant},
+    S#s{catchup = C#credit{owner = {Producer, MRef}, binding = BindingRef}};
+bind_producer(Producer, BindingRef,
+              S = #s{catchup = #credit{role = requester,
+                                       owner = {Producer, _MRef},
+                                       binding = BindingRef}}) ->
+    %% No repeated callback: re-open/bind messages cannot duplicate credit.
+    S;
+bind_producer(_Producer, _BindingRef, S = #s{catchup = #credit{role = requester}}) ->
+    protocol_failed(catchup_producer_replaced, S);
+bind_producer(_Producer, _BindingRef, S) -> S.
+
+submit_page(Producer, BindingRef, Grant, ReqId, From, To,
+            S = #s{catchup = C = #credit{role = requester, ns = Ns,
+                                         owner = {Producer, _MRef},
+                                         binding = BindingRef, grant = Grant,
+                                         pending = none}})
+  when is_binary(Grant), byte_size(Grant) =:= 16 ->
+    Payload = quod_catchup:encode_frame(Ns, {blocks_req, Grant, ReqId, From, To}),
+    S1 = S#s{catchup = C#credit{grant = none, pending = {Grant, ReqId}}},
+    enqueue_send({ordered, frame(Payload), request_accepted}, S1);
+submit_page(_Producer, _BindingRef, _Grant, _ReqId, _From, _To, S) ->
+    %% Late controls belong to their original binding, never a replacement.
+    S.
+
+catchup_control({blocks_req, Grant, ReqId, From, To},
+                S = #s{catchup = C = #credit{role = server, ns = Ns,
+                                             grant = Grant, pending = none}})
+  when is_binary(Grant) ->
+    StartedMs = quod_time:mono_ms(),
+    OperationRef = make_ref(),
+    C1 = C#credit{grant = none, pending = {OperationRef, Grant, ReqId, reading}},
+    case quod_reg:where({quod_catchup, Ns}) of
+        Owner when is_pid(Owner) ->
+            MRef = erlang:monitor(process, Owner),
+            Owner ! {catchup_request, self(), OperationRef, From, To, StartedMs},
+            S#s{catchup = C1#credit{owner = {Owner, MRef}}};
+        undefined ->
+            queue_page_response({error, not_ready}, S#s{catchup = C1})
+    end;
+catchup_control({blocks_resp_bytes, Grant, ReqId, Blobs, Height, Next}, S) ->
+    accept_page(Grant, ReqId, {ok, Blobs, Height}, Next, S);
+catchup_control({blocks_err, Grant, ReqId, Reason, Next}, S) ->
+    accept_page(Grant, ReqId, {error, Reason}, Next, S);
+catchup_control(_Control, S) -> protocol_failed(catchup_credit_violation, S).
+
+accept_page(Grant, ReqId, Result, Next,
+            S = #s{catchup = C = #credit{role = requester,
+                                         owner = {Producer, _MRef},
+                                         binding = BindingRef,
+                                         pending = {Grant, ReqId}}})
+  when Next =/= Grant ->
+    Producer ! {catchup_page, self(), BindingRef, Grant, ReqId, Result, Next},
+    S#s{catchup = C#credit{grant = Next, pending = none}};
+accept_page(_Grant, _ReqId, _Result, _Next, S) ->
+    protocol_failed(catchup_response_violation, S).
+
+complete_server_page(Owner, OperationRef, Result,
+                     S = #s{catchup = #credit{role = server,
+                          owner = {Owner, _MRef},
+                          pending = {OperationRef, _Grant, _ReqId, reading}}}) ->
+    queue_page_response(Result, S);
+complete_server_page(_Owner, _OperationRef, _Result, S) -> S.
+
+queue_page_response(Result,
+                    S = #s{catchup = C = #credit{ns = Ns,
+                           pending = {OperationRef, Grant, ReqId, reading}}}) ->
+    Next = fresh_grant(Grant),
+    Control = case Result of
+                  {ok, Blobs, Height} ->
+                      {blocks_resp_bytes, Grant, ReqId, Blobs, Height, Next};
+                  {error, Reason} when Reason =:= not_ready; Reason =:= server_error ->
+                      {blocks_err, Grant, ReqId, Reason, Next}
+              end,
+    Payload = quod_catchup:encode_frame(Ns, Control),
+    S1 = S#s{catchup = C#credit{pending = {OperationRef, Grant, ReqId, sending}}},
+    enqueue_send({ordered, frame(Payload), {page_sent, OperationRef, Next}}, S1).
+
+catchup_send_accepted({initial_credit, Grant}, S = #s{catchup = C}) ->
+    S#s{catchup = C#credit{grant = Grant}};
+catchup_send_accepted(request_accepted, S) -> S;
+catchup_send_accepted({page_sent, OperationRef, Next}, S = #s{catchup = C}) ->
+    _ = case C#credit.owner of
+        {Owner, MRef} ->
+            _ = erlang:demonitor(MRef, [flush]),
+            Owner ! {catchup_page_sent, self(), OperationRef};
+        none -> ok
+    end,
+    S#s{catchup = C#credit{grant = Next, owner = none, pending = none}}.
+
+fresh_grant(Previous) ->
+    case crypto:strong_rand_bytes(16) of
+        Previous -> fresh_grant(Previous);
+        Grant -> Grant
+    end.
+
+-spec protocol_failed(term(), #s{}) -> no_return().
+protocol_failed(Reason, S = #s{conn = Conn, sid = Sid}) ->
+    cancel_send_timer(S),
+    reply_queued_reliable({error, Reason}, S),
+    _ = catch quic:reset_stream(Conn, Sid, 0),
+    exit(Reason).
 
 publish(Peer, Channel, Payload) ->
     _ = quod_reg:publish({channel, Channel}, {quod_message, {Peer, self()}, Channel, Payload}),
@@ -505,6 +726,12 @@ frame(Payload) -> <<(byte_size(Payload)):32, Payload/binary>>.
 %% binds the header identity to TLS. The opener consumes the first frame as the
 %% ACK; real payloads are never empty, so there is no ambiguity.
 ack_frame() -> frame(<<>>).
+
+parse_one(<<PLen:32, _/binary>>) when PLen > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    {error, oversized};
+parse_one(<<PLen:32, Payload:PLen/binary, Rest/binary>>) ->
+    {ok, Payload, Rest};
+parse_one(_Bin) -> more.
 
 parse(Bin) -> parse(Bin, []).
 parse(<<PLen:32, _/binary>>, _Acc)

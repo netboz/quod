@@ -9,7 +9,7 @@ connection creation per pool key (ordinary, pinned, or identity-discovery; no di
 race within a pool). Streams/links and message delivery live in
 `m:quod_conn` / `m:quod_link`.
 
-Upper layers pick one of two send models:
+Ordinary channels pick one of two send models:
 
 ```erlang
 %% (a) fire-and-forget — the transport owns the link; buffers until it is ready:
@@ -18,8 +18,13 @@ quod_quic:send(NodeId, Channel, Frame)        %% non-blocking; no link to track
 quod_quic:open_link(NodeId, Channel)          %% -> caller gets {link_up, NodeId, Channel, LinkPid}
 quod_link:send(LinkPid, Payload)              %% then send on the LinkPid directly
 %% erlang:monitor(LinkPid) -> 'DOWN' is the disconnect
-%% either way, inbound messages arrive on the gproc property {channel, Channel}
+%% either way, ordinary inbound messages arrive on the gproc property {channel, Channel}
 ```
+
+Catch-up channels instead bind one producer to the opened link and exchange
+pages through `quod_link:request_page/6` and exact-owner credit/result callbacks.
+Their inbound requests go directly to the registered catch-up endpoint, never
+through channel-wide gproc publication.
 
 > #### Why pure Erlang {: .info }
 >
@@ -32,7 +37,7 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 
 -behaviour(gen_server).
 
--export([start_link/0, open_link/2, open_link_pinned/3,
+-export([start_link/0, open_link/2, open_link_tagged/2, open_link_pinned/3,
          open_link_pinned_lease/3,
          release_link_pinned/4,
          open_link_identified/2,
@@ -73,6 +78,15 @@ not yet known). Asynchronous: the caller receives `{link_up, Target, Channel, Li
 -spec open_link(binary() | {inet:hostname(), inet:port_number()}, binary()) -> ok.
 open_link(Target, Channel) ->
     gen_server:cast(quod_reg:via(?KEY), {open_link, Target, Channel, self()}).
+
+-doc "Correlated ordinary-pool open; replies carry the returned reference.".
+-spec open_link_tagged(binary() | {inet:hostname(), inet:port_number()}, binary()) ->
+          reference().
+open_link_tagged(Target, Channel) ->
+    Ref = make_ref(),
+    gen_server:cast(quod_reg:via(?KEY),
+                    {open_link, Target, Channel, {self(), Ref}}),
+    Ref.
 
 -doc """
 Open a directory-scoped link by dialing `Endpoint` while pinning the TLS peer to
@@ -160,8 +174,9 @@ send_pinned(NodeKey, Endpoint, Channel, Frame) ->
 like `open_link/2`, but the caller never sees the link: the connection reuses a live link or **buffers**
 `Frame` until one is ready (`m:quod_conn`). Non-blocking; a resolve/connect failure silently drops the
 frame (the caller relies on its own retry/anti-entropy). This is the send path for endpoints that don't
-need the link lifecycle (`m:quod_catchup`, `m:quod_feed`); use `open_link/2` when you
-must monitor the link yourself (Brahms, consensus).
+need the link lifecycle (`m:quod_feed`); use `open_link/2` when you
+must monitor the link yourself (Brahms, consensus), or `open_link_tagged/2`
+for a correlated catch-up binding.
 """.
 -spec send(binary() | {inet:hostname(), inet:port_number()}, binary(), binary()) -> ok.
 send(Target, Channel, Frame) ->
@@ -384,7 +399,7 @@ handle_cast({open_link, Target, Channel, ReplyTo}, State) ->
             {noreply, State1};
         error ->
             logger:debug("quod: open_link target ~p unresolved/non-dialable", [Target]),
-            ReplyTo ! {link_error, Target, Channel},
+            ordinary_link_error(ReplyTo, Target, Channel),
             {noreply, State}
     end;
 %% fire-and-forget send: resolve + ensure the connection (dialing on demand), then hand the frame to the
@@ -471,6 +486,12 @@ start_conn(ConnKey, Peer, {Host, Port}, Policy,
 
 directory_link_error({ReplyTo, Ref}, Peer, Channel) ->
     ReplyTo ! {link_error, Ref, Peer, Channel},
+    ok.
+
+ordinary_link_error({ReplyTo, Ref}, Peer, Channel) ->
+    directory_link_error({ReplyTo, Ref}, Peer, Channel);
+ordinary_link_error(ReplyTo, Peer, Channel) when is_pid(ReplyTo) ->
+    ReplyTo ! {link_error, Peer, Channel},
     ok.
 
 ordinary_identity_policy(Target)

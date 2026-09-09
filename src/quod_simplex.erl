@@ -130,7 +130,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          committee_delta/1, apply_committee_delta/2,
          membership_diff_acceptable/2]).   %% committee = projection of peer_admitted facts
 
--export_type([history_projection/0]).
+-export_type([history_projection/0, history_view/0]).
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
 -export([start_link/2, rebuild/1, prolog_ready/4, operation_projection/4,
@@ -144,11 +144,11 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
          cancel_dtx_begin/3, dtx_group_barrier/3,
          dtx_endpoint_request/7, dtx_endpoint_local/4,
-         history_source/2, history_current_view/2, transaction_evidence/3,
-         operation_claim_evidence/3,
+         history_view/3, history_view_live/1, transaction_evidence/4,
+         operation_claim_evidence/4,
          dtx_local_evidence/3, dtx_applied_source/2,
          dtx_outcome_lookup/2,
-         status/1, committee/1, ledger_read_snapshot/1, genesis_hash/1,
+         status/1, committee/1, genesis_hash/1,
          acquire_proof_access/1, check_proof_access/1,
          identity_view/1,
          stats/1, namespaces/0]).
@@ -185,8 +185,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_round/2, test_dtx_round/2, test_dtx_round_hints/2,
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
          test_dtx_source_identity/2,
-         test_local_history_source/3,
-         test_local_history_current_view/3,
+         test_local_history_view/3, test_local_history_view/4,
          test_consensus_barrier/1, test_dtx_consensus_barrier/2,
          test_requested/1,
          test_progress_counts/1, test_engine_pool_sizes/1,
@@ -1637,8 +1636,10 @@ test_dtx_source_identity(Record, TargetIdentity) ->
             none
     end.
 
-test_local_history_source(Identity, Requirement, S) ->
-    local_history_source(Identity, Requirement, S).
+test_local_history_view(Identity, Requirement, S) ->
+    local_history_view(Identity, Requirement, S).
+test_local_history_view(Identity, Requirement, Deadline, S) ->
+    local_history_view(Identity, Requirement, Deadline, S).
 test_consensus_barrier(S) -> consensus_barrier(S).
 test_dtx_consensus_barrier(Record, S) -> dtx_consensus_barrier(Record, S).
 test_dtx_slot_route(Slot, S) -> dtx_slot_route(Slot, S).
@@ -2585,6 +2586,7 @@ dtx_endpoint_local(_Ns, _Request, _ValidationSidecar, _TimeoutMs) ->
 dtx_outcome_lookup(OutcomeRef, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
+    Deadline = quod_time:mono_ms() + TimeoutMs,
     case {quod_outcome:ref_identity(OutcomeRef),
           lists:sort(namespaces())} of
         {{ok, Identity}, [OwnerNs | _]} ->
@@ -2592,7 +2594,7 @@ dtx_outcome_lookup(OutcomeRef, TimeoutMs)
                 {ok, SourceRoutes} ->
                     case quod_dtx_current_view:lookup_outcome(
                            OwnerNs, {remote, SourceRoutes}, OutcomeRef,
-                           TimeoutMs) of
+                           Deadline) of
                         Result -> dtx_outcome_result(OutcomeRef, Result)
                     end;
                 {error, _} ->
@@ -2604,94 +2606,140 @@ dtx_outcome_lookup(OutcomeRef, TimeoutMs)
 dtx_outcome_lookup(OutcomeRef, _TimeoutMs) ->
     {error, {outcome_unknown, OutcomeRef}}.
 
--doc "Return the read-ready local durable source for one exact ontology identity.".
--spec history_source({binary(), <<_:256>>}, any | validator) ->
-          {ok, file:filename_all()} |
-          {error, not_ready | invalid_identity | read_certificate_unavailable}.
-history_source({Ns, <<_:256>>} = Identity, Requirement)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       (Requirement =:= any orelse Requirement =:= validator) ->
-    try gen_statem:call(
-          quod_reg:via({quod_simplex, Ns}),
-          {history_source, Identity, Requirement}, 1000)
-    catch exit:_ -> {error, not_ready}
-    end;
-history_source(_Identity, _Requirement) ->
+-type history_view() ::
+        #{owner := pid(), identity := {binary(), <<_:256>>},
+          slot := non_neg_integer(), applied := non_neg_integer(),
+          snapshot := quod_ledger_store:session(),
+          projection := history_projection()}.
+
+-doc """
+Borrow the registered owner's immutable committed ledger and matching verified
+projection in one turn. An exact identity pins the incarnation; a namespace
+selects this local owner's incarnation. No path or file handle is returned.
+
+`committed` serves the stored prefix even while Prolog is replaying, including
+the empty prefix of a pinned joiner; this does not certify a genesis. `any`
+requires the ordinary read-ready endpoint; `validator` additionally requires
+local committee membership. Committed `slot` and Prolog `applied` are distinct:
+`applied` is the owner's apply-sent frontier, not a new MVCC acknowledgement.
+Borrowing bytes must not report a pending apply as completed. Later appends do
+not invalidate this bounded view or any proof's separately pinned MVCC base.
+`Deadline` is the caller's original absolute `quod_time:mono_ms()` deadline;
+both queued admission and return publication must still fit that budget.
+""".
+-spec history_view(binary() | {binary(), <<_:256>>} |
+                   {pid(), {binary(), <<_:256>>}},
+                   committed | any | validator, integer()) ->
+          {ok, history_view()} |
+          {error, timeout | not_ready | invalid_identity | read_certificate_unavailable}.
+history_view({Owner, {Ns, <<_:256>>} = Identity}, Requirement, Deadline)
+  when is_pid(Owner), is_binary(Ns), byte_size(Ns) > 0, is_integer(Deadline),
+       (Requirement =:= committed orelse Requirement =:= any orelse
+        Requirement =:= validator) ->
+    call_history_view(Owner, Ns, Identity, Requirement, Deadline);
+history_view({Ns, <<_:256>>} = Identity, Requirement, Deadline)
+  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Deadline),
+       (Requirement =:= committed orelse Requirement =:= any orelse
+        Requirement =:= validator) ->
+    registered_history_view(Ns, Identity, Requirement, Deadline);
+history_view(Ns, Requirement, Deadline)
+  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Deadline),
+       (Requirement =:= committed orelse Requirement =:= any orelse
+        Requirement =:= validator) ->
+    registered_history_view(Ns, Ns, Requirement, Deadline);
+history_view(_Identity, _Requirement, _Deadline) ->
     {error, invalid_identity}.
 
--doc "Return the consensus owner's verified current view for a co-hosted ontology.".
--spec history_current_view({binary(), <<_:256>>}, any | validator) ->
-          {ok, map()} |
-          {error, not_ready | invalid_identity | read_certificate_unavailable}.
-history_current_view({Ns, <<_:256>>} = Identity, Requirement)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       (Requirement =:= any orelse Requirement =:= validator) ->
-    try gen_statem:call(
-          quod_reg:via({quod_simplex, Ns}),
-          {history_current_view, Identity, Requirement}, 1000)
-    catch exit:_ -> {error, not_ready}
+registered_history_view(Ns, Identity, Requirement, Deadline) ->
+    %% Resolve once. A replacement registration must never receive this call.
+    try call_history_view(
+          quod_reg:where({quod_simplex, Ns}), Ns, Identity, Requirement, Deadline)
+    catch _:_ -> {error, not_ready}
+    end.
+
+call_history_view(Owner, Ns, Identity, Requirement, Deadline) ->
+    case max(0, Deadline - quod_time:mono_ms()) of
+        0 -> {error, timeout};
+        Remaining ->
+            case history_owner_live(Owner, Ns) of
+                false -> {error, not_ready};
+                true ->
+                    try gen_statem:call(
+                          Owner, {history_view, Identity, Requirement, Deadline}, Remaining) of
+                        {ok, #{owner := Owner} = View} ->
+                            case {Deadline > quod_time:mono_ms(), history_view_live(View)} of
+                                {false, _} -> {error, timeout};
+                                {true, true} -> {ok, View};
+                                {true, false} -> {error, not_ready}
+                            end;
+                        {error, _} = Error -> Error;
+                        _ -> {error, not_ready}
+                    catch
+                        exit:{timeout, _} -> {error, timeout};
+                        exit:_ -> {error, not_ready}
+                    end
+            end
+    end.
+
+-doc "Check the captured local owner incarnation; this confers no certificate authority.".
+-spec history_view_live(history_view() |
+                          #{owner := pid(), identity := {binary(), <<_:256>>}}) ->
+          boolean().
+history_view_live(#{owner := Owner, identity := {Ns, _Anchor}}) when is_pid(Owner) ->
+    history_owner_live(Owner, Ns);
+history_view_live(_) -> false.
+
+history_owner_live(Owner, Ns) when is_pid(Owner) ->
+    try quod_reg:where({quod_simplex, Ns}) =:= Owner andalso is_process_alive(Owner)
+    catch _:_ -> false
     end;
-history_current_view(_Identity, _Requirement) ->
-    {error, invalid_identity}.
+history_owner_live(_, _) -> false.
 
 -doc "Return the exact signed transaction and certified reference at a known slot.".
--spec transaction_evidence(binary(), pos_integer(), <<_:256>>) ->
+-spec transaction_evidence(binary(), pos_integer(), <<_:256>>, integer()) ->
           {ok, quod_dtx:certified_ref(), #transaction{}} |
-          {error, not_ready | not_found | invalid_request}.
-transaction_evidence(Ns, Slot, <<_:256>> = TxId)
-  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Slot), Slot > 0 ->
-    case genesis_hash(Ns) of
-        <<_:256>> = Anchor ->
-            Identity = {Ns, Anchor},
-            case history_source(Identity, any) of
-                {ok, Root} ->
-                    transaction_evidence_at(
-                      Ns, Root, Identity, Slot, TxId);
-                {error, _} = Error -> Error
-            end;
-        _ -> {error, not_ready}
+          {error, timeout | not_ready | not_found | invalid_request}.
+transaction_evidence(Ns, Slot, <<_:256>> = TxId, Deadline)
+  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Slot), Slot > 0,
+       is_integer(Deadline) ->
+    case history_view(Ns, any, Deadline) of
+        {ok, View} -> evidence_at(View, Slot, {application, TxId});
+        {error, _} = Error -> Error
     end;
-transaction_evidence(_Ns, _Slot, _TxId) ->
+transaction_evidence(_Ns, _Slot, _TxId, _Deadline) ->
     {error, invalid_request}.
 
 -doc "Return the exact certified claim at its projected first slot.".
--spec operation_claim_evidence(binary(), pos_integer(), term()) ->
+-spec operation_claim_evidence(binary(), pos_integer(), term(), integer()) ->
           {ok, quod_dtx:certified_ref(), #transaction{}} |
-          {error, not_ready | not_found | invalid_request}.
-operation_claim_evidence(Ns, Slot, OperationRef)
+          {error, timeout | not_ready | not_found | invalid_request}.
+operation_claim_evidence(Ns, Slot, OperationRef, Deadline)
   when is_binary(Ns), byte_size(Ns) > 0,
-       is_integer(Slot), Slot > 0 ->
-    case genesis_hash(Ns) of
-        <<_:256>> = Anchor ->
-            Identity = {Ns, Anchor},
-            case history_source(Identity, any) of
-                {ok, Root} ->
-                    operation_claim_evidence_at(
-                      Ns, Root, Identity, Slot, OperationRef);
-                {error, _} = Error -> Error
-            end;
-        _ ->
-            {error, not_ready}
+       is_integer(Slot), Slot > 0, is_integer(Deadline) ->
+    case history_view(Ns, any, Deadline) of
+        {ok, View} -> evidence_at(View, Slot, {claim, OperationRef});
+        {error, _} = Error -> Error
     end;
-operation_claim_evidence(_Ns, _Slot, _OperationRef) ->
+operation_claim_evidence(_Ns, _Slot, _OperationRef, _Deadline) ->
     {error, invalid_request}.
 
-operation_claim_evidence_at(Ns, Root, Identity, Slot, OperationRef) ->
+evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
+            Slot, {Kind, _} = Selection) ->
+    Attributes = #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
+                   'quod.evidence.kind' => atom_to_binary(Kind)},
     case quod_trace:with_optional_span(
            quod_trace:context(), <<"quod.evidence.ledger_open">>, internal,
-           #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
-             'quod.evidence.kind' => <<"claim">>},
-           fun() -> quod_ledger_store:open_ro(Ns, Root) end) of
+           Attributes,
+           fun() -> quod_ledger_store:open_ro_snapshot(Snapshot) end) of
         {ok, Store} ->
             try
                 case quod_trace:with_optional_span(
                        quod_trace:context(), <<"quod.evidence.read_at">>, internal,
-                       #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
-                         'quod.evidence.kind' => <<"claim">>},
+                       Attributes,
                        fun() -> quod_ledger_store:read_at(Store, Slot) end) of
                     {ok, #entry{data = {batch, Transactions}} = Entry} ->
-                        operation_claim_in_entry(
-                          Identity, Entry, Transactions, OperationRef);
+                        evidence_in_entry(
+                          Identity, Entry, Transactions, Selection);
                     _ ->
                         {error, not_found}
                 end
@@ -2701,15 +2749,22 @@ operation_claim_evidence_at(Ns, Root, Identity, Slot, OperationRef) ->
             {error, not_ready}
     end.
 
-operation_claim_in_entry(Identity, Entry, Transactions, OperationRef) ->
+evidence_in_entry(Identity, Entry, Transactions, {claim, OperationRef}) ->
     Matches =
         [Claim || #transaction{role = {remote_claim, _, _, _}} = Claim
                       <- Transactions,
                   operation_ref_matches(Claim, OperationRef)],
+    certify_evidence_match(Identity, Entry, Matches);
+evidence_in_entry(Identity, Entry, Transactions, {application, TxId}) ->
+    certify_evidence_match(
+      Identity, Entry,
+      [T || #transaction{tx_id = Id} = T <- Transactions, Id =:= TxId]).
+
+certify_evidence_match(Identity, Entry, Matches) ->
     case Matches of
-        [Claim] ->
-            case quod_dtx:certified_entry_ref(Identity, Entry, Claim) of
-                {ok, Ref} -> {ok, Ref, Claim};
+        [Transaction] ->
+            case quod_dtx:certified_entry_ref(Identity, Entry, Transaction) of
+                {ok, Ref} -> {ok, Ref, Transaction};
                 _ -> {error, invalid_request}
             end;
         _ ->
@@ -2720,37 +2775,6 @@ operation_ref_matches(Claim, OperationRef) ->
     case quod_transaction:request_claim(Claim) of
         {ok, #{operation_ref := OperationRef}} -> true;
         _ -> false
-    end.
-
-transaction_evidence_at(Ns, Root, Identity, Slot, TxId) ->
-    case quod_trace:with_optional_span(
-           quod_trace:context(), <<"quod.evidence.ledger_open">>, internal,
-           #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
-             'quod.evidence.kind' => <<"application">>},
-           fun() -> quod_ledger_store:open_ro(Ns, Root) end) of
-        {ok, Store} ->
-            try
-                case quod_trace:with_optional_span(
-                       quod_trace:context(), <<"quod.evidence.read_at">>, internal,
-                       #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
-                         'quod.evidence.kind' => <<"application">>},
-                       fun() -> quod_ledger_store:read_at(Store, Slot) end) of
-                    {ok, #entry{data = {batch, Transactions}} = Entry} ->
-                        case [T || #transaction{tx_id = Id} = T <- Transactions,
-                                   Id =:= TxId] of
-                            [Transaction] ->
-                                case quod_dtx:certified_entry_ref(
-                                       Identity, Entry, Transaction) of
-                                    {ok, Ref} -> {ok, Ref, Transaction};
-                                    _ -> {error, invalid_request}
-                                end;
-                            _ -> {error, not_found}
-                        end;
-                    _ -> {error, not_found}
-                end
-            after quod_ledger_store:close(Store)
-            end;
-        _ -> {error, not_ready}
     end.
 
 dtx_outcome_result(_OutcomeRef, {ok, Status}) when is_map(Status) ->
@@ -2811,8 +2835,7 @@ dtx_applied_source(Ns, FinalizeRef)
         case gen_statem:call(
                quod_reg:via({quod_simplex, Ns}),
                {dtx_local_evidence_source, FinalizeRef, finalize}, 1000) of
-            {ok, LocalSource = #{ledger_root := _, snapshot := _,
-                                 projection := _}} ->
+            {ok, LocalSource} ->
                 {ok, {local, LocalSource}};
             {error, _} = Error -> Error
         end
@@ -2824,25 +2847,6 @@ dtx_applied_source(_Ns, _FinalizeRef) ->
 status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
 stats(Ns)     -> call(Ns, get_stats, undefined).
-
--doc "Return a read-only snapshot of this owner's already-verified ledger index.".
--spec ledger_read_snapshot(binary()) ->
-          {ok, quod_ledger_store:session()} | {error, not_ready}.
-ledger_read_snapshot(Ns) when is_binary(Ns) ->
-    try quod_reg:where({quod_simplex, Ns}) of
-        Pid when is_pid(Pid) ->
-            %% A busy consensus owner may decline this serving optimization;
-            %% catch-up then uses its existing fully verified O(history) open.
-            try gen_statem:call(Pid, get_ledger_read_snapshot, 1000)
-            catch exit:_ -> {error, not_ready}
-            end;
-        undefined ->
-            {error, not_ready}
-    catch _:_ ->
-        {error, not_ready}
-    end;
-ledger_read_snapshot(_Ns) ->
-    {error, not_ready}.
 
 -doc "The immutable 32-byte slot-1 genesis anchor for this consensus process, including before a fresh joiner has downloaded slot 1.".
 -spec genesis_hash(binary()) -> binary() | undefined.
@@ -3777,15 +3781,10 @@ running_impl(
     {keep_state, S,
      [{reply, From,
        local_dtx_evidence_source(Ref, ExpectedPhase, S)}]};
-running_impl({call, From}, {history_source, Identity, Requirement}, S) ->
+running_impl({call, From}, {history_view, Identity, Requirement, Deadline}, S) ->
     {keep_state, S,
      [{reply, From,
-       local_history_source(Identity, Requirement, S)}]};
-running_impl(
-  {call, From}, {history_current_view, Identity, Requirement}, S) ->
-    {keep_state, S,
-     [{reply, From,
-       local_history_current_view(Identity, Requirement, S)}]};
+       local_history_view(Identity, Requirement, Deadline, S)}]};
 running_impl({call, From}, get_dtx_binding, S) ->
     Reply = case current_dtx_binding(S) of
                 {ok, Binding} -> {ok, Binding};
@@ -4241,7 +4240,14 @@ running_impl({call, From}, {sink_catchup, Source, Es, Projection}, S0) ->
         %% transition helper cancels the named timer before the recovered member can vote again.
         true  -> {S1, Reply} = apply_catchup_window(
                                 Source, Es, Projection, S0),
-                 keep_progress(S0, S1, [{reply, From, Reply}]);
+                 %% Return the same writer-turn view with the sink acknowledgement.
+                 %% The recovery driver can backfill its phase index from this
+                 %% prefix without recapturing or reopening the ledger path.
+                 Result = case Reply of
+                              ok -> {ok, local_history_view(S1)};
+                              {error, _} = Error -> Error
+                          end,
+                 keep_progress(S0, S1, [{reply, From, Result}]);
         false -> {keep_state, S0, [{reply, From, {error, not_following}}]}
     end;
 %% The feed puller closes its whole multi-window replay through this process. All apply casts
@@ -4258,10 +4264,6 @@ running_impl({call, From}, finish_feed_replay, S) ->
     {keep_state, S, [{reply, From, ok}]};
 running_impl({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running_impl({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
-running_impl({call, From}, get_ledger_read_snapshot,
-             S = #s{store = Store}) when Store =/= undefined ->
-    {keep_state, S,
-     [{reply, From, {ok, quod_ledger_store:snapshot(Store)}}]};
 running_impl({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
 running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 
@@ -5136,7 +5138,7 @@ start_dtx_coordinator(
     %% inside the shared certified-history owner, which already serializes
     %% work for one identity.
     Owner = self(),
-    LocalSource = local_reference_source(S),
+    LocalSource = local_history_view(S),
     {Pid, Monitor} =
         spawn_monitor(
           fun() ->
@@ -5703,6 +5705,7 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     Parent = self(),
     OwnerMRef = dtx_worker_owner_monitor(Destination),
     TraceCtx = quod_trace:context(),
+    Deadline = quod_time:mono_ms() + TimeoutMs,
     {Pid, Monitor} = spawn_monitor(
                        fun() ->
                            quod_trace:with_optional_span(
@@ -5712,7 +5715,7 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
                              fun() ->
                                  run_dtx_endpoint_worker(
                                    Parent, Ns, Peer, Request,
-                                   quod_time:mono_ms() + TimeoutMs)
+                                   Deadline)
                              end)
                        end),
     Worker = #dtx_server_worker{
@@ -5742,7 +5745,7 @@ run_dtx_endpoint_query(
     case max(0, Deadline - quod_time:mono_ms()) of
         0 -> endpoint_worker_expired(Parent);
         Remaining ->
-            Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining),
+            Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining, Deadline),
             case waiting_applied_key(Request, Result) of
                 {wait, Key} ->
                     wait_dtx_endpoint_progress(Context, {applied, Key});
@@ -5989,12 +5992,12 @@ dtx_endpoint_operation_ready(_, _S) ->
     false.
 
 execute_dtx_endpoint_request(
-  Ns, _Peer, {apply_claim, _RequestId, EvidenceBlob}, TimeoutMs) ->
-    execute_claimed_application(Ns, EvidenceBlob, TimeoutMs);
+  Ns, _Peer, {apply_claim, _RequestId, EvidenceBlob}, _TimeoutMs, Deadline) ->
+    execute_claimed_application(Ns, EvidenceBlob, Deadline);
 execute_dtx_endpoint_request(
   Ns, Peer,
   {cancel_operation_effect, _RequestId, SubmissionBlob},
-  _TimeoutMs) ->
+  _TimeoutMs, _Deadline) ->
     case quod_effect_journal:cancel_operation(
            Peer, Ns, SubmissionBlob) of
         cancelled -> {operation_effect_cancelled, cancelled};
@@ -6002,21 +6005,21 @@ execute_dtx_endpoint_request(
         {error, _} -> {error, invalid_request}
     end;
 execute_dtx_endpoint_request(
-  Ns, _Peer, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs) ->
+  Ns, _Peer, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs, _Deadline) ->
     case quod_prolog:dtx_group_state(Ns, GroupId) of
         {ok, State} -> {phase_state, State};
         {error, _} -> {error, not_ready}
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome, _RequestId, OutcomeRef, _CommitteeId,
-       _MinimumSlot}, TimeoutMs) ->
+       _MinimumSlot}, TimeoutMs, _Deadline) ->
     execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs);
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
-       _MinimumSlot}, TimeoutMs) ->
+       _MinimumSlot}, TimeoutMs, _Deadline) ->
     execute_outcome_snapshot(Ns, GroupRef, TimeoutMs);
 execute_dtx_endpoint_request(
-  Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs) ->
+  Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs, _Deadline) ->
     case quod_dtx:decode(PlanBlob) of
         {ok, Plan} ->
             case quod_prolog:validate_read_plan(Ns, Plan, TimeoutMs) of
@@ -6030,7 +6033,7 @@ execute_dtx_endpoint_request(
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {applied, _RequestId, GroupId, FinalizeRef,
-       _Generation, _Verdict}, _TimeoutMs) ->
+       _Generation, _Verdict}, _TimeoutMs, _Deadline) ->
     case dtx_local_evidence(Ns, FinalizeRef, finalize) of
         {ok, Evidence} ->
             case quod_prolog:dtx_group_state(Ns, GroupId) of
@@ -6045,7 +6048,7 @@ execute_dtx_endpoint_request(
             {error, not_ready}
     end.
 
-execute_claimed_application(Ns, EvidenceBlob, TimeoutMs) ->
+execute_claimed_application(Ns, EvidenceBlob, Deadline) ->
     Started = erlang:monotonic_time(),
     case decode_claimed_application(EvidenceBlob) of
         {ok, ClaimRef, Claim, Application} ->
@@ -6053,7 +6056,7 @@ execute_claimed_application(Ns, EvidenceBlob, TimeoutMs) ->
                    Ns, claim_verification, ok,
                    erlang:monotonic_time() - Started),
             claimed_application_result(
-              Ns, ClaimRef, Claim, Application, TimeoutMs);
+              Ns, ClaimRef, Claim, Application, Deadline);
         error ->
             ok = quod_metrics:observe_remote_operation_stage(
                    Ns, claim_verification, failed,
@@ -6082,20 +6085,23 @@ decode_claimed_application(EvidenceBlob) ->
 
 claimed_application_result(
   Ns, _ClaimRef, _Claim,
-  #transaction{tx_id = TxId, effects = []} = Application, TimeoutMs) ->
+  #transaction{tx_id = TxId, effects = []} = Application, Deadline) ->
     case genesis_hash(Ns) of
         <<_:256>> = Anchor ->
             TargetRef = {transaction, Ns, Anchor, TxId},
-            Submission = quod_prolog:submit_role(
-                           Ns, Application, [], TimeoutMs),
+            Submission = case max(0, Deadline - quod_time:mono_ms()) of
+                             0 -> {error, timeout};
+                             Remaining -> quod_prolog:submit_role(
+                                            Ns, Application, [], Remaining)
+                         end,
             claimed_application_outcome(
-              Ns, TargetRef, TxId, Submission);
+              Ns, TargetRef, TxId, Submission, Deadline);
         _ ->
             {error, not_ready}
     end;
 claimed_application_result(
   Ns, ClaimRef, Claim,
-  Application0 = #transaction{tx_id = TxId, effects = [Effect]}, TimeoutMs) ->
+  Application0 = #transaction{tx_id = TxId, effects = [Effect]}, Deadline) ->
     case {genesis_hash(Ns), current_application_signer(Ns, Claim)} of
         {<<_:256>> = Anchor, {ok, Self, _Admission}} ->
             case Self =:= quod_effect:executor(Effect) of
@@ -6108,7 +6114,7 @@ claimed_application_result(
                            ClaimRef, TargetRef, Application) of
                         {ok, EffectId} ->
                             claimed_effect_application(
-                              Ns, TargetRef, TxId, EffectId, TimeoutMs);
+                              Ns, TargetRef, TxId, EffectId, Deadline);
                         {error, Reason} ->
                             logger:warning(
                               "quod[~ts]: operation effect binding failed: ~p",
@@ -6123,7 +6129,7 @@ claimed_application_result(
             %% private effect. Route walking will try that exact validator.
             {error, not_ready}
     end;
-claimed_application_result(_Ns, _ClaimRef, _Claim, _Application, _TimeoutMs) ->
+claimed_application_result(_Ns, _ClaimRef, _Claim, _Application, _Deadline) ->
     {error, invalid_request}.
 
 current_application_signer(
@@ -6141,16 +6147,19 @@ current_application_signer(
     end.
 
 claimed_effect_application(
-  Ns, TargetRef, TxId, EffectId, TimeoutMs) ->
+  Ns, TargetRef, TxId, EffectId, Deadline) ->
     case quod_effect_journal:handoff(EffectId) of
         ok ->
-            Await = quod_effect_journal:await(EffectId, TimeoutMs),
+            Await = case max(0, Deadline - quod_time:mono_ms()) of
+                        0 -> {error, timeout};
+                        Remaining -> quod_effect_journal:await(EffectId, Remaining)
+                    end,
             claimed_application_outcome(
               Ns, TargetRef, TxId,
               case Await of
                   ok -> {error, committed_outcome_lookup};
                   {error, Reason} -> {error, Reason}
-              end);
+              end, Deadline);
         {error, not_in_charge} ->
             {error, not_ready};
         {error, _} ->
@@ -6160,24 +6169,24 @@ claimed_effect_application(
     end.
 
 claimed_application_outcome(
-  Ns, _TargetRef, TxId, {ok, _Bindings, Slot, TxId}) ->
-    claimed_application_evidence(Ns, Slot, TxId, committed);
-claimed_application_outcome(Ns, TargetRef, TxId, {error, _Reason}) ->
+  Ns, _TargetRef, TxId, {ok, _Bindings, Slot, TxId}, Deadline) ->
+    claimed_application_evidence(Ns, Slot, TxId, committed, Deadline);
+claimed_application_outcome(Ns, TargetRef, TxId, {error, _Reason}, Deadline) ->
     case quod_prolog:local_outcome(Ns, TargetRef) of
         {ok, #{status := committed, height := Slot}} ->
-            claimed_application_evidence(Ns, Slot, TxId, committed);
+            claimed_application_evidence(Ns, Slot, TxId, committed, Deadline);
         {ok, #{status := rejected, reason := Reason, height := Slot}}
           when is_atom(Reason) ->
             claimed_application_evidence(
-              Ns, Slot, TxId, {rejected, Reason});
+              Ns, Slot, TxId, {rejected, Reason}, Deadline);
         _ ->
             {error, not_ready}
     end;
-claimed_application_outcome(_Ns, _TargetRef, _TxId, _Other) ->
+claimed_application_outcome(_Ns, _TargetRef, _TxId, _Other, _Deadline) ->
     {error, not_ready}.
 
-claimed_application_evidence(Ns, Slot, TxId, Result) ->
-    case transaction_evidence(Ns, Slot, TxId) of
+claimed_application_evidence(Ns, Slot, TxId, Result, Deadline) ->
+    case transaction_evidence(Ns, Slot, TxId, Deadline) of
         {ok, Ref, Transaction} ->
             case quod_transaction:encode_evidence(Ref, Transaction) of
                 {ok, EvidenceBlob} ->
@@ -10790,7 +10799,7 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
         {ok, ReferencePlan} ->
             Owner = self(),
             LocalIdentity = target_identity(S),
-            LocalSource = local_reference_source(S),
+            LocalSource = local_history_view(S),
             Contacts = content_reference_contacts(
                          ReferencePlan, DtxWorkers, LocalIdentity),
             Worker = spawn(
@@ -11055,7 +11064,7 @@ start_dtx_foreign_validation(
   S = #s{dtx_workers = DtxWorkers}) ->
     Owner = self(),
     LocalIdentity = target_identity(S),
-    LocalSource = local_reference_source(S),
+    LocalSource = local_history_view(S),
     ValidationSidecar = (round_state(Sl, S))#round.validation_sidecar,
     Contacts = dtx_reference_contacts(
                  ReferencePlan, DtxWorkers, LocalIdentity),
@@ -11265,9 +11274,11 @@ verify_local_dtx_reference(
       quod_foreign_log:verify_local(
         LocalSource, Ref, Phase, ?DTX_FOREIGN_VERIFY_MS)).
 
-local_reference_source(
-  S = #s{ledger_root = LedgerRoot, store = Store}) ->
-    #{ledger_root => LedgerRoot,
+%% One captured object for both callers and internal validation workers. The
+%% session owns no descriptor; borrowers open and close their own bounded read.
+local_history_view(S = #s{store = Store, slot = Slot, last_applied = Applied}) ->
+    #{owner => self(), identity => target_identity(S),
+      slot => Slot, applied => Applied,
       snapshot => quod_ledger_store:snapshot(Store),
       projection => state_projection(S)}.
 
@@ -11292,13 +11303,13 @@ local_dtx_evidence_source(
   Ref, ExpectedPhase,
   S = #s{slot = Committed}) ->
     TargetIdentity = target_identity(S),
-    case {local_history_source(TargetIdentity, any, S),
+    case {local_history_view(TargetIdentity, any, S),
           valid_dtx_phase(ExpectedPhase),
           quod_dtx:certified_ref_binding(Ref)} of
-        {{ok, _LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
+        {{ok, View}, true, {ok, TargetIdentity, Slot, _Digest}}
           when Slot =< Committed ->
-            {ok, local_reference_source(S)};
-        {{ok, _LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
+            {ok, View};
+        {{ok, _View}, true, {ok, TargetIdentity, Slot, _Digest}}
           when Slot > Committed ->
             {error, not_found};
         {{error, not_ready}, _, _} ->
@@ -11307,58 +11318,30 @@ local_dtx_evidence_source(
             {error, invalid_request}
     end.
 
-local_history_source(
-  Identity, Requirement, S = #s{ledger_root = LedgerRoot}) ->
-    case {Requirement =:= any orelse is_participant(S),
-          endpoint_read_ready(S), Identity =:= target_identity(S),
-          is_list(LedgerRoot) orelse is_binary(LedgerRoot)} of
-        {false, _, _, _} -> {error, read_certificate_unavailable};
-        {true, true, true, true} -> {ok, LedgerRoot};
-        {true, false, _, _} -> {error, not_ready};
-        _ -> {error, invalid_identity}
+local_history_view(Identity, Requirement, Deadline, S) ->
+    case {Deadline > quod_time:mono_ms(),
+          history_view_live(#{owner => self(), identity => target_identity(S)})} of
+        {false, _} -> {error, timeout};
+        {true, false} -> {error, not_ready};
+        {true, true} -> local_history_view(Identity, Requirement, S)
     end.
 
-%% The live consensus owner has already verified this projection. A local
-%% current-view request must reuse it rather than rebuild and persist a second
-%% copy of the same local ledger through the foreign-history owner.
-local_history_current_view(Identity, Requirement, S) ->
-    case local_history_source(Identity, Requirement, S) of
-        {ok, _LedgerRoot} ->
-            Projection = state_projection(S),
-            Committee = history_committee(Projection),
-            Height = S#s.last_applied,
-            Dtx = maps:get(dtx, Projection),
-            case Height > 0 andalso Committee =/= [] of
-                true ->
-                    {ok,
-                     #{identity => Identity,
-                       slot => Height,
-                       generation => maps:get(generation, Dtx),
-                       committee => Committee,
-                       committee_id => maps:get(committee_id, Projection),
-                       route_candidates =>
-                           local_history_route_candidates(
-                             Committee,
-                             history_validator_routes(Projection))}};
-                false ->
-                    {error, not_ready}
+local_history_view(Identity, Requirement, S = #s{ns = Ns, store = Store}) ->
+    ExactIdentity = target_identity(S),
+    case {Identity =:= Ns orelse Identity =:= ExactIdentity,
+          Requirement =/= validator orelse is_participant(S),
+          Requirement =:= committed orelse endpoint_read_ready(S),
+          ExactIdentity, Store} of
+        {false, _, _, _, _} -> {error, invalid_identity};
+        {true, false, _, _, _} -> {error, read_certificate_unavailable};
+        {true, true, true, {Ns, <<_:256>>}, Store} when Store =/= undefined ->
+            case quod_ledger_store:last(Store) =:= S#s.slot andalso
+                 (S#s.slot > 0 orelse Requirement =:= committed) of
+                true -> {ok, local_history_view(S)};
+                false -> {error, not_ready}
             end;
-        {error, _} = Error ->
-            Error
+        _ -> {error, not_ready}
     end.
-
-local_history_route_candidates(Committee, Routes) ->
-    lists:keysort(
-      1,
-      [{Peer, [Endpoint]}
-       || Peer <- Committee,
-          {ok, Endpoint} <- [maps:find(Peer, Routes)],
-          quod_quic:valid_endpoint(Endpoint)]).
-
--ifdef(TEST).
-test_local_history_current_view(Identity, Requirement, S) ->
-    local_history_current_view(Identity, Requirement, S).
--endif.
 
 valid_dtx_phase('begin') -> true;
 valid_dtx_phase(entry) -> true;
@@ -14276,6 +14259,7 @@ start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH,
     Statem = self(),
     {Pid, _Ref} = spawn_monitor(
         fun() ->
+            _ = quod_process:kill_when_owner_dies(Statem, self()),
             Owner = self(),
             Sink = fun(Es, Projection1) ->
                        gen_statem:call(
@@ -14313,9 +14297,8 @@ run_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot) ->
 
 recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
             FetchesLeft, FallbackUsed, HintWarms) ->
-    case recovery_snapshot(Statem) of
-        {ok, From, Projection} when From > 1 ->
-            Height = From - 1,
+    case recovery_snapshot(Statem, Ns, GH) of
+        {ok, #{slot := Height, projection := Projection}} when Height > 0 ->
             Committee = history_committee(Projection),
             Peers = committee_contacts(Self, Committee),
             Needed = required_tip_peers(Committee, Self),
@@ -14340,7 +14323,7 @@ recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
                                               FallbackUsed, ahead_contacts(Probes), Exact, Failure)
                     end
             end;
-        {ok, _From, _Committee} ->
+        {ok, #{slot := 0}} ->
             continue_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot,
                               FetchesLeft,
                               FallbackUsed, [], [], empty_namespace);
@@ -14427,10 +14410,10 @@ recovery_sources(_Ns, [], _Exact, FallbackUsed) -> {[], FallbackUsed}.
 try_recovery_sources(_Ns, _GH, _Statem, [], _Sink, _LedgerRoot) ->
     {error, no_source};
 try_recovery_sources(Ns, GH, Statem, [Contact | Rest], Sink, LedgerRoot) ->
-    case recovery_snapshot(Statem) of
-        {ok, From, Projection} ->
+    case recovery_snapshot(Statem, Ns, GH) of
+        {ok, View} ->
             case catch_up_from(
-                   Ns, GH, From, Projection, Contact, Sink, LedgerRoot) of
+                   Ns, GH, View, Contact, Sink, LedgerRoot) of
                 {ok, _} = Ok -> Ok;
                 {error, _}   -> try_recovery_sources(
                                   Ns, GH, Statem, Rest, Sink, LedgerRoot)
@@ -14469,14 +14452,10 @@ collect_tip_probes(Ref, Height, Left, Needed, Deadline, ExactN, Acc) ->
         lists:reverse(Acc)
     end.
 
-recovery_snapshot(Statem) ->
-    try gen_statem:call(Statem, get_status, 5000) of
-        #{slot := H, history_projection := Projection}
-          when is_integer(H), is_map(Projection) ->
-            {ok, H + 1, Projection};
-        _ -> {error, bad_status}
-    catch exit:R -> {error, R}
-    end.
+recovery_snapshot(Statem, Ns, GH) ->
+    %% Preserve this recovery capture's existing five-second budget. Capture
+    %% bytes and projection together, from the exact worker-owning incarnation.
+    history_view({Statem, {Ns, GH}}, committed, quod_time:mono_ms() + 5000).
 
 %% Self's durable head plus distinct, current committee peers at exactly that height must form a quorum.
 %% Lower reports are stale; higher reports are consumed by catch-up and require another round if they were
@@ -14487,11 +14466,12 @@ tip_quorum(Committee, Self, Peers) ->
     Confirmed = lists:usort(Local ++ [P || P <- Peers, lists:member(P, Committee)]),
     length(Confirmed) >= quorum(length(Committee)).
 
-catch_up_from(Ns, GH, From, Projection, Contact, Sink, LedgerRoot) ->
+catch_up_from(Ns, GH, View = #{slot := Height, projection := Projection},
+              Contact, Sink, LedgerRoot) ->
     Fetch = fun(F) -> quod_catchup:pull(Ns, F, F + ?SYNC_WINDOW - 1, Contact) end,
     quod_catchup:catch_up(
-      Ns, GH, Fetch, Sink, From, Projection,
-      #{ledger_root => LedgerRoot}).
+      Ns, GH, Fetch, Sink, Height + 1, Projection,
+      #{ledger_root => LedgerRoot, history_view => View}).
 
 %% The single recovery armer, run each tick off the commit hot path. It owns gap hysteresis and failure
 %% backoff; the recovery enum enforces single flight.

@@ -331,28 +331,29 @@ stating it as a fact.
 
 ---
 
-## 8. Reading is cheap — it doesn't go through the committee
+## 8. Reads do not create consensus records
 
-A natural worry: if a popular ontology — say `root`, the basic one everyone builds
-on — is run by just 3 computers, does every lookup pile onto those 3?
+Reading facts does not itself append a block. That does not mean any computer
+holding a copy may answer a remote Prolog invocation.
 
-No — because **the committee is only the authority for *changing* an ontology.**
-Reading it needs nothing more than *a copy of the current facts*, and copies can be
-everywhere:
+A plain remote `::` read selects a host in the target's certified current
+committee, then runs through the ordinary target ACL and scope path. A signed
+advertisement or a complete observer copy is not enough to become an eligible
+execution route. This is the contract in
+[distributed-proof-plan.md §8](distributed-proof-plan.md#8-foreign-finality-verification).
 
-1. **Your own cached copy** — for things that rarely change (like the category
-   structure), a computer keeps its own copy and is only pinged on the rare change.
-   In normal running, a lookup in `root` is answered right on the asking computer,
-   with no network at all.
-2. **A nearby copy** — one short step away to a neighbouring computer, not all the
-   way to the committee.
-3. **The committee itself** — only when you need the guaranteed-latest value, which
-   is rare.
+Existing local proof scopes and subscribed projections read their own pinned
+or verified state through their existing interfaces; a cached projection is
+not a replacement remote execution authority. When a one-writer transaction
+depends on read-only ontologies, their existing f+1 read certificates attest
+the sealed dependencies without adding Prepare/Finalize blocks. Later changes
+do not retroactively invalidate those admitted snapshots.
 
-So the 3 committee computers only carry that ontology's *changes*, and a foundational
-ontology like `root` is barely ever changed. If some *other* ontology turns out to
-be changed heavily, the fix is to split it into smaller ontologies, each with its
-own committee — more committees sharing the load, all working at the same time.
+Thus reads avoid consensus records, but may still require network work and
+certification. The planned owner-view refactor keeps warm/live requests from
+rebuilding the entire ledger prefix. Cold boot and gap recovery still verify
+the required history until a reviewed recovery-snapshot design replaces that
+work. Neither optimization bypasses authorization or freshness checks.
 
 ---
 

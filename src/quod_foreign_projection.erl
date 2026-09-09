@@ -2,8 +2,8 @@
 -moduledoc """
 One unregistered, monitored materialization worker for a followed ontology.
 
-The node-wide `quod_foreign_log` owner supplies only heights already persisted
-in its certificate-verified cache.  This worker owns the corresponding Erlog
+The node-wide `quod_foreign_log` owner supplies an atomic immutable ledger
+session, height and projection from its certificate-verified cache. This worker owns the corresponding Erlog
 ETS table and folds those cached entries through `quod_committed_projection`;
 it performs no network fetch, certificate verification, effect handling, or
 runtime reaction. For a live contiguous advance it preserves the canonical
@@ -19,7 +19,7 @@ monopolizes the foreign-log owner.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_monitor/4, advance/4, clauses/4, stop/1]).
+-export([start_monitor/4, advance/3, clauses/4, stop/1]).
 
 -ifdef(TEST).
 -export([test_result_heads/1, test_result_publications/2]).
@@ -28,8 +28,7 @@ monopolizes the foreign-log owner.
 -record(s, {
           owner :: pid(),
           identity :: {binary(), <<_:256>>},
-          root :: file:filename_all(),
-          cache_ns :: binary(),
+          view :: map(),
           projection :: quod_committed_projection:projection(),
           generation :: reference(),
           target_height = 0 :: non_neg_integer(),
@@ -40,20 +39,19 @@ monopolizes the foreign-log owner.
           resnapshot = false :: boolean()
          }).
 
--spec start_monitor(pid(), {binary(), <<_:256>>}, file:filename_all(), binary()) ->
+-spec start_monitor(pid(), {binary(), <<_:256>>}, file:filename_all(), map()) ->
           {pid(), reference(), reference()}.
-start_monitor(Owner, {Ns, <<_:256>> = _Anchor} = Identity, Root, CacheNs)
-  when is_pid(Owner), is_binary(Ns), is_binary(CacheNs) ->
+start_monitor(Owner, {Ns, <<_:256>> = _Anchor} = Identity, ScratchRoot, View)
+  when is_pid(Owner), is_binary(Ns), is_map(View) ->
     Generation = make_ref(),
     {Pid, MRef} = spawn_monitor(
-                    fun() -> init(Owner, Identity, Root, CacheNs, Generation) end),
+                    fun() -> init(Owner, Identity, ScratchRoot, View, Generation) end),
     {Pid, MRef, Generation}.
 
--spec advance(pid(), reference(), non_neg_integer(),
-              {non_neg_integer(), <<_:256>>}) -> ok.
-advance(Pid, Generation, Height, {Height, <<_:256>>} = Head)
-  when is_pid(Pid), is_reference(Generation), Height > 0 ->
-    Pid ! {advance, Generation, Height, Head},
+-spec advance(pid(), reference(), map()) -> ok.
+advance(Pid, Generation, View)
+  when is_pid(Pid), is_reference(Generation), is_map(View) ->
+    Pid ! {advance, Generation, View},
     ok.
 
 -doc "Read exact interpreted clauses from this certified materialized snapshot.".
@@ -81,9 +79,9 @@ stop(Pid) when is_pid(Pid) ->
     Pid ! stop,
     ok.
 
-init(Owner, {Ns, Anchor} = Identity, Root, CacheNs, Generation) ->
+init(Owner, {Ns, Anchor} = Identity, ScratchRoot, View, Generation) ->
     OwnerMRef = erlang:monitor(process, Owner),
-    ProjectionRoot = projection_root(Root, CacheNs, Generation),
+    ProjectionRoot = projection_root(ScratchRoot, Generation),
     {ok, Outcomes} = quod_outcome:open(
                        Ns, Anchor,
                        #{ledger_dir => ProjectionRoot}),
@@ -91,8 +89,8 @@ init(Owner, {Ns, Anchor} = Identity, Root, CacheNs, Generation) ->
                    Identity, 0, quod_committed_projection:new_est(),
                    Outcomes, none),
     try
-        loop(#s{owner = Owner, identity = Identity, root = Root,
-                cache_ns = CacheNs, projection = Projection,
+        loop(#s{owner = Owner, identity = Identity, view = View,
+                projection = Projection,
                 generation = Generation})
     after
         erlang:demonitor(OwnerMRef, [flush]),
@@ -106,9 +104,16 @@ init(Owner, {Ns, Anchor} = Identity, Root, CacheNs, Generation) ->
 
 loop(S = #s{generation = Generation}) ->
     receive
-        {advance, Generation, Height, Head} ->
-            advance_requested(Height, Head, S);
-        {advance, _StaleGeneration, _Height, _Head} ->
+        {advance, Generation, View} ->
+            case source_view(View, S) of
+                {ok, Height, Head} ->
+                    case Height >= quod_committed_projection:applied(S#s.projection) of
+                        true -> advance_requested(Height, Head, S#s{view = View});
+                        false -> loop(S)
+                    end;
+                error -> loop(S)
+            end;
+        {advance, _StaleGeneration, _View} ->
             loop(S);
         {clauses, Caller, Ref, Generation, Functors} when is_pid(Caller) ->
             Caller ! {foreign_projection_clauses, Ref,
@@ -149,18 +154,19 @@ advance_requested(Height, Head,
             materialize_turn(S1)
     end.
 
-materialize_turn(S = #s{identity = {Ns, _Anchor}, root = Root,
-                        cache_ns = CacheNs, projection = Projection0,
+materialize_turn(S = #s{identity = {Ns, _Anchor}, view = View,
+                        projection = Projection0,
                         target_height = Target}) ->
     From = quod_committed_projection:applied(Projection0) + 1,
     To = min(Target, From + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1),
-    case quod_ledger_store:open_ro(CacheNs, Root, wrapped) of
+    case quod_ledger_store:open_ro_snapshot(maps:get(snapshot, View)) of
         {ok, Store} ->
-            Result = try quod_ledger_store:read_range(Store, From, To)
+            Result = try quod_catchup:read_blocks(Store, From, To)
                      after quod_ledger_store:close(Store)
                      end,
             case Result of
-                {ok, Entries} when length(Entries) =:= To - From + 1 ->
+                {ok, [_ | _] = Entries, Target}
+                  when length(Entries) =< To - From + 1 ->
                     case apply_entries(Entries, Projection0, [], []) of
                         {ok, Projection1, Changed, Publications} ->
                             Changed1 = merge_changed(S#s.changed, Changed),
@@ -197,18 +203,17 @@ materialize_turn(S = #s{identity = {Ns, _Anchor}, root = Root,
 continue_loop(S = #s{generation = Generation}) ->
     receive
         {continue, Generation} -> materialize_turn(S);
-        {advance, Generation, Height, Head} ->
+        {advance, Generation, View} ->
             %% The cache may advance while this generation is rebuilding.
             %% Replace only the target; the already-folded prefix is retained.
-            materialize_turn(
-              S#s{target_height = max(Height, S#s.target_height),
-                  target_head = case Height >= S#s.target_height of
-                                    true -> Head;
-                                    false -> S#s.target_head
-                                end,
-                  publications = resnapshot,
-                  resnapshot = true});
-        {advance, _StaleGeneration, _Height, _Head} ->
+            case source_view(View, S) of
+                {ok, Height, Head} when Height >= S#s.target_height ->
+                    materialize_turn(
+                      S#s{target_height = Height, target_head = Head, view = View,
+                          publications = resnapshot, resnapshot = true});
+                _ -> continue_loop(S)
+            end;
+        {advance, _StaleGeneration, _View} ->
             continue_loop(S);
         {clauses, Caller, Ref, Generation, _Functors} when is_pid(Caller) ->
             Caller ! {foreign_projection_clauses, Ref, {error, building}},
@@ -222,6 +227,13 @@ continue_loop(S = #s{generation = Generation}) ->
             ok;
         stop -> ok
     end.
+
+source_view(#{owner := Owner, identity := Identity, slot := Height,
+              snapshot := _Snapshot, projection := #{history_head := {Height, Hash}}},
+            #s{owner = Owner, identity = Identity})
+  when is_integer(Height), Height > 0, is_binary(Hash), byte_size(Hash) =:= 32 ->
+    {ok, Height, {Height, Hash}};
+source_view(_View, _S) -> error.
 
 stored_clauses(Functors, Projection) ->
     Est = quod_committed_projection:est(Projection),
@@ -346,7 +358,7 @@ projection_memory_bytes(Projection) ->
     #est{db = #db{ref = Ref}} = quod_committed_projection:est(Projection),
     quod_erlog_db_mvcc:memory_words(Ref) * erlang:system_info(wordsize).
 
-projection_root(Root, CacheNs, Generation) ->
+projection_root(ScratchRoot, Generation) ->
     %% Ordinary and distributed outcomes reuse the existing bounded DETS
     %% projection instead of accumulating one unbounded Erlang map per
     %% followed ontology.  The directory is derived and disposable; the
@@ -356,6 +368,4 @@ projection_root(Root, CacheNs, Generation) ->
                  crypto:hash(
                    sha256, term_to_binary(Generation, [deterministic])),
                  lowercase)),
-    CacheRoot = quod_ledger_store:ns_dir(
-                  filename:join(Root, "projections"), CacheNs),
-    filename:join(CacheRoot, Suffix).
+    filename:join(ScratchRoot, Suffix).

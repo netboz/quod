@@ -10,8 +10,9 @@ channel, separate from `quod_simplex`'s `{log, Ns}` channel:
 - **Server** (any Member holding the durable log): asks the existing consensus owner for a copy of its
   already-verified sparse ledger index, then reads the committed `#entry{}` range through a separate
   **read-only** handle. The worker never shares the writer's raw descriptor and never rescans the full
-  log. Each request runs in a worker; concurrency + range + frame size are bounded (hostile-net +
-  memory caps).
+  log. One authenticated link grant admits one reader through ordered response
+  acceptance. Concurrent logical requests remain in their producer's rows;
+  range and frame bounds protect the byte grammar, not a worker population cap.
 - **Client** (a joiner): `contact/1` samples ONE download contact — the live, self-filtered Brahms view
   first, the static seeds (minus this node's own `node_addr`) as the cold-start fallback
   (`quod_brahms:sample_contact/2`) — and `pull/4` requests `[From, To]` from it. The contact is STICKY for
@@ -31,18 +32,16 @@ verification at the caller, never from the serving peer.
 -include("quod_transport_limits.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, stats/1,
-         channel/1, encode_frame/2, decode_frame/2, decode_frame/3, page_stats/1,
+-export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, read_blocks/3, stats/1,
+         channel/1, encode_frame/2, decode_frame/2, decode_entries/2, page_stats/1,
          verify_forward/5, verify_forward/6, verify_entry/3,
          catch_up/5, catch_up/7]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([peer_matches/2, contact_candidates/3,
-         test_state/2, test_state/3]).
+-export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3]).
 -endif.
 
 -define(REQ_TIMEOUT_MS,  8000).
--define(MAX_INFLIGHT,    32).            %% server: concurrent read workers (bound a pull-flood)
 -define(MAX_BLOCKS,      ?QUOD_MAX_FOREIGN_PAGE_ENTRIES).
 -define(RESP_BUDGET,     ?QUOD_MAX_FOREIGN_PAGE_BYTES).
                                          %% frame MUST fit quod_link's 1 MiB cap (it EXITs the link on a
@@ -51,46 +50,40 @@ verification at the caller, never from the serving peer.
 -record(client_pull, {
           from :: gen_server:from(),
           timer :: reference(),
-          expected_peer :: {bound, node_id()} | {opening, reference()},
+          caller_monitor :: reference(),
+          contact :: term(),
+          range :: {pos_integer(), log_index()},
+          deadline :: integer(),
+          sent = none :: none | {pid(), reference(), binary()},
           started_ms :: integer()
          }).
 
+-record(binding, {ref :: reference(), contact, open_ref = none, link = none,
+                  monitor = none, credit = none, active = none,
+                  waiting = {[], []}, borrowers = #{}, retiring = false}).
+-record(reader, {link :: pid(), link_monitor :: reference(), worker :: pid() | none,
+                 monitor = none :: reference() | none, timer = none :: reference() | none,
+                 source = none, result = none, retiring = false,
+                 started_ms :: integer()}).
+
 -record(s, {ns       :: binary(),
-            self     :: node_id(),
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
-            data_dir :: file:filename_all(),
             seeds    = []  :: [endpoint()],             %% static cold-start contacts (sample_contact fallback)
             pending  = #{} :: #{<<_:128>> => #client_pull{}},
                                       %% client: one exact owned row per pull
             pending_peak = 0 :: non_neg_integer(),
-            openings = #{} :: #{reference() =>
-                                  {<<_:128>>, endpoint(), binary()}},
-                                      %% identified OpenRef=>{ReqId,Endpoint,Frame}
-            inflight = #{} :: #{reference() => integer()},
+            openings = #{} :: #{reference() => term()},
+            bindings = #{} :: #{term() => #binding{}},
+            contacts = #{} :: #{term() => reference()},
+            transport_monitor :: reference(),
+            inflight = #{} :: #{reference() => #reader{}},
                                       %% server: one exact row per live read worker
             inflight_peak = 0 :: non_neg_integer()}).
 
 -ifdef(TEST).
-test_state(Ns, LedgerDir) ->
-    test_state(Ns, LedgerDir, #{}).
-
-test_state(Ns, LedgerDir, Opts) ->
-    Pending = normalize_test_pending(maps:get(pending, Opts, #{})),
-    #s{ns = Ns, self = <<0:256>>, chan = channel(Ns),
-       data_dir = LedgerDir,
-       pending = Pending,
-       pending_peak = map_size(Pending),
-       openings = maps:get(openings, Opts, #{})}.
-
-normalize_test_pending(Pending) ->
-    maps:map(
-      fun(_ReqId, {From, Timer, ExpectedPeer}) ->
-              #client_pull{from = From, timer = Timer,
-                           expected_peer = ExpectedPeer,
-                           started_ms = quod_time:mono_ms()};
-         (_ReqId, #client_pull{} = Pull) ->
-              Pull
-      end, Pending).
+test_recovery_state(Pid) -> gen_server:call(Pid, test_recovery_state).
+test_hold_next_reader(Pid, Point, TestPid) ->
+    gen_server:call(Pid, {test_hold_next_reader, Point, TestPid}).
 -endif.
 
 %%%===================================================================
@@ -129,9 +122,11 @@ contacts(Ns, Limit) when is_integer(Limit), Limit > 0 ->
 -spec pull(binary(), pos_integer(), log_index(), node_id() | endpoint()) ->
         {ok, [#entry{}], log_index()} | {error, term()}.
 pull(Ns, From, To, Contact) ->
+    Started = quod_time:mono_ms(),
     case quod_reg:where({quod_catchup, Ns}) of
         undefined -> {error, no_catchup_endpoint};
-        Pid -> try gen_server:call(Pid, {pull, From, To, Contact}, ?REQ_TIMEOUT_MS + 1000)
+        Pid -> try gen_server:call(Pid, {pull, From, To, Contact, Started},
+                                  ?REQ_TIMEOUT_MS + 1000)
                catch exit:_ -> {error, timeout} end
     end.
 
@@ -158,82 +153,84 @@ channel(Ns) when is_binary(Ns) ->
 -doc "Encode one catch-up frame; committed entries travel only as their canonical blobs.".
 -spec encode_frame(binary(), term()) -> binary().
 encode_frame(Ns, Term) when is_binary(Ns) ->
-    WireTerm = encode_wire_term(Term),
+    {ok, Term, _} = decode_wire_term(Term, 0),
     {ok, Inner} = quod_safe_term:encode_canonical(
-                    WireTerm, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-    term_to_binary(
+                    Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+    {ok, Outer} = quod_safe_term:encode_canonical(
       {catchup, Ns, Inner},
-      [deterministic]).
-
-encode_wire_term({blocks_resp, ReqId, Entries, Height}) when is_list(Entries) ->
-    EntryBlobs =
-        [begin
-             {ok, Blob} = quod_ledger:encode_entry(Entry),
-             Blob
-         end || Entry <- Entries],
-    {blocks_resp_bytes, ReqId, EntryBlobs, Height};
-encode_wire_term(Term) ->
-    Term.
+      ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+    Outer.
 
 -doc "Decode one existing catch-up frame, returning its inner encoded byte count.".
 -spec decode_frame(binary(), binary()) ->
           {ok, term(), non_neg_integer()} | {error, term()}.
-decode_frame(Ns, Payload) ->
-    decode_frame(Ns, Payload, materialized).
-
--doc "Decode a catch-up frame with target-owned or opaque foreign symbols.".
--spec decode_frame(binary(), binary(), materialized | wrapped) ->
-          {ok, term(), non_neg_integer()} | {error, term()}.
-decode_frame(Ns, Payload, SymbolMode)
+decode_frame(Ns, Payload)
   when is_binary(Ns), is_binary(Payload),
-       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES,
-       (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
-    try binary_to_term(Payload, [safe]) of
-        {catchup, Ns, Bin}
+       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    case quod_safe_term:decode_wrapped(Payload, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+        {ok, {catchup, Ns, Bin}}
           when is_binary(Bin),
                byte_size(Bin) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
             case quod_safe_term:decode_wrapped(
                    Bin, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
                 {ok, WireTerm} ->
-                    decode_wire_term(WireTerm, byte_size(Bin), SymbolMode);
+                    decode_wire_term(WireTerm, byte_size(Bin));
                 {error, _} ->
                     {error, bad_frame}
             end;
         _ ->
             {error, bad_frame}
-    catch _:_ ->
-        {error, bad_frame}
     end;
-decode_frame(_Ns, _Payload, _SymbolMode) ->
+decode_frame(_Ns, _Payload) ->
     {error, frame_too_large}.
 
-decode_wire_term({blocks_req, <<_:128>> = ReqId, From, To}, Bytes, _SymbolMode)
+decode_wire_term({blocks_credit, <<_:128>> = Grant}, Bytes) ->
+    {ok, {blocks_credit, Grant}, Bytes};
+decode_wire_term({blocks_req, <<_:128>> = Grant, <<_:128>> = ReqId, From, To}, Bytes)
   when is_integer(From), From > 0, is_integer(To), To >= From ->
-    {ok, {blocks_req, ReqId, From, To}, Bytes};
+    {ok, {blocks_req, Grant, ReqId, From, To}, Bytes};
 decode_wire_term(
-  {blocks_resp_bytes, <<_:128>> = ReqId, EntryBlobs, Height}, Bytes,
-  SymbolMode)
+  {blocks_resp_bytes, <<_:128>> = Grant, <<_:128>>,
+   EntryBlobs, Height, <<_:128>> = Next} = Term, Bytes)
   when is_list(EntryBlobs), is_integer(Height), Height >= 0 ->
-    case decode_entry_blobs(EntryBlobs, SymbolMode, []) of
-        {ok, Entries} ->
-            {ok, {blocks_resp, ReqId, Entries, Height}, Bytes};
-        error ->
-            {error, bad_frame}
+    case Grant =/= Next andalso valid_blob_page(EntryBlobs, 0, 0) of
+        true -> {ok, Term, Bytes};
+        false -> {error, bad_frame}
     end;
-decode_wire_term({blocks_err, <<_:128>> = ReqId}, Bytes, _SymbolMode) ->
-    {ok, {blocks_err, ReqId}, Bytes};
-decode_wire_term(_Term, _Bytes, _SymbolMode) ->
+decode_wire_term(
+  {blocks_err, <<_:128>> = Grant, <<_:128>>, Reason, <<_:128>> = Next} = Term, Bytes)
+  when Grant =/= Next, (Reason =:= not_ready orelse Reason =:= server_error) ->
+    {ok, Term, Bytes};
+decode_wire_term(_Term, _Bytes) ->
     {error, bad_frame}.
+
+valid_blob_page([], _Count, _Bytes) -> true;
+valid_blob_page([Blob | Rest], Count, Bytes)
+  when is_binary(Blob), Count < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
+       Bytes + byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
+    valid_blob_page(Rest, Count + 1, Bytes + byte_size(Blob));
+valid_blob_page(_, _, _) -> false.
+
+%% The transport validates only opaque blob bounds. The receiving reader owns
+%% this one decode, selecting local or wrapped vocabulary before verification.
+-spec decode_entries([binary()], materialized | wrapped) ->
+          {ok, [#entry{}]} | {error, bad_frame}.
+decode_entries(Blobs, SymbolMode)
+  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
+    case valid_blob_page(Blobs, 0, 0) of
+        true -> decode_entry_blobs(Blobs, SymbolMode, []);
+        false -> {error, bad_frame}
+    end.
 
 decode_entry_blobs([Blob | Rest], SymbolMode, Acc) when is_binary(Blob) ->
     case quod_ledger:decode_entry(Blob, SymbolMode) of
         {ok, Entry} -> decode_entry_blobs(Rest, SymbolMode, [Entry | Acc]);
-        {error, _} -> error
+        {error, _} -> {error, bad_frame}
     end;
 decode_entry_blobs([], _SymbolMode, Acc) ->
     {ok, lists:reverse(Acc)};
 decode_entry_blobs(_Malformed, _SymbolMode, _Acc) ->
-    error.
+    {error, bad_frame}.
 
 -doc "Bound a decoded catch-up page by the shared entry-count and encoded-byte limits.".
 -spec page_stats(term()) ->
@@ -262,55 +259,59 @@ page_stats(_Malformed, _Count, _Bytes) ->
 
 -doc """
 Read the committed `#entry{}` range `[From, To]` (capped to `?MAX_BLOCKS` and the readable height) from a
-READ-ONLY store view. Returns the entries + the server's current committed height. Used by the server
+READ-ONLY store view. Returns the entries + the snapshot's captured committed height. Used by the server
 worker; pure w.r.t. the gen_server (opens/closes its own handle).
 """.
--spec serve_blocks(binary(), file:filename_all(), pos_integer(), log_index()) ->
+-spec serve_blocks(binary(), quod_ledger_store:session(), non_neg_integer(), log_index()) ->
         {ok, [#entry{}], log_index()} | {error, term()}.
-serve_blocks(Ns, DataDir, From0, To) ->
+serve_blocks(Ns, Snapshot, From, To) ->
     StartedNative = erlang:monotonic_time(),
-    Result = serve_blocks_measured(Ns, DataDir, From0, To),
+    Result = serve_blocks_measured(Ns, Snapshot, From, To),
     observe_serve_stage(serve_read_total, Result, StartedNative),
     Result.
 
-serve_blocks_measured(Ns, DataDir, From0, To) ->
-    From = max(1, From0),
-    case open_read_view(Ns, DataDir) of
+serve_blocks_measured(Ns, Snapshot, From, To) ->
+    case measure_serve_stage(
+           serve_snapshot_resume,
+           fun() -> quod_ledger_store:open_ro_snapshot(Snapshot) end) of
         {error, _} = E -> E;
         {ok, Store}    ->
             try
-                LastI = quod_ledger_store:last(Store),
-                To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
-                {ok, Es} = measure_serve_stage(
-                             serve_range_read,
-                             fun() ->
-                                 quod_ledger_store:read_range(
-                                   Store, From, To1)
-                             end),
-                Capped = cap_bytes(Es, 0),
-                {ok, Capped, LastI}   %% keep the response within one quod_link frame
-            catch _:R -> {error, R}
+                case quod_ledger_store:namespace(Store) of
+                    Ns -> read_blocks(Store, From, To);
+                    _ -> {error, wrong_namespace}
+                end
             after quod_ledger_store:close(Store)
             end
     end.
 
-%% A hosted namespace already owns the one verified sparse index in Simplex.
-%% Reusing a snapshot avoids an O(history) rescan for every tiny catch-up page.
-%% The fallback is the same offline/startup reader used before this optimization;
-%% it is not another source of truth and every returned frame is still checked.
-open_read_view(Ns, DataDir) ->
-    SnapshotResult = measure_serve_stage(
-                       serve_snapshot_lookup,
-                       fun() -> quod_simplex:ledger_read_snapshot(Ns) end),
-    case SnapshotResult of
-        {ok, Snapshot} ->
-            measure_serve_stage(
-              serve_snapshot_resume,
-              fun() -> quod_ledger_store:open_ro_snapshot(Snapshot) end);
-        {error, not_ready} ->
-            measure_serve_stage(
-              serve_fallback_open,
-              fun() -> quod_ledger_store:open_ro(Ns, DataDir) end)
+%% Cold cache recovery already owns an opened store. It uses this same bounded
+%% page reader directly, not a new open (and index scan) for each replay page.
+-spec read_blocks(quod_ledger_store:handle(), non_neg_integer(), log_index()) ->
+          {ok, [#entry{}], log_index()} | {error, term()}.
+read_blocks(Store, From0, To) ->
+    From = max(1, From0),
+    try
+        LastI = quod_ledger_store:last(Store),
+        To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
+        {ok, Es} = measure_serve_stage(
+                     serve_range_read,
+                     fun() -> quod_ledger_store:read_range(Store, From, To1) end),
+        {ok, cap_bytes(Es, 0), LastI}
+    catch _:R -> {error, R}
+    end.
+
+serve_hosted_blocks(Ns, From, To, Deadline, Owner, OperationRef) ->
+    case measure_serve_stage(
+           serve_snapshot_lookup,
+           fun() -> quod_simplex:history_view(Ns, committed, Deadline) end) of
+        {ok, #{snapshot := Snapshot} = View} ->
+            case gen_server:call(Owner, {page_source, OperationRef, View},
+                                 max(0, Deadline - quod_time:mono_ms())) of
+                ok -> serve_blocks(Ns, Snapshot, From, To);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
     end.
 
 measure_serve_stage(Stage, Fun) ->
@@ -610,13 +611,14 @@ with its resulting authoritative projection.
 
 `GenesisHash` is the out-of-band-pinned slot-1 block hash. `Fetch(From)` returns
 one bounded entry window and the untrusted server height. `Sink(Entries,
-Projection)` atomically appends that verified window and accepts its exact
-resulting projection.
+Projection)` atomically appends that verified window and returns `{ok, View}`:
+the writer's immutable history view from that same turn.
 
-`Options` contains the local `ledger_root`. Content-only catch-up never reads
-it and never opens a phase index. On the first fetched DTX control, the driver
+`Options` contains the local `ledger_root` for scratch phase-index output only.
+Resumed catch-up also carries the initial `history_view`, matching `From` and
+`Projection`. Content-only catch-up never opens a phase index. On the first fetched DTX control, the driver
 opens one session-unique phase index, backfills the exact already-sunk local
-prefix from slot 1, and retains the index for every remaining window. A window
+prefix from the retained writer snapshot, and retains the index for every remaining window. A window
 is first previewed into a bounded phase delta; the sink runs next; only a
 successful sink is followed by `quod_dtx_phase_index:commit_delta/2`. The index
 is always closed and deleted when the catch-up attempt ends.
@@ -631,7 +633,7 @@ at that point. `catch_up/5` starts at slot 1 and checks the genesis anchor.
         fun((pos_integer()) ->
                 {ok, [#entry{}], log_index()} | {error, term()}),
         fun(([#entry{}], quod_simplex:history_projection()) ->
-                ok | {error, term()}),
+                {ok, quod_simplex:history_view()} | {error, term()}),
         #{ledger_root := file:filename_all()}) ->
           {ok, log_index()} | {error, term()}.
 catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink,
@@ -640,7 +642,7 @@ catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink,
        is_function(Fetch, 1), is_function(Sink, 2) ->
     Projection = quod_simplex:history_projection({Ns, GenesisHash}),
     catch_up_loop(
-      Ns, GenesisHash, Fetch, Sink, LedgerRoot, 1, Projection, 0, none);
+      Ns, GenesisHash, Fetch, Sink, {LedgerRoot, none}, 1, Projection, 0, none);
 catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _Options) ->
     {error, bad_catchup_options}.
 
@@ -649,22 +651,27 @@ catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _Options) ->
         fun((pos_integer()) ->
                 {ok, [#entry{}], log_index()} | {error, term()}),
         fun(([#entry{}], quod_simplex:history_projection()) ->
-                ok | {error, term()}),
+                {ok, quod_simplex:history_view()} | {error, term()}),
         pos_integer(), quod_simplex:history_projection(),
-        #{ledger_root := file:filename_all()}) ->
+        #{ledger_root := file:filename_all(),
+          history_view := quod_simplex:history_view()}) ->
           {ok, log_index()} | {error, term()}.
 catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink, From, Projection,
-         #{ledger_root := LedgerRoot})
+         #{ledger_root := LedgerRoot,
+           history_view := #{identity := {Ns, GenesisHash}, slot := Height,
+                             owner := Owner, snapshot := _,
+                             projection := Projection} = View})
   when is_binary(Ns), byte_size(Ns) > 0,
        is_function(Fetch, 1), is_function(Sink, 2),
-       is_integer(From), From >= 1, is_map(Projection) ->
+       is_integer(From), From >= 1, From =:= Height + 1,
+       is_map(Projection), is_pid(Owner) ->
     catch_up_loop(
-      Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+      Ns, GenesisHash, Fetch, Sink, {LedgerRoot, View},
       From, Projection, 0, none);
 catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _From, _Projection, _Options) ->
     {error, bad_catchup_options}.
 
-catch_up_loop(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+catch_up_loop(Ns, GenesisHash, Fetch, Sink, Context,
               From, Projection, MaxH, PhaseIndex) ->
     case Fetch(From) of
         {error, R} ->
@@ -676,26 +683,26 @@ catch_up_loop(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
                 [] -> {error, no_progress};
                 _ ->
                     catch_up_entries(
-                      Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+                      Ns, GenesisHash, Fetch, Sink, Context,
                       From, Projection, Target, Entries, PhaseIndex)
             end;
         _MalformedResponse ->
             {error, {fetch, bad_response}}
     end.
 
-catch_up_entries(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+catch_up_entries(Ns, GenesisHash, Fetch, Sink, Context,
                  From, Projection, Target, Entries, none) ->
     case window_has_dtx(Entries) of
         false ->
             catch_up_content_window(
-              Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+              Ns, GenesisHash, Fetch, Sink, Context,
               From, Projection, Target, Entries);
         true ->
-            case open_phase_index(Ns, GenesisHash, LedgerRoot, From) of
+            case open_phase_index(Ns, GenesisHash, Context, From) of
                 {ok, PhaseIndex} ->
                     try
                         catch_up_phase_window(
-                          Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+                          Ns, GenesisHash, Fetch, Sink, Context,
                           From, Projection, Target, Entries, PhaseIndex)
                     after
                         _ = quod_dtx_phase_index:close(PhaseIndex)
@@ -704,20 +711,22 @@ catch_up_entries(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
                     Error
             end
     end;
-catch_up_entries(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+catch_up_entries(Ns, GenesisHash, Fetch, Sink, Context,
                  From, Projection, Target, Entries, PhaseIndex) ->
     catch_up_phase_window(
-      Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+      Ns, GenesisHash, Fetch, Sink, Context,
       From, Projection, Target, Entries, PhaseIndex).
 
-catch_up_content_window(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+catch_up_content_window(Ns, GenesisHash, Fetch, Sink, Context,
                         From, Projection, Target, Entries) ->
     case verify_forward(Ns, GenesisHash, Projection, From, Entries) of
         {ok, Verified, Projection1} ->
-            case Sink(Verified, Projection1) of
-                ok ->
+            case sink_window(Sink, Verified, Projection1, Context,
+                             {Ns, GenesisHash}) of
+                {ok, NextContext} ->
                     continue_catch_up(
-                      Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+                      Ns, GenesisHash, Fetch, Sink,
+                      NextContext,
                       From, Verified, Projection1, Target, none);
                 {error, R} ->
                     {error, {sink, R}}
@@ -728,17 +737,19 @@ catch_up_content_window(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
             {error, {verify, R}}
     end.
 
-catch_up_phase_window(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+catch_up_phase_window(Ns, GenesisHash, Fetch, Sink, Context,
                       From, Projection, Target, Entries, PhaseIndex) ->
     case verify_forward(
            Ns, GenesisHash, Projection, From, Entries, PhaseIndex) of
         {ok, Verified, Projection1, Delta} ->
-            case Sink(Verified, Projection1) of
-                ok ->
+            case sink_window(Sink, Verified, Projection1, Context,
+                             {Ns, GenesisHash}) of
+                {ok, NextContext} ->
                     case quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) of
                         ok ->
                             continue_catch_up(
-                              Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+                              Ns, GenesisHash, Fetch, Sink,
+                              NextContext,
                               From, Verified, Projection1, Target, PhaseIndex);
                         {error, R} ->
                             {error, {phase_index, R}}
@@ -752,7 +763,30 @@ catch_up_phase_window(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
             {error, {verify, R}}
     end.
 
-continue_catch_up(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+%% Bind the sink acknowledgement to the exact window and original writer.
+%% This is source coherence, not a second certificate check: verify_forward
+%% remains the one verifier, and the writer remains the one append owner.
+sink_window(Sink, Verified, Projection, {Scratch, Previous}, Identity) ->
+    Height = (lists:last(Verified))#entry.index,
+    Head = maps:get(history_head, Projection),
+    case Sink(Verified, Projection) of
+        {ok, #{owner := Owner, identity := Identity, slot := Height,
+               snapshot := _, projection := #{history_head := Head}} = View}
+          when is_pid(Owner) ->
+            %% The verifier retains historical committee eras; the live
+            %% writer retains its current era only. Their map representations
+            %% need not match. Bind the immutable committed head, not that
+            %% historical bookkeeping, and keep the verifier's own projection.
+            case Previous of
+                none -> {ok, {Scratch, View}};
+                #{owner := Owner} -> {ok, {Scratch, View}};
+                _ -> {error, invalid_history_view}
+            end;
+        {error, _} = Error -> Error;
+        _ -> {error, invalid_history_view}
+    end.
+
+continue_catch_up(Ns, GenesisHash, Fetch, Sink, Context,
                   From, Verified, Projection, Target, PhaseIndex) ->
     Next = From + length(Verified),
     case Next > Target of
@@ -760,7 +794,7 @@ continue_catch_up(Ns, GenesisHash, Fetch, Sink, LedgerRoot,
             {ok, Target};
         false ->
             catch_up_loop(
-              Ns, GenesisHash, Fetch, Sink, LedgerRoot,
+              Ns, GenesisHash, Fetch, Sink, Context,
               Next, Projection, Target, PhaseIndex)
     end.
 
@@ -776,11 +810,11 @@ window_has_dtx([_Malformed | Rest]) ->
 window_has_dtx(_) ->
     false.
 
-open_phase_index(Ns, GenesisHash, LedgerRoot, From) ->
+open_phase_index(Ns, GenesisHash, {LedgerRoot, View}, From) ->
     case quod_dtx_phase_index:open(LedgerRoot, Ns) of
         {ok, PhaseIndex} ->
             case backfill_phase_index(
-                   Ns, GenesisHash, LedgerRoot, From - 1, PhaseIndex) of
+                   Ns, GenesisHash, View, From - 1, PhaseIndex) of
                 ok ->
                     {ok, PhaseIndex};
                 {error, _} = Error ->
@@ -791,13 +825,16 @@ open_phase_index(Ns, GenesisHash, LedgerRoot, From) ->
             {error, {phase_index, R}}
     end.
 
-backfill_phase_index(_Ns, _GenesisHash, _LedgerRoot, 0, _PhaseIndex) ->
+backfill_phase_index(_Ns, _GenesisHash, _View, 0, _PhaseIndex) ->
     ok;
-backfill_phase_index(Ns, GenesisHash, LedgerRoot, PrefixHeight, PhaseIndex) ->
-    case quod_ledger_store:open_ro(Ns, LedgerRoot) of
+backfill_phase_index(Ns, GenesisHash,
+                     #{identity := {Ns, GenesisHash}, slot := PrefixHeight,
+                       snapshot := Snapshot}, PrefixHeight, PhaseIndex) ->
+    case quod_ledger_store:open_ro_snapshot(Snapshot) of
         {ok, Store} ->
             try
-                case quod_ledger_store:last(Store) >= PrefixHeight of
+                case quod_ledger_store:namespace(Store) =:= Ns andalso
+                     quod_ledger_store:last(Store) =:= PrefixHeight of
                     true ->
                         Projection = quod_simplex:history_projection(
                                        {Ns, GenesisHash}),
@@ -812,7 +849,9 @@ backfill_phase_index(Ns, GenesisHash, LedgerRoot, PrefixHeight, PhaseIndex) ->
             end;
         {error, R} ->
             {error, {phase_index_backfill, R}}
-    end.
+    end;
+backfill_phase_index(_Ns, _GenesisHash, _View, _PrefixHeight, _PhaseIndex) ->
+    {error, {phase_index_backfill, invalid_history_view}}.
 
 backfill_phase_windows(_Store, _Ns, _GenesisHash, From, PrefixHeight,
                        _Projection, _PhaseIndex)
@@ -859,239 +898,493 @@ anchor_ok(_From, _Verified, _GenesisHash) -> true. %% mid-chain window
 %%%===================================================================
 
 init({Ns, Config}) ->
-    Self = maps:get(node_id, Config),
-    Chan = channel(Ns),
-    quod_reg:subscribe({channel, Chan}),
-    {ok, #s{ns = Ns, self = Self, chan = Chan,
-            data_dir = quod_ledger_store:ledger_dir(Config),
+    process_flag(trap_exit, true),
+    TransportMonitor = quod_reg:monitor_name({transport, node}, follow),
+    {ok, #s{ns = Ns, chan = channel(Ns),
+            transport_monitor = TransportMonitor,
             seeds = maps:get(seed_peers, Config, [])}}.
 
 handle_call(contact, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, quod_brahms:sample_contact(Ns, Seeds), S};
 handle_call({contacts, Limit}, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, contact_candidates(Ns, Seeds, Limit), S};
-handle_call({pull, From, To, Contact}, ReplyTo, S) ->
-    begin_pull(Contact, From, To, ReplyTo, S);
-handle_call(stats, _From, S) ->
-    {reply,
-     #{client_pending => map_size(S#s.pending),
-       client_pending_peak => S#s.pending_peak,
-       server_inflight => map_size(S#s.inflight),
-       server_inflight_peak => S#s.inflight_peak},
-     S};
-handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
-
-handle_cast({send_resp, OwnerRef, ReplyLink, Resp, Result}, S0) ->
-    case maps:take(OwnerRef, S0#s.inflight) of
-        {StartedMs, Inflight1} ->
-            %% A certified page is protocol data, not a lossy freshness cue.
-            %% Keep it on the request's authenticated link and let QUIC's
-            %% send_ready event release transient flow-control pressure.
-            {ok, Frame} = measure_serve_stage(
-                            serve_encode,
-                            fun() ->
-                                {ok, encode_frame(S0#s.ns, Resp)}
-                            end),
-            ok = quod_link:send_ordered(ReplyLink, Frame),
-            S1 = S0#s{inflight = Inflight1},
-            {noreply,
-             record_server_terminal(Result, elapsed_ms(StartedMs), S1)};
-        error ->
-            {noreply, S0}
+handle_call({pull, From, To, Contact, Started}, ReplyTo, S) ->
+    begin_pull(Contact, From, To, Started, ReplyTo, S);
+handle_call({page_source, Op, View}, {Worker, _}, S0) ->
+    case maps:get(Op, S0#s.inflight, undefined) of
+        #reader{worker = Worker, source = none, retiring = false} = Row ->
+            case Row#reader.started_ms + ?REQ_TIMEOUT_MS > quod_time:mono_ms() andalso
+                 is_process_alive(Worker) andalso quod_simplex:history_view_live(View) of
+                true ->
+                    Source = maps:get(owner, View),
+                    MRef = erlang:monitor(process, Source, [{tag, {page_source_down, Op}}]),
+                    {reply, ok, S0#s{inflight = (S0#s.inflight)#{
+                                     Op => Row#reader{source =
+                                       {Source, maps:get(identity, View), MRef}}}}};
+                false -> {reply, {error, not_ready}, S0}
+            end;
+        _ -> {reply, {error, not_ready}, S0}
     end;
+handle_call(stats, _From, S) ->
+    {reply, #{client_pending => map_size(S#s.pending),
+              client_pending_peak => S#s.pending_peak,
+              server_inflight => map_size(S#s.inflight),
+              server_inflight_peak => S#s.inflight_peak}, S};
+handle_call(Request, _From, S) -> test_call(Request, S).
+
+-ifdef(TEST).
+test_call(test_recovery_state, S) ->
+    {reply, #{openings => S#s.openings, contacts => S#s.contacts,
+              bindings => maps:map(
+                fun(_, B) -> #{open_ref => B#binding.open_ref, link => B#binding.link,
+                               retiring => B#binding.retiring,
+                               borrowers => map_size(B#binding.borrowers),
+                               waiting => queue:len(B#binding.waiting),
+                               active => B#binding.active} end,
+                S#s.bindings),
+              readers => maps:map(
+                fun(_, R) -> #{worker => R#reader.worker, link => R#reader.link,
+                               result => R#reader.result, retiring => R#reader.retiring} end,
+                S#s.inflight)}, S};
+test_call({test_hold_next_reader, Point, TestPid}, S)
+  when (Point =:= before_read orelse Point =:= after_result), is_pid(TestPid) ->
+    put({?MODULE, reader_gate}, {Point, TestPid}),
+    {reply, ok, S};
+test_call(_, S) -> {reply, {error, unknown_call}, S}.
+
+take_reader_gate() -> erase({?MODULE, reader_gate}).
+reader_gate(Point, {Point, TestPid}, Op) ->
+    TestPid ! {reader_held, self(), Op, Point},
+    receive {release_reader, Op} -> ok end;
+reader_gate(_, _, _) -> ok.
+-else.
+test_call(_, S) -> {reply, {error, unknown_call}, S}.
+take_reader_gate() -> none.
+reader_gate(_, _, _) -> ok.
+-endif.
+
 handle_cast(_Msg, S) -> {noreply, S}.
 
-handle_info(
-  {quod_message, {PeerIdentity, ReplyLink}, Chan, Payload},
-  S = #s{chan = Chan}) when is_pid(ReplyLink) ->
-    case quod_link:peer_key(PeerIdentity) of
-        undefined -> {noreply, S};
-        Peer -> {noreply, inbound(Peer, ReplyLink, Payload, S)}
+handle_info({catchup_request, Link, Op, From, To, StartedMs}, S)
+  when is_pid(Link), is_reference(Op), is_integer(From), From > 0,
+       is_integer(To), To >= From, is_integer(StartedMs) ->
+    {noreply, start_reader(Link, Op, From, To, StartedMs, S)};
+handle_info({reader_result, Op, Worker, Result}, S0) ->
+    case maps:get(Op, S0#s.inflight, undefined) of
+        #reader{worker = Worker, result = none, retiring = false} = Row ->
+            {noreply, put_reader(Op, Row#reader{result = Result}, S0)};
+        _ -> {noreply, S0}
     end;
-handle_info(
-  {link_up, OpenRef, <<_:256>> = Peer, Chan, ReplyLink},
-  S = #s{chan = Chan}) when is_reference(OpenRef), is_pid(ReplyLink) ->
-    {noreply, finish_identified_open(OpenRef, Peer, ReplyLink, S)};
-handle_info(
-  {link_error, OpenRef, _Peer, Chan},
-  S = #s{chan = Chan}) when is_reference(OpenRef) ->
-    {noreply, fail_identified_open(OpenRef, S)};
-handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};
+handle_info({catchup_page_sent, Link, Op}, S0) ->
+    case maps:get(Op, S0#s.inflight, undefined) of
+        #reader{link = Link, worker = none, result = Result} = Row ->
+            {noreply, retire_reader(Op, Row, terminal_result(Result), S0)};
+        _ -> {noreply, S0}
+    end;
+handle_info({page_deadline, Op}, S0) ->
+    {noreply, cancel_reader(Op, {error, not_ready}, false, S0)};
+handle_info({{page_source_down, Op}, MRef, process, Source, _}, S0) ->
+    case maps:get(Op, S0#s.inflight, undefined) of
+        #reader{source = {Source, _Identity, MRef}} ->
+            {noreply, cancel_reader(Op, {error, not_ready}, false, S0)};
+        _ -> {noreply, S0}
+    end;
+handle_info({{page_worker_down, Op}, MRef, process, Worker, _}, S0) ->
+    {noreply, reader_down(Op, MRef, Worker, S0)};
+handle_info({{page_link_down, Op}, MRef, process, Link, _}, S0) ->
+    case maps:get(Op, S0#s.inflight, undefined) of
+        #reader{link = Link, link_monitor = MRef} ->
+            {noreply, cancel_reader(Op, {error, server_error}, true, S0)};
+        _ -> {noreply, S0}
+    end;
+handle_info({link_up, OpenRef, Peer, Chan, Link}, S = #s{chan = Chan})
+  when is_reference(OpenRef), is_pid(Link) ->
+    {noreply, finish_open(OpenRef, Peer, Link, S)};
+handle_info({link_error, OpenRef, _Peer, Chan}, S = #s{chan = Chan}) ->
+    {noreply, fail_open(OpenRef, S)};
+handle_info({catchup_credit, Link, Ref, Grant}, S0) ->
+    case maps:get(Ref, S0#s.bindings, undefined) of
+        #binding{link = Link, retiring = false, active = none, credit = none} = B ->
+            {noreply, drive_binding(Ref, put_binding(B#binding{credit = Grant}, S0))};
+        _ -> {noreply, S0}
+    end;
+handle_info({catchup_page, Link, Ref, Grant, ReqId, Result, NextGrant}, S0) ->
+    {noreply, finish_page(Link, Ref, Grant, ReqId, Result, NextGrant, S0)};
 handle_info({req_timeout, ReqId}, S) ->
-    case maps:take(ReqId, S#s.pending) of
-        {#client_pull{from = From, expected_peer = ExpectedPeer,
-                      started_ms = StartedMs}, P1} ->
-            gen_server:reply(From, {error, timeout}),
-            S1 = S#s{pending = P1,
-                     openings = drop_opening(ExpectedPeer, S#s.openings)},
-            {noreply, record_client_terminal(
-                        timeout, elapsed_ms(StartedMs), S1)};
-        error -> {noreply, S}
+    {noreply, cancel_pull(ReqId, {error, timeout}, S)};
+handle_info({{pull_caller_down, ReqId}, MRef, process, _Pid, _}, S) ->
+    case maps:get(ReqId, S#s.pending, undefined) of
+        #client_pull{caller_monitor = MRef} ->
+            {noreply, cancel_pull(ReqId, {error, caller_down}, S)};
+        _ -> {noreply, S}
     end;
+handle_info({{catchup_borrower_down, Ref, Caller}, MRef, process, Caller, _}, S0) ->
+    {noreply, borrower_down(Ref, Caller, MRef, S0)};
+handle_info({{catchup_link_down, Ref}, MRef, process, Link, _}, S0) ->
+    {noreply, binding_down(Ref, MRef, Link, S0)};
+handle_info({gproc, unreg, Monitor, _}, S = #s{transport_monitor = Monitor}) ->
+    {noreply, retire_transport(S)};
+handle_info({gproc, registered, Monitor, _}, S = #s{transport_monitor = Monitor}) ->
+    {noreply, maps:fold(fun(Ref, _, Acc) -> ensure_open(Ref, Acc) end, S, S#s.bindings)};
+%% Linked reader faults are retired by the corresponding monitored DOWN only.
+handle_info({'EXIT', _Pid, _Reason}, S) -> {noreply, S};
 handle_info(_Info, S) -> {noreply, S}.
 
-terminate(_Reason, #s{chan = Chan}) ->
-    _ = try quod_reg:unsubscribe({channel, Chan}) catch _:_ -> ok end,
+terminate(_Reason, S) ->
+    _ = catch quod_reg:demonitor_name({transport, node}, S#s.transport_monitor),
+    maps:foreach(fun(_, B) -> close_binding(B) end, S#s.bindings),
+    maps:foreach(fun(_, R) ->
+        case R#reader.worker of none -> ok; Pid -> exit(Pid, kill) end,
+        quod_link:close(R#reader.link),
+        cleanup_reader(R)
+    end, S#s.inflight),
+    maps:foreach(fun(_, P) ->
+        cancel_timer(P#client_pull.timer),
+        erlang:demonitor(P#client_pull.caller_monitor, [flush]),
+        gen_server:reply(P#client_pull.from, {error, unavailable})
+    end, S#s.pending),
     ok.
 
-%%%===================================================================
-%%% wire / dispatch
-%%%===================================================================
-
-inbound(_Peer, _ReplyLink, Payload, S)
-  when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-    S;   %% drop an oversized frame BEFORE decoding — bound binary_to_term memory (hostile peer)
-inbound(Peer, ReplyLink, Payload, S) ->
-    case decode_frame(S#s.ns, Payload) of
-        {ok, Term, _Bytes} ->
-            try route(Peer, ReplyLink, Term, S) catch _:_ -> S end;
-        {error, _} -> S
-    end.
-
-route(_Peer, ReplyLink, {blocks_req, ReqId, From, To}, S) ->
-    handle_req(ReplyLink, ReqId, From, To, S);
-route(Peer, _ReplyLink, {blocks_resp, ReqId, Entries, Height}, S) ->
-    handle_resp(Peer, ReqId, Entries, Height, S);
-route(Peer, _ReplyLink, {blocks_err, ReqId}, S) ->
-    handle_err(Peer, ReqId, S).
-
-%% Server: read the requested range in a worker (never block the endpoint; concurrency-capped). Over the
-%% cap ⇒ drop; the client times out and retries a fresher/other peer.
-handle_req(ReplyLink, ReqId, From, To, S = #s{ns = Ns, data_dir = Dir})
-  when is_integer(From), is_integer(To) ->
-    case map_size(S#s.inflight) < ?MAX_INFLIGHT of
-        false -> S;
-        true  ->
-            Self = self(),
-            OwnerRef = make_ref(),
-            StartedMs = quod_time:mono_ms(),
-            %% The worker ALWAYS casts a response (whole body in try/catch), so `inflight` is decremented
-            %% even if serve_blocks throws — otherwise a crashed worker would leak a slot and, after
-            %% ?MAX_INFLIGHT such crashes, wedge the endpoint. An error sends a distinct `blocks_err` (never
-            %% a misleading empty `{[], 0}` that a joiner would read as "namespace empty").
-            _ = spawn(fun() ->
-                          {Resp, Result} =
-                              try case serve_blocks(Ns, Dir, From, To) of
-                                      {ok, Es, H} ->
-                                          {{blocks_resp, ReqId, Es, H}, completed};
-                                      {error, _} ->
-                                          {{blocks_err, ReqId}, error}
-                                  end
-                              catch _:_ -> {{blocks_err, ReqId}, error}
-                              end,
-                          gen_server:cast(
-                            Self, {send_resp, OwnerRef, ReplyLink, Resp, Result})
-                      end),
-            Inflight1 = (S#s.inflight)#{OwnerRef => StartedMs},
-            S#s{inflight = Inflight1,
-                inflight_peak = max(S#s.inflight_peak, map_size(Inflight1))}
-    end;
-handle_req(_ReplyLink, _ReqId, _From, _To, S) ->
-    S.   %% malformed range ⇒ drop; no owned row was admitted
-
-%% Client: match a response to its parked caller.
-handle_resp(Peer, ReqId, Entries, Height, S) ->
-    reply_pending(Peer, ReqId, {ok, Entries, Height}, S).
-
-%% Client: the server hit a read error (distinct from an empty log) — fail the pull so the caller retries
-%% another contact rather than concluding the namespace is empty.
-handle_err(Peer, ReqId, S) ->
-    reply_pending(Peer, ReqId, {error, server_error}, S).
-
-reply_pending(Peer, ReqId, Reply, S) ->
-    case maps:get(ReqId, S#s.pending, undefined) of
-        #client_pull{expected_peer = ExpectedPeer} ->
-            case peer_matches(Peer, ExpectedPeer) of
-                false -> S;   %% authenticated response, but not from the node this request targeted
-                true  ->
-                    {#client_pull{from = From, timer = TRef,
-                                  started_ms = StartedMs}, P1} =
-                        maps:take(ReqId, S#s.pending),
-                    _ = erlang:cancel_timer(TRef),
-                    gen_server:reply(From, Reply),
-                    record_client_terminal(
-                      terminal_result(Reply), elapsed_ms(StartedMs),
-                      S#s{pending = P1})
-            end;
-        undefined -> S   %% unknown / already-timed-out ReqId
-    end.
-
-peer_matches(Peer, {bound, Peer}) -> true;
-peer_matches(_Peer, {bound, _ExpectedPeer}) -> false.
-
-begin_pull(Contact, From, To, ReplyTo, S = #s{ns = Ns, chan = Chan}) ->
-    ReqId = crypto:strong_rand_bytes(16),
-    StartedMs = quod_time:mono_ms(),
-    Frame = encode_frame(Ns, {blocks_req, ReqId, From, To}),
-    TRef = erlang:send_after(
-             ?REQ_TIMEOUT_MS, self(), {req_timeout, ReqId}),
-    case Contact of
-        <<_:256>> = Peer ->
-            ok = quod_quic:send(Peer, Chan, Frame),
-            Pull = #client_pull{from = ReplyTo, timer = TRef,
-                                expected_peer = {bound, Peer},
-                                started_ms = StartedMs},
-            {noreply, put_client_pull(ReqId, Pull, S)};
-        _ ->
-            case quod_quic:valid_endpoint(Contact) of
-                true ->
-                    OpenRef = quod_quic:open_link_identified(Contact, Chan),
-                    Pull = #client_pull{from = ReplyTo, timer = TRef,
-                                        expected_peer = {opening, OpenRef},
-                                        started_ms = StartedMs},
-                    Openings1 = (S#s.openings)#{
-                                  OpenRef => {ReqId, Contact, Frame}},
-                    S1 = put_client_pull(ReqId, Pull, S),
-                    {noreply, S1#s{openings = Openings1}};
-                false ->
-                    _ = erlang:cancel_timer(TRef),
-                    {reply, {error, bad_contact}, S}
+start_reader(Link, Op, From, To, Started, S = #s{ns = Ns}) ->
+    %% The link has already spent its one grant. There is no population cap.
+    %% The linked worker and its exact row survive result delivery until DOWN.
+    case maps:is_key(Op, S#s.inflight) orelse not is_process_alive(Link) of
+        true -> S;
+        false ->
+            Deadline = Started + ?REQ_TIMEOUT_MS,
+            LinkMonitor = erlang:monitor(process, Link, [{tag, {page_link_down, Op}}]),
+            Row = #reader{link = Link, link_monitor = LinkMonitor,
+                          worker = none, started_ms = Started},
+            case Deadline =< quod_time:mono_ms() of
+                true -> send_reader_result(Op, Row#reader{result = {error, not_ready}}, S);
+                false -> spawn_reader(Ns, Op, From, To, Deadline, Row, S)
             end
     end.
 
-finish_identified_open(OpenRef, Peer, ReplyLink,
-                       S = #s{openings = Openings, pending = Pending}) ->
-    case maps:take(OpenRef, Openings) of
-        {{ReqId, Endpoint, Frame}, Openings1} ->
-            case maps:get(ReqId, Pending, undefined) of
-                #client_pull{expected_peer = {opening, OpenRef}} = Pull ->
-                    ok = quod_quic:learn(Peer, Endpoint),
-                    ok = quod_link:send(ReplyLink, Frame),
-                    Pending1 = Pending#{
-                                 ReqId => Pull#client_pull{
-                                            expected_peer = {bound, Peer}}},
-                    S#s{pending = Pending1, openings = Openings1};
-                _ ->
-                    S#s{openings = Openings1}
-            end;
-        error ->
-            S
+spawn_reader(Ns, Op, From, To, Deadline, Row, S) ->
+            Owner = self(),
+            Gate = take_reader_gate(),
+            {Worker, MRef} = spawn_opt(fun() ->
+                reader_gate(before_read, Gate, Op),
+                Result = try
+                    case serve_hosted_blocks(Ns, From, To, Deadline, Owner, Op) of
+                        {ok, Entries, Height} ->
+                            {ok, Blobs} = measure_serve_stage(serve_encode,
+                              fun() ->
+                                  {ok, [begin {ok, Blob} = quod_ledger:encode_entry(E), Blob end
+                                        || E <- Entries]}
+                              end),
+                            {ok, Blobs, Height};
+                        {error, _} -> {error, not_ready}
+                    end
+                catch _:_ -> {error, server_error}
+                end,
+                Owner ! {reader_result, Op, self(), Result},
+                reader_gate(after_result, Gate, Op)
+            end, [link, {monitor, [{tag, {page_worker_down, Op}}]}]),
+            Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
+                                     self(), {page_deadline, Op}),
+            put_reader(Op, Row#reader{worker = Worker, monitor = MRef, timer = Timer}, S).
+
+put_reader(Op, R, S) ->
+    Rows = (S#s.inflight)#{Op => R},
+    S#s{inflight = Rows, inflight_peak = max(S#s.inflight_peak, map_size(Rows))}.
+
+reader_down(Op, MRef, Worker, S) ->
+    case maps:get(Op, S#s.inflight, undefined) of
+        #reader{worker = Worker, monitor = MRef} = Row0 ->
+            Result = case reader_result_live(Row0) of
+                false -> {error, not_ready};
+                true -> case Row0#reader.result of
+                            none -> {error, server_error}; R -> R
+                        end
+            end,
+            cleanup_source(Row0#reader.source),
+            cancel_timer(Row0#reader.timer),
+            Row = Row0#reader{worker = none, source = none, timer = none, result = Result},
+            send_reader_result(Op, Row, S);
+        _ -> S
     end.
 
-fail_identified_open(OpenRef,
-                     S = #s{openings = Openings, pending = Pending}) ->
-    case maps:take(OpenRef, Openings) of
-        {{ReqId, _Endpoint, _Frame}, Openings1} ->
-            case maps:take(ReqId, Pending) of
-                {#client_pull{from = From, timer = TRef,
-                              expected_peer = {opening, OpenRef},
-                              started_ms = StartedMs}, Pending1} ->
-                    _ = erlang:cancel_timer(TRef),
-                    gen_server:reply(From, {error, timeout}),
-                    record_client_terminal(
-                      link_down, elapsed_ms(StartedMs),
-                      S#s{pending = Pending1, openings = Openings1});
-                _ ->
-                    S#s{openings = Openings1}
-            end;
-        error ->
-            S
+send_reader_result(Op, Row, S) ->
+    case Row#reader.retiring orelse not is_process_alive(Row#reader.link) of
+        true -> retire_reader(Op, Row, link_down, S);
+        false ->
+            quod_link:complete_page(Row#reader.link, Op, Row#reader.result),
+            put_reader(Op, Row, S)
     end.
 
-drop_opening({opening, OpenRef}, Openings) ->
-    maps:remove(OpenRef, Openings);
-drop_opening({bound, _Peer}, Openings) ->
-    Openings.
+reader_result_live(#reader{started_ms = Started, source = Source}) ->
+    Started + ?REQ_TIMEOUT_MS > quod_time:mono_ms() andalso
+    case Source of
+        none -> true;
+        {Pid, Identity, _} ->
+            quod_simplex:history_view_live(#{owner => Pid, identity => Identity})
+    end.
+
+cancel_reader(Op, Result, Retiring, S) ->
+    case maps:get(Op, S#s.inflight, undefined) of
+        #reader{worker = none} = Row when Retiring ->
+            retire_reader(Op, Row, link_down, S);
+        #reader{worker = none} -> S;
+        #reader{worker = Worker} = Row ->
+            exit(Worker, kill),
+            put_reader(Op, Row#reader{result = Result,
+                                     retiring = Retiring orelse Row#reader.retiring}, S);
+        _ -> S
+    end.
+
+cleanup_source({_, _, MRef}) -> erlang:demonitor(MRef, [flush]), ok;
+cleanup_source(none) -> ok.
+cancel_timer(none) -> ok;
+cancel_timer(Ref) -> _ = erlang:cancel_timer(Ref), ok.
+cleanup_reader(R) ->
+    cancel_timer(R#reader.timer),
+    cleanup_source(R#reader.source),
+    case R#reader.monitor of none -> ok; MRef -> erlang:demonitor(MRef, [flush]) end,
+    erlang:demonitor(R#reader.link_monitor, [flush]),
+    ok.
+retire_reader(Op, Row, Result, S) ->
+    cleanup_reader(Row),
+    record_server_terminal(Result, elapsed_ms(Row#reader.started_ms),
+                           S#s{inflight = maps:remove(Op, S#s.inflight)}).
+
+begin_pull(Contact, From, To, Started, ReplyTo, S0)
+  when is_integer(From), From > 0, is_integer(To), To >= From,
+       is_integer(Started) ->
+    case is_binary(Contact) andalso byte_size(Contact) =:= 32 orelse
+         quod_quic:valid_endpoint(Contact) of
+        false -> {reply, {error, bad_contact}, S0};
+        true ->
+            Deadline = Started + ?REQ_TIMEOUT_MS,
+            Remaining = Deadline - quod_time:mono_ms(),
+            Caller = element(1, ReplyTo),
+            case {Remaining > 0, is_process_alive(Caller)} of
+                {false, _} -> {reply, {error, timeout}, S0};
+                {true, false} -> {reply, {error, caller_down}, S0};
+                {true, true} ->
+                    ReqId = crypto:strong_rand_bytes(16),
+                    Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
+                                              self(), {req_timeout, ReqId}),
+                    MRef = erlang:monitor(process, Caller,
+                                          [{tag, {pull_caller_down, ReqId}}]),
+                    {Ref, S1} = ensure_binding(Contact, Caller, S0),
+                    B = maps:get(Ref, S1#s.bindings),
+                    Pull = #client_pull{from = ReplyTo, timer = Timer,
+                                        caller_monitor = MRef, contact = Contact,
+                                        range = {From, To}, deadline = Deadline,
+                                        started_ms = Started},
+                    S2 = put_client_pull(ReqId, Pull,
+                           put_binding(B#binding{waiting = queue:in(ReqId, B#binding.waiting)}, S1)),
+                    {noreply, drive_binding(Ref, ensure_open(Ref, S2))}
+            end
+    end;
+begin_pull(_, _, _, _, _, S) -> {reply, {error, bad_range}, S}.
+
+ensure_binding(Contact, Caller, S) ->
+    case maps:find(Contact, S#s.contacts) of
+        {ok, Ref} -> {Ref, retain_borrower(Ref, Caller, S)};
+        error ->
+            Ref = make_ref(),
+            {Ref, retain_borrower(Ref, Caller,
+                    put_binding(#binding{ref = Ref, contact = Contact},
+                                S#s{contacts = (S#s.contacts)#{Contact => Ref}}))}
+    end.
+put_binding(B, S) -> S#s{bindings = (S#s.bindings)#{B#binding.ref => B}}.
+
+%% All production pull callers are the existing recovery/feed pull workers.
+%% Their lifetime spans the gaps between pages of one catch-up run. Retaining
+%% that exact borrower, not a clock or the namespace's lifetime, keeps its
+%% stream usable between pages and releases the binding when the run ends.
+retain_borrower(Ref, Caller, S) ->
+    B = maps:get(Ref, S#s.bindings),
+    case maps:is_key(Caller, B#binding.borrowers) of
+        true -> S;
+        false ->
+            MRef = erlang:monitor(process, Caller,
+                                 [{tag, {catchup_borrower_down, Ref, Caller}}]),
+            put_binding(B#binding{borrowers = (B#binding.borrowers)#{Caller => MRef}}, S)
+    end.
+
+borrower_down(Ref, Caller, MRef, S0) ->
+    case maps:get(Ref, S0#s.bindings, undefined) of
+        #binding{borrowers = Borrowers} = B ->
+            case maps:get(Caller, Borrowers, none) of
+                MRef ->
+                    S1 = put_binding(B#binding{borrowers = maps:remove(Caller, Borrowers)}, S0),
+                    Owned = [Id || {Id, #client_pull{from = {Pid, _}, contact = Contact}} <-
+                                       maps:to_list(S1#s.pending),
+                                   Pid =:= Caller, Contact =:= B#binding.contact],
+                    S2 = lists:foldl(fun(Id, Acc) ->
+                                        cancel_pull(Id, {error, caller_down}, Acc)
+                                    end, S1, Owned),
+                    release_unused_binding(Ref, S2);
+                _ -> S0
+            end;
+        _ -> S0
+    end.
+
+release_unused_binding(Ref, S0) ->
+    case maps:get(Ref, S0#s.bindings, undefined) of
+        #binding{borrowers = Borrowers, link = Link} = B when map_size(Borrowers) =:= 0 ->
+            case Link of
+                none when B#binding.open_ref =:= none -> remove_binding(B, S0);
+                none -> put_binding(B#binding{retiring = true}, S0);
+                _ -> quod_link:close(Link), put_binding(B#binding{retiring = true, credit = none}, S0)
+            end;
+        _ -> S0
+    end.
+
+remove_binding(B, S) ->
+    S#s{bindings = maps:remove(B#binding.ref, S#s.bindings),
+        contacts = maps:remove(B#binding.contact, S#s.contacts),
+        openings = maps:remove(B#binding.open_ref, S#s.openings)}.
+
+ensure_open(Ref, S) ->
+    case maps:get(Ref, S#s.bindings) of
+        #binding{link = none, open_ref = none, retiring = false, contact = Contact,
+                 waiting = Waiting} = B ->
+            case queue:is_empty(Waiting) orelse quod_reg:where({transport, node}) =:= undefined of
+                true -> S;
+                false ->
+                    OpenRef = case Contact of
+                        <<_:256>> -> quod_quic:open_link_tagged(Contact, S#s.chan);
+                        _ -> quod_quic:open_link_identified(Contact, S#s.chan)
+                    end,
+                    put_binding(B#binding{open_ref = OpenRef},
+                                S#s{openings = (S#s.openings)#{OpenRef => Ref}})
+            end;
+        _ -> S
+    end.
+
+finish_open(OpenRef, Peer, Link, S0) ->
+    case maps:take(OpenRef, S0#s.openings) of
+        {Ref, Openings} ->
+            case maps:get(Ref, S0#s.bindings, undefined) of
+                #binding{open_ref = OpenRef, contact = Contact} = B ->
+                    case Contact of <<_:256>> -> ok; _ -> quod_quic:learn(Peer, Contact) end,
+                    MRef = erlang:monitor(process, Link, [{tag, {catchup_link_down, Ref}}]),
+                    S1 = put_binding(B#binding{open_ref = none, link = Link, monitor = MRef},
+                                     S0#s{openings = Openings}),
+                    case B#binding.retiring of
+                        true -> quod_link:close(Link), S1;
+                        false -> quod_link:bind_catchup(Link, Ref), S1
+                    end;
+                _ -> S0#s{openings = Openings}
+            end;
+        error -> S0
+    end.
+
+fail_open(OpenRef, S0) ->
+    case maps:take(OpenRef, S0#s.openings) of
+        {Ref, Openings} ->
+            B = maps:get(Ref, S0#s.bindings),
+            S1 = put_binding(B#binding{open_ref = none, waiting = queue:new(), retiring = false},
+                             S0#s{openings = Openings}),
+            release_unused_binding(Ref,
+              lists:foldl(fun(Id, S) -> complete_pull(Id, {error, link_down}, S) end,
+                          S1, queue:to_list(B#binding.waiting)));
+        error -> S0
+    end.
+
+drive_binding(Ref, S0) ->
+    case maps:get(Ref, S0#s.bindings) of
+        #binding{link = Link, credit = Grant, active = none,
+                 retiring = false, waiting = Waiting} = B
+          when is_pid(Link), is_binary(Grant) ->
+            case queue:out(Waiting) of
+                {empty, _} -> S0;
+                {{value, ReqId}, Rest} ->
+                    S1 = put_binding(B#binding{waiting = Rest}, S0),
+                    case maps:get(ReqId, S1#s.pending, undefined) of
+                        undefined -> drive_binding(Ref, S1);
+                        #client_pull{range = {From, To}} = P ->
+                            case P#client_pull.deadline =< quod_time:mono_ms() of
+                                true -> drive_binding(Ref, complete_pull(ReqId, {error, timeout}, S1));
+                                false ->
+                                    quod_link:request_page(Link, Ref, Grant, ReqId, From, To),
+                                    Pending = (S1#s.pending)#{ReqId => P#client_pull{
+                                                sent = {Link, Ref, Grant}}},
+                                    put_binding(B#binding{waiting = Rest, active = ReqId, credit = none},
+                                                S1#s{pending = Pending})
+                            end
+                    end
+            end;
+        _ -> S0
+    end.
+
+finish_page(Link, Ref, Grant, ReqId, Result, NextGrant, S0) ->
+    case {maps:get(Ref, S0#s.bindings, undefined), maps:get(ReqId, S0#s.pending, undefined)} of
+        {#binding{link = Link, active = ReqId, retiring = false} = B,
+         #client_pull{sent = {Link, Ref, Grant}, deadline = Deadline}} ->
+            case Deadline > quod_time:mono_ms() of
+              false -> cancel_pull(ReqId, {error, timeout}, S0);
+              true ->
+               Reply = case Result of
+                {ok, Blobs, Height} ->
+                    case decode_entries(Blobs, materialized) of
+                        {ok, Entries} -> {ok, Entries, Height};
+                        {error, _} -> {error, malformed_page}
+                    end;
+                {error, Reason} -> {error, Reason}
+            end,
+            S1 = complete_pull(ReqId, Reply, S0),
+               drive_binding(Ref, put_binding(B#binding{active = none, credit = NextGrant}, S1))
+            end;
+        _ -> S0
+    end.
+
+complete_pull(ReqId, Reply, S) ->
+    case maps:take(ReqId, S#s.pending) of
+        {P, Pending} ->
+            cancel_timer(P#client_pull.timer),
+            erlang:demonitor(P#client_pull.caller_monitor, [flush]),
+            gen_server:reply(P#client_pull.from, Reply),
+            record_client_terminal(terminal_result(Reply), elapsed_ms(P#client_pull.started_ms),
+                                   S#s{pending = Pending});
+        error -> S
+    end.
+
+cancel_pull(ReqId, Reply, S0) ->
+    case maps:get(ReqId, S0#s.pending, undefined) of
+        #client_pull{sent = {Link, Ref, _}} ->
+            B = maps:get(Ref, S0#s.bindings),
+            quod_link:close(Link),
+            put_binding(B#binding{retiring = true, credit = none},
+                        complete_pull(ReqId, Reply, S0));
+        #client_pull{contact = Contact} ->
+            Ref = maps:get(Contact, S0#s.contacts),
+            B = maps:get(Ref, S0#s.bindings),
+            Waiting = queue:filter(fun(Id) -> Id =/= ReqId end, B#binding.waiting),
+            drive_binding(Ref, put_binding(B#binding{waiting = Waiting},
+                                          complete_pull(ReqId, Reply, S0)));
+        undefined -> S0
+    end.
+
+binding_down(Ref, MRef, Link, S0) ->
+    case maps:get(Ref, S0#s.bindings, undefined) of
+        #binding{link = Link, monitor = MRef, active = Active} = B ->
+            S1 = case Active of none -> S0; _ -> complete_pull(Active, {error, link_down}, S0) end,
+            S2 = put_binding(B#binding{link = none, monitor = none,
+                                      active = none, credit = none, retiring = false}, S1),
+            case map_size(B#binding.borrowers) of
+                0 -> remove_binding(B, S2);
+                _ -> ensure_open(Ref, S2)
+            end;
+        _ -> S0
+    end.
+close_binding(B) ->
+    maps:foreach(fun(_, MRef) -> erlang:demonitor(MRef, [flush]) end, B#binding.borrowers),
+    case B#binding.link of Link when is_pid(Link) -> quod_link:close(Link); _ -> ok end.
+retire_transport(S0) ->
+    maps:fold(fun(_Ref, B, S) ->
+        case B#binding.link of
+            none when map_size(B#binding.borrowers) =:= 0 -> remove_binding(B, S);
+            none -> put_binding(B#binding{open_ref = none, retiring = false}, S);
+            Link -> quod_link:close(Link),
+                    put_binding(B#binding{credit = none, retiring = true}, S)
+        end
+    end, S0#s{openings = #{}}, S0#s.bindings).
 
 put_client_pull(ReqId, Pull, S0) ->
     Pending1 = (S0#s.pending)#{ReqId => Pull},

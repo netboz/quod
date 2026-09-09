@@ -10,11 +10,19 @@ ledger and the running consensus/kb processes.
 | `GET /api/tx/:ns/:id` | one transaction outcome by its target-anchored durable index |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
 
-History reads use the same pattern as `quod_catchup:serve_blocks/4`: a read-only
-store view per request (`quod_ledger_store:open_ro/2`), never the writer's handle.
-Exact outcome classification reads the compact DETS index directly; if the
-ontology is stopped, the request opens the same file read-only. Unauthenticated
-traffic never enters the ontology apply server.
+History reads borrow the registered Simplex owner's immutable committed snapshot,
+never the writer's handle or a path-based fallback. All three history endpoints
+accept `mode=offline` for explicitly selected stopped-ledger inspection; omitted
+mode means live, and an unavailable live owner returns HTTP 503. Offline mode
+refuses a running owner. Exact outcome classification uses the existing compact
+DETS index, then enriches terminal detail from that same owner's snapshot.
+
+`explorer.read_budget_ms` bounds one read operation from handler admission,
+including capture, disk reads, rendering and outcome enrichment. It is a terminal
+deadline, never a retry clock. Synchronous file I/O cannot be interrupted here:
+after it returns, an expired read is refused and its handle closed, so this is
+not a hard wall-clock bound on the HTTP process. Unauthenticated traffic never
+enters the ontology apply server.
 Term rendering is real Prolog text via `erlog_io:writeq1/1`; raw binaries inside
 terms (pubkeys) are first rewritten to their printable short form. All JSON goes
 through OTP's `m:json`.
@@ -30,7 +38,8 @@ the live stream, so a committed record renders identically live and from history
 %% Pure surfaces driven directly by eunit.
 -export([txs_page/3, parse_tx_id/1, outcome_json/1,
          committee_status_json/1,
-         test_transaction_outcome/4, tx_json_full/3, entry_txs/1]).
+         transaction_outcome/4, tx_json_full/3, entry_txs/1,
+         history_mode/1, with_history_store/5, read_deadline/0]).
 -endif.
 -include("quod_ledger.hrl").
 
@@ -45,17 +54,24 @@ the live stream, so a committed record renders identically live and from history
 init(Req0, health) ->
     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/plain">>}, <<"ok\n">>, Req0), health};
 init(Req0, Op) ->
-    Req = try handle(Op, Req0)
+    Deadline = read_deadline(),
+    Req = try handle(Op, Req0, Deadline)
           catch Class:Reason:Stack ->
                     logger:warning("quod explorer: ~p failed ~p:~p ~p", [Op, Class, Reason, Stack]),
                     json_reply(500, #{error => internal}, Req0)
           end,
     {ok, Req, Op}.
 
-handle(summary, Req) ->
+handle(summary, Req, _Deadline) ->
     json_reply(200, summary(), Req);
-handle(txs, Req) ->
+handle(Op, Req, Deadline) ->
     Qs = maps:from_list(cowboy_req:parse_qs(Req)),
+    case history_mode(Qs) of
+        {ok, Mode} -> handle_history(Op, Req, Qs, Mode, Deadline);
+        {error, bad_mode} -> json_reply(400, #{error => bad_mode}, Req)
+    end.
+
+handle_history(txs, Req, Qs, Mode, Deadline) ->
     %% A valueless query key (`?ns`, `?limit`) parses to the atom `true`; treat any non-binary value as
     %% absent so a bare `?ns` is a clean `missing_ns` and a bare `?limit`/`?before` falls to its default
     %% (rather than reaching int_param as `true` and function_clause-crashing to a 500).
@@ -64,16 +80,18 @@ handle(txs, Req) ->
         Ns ->
             Before = int_param(maps:get(<<"before">>, Qs, undefined), undefined),
             Limit  = min(?MAX_PAGE, int_param(maps:get(<<"limit">>, Qs, undefined), ?DEFAULT_PAGE)),
-            json_reply(200, with_store(Ns, fun(Store) -> txs_page(Store, Before, Limit) end,
-                                       #{txs => [], height => 0, next_before => null}), Req)
+            Result = with_history_store(
+                       Ns, Mode, Deadline, fun(Store) -> txs_page(Store, Before, Limit) end,
+                       #{txs => [], height => 0, next_before => null}),
+            history_reply(Result, Req, Deadline)
     end;
-handle(tx, Req) ->
+handle_history(tx, Req, _Qs, Mode, Deadline) ->
     Ns = cowboy_req:binding(ns, Req),
-    case transaction_outcome(Ns, cowboy_req:binding(id, Req)) of
+    case transaction_outcome(Ns, cowboy_req:binding(id, Req), Mode, Deadline) of
         {ok, pending, Outcome} ->
-            json_reply(202, #{outcome => Outcome}, Req);
+            history_json_reply(202, #{outcome => Outcome}, Req, Deadline);
         {ok, terminal, Found} ->
-            json_reply(200, Found, Req);
+            history_json_reply(200, Found, Req, Deadline);
         {error, bad_tx_id} ->
             json_reply(400, #{error => bad_tx_id}, Req);
         {error, not_found} ->
@@ -81,12 +99,12 @@ handle(tx, Req) ->
         {error, Reason} ->
             json_reply(503, #{error => text(Reason)}, Req)
     end;
-handle(block, Req) ->
+handle_history(block, Req, _Qs, Mode, Deadline) ->
     Ns = cowboy_req:binding(ns, Req),
     case int_param(cowboy_req:binding(slot, Req), undefined) of
         undefined -> json_reply(400, #{error => bad_slot}, Req);
         Slot ->
-            R = with_store(Ns, fun(Store) ->
+            R = with_history_store(Ns, Mode, Deadline, fun(Store) ->
                     case quod_ledger_store:read_at(Store, Slot) of
                         {ok, E}   -> block_json(Store, Ns, E);
                         not_found -> not_found
@@ -94,8 +112,20 @@ handle(block, Req) ->
                 end, not_found),
             case R of
                 not_found -> json_reply(404, #{error => not_found}, Req);
-                Block     -> json_reply(200, Block, Req)
+                Block     -> history_reply(Block, Req, Deadline)
             end
+    end.
+
+history_reply({error, Reason}, Req, _Deadline) ->
+    json_reply(503, #{error => text(Reason)}, Req);
+history_reply(Result, Req, Deadline) ->
+    history_json_reply(200, Result, Req, Deadline).
+
+history_json_reply(Status, Result, Req, Deadline) ->
+    Body = encode(Result),
+    case Deadline > quod_time:mono_ms() of
+        true -> cowboy_req:reply(Status, #{<<"content-type">> => <<"application/json">>}, Body, Req);
+        false -> json_reply(503, #{error => ontology_unreachable}, Req)
     end.
 
 prove_result(
@@ -249,26 +279,81 @@ leader_json(_Slot, _Committee) ->
 %%% history — read-only ledger views (quod_catchup's pattern)
 %%%===================================================================
 
-with_store(Ns, Fun, Empty) ->
-    with_store(Ns, content_ledger_dir(Ns), Fun, Empty).
-
-with_store(Ns, DataDir, Fun, Empty) ->
-    case quod_ledger_store:open_ro(Ns, DataDir) of
-        {ok, Store} ->
-            try Fun(Store) after quod_ledger_store:close(Store) end;
-        {error, _} ->
-            Empty
+%% Both selectors belong to the existing history endpoints. Missing mode is
+%% live; stopped-ledger inspection is never selected by a failed owner call.
+history_mode(Qs) ->
+    case maps:get(<<"mode">>, Qs, <<"live">>) of
+        <<"live">> -> {ok, live};
+        <<"offline">> -> {ok, offline};
+        _ -> {error, bad_mode}
     end.
 
-%% Some renderers have a meaningful no-store form.  Keep its construction
-%% lazy: rendering an ordinary live block must not decode it twice merely to
-%% prepare an unavailable-ledger fallback.
-with_store_or(Ns, Fun, Fallback) ->
-    case quod_ledger_store:open_ro(Ns, content_ledger_dir(Ns)) of
-        {ok, Store} ->
-            try Fun(Store) after quod_ledger_store:close(Store) end;
-        {error, _} ->
-            Fallback()
+read_deadline() ->
+    Started = quod_time:mono_ms(),
+    Budget = case application:get_env(quod, explorer_read_budget_ms) of
+                 {ok, Milliseconds} -> Milliseconds;
+                 undefined ->
+                     %% Configuration-free embedding uses the same schema default.
+                     #{default := Milliseconds} =
+                         proplists:get_value(read_budget_ms, quod_schema:fields(explorer)),
+                     Milliseconds
+             end,
+    true = is_integer(Budget) andalso Budget > 0,
+    Started + Budget.
+
+with_history_store(Ns, live, Deadline, Fun, _Empty) ->
+    case quod_simplex:history_view(Ns, committed, Deadline) of
+        {ok, #{snapshot := Snapshot} = View} ->
+            case quod_ledger_store:open_ro_snapshot(Snapshot) of
+                {ok, Store} ->
+                    try
+                        case history_read_live(View, Deadline) of
+                            true ->
+                                Result = Fun(Store),
+                                case history_read_live(View, Deadline) of
+                                    true -> Result;
+                                    false -> {error, ontology_unreachable}
+                                end;
+                            false -> {error, ontology_unreachable}
+                        end
+                    after quod_ledger_store:close(Store)
+                    end;
+                {error, _} -> {error, ontology_unreachable}
+            end;
+        {error, _} -> {error, ontology_unreachable}
+    end;
+with_history_store(Ns, offline, Deadline, Fun, Empty) ->
+    case Deadline > quod_time:mono_ms() of
+        true ->
+            Result = with_offline_store(Ns, Fun, Empty),
+            case Deadline > quod_time:mono_ms() of
+                true -> Result;
+                false -> {error, ontology_unreachable}
+            end;
+        false -> {error, ontology_unreachable}
+    end.
+
+history_read_live(View, Deadline) ->
+    Deadline > quod_time:mono_ms() andalso quod_simplex:history_view_live(View).
+
+%% This is the sole explicitly selected stopped-ledger index reconstruction.
+%% Refuse a running/restarted owner, including one appearing during the read.
+with_offline_store(Ns, Fun, Empty) ->
+    case quod_reg:where({quod_simplex, Ns}) of
+        undefined ->
+            case quod_ledger_store:open_ro(Ns, content_ledger_dir(Ns)) of
+                {ok, Store} ->
+                    try
+                        Result = Fun(Store),
+                        case quod_reg:where({quod_simplex, Ns}) of
+                            undefined -> Result;
+                            _ -> {error, ontology_unreachable}
+                        end
+                    after quod_ledger_store:close(Store)
+                    end;
+                {error, _} -> Empty
+            end;
+        _ -> {error, ontology_unreachable}
     end.
 
 content_storage(Ns) ->
@@ -306,62 +391,70 @@ collect_txs(Store, Slot, Need, Scan, Acc) ->
 %% The outcome index gives the exact terminal height in O(1). The detail view
 %% then reads that one block for its certificate and signed transaction fields;
 %% it never scans history or re-proves the goal.
-transaction_outcome(Ns, IdText) ->
-    transaction_outcome(
-      Ns, IdText, content_ledger_dir(Ns), content_ledger_dir(Ns)).
-
-transaction_outcome(Ns, IdText, OutcomeDir, LedgerDir) ->
+transaction_outcome(Ns, IdText, Mode, Deadline) ->
     case parse_tx_id(IdText) of
         {ok, TxId} ->
-            case quod_outcome:lookup_live(Ns, OutcomeDir, TxId) of
-                {ok, #{status := pending} = Outcome} ->
-                    {ok, pending, outcome_json(Outcome)};
-                {ok, #{height := Height} = Outcome} ->
-                    terminal_transaction(
-                      Ns, TxId, Height, Outcome, LedgerDir);
-                {error, not_found} ->
-                    {error, not_found};
-                {error, Reason} ->
-                    {error, Reason}
+            Owner = quod_reg:where({quod_simplex, Ns}),
+            case outcome_owner_live(Ns, Mode, Owner, Deadline) of
+                false -> {error, ontology_unreachable};
+                true ->
+                    Result = quod_outcome:lookup_live(Ns, content_ledger_dir(Ns), TxId),
+                    case outcome_owner_live(Ns, Mode, Owner, Deadline) of
+                        true -> transaction_detail(Ns, TxId, Result, Mode, Owner, Deadline);
+                        false -> {error, ontology_unreachable}
+                    end
             end;
         {error, bad_tx_id} ->
             {error, bad_tx_id}
     end.
 
-terminal_transaction(Ns, TxId, Height, Outcome, LedgerDir) ->
-    with_store(
-      Ns, LedgerDir,
-      fun(Store) ->
-          case quod_ledger_store:read_at(Store, Height) of
-              {ok, E} ->
-                  case [T || T <- entry_txs(E),
-                             T#transaction.tx_id =:= TxId] of
-                      [T] ->
-                          case durable_submission_json(T) of
-                              {ok, GoalJson, ResultJson} ->
-                                  {ok, terminal,
-                                   #{tx => tx_json_full_decoded(
-                                             Ns, T, E,
-                                             GoalJson, ResultJson),
-                                     block => block_meta(E),
-                                     outcome => terminal_outcome_json(
-                                                  Outcome, GoalJson,
-                                                  ResultJson)}};
-                              {error, _} = Error -> Error
-                          end;
-                      _ ->
-                          {error, outcome_index_mismatch}
-                  end;
-              not_found ->
-                  {error, outcome_index_mismatch}
-          end
-      end,
-      {error, ontology_unreachable}).
+outcome_owner_live(Ns, Mode, Owner, Deadline) ->
+    Deadline > quod_time:mono_ms() andalso
+    quod_reg:where({quod_simplex, Ns}) =:= Owner andalso
+    case Mode of
+        live -> is_pid(Owner) andalso is_process_alive(Owner);
+        offline -> Owner =:= undefined
+    end.
 
--ifdef(TEST).
-test_transaction_outcome(Ns, IdText, OutcomeDir, LedgerDir) ->
-    transaction_outcome(Ns, IdText, OutcomeDir, LedgerDir).
--endif.
+transaction_detail(Ns, TxId, {ok, #{status := pending,
+                                  ref := {transaction, Ns, Anchor, TxId}} = Outcome},
+                   live, Owner, Deadline) ->
+    case quod_simplex:history_view({Owner, {Ns, Anchor}}, committed, Deadline) of
+        {ok, _View} -> {ok, pending, outcome_json(Outcome)};
+        {error, _} -> {error, ontology_unreachable}
+    end;
+transaction_detail(_Ns, _TxId, {ok, #{status := pending} = Outcome}, offline, _Owner, _Deadline) ->
+    {ok, pending, outcome_json(Outcome)};
+transaction_detail(Ns, TxId, {ok, #{height := Height,
+                                   ref := {transaction, Ns, Anchor, TxId}} = Outcome},
+                   Mode, Owner, Deadline) ->
+    %% Read the outcome first: an append may publish a newer terminal index row
+    %% while an earlier snapshot is being captured. Pin the original owner and
+    %% outcome anchor, then borrow a prefix that can contain that terminal slot.
+    Source = case Mode of live -> {Owner, {Ns, Anchor}}; offline -> Ns end,
+    with_history_store(Source, Mode, Deadline,
+      fun(Store) -> terminal_transaction(Ns, TxId, Height, Outcome, Store) end,
+      {error, ontology_unreachable});
+transaction_detail(_Ns, _TxId, {error, _} = Error, _Mode, _Owner, _Deadline) ->
+    Error.
+
+terminal_transaction(Ns, TxId, Height, Outcome, Store) ->
+    case quod_ledger_store:read_at(Store, Height) of
+        {ok, E} ->
+            case [T || T <- entry_txs(E), T#transaction.tx_id =:= TxId] of
+                [T] ->
+                    case durable_submission_json(T) of
+                        {ok, GoalJson, ResultJson} ->
+                            {ok, terminal,
+                             #{tx => tx_json_full_decoded(Ns, T, E, GoalJson, ResultJson),
+                               block => block_meta(E),
+                               outcome => terminal_outcome_json(Outcome, GoalJson, ResultJson)}};
+                        {error, _} = Error -> Error
+                    end;
+                _ -> {error, outcome_index_mismatch}
+            end;
+        not_found -> {error, outcome_index_mismatch}
+    end.
 
 parse_tx_id(Id) when is_binary(Id), byte_size(Id) =:= 64 ->
     try binary:decode_hex(Id) of
@@ -621,10 +714,15 @@ signature_status(_Transaction, _Entry) ->
 block_json(Ns, #entry{} = E) ->
     %% The live stream has no store handle.  Open the same read-only ledger
     %% view used by history so a just-committed Finalize can show the exact
-    %% referenced Prepare plan too; a stopped/unavailable ontology simply
-    %% leaves that optional display field absent.
-    with_store_or(Ns, fun(Store) -> block_json(Store, Ns, E) end,
-                  fun() -> block_json(none, Ns, E) end).
+    %% referenced Prepare plan too. The event has one read deadline; an
+    %% unavailable owner leaves only that optional display field absent, never
+    %% reopens a path or postpones the event for a timed retry.
+    Deadline = read_deadline(),
+    case with_history_store(Ns, live, Deadline,
+           fun(Store) -> block_json(Store, Ns, E) end, unavailable) of
+        {error, ontology_unreachable} -> block_json(none, Ns, E);
+        Block -> Block
+    end.
 
 block_json(Store, Ns, #entry{data = Data} = E) ->
     case quod_ledger:classify(Data) of

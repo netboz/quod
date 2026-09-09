@@ -113,7 +113,8 @@ floor but does not cause the history-proportional seconds.
 
 ## 5. Phase 1A correction boundary
 
-`operation_claim_evidence_at/5` and `transaction_evidence_at/5` call
+On the measured 0.7.151 baseline, `operation_claim_evidence_at/5` and
+`transaction_evidence_at/5` call
 `quod_ledger_store:open_ro/2`, rebuilding the ledger index. Their public entry
 points already locate and call the live `quod_simplex` owner. Other live local
 history callers receive only its ledger path even though the code already has
@@ -151,15 +152,28 @@ recovery may reconstruct an index, and Explorer may retain one explicit
 stopped-ledger inspection mode; it may never enter that mode merely because a
 live owner snapshot failed.
 
+Catch-up's lazy DTX phase-prefix reconstruction also takes an owner snapshot:
+the same append acknowledgement returns the immutable view for the next
+window. Its scratch directory is output only. Initial recovery uses the one
+`history_view/3` capture, including an empty committed prefix for a pinned
+joiner without granting execution readiness. Historical committee-era rows
+remain at the verifier; acknowledgement coherence binds the exact committed
+head rather than requiring identical internal projection representations.
+
 Review must verify:
 
-- one atomic local-source capture and zero full index scan in every live local
-  evidence/current-view path;
+- each local-source view is captured atomically, with zero full index scan in
+  every live local evidence/current-view path; the same owner may supply one
+  additional byte view for a verified quorum's later certificate anchor as
+  specified in Roadmap §3.5, without refreshing the proof base or sealed plan;
 - byte-identical evidence and unchanged typed failures;
 - immutable snapshot bounds under later append and changed-file refusal;
-- the current append-only/no-file-replacement premise is explicit, and the
-  future compaction contract invalidates old sessions across segment swaps;
-- no stale result after owner death;
+- the current append-only/no-file-replacement premise is explicit; future
+  compaction preserves borrowed generations until their readers/MVCC pins are
+  released and prevents old sessions from attaching to replacement bytes;
+- owner death cannot establish current readiness through a stale reply;
+  parked waits are released by their existing request/worker lifecycle, not
+  merely checked for liveness before and after a blocking call;
 - resource closure on every path;
 - unchanged local/co-hosted/remote backtracking, transaction savepoints,
   action prerequisites/postconditions, read dependencies, `fail_reasons`,

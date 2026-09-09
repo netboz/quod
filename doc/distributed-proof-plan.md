@@ -623,8 +623,8 @@ codec seam:
 | volatile pre-Begin registrations waiting per local ontology/validator | existing configurable proof-worker capacity and deadline; no separate handoff quota |
 | accepted dormant Begin intents per local ontology/validator | one exact row per group; no separate compiled population cap |
 | terminal group entries retained in memory | 4,096 |
-| pending foreign-log verifications global / per authenticated peer | 32 / 4 |
-| catch-up read workers per hosted ontology / entries per page / response bytes | 32 / 256 / 900 KiB |
+| pending foreign-log verifications global / per authenticated peer | no numeric population cap; existing per-identity owner coalesces/parks requests under caller deadlines (see §8) |
+| catch-up read workers / entries per page / response bytes | one admitted read per authenticated link grant, no ontology-wide worker cap / 256 / 900 KiB |
 | pending exact group-phase lookups per ontology | governed by the shared foreign-history owner and caller deadlines; no DTX-specific count cap |
 | outgoing DTX endpoint correlations / inbound endpoint workers per ontology | no compiled population cap; each exact live request is owned by its caller deadline and monitored worker |
 | cached foreign ontology histories / total cache bytes | no protocol population ceiling; dormant disk caches reopen lazily and operator storage monitoring remains operational policy |
@@ -1457,12 +1457,19 @@ Startup replay and catch-up cannot depend on the later Prolog owner. Boot replay
 populates one ephemeral DETS phase set during its already-required slot-1 fold,
 before the statem serves. A later catch-up session creates and backfills that set
 from slot 1 **lazily**, only when its first DTX record needs exact old-group
-history; a content-only repair never rescans the ledger. Once created, the set
+history. The input is the writer's captured session: the initial `history_view/3`
+for resumed recovery, then the view returned with each successful sink.
+Scratch placement does not identify an input ledger. This is
+semantic prefix replay, not another sparse-index reconstruction. A content-only
+repair performs neither. Once created, the set
 extends across every later page rather than rebuilding per window. Each set has
 a session-unique table name/path and uses the same canonical row validator. The
 existing monitored catch-up worker owns the scan and DETS work, so the live
 Simplex event loop never performs it. It uses `{auto_save, infinity}`, consults
 the set before each DTX transition, then closes and removes it in `after`.
+Forced owner-loss cancellation uses the existing directional worker watcher:
+descriptors die with the worker, and abandoned scratch is removed by the
+existing namespace-start cleanup (not a promise that `after` runs on `kill`).
 Namespace startup removes only abandoned files under the exact DTX-phase scratch
 prefix. The set has bounded memory, performs no datasync, is never reused or
 repaired after a crash, and contains no authority beyond the ledger being

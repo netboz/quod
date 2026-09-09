@@ -99,11 +99,14 @@ dominate them.
 
 ## 5. Proven owner and correction
 
-`quod_simplex` already owns an open verified ledger and sparse index. Its
-registered process exposes `ledger_read_snapshot/1`; `quod_ledger_store`
-already exposes `open_ro_snapshot/1`. Yet `operation_claim_evidence_at/5` and
-`transaction_evidence_at/5` reopen the hosted ledger with `open_ro/2`, rebuilding
-and validating the full index for every remote write.
+On the measured 0.7.151 baseline, `quod_simplex` already owned an open verified
+ledger and sparse index, exposed through `ledger_read_snapshot/1`, and
+`quod_ledger_store` offered `open_ro_snapshot/1`. Yet
+`operation_claim_evidence_at/5` and `transaction_evidence_at/5` reopened the
+hosted ledger with `open_ro/2`, rebuilding and validating the full index for
+every remote write. Phase 1A replaces the separate source/snapshot accessors
+with one deadline-bound `history_view/3` and both evidence scans with bounded snapshot reads;
+these measurements are pre-change evidence, not optimized results.
 
 Both evidence APIs first resolve the live `quod_simplex` owner. A stopped or
 non-hosted full-scan fallback at these sites is therefore not recovery: no
@@ -117,8 +120,10 @@ This adds no cache, verifier, owner, poll, timer, cap, or format change.
 
 ### 5.1 The same defect elsewhere
 
-A production-wide source audit found that the measured functions were not the
-only callers treating a ledger path as a live read capability:
+A production-wide source audit of the pre-cut tree found that the measured
+functions were not the only callers treating a ledger path as a live read
+capability. The following is the diagnosis that Phase 1A replaces, not the
+remaining-open inventory of the implementation candidate:
 
 - catch-up serving has a snapshot fast path but falls back to a complete
   `open_ro` scan when the live Simplex owner is not ready;

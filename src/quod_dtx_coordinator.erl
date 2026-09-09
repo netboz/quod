@@ -326,7 +326,17 @@ operation_init(Owner, OwnerNs, OperationRef) ->
 %% the same durable index on start and on a real progress edge; absence is not
 %% completion and a completion receipt is not the target's verdict.
 operation_refresh(Owner, OwnerMonitor,
-                  #{owner_ns := OwnerNs, operation_ref := OperationRef} = Context) ->
+                  Context) ->
+    %% This is one recovery read attempt, not the lifetime of durable custody.
+    %% Only startup or a genuine source/follower progress event calls here;
+    %% capture and outcome corroboration share the existing request budget.
+    Deadline = quod_time:mono_ms() + ?DEFAULT_REQUEST_TIMEOUT_MS,
+    operation_refresh_before_deadline(
+      Owner, OwnerMonitor, Context#{read_deadline => Deadline}).
+
+operation_refresh_before_deadline(
+  Owner, OwnerMonitor,
+  #{owner_ns := OwnerNs, operation_ref := OperationRef} = Context) ->
     case quod_prolog:local_outcome(OwnerNs, OperationRef) of
         {ok, #{status := claimed, ref := OperationRef,
                operation_state := ClaimState, height := Slot,
@@ -372,11 +382,13 @@ operation_refresh(Owner, OwnerMonitor,
     end.
 
 operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef,
-                     Bound = #{target_ref := TargetRef, request_digest := Digest}) ->
+                     Bound = #{target_ref := TargetRef, request_digest := Digest,
+                               read_deadline := Deadline}) ->
     case quod_trace:with_optional_span(
            quod_trace:context(), <<"quod.operation.claim_evidence">>, internal,
            #{'quod.namespace' => OwnerNs, 'quod.ledger.slot' => ClaimSlot},
-           fun() -> quod_simplex:operation_claim_evidence(OwnerNs, ClaimSlot, OperationRef) end) of
+           fun() -> quod_simplex:operation_claim_evidence(
+                      OwnerNs, ClaimSlot, OperationRef, Deadline) end) of
         {ok, ClaimRef, Claim} ->
             case operation_context(OwnerNs, OperationRef, ClaimRef, Claim) of
                 {ok, #{target_ref := TargetRef, request_digest := Digest} = Context} ->
@@ -389,7 +401,7 @@ operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef,
                 {error, Reason} ->
                     operation_stop(Owner, OperationRef, Reason)
             end;
-        {error, not_ready} ->
+        {error, Reason} when Reason =:= not_ready; Reason =:= timeout ->
             operation_wait(Owner, OwnerMonitor, Bound);
         {error, Reason} ->
             operation_stop(Owner, OperationRef, Reason)
@@ -398,14 +410,14 @@ operation_load_claim(Owner, OwnerMonitor, OwnerNs, ClaimSlot, OperationRef,
 operation_resolve_target(
   Owner, OwnerMonitor,
   #{owner_ns := OwnerNs, operation_ref := OperationRef,
-    target := Target, target_ref := TargetRef} = Context) ->
-    case operation_outcome_source(Target) of
+    target := Target, target_ref := TargetRef, read_deadline := Deadline} = Context) ->
+    case operation_outcome_source(Target, Deadline) of
         {ok, Source} ->
             case quod_trace:with_optional_span(
                    quod_trace:context(), <<"quod.operation.resolve_outcome">>, internal,
                    #{'quod.namespace' => element(1, Target)},
                    fun() -> quod_dtx_current_view:lookup_outcome(
-                              OwnerNs, Source, TargetRef, ?DEFAULT_REQUEST_TIMEOUT_MS) end) of
+                              OwnerNs, Source, TargetRef, Deadline) end) of
                 {ok, #{ref := TargetRef, status := committed}} ->
                     operation_deliver_resolved(Owner, OperationRef, committed, TargetRef);
                 {ok, #{ref := TargetRef, status := rejected, reason := Reason}}
@@ -419,11 +431,12 @@ operation_resolve_target(
             operation_wait_target(Owner, OwnerMonitor, Context)
     end.
 
-operation_outcome_source(Target) ->
+operation_outcome_source(Target, Deadline) ->
     %% A co-hosted observer is a byte source, not a voting source. If the
     %% local validator is unavailable, use the ordinary certified routes.
-    case quod_simplex:history_source(Target, validator) of
-        {ok, Root} -> {ok, {local, Root}};
+    case quod_simplex:history_view(Target, validator, Deadline) of
+        {ok, View} -> {ok, {local, View}};
+        {error, timeout} -> {error, retry};
         {error, _} ->
             case routes(Target) of
                 [] -> {error, retry};
@@ -2332,7 +2345,7 @@ applied_source({Ns, _Anchor} = Target, FinalizeRef, HistoricalRoutes) ->
     case cohosted(Target) of
         true ->
             case quod_simplex:dtx_applied_source(Ns, FinalizeRef) of
-                {ok, {local, _LedgerRoot} = Source} -> {ok, Source};
+                {ok, {local, _View} = Source} -> {ok, Source};
                 {error, _} -> {error, retry}
             end;
         false ->

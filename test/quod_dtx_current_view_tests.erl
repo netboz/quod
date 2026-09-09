@@ -4,10 +4,232 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
+deadline(TimeoutMs) -> quod_time:mono_ms() + TimeoutMs.
+
 thresholds_are_f_plus_one_at_every_committee_boundary_test() ->
     ?assertEqual(
        [{1, 1}, {4, 2}, {7, 3}, {64, 22}],
        [{N, quod_dtx_current_view:threshold(N)} || N <- [1, 4, 7, 64]]).
+
+local_current_view_uses_the_captured_projection_and_apply_sent_frontier_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"quod:captured-current-", (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    Target = {Ns, digest(252)},
+    Key = digest(253),
+    CommitteeId = digest(254),
+    Endpoint = {"127.0.0.1", 35254},
+    Source = #{owner => self(), identity => Target, slot => 8, applied => 7,
+               snapshot => unused,
+               projection => #{committee => [Key], committee_id => CommitteeId,
+                               validator_routes => #{Key => Endpoint},
+                               dtx => #{generation => 5}}},
+    true = quod_reg:reg({quod_simplex, Ns}),
+    try
+        ReadView = maps:get(
+                     view, quod_dtx_current_view:test_production_dependencies()),
+        %% A second owner call here would self-call and fail; the complete
+        %% semantic view must instead be derived from the supplied object.
+        ?assertEqual(
+           {ok, #{identity => Target, slot => 7, generation => 5,
+                  committee => [Key], committee_id => CommitteeId,
+                  route_candidates => [{Key, [Endpoint]}]}},
+           ReadView({local, Source}, {identity, Target}, 1000)),
+        ?assertEqual(
+           {error, not_ready},
+           ReadView({local, Source}, {identity, {Ns, digest(255)}}, 1000))
+    after
+        true = gproc:unreg({n, l, {quod_simplex, Ns}})
+    end.
+
+newer_read_anchor_borrows_once_from_the_original_committed_owner_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F0 = fixture(1),
+    Ns = <<"quod:recapture-current-", (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    Target = {Ns, digest(252)},
+    F = F0#{target := Target},
+    Ref = read_anchor_ref(F, maps:values(maps:get(signers, F))),
+    {ok, {Target, Slot, BlockHash, RecordDigest}} =
+        quod_dtx:certified_ref_claim(Ref),
+    Claim = {Slot, BlockHash, RecordDigest},
+    Parent = self(),
+    Owner = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_simplex, Ns}),
+        Parent ! {capture_owner_ready, self()},
+        receive
+            {'$gen_call', From, {history_view, Target, committed, _Deadline}} ->
+                Parent ! captured_committed_once,
+                %% The requested slot 8 is still unavailable. This must be a
+                %% terminal refusal, never a polling or fresh-source loop.
+                gen:reply(From, {ok, #{owner => self(), identity => Target,
+                                      slot => 7, applied => 7,
+                                      snapshot => unused, projection => #{}}}),
+                receive stop -> ok end
+        end
+    end),
+    {Pid, Monitor} = Owner,
+    receive {capture_owner_ready, Pid} -> ok
+    after 1000 -> error(capture_owner_not_ready)
+    end,
+    Source = #{owner => Pid, identity => Target, slot => 7, applied => 7,
+               snapshot => unused, projection => #{}},
+    try
+        ?assertEqual(
+           {error, not_ready},
+           quod_dtx_current_view:test_read_anchor_source(
+             {local, Source}, Target, Claim, deadline(1000))),
+        receive captured_committed_once -> ok
+        after 0 -> error(missing_exact_owner_capture)
+        end
+    after
+        Pid ! stop,
+        receive {'DOWN', Monitor, process, Pid, normal} -> ok
+        after 1000 -> exit(Pid, kill), error(capture_owner_not_stopped)
+        end
+    end,
+    %% Keeping the same namespace registered elsewhere must not revive the
+    %% original byte capability or route the re-capture to its replacement.
+    true = quod_reg:reg({quod_simplex, Ns}),
+    try
+        ?assertEqual(
+           {error, not_ready},
+           quod_dtx_current_view:test_read_anchor_source(
+             {local, Source}, Target, Claim, deadline(1000)))
+    after
+        true = gproc:unreg({n, l, {quod_simplex, Ns}})
+    end.
+
+later_quorum_anchor_capture_spends_the_original_certification_deadline_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F0 = fixture(1),
+    Ns = <<"quod:deadline-anchor-", (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    Target = {Ns, digest(252)},
+    F = F0#{target := Target,
+            view := (maps:get(view, F0))#{identity := Target}},
+    PlanBlob = read_plan_blob(F, <<"deadline_anchor">>),
+    Parent = self(),
+    {Owner, OwnerMonitor} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_simplex, Ns}),
+        Parent ! {capture_owner_ready, self()},
+        receive
+            {'$gen_call', From, {history_view, Target, committed, CaptureDeadline}} ->
+                Parent ! {later_capture_deadline, CaptureDeadline},
+                receive resume -> ok end,
+                gen:reply(From, {ok, #{owner => self(), identity => Target,
+                                      slot => 8, applied => 8,
+                                      snapshot => unused, projection => #{}}}),
+                receive stop -> ok end
+        end
+    end),
+    receive {capture_owner_ready, Owner} -> ok
+    after 1000 -> error(capture_owner_not_ready)
+    end,
+    Source = #{owner => Owner, identity => Target, slot => 7, applied => 7,
+               snapshot => unused, projection => #{}},
+    Deps0 = dependencies(F, fun(Key, Request) -> read_attest_reply(F, Key, Request) end),
+    Deps = Deps0#{exact_entry => fun(_, _, _) ->
+        Parent ! unexpected_exact_verification,
+        {error, not_ready}
+    end},
+    Deadline = deadline(300),
+    {Reader, ReaderMonitor} = spawn_monitor(fun() ->
+        Result = quod_dtx_current_view:test_certify_reads(
+                   Ns, {{local, Source}, PlanBlob}, Deadline, Deps),
+        Parent ! {deadline_certificate, self(), Result}
+    end),
+    try
+        %% This is reached only after a real, cryptographically valid f+1
+        %% vote. The later byte capture receives the identical original value.
+        receive {later_capture_deadline, CapturedDeadline} ->
+            ?assertEqual(Deadline, CapturedDeadline)
+        after 1000 -> error(missing_later_quorum_anchor_capture)
+        end,
+        receive {deadline_certificate, Reader, Result} ->
+            ?assertEqual({error, retry}, Result)
+        after 1000 -> error(anchor_capture_restarted_the_budget)
+        end,
+        Owner ! resume,
+        receive unexpected_exact_verification -> error(verification_after_expiry)
+        after 0 -> ok
+        end,
+        %% An already-spent deadline never starts a fresh view/probe attempt.
+        NeverView = Deps#{view => fun(_, _, _) -> error(view_after_expiry) end},
+        ?assertEqual({error, retry},
+                     quod_dtx_current_view:test_certify_reads(
+                       Ns, {{local, Source}, PlanBlob}, Deadline, NeverView))
+    after
+        exit(Reader, kill),
+        receive {'DOWN', ReaderMonitor, process, Reader, _} -> ok
+        after 1000 -> error(certificate_reader_did_not_stop)
+        end,
+        exit(Owner, kill),
+        receive {'DOWN', OwnerMonitor, process, Owner, _} -> ok
+        after 1000 -> error(capture_owner_did_not_stop)
+        end
+    end.
+
+newer_untrusted_read_anchor_cannot_trigger_owner_recapture_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F0 = fixture(4),
+    Ns = <<"quod:untrusted-recapture-", (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    Target = {Ns, digest(252)},
+    F = F0#{target := Target,
+            view := (maps:get(view, F0))#{identity := Target}},
+    [A, B | _] = maps:get(committee, F),
+    Ref = read_anchor_ref(F, maps:values(maps:get(signers, F))),
+    PlanBlob = read_plan_blob(F, <<"untrusted_newer_anchor">>),
+    Deps = dependencies(F,
+      fun(Key, Request) when Key =:= A ->
+              read_attest_reply(F, Key, Request, Ref);
+         (Key, Request) when Key =:= B ->
+              {ok, Response, []} = read_attest_reply(F, Key, Request, Ref),
+              {ok, setelement(9, Response, <<0:512>>), []};
+         (_Key, _Request) -> {error, not_ready}
+      end),
+    Parent = self(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_simplex, Ns}),
+        Parent ! {capture_owner_ready, self()},
+        count_recapture_requests(0)
+    end),
+    receive {capture_owner_ready, Pid} -> ok
+    after 1000 -> error(capture_owner_not_ready)
+    end,
+    Source = #{owner => Pid, identity => Target, slot => 7, applied => 7,
+               snapshot => unused, projection => #{}},
+    try
+        %% One valid vote plus one forged signature is below f+1. Neither
+        %% the advertised height nor its apparently matching proof may cause
+        %% any access to newer local bytes before the signed quorum exists.
+        ?assertEqual(
+           {error, retry},
+           quod_dtx_current_view:test_certify_reads(
+             Ns, {{local, Source}, PlanBlob}, deadline(1000), Deps)),
+        Check = make_ref(),
+        Pid ! {count, self(), Check},
+        receive {capture_count, Check, Count} -> ?assertEqual(0, Count)
+        after 1000 -> error(missing_capture_count)
+        end
+    after
+        Pid ! stop,
+        receive {'DOWN', Monitor, process, Pid, normal} -> ok
+        after 1000 -> exit(Pid, kill), error(capture_owner_not_stopped)
+        end
+    end.
+
+count_recapture_requests(Count) ->
+    receive
+        {'$gen_call', From, {history_view, _Identity, _Requirement, _Deadline}} ->
+            gen:reply(From, {error, not_ready}),
+            count_recapture_requests(Count + 1);
+        {count, Caller, Ref} ->
+            Caller ! {capture_count, Ref, Count},
+            count_recapture_requests(Count);
+        stop -> ok
+    end.
 
 %% Cancellation has one event-driven retry owner: endpoint failure returns to
 %% that owner instead of walking another route immediately. For every other
@@ -187,7 +409,7 @@ cohosted_certification_uses_the_local_member_without_a_route_test() ->
     ?assertMatch(
        {ok, {quod_dtx_applied_certificate, 1, _, _, _, _, _, _, _, _}},
        quod_dtx_current_view:test_certify_applied(
-         maps:get(owner_ns, F), {local, <<"/tmp/cohosted">>},
+         maps:get(owner_ns, F), {local, local_source(F)},
          maps:get(claim, F), Evidence, 1000, Deps)),
     receive
         {local_applied_probe, TargetNs} ->
@@ -225,7 +447,7 @@ read_certificate_reaches_f_plus_one_without_a_consensus_block_test() ->
              end),
     {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
                           maps:get(owner_ns, F), {source(F), PlanBlob},
-                          1000, Deps),
+                          deadline(1000), Deps),
     ?assert(quod_read_certificate:verify(
               Certificate, maps:get(committee, F),
               maps:get(committee_id, F))).
@@ -246,7 +468,7 @@ read_certificate_one_below_f_plus_one_retries_test() ->
     ?assertEqual(
        {error, retry},
        quod_dtx_current_view:test_certify_reads(
-         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+         maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
 
 read_certificate_ignores_vote_from_another_committee_view_test() ->
     F = fixture(4),
@@ -277,7 +499,7 @@ read_certificate_ignores_vote_from_another_committee_view_test() ->
     ?assertEqual(
        {error, retry},
        quod_dtx_current_view:test_certify_reads(
-         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+         maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
 
 read_certificate_f_plus_one_stale_refusals_remain_typed_test() ->
     F = fixture(4),
@@ -295,7 +517,7 @@ read_certificate_f_plus_one_stale_refusals_remain_typed_test() ->
     ?assertEqual(
        {error, conflict_retry},
        quod_dtx_current_view:test_certify_reads(
-         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+         maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
 
 read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
     F = fixture(4),
@@ -316,7 +538,7 @@ read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
              end),
     {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
                           maps:get(owner_ns, F), {source(F), PlanBlob},
-                          1000, Deps),
+                          deadline(1000), Deps),
     ?assert(quod_read_certificate:verify(
               Certificate, maps:get(committee, F),
               maps:get(committee_id, F))).
@@ -342,7 +564,7 @@ read_certificate_combines_equivalent_finality_subsets_test() ->
              end),
     {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
                           maps:get(owner_ns, F), {source(F), PlanBlob},
-                          1000, Deps),
+                          deadline(1000), Deps),
     ?assert(quod_read_certificate:verify(
               Certificate, maps:get(committee, F),
               maps:get(committee_id, F))).
@@ -375,7 +597,7 @@ read_certificate_selects_verified_proof_from_equivalent_votes_test() ->
           end},
     {ok, Certificate} = quod_dtx_current_view:test_certify_reads(
                           maps:get(owner_ns, F), {source(F), PlanBlob},
-                          1000, Deps),
+                          deadline(1000), Deps),
     ?assertEqual(GoodRef, element(6, Certificate)),
     receive rejected_bad_finality -> ok after 0 -> error(bad_ref_not_checked) end,
     receive accepted_good_finality -> ok after 0 -> error(good_ref_not_checked) end.
@@ -401,7 +623,7 @@ read_certificate_refuses_when_no_equivalent_proof_verifies_test() ->
     ?assertEqual(
        {error, retry},
        quod_dtx_current_view:test_certify_reads(
-         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+         maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
 
 read_certificate_does_not_combine_different_record_digests_test() ->
     F = fixture(4),
@@ -422,7 +644,7 @@ read_certificate_does_not_combine_different_record_digests_test() ->
     ?assertEqual(
        {error, retry},
        quod_dtx_current_view:test_certify_reads(
-         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)).
+         maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
 
 read_certification_never_allocates_foreign_plan_symbols_test() ->
     F = fixture(1),
@@ -438,7 +660,7 @@ read_certification_never_allocates_foreign_plan_symbols_test() ->
     ?assertMatch(
        {ok, {quod_read_certificate, 3, _, _, _, _, _, _}},
        quod_dtx_current_view:test_certify_reads(
-         maps:get(owner_ns, F), {source(F), PlanBlob}, 1000, Deps)),
+         maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)),
     ?assertEqual(Before, erlang:system_info(atom_count)),
     ?assertException(error, badarg,
                      binary_to_existing_atom(Symbol, utf8)).
@@ -883,11 +1105,18 @@ certify(F, Dependencies) ->
 source(F) ->
     {remote, maps:get(source_routes, F)}.
 
+%% Only the transport is faked in these collector tests; local sources still
+%% carry the sole history-view shape. No byte read is made by these fixtures.
+local_source(F) ->
+    #{owner => self(), identity => maps:get(target, F),
+      slot => 8, applied => 8, snapshot => unused,
+      projection => #{}}.
+
 lookup(F, OutcomeRef, Dependencies) ->
     quod_dtx_current_view:test_lookup_outcome(
       maps:get(owner_ns, F),
       {remote, maps:get(source_routes, F)},
-      OutcomeRef, 1000, Dependencies).
+      OutcomeRef, deadline(1000), Dependencies).
 
 many_requests(F, Count) ->
     lists:duplicate(

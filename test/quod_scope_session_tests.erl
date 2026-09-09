@@ -351,8 +351,39 @@ read_certificate_facades_test_() ->
      fun cleanup_read_certificate_target/1,
      fun(Ctx) ->
          [?_test(local_read_certificate_facade_binds_the_sealed_plan(Ctx)),
-          ?_test(cohosted_read_certificate_facade_uses_its_live_session(Ctx))]
+          ?_test(cohosted_read_certificate_facade_uses_its_live_session(Ctx)),
+          ?_test(read_certificate_recaptures_newer_anchor_without_reproof(Ctx))]
      end}.
+
+read_certificate_recaptures_newer_anchor_without_reproof(Ctx) ->
+    {Session, Plan} = sealed_read_session(Ctx, key(314)),
+    Target = {Ns, _Anchor} = maps:get(target, Ctx),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    Deadline = quod_time:mono_ms() + 5000,
+    {ok, #{slot := 2, snapshot := Snapshot} = Source} =
+        quod_simplex:history_view(Target, validator, Deadline),
+    try
+        %% A real committed mutation lands after the source is captured but
+        %% before validators attest. It does not change the plan's read token.
+        {ok, [#{}], 3} = quod_prolog:prove(
+                           Ns, {assertz, {read_certificate_race, ok}}),
+        {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
+        try
+            ?assertEqual(not_found, quod_ledger_store:read_at(Store, 3))
+        after quod_ledger_store:close(Store)
+        end,
+        {ok, Certificate} = quod_dtx_current_view:certify_reads(
+                               Ns, {{local, Source}, PlanBlob}, Deadline),
+        {ok, #{target := Target, anchor_ref := AnchorRef}} =
+            quod_read_certificate:binding(Certificate),
+        ?assertMatch({ok, Target, 3, _},
+                     quod_dtx:certified_ref_binding(AnchorRef)),
+        {ok, RetainedPlan} = quod_proof_session:sealed_plan(Session),
+        ?assertEqual(Plan, RetainedPlan),
+        ?assertEqual({ok, PlanBlob}, quod_dtx:encode(RetainedPlan))
+    after
+        quod_proof_session:stop(Session)
+    end.
 
 local_read_certificate_facade_binds_the_sealed_plan(Ctx) ->
     {Session, Plan} = sealed_read_session(Ctx, key(301)),
@@ -1491,9 +1522,9 @@ start_read_scope_worker(Ctx, ProofId) ->
 
 observer_history_owner(Parent, State) ->
     receive
-        {'$gen_call', From, {history_source, Identity, Requirement}} ->
-            Result = quod_simplex:test_local_history_source(
-                       Identity, Requirement, State),
+        {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
+            Result = quod_simplex:test_local_history_view(
+                       Identity, Requirement, Deadline, State),
             Parent ! {observer_history_request, Requirement, Result},
             gen:reply(From, Result),
             observer_history_owner(Parent, State);

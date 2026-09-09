@@ -20,6 +20,7 @@ matching **property**, both keyed by the same `Key = {Type, Id}`:
 | `{directory, node}`   | the local route-directory owner             |
 | `{directory_control, node}` | directory dissemination/control    |
 | `{foreign_log, node}` | anchored foreign-log verifier/cache         |
+| `{foreign_cache_writer, {Namespace, Anchor}}` | existing verifier's exclusive cache mutation lifetime |
 | `{namespace_manager, node}` | desired per-ontology process sets   |
 | `{quod_ns_sup, node}` | dynamic content-subtree supervisor          |
 | `{quod_brahms_sup, node}` | dynamic Brahms supervisor             |

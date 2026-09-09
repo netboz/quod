@@ -1,9 +1,16 @@
 # Simplex occupied-turn diagnosis
 
 Status: diagnostic implementation and independent consensus review complete;
-**approved for commit and preserved-ledger diagnostic deployment**. Both gate
+**committed as `18948ed` and deployed as 0.7.157**. Both gate
 runs passed EUnit 1885/0, ask/QUIC CT 26/26, Simplex CT 12/12, xref,
-dialyzer and diff-check. No new hardware result is claimed. This is the next local instrument requested by the independently
+dialyzer and diff-check. The [hardware report](consensus-owner-turn-hardware-results.md)
+records the successful tracing-off runs and failed tracing-on preflight; no
+performance closure is claimed. That evidence is independently reviewed; the
+wrapper's hardware overhead and occupied-turn attribution remain unmeasured.
+The next [exact-reference contract](exact-reference-lifecycle-tracing-contract.md)
+has its own architecture approval and conditional implementation gates; it is
+not an extension of this instrumentation approval.
+This is the local instrument requested by the independently
 approved [0.7.156 hardware review](consensus-tracing-hardware-results.md).
 It does not change consensus or establish a new performance result. Consensus
 review-before-commit remains in force.

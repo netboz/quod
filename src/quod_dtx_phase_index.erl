@@ -21,7 +21,7 @@ by killed replay/catch-up workers.
 
 -include("quod_proof_limits.hrl").
 
--export([open/2, suspend/1, resume/1, close/1, cleanup/2, stats/1,
+-export([open/2, suspend/1, resume/1, close/1, cleanup/2, cleanup/3, stats/1,
          new_delta/0, preview_batch/4, commit_delta/2,
          apply_batch/3]).
 -export_type([index/0, delta/0]).
@@ -183,22 +183,40 @@ close_result(ok, {error, Reason}) -> {error, {phase_index_io, Reason}}.
 -spec cleanup(file:filename_all(), binary()) ->
           ok | {error, index_error()}.
 cleanup(LedgerDir, Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
-    Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
-    case file:list_dir(Dir) of
-        {ok, Names} -> cleanup_names(Dir, Names);
-        {error, enoent} -> ok;
-        {error, Reason} -> {error, {phase_index_io, Reason}}
-    end;
+    cleanup(LedgerDir, Ns, none);
 cleanup(_LedgerDir, _Ns) ->
     {error, bad_phase_index_argument}.
 
-cleanup_names(_Dir, []) -> ok;
-cleanup_names(Dir, [Name | Rest]) ->
-    case is_scratch_name(Name) of
-        false -> cleanup_names(Dir, Rest);
+-doc "Sweep abandoned scratch files while preserving the exact handed-off session.".
+-spec cleanup(file:filename_all(), binary(), none | index()) ->
+          ok | {error, index_error()}.
+cleanup(LedgerDir, Ns, Retained) when is_binary(Ns), byte_size(Ns) > 0 ->
+    Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
+    case retained_cleanup_path(Dir, Retained) of
+        {ok, Keep} ->
+            case file:list_dir(Dir) of
+                {ok, Names} -> cleanup_names(Dir, Names, Keep);
+                {error, enoent} -> ok;
+                {error, Reason} -> {error, {phase_index_io, Reason}}
+            end;
+        error -> {error, bad_phase_index_argument}
+    end;
+cleanup(_LedgerDir, _Ns, _Retained) ->
+    {error, bad_phase_index_argument}.
+
+retained_cleanup_path(_Dir, none) -> {ok, none};
+retained_cleanup_path(Dir, #index{path = Path, state = suspended}) ->
+    case filename:dirname(Path) =:= Dir of true -> {ok, Path}; false -> error end;
+retained_cleanup_path(_Dir, _Retained) -> error.
+
+cleanup_names(_Dir, [], _Keep) -> ok;
+cleanup_names(Dir, [Name | Rest], Keep) ->
+    Path = filename:join(Dir, Name),
+    case is_scratch_name(Name) andalso Path =/= Keep of
+        false -> cleanup_names(Dir, Rest, Keep);
         true ->
-            case delete_file(filename:join(Dir, Name)) of
-                ok -> cleanup_names(Dir, Rest);
+            case delete_file(Path) of
+                ok -> cleanup_names(Dir, Rest, Keep);
                 {error, Reason} -> {error, {phase_index_io, Reason}}
             end
     end.

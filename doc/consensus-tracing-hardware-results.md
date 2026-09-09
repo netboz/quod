@@ -1,6 +1,6 @@
 # Consensus diagnostic hardware capture — 0.7.156
 
-Status: measured development evidence, awaiting external hardware review.
+Status: measured development evidence, independently reviewed and approved.
 The diagnostic cut `ed17698` and separate version bump `ed64677` were
 independently reviewed before commit and deployment. No protocol or
 performance fix was introduced. The original 1,625 ms trigger and absolute

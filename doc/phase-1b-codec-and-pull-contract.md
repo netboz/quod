@@ -29,6 +29,13 @@ its existing linked probe children—does the decode. The owner does not spawn
 a decoder. `#page_binding{}` still owns the exact link/lease and spendable
 credit; the pull row owns its operation and pending successor grant.
 
+The immediate puller is not a detachable upstream caller. The shared verifier
+may outlive one caller's deadline; its existing page rows still follow that
+puller's death and their own original absolute page budgets. The
+[exact-reference lifecycle/custody cut](exact-reference-lifecycle-tracing-contract.md)
+clarifies those lifetimes at the same owner without changing this page-credit
+or decode-completion protocol.
+
 ### 1.1 Row and correlation
 
 The old `submitted` field is deleted. One explicit `turn` state in that same

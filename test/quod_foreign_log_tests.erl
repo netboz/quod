@@ -7,6 +7,20 @@
 
 -export([identity_current_global_network_dependency_case/0]).
 
+-ifdef(TEST).
+%% The lifecycle/trace suites exercise the same signed fixture and registered
+%% borrowed-source seams; do not build a second verifier or genesis fixture.
+-export([foreign_fixture/1, membership_after_finalize_fixture/1,
+         chain_fetch/2, peer_chain_fetch/3, local_fixture_view/2,
+         start_local_borrow_source/2, stop_local_borrow_source/2,
+         start_owner/2, stop_owner/1, unique_ns/0, temp_dir/1,
+         with_page_decode_fixture/2, receive_page_open/3,
+         install_page_test_link/5, receive_page_request/3,
+         hold_next_page_decode/3, receive_page_decode_gate/2,
+         page_gate_complete/4, fixture_entry_blobs/1,
+         assert_page_owner_drained/0]).
+-endif.
+
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
 
@@ -22,9 +36,9 @@ page_credit_shares_pinned_binding_fifo_across_anchors_test() ->
     Parent = self(),
     Link = spawn(fun() -> page_test_link(Parent) end),
     try
-        First = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000}),
+        First = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000})),
         {Lease, Producer} = receive_page_open(Peer, Endpoint, Ns),
-        Second = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000}),
+        Second = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000})),
         wait_page_pull_count(2, 2000),
         ?assertEqual(1, maps:get(page_bindings, quod_foreign_log:stats())),
         receive {page_test_open, _, _, _, _, _} -> error(duplicate_pinned_open)
@@ -473,15 +487,18 @@ page_decode_owner_replacement_cannot_accept_old_page_test() ->
           try
               stop_owner(Owner),
               ?assertMatch({error, {normal, Owner}}, gen_server:wait_response(First, 1000)),
+              %% The directional owner-death watcher now retires even a
+              %% decoder held before completion. A replacement never inherits
+              %% that writer or relies on it finishing voluntarily.
+              receive {'DOWN', WorkerMonitor, process, Worker, killed} -> ok
+              after 2000 -> error(old_page_worker_survived_owner)
+              end,
               ReplacementDir = temp_dir("page-decode-new-owner"),
               Replacement = start_owner_opts(ReplacementDir, undefined, #{page_timeout_ms => 5000}),
               try
                   ?assertEqual(Replacement, quod_reg:where({foreign_log, node})),
                   1 = erlang:trace(Replacement, true, ['receive', {tracer, self()}]),
                   Worker ! {continue_foreign_page_decode, Token},
-                  receive {'DOWN', WorkerMonitor, process, Worker, normal} -> ok
-                  after 2000 -> error(old_page_worker_did_not_finish)
-                  end,
                   Barrier = erlang:trace_delivered(all),
                   assert_no_page_completion_to_replacement(Replacement, Barrier),
                   ?assertEqual(#{}, gen_server:call(Replacement, test_page_rows)),
@@ -528,7 +545,17 @@ page_decode_trace_crosses_real_owner_and_confirmation_probe_test() ->
                       Confirmation = quod_trace_tests:take_span(<<"quod.foreign.tip_confirm">>),
                       %% Select the page belonging to the spawned confirmation
                       %% probe, not an earlier bootstrap page in its parent.
-                      Page = take_page_child_span(<<"quod.foreign.page_fetch">>, Confirmation),
+                      %% The collection/worker intervals now expose expected
+                      %% fanout and each probe's own stage reconciliation.
+                      Collection = take_page_child_span(
+                                     <<"quod.foreign.probe_collection">>, Confirmation),
+                      Probe = take_page_child_span(
+                                <<"quod.foreign.probe_worker">>, Collection),
+                      ?assertEqual(1, maps:get('quod.foreign.expected_probe_children',
+                                               otel_attributes:map(Collection#span.attributes))),
+                      ?assertEqual(1, maps:get('quod.foreign.probe_ordinal',
+                                               otel_attributes:map(Probe#span.attributes))),
+                      Page = take_page_child_span(<<"quod.foreign.page_fetch">>, Probe),
                       lists:foreach(
                         fun(Name) ->
                             Span = take_page_child_span(Name, Page),
@@ -570,9 +597,9 @@ page_credit_worker_death_resets_sent_page_and_rebinds_unsent_deadline_test() ->
     Link1 = spawn(fun() -> page_test_link(Parent) end),
     Link2 = spawn(fun() -> page_test_link(Parent) end),
     try
-        First = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000}),
+        First = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000})),
         {Lease1, Pid} = receive_page_open(Peer, Endpoint, Ns),
-        Second = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000}),
+        Second = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000})),
         wait_page_pull_count(2, 2000),
         Pid ! {link_up, Lease1, Peer, quod_catchup:channel(Ns), Link1},
         Binding = receive {page_test_bound, Link1, Pid, Ref} -> Ref
@@ -625,9 +652,9 @@ page_credit_caller_timeout_does_not_cancel_shared_page_test() ->
     Parent = self(),
     Link = spawn(fun() -> page_test_link(Parent) end),
     try
-        Short = gen_server:send_request(Pid, {verify, Peer, Endpoint, Ref, finalize, 30}),
+        Short = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, Ref, finalize, 30})),
         {Lease, Pid} = receive_page_open(Peer, Endpoint, Ns),
-        Long = gen_server:send_request(Pid, {verify, Peer, Endpoint, Ref, finalize, 5000}),
+        Long = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, Ref, finalize, 5000})),
         ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
         Pid ! {link_up, Lease, Peer, quod_catchup:channel(Ns), Link},
         Binding = receive {page_test_bound, Link, Pid, BRef} -> BRef
@@ -661,7 +688,7 @@ page_credit_late_terminal_cannot_beat_queued_deadline_test() ->
     Parent = self(),
     Link = spawn(fun() -> page_test_link(Parent) end),
     try
-        Request = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000}),
+        Request = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000})),
         {Lease, Pid} = receive_page_open(Peer, Endpoint, Ns),
         Pid ! {link_up, Lease, Peer, quod_catchup:channel(Ns), Link},
         Binding = receive {page_test_bound, Link, Pid, Ref} -> Ref
@@ -698,15 +725,15 @@ page_credit_cancelled_open_and_new_open_failure_leave_no_binding_test() ->
     Pid = start_owner_opts(Dir, undefined, #{page_timeout_ms => 5000}),
     Transport = start_page_test_transport(self()),
     try
-        First = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000}),
+        First = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, A), finalize, 5000})),
         {Lease1, Pid} = receive_page_open(Peer, Endpoint, Ns),
         [#{caller := PageOwner}] = maps:values(gen_server:call(Pid, test_page_rows)),
         exit(PageOwner, kill),
         ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
         ?assertEqual(0, maps:get(page_bindings, quod_foreign_log:stats())),
-        Second = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000}),
+        Second = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, B), finalize, 5000})),
         {Lease2, Pid} = receive_page_open(Peer, Endpoint, Ns),
-        Third = gen_server:send_request(Pid, {verify, Peer, Endpoint, maps:get(ref, C), finalize, 5000}),
+        Third = gen_server:send_request(Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, C), finalize, 5000})),
         wait_page_pull_count(2, 1000),
         Pid ! {link_error, Lease1, Peer, quod_catchup:channel(Ns)},
         ?assertMatch(#{pulls := 2, page_bindings := 1}, quod_foreign_log:stats()),
@@ -753,7 +780,7 @@ with_page_decode_fixture(Options, Fun) ->
 
 page_verify_request(Owner, Peer, Endpoint, Fixture) ->
     gen_server:send_request(
-      Owner, {verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000}).
+      Owner, owner_request({verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000})).
 
 begin_single_page(#{owner := Owner, first := A, ns := Ns, peer := Peer,
                     endpoint := Endpoint, link1 := Link}) ->
@@ -824,9 +851,10 @@ serve_page_trace_current(Owner, Link, Binding, Fixture, Tag) ->
     after 6000 -> error(page_trace_current_did_not_complete)
     end.
 
-take_page_child_span(Name, #span{span_id = ParentId}) ->
+take_page_child_span(Name, #span{span_id = ParentId, trace_id = TraceId}) ->
     receive
-        {quod_test_span, Span = #span{name = Name, parent_span_id = ParentId}} -> Span
+        {quod_test_span, Span = #span{name = Name, parent_span_id = ParentId,
+                                     trace_id = TraceId}} -> Span
     after 2000 -> error({missing_page_child_span, Name})
     end.
 
@@ -1332,7 +1360,7 @@ with_confirmation_fixture(Fun) ->
         [First | _] = Peers,
         [{First, [Endpoint]} | _] = Routes,
         Seed = gen_server:send_request(
-                 Owner, {verify, First, Endpoint, maps:get(ref, Fixture), transaction, 10000}),
+                 Owner, owner_request({verify, First, Endpoint, maps:get(ref, Fixture), transaction, 10000})),
         Link = maps:get(First, Links),
         open_confirmation_link(C, First, Endpoint),
         SeedPull = receive_confirmation_pull(Owner, Link, 1, 2),
@@ -1824,7 +1852,7 @@ current_view_nonoverlapping_stages_explain_enclosing_request_test() ->
               %% production deadline.
               receive after 25 -> ok end,
               1 = erlang:trace_pattern(
-                    {quod_trace, add_event, 3}, true, []),
+                    {quod_trace, set_attributes, 2}, true, []),
               1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
               try
                   Worker ! release_accounted_current,
@@ -1838,20 +1866,21 @@ current_view_nonoverlapping_stages_explain_enclosing_request_test() ->
                   end,
                   receive
                       {trace, Worker, call,
-                       {quod_trace, add_event,
-                        [TraceCtx,
-                         <<"foreign.current.worker.finished">>,
-                         #{'quod.foreign.retained_height' := 0,
-                           'quod.foreign.verified_suffix' := Suffix}]}} ->
-                          ?assert(TraceCtx =/= undefined),
-                          ?assert(Suffix > 0)
+                       {quod_trace, set_attributes,
+                        [_SpanCtx,
+                         #{'quod.foreign.resident_start_height' := 0,
+                           'quod.foreign.final_verified_height' := Height}]}} ->
+                          %% This metrics fixture does not install an SDK.
+                          %% Real sampled parenting and replay-vs-network
+                          %% counts are covered by the worker tracing suite.
+                          ?assert(Height > 0)
                   after 2000 ->
                       error(accounted_current_trace_not_carried)
                   end
               after
                   _ = catch erlang:trace(Worker, false, [call]),
                   _ = erlang:trace_pattern(
-                        {quod_trace, add_event, 3}, false, [])
+                        {quod_trace, set_attributes, 2}, false, [])
               end,
               After = foreign_stage_samples(
                         [current_total, owner_mailbox, request_current,
@@ -3245,7 +3274,7 @@ exact_verification_parks_until_directory_progress_test() ->
     try
         Request = gen_server:send_request(
                     Pid,
-                    {verify_reference, Ref, finalize, none, none, 300}),
+                    owner_request({verify_reference, Ref, finalize, none, none, 300})),
         %% The stats call is a mailbox barrier: absence of a route has parked
         %% the owned call instead of returning retry or starting a worker.
         ?assertMatch(#{pending := 0, queued := 1},
@@ -3291,12 +3320,12 @@ parked_route_does_not_block_later_request_contact_test() ->
     try
         Parked = gen_server:send_request(
                    Pid,
-                   {verify_reference, Ref, finalize, none, none, 350}),
+                   owner_request({verify_reference, Ref, finalize, none, none, 350})),
         ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
         Contact = gen_server:send_request(
                     Pid,
-                    {verify_reference, Ref, finalize,
-                     {Peer, Endpoint}, none, 250}),
+                    owner_request({verify_reference, Ref, finalize,
+                                   {Peer, Endpoint}, none, 250})),
         %% The second row has a usable request-scoped route, so it runs even
         %% though the older row remains parked at the front of the one queue.
         receive
@@ -3398,7 +3427,7 @@ uncertified_feed_progress_does_not_wake_parked_exact_verification_test() ->
     try
         Request = gen_server:send_request(
                     Pid,
-                    {verify_reference, Ref, finalize, none, none, 300}),
+                    owner_request({verify_reference, Ref, finalize, none, none, 300})),
         ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
         ok = quod_foreign_log:observe_candidate(
                Identity, {Peer, Endpoint}),
@@ -3438,8 +3467,8 @@ parked_exact_expires_only_at_its_caller_deadline_test() ->
     try
         Request = gen_server:send_request(
                     Pid,
-                    {verify_reference, Ref, finalize,
-                     none, none, 80}),
+                    owner_request({verify_reference, Ref, finalize,
+                                   none, none, 80})),
         ?assertEqual(1, maps:get(queued, quod_foreign_log:stats())),
         ?assertEqual(
            {reply, {error, retry}},
@@ -3638,7 +3667,8 @@ verify_local_recovery_wait_has_no_caller_deadline_test() ->
                   Parent ! {owner_ready, self()},
                   receive
                       {'$gen_call', {Caller, Tag},
-                       {verify_local, Source, Ref, finalize, infinity}} ->
+                       {verification, infinity, _Ctx, _Enqueued,
+                        {verify_local, Source, Ref, finalize, infinity}}} ->
                           Parent ! {recovery_waiting, self()},
                           receive release -> Caller ! {Tag, {error, retry}} end
                   end
@@ -3694,8 +3724,8 @@ verify_local_infinite_borrow_source_kill_retires_only_its_worker_test() ->
             %% source monitor. Distinct remote work must remain independent.
             ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
             Remote = gen_server:send_request(
-                       Pid, {verify, maps:get(pub, Fixture),
-                             {"127.0.0.1", 19000}, Ref, finalize, 5000}),
+                       Pid, owner_request({verify, maps:get(pub, Fixture),
+                                           {"127.0.0.1", 19000}, Ref, finalize, 5000})),
             ?assertMatch(#{pending := 1, queued := 1}, quod_foreign_log:stats()),
             exit(SourcePid, kill),
             ?assertEqual({error, retry}, receive_local_borrow_result(Caller)),
@@ -3849,15 +3879,15 @@ verify_local_queued_infinite_borrow_source_kill_removes_its_row_test() ->
     {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
     try
         Remote = gen_server:send_request(
-                   Pid, {verify, maps:get(pub, Fixture),
-                         {"127.0.0.1", 19000}, Ref, finalize, 5000}),
+                   Pid, owner_request({verify, maps:get(pub, Fixture),
+                                       {"127.0.0.1", 19000}, Ref, finalize, 5000})),
         RemoteWorker = receive
                            {remote_borrow_worker_held, RemoteGate, W} -> W
                        after 2000 -> error(remote_request_not_started)
                        end,
         try
             Local = gen_server:send_request(
-                      Pid, {verify_local, Source, Ref, finalize, infinity}),
+                      Pid, owner_request({verify_local, Source, Ref, finalize, infinity})),
             ?assertMatch(#{pending := 1, queued := 1}, quod_foreign_log:stats()),
             ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
             exit(SourcePid, kill),
@@ -3893,7 +3923,7 @@ verify_local_shared_borrow_caller_timeout_keeps_source_monitor_test() ->
             hold_local_borrow(Pid, Source, Ref),
         try
             Short = gen_server:send_request(
-                      Pid, {verify_local, Source, Ref, finalize, 20}),
+                      Pid, owner_request({verify_local, Source, Ref, finalize, 20})),
             %% Same-sender stats is an admission barrier for the short caller:
             %% identical views share the held reader, not a second queue row.
             ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
@@ -5021,8 +5051,7 @@ current_view_caller_timeout_detaches_without_killing_shared_work_test() ->
         flush_fetches(),
         ok = atomics:put(Gate, 1, 1),
         First = gen_server:send_request(
-                  Pid, {current, Routes, {Ns, maps:get(anchor, Fixture)}, none,
-                        100, undefined, erlang:monotonic_time()}),
+                  Pid, current_request(Routes, {Ns, maps:get(anchor, Fixture)}, none, 100)),
         Worker = receive
                      {current_fetch_blocked, FetchWorker} -> FetchWorker
                  after 2000 ->
@@ -5035,8 +5064,7 @@ current_view_caller_timeout_detaches_without_killing_shared_work_test() ->
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
         Second = gen_server:send_request(
-                   Pid, {current, Routes, {Ns, maps:get(anchor, Fixture)}, none,
-                         2000, undefined, erlang:monotonic_time()}),
+                   Pid, current_request(Routes, {Ns, maps:get(anchor, Fixture)}, none, 2000)),
         ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
         Worker ! release_current_fetch,
         ?assertMatch(
@@ -5275,8 +5303,8 @@ queued_identical_callers_expire_without_cancelling_the_job_test() ->
     Pid = start_owner(Dir, Fetch),
     try
         Active = gen_server:send_request(
-                   Pid, {verify, Peer, Endpoint, maps:get(ref, Fixture),
-                         finalize, 5000}),
+                   Pid, owner_request({verify, Peer, Endpoint, maps:get(ref, Fixture),
+                                       finalize, 5000})),
         ActiveWorker = receive
                            {distinct_work_blocked, Worker} -> Worker
                        after 2000 ->
@@ -6205,8 +6233,13 @@ foreign_stage_sample(Stage) ->
     end.
 
 current_request(Routes, Identity, Contact, TimeoutMs) ->
-    {current, Routes, Identity, Contact, TimeoutMs, undefined,
-     erlang:monotonic_time()}.
+    owner_request({current, Routes, Identity, Contact, TimeoutMs}).
+
+owner_request(Request) ->
+    Timeout = element(tuple_size(Request), Request),
+    Deadline = case Timeout of infinity -> infinity;
+                              _ -> quod_time:mono_ms() + Timeout end,
+    {verification, Deadline, undefined, erlang:monotonic_time(), Request}.
 
 start_owner(Dir, Fetch) ->
     start_owner_opts(Dir, Fetch, #{}).

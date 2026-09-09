@@ -31,11 +31,45 @@ local durable support, and result delivery waits 22.817 ms mean at the source
 owner under c4. Neither is yet an exclusive root-cause attribution; the old
 mixed-receipt outlier did not recur. This is not authorization for a
 protocol change: the next [owner-turn diagnostic](consensus-owner-turn-tracing.md)
-is local instrumentation, independently reviewed and approved for commit and
-preserved-ledger diagnostic deployment (EUnit 1885/0, ask/QUIC 26/26,
-Simplex 12/12, xref and dialyzer clean). The 0.7.156 serial
-result-stage regression (+18.4%) and 137.462 ms c4 source/endpoint duration gap
-remain open. This is not authorization for a
+is local instrumentation, independently reviewed and deployed as 0.7.157
+(EUnit 1885/0, ask/QUIC 26/26, Simplex 12/12, xref and dialyzer clean).
+Its independently approved [hardware evidence](consensus-owner-turn-hardware-results.md) records
+200/200 tracing-off writes committed, but a new 9.684-second mixed claim/receipt
+tail with foreign validation returning `abstain` after 6.002 seconds. This
+receipt is not a duplicate. The tracing-on attempt failed its read-only
+preflight before measured writes; a later Tempo OOM also defeats a loss-free
+capture claim. No protocol fix or successful on/off overhead comparison is
+established. After restoring tracing off, a separate read-only control exposed
+37.074 seconds of successive cold foreign-history stages (389/1138 entries);
+both verifications passed, but exceeded the 35-second HTTP budget. A distinct
+warm read then passed in 11.015 ms. These are health probes, not write latency
+samples, and the cold replay's fine-grained attribution remains incomplete.
+The cold-start item is still open. Serial `operation_result` has risen
+18.4% then another 2.27%, now 195.679 ms. The source/endpoint residual is now
+58.302/152.248 ms at c1/c4 (the previous c4 gap was 137.462 ms), and c4
+source-owner delivery rose 22.817→26.909 ms. All remain unlocated or only
+partially attributed. The next approved owner cut is the
+[exact-reference lifecycle/trace contract](exact-reference-lifecycle-tracing-contract.md)
+at the existing foreign-log owner: caller versus shared-work lifetime,
+context-independent coalescing, queue/park/wake ordering and full cold-rebuild
+coverage. Claude approved diagnostics and the specified lifecycle refactoring
+as one coherent cut, conditional on fail-before wake evidence and a same-cache-
+file restart-custody proof; final implementation review remains required before
+commit/deploy.
+The fail-before tests now reproduce deadline, sharing and wake-order defects;
+the actual same-inode append test also refutes watcher-only restart exclusion.
+The resulting [cache-writer custody extension](foreign-cache-writer-custody-contract.md)
+was returned for review and is now approved within the same coherent cut:
+existing-worker registration, actual-death release, admitted custody waits,
+session-safe cleanup and the existing permanent-registry-application boundary.
+The coherent cut's final independent review closed on 2026-09-10, with
+fail-before controls and permanent lifecycle, file-custody and real-SDK
+regressions. Claude reproduced EUnit 1937/0, ask/QUIC 26/26, Simplex 12/12,
+xref, Dialyzer and the production release build. Its
+[implementation checkpoint](exact-reference-lifecycle-tracing-contract.md#implementation-checkpoint--2026-09-09)
+records the exact scope and local gate archive. Commit and preserved-ledger
+deployment are approved; no new benchmark or hardware closure is claimed here.
+This is not authorization for a
 duplicate-receipt validation bypass. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source
@@ -694,18 +728,27 @@ work only where measurement justifies it; do not weaken freshness.
 The [Phase-1B review brief](phase-1b-current-view-review.md) separates that
 cryptographic redesign from a semantics-preserving cleanup of the existing
 verifier's execution. Claude approved the cleanup direction and all three
-detailed cut contracts. Cuts 1 and 2 passed implementation review and were
-committed; Yan then authorized **Cut 3** implementation. The
+detailed cut contracts; all three implementations are reviewed, committed and
+deployed in 0.7.155. Their measured results and later diagnostic captures are
+linked in the status above. The
 [shared artifact and pull contract](phase-1b-codec-and-pull-contract.md) is
 reviewed; its shared artifact cut is explicitly consensus-facing. Each cut
-requires fresh sequential gates and review before commit. Cut 1 removes
+required fresh sequential gates and review before commit. Cut 1 removed
 owner-side page decoding while retaining the
 existing page lifecycle. Broader response
 reuse remains unapproved. Suffix reuse already exists. The audit
 found owner-mailbox page decoding on 0.7.152, repeated canonical-byte work and all-reply
 probe barriers; their individual latency contributions are not yet fully
-attributed. Neither contract approval nor hardware approval starts their
-implementation automatically.
+attributed. The next
+[exact-reference lifecycle/trace contract](exact-reference-lifecycle-tracing-contract.md)
+is architecture-reviewed, with implementation proof gates pending:
+context-independent sharing, absolute caller
+budgets distinct from shared cache work, event ordering and complete cold
+rebuild observation. Its specified behavioral refactoring is approved with
+the fail-before wake and same-file custody conditions binding. The separately
+reviewed existing-worker custody extension is now included; any further new
+exclusion protocol returns for review. Approved measurements alone do not
+close the implementation or hardware gates.
 The brief also distinguishes rejecting a retired committee after its
 replacement is known from discovering a concealed replacement; do not claim
 the existing unit regression or key evolution proves both.

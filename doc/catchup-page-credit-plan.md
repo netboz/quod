@@ -328,8 +328,14 @@ The source seams are `quod_simplex:call_history_view`,
 The approved request-lifecycle correction removes the independent one-second
 cutoff. Capture consumes the calling operation's original absolute remaining
 budget, at the same owner; source death releases the borrow through the existing
-request-row monitor. Caller detachment removes only that caller; the operation's
-terminal deadline ends its shared work. Do not restart verification's budget
+request-row monitor. Caller detachment removes only that caller. A borrowing
+operation with an existing terminal work deadline keeps that deadline; it is
+not a detachable caller's deadline. Shared exact cache verification has no
+separate whole-job deadline: its admitted active/runnable/custody-waiting job
+survives caller expiry, its pages retain their original budgets, and an
+unavailable-route park retires when it loses all interest. See the
+[exact-reference lifecycle contract](exact-reference-lifecycle-tracing-contract.md#42-shared-work-has-a-different-lifetime).
+Do not restart verification's budget
 after capture. Catch-up serving uses its page/service deadline, co-hosted follow
 uses its existing follow-work budget, read certification (initial and later
 anchor alike) uses the proof's remaining budget, and outcome/evidence recovery

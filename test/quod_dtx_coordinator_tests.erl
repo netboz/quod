@@ -1402,7 +1402,8 @@ certify_operation_remote_result(
     gen_server:reply(RoutesFrom, {ok, Routes}),
     receive
         {operation_stub_call, foreign, ViewFrom,
-         {current, Routes, Target, none, Timeout, _TraceCtx, _EnqueuedNative}} ->
+         {verification, _Deadline, _TraceCtx, _EnqueuedNative,
+          {current, Routes, Target, none, Timeout}}} ->
             ?assert(Timeout > 0),
             ?assert(Timeout =< RemainingAfterCapture),
             gen_server:reply(ViewFrom, {ok, View});

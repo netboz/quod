@@ -18,13 +18,167 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
               end),
             Parent = quod_trace_tests:take_span(<<"operation.test.parent">>),
             Worker = quod_trace_tests:take_span(<<"quod.operation.recover">>),
+            Local = quod_trace_tests:take_span(<<"quod.operation.local_outcome">>),
             Resolve = quod_trace_tests:take_span(<<"quod.operation.resolve_outcome">>),
+            Notify = quod_trace_tests:take_span(<<"quod.operation.result_notify">>),
             Probe = quod_trace_tests:take_span(<<"quod.dtx.quorum.probe">>),
             ?assertEqual(Parent#span.trace_id, Worker#span.trace_id),
             ?assertEqual(Parent#span.span_id, Worker#span.parent_span_id),
+            ?assertEqual(Worker#span.trace_id, Local#span.trace_id),
+            ?assertEqual(Worker#span.span_id, Local#span.parent_span_id),
+            ?assert(Local#span.end_time =< Resolve#span.start_time),
+            ?assertEqual(
+               #{'quod.namespace' => maps:get(source_ns, F)},
+               otel_attributes:map(Local#span.attributes)),
             ?assertEqual(Worker#span.span_id, Resolve#span.parent_span_id),
             ?assertEqual(Resolve#span.trace_id, Probe#span.trace_id),
-            ?assertEqual(Resolve#span.span_id, Probe#span.parent_span_id)
+            ?assertEqual(Resolve#span.span_id, Probe#span.parent_span_id),
+            Events = lists:reverse(otel_events:list(Worker#span.events)),
+            ?assertEqual([<<"operation.worker_started">>],
+                         [E#event.name || E <- Events]),
+            [Started] = Events,
+            [Sent] = otel_events:list(Notify#span.events),
+            ?assertEqual(Worker#span.trace_id, Notify#span.trace_id),
+            ?assertEqual(Worker#span.span_id, Notify#span.parent_span_id),
+            ?assertEqual(<<"operation.result_sent">>, Sent#event.name),
+            ?assert(Started#event.system_time_native =< Local#span.start_time),
+            ?assert(Resolve#span.end_time =< Sent#event.system_time_native),
+            ?assertEqual(#{}, otel_attributes:map(Sent#event.attributes)),
+            ?assert(lists:all(fun(E) -> otel_attributes:map(E#event.attributes) =:= #{} end,
+                             Events))
+        end)
+    end).
+
+%% Drive the real fresh-result branch, including its ordinary receipt call.
+%% Holding that call proves the target result is sent before receipt drain;
+%% tracing never substitutes a decoder, a verifier, or a delivery result.
+fresh_operation_result_decode_and_send_are_traced_test_() ->
+    [{atom_to_list(Class), fun() ->
+        fresh_operation_result_trace(Class)
+      end} || Class <- [committed, rejected, malformed, wrong_target]].
+
+fresh_operation_result_trace(Class) ->
+    with_operation_fixture(fun(#{source_ns := Ns, target := Target}) ->
+        Fixture = quod_ct:remote_operation_fixture(
+                    #{target => {Ns, digest(242)}, participant_target => Target}),
+        Claim = maps:get(claim, Fixture),
+        {ok, #{operation_ref := OperationRef, digest := Digest}} =
+            quod_transaction:request_claim(Claim),
+        {ok, ClaimEvidence} = quod_transaction:encode_evidence(
+                               maps:get(certified_claim_ref, Fixture), Claim),
+        {ok, Evidence0} = quod_transaction:encode_evidence(
+                           maps:get(certified_target_ref, Fixture),
+                           maps:get(application, Fixture)),
+        Evidence = case Class of malformed -> <<"not an evidence blob">>; _ -> Evidence0 end,
+        TargetRef = maps:get(target_ref, Fixture),
+        BoundTarget = case Class of
+                          wrong_target -> setelement(4, TargetRef, digest(250));
+                          _ -> TargetRef
+                      end,
+        Result = case Class of rejected -> {rejected, conflict_retry}; _ -> committed end,
+        RequestId = <<251:128>>,
+        Request = {apply_claim, RequestId, ClaimEvidence},
+        Response = {application, RequestId, Result, Evidence},
+        Context = #{owner_ns => Ns, origin => maps:get(origin, Fixture),
+                    operation_ref => OperationRef, request_digest => Digest,
+                    target => Target, target_ref => BoundTarget},
+        Test = self(),
+        quod_trace_tests:with_tracer(fun() ->
+            {Worker, Monitor} = spawn_monitor(fun() ->
+                OwnerMonitor = monitor(process, Test),
+                try
+                    quod_trace:with_span(
+                      otel_ctx:new(), <<"operation.fresh.test">>, internal, #{},
+                      fun(_) ->
+                          quod_dtx_coordinator:test_operation_target_result(
+                            Test, OwnerMonitor, Request, Response, Result, Evidence, Context)
+                      end)
+                after demonitor(OwnerMonitor, [flush])
+                end
+            end),
+            try
+                Notification = case Class of
+                    C when C =:= committed; C =:= rejected ->
+                        receive
+                            {dtx_coordinator, Worker, OperationRef,
+                             {target_result, Result, TargetRef}} -> ok
+                        after 1000 -> error(missing_fresh_target_result)
+                        end,
+                        ReceiptFrom = receive
+                            {operation_stub_call, source, From,
+                             {submit_role,
+                              #transaction{role = {remote_complete, OperationRef, Digest, TargetRef}},
+                              [], _TraceCtx}} -> From
+                        after 1000 -> error(missing_fresh_source_receipt)
+                        end,
+                        ?assert(is_process_alive(Worker)),
+                        %% The notification has exported while the recovery
+                        %% call is held in receipt work. Ending/killing that
+                        %% parent later cannot hide this client handoff.
+                        Notify0 = quod_trace_tests:take_span(<<"quod.operation.result_notify">>),
+                        ?assertNot(Notify0#span.is_recording),
+                        receive
+                            {quod_test_span, #span{name = <<"operation.fresh.test">>}} ->
+                                error(recovery_parent_ended_before_receipt)
+                        after 0 -> ok
+                        end,
+                        receive
+                            {dtx_coordinator, Worker, OperationRef, {done, _}} ->
+                                error(receipt_drain_was_not_waited)
+                        after 0 -> ok
+                        end,
+                        gen_server:reply(ReceiptFrom, {ok, [], 4, digest(252)}),
+                        receive
+                            {dtx_coordinator, Worker, OperationRef, {done, OperationRef}} -> ok
+                        after 1000 -> error(missing_fresh_operation_done)
+                        end,
+                        Notify0;
+                    _ ->
+                        receive
+                            {dtx_coordinator, Worker, OperationRef,
+                             {error, invalid_target_evidence}} -> ok
+                        after 1000 -> error(missing_typed_target_evidence_error)
+                        end,
+                        none
+                end,
+                receive {'DOWN', Monitor, process, Worker, normal} -> ok
+                after 1000 -> error(fresh_operation_worker_did_not_finish)
+                end,
+                assert_no_operation_stub_calls(),
+                Parent = quod_trace_tests:take_span(<<"operation.fresh.test">>),
+                Decode = quod_trace_tests:take_span(<<"quod.operation.result_evidence_decode">>),
+                ?assertEqual(Parent#span.trace_id, Decode#span.trace_id),
+                ?assertEqual(Parent#span.span_id, Decode#span.parent_span_id),
+                ?assertEqual(#{}, otel_attributes:map(Decode#span.attributes)),
+                ?assertEqual([], otel_events:list(Parent#span.events)),
+                case Class of
+                    C2 when C2 =:= committed; C2 =:= rejected ->
+                        [Sent] = otel_events:list(Notification#span.events),
+                        ?assertEqual(Parent#span.trace_id, Notification#span.trace_id),
+                        ?assertEqual(Parent#span.span_id, Notification#span.parent_span_id),
+                        ?assertEqual(
+                           #{'quod.namespace' => Ns,
+                             'quod.operation.id' => quod_trace:tx_id(element(5, OperationRef))},
+                           otel_attributes:map(Notification#span.attributes)),
+                        ?assertEqual(<<"operation.result_sent">>, Sent#event.name),
+                        ?assert(Decode#span.end_time =< Sent#event.system_time_native),
+                        Receipt = quod_trace_tests:take_span(<<"quod.operation.receipt">>),
+                        ?assertEqual(Parent#span.trace_id, Receipt#span.trace_id),
+                        ?assert(Notification#span.end_time =< Receipt#span.start_time);
+                    _ ->
+                        ?assertEqual(none, Notification),
+                        receive
+                            {dtx_coordinator, Worker, OperationRef, {target_result, _, _}} ->
+                                error(invalid_evidence_produced_a_target_result);
+                            {quod_test_span, #span{name = <<"quod.operation.result_notify">>}} ->
+                                error(invalid_evidence_produced_a_notification)
+                        after 0 -> ok
+                        end
+                end
+            after
+                exit(Worker, kill),
+                demonitor(Monitor, [flush])
+            end
         end)
     end).
 

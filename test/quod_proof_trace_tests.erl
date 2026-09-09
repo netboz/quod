@@ -7,33 +7,38 @@
 ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test() ->
     with_engine(fun(Ns) ->
         quod_trace_tests:with_tracer(fun() ->
+          quod_trace:with_span(otel_ctx:new(), <<"test.ordinary_proof">>, internal, #{},
+            fun(TestParent) ->
+            TraceId = otel_span:trace_id(TestParent),
+            Take = fun(Name) -> quod_trace_tests:take_span(Name, TraceId) end,
             ?assertEqual({ok, [#{}], 1}, quod_prolog:prove(Ns, true)),
-            Public = quod_trace_tests:take_span(<<"quod.prolog.public_proof">>),
-            Worker = quod_trace_tests:take_span(<<"quod.prolog.prove">>),
-            Authorization = quod_trace_tests:take_span(
+            Public = Take(<<"quod.prolog.public_proof">>),
+            Worker = Take(<<"quod.prolog.prove">>),
+            Authorization = Take(
                               <<"quod.prolog.authorization">>),
-            Invocation = quod_trace_tests:take_span(<<"quod.prolog.invocation">>),
-            PinOrigin = quod_trace_tests:take_span(<<"quod.prolog.pin_origin">>),
-            ContextStart = quod_trace_tests:take_span(
+            Invocation = Take(<<"quod.prolog.invocation">>),
+            PinOrigin = Take(<<"quod.prolog.pin_origin">>),
+            ContextStart = Take(
                              <<"quod.prolog.context_start">>),
-            OriginOpen = quod_trace_tests:take_span(
+            OriginOpen = Take(
                            <<"quod.prolog.origin_scope_open">>),
-            SessionOpen = quod_trace_tests:take_span(
+            SessionOpen = Take(
                             <<"quod.proof_session.open">>),
-            FirstResult = quod_trace_tests:take_span(
+            FirstResult = Take(
                             <<"quod.proof_session.first_result">>),
-            Advance = quod_trace_tests:take_span(
+            Advance = Take(
                         <<"quod.proof_session.advance">>),
-            ErlogStep = quod_trace_tests:take_span(<<"quod.erlog.step">>),
-            Interpret = quod_trace_tests:take_span(
+            ErlogStep = Take(<<"quod.erlog.step">>),
+            Interpret = Take(
                           <<"quod.erlog.interpret_result">>),
-            Exposure = quod_trace_tests:take_span(
+            Exposure = Take(
                          <<"quod.erlog.exposure_guard">>),
-            Seal = quod_trace_tests:take_span(<<"quod.proof_context.seal">>),
-            Finalize = quod_trace_tests:take_span(
+            Seal = Take(<<"quod.proof_context.seal">>),
+            Finalize = Take(
                          <<"quod.proof_context.finalize">>),
-            Cleanup = quod_trace_tests:take_span(
+            Cleanup = Take(
                         <<"quod.proof_context.cleanup">>),
+            ?assertEqual(otel_span:span_id(TestParent), Public#span.parent_span_id),
             assert_child(Public, Worker),
             lists:foreach(fun(Child) -> assert_child(Worker, Child) end,
                           [PinOrigin, ContextStart, OriginOpen, Authorization,
@@ -47,10 +52,13 @@ ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test() ->
             %% final cleanup. Cached finalize(commit) must not seal a second time.
             ordered([Authorization, Invocation, Seal, Finalize, Cleanup]),
             receive
-                {quod_test_span, #span{name = <<"quod.proof_context.seal">>}} ->
+                {quod_test_span, #span{name = <<"quod.proof_context.seal">>,
+                                       trace_id = TraceId}} ->
                     error(duplicate_seal_span)
             after 0 -> ok
             end
+          end),
+          _ = quod_trace_tests:take_span(<<"test.ordinary_proof">>)
         end)
     end).
 

@@ -14,10 +14,17 @@ deployed as 0.7.152; Claude independently approved its hardware evidence
 absolute latency gate remains unmet. Phase 1B Cut 1 is reviewed and committed
 as `e4ad3e1`, with the separate 0.7.153 bump `43bd48c`. Yan authorized
 continuation to Cut 2, independently reviewed and committed as `8ca87e8`
-(separate 0.7.154 bump `dd98f53`). Cut 3 is independently reviewed SAFE TO
-COMMIT with reproduced sequential gates (EUnit 1850/0, ask and QUIC CT 26/26
-each, xref and Dialyzer). All three implementation reviews are closed;
-coordinated development deployment and matched N=4 measurement are next. This
+(separate 0.7.154 bump `dd98f53`). Cut 3 was independently reviewed with
+reproduced sequential gates (EUnit 1850/0, ask and QUIC CT 26/26 each, xref
+and Dialyzer), then committed as `ecb7861` (0.7.155 bump `49f3759`). All three
+cuts are deployed and the matched N=4 measurement is complete: 400/400
+committed, one-hop mean 381.50 ms serial / 874.46 ms c4. The
+[hardware evidence](phase-1b-hardware-results.md) is independently reviewed and approved;
+absolute latency gates remain unmet, and the 1.625-second serial outlier's
+approval stall is localized but its triggering event is not yet established.
+The c4 result-return stage regressed 14.81%; both findings are the subject of
+the [trace-only diagnosis cut](consensus-result-tracing.md), not authorization
+for a duplicate-receipt validation bypass. This
 does not close the separate result-authentication design or authorize a
 release-safety claim. After-terminal quiet-source
 lag remains the explicit limitation in §6.2: consume-once progress alone does not

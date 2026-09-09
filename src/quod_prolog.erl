@@ -321,9 +321,9 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% parent height (Slot-1).  Membership and DTX control waves share this
             %% one height/correlation/timer mechanism; only their pure
             %% validator and reply tag differ.
-            %% Tag => {Slot, {membership, Change} |
+            %% Tag => {Slot, {content, Transactions, BlockTimestamp} |
             %%                 {dtx, Controls, BlockTimestamp},
-            %%         ReplyTo, TimerRef}
+            %%         ReplyTo, TimerRef, TraceCtx}
             validations = #{} :: map(),
             applies   = 0, rejects = 0, proves = 0, conflicts = 0,
             park_timeouts = 0 :: non_neg_integer(),     %% writes still unresolved at their caller deadline
@@ -969,10 +969,12 @@ us — `abstain`. Re-issuing the same `Tag` supersedes a still-parked request fo
 -spec request_content_verdict(binary(), [#transaction{}], non_neg_integer(),
                               pos_integer(), pid(), term()) -> ok.
 request_content_verdict(Ns, Transactions, BlockTimestamp, Slot, ReplyTo, Tag) ->
+    TraceCtx = quod_trace:context(),
+    trace_validation_queued(TraceCtx, content, Ns, Slot, Tag),
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}),
       {content_verdict_req, Transactions, BlockTimestamp,
-       Slot, ReplyTo, Tag}).
+       Slot, ReplyTo, Tag, TraceCtx}).
 
 -doc """
 Look up every control's exact group history for one canonical phase wave at
@@ -986,9 +988,11 @@ by GroupId.
 request_dtx_verdict(Ns, Controls, BlockTimestamp, Slot, ReplyTo, Tag)
   when is_binary(Ns), is_list(Controls), Controls =/= [],
        is_integer(Slot), Slot > 0, is_pid(ReplyTo) ->
+    TraceCtx = quod_trace:context(),
+    trace_validation_queued(TraceCtx, dtx, Ns, Slot, Tag),
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}),
-      {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag}).
+      {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag, TraceCtx}).
 
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
@@ -1509,15 +1513,15 @@ handle_cast({runtime_detach, _Pid}, S) -> {noreply, S};
 %% membership change against Slot-1, delivering now or parking until the KB catches up.
 handle_cast(
   {content_verdict_req, Transactions, BlockTimestamp,
-   Slot, ReplyTo, Tag}, S) ->
+   Slot, ReplyTo, Tag, TraceCtx}, S) ->
     {noreply,
      request_validation(
-       {content, Transactions, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
+       {content, Transactions, BlockTimestamp}, Slot, ReplyTo, Tag, TraceCtx, S)};
 handle_cast(
-  {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag}, S) ->
+  {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag, TraceCtx}, S) ->
     {noreply,
      request_validation(
-       {dtx, Controls, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
+       {dtx, Controls, BlockTimestamp}, Slot, ReplyTo, Tag, TraceCtx, S)};
 handle_cast(
   {agent_attestation, Request, ReplyTo, Tag},
   S = #s{ready = true})
@@ -1693,7 +1697,10 @@ handle_info({group_wait_timeout, GroupId}, S = #s{group_waiters = Waiters}) ->
 %% deliver `abstain` so the voter stops waiting.
 handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
     case maps:take(Tag, V) of
-        {{_Slot, Request, ReplyTo, _TRef}, V1} ->
+        {{Slot, Request, ReplyTo, _TRef, TraceCtx}, V1} ->
+            trace_validation_event(
+              TraceCtx, <<"quod.consensus.parent_request_expired">>,
+              Request, Slot, Tag, S),
             deliver_validation(Request, ReplyTo, Tag, abstain, S),
             {noreply, S#s{validations = V1}};
         error -> {noreply, S}
@@ -6495,16 +6502,14 @@ trace_committed_view(#entry{index = Index,
                              otel_span:is_valid(Span)];
                 _ -> []
             end,
-    {Recording, Unrecorded} = lists:partition(
-                               fun otel_span:is_recording/1, lists:uniq(Spans)),
-    case Recording ++ Unrecorded of
-        [] -> Apply();
-        [Parent | Links] ->
+    case quod_trace:shared_context(Spans) of
+        none -> Apply();
+        {Ctx, Links} ->
             quod_trace:with_span(
-              otel_tracer:set_current_span(otel_ctx:new(), Parent),
+              Ctx,
               <<"quod.prolog.apply">>, internal,
               #{'quod.namespace' => Ns, 'quod.ledger.slot' => Index},
-              opentelemetry:links(Links), fun(_Span) -> Apply() end)
+              Links, fun(_Span) -> Apply() end)
     end;
 trace_committed_view(_Entry, _S, Apply) -> Apply().
 
@@ -7115,24 +7120,30 @@ drop_request(ReqId, Requests) ->
 %% request still parked under it.  This one mechanism serves every
 %% parent-state consensus verdict; adding a DTX phase does not add another
 %% timer/map lifecycle.
-request_validation(Request, Slot, ReplyTo, Tag, S0) ->
+request_validation(Request, Slot, ReplyTo, Tag, TraceCtx, S0) ->
+    trace_validation_event(
+      TraceCtx, <<"quod.consensus.parent_request_received">>, Request, Slot, Tag, S0),
     do_request_validation(
-      Request, Slot, ReplyTo, Tag, supersede_validation(Tag, S0)).
+      Request, Slot, ReplyTo, Tag, TraceCtx, supersede_validation(Tag, S0)).
 
 %% Judge at height `Slot-1`: answer now if the exact parent state is published,
 %% park while the KB (or, for DTX, its durable outcome floor) is behind, and
 %% abstain if the slot has already resolved without us.
-do_request_validation(Request, Slot, ReplyTo, Tag,
+do_request_validation(Request, Slot, ReplyTo, Tag, TraceCtx,
                       S = #s{validations = V, vttl = Vttl}) ->
     case validation_position(Request, Slot - 1, S) of
         ready ->
-            {Verdict, S1} = validation_verdict(Request, S),
+            {Verdict, S1} = traced_validation_verdict(Request, Slot, Tag, TraceCtx, S),
             deliver_validation(Request, ReplyTo, Tag, Verdict, S1),
             S1;
         wait ->
             TRef = erlang:send_after(Vttl, self(), {validation_timeout, Tag}),
-            S#s{validations = V#{Tag => {Slot, Request, ReplyTo, TRef}}};
+            trace_validation_event(
+              TraceCtx, <<"quod.consensus.parent_request_parked">>, Request, Slot, Tag, S),
+            S#s{validations = V#{Tag => {Slot, Request, ReplyTo, TRef, TraceCtx}}};
         stale ->
+            trace_validation_event(
+              TraceCtx, <<"quod.consensus.parent_request_stale">>, Request, Slot, Tag, S),
             deliver_validation(Request, ReplyTo, Tag, abstain, S),
             S
     end.
@@ -7153,8 +7164,11 @@ validation_position(_Request, _Parent, _S) ->
 
 supersede_validation(Tag, S = #s{validations = V}) ->
     case maps:take(Tag, V) of
-        {{_Slot, _Request, _ReplyTo, OldTRef}, V1} ->
+        {{Slot, Request, _ReplyTo, OldTRef, TraceCtx}, V1} ->
             _ = erlang:cancel_timer(OldTRef),
+            trace_validation_event(
+              TraceCtx, <<"quod.consensus.parent_request_superseded">>,
+              Request, Slot, Tag, S),
             S#s{validations = V1};
         error ->
             S
@@ -7165,11 +7179,15 @@ supersede_validation(Tag, S = #s{validations = V}) ->
 %% durably-published floor, so reaching the KB height alone must not release it.
 resolve_validations(S = #s{validations = V}) ->
     lists:foldl(
-      fun({Tag, {Slot, Request, ReplyTo, TRef}}, Acc) ->
+      fun({Tag, {Slot, Request, ReplyTo, TRef, TraceCtx}}, Acc) ->
               case validation_position(Request, Slot - 1, Acc) of
                   ready ->
                       _ = erlang:cancel_timer(TRef),
-                      {Verdict, Acc1} = validation_verdict(Request, Acc),
+                      trace_validation_event(
+                        TraceCtx, <<"quod.consensus.parent_request_resumed">>,
+                        Request, Slot, Tag, Acc),
+                      {Verdict, Acc1} =
+                          traced_validation_verdict(Request, Slot, Tag, TraceCtx, Acc),
                       deliver_validation(
                         Request, ReplyTo, Tag, Verdict, Acc1),
                       Acc1#s{
@@ -7179,6 +7197,9 @@ resolve_validations(S = #s{validations = V}) ->
                       Acc;
                   stale ->
                       _ = erlang:cancel_timer(TRef),
+                      trace_validation_event(
+                        TraceCtx, <<"quod.consensus.parent_request_stale">>,
+                        Request, Slot, Tag, Acc),
                       deliver_validation(
                         Request, ReplyTo, Tag, abstain, Acc),
                       Acc#s{
@@ -7192,9 +7213,52 @@ test_resolve_validation(Request, Slot, Applied, Outcomes) ->
     S1 = resolve_validations(
            #s{applied = Applied, outcomes = Outcomes,
               validations =
-                #{Tag => {Slot, Request, self(), make_ref()}}}),
+                #{Tag => {Slot, Request, self(), make_ref(), undefined}}}),
     maps:is_key(Tag, S1#s.validations).
 -endif.
+
+%% Transient context rides the existing parked row; tracing owns neither a
+%% deadline nor a request lifetime. Parent events delimit queue/park time,
+%% while only the synchronous validation computation creates a child span.
+trace_validation_queued(TraceCtx, Kind, Ns, Slot, Tag) ->
+    quod_trace:add_event(
+      TraceCtx, <<"quod.consensus.parent_request_queued">>,
+      validation_trace_attributes(Kind, Ns, Slot, Tag)).
+
+trace_validation_event(undefined, _Name, _Request, _Slot, _Tag, _S) -> ok;
+trace_validation_event(TraceCtx, Name, {Kind, _, _}, Slot, Tag,
+                       #s{ns = Ns, applied = Applied}) ->
+    quod_trace:add_event(
+      TraceCtx, Name,
+      (validation_trace_attributes(Kind, Ns, Slot, Tag))#{'quod.applied' => Applied}).
+
+validation_trace_attributes(Kind, Ns, Slot, Tag) ->
+    Attributes = #{'quod.namespace' => Ns, 'quod.consensus.slot' => Slot,
+      'quod.parent_height' => Slot - 1,
+      'quod.request_kind' => atom_to_binary(Kind, utf8)},
+    case Tag of
+        {Slot, <<_:256>> = Hash} ->
+            Attributes#{'quod.consensus.block_hash' => quod_trace:tx_id(Hash)};
+        _ -> Attributes
+    end.
+
+traced_validation_verdict(Request = {Kind, _, _}, Slot, Tag, TraceCtx,
+                          S = #s{ns = Ns}) ->
+    quod_trace:with_optional_span(
+      TraceCtx, <<"quod.consensus.parent_validation">>, internal,
+      validation_trace_attributes(Kind, Ns, Slot, Tag),
+      fun() ->
+          {Verdict, _} = Result = validation_verdict(Request, S),
+          quod_trace:set_attributes(
+            otel_tracer:current_span_ctx(),
+            #{'quod.verdict' => validation_trace_verdict(Verdict)}),
+          Result
+      end).
+
+validation_trace_verdict(valid) -> <<"valid">>;
+validation_trace_verdict({valid, _}) -> <<"valid">>;
+validation_trace_verdict({invalid, _}) -> <<"invalid">>;
+validation_trace_verdict(abstain) -> <<"abstain">>.
 
 validation_verdict({content, Transactions, BlockTimestamp}, S) ->
     content_validation_verdict(Transactions, BlockTimestamp, S);

@@ -13,7 +13,8 @@ Only W3C Trace Context is propagated between validators; baggage is deliberately
 excluded from the authenticated relay surface.
 """.
 
--export([context/0, with_context/2, with_span/5, with_span/6, with_optional_span/5,
+-export([context/0, shared_context/1,
+         with_context/2, with_span/5, with_span/6, with_optional_span/5,
          start_span/4, finish_span/2,
          set_attributes/2, add_event/3, inject/1, extract/1,
          valid_carrier/1, tx_id/1, result/2]).
@@ -27,6 +28,25 @@ excluded from the authenticated relay surface.
 
 -spec context() -> context().
 context() -> otel_ctx:get_current().
+
+-doc """
+Choose one parent for shared work and link its other participating spans.
+
+Prefer the first recording span so an earlier unsampled request cannot hide
+shared work. Otherwise preserve the first valid parent's sampling decision;
+never manufacture a root. The returned context carries only the SDK span,
+not process-local values or baggage from any participating request.
+""".
+-spec shared_context([term()]) -> none | {context(), [opentelemetry:link()]}.
+shared_context(SpanContexts) ->
+    Spans = lists:uniq([Span || Span <- SpanContexts, otel_span:is_valid(Span)]),
+    {Recording, Unrecorded} = lists:partition(fun otel_span:is_recording/1, Spans),
+    case Recording ++ Unrecorded of
+        [] -> none;
+        [Parent | Others] ->
+            {otel_tracer:set_current_span(otel_ctx:new(), Parent),
+             opentelemetry:links(Others)}
+    end.
 
 -doc "Attach transient request context for one callback without creating a span.".
 -spec with_context(context(), fun(() -> T)) -> T.

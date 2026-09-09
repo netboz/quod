@@ -1,5 +1,6 @@
 -module(quod_prolog_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 -import(quod_ct, [diff_for/1, change/3, batch/1, wait_until/2]).
 
@@ -985,6 +986,8 @@ membership_test_() ->
       fun t_verdict_side_effects/1,
       fun t_verdict_lifecycle/1,
       fun t_verdict_tag_reuse/1,
+      fun(Ctx) -> t_parent_validation_trace_lifecycle(content, Ctx) end,
+      fun(Ctx) -> t_parent_validation_trace_lifecycle(dtx, Ctx) end,
       fun t_signed_operation_uses_the_same_content_verdict_path/1,
       fun t_signed_operation_rechecks_the_parent_policy/1,
       fun t_committed_signed_operation_waits_for_network_identity/1,
@@ -1409,6 +1412,135 @@ t_verdict_tag_reuse({Ns, _}) ->
         %% the superseded far-slot timer was cancelled, so no stray abstain follows
         ?assertEqual(ok, no_verdict(t))
     end.
+
+%% Exercise both public cast facades and the one real parked-request owner.
+%% The computation spans must descend from the caller's span even though the
+%% engine receives and later resumes the work in unrelated mailbox turns.
+t_parent_validation_trace_lifecycle(Kind, {Ns, Engine}) ->
+    fun() ->
+        quod_trace_tests:with_tracer(fun() ->
+            ok = ab(Ns, 1, batch(canjoin_open(Ns))),
+            BlockHash = <<127:256>>,
+            ParkTag = {3, BlockHash},
+            quod_trace:with_span(
+              otel_ctx:new(), <<"parent_validation_lifecycle">>, internal, #{},
+              fun(_) ->
+                  trace_verdict_request(Kind, Ns, 3, ParkTag),
+                  ?assertEqual(1, quod_prolog:applied(Ns)),
+                  assert_no_trace_verdict(ParkTag),
+                  ok = ab(Ns, 2, noop),
+                  assert_trace_verdict(Kind, ParkTag, Engine, 2,
+                                       trace_ready_verdict(Kind)),
+                  trace_verdict_request(Kind, Ns, 2, trace_stale),
+                  assert_trace_verdict(Kind, trace_stale, Engine, 2, abstain),
+                  trace_verdict_request(Kind, Ns, 9, trace_replaced),
+                  ?assertEqual(2, quod_prolog:applied(Ns)),
+                  trace_verdict_request(Kind, Ns, 4, trace_replaced),
+                  ?assertEqual(2, quod_prolog:applied(Ns)),
+                  assert_no_trace_verdict(trace_replaced),
+                  ok = ab(Ns, 3, noop),
+                  assert_trace_verdict(Kind, trace_replaced, Engine, 3,
+                                       trace_ready_verdict(Kind)),
+                  trace_verdict_request(Kind, Ns, 9, trace_expired),
+                  assert_trace_verdict(Kind, trace_expired, Engine, 3, abstain),
+                  %% Expiry necessarily passes the cancelled predecessor's
+                  %% earlier deadline. Its supersession must stay reply-free.
+                  assert_no_trace_verdict(trace_replaced)
+              end),
+            Parent = quod_trace_tests:take_span(<<"parent_validation_lifecycle">>),
+            Spans = [quod_trace_tests:take_span(<<"quod.consensus.parent_validation">>)
+                     || _ <- [1, 2]],
+            lists:foreach(fun(Span) ->
+                ?assertEqual(Parent#span.trace_id, Span#span.trace_id),
+                ?assertEqual(Parent#span.span_id, Span#span.parent_span_id),
+                Attrs = otel_attributes:map(Span#span.attributes),
+                ?assertEqual(Ns, maps:get('quod.namespace', Attrs)),
+                ?assertEqual(atom_to_binary(Kind, utf8),
+                             maps:get('quod.request_kind', Attrs)),
+                ?assertEqual(trace_verdict_label(Kind), maps:get('quod.verdict', Attrs)),
+                case maps:get('quod.consensus.slot', Attrs) of
+                    3 -> ?assertEqual(quod_trace:tx_id(BlockHash),
+                                      maps:get('quod.consensus.block_hash', Attrs));
+                    4 -> ?assertNot(maps:is_key('quod.consensus.block_hash', Attrs))
+                end,
+                ?assert(Span#span.end_time >= Span#span.start_time)
+            end, Spans),
+            ?assertEqual([3, 4], [maps:get('quod.consensus.slot', otel_attributes:map(Span#span.attributes))
+                                  || Span <- Spans]),
+            Events = lists:reverse(otel_events:list(Parent#span.events)),
+            ?assertEqual(
+              [queued, received, parked, resumed,
+               queued, received, stale,
+               queued, received, parked,
+               queued, received, superseded, parked, resumed,
+               queued, received, parked, expired],
+              [trace_event_kind(Event#event.name) || Event <- Events]),
+            lists:foreach(fun(Event) ->
+                Attrs = otel_attributes:map(Event#event.attributes),
+                ?assertEqual(Ns, maps:get('quod.namespace', Attrs)),
+                ?assertEqual(atom_to_binary(Kind, utf8),
+                             maps:get('quod.request_kind', Attrs)),
+                %% Only closed labels, numeric placement and the exact block
+                %% hash reach telemetry. Generic request tags remain opaque.
+                Base = case trace_event_kind(Event#event.name) of
+                    queued -> ['quod.namespace', 'quod.consensus.slot', 'quod.parent_height',
+                               'quod.request_kind'];
+                    _ -> ['quod.namespace', 'quod.consensus.slot', 'quod.parent_height',
+                          'quod.request_kind', 'quod.applied']
+                end,
+                Expected = case maps:get('quod.consensus.slot', Attrs) of
+                    3 ->
+                        ?assertEqual(quod_trace:tx_id(BlockHash),
+                                     maps:get('quod.consensus.block_hash', Attrs)),
+                        ['quod.consensus.block_hash' | Base];
+                    _ -> Base
+                end,
+                ?assertEqual(lists:sort(Expected), lists:sort(maps:keys(Attrs)))
+            end, Events),
+            ?assertEqual(0, otel_events:dropped(Parent#span.events))
+        end)
+    end.
+
+trace_verdict_request(content, Ns, Slot, Tag) ->
+    quod_prolog:request_content_verdict(
+      Ns, [mem_assert(Ns, <<"trace-member">>, "host", 1)], 0, Slot, self(), Tag);
+trace_verdict_request(dtx, Ns, Slot, Tag) ->
+    %% Deliberately malformed control exercises the real DTX verdict computation
+    %% without needing another consensus fixture or a second validation seam.
+    quod_prolog:request_dtx_verdict(Ns, [malformed], 0, Slot, self(), Tag).
+
+trace_ready_verdict(content) -> valid;
+trace_ready_verdict(dtx) -> {invalid, malformed_control}.
+
+trace_verdict_label(content) -> <<"valid">>;
+trace_verdict_label(dtx) -> <<"invalid">>.
+
+assert_trace_verdict(content, Tag, _Engine, _Floor, Verdict) ->
+    receive
+        {content_verdict, Tag, Reply} -> ?assertEqual(Verdict, Reply)
+    after 2000 -> error({missing_content_verdict, Tag})
+    end;
+assert_trace_verdict(dtx, Tag, Engine, Floor, Verdict) ->
+    receive
+        {dtx_verdict, Tag, ReplyEngine, ReplyFloor, Reply} ->
+            ?assertEqual({Engine, Floor, Verdict}, {ReplyEngine, ReplyFloor, Reply})
+    after 2000 -> error({missing_dtx_verdict, Tag})
+    end.
+
+assert_no_trace_verdict(Tag) ->
+    receive
+        {content_verdict, Tag, _} = Reply -> error({unexpected_verdict, Reply});
+        {dtx_verdict, Tag, _, _, _} = Reply -> error({unexpected_verdict, Reply})
+    after 0 -> ok
+    end.
+
+trace_event_kind(<<"quod.consensus.parent_request_queued">>) -> queued;
+trace_event_kind(<<"quod.consensus.parent_request_received">>) -> received;
+trace_event_kind(<<"quod.consensus.parent_request_parked">>) -> parked;
+trace_event_kind(<<"quod.consensus.parent_request_resumed">>) -> resumed;
+trace_event_kind(<<"quod.consensus.parent_request_stale">>) -> stale;
+trace_event_kind(<<"quod.consensus.parent_request_expired">>) -> expired;
+trace_event_kind(<<"quod.consensus.parent_request_superseded">>) -> superseded.
 
 t_signed_operation_uses_the_same_content_verdict_path({Ns, _}) ->
     fun() ->

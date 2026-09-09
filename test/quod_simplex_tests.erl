@@ -7,6 +7,7 @@ keypairs, so the crypto path is exercised end-to-end. Real multi-node QUIC behav
 are covered by `simplex_SUITE`.
 """.
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -9545,31 +9546,51 @@ unsupported_and_malformed_relay_terms_are_safely_dropped_test() ->
 %% complaint-signed its slot before proposing stopped redriving, no follower ever saw
 %% the proposal, and the burst wedged with zero support votes.)
 latched_leader_still_redrives_proposal_test() ->
-    Committee = committee(4),
-    Validators = pubs(Committee),
-    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
-    B4 = blk(4),
-    BH = quod_simplex:block_hash(B4),
-    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, 3)),
-    %% latch the complaint exactly as the pre-proposal timeout path does
-    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
-    try
-        Inbound = maps:from_list([{P, {Sink, make_ref()}} || P <- Validators, P =/= Me]),
-        Readiness = voting_readiness([P || P <- Validators, P =/= Me], Sink, 3),
-        SReady = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
-                      slot => 3, approved => 3, eng => E1,
-                      inbound_conns => Inbound, peer_readiness => Readiness,
-                      head_progress => {4, awaiting_proposal, true}}),
-        Complained = quod_simplex:on_progress_timeout(4, SReady),
-        ?assertEqual({none, false, true}, quod_simplex:test_round(4, Complained)),
-        %% now it proposes (the drain would do this); then the next Δ must RE-SEND it
-        Redriven = quod_simplex:on_progress_timeout(
-                     4, quod_simplex:test_state_set(
-                          local_proposal, {4, BH}, Complained)),
-        ?assertEqual(1, maps:get(redrives, quod_simplex:stats_map(Redriven)))
-    after
-        exit(Sink, kill)
-    end.
+    quod_trace_tests:with_tracer(fun() ->
+        Committee = committee(4),
+        Validators = pubs(Committee),
+        {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+        B4 = blk(4),
+        BH = quod_simplex:block_hash(B4),
+        {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, 3)),
+        %% latch the complaint exactly as the pre-proposal timeout path does
+        Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+        {TraceCtx, TraceSpan} = quod_trace:start_span(
+                                 otel_ctx:new(), <<"consensus.redrive.test">>, internal, #{}),
+        try
+            Inbound = maps:from_list([{P, {Sink, make_ref()}} || P <- Validators, P =/= Me]),
+            Readiness = voting_readiness([P || P <- Validators, P =/= Me], Sink, 3),
+            SReady = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                          slot => 3, approved => 3, eng => E1,
+                          inbound_conns => Inbound, peer_readiness => Readiness,
+                          head_progress => {4, awaiting_proposal, true}}),
+            Complained = quod_simplex:on_progress_timeout(4, SReady),
+            ?assertEqual({none, false, true}, quod_simplex:test_round(4, Complained)),
+            %% now it proposes (the drain would do this); then the next Δ must RE-SEND it
+            Redriven = quod_simplex:on_progress_timeout(
+                         4, quod_simplex:test_state_set(
+                              local_proposal, {4, BH, [TraceCtx]}, Complained)),
+            ?assertEqual(1, maps:get(redrives, quod_simplex:stats_map(Redriven)))
+        after
+            exit(Sink, kill),
+            quod_trace:finish_span(TraceSpan, ok)
+        end,
+        Span = quod_trace_tests:take_span(<<"consensus.redrive.test">>),
+        Events = otel_events:list(Span#span.events),
+        [Watchdog] = [E || E = #event{name = N} <- Events,
+                           N =:= <<"consensus.watchdog_fired">>],
+        [Redrive] = [E || E = #event{name = N} <- Events,
+                          N =:= <<"consensus.proposal_redriven">>],
+        WatchdogAttrs = otel_attributes:map(Watchdog#event.attributes),
+        ?assertEqual(4, maps:get('quod.consensus.slot', WatchdogAttrs)),
+        ?assertEqual(<<"awaiting_proposal">>, maps:get('quod.consensus.phase', WatchdogAttrs)),
+        %% A watchdog is a slot event; only the actual resend identifies a
+        %% block. This prevents a timeout from claiming another proposal's hash.
+        ?assertNot(maps:is_key('quod.consensus.block_hash', WatchdogAttrs)),
+        ?assertEqual(binary:encode_hex(BH, lowercase), maps:get(
+          'quod.consensus.block_hash', otel_attributes:map(Redrive#event.attributes))),
+        ?assert(Watchdog#event.system_time_native =< Redrive#event.system_time_native)
+    end).
 
 %% The quod_metrics matcher and stats_map can never drift: every key the Prometheus
 %% refresh pattern requires must exist in the stats map (a miss silently zeroes ALL

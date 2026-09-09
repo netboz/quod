@@ -36,6 +36,7 @@ does not cancel or resubmit the uncertain operation.
          test_dormant_wait_event/4,
          test_dormant_cancel_request/2,
          test_operation_target_response_disposition/2,
+         test_operation_target_result/7,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
          test_endpoint_request_candidates/5,
@@ -317,6 +318,8 @@ valid_operation_ref(_Ns, _OperationRef) ->
 
 operation_init(Owner, OwnerNs, OperationRef) ->
     OwnerMonitor = erlang:monitor(process, Owner),
+    _ = quod_trace:add_event(
+          quod_trace:context(), <<"operation.worker_started">>, #{}),
     operation_refresh(
       Owner, OwnerMonitor,
       #{owner_ns => OwnerNs, operation_ref => OperationRef,
@@ -337,7 +340,13 @@ operation_refresh(Owner, OwnerMonitor,
 operation_refresh_before_deadline(
   Owner, OwnerMonitor,
   #{owner_ns := OwnerNs, operation_ref := OperationRef} = Context) ->
-    case quod_prolog:local_outcome(OwnerNs, OperationRef) of
+    %% Includes the existing outcome-owner call and its mailbox wait; it is
+    %% not a second lookup or a measurement of index execution alone.
+    Outcome = quod_trace:with_optional_span(
+                quod_trace:context(), <<"quod.operation.local_outcome">>, internal,
+                #{'quod.namespace' => OwnerNs},
+                fun() -> quod_prolog:local_outcome(OwnerNs, OperationRef) end),
+    case Outcome of
         {ok, #{status := claimed, ref := OperationRef,
                operation_state := ClaimState, height := Slot,
                request_digest := <<_:256>> = Digest,
@@ -445,9 +454,26 @@ operation_outcome_source(Target, Deadline) ->
     end.
 
 operation_deliver_resolved(Owner, OperationRef, Result, TargetRef) ->
-    Owner ! {dtx_coordinator, self(), OperationRef,
-             {target_result, Result, TargetRef}},
+    notify_operation_target_result(Owner, OperationRef, Result, TargetRef),
     operation_stop(Owner, OperationRef, done).
+
+%% One existing owner-message seam for fresh application and read-only
+%% recovery alike. Finish this short span before driving the receipt: the
+%% enclosing recovery span may still be open (or retired) after client reply.
+%% The event precedes the unchanged send so the source owner's receive event
+%% exposes its mailbox delay on this node's clock.
+notify_operation_target_result(
+  Owner, {operation, Ns, _Anchor, _Principal, OperationId} = OperationRef,
+  Result, TargetRef) ->
+    quod_trace:with_optional_span(
+      quod_trace:context(), <<"quod.operation.result_notify">>, internal,
+      #{'quod.namespace' => Ns, 'quod.operation.id' => quod_trace:tx_id(OperationId)},
+      fun() ->
+          _ = quod_trace:add_event(
+                quod_trace:context(), <<"operation.result_sent">>, #{}),
+          Owner ! {dtx_coordinator, self(), OperationRef,
+                   {target_result, Result, TargetRef}}
+      end).
 
 operation_context(
   OwnerNs, OperationRef,
@@ -562,6 +588,10 @@ operation_target_error_disposition(_Response) ->
 -ifdef(TEST).
 test_operation_target_response_disposition(Request, Response) ->
     operation_target_response_disposition(Request, Response).
+test_operation_target_result(
+  Owner, OwnerMonitor, Request, Response, Result, EvidenceBlob, Context) ->
+    operation_target_result(
+      Owner, OwnerMonitor, Request, Response, Result, EvidenceBlob, Context).
 -endif.
 
 operation_target_result(
@@ -569,7 +599,12 @@ operation_target_result(
   Context = #{operation_ref := OperationRef,
               target_ref := TargetRef}) ->
     case {quod_dtx_endpoint:correlates(Request, Response),
-          quod_transaction:decode_evidence(EvidenceBlob)} of
+          %% This is codec/shape checking of the existing reply, not a new
+          %% authentication step. Keep it inside the same eager tuple so
+          %% malformed or mismatched replies follow the unchanged contract.
+          quod_trace:with_optional_span(
+            quod_trace:context(), <<"quod.operation.result_evidence_decode">>, internal,
+            #{}, fun() -> quod_transaction:decode_evidence(EvidenceBlob) end)} of
         {true, {ok, TargetCertifiedRef,
                 #transaction{tx_id = TargetTxId,
                              role = {remote_application, _, _, _}}
@@ -580,8 +615,8 @@ operation_target_result(
                     %% submission owner.  Publish its certified target result
                     %% before asynchronously appending the source receipt so a
                     %% waiting client never needs a second target submission.
-                    Owner ! {dtx_coordinator, self(), OperationRef,
-                             {target_result, Result, TargetRef}},
+                    notify_operation_target_result(
+                      Owner, OperationRef, Result, TargetRef),
                     operation_drive(
                       Owner, OwnerMonitor,
                       Context#{state => source,

@@ -228,6 +228,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_outbox/1,
          test_ingress_needs_drain/2,
          test_round_probe/1, test_route/4,
+         test_trace_block/5, test_start_content_validation/5,
          proposal_visible/2, reseat_engine/2,
          committee_view_id/4, test_committee_id/1,
          test_author_admissions/1,
@@ -1555,6 +1556,9 @@ test_state_set(dtx_coordinators, V, S) -> S#s{dtx_coordinators = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
             (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
+test_state_set(local_proposal, {Slot, Hash, Contexts}, S) ->
+    S#s{local_proposals = (S#s.local_proposals)#{
+          Slot => #local_proposal{hash = Hash, trace_ctxs = Contexts}}};
 %% Plant parked ingress items: [{Origin, From, Change, EnqueuedAtMonoMs}] — waiter
 %% envelopes, byte accounting, and per-author counts are derived exactly as park_ingress
 %% derives them, so drain/expiry tests exercise the real bookkeeping.
@@ -2253,6 +2257,10 @@ test_route(Pass, Origin, Change, S) ->
         ingress_route(Pass, Origin, Change, S),
     Decision.
 test_round_probe(#s{round_probe = Probe}) -> Probe.
+test_trace_block(Slot, Hash, Name, S, Fun) ->
+    trace_block_work(Slot, Hash, Name, #{}, S, Fun).
+test_start_content_validation(Transactions, Timestamp, Slot, Hash, S) ->
+    start_content_validation(Transactions, Timestamp, Slot, Hash, S).
 test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
 test_author_admissions(#s{author_admissions = Admissions}) -> Admissions.
 test_log_projection(Ns, Entries, Seed) ->
@@ -2443,9 +2451,12 @@ await_operation_result(Ns, OperationRef, TimeoutMs)
     %% timeout expires the call alias, not the caller PID; its monitor alone
     %% therefore cannot release result-only work for a long-lived caller.
     Server = quod_reg:where({quod_simplex, Ns}),
+    TraceCtx = quod_trace:context(),
+    trace_operation_event(
+      TraceCtx, <<"operation.result_wait_sent">>, OperationRef, Ns, #{}),
     try gen_statem:call(
           Server, {await_operation_result, WaitRef, OperationRef,
-                   quod_trace:context()}, TimeoutMs)
+                   TraceCtx}, TimeoutMs)
     catch
         exit:_ -> {error, {outcome_unknown, OperationRef}}
     after
@@ -3861,10 +3872,15 @@ running_impl(cast, {prolog_ready, _PrologPid, _Height, _Unresolved}, S) ->
 running_impl(
   {call, From}, {await_operation_result, WaitRef, OperationRef, TraceCtx}, S0)
   when is_reference(WaitRef) ->
+    trace_operation_event(
+      TraceCtx, <<"operation.result_wait_received">>, OperationRef, S0#s.ns, #{}),
     case quod_trace:with_context(TraceCtx, fun() ->
              await_operation_recovery(From, WaitRef, OperationRef, S0)
          end) of
         {reply, Reply, S1} ->
+            trace_operation_event(
+              TraceCtx, <<"operation.result_immediate_reply">>,
+              OperationRef, S0#s.ns, #{}),
             {keep_state, S1, [{reply, From, Reply}]};
         {wait, S1} ->
             keep_progress(S0, S1, [])
@@ -4700,6 +4716,15 @@ operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx})
 operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx}) ->
     TraceCtx.
 
+%% Correlation only: never log principal bytes, payloads or failure terms.
+%% These events use the existing owner/request context, not another waiter map.
+trace_operation_event(Ctx, Name, {operation, _, <<_:256>>, _, <<_:256>> = Id},
+                      Ns, Attributes) ->
+    quod_trace:add_event(
+      Ctx, Name, Attributes#{'quod.namespace' => Ns,
+                            'quod.operation.id' => quod_trace:tx_id(Id)});
+trace_operation_event(_Ctx, _Name, _Ref, _Ns, _Attributes) -> ok.
+
 park_operation_waiter(
   From = {Caller, _Tag}, WaitRef, OperationRef,
   Owner = #operation_recovery_owner{waiters = Waiters},
@@ -4736,7 +4761,22 @@ finish_operation_target_result(
                   target_ref = TargetRef, target_result = pending,
                   waiters = Waiters}
           when Result =/= error ->
-            reply_operation_waiters(Waiters, Result),
+            %% The captured claim span may already have ended. Export this
+            %% synchronous delivery independently, before receipt retirement;
+            %% events on the captured span alone could silently disappear.
+            quod_trace:with_optional_span(
+              Owner#operation_recovery_owner.trace_ctx,
+              <<"quod.operation.result_delivery">>, internal,
+              #{'quod.namespace' => S#s.ns, 'quod.waiter.count' => map_size(Waiters)},
+              fun() ->
+                  trace_operation_event(
+                    quod_trace:context(), <<"operation.target_result_accepted">>,
+                    OperationRef, S#s.ns, #{'quod.waiter.count' => map_size(Waiters)}),
+                  trace_operation_event(
+                    quod_trace:context(), <<"operation.result_reply_ready">>,
+                    OperationRef, S#s.ns, #{}),
+                  reply_operation_waiters(Waiters, Result)
+              end),
             {true, put_operation_owner(
                      Owner#operation_recovery_owner{
                        target_result = Result, waiters = #{}}, S)};
@@ -4867,6 +4907,8 @@ start_operation_recovery(
             status = pending,
             operation_ref = OperationRef, trace_ctx = TraceCtx},
   #s{ns = Ns}) ->
+    trace_operation_event(
+      TraceCtx, <<"operation.recovery_spawn">>, OperationRef, Ns, #{}),
     case quod_trace:with_context(TraceCtx, fun() ->
              quod_dtx_coordinator:start_operation_monitor(
                self(), Ns, OperationRef, #{})
@@ -9391,10 +9433,14 @@ apply_event({broadcast, Cert}, S) ->
 %% most one of {commit cert, complaint cert} per slot — the safety rule. The hash-scoped `invalid` guard is
 %% belt-and-braces: a node that evaluated a membership proposal and rejected that block never endorses it at
 %% ANY phase. It cannot poison a different quorum-certified block after leader equivocation.
-apply_event({notarized, #block{} = Block}, S0) ->
+apply_event({notarized, #block{slot = Slot} = Block}, S0) ->
+    trace_block_event(Slot, engine_block_hash(Slot, S0),
+                      <<"consensus.notarized">>, #{}, S0),
     choose_final_vote(Block#block.slot, notarized, approve_block(Block, S0));
 %% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
 apply_event({committed, Slot, Block}, S) ->
+    trace_block_event(Slot, engine_block_hash(Slot, S),
+                      <<"consensus.finality_received">>, #{}, S),
     commit_contiguous(Slot, Block, S);
 %% A slot was complaint-skipped: finalize it as an empty (`noop`) slot, in order — advancing the height
 %% so the rotated leader for the next slot proposes.
@@ -9453,6 +9499,7 @@ commit_block(Slot, #block{payload = Payload} = Block,
             E = quod_ledger:entry(Block, Cert),
             {ok, Store1} = timed_step(S, persist,
                                       fun() -> persist_entry(Store, E, Slot, S) end),
+            trace_block_event(Slot, BH, <<"consensus.durable">>, #{}, S),
             timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
             SCommitted = timed_step(S, resolve, fun() ->
                              resolve_committed_submissions(
@@ -9474,9 +9521,12 @@ commit_block(Slot, #block{payload = Payload} = Block,
     end.
 
 persist_entry(Store, Entry, Slot, S) ->
-    quod_trace:with_optional_span(
-      trace_context_for_slot(Slot, S), <<"quod.ledger.sync">>, internal,
-      #{'quod.namespace' => S#s.ns, 'quod.consensus.slot' => Slot},
+    Hash = case quod_ledger:block_from_entry(Entry) of
+               {ok, _Block} -> engine_block_hash(Slot, S);
+               error -> none
+           end,
+    trace_block_work(
+      Slot, Hash, <<"quod.ledger.sync">>, #{}, S,
       fun() -> quod_ledger_store:append(Store, [Entry]) end).
 
 resolve_committed_submissions(Payload, Slot, S) ->
@@ -10146,11 +10196,62 @@ trace_node_id(Id) when is_binary(Id) -> binary:encode_hex(Id, lowercase);
 trace_node_id({Host, Port}) ->
     iolist_to_binary(io_lib:format("~ts:~B", [Host, Port])).
 
-trace_context_for_slot(Slot, #s{local_proposals = Local}) ->
+%% Shared block work must not disappear behind an unsampled first receipt.
+%% This is the same recording-parent/link policy as committed Prolog apply.
+%% Contexts remain in the existing local proposal, never in signed block bytes.
+trace_for_slot(Slot, #s{local_proposals = Local}) ->
     case maps:get(Slot, Local, undefined) of
-        #local_proposal{trace_ctxs = [TraceCtx | _]} -> TraceCtx;
-        _ -> undefined
+        #local_proposal{trace_ctxs = Contexts} ->
+            quod_trace:shared_context(
+              [otel_tracer:current_span_ctx(Ctx) || Ctx <- Contexts]);
+        _ -> none
     end.
+
+%% Complaints and skipped entries make a slot claim, never a block claim.
+trace_for_block(Slot, none, S) -> trace_for_slot(Slot, S);
+trace_for_block(Slot, Hash, S = #s{local_proposals = Local}) ->
+    case maps:get(Slot, Local, undefined) of
+        #local_proposal{hash = Hash} -> trace_for_slot(Slot, S);
+        _ -> none
+    end.
+
+trace_block_attributes(Slot, none, Attributes, #s{ns = Ns}) ->
+    Attributes#{'quod.namespace' => Ns, 'quod.consensus.slot' => Slot};
+trace_block_attributes(Slot, Hash, Attributes, #s{ns = Ns}) ->
+    Attributes#{'quod.namespace' => Ns, 'quod.consensus.slot' => Slot,
+                'quod.consensus.block_hash' => binary:encode_hex(Hash, lowercase)}.
+
+trace_block_work(Slot, Hash, Name, Attributes, S, Fun) ->
+    trace_shared_work(trace_for_block(Slot, Hash, S), Name,
+                     trace_block_attributes(Slot, Hash, Attributes, S), Fun).
+
+trace_shared_work(none, _Name, _Attributes, Fun) -> Fun();
+trace_shared_work({Ctx, Links}, Name, Attributes, Fun) ->
+    quod_trace:with_span(Ctx, Name, internal, Attributes, Links,
+                        fun(_Span) -> Fun() end).
+
+trace_block_event(Slot, Hash, Name, Attributes, S) ->
+    case trace_for_block(Slot, Hash, S) of
+        none -> ok;
+        {Ctx, _Links} ->
+            _ = quod_trace:add_event(
+                  Ctx, Name, trace_block_attributes(Slot, Hash, Attributes, S)),
+            ok
+    end.
+
+trace_slot_event(Slot, Name, Attributes, S) ->
+    trace_block_event(Slot, none, Name, Attributes, S).
+
+trace_validation_class(valid) -> <<"valid">>;
+trace_validation_class({invalid, _Reason}) -> <<"invalid">>;
+trace_validation_class(abstain) -> <<"abstain">>;
+trace_validation_class(_) -> <<"unexpected">>.
+
+trace_validation_kind(#round{validation = {content_foreign, _, _}}) -> <<"content_foreign">>;
+trace_validation_kind(#round{validation = content}) -> <<"content_parent">>;
+trace_validation_kind(#round{validation = {dtx, _, _, _}}) -> <<"dtx_parent">>;
+trace_validation_kind(#round{validation = {dtx_foreign, _, _, _, _}}) -> <<"dtx_foreign">>;
+trace_validation_kind(#round{}) -> <<"none">>.
 
 round_state(Slot, #s{rounds = Rounds}) ->
     maps:get(Slot, Rounds, #round{}).
@@ -10475,6 +10576,11 @@ dispatch(Peer, {propose, #block{} = B, ValidationSidecar}, S) ->
 dispatch(_Peer, {share, #share{} = Sh}, S) ->
     case well_formed_share(Sh) of
         true ->
+            %% Receipt of a well-shaped share is not proof it verifies. The
+            %% engine below still owns authentication, dedup and quorum weight.
+            trace_block_event(
+              Sh#share.slot, Sh#share.block_hash, <<"consensus.share_received">>,
+              #{'quod.vote.kind' => atom_to_binary(Sh#share.kind, utf8)}, S),
             %% A peer's share for a slot WE proposed: its arrival lag since our own
             %% propose (one clock) is the direct in-production measure of how long
             %% votes take to come back — the number the round-phase histograms can
@@ -10819,11 +10925,23 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
             LocalSource = local_history_view(S),
             Contacts = content_reference_contacts(
                          ReferencePlan, DtxWorkers, LocalIdentity),
+            Trace = trace_for_block(Sl, BH, S),
+            TraceAttributes = trace_block_attributes(
+                                Sl, BH,
+                                #{'quod.validation.transactions' => length(ReferencePlan)}, S),
+            trace_block_event(Sl, BH, <<"consensus.foreign_validation_queued">>, #{}, S),
             Worker = spawn(
                        fun() ->
-                           Verdict = verify_content_foreign_references(
-                                       ReferencePlan, LocalIdentity,
-                                       LocalSource, Contacts),
+                           Verdict = trace_shared_work(
+                             Trace, <<"quod.consensus.foreign_validation">>, TraceAttributes,
+                             fun() ->
+                                 Result = verify_content_foreign_references(
+                                            ReferencePlan, LocalIdentity, LocalSource, Contacts),
+                                 _ = quod_trace:add_event(
+                                       quod_trace:context(), <<"consensus.foreign_validation_finished">>,
+                                       #{'quod.validation.verdict' => trace_validation_class(Result)}),
+                                 Result
+                             end),
                            ok = observe_verified_reference_contacts(
                                   Verdict, Contacts),
                            Owner ! {content_foreign_verdict,
@@ -10840,8 +10958,16 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
     end.
 
 request_content_validation(Transactions, BlockTimestamp, Sl, BH, S) ->
-    _ = quod_prolog:request_content_verdict(
-          S#s.ns, Transactions, BlockTimestamp, Sl, self(), {Sl, BH}),
+    %% The Prolog API carries this context through its existing asynchronous
+    %% request/park/reply lifecycle. No wait or new validation request is added.
+    TraceCtx = case trace_for_block(Sl, BH, S) of
+                   {Ctx, _Links} -> Ctx;
+                   none -> otel_ctx:new()
+               end,
+    _ = quod_trace:with_context(
+          TraceCtx,
+          fun() -> quod_prolog:request_content_verdict(
+                     S#s.ns, Transactions, BlockTimestamp, Sl, self(), {Sl, BH}) end),
     Round = round_state(Sl, S),
     put_round(Sl, Round#round{validating = BH, validation = content}, S).
 
@@ -10854,6 +10980,9 @@ on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict,
         {BH, {content_foreign, WorkerPid, Monitor},
          #block{timestamp = Timestamp,
                 payload = {batch, Transactions}}} ->
+            trace_block_event(
+              Sl, BH, <<"consensus.foreign_validation_received">>,
+              #{'quod.validation.verdict' => trace_validation_class(Verdict)}, S),
             _ = erlang:demonitor(Monitor, [flush]),
             S1 = put_round(
                    Sl, Round#round{validating = none,
@@ -11601,6 +11730,9 @@ drop_dtx_validation_monitor(Ref, Pid, S = #s{rounds = Rounds}) ->
                 dtx_validation_monitor(Round) =:= {Pid, Ref}] of
         [Sl] ->
             Round = round_state(Sl, S),
+            trace_block_event(
+              Sl, Round#round.validating, <<"consensus.validation_worker_down">>,
+              #{'quod.validation.kind' => trace_validation_kind(Round)}, S),
             {true, put_round(
                      Sl, release_dtx_validation_round(Round), S)};
         [] ->
@@ -11629,6 +11761,9 @@ on_content_verdict(Sl, BH, Verdict, S = #s{approved = Approved})
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation} of
         {BH, content} ->
+            trace_block_event(
+              Sl, BH, <<"consensus.parent_verdict_received">>,
+              #{'quod.validation.verdict' => trace_validation_class(Verdict)}, S),
             S1 = put_round(
                    Sl,
                    Round#round{validating = none, validation = none}, S),
@@ -11959,6 +12094,11 @@ delta_ms() ->
 %% bounded rearm budget keeps repeated link flaps from postponing complaint progress forever.
 on_progress_timeout(V,
         S0 = #s{head_progress = #head_progress{slot = V, phase = Phase}}) ->
+    trace_slot_event(
+      V, <<"consensus.watchdog_fired">>,
+      #{'quod.consensus.phase' => atom_to_binary(Phase, utf8),
+        'quod.validation.kind' => trace_validation_kind(round_state(V, S0)),
+        'quod.kb.last_dispatched_height' => S0#s.last_applied}, S0),
     S1 = S0#s{progress_timeouts = S0#s.progress_timeouts + 1},
     case may_vote(S1) of
         false ->
@@ -12119,8 +12259,12 @@ local_proposal_evidence(Slot, S0 = #s{local_proposals = Local}) ->
                     %% idempotent, and an abstention may be retried. Do this before rebuilding vote frames.
                     S1 = support_or_validate(Block, BH, S0),
                     case Slot > S1#s.slot of
-                        true  -> {[{propose, Block, ValidationSidecar}],
-                                  S1#s{redrives = S1#s.redrives + 1}};
+                        true  ->
+                            trace_block_event(
+                              Slot, BH, <<"consensus.proposal_redriven">>,
+                              #{'quod.validation.kind' => trace_validation_kind(round_state(Slot, S1))}, S1),
+                            {[{propose, Block, ValidationSidecar}],
+                             S1#s{redrives = S1#s.redrives + 1}};
                         false -> {[], S1}
                     end;
                 undefined ->
@@ -12333,12 +12477,9 @@ record_share(Kind, Slot, BlockHash, Block,
         false ->
             blocked;
         true ->
-            TraceCtx = trace_context_for_slot(Slot, S),
-            {ok, Journal1} = quod_trace:with_optional_span(
-                               TraceCtx, <<"quod.signing_journal.vote_sync">>, internal,
-                               #{'quod.namespace' => S#s.ns,
-                                 'quod.consensus.slot' => Slot,
-                                 'quod.vote.kind' => atom_to_binary(Kind, utf8)},
+            {ok, Journal1} = trace_block_work(
+                               Slot, BlockHash, <<"quod.signing_journal.vote_sync">>,
+                               #{'quod.vote.kind' => atom_to_binary(Kind, utf8)}, S,
                                fun() ->
                                    record_signing_decision(
                                      S#s.ns, Journal, Kind, Slot,
@@ -12351,6 +12492,9 @@ record_share(Kind, Slot, BlockHash, Block,
                          complaint -> Round#round{final = complaint}
                      end,
             S1 = put_round(Slot, Round1, S#s{signing_journal = Journal1}),
+            trace_block_event(
+              Slot, BlockHash, <<"consensus.vote_durable">>,
+              #{'quod.vote.kind' => atom_to_binary(Kind, utf8)}, S1),
             {ok, make_share(S#s.consensus_domain, Kind, Slot, BlockHash, S#s.id), S1}
     end.
 

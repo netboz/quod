@@ -5,7 +5,7 @@
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include_lib("opentelemetry/src/otel_tracer.hrl").
 
--export([with_tracer/1, take_span/1]).
+-export([with_tracer/1, take_span/1, take_span/2]).
 
 %% Real SDK storage, parent-based sampling, attachment and span completion;
 %% only the exporter is replaced by a test mailbox. Do not start an SDK app or
@@ -57,6 +57,55 @@ take_span(Name) ->
         {quod_test_span, Span = #span{name = Name}} -> Span
     after 2000 -> error({missing_span, Name})
     end.
+
+%% The test tracer observes the whole Quod application, including unrelated
+%% live background work. Request assertions must identify their exact trace,
+%% not whichever same-named span happens to finish first.
+take_span(Name, TraceId) ->
+    receive
+        {quod_test_span, Span = #span{name = Name, trace_id = TraceId}} -> Span
+    after 2000 -> error({missing_span, Name, TraceId})
+    end.
+
+trace_correlated_selector_ignores_other_same_named_spans_test() ->
+    with_tracer(fun() ->
+        {OtherCtx, Other} = quod_trace:start_span(
+                             otel_ctx:new(), <<"selector.other">>, internal, #{}),
+        {ExpectedCtx, Expected} = quod_trace:start_span(
+                                   otel_ctx:new(), <<"selector.expected">>, internal, #{}),
+        try
+            OtherTrace = otel_span:trace_id(Other),
+            ExpectedTrace = otel_span:trace_id(Expected),
+            ?assertNotEqual(OtherTrace, ExpectedTrace),
+            Name = <<"selector.shared.name">>,
+            %% Two actual SDK exports from the other request precede the
+            %% wanted child. Consuming the first demonstrates the old hazard;
+            %% the second makes a name-only correlated selector fail too.
+            lists:foreach(fun(Ctx) ->
+                ok = quod_trace:with_span(
+                       Ctx, Name, internal, #{}, fun(_) -> ok end)
+            end, [OtherCtx, OtherCtx, ExpectedCtx]),
+            Wrong = take_span(Name),
+            ?assertEqual(OtherTrace, Wrong#span.trace_id),
+            Wanted = take_span(Name, ExpectedTrace),
+            ?assertEqual(ExpectedTrace, Wanted#span.trace_id),
+            ?assertEqual(otel_span:span_id(Expected), Wanted#span.parent_span_id),
+            Leftover = take_span(Name),
+            ?assertEqual(OtherTrace, Leftover#span.trace_id),
+            Missing = <<"missing.shared.child">>,
+            ok = quod_trace:with_span(OtherCtx, Missing, internal, #{}, fun(_) -> ok end),
+            %% A broken propagation path must remain a failing missing-child
+            %% assertion, never pass by accepting another request's child.
+            ?assertError({missing_span, Missing, ExpectedTrace}, take_span(Missing, ExpectedTrace)),
+            Unrelated = take_span(Missing),
+            ?assertEqual(otel_span:trace_id(Other), Unrelated#span.trace_id)
+        after
+            quod_trace:finish_span(Other, ok),
+            quod_trace:finish_span(Expected, ok),
+            _ = take_span(<<"selector.other">>),
+            _ = take_span(<<"selector.expected">>)
+        end
+    end).
 
 sampled_parent_child_lifecycle_test() ->
     with_tracer(fun() ->
@@ -126,6 +175,99 @@ shared_span_preserves_parent_and_links_other_request_test() ->
         ?assertNot(Span#span.is_recording),
         ?assert(Span#span.end_time >= Span#span.start_time)
     end).
+
+shared_context_prefers_recording_and_deduplicates_test_() ->
+    [{atom_to_list(Order), fun() ->
+        with_tracer(fun() -> shared_context_prefers_recording(Order) end)
+      end} || Order <- [unsampled_first, sampled_first]].
+
+shared_context_prefers_recording(Order) ->
+    Unsampled = otel_tracer:current_span_ctx(quod_trace:extract([
+      {<<"traceparent">>,
+       <<"00-123456789abcdef0123456789abcdef0-123456789abcdef0-00">>}])),
+    {_, First} = quod_trace:start_span(
+                   otel_ctx:new(), <<"shared.first">>, internal, #{}),
+    {_, Second} = quod_trace:start_span(
+                    otel_ctx:new(), <<"shared.second">>, internal, #{}),
+    ?assert(otel_span:is_recording(First)),
+    ?assert(otel_span:is_recording(Second)),
+    Inputs = case Order of
+                 unsampled_first -> [Unsampled, First, Second];
+                 sampled_first -> [First, Unsampled, Second]
+             end,
+    Sentinel = otel_ctx:set_value(otel_ctx:new(), private_request_value, secret),
+    Token = otel_ctx:attach(Sentinel),
+    try
+        {Context, Links} = quod_trace:shared_context(
+                             [undefined | Inputs] ++ [First, Unsampled, invalid]),
+        ?assertEqual(otel_tracer:set_current_span(otel_ctx:new(), First), Context),
+        ?assertEqual(Sentinel, quod_trace:context()),
+        %% Stable recording-first order leaves the second recording request
+        %% and then the unrecorded request as distinct SDK links.
+        ?assertEqual(opentelemetry:links([Second, Unsampled]), Links),
+        Ref = make_ref(),
+        ?assertEqual(unchanged,
+          quod_trace:with_span(Context, <<"shared.selected">>, internal, #{}, Links,
+            fun(_) -> self() ! {shared_work_called, Ref}, unchanged end)),
+        receive {shared_work_called, Ref} -> ok
+        after 0 -> error(shared_work_not_called)
+        end,
+        receive {shared_work_called, Ref} -> error(shared_work_called_twice)
+        after 0 -> ok
+        end,
+        Span = take_span(<<"shared.selected">>),
+        ?assertEqual(otel_span:trace_id(First), Span#span.trace_id),
+        ?assertEqual(otel_span:span_id(First), Span#span.parent_span_id),
+        %% The API accepts maps; the SDK stores normalized link records.
+        ?assertEqual(
+          lists:sort([{maps:get(trace_id, Link), maps:get(span_id, Link),
+                       maps:get(tracestate, Link), maps:get(attributes, Link)}
+                      || Link <- Links]),
+          lists:sort([{Link#link.trace_id, Link#link.span_id,
+                       Link#link.tracestate, otel_attributes:map(Link#link.attributes)}
+                      || Link <- otel_links:list(Span#span.links)])),
+        ?assertEqual(Sentinel, quod_trace:context())
+    after
+        otel_ctx:detach(Token),
+        quod_trace:finish_span(First, ok),
+        quod_trace:finish_span(Second, ok)
+    end,
+    _ = take_span(<<"shared.first">>),
+    _ = take_span(<<"shared.second">>),
+    ok.
+
+shared_context_all_unsampled_preserves_sampler_test() ->
+    with_tracer(fun() ->
+        First = otel_tracer:current_span_ctx(quod_trace:extract([
+          {<<"traceparent">>,
+           <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00">>}])),
+        Second = otel_tracer:current_span_ctx(quod_trace:extract([
+          {<<"traceparent">>,
+           <<"00-123456789abcdef0123456789abcdef0-123456789abcdef0-00">>}])),
+        {Context, Links} = quod_trace:shared_context([First, Second, First]),
+        ?assertEqual(otel_tracer:set_current_span(otel_ctx:new(), First), Context),
+        ?assertEqual(opentelemetry:links([Second]), Links),
+        Result = quod_trace:with_span(
+          Context, <<"shared.unsampled">>, internal, #{}, Links,
+            fun(SpanCtx) ->
+                ?assertEqual(otel_span:trace_id(First), otel_span:trace_id(SpanCtx)),
+                ?assertNot(otel_span:is_recording(SpanCtx)),
+                ?assertEqual(0, SpanCtx#span_ctx.trace_flags band 1),
+                unchanged
+            end),
+        ?assertEqual(unchanged, Result),
+        receive {quod_test_span, #span{name = <<"shared.unsampled">>}} ->
+            error(unsampled_shared_span_exported)
+        after 0 -> ok
+        end
+    end).
+
+shared_context_without_valid_participants_returns_none_test() ->
+    ?assertEqual(none, quod_trace:shared_context([])),
+    ?assertEqual(none, quod_trace:shared_context([
+      undefined, invalid, #{},
+      #span_ctx{trace_id = 0, span_id = 1},
+      #span_ctx{trace_id = 1, span_id = 0}])).
 
 unsampled_parent_is_not_overridden_test() ->
     with_tracer(fun() ->

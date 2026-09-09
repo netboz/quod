@@ -2,9 +2,11 @@
 
 **Status: all three cut contracts approved; Cut 1 reviewed and committed as
 `e4ad3e1`, version 0.7.153 (`43bd48c`). Cut 2 reviewed and committed as
-`8ca87e8`, with the separate 0.7.154 bump `dd98f53`. Cut 3 is implemented
-and independently reviewed SAFE TO COMMIT; all three cuts' reviews are closed.
-Coordinated development deployment and matched hardware measurement are next.**
+`8ca87e8`, with the separate 0.7.154 bump `dd98f53`. Cut 3 is independently
+reviewed and committed as `ecb7861`, with separate 0.7.155 bump `49f3759`.
+All three cuts are deployed; matched N=4 hardware measurement is complete,
+with its evidence independently reviewed and approved. Absolute latency gates remain
+unmet.**
 Baseline `d48cd89` / 0.7.152. Claude verified and approved the completed
 owner-decode, shared-artifact and final-confirmation contracts. His three
 small clarifications are folded in below: exact binding re-check at decode
@@ -13,8 +15,11 @@ typing. Cut 3 was implemented under Yan's subsequent authorization. Every cut
 requires fresh sequential gates and review before commit; cut 2 is consensus-facing. Broader
 probe-response reuse and cryptographic redesign remain closed.
 
-No new performance result is claimed. The accepted hardware data and the
-0.7.152 baseline remain in [the hardware report](phase-1a-hardware-results.md).
+The accepted 0.7.152 baseline remains in
+[its hardware report](phase-1a-hardware-results.md). The new
+[0.7.155 measurements](phase-1b-hardware-results.md) retain all 400 requests,
+the serial outlier and the remaining missed gates; functional review alone
+was not used to claim these measured savings.
 
 ## 1. Page interpretation: one retained pull, two local handoff steps
 

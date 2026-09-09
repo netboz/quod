@@ -7,6 +7,58 @@ verdict until the test explicitly delivers the worker's verified result.
 """.
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
+
+result_trace_marks_only_the_bound_delivery_test_() ->
+    [{atom_to_list(Lifetime), fun() -> result_trace_marks_only_bound_delivery(Lifetime) end}
+     || Lifetime <- [live_parent, ended_parent]].
+
+result_trace_marks_only_bound_delivery(Lifetime) ->
+    quod_trace_tests:with_tracer(fun() ->
+        {Ctx, Parent} = quod_trace:start_span(
+                          otel_ctx:new(), <<"operation.result_delivery.test">>, internal, #{}),
+        case Lifetime of
+            ended_parent -> quod_trace:finish_span(Parent, ok);
+            live_parent -> ok
+        end,
+        try quod_trace:with_context(Ctx, fun() ->
+              with_fixture(fun(F, S0, Worker, _LifeMonitor) ->
+                  Ref = maps:get(operation_ref, F),
+                  Target = maps:get(target_ref, F),
+                  {Tag, S1} = wait_for_result(Ref, S0),
+                  %% A wrong worker cannot produce an accepted-result event.
+                  ?assertEqual(false, quod_simplex:finish_operation_target_result(
+                                        self(), Ref, committed, Target, S1)),
+                  assert_no_reply(Tag),
+                  {true, S2} = quod_simplex:finish_operation_target_result(
+                                 Worker, Ref, committed, Target, S1),
+                  ?assertEqual({committed, Target}, reply(Tag)),
+                  {true, S2} = quod_simplex:finish_operation_target_result(
+                                 Worker, Ref, committed, Target, S2),
+                  assert_no_reply(Tag)
+              end)
+          end)
+        after quod_trace:finish_span(Parent, ok)
+        end,
+        _ = quod_trace_tests:take_span(<<"operation.result_delivery.test">>),
+        Span = quod_trace_tests:take_span(<<"quod.operation.result_delivery">>),
+        ?assertEqual(otel_span:trace_id(Parent), Span#span.trace_id),
+        ?assertEqual(otel_span:span_id(Parent), Span#span.parent_span_id),
+        %% No second span after duplicate/stale delivery, not just no reply.
+        receive {quod_test_span, #span{name = <<"quod.operation.result_delivery">>}} ->
+            error(duplicate_delivery_span)
+        after 0 -> ok
+        end,
+        Events = lists:reverse(otel_events:list(Span#span.events)),
+        ?assertEqual([<<"operation.target_result_accepted">>,
+                      <<"operation.result_reply_ready">>],
+                     [E#event.name || E <- Events]),
+        [Accepted, Replied] = Events,
+        ?assert(Accepted#event.system_time_native =< Replied#event.system_time_native),
+        Attrs = otel_attributes:map(Accepted#event.attributes),
+        ?assertEqual(1, maps:get('quod.waiter.count', Attrs)),
+        ?assertEqual(64, byte_size(maps:get('quod.operation.id', Attrs)))
+    end).
 
 receipt_before_result_keeps_the_waiting_caller_test() ->
     with_fixture(fun(F, S0, Worker, LifeMonitor) ->

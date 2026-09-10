@@ -286,6 +286,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_reconcile_dtx_coordinator/1,
          test_reconcile_dtx_coordinators/2,
          test_drop_dtx_coordinator/4,
+         test_start_dtx_coordinator_worker/5,
+         test_finish_dtx_coordinator_bootstrap/5,
          test_dtx_coordinator_state/1,
          test_stop_dtx_coordinator/1,
          test_seed_running_dtx_coordinator/3,
@@ -1170,7 +1172,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     group_id :: <<_:256>>,
     begin_ref = none :: none | quod_dtx:certified_ref(),
     group_ref = none :: none | term(),
+    %% Keep the original parent separate: a replacement is another attempt,
+    %% never a child of the span this owner has already released.
     trace_ctx = #{} :: quod_trace:context(),
+    coordinate_span = none
+        :: none | {quod_trace:context(), quod_trace:span_ctx()},
     pid = none :: none | pid(),
     monitor = none :: none | reference()
 }).
@@ -1867,21 +1873,25 @@ test_reconcile_dtx_coordinators(Desired, S) ->
     reconcile_dtx_coordinators(Desired, S).
 test_drop_dtx_coordinator(Ref, Pid, Reason, S) ->
     drop_dtx_coordinator_owner(Ref, Pid, Reason, S).
+test_start_dtx_coordinator_worker(Begin, GroupRef, BeginRef, TraceCtx, S) ->
+    start_dtx_coordinator_worker(
+      quod_dtx:group_id(Begin), Begin, GroupRef, BeginRef, none, TraceCtx, S).
+test_finish_dtx_coordinator_bootstrap(Pid, GroupId, BeginRef, Result, S) ->
+    finish_dtx_coordinator_bootstrap(Pid, GroupId, BeginRef, Result, S).
 test_dtx_coordinator_state(#s{dtx_coordinators = Coordinators}) ->
     maps:map(
       fun(_GroupId,
           #dtx_coordinator_owner{status = Status, group_id = GroupId,
                                  begin_ref = BeginRef, pid = Pid,
-                                 monitor = Monitor}) ->
+                                 monitor = Monitor, trace_ctx = TraceCtx,
+                                 coordinate_span = CoordinateSpan}) ->
               #{status => Status, group_id => GroupId,
                 begin_ref => BeginRef, pid => Pid,
-                monitor => Monitor}
+                monitor => Monitor, trace_ctx => TraceCtx,
+                coordinate_span => CoordinateSpan}
       end, Coordinators).
 test_stop_dtx_coordinator(S = #s{dtx_coordinators = Coordinators}) ->
-    maps:foreach(
-      fun(_GroupId, Owner) -> stop_dtx_coordinator_process(Owner) end,
-      Coordinators),
-    S#s{dtx_coordinators = #{}}.
+    lists:foldl(fun stop_dtx_coordinator/2, S, maps:keys(Coordinators)).
 test_seed_running_dtx_coordinator(GroupId, Pid, S)
   when is_binary(GroupId), is_pid(Pid) ->
     put_dtx_coordinator(
@@ -4119,7 +4129,8 @@ running_impl(
   info, {dtx_coordinator, Pid, GroupId, {done, _CompleteRef}},
   S) ->
     case dtx_coordinator_owner(GroupId, S) of
-        #dtx_coordinator_owner{status = running, pid = Pid} ->
+        Owner = #dtx_coordinator_owner{status = running, pid = Pid} ->
+            dtx_coordinator_event(Owner, <<"dtx.done_observed">>),
             %% Complete is authoritative only through the installed
             %% projection; reconciliation affects this exact GroupId only.
             keep_progress(S, reconcile_dtx_coordinator(S), []);
@@ -4130,7 +4141,10 @@ running_impl(
   info, {dtx_coordinator, Pid, GroupId, {error, Reason}},
   S) ->
     case dtx_coordinator_owner(GroupId, S) of
-        #dtx_coordinator_owner{status = running, pid = Pid} ->
+        Owner = #dtx_coordinator_owner{status = running, pid = Pid} ->
+            %% The fatal path retains this row for terminate/3 to release.
+            %% Never export the reason or end a still-owned handle here.
+            dtx_coordinator_event(Owner, <<"dtx.worker_error">>),
             %% Temporary reachability and history gaps remain parked inside
             %% the message-driven coordinator.  Reaching this event therefore
             %% means its certified state is internally inconsistent; silently
@@ -4364,7 +4378,11 @@ terminate(
       end, DtxOutChannels),
     close_dtx_endpoint(DtxCorrelations, DtxWorkers),
     maps:foreach(
-      fun(_GroupId, Owner) -> stop_dtx_coordinator_process(Owner) end,
+      fun(_GroupId, Owner) ->
+              Released = close_dtx_coordinator_span(
+                           Owner, <<"owner_terminating">>, #{}),
+              stop_dtx_coordinator_process(Released)
+      end,
       DtxCoordinators),
     _ = case Store of
             undefined -> ok;
@@ -5271,17 +5289,33 @@ start_dtx_coordinator(
 start_dtx_coordinator_worker(
   GroupId, Begin, GroupRef, BeginRef, BeginEvidence, TraceCtx,
   S = #s{ns = Ns}) ->
-    case quod_trace:with_context(TraceCtx, fun() ->
-             quod_dtx_coordinator:start_monitor(
-               self(), Ns, Begin, BeginEvidence, #{})
-         end) of
+    {ChildCtx, Span} = quod_trace:start_span(
+      TraceCtx, <<"quod.dtx.coordinate">>, internal,
+      #{'quod.namespace' => Ns,
+        'quod.dtx.group_id' => quod_trace:tx_id(GroupId),
+        'quod.dtx.ancestry' => dtx_coordinator_ancestry(TraceCtx),
+        'quod.dtx.duration_scope' => <<"owner_observed_attempt">>}),
+    Owner = #dtx_coordinator_owner{
+              status = running, group_id = GroupId,
+              begin_ref = BeginRef, group_ref = GroupRef,
+              trace_ctx = TraceCtx,
+              coordinate_span = owned_dtx_coordinator_span(TraceCtx, ChildCtx, Span)},
+    %% Only child start is inside this catch. OTP installs the returned row
+    %% only when the whole callback returns. A later uncaught unwind can lose
+    %% this tentative span; terminate has the old snapshot (see B amendment).
+    %% Preserve the exact pre-install exception/stack, with no new tracking.
+    Started = try quod_trace:with_context(ChildCtx, fun() ->
+                      quod_dtx_coordinator:start_monitor(
+                        self(), Ns, Begin, BeginEvidence, #{})
+                  end)
+              catch StartClass:StartReason:StartStack ->
+                  _ = close_dtx_coordinator_span(Owner, <<"start_failed">>, #{}),
+                  erlang:raise(StartClass, StartReason, StartStack)
+              end,
+    case Started of
         {ok, Pid, Monitor} ->
             S1 = put_dtx_coordinator(
-                   #dtx_coordinator_owner{
-                     status = running, group_id = GroupId,
-                     begin_ref = BeginRef, group_ref = GroupRef,
-                     trace_ctx = TraceCtx,
-                     pid = Pid, monitor = Monitor}, S),
+                   Owner#dtx_coordinator_owner{pid = Pid, monitor = Monitor}, S),
             %% Establish the owner-to-child progress stream after recording
             %% its exact pid. The child's initial drive may already have
             %% observed a temporarily unavailable local view; this edge makes
@@ -5289,6 +5323,7 @@ start_dtx_coordinator_worker(
             ok = activate_dtx_coordinator(Pid, S1),
             S1;
         {error, Reason} ->
+            _ = close_dtx_coordinator_span(Owner, <<"start_failed">>, #{}),
             error({dtx_coordinator_start_failed, Ns, GroupId, Reason})
     end.
 
@@ -5349,7 +5384,11 @@ drop_dtx_coordinator_owner(
                 <- maps:to_list(Coordinators),
             OwnerPid =:= Pid, OwnerMonitor =:= Ref],
     case Matches of
-        [{GroupId, _Owner}] ->
+        [{GroupId, Owner}] ->
+            S1 = remove_dtx_coordinator(GroupId, S),
+            _ = close_dtx_coordinator_span(
+                  Owner, <<"worker_exit">>,
+                  #{'quod.dtx.exit_class' => dtx_coordinator_exit_class(Reason)}),
             case Reason of
                 normal -> ok;
                 shutdown -> ok;
@@ -5358,9 +5397,10 @@ drop_dtx_coordinator_owner(
                       "quod[~s]: DTX coordinator worker for ~p exited: ~p",
                       [S#s.ns, GroupId, Reason])
             end,
-            {true,
-             reconcile_dtx_coordinator(
-               remove_dtx_coordinator(GroupId, S))};
+            %% Removal preserves the existing restart order. With no carrying
+            %% row, a history rebuild is honestly parentless, not retained
+            %% ancestry inferred from this released attempt.
+            {true, reconcile_dtx_coordinator(S1)};
         [] ->
             false
     end.
@@ -5381,9 +5421,63 @@ stop_dtx_coordinator(GroupId, S) ->
     case dtx_coordinator_owner(GroupId, S) of
         none -> S;
         Owner ->
-            stop_dtx_coordinator_process(Owner),
-            remove_dtx_coordinator(GroupId, S)
+            S1 = remove_dtx_coordinator(GroupId, S),
+            Released = close_dtx_coordinator_span(
+                         Owner, <<"retirement_requested">>, #{}),
+            stop_dtx_coordinator_process(Released),
+            S1
     end.
+
+%% Span membership follows the existing owner row, not is_recording/1 (whose
+%% immutable flag cannot tell whether an SDK span has ended). These are release
+%% observations, not durable results or a claim that the child has stopped.
+%% End-once applies to installed states. On fatal callback unwind, terminate
+%% can see a stale token: the pinned SDK's end-after-take no-op is intentional.
+close_dtx_coordinator_span(
+  Owner = #dtx_coordinator_owner{coordinate_span = none}, _Closure, _Attributes) ->
+    Owner;
+close_dtx_coordinator_span(
+  Owner = #dtx_coordinator_owner{coordinate_span = {_Ctx, Span}},
+  Closure, Attributes) ->
+    Released = Owner#dtx_coordinator_owner{coordinate_span = none},
+    %% Observation release must never mask the original start exception or
+    %% interrupt the existing shutdown path if the SDK has already stopped.
+    _ = catch quod_trace:set_attributes(
+          Span, Attributes#{'quod.dtx.closure' => Closure}),
+    _ = catch otel_span:end_span(Span),
+    Released.
+
+dtx_coordinator_ancestry(TraceCtx) ->
+    case otel_span:is_valid(otel_tracer:current_span_ctx(TraceCtx)) of
+        true -> <<"retained_parent">>;
+        false -> <<"no_retained_parent">>
+    end.
+
+%% The API's disabled tracer can return the existing parent verbatim instead
+%% of allocating a span. That borrowed parent is never this row's token.
+%% Unsampled *new* spans retain ordinary ownership; validity/identity here is
+%% allocation detection, not an is_recording-based mutable ended flag.
+owned_dtx_coordinator_span(ParentCtx, ChildCtx, Span) ->
+    Parent = otel_tracer:current_span_ctx(ParentCtx),
+    case otel_span:is_valid(Span) andalso
+         (not otel_span:is_valid(Parent) orelse
+          {otel_span:trace_id(Span), otel_span:span_id(Span)} =/=
+          {otel_span:trace_id(Parent), otel_span:span_id(Parent)}) of
+        true -> {ChildCtx, Span};
+        false -> none
+    end.
+
+dtx_coordinator_event(#dtx_coordinator_owner{coordinate_span = none}, _Name) ->
+    ok;
+dtx_coordinator_event(#dtx_coordinator_owner{coordinate_span = {Ctx, _}}, Name) ->
+    _ = catch quod_trace:add_event(Ctx, Name, #{}),
+    ok.
+
+dtx_coordinator_exit_class(normal) -> <<"normal">>;
+dtx_coordinator_exit_class(shutdown) -> <<"shutdown">>;
+dtx_coordinator_exit_class({shutdown, _}) -> <<"shutdown">>;
+dtx_coordinator_exit_class(killed) -> <<"killed">>;
+dtx_coordinator_exit_class(_) -> <<"abnormal">>.
 
 stop_dtx_coordinator_process(
   #dtx_coordinator_owner{pid = Pid, monitor = Monitor})

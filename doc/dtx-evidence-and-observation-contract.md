@@ -365,3 +365,139 @@ transcripts distinguish those outcomes and do not claim general atom safety.
 
 No production deployment, ledger purge, uncertain request resubmission,
 timeout increase, benchmark restart or latency result is claimed by A.
+
+## 6. B callback-unwind amendment — approved 2026-09-10
+
+The original contract above remains intact. After A was committed as
+`5a3e516`, independent review reproduced the B draft's stale-snapshot probe:
+two end calls for the old span, one export, and the original start error
+preserved. The following three clauses are explicitly approved refinements
+of section 3, not implementation acceptance or permission to commit B.
+
+1. Owner end-once is defined over **installed** states. `coordinate_span` is
+   the sole ownership token. Build post-transition bookkeeping before span
+   release effects, and return consistent bookkeeping on every surviving
+   callback arm. Seam-scoped start cleanup still preserves the original
+   error/exception; no returning path may retain a handle it released or
+   discard a live handle it still owns.
+2. Uncaught callback unwind is engine death. Termination is best-effort over
+   OTP's possibly stale snapshot: a previously released handle can receive a
+   second end call, relying explicitly on the pinned SDK's `ets:take` followed
+   by end-after-take no-op. A newly started handle in discarded tentative state
+   is declared lost and left to SDK sweeping. Missing roots remain expected-
+   attempt discrepancies, never idleness. No tracking inventory, journal,
+   process-dictionary state, secondary owner, acknowledgement, or extra OTP
+   turn is introduced to repair these death-path observations.
+3. Adoption never clears `trace_ctx`. Parent preservation rides only existing
+   rows: replacement through a carrying row is a sibling under its original
+   parent, not under the old attempt. Where existing execution first removes
+   every carrying row (post-adoption DOWN then history rebuild), ancestry is
+   honestly lost. The analyzer must name that parentless class without
+   inventing retention or inferring the precise cause from a missing parent.
+   Truly history-only recovery remains parentless; selection/start order stays
+   unchanged.
+
+Before implementation review, complete the SDK-disappearance regression
+matrix (original exception and worker/store/journal shutdown preserved), the
+dedicated end-after-take no-op regression, permanent controls for the declared
+unwind behavior (including a lost tentative handle counted as a discrepancy),
+and ancestry controls for adoption retention and parentless rebuilt rows.
+All original real-SDK lifecycle tests, fail-before controls, clean sequential
+gates, and exact-tree review-before-commit remain required. No campaign,
+health, or latency gate is closed by this amendment.
+
+## 7. B implementation addendum — 2026-09-10
+
+Sections 1–6 above are unchanged. A is committed as `5a3e516`; B implements
+section 3 under the approved section 6 amendment. B remains uncommitted and
+subject to exact-tree independent implementation review. This addendum records
+implementation and evidence, not new ownership authority or a campaign result.
+
+Simplex's existing owner row starts the coordinate span before child start
+and passes its context through the existing carrier. Only `coordinate_span`
+is the ownership token; the original `trace_ctx` remains separate. Installed
+release transitions construct their returned bookkeeping before span effects,
+with bounded closure/exit attributes and independently protected SDK cleanup.
+The child no longer owns a process-lifetime coordinate wrapper. Existing
+desired selection, activation, PID/monitor matching, demonitoring, retirement,
+public terminal delivery and worker/store/journal shutdown remain in place.
+
+Adoption preserves the same parent, span, PID and monitor. A row-preserving
+replacement is a sibling under the original caller. The existing DOWN path
+removes the carrying row before history reconstruction; the loader has no
+coordinate root, and the rebuilt worker is honestly parentless. The producer
+declares `retained_parent` or `no_retained_parent`, not a guessed ancestry
+origin. No retention or secondary ownership mechanism repairs that break.
+
+The SDK assumption is pinned to the existing OpenTelemetry 1.7.0 dependency:
+its real `ets:take` removes the recorded span before export, and a second end
+is a no-op even while the immutable context still says recording. Dedicated
+regressions assert that assumption, the old-snapshot double-end death path,
+and a lost tentative root after real owner/worker death and SDK sweeping.
+The independent test-side start inventory counts the latter as one missing
+root, with no invented interval, closure or idleness. SDK-disappearance
+controls preserve returned errors, thrown exceptions and their original stack,
+and actual worker/store/journal shutdown. No runtime inventory, journal,
+process-dictionary tracker, extra owner, acknowledgement or OTP turn is added.
+
+Only the actual recovery done branch emits semantic `dtx.completed`; owner
+receipt emits separate `dtx.done_observed`. Failed/uncertain close decisions
+emit `dtx.coordinator.close_observed`, never semantic completion. Child root
+event writes finish before the existing final done/error notification, so
+they do not overlap owner appends to the pinned SDK's non-atomic event list.
+Cleanup still follows notification. Neither event is a child-duration end;
+structural production call/send traces pin this ordering. The owner interval
+is explicitly `owner_observed_attempt`, not the child `coordinator_total`.
+
+The disabled API may return a recording parent verbatim. The coordinate
+owner detects that borrowed identity and never owns/ends it; genuinely new
+unsampled spans retain ordinary ownership. This narrow correction does not
+claim to repair independent pre-existing wave-span no-op alias handling.
+
+There are 24 new permanent cases: 14 lifecycle and 10 SDK/unwind cases. The
+fixtures drive real SDK storage/export, reducer/planner, child notifications,
+follow cleanup and monitor behavior. Pre-verified planner snapshots are
+explicitly TEST-only inputs, not full consensus/quorum admission. Ancestry
+rebuild cases separately drive the real history loader over stored signed
+Begin evidence. Unwind evidence is a production callback-state fixture with
+real process death, not a complete consensus callback transition.
+
+The separately labeled offline analyzer is archived under
+`/tmp/quod-coordinator-B-analyzer-MpMvdf/`, schema coordinator-B-v3. Its final
+42 B cases, seven unchanged attribution cases, eight exact-auditor checks
+and eight before/after controls match their expected results. A final actual
+SDK inventory is integrated under
+`/tmp/quod-coordinator-B-amended-t674uV/final-sdk-audit/`: one producer start,
+zero exports, one missing-root discrepancy and its exact-ID detail. Verified
+unwind evidence is retained but the cause of absent export stays unknown.
+Missing final-stage endpoints remain discrepancies, never zero-filled time.
+No suitable existing production attempt denominator was found; selecting and
+verifying an independent capture path remains a pre-campaign requirement.
+All 463 frozen campaign hashes are unchanged; no old results are recomputed.
+
+Preliminary failures and their corrections are preserved in the amended
+archive's `PROGRESS.md`. One combined-run failure was reproduced against A:
+the old mixed-wave fixture leaked projection casts through EUnit's shared
+mailbox into later FIFO/ordering tests. Only that upstream fixture now has an
+EUnit spawn boundary; its body and all ordering assertions remain unchanged.
+The new secret-error test also needed its existing child barrier before a
+synthetic owner notification; it still pins the original error, one error
+event, no completion/secret export and one termination end. Final focused
+coverage passes 338/0; that is not a substitute for the full gate results.
+
+The final clean sequential run, `gates-1` in the amended B archive, completed
+at 18:01:00 UTC: EUnit **2073/0**, ask CT **26/26**, QUIC CT **26/26**, Quod
+Simplex CT **12/12**, N=4 Simplex CT **8/8**, xref, Dialyzer, production release
+0.7.160, diff-check and unchanged-code/test hashes — all exit 0. The previous
+test build is preserved as `_build/test.before-B-amended-t674uV`. Final
+lifecycle controls pass 14/14 twice, with all 23 matrix outcomes matching,
+including ten intentional structural failures. Final SDK controls pass all
+five execution modes. The handoff supplies the five-file gate manifest and
+the separate six-file review manifest including this append-only contract.
+These results make B ready for independent review, not approved for commit.
+
+No deployment, ledger purge, uncertain resubmission, timeout increase,
+measurement restart or latency improvement is claimed. Both stopped campaigns,
+the replaying-1302/applied-1304 discrepancy, serial +8.7% and every standing
+health, client and attribution gate remain open. Unrelated documentation and
+the five write-lanes files are excluded from this implementation scope.

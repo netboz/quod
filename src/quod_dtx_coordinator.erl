@@ -56,8 +56,10 @@ does not cancel or resubmit the uncertain operation.
 -ifdef(TEST).
 -define(TEST_PHASE_BARRIER(Owner, GroupId, Event),
         test_phase_barrier(Owner, GroupId, Event)).
+-define(TEST_OBSERVATION_STATE(Initial), test_observation_state(Initial)).
 -else.
 -define(TEST_PHASE_BARRIER(_Owner, _GroupId, _Event), ok).
+-define(TEST_OBSERVATION_STATE(Initial), Initial).
 -endif.
 
 -record(config, {
@@ -139,7 +141,9 @@ start_monitor(Owner, OwnerNs, Begin, BeginEvidence, Options)
         {ok, Initial} ->
             TraceCtx = quod_trace:context(),
             {Pid, Monitor} = spawn_monitor(fun() ->
-                quod_trace:with_context(TraceCtx, fun() -> init(Initial) end)
+                quod_trace:with_context(TraceCtx, fun() ->
+                    init(?TEST_OBSERVATION_STATE(Initial))
+                end)
             end),
             {ok, Pid, Monitor};
         {error, _} = Error ->
@@ -591,6 +595,16 @@ operation_target_error_disposition(_Response) ->
     invalid_target_response.
 
 -ifdef(TEST).
+%% Observation fixtures enter with a pre-verified planner snapshot, not a
+%% fabricated endpoint reply. The production expansion is just Initial; no
+%% option, lookup or alternate admission path exists in release code.
+test_observation_state(S = #state{group_id = GroupId}) ->
+    case application:get_env(quod, dtx_test_observation_state) of
+        {ok, {GroupId, Snapshot, Follows}} ->
+            S#state{snapshot = Snapshot, follows = Follows};
+        _ -> S
+    end.
+
 test_operation_target_response_disposition(Request, Response) ->
     operation_target_response_disposition(Request, Response).
 test_operation_target_result(
@@ -823,17 +837,14 @@ options(Options) when map_size(Options) =< 1 ->
 options(_) ->
     {error, invalid_coordinator_options}.
 
-init(S0 = #state{owner = Owner, owner_ns = OwnerNs,
-                 group_id = GroupId}) ->
+init(S0 = #state{owner = Owner}) ->
     OwnerMonitor = erlang:monitor(process, Owner),
     queue_drive(),
     S = S0#state{owner_monitor = OwnerMonitor,
                  total_started_native = erlang:monotonic_time()},
-    quod_trace:with_span(
-      quod_trace:context(), <<"quod.dtx.coordinate">>, internal,
-      #{'quod.namespace' => OwnerNs,
-        'quod.dtx.group_id' => quod_trace:tx_id(GroupId)},
-      fun(_SpanCtx) -> loop(S) end).
+    %% The monitor holder owns the attempt span. This child inherits its
+    %% context, but external retirement cannot reliably run child cleanup.
+    loop(S).
 
 loop(S) ->
     receive
@@ -916,6 +927,7 @@ handle_loop_message(
 handle_loop_message(
   {'DOWN', Monitor, process, Owner, _Reason},
   S = #state{owner_monitor = Monitor, owner = Owner}) ->
+    observe_coordinator_close(uncertain),
     close_coordinator(uncertain, S),
     ok;
 handle_loop_message(
@@ -1003,6 +1015,14 @@ drive_commands(S0 = #state{commands = {Mode, Stage, Commands}})
 drive_commands_next(S) ->
     case quod_dtx_recovery:next(S#state.begin_record, S#state.snapshot) of
         {done, CompleteRef} ->
+            %% Finish child root-event writes before the existing notification
+            %% lets the owner append done_observed to that same SDK event list.
+            %% The SDK's event RMW is not atomic across processes. This changes
+            %% observation order only: notification still precedes all cleanup.
+            _ = catch quod_trace:add_event(
+                  quod_trace:context(), <<"dtx.completed">>,
+                  #{'quod.dtx.result' => <<"ok">>}),
+            observe_coordinator_close(ok),
             notify(S, {done, CompleteRef}),
             close_coordinator(ok, S),
             stop;
@@ -1666,6 +1686,7 @@ install_applied_wave(_Commands, _Views, S, _Targets, _Waiting, _Progress) ->
     {fatal, invalid_applied_claim, S}.
 
 terminate_expected(Reason, S) ->
+    observe_coordinator_close(failed),
     notify(S, {error, Reason}),
     close_coordinator(failed, S),
     stop.
@@ -1684,6 +1705,10 @@ notify(#state{owner = Owner, group_id = GroupId}, Event) ->
 %% peer into the CT controller.  Monitoring Owner plus a hard bound prevents a
 %% failed test from stranding recovery.  This remains generic over every
 %% progress phase instead of encoding a Decision-specific protocol branch.
+test_phase_barrier(Owner, GroupId, {done, _CompleteRef}) ->
+    test_phase_barrier(Owner, GroupId, {progress, done});
+test_phase_barrier(Owner, GroupId, {terminal, _Terminal}) ->
+    test_phase_barrier(Owner, GroupId, {progress, terminal});
 test_phase_barrier(Owner, GroupId, {progress, Phase}) ->
     case application:get_env(quod, dtx_test_phase_barrier) of
         {ok, {hold, Phase}} ->
@@ -1748,9 +1773,6 @@ close_coordinator(Result,
     stop_active_wave(S#state.wave),
     close_active_stage(Result, S),
     observe_stage(S, coordinator_total, Result, StartedNative),
-    _ = quod_trace:add_event(
-          quod_trace:context(), <<"dtx.completed">>,
-          #{'quod.dtx.result' => atom_to_binary(Result, utf8)}),
     maps:foreach(
       fun(_Identity, FollowRef) ->
               _ = catch quod_foreign_log:unfollow(FollowRef)
@@ -1762,6 +1784,15 @@ close_coordinator(Result,
                         {foreign_log, node}, Monitor),
             ok
     end,
+    ok.
+
+%% A bounded close decision, not completed cleanup or a child-duration end.
+%% All notifying branches emit it before sending their final owner event, so
+%% the owner's subsequent event append cannot overlap this child's append.
+observe_coordinator_close(Result) ->
+    _ = catch quod_trace:add_event(
+          quod_trace:context(), <<"dtx.coordinator.close_observed">>,
+          #{'quod.dtx.result' => atom_to_binary(Result, utf8)}),
     ok.
 
 stop_active_wave(none) -> ok;

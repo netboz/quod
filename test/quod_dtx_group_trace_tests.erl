@@ -4,6 +4,10 @@
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 
+%% Shared only by the observation-owner regressions. These are signed Begin
+%% admission fixtures, not an assertion of full consensus-node readiness.
+-export([with_fixture/1, with_live_admission/1]).
+
 %% Real Prolog and Simplex callbacks own reserve -> admission -> activation;
 %% the real coordinator and endpoint submit worker then cross both spawn
 %% boundaries. Consensus is deliberately not ready, so this fixture observes
@@ -14,7 +18,10 @@ group_admission_spawn_and_endpoint_keep_request_context_test_() ->
 
 group_admission_trace(Sampling) ->
     quod_trace_tests:with_tracer(fun() ->
-        with_live_admission(fun(F, Engine, Owner, Ref) ->
+      with_live_admission(fun(F, Engine, Owner, Ref) ->
+      {Ambient, AmbientSpan} = quod_trace:start_span(
+        otel_ctx:new(), <<"unrelated.group.caller">>, internal, #{}),
+      try quod_trace:with_context(Ambient, fun() ->
             Begin = maps:get('begin', F),
             {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
             {ok, BeginBytes} = quod_dtx:encode_record(Begin),
@@ -69,9 +76,11 @@ group_admission_trace(Sampling) ->
             ?assertEqual(Owners1, quod_simplex:test_dtx_coordinator_state(S2)),
             ?assertEqual({ok, BeginBytes}, quod_dtx:encode_record(Begin)),
             quod_trace:finish_span(LateSpan, ok),
-            %% Actual owner death, not an invented coordinator close message.
-            exit(Owner, kill),
-            receive {'DOWN', Monitor, process, Worker, normal} -> ok
+            %% A graceful owner stop runs the real Simplex terminate callback.
+            %% Untrappable owner death cannot promise export of a volatile
+            %% owner-held span; this case does not claim to cover that loss.
+            ok = gen_statem:stop(Owner),
+            receive {'DOWN', Monitor, process, Worker, shutdown} -> ok
             after 3000 -> error(group_worker_survived_owner)
             end,
             case Sampling of
@@ -80,6 +89,8 @@ group_admission_trace(Sampling) ->
                     ?assertEqual(otel_span:trace_id(RootSpan), Coordinate#span.trace_id),
                     ?assertEqual(otel_span:span_id(RootSpan), Coordinate#span.parent_span_id),
                     ?assertEqual(Coordinate#span.span_id, otel_span:span_id(EndpointSpan)),
+                    ?assertEqual(<<"owner_terminating">>, maps:get(
+                      'quod.dtx.closure', otel_attributes:map(Coordinate#span.attributes))),
                     ?assertEqual(quod_trace:tx_id(GroupId), maps:get(
                       'quod.dtx.group_id', otel_attributes:map(Coordinate#span.attributes)));
                 unsampled ->
@@ -90,10 +101,24 @@ group_admission_trace(Sampling) ->
                     end
             end,
             quod_trace:finish_span(RootSpan, ok)
-        end)
+      end),
+      %% Explicit request context never falls back to this unrelated ambient
+      %% span, even when the request's sampling decision is off.
+      AmbientTrace = otel_span:trace_id(AmbientSpan),
+      receive {quod_test_span, #span{trace_id = AmbientTrace}} ->
+          error(child_exported_under_unrelated_ambient)
+      after 0 -> ok end
+      after quod_trace:finish_span(AmbientSpan, ok) end
+      end)
     end).
 
-mixed_local_group_wave_links_recording_request_without_reparenting_test() ->
+mixed_local_group_wave_links_recording_request_without_reparenting_test_() ->
+    %% This production-callback fixture receives projection casts as well as
+    %% spans. Keep its mailbox private: unrelated admission tests must not
+    %% mistake these casts for their own one-row/two-row acknowledgements.
+    {spawn, fun mixed_local_group_wave_links_recording_request_without_reparenting/0}.
+
+mixed_local_group_wave_links_recording_request_without_reparenting() ->
     quod_trace_tests:with_tracer(fun() ->
         with_fixture(fun(F, S0, _Journal) ->
             {Ns, _} = Origin = maps:get(target, F),
@@ -166,7 +191,10 @@ history_only_group_recovery_has_no_ambient_parent_test() ->
                       #{GroupId => {record, GroupId, Begin, GroupRef}}, S0)
                 end),
                 Self ! {started, self(), quod_simplex:test_dtx_coordinator_state(S)},
-                receive stop -> ok end
+                receive stop ->
+                    _ = quod_simplex:test_stop_dtx_coordinator(S),
+                    ok
+                end
             end),
             #{GroupId := #{pid := Worker}} = receive
                 {started, Owner, Rows} -> Rows
@@ -174,12 +202,14 @@ history_only_group_recovery_has_no_ambient_parent_test() ->
             end,
             Monitor = monitor(process, Worker),
             Owner ! stop,
-            receive {'DOWN', Monitor, process, Worker, normal} -> ok
+            receive {'DOWN', Monitor, process, Worker, shutdown} -> ok
             after 3000 -> error(recovery_survived_owner)
             end,
             Coordinate = quod_trace_tests:take_span(<<"quod.dtx.coordinate">>),
             ?assertNotEqual(otel_span:trace_id(Span), Coordinate#span.trace_id),
             ?assertEqual(undefined, Coordinate#span.parent_span_id),
+            ?assertEqual(<<"retirement_requested">>, maps:get(
+              'quod.dtx.closure', otel_attributes:map(Coordinate#span.attributes))),
             quod_trace:finish_span(Span, ok)
         end)
     end).

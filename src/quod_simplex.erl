@@ -1853,9 +1853,10 @@ test_retained_dtx_state(#s{retained_dtx = Registry}) ->
                           relay_placement => RelayPlacement}
                 end, retained_rows(Registry)),
       fingerprint => Registry#retained_dtx.fingerprint}.
-test_refresh_retained_readiness(S) -> refresh_retained_readiness(S).
+test_refresh_retained_readiness(S) ->
+    finish_pending_begins_reconciliation(refresh_retained_readiness(S)).
 test_refresh_retained_dtx_signatures(S) ->
-    refresh_retained_dtx_signatures(S).
+    finish_pending_begins_reconciliation(refresh_retained_dtx_signatures(S)).
 test_reconcile_signing_state(S) -> reconcile_signing_state(S).
 test_finish_pending_begins_reconciliation(Transition, S) ->
     finish_pending_begins_reconciliation(Transition, S).
@@ -3305,9 +3306,8 @@ restore_pending_dtx(
                           digest = Digest,
                           inserted_at = InsertedAt,
                           observation_started_at = InsertedAt,
-                          placement = retained_placement(
-                                        retention_disposition(
-                                          Record, S#s.dtx_projection)),
+                          placement = retained_installation_placement(
+                                        Record, Control, Digest, none, S),
                           bytes = byte_size(Envelope)},
                     S#s{retained_dtx = retained_put_new(
                                           Submission, S#s.retained_dtx)};
@@ -7162,11 +7162,11 @@ retain_dtx_submission(Kind, Record, Digest, Waiter, ValidationSidecar,
                     case NewSubmission of
                         sign ->
                             sign_and_retain_dtx(
-                              Kind, Record, Digest, Waiter, Hints, S);
+                              Kind, Record, Digest, Waiter, Hints, none, S);
                         {signed, Control, Envelope} ->
                             install_dtx_submission(
                               Record, Control, Envelope, Digest,
-                              Waiter, Hints, S)
+                              Waiter, Hints, none, S)
                     end
             end
     end.
@@ -7199,7 +7199,7 @@ validated_dtx_record(Record) ->
             {ok, Kind, quod_dtx:record_digest(Record)}
     end.
 
-sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
+sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar, OldSequence,
                     S = #s{id = Signer, self = Self,
                            signing_journal = Journal,
                            dtx_lanes = CommittedFloors}) ->
@@ -7224,7 +7224,7 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
                                    Kind, S#s.ns, Journal1),
                             install_dtx_submission(
                               Record, Control, Envelope, Digest, Waiter,
-                              ValidationSidecar,
+                              ValidationSidecar, OldSequence,
                               S#s{signing_journal = Journal1});
                         {error, Reason} ->
                             {error, Reason}
@@ -7237,7 +7237,7 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar,
     end.
 
 install_dtx_submission(Record, Control, Envelope, Digest, Waiter,
-                       ValidationSidecar,
+                       ValidationSidecar, OldSequence,
                        S = #s{retained_dtx = Registry}) ->
     InsertedAt = quod_time:mono_ms(),
     Submission =
@@ -7248,13 +7248,41 @@ install_dtx_submission(Record, Control, Envelope, Digest, Waiter,
           observation_started_at = InsertedAt,
           trace_ctx = quod_trace:context(),
           validation_sidecar = ValidationSidecar,
-          placement = retained_placement(
-                        retention_disposition(Record, S#s.dtx_projection)),
+          placement = retained_installation_placement(
+                        Record, Control, Digest, OldSequence, S),
           bytes = byte_size(Envelope) +
               validation_sidecar_bytes(ValidationSidecar),
           waiters = dtx_waiter_set(Waiter)},
     {ok, schedule_dtx_drive(
            S#s{retained_dtx = retained_put_new(Submission, Registry)})}.
+
+retained_installation_placement(Record, Control, Digest, OldSequence, S) ->
+    Disposition = retention_disposition(Record, S#s.dtx_projection),
+    case Disposition of
+        stale ->
+            %% Emit the bounded identifiers before the ordinary invariant
+            %% exception. No state/journal/control dump and no hidden recovery;
+            %% the existing formatter still sanitizes and bounds the report.
+            Meta = quod_dtx:control_metadata(Control),
+            Lane = {maps:get(author_admission, Meta), maps:get(author, Meta)},
+            logger:error(quod_log_formatter:redact(
+              #{event => stale_retained_dtx,
+                namespace => retained_diagnostic_namespace(S#s.ns),
+                group_digest => binary:encode_hex(quod_dtx:group_id(Record)),
+                record_digest => binary:encode_hex(Digest),
+                phase => quod_dtx:record_kind(Record),
+                committed_height => S#s.slot,
+                old_sequence => OldSequence,
+                proposed_sequence => maps:get(sequence, Meta),
+                committed_floor => maps:get(Lane, S#s.dtx_lanes, 0),
+                readiness => stale}));
+        _ -> ok
+    end,
+    retained_placement(Disposition).
+
+retained_diagnostic_namespace(Ns) when byte_size(Ns) =< 255 -> Ns;
+retained_diagnostic_namespace(Ns) ->
+    {truncated, binary:part(Ns, 0, 255), byte_size(Ns)}.
 
 -ifdef(TEST).
 pending_begins_snapshot(memory) -> #{};
@@ -7404,31 +7432,34 @@ refresh_retained_readiness(
   S = #s{retained_dtx = #retained_dtx{fingerprint = Fingerprint}}) ->
     Current = retained_readiness_fingerprint(S),
     case Fingerprint =:= Current of
-        true -> S;
+        true -> {S, none};
         false -> reclassify_retained_rows(Current, S)
     end.
 
 reclassify_retained_rows(
   Fingerprint,
   S0 = #s{retained_dtx = #retained_dtx{rows = Rows}}) ->
-    S1 = lists:foldl(
-           fun(Digest, S) -> reclassify_retained_row(Digest, S) end,
-           S0, maps:keys(Rows)),
+    {S1, Transition} = lists:foldl(
+           fun(Digest, {S, Pending}) ->
+                   {Next, Cleared} = reclassify_retained_row(Digest, S),
+                   {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
+           end, {S0, none}, maps:keys(Rows)),
     Registry = S1#s.retained_dtx,
-    S1#s{retained_dtx = Registry#retained_dtx{
-                               fingerprint = Fingerprint}}.
+    {S1#s{retained_dtx = Registry#retained_dtx{
+                                fingerprint = Fingerprint}}, Transition}.
 
 reclassify_retained_row(
   Digest, S = #s{retained_dtx = Registry,
                  dtx_projection = Projection}) ->
     case maps:get(Digest, retained_rows(Registry), undefined) of
         undefined ->
-            S;
+            {S, none};
         Row = #dtx_submission{record = Record, placement = OldPlacement} ->
             case retention_disposition(Record, Projection) of
                 {refused, conflict} ->
                     Reply = invalid_dtx_submission_reply(
-                              prepare, Digest, [conflict], Projection, S),
+                              quod_dtx:record_kind(Record), Digest,
+                              [conflict], Projection, S),
                     finish_retained_dtx(Digest, rejected, Reply, S);
                 stale ->
                     retire_dtx_submission(
@@ -7436,11 +7467,11 @@ reclassify_retained_row(
                 Disposition ->
                     NewPlacement = retained_placement(Disposition),
                     case NewPlacement =:= OldPlacement of
-                        true -> S;
+                        true -> {S, none};
                         false ->
-                            S#s{retained_dtx = retained_replace(
+                            {S#s{retained_dtx = retained_replace(
                                   Row#dtx_submission{
-                                    placement = NewPlacement}, Registry)}
+                                    placement = NewPlacement}, Registry)}, none}
                     end
             end
     end.
@@ -9763,8 +9794,9 @@ resolve_committed_dtx_control(Entry, Control, Identity, Registry, S) ->
             case quod_dtx:certified_entry_ref(Identity, Entry, Control) of
                 {ok, Ref} ->
                     S1 = adopt_committed_begin_owner(Control, Ref, S),
-                    finish_retained_dtx(
-                      Digest, completed, {ok, Ref, Entry}, S1);
+                    {S2, none} = finish_retained_dtx(
+                                   Digest, completed, {ok, Ref, Entry}, S1),
+                    S2;
                 {error, Reason} ->
                     error({invalid_committed_dtx_reference,
                            (quod_ledger:entry_view(Entry))#entry.index, Reason})
@@ -10362,9 +10394,17 @@ reconcile_signing_state_journal(
     %% quod_prolog's publication floor can make the absence classification
     %% definitive rather than outcome-unknown.
     ok = project_pending_begins(Ns, Journal1),
-    {refresh_retained_dtx_signatures(
-       reconcile_transaction_signing_custody(
-         S#s{signing_journal = Journal1})), Transition}.
+    %% Semantic alternatives may survive exact-digest commit resolution, but
+    %% must not acquire a new signature after the projection made them stale.
+    %% Both classification and signature retirement return Begin resolutions
+    %% to the caller's existing post-apply boundary.
+    {Classified, Retired} = refresh_retained_readiness(
+                             reconcile_transaction_signing_custody(
+                               S#s{signing_journal = Journal1})),
+    {Renewed, SignatureRetired} = refresh_retained_dtx_signatures(Classified),
+    {Renewed, merge_pending_begins_reconciliation(
+                Transition,
+                merge_pending_begins_reconciliation(Retired, SignatureRetired))}.
 
 reconcile_transaction_signing_custody(
   S0 = #s{signing_journal = Journal0}) ->
@@ -10424,6 +10464,17 @@ pending_begins_reconciliation(
         _ -> {cleared_pending_begins, Cleared}
     end.
 
+merge_pending_begins_reconciliation(none, Transition) -> Transition;
+merge_pending_begins_reconciliation(Transition, none) -> Transition;
+merge_pending_begins_reconciliation(
+  {cleared_pending_begins, Left}, {cleared_pending_begins, Right}) ->
+    {cleared_pending_begins, lists:usort(Left ++ Right)}.
+
+%% Ordinary retirement has no enclosing ledger apply. Complete its returned
+%% transition at that existing boundary; commit/skip/catch-up use /2 later.
+finish_pending_begins_reconciliation({S, Transition}) ->
+    finish_pending_begins_reconciliation(Transition, S).
+
 finish_pending_begins_reconciliation(
   {cleared_pending_begins, GroupRefs}, S = #s{ns = Ns}) ->
     lists:foreach(
@@ -10436,7 +10487,7 @@ finish_pending_begins_reconciliation(none, S) ->
 refresh_retained_dtx_signatures(
   S = #s{retained_dtx = Registry}) ->
     case retained_count(Registry) of
-        0 -> S;
+        0 -> {S, none};
         _ -> refresh_retained_dtx_signatures_nonempty(S)
     end.
 
@@ -10446,10 +10497,11 @@ refresh_retained_dtx_signatures_nonempty(S0) ->
         {ok, {_Ns, _Anchor, Self, Admission}} ->
             CurrentLane = {Admission, Self},
             maps:fold(
-              fun(Digest, Submission, Acc) ->
-                      refresh_dtx_submission(
-                        Digest, Submission, CurrentLane, Acc)
-              end, S0, Rows);
+              fun(Digest, Submission, {Acc, Pending}) ->
+                      {Next, Cleared} = refresh_dtx_submission(
+                                         Digest, Submission, CurrentLane, Acc),
+                      {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
+              end, {S0, none}, Rows);
         {error, _} ->
             abandon_retained_dtx(not_in_charge, S0)
     end.
@@ -10473,26 +10525,26 @@ refresh_dtx_submission(
             %% admission changed fail the same check and retire.
             case dtx_control_acceptable(
                    Control, S#s.author_admissions, CommittedFloors, S) of
-                true -> S;
+                true -> {S, none};
                 false -> retire_dtx_submission(Digest, not_in_charge, S)
             end;
         {true, false} ->
-            S;
+            {S, none};
         {true, true} ->
             {Old, RegistryWithout} = retained_take(
                                        Digest, S#s.retained_dtx),
             SWithout = S#s{retained_dtx = RegistryWithout},
             case sign_and_retain_dtx(
                    quod_dtx:control_kind(Control), Record, Digest,
-                   none, ValidationSidecar, SWithout) of
+                   none, ValidationSidecar, Sequence, SWithout) of
                 {ok, S1 = #s{retained_dtx = Renewed}} ->
                     New = maps:get(Digest, retained_rows(Renewed)),
-                    update_dtx_submission(
+                    {update_dtx_submission(
                       Digest,
                       New#dtx_submission{waiters = Old#dtx_submission.waiters,
                                          trace_ctx = Old#dtx_submission.trace_ctx,
                                          observation_started_at =
-                                           ObservationStartedAt}, S1);
+                                           ObservationStartedAt}, S1), none};
                 {error, Reason} ->
                     logger:error(
                       "quod[~s]: unable to re-envelope retained DTX control: ~p",
@@ -10514,7 +10566,7 @@ finish_retained_dtx(Digest, Result, Reply,
             finish_detached_retained_dtx(
               Row, Result, Reply, S#s{retained_dtx = Registry1});
         error ->
-            S
+            {S, none}
     end.
 
 finish_detached_retained_dtx(
@@ -10528,26 +10580,26 @@ finish_detached_retained_dtx(
     %% The signing-journal reconciliation below preserves the exposed sequence
     %% floor while removing the exact pending body and reuses the existing
     %% outcome-projection/resolution path.
-    S = retire_uncommitted_begin(Result, Control, S0),
+    {S, Transition} = retire_uncommitted_begin(Result, Control, S0),
     observe_simplex_owner_terminal(
       S, dtx_control, quod_dtx:control_kind(Control), Result, StartedAt),
-    reply_waiters(retained_waiter_tags(Row), Reply, S).
+    {reply_waiters(retained_waiter_tags(Row), Reply, S), Transition}.
 
 retire_uncommitted_begin(completed, _Control, S) ->
     %% The commit path removes the pending row only after installing the
     %% certified Begin projection, preserving apply-before-result ordering.
-    S;
+    {S, none};
 retire_uncommitted_begin(_Result, Control, S) ->
     case quod_dtx:control_kind(Control) of
         'begin' -> retire_uncommitted_begin_state(
                      quod_dtx:group_id(Control), S);
-        _OtherPhase -> S
+        _OtherPhase -> {S, none}
     end.
 
 -ifdef(TEST).
 retire_uncommitted_begin_state(
   GroupId, S = #s{signing_journal = memory, dtx_pending = Pending}) ->
-    S#s{dtx_pending = maps:remove(GroupId, Pending)};
+    {S#s{dtx_pending = maps:remove(GroupId, Pending)}, none};
 retire_uncommitted_begin_state(GroupId, S) ->
     retire_durable_uncommitted_begin(GroupId, S).
 -else.
@@ -10566,22 +10618,23 @@ retire_durable_uncommitted_begin(
             %% A surrounding journal reconciliation may already own this
             %% retirement. Keep the in-memory projection in step without
             %% emitting its public transition twice.
-            S1;
+            {S1, none};
         true ->
             {ok, Journal1} = reconcile_signing_journal(
                                Slot, state_projection(S1), Journal0),
             After = pending_begins_snapshot(Journal1),
             Transition = pending_begins_reconciliation(Before, After, S1),
             ok = project_pending_begins(Ns, Journal1),
-            finish_pending_begins_reconciliation(
-              Transition, S1#s{signing_journal = Journal1})
+            {S1#s{signing_journal = Journal1}, Transition}
     end.
 
 abandon_retained_dtx(Reason,
                      S = #s{retained_dtx = Registry}) ->
     lists:foldl(
-      fun(Digest, Acc) -> retire_dtx_submission(Digest, Reason, Acc) end,
-      S, maps:keys(retained_rows(Registry))).
+      fun(Digest, {Acc, Pending}) ->
+              {Next, Cleared} = retire_dtx_submission(Digest, Reason, Acc),
+              {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
+      end, {S, none}, maps:keys(retained_rows(Registry))).
 
 prune_block_requests(Committed, Requests) ->
     maps:filter(fun({Slot, _BH}, _Retry) -> Slot > Committed end, Requests).
@@ -11708,8 +11761,9 @@ retire_invalid_dtx_submission(
                               Reply = invalid_dtx_submission_reply(
                                         Kind, Digest, Reasons,
                                         Projection, Acc),
-                              finish_retained_dtx(
-                                Digest, rejected, Reply, Acc);
+                              finish_pending_begins_reconciliation(
+                                finish_retained_dtx(
+                                  Digest, rejected, Reply, Acc));
                           false ->
                               Acc
                       end
@@ -12018,7 +12072,8 @@ keep_progress(S0, S1, Actions, TimerMode) ->
                                SCoordinated) end),
     SClassified = timed_step(
                     SOperations, dtx_reclassify,
-                    fun() -> refresh_retained_readiness(SOperations) end),
+                    fun() -> finish_pending_begins_reconciliation(
+                               refresh_retained_readiness(SOperations)) end),
     SDtx = timed_step(SClassified, dtx_drive,
                       fun() -> drive_retained_dtx(SClassified) end),
     {SAdmitted, ActionsRevAdmission} =

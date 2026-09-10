@@ -4297,9 +4297,11 @@ running_impl(cast, {sync_done, Pid, {ready, H}},
         S0 = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
     S1 = S0#s{sync = ready, sync_arm = reset_pace()},
     S2 = apply_committed(S1),
-    %% keep_progress requests the ready marker after every preceding replay
-    %% cast; Prolog's explicit acknowledgement opens the proof gate.
-    keep_progress(S0, S2, []);
+    %% The owner requests closure on the same FIFO cast channel as every
+    %% preceding replay apply, even when Prolog was already acknowledged.
+    %% Only Prolog supplies the interval ID/floor. Initial proof readiness
+    %% still requires its unchanged pid- and height-bound acknowledgement.
+    keep_progress(S0, S2, [], normal, replay_complete);
 %% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
 %% next worker resumes from the resulting height, but no signing capability survives the failure.
 running_impl(cast, {sync_done, Pid, _Result}, S0 = #s{sync = {pulling, Pid}}) ->
@@ -12133,6 +12135,9 @@ keep_progress(S0, S1, Actions) ->
     keep_progress(S0, S1, Actions, normal).
 
 keep_progress(S0, S1, Actions, TimerMode) ->
+    keep_progress(S0, S1, Actions, TimerMode, ordinary).
+
+keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
     ActionsRev0 = lists:reverse(Actions),
     BeforeIngress = (refresh_ingress_view(S0))#s.ingress,
     SWoken = case S1#s.slot > S0#s.slot of
@@ -12141,7 +12146,7 @@ keep_progress(S0, S1, Actions, TimerMode) ->
              end,
     SReady = timed_step(SWoken, readiness,
                         fun() -> settle_readiness(
-                                   S0, maybe_mark_ready(SWoken)) end),
+                                   S0, maybe_mark_ready(SWoken, ReadyBoundary)) end),
     SRecovered = timed_step(SReady, reconcile,
                             fun() -> reconcile_block_requests(SReady) end),
     SCoordinated = timed_step(
@@ -14537,18 +14542,26 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}, Ori
             end
     end.
 
-%% Ask quod_prolog to mark its rebuilt kb ready only once the committed prefix
-%% is applied and recovery is `ready`.  This remains a request: `prolog_ready`
-%% flips only when that exact current process acknowledges the consumed height.
-%% A later-behind node keeps serving its stale-but-valid reads while it gap-fills.
-maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false, sync = ready}) ->
+%% Ordinary progress retains the initial-readiness handshake. In particular,
+%% a settled observer stays sync=ready across all feed windows and ticks;
+%% those turns must not close an already-ready Prolog's replay per window.
+%% The member sync_done and finish_feed_replay completion seams explicitly
+%% request interval closure independently of the old acknowledgement.
+maybe_mark_ready(S = #s{prolog_ready = true}, ordinary) -> S;
+maybe_mark_ready(S, _Boundary) -> maybe_mark_ready(S).
+
+%% Request readiness/interval closure only after dispatching the committed
+%% prefix and reaching the path's completion boundary. Prolog owns the actual
+%% ID/floor and refuses dependency/projection failures. An already-ready ack
+%% is inert; initial proof readiness still needs the exact current pid/height.
+maybe_mark_ready(S = #s{ns = Ns, sync = ready}) ->
     Prolog = try quod_reg:where({quod_prolog, Ns}) catch _:_ -> undefined end,
     case (Prolog =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
         true  -> _ = try quod_prolog:mark_ready(Ns) catch _:_ -> ok end,
                  S;
         false -> S
     end;
-maybe_mark_ready(S) -> S.   %% acknowledged already, or recovery has not reached `ready` yet
+maybe_mark_ready(S) -> S.   %% recovery has not reached `ready` yet
 
 %%%===================================================================
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)

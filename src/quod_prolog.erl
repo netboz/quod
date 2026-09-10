@@ -6912,9 +6912,11 @@ oldest_snapshot(Current, #s{workers = Workers,
 %% `Before` is the pre-apply height: the height a replay run opened from (`replay_started`), or the
 %% height replay reached before the resuming live block (`replay_ready`). A replay run (boot rebuild or a
 %% runtime gap-fill) opens on the first advancing `replay` apply and closes on its ready edge — the first
-%% advancing `live` apply, or `mark_ready` at boot. The correlating `Id` lets a consumer ignore a stale
-%% boundary from a superseded run. Simplex explicitly casts `mark_ready` after every completed
-%% recovery, so a quiet head closes the interval without waiting for another live block.
+%% advancing `live` apply, or `mark_ready` at boot/recovery completion. The correlating `Id` lets a
+%% consumer ignore a stale boundary from a superseded run. Simplex's owner casts `mark_ready` at
+%% member/feed replay completion even if proof readiness was already acknowledged, never once per
+%% feed window. It uses the same FIFO channel as apply_entry; this owner chooses the actual ID/floor
+%% and keeps the dependency/failure guards. A quiet head needs no later live block to close replay.
 note_origin(_Origin, false, _Before, S) -> S;   %% apply did not advance ⇒ no lifecycle change
 note_origin(replay, true, Before, S = #s{runtime_mode = live, ns = Ns}) ->
     Id = make_ref(),

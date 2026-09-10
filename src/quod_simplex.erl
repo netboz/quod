@@ -267,6 +267,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_seed_dtx_submission/3,
          test_seed_dtx_submission_at/4,
          test_eligible_dtx_wave/1,
+         test_propose_dtx_wave/4,
          test_dtx_drive_scheduled/1,
          test_resolve_committed_dtx/3,
          test_retain_dtx_record/3,
@@ -1073,6 +1074,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     from = none :: none | gen_statem:from(),
     record :: quod_dtx:control_record(),
     group_ref :: term(),
+    trace_ctx = #{} :: quod_trace:context(),
     deadline_ms :: integer(),
     enqueued_at :: integer()
 }).
@@ -1098,6 +1100,9 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     digest :: <<_:256>>,
     inserted_at :: integer(),
     observation_started_at :: integer(),
+    %% Observation follows this existing volatile control row, never its
+    %% signed envelope or journal. Recovered controls have no caller parent.
+    trace_ctx = #{} :: quod_trace:context(),
     validation_sidecar = [] :: [quod_dtx_endpoint:validation_item()],
     placement :: ready | blocked,
     %% Volatile placement on the existing consensus link.  The retained row
@@ -1164,6 +1169,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     group_id :: <<_:256>>,
     begin_ref = none :: none | quod_dtx:certified_ref(),
     group_ref = none :: none | term(),
+    trace_ctx = #{} :: quod_trace:context(),
     pid = none :: none | pid(),
     monitor = none :: none | reference()
 }).
@@ -1805,6 +1811,8 @@ test_dtx_waiter_set(Waiters) ->
 test_eligible_dtx_wave(S) ->
     [{Digest, Record}
      || {Digest, #dtx_submission{record = Record}} <- eligible_dtx_wave(S)].
+test_propose_dtx_wave(Slot, Envelopes, Hints, S) ->
+    propose_dtx_wave(Slot, Envelopes, Hints, S).
 test_dtx_drive_scheduled(#s{dtx_drive_scheduled = Scheduled}) -> Scheduled.
 test_resolve_committed_dtx(Entry, Payload, S) ->
     resolve_committed_dtx(Entry, Payload, S).
@@ -2505,7 +2513,7 @@ register_dtx_begin(Ns, EnginePid, IntentId, Begin, GroupRef, DeadlineMs)
             {ok, gen_statem:send_request(
                    SimplexPid,
                    {register_dtx_begin, EnginePid, IntentId,
-                    Begin, GroupRef, DeadlineMs})}
+                    Begin, GroupRef, DeadlineMs, quod_trace:context()})}
     end;
 register_dtx_begin(_Ns, _EnginePid, _IntentId, _Begin, _GroupRef,
                    _DeadlineMs) ->
@@ -3838,9 +3846,12 @@ running_impl({call, From}, get_dtx_binding, S) ->
     {keep_state, S, [{reply, From, Reply}]};
 running_impl(
   {call, From},
-  {register_dtx_begin, EnginePid, IntentId, Begin, GroupRef, DeadlineMs}, S0) ->
-    case enqueue_dtx_intent(
-           From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs, S0) of
+  {register_dtx_begin, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
+   TraceCtx}, S0) ->
+    case quod_trace:with_context(TraceCtx, fun() ->
+             enqueue_dtx_intent(
+               From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs, S0)
+         end) of
         {ok, S1} ->
             keep_progress(S0, S1, []);
         {error, Reason} ->
@@ -4408,6 +4419,7 @@ enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
                     Intent = #dtx_intent{
                                 id = IntentId, from = From, record = Begin,
                                 group_ref = GroupRef,
+                                trace_ctx = quod_trace:context(),
                                 deadline_ms = DeadlineMs,
                                 enqueued_at = quod_time:mono_ms()},
                     Waiting = queue:in(Intent, Admission#dtx_admission.waiting),
@@ -4588,13 +4600,16 @@ activate_dtx_intent(
   S0 = #s{dtx_admission =
             #dtx_admission{engine = EnginePid, dormant = Dormant0} = Admission}) ->
     case take_dormant_dtx_intent(IntentId, Dormant0) of
-        {ok, #dtx_intent{record = Begin, group_ref = GroupRef}, Dormant} ->
+        {ok, #dtx_intent{record = Begin, group_ref = GroupRef,
+                          trace_ctx = TraceCtx}, Dormant} ->
             S = compact_dtx_admission(
                   S0#s{dtx_admission =
                            Admission#dtx_admission{dormant = Dormant}}),
             case begin_matches_binding(Begin, GroupRef, S) of
                 true ->
-                    case retain_dtx_record(Begin, none, [], S) of
+                    case quod_trace:with_context(TraceCtx, fun() ->
+                             retain_dtx_record(Begin, none, [], S)
+                         end) of
                         {ok, S1} -> S1;
                         {error, Reason} ->
                             logger:error(
@@ -5160,7 +5175,8 @@ reconcile_dtx_coordinator(
   GroupId, Desired, S = #s{dtx_coordinators = Coordinators}) ->
     case maps:get(GroupId, Coordinators, none) of
         none ->
-            start_dtx_coordinator(Desired, S);
+            start_dtx_coordinator(
+              Desired, desired_dtx_trace_context(Desired, S), S);
         Owner ->
             reconcile_dtx_coordinator_owner(Desired, Owner, S)
     end.
@@ -5172,6 +5188,7 @@ reconcile_dtx_coordinator_owner(Desired, Owner, S) ->
         replace ->
             start_dtx_coordinator(
               Desired,
+              Owner#dtx_coordinator_owner.trace_ctx,
               stop_dtx_coordinator(
                 Owner#dtx_coordinator_owner.group_id, S))
     end.
@@ -5195,20 +5212,38 @@ dtx_coordinator_matches(
 dtx_coordinator_matches(_Desired, _Owner, _S) ->
     replace.
 
+%% The live admission's context follows the existing retained Begin. A
+%% history-only restart has no such caller; never borrow the ambient owner
+%% turn (which may belong to an unrelated request).
+desired_dtx_trace_context({record, _GroupId, Begin, _GroupRef}, S) ->
+    Context = retained_dtx_trace_context(Begin, S),
+    case quod_trace:shared_context([otel_tracer:current_span_ctx(Context)]) of
+        none -> otel_ctx:new();
+        {Parent, []} -> Parent
+    end;
+desired_dtx_trace_context(_Recovered, _S) ->
+    otel_ctx:new().
+
+retained_dtx_trace_context(Record, #s{retained_dtx = Registry}) ->
+    case maps:get(quod_dtx:record_digest(Record), retained_rows(Registry), none) of
+        #dtx_submission{trace_ctx = Context} -> Context;
+        none -> otel_ctx:new()
+    end.
+
 start_dtx_coordinator(
   {record, GroupId, Begin, GroupRef},
-  S) ->
+  TraceCtx, S) ->
     start_dtx_coordinator_worker(
-      GroupId, Begin, GroupRef, none, none, S);
+      GroupId, Begin, GroupRef, none, none, TraceCtx, S);
 start_dtx_coordinator(
   {recovered, GroupId, Begin, GroupRef, BeginRef, {ok, Evidence}},
-  S) ->
+  TraceCtx, S) ->
     start_dtx_coordinator_worker(
       GroupId, Begin, GroupRef, BeginRef, {BeginRef, Evidence},
-      S);
+      TraceCtx, S);
 start_dtx_coordinator(
   {reference, GroupId, BeginRef},
-  S) ->
+  TraceCtx, S) ->
     %% Each worker receives its own immutable snapshot. Current-era controls
     %% are independent reads; references from older committee eras fall back
     %% inside the shared certified-history owner, which already serializes
@@ -5218,26 +5253,31 @@ start_dtx_coordinator(
     {Pid, Monitor} =
         spawn_monitor(
           fun() ->
-              Result = dtx_local_evidence_at(
-                         LocalSource, BeginRef, 'begin'),
+              Result = quod_trace:with_context(TraceCtx, fun() ->
+                  dtx_local_evidence_at(LocalSource, BeginRef, 'begin')
+              end),
               Owner ! {dtx_coordinator_bootstrap, self(),
                        GroupId, BeginRef, Result}
           end),
     put_dtx_coordinator(
       #dtx_coordinator_owner{
         status = recovering, group_id = GroupId,
+        trace_ctx = TraceCtx,
         begin_ref = BeginRef, pid = Pid, monitor = Monitor}, S).
 
 start_dtx_coordinator_worker(
-  GroupId, Begin, GroupRef, BeginRef, BeginEvidence,
+  GroupId, Begin, GroupRef, BeginRef, BeginEvidence, TraceCtx,
   S = #s{ns = Ns}) ->
-    case quod_dtx_coordinator:start_monitor(
-           self(), Ns, Begin, BeginEvidence, #{}) of
+    case quod_trace:with_context(TraceCtx, fun() ->
+             quod_dtx_coordinator:start_monitor(
+               self(), Ns, Begin, BeginEvidence, #{})
+         end) of
         {ok, Pid, Monitor} ->
             S1 = put_dtx_coordinator(
                    #dtx_coordinator_owner{
                      status = running, group_id = GroupId,
                      begin_ref = BeginRef, group_ref = GroupRef,
+                     trace_ctx = TraceCtx,
                      pid = Pid, monitor = Monitor}, S),
             %% Establish the owner-to-child progress stream after recording
             %% its exact pid. The child's initial drive may already have
@@ -5255,7 +5295,7 @@ finish_dtx_coordinator_bootstrap(
     case dtx_coordinator_owner(GroupId, S) of
         #dtx_coordinator_owner{
           status = recovering, pid = Pid, monitor = Monitor,
-          begin_ref = BeginRef} ->
+          begin_ref = BeginRef, trace_ctx = TraceCtx} ->
             _ = erlang:demonitor(Monitor, [flush]),
             S0 = remove_dtx_coordinator(GroupId, S),
             Desired = maps:get(
@@ -5266,7 +5306,7 @@ finish_dtx_coordinator_bootstrap(
                     reconcile_dtx_coordinator(
                       start_dtx_coordinator(
                         {recovered, GroupId, Begin, GroupRef,
-                         BeginRef, Result}, S0));
+                         BeginRef, Result}, TraceCtx, S0));
                 {{reference, GroupId, BeginRef}, {error, Reason}} ->
                     error({dtx_coordinator_begin_recovery_failed,
                            S#s.ns, GroupId, Reason});
@@ -7206,6 +7246,7 @@ install_dtx_submission(Record, Control, Envelope, Digest, Waiter,
           group_id = quod_dtx:group_id(Record), digest = Digest,
           inserted_at = InsertedAt,
           observation_started_at = InsertedAt,
+          trace_ctx = quod_trace:context(),
           validation_sidecar = ValidationSidecar,
           placement = retained_placement(
                         retention_disposition(Record, S#s.dtx_projection)),
@@ -9262,6 +9303,13 @@ dtx_wave_compatible(_Phase, _Controls, _S) ->
 dtx_wave_payload(Envelopes) ->
     {batch, [{dtx, Envelope} || Envelope <- Envelopes]}.
 
+%% Mixed local DTX waves use the ordinary local-proposal parent/link policy.
+%% A consensus-relayed control has no request carrier on that channel; its
+%% missing context remains missing rather than being invented at this owner.
+dtx_control_trace_contexts(Controls, S) ->
+    [retained_dtx_trace_context(quod_dtx:control_body(Control), S)
+     || Control <- Controls].
+
 drive_dtx_at_slot(
   Slot, Wave, S) ->
     Envelopes = [Envelope || {_Digest,
@@ -9320,7 +9368,9 @@ propose_dtx_wave(Slot, Envelopes, ValidationSidecar0, S = #s{approved = Parent})
                            dtx_controls_validation_sidecar(
                              Controls, ValidationSidecar0)),
             BH = block_hash(Block),
-            Local = #local_proposal{hash = BH, validation_sidecar = ValidationSidecar},
+            Local = #local_proposal{
+                      hash = BH, validation_sidecar = ValidationSidecar,
+                      trace_ctxs = dtx_control_trace_contexts(Controls, S)},
             S1 = S#s{
                    local_proposals =
                      (S#s.local_proposals)#{Slot => Local},
@@ -10440,6 +10490,7 @@ refresh_dtx_submission(
                     update_dtx_submission(
                       Digest,
                       New#dtx_submission{waiters = Old#dtx_submission.waiters,
+                                         trace_ctx = Old#dtx_submission.trace_ctx,
                                          observation_started_at =
                                            ObservationStartedAt}, S1);
                 {error, Reason} ->

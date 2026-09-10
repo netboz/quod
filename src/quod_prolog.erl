@@ -95,6 +95,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_resolve_validation/4,
          test_signed_origin_policy_goal/2,
          test_dtx_handoff_state/3,
+         test_dtx_reservation_state/4,
          test_handle_response_info/2,
          test_cancel_dtx_handoff/2,
          test_activate_dtx_handoff/4,
@@ -1260,9 +1261,11 @@ handle_call({validate_read_plan, Plan}, _From,
 %% The worker has already sealed every participant and built one immutable
 %% semantic Begin. Registration is asynchronous to Simplex and correlated by
 %% this exact proof worker, so other proofs and the engine mailbox keep moving.
-handle_call({reserve_dtx_begin, Ref, Begin, GroupRef}, From = {Pid, _Tag},
+handle_call({reserve_dtx_begin, Ref, Begin, GroupRef, TraceCtx}, From = {Pid, _Tag},
             S) ->
-    register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S);
+    quod_trace:with_context(TraceCtx, fun() ->
+        register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S)
+    end);
 handle_call({activate_dtx_begin, Ref, GroupRef}, From = {Pid, _Tag}, S) ->
     activate_dtx_handoff(Ref, Pid, From, GroupRef, S);
 handle_call({cancel_dtx_begin, Ref, GroupRef}, _From = {Pid, _Tag}, S) ->
@@ -5219,7 +5222,8 @@ admit_group(Engine, WorkerRef, Begin, GroupRef, Plans, Bindings, Ns) ->
     Result =
         case gen_server:call(
                Engine,
-               {reserve_dtx_begin, WorkerRef, Begin, GroupRef}, infinity) of
+               {reserve_dtx_begin, WorkerRef, Begin, GroupRef,
+                quod_trace:context()}, infinity) of
             ok ->
                 finish_reserved_group(
                   Engine, WorkerRef, GroupRef, Plans, Bindings);
@@ -6179,6 +6183,15 @@ terminal_result(_Stored) ->
 
 -ifdef(TEST).
 test_terminal_result(Stored) -> terminal_result(Stored).
+
+test_dtx_reservation_state(Ns, Anchor, Ref, WorkerPid) ->
+    {ok, Outcomes} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    #s{ns = Ns, outcomes = Outcomes,
+       workers = #{Ref => #proof_worker{
+         pid = WorkerPid, kind = prove, from = {WorkerPid, make_ref()},
+         timer = make_ref(),
+         deadline_ms = quod_time:mono_ms() + 5000}},
+       requests = gen_statem:reqids_new()}.
 
 test_dtx_handoff_state(Ns, WorkerSpecs, RequestSpecs) ->
     Workers = maps:from_list(

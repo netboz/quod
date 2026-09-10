@@ -576,10 +576,11 @@ observe_signing_journal_vote_sync(Ns, DurationNative)
             ok;
         _Pid ->
             try
-                Seconds = erlang:convert_time_unit(DurationNative, native, nanosecond) / 1000000000,
+                %% The seconds-suffixed histogram converts native durations on
+                %% export, including its finite bucket bounds.
                 _ = prometheus_histogram:observe(
                       quod_consensus_signing_journal_vote_sync_seconds,
-                      [label(Ns)], Seconds),
+                      [label(Ns)], DurationNative),
                 ok
             catch
                 _:_ -> ok

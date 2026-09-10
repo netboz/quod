@@ -135,7 +135,10 @@ start_monitor(Owner, OwnerNs, Begin, BeginEvidence, Options)
        byte_size(OwnerNs) > 0, is_map(Options) ->
     case initial_state(Owner, OwnerNs, Begin, BeginEvidence, Options) of
         {ok, Initial} ->
-            {Pid, Monitor} = spawn_monitor(fun() -> init(Initial) end),
+            TraceCtx = quod_trace:context(),
+            {Pid, Monitor} = spawn_monitor(fun() ->
+                quod_trace:with_context(TraceCtx, fun() -> init(Initial) end)
+            end),
             {ok, Pid, Monitor};
         {error, _} = Error ->
             Error
@@ -2583,13 +2586,16 @@ submit_endpoint_requests_with(
 %% Every asynchronous child is monitored for its result and independently
 %% bound to its immediate owner. A direct shutdown therefore tears down the
 %% whole ownership tree even when the owner is killed outside its receive
-%% loop; normal completion removes the one-shot watcher automatically.
+%% loop; normal completion removes the one-shot watcher automatically. The
+%% transient context also crosses this boundary: otherwise submit fan-out
+%% silently loses the parent before reaching the existing endpoint carrier.
 spawn_owned_monitor(Owner, Fun)
   when is_pid(Owner), is_function(Fun, 0) ->
+    TraceCtx = quod_trace:context(),
     spawn_monitor(
       fun() ->
           _ = quod_process:kill_when_owner_dies(Owner, self()),
-          Fun()
+          quod_trace:with_context(TraceCtx, Fun)
       end).
 
 -ifdef(TEST).

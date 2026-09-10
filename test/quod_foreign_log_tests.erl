@@ -10,7 +10,8 @@
 -ifdef(TEST).
 %% The lifecycle/trace suites exercise the same signed fixture and registered
 %% borrowed-source seams; do not build a second verifier or genesis fixture.
--export([foreign_fixture/1, membership_after_finalize_fixture/1,
+-export([foreign_fixture/1, prepared_then_committed_fixture/1,
+         membership_after_finalize_fixture/1,
          chain_fetch/2, peer_chain_fetch/3, local_fixture_view/2,
          start_local_borrow_source/2, stop_local_borrow_source/2,
          start_owner/2, stop_owner/1, unique_ns/0, temp_dir/1,
@@ -3216,8 +3217,10 @@ wait_follow_attempt_idle(_Pid, _Identity, _Left) -> error(follow_attempt_did_not
 follow_wakes_coalesce_while_certified_work_is_inflight_test() ->
     Dir = temp_dir("follow-wake-coalesce"),
     Parent = self(),
+    FetchCount = atomics:new(1, []),
     BlockingFetch =
         fun(_, _, _, _, _) ->
+            _ = atomics:add_get(FetchCount, 1, 1),
             Parent ! {follow_fetch_started, self()},
             receive
                 release_follow_fetch -> {error, unavailable}
@@ -3247,10 +3250,21 @@ follow_wakes_coalesce_while_certified_work_is_inflight_test() ->
         Worker1 ! release_follow_fetch,
         Unreachable1 = receive_follow(FollowRef, Identity),
         ok = quod_foreign_log:ack(FollowRef, element(1, Unreachable1)),
+        %% Failed discovery has no certified projection. Its bootstrap hint
+        %% therefore remains available to the one coalesced next attempt;
+        %% that attempt must really fetch, not pass via an accidental no-route
+        %% early return after an empty projection erased the hint.
+        Worker2 = receive
+                      {follow_fetch_started, W2} -> W2
+                  after 2000 -> error(second_follow_fetch_not_started)
+                  end,
+        ?assertNotEqual(Worker1, Worker2),
+        Worker2 ! release_follow_fetch,
         Unreachable2 = receive_follow(FollowRef, Identity),
         ok = quod_foreign_log:ack(FollowRef, element(1, Unreachable2)),
         %% Three signals created one dirty edge and therefore one second job.
         ?assertEqual(2, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertEqual(2, atomics:get(FetchCount, 1)),
         ok = quod_foreign_log:unfollow(FollowRef),
         ok = wait_follow_count(0, 2000)
     after

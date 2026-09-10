@@ -661,6 +661,23 @@ event is worth resolving.
 
 ### 21.1 Namespaces, ownership, and cross-ontology boundaries
 
+**Direction supersession — Yan, 2026-09-10.** The historical “rare, low-rate”
+recommendation quoted below is superseded. With ontology-per-agent ownership,
+multi-owner durable consequences are expected to be common. The response is
+to make semantically independent writes use the planned cheap lanes, not to
+weaken conserved transfers or force unrelated owners into one ontology.
+Default multi-writer atomicity remains. The number of actors contacted is not
+the number of sealed writers; read-only dependencies keep their existing
+certificate semantics. Current L3 cost must be measured on the current
+substrate, not inferred from the withdrawn singleton-group-queue diagnosis.
+See `performance-roadmap.md` §1.0 and the 0.7.159 stopped warm pilot.
+
+This does not put animation/continuous motion into consensus: simulation
+frames remain latest-wins transport data; semantic consequences commit. A
+single ontology's simultaneous multi-part update remains one ordinary diff.
+The following quote is retained as the original review, **not** as current
+authority for its rarity prescription.
+
 > **Correction — the draft never mentions namespaces, and for Quod that is the
 > largest omission.** Consensus, committees, ACLs, throughput, and OCC conflicts
 > are all per namespace. The design is not implementable until these are decided:
@@ -1187,8 +1204,9 @@ Build a coherent architecture with a small number of representative cases.
 
 > **Added non-goals.** Do not build a validator-side re-simulation of physics; do
 > not attempt trustless combat in the first version (§2); do not put continuous
-> physiological or charge values in D (§36); do not make the ordinary combat path
-> cross an ontology boundary (§21.1).
+> physiological or charge values in D (§36). The former prohibition on ordinary
+> cross-ontology consequences is superseded by the dated §21.1 decision;
+> continuous simulation and committed semantic events remain distinct.
 
 ---
 

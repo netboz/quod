@@ -74,8 +74,29 @@ all 40 namespace states retained and locates 30.062 seconds in certified cache
 replay plus 6.174 seconds in ledger opening across two sequential current-view
 workers. The one cold read exceeded the unchanged 35-second HTTP budget;
 its failure and `BENCH_STOP` remain intact. No write was submitted. A small
-stage-classification correction is independently reviewed and approved; a subsequent
-explicitly warm-labeled multi-writer baseline needs a fresh measurement go.
+stage-classification correction was independently reviewed and committed as
+`4a97474`, separately bumped (`af79612`) and deployed as 0.7.159. Yan gave the
+fresh go for a separate warm campaign. Its
+[conserved-transfer pilot](multi-writer-warm-hardware-results.md) passed c1
+20/20 (p50 539.606 ms); c4 stopped after five admissions with one committed
+client reply and four pending replies. Three of those later resolved committed
+without resubmission; request 8 remained unresolved at the final read-only
+audit (2026-09-10, 00:12:07 UTC). The
+independent-facts and n100 runs did not start. Archived counters show repeated
+expensive replay after the pre-c4 samples despite all-node warm preparation;
+the preceding job is not correlated to the 47.056-second foreign-owner queue.
+Group trace context is lost before coordinator creation, so the >=95%
+client-level attribution gate is not met. This failed run and its stop marker
+remain preserved. A four-case isolated probe now proves that a retryable
+exact-route failure discards resident state and replays the same disk prefix
+on the healthy fallback; it does not identify the hardware predecessor. The
+[failure-residency/observation contract](foreign-history-failure-residency-contract.md)
+was architecture-reviewed on 2026-09-10. Its single owner cut is implemented
+with the full local gates green; the complete tree must return for
+implementation review before commit or deployment. The change preserves a
+healthy certified cursor across failed routes, separates prefix advance from
+wake permission, and makes the existing group/queue work observable. It does
+not yet establish the exclusive c4 cause or any improved hardware number.
 Cold and warm observations must not be averaged. No exact-reference/outlier,
 absolute-latency, checkpoint/compaction or other architecture gate closes here.
 This is not authorization for a
@@ -107,6 +128,40 @@ file owns sequencing only; detailed mechanics remain in their existing plans.
    phase that replaces them.
 7. Report all requests and use means for attribution. Never subtract marginal
    percentiles.
+
+### 1.0 Direction update — common multi-ontology writes (2026-09-10)
+
+Yan's dated decision supersedes the earlier assumption that cross-ontology
+consequences should be rare and low-rate. Ontology-per-agent ownership makes
+multi-owner durable interactions an expected common workload. Contacting two
+actors does not itself imply two writers: lane choice still follows the sealed
+plans and actual read/write/effect sets. Widen cheap lanes where semantics
+permit, while preserving default atomicity and conserved transfers.
+
+The old singleton-group-queue diagnosis is also withdrawn: current L3 already
+holds per-GroupId conflict descriptors and permits non-conflicting groups to
+interleave, with wait-die for intersecting sets. Remaining barriers must be
+measured; no stale “1.8 s” or N-times-1.8-s assertion is a current baseline.
+
+The approved order is owner cut, warm-labeled conserved A→B and source-included
+T=2 fact workloads with real state oracles, then an L2 **slices 6–8 contract
+refresh** against today's canonical-entry API and transaction/result lifecycle.
+The 0.7.159 pilot stopped on uncertainty, so the baseline matrix is incomplete.
+Source-only contract preparation can identify boundaries, but no further
+workload is silently resumed and no L2 implementation is opened by it.
+
+The contract refresh must settle `independent/1` backtracking/scope, source as
+one of the targets, effects custody, exact target-set completion, durable
+reconstruction and the separately gated result-authentication contract. It
+must not treat inclusion evidence as proof of an accompanying rejection reason.
+It has priority as design work rather than waiting behind the historical
+Phase-3 ordering below; implementation/format activation still needs explicit
+review and gate reconciliation. No throughput or flat-target-count number is
+promised. Yan's five write-lanes files remain excluded; stale passages there
+are an amendment map for their owner, not permission to edit them.
+
+Continuous motion remains outside consensus. A multi-part change wholly
+owned by one ontology is one multi-op diff, not this multi-owner problem.
 
 ### 1.1 Time is not a progress signal
 
@@ -799,9 +854,12 @@ drained.
 Gate: atomic four-ontology p50 at most 300 ms, with terminal drain and restart
 recovery proved separately.
 
-Then implement the already-designed L2 `independent/1` slices. Independent
-multi-target writes become ordinary parallel writes plus one receipt; atomic
-multi-writer goals remain the default.
+The historical ordering placed L2 implementation here. The dated §1.0 update
+opens its slices 6–8 contract refresh earlier; implementation sequencing and
+format activation require the refreshed review, not this old ordering or an
+assumption that `independent/1` already exists. The intended independent lane
+is parallel target writes plus one receipt; atomic multi-writer goals remain
+the default.
 
 Gate: independent multi-target p50 at most 120 ms and flat with target count.
 
@@ -953,8 +1011,9 @@ before another optimization is built.
 - lost `verify_local` committee-era regression.
 
 Fold an item into another commit only when it belongs to the same owning
-abstraction and remains independently reviewable. L2 stays gated until Phase 1
-and finality activation are green.
+abstraction and remains independently reviewable. L2 implementation remains
+gated; the earlier contract refresh and unresolved activation sequencing are
+explicit in §1.0. No design-only update closes Phase 1 or finality gates.
 
 ## 10. Documentation ownership and amendment map
 

@@ -309,6 +309,49 @@ histogram_sum_or_zero(Name, Labels) ->
         {_Buckets, Sum} -> Sum
     end.
 
+signing_journal_vote_sync_uses_native_duration_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
+    Ns = <<"journal:duration:", Suffix/binary>>,
+    FiniteNs = <<"journal:finite:", Suffix/binary>>,
+    ZeroNs = <<"journal:zero:", Suffix/binary>>,
+    AbsentNs = <<"journal:absent:", Suffix/binary>>,
+    Metric = quod_consensus_signing_journal_vote_sync_seconds,
+    OneSecond = erlang:convert_time_unit(1, second, native),
+    HalfSecond = erlang:convert_time_unit(500, millisecond, native),
+    ok = quod_metrics:declare(<<"kp_testnode">>),
+    ok = quod_metrics:observe_signing_journal_vote_sync(AbsentNs, OneSecond),
+    ?assertEqual(undefined, prometheus_histogram:value(Metric, [AbsentNs])),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:observe_signing_journal_vote_sync(Ns, OneSecond),
+        {OneSecondBuckets, OneSecondSum} =
+            prometheus_histogram:value(Metric, [Ns]),
+        ?assertEqual(1.0, OneSecondSum),
+        %% The existing finite bounds end at 0.5 seconds. A single one-second
+        %% sample must overflow; two half-second samples prove the finite
+        %% boundary independently while exporting the same one-second sum.
+        ?assertEqual(1, lists:sum(OneSecondBuckets)),
+        ?assertEqual(1, lists:last(OneSecondBuckets)),
+        ok = quod_metrics:observe_signing_journal_vote_sync(FiniteNs, HalfSecond),
+        ok = quod_metrics:observe_signing_journal_vote_sync(FiniteNs, HalfSecond),
+        {FiniteBuckets, FiniteSum} = prometheus_histogram:value(Metric, [FiniteNs]),
+        ?assertEqual(1.0, FiniteSum),
+        ?assertEqual(2, lists:sum(FiniteBuckets)),
+        ?assertEqual(0, lists:last(FiniteBuckets)),
+        ?assertEqual(2, lists:nth(length(FiniteBuckets) - 1, FiniteBuckets)),
+        ok = quod_metrics:observe_signing_journal_vote_sync(ZeroNs, 0),
+        {ZeroBuckets, ZeroSum} = prometheus_histogram:value(Metric, [ZeroNs]),
+        ?assertEqual(0.0, ZeroSum),
+        ?assertEqual(1, lists:sum(ZeroBuckets)),
+        ?assertEqual(1, hd(ZeroBuckets)),
+        ?assertEqual(0, lists:last(ZeroBuckets))
+    after
+        true = unregister(quod_metrics),
+        Placeholder ! stop
+    end.
+
 directory_rebuild_latency_uses_only_fixed_result_labels_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     ok = quod_metrics:observe_directory_rebuild(ok, 7),

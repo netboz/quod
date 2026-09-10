@@ -181,7 +181,8 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
                        invalid -> {invalid, foreign_reference}
                    end,
         receive
-            {content_foreign_verdict, {Slot, Hash}, Worker, Verdict} ->
+            {content_foreign_verdict, {Slot, Hash}, Worker, Deadline, Verdict} ->
+                ?assert(Deadline > quod_time:mono_ms()),
                 ?assertEqual(Expected, Verdict)
         after 3000 -> error(foreign_verdict_not_delivered)
         end,
@@ -215,6 +216,71 @@ assert_parent_and_block(Span, Parent, Ns, Slot, Hash) ->
     ?assertEqual(Slot, maps:get('quod.consensus.slot', Attributes)),
     ?assertEqual(binary:encode_hex(Hash, lowercase),
                  maps:get('quod.consensus.block_hash', Attributes)).
+
+%% The real worker borrows the already captured local view: calling back into
+%% this registered owner while it waits here would fail the positive control.
+%% Hold an actual successful packet until its original deadline, not a forged
+%% success or a newly granted short test allowance.
+foreign_validation_queued_success_respects_original_deadline_test_() ->
+    [{atom_to_list(When), {timeout, 12, fun() ->
+        with_certified_history(fun(State0, Transaction, Ref) ->
+            {ok, {Ns, Anchor}, _, _} = quod_dtx:certified_ref_binding(Ref),
+            Receipt = #transaction{
+              role = {remote_complete, unused_operation, unused_request,
+                      quod_transaction:stable_ref(Ref)},
+              evidence = {Ref, Transaction}, foreign_reads = []},
+            %% This is a callback-state fixture, not candidate wire admission:
+            %% only the receipt's reference binding is under test. The worker
+            %% still authenticates the actual signed entry in the real store.
+            Block = #block{slot = 3, parent = 2, payload = {batch, [Receipt]},
+                           timestamp = 0, block_bytes = <<"queue-deadline-fixture">>},
+            Hash = quod_simplex:block_hash(Block),
+            Eng0 = quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [], 2),
+            {Eng, _} = quod_simplex:eng_offer({block, Block}, Eng0),
+            State = quod_simplex:test_state_set(eng, Eng, State0),
+            true = quod_reg:reg({quod_prolog, Ns}),
+            StartedAt = quod_time:mono_ms(),
+            Started = quod_simplex:test_start_content_validation([Receipt], 0, 3, Hash, State),
+            {Hash, {content_foreign, Worker, Monitor}, _, _, _} =
+                quod_simplex:test_dtx_round(3, Started),
+            try
+                receive
+                    {content_foreign_verdict, {3, Hash}, Worker, Deadline, valid} ->
+                        ?assert(Deadline >= StartedAt + 6000),
+                        ?assert(Deadline =< quod_time:mono_ms() + 6000),
+                        ?assert(Deadline > quod_time:mono_ms()),
+                        case When of
+                            timely -> ok;
+                            expired -> receive after max(0, Deadline - quod_time:mono_ms()) -> ok end
+                        end,
+                        Done = quod_simplex:on_content_foreign_verdict(
+                          3, Hash, Worker, Deadline, valid, Started),
+                        case When of
+                            timely ->
+                                ?assertMatch({Hash, content, _, _, _},
+                                             quod_simplex:test_dtx_round(3, Done)),
+                                receive
+                                    {'$gen_cast', {content_verdict_req, [Receipt], 0,
+                                                  3, _, {3, Hash}, _}} -> ok
+                                after 1000 -> error(valid_result_not_applied)
+                                end;
+                            expired ->
+                                ?assertMatch({none, none, _, _, _},
+                                             quod_simplex:test_dtx_round(3, Done)),
+                                receive
+                                    {'$gen_cast', {content_verdict_req, _, _, _, _, _, _}} ->
+                                        error(expired_success_published)
+                                after 0 -> ok
+                                end
+                        end
+                after 3000 -> error(real_worker_did_not_return_valid)
+                end
+            after
+                _ = erlang:demonitor(Monitor, [flush]),
+                true = gproc:unreg(quod_reg:name({quod_prolog, Ns}))
+            end
+        end)
+    end}} || When <- [timely, expired]].
 
 assert_called_once(Ref) ->
     receive {called, Ref} -> ok after 0 -> error(work_not_called) end,

@@ -104,6 +104,7 @@ before that projection can be reused in memory.
 -export([start_link/0, start_link/1,
          verify/5, verify_reference/3, verify_local/4,
          verify_reference/4, verify_reference/5,
+         resolve_reference/6, verify_local_deadline/4,
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, refresh/1, ack/2, projection_clauses/3, unfollow/1,
@@ -357,9 +358,10 @@ start_link(Opts) when is_map(Opts) ->
 Verify one exact foreign DTX reference through one explicit source.
 
 This is the low-level exact-source form used for isolated verification and
-adversarial checks. Normal DTX recovery uses `verify_reference/3`, which
-selects and rotates sources inside this owner. Both forms use the same cache,
-history fold, certificate checks, and resource accounting.
+adversarial checks. Normal DTX recovery uses `resolve_reference/6`, which
+prefers a captured local prefix and otherwise selects routed sources inside
+this owner. Routed forms share the cache, history fold, certificate checks,
+and resource accounting.
 """.
 -spec verify(<<_:256>>, term(), quod_dtx:certified_ref(),
              transaction | 'begin' | prepare | decision | finalize | complete,
@@ -420,17 +422,63 @@ correctness path.
 verify_reference(Ref, ExpectedPhase, Contact, EntryHint0, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    Deadline = caller_deadline(TimeoutMs),
+    verify_reference_deadline(
+      Ref, ExpectedPhase, Contact, EntryHint0, caller_deadline(TimeoutMs));
+verify_reference(_Ref, _ExpectedPhase, _Contact, _EntryHint, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+verify_reference_deadline(Ref, ExpectedPhase, Contact, EntryHint0, Deadline) ->
     case valid_request_contact(Contact) of
         true ->
             EntryHint = normalize_entry_hint(EntryHint0),
-            verification_call(
-              {verify_reference, Ref, ExpectedPhase, Contact,
-               EntryHint, TimeoutMs}, Deadline);
+            case caller_remaining(Deadline) of
+                0 -> {error, retry};
+                Remaining ->
+                    verification_call(
+                      {verify_reference, Ref, ExpectedPhase, Contact,
+                       EntryHint, Remaining}, Deadline)
+            end;
         false ->
             {error, bad_foreign_reference}
+    end.
+
+-doc """
+Resolve exact evidence independently of the endpoint which supplied its reference.
+
+Prefer one captured committed local prefix when it contains the requested slot;
+otherwise make one routed verification request. A sufficient capture stays
+pinned even if its owner disappears or its evidence fails verification. Local
+and routed primitives share the original absolute monotonic deadline. Neither
+contacts nor entry hints confer authority, and the expected target is checked
+before any owner capture or routed admission.
+""".
+-spec resolve_reference({binary(), <<_:256>>}, quod_dtx:certified_ref(),
+                        entry | transaction | 'begin' | prepare | decision |
+                        finalize | complete,
+                        none | {<<_:256>>, term()},
+                        none | quod_ledger:entry_artifact(), integer()) ->
+          {ok, map()} | {error, term()}.
+resolve_reference(Target, Ref, Phase, Contact, EntryHint, Deadline)
+  when is_integer(Deadline) ->
+    case {validate_reference_request(Ref, Phase), valid_request_contact(Contact)} of
+        {{ok, Target}, true} ->
+            case caller_remaining(Deadline) of
+                0 -> {error, retry};
+                Remaining when Remaining =< ?MAX_TIMER_MS - 1000 ->
+                    {ok, Target, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
+                    case quod_simplex:history_view(Target, committed, Deadline) of
+                        {ok, #{identity := Target, slot := Height} = View}
+                          when Height >= Slot ->
+                            verify_local_deadline(View, Ref, Phase, Deadline);
+                        _UnavailableLocalCopy ->
+                            verify_reference_deadline(
+                              Ref, Phase, Contact, EntryHint, Deadline)
+                    end;
+                _ -> {error, bad_foreign_reference}
+            end;
+        _ -> {error, bad_foreign_reference}
     end;
-verify_reference(_Ref, _ExpectedPhase, _Contact, _EntryHint, _TimeoutMs) ->
+resolve_reference(_Target, _Ref, _Phase, _Contact, _EntryHint, _Deadline) ->
     {error, bad_foreign_reference}.
 
 -doc """
@@ -505,15 +553,29 @@ authority.
                    pos_integer() | infinity) ->
           {ok, map()} | {error, term()}.
 verify_local(
+  View, Ref, ExpectedPhase, TimeoutMs)
+  when ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
+         TimeoutMs =< ?MAX_TIMER_MS - 1000) orelse TimeoutMs =:= infinity) ->
+    verify_local_deadline(View, Ref, ExpectedPhase, caller_deadline(TimeoutMs));
+verify_local(_View, _Ref, _ExpectedPhase, _TimeoutMs) ->
+    {error, bad_foreign_reference}.
+
+-doc "Verify an already captured local view under the original absolute deadline.".
+-spec verify_local_deadline(quod_simplex:history_view(),
+                            quod_dtx:certified_ref(),
+                            entry | transaction | 'begin' | prepare | decision |
+                            finalize | complete, integer() | infinity) ->
+          {ok, map()} | {error, term()}.
+verify_local_deadline(
   #{owner := Owner, identity := Identity, slot := Height, applied := Applied,
     snapshot := Snapshot, projection := Projection} = View,
-  Ref, ExpectedPhase, TimeoutMs)
+  Ref, ExpectedPhase, Deadline)
   when is_pid(Owner), is_integer(Height), Height >= 0,
        is_integer(Applied), Applied >= 0, Applied =< Height,
-       ((is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
-         TimeoutMs =< ?MAX_TIMER_MS - 1000) orelse TimeoutMs =:= infinity) ->
-    Deadline = caller_deadline(TimeoutMs),
-    Result = case validate_local_request(View, Ref, ExpectedPhase, TimeoutMs) of
+       (is_integer(Deadline) orelse Deadline =:= infinity) ->
+    Remaining = caller_remaining(Deadline),
+    Result = case Remaining =/= 0 andalso
+                  validate_local_request(View, Ref, ExpectedPhase, Remaining) of
         {ok, Identity} ->
             with_local_view_owner(
               View,
@@ -522,14 +584,15 @@ verify_local(
                          Snapshot, Ref, ExpectedPhase, Projection) of
                       {error, historical_committee} ->
                           verify_historical_local_reference(
-                            View, Ref, ExpectedPhase, TimeoutMs, Deadline);
+                            View, Ref, ExpectedPhase, Remaining, Deadline);
                       Result -> Result
                   end
               end);
-        {error, _} = Error -> Error
+        {error, _} = Error -> Error;
+        false -> {error, retry}
     end,
     caller_result(Deadline, Result);
-verify_local(_View, _Ref, _ExpectedPhase, _TimeoutMs) ->
+verify_local_deadline(_View, _Ref, _ExpectedPhase, _Deadline) ->
     {error, bad_foreign_reference}.
 
 verify_historical_local_reference(View, Ref, ExpectedPhase, TimeoutMs, Deadline) ->
@@ -537,6 +600,9 @@ verify_historical_local_reference(View, Ref, ExpectedPhase, TimeoutMs, Deadline)
 
 caller_deadline(infinity) -> infinity;
 caller_deadline(TimeoutMs) -> quod_time:mono_ms() + TimeoutMs.
+
+caller_remaining(infinity) -> infinity;
+caller_remaining(Deadline) -> max(0, Deadline - quod_time:mono_ms()).
 
 caller_live(infinity) -> true;
 caller_live(Deadline) -> Deadline > quod_time:mono_ms().
@@ -2165,7 +2231,13 @@ terminate(_Reason, #s{page_bindings = Bindings,
 %%%===================================================================
 
 validate_reference_request(Ref, Phase, TimeoutMs) ->
-    case validate_reference(Ref, TimeoutMs) of
+    case valid_local_timeout(TimeoutMs) andalso TimeoutMs =/= infinity of
+        true -> validate_reference_request(Ref, Phase);
+        false -> {error, bad_foreign_reference}
+    end.
+
+validate_reference_request(Ref, Phase) ->
+    case validate_reference(Ref) of
         {ok, Identity} ->
             case valid_phase(Phase) of
                 true -> {ok, Identity};
@@ -2260,16 +2332,14 @@ valid_identity({Ns, <<_:256>>})
 valid_identity(_) ->
     false.
 
-validate_reference(Ref, TimeoutMs) ->
+validate_reference(Ref) ->
     case Ref of
         {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
          <<_:256>>, <<_:256>>, Proof}
           when is_binary(Ns), byte_size(Ns) > 0,
                byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
                is_integer(Slot), Slot > 0,
-               is_binary(Proof), byte_size(Proof) > 0,
-               is_integer(TimeoutMs), TimeoutMs > 0,
-               TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
+               is_binary(Proof), byte_size(Proof) > 0 ->
             case quod_dtx:validate_certified_ref(Ref) of
                 true -> {ok, {Ns, Anchor}};
                 false -> {error, bad_foreign_reference}

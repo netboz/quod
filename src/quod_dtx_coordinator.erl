@@ -40,6 +40,8 @@ does not cancel or resubmit the uncertain operation.
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
          test_endpoint_request_candidates/5,
+         test_submit_phase_evidence/4, test_phase_reply_evidence/8,
+         test_observe_phase_evidence/6,
          test_spawn_owned_worker/2, test_close_wave/1,
          test_worker_down_disposition/2,
          test_progress_source/2, test_local_progress_event/2]).
@@ -1070,7 +1072,19 @@ start_wave(Stage, Commands, S0) ->
 start_typed_wave(Stage, Items, Meta, S0) ->
     Ref = make_ref(),
     Parent = self(),
-    Context = wave_context(S0),
+    Context0 = wave_context(S0),
+    %% Evidence has its own configured attempt budget. Capture it before
+    %% admitting any worker; scheduling and owner-mailbox time spend it too.
+    Context = case Stage of
+                  phase_verify -> Context0#{evidence_deadline =>
+                      quod_time:mono_ms() + context_timeout(Context0)};
+                  _ -> Context0
+              end,
+    WaveMeta = case Stage of
+                   phase_verify -> Meta#{evidence_deadline =>
+                       maps:get(evidence_deadline, Context)};
+                   _ -> Meta
+               end,
     {WaveTraceCtx, WaveTraceSpan} = quod_trace:start_span(
                                       quod_trace:context(),
                                       <<"quod.dtx.wave">>, internal,
@@ -1105,7 +1119,7 @@ start_typed_wave(Stage, Items, Meta, S0) ->
               ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS,
               self(), {dtx_wave_timeout, Ref}),
     Wave = #wave{ref = Ref, stage = Stage, items = Items,
-                 workers = Workers, timer = Timer, meta = Meta,
+                 workers = Workers, timer = Timer, meta = WaveMeta,
                  started_native = erlang:monotonic_time(),
                  trace_span = WaveTraceSpan},
     {next, S0#state{commands = none, wave = Wave}}.
@@ -1319,40 +1333,41 @@ classify_phase_command_result(_Command, {error, Reason}, S) ->
 classify_phase_command_result(_Command, _Malformed, S) ->
     {fatal, invalid_dtx_wave_result, S}.
 
-finish_verify_wave(Specs, Results, Meta0, S0) ->
+finish_verify_wave(Specs, Results,
+                   #{evidence_deadline := Deadline} = Meta0, S0) ->
     {S, PhasesRev, Progress, Waiting, Fatal} =
         classify_verify_wave(
           Specs, Results, S0, [], maps:get(progress, Meta0),
-          maps:get(waiting, Meta0), maps:get(fatal, Meta0)),
+          maps:get(waiting, Meta0), maps:get(fatal, Meta0), Deadline),
     Meta = Meta0#{phases := maps:get(phases, Meta0) ++
                               lists:reverse(PhasesRev),
                   progress := Progress, waiting := Waiting,
                   fatal := Fatal},
     finish_wave_outcome(Meta, S).
 
-classify_verify_wave([], [], S, Phases, Progress, Waiting, Fatal) ->
+classify_verify_wave([], [], S, Phases, Progress, Waiting, Fatal, _Deadline) ->
     {S, Phases, Progress, Waiting, Fatal};
 classify_verify_wave(
   [{Target, GroupId, Kind, Ref, Preferred} | Specs],
-  [Result | Results], S0, Phases, Progress, Waiting, Fatal0) ->
-    case Result of
+  [Result | Results], S0, Phases, Progress, Waiting, Fatal0, Deadline) ->
+    case phase_evidence_result(Result, Deadline) of
         {ok, Evidence} ->
             case install_phase_evidence(
                    Target, GroupId, Kind, Ref, Evidence, S0) of
                 {progress, S1, Phase} ->
                     classify_verify_wave(
                       Specs, Results, S1, [Phase | Phases], true,
-                      Waiting, Fatal0);
+                      Waiting, Fatal0, Deadline);
                 {fatal, Reason, S1} ->
                     classify_verify_wave(
                       Specs, Results, S1, Phases, Progress, Waiting,
-                      first_fatal(Fatal0, Reason))
+                      first_fatal(Fatal0, Reason), Deadline)
             end;
         {error, retry} ->
             S1 = put_pending(
                    {reference, Target, GroupId, Kind, Ref, Preferred}, S0),
             classify_verify_wave(
-              Specs, Results, S1, Phases, Progress, true, Fatal0);
+              Specs, Results, S1, Phases, Progress, true, Fatal0, Deadline);
         {worker_down, Reason} ->
             case worker_down_disposition(evidence, Reason) of
                 retry ->
@@ -1360,18 +1375,18 @@ classify_verify_wave(
                            {reference, Target, GroupId, Kind, Ref,
                             Preferred}, S0),
                     classify_verify_wave(
-                      Specs, Results, S1, Phases, Progress, true, Fatal0);
+                      Specs, Results, S1, Phases, Progress, true, Fatal0, Deadline);
                 {fatal, Failure} ->
                     classify_verify_wave(
                       Specs, Results, S0, Phases, Progress, Waiting,
-                      first_fatal(Fatal0, Failure))
+                      first_fatal(Fatal0, Failure), Deadline)
             end;
         _Malformed ->
             classify_verify_wave(
               Specs, Results, S0, Phases, Progress, Waiting,
-              first_fatal(Fatal0, invalid_verified_phase_evidence))
+              first_fatal(Fatal0, invalid_verified_phase_evidence), Deadline)
     end;
-classify_verify_wave(_Specs, _Results, S, Phases, Progress, Waiting, Fatal) ->
+classify_verify_wave(_Specs, _Results, S, Phases, Progress, Waiting, Fatal, _Deadline) ->
     {S, Phases, Progress, Waiting,
      first_fatal(Fatal, invalid_dtx_wave_result)}.
 
@@ -1451,7 +1466,7 @@ phase_command_io({phase, Target, GroupId, Kind}, Context)
   when Kind =:= prepare ->
     Request = {phase, request_id(), GroupId, Kind},
     Result = phase_command_sources(
-               endpoint_sources(Target, any), Target, Kind, Request, Context),
+               endpoint_sources(Target), Target, Kind, Request, Context),
     {ok, Target, GroupId, Kind, Request, Result};
 phase_command_io(_Command, _Context) ->
     {error, invalid_recovery_record}.
@@ -1489,30 +1504,15 @@ phase_source_disposition({remote, _, _}, _Kind, _Request, {error, _}) ->
     next.
 
 phase_evidence_io(
-  {Target, GroupId, Kind, Ref, Preferred}, Context) ->
-    Timeout = maps:get(request_timeout_ms, Context),
-    phase_evidence_sources(
-      endpoint_sources(Target, Preferred), Target, GroupId, Kind, Ref,
-      preferred_entry_hint(Preferred, Ref), Timeout).
-
-phase_evidence_sources([], _Target, _GroupId, _Kind, _Ref, _Hint, _Timeout) ->
-    {error, retry};
-phase_evidence_sources(
-  [Source | Rest], Target, GroupId, Kind, Ref, EntryHint, Timeout) ->
-    Result =
-        case endpoint_evidence_source(Source) of
-            local ->
-                {Ns, _Anchor} = Target,
-                quod_simplex:dtx_local_evidence(Ns, Ref, Kind);
-            {remote, _PeerKey} ->
-                quod_foreign_log:verify_reference(
-                  Ref, Kind, none, EntryHint, Timeout)
-        end,
-    case Result of
+  {Target, _GroupId, Kind, Ref, Preferred},
+  #{evidence_deadline := Deadline}) ->
+    %% A reply's preferred peer key is a delivery hint, not an authenticated
+    %% contact. The evidence owner alone selects local versus routed storage.
+    case quod_foreign_log:resolve_reference(
+           Target, Ref, Kind, none, preferred_entry_hint(Preferred, Ref),
+           Deadline) of
         {ok, Evidence} -> {ok, Evidence};
-        {error, _} ->
-            phase_evidence_sources(
-              Rest, Target, GroupId, Kind, Ref, EntryHint, Timeout)
+        {error, _} -> {error, retry}
     end.
 
 preferred_entry_hint({reply_source, local, Hints}, Ref) ->
@@ -1520,6 +1520,15 @@ preferred_entry_hint({reply_source, local, Hints}, Ref) ->
 preferred_entry_hint({reply_source, remote, _PeerKey, Hints}, Ref) ->
     entry_hint(Ref, Hints);
 preferred_entry_hint(_Preferred, _Ref) -> none.
+
+%% The worker's checked success can wait in the coordinator mailbox. It may
+%% not install evidence after this same attempt's allowance has expired.
+phase_evidence_result({ok, _} = Result, Deadline) ->
+    case quod_time:mono_ms() < Deadline of
+        true -> Result;
+        false -> {error, retry}
+    end;
+phase_evidence_result(Result, _Deadline) -> Result.
 
 entry_hint(Ref, Hints) when is_list(Hints) ->
     case maps:from_list(quod_dtx_endpoint:normalize_sidecar(Hints)) of
@@ -1870,13 +1879,13 @@ handle_submit_response(_Target, _GroupId, _Kind, _Request, _Malformed, S) ->
     {fatal, invalid_endpoint_response, S}.
 
 recover_submitted_phase(Target, GroupId, Kind, S) ->
-    case observe_phase(Target, GroupId, Kind, any, S) of
+    case observe_phase(Target, GroupId, Kind, S) of
         {retry, S1} when Kind =:= finalize ->
             %% A direct-abort Finalize may lose the target-ledger race to a
             %% previously submitted Prepare. Discovering that certified
             %% Prepare replaces the unsigned generation hint and lets the pure
             %% planner construct the prepared abort Finalize.
-            observe_phase(Target, GroupId, prepare, any, S1);
+            observe_phase(Target, GroupId, prepare, S1);
         Result ->
             Result
     end.
@@ -1972,47 +1981,15 @@ wait_for_commands_progress(Commands, S) ->
       S, Commands).
 
 verify_accepted_phase(Target, GroupId, Kind, Ref, Preferred, S) ->
-    verify_accepted_phase_sources(
-      endpoint_sources(Target, Preferred),
-      Target, GroupId, Kind, Ref, S).
+    verify_phase(Target, GroupId, Kind, Ref, Preferred, S).
 
-verify_accepted_phase_sources([], _Target, _GroupId, _Kind, _Ref, S) ->
-    {retry, S};
-verify_accepted_phase_sources(
-  [Source | Rest], Target, GroupId, Kind, Ref, S) ->
-    EvidenceSource = endpoint_evidence_source(Source),
-    case {Source,
-          verify_phase(Target, GroupId, Kind, Ref, EvidenceSource, S)} of
-        {_Any, {progress, _S1, _Phase} = Progress} ->
-            Progress;
-        {_Any, {retry, S1}} ->
-            verify_accepted_phase_sources(
-              Rest, Target, GroupId, Kind, Ref, S1);
-        {local, {fatal, _Reason, _S1} = Fatal} ->
-            Fatal;
-        {{remote, _Peer, _Endpoints}, {fatal, _Reason, S1}} ->
-            %% A bad authenticated route cannot override certified evidence
-            %% obtainable from another current validator.
-            verify_accepted_phase_sources(
-              Rest, Target, GroupId, Kind, Ref, S1)
-    end.
-
-endpoint_evidence_source(local) ->
-    local;
-endpoint_evidence_source({remote, PeerKey, _Endpoints}) ->
-    {remote, PeerKey};
-endpoint_evidence_source({reply_source, local, Hints}) ->
-    {local, Hints};
-endpoint_evidence_source({reply_source, remote, PeerKey, Hints}) ->
-    {remote, PeerKey, Hints}.
-
-observe_phase(Target, GroupId, Kind, Preferred, S) ->
+observe_phase(Target, GroupId, Kind, S) ->
     phase_sources(
-      endpoint_sources(Target, Preferred), Target, GroupId, Kind, S).
+      endpoint_sources(Target), Target, GroupId, Kind, S).
 
 observe_uncertain_phase(Target, GroupId, Kind, S) ->
     uncertain_phase_sources(
-      endpoint_sources(Target, any), Target, GroupId, Kind,
+      endpoint_sources(Target), Target, GroupId, Kind,
       false, false, S).
 
 uncertain_phase_sources([], _Target, _GroupId, _Kind,
@@ -2029,8 +2006,11 @@ uncertain_phase_sources(
                Target, GroupId, Kind, Request,
                endpoint_request(Source, Target, Request, [], S), S),
     case {Source, Result} of
-        {_Any, {progress, _S1, _Phase} = Progress} ->
-            Progress;
+        {_Any, {verify, Ref, Preferred, S1}} ->
+            %% Delivery ends at the first correlated committed reference.
+            %% A failed pinned evidence attempt must wait for progress, not
+            %% advance to another peer and mint a fresh verification budget.
+            verify_phase(Target, GroupId, Kind, Ref, Preferred, S1);
         {_Any, {absent, S1}} ->
             uncertain_phase_sources(
               Rest, Target, GroupId, Kind, true,
@@ -2046,13 +2026,11 @@ uncertain_phase_sources(
     end.
 
 classify_uncertain_phase_response(
-  Target, GroupId, Kind, Request,
+  _Target, _GroupId, _Kind, Request,
   {ok, {phase, _RequestId, _Generation, {committed, Ref}} = Response,
     Source}, S) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
-        true -> verify_phase(
-                  Target, GroupId, Kind, Ref,
-                  endpoint_evidence_source(Source), S);
+        true -> {verify, Ref, Source, S};
         false -> {fatal, invalid_endpoint_response, S}
     end;
 classify_uncertain_phase_response(
@@ -2099,10 +2077,12 @@ phase_sources([], _Target, _GroupId, _Kind, S) ->
     {retry, S};
 phase_sources([Source | Rest], Target, GroupId, Kind, S) ->
     Request = {phase, request_id(), GroupId, Kind},
-    Result = handle_phase_response(
+    Result = handle_phase_response_deferred(
                Target, GroupId, Kind, Request,
                endpoint_request(Source, Target, Request, [], S), S),
     case {Source, Result} of
+        {_Any, {verify, Ref, Preferred, S1}} ->
+            verify_phase(Target, GroupId, Kind, Ref, Preferred, S1);
         {_Any, {progress, _S1, _Phase} = Progress} -> Progress;
         {_Any, {retry, S1}} ->
             phase_sources(Rest, Target, GroupId, Kind, S1);
@@ -2114,17 +2094,8 @@ phase_sources([Source | Rest], Target, GroupId, Kind, S) ->
             phase_sources(Rest, Target, GroupId, Kind, S1)
     end.
 
-handle_phase_response(Target, GroupId, Kind, Request, Result, S) ->
-    case handle_phase_response_deferred(
-           Target, GroupId, Kind, Request, Result, S) of
-        {verify, Ref, Source, S1} ->
-            verify_phase(Target, GroupId, Kind, Ref, Source, S1);
-        Classified ->
-            Classified
-    end.
-
 %% Decode and correlate a phase observation once.  Sequential recovery may
-%% verify immediately through `handle_phase_response/6`; a participant wave
+%% verify only after ending its delivery walk; a participant wave
 %% returns the exact same verification job to the shared evidence wave.
 handle_phase_response_deferred(
   _Target, _GroupId, _Kind, Request,
@@ -2174,29 +2145,12 @@ verify_phase(Target, GroupId, Kind, Ref, Source, S) ->
                   StartedNative),
     Result.
 
-verify_phase_raw(Target = {Ns, _Anchor}, GroupId, Kind, Ref, local, S) ->
-    case quod_simplex:dtx_local_evidence(Ns, Ref, Kind) of
-        {ok, Evidence} -> install_phase_evidence(
-                            Target, GroupId, Kind, Ref, Evidence, S);
-        {error, _} -> {retry, S}
-    end;
-verify_phase_raw(Target, GroupId, Kind, Ref,
-                 {remote, _PeerKey}, S = #state{config = Config}) ->
-    case quod_foreign_log:verify_reference(
-           Ref, Kind, Config#config.request_timeout_ms) of
-        {ok, Evidence} -> install_phase_evidence(
-                            Target, GroupId, Kind, Ref, Evidence, S);
-        {error, _} -> {retry, S}
-    end;
-verify_phase_raw(Target = {_Ns, _Anchor}, GroupId, Kind, Ref,
-                 {local, _Hints}, S) ->
-    verify_phase_raw(Target, GroupId, Kind, Ref, local, S);
-verify_phase_raw(Target, GroupId, Kind, Ref,
-                 {remote, _PeerKey, Hints},
+verify_phase_raw(Target, GroupId, Kind, Ref, Source,
                  S = #state{config = Config}) ->
-    case quod_foreign_log:verify_reference(
-           Ref, Kind, none, entry_hint(Ref, Hints),
-           Config#config.request_timeout_ms) of
+    Deadline = quod_time:mono_ms() + Config#config.request_timeout_ms,
+    Result = quod_foreign_log:resolve_reference(
+               Target, Ref, Kind, none, preferred_entry_hint(Source, Ref), Deadline),
+    case phase_evidence_result(Result, Deadline) of
         {ok, Evidence} -> install_phase_evidence(
                             Target, GroupId, Kind, Ref, Evidence, S);
         {error, _} -> {retry, S}
@@ -2403,7 +2357,7 @@ applied_source({Ns, _Anchor} = Target, FinalizeRef, HistoricalRoutes) ->
 %% ------------------------------------------------------------------
 
 submit_endpoint_request(Target, Request, ValidationSidecar, S) ->
-    Sources = endpoint_sources(Target, any),
+    Sources = endpoint_sources(Target),
     submit_endpoint_requests(Sources, Target, Request, ValidationSidecar, S).
 
 submit_reply({ok, Response, Source}) -> {reply, Response, Source}.
@@ -2522,7 +2476,7 @@ candidate_result_rank(_Request, {error, timeout}) ->
 candidate_result_rank(_Request, _Result) ->
     1.
 
-endpoint_sources(Target, Preferred) ->
+endpoint_sources(Target) ->
     Cohosted = cohosted(Target),
     LocalKey = case {Cohosted, application:get_env(quod, node_pubkey)} of
                    {true, {ok, <<_:256>> = Key}} -> Key;
@@ -2531,23 +2485,7 @@ endpoint_sources(Target, Preferred) ->
     Remote = [{remote, PeerKey, Endpoints}
               || {PeerKey, Endpoints} <- routes(Target),
                  PeerKey =/= LocalKey],
-    All = case Cohosted of true -> [local | Remote]; false -> Remote end,
-    case Preferred of
-        any -> All;
-        local -> [local | lists:delete(local, All)];
-        {remote, PreferredKey} ->
-            case lists:keytake(PreferredKey, 2, All) of
-                {value, PreferredSource, Rest} -> [PreferredSource | Rest];
-                false -> All
-            end;
-        {reply_source, remote, PreferredKey, _Hints} ->
-            case lists:keytake(PreferredKey, 2, All) of
-                {value, PreferredSource, Rest} -> [PreferredSource | Rest];
-                false -> All
-            end;
-        {reply_source, local, _Hints} ->
-            [local | lists:delete(local, All)]
-    end.
+    case Cohosted of true -> [local | Remote]; false -> Remote end.
 
 submit_endpoint_requests([], _Target, _Request, _ValidationSidecar, _S) ->
     not_submitted;
@@ -2974,6 +2912,73 @@ test_valid_validator_routes(Routes, Committee) ->
     valid_validator_routes(Routes, Committee).
 test_valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence) ->
     valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence).
+%% Exercise actual endpoint fanout/selection and the consuming evidence paths.
+%% The fixture supplies encoded replies and certified history, never a verifier answer.
+test_submit_phase_evidence(Mode, {submit, Target, _} = Command, OwnerNs, Timeout) ->
+    S = #state{owner_ns = OwnerNs, snapshot = quod_dtx_recovery:empty(),
+               config = #config{request_timeout_ms = Timeout}},
+    {ok, Target, GroupId, Kind, _Request,
+     {reply, {accepted, _, _, Ref}, Source}} =
+        submit_command_io(Command, wave_context(S)),
+    {Source, test_phase_reply_evidence(
+               Mode, OwnerNs, Target, GroupId, Kind, Ref, Source, Timeout)}.
+
+test_phase_reply_evidence(Mode, OwnerNs, Target, GroupId, Kind, Ref, Source, Timeout) ->
+    S = #state{owner_ns = OwnerNs, snapshot = quod_dtx_recovery:empty(),
+               config = #config{request_timeout_ms = Timeout}},
+    case Mode of
+        accepted ->
+            test_phase_evidence_result(
+              verify_accepted_phase(Target, GroupId, Kind, Ref, Source, S));
+        observed ->
+            RequestId = request_id(),
+            {verify, Ref, Source, S1} = handle_phase_response_deferred(
+              Target, GroupId, Kind, {phase, RequestId, GroupId, Kind},
+              {ok, {phase, RequestId, 0, {committed, Ref}}, Source}, S),
+            test_phase_evidence_result(
+              verify_phase(Target, GroupId, Kind, Ref, Source, S1));
+        WaveMode when WaveMode =:= wave; element(1, WaveMode) =:= queued_wave ->
+            Spec = {Target, GroupId, Kind, Ref, Source},
+            {next, #state{wave = #wave{ref = WaveRef, meta = Meta} = Wave}} =
+                start_typed_wave(phase_verify, [Spec], #{}, S),
+            Deadline = maps:get(evidence_deadline, Meta),
+            try
+                receive
+                    {dtx_wave_result, WaveRef, _Worker, 1, Result} ->
+                        case WaveMode of
+                            {queued_wave, Test} ->
+                                Test ! {evidence_queued, self(), Deadline, Result},
+                                receive consume_evidence -> ok end;
+                            wave -> ok
+                        end,
+                        case classify_verify_wave(
+                               [Spec], [Result], S, [], false, false, none, Deadline) of
+                            {#state{snapshot = Snapshot}, _, true, false, none} ->
+                                {ok, Snapshot};
+                            {_, _, false, true, none} -> retry;
+                            {_, _, _, _, Reason} -> {error, Reason}
+                        end
+                after 5000 -> error(evidence_wave_stalled)
+                end
+            after stop_active_wave(Wave)
+            end
+    end.
+
+test_observe_phase_evidence(Mode, OwnerNs, Target, GroupId, Kind, Timeout) ->
+    S = #state{owner_ns = OwnerNs, snapshot = quod_dtx_recovery:empty(),
+               config = #config{request_timeout_ms = Timeout}},
+    Result = case Mode of
+                 ordinary -> observe_phase(Target, GroupId, Kind, S);
+                 uncertain -> observe_uncertain_phase(Target, GroupId, Kind, S)
+             end,
+    test_phase_evidence_result(Result).
+
+test_phase_evidence_result({progress, #state{snapshot = Snapshot}, _Phase}) ->
+    {ok, Snapshot};
+test_phase_evidence_result({retry, _S}) -> retry;
+test_phase_evidence_result({absent, _S}) -> absent;
+test_phase_evidence_result({fatal, Reason, _S}) -> {error, Reason}.
+
 test_initial_commands(Ns, Begin, BeginRef, Evidence) ->
     case initial_state(self(), Ns, Begin, {BeginRef, Evidence}, #{}) of
         {ok, #state{snapshot = Snapshot}} ->

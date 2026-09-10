@@ -146,7 +146,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_endpoint_request/7, dtx_endpoint_local/4,
          history_view/3, history_view_live/1, transaction_evidence/4,
          operation_claim_evidence/4,
-         dtx_local_evidence/3, dtx_applied_source/2,
+         dtx_local_evidence/4, dtx_applied_source/2,
          dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
          acquire_proof_access/1, check_proof_access/1,
@@ -229,6 +229,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_ingress_needs_drain/2,
          test_round_probe/1, test_route/4,
          test_trace_block/5, test_start_content_validation/5,
+         on_content_foreign_verdict/6,
          proposal_visible/2, reseat_engine/2,
          committee_view_id/4, test_committee_id/1,
          test_author_admissions/1,
@@ -1663,7 +1664,8 @@ test_validate_dtx_reference_evidence(Control, Evidence) ->
     validate_dtx_reference_evidence(Control, Evidence).
 test_verify_content_requirements(Requirements, Seen) ->
     verify_content_requirements(
-      Requirements, <<0:256>>, undefined, #{}, Seen).
+      Requirements, <<0:256>>, undefined, #{}, Seen,
+      quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS).
 test_content_reference_contacts(
   ReferencePlan, TargetIdentity, #s{dtx_workers = Workers}) ->
     content_reference_contacts(ReferencePlan, Workers, TargetIdentity).
@@ -2811,27 +2813,27 @@ dtx_outcome_result(
 dtx_outcome_result(OutcomeRef, {error, _}) ->
     {error, {outcome_unknown, OutcomeRef}}.
 
--doc "Verify one exact certified ledger reference in the owning local ledger.".
+-doc "Verify exact local-only evidence within the serving request's absolute deadline.".
 -spec dtx_local_evidence(binary(), quod_dtx:certified_ref(),
                          entry | transaction | 'begin' | prepare | decision |
-                         finalize | complete) ->
+                         finalize | complete, integer()) ->
           {ok, map()} |
           {error, not_ready | not_found | invalid_request}.
-dtx_local_evidence(Ns, Ref, ExpectedPhase)
-  when is_binary(Ns), byte_size(Ns) > 0 ->
-    try
-        case gen_statem:call(
-               quod_reg:via({quod_simplex, Ns}),
-               {dtx_local_evidence_source, Ref, ExpectedPhase}, 1000) of
-            {ok, LocalSource} ->
-                dtx_local_evidence_at(
-                  LocalSource, Ref, ExpectedPhase);
-            {error, _} = Error ->
-                Error
-        end
-    catch exit:_ -> {error, not_ready}
+dtx_local_evidence(Ns, Ref, ExpectedPhase, Deadline)
+  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Deadline) ->
+    case {valid_dtx_phase(ExpectedPhase), quod_dtx:certified_ref_binding(Ref)} of
+        {true, {ok, {Ns, _Anchor} = Identity, Slot, _Digest}} ->
+            case history_view(Identity, any, Deadline) of
+                {ok, #{slot := Height} = View} when Height >= Slot ->
+                    local_evidence_result(quod_foreign_log:verify_local_deadline(
+                      View, Ref, ExpectedPhase, Deadline));
+                {ok, _Lagging} -> {error, not_found};
+                {error, invalid_identity} -> {error, invalid_request};
+                {error, _Unavailable} -> {error, not_ready}
+            end;
+        _ -> {error, invalid_request}
     end;
-dtx_local_evidence(_Ns, _Ref, _ExpectedPhase) ->
+dtx_local_evidence(_Ns, _Ref, _ExpectedPhase, _Deadline) ->
     {error, invalid_request}.
 
 %% A coordinator recovered by this Simplex receives one immutable snapshot and
@@ -4171,14 +4173,15 @@ running_impl(
     keep_progress(S0, S1, []);
 running_impl(
   info,
-  {content_foreign_verdict, {Sl, BH}, WorkerPid, Verdict}, S0) ->
-    S1 = on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict, S0),
+  {content_foreign_verdict, {Sl, BH}, WorkerPid, Deadline, Verdict}, S0) ->
+    S1 = on_content_foreign_verdict(
+           Sl, BH, WorkerPid, Deadline, Verdict, S0),
     keep_progress(S0, S1, []);
 running_impl(
   info,
-  {dtx_foreign_verdict, {Sl, BH, ParentToken}, WorkerPid, Verdict}, S0) ->
+  {dtx_foreign_verdict, {Sl, BH, ParentToken}, WorkerPid, Deadline, Verdict}, S0) ->
     S1 = on_dtx_foreign_verdict(
-           Sl, BH, ParentToken, WorkerPid, Verdict, S0),
+           Sl, BH, ParentToken, WorkerPid, Deadline, Verdict, S0),
     keep_progress(S0, S1, []);
 running_impl(info, {link_up, Peer, Chan, LinkPid}, S0 = #s{chan = Chan}) ->
     keep_progress(S0, handle_link_up(Peer, LinkPid, S0), []);
@@ -6149,8 +6152,8 @@ execute_dtx_endpoint_request(
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {applied, _RequestId, GroupId, FinalizeRef,
-       _Generation, _Verdict}, _TimeoutMs, _Deadline) ->
-    case dtx_local_evidence(Ns, FinalizeRef, finalize) of
+       _Generation, _Verdict}, _TimeoutMs, Deadline) ->
+    case dtx_local_evidence(Ns, FinalizeRef, finalize, Deadline) of
         {ok, Evidence} ->
             case quod_prolog:dtx_group_state(Ns, GroupId) of
                 {ok, State} -> {applied_state, Evidence, State};
@@ -11047,6 +11050,7 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
             request_content_validation(
               Transactions, BlockTimestamp, Sl, BH, S);
         {ok, ReferencePlan} ->
+            Deadline = quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS,
             Owner = self(),
             LocalIdentity = target_identity(S),
             LocalSource = local_history_view(S),
@@ -11063,7 +11067,8 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
                              Trace, <<"quod.consensus.foreign_validation">>, TraceAttributes,
                              fun() ->
                                  Result = verify_content_foreign_references(
-                                            ReferencePlan, LocalIdentity, LocalSource, Contacts),
+                                            ReferencePlan, LocalIdentity, LocalSource,
+                                            Contacts, Deadline),
                                  _ = quod_trace:add_event(
                                        quod_trace:context(), <<"consensus.foreign_validation_finished">>,
                                        #{'quod.validation.verdict' => trace_validation_class(Result)}),
@@ -11072,7 +11077,8 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
                            ok = observe_verified_reference_contacts(
                                   Verdict, Contacts),
                            Owner ! {content_foreign_verdict,
-                                    {Sl, BH}, self(), Verdict}
+                                    {Sl, BH}, self(), Deadline,
+                                    reference_deadline_result(Deadline, Verdict)}
                        end),
             Monitor = erlang:monitor(process, Worker),
             Round = round_state(Sl, S),
@@ -11098,7 +11104,7 @@ request_content_validation(Transactions, BlockTimestamp, Sl, BH, S) ->
     Round = round_state(Sl, S),
     put_round(Sl, Round#round{validating = BH, validation = content}, S).
 
-on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict,
+on_content_foreign_verdict(Sl, BH, WorkerPid, Deadline, Verdict0,
                            S = #s{approved = Approved})
   when Sl =:= Approved + 1 ->
     Round = round_state(Sl, S),
@@ -11107,6 +11113,7 @@ on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict,
         {BH, {content_foreign, WorkerPid, Monitor},
          #block{timestamp = Timestamp,
                 payload = {batch, Transactions}}} ->
+            Verdict = reference_deadline_result(Deadline, Verdict0),
             trace_block_event(
               Sl, BH, <<"consensus.foreign_validation_received">>,
               #{'quod.validation.verdict' => trace_validation_class(Verdict)}, S),
@@ -11123,7 +11130,7 @@ on_content_foreign_verdict(Sl, BH, WorkerPid, Verdict,
             end;
         _ -> S
     end;
-on_content_foreign_verdict(_Sl, _BH, _WorkerPid, _Verdict, S) -> S.
+on_content_foreign_verdict(_Sl, _BH, _WorkerPid, _Deadline, _Verdict, S) -> S.
 
 reject_content_candidate(Sl, BH, _Reason, S) ->
     Round = round_state(Sl, S),
@@ -11153,52 +11160,53 @@ content_reference_plan([Transaction | Rest], PlanRev) ->
     end.
 
 verify_content_foreign_references(
-  ReferencePlan, LocalIdentity, LedgerRoot, Contacts) ->
-    verify_content_foreign_references(
-      ReferencePlan, LocalIdentity, LedgerRoot, Contacts, #{}).
+  ReferencePlan, LocalIdentity, LedgerRoot, Contacts, Deadline) ->
+    reference_deadline_result(Deadline,
+      verify_content_foreign_references(
+        ReferencePlan, LocalIdentity, LedgerRoot, Contacts, #{}, Deadline)).
 
 verify_content_foreign_references(
-  [], _LocalIdentity, _LedgerRoot, _Contacts, _Seen) ->
+  [], _LocalIdentity, _LedgerRoot, _Contacts, _Seen, _Deadline) ->
     valid;
 verify_content_foreign_references(
   [{#transaction{} = Transaction, References} | Rest],
   LocalIdentity, LedgerRoot,
-  Contacts, Seen0) ->
+  Contacts, Seen0, Deadline) ->
     case verify_content_requirements(
-           References, LocalIdentity, LedgerRoot, Contacts, Seen0) of
+           References, LocalIdentity, LedgerRoot, Contacts, Seen0, Deadline) of
         {valid, Seen1} ->
             verify_content_reference_binding(
-              Transaction, Rest, LocalIdentity, LedgerRoot, Contacts, Seen1);
+              Transaction, Rest, LocalIdentity, LedgerRoot, Contacts, Seen1, Deadline);
         Other -> Other
     end;
 verify_content_foreign_references(
-  _Malformed, _LocalIdentity, _LedgerRoot, _Contacts, _Seen) ->
+  _Malformed, _LocalIdentity, _LedgerRoot, _Contacts, _Seen, _Deadline) ->
     {invalid, malformed_foreign_references}.
 
-verify_content_requirements([], _LocalIdentity, _LedgerRoot, _Contacts, Seen) ->
+verify_content_requirements([], _LocalIdentity, _LedgerRoot, _Contacts, Seen, _Deadline) ->
     {valid, Seen};
 verify_content_requirements([{Phase, Ref} | Rest],
-                            LocalIdentity, LedgerRoot, Contacts, Seen0) ->
+                            LocalIdentity, LedgerRoot, Contacts, Seen0, Deadline) ->
     case maps:find(Ref, Seen0) of
         {ok, Evidence} ->
             case reference_evidence_satisfies(Phase, Evidence) of
                 true ->
                     verify_content_requirements(
-                      Rest, LocalIdentity, LedgerRoot, Contacts, Seen0);
+                      Rest, LocalIdentity, LedgerRoot, Contacts, Seen0, Deadline);
                 false -> {invalid, foreign_reference}
             end;
         error ->
             case verify_content_reference(
-                   Ref, Phase, LocalIdentity, LedgerRoot, Contacts) of
+                   Ref, Phase, LocalIdentity, LedgerRoot, Contacts, Deadline) of
                 {valid, Evidence} ->
                     verify_content_requirements(
                       Rest, LocalIdentity, LedgerRoot, Contacts,
-                      Seen0#{Ref => Evidence});
+                      Seen0#{Ref => Evidence}, Deadline);
                 Other -> Other
             end
     end;
 verify_content_requirements(_Malformed, _LocalIdentity, _LedgerRoot,
-                            _Contacts, _Seen) ->
+                            _Contacts, _Seen, _Deadline) ->
     {invalid, malformed_foreign_references}.
 
 reference_evidence_satisfies(transaction,
@@ -11211,12 +11219,12 @@ reference_evidence_satisfies(entry, #{entry := Entry}) ->
 reference_evidence_satisfies(_Phase, _Evidence) -> false.
 
 verify_content_reference_binding(Transaction, Rest,
-                                 LocalIdentity, LedgerRoot, Contacts, Seen) ->
+                                 LocalIdentity, LedgerRoot, Contacts, Seen, Deadline) ->
     case {verify_role_reference_binding(Transaction, Seen),
           quod_commit_validation:validate_foreign_reads(Transaction, Seen)} of
         {true, ok} ->
             verify_content_foreign_references(
-              Rest, LocalIdentity, LedgerRoot, Contacts, Seen);
+              Rest, LocalIdentity, LedgerRoot, Contacts, Seen, Deadline);
         {false, _} -> {invalid, foreign_reference_binding};
         {_, {error, Reason}} -> {invalid, Reason}
     end.
@@ -11238,15 +11246,15 @@ verify_role_reference_binding(
 verify_role_reference_binding(#transaction{evidence = none}, _Seen) -> true;
 verify_role_reference_binding(#transaction{}, _Seen) -> false.
 
-verify_content_reference(Ref, Phase, LocalIdentity, LedgerRoot, Contacts) ->
+verify_content_reference(Ref, Phase, LocalIdentity, LedgerRoot, Contacts, Deadline) ->
     case quod_dtx:certified_ref_binding(Ref) of
         {ok, LocalIdentity, _Slot, _Digest} ->
             verify_local_dtx_reference(
-              Ref, Phase, LocalIdentity, LedgerRoot);
+              Ref, Phase, LocalIdentity, LedgerRoot, Deadline);
         {ok, ForeignIdentity, _Slot, _Digest} ->
             verify_remote_dtx_reference(
               Ref, Phase, ForeignIdentity,
-              reference_contact(Ref, ForeignIdentity, Contacts));
+              reference_contact(Ref, ForeignIdentity, Contacts), Deadline);
         error -> {invalid, malformed_foreign_reference}
     end.
 
@@ -11338,6 +11346,7 @@ continue_dtx_verdict(Verdict, Payload, Block, Sl, BH, ParentToken, S) ->
 start_dtx_foreign_validation(
   ReferencePlan, Histories, Sl, BH, ParentToken,
   S = #s{dtx_workers = DtxWorkers}) ->
+    Deadline = quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS,
     Owner = self(),
     LocalIdentity = target_identity(S),
     LocalSource = local_history_view(S),
@@ -11348,11 +11357,12 @@ start_dtx_foreign_validation(
                fun() ->
                    Verdict = verify_dtx_foreign_references(
                                ReferencePlan, LocalIdentity, LocalSource, Contacts,
-                               ValidationSidecar),
+                               ValidationSidecar, Deadline),
                    ok = observe_verified_reference_contacts(
                           Verdict, Contacts),
                    Owner ! {dtx_foreign_verdict,
-                            {Sl, BH, ParentToken}, self(), Verdict}
+                            {Sl, BH, ParentToken}, self(), Deadline,
+                            reference_deadline_result(Deadline, Verdict)}
                end),
     Monitor = erlang:monitor(process, Worker),
     Round = round_state(Sl, S),
@@ -11364,7 +11374,7 @@ start_dtx_foreign_validation(
           {dtx_foreign, ParentToken, Worker, Monitor, Histories}}, S).
 
 on_dtx_foreign_verdict(
-  Sl, BH, ParentToken, WorkerPid, Verdict,
+  Sl, BH, ParentToken, WorkerPid, Deadline, Verdict0,
   S = #s{approved = Approved, history_head = ParentToken})
   when Sl =:= Approved + 1 ->
     Round = round_state(Sl, S),
@@ -11373,6 +11383,7 @@ on_dtx_foreign_verdict(
         {BH,
          {dtx_foreign, ParentToken, WorkerPid, _Monitor, Histories},
          {BH, #block{payload = Payload} = Block}} ->
+            Verdict = reference_deadline_result(Deadline, Verdict0),
             S0 = put_round(
                    Sl,
                    release_dtx_validation_round(Round), S),
@@ -11394,7 +11405,7 @@ on_dtx_foreign_verdict(
               Sl, BH, ParentToken, WorkerPid, S)
     end;
 on_dtx_foreign_verdict(
-  Sl, BH, ParentToken, WorkerPid, _Verdict, S) ->
+  Sl, BH, ParentToken, WorkerPid, _Deadline, _Verdict, S) ->
     discard_stale_dtx_validation(
       Sl, BH, ParentToken, WorkerPid, S).
 
@@ -11417,36 +11428,37 @@ dtx_reference_plan([Control | Rest], PlanRev) ->
     end.
 
 verify_dtx_foreign_references(
-  ReferencePlan, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar)
+  ReferencePlan, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar, Deadline)
   when is_list(ReferencePlan) ->
-    verify_dtx_foreign_controls(
-      ReferencePlan, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar).
+    reference_deadline_result(Deadline,
+      verify_dtx_foreign_controls(
+        ReferencePlan, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar, Deadline)).
 
 verify_dtx_foreign_controls(
-  [], _LocalIdentity, _LedgerRoot, _Contacts, _ValidationSidecar) ->
+  [], _LocalIdentity, _LedgerRoot, _Contacts, _ValidationSidecar, _Deadline) ->
     valid;
 verify_dtx_foreign_controls(
   [{Control, References} | Rest], LocalIdentity, LedgerRoot, Contacts,
-  ValidationSidecar) ->
+  ValidationSidecar, Deadline) ->
     case verify_dtx_control_foreign_references(
            Control, References, LocalIdentity, LedgerRoot, Contacts,
-           ValidationSidecar) of
+           ValidationSidecar, Deadline) of
         valid ->
             verify_dtx_foreign_controls(
-              Rest, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar);
+              Rest, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar, Deadline);
         Other -> Other
     end.
 
 verify_dtx_control_foreign_references(
   Control, References, LocalIdentity, LedgerRoot, Contacts,
-  ValidationSidecar) ->
+  ValidationSidecar, Deadline) ->
     verify_dtx_reference_list(
       References, Control, LocalIdentity, LedgerRoot, Contacts,
-      maps:from_list(ValidationSidecar), []).
+      maps:from_list(ValidationSidecar), [], Deadline).
 
 verify_dtx_reference_list(
   [], Control, _LocalIdentity, _LedgerRoot, _Contacts, ValidationSidecar,
-  EvidenceRev) ->
+  EvidenceRev, _Deadline) ->
     Evidence = lists:reverse(EvidenceRev),
     Bindings = [{Phase, Ref, maps:get(control, Row)}
                 || {Phase, Ref, Row} <- Evidence],
@@ -11456,16 +11468,16 @@ verify_dtx_reference_list(
     end;
 verify_dtx_reference_list(
   [{Phase, Ref} | Rest], Control, LocalIdentity, LedgerRoot,
-  Contacts, ValidationSidecar, EvidenceRev) ->
+  Contacts, ValidationSidecar, EvidenceRev, Deadline) ->
     Result = case quod_dtx:certified_ref_binding(Ref) of
                  {ok, LocalIdentity, _Slot, _Digest} ->
                      verify_local_dtx_reference(
-                       Ref, Phase, LocalIdentity, LedgerRoot);
+                       Ref, Phase, LocalIdentity, LedgerRoot, Deadline);
                  {ok, ForeignIdentity, _Slot, _Digest} ->
                      verify_remote_dtx_reference(
                        Ref, Phase, ForeignIdentity,
                        reference_contact(Ref, ForeignIdentity, Contacts),
-                       maps:get(Ref, ValidationSidecar, none));
+                       maps:get(Ref, ValidationSidecar, none), Deadline);
                  error ->
                      {invalid, malformed_foreign_reference}
              end,
@@ -11473,7 +11485,7 @@ verify_dtx_reference_list(
         {valid, ReferencedEvidence} ->
             verify_dtx_reference_list(
               Rest, Control, LocalIdentity, LedgerRoot, Contacts, ValidationSidecar,
-              [{Phase, Ref, ReferencedEvidence} | EvidenceRev]);
+              [{Phase, Ref, ReferencedEvidence} | EvidenceRev], Deadline);
         {invalid, _} = Invalid ->
             Invalid;
         abstain ->
@@ -11545,10 +11557,15 @@ validate_dtx_reference_evidence(Control, Evidence) ->
     quod_dtx:validate_references(Control, Evidence).
 
 verify_local_dtx_reference(
-  Ref, Phase, _Identity, LocalSource) ->
+  Ref, Phase, _Identity, LocalSource, Deadline) ->
     verify_local_dtx_reference_result(
-      quod_foreign_log:verify_local(
-        LocalSource, Ref, Phase, ?DTX_FOREIGN_VERIFY_MS)).
+      quod_foreign_log:verify_local_deadline(LocalSource, Ref, Phase, Deadline)).
+
+reference_deadline_result(Deadline, Result) ->
+    case Deadline > quod_time:mono_ms() of
+        true -> Result;
+        false -> abstain
+    end.
 
 %% One captured object for both callers and internal validation workers. The
 %% session owns no descriptor; borrowers open and close their own bounded read.
@@ -11628,45 +11645,13 @@ valid_dtx_phase(finalize) -> true;
 valid_dtx_phase(complete) -> true;
 valid_dtx_phase(_) -> false.
 
-verify_remote_dtx_reference(Ref, Phase, Identity, Contact) ->
-    verify_remote_dtx_reference(Ref, Phase, Identity, Contact, none).
+verify_remote_dtx_reference(Ref, Phase, Identity, Contact, Deadline) ->
+    verify_remote_dtx_reference(Ref, Phase, Identity, Contact, none, Deadline).
 
-verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}, Contact, EntryHint) ->
-    case quod_reg:where({quod_simplex, Ns}) of
-        undefined ->
-            verify_remote_dtx_reference_routes(
-              Ref, Phase, Ns, Anchor, Contact, EntryHint);
-        _LocalSimplex ->
-            case dtx_local_evidence(Ns, Ref, Phase) of
-                {ok, #{transaction := _Transaction} = Evidence}
-                  when Phase =:= transaction; Phase =:= entry ->
-                    {valid, Evidence};
-                {ok, #{control := _Control} = Evidence} ->
-                    {valid, Evidence};
-                {ok, _MalformedEvidence} ->
-                    {invalid, foreign_reference};
-                {error, invalid_request} ->
-                    {invalid, foreign_reference};
-                {error, _Unavailable} ->
-                    %% A rebuilding or lagging co-hosted copy is only a route
-                    %% preference.  A current pinned validator may still
-                    %% provide the exact certified reference.
-                    verify_remote_dtx_reference_routes(
-                      Ref, Phase, Ns, Anchor, Contact, EntryHint)
-            end
-    end.
-
-verify_remote_dtx_reference_routes(
-  Ref, Phase, Ns, Anchor, Contact, EntryHint) ->
-    case quod_dtx:certified_ref_binding(Ref) of
-        {ok, {Ns, Anchor}, _Slot, _Digest} ->
-            verify_remote_dtx_reference_result(
-              quod_foreign_log:verify_reference(
-                Ref, Phase, Contact, EntryHint,
-                ?DTX_FOREIGN_VERIFY_MS));
-        _ ->
-            {invalid, foreign_reference}
-    end.
+verify_remote_dtx_reference(Ref, Phase, Identity, Contact, EntryHint, Deadline) ->
+    verify_remote_dtx_reference_result(
+      quod_foreign_log:resolve_reference(
+        Identity, Ref, Phase, Contact, EntryHint, Deadline)).
 
 verify_remote_dtx_reference_result(Result) ->
     case Result of
@@ -11679,6 +11664,8 @@ verify_remote_dtx_reference_result(Result) ->
         {error, phase_mismatch} ->
             {invalid, foreign_reference};
         {error, invalid_foreign_reference} ->
+            {invalid, foreign_reference};
+        {error, bad_foreign_reference} ->
             {invalid, foreign_reference};
         {error, _Unavailable} ->
             abstain

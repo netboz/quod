@@ -79,12 +79,9 @@ queued_success_checks_each_caller_deadline_test() ->
             ?assertEqual(2, length(maps:get(callers, Active))),
             ok = sys:suspend(Owner),
             try
-                1 = erlang:trace(Worker, true, [send, {tracer, self()}]),
+                1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]),
                 Worker ! {release_local_worker, Token},
-                receive
-                    {trace, Worker, send, {foreign_worker_done, RequestRef, {ok, _}, _}, Owner} -> ok
-                after 1000 -> error(verified_completion_not_queued)
-                end,
+                await_local_completion_delivery(Owner, RequestRef, 1000),
                 ?assert(quod_time:mono_ms() < Deadline),
                 {messages, Before} = process_info(Owner, messages),
                 ?assertEqual([done], request_messages(Before, RequestRef)),
@@ -97,11 +94,81 @@ queued_success_checks_each_caller_deadline_test() ->
                              gen_server:wait_response(Long, 2000)),
                 ?assertMatch(#{pending := 0, queued := 0}, quod_foreign_log:stats())
             after
+                stop_fixture_trace(Owner),
                 _ = catch sys:resume(Owner),
                 Worker ! {release_local_worker, Token}
             end
         end)
     end).
+
+%% A VM-suspended recipient has not processed its incoming message signals.
+%% A genuine sender trace is therefore available before recipient delivery
+%% evidence. Replaying that trace to the barrier must not release it. This
+%% controls the exact await helper used by the production-owner fixture above.
+completion_delivery_barrier_rejects_send_only_test() ->
+    RequestRef = make_ref(),
+    Message = {foreign_worker_done, RequestRef, {ok, #{}}, #{}},
+    {Owner, OwnerMonitor} = spawn_monitor(fun() ->
+        receive Message -> receive stop -> ok end end
+    end),
+    {Worker, WorkerMonitor} = spawn_monitor(fun() ->
+        receive go -> Owner ! Message, receive stop -> ok end end
+    end),
+    try
+        true = erlang:suspend_process(Owner),
+        1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]),
+        1 = erlang:trace(Worker, true, [send, {tracer, self()}]),
+        Worker ! go,
+        SenderTrace = receive
+            {trace, Worker, send, Message, Owner} = Trace -> Trace
+        after 1000 -> error(sender_trace_missing)
+        end,
+        self() ! SenderTrace,
+        ?assertError(verified_completion_not_queued,
+                     await_local_completion_delivery(Owner, RequestRef, 0)),
+        receive SenderTrace -> ok
+        after 0 -> error(sender_trace_was_consumed)
+        end,
+        true = erlang:resume_process(Owner),
+        ?assertEqual(ok, await_local_completion_delivery(Owner, RequestRef, 1000))
+    after
+        _ = catch erlang:resume_process(Owner),
+        stop_fixture_trace(Owner),
+        stop_fixture_trace(Worker),
+        Owner ! Message,
+        Owner ! stop,
+        Worker ! go,
+        Worker ! stop,
+        receive {'DOWN', OwnerMonitor, process, Owner, _} -> ok
+        after 1000 -> error(barrier_owner_not_reaped)
+        end,
+        receive {'DOWN', WorkerMonitor, process, Worker, _} -> ok
+        after 1000 -> error(barrier_worker_not_reaped)
+        end
+    end.
+
+await_local_completion_delivery(Owner, RequestRef, Timeout) ->
+    %% Sender trace delivery and destination signal delivery are different
+    %% edges. Only the exact destination's receive event proves this barrier.
+    receive
+        {trace, Owner, 'receive', {foreign_worker_done, RequestRef, {ok, _}, _}} -> ok
+    after Timeout -> error(verified_completion_not_queued)
+    end.
+
+stop_fixture_trace(Pid) ->
+    _ = erlang:trace(Pid, false, [all]),
+    Delivered = erlang:trace_delivered(Pid),
+    receive {trace_delivered, Pid, Delivered} -> ok
+    after 1000 -> error(fixture_trace_not_delivered)
+    end,
+    drain_fixture_trace(Pid).
+
+drain_fixture_trace(Pid) ->
+    receive
+        {trace, Pid, _, _} -> drain_fixture_trace(Pid);
+        {trace, Pid, _, _, _} -> drain_fixture_trace(Pid)
+    after 0 -> ok
+    end.
 
 expired_caller_does_not_cancel_shared_exact_job_test() ->
     Fixture = fixture(exact),

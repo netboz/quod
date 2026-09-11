@@ -7,14 +7,15 @@
 -define(V2_MAGIC, 16#915106AB).
 -define(V3_MAGIC, 16#915106AC).
 -define(V4_MAGIC, 16#915106AD).
--define(MAGIC, 16#915106AE).
+-define(V5_MAGIC, 16#915106AE).
+-define(MAGIC, 16#915106AF).
 -define(READ_CHUNK, 262144).
 
 %% Every superseded frame magic must be rejected as an identifiable format, at
 %% its exact offset, without mutating the file. Each legacy case below runs for
 %% all of them.
 legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}, {3, ?V3_MAGIC},
-                     {4, ?V4_MAGIC}].
+                     {4, ?V4_MAGIC}, {5, ?V5_MAGIC}].
 
 %%%===================================================================
 %%% fixtures

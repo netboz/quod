@@ -49,6 +49,32 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
         end)
     end).
 
+%% A hand-built source projection is deliberately not a consensus-admitted
+%% N-target claim. Until slice 8 the real worker must refuse the entire vector
+%% before loading a claim, selecting a target, probing, or sending a receipt.
+multi_target_operation_worker_refuses_without_dispatch_test() ->
+    with_operation_fixture(fun(F) ->
+        with_operation_worker(F, fun(Worker, Monitor) ->
+            {ok, Row} = terminal_operation_row(F),
+            Ref = maps:get(target_ref, F),
+            Other = {transaction, <<"quod:s7-other">>, digest(250), digest(251)},
+            {ok, Refs} = quod_operation_vector:references([Ref, Other]),
+            reply_operation_source(F, {ok, Row#{outcome_ref := {applications, Refs}}}),
+            Op = maps:get(operation_ref, F),
+            receive
+                {dtx_coordinator, Worker, Op, {error, independent_lane_unavailable}} -> ok;
+                {dtx_coordinator, Worker, Op, OtherMessage} ->
+                    error({multi_target_worker_dispatched, OtherMessage})
+            after 1000 -> error(multi_target_worker_refusal_missing)
+            end,
+            receive {'DOWN', Monitor, process, Worker, normal} -> ok
+            after 1000 -> error(multi_target_worker_did_not_stop)
+            end,
+            assert_no_operation_stub_calls(),
+            assert_no_target_result(Worker)
+        end)
+    end).
+
 %% Drive the real fresh-result branch, including its ordinary receipt call.
 %% Holding that call proves the target result is sent before receipt drain;
 %% tracing never substitutes a decoder, a verifier, or a delivery result.
@@ -77,7 +103,7 @@ fresh_operation_result_trace(Class) ->
                       end,
         Result = case Class of rejected -> {rejected, conflict_retry}; _ -> committed end,
         RequestId = <<251:128>>,
-        Request = {apply_claim, RequestId, ClaimEvidence},
+        Request = {apply_claim, RequestId, Target, ClaimEvidence},
         Response = {application, RequestId, Result, Evidence},
         Context = #{owner_ns => Ns, origin => maps:get(origin, Fixture),
                     operation_ref => OperationRef, request_digest => Digest,
@@ -107,7 +133,8 @@ fresh_operation_result_trace(Class) ->
                         ReceiptFrom = receive
                             {operation_stub_call, source, From,
                              {submit_role,
-                              #transaction{role = {remote_complete, OperationRef, Digest, TargetRef}},
+                              #transaction{role = {remote_complete, OperationRef, Digest,
+                                                   [{Target, {included, TargetRef}}]}},
                               [], _TraceCtx}} -> From
                         after 1000 -> error(missing_fresh_source_receipt)
                         end,
@@ -207,7 +234,7 @@ remote_operation_temporary_reply_parks_on_progress_test() ->
                             maps:get(certified_claim_ref, Fixture),
                             maps:get(claim, Fixture)),
     RequestId = <<199:128>>,
-    Request = {apply_claim, RequestId, ClaimEvidence},
+    Request = {apply_claim, RequestId, maps:get(participant_target, Fixture), ClaimEvidence},
     lists:foreach(
       fun(Reason) ->
           ?assertEqual(
@@ -1096,7 +1123,7 @@ invalid_begin_allocates_no_worker_test() ->
 
 dormant_cancel_retires_custody_only_on_explicit_terminal_reply_test() ->
     RequestId = <<230:128>>,
-    Request = {cancel_operation_effect, RequestId, <<"signed-submission">>},
+    Request = {cancel_operation_effect, RequestId, {<<"quod:a">>, <<1:256>>}, <<"signed-submission">>},
     ?assertEqual(
        terminal,
        quod_dtx_coordinator:test_dormant_cancel_disposition(
@@ -1180,13 +1207,13 @@ dormant_cancel_retries_exact_submission_only_on_target_route_edge_test() ->
          Owner, OwnerMonitor, Target)),
     SignedSubmission = <<"exact-signed-operation-submission">>,
     Request1 = quod_dtx_coordinator:test_dormant_cancel_request(
-                 <<234:128>>, SignedSubmission),
+                 <<234:128>>, Target, SignedSubmission),
     Request2 = quod_dtx_coordinator:test_dormant_cancel_request(
-                 <<235:128>>, SignedSubmission),
+                 <<235:128>>, Target, SignedSubmission),
     ?assertMatch(
-       {cancel_operation_effect, <<234:128>>, SignedSubmission}, Request1),
+       {cancel_operation_effect, <<234:128>>, Target, SignedSubmission}, Request1),
     ?assertMatch(
-       {cancel_operation_effect, <<235:128>>, SignedSubmission}, Request2).
+       {cancel_operation_effect, <<235:128>>, Target, SignedSubmission}, Request2).
 
 %% ------------------------------------------------------------------
 %% Operation recovery owner-interface fixtures
@@ -1322,7 +1349,9 @@ terminal_operation_row(#{operation_ref := OperationRef,
                          target_ref := TargetRef}) ->
     {ok, #{status => claimed, operation_state => terminal,
            ref => OperationRef, request_digest => Digest,
-           outcome_ref => TargetRef, height => 2}}.
+           outcome_ref => {applications, [TargetRef]},
+           included => [{quod_operation_vector:target(TargetRef), {included, TargetRef}}],
+           height => 2}}.
 
 reply_operation_source(#{operation_ref := OperationRef}, Reply) ->
     From = expect_operation_stub_call(source, {outcome, OperationRef}),
@@ -1433,7 +1462,7 @@ assert_terminal_operation_binding(
     target_ref := TargetRef}, Worker) ->
     receive
         {dtx_coordinator, Worker, OperationRef,
-         {claim_state, terminal, 2, Digest, TargetRef}} -> ok
+         {claim_state, terminal, 2, Digest, [TargetRef]}} -> ok
     after 1000 -> error(missing_terminal_operation_binding)
     end.
 

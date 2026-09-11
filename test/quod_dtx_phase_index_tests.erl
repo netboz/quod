@@ -244,7 +244,8 @@ noncanonical_or_trailing_history_fails_closed_test() ->
           GroupId = key(41),
           Projection = quod_dtx:initial_projection(Target, 0),
           {Control, Ref} = direct_abort(Target, GroupId, key(42), 1, Signer),
-          Canonical = term_to_binary(quod_dtx:initial_group_history(),
+          Canonical = term_to_binary({quod_dtx_phase_history, 1,
+                                      quod_dtx:initial_group_history()},
                                     [deterministic]),
           ok = quod_dtx_phase_index:test_insert_raw(
                  Index, GroupId, <<Canonical/binary, 0>>),
@@ -270,7 +271,7 @@ canonical_history_under_the_wrong_group_key_fails_closed_test() ->
                 records => #{finalize => Entry}},
           ok = quod_dtx_phase_index:test_insert_raw(
                  Index, GroupId,
-                 term_to_binary(WrongHistory, [deterministic])),
+                 term_to_binary({quod_dtx_phase_history, 1, WrongHistory}, [deterministic])),
           ?assertEqual(
              {error, {invalid_transition, bad_binding}},
              phase_apply(

@@ -129,7 +129,7 @@ before that projection can be reused in memory.
 -define(MANIFEST, "identity.term").
 -define(CHECKPOINT, "checkpoint.term").
 -define(LOG, "log.0001").
--define(CACHE_VERSION, 2).
+-define(CACHE_VERSION, 3). %% V6 ledger and transaction-V14 projection/checkpoint
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).

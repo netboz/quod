@@ -34,7 +34,7 @@ does not cancel or resubmit the uncertain operation.
          test_install_applied_results/3,
          test_dormant_cancel_disposition/2,
          test_dormant_wait_event/4,
-         test_dormant_cancel_request/2,
+         test_dormant_cancel_request/3,
          test_operation_target_response_disposition/2,
          test_operation_target_result/7,
          test_local_submit_result/2, test_remote_submit_result/2,
@@ -206,13 +206,16 @@ start_dormant_operation_monitor(_Owner, _OwnerNs, _Submission) ->
     {error, invalid_operation_start}.
 
 dormant_operation_context(OwnerNs, Submission) ->
-    case quod_transaction:encode_operation_submission(Submission) of
-        {ok, SubmissionBlob} ->
-            dormant_operation_binding(
-              OwnerNs, SubmissionBlob,
-              quod_transaction:decode_operation_submission(SubmissionBlob));
-        {error, _} ->
-            {error, invalid_operation_claim}
+    try
+        {ok, SubmissionBlob} = quod_transaction:encode_operation_submission(Submission),
+        {ok, Targets} = quod_transaction:operation_submission_targets(Submission),
+        Contexts = [begin
+            {ok, C} = dormant_operation_binding(OwnerNs, SubmissionBlob,
+                quod_transaction:decode_operation_submission(SubmissionBlob, Target)), C
+        end || Target <- Targets],
+        [First | Rest] = Contexts,
+        {ok, First#{remaining_targets => Rest}}
+    catch _:_ -> {error, invalid_operation_claim}
     end.
 
 dormant_operation_binding(
@@ -249,13 +252,13 @@ dormant_operation_cancel(
     Request = dormant_cancel_request(
                 crypto:strong_rand_bytes(
                   ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8),
-                SubmissionBlob),
+                Target, SubmissionBlob),
     case quod_dtx_current_view:submit_operation_to(
            OwnerNs, Target, TargetNode, Request,
            ?DEFAULT_REQUEST_TIMEOUT_MS) of
         {ok, Response} ->
             case dormant_cancel_disposition(Request, Response) of
-                terminal -> dormant_operation_finish(Owner, Context);
+                terminal -> dormant_operation_next(Owner, OwnerMonitor, Context);
                 wait -> dormant_operation_wait(
                           Owner, OwnerMonitor, Context)
             end;
@@ -276,11 +279,24 @@ dormant_cancel_disposition(_Request, _Response) ->
             %% gone. Keep source custody and wait for a real progress edge.
     wait.
 
-dormant_cancel_request(RequestId, SubmissionBlob)
+dormant_cancel_request(RequestId, Target, SubmissionBlob)
   when is_binary(RequestId),
        bit_size(RequestId) =:= ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS,
        is_binary(SubmissionBlob) ->
-    {cancel_operation_effect, RequestId, SubmissionBlob}.
+    {cancel_operation_effect, RequestId, Target, SubmissionBlob}.
+
+%% Cancellation is of never-activated private prerequisites, not a target
+%% application fan-out. The existing owner walks the canonical set and cannot
+%% retire source custody on only one target's acknowledgement.
+dormant_operation_next(Owner, OwnerMonitor,
+                       #{remaining_targets := [Next | Rest]} = Context) ->
+    dormant_operation_cleanup(Context),
+    Target = maps:get(target, Next),
+    true = quod_reg:subscribe({directory_route, Target}),
+    ok = quod_directory:route_needed(Target),
+    dormant_operation_cancel(Owner, OwnerMonitor, Next#{remaining_targets => Rest});
+dormant_operation_next(Owner, _OwnerMonitor, #{remaining_targets := []} = Context) ->
+    dormant_operation_finish(Owner, Context).
 
 dormant_operation_finish(
   _Owner, #{owner_ns := OwnerNs, claim_tx_id := ClaimTxId} = Context) ->
@@ -359,13 +375,13 @@ operation_refresh_before_deadline(
         {ok, #{status := claimed, ref := OperationRef,
                operation_state := ClaimState, height := Slot,
                request_digest := <<_:256>> = Digest,
-               outcome_ref := {transaction, TargetNs, <<_:256>> = Anchor,
-                               <<_:256>>} = TargetRef}}
+               outcome_ref := {applications,
+                 [{transaction, TargetNs, <<_:256>> = Anchor, <<_:256>>} = TargetRef]}}}
           when (ClaimState =:= unresolved orelse ClaimState =:= terminal),
                is_integer(Slot), Slot > 0,
                is_binary(TargetNs), byte_size(TargetNs) > 0 ->
             Owner ! {dtx_coordinator, self(), OperationRef,
-                     {claim_state, ClaimState, Slot, Digest, TargetRef}},
+                     {claim_state, ClaimState, Slot, Digest, [TargetRef]}},
             Bound = Context#{target => {TargetNs, Anchor},
                              target_ref => TargetRef, request_digest => Digest},
             case {ClaimState, map_get(state, Context)} of
@@ -385,6 +401,11 @@ operation_refresh_before_deadline(
                 {unresolved, _} ->
                     operation_drive(Owner, OwnerMonitor, Bound)
             end;
+        {ok, #{outcome_ref := {applications, Refs}}} when length(Refs) > 1 ->
+            %% Temporary release boundary ruled in C1: the canonical storage
+            %% and target applier accept vectors, but the N-target execution
+            %% owner is slice 8. Never pick the first target or fall back to L3.
+            operation_stop(Owner, OperationRef, independent_lane_unavailable);
         {error, not_found} ->
             operation_wait(Owner, OwnerMonitor, Context);
         {error, {outcome_unknown, OperationRef}} ->
@@ -488,10 +509,9 @@ operation_context(
   OwnerNs, OperationRef,
   ClaimRef,
   #transaction{origin = {OwnerNs, <<_:256>>} = Origin,
-               role = {remote_claim, _Manifest,
-                       {{TargetNs, <<_:256>> = TargetAnchor} = Target,
-                        _PlanDigest, _PlanBlob, _Attestation},
-                       <<_:256>> = TargetTxId}} = Claim)
+               role = {remote_claim, _Manifest, _Bundles,
+                       [{transaction, TargetNs, <<_:256>> = TargetAnchor,
+                         <<_:256>> = TargetTxId}]}} = Claim)
   when is_binary(TargetNs), byte_size(TargetNs) > 0 ->
     case {quod_dtx:certified_ref_binding(ClaimRef),
           quod_transaction:request_claim(Claim)} of
@@ -499,7 +519,8 @@ operation_context(
          {ok, #{operation_ref := OperationRef,
                 digest := <<_:256>> = RequestDigest}}}
           when ClaimTxId =:= Claim#transaction.tx_id ->
-            case quod_transaction:remote_claim_route(Claim) of
+            Target = {TargetNs, TargetAnchor},
+            case quod_transaction:remote_claim_route(Claim, Target) of
                 Route when Route =:= shared; element(1, Route) =:= private ->
                     {ok, #{owner_ns => OwnerNs, origin => Origin,
                            operation_ref => OperationRef,
@@ -526,7 +547,7 @@ operation_drive(Owner, OwnerMonitor,
                   ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8),
     case quod_transaction:encode_evidence(ClaimRef, Claim) of
         {ok, ClaimEvidence} ->
-            Request = {apply_claim, RequestId, ClaimEvidence},
+            Request = {apply_claim, RequestId, Target, ClaimEvidence},
             Started = erlang:monotonic_time(),
             Submission = quod_trace:with_optional_span(
                            quod_trace:context(), <<"quod.operation.target_application">>, client,
@@ -663,9 +684,10 @@ operation_submit_complete(
     target_transaction := TargetTransaction} = Context) ->
     try
         Complete0 = quod_transaction:remote_complete(
-                      Origin, OperationRef, RequestDigest, TargetRef),
-        Complete = quod_transaction:attach_evidence(
-                     Complete0, TargetCertifiedRef, TargetTransaction),
+                      Origin, OperationRef, RequestDigest,
+                      [{quod_operation_vector:target(TargetRef), {included, TargetRef}}]),
+        Complete = quod_transaction:attach_receipt_evidence(
+                     Complete0, [{TargetCertifiedRef, TargetTransaction}]),
         Started = erlang:monotonic_time(),
         Submission = quod_trace:with_optional_span(
                        quod_trace:context(), <<"quod.operation.receipt">>, internal,
@@ -3039,8 +3061,8 @@ test_dormant_cancel_disposition(Request, Response) ->
     dormant_cancel_disposition(Request, Response).
 test_dormant_wait_event(Message, Owner, OwnerMonitor, Target) ->
     dormant_wait_event(Message, Owner, OwnerMonitor, Target).
-test_dormant_cancel_request(RequestId, SubmissionBlob) ->
-    dormant_cancel_request(RequestId, SubmissionBlob).
+test_dormant_cancel_request(RequestId, Target, SubmissionBlob) ->
+    dormant_cancel_request(RequestId, Target, SubmissionBlob).
 test_remote_submit_result(Request, Response) ->
     remote_submit_result(Request, Response).
 -endif.

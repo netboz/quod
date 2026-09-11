@@ -944,7 +944,7 @@ bind_session_operation_effect(
             %% the exact signed submission. This scope contributes only its
             %% unforgeable reservation capability and authenticated target.
             quod_effect_journal:bind_operation(
-              Reservation, SubmissionBlob);
+              Reservation, Target, SubmissionBlob);
         {ok, _OtherReservation} ->
             {error, invalid_operation_effect};
         {error, _} = Error -> Error

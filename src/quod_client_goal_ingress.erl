@@ -129,7 +129,7 @@ resolved_operation(
   Evidence, Digest, OperationRef,
   {ok, #{status := claimed, request_digest := Digest,
          outcome_ref := OutcomeRef} = Claim}) ->
-    case quod_prolog:outcome(OutcomeRef) of
+    case resolve_claim_outcome(OutcomeRef) of
         {ok, Outcome} ->
             {ok, Evidence, {operation_outcome, Claim, Outcome}};
         {error, _} ->
@@ -146,6 +146,16 @@ resolved_operation(
     {error, operation_conflict};
 resolved_operation(_Evidence, _Digest, _OperationRef, {ok, _BadClaim}) ->
     {error, outcome_index_corrupt}.
+
+resolve_claim_outcome({applications, [Ref]}) ->
+    %% Preserve the existing one-target client grammar over the generalized
+    %% durable vector. Inclusion remains a reference, never a result verdict.
+    quod_prolog:outcome(Ref);
+resolve_claim_outcome({applications, _}) ->
+    %% N-target execution/result publication is the reviewed slice-8 scope.
+    %% Do not resolve a prefix and present it as a completed operation.
+    {error, independent_lane_unavailable};
+resolve_claim_outcome(OrdinaryOrGroupRef) -> quod_prolog:outcome(OrdinaryOrGroupRef).
 
 verified_gateway(SessionId, RequestBytes, Signature, PublicKey, Peer) ->
     case trace_stage(

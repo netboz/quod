@@ -1192,7 +1192,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     claim_state = unknown :: unknown | unresolved | terminal,
     claim_slot = none :: none | pos_integer(),
     claim_tx_id = none :: none | <<_:256>>,
-    target_ref = none :: none | term(),
+    target_refs = none :: none | [term()],
+    target_results = #{} :: map(),
     request_digest = none :: none | <<_:256>>,
     status = pending ::
         pending | running | blocked | settling,
@@ -1921,7 +1922,7 @@ test_operation_target_result(Result, TargetRef) ->
                operation_ref = OperationRef,
                claim_state = unresolved,
                claim_slot = 1,
-               target_ref = TargetRef,
+               target_refs = [TargetRef],
                request_digest = <<0:256>>,
                status = running,
                pid = self()},
@@ -1967,7 +1968,7 @@ test_operation_recoveries(#s{operation_recoveries = Recoveries}) ->
     maps:map(
       fun(_Ref, #operation_recovery_owner{
                   claim_state = State, status = Status, claim_slot = Slot,
-                  target_ref = Target, request_digest = Digest, pid = Pid,
+                  target_refs = Target, request_digest = Digest, pid = Pid,
                   monitor = Monitor, target_result = Result, waiters = Waiters}) ->
           #{claim_state => State, status => Status, slot => Slot,
             target_ref => Target, digest => Digest, pid => Pid,
@@ -4707,20 +4708,17 @@ drop_dtx_admission_monitor(_Ref, _Pid, _S) ->
 apply_operation_projection(
   Slot,
   #transaction{tx_id = ClaimTxId,
-               role = {remote_claim, _Manifest,
-                       {{TargetNs, <<_:256>> = TargetAnchor}, _PlanDigest,
-                        _PlanBlob, _Attestation},
-                       <<_:256>> = TargetTxId}} = Claim,
+               role = {remote_claim, _Manifest, _Bundles, _Predicted}} = Claim,
   S = #s{ns = Ns, operation_recoveries = Recoveries}) ->
     case quod_transaction:request_claim(Claim) of
         {ok, #{operation_ref := OperationRef,
                digest := <<_:256>> = Digest}} ->
-            TargetRef = {transaction, TargetNs, TargetAnchor, TargetTxId},
+            {ok, TargetRefs} = quod_transaction:remote_claim_references(Claim),
             Owner = maps:get(
                       OperationRef, Recoveries,
                       #operation_recovery_owner{operation_ref = OperationRef,
                                                 trace_ctx = quod_trace:context()}),
-            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRef),
+            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRefs),
             case Bound#operation_recovery_owner.claim_tx_id of
                 Old when Old =:= none; Old =:= ClaimTxId -> ok;
                 _ -> error({operation_recovery_conflict, Ns, OperationRef})
@@ -4737,11 +4735,12 @@ apply_operation_projection(
     end;
 apply_operation_projection(
   _Slot,
-  #transaction{role = {remote_complete, OperationRef, Digest, TargetRef}},
+  #transaction{role = {remote_complete, OperationRef, Digest, Receipt}},
   S = #s{operation_recoveries = Recoveries}) ->
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{claim_slot = Slot} ->
-            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRef),
+            {ok, TargetRefs} = quod_operation_vector:receipt_references(Receipt),
+            Bound = bind_operation_claim(Owner, Slot, Digest, TargetRefs),
             %% A different validator may append the receipt before this
             %% replica's worker finishes. Keep result custody for its callers.
             Completed = Bound#operation_recovery_owner{claim_state = terminal},
@@ -4819,9 +4818,38 @@ finish_operation_target_result(
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{
                   status = running, pid = Pid,
-                  target_ref = TargetRef, target_result = pending,
+                  target_refs = TargetRefs, target_results = Results,
+                  target_result = pending,
                   waiters = Waiters}
           when Result =/= error ->
+            case is_list(TargetRefs) andalso lists:member(TargetRef, TargetRefs) andalso
+                 (not is_map_key(TargetRef, Results) orelse
+                  map_get(TargetRef, Results) =:= Result) of
+                false -> false;
+                true ->
+                    Results1 = Results#{TargetRef => Result},
+                    Bound = Owner#operation_recovery_owner{target_results = Results1},
+                    case TargetRefs of
+                        [TargetRef] ->
+                            finish_operation_result_delivery(Bound, Result, Waiters, OperationRef, S);
+                        _ ->
+                            %% Multi-target dispatch/publication is unavailable
+                            %% until slice 8. Keep per-target facts monotone;
+                            %% never let one reply release the whole vector.
+                            {true, put_operation_owner(Bound, S)}
+                    end
+            end;
+        #operation_recovery_owner{
+           status = Status, pid = Pid, target_results = Results}
+          when Result =/= error,
+               (Status =:= running orelse Status =:= settling),
+               is_map_key(TargetRef, Results), map_get(TargetRef, Results) =:= Result ->
+            {true, S};
+        _ ->
+            false
+    end.
+
+finish_operation_result_delivery(Owner, Result, Waiters, OperationRef, S) ->
             %% The captured claim span may already have ended. Export this
             %% synchronous delivery independently, before receipt retirement;
             %% events on the captured span alone could silently disappear.
@@ -4840,16 +4868,7 @@ finish_operation_target_result(
               end),
             {true, put_operation_owner(
                      Owner#operation_recovery_owner{
-                       target_result = Result, waiters = #{}}, S)};
-        #operation_recovery_owner{
-           status = Status, pid = Pid, target_ref = TargetRef,
-           target_result = Result}
-          when Result =/= error,
-               (Status =:= running orelse Status =:= settling) ->
-            {true, S};
-        _ ->
-            false
-    end.
+                       target_result = Result, waiters = #{}}, S)}.
 
 operation_target_result(committed, TargetRef) ->
     {committed, TargetRef};
@@ -4905,12 +4924,13 @@ operation_owner_from_row(
   #{type := operation,
     ref := {operation, Ns, <<_:256>>, _AgentRef, <<_:256>>} = OperationRef,
     request_digest := <<_:256>> = Digest,
-    outcome_ref := {transaction, _TargetNs, <<_:256>>, <<_:256>>} = TargetRef,
+    outcome_ref := {applications, TargetRefs}, included := [],
     first_slot := Slot, state := unresolved})
   when is_integer(Slot), Slot > 0 ->
+    {ok, TargetRefs} = quod_operation_vector:references(TargetRefs),
     #operation_recovery_owner{
        operation_ref = OperationRef, claim_state = unresolved, claim_slot = Slot,
-       target_ref = TargetRef, request_digest = Digest};
+       target_refs = TargetRefs, request_digest = Digest};
 operation_owner_from_row(Ns, Row) ->
     error({invalid_unresolved_operation_projection, Ns, Row}).
 
@@ -4923,7 +4943,7 @@ install_operation_desired(
                             (bind_operation_claim(
                                Current, Owner#operation_recovery_owner.claim_slot,
                                Owner#operation_recovery_owner.request_digest,
-                               Owner#operation_recovery_owner.target_ref)
+                               Owner#operation_recovery_owner.target_refs)
                             )#operation_recovery_owner{
                                 claim_state = merge_operation_claim_state(
                                                 Current#operation_recovery_owner.claim_state,
@@ -5065,13 +5085,14 @@ wake_operation_owner(Owner) -> Owner.
 
 bind_operation_claim(Owner = #operation_recovery_owner{
                               operation_ref = Ref, claim_slot = OldSlot,
-                              request_digest = OldDigest, target_ref = OldTarget},
-                     Slot, Digest, TargetRef) ->
+                              request_digest = OldDigest, target_refs = OldTargets},
+                     Slot, Digest, TargetRefs) ->
     case (OldSlot =:= none orelse OldSlot =:= Slot) andalso
          (OldDigest =:= none orelse OldDigest =:= Digest) andalso
-         (OldTarget =:= none orelse OldTarget =:= TargetRef) of
+         quod_operation_vector:references(TargetRefs) =:= {ok, TargetRefs} andalso
+         (OldTargets =:= none orelse OldTargets =:= TargetRefs) of
         true -> Owner#operation_recovery_owner{
-                  claim_slot = Slot, request_digest = Digest, target_ref = TargetRef};
+                  claim_slot = Slot, request_digest = Digest, target_refs = TargetRefs};
         false -> error({operation_recovery_binding_conflict, Ref})
     end.
 
@@ -6107,8 +6128,8 @@ content_reference_contacts(ReferencePlan, Workers, TargetIdentity) ->
       fun(_Pid,
           #dtx_server_worker{
             contact = {<<_:256>>, _} = Contact,
-            request = {apply_claim, _RequestId, EvidenceBlob}}, Acc) ->
-              case decode_claimed_application(EvidenceBlob) of
+            request = {apply_claim, _RequestId, TargetIdentity, EvidenceBlob}}, Acc) ->
+              case decode_claimed_application(TargetIdentity, EvidenceBlob) of
                   {ok, _ClaimRef,
                    #transaction{origin = Identity},
                    #transaction{tx_id = TxId}}
@@ -6189,9 +6210,11 @@ endpoint_read_ready(_S) ->
 
 dtx_endpoint_operation_ready({submit, _, _}, S) ->
     endpoint_write_ready(S);
-dtx_endpoint_operation_ready({apply_claim, _, _}, S) ->
+dtx_endpoint_operation_ready({apply_claim, _, {Ns, Anchor}, _},
+                             S = #s{ns = Ns, genesis_hash = Anchor}) ->
     endpoint_write_ready(S);
-dtx_endpoint_operation_ready({cancel_operation_effect, _, _}, S) ->
+dtx_endpoint_operation_ready({cancel_operation_effect, _, {Ns, Anchor}, _},
+                             S = #s{ns = Ns, genesis_hash = Anchor}) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready({phase, _, _, _}, S) ->
     endpoint_read_ready(S);
@@ -6207,14 +6230,14 @@ dtx_endpoint_operation_ready(_, _S) ->
     false.
 
 execute_dtx_endpoint_request(
-  Ns, _Peer, {apply_claim, _RequestId, EvidenceBlob}, _TimeoutMs, Deadline) ->
-    execute_claimed_application(Ns, EvidenceBlob, Deadline);
+  Ns, _Peer, {apply_claim, _RequestId, {Ns, _} = Target, EvidenceBlob}, _TimeoutMs, Deadline) ->
+    execute_claimed_application(Target, EvidenceBlob, Deadline);
 execute_dtx_endpoint_request(
   Ns, Peer,
-  {cancel_operation_effect, _RequestId, SubmissionBlob},
+  {cancel_operation_effect, _RequestId, {Ns, _} = Target, SubmissionBlob},
   _TimeoutMs, _Deadline) ->
     case quod_effect_journal:cancel_operation(
-           Peer, Ns, SubmissionBlob) of
+           Peer, Target, SubmissionBlob) of
         cancelled -> {operation_effect_cancelled, cancelled};
         not_found -> {operation_effect_cancelled, not_found};
         {error, _} -> {error, invalid_request}
@@ -6263,9 +6286,9 @@ execute_dtx_endpoint_request(
             {error, not_ready}
     end.
 
-execute_claimed_application(Ns, EvidenceBlob, Deadline) ->
+execute_claimed_application({Ns, _} = Target, EvidenceBlob, Deadline) ->
     Started = erlang:monotonic_time(),
-    case decode_claimed_application(EvidenceBlob) of
+    case decode_claimed_application(Target, EvidenceBlob) of
         {ok, ClaimRef, Claim, Application} ->
             ok = quod_metrics:observe_remote_operation_stage(
                    Ns, claim_verification, ok,
@@ -6279,7 +6302,7 @@ execute_claimed_application(Ns, EvidenceBlob, Deadline) ->
             {error, invalid_request}
     end.
 
-decode_claimed_application(EvidenceBlob) ->
+decode_claimed_application(Target, EvidenceBlob) ->
     case quod_transaction:decode_evidence(EvidenceBlob) of
         {ok, CertifiedClaimRef,
          #transaction{role = {remote_claim, _, _, _}} = Claim} ->
@@ -6287,7 +6310,7 @@ decode_claimed_application(EvidenceBlob) ->
                 ClaimRef = quod_transaction:stable_ref(CertifiedClaimRef),
                 {transaction, _, _, _} = ClaimRef,
                 Application0 = quod_transaction:remote_application(
-                                 ClaimRef, Claim),
+                                 ClaimRef, Claim, Target),
                 Application = quod_transaction:attach_evidence(
                                 Application0, CertifiedClaimRef, Claim),
                 {ok, ClaimRef, Claim, Application}
@@ -6347,15 +6370,15 @@ claimed_application_result(
 claimed_application_result(_Ns, _ClaimRef, _Claim, _Application, _Deadline) ->
     {error, invalid_request}.
 
-current_application_signer(
-  Ns,
-  #transaction{role = {remote_claim, _Manifest,
-                       {_Target, _PlanDigest, PlanBlob, _Attestation},
-                       _TargetTxId}}) ->
-    case {quod_dtx:decode(PlanBlob), dtx_binding(Ns)} of
-        {{ok, Plan}, {ok, {Ns, _Anchor, Self, Admission}}} ->
-            case quod_dtx:signer(Plan) of
-                Self -> {ok, Self, Admission};
+current_application_signer(Ns, Claim) ->
+    case dtx_binding(Ns) of
+        {ok, {Ns, Anchor, Self, Admission}} ->
+            case quod_transaction:remote_claim_plan(Claim, {Ns, Anchor}) of
+                {ok, Plan} ->
+                    case quod_dtx:signer(Plan) of
+                        Self -> {ok, Self, Admission};
+                        _ -> error
+                    end;
                 _ -> error
             end;
         _ -> error
@@ -6537,15 +6560,15 @@ complete_dtx_server_worker(
     end.
 
 observe_operation_response_flush(
-  {apply_claim, _, _}, {application, _, committed, _}, Ns, Started) ->
+  {apply_claim, _, _, _}, {application, _, committed, _}, Ns, Started) ->
     quod_metrics:observe_remote_operation_stage(
       Ns, response_flush, ok, erlang:monotonic_time() - Started);
 observe_operation_response_flush(
-  {apply_claim, _, _}, {application, _, {rejected, _}, _}, Ns, Started) ->
+  {apply_claim, _, _, _}, {application, _, {rejected, _}, _}, Ns, Started) ->
     quod_metrics:observe_remote_operation_stage(
       Ns, response_flush, rejected, erlang:monotonic_time() - Started);
 observe_operation_response_flush(
-  {apply_claim, _, _}, _Response, Ns, Started) ->
+  {apply_claim, _, _, _}, _Response, Ns, Started) ->
     quod_metrics:observe_remote_operation_stage(
       Ns, response_flush, failed, erlang:monotonic_time() - Started);
 observe_operation_response_flush(_Request, _Response, _Ns, _Started) -> ok.
@@ -6578,11 +6601,11 @@ dtx_endpoint_result_response(
             {{error, RequestId, not_ready}, []}
     end;
 dtx_endpoint_result_response(
-  {apply_claim, RequestId, _ClaimEvidence},
+  {apply_claim, RequestId, _Target, _ClaimEvidence},
   {application_result, Result, TargetEvidence}, _S) ->
     {{application, RequestId, Result, TargetEvidence}, []};
 dtx_endpoint_result_response(
-  {cancel_operation_effect, RequestId, _SubmissionBlob},
+  {cancel_operation_effect, RequestId, _Target, _SubmissionBlob},
   {operation_effect_cancelled, Status}, _S) ->
     {{operation_effect_cancelled, RequestId, Status}, []};
 dtx_endpoint_result_response(
@@ -11334,11 +11357,15 @@ verify_role_reference_binding(
     end;
 verify_role_reference_binding(
   #transaction{role = {remote_complete, _, _, _},
-               evidence = {Ref, Referenced}}, Seen) ->
-    case maps:get(Ref, Seen, none) of
-        #{transaction := Referenced} -> true;
-        _ -> false
-    end;
+               evidence = {applications, Pairs}}, Seen) when is_list(Pairs), Pairs =/= [] ->
+    lists:all(fun
+        ({Ref, #transaction{} = Referenced}) ->
+            case maps:get(Ref, Seen, none) of
+                #{transaction := Referenced} -> true;
+                _ -> false
+            end;
+        (_) -> false
+    end, Pairs);
 verify_role_reference_binding(#transaction{evidence = none}, _Seen) -> true;
 verify_role_reference_binding(#transaction{}, _Seen) -> false.
 

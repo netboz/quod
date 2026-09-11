@@ -54,9 +54,9 @@ group_admission_trace(Sampling) ->
                             Ns, EndpointRequest, [], Carrier),
             {ok, Plain} = quod_dtx_endpoint:encode_request(
                            Ns, EndpointRequest, []),
-            {quod_dtx_endpoint, 10, Ns, Semantic, Carrier} =
+            {quod_dtx_endpoint, 11, Ns, Semantic, Carrier} =
                 binary_to_term(Traced, [safe]),
-            ?assertEqual({quod_dtx_endpoint, 10, Ns, Semantic, []},
+            ?assertEqual({quod_dtx_endpoint, 11, Ns, Semantic, []},
                          binary_to_term(Plain, [safe])),
             ?assertEqual({ok, EndpointRequest, [], Carrier},
                          quod_dtx_endpoint:decode_request(Ns, Traced)),

@@ -27,7 +27,7 @@ recovery and compaction to one format and one authority path.
          reserve/1, release_reservation/1,
          stage/5, bind_reservation/5,
          bind_transaction/3, bind_group/5,
-         bind_operation/2, bind_operation_transaction/3,
+         bind_operation/3, bind_operation_transaction/3,
          cancel_operation/3,
          release_applied/2,
          activate/1, handoff/1, retire/2, retire_transaction/2,
@@ -40,7 +40,8 @@ recovery and compaction to one format and one authority path.
 -export([start_link/1, test_desired_state/3]).
 -endif.
 
--define(MAGIC, 16#51454A31). %% "QEJ1"
+-define(QEJ1_MAGIC, 16#51454A31). %% snapshots carrying transaction V13
+-define(MAGIC, 16#51454A32). %% "QEJ2": transaction V14, no old-row decoder
 -define(HEADER_BYTES, 40).
 -define(DEFAULT_AWAIT_MS, 60000).
 
@@ -177,20 +178,20 @@ bind_group(Plan, GroupRef, Target, PlanDigest, Reservation) ->
     call({bind_group, Plan, GroupRef, Target, PlanDigest, Reservation}).
 
 -doc "Persist one prepared effect under an already-registered source claim.".
--spec bind_operation(reference(), binary()) ->
+-spec bind_operation(reference(), {binary(), binary()}, binary()) ->
           {ok, binary()} | {error, term()}.
-bind_operation(Reservation, SubmissionBlob) when is_reference(Reservation),
+bind_operation(Reservation, Target, SubmissionBlob) when is_reference(Reservation),
                                                  is_binary(SubmissionBlob) ->
-    call({bind_operation, Reservation, SubmissionBlob});
-bind_operation(_Reservation, _SubmissionBlob) ->
+    call({bind_operation, Reservation, Target, SubmissionBlob});
+bind_operation(_Reservation, _Target, _SubmissionBlob) ->
     {error, invalid_operation_effect}.
 
 -doc "Cancel one exact signed operation submission from its authenticated source.".
--spec cancel_operation(<<_:256>>, binary(), binary()) ->
+-spec cancel_operation(<<_:256>>, {binary(), binary()}, binary()) ->
           cancelled | not_found | {error, term()}.
-cancel_operation(<<_:256>> = Peer, Ns, SubmissionBlob)
+cancel_operation(<<_:256>> = Peer, {Ns, <<_:256>>} = Target, SubmissionBlob)
   when is_binary(Ns), byte_size(Ns) > 0, is_binary(SubmissionBlob) ->
-    call({cancel_operation, Peer, Ns, SubmissionBlob});
+    call({cancel_operation, Peer, Target, SubmissionBlob});
 cancel_operation(_Peer, _Ns, _SubmissionBlob) ->
     {error, invalid_operation_effect}.
 
@@ -369,9 +370,9 @@ handle_call(
         {error, Reason} -> {reply, {error, Reason}, S0}
     end;
 handle_call(
-  {bind_operation, Reservation, SubmissionBlob}, {Owner, _}, S0) ->
+  {bind_operation, Reservation, Target, SubmissionBlob}, {Owner, _}, S0) ->
     case bind_operation_row(
-           Reservation, SubmissionBlob, Owner, S0) of
+           Reservation, Target, SubmissionBlob, Owner, S0) of
         {ok, EffectId, S1} ->
             {reply, {ok, EffectId}, S1};
         {error, Reason} ->
@@ -712,10 +713,10 @@ bind_group_row(_Plan, _GroupRef, _Target, _PlanDigest,
     {error, invalid_direct_effect}.
 
 bind_operation_row(
-  Reservation, SubmissionBlob, Owner,
+  Reservation, Target, SubmissionBlob, Owner,
   S = #s{capacity = Capacity, rows = Rows,
          reservations = Reservations}) ->
-    case quod_transaction:decode_operation_submission(SubmissionBlob) of
+    case quod_transaction:decode_operation_submission(SubmissionBlob, Target) of
         {ok,
          #{effect := Effect, plan_digest := PlanDigest,
            manifest_digest := ManifestDigest, target := Target} = Binding} ->
@@ -851,10 +852,10 @@ attached_operation_matches(_TargetRef, _Transaction, _Row) -> false.
 
 validate_operation_transaction(
   #row{effect = Effect,
-       ref = Ref, commit = SubmissionBlob},
+       ref = {operation_effect, 1, _, _, Target, _, _} = Ref, commit = SubmissionBlob},
   Transaction = #transaction{author = Author, author_seq = 0, sig = none,
                              effects = [Effect]}) ->
-    case quod_transaction:decode_operation_submission(SubmissionBlob) of
+    case quod_transaction:decode_operation_submission(SubmissionBlob, Target) of
         {ok,
          #{effect := Effect, plan := Plan, claim := Claim,
            claim_ref := ClaimRef, target_ref := TargetRef,
@@ -875,7 +876,7 @@ validate_operation_transaction(_Row, _Transaction) ->
 validate_operation_transaction_fields(
   Plan, Claim, ClaimRef, TargetRef, Target, PlanDigest,
   Transaction, Author, Effect) ->
-    try quod_transaction:remote_application(ClaimRef, Claim) of
+    try quod_transaction:remote_application(ClaimRef, Claim, Target) of
         Expected ->
             operation_transaction_verdict(
               [{application_id,
@@ -1163,9 +1164,9 @@ retire_transaction_row(TxId, Reason, S = #s{rows = Rows}) ->
             S
     end.
 
-cancel_operation_row(Peer, Ns, SubmissionBlob, S) ->
-    case quod_transaction:decode_operation_submission(SubmissionBlob) of
-        {ok, #{author := Peer, target := {Ns, _Anchor} = Target,
+cancel_operation_row(Peer, Target, SubmissionBlob, S) ->
+    case quod_transaction:decode_operation_submission(SubmissionBlob, Target) of
+        {ok, #{author := Peer, target := Target,
                effect := Effect} = Binding} ->
             case local_effect_owner(Effect, Target) of
                 true -> cancel_operation_binding(Binding, S);
@@ -1424,7 +1425,7 @@ retire_bound_owner_monitor(MRef, S = #s{bound_owners = Owners}) ->
 
 persist(S = #s{path = Path, capacity = Capacity, rows = Rows}) ->
     Payload = term_to_binary(
-                {quod_effect_journal, 6, Capacity,
+                {quod_effect_journal, 7, Capacity,
                  [encode_row(EffectId, Row)
                   || {EffectId, Row} <- lists:sort(maps:to_list(Rows))]},
                 [deterministic]),
@@ -1447,6 +1448,8 @@ persist(S = #s{path = Path, capacity = Capacity, rows = Rows}) ->
 load(Path) ->
     case file:read_file(Path) of
         {error, enoent} -> {unconfigured, #{}};
+        {ok, <<?QEJ1_MAGIC:32, _/binary>>} ->
+            error({unsupported_effect_journal_format, 1});
         {ok, <<?MAGIC:32/unsigned-big, Size:32/unsigned-big,
                Digest:32/binary, Payload:Size/binary>>} ->
             Digest = crypto:hash(sha256, Payload),
@@ -1455,7 +1458,7 @@ load(Path) ->
         {error, Reason} -> error({effect_journal_io, Reason})
     end.
 
-decode_snapshot({quod_effect_journal, 6, Capacity, Encoded})
+decode_snapshot({quod_effect_journal, 7, Capacity, Encoded})
   when ((is_integer(Capacity) andalso Capacity >= 0) orelse
         Capacity =:= unlimited),
        is_list(Encoded) ->
@@ -1477,10 +1480,10 @@ encode_row(EffectId, #row{effect = Effect, action = Action,
                           commit = Commit, ref = Ref,
                           admission = Admission, state = State,
                           height = Height, result = Result}) ->
-    {quod_effect_row, 5, EffectId, Effect, Action, Desired, Prepared,
+    {quod_effect_row, 6, EffectId, Effect, Action, Desired, Prepared,
      Commit, Ref, Admission, State, Height, Result}.
 
-decode_row({quod_effect_row, 5, EffectId, Effect, Action, Desired, Prepared,
+decode_row({quod_effect_row, 6, EffectId, Effect, Action, Desired, Prepared,
             Commit, Ref, Admission, State, Height, Result}) ->
     Row = #row{effect = Effect, action = Action, desired = Desired,
                prepared = Prepared, commit = Commit, ref = Ref,
@@ -1563,12 +1566,12 @@ valid_row_payload(
 valid_row_payload(
   #row{state = operation_pending, effect = Effect, action = Action,
        prepared = Prepared, commit = Commit,
-       ref = Ref}) ->
+       ref = {operation_effect, 1, _, _, Target, _, _} = Ref}) ->
     crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
         crypto:hash(sha256, Prepared) =:=
             quod_effect:prepared_digest(Effect) andalso
         byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
-        case quod_transaction:decode_operation_submission(Commit) of
+        case quod_transaction:decode_operation_submission(Commit, Target) of
             {ok, #{effect := Effect} = Binding} ->
                 operation_effect_ref(Binding) =:= Ref;
             {error, _} -> false

@@ -587,27 +587,26 @@ role_name({remote_complete, _, _, _}) -> remote_complete.
 
 role_details(application) -> null;
 role_details(
-  {remote_claim, _Manifest,
-   {Target = {TargetNs, <<_:256>> = TargetAnchor}, PlanDigest,
-    _PlanBlob, _Attestation}, <<_:256>> = TargetTxId})
-  when is_binary(TargetNs) ->
-    #{target => origin_json(Target),
-      target_transaction => anchored_outcome_ref_json(
-                              {transaction, TargetNs, TargetAnchor,
-                               TargetTxId}),
-      plan_digest => digest_json(PlanDigest)};
+  {remote_claim, _Manifest, Bundles, Refs}) ->
+    #{targets => [#{target => origin_json(Target), plan_digest => digest_json(Digest)}
+                  || {Target, Digest, _Blob, _Attestation} <- Bundles],
+      target_transactions => [anchored_outcome_ref_json(R) || R <- Refs]};
 role_details(
   {remote_application, ClaimRef, OperationRef, RequestDigest}) ->
     #{source_claim => anchored_outcome_ref_json(ClaimRef),
       operation_ref => operation_ref_json(OperationRef),
       request_digest => digest_json(RequestDigest)};
 role_details(
-  {remote_complete, OperationRef, RequestDigest, TargetRef}) ->
+  {remote_complete, OperationRef, RequestDigest, Receipt}) ->
     #{operation_ref => operation_ref_json(OperationRef),
       request_digest => digest_json(RequestDigest),
-      target_transaction => anchored_outcome_ref_json(TargetRef)}.
+      targets => [#{target => origin_json(Target), kind => included,
+                    application_ref => anchored_outcome_ref_json(Ref)}
+                  || {Target, {included, Ref}} <- Receipt]}.
 
 evidence_ref_json(none) -> null;
+evidence_ref_json({applications, Pairs}) ->
+    [evidence_ref_json(Pair) || Pair <- Pairs];
 evidence_ref_json({CertifiedRef, _Transaction}) ->
     case quod_dtx:certified_ref_binding(CertifiedRef) of
         {ok, {Ns, Anchor}, Slot, TxId} ->
@@ -946,6 +945,8 @@ operation_ref_json(
 operation_ref_json(_) ->
     null.
 
+anchored_outcome_ref_json({applications, Refs}) ->
+    #{kind => applications, targets => [anchored_outcome_ref_json(R) || R <- Refs]};
 anchored_outcome_ref_json(
   {transaction, Ns, <<_:256>> = Anchor, <<_:256>> = TxId})
   when is_binary(Ns) ->

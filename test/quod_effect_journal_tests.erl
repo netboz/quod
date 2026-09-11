@@ -5,7 +5,7 @@
 -include("quod_ledger.hrl").
 
 -define(ROOT_NS, <<"quod:root">>).
--define(MAGIC, 16#51454A31).
+-define(MAGIC, 16#51454A32).
 
 capacity_is_projected_and_restart_durable_test() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -66,7 +66,9 @@ superseded_snapshot_version_is_identified_test() ->
     %% V5 stored a different meaning in the operation row's 32-byte field.
     %% Reject it explicitly rather than guessing during recovery.
     assert_unsupported_snapshot_version(
-      5, {quod_effect_journal, 5, 64, []}).
+      5, {quod_effect_journal, 5, 64, []}),
+    assert_unsupported_snapshot_version(
+      6, {quod_effect_journal, 6, 64, []}).
 
 prepared_recovery_may_restore_genesis_atoms_test() ->
     %% A prepared genesis can contain an atom which existed in the authoring
@@ -484,9 +486,9 @@ operation_cancel_before_bind_removes_every_exact_reservation_test() ->
           ?assertMatch(#{reservations := 0, active := 0},
                        quod_effect_journal:stats()),
           ?assertEqual({error, missing_effect_preparation},
-                       quod_effect_journal:bind_operation(Token1, Blob)),
+                       quod_effect_journal:bind_operation(Token1, maps:get(target, Binding), Blob)),
           ?assertEqual({error, missing_effect_preparation},
-                       quod_effect_journal:bind_operation(Token2, Blob)),
+                       quod_effect_journal:bind_operation(Token2, maps:get(target, Binding), Blob)),
           ?assertEqual(not_found, cancel_operation(Binding, Blob))
       end).
 
@@ -504,7 +506,7 @@ operation_bind_consumes_duplicates_and_cancel_survives_restart_test() ->
                         Parent !
                             {operation_bind_result, self(),
                              quod_effect_journal:bind_operation(
-                               Token1, Blob)}
+                               Token1, maps:get(target, Binding), Blob)}
                     end),
           OwnerMRef = monitor(process, Owner),
           EffectId =
@@ -558,7 +560,7 @@ operation_unbound_reservation_is_lost_on_journal_restart_test() ->
           ?assertMatch(#{reservations := 0},
                        quod_effect_journal:stats()),
           ?assertEqual({error, missing_effect_preparation},
-                       quod_effect_journal:bind_operation(Token, Blob)),
+                       quod_effect_journal:bind_operation(Token, maps:get(target, Binding), Blob)),
           stop(Restarted)
       end).
 
@@ -567,24 +569,24 @@ operation_cancel_authentication_is_fail_closed_test() ->
       fun(_Dir, _Journal, Fixture, Binding) ->
           Blob = operation_blob(Fixture),
           Token = stage_operation_reservation(Fixture, Binding, #{}),
-          {TargetNs, _TargetAnchor} = maps:get(target, Binding),
+          {TargetNs, TargetAnchor} = Target = maps:get(target, Binding),
           Author = maps:get(author, Binding),
           ?assertEqual(
              {error, invalid_operation_effect},
              quod_effect_journal:cancel_operation(
-               hash(8301), TargetNs, Blob)),
+               hash(8301), Target, Blob)),
           ?assertEqual(
              {error, invalid_operation_effect},
              quod_effect_journal:cancel_operation(
-               Author, <<TargetNs/binary, "-wrong">>, Blob)),
+               Author, {<<TargetNs/binary, "-wrong">>, TargetAnchor}, Blob)),
           ?assertEqual(
              {error, invalid_operation_effect},
              quod_effect_journal:cancel_operation(
-               Author, TargetNs, tampered_operation_blob(Fixture))),
+               Author, Target, tampered_operation_blob(Fixture))),
           ?assertMatch(#{reservations := 1, active := 0},
                        quod_effect_journal:stats()),
           ?assertMatch({ok, <<_:256>>},
-                       quod_effect_journal:bind_operation(Token, Blob))
+                       quod_effect_journal:bind_operation(Token, maps:get(target, Binding), Blob))
       end).
 
 operation_binding_requires_every_attested_field_test() ->
@@ -608,7 +610,7 @@ operation_binding_requires_every_attested_field_test() ->
                           Fixture, Binding, Overrides),
                 ?assertEqual(
                    {error, ExpectedReason},
-                   quod_effect_journal:bind_operation(Token, Blob)),
+                   quod_effect_journal:bind_operation(Token, maps:get(target, Binding), Blob)),
                 ?assertMatch(#{reservations := 1, active := 0},
                              quod_effect_journal:stats()),
                 ok = quod_effect_journal:release_reservation(Token)
@@ -635,7 +637,7 @@ operation_reservation_owner_death_prevents_late_bind_test() ->
           end,
           ok = wait_reservations(0, 100),
           ?assertEqual({error, missing_effect_preparation},
-                       quod_effect_journal:bind_operation(Token, Blob))
+                       quod_effect_journal:bind_operation(Token, maps:get(target, Binding), Blob))
       end).
 
 group_binding_survives_owner_death_and_restart_test() ->
@@ -776,7 +778,7 @@ with_operation_journal(Fun) ->
                     #{prepared_effect => true}),
         Blob = operation_blob(Fixture),
         {ok, Binding} =
-            quod_transaction:decode_operation_submission(Blob),
+            quod_transaction:decode_operation_submission(Blob, maps:get(target, Fixture)),
         {TargetNs, TargetAnchor} = maps:get(target, Binding),
         TargetKey = quod_effect:executor(maps:get(effect, Binding)),
         application:set_env(quod, node_pubkey, TargetKey),
@@ -838,9 +840,8 @@ operation_blob(Fixture) ->
     Blob.
 
 cancel_operation(Binding, Blob) ->
-    {TargetNs, _TargetAnchor} = maps:get(target, Binding),
     quod_effect_journal:cancel_operation(
-      maps:get(author, Binding), TargetNs, Blob).
+      maps:get(author, Binding), maps:get(target, Binding), Blob).
 
 tampered_operation_blob(Fixture) ->
     {submit, Author, <<First, Rest/binary>>, Canonical} =
@@ -918,7 +919,7 @@ fixture(State) ->
                               sig = none}),
     TxId = Unsigned#transaction.tx_id,
     Ref = {transaction, ?ROOT_NS, Anchor, TxId},
-    Row = {quod_effect_row, 5, quod_effect:effect_id(Effect), Effect,
+    Row = {quod_effect_row, 6, quod_effect:effect_id(Effect), Effect,
            ActionBytes, DesiredBytes, PreparedBytes,
            pending_transaction_bytes(Unsigned, Admission), Ref, Admission,
            State, 0, none},
@@ -1016,7 +1017,7 @@ write_snapshot(Dir, Row) ->
     Path = filename:join(Dir, "direct_effects.qej"),
     ok = filelib:ensure_dir(Path),
     Payload = term_to_binary(
-                {quod_effect_journal, 6, 64, Rows}, [deterministic]),
+                {quod_effect_journal, 7, 64, Rows}, [deterministic]),
     Digest = crypto:hash(sha256, Payload),
     Bytes = <<?MAGIC:32/unsigned-big,
               (byte_size(Payload)):32/unsigned-big,

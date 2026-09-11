@@ -164,9 +164,10 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
           end,
     {ok, {Ns, _}, _, _} = quod_dtx:certified_ref_binding(Ref),
     TargetRef = quod_transaction:stable_ref(Ref),
+    {ok, Included} = quod_operation_vector:included([TargetRef]),
     Receipt = #transaction{
-                 role = {remote_complete, unused_operation, unused_request, TargetRef},
-                 evidence = {Ref, Transaction}, foreign_reads = []},
+                 role = {remote_complete, unused_operation, unused_request, Included},
+                 evidence = {applications, [{Ref, Transaction}]}, foreign_reads = []},
     ?assertEqual([{transaction, Ref}], quod_transaction:required_references(Receipt)),
     Slot = 3,
     Hash = crypto:hash(sha256, <<"receipt-validation-proposal">>),
@@ -225,10 +226,12 @@ foreign_validation_queued_success_respects_original_deadline_test_() ->
     [{atom_to_list(When), {timeout, 12, fun() ->
         with_certified_history(fun(State0, Transaction, Ref) ->
             {ok, {Ns, Anchor}, _, _} = quod_dtx:certified_ref_binding(Ref),
+            {ok, Included} = quod_operation_vector:included(
+                               [quod_transaction:stable_ref(Ref)]),
             Receipt = #transaction{
               role = {remote_complete, unused_operation, unused_request,
-                      quod_transaction:stable_ref(Ref)},
-              evidence = {Ref, Transaction}, foreign_reads = []},
+                      Included},
+              evidence = {applications, [{Ref, Transaction}]}, foreign_reads = []},
             %% This is a callback-state fixture, not candidate wire admission:
             %% only the receipt's reference binding is under test. The worker
             %% still authenticates the actual signed entry in the real store.

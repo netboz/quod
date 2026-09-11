@@ -48,7 +48,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
 
 -export_type([index/0, outcome/0]).
 
--define(FORMAT, 6).
+-define(FORMAT, 7). %% generalized target-keyed operation projection
 -define(CACHE_LIMIT, 4096).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -991,20 +991,26 @@ operation_candidate(
          operation_outcome_ref(OutcomeRef) of
         true ->
             Key = operation_key(Index, AgentRef, OperationId),
-            State = case quod_outcome:ref_identity(OutcomeRef) of
-                        {ok, {Ns, Anchor}} -> {terminal, Slot};
-                        {ok, _Foreign} -> unresolved
+            State = case OutcomeRef of
+                        {applications, _Refs} -> unresolved;
+                        _ ->
+                            case quod_outcome:ref_identity(OutcomeRef) of
+                                {ok, {Ns, Anchor}} -> {terminal, Slot};
+                                {ok, _Foreign} -> unresolved
+                            end
                     end,
             {ok, Key,
              #{type => operation, ref => OperationRef,
                request_digest => Digest, outcome_ref => OutcomeRef,
-               first_slot => Slot, state => State}};
+               included => [], first_slot => Slot, state => State}};
         false ->
             error
     end;
 operation_candidate(_Index, _Claim, _OutcomeRef, _Slot) ->
     error.
 
+operation_outcome_ref({applications, Refs}) ->
+    quod_operation_vector:references(Refs) =:= {ok, Refs};
 operation_outcome_ref({transaction, Ns, <<_:256>>, <<_:256>>}) ->
     is_binary(Ns) andalso byte_size(Ns) > 0;
 operation_outcome_ref(
@@ -1012,22 +1018,23 @@ operation_outcome_ref(
     is_binary(Ns) andalso byte_size(Ns) > 0;
 operation_outcome_ref(_Ref) -> false.
 
--doc "Mark one exact foreign operation target as durably observed.".
+-doc "Install the complete exact inclusion vector without inventing target verdicts.".
 -spec check_completion(index(), term(), <<_:256>>, term()) ->
           {new, index()} | {replay, index()} | {error, index_error()}.
 check_completion(Index,
                  {operation, Ns, Anchor, AgentRef, OperationId} = OperationRef,
-                 <<_:256>> = Digest, OutcomeRef) ->
+                 <<_:256>> = Digest, Receipt) ->
     case {Ns =:= Index#index.ns, Anchor =:= Index#index.anchor,
-          operation_outcome_ref(OutcomeRef)} of
-        {true, true, true} ->
+          quod_operation_vector:receipt_references(Receipt)} of
+        {true, true, {ok, Refs}} ->
             Key = operation_key(Index, AgentRef, OperationId),
             case lookup_operation(Index, Key) of
                 {{ok, #{ref := OperationRef, request_digest := Digest,
-                        outcome_ref := OutcomeRef, state := unresolved}},
+                        outcome_ref := {applications, Refs},
+                        included := [], state := unresolved}},
                  Index1} -> {new, Index1};
                 {{ok, #{ref := OperationRef, request_digest := Digest,
-                        outcome_ref := OutcomeRef,
+                        outcome_ref := {applications, Refs}, included := Receipt,
                         state := {terminal, _}}}, Index1} -> {replay, Index1};
                 {{ok, _}, _Index1} -> {error, outcome_index_conflict};
                 {not_found, _Index1} -> {error, outcome_index_bad_operation};
@@ -1043,21 +1050,22 @@ check_completion(_Index, _OperationRef, _Digest, _OutcomeRef) ->
           {new | replay, index()} | {error, index_error()}.
 complete_operation(Index, Slot,
                    {operation, Ns, Anchor, AgentRef, OperationId} = OperationRef,
-                   <<_:256>> = Digest, OutcomeRef)
+                   <<_:256>> = Digest, Receipt)
   when is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
     case {Ns =:= Index#index.ns, Anchor =:= Index#index.anchor,
-          operation_outcome_ref(OutcomeRef)} of
-        {true, true, true} ->
+          quod_operation_vector:receipt_references(Receipt)} of
+        {true, true, {ok, Refs}} ->
             Key = operation_key(Index, AgentRef, OperationId),
             case lookup_operation(Index, Key) of
                 {{ok, #{ref := OperationRef, request_digest := Digest,
-                        outcome_ref := OutcomeRef, state := unresolved} = Row},
+                        outcome_ref := {applications, Refs},
+                        included := [], state := unresolved} = Row},
                  Index1} ->
-                    Row1 = Row#{state := {terminal, Slot}},
+                    Row1 = Row#{included := Receipt, state := {terminal, Slot}},
                     Index2 = stage_row(Key, Row1, Index1),
                     {new, cache_put(Key, Row1, Index2)};
                 {{ok, #{ref := OperationRef, request_digest := Digest,
-                        outcome_ref := OutcomeRef,
+                        outcome_ref := {applications, Refs}, included := Receipt,
                         state := {terminal, Existing}}}, Index1}
                   when Existing =< Slot ->
                     %% Several validators may observe the same target outcome
@@ -1089,7 +1097,8 @@ unresolved_operations(Index = #index{backend = {memory, Map}}) ->
 unresolved_operations(Index = #index{backend = {dets, Name}}) ->
     Pattern = {{operation, Index#index.anchor, '_', '_'},
                #{type => operation, ref => '_', request_digest => '_',
-                 outcome_ref => '_', first_slot => '_', state => unresolved}},
+                 outcome_ref => '_', included => '_',
+                 first_slot => '_', state => unresolved}},
     Rows = try [Row || {_Key, Row} <- dets:match_object(Name, Pattern)]
            catch _:_ -> []
            end,
@@ -1271,7 +1280,8 @@ public(#{type := group,
 public(#{type := operation,
          ref := {operation, Ns, <<_:256>>, AgentRef, <<_:256>>} = Ref,
          request_digest := <<_:256>> = RequestDigest,
-         outcome_ref := OutcomeRef, first_slot := Slot, state := State})
+         outcome_ref := OutcomeRef, included := Included,
+         first_slot := Slot, state := State})
   when is_binary(Ns), byte_size(Ns) > 0, is_binary(AgentRef),
        is_integer(Slot), Slot > 0 ->
     PublicState = case State of
@@ -1280,7 +1290,7 @@ public(#{type := operation,
                   end,
     {ok, #{status => claimed, operation_state => PublicState, ref => Ref,
            request_digest => RequestDigest,
-           outcome_ref => OutcomeRef, height => Slot}};
+           outcome_ref => OutcomeRef, included => Included, height => Slot}};
 public(_Other) ->
     {error, outcome_index_corrupt}.
 
@@ -1372,17 +1382,26 @@ valid_stored(
   #{type := operation,
     ref := {operation, Ns, Anchor, AgentRef, OperationId},
     request_digest := <<_:256>>,
-    outcome_ref := OutcomeRef, first_slot := Slot, state := State} = Row)
-  when map_size(Row) =:= 6,
+    outcome_ref := OutcomeRef, included := Included,
+    first_slot := Slot, state := State} = Row)
+  when map_size(Row) =:= 7,
        is_binary(Ns), byte_size(Ns) > 0,
        is_binary(Anchor), byte_size(Anchor) =:= 32,
        is_binary(AgentRef),
        is_binary(OperationId), byte_size(OperationId) =:= 32,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
     quod_agent_ref:valid_principal({agent, AgentRef}) andalso
-        operation_outcome_ref(OutcomeRef) andalso valid_operation_state(State);
+        operation_outcome_ref(OutcomeRef) andalso valid_operation_state(State) andalso
+        valid_operation_included(OutcomeRef, Included, State);
 valid_stored(_Key, _Value) ->
     false.
+
+valid_operation_included({applications, _}, [], unresolved) -> true;
+valid_operation_included({applications, Refs}, Included, {terminal, _}) ->
+    quod_operation_vector:receipt_references(Included) =:= {ok, Refs};
+valid_operation_included({applications, _}, _, _) -> false;
+valid_operation_included(_OrdinaryOrGroup, [], _) -> true;
+valid_operation_included(_, _, _) -> false.
 
 valid_status(pending) -> true;
 valid_status({committed, Slot}) -> is_integer(Slot) andalso Slot > 0;

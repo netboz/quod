@@ -456,7 +456,7 @@ remote_operation_ids_are_acyclic_and_evidence_independent_test() ->
                    Completion#transaction.result)),
     ?assertEqual(
        Application#transaction.tx_id,
-       (quod_transaction:remote_application(ClaimRef, Claim))#transaction.tx_id),
+       (quod_transaction:remote_application(ClaimRef, Claim, Target))#transaction.tx_id),
     {TargetNs, TargetAnchor} = Target,
     ?assertEqual({transaction, TargetNs, TargetAnchor,
                   Application#transaction.tx_id}, TargetRef),
@@ -467,7 +467,7 @@ remote_operation_ids_are_acyclic_and_evidence_independent_test() ->
                                       OriginNs, OriginAnchor, 9, <<215:256>>,
                                       Claim#transaction.tx_id, <<"other-qc">>),
     OtherEvidence = quod_transaction:attach_evidence(
-                      quod_transaction:remote_application(ClaimRef, Claim),
+                      quod_transaction:remote_application(ClaimRef, Claim, Target),
                       OtherCertifiedClaimRef, Claim),
     ?assertEqual(Application#transaction.tx_id,
                  OtherEvidence#transaction.tx_id),
@@ -479,7 +479,7 @@ remote_operation_role_and_evidence_roundtrip_test() ->
     Claim = maps:get(claim, Fixture),
     Application = maps:get(application, Fixture),
     Completion = maps:get(completion, Fixture),
-    ?assertEqual(shared, quod_transaction:remote_claim_route(Claim)),
+    ?assertEqual(shared, quod_transaction:remote_claim_route(Claim, maps:get(participant_target, Fixture))),
     ?assertMatch([{transaction, _}],
                  quod_transaction:required_references(Application)),
     ?assertMatch([{transaction, _}],
@@ -509,8 +509,8 @@ operation_submission_is_one_verified_custody_artifact_test() ->
           effect := {quod_direct_effect, 2, _, _, _, _, _, _, _, _, _},
           author := SourceKey, admission := <<_:256>>,
           cancel_digest := <<_:256>>}},
-       quod_transaction:decode_operation_submission(Blob)),
-    {ok, Decoded} = quod_transaction:decode_operation_submission(Blob),
+       quod_transaction:decode_operation_submission(Blob, maps:get(target, Fixture))),
+    {ok, Decoded} = quod_transaction:decode_operation_submission(Blob, maps:get(target, Fixture)),
     ?assertEqual(
        crypto:hash(
          sha256, <<"quod.operation.cancel.v1", Signature/binary>>),
@@ -527,7 +527,7 @@ operation_submission_rejects_before_inner_decode_test() ->
     TamperedBlob = term_to_binary(Tampered, [deterministic]),
     ?assertEqual(
        {error, invalid_operation_submission},
-       quod_transaction:decode_operation_submission(TamperedBlob)),
+       quod_transaction:decode_operation_submission(TamperedBlob, maps:get(target, Fixture))),
     %% A valid outer signature under another key cannot detach the custody
     %% artifact from the source author embedded in its signed transaction.
     {OtherKey, OtherSeed} = quod_identity:generate(),
@@ -541,7 +541,7 @@ operation_submission_rejects_before_inner_decode_test() ->
     ?assertEqual(
        {error, invalid_operation_submission},
        quod_transaction:decode_operation_submission(
-         term_to_binary(WrongAuthorSubmission, [deterministic]))),
+         term_to_binary(WrongAuthorSubmission, [deterministic]), maps:get(target, Fixture))),
     %% The manifest names the source node/admission that may claim this
     %% attested plan. A different coordinator remains a well-signed claim but
     %% cannot become an operation-custody capability.
@@ -553,7 +553,7 @@ operation_submission_rejects_before_inner_decode_test() ->
     ?assertEqual(
        {error, invalid_operation_submission},
        quod_transaction:decode_operation_submission(
-         term_to_binary(MismatchSubmission, [deterministic]))),
+         term_to_binary(MismatchSubmission, [deterministic]), maps:get(target, CoordinatorMismatch))),
     %% A valid signed remote claim without an effect belongs to the ordinary
     %% application path and can never authorize private-effect cancellation.
     NoEffect = quod_ct:remote_operation_fixture(#{}),
@@ -600,7 +600,7 @@ relay_submission_roundtrip_test() ->
 superseded_v12_transaction_is_explicitly_rejected_test() ->
     {Tx, Identity} = signed(),
     {ok, V13Bytes} = quod_transaction:bytes(?BINDING, Tx),
-    {quod_transaction, 13, Ns, Anchor, Admission,
+    {quod_transaction, 14, Ns, Anchor, Admission,
      TxId, Origin, ProofId, PlanDigest, Goal, Result,
      MaterialWire, EffectsWire, _Role, _Evidence,
      _ForeignReads,
@@ -733,7 +733,7 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 13, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 14, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
            <<>>, <<>>, term_to_binary(MaterialWire, [deterministic]),
            CanonicalEffects,

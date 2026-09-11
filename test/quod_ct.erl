@@ -24,6 +24,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
          remote_operation_fixture/1,
+         operation_plan_fixture/2,
          signed_effect_operation_submission/0,
          signed_effect_operation_submission/1,
          signed_agent_facts/1,
@@ -237,6 +238,11 @@ signed_remote_plan_fixture(Overrides) when is_map(Overrides) ->
     signed_plan_fixture(
       Overrides#{target => Origin, participant_target => Target}, [Target]).
 
+%% Codec/validation fixtures may exercise N-target metadata before slice 8
+%% enables its public routing row. This helper performs no dispatch.
+operation_plan_fixture(Overrides, Targets) ->
+    signed_plan_fixture(Overrides, Targets).
+
 signed_plan_fixture(Overrides, ParticipantTargets0) ->
     Request = signed_goal_fixture(Overrides),
     Origin = {Ns, Anchor} = maps:get(target, Request),
@@ -392,7 +398,7 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
     Bundle = {Target, quod_dtx:digest(Plan), maps:get(plan_blob, Fixture),
               maps:get(attestation, Fixture)},
     Claim0 = quod_transaction:remote_claim(
-               Origin, maps:get(manifest, Fixture), Bundle,
+               Origin, maps:get(manifest, Fixture), [Bundle],
                maps:get(auth, Fixture), maps:get(foreign_reads, Overrides, [])),
     NodeIdentity = maps:get(node_identity, Fixture),
     NodeKey = maps:get(pubkey, NodeIdentity),
@@ -409,7 +415,7 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
                                 OriginNs, OriginAnchor, 2, <<213:256>>,
                                 Claim#transaction.tx_id, <<"claim-qc">>),
     Application0 = quod_transaction:attach_evidence(
-                     quod_transaction:remote_application(ClaimRef, Claim),
+                     quod_transaction:remote_application(ClaimRef, Claim, Target),
                      CertifiedClaimRef, Claim),
     {TargetNs, TargetAnchor} = Target,
     {ok, Application} = quod_transaction:sign(
@@ -426,9 +432,9 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
     Completion0 = quod_transaction:remote_complete(
                     Origin, maps:get(operation_ref, ClaimData),
-                    maps:get(digest, ClaimData), TargetRef),
-    Completion = quod_transaction:attach_evidence(
-                   Completion0, CertifiedTargetRef, Application),
+                    maps:get(digest, ClaimData), [{Target, {included, TargetRef}}]),
+    Completion = quod_transaction:attach_receipt_evidence(
+                   Completion0, [{CertifiedTargetRef, Application}]),
     Fixture#{origin => Origin, participant_target => Target,
              claim => Claim, claim_ref => ClaimRef,
              certified_claim_ref => CertifiedClaimRef,
@@ -519,7 +525,7 @@ signed_effect_operation_submission(Options) ->
     {ok, PlanBlob} = quod_dtx:encode(Plan),
     Claim0 = quod_transaction:remote_claim(
                Origin, Manifest,
-               {Target, PlanDigest, PlanBlob, Attestation},
+               [{Target, PlanDigest, PlanBlob, Attestation}],
                maps:get(auth, Request), []),
     {ok, Claim, Submission} = quod_transaction:sign_submission(
                                 {OriginNs, OriginAnchor, Admission},

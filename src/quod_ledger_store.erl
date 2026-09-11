@@ -71,7 +71,8 @@ index to the next worker through an immutable session.
 -define(V2_MAGIC,  16#915106AB). %% consensus-signature format; phash2 OCC read-sets
 -define(V3_MAGIC,  16#915106AC). %% mutation-version OCC tokens; content-only block payload
 -define(V4_MAGIC,  16#915106AD). %% shared tagged term payload with DTX controls
--define(MAGIC,     16#915106AE). %% V5: byte-canonical entry/block/transaction envelopes
+-define(V5_MAGIC,  16#915106AE). %% byte-canonical envelopes carrying transaction V13
+-define(MAGIC,     16#915106AF). %% V6: transaction V14, generalized operation claims
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
@@ -446,6 +447,8 @@ next_frame(Fd, {Off, Buf0}) ->
             {stop, {unsupported_format, 3}, Off};
         {short, <<?V4_MAGIC:32, _/binary>>} ->
             {stop, {unsupported_format, 4}, Off};
+        {short, <<?V5_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 5}, Off};
         {short, _}    -> {stop, short, Off};
         {io_error, R} -> {stop, {io_error, R}, Off};
         {ok, Buf1} ->
@@ -458,6 +461,8 @@ next_frame(Fd, {Off, Buf0}) ->
                     {stop, {unsupported_format, 3}, Off};
                 <<?V4_MAGIC:32, _/binary>> ->
                     {stop, {unsupported_format, 4}, Off};
+                <<?V5_MAGIC:32, _/binary>> ->
+                    {stop, {unsupported_format, 5}, Off};
                 <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
                     {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
@@ -641,7 +646,7 @@ tail_contains_magic(Fd, Pos, Size) ->
     case file:pread(Fd, Pos, Len) of
         {ok, Bin} when byte_size(Bin) =:= Len ->
             case binary:match(
-                   Bin, [<<?MAGIC:32>>, <<?V4_MAGIC:32>>, <<?V3_MAGIC:32>>,
+                   Bin, [<<?MAGIC:32>>, <<?V5_MAGIC:32>>, <<?V4_MAGIC:32>>, <<?V3_MAGIC:32>>,
                          <<?V2_MAGIC:32>>, <<?V1_MAGIC:32>>]) of
                 nomatch when Pos + Len >= Size ->
                     false;

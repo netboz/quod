@@ -1535,8 +1535,8 @@ dtx_unverified_endpoint_contacts_are_never_retained_test() ->
         {ok, ClaimEvidence} = quod_transaction:encode_evidence(
                                 maps:get(certified_claim_ref, Operation),
                                 maps:get(claim, Operation)),
-        ApplyRequest = {apply_claim, <<72:128>>, ClaimEvidence},
         {TargetNs, _} = Target = maps:get(participant_target, Operation),
+        ApplyRequest = {apply_claim, <<72:128>>, Target, ClaimEvidence},
         ApplyState0 = ready_dtx_endpoint_state(
                         Target, maps:get(node_identity, Operation),
                         maps:get(admission, Operation)),
@@ -1614,7 +1614,7 @@ content_reference_contact_is_claim_only_test() ->
     Target = maps:get(participant_target, Fixture),
     {ok, EvidenceBlob} = quod_transaction:encode_evidence(
                            ClaimRef, maps:get(claim, Fixture)),
-    Request = {apply_claim, <<77:128>>, EvidenceBlob},
+    Request = {apply_claim, <<77:128>>, Target, EvidenceBlob},
     Worker = spawn(fun validation_owner/0),
     Peer = <<78:256>>,
     Endpoint = {"127.0.0.1", 15973},

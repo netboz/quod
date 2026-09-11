@@ -328,6 +328,53 @@ ask_test_() ->
           ?_test(t_workers_are_reaped(Ctx))]
      end}.
 
+fresh_ledgers_single_target_uses_vector_receipt_test_() ->
+    {setup, fun setup/0, fun cleanup/1, fun(Ctx) ->
+      {timeout, 30, fun() ->
+        #{chain_b := B, chain_c := C, dir := Dir, namespaces := Namespaces} = Ctx,
+        Owners = [{Ns, quod_reg:where({quod_simplex, Ns}),
+                        quod_reg:where({quod_prolog, Ns})} || Ns <- Namespaces],
+        lists:foreach(fun(Ns) ->
+            NsDir = quod_ledger_store:ns_dir(Dir, Ns),
+            assert_file_magic(filename:join(NsDir, "log.0001"), 16#915106AF),
+            assert_file_magic(filename:join(NsDir, "signing.0001"), 16#51534A34)
+        end, Namespaces),
+        {ok, Network} = quod_ontology:network_identity(),
+        F = quod_ct:signed_goal_fixture(#{network => Network,
+            target => {B, quod_simplex:genesis_hash(B)},
+            goal_text => <<"chain_c::assertz(s7_single_vector_live).">>}),
+        [KeyFact] = quod_ct:signed_agent_facts(F),
+        ?assertMatch({ok, [_], _}, quod_prolog:execute(B, {assertz, KeyFact})),
+        #{goal := FrozenGoal} = maps:get(evidence, F),
+        {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
+        ?assertMatch({ok, [_], _}, quod_prolog:execute_signed(
+            maps:get(evidence, F), Goal, maps:get(principal, F))),
+        Op = maps:get(operation_ref, F),
+        ok = quod_ct:wait_until(fun() ->
+            case quod_prolog:local_outcome(B, Op) of
+                {ok, #{operation_state := terminal}} -> true;
+                _ -> false
+            end
+        end),
+        {ok, #{operation_state := terminal, outcome_ref := {applications, [Ref]},
+               included := Included}} = quod_prolog:local_outcome(B, Op),
+        Target = {C, quod_simplex:genesis_hash(C)},
+        ?assertEqual(Target, quod_operation_vector:target(Ref)),
+        ?assertEqual([{Target, {included, Ref}}], Included),
+        ?assertMatch({ok, #{status := committed}}, quod_prolog:local_outcome(C, Ref)),
+        ?assertMatch({ok, [_], _}, prove(C, s7_single_vector_live)),
+        ?assertMatch({fail, _}, prove(B, s7_single_vector_live)),
+        ?assertEqual(Owners, [{Ns, quod_reg:where({quod_simplex, Ns}),
+                                  quod_reg:where({quod_prolog, Ns})} || Ns <- Namespaces])
+      end}
+    end}.
+
+assert_file_magic(Path, Magic) ->
+    {ok, Fd} = file:open(Path, [read, raw, binary]),
+    try ?assertEqual({ok, <<Magic:32>>}, file:read(Fd, 4))
+    after ok = file:close(Fd)
+    end.
+
 t_scope_trace_covers_open_and_answer(#{pets := Ns}) ->
     quod_trace_tests:with_tracer(fun() ->
         ?assertMatch({ok, [#{}], _}, prove(Ns, {'::', private, {secret, 42}})),

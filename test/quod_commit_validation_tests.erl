@@ -83,7 +83,7 @@ duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->
     {ok, Outcomes0} = quod_outcome:open(
                         Ns, Anchor, #{outcome_backend => memory}),
     {new, Outcomes1} = quod_outcome:claim_operation(
-                         Outcomes0, 2, ClaimData, TargetRef),
+                         Outcomes0, 2, ClaimData, {applications, [TargetRef]}),
     Context0 = quod_commit_validation:new(
                  Origin, 1, quod_ct:committed_kb([]), Outcomes1, none),
     try
@@ -119,7 +119,7 @@ non_identical_remote_completion_remains_invalid_in_proposal_check_test() ->
     {ok, Outcomes0} = quod_outcome:open(
                         Ns, Anchor, #{outcome_backend => memory}),
     {new, Outcomes1} = quod_outcome:claim_operation(
-                         Outcomes0, 2, ClaimData, TargetRef),
+                         Outcomes0, 2, ClaimData, {applications, [TargetRef]}),
     Context0 = quod_commit_validation:new(
                  Origin, 1, quod_ct:committed_kb([]), Outcomes1, none),
     try
@@ -130,17 +130,17 @@ non_identical_remote_completion_remains_invalid_in_proposal_check_test() ->
                            key(different_target)},
         DifferentTargetCompletion = Completion#transaction{
           role = {remote_complete, OperationRef,
-                  RequestDigest, DifferentTarget}},
+                  RequestDigest, [{{TargetNs, TargetAnchor}, {included, DifferentTarget}}]}},
         DifferentDigestCompletion = Completion#transaction{
           role = {remote_complete, OperationRef,
-                  key(different_digest), TargetRef}},
+                  key(different_digest), [{{TargetNs, TargetAnchor}, {included, TargetRef}}]}},
         {operation, OperationNs, OperationAnchor,
          AgentRef, _OperationId} = OperationRef,
         DifferentOperation = {operation, OperationNs, OperationAnchor,
                               AgentRef, key(different_operation)},
         DifferentOperationCompletion = Completion#transaction{
           role = {remote_complete, DifferentOperation,
-                  RequestDigest, TargetRef}},
+                  RequestDigest, [{{TargetNs, TargetAnchor}, {included, TargetRef}}]}},
         ?assertEqual(
            {outcome_error, outcome_index_conflict},
            quod_commit_validation:content(

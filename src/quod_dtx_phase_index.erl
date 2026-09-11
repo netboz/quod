@@ -35,6 +35,8 @@ by killed replay/catch-up workers.
 -define(TOKEN_BYTES, 16).
 -define(TOKEN_HEX_BYTES, (?TOKEN_BYTES * 2)).
 -define(OPEN_ATTEMPTS, 4).
+-define(HISTORY_DOMAIN, quod_dtx_phase_history).
+-define(HISTORY_VERSION, 1). %% C2: implicit certificates can carry tx14 child blocks
 -define(MAX_GROUP_RECORDS, 5).
 %% A history stores at most one certified reference for each fixed phase.  A
 %% reference combines a body-bounded finality proof with an identity whose
@@ -311,7 +313,7 @@ stage_history(Delta, _GroupId, History, History) ->
     {ok, Delta};
 stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
               GroupId, _OldHistory, History) ->
-    Blob = term_to_binary(History, [deterministic]),
+    Blob = encode_history(History),
     HistoryBytes = byte_size(Blob),
     OldBytes =
         case maps:find(GroupId, Rows) of
@@ -356,7 +358,7 @@ encode_delta_rows(
   [{<<_:256>> = GroupId, {History, StoredBytes}} | Rest],
   Bytes0, ExpectedBytes, Acc)
   when is_integer(StoredBytes), StoredBytes >= 0 ->
-    Blob = term_to_binary(History, [deterministic]),
+    Blob = encode_history(History),
     Bytes = byte_size(Blob),
     Total = Bytes0 + Bytes,
     case Bytes =:= StoredBytes andalso Bytes =< ?MAX_HISTORY_BYTES of
@@ -414,15 +416,18 @@ dets_lookup(Table, Key) ->
         Class:Reason -> {error, {Class, Reason}}
     end.
 
+encode_history(History) ->
+    term_to_binary({?HISTORY_DOMAIN, ?HISTORY_VERSION, History}, [deterministic]).
+
 decode_history(Blob) when is_binary(Blob),
                           byte_size(Blob) =< ?MAX_HISTORY_BYTES ->
     case quod_safe_term:decode(Blob, ?MAX_HISTORY_BYTES) of
-        {ok, History} ->
-            case term_to_binary(History, [deterministic]) =:= Blob of
+        {ok, {?HISTORY_DOMAIN, ?HISTORY_VERSION, History}} when is_map(History) ->
+            case encode_history(History) =:= Blob of
                 true -> {ok, History};
                 false -> {error, phase_index_corrupt}
             end;
-        {error, _} -> {error, phase_index_corrupt}
+        _ -> {error, phase_index_corrupt}
     end;
 decode_history(_) ->
     {error, phase_index_corrupt}.

@@ -237,7 +237,7 @@ count_recapture_requests(Count) ->
 %% likewise return to existing recovery rather than resubmit the operation.
 endpoint_failure_never_immediately_resubmits_uncertain_work_test() ->
     Cancellation =
-        {cancel_operation_effect, <<1:128>>, <<"signed-submission">>},
+        {cancel_operation_effect, <<1:128>>, {<<"quod:a">>, <<1:256>>}, <<"signed-submission">>},
     lists:foreach(
       fun(Reason) ->
               ?assertEqual(
@@ -935,7 +935,7 @@ operation_outcome_requires_f_plus_one_current_validators_test() ->
     Status = #{status => claimed, operation_state => terminal,
                height => 14, ref => Ref,
                request_digest => digest(13),
-               outcome_ref => outcome_transaction_ref(F)},
+               outcome_ref => outcome_transaction_ref(F), included => []},
     Matching = maps:from_keys([A, B], true),
     Deps = outcome_dependencies(
              maps:get(view, F),

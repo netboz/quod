@@ -1,6 +1,6 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v10 wire boundary for durable operation and read-attestation traffic.
+Pure v11 wire boundary for durable operation and read-attestation traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
@@ -25,9 +25,10 @@ channel the caller subscribed to. Semantic DTX record bytes stay opaque to
 this module. A validation sidecar may carry exact committed entries or applied
 certificates beside the semantic term. This module only bounds and shape-checks
 them: `quod_foreign_log` verifies entries and `quod_dtx_current_view` verifies
-certificates. A one-target remote application carries one canonical certified claim
-owned by `quod_transaction`; the target reconstructs its deterministic
-application. Both enter the existing target signing and consensus machinery.
+certificates. An application request carries an exact anchored target and a
+canonical certified vector claim owned by `quod_transaction`; that target
+reconstructs only its own deterministic application. It enters the existing
+target signing and consensus machinery.
 The outer request also carries W3C trace context. It is transient metadata,
 outside the semantic request, evidence, signatures and correlation checks.
 """.
@@ -46,7 +47,7 @@ outside the semantic request, evidence, signatures and correlation checks.
               public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 10).
+-define(VERSION, 11). %% exact anchored operation target in request vocabulary
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -72,8 +73,8 @@ outside the semantic request, evidence, signatures and correlation checks.
          quod_dtx_current_view:applied_certificate()}.
 -type request() ::
         {submit, request_id(), binary()} |
-        {apply_claim, request_id(), binary()} |
-        {cancel_operation_effect, request_id(), binary()} |
+        {apply_claim, request_id(), identity(), binary()} |
+        {cancel_operation_effect, request_id(), identity(), binary()} |
         {phase, request_id(), <<_:256>>, phase_kind()} |
         {outcome, request_id(), outcome_ref(), <<_:256>>, pos_integer()} |
         {outcome_barrier, request_id(), group_ref(), <<_:256>>,
@@ -142,7 +143,7 @@ encode_direction(Namespace, Inner, Hints, TraceCarrier, Direction) ->
     end.
 
 encode_traced_direction(Namespace, Inner, Hints, TraceCarrier, Direction) ->
-    case {valid_namespace(Namespace), validate_direction(Inner, Direction),
+    case {valid_namespace(Namespace), validate_bound_direction(Namespace, Inner, Direction),
           valid_validation_sidecar(Hints)} of
         {true, ok, true} ->
             case encode_validation_sidecar(Hints) of
@@ -240,7 +241,7 @@ decode_inner(Expected, Namespace, InnerBinary, Direction) ->
                     case term_to_binary(Wrapped, [deterministic]) =:= InnerBinary of
                         false -> protocol_error(non_canonical);
                         true ->
-                            case validate_direction(Inner, Direction) of
+                            case validate_bound_direction(Namespace, Inner, Direction) of
                                 ok ->
                                     {ok, Namespace, Inner,
                                      decode_validation_sidecar(RawHints)};
@@ -372,21 +373,29 @@ valid_validation_item({Ref, _Entry} = Hint) ->
 %% Fixed v9 operation algebra
 %% ------------------------------------------------------------------
 
+validate_bound_direction(Ns, {Kind, _, {Ns, _}, _} = Inner, request)
+  when Kind =:= apply_claim; Kind =:= cancel_operation_effect ->
+    validate_direction(Inner, request);
+validate_bound_direction(_Ns, {Kind, _, _, _}, request)
+  when Kind =:= apply_claim; Kind =:= cancel_operation_effect ->
+    protocol_error(bad_namespace);
+validate_bound_direction(_Ns, Inner, Direction) -> validate_direction(Inner, Direction).
+
 validate_request({submit, RequestId, RecordBlob}) ->
     case valid_request_id(RequestId) of
         false -> protocol_error(bad_request_id);
         true -> validate_record_blob(RecordBlob)
     end;
-validate_request({apply_claim, RequestId, EvidenceBlob}) ->
+validate_request({apply_claim, RequestId, Target, EvidenceBlob}) ->
     validate_request_fields(
-      RequestId, valid_claim_evidence(EvidenceBlob));
+      RequestId, valid_identity(Target) andalso valid_claim_evidence(Target, EvidenceBlob));
 validate_request({phase, RequestId, GroupId, Kind}) ->
     validate_request_fields(
       RequestId, valid_digest(GroupId) andalso valid_phase_kind(Kind));
 validate_request(
-  {cancel_operation_effect, RequestId, SubmissionBlob}) ->
+  {cancel_operation_effect, RequestId, Target, SubmissionBlob}) ->
     validate_request_fields(
-      RequestId, valid_operation_submission(SubmissionBlob));
+      RequestId, valid_identity(Target) andalso valid_operation_submission(SubmissionBlob));
 validate_request(
   {outcome, RequestId, OutcomeRef, CommitteeId, MinimumSlot}) ->
     validate_request_fields(
@@ -559,15 +568,24 @@ valid_public_outcome_status(
     valid_group_ref(GroupRef);
 valid_public_outcome_status(
   #{status := claimed, height := Height, ref := OperationRef,
-    request_digest := RequestDigest, outcome_ref := OutcomeRef,
+    request_digest := RequestDigest, outcome_ref := OutcomeRef, included := Included,
     operation_state := OperationState} = Status)
-  when map_size(Status) =:= 6 ->
+  when map_size(Status) =:= 7 ->
     valid_slot(Height) andalso valid_operation_ref(OperationRef) andalso
         is_binary(RequestDigest) andalso byte_size(RequestDigest) =:= 32 andalso
         valid_operation_state(OperationState) andalso
-        valid_outcome_ref(OutcomeRef);
+        valid_operation_projection(OutcomeRef, Included, OperationState);
 valid_public_outcome_status(_) ->
     false.
+
+valid_operation_projection({applications, Refs}, [], unresolved) ->
+    quod_operation_vector:references(Refs) =:= {ok, Refs};
+valid_operation_projection({applications, Refs}, Included, terminal) ->
+    quod_operation_vector:references(Refs) =:= {ok, Refs} andalso
+        quod_operation_vector:receipt_references(Included) =:= {ok, Refs};
+valid_operation_projection({applications, _}, _, _) -> false;
+valid_operation_projection(Ref, [], _) -> valid_outcome_ref(Ref);
+valid_operation_projection(_, _, _) -> false.
 
 valid_operation_state(unresolved) -> true;
 valid_operation_state(terminal) -> true;
@@ -612,8 +630,8 @@ valid_participant_slots(_, _, _) -> false.
 
 -spec request_id(term()) -> request_id() | error.
 request_id({submit, RequestId, _}) -> valid_id_or_error(RequestId);
-request_id({apply_claim, RequestId, _}) -> valid_id_or_error(RequestId);
-request_id({cancel_operation_effect, RequestId, _}) ->
+request_id({apply_claim, RequestId, _, _}) -> valid_id_or_error(RequestId);
+request_id({cancel_operation_effect, RequestId, _, _}) ->
     valid_id_or_error(RequestId);
 request_id({phase, RequestId, _, _}) -> valid_id_or_error(RequestId);
 request_id({outcome, RequestId, _, _, _}) -> valid_id_or_error(RequestId);
@@ -661,12 +679,12 @@ correlates({submit, RequestId, RecordBlob} = Request,
     valid_pair(Request, Response) andalso
         prepare_blob_digest(RecordBlob) =:= SemanticDigest;
 correlates(
-  {apply_claim, RequestId, ClaimEvidence} = Request,
+  {apply_claim, RequestId, Target, ClaimEvidence} = Request,
   {application, RequestId, _Result, TargetEvidence} = Response) ->
     valid_pair(Request, Response) andalso
-        application_response_matches(ClaimEvidence, TargetEvidence);
+        application_response_matches(Target, ClaimEvidence, TargetEvidence);
 correlates(
-  {cancel_operation_effect, RequestId, _} = Request,
+  {cancel_operation_effect, RequestId, _, _} = Request,
   {operation_effect_cancelled, RequestId, _} = Response) ->
     valid_pair(Request, Response);
 correlates({phase, RequestId, _, _} = Request,
@@ -728,16 +746,17 @@ prepare_blob_digest(RecordBlob) ->
             error
     end.
 
-valid_claim_evidence(Blob) ->
+valid_claim_evidence(Target, Blob) ->
     case quod_transaction:decode_evidence(Blob) of
         {ok, ClaimRef,
          #transaction{role = {remote_claim, _, _, _}} = Claim} ->
             case quod_transaction:stable_ref(ClaimRef) of
-                {transaction, _, _, _} = StableRef ->
-                    try quod_transaction:remote_application(
-                          StableRef, Claim) of
-                        #transaction{} -> true
-                    catch _:_ -> false
+                {transaction, _, _, _} ->
+                    case {quod_transaction:remote_claim_references(Claim),
+                          quod_transaction:remote_claim_plan(Claim, Target)} of
+                        {{ok, Refs}, {ok, _Plan}} ->
+                            quod_operation_vector:lookup(Target, Refs) =/= error;
+                        _ -> false
                     end;
                 invalid -> false
             end;
@@ -769,21 +788,21 @@ valid_application_result(committed) -> true;
 valid_application_result({rejected, Reason}) when is_atom(Reason) -> true;
 valid_application_result(_) -> false.
 
-application_response_matches(ClaimBlob, TargetBlob) ->
+application_response_matches(Target, ClaimBlob, TargetBlob) ->
     case {quod_transaction:decode_evidence(ClaimBlob),
           quod_transaction:decode_evidence(TargetBlob)} of
         {{ok, ClaimRef, #transaction{} = Claim},
-         {ok, _TargetRef, #transaction{} = TargetTx}} ->
-            case quod_transaction:stable_ref(ClaimRef) of
-                {transaction, _, _, _} = StableRef ->
+         {ok, TargetRef, #transaction{} = TargetTx}} ->
+            case {quod_transaction:stable_ref(ClaimRef), certified_ref_identity(TargetRef)} of
+                {{transaction, _, _, _} = StableRef, Target} ->
                     try quod_transaction:remote_application(
-                          StableRef, Claim) of
+                          StableRef, Claim, Target) of
                         Expected ->
                             Expected#transaction.tx_id =:=
                                 TargetTx#transaction.tx_id
                     catch _:_ -> false
                     end;
-                invalid -> false
+                _ -> false
             end;
         _ -> false
     end.

@@ -82,6 +82,7 @@ replay. Neither transition changes the global proof generation.
          material/1, diff/1, read_check/1, effects/1, live_bridges/1,
          transcript/1,
          new_manifest/1, manifest_digest/1, manifest_coordinator/1,
+         manifest_participants/1,
          manifest_group_ref/2,
          encode_manifest/1, decode_manifest/1,
          attest_plan/4, verify_plan_attestation/4,

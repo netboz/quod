@@ -951,7 +951,7 @@ remote_signed_two_gateway_race(Config) ->
        peer:call(Target, quod_simplex, genesis_hash, [?NS])),
     ?assertMatch(
        {ok, #{status := claimed, operation_state := terminal,
-              outcome_ref := {transaction, ?NS, TargetAnchor, _}}},
+              outcome_ref := {applications, [{transaction, ?NS, TargetAnchor, _}]}}},
        peer:call(Third, quod_prolog, outcome, [OperationRef])),
     ?assertMatch(
        {ok, _, {operation_outcome,
@@ -1877,7 +1877,9 @@ completed_remote_operation(Target, OperationRef, 0) ->
 completed_remote_operation(Target, OperationRef, Remaining) ->
     case peer:call(Target, quod_prolog, outcome, [OperationRef]) of
         {ok, #{status := claimed, operation_state := terminal,
-               outcome_ref := OutcomeRef}} ->
+               outcome_ref := {applications, [OutcomeRef]}, included := Included}} ->
+            ?assertEqual([{quod_operation_vector:target(OutcomeRef),
+                           {included, OutcomeRef}}], Included),
             case peer:call(Target, quod_prolog, outcome, [OutcomeRef]) of
                 {ok, #{status := committed, ref := OutcomeRef}} -> OutcomeRef;
                 _ ->

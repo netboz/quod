@@ -104,7 +104,7 @@ one_operation_projection_arbitrates_transaction_and_begin_test() ->
        {ok, #{status => claimed, ref => OperationRef,
               request_digest => maps:get(digest, TransactionClaim),
               outcome_ref => TransactionRef, height => 2,
-              operation_state => terminal}},
+              included => [], operation_state => terminal}},
        quod_outcome:public(Existing)),
     ?assertEqual(Target, maps:get(target, TransactionClaim)),
     ok = quod_outcome:close(Index3).
@@ -114,24 +114,26 @@ remote_claim_and_completion_form_one_durable_operation_test() ->
     {Ns, Anchor} = maps:get(origin, Fixture),
     Claim = maps:get(claim, Fixture),
     TargetRef = maps:get(target_ref, Fixture),
+    References = {applications, [TargetRef]},
+    {ok, Receipt} = quod_operation_vector:included([TargetRef]),
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
     OperationRef = maps:get(operation_ref, ClaimData),
     Digest = maps:get(digest, ClaimData),
     {ok, Index0} = quod_outcome:open(
                      Ns, Anchor, #{outcome_backend => memory}),
     {new, Index1} = quod_outcome:claim_operation(
-                      Index0, 2, ClaimData, TargetRef),
+                      Index0, 2, ClaimData, References),
     {ok, Index1a} = quod_outcome:flush(Index1),
     {Unresolved, Index2} = quod_outcome:unresolved_operations(Index1a),
-    ?assertMatch([#{ref := OperationRef, outcome_ref := TargetRef,
+    ?assertMatch([#{ref := OperationRef, outcome_ref := References,
                     state := unresolved}], Unresolved),
     {new, Index3} = quod_outcome:check_completion(
-                      Index2, OperationRef, Digest, TargetRef),
+                      Index2, OperationRef, Digest, Receipt),
     {new, Index4} = quod_outcome:complete_operation(
-                      Index3, 4, OperationRef, Digest, TargetRef),
+                      Index3, 4, OperationRef, Digest, Receipt),
     {replay, Index4Duplicate} = quod_outcome:complete_operation(
                                   Index4, 5, OperationRef,
-                                  Digest, TargetRef),
+                                  Digest, Receipt),
     {{ok, #{state := {terminal, 4}}}, _} =
         quod_outcome:lookup_ref(Index4Duplicate, OperationRef),
     {ok, Index4a} = quod_outcome:flush(Index4Duplicate),
@@ -140,17 +142,18 @@ remote_claim_and_completion_form_one_durable_operation_test() ->
     ?assertEqual(
        {ok, #{status => claimed, operation_state => terminal,
               ref => OperationRef, request_digest => Digest,
-              outcome_ref => TargetRef, height => 2}},
+              outcome_ref => References, included => Receipt, height => 2}},
        quod_outcome:public(Stored)),
     ?assertMatch(
        {replay, _},
-       quod_outcome:claim_operation(Index6, 2, ClaimData, TargetRef)),
+       quod_outcome:claim_operation(Index6, 2, ClaimData, References)),
     ?assertMatch({replay, _}, quod_outcome:check_completion(
-                               Index6, OperationRef, Digest, TargetRef)),
+                               Index6, OperationRef, Digest, Receipt)),
     ?assertMatch({error, outcome_index_conflict},
                  quod_outcome:check_completion(
                    Index6, OperationRef, Digest,
-                   setelement(4, TargetRef, <<0:256>>))),
+                   [{quod_operation_vector:target(TargetRef),
+                     {included, setelement(4, TargetRef, <<0:256>>)}}])),
     ok = quod_outcome:close(Index6).
 
 same_operation_id_conflicts_across_transaction_and_begin_after_reopen_test() ->

@@ -51,11 +51,12 @@
 -record(transaction, {tx_id      :: binary(),            %% target-bound digest of the complete semantic write
                  role = application :: application |
                                        {remote_application, term(), term(), binary()} |
-                                       {remote_claim, term(), term(), binary()} |
+                                       {remote_claim, term(), [tuple()], [term()]} |
                                        {remote_complete, term(), binary(), term()},
                                                         %% one canonical content family: Prolog application or
                                                         %% operation metadata; evidence has dedicated fields below
-                 evidence = none :: none | {term(), tuple()},
+                 evidence = none :: none | {term(), tuple()} |
+                                           {applications, [{term(), tuple()}]},
                                                         %% exact referenced record + certified ledger ref;
                                                         %% signed but excluded from semantic identity
                  foreign_reads = [] :: [term()],       %% certified read-only plan statements;

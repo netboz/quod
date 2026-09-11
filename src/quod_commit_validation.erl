@@ -171,6 +171,15 @@ validate_content_transactions(
   [], _Network, _BlockTimestamp, _Mode, _Seen, Context) ->
     {ok, valid, Context};
 validate_content_transactions(
+  [#transaction{role = {remote_claim, _, Bundles, _}} | _],
+  _Network, _BlockTimestamp, _Mode, _Seen, Context)
+  when is_list(Bundles), length(Bundles) > 1 ->
+    %% C1's temporary slice-7 availability boundary applies to admission too.
+    %% A node author must not bypass the public proof route by submitting an
+    %% N-target claim directly. Slice 8 replaces this guard only with its
+    %% reviewed original-signed-goal intent authority and verdict evidence.
+    {ok, {invalid, independent_lane_unavailable}, Context};
+validate_content_transactions(
   [#transaction{role = {remote_application, _, _, _}} = Change | Rest],
   Network, BlockTimestamp, Mode, Seen, Context0) ->
     case remote_application(Change, Context0) of
@@ -359,19 +368,12 @@ operation_projection_transition({claim, Slot}, Outcomes, Claim, OutcomeRef) ->
 
 transaction_outcome_ref(
   {_Ns, _Anchor},
-  #transaction{role = {remote_claim, _Manifest, _Bundle,
-                       <<_:256>> = TargetTxId}} = Change) ->
-    {TargetNs, TargetAnchor} = remote_claim_target(Change),
-    {transaction, TargetNs, TargetAnchor, TargetTxId};
+  #transaction{role = {remote_claim, _, _, _}} = Change) ->
+    {ok, Refs} = quod_transaction:remote_claim_references(Change),
+    {applications, Refs};
 transaction_outcome_ref(
   {Ns, Anchor}, #transaction{tx_id = <<_:256>> = TxId}) ->
     {transaction, Ns, Anchor, TxId}.
-
-remote_claim_target(
-  #transaction{role = {remote_claim, _Manifest,
-                       {{Ns, <<_:256>> = Anchor}, _Digest,
-                        _PlanBlob, _Attestation}, _TargetTxId}})
-  when is_binary(Ns) -> {Ns, Anchor}.
 
 -doc "Evaluate one certified remote application at the target parent.".
 -spec remote_application(#transaction{}, context()) ->
@@ -383,10 +385,9 @@ remote_application(
              evidence = {CertifiedRef,
                          #transaction{
                            role = {remote_claim, Manifest,
-                                   {_Target, PlanDigest, PlanBlob,
-                                    _Attestation}, _Predicted}} = Claim}},
-  Context = #context{}) ->
-    Expected = try quod_transaction:remote_application(ClaimRef, Claim)
+                                   Bundles, _Predicted}} = Claim}},
+  Context = #context{target = Target}) ->
+    Expected = try quod_transaction:remote_application(ClaimRef, Claim, Target)
                catch _:_ -> invalid
                end,
     case Expected of
@@ -398,6 +399,8 @@ remote_application(
                     case quod_transaction:valid_id(
                            Context#context.target, Change) of
                         true ->
+                            {Target, PlanDigest, PlanBlob, _Attestation} =
+                                lists:keyfind(Target, 1, Bundles),
                             classify_remote_prepared(
                               prepared_application(
                                 Manifest, PlanDigest, PlanBlob, Context));

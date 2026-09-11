@@ -4,7 +4,7 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--define(MAGIC, 16#51534A33). %% "QSJ3"
+-define(MAGIC, 16#51534A34). %% "QSJ4"
 -define(HDR_BYTES, 12).
 
 persists_votes_and_dtx_floor_test() ->
@@ -56,7 +56,7 @@ malformed_supported_block_is_rejected_without_mutation_test() ->
           Block = supported_block(6, 1),
           Bytes = quod_ledger:block_bytes(Block),
           Payload = term_to_binary(
-                      {quod_signing_support, 3, 7, Bytes},
+                      {quod_signing_support, 4, 7, Bytes},
                       [deterministic]),
           ok = file:write_file(
                  Path, quod_signing_journal:test_frame(Payload), [append]),
@@ -152,7 +152,7 @@ superseded_signing_magic_fails_explicitly_without_mutation_test() ->
                    quod_signing_journal:recover(Ns, domain(1), Dir)),
                 ?assertEqual({ok, Bytes}, file:read_file(Path))
             end,
-            [{1, 16#51534A31}, {2, 16#51534A32}])
+            [{1, 16#51534A31}, {2, 16#51534A32}, {3, 16#51534A33}])
       end).
 
 legacy_magic_in_tail_is_not_trimmed_test() ->
@@ -810,7 +810,7 @@ dormant_transaction_activation_record_is_rejected_on_recovery_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Payload = term_to_binary(
-                      {quod_signing_transaction_activated, 3, TxId},
+                      {quod_signing_transaction_activated, 4, TxId},
                       [deterministic]),
           ok = file:write_file(
                  Path, quod_signing_journal:test_frame(Payload), [append]),
@@ -846,7 +846,7 @@ unknown_atom_record_is_rejected_without_atom_creation_test() ->
           Path = journal_path(Ns, Dir),
           Offset = filelib:file_size(Path),
           Canonical = term_to_binary(
-                        {quod_signing_final_vote, 3,
+                        {quod_signing_final_vote, 4,
                          complaint, 8, none},
                         [deterministic]),
           Unknown = binary:replace(
@@ -866,7 +866,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Body = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
     Envelope = binary:copy(<<0>>, ?QUOD_MAX_DTX_CONTROL_BYTES),
     AtLimit = term_to_binary(
-                {quod_signing_pending_begin, 3, Fixed, Fixed,
+                {quod_signing_pending_begin, 4, Fixed, Fixed,
                  16#FFFFFFFFFFFFFFFF, Fixed, Body, Envelope},
                 [deterministic]),
     ?assertEqual(quod_signing_journal:test_max_frame_payload_bytes(),
@@ -874,7 +874,7 @@ frame_bound_tracks_shared_dtx_limits_exactly_test() ->
     Frame = quod_signing_journal:test_frame(AtLimit),
     ?assertEqual(byte_size(AtLimit) + ?HDR_BYTES, byte_size(Frame)),
     Over = term_to_binary(
-             {quod_signing_pending_begin, 3, Fixed, Fixed,
+             {quod_signing_pending_begin, 4, Fixed, Fixed,
               16#FFFFFFFFFFFFFFFF, Fixed, Body,
              <<Envelope/binary, 0>>},
              [deterministic]),
@@ -1061,7 +1061,7 @@ pending_term(Fixture) ->
     #{lane := {Admission, Author}, sequence := Sequence,
       group_id := GroupId, body := Body, envelope := Envelope} =
         pending_fixture(Fixture),
-    {quod_signing_pending_begin, 3, Admission, Author, Sequence,
+    {quod_signing_pending_begin, 4, Admission, Author, Sequence,
      GroupId, Body, Envelope}.
 
 supported_block(Slot, Variant) ->

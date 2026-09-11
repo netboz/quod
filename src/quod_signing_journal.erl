@@ -41,8 +41,9 @@ accepts only the compact result of an already-validated history fold.
 -define(QVJ3_MAGIC, 16#51564A33). %% "QVJ3"
 -define(QSJ1_MAGIC, 16#51534A31). %% "QSJ1"
 -define(QSJ2_MAGIC, 16#51534A32). %% "QSJ2"
--define(MAGIC,      16#51534A33). %% "QSJ3"
--define(FORMAT_VERSION, 3).
+-define(QSJ3_MAGIC, 16#51534A33). %% transaction V13 envelopes
+-define(MAGIC,      16#51534A34). %% "QSJ4": transaction V14 envelopes
+-define(FORMAT_VERSION, 4).
 -define(HDR_BYTES, 12).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(COMPACT_BYTES, (1024 * 1024)).
@@ -657,6 +658,7 @@ legacy_version(<<?QVJ2_MAGIC:32, _/binary>>) -> {vote, 2};
 legacy_version(<<?QVJ3_MAGIC:32, _/binary>>) -> {vote, 3};
 legacy_version(<<?QSJ1_MAGIC:32, _/binary>>) -> {signing, 1};
 legacy_version(<<?QSJ2_MAGIC:32, _/binary>>) -> {signing, 2};
+legacy_version(<<?QSJ3_MAGIC:32, _/binary>>) -> {signing, 3};
 legacy_version(_) -> none.
 
 torn_tail(_Fd, Offset, strict) ->

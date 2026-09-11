@@ -214,8 +214,8 @@ submit_operation(_OwnerNs, _Target, _Request, _TimeoutMs) ->
           {error, busy | not_ready | invalid_request | timeout |
                   connection_lost}.
 submit_claim_application(OwnerNs, Target, Claim,
-                         {apply_claim, _, _} = Request, TimeoutMs) ->
-    case quod_transaction:remote_claim_route(Claim) of
+                         {apply_claim, _, Target, _} = Request, TimeoutMs) ->
+    case quod_transaction:remote_claim_route(Claim, Target) of
         shared ->
             submit_operation(OwnerNs, Target, Request, TimeoutMs);
         {private, TargetNode} ->
@@ -359,7 +359,7 @@ submit_operation_candidates(OwnerNs, TargetNs,
 %% transport failure into an immediate semantic retry. A timeout or authenticated
 %% link loss is likewise uncertain for every write/read request and must return
 %% to its existing history/recovery owner instead of resubmitting automatically.
-endpoint_failure_disposition({cancel_operation_effect, _, _}, _Reason) -> stop;
+endpoint_failure_disposition({cancel_operation_effect, _, _, _}, _Reason) -> stop;
 endpoint_failure_disposition(_Request, timeout) -> stop;
 endpoint_failure_disposition(_Request, connection_lost) -> stop;
 endpoint_failure_disposition(_Request, _Reason) -> next.

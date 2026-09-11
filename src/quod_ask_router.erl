@@ -1476,8 +1476,8 @@ valid_status_event(_Operation, opening) -> false.
 %% Nested selection and controller events are requests made while the target
 %% is still servicing one invocation demand.  They retain that demand's exact
 %% RequestId/AcceptedCommandSeq until its final invocation result arrives.
-event_terminal({nested_open, _, _, _, _}) -> false;
-event_terminal({nested_next, _, _, _}) -> false;
+event_terminal({nested_open, _, _, _, _, _}) -> false;
+event_terminal({nested_next, _, _, _, _}) -> false;
 event_terminal({nested_cancel, _, _}) -> false;
 event_terminal({tx_activate, _, _, _, _}) -> false;
 event_terminal({tx_finish, _, _, _, _, _}) -> false;

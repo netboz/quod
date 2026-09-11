@@ -376,6 +376,7 @@ collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         'not' -> collect_goal_positions(Tuple, [2], Acc);
         once -> collect_goal_positions(Tuple, [2], Acc);
         call -> collect_goal_positions(Tuple, [2], Acc);
+        independent when tuple_size(Tuple) =:= 2 -> collect_goal_positions(Tuple, [2], Acc);
         findall -> collect_goal_positions(Tuple, [3], Acc);
         bagof -> collect_goal_positions(Tuple, [3], Acc);
         setof -> collect_goal_positions(Tuple, [3], Acc);
@@ -396,6 +397,8 @@ collect_goal_symbols(_Goal, Acc) ->
 collect_opaque_goal_positions(<<"once">>, Tuple, Acc) ->
     collect_goal_positions(Tuple, [2], Acc);
 collect_opaque_goal_positions(<<"call">>, Tuple, Acc) ->
+    collect_goal_positions(Tuple, [2], Acc);
+collect_opaque_goal_positions(<<"independent">>, Tuple, Acc) when tuple_size(Tuple) =:= 2 ->
     collect_goal_positions(Tuple, [2], Acc);
 collect_opaque_goal_positions(<<"not">>, Tuple, Acc) ->
     collect_goal_positions(Tuple, [2], Acc);
@@ -472,6 +475,7 @@ replace_goal_symbols(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         'not' -> replace_goal_positions(Tuple, [2]);
         once -> replace_goal_positions(Tuple, [2]);
         call -> replace_goal_positions(Tuple, [2]);
+        independent when tuple_size(Tuple) =:= 2 -> replace_goal_positions(Tuple, [2]);
         findall -> replace_goal_positions(Tuple, [3]);
         bagof -> replace_goal_positions(Tuple, [3]);
         setof -> replace_goal_positions(Tuple, [3]);

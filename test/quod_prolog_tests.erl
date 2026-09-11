@@ -331,12 +331,12 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
         assert_scope_reply(Handle, OpenRef, {opened, InvocationId}),
         {ok, NextRef} = quod_scope_session:invoke_next(
                           Handle, InvocationId, 1),
-        ?assertMatch({solution, 1, _, true},
+        ?assertMatch({solution, 1, _, true, false},
                      scope_reply(Handle, NextRef)),
         _ = quod_proof_context:start(
               ProofId, false, {Ns, Anchor}, Deadline, {node, Pubkey}),
         try
-            {ok, Plan} = quod_scope_session:seal(
+            {ok, Plan, 1} = quod_scope_session:seal(
                            Handle, {Ns, Anchor}, {node, Pubkey}, none),
             ?assertEqual(Pubkey, quod_dtx:signer(Plan)),
             ?assert(quod_dtx:verify(Plan))
@@ -1269,7 +1269,7 @@ t_same_block_read_after_write({Ns, _}) ->
         W = change(Ns, diff_for({k, one}), #{}),
         %% honest capture against height 1 — stale only because W precedes it
         Raw = change(Ns, diff_for({dependent, x}), #{{k, 1} => never_present}),
-        Blind = change(Ns, diff_for({independent, y}), #{}),
+        Blind = change(Ns, diff_for({unrelated, y}), #{}),
         %% self read-modify-write: reads parent/2 at its committed height and
         %% rewrites it — its own writes stage after its validation
         Self = change(Ns, diff_for({parent, tom, sue}),
@@ -1277,7 +1277,7 @@ t_same_block_read_after_write({Ns, _}) ->
         ok = ab(Ns, 2, {batch, [W, Raw, Blind, Self]}),
         ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {k, one})),
         ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {dependent, x})),
-        ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {independent, y})),
+        ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {unrelated, y})),
         ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {parent, tom, sue}))
     end.
 

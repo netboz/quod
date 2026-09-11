@@ -3,6 +3,18 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_client_goal_limits.hrl").
 
+independent_refusals_remain_typed_through_the_client_boundary_test() ->
+    lists:foreach(fun({Reason, Status}) ->
+        Error = {error, Reason},
+        ?assertEqual(Error, quod_client_result:normalize(#{}, Error)),
+        {ok, Bytes} = quod_client_result:encode(Error),
+        ?assertEqual({ok, Error}, quod_client_result:decode(Bytes)),
+        ?assertEqual({Status, #{error => Reason}},
+                     quod_client_result:http_normalized(#{}, Error))
+    end, [{independent_requires_signed_request, 400},
+          {independent_nesting, 400}, {independent_mixed_writes, 400},
+          {independent_lane_unavailable, 503}]).
+
 all_normalized_results_roundtrip_test() ->
     Fixture = fixture(),
     Evidence = maps:get(evidence, Fixture),

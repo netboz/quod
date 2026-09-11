@@ -152,10 +152,10 @@ the exact bound identities, and verify under the authenticated target key.
 """.
 -spec seal(handle() | term(), quod_proof_context:identity(),
            quod_dtx:principal(), quod_client_goal:request_binding()) ->
-          {ok, quod_dtx:plan()} | not_material | {error, term()}.
+          {ok, quod_dtx:plan(), 0..3} | not_material | {error, term()}.
 seal({local_scope, _ScopeId, Ns, Anchor, Height, Session},
      OriginIdentity, Principal, RequestBinding) ->
-    quod_proof_session:seal(
+    seal_session_with_provenance(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => quod_proof_context:proof_id(),
@@ -221,8 +221,16 @@ await_remote_seal(
   RequestId, Router, MRef, RemainingMs) ->
     receive
         {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
-         {plan_sealed, Blob}} ->
-            checked_remote_plan(Handle, Principal, RequestBinding, Blob);
+         {plan_sealed, Blob, Provenance}} ->
+            case checked_remote_plan(Handle, Principal, RequestBinding, Blob) of
+                {ok, Plan} when is_integer(Provenance), Provenance >= 0, Provenance =< 3 ->
+                    case quod_dtx:writes(Plan) =:= (Provenance =/= 0) of
+                        true -> {ok, Plan, Provenance};
+                        false -> {error, {protocol_error, bad_payload}}
+                    end;
+                {ok, _} -> {error, {protocol_error, bad_payload}};
+                {error, _} = Error -> Error
+            end;
         {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
          plan_not_material} ->
             not_material;
@@ -1435,7 +1443,8 @@ finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
             put_runtime(Runtime0#runtime{
               invocations = Invocations#{
                 InvocationId => {Seq + 1, Count + 1}}}),
-            send_reply(RequestRef, {solution, Seq, Solution, Dirty});
+            Independent = quod_proof_session:independent_intent(Session, InvocationId),
+            send_reply(RequestRef, {solution, Seq, Solution, Dirty, Independent});
         {result_error, Reason} ->
             remove_invocation(InvocationId),
             send_next_error(RequestRef, Reason)
@@ -1481,7 +1490,7 @@ seal_current({OriginNs, <<_:256>>} = OriginIdentity)
              proof_id = ProofId, principal = Principal,
              request_binding = RequestBinding,
              session = Session} = runtime(),
-    quod_proof_session:seal(
+    seal_session_with_provenance(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => ProofId, origin => OriginIdentity,
@@ -1489,6 +1498,12 @@ seal_current({OriginNs, <<_:256>>} = OriginIdentity)
         request_binding => RequestBinding});
 seal_current(_OriginIdentity) ->
     {error, {protocol_error, request_binding}}.
+
+seal_session_with_provenance(Session, Bindings) ->
+    case quod_proof_session:seal(Session, Bindings) of
+        {ok, Plan} -> {ok, Plan, quod_proof_session:provenance(Session)};
+        Other -> Other
+    end.
 
 remove_invocation(InvocationId) ->
     Runtime = runtime(),

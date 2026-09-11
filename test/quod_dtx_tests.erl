@@ -193,6 +193,27 @@ read_only_participant_seals_empty_diff_with_read_check_test() ->
         quod_proof_session:stop(Session)
     end.
 
+independent_lane_is_explicit_and_unavailable_until_slice_eight_test() ->
+    Origin = {<<"quod:origin">>, key(3)},
+    Target = {<<"quod:target">>, key(4)},
+    Binding = {agent_goal_v1, key(45)},
+    OriginPlan = sealed_route_plan([], {assertz, p}, Origin, Origin, Binding),
+    TargetPlan = sealed_route_plan([], {assertz, q}, Target, Origin, Binding),
+    Plans = #{Origin => OriginPlan, Target => TargetPlan},
+    ?assertEqual({error, independent_lane_unavailable},
+                 quod_prolog:test_route_plans(Plans, Origin, true, true)),
+    ?assertMatch({group, [_, _]},
+                 quod_prolog:test_route_plans(Plans, Origin, true, false)),
+    ?assertEqual(read, quod_prolog:test_route_plans(#{}, Origin, true, true)),
+    ?assertMatch({single, Origin, []},
+                 quod_prolog:test_route_plans(#{Origin => OriginPlan}, Origin, true, true)),
+    ?assertMatch({remote_claim, Target, []},
+                 quod_prolog:test_route_plans(#{Target => TargetPlan}, Origin, true, true)),
+    lists:foreach(fun(P) ->
+        ?assertEqual({error, independent_requires_signed_request},
+                     quod_prolog:test_route_plans(P, Origin, false, true))
+    end, [#{}, #{Origin => OriginPlan}, Plans]).
+
 write_lane_routing_is_derived_only_from_sealed_plans_test() ->
     Origin = {<<"quod:origin">>, key(3)},
     RemoteA = {<<"quod:remote-a">>, key(4)},

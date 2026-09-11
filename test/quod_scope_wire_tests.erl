@@ -41,7 +41,7 @@ all_command_shapes_roundtrip_deterministically_test() ->
          {invoke_next, id(1), 1},
          {invoke_cancel, id(1)},
          {nested_opened, id(2), id(3)},
-         {nested_solution, id(2), id(3), 1, Answer},
+         {nested_solution, id(2), id(3), 1, Answer, false},
          {nested_complete, id(2), id(3), 2, Reasons},
          {nested_erlog_error, id(2), id(3), 3, ErlogError},
          {nested_error, id(2), {ontology_busy, <<"quod:c">>}},
@@ -62,6 +62,31 @@ all_command_shapes_roundtrip_deterministically_test() ->
           {ok, EncodedAgain} = quod_scope_wire:encode_command(Command),
           ?assertEqual(Encoded, EncodedAgain)
       end, lists:enumerate(Operations)).
+
+independent_metadata_roundtrips_and_refuses_malformed_values_test() ->
+    Selection = {tx_selection, none, [], independent},
+    Command = command({invoke_open, id(1), Selection, chain(2), payload(goal, true)}),
+    {ok, Bytes} = quod_scope_wire:encode_command(Command),
+    ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Bytes)),
+    lists:foreach(fun(Operation) ->
+        Event = event(Operation),
+        {ok, Encoded} = quod_scope_wire:encode_event(Event),
+        ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Encoded))
+    end, [{solution, id(1), 1, payload(answer, true), true},
+          {plan_sealed, <<"plan">>, 2}, {plan_sealed, <<"plan">>, 3},
+          {nested_open, id(2), <<"other">>, chain(2), payload(goal, true), Selection},
+          {nested_next, id(2), id(3), 1, Selection}]),
+    lists:foreach(fun(Operation) ->
+        ?assertMatch({error, {protocol_error, _}},
+                     quod_scope_wire:encode_event(event(Operation)))
+    end, [{solution, id(1), 1, payload(answer, true), 1},
+          {plan_sealed, <<"plan">>, -1}, {plan_sealed, <<"plan">>, 4},
+          {plan_sealed, <<"plan">>},
+          {nested_next, id(2), id(3), 1, {tx_selection, none, []}}]),
+    ?assertNot(quod_transaction_scope:valid_selection(
+                 {tx_selection, id(4), [], independent})),
+    ?assertNot(quod_transaction_scope:valid_selection(
+                 {tx_selection, none, [], true})).
 
 scope_v5_authentication_digest_is_exact_and_bounded_test() ->
     {ok, NodeDigest} = quod_scope_wire:authentication_digest(node),
@@ -114,18 +139,18 @@ all_events_carry_exact_state_and_roundtrip_test() ->
         [{scope_opened, 77},
          scope_closed,
          plan_not_material,
-         {plan_sealed, <<"opaque plan">>},
+         {plan_sealed, <<"opaque plan">>, 1},
          {plan_attested, Attestation},
          {reads_certified, <<"opaque read certificate">>},
          group_effects_bound,
          {invocation_opened, id(1)},
-         {solution, id(1), 1, Answer},
+         {solution, id(1), 1, Answer, false},
          {complete, id(1), 2, Reasons},
          {erlog_error, id(1), 3, ErlogError},
          {invocation_error, id(1), 4, {proof_limit_exceeded, <<"quod:b">>}},
          {scope_error, read_only},
-         {nested_open, id(2), <<"quod:c">>, chain(2), Goal},
-         {nested_next, id(2), id(3), 1},
+         {nested_open, id(2), <<"quod:c">>, chain(2), Goal, selection(none, [])},
+         {nested_next, id(2), id(3), 1, selection(none, [])},
          {nested_cancel, id(2), id(3)},
          {tx_activate, id(4), id(5), none, [id(6), id(7)]},
          {tx_finish, id(4), id(5), id(7), id(6), finish},
@@ -205,12 +230,12 @@ seal_operations_round_trip_and_stay_bounded_test() ->
     {ok, EncodedNotMaterial} = quod_scope_wire:encode_event(NotMaterial),
     ?assertEqual({ok, NotMaterial},
                  quod_scope_wire:decode_response(EncodedNotMaterial)),
-    Sealed = event({plan_sealed, <<"opaque plan blob">>}),
+    Sealed = event({plan_sealed, <<"opaque plan blob">>, 1}),
     {ok, EncodedSealed} = quod_scope_wire:encode_event(Sealed),
     ?assertEqual({ok, Sealed}, quod_scope_wire:decode_response(EncodedSealed)),
     Oversized = event(
                   {plan_sealed,
-                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>}),
+                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>, 1}),
     ?assertEqual({error, {too_large, plan}},
                  quod_scope_wire:encode_event(Oversized)),
     %% The seal failure vocabulary is part of the closed public catalog.
@@ -221,7 +246,9 @@ seal_operations_round_trip_and_stay_bounded_test() ->
           ?assertEqual({ok, Event},
                        quod_scope_wire:decode_response(EncodedError))
       end,
-      [{too_large, transcript}, {too_large, plan}, {too_large, result},
+      [independent_requires_signed_request, independent_nesting,
+       independent_mixed_writes, independent_lane_unavailable,
+       {too_large, transcript}, {too_large, plan}, {too_large, result},
        {non_transactional_dependency, {directory_host, 5}},
        {network_identity_unavailable, <<"quod:target">>}]),
     ?assertEqual(
@@ -513,7 +540,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, lists:seq(1, 10)),
+      end, lists:seq(1, 11)),
     WrongDomain = term_to_binary({<<"other.scope">>, 5, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
@@ -840,7 +867,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 11, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 12, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
@@ -854,7 +881,7 @@ signed_auth(RequestBytes, Signature) ->
     {signed_goal, RequestBytes, Signature, Certificate}.
 
 selection(Lineage, BatchIds) ->
-    {tx_selection, Lineage, BatchIds}.
+    {tx_selection, Lineage, BatchIds, ordinary}.
 
 binding() -> binding_with_origin(<<"quod:a">>).
 

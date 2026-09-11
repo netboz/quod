@@ -526,6 +526,106 @@ t_signed_nested_scope_uses_target_policy(#{pets := Pets}) ->
           ?assert(lists:member({not_allowed, <<"private">>}, Reasons))
       end).
 
+independent_integration_test_() ->
+    {setup, fun setup/0, fun cleanup/1, fun(Ctx) ->
+        [{timeout, 60, ?_test(t_independent_signed_routes(Ctx))},
+         {timeout, 60, ?_test(t_independent_retained_branch_routes(Ctx))},
+         {timeout, 60, ?_test(t_independent_mixed_residue_fallback_commits(Ctx))},
+         {timeout, 60, ?_test(t_independent_cross_scope_nesting(Ctx))}]
+    end}.
+
+%% Real founded engines, original cryptographically verified requests, and
+%% actual sealing/routing. There is no test-only lane-selection flag here.
+t_independent_signed_routes(#{chain_b := B, chain_c := C, animals := A}) ->
+    ?assertMatch({ok, [_], _}, independent_signed(B, <<"independent(true).">>)),
+    ?assertMatch({ok, [_], _}, independent_signed(
+                               B, <<"independent(assertz(s6_local)).">>)),
+    ?assertMatch({ok, [_], _}, prove(B, s6_local)),
+    ?assertMatch({ok, [_], _}, independent_signed(
+                               B, <<"independent(chain_c::assertz(s6_remote)).">>)),
+    ?assertMatch({ok, [_], _}, prove(C, s6_remote)),
+    ?assertEqual({error, independent_lane_unavailable}, independent_signed(
+      B, <<"independent((assertz(s6_ab), chain_c::assertz(s6_ab))).">>)),
+    ?assertEqual({error, independent_lane_unavailable}, independent_signed(
+      B, <<"independent((chain_c::assertz(s6_bc), animals::assertz(s6_bc))).">>)),
+    lists:foreach(fun({Ns, Fact}) ->
+        ?assertMatch({fail, _}, prove(Ns, Fact))
+    end, [{B, s6_ab}, {C, s6_ab}, {C, s6_bc}, {A, s6_bc}]),
+    lists:foreach(fun(Inner) ->
+        ?assertEqual({error, independent_requires_signed_request},
+                     quod_prolog:execute(B, {independent, Inner}))
+    end, [true, {assertz, s6_unsigned},
+          {',', {assertz, s6_unsigned}, {'::', chain_c, {assertz, s6_unsigned}}}]),
+    ?assertMatch({fail, _}, prove(B, s6_unsigned)),
+    ?assertMatch({fail, _}, prove(C, s6_unsigned)).
+
+t_independent_retained_branch_routes(#{chain_b := B, chain_c := C}) ->
+    %% F1 must COMMIT the retained material in the ordinary atomic lane.
+    %% Rejecting the proof is deliberately not accepted as a safe substitute.
+    ?assertMatch({ok, [_], _}, independent_signed(B,
+      <<"(independent((assertz(s6_f1), chain_c::assertz(s6_f1), fail)); true).">>)),
+    ?assertMatch({ok, [_], _}, prove(B, s6_f1)),
+    ?assertMatch({ok, [_], _}, prove(C, s6_f1)),
+    ?assertEqual({error, independent_mixed_writes}, independent_signed(B,
+      <<"((assertz(s6_f2), fail); true), independent(chain_c::assertz(s6_f2)).">>)),
+    ?assertEqual({error, independent_lane_unavailable}, independent_signed(B,
+      <<"(independent((assertz(s6_f3), fail)); true), independent(chain_c::assertz(s6_f3)).">>)),
+    %% A descendant's successful marker belongs to the caller's answer trail.
+    ?assertMatch({ok, [_], _}, independent_signed(B,
+      <<"((chain_c::independent(assertz(s6_descendant)), fail); true).">>)),
+    ?assertMatch({ok, [_], _}, prove(C, s6_descendant)),
+    ?assertEqual({error, independent_mixed_writes}, independent_signed(B,
+      <<"independent((chain_c::assertz(s6_late), assertz(s6_late))), assertz(s6_outside).">>)),
+    ?assertMatch({fail, _}, independent_signed(B,
+      <<"independent((assertz(s6_total_fail), chain_c::assertz(s6_total_fail))), fail.">>)),
+    lists:foreach(fun(Fact) ->
+        ?assertMatch({fail, _}, prove(B, Fact)),
+        ?assertMatch({fail, _}, prove(C, Fact))
+    end, [s6_f2, s6_f3, s6_late, s6_outside, s6_total_fail]).
+
+t_independent_mixed_residue_fallback_commits(#{chain_b := B, chain_c := C}) ->
+    %% Adding a wrapper to a failed branch must not change an ordinary
+    %% fallback's atomic commit. Both proofs retain the failed branch's write.
+    ?assertMatch({ok, [_], _}, independent_signed(B,
+      <<"((assertz(s6_plain_residue), fail); chain_c::assertz(s6_plain_fallback)).">>)),
+    ?assertMatch({ok, [_], _}, prove(B, s6_plain_residue)),
+    ?assertMatch({ok, [_], _}, prove(C, s6_plain_fallback)),
+    %% The selected answer is ordinary, but the sealed aggregate mask is 3:
+    %% wrapped residue on B plus ordinary fallback material on C. All of it
+    %% must commit through L3; provenance can veto only an independent route.
+    ?assertMatch({ok, [_], _}, independent_signed(B,
+      <<"(independent((assertz(s6_mixed_residue), fail)); chain_c::assertz(s6_mixed_fallback)).">>)),
+    ?assertMatch({ok, [_], _}, prove(B, s6_mixed_residue)),
+    ?assertMatch({ok, [_], _}, prove(C, s6_mixed_fallback)).
+
+t_independent_cross_scope_nesting(#{chain_b := B}) ->
+    lists:foreach(fun(Text) ->
+        ?assertEqual({error, independent_nesting}, independent_signed(B, Text))
+    end, [<<"independent(chain_c::transaction(true)).">>,
+          <<"transaction(chain_c::independent(true)).">>,
+          <<"independent(chain_c::independent(true)).">>,
+          <<"chain_c::independent(chain_b::transaction(true)).">>,
+          <<"chain_c::transaction(chain_b::independent(true)).">>,
+          <<"chain_c::independent(chain_b::independent(true)).">>]),
+    %% Wrapper begun inside a selected scope, then reentering its origin.
+    ?assertEqual({error, independent_lane_unavailable}, independent_signed(B,
+      <<"chain_c::independent((assertz(s6_reentry), chain_b::assertz(s6_reentry))).">>)).
+
+independent_signed(Ns, Text) ->
+    %% A signed target may publish its source receipt asynchronously after the
+    %% client reply. Keep the founded fixture's network identity stable for
+    %% that lifetime; a temporary identity override is not valid here.
+    {ok, Network} = quod_ontology:network_identity(),
+    Fixture = quod_ct:signed_goal_fixture(
+                #{network => Network, target => {Ns, quod_simplex:genesis_hash(Ns)},
+                  operation_id => crypto:strong_rand_bytes(32), goal_text => Text}),
+    [KeyFact] = quod_ct:signed_agent_facts(Fixture),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(Ns, {assertz, KeyFact})),
+    #{goal := FrozenGoal} = maps:get(evidence, Fixture),
+    {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
+    quod_prolog:execute_signed(maps:get(evidence, Fixture), Goal,
+                               maps:get(principal, Fixture)).
+
 t_cursor_backtracks_across_ontology(#{pets := P}) ->
     CursorId = crypto:strong_rand_bytes(32),
     {ok, Engine, CallRef} = quod_prolog:open_cursor(
@@ -600,7 +700,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
         assert_scope_reply(Handle, FirstOpen, {opened, First}),
         {ok, FirstNext} = quod_scope_session:invoke_next(Handle, First, 1),
         ?assertEqual(
-           {solution, 1, Follow, false},
+           {solution, 1, Follow, false, false},
            receive_scope_reply(Handle, FirstNext)),
 
         {ok, SecondOpen} = quod_scope_session:invoke_open(
@@ -610,7 +710,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
         {ok, SecondNext} = quod_scope_session:invoke_next(
                              Handle, Second, 1),
         ?assertEqual(
-           {solution, 1, Follow, false},
+           {solution, 1, Follow, false, false},
            receive_scope_reply(Handle, SecondNext))
     after
         ok = quod_scope_session:invoke_cancel(Handle, First),
@@ -885,7 +985,7 @@ t_scope_session_binding(#{animals := A}) ->
                      receive_scope_reply(Handle, WrongSeqRef)),
         {ok, NextRef} = quod_scope_session:invoke_next(
                           Handle, InvocationId, 1),
-        ?assertMatch({solution, 1, {diet, cat, fish}, false},
+        ?assertMatch({solution, 1, {diet, cat, fish}, false, false},
                      receive_scope_reply(Handle, NextRef)),
         ok = quod_scope_session:invoke_cancel(Handle, InvocationId),
         ?assertEqual(
@@ -1206,14 +1306,14 @@ t_frozen_scope_view(#{animals := A, pets := P}) ->
         {ok, FirstRef} = quod_scope_session:invoke_next(
                            Handle, InvocationId, 1),
         ?assertMatch(
-           {solution, 1, {diet, dog, kibble}, false},
+           {solution, 1, {diet, dog, kibble}, false, false},
            receive_scope_reply(Handle, FirstRef)),
         ?assertMatch({ok, [_], _},
                      prove(A, {assertz, {diet, dog, tofu}})),
         {ok, SecondRef} = quod_scope_session:invoke_next(
                             Handle, InvocationId, 2),
         ?assertMatch(
-           {solution, 2, {diet, dog, meat}, false},
+           {solution, 2, {diet, dog, meat}, false, false},
            receive_scope_reply(Handle, SecondRef)),
         {ok, CompleteRef} = quod_scope_session:invoke_next(
                               Handle, InvocationId, 3),

@@ -27,6 +27,26 @@ resumable_invocation_preserves_solution_order_test() ->
         quod_proof_session:stop(Session)
     end.
 
+independent_intent_belongs_to_an_invocation_not_the_shared_revision_test() ->
+    Session = quod_proof_session:start(
+      quod_transaction_predicates:load(committed([])),
+      #{read_set => true, signed_request => true}),
+    First = invocation_id(1),
+    Second = invocation_id(2),
+    try
+        ok = quod_proof_session:open(Session, First,
+               {independent, {assertz, {wrapped, one}}}, allowed, context(), empty_selection()),
+        ?assertMatch({solution, _}, quod_proof_session:next(Session, First)),
+        ?assert(quod_proof_session:independent_intent(Session, First)),
+        ok = quod_proof_session:open(Session, Second,
+               {assertz, {ordinary, two}}, allowed, context(), empty_selection()),
+        ?assertMatch({solution, _}, quod_proof_session:next(Session, Second)),
+        ?assertNot(quod_proof_session:independent_intent(Session, Second)),
+        ?assert(quod_proof_session:independent_intent(Session, First)),
+        ?assertEqual(3, quod_proof_session:provenance(Session))
+    after quod_proof_session:stop(Session)
+    end.
+
 repeated_invocations_share_staged_writes_test() ->
     Session = quod_proof_session:start(committed([]), #{read_set => true}),
     Context = context(),

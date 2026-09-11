@@ -126,8 +126,8 @@ guarded_ask(Self, Target, Inner, Next, St) ->
 %% when the target is exhausted, fail back into the surrounding proof.
 drive_stream(Stream, GoalTerm, Target, Next, St) ->
     case stream_next(Stream, St) of
-        {solution, Sol, Stream1, St1} ->
-            emit(Stream1, GoalTerm, Target, Sol, Next, St1);
+        {solution, Sol, Stream1, St1, Independent} ->
+            emit(Stream1, GoalTerm, Target, Sol, Next, St1, Independent);
         {complete, Reasons, St1} ->
             case erlog_int:merge_failure_reasons(Reasons, St1) of
                 {ok, St2} -> erlog_int:fail(St2);
@@ -139,7 +139,7 @@ drive_stream(Stream, GoalTerm, Target, Next, St) ->
 %% Unify one target solution into the local proof. The pushed choice point captures the
 %% PRE-unify bindings/var-counter, so backtracking restores them and pulls the next
 %% solution — the streaming analogue of a clause choice point.
-emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
+emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}, Independent) ->
     case bind_answer(GoalTerm, Sol, Bs, Vn) of
         {ok, Bs1, Vn1} ->
             Fail = fun(#cp{bs = Bs0, vn = Vn0}, Cps, FSt) ->
@@ -148,7 +148,9 @@ emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
             end,
             Cp = #cp{type = compiled, data = Fail, next = Next, bs = Bs, vn = Vn},
             St1 = erlog_int:push_choicepoint(Cp, St),
-            erlog_int:prove_body(Next, St1#est{bs = Bs1, vn = Vn1});
+            erlog_int:prove_body(
+              Next, quod_erlog_db_local_prove:accept_independent(
+                      St1#est{bs = Bs1, vn = Vn1}, Independent));
         {error, Reason} ->
             ask_error(Reason)
     end.
@@ -737,8 +739,8 @@ stream_next(Stream, St) ->
               end,
           St2 = refresh_session(St1),
           case Result of
-              {solution, Solution, NextStream} ->
-                  {solution, Solution, NextStream, St2};
+              {solution, Solution, NextStream, Independent} ->
+                  {solution, Solution, NextStream, St2, Independent};
               {complete, Reasons} ->
                   {complete, Reasons, St2};
               {error, Reason} ->
@@ -790,13 +792,13 @@ origin_advance(Ref, OwnerActor, OwnerSelection, Expected) ->
     end.
 
 scope_advance_reply(Ref, Owner, Handle, InvocationId, Selection, Expected,
-                    {solution, Expected, Solution, Dirty}) ->
+                    {solution, Expected, Solution, Dirty, Independent}) ->
     ScopeId = quod_scope_session:scope_id(Handle),
     ok = quod_proof_context:mark_dirty(ScopeId, Dirty),
     Next = {scope_invocation, Handle, InvocationId,
             Selection, Expected + 1},
     ok = quod_proof_context:update_proxy(Ref, Owner, Next),
-    {solution, Solution, origin_stream(Ref, Expected + 1)};
+    {solution, Solution, origin_stream(Ref, Expected + 1), Independent};
 scope_advance_reply(Ref, Owner, Handle, InvocationId, _Selection, Expected,
                     {complete, Expected, Reasons, Dirty}) ->
     ok = quod_proof_context:mark_dirty(
@@ -832,7 +834,8 @@ local_advance_reply(Ref, Owner, ScopeId, Session, InvocationId,
     Next = {local_scope_invocation, ScopeId, Session, InvocationId,
             Selection, Expected + 1},
     ok = quod_proof_context:update_proxy(Ref, Owner, Next),
-    {solution, Solution, origin_stream(Ref, Expected + 1)};
+    {solution, Solution, origin_stream(Ref, Expected + 1),
+     quod_proof_session:independent_intent(Session, InvocationId)};
 local_advance_reply(Ref, Owner, ScopeId, _Session, InvocationId,
                     _Selection, _Expected,
                     {complete, Reasons}) ->
@@ -870,10 +873,10 @@ nested_advance(Origin, ProofId, Ref, Actor, Selection, Expected) ->
     Origin ! {proof_nested_next, ProofId, self(), RequestRef,
               Actor, Selection, Ref, Expected},
     case await_nested_reply(Origin, ProofId, RequestRef) of
-        {solution, Expected, Solution} ->
+        {solution, Expected, Solution, Independent} ->
             {solution, Solution,
              {nested_scope_stream, Origin, ProofId, Ref,
-              Actor, Selection, Expected + 1}};
+              Actor, Selection, Expected + 1}, Independent};
         {complete, Expected, Reasons} ->
             {complete, Reasons};
         {error, Reason} ->
@@ -986,12 +989,12 @@ decode_remote_scope_event(_Handle,
                           false, {open, InvocationId}) ->
     {error, Reason};
 decode_remote_scope_event(_Handle,
-                          {solution, InvocationId, AnswerSeq, Blob},
+                          {solution, InvocationId, AnswerSeq, Blob, Independent},
                           Dirty,
                           {{_ScopeId, InvocationId}, _Selection, AnswerSeq}) ->
     decoded_scope_payload(
       answer, Blob,
-      fun(Solution) -> {solution, AnswerSeq, Solution, Dirty} end);
+      fun(Solution) -> {solution, AnswerSeq, Solution, Dirty, Independent} end);
 decode_remote_scope_event(_Handle,
                           {complete, InvocationId, AnswerSeq, Blob},
                           Dirty,
@@ -1036,8 +1039,8 @@ decoded_scope_payload(Kind, Blob, BuildReply) ->
     end.
 
 serve_remote_controller(Handle,
-                        {nested_open, ControllerId, Target, Chain, GoalBlob},
-                        Actor, Selection) ->
+                        {nested_open, ControllerId, Target, Chain, GoalBlob, Selection},
+                        Actor, _BaseSelection) ->
     case remote_controller_source(Handle, Actor, Selection) of
         false -> {error, not_allowed};
         true ->
@@ -1056,8 +1059,8 @@ serve_remote_controller(Handle,
             end
     end;
 serve_remote_controller(Handle,
-                        {nested_next, ControllerId, ProxyId, Expected},
-                        Actor, Selection) ->
+                        {nested_next, ControllerId, ProxyId, Expected, Selection},
+                        Actor, _BaseSelection) ->
     case remote_controller_source(Handle, Actor, Selection) of
         false -> {error, not_allowed};
         true ->
@@ -1153,11 +1156,11 @@ remote_controller_source(Handle,
           Actor, quod_transaction_scope:selection_lineage(Selection)).
 
 send_nested_advance_reply(Handle, ControllerId, ProxyId, Expected,
-                          {solution, Solution, _Stream}) ->
+                          {solution, Solution, _Stream, Independent}) ->
     encoded_controller_reply(
       answer, Solution,
       fun(Blob) ->
-          {nested_solution, ControllerId, ProxyId, Expected, Blob}
+          {nested_solution, ControllerId, ProxyId, Expected, Blob, Independent}
       end, Handle);
 send_nested_advance_reply(Handle, ControllerId, ProxyId, Expected,
                           {complete, Reasons}) ->
@@ -1257,8 +1260,8 @@ serve_tx_request({proof_tx_request, ProofId, From, ScopeId, InvocationId,
     From ! {proof_tx_reply, ProofId, InvocationId, RequestRef, Reply},
     ok.
 
-nested_origin_reply(Expected, {solution, Solution, _Stream}) ->
-    {solution, Expected, Solution};
+nested_origin_reply(Expected, {solution, Solution, _Stream, Independent}) ->
+    {solution, Expected, Solution, Independent};
 nested_origin_reply(Expected, {complete, Reasons}) ->
     {complete, Expected, Reasons};
 nested_origin_reply(_Expected, {error, Reason}) ->

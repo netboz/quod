@@ -23,6 +23,10 @@
          remote_signed_origin_read_certificate_stale_rejected/1,
          remote_signed_two_gateway_race/1,
          remote_signed_gateway_group/1,
+         remote_independent_routes/1,
+         remote_independent_branch_provenance/1,
+         remote_independent_nesting_and_auth/1,
+         remote_independent_cursor_selects_only_accepted_answer/1,
          remote_signed_concurrent_gateway_groups/1,
          remote_signed_queued_occ_abort/1,
          remote_signed_gateway_group_with_root_effect/1,
@@ -59,6 +63,10 @@ all() -> [remote_plain_read_excludes_live_observer,
           remote_signed_origin_read_certificate_stale_rejected,
           remote_signed_two_gateway_race,
           remote_signed_gateway_group,
+          remote_independent_routes,
+          remote_independent_branch_provenance,
+          remote_independent_nesting_and_auth,
+          remote_independent_cursor_selects_only_accepted_answer,
           remote_signed_concurrent_gateway_groups,
           remote_signed_queued_occ_abort,
           remote_signed_gateway_group_with_root_effect,
@@ -157,6 +165,12 @@ init_per_suite(Config) ->
             "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
             "_Chain, _Ns).\n",
             "can_invoke((instance_of(pet, my_dog), _), "
+            "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
+            "_Chain, _Ns).\n",
+            "can_invoke(independent(_), "
+            "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
+            "_Chain, _Ns).\n"
+            "can_invoke((_;_), "
             "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
             "_Chain, _Ns).\n",
             PetsBin,
@@ -966,6 +980,115 @@ remote_signed_two_gateway_race(Config) ->
 
 %% A signed agent stored in A reaches B and then C through the same nested
 %% scope and group machinery. No specialized client or agent executor exists.
+remote_independent_routes(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+      submit_signed_execute(Config, <<"animals::independent(true).">>)),
+    Tag = erlang:unique_integer([positive]),
+    Text = iolist_to_binary(io_lib:format(
+      "animals::independent(assertz(s6_remote(~B))).", [Tag])),
+    {ok, Evidence, {normalized, {committed, [_], Ref}}} =
+        submit_signed_execute(Config, Text),
+    ?assertMatch({transaction, ?NS, _, _}, Ref),
+    ?assertEqual(Ref, completed_remote_operation(
+                       Asker, maps:get(operation_ref, Evidence), 600)),
+    assert_fact_once(Target, ?NS, s6_remote, Tag),
+    lists:foreach(fun(Goal) ->
+        ?assertMatch({ok, _, {normalized, {error, independent_lane_unavailable}}},
+                     submit_signed_execute(Config, Goal))
+    end, [<<"independent((assertz(s6_ab), animals::assertz(s6_ab))).">>,
+          <<"animals::independent((assertz(s6_bc), third::assertz(s6_bc))).">>]),
+    lists:foreach(fun({Peer, Ns, Fact}) ->
+        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, Fact]))
+    end, [{Asker, ?ASKER_NS, s6_ab}, {Target, ?NS, s6_ab},
+          {Target, ?NS, s6_bc}, {?config(third, Config), ?THIRD_NS, s6_bc}]).
+
+remote_independent_branch_provenance(Config) ->
+    Target = ?config(target, Config),
+    Third = ?config(third, Config),
+    %% The original signed request and real sealed retained writes choose L3.
+    ?assertMatch({ok, _, {normalized, {committed, [_], {group_outcome, _, _, _}}}},
+      submit_signed_execute(Config,
+        <<"animals::((independent((assertz(s6_f1), third::assertz(s6_f1), fail))); true).">>)),
+    ?assertMatch({ok, [#{}], _},
+                 peer:call(Target, quod_prolog, prove, [?NS, s6_f1])),
+    ?assertMatch({ok, [_], _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, s6_f1])),
+    ?assertMatch({ok, _, {normalized, {error, independent_mixed_writes}}},
+      submit_signed_execute(Config,
+        <<"animals::(((assertz(s6_f2), fail); true), independent(third::assertz(s6_f2))).">>)),
+    ?assertMatch({ok, _, {normalized, {error, independent_lane_unavailable}}},
+      submit_signed_execute(Config,
+        <<"animals::((independent((assertz(s6_f3), fail)); true), independent(third::assertz(s6_f3))).">>)),
+    %% A remotely-produced successful marker must unwind at its caller too.
+    ?assertMatch({ok, _, {normalized, {committed, [_], {group_outcome, _, _, _}}}},
+      submit_signed_execute(Config,
+        <<"((animals::independent((assertz(s6_unwound), third::assertz(s6_unwound))), fail); true).">>)),
+    lists:foreach(fun(Fact) ->
+        ?assertMatch({fail, _}, peer:call(Target, quod_prolog, prove, [?NS, Fact])),
+        ?assertMatch({fail, _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, Fact]))
+    end, [s6_f2, s6_f3]).
+
+remote_independent_nesting_and_auth(Config) ->
+    lists:foreach(fun(Text) ->
+        ?assertMatch({ok, _, {normalized, {error, independent_nesting}}},
+                     submit_signed_execute(Config, Text))
+    end, [<<"animals::independent(third::transaction(true)).">>,
+          <<"animals::transaction(third::independent(true)).">>,
+          <<"animals::independent(third::independent(true)).">>,
+          <<"animals::independent(third::(animals::transaction(true))).">>]),
+    Session = ?config(client_session, Config),
+    {Bytes, _Signature} = signed_goal_request(
+      ?config(network_id, Config), ?config(agent_pub, Config), ?config(agent_key, Config),
+      ?ASKER_NS, ?config(asker_anchor, Config), maps:get(expires_ms, Session),
+      <<"animals::independent(assertz(s6_invalid_auth)).">>),
+    ?assertEqual({error, invalid_signature}, peer:call(
+      ?config(asker, Config), quod_client_goal_ingress, submit,
+      [execute, maps:get(session_id, Session), Bytes, <<0:512>>, ?config(client_peer, Config)])),
+    ?assertMatch({fail, _}, peer:call(
+      ?config(target, Config), quod_prolog, prove, [?NS, s6_invalid_auth])).
+
+remote_independent_cursor_selects_only_accepted_answer(Config) ->
+    Asker = ?config(asker, Config),
+    Session = ?config(client_session, Config),
+    SessionId = maps:get(session_id, Session),
+    ClientPeer = ?config(client_peer, Config),
+    lists:foreach(fun(AcceptSecond) ->
+        Tag = erlang:unique_integer([positive]),
+        Text = iolist_to_binary(io_lib:format(
+          "animals::((independent((assertz(s6_cursor(~B)), third::assertz(s6_cursor(~B)))), X=first); X=second).",
+          [Tag, Tag])),
+        {Bytes, Signature} = signed_goal_request(
+          ?config(network_id, Config), ?config(agent_pub, Config), ?config(agent_key, Config),
+          ?ASKER_NS, ?config(asker_anchor, Config), maps:get(expires_ms, Session), cursor, Text),
+        {ok, _, {normalized, {solution, CursorId, _, First}}} = peer:call(
+          Asker, quod_client_goal_ingress, submit,
+          [cursor, SessionId, Bytes, Signature, ClientPeer], 60000),
+        ?assertEqual({ok, [{<<"X">>, first}]}, quod_durable_term:decode_result(First)),
+        case AcceptSecond of
+            false -> ok;
+            true ->
+                {ok, _, {normalized, {solution, CursorId, _, Second}}} = peer:call(
+                  Asker, quod_client_goal_ingress, cursor_command,
+                  [SessionId, CursorId, next, ClientPeer], 60000),
+                ?assertEqual({ok, [{<<"X">>, second}]},
+                             quod_durable_term:decode_result(Second))
+        end,
+        Result = peer:call(Asker, quod_client_goal_ingress, cursor_command,
+                          [SessionId, CursorId, accept, ClientPeer], 60000),
+        case AcceptSecond of
+            false ->
+                ?assertMatch({ok, _, {normalized, {error, independent_lane_unavailable}}}, Result),
+                assert_fact_absent(?config(target, Config), ?NS, s6_cursor, Tag),
+                assert_fact_absent(?config(third, Config), ?THIRD_NS, s6_cursor, Tag);
+            true ->
+                ?assertMatch({ok, _, {normalized,
+                                     {committed, [_], {group_outcome, _, _, _}}}}, Result),
+                assert_fact_once(?config(target, Config), ?NS, s6_cursor, Tag),
+                assert_fact_once(?config(third, Config), ?THIRD_NS, s6_cursor, Tag)
+        end
+    end, [false, true]).
+
 remote_signed_gateway_group(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),

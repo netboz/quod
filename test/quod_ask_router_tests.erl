@@ -305,7 +305,7 @@ command_correlation_generation_and_no_reply_commands_test() ->
       fun(Router, TestPid, TargetKey, Binding, Handle,
           RequestLink, ReturnLink) ->
           InvocationId = id(31),
-          Selection = {tx_selection, none, []},
+          Selection = {tx_selection, none, [], ordinary},
           {ok, RequestId} = quod_ask_router:command(
                               Handle, 20000,
                               {invoke_open, InvocationId, Selection,
@@ -536,7 +536,8 @@ intermediary_nested_event_retains_invocation_correlation_test() ->
           {ok, GoalBlob} = quod_scope_wire:encode_payload(
                              goal, {child_goal, ok}),
           Nested = {nested_open, ControllerId, <<"quod:child">>,
-                    [target_identity(Binding)], GoalBlob},
+                    [target_identity(Binding)], GoalBlob,
+                    quod_transaction_scope:empty_selection()},
           send_event(Router, TargetKey, ReturnLink, Binding,
                      2, RequestId, CommandSeq, 0, false, Nested),
           receive
@@ -545,7 +546,7 @@ intermediary_nested_event_retains_invocation_correlation_test() ->
           end,
           {ok, AnswerBlob} = quod_scope_wire:encode_payload(
                                answer, {child_goal, ok}),
-          Final = {solution, InvocationId, 1, AnswerBlob},
+          Final = {solution, InvocationId, 1, AnswerBlob, false},
           send_event(Router, TargetKey, ReturnLink, Binding,
                      3, RequestId, CommandSeq, 0, false, Final),
           receive

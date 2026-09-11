@@ -243,7 +243,7 @@ sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
              quod_prolog:test_scope_command_route(sealed, Operation))
       end,
       [scope_seal,
-       {invoke_open, <<1:128>>, {tx_selection, none, []}, [], <<>>},
+       {invoke_open, <<1:128>>, {tx_selection, none, [], ordinary}, [], <<>>},
        {invoke_next, <<1:128>>, 1},
        {invoke_cancel, <<1:128>>},
        {materialize, <<1:128>>, <<2:128>>, <<3:128>>, [<<4:128>>]},

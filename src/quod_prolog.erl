@@ -104,7 +104,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_active_operation/3,
          test_inflight_public_reply/1,
          test_await_public_proof/5,
-         test_route_plans/3,
+         test_route_plans/3, test_route_plans/4,
          test_agent_identity_reads_current/2,
          test_install_read_certificate_barrier/0,
          test_await_read_certificate_barrier/1,
@@ -1915,6 +1915,7 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                                      #{read_only => ReadOnly,
                                        principal => Principal,
                                        request_binding => RequestBinding,
+                                       signed_request => maps:get(request_auth, RequestContext) =/= none,
                                        trace_ctx => maps:get(
                                          trace_ctx, RequestContext,
                                          otel_ctx:new()),
@@ -2944,6 +2945,7 @@ start_admitted_remote_scope_session(
                              #{read_only => ReadOnly,
                                principal => Principal,
                                request_binding => RequestBinding,
+                               signed_request => Scope#remote_scope.request_auth =/= none,
                                trace_ctx => Scope#remote_scope.trace_ctx,
                                signer => S#s.signer,
                                deadline_ms => Scope#remote_scope.deadline_ms}),
@@ -3084,14 +3086,14 @@ handle_bound_scope_reply(
 handle_bound_scope_reply(
   Binding, _Scope,
   {scope_seal, RequestId, CommandSeq},
-  {sealed, {ok, Plan}}, S) ->
+  {sealed, {ok, Plan, Provenance}}, S) ->
     case quod_scope_wire:encode_payload(plan, Plan) of
         {ok, Blob} ->
             S1 = update_remote_scope(
                    Binding,
                    fun(Scope) -> Scope#remote_scope{state = sealed} end, S),
             emit_scope_event(
-              Binding, RequestId, CommandSeq, {plan_sealed, Blob}, S1);
+              Binding, RequestId, CommandSeq, {plan_sealed, Blob, Provenance}, S1);
         {error, Reason} ->
             poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S)
     end;
@@ -3215,10 +3217,10 @@ finish_scope_control(Binding,
 
 emit_invocation_result(Binding, RequestId, CommandSeq,
                        InvocationId, ExpectedSeq,
-                       {solution, ExpectedSeq, Solution, _Dirty}, S) ->
+                       {solution, ExpectedSeq, Solution, _Dirty, Independent}, S) ->
     emit_payload_event(
       answer, Solution,
-      fun(Blob) -> {solution, InvocationId, ExpectedSeq, Blob} end,
+      fun(Blob) -> {solution, InvocationId, ExpectedSeq, Blob, Independent} end,
       Binding, RequestId, CommandSeq,
       InvocationId, ExpectedSeq, S);
 emit_invocation_result(Binding, RequestId, CommandSeq,
@@ -3435,7 +3437,10 @@ test_certify_reads_pending_reason(PendingCount, Ns)
     certify_reads_pending_reason(Pending, Ns).
 
 test_route_plans(Plans, OriginIdentity, SignedRequest) ->
-    route_plans(Plans, OriginIdentity, SignedRequest).
+    route_plans(Plans, OriginIdentity, SignedRequest, false).
+
+test_route_plans(Plans, OriginIdentity, SignedRequest, Independent) ->
+    route_plans(Plans, OriginIdentity, SignedRequest, Independent).
 
 test_sealed_submit_transition() ->
     {ok, AuthenticationDigest} =
@@ -3521,7 +3526,7 @@ remote_controller_bound(_ProofId, _From, _Binding, _Scope) -> false.
 
 translate_remote_controller_request(
   {proof_nested_open, _ProofId, From, InternalRequestRef,
-   _Actor, _Selection, TargetNs, Goal, Chain},
+   _Actor, Selection, TargetNs, Goal, Chain},
   Binding, Scope, S) ->
     case quod_scope_wire:encode_payload(goal, Goal) of
         {ok, GoalBlob} ->
@@ -3532,7 +3537,7 @@ translate_remote_controller_request(
             Scope1 = Scope#remote_scope{controllers = Controllers},
             queue_controller_event(
               Binding, ControllerId,
-              {nested_open, ControllerId, TargetNs, Chain, GoalBlob},
+              {nested_open, ControllerId, TargetNs, Chain, GoalBlob, Selection},
               Scope1, put_remote_scope(Scope1, S));
         {error, Reason} ->
             From ! {proof_nested_reply, binding_proof_id(Binding),
@@ -3541,7 +3546,7 @@ translate_remote_controller_request(
     end;
 translate_remote_controller_request(
   {proof_nested_next, _ProofId, From, InternalRequestRef,
-   _Actor, _Selection, ProxyId, ExpectedSeq},
+   _Actor, Selection, ProxyId, ExpectedSeq},
   Binding, Scope, S) ->
     ControllerId = new_controller_id(Scope),
     Controllers = (Scope#remote_scope.controllers)#{
@@ -3550,7 +3555,7 @@ translate_remote_controller_request(
     Scope1 = Scope#remote_scope{controllers = Controllers},
     queue_controller_event(
       Binding, ControllerId,
-      {nested_next, ControllerId, ProxyId, ExpectedSeq},
+      {nested_next, ControllerId, ProxyId, ExpectedSeq, Selection},
       Scope1, put_remote_scope(Scope1, S));
 translate_remote_controller_request(
   {proof_nested_cancel, _ProofId, _From, _Actor, _Selection, ProxyId},
@@ -3669,10 +3674,10 @@ controller_reply(
       {opened, ProxyId}}};
 controller_reply(
   {nested_next, Pid, RequestRef, ProxyId, ExpectedSeq},
-  {nested_solution, _ControllerId, ProxyId, ExpectedSeq, Blob}, Binding) ->
+  {nested_solution, _ControllerId, ProxyId, ExpectedSeq, Blob, Independent}, Binding) ->
     decoded_nested_reply(
       answer, Blob, Pid, Binding, RequestRef,
-      fun(Solution) -> {solution, ExpectedSeq, Solution} end);
+      fun(Solution) -> {solution, ExpectedSeq, Solution, Independent} end);
 controller_reply(
   {nested_next, Pid, RequestRef, ProxyId, ExpectedSeq},
   {nested_complete, _ControllerId, ProxyId, ExpectedSeq, Blob}, Binding) ->
@@ -4315,6 +4320,7 @@ run_pinned_origin(
       end),
     OverlayOpts = #{read_set => true,
                     read_only => ReadOnly,
+                    signed_request => RequestEvidence =/= none,
                     signer => Signer,
                     proof_context => {origin, OriginHandle}},
     Context = quod_predicates:with_chain(
@@ -4480,8 +4486,9 @@ run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
 %% A successful writable proof seals every scope while all sessions are still
 %% open, then routes the immutable participant set once. Only write/effect
 %% plans consume consensus slots; read-only dependencies become certificates
-%% for the ordinary single-writer path. Two or more writers retain the atomic
-%% group unchanged.
+%% for the ordinary single-writer path. Two or more writers remain atomic unless
+%% the selected proof explicitly requested independent commits; slice 6 refuses
+%% that lane by name until its dispatch implementation lands in slice 8.
 %% Read-only proof kinds and failed proofs pass through; failed proofs close
 %% without sealing.
 finish_pinned_proof(prove, Origin, Goal, {ok, Bindings, _Diff, ReadSet}) ->
@@ -4504,7 +4511,8 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
       fun(_SpanCtx) ->
           route_plans(
             Plans, OriginIdentity,
-            quod_proof_context:request_auth() =/= none)
+            quod_proof_context:request_auth() =/= none,
+            quod_proof_context:independent())
       end),
     RemoteClaim = case Route of
                       {remote_claim, _, _} -> true;
@@ -4513,6 +4521,7 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
     ok = observe_remote_seal(
            Origin, RemoteClaim, SealStarted),
     case Route of
+        {error, _} = Error -> Error;
         read ->
             {ok, Bindings, [], ReadSet};
         {single, Target, ReadRows} ->
@@ -4538,7 +4547,9 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
 
 %% Pure lane choice: consensus ownership is determined only by the sealed
 %% plans, never by where their sessions happen to be hosted.
-route_plans(Plans, OriginIdentity, SignedRequest) ->
+route_plans(_Plans, _OriginIdentity, false, true) ->
+    {error, independent_requires_signed_request};
+route_plans(Plans, OriginIdentity, SignedRequest, Independent) ->
     Rows = lists:sort(maps:to_list(Plans)),
     Writers = [{Identity, Plan} || {Identity, Plan} <- Rows,
                                     quod_dtx:writes(Plan)],
@@ -4551,6 +4562,8 @@ route_plans(Plans, OriginIdentity, SignedRequest) ->
             {remote_claim, Target, Readers};
         [{Target, _Plan}] ->
             {single, Target, Readers};
+        [_ | _] when Independent ->
+            {error, independent_lane_unavailable};
         [_ | _] ->
             %% L3 is unchanged: only writers and their OCC readers consume
             %% Prepare/Finalize slots. A pure signed-origin claim is already
@@ -5389,7 +5402,12 @@ cursor_wait(Owner, CallRef, CursorId, InvocationId, Session, Height) ->
         {quod_cursor_command, Owner, CallRef, CursorId,
          _CommandRef, accept} ->
             case quod_proof_session:bindings(Session, InvocationId) of
-                {ok, Bindings} -> {accept, Bindings};
+                {ok, Bindings} ->
+                    case quod_proof_context:select_independent(
+                           quod_proof_session:independent_intent(Session, InvocationId)) of
+                        ok -> {accept, Bindings};
+                        {error, _} = Error -> Error
+                    end;
                 {error, Reason} -> {error, Reason}
             end;
         {quod_cursor_command, Owner, CallRef, CursorId,
@@ -5409,7 +5427,14 @@ run_origin_invocation(
     case quod_proof_context:register_invocation(Actor, Selection) of
         ok ->
             try quod_proof_session:open_first(
-                  Session, InvocationId, Goal, Verdict, Context, Selection)
+                  Session, InvocationId, Goal, Verdict, Context, Selection) of
+                {ok, _, _, _} = Result ->
+                    case quod_proof_context:select_independent(
+                           quod_proof_session:independent_intent(Session, InvocationId)) of
+                        ok -> Result;
+                        {error, _} = Error -> Error
+                    end;
+                Result -> Result
             after
                 try
                     ok = quod_proof_session:cancel(Session, InvocationId)

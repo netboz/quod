@@ -16,7 +16,7 @@ the scope wire as Erlang references.
          scope_authentication/0, ensure_scope_authentication/0,
          durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0,
-         finalize/1, seal_plans/0, scope_handle/1,
+         finalize/1, seal_plans/0, scope_handle/1, select_independent/1, independent/0,
          bind_router/3,
          get_or_open_scope/2,
          scope_owner/1,
@@ -72,6 +72,7 @@ the scope wire as Erlang references.
               invocations = #{} :: #{actor() => quod_transaction_scope:lineage()},
               proxies = #{} :: map(),
               dirty = #{} :: map(),
+              independent = false :: boolean(),
               txs = #{} :: #{opaque_id() => #tx{}},
               lineages = #{} :: #{opaque_id() => #lineage{}},
               batches = #{} :: #{opaque_id() => #batch{}},
@@ -159,6 +160,20 @@ request_auth() ->
 
 -spec request_binding() -> quod_client_goal:request_binding().
 request_binding() -> (context())#ctx.request_binding.
+
+%% Called only when the origin accepts its selected whole-proof solution.
+%% Descendant replies first join the caller's binding trail; they never set this.
+-spec select_independent(boolean()) -> ok | {error, independent_requires_signed_request}.
+select_independent(Selected) when is_boolean(Selected) ->
+    Ctx = context(),
+    open = Ctx#ctx.seal_result,
+    case Selected andalso Ctx#ctx.request_evidence =:= none of
+        true -> {error, independent_requires_signed_request};
+        false -> put_context(Ctx#ctx{independent = Selected}), ok
+    end.
+
+-spec independent() -> boolean().
+independent() -> (context())#ctx.independent.
 
 -doc "Return the one scope-wire authentication object for this proof.".
 -spec scope_authentication() -> quod_scope_wire:authentication().
@@ -352,7 +367,7 @@ seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
         {ok, false} -> {ok, #{}};
         {ok, true} -> seal_scopes(lists:sort(maps:to_list(Scopes)),
                                   OriginIdentity, Principal,
-                                  RequestBinding, #{});
+                                  RequestBinding, #{}, 0);
         {error, _} = Error -> {Error, #{}}
     end.
 
@@ -386,19 +401,24 @@ local_scope_material([#scope{} | Rest]) ->
 local_scope_material([]) ->
     {ok, false}.
 
-seal_scopes([], _OriginIdentity, _Principal, _RequestBinding, Plans) ->
-    {ok, Plans};
+seal_scopes([], _OriginIdentity, _Principal, _RequestBinding, Plans, Mask) ->
+    %% Provenance can veto an independent route, never revive discarded intent.
+    %% Ordinary fallback commits all retained material atomically, even mask 3.
+    case independent() andalso (Mask band 1) =/= 0 of
+        true -> {{error, independent_mixed_writes}, Plans};
+        false -> {ok, Plans}
+    end;
 seal_scopes([{Identity, #scope{handle = Handle}} | Rest],
-            OriginIdentity, Principal, RequestBinding, Plans) ->
+            OriginIdentity, Principal, RequestBinding, Plans, Mask) ->
     case quod_scope_session:seal(
            Handle, OriginIdentity, Principal, RequestBinding) of
-        {ok, Plan} ->
+        {ok, Plan, Provenance} ->
             seal_scopes(
               Rest, OriginIdentity, Principal, RequestBinding,
-              Plans#{Identity => Plan});
+              Plans#{Identity => Plan}, Mask bor Provenance);
         not_material ->
             seal_scopes(
-              Rest, OriginIdentity, Principal, RequestBinding, Plans);
+              Rest, OriginIdentity, Principal, RequestBinding, Plans, Mask);
         {error, _} = Error ->
             {Error, Plans}
     end.
@@ -721,7 +741,7 @@ tx_request(_Actor, _Operation) ->
 -doc "Lazily checkpoint the exact live selection on this target actor's scope.".
 -spec materialize(quod_transaction_scope:selection(), actor()) ->
           ok | {error, term()}.
-materialize({tx_selection, Lineage, BatchIds} = Selection,
+materialize({tx_selection, Lineage, BatchIds, _Mode} = Selection,
             {ScopeId, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>} = Actor)
   when is_binary(ScopeId),
        byte_size(ScopeId) =:= ?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8 ->

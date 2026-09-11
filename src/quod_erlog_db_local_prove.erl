@@ -31,6 +31,8 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 %% overlay API
 -export([wrap_state/1, wrap_state/2, access_guard/1, check_access/1,
          proof_context/1, fresh_proof_state/1,
+         write_intent/1, set_write_intent/2, signed_request/1,
+         successful_independent/1, accept_independent/2, provenance/1,
          revision/1, replace_revision/2,
          live_transaction_tokens/1,
          committed_state/1, checkpoint/1, restore/2,
@@ -49,6 +51,8 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
         {quod_proof_access, binary(), non_neg_integer()}.
 
 -record(fstate, {abolished = false :: boolean(),
+                 abolish_intent = ordinary :: ordinary | independent,
+                 provenance = #{} :: map(),
                  asserta   = []    :: [{integer(), term(), term()}],
                  assertz_rev = []  :: [{integer(), term(), term()}],
                  retracted = #{}   :: #{integer() => {term(), term()}}}).
@@ -56,8 +60,13 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -record(lp, {out_db   :: #db{},
              scope_id = undefined :: reference() | undefined,
              local    = #{}      :: #{term() => #fstate{}},
-             event_ops_rev = [] :: [{event, term()}],
+             event_ops_rev = [] :: [{event, term(), ordinary | independent}],
              effects = []       :: [quod_effect:effect()],
+             effect_provenance = #{} :: map(),
+             %% Invocation-local execution mode, not the successful-proof flag.
+             %% A revision rebase preserves the receiving invocation's mode.
+             write_intent = ordinary :: ordinary | independent,
+             signed_request = false :: boolean(),
              next_tag = 1000000  :: integer(),   %% above any committed-db tag
              read_ets = undefined :: ets:tid() | undefined,
              %% Read-time link following is disabled inside a committee membership verdict
@@ -91,8 +100,9 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -type distributed_token() :: {batch, <<_:128>>} | {pending, <<_:128>>}.
 -record(checkpoint, {scope_id :: reference(),
                      local    :: #{term() => #fstate{}},
-                     event_ops_rev = [] :: [{event, term()}],
+                     event_ops_rev = [] :: [{event, term(), ordinary | independent}],
                      effects = [] :: [quod_effect:effect()],
+                     effect_provenance = #{} :: map(),
                      prepared_effects = #{} :: map(),
                      next_tag :: integer(),
                      distributed = [] :: [distributed_token()]}).
@@ -139,6 +149,7 @@ wrap_state(St, Opts) ->
     ProofContext = maps:get(proof_context, Opts, undefined),
     AccessGuard = access_guard_option(Opts),
     Ov1 = Ov#lp{proof_context = ProofContext,
+                signed_request = boolean_option(signed_request, Opts),
                 access_guard = AccessGuard,
                 read_only = ReadOnly},
     Ov2 =
@@ -234,6 +245,8 @@ put_prepared_effect(
             Row = {Action, Desired, Effect, Prepared},
             St#est{db = Db#db{ref = Ov#lp{
                 effects = Candidate,
+                effect_provenance = (Ov#lp.effect_provenance)#{
+                                      EffectId => Ov#lp.write_intent},
                 prepared_effects = Prepared0#{EffectId => Row}}}};
         false -> erlang:error(invalid_direct_effect)
     end;
@@ -282,6 +295,72 @@ proof_context(
 proof_context(_) ->
     undefined.
 
+%% The successful-path marker lives in Erlog's binding store. Its key contains
+%% the private overlay reference and is never a Prolog variable or wire value.
+%% Ordinary backtracking therefore restores it WITHOUT restoring the database.
+-spec write_intent(tuple()) -> ordinary | independent.
+write_intent(#est{db = #db{mod = ?MODULE, ref = #lp{write_intent = Mode}}}) ->
+    Mode;
+write_intent(_) -> ordinary.
+
+-spec set_write_intent(tuple(), ordinary | independent) -> tuple().
+set_write_intent(#est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St, Mode)
+  when Mode =:= ordinary; Mode =:= independent ->
+    St#est{db = Db#db{ref = Ov#lp{write_intent = Mode}}}.
+
+-spec signed_request(tuple()) -> boolean().
+signed_request(#est{db = #db{mod = ?MODULE, ref = #lp{signed_request = Signed}}}) ->
+    Signed;
+signed_request(_) -> false.
+
+-spec successful_independent(tuple()) -> boolean().
+successful_independent(
+  #est{bs = Bs, db = #db{mod = ?MODULE, ref = #lp{scope_id = ScopeId}}}) ->
+    erlog_int:get_binding({{?MODULE, ScopeId, independent}}, Bs) =:= {ok, true}.
+
+-spec accept_independent(tuple(), boolean()) -> tuple().
+accept_independent(St, false) -> St;
+accept_independent(
+  #est{bs = Bs, db = #db{mod = ?MODULE, ref = #lp{scope_id = ScopeId}}} = St,
+  true) ->
+    St#est{bs = erlog_int:add_binding(
+                   {{?MODULE, ScopeId, independent}}, true, Bs)}.
+
+%% Only entries which still contribute sealed material participate. Marks on
+%% removed assertions do not count; retained events/effects count separately.
+%% This mask may veto mixed material, but MUST NOT select the independent lane.
+-spec provenance(tuple()) -> 0..3.
+provenance(#est{db = #db{mod = ?MODULE, ref = Ov}}) -> provenance(Ov);
+provenance(#lp{local = Local, event_ops_rev = Events,
+               effects = Effects, effect_provenance = EP,
+               out_db = #db{mod = M, ref = R}} = Ov) ->
+    ensure_access(Ov),
+    Facts = maps:fold(
+      fun(F, #fstate{abolished = Ab, abolish_intent = AbMode,
+                     asserta = A, assertz_rev = Z, retracted = Ret,
+                     provenance = P}, Acc) ->
+          AssertMask = lists:foldl(
+            fun({Tag, _, _}, Mask) -> Mask bor intent_bit(maps:get({assert, Tag}, P)) end,
+            Acc, A ++ Z),
+          Retracts = case Ab of
+                         true -> committed_clauses(M, R, F);
+                         false -> [{Tag, H, B} || {Tag, {H, B}} <- maps:to_list(Ret)]
+                     end,
+          lists:foldl(
+            fun({Tag, _, _}, Mask) ->
+                Mask bor intent_bit(maps:get({retract, Tag}, P, AbMode))
+            end, AssertMask, Retracts)
+      end, 0, Local),
+    EventMask = lists:foldl(
+      fun({event, _, Mode}, Mask) -> Mask bor intent_bit(Mode) end, Facts, Events),
+    lists:foldl(
+      fun(Effect, Mask) ->
+          Mask bor intent_bit(maps:get(quod_effect:effect_id(Effect), EP))
+      end, EventMask, Effects).
+
+intent_bit(ordinary) -> 1;
+intent_bit(independent) -> 2.
+
 -doc "Reset interpreter-local proof data while retaining the current overlay revision.".
 -spec fresh_proof_state(tuple()) -> tuple().
 fresh_proof_state(
@@ -308,10 +387,11 @@ revision(_St) ->
 replace_revision(
   #est{db = #db{mod = ?MODULE,
                 ref = #lp{scope_id = ScopeId,
-                          access_guard = AccessGuard}} = Db} = St,
+                          access_guard = AccessGuard,
+                          write_intent = Mode}} = Db} = St,
   #revision{scope_id = ScopeId,
             overlay = #lp{access_guard = AccessGuard} = Overlay}) ->
-    St#est{db = Db#db{ref = Overlay}};
+    St#est{db = Db#db{ref = Overlay#lp{write_intent = Mode}}};
 replace_revision(_St, _Revision) ->
     erlang:error(badarg).
 
@@ -409,7 +489,7 @@ get_local_changes(
     FactOps = maps:fold(
                 fun(F, FS, Acc) -> functor_ops(F, FS, M, R) ++ Acc end,
                 [], Local),
-    FactOps ++ lists:reverse(EventOpsRev).
+    FactOps ++ [{event, Term} || {event, Term, _Mode} <- lists:reverse(EventOpsRev)].
 
 -doc "Stage one explicit event occurrence in this rollback-safe proof revision.".
 -spec stage_event(tuple(), term()) -> {ok, tuple()} | error.
@@ -420,7 +500,7 @@ stage_event(
   Term) ->
     ensure_access(Ov),
     {ok, St#est{db = Db#db{ref = Ov#lp{
-        event_ops_rev = [{event, Term} | Events]}}}};
+        event_ops_rev = [{event, Term, Ov#lp.write_intent} | Events]}}}};
 stage_event(
   #est{db = #db{mod = ?MODULE, ref = #lp{read_only = true} = Ov}},
   _Term) ->
@@ -599,10 +679,12 @@ new({OutRef, OutMod}) ->
 choicepoint_checkpoint(
   #lp{scope_id = ScopeId, local = Local, event_ops_rev = EventOpsRev,
       effects = Effects,
+      effect_provenance = EffectProvenance,
       prepared_effects = PreparedEffects,
       next_tag = NextTag}) ->
     #checkpoint{scope_id = ScopeId, local = Local,
                 event_ops_rev = EventOpsRev, effects = Effects,
+                effect_provenance = EffectProvenance,
                 prepared_effects = PreparedEffects,
                 next_tag = NextTag,
                 distributed = quod_transaction_scope:checkpoint_token()}.
@@ -611,10 +693,12 @@ choicepoint_restore(
   #lp{scope_id = ScopeId} = Ov,
   #checkpoint{scope_id = ScopeId,
               local = Local, event_ops_rev = EventOpsRev, effects = Effects,
+              effect_provenance = EffectProvenance,
               prepared_effects = PreparedEffects, next_tag = NextTag,
               distributed = Distributed}) ->
     ok = quod_transaction_scope:restore_token(Distributed),
     Ov#lp{local = Local, event_ops_rev = EventOpsRev, effects = Effects,
+          effect_provenance = EffectProvenance,
           prepared_effects = PreparedEffects, next_tag = NextTag};
 choicepoint_restore(_Ov, _Checkpoint) ->
     erlang:error(badarg).
@@ -632,7 +716,9 @@ asserta_clause(#lp{} = St, F, Head, Body) ->
             L = St#lp.local,
             Tag = St#lp.next_tag,
             FS = maps:get(F, L, #fstate{}),
-            FS1 = FS#fstate{asserta = [{Tag, Head, Body} | FS#fstate.asserta]},
+            FS1 = FS#fstate{asserta = [{Tag, Head, Body} | FS#fstate.asserta],
+                            provenance = (FS#fstate.provenance)#{
+                                            {assert, Tag} => St#lp.write_intent}},
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
@@ -644,7 +730,9 @@ assertz_clause(#lp{} = St, F, Head, Body) ->
             L = St#lp.local,
             Tag = St#lp.next_tag,
             FS = maps:get(F, L, #fstate{}),
-            FS1 = FS#fstate{assertz_rev = [{Tag, Head, Body} | FS#fstate.assertz_rev]},
+            FS1 = FS#fstate{assertz_rev = [{Tag, Head, Body} | FS#fstate.assertz_rev],
+                            provenance = (FS#fstate.provenance)#{
+                                            {assert, Tag} => St#lp.write_intent}},
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
@@ -660,15 +748,21 @@ retract_clause(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F, Tag) ->
                     FS = maps:get(F, L, #fstate{}),
                     case local_tag(Tag, FS) of
                         {true, asserta} ->
-                            {ok, St#lp{local = L#{F => FS#fstate{asserta = lists:keydelete(Tag, 1, FS#fstate.asserta)}}}};
+                            {ok, St#lp{local = L#{F => FS#fstate{
+                                asserta = lists:keydelete(Tag, 1, FS#fstate.asserta),
+                                provenance = maps:remove({assert, Tag}, FS#fstate.provenance)}}}};
                         {true, assertz} ->
                             {ok, St#lp{local = L#{F => FS#fstate{
-                                assertz_rev = lists:keydelete(Tag, 1, FS#fstate.assertz_rev)}}}};
+                                assertz_rev = lists:keydelete(Tag, 1, FS#fstate.assertz_rev),
+                                provenance = maps:remove({assert, Tag}, FS#fstate.provenance)}}}};
                         false ->
                             case committed_clause(M, R, F, Tag) of
                                 undefined -> {ok, St};
                                 {H, B}    -> Ret = (FS#fstate.retracted)#{Tag => {H, B}},
-                                             {ok, St#lp{local = L#{F => FS#fstate{retracted = Ret}}}}
+                                             {ok, St#lp{local = L#{F => FS#fstate{
+                                               retracted = Ret,
+                                               provenance = (FS#fstate.provenance)#{
+                                                 {retract, Tag} => St#lp.write_intent}}}}}
                             end
                     end
             end
@@ -689,7 +783,17 @@ abolish_clauses(
                     %% procedure later in get_local_changes/1. Therefore abolish is a
                     %% read-modify-write even when the Prolog goal never reads F.
                     record_read(RS, F, R),
-                    {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
+                    Previous = maps:get(F, L, #fstate{}),
+                    AbMode = case Previous#fstate.abolished of
+                                 true -> Previous#fstate.abolish_intent;
+                                 false -> St#lp.write_intent
+                             end,
+                    Marks = maps:filter(
+                              fun({Kind, _}, _) -> Kind =:= retract end,
+                              Previous#fstate.provenance),
+                    {ok, St#lp{local = L#{F => #fstate{
+                      abolished = true, abolish_intent = AbMode,
+                      provenance = Marks}}}}
             end
     end.
 

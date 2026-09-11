@@ -34,7 +34,9 @@ where the proof ran.
         read_only | target_unavailable | ontology_rebuilding | ontology_busy |
         cursor_not_found | cursor_not_ready | cursor_busy | invalid_action |
         non_backtrackable_action | conflict_retry | proof_unavailable |
-        result_too_large.
+        result_too_large | independent_requires_signed_request |
+        independent_nesting | independent_mixed_writes |
+        independent_lane_unavailable.
 -type result() ::
         {answers, non_neg_integer(), [binary()]} |
         {solution, <<_:256>>, non_neg_integer(), binary()} |
@@ -212,6 +214,10 @@ public_error(invalid_action) -> invalid_action;
 public_error(non_backtrackable_action) -> non_backtrackable_action;
 public_error(conflict_retry) -> conflict_retry;
 public_error(result_too_large) -> result_too_large;
+public_error(independent_requires_signed_request) -> independent_requires_signed_request;
+public_error(independent_nesting) -> independent_nesting;
+public_error(independent_mixed_writes) -> independent_mixed_writes;
+public_error(independent_lane_unavailable) -> independent_lane_unavailable;
 public_error(_Reason) -> proof_unavailable.
 
 -doc "Encode one canonical normalized result.".
@@ -339,7 +345,11 @@ valid_public_error(Reason) ->
         Reason =:= invalid_action orelse
         Reason =:= non_backtrackable_action orelse
         Reason =:= conflict_retry orelse
-        Reason =:= proof_unavailable orelse Reason =:= result_too_large.
+        Reason =:= proof_unavailable orelse Reason =:= result_too_large orelse
+        Reason =:= independent_requires_signed_request orelse
+        Reason =:= independent_nesting orelse
+        Reason =:= independent_mixed_writes orelse
+        Reason =:= independent_lane_unavailable.
 
 -doc "Render one already-normalized local or forwarded result.".
 -spec http_normalized(quod_client_goal:evidence(), result()) ->
@@ -399,6 +409,14 @@ http_error({error, conflict_retry}) ->
     {409, #{error => conflict_retry}};
 http_error({error, result_too_large}) ->
     {413, #{error => result_too_large}};
+http_error({error, independent_requires_signed_request}) ->
+    {400, #{error => independent_requires_signed_request}};
+http_error({error, independent_nesting}) ->
+    {400, #{error => independent_nesting}};
+http_error({error, independent_mixed_writes}) ->
+    {400, #{error => independent_mixed_writes}};
+http_error({error, independent_lane_unavailable}) ->
+    {503, #{error => independent_lane_unavailable}};
 http_error({error, proof_unavailable}) ->
     {503, #{error => proof_unavailable}}.
 

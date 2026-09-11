@@ -119,6 +119,39 @@ database_update_clause_heads_are_callable_positions_test() ->
     ?assertEqual(HeadName, atom_to_binary(HeadAtom, utf8)),
     ?assertEqual(BodyName, atom_to_binary(BodyAtom, utf8)).
 
+independent_walks_owned_goals_but_not_foreign_goals_or_data_test() ->
+    Suffix = integer_to_binary(erlang:unique_integer([positive])),
+    Head = <<"s6_wire_owned_", Suffix/binary>>,
+    Foreign = <<"s6_wire_foreign_", Suffix/binary>>,
+    Data = <<"s6_wire_data_", Suffix/binary>>,
+    Inner = {',', {assertz, {{'$quod_symbol', Head}, {'$quod_symbol', Data}}},
+              {'::', {'$quod_symbol', <<"other">>}, {'$quod_symbol', Foreign}}},
+    lists:foreach(fun(Wrapper) ->
+        Goal = {Wrapper, Inner},
+        {ok, Names} = quod_wire_term:goal_symbol_names(Goal),
+        ?assert(lists:member(Head, Names)),
+        ?assertNot(lists:member(Foreign, Names)),
+        ?assertNot(lists:member(Data, Names)),
+        {ok, {independent, {',', {assertz, {HeadAtom, {'$quod_symbol', Data}}},
+                               {'::', other, {'$quod_symbol', Foreign}}}}} =
+            quod_wire_term:materialize_goal_symbols(Goal),
+        ?assertEqual(Head, atom_to_binary(HeadAtom, utf8)),
+        ?assertError(badarg, binary_to_existing_atom(Foreign, utf8)),
+        ?assertError(badarg, binary_to_existing_atom(Data, utf8))
+    end, [independent, {'$quod_symbol', <<"independent">>}]).
+
+independent_with_other_arity_does_not_materialize_data_test() ->
+    Name = <<"s6_not_a_goal_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Data = {'$quod_symbol', Name},
+    lists:foreach(fun(Wrapper) ->
+        Goal = {Wrapper, Data, other},
+        {ok, Names} = quod_wire_term:goal_symbol_names(Goal),
+        ?assertNot(lists:member(Name, Names)),
+        ?assertEqual({ok, {independent, Data, other}},
+                     quod_wire_term:materialize_goal_symbols(Goal)),
+        ?assertError(badarg, binary_to_existing_atom(Name, utf8))
+    end, [independent, {'$quod_symbol', <<"independent">>}]).
+
 depth_limit_test() ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, ok, lists:seq(1, 70)),
     ?assertEqual({error, bad_term}, quod_wire_term:encode(Deep)).

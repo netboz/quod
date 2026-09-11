@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 11).
+-define(VERSION, 12).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -47,7 +47,7 @@ renew the scope lifetime.
 -type key() :: <<_:?QUOD_SCOPE_WIRE_KEY_BITS>>.
 -type opaque_id() :: <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>.
 -type lineage() :: none | opaque_id().
--type selection() :: {tx_selection, lineage(), [opaque_id()]}.
+-type selection() :: quod_transaction_scope:selection().
 -type identity() :: {binary(), key()}.
 -type authentication() ::
         node |
@@ -69,7 +69,8 @@ renew the scope lifetime.
         {invoke_next, opaque_id(), pos_integer()} |
         {invoke_cancel, opaque_id()} |
         {nested_opened, opaque_id(), opaque_id()} |
-        {nested_solution | nested_complete | nested_erlog_error,
+        {nested_solution, opaque_id(), opaque_id(), pos_integer(), binary(), boolean()} |
+        {nested_complete | nested_erlog_error,
          opaque_id(), opaque_id(), pos_integer(), binary()} |
         {nested_error, opaque_id(), term()} |
         {tx_activated, opaque_id(), opaque_id(),
@@ -82,7 +83,7 @@ renew the scope lifetime.
         {controller_error, opaque_id(), term()}.
 -type event_operation() ::
         {scope_opened, non_neg_integer()} | scope_closed |
-        {plan_sealed, binary()} | plan_not_material |
+        {plan_sealed, binary(), 0..3} | plan_not_material |
         {plan_attested, binary()} | {reads_certified, binary()} |
         group_effects_bound | {operation_effect_bound, <<_:256>>} |
         {plan_submitted, {committed, pos_integer(), binary()} |
@@ -90,12 +91,13 @@ renew the scope lifetime.
                          {outcome_unknown,
                           {transaction, binary(), binary(), binary()}}} |
         {invocation_opened, opaque_id()} |
-        {solution | complete | erlog_error,
+        {solution, opaque_id(), pos_integer(), binary(), boolean()} |
+        {complete | erlog_error,
          opaque_id(), pos_integer(), binary()} |
         {invocation_error, opaque_id(), pos_integer(), term()} |
         {scope_error, term()} |
-        {nested_open, opaque_id(), binary(), [identity()], binary()} |
-        {nested_next, opaque_id(), opaque_id(), pos_integer()} |
+        {nested_open, opaque_id(), binary(), [identity()], binary(), selection()} |
+        {nested_next, opaque_id(), opaque_id(), pos_integer(), selection()} |
         {nested_cancel, opaque_id(), opaque_id()} |
         {tx_activate, opaque_id(), opaque_id(), lineage(), [opaque_id()]} |
         {tx_finish, opaque_id(), opaque_id(), opaque_id(), opaque_id(),
@@ -496,7 +498,8 @@ validate_command_operation({invoke_cancel, InvocationId}) ->
 validate_command_operation({nested_opened, ControllerId, ProxyId}) ->
     validate_two_ids(ControllerId, ProxyId);
 validate_command_operation(
-  {nested_solution, ControllerId, ProxyId, AnswerSeq, Blob}) ->
+  {nested_solution, ControllerId, ProxyId, AnswerSeq, Blob, Independent})
+  when is_boolean(Independent) ->
     validate_two_ids_sequence_blob(
       ControllerId, ProxyId, AnswerSeq, Blob, answer);
 validate_command_operation(
@@ -551,7 +554,8 @@ validate_event_operation({scope_opened, BaseHeight}) ->
         false -> protocol_error(bad_height)
     end;
 validate_event_operation(scope_closed) -> ok;
-validate_event_operation({plan_sealed, Blob}) ->
+validate_event_operation({plan_sealed, Blob, Provenance})
+  when is_integer(Provenance), Provenance >= 0, Provenance =< 3 ->
     validate_blob(plan, Blob);
 validate_event_operation(plan_not_material) -> ok;
 validate_event_operation({plan_attested, Blob}) ->
@@ -585,7 +589,8 @@ validate_event_operation(
     end;
 validate_event_operation({invocation_opened, InvocationId}) ->
     validate_one_id(InvocationId);
-validate_event_operation({solution, InvocationId, AnswerSeq, Blob}) ->
+validate_event_operation({solution, InvocationId, AnswerSeq, Blob, Independent})
+  when is_boolean(Independent) ->
     validate_id_sequence_blob(InvocationId, AnswerSeq, Blob, answer);
 validate_event_operation({complete, InvocationId, AnswerSeq, Blob}) ->
     validate_id_sequence_blob(
@@ -600,15 +605,17 @@ validate_event_operation({invocation_error, InvocationId, AnswerSeq, Reason}) ->
 validate_event_operation({scope_error, Reason}) ->
     validate_public_error(Reason);
 validate_event_operation(
-  {nested_open, ControllerId, TargetNs, Chain, GoalBlob}) ->
-    case valid_namespace(TargetNs) of
-        true -> validate_id_chain_blob(ControllerId, Chain, GoalBlob, goal);
-        false -> protocol_error(bad_identity)
+  {nested_open, ControllerId, TargetNs, Chain, GoalBlob, Selection}) ->
+    case {valid_namespace(TargetNs), validate_selection(Selection)} of
+        {true, ok} -> validate_id_chain_blob(ControllerId, Chain, GoalBlob, goal);
+        {false, _} -> protocol_error(bad_identity);
+        {_, {error, _} = Error} -> Error
     end;
-validate_event_operation({nested_next, ControllerId, ProxyId, AnswerSeq}) ->
-    case validate_two_ids(ControllerId, ProxyId) of
-        ok -> validate_sequence(AnswerSeq);
-        {error, _} = Error -> Error
+validate_event_operation({nested_next, ControllerId, ProxyId, AnswerSeq, Selection}) ->
+    case {validate_two_ids(ControllerId, ProxyId), validate_selection(Selection)} of
+        {ok, ok} -> validate_sequence(AnswerSeq);
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error
     end;
 validate_event_operation({nested_cancel, ControllerId, ProxyId}) ->
     validate_two_ids(ControllerId, ProxyId);
@@ -747,7 +754,7 @@ validate_id_id_list(Id, Ids) ->
 
 validate_id_list(Ids) ->
     case validate_unique_ids(
-           Ids, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, false) of
+           Ids, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 0, #{}) of
         ok -> ok;
         error -> protocol_error(bad_id_list)
     end.
@@ -762,16 +769,11 @@ validate_sorted_id_list(Ids) ->
         {error, _} = Error -> Error
     end.
 
-validate_selection({tx_selection, Lineage, BatchIds}) ->
-    Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
-    case valid_lineage(Lineage) andalso
-         validate_unique_ids(BatchIds, Limit, true) =:= ok andalso
-         BatchIds =:= lists:sort(BatchIds) andalso
-         (Lineage =/= none orelse BatchIds =:= []) of
+validate_selection(Selection) ->
+    case quod_transaction_scope:valid_selection(Selection) of
         true -> ok;
         false -> protocol_error(bad_selection)
-    end;
-validate_selection(_Selection) -> protocol_error(bad_selection).
+    end.
 
 validate_activated(ControllerId, FinalLineage, Activated) ->
     case {valid_id(ControllerId), valid_id(FinalLineage),
@@ -804,20 +806,16 @@ unique_ids(Position, Activated) ->
     Ids = [element(Position, Entry) || Entry <- Activated],
     map_size(maps:from_keys(Ids, true)) =:= length(Ids).
 
-validate_unique_ids(Ids, Limit, AllowEmpty) ->
-    validate_unique_ids(Ids, Limit, AllowEmpty, 0, #{}).
-
-validate_unique_ids([], _Limit, true, _Count, _Seen) -> ok;
-validate_unique_ids([], _Limit, false, Count, _Seen) when Count > 0 -> ok;
-validate_unique_ids([], _Limit, false, 0, _Seen) -> error;
-validate_unique_ids([Id | Rest], Limit, AllowEmpty, Count, Seen)
+validate_unique_ids([], _Limit, Count, _Seen) when Count > 0 -> ok;
+validate_unique_ids([], _Limit, 0, _Seen) -> error;
+validate_unique_ids([Id | Rest], Limit, Count, Seen)
   when Count < Limit ->
     case valid_id(Id) andalso not maps:is_key(Id, Seen) of
         true -> validate_unique_ids(
-                  Rest, Limit, AllowEmpty, Count + 1, Seen#{Id => true});
+                  Rest, Limit, Count + 1, Seen#{Id => true});
         false -> error
     end;
-validate_unique_ids(_Ids, _Limit, _AllowEmpty, _Count, _Seen) -> error.
+validate_unique_ids(_Ids, _Limit, _Count, _Seen) -> error.
 
 bounded_nonempty_list([_ | _] = List, Limit) ->
     bounded_list(List, Limit, 0);
@@ -920,6 +918,10 @@ valid_uint64(Integer) ->
 %% remain opaque bounded quod_wire_term blobs in their dedicated operations.
 validate_public_error(read_only) -> ok;
 validate_public_error(signed_scope_unavailable) -> ok;
+validate_public_error(independent_requires_signed_request) -> ok;
+validate_public_error(independent_nesting) -> ok;
+validate_public_error(independent_mixed_writes) -> ok;
+validate_public_error(independent_lane_unavailable) -> ok;
 validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
 validate_public_error({Tag, Value} = Reason) ->

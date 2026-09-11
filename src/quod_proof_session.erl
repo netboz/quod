@@ -31,7 +31,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          dirty/1,
          checkpoint_many/2, restore_many/2, release_many/2,
          overlay_generation/1,
-         bindings/2, open_first/6, run_first/3,
+         bindings/2, independent_intent/2, provenance/1, open_first/6, run_first/3,
          run_first_with_dependencies/3]).
 
 -ifdef(TEST).
@@ -163,8 +163,11 @@ open_checked(Handle, InvocationId, RequestedGoal, Verdict,
             case charge_transcript(State, InvocationId, RequestedGoal,
                                    Verdict, Context) of
                 {ok, State1} ->
+                    InvocationState = quod_erlog_db_local_prove:set_write_intent(
+                                        State1#session_state.current,
+                                        quod_transaction_scope:selection_mode(Selection)),
                     Scope = quod_proof_scope:open_invocation(
-                              ExecutionGoal, State1#session_state.current,
+                              ExecutionGoal, InvocationState,
                               Context,
                               quod_transaction_scope:checkpoint_depth(
                                 Selection)),
@@ -355,6 +358,19 @@ committed_state(Handle) ->
 local_changes(Handle) ->
     State = get_session(Handle),
     overlay_local_changes(State#session_state.current).
+
+-spec provenance(session()) -> 0..3.
+provenance(Handle) ->
+    quod_erlog_db_local_prove:provenance((get_session(Handle))#session_state.current).
+
+-spec independent_intent(session(), <<_:128>>) -> boolean().
+independent_intent(Handle, InvocationId) ->
+    State = get_session(Handle),
+    case maps:find(InvocationId, State#session_state.invocations) of
+        {ok, {idle, Scope, _Selection}} ->
+            quod_erlog_db_local_prove:successful_independent(quod_proof_scope:state(Scope));
+        _ -> erlang:error(unknown_invocation)
+    end.
 
 -doc "Return the direct effects staged in the current immutable revision.".
 -spec effects(session()) -> [quod_effect:effect()].

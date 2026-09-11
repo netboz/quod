@@ -1,0 +1,46 @@
+// Synthetic offline parser/coverage tests only; no Quod VM, network or workload.
+import assert from 'node:assert/strict';
+import {audit} from './analyze-exact.mjs';
+const F='quod.foreign.',O='quod.owner.',t1='1'.repeat(32),t2='2'.repeat(32);
+let next=1;
+function span(name,start,end,attributes={},p=null,trace=t1){return {name:F+name,trace_id:trace,span_id:(next++).toString(16).padStart(16,'0'),parent:p?.span_id??null,start_ns:String(start*1e6),end_ns:String(end*1e6),attributes,resource:{'service.instance.id':'alloc-A'},links:[],events:[],dropped_attributes:0,dropped_events:0,dropped_links:0};}
+const c=span('owner_request',0,10,{[F+'cause']:'caller_expired'});
+const r=span('caller_residence',1,10,{[O+'stages_expected']:1,[O+'terminal']:'caller_expired',[O+'mailbox_native']:7},c);
+const os=span('owner_stage',1,10,{[O+'stage_ordinal']:1,[O+'stage']:'running'},r);
+const w=span('verification_worker',2,20,{[F+'job_id']:'job-one',[F+'attempt']:1,[F+'worker_pid']:'<0.1.0>',[F+'work']:'request_exact',[F+'stages_started']:3,[F+'stages_completed']:3,[F+'probe_children_started']:0,[F+'resident_start_height']:0,[F+'disk_start_height']:14,[F+'disk_replayed_entries']:14,[F+'network_advance_verified_entries']:0,'quod.namespace':'fixture','quod.genesis_anchor':'anchor'},c);
+function stage(name,a,b,n,p=w){return span(name,a,b,{[F+'stage_ordinal']:n,[F+'stage_process']:'<0.1.0>'},p);}
+const page=stage('page_fetch',3,8,1),wait=stage('page_wait',3,8,2,page),handoff=stage('worker_handoff',19,20,3);
+page.attributes[F+'page_entries']=1;
+const adm=span('page_admission',3,3.1,{[F+'page_id']:'page-one',[F+'page_expected_terminal']:1},page);
+const term=span('page_completion_owner',12,12.1,{[F+'page_id']:'page-one',[F+'page_terminal_count']:1,[F+'page_terminal']:'page_expired',[F+'page_turn']:'decoding',[F+'page_deadline_expired']:true},page);
+const install=span('result_install',21,21.1,{},w);
+const late=span('owner_request',5,22,{[F+'cause']:'owner_reply'},null,t2);
+const lr=span('caller_residence',5.1,21.2,{[O+'stages_expected']:1,[O+'terminal']:'reply'},late,t2);
+const ls=span('owner_stage',5.1,21.2,{[O+'stage_ordinal']:1,[O+'stage']:'running'},lr,t2);
+const join=span('join',5.2,5.3,{[F+'job_id']:'job-one',[F+'attempt']:1},late,t2);
+join.links=[{trace_id:t1,span_id:w.span_id,attributes:{}}];
+const spans=[c,r,os,w,page,wait,handoff,adm,term,install,late,lr,ls,join];
+const ok=audit(spans);
+assert.equal(ok.summary.structural_count_pass,true,JSON.stringify(ok.issues));
+assert.equal(ok.summary.workers,1);
+assert.equal(ok.summary.caller_expired_with_worker_outliving,1);
+assert.equal(ok.pages[0].terminal_started_after_parent_end,true);
+assert.equal(ok.installations[0].started_after_worker_end,true);
+assert.equal(ok.callers.find(x=>x.trace_id===t2).worker_keys.length,1);
+assert.equal(ok.workers[0].attributes[F+'disk_replayed_entries'],14);
+assert.equal(ok.workers[0].attributes[F+'network_advance_verified_entries'],0);
+assert.equal(ok.summary.causal_completeness_claim_permitted,false);
+const missingStage=audit(spans.filter(s=>s!==wait));
+assert(missingStage.issues.some(i=>i.kind==='producer_stage_count_or_sequence'));
+const missingTerminal=audit(spans.filter(s=>s!==term));
+assert(missingTerminal.issues.some(i=>i.kind==='page_admission_terminal_count'));
+const dup={...term,span_id:'f'.repeat(16)};
+assert(audit([...spans,dup]).issues.some(i=>i.kind==='page_admission_terminal_count'));
+const dropped=audit(spans.map(s=>s===w?{...s,dropped_links:1}:s));
+assert(dropped.issues.some(i=>i.kind==='dropped_foreign_metadata'));
+const dedup=audit([...spans,...spans]);
+assert.equal(dedup.summary.workers,1);assert.equal(dedup.deduplicated_copies,spans.length);
+const noWorker=audit(spans.filter(s=>s!==w));
+assert.equal(noWorker.summary.structural_count_pass,false);
+assert.equal(noWorker.unresolved_trace_ids[0],t1);
+console.log('8 offline grammar checks passed: positive ended-parent/shared job, missing stage, missing terminal, duplicate terminal, dropped links, dedup, missing worker, replay/network separation.');

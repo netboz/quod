@@ -1,4 +1,5 @@
 -module(quod_trace).
+-include("quod_c4_attempt.hrl").
 -moduledoc """
 Small OpenTelemetry boundary for Quod.
 
@@ -149,9 +150,11 @@ owner_observation_attributes({Start, QueueBefore, ReductionsBefore},
 -doc "Start a span that another callback will finish; returns its child context.".
 -spec start_span(context(), binary(), atom(), map()) -> {context(), span_ctx()}.
 start_span(Ctx, Name, Kind, Attributes) ->
-    SpanCtx = otel_tracer:start_span(
-                Ctx, tracer(), Name,
-                #{kind => Kind, attributes => trace_attributes(Attributes)}),
+    Tracer = tracer(),
+    SpanCtx = ?C4_ATTEMPT(Ctx, Tracer, Name, Attributes,
+                fun() -> otel_tracer:start_span(
+                  Ctx, Tracer, Name,
+                  #{kind => Kind, attributes => trace_attributes(Attributes)}) end),
     {otel_tracer:set_current_span(Ctx, SpanCtx), SpanCtx}.
 
 -spec finish_span(span_ctx(), term()) -> ok.

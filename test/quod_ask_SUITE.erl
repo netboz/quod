@@ -35,6 +35,9 @@
          remote_four_scope_chain_recovers_empty_routes/1]).
 -export([run_scope_proofs/3]).
 -export([remote_signed_transaction_savepoints/1]).
+-export([cut_findall_local_and_cohosted/1,
+         cut_findall_remote_boundaries/1,
+         cut_findall_signed_multiscope_savepoints/1]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
@@ -48,6 +51,9 @@
 -define(SCOPE_WAVE_SIZE, 8).
 
 all() -> [remote_signed_transaction_savepoints,
+          cut_findall_local_and_cohosted,
+          cut_findall_remote_boundaries,
+          cut_findall_signed_multiscope_savepoints,
           remote_plain_read_excludes_live_observer,
           remote_plain_read_rejects_lying_validator,
           remote_scope_solutions, remote_scope_trace_parentage,
@@ -96,6 +102,51 @@ remote_signed_transaction_savepoints(Config) ->
         KeepAtom = peer:call(Peer, erlang, binary_to_existing_atom, [Kept, utf8]),
         ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {RemoveAtom, {'X'}}])),
         ?assertMatch({ok, [_], _}, peer:call(Peer, quod_prolog, prove, [Ns, {KeepAtom, 3}]))
+    end, [{?config(target, Config), ?NS}, {?config(third, Config), ?THIRD_NS}]).
+
+cut_findall_local_and_cohosted(Config) ->
+    Peer = ?config(target, Config),
+    X = {'X'}, Choices = {';', {'=', X, 1}, {'=', X, 2}},
+    lists:foreach(fun(Inner) ->
+        Goal = {findall, X, {';', {',', Inner, '!'}, {'=', X, 3}}, {'L'}},
+        ?assertMatch({ok, [#{'L' := [1]}], _},
+                     peer:call(Peer, quod_prolog, prove, [?NS, Goal], 60000))
+    end, [Choices, {'::', ?FOURTH_NS, Choices}]).
+
+cut_findall_remote_boundaries(Config) ->
+    Peer = ?config(asker, Config),
+    X = {'X'}, Choices = {';', {'=', X, 1}, {'=', X, 2}},
+    Remote = {'::', ?NS, Choices},
+    Cases = [
+      {{';', Remote, {'=', X, 3}}, [1, 2, 3]},
+      {{';', {'::', ?NS, {',', Choices, '!'}}, {'=', X, 3}}, [1, 3]},
+      {{';', {',', Remote, '!'}, {'=', X, 3}}, [1]},
+      {{';', {',', {'::', ?NS, {'\\+', {',', '!', fail}}}, {'=', X, 1}},
+               {'=', X, 3}}, [1, 3]},
+      {{'::', ?NS, {';', {'->', {',', '!', fail}, {'=', X, 1}},
+                              {'=', X, 2}}}, [2]}],
+    lists:foreach(fun({Inner, Expected}) ->
+        Goal = {findall, X, Inner, {'L'}},
+        ?assertMatch({ok, [#{'L' := Expected}], _},
+                     peer:call(Peer, quod_prolog, prove, [?ASKER_NS, Goal], 60000))
+    end, Cases).
+
+cut_findall_signed_multiscope_savepoints(Config) ->
+    %% Genuine signed requests and target commits, not an intent or overlay
+    %% shortcut. Ordinary collection retains staged writes; transaction
+    %% checkpoints remove failed-candidate writes on both remote scopes.
+    ?assertMatch({ok, _, {normalized, {committed, [_], {group_outcome, _, _, _}}}},
+      submit_signed_execute(Config,
+        <<"animals::findall(X, ((X=1;X=2), assertz(cut_keep(X)), third::assertz(cut_keep(X)), !), [1]).">>)),
+    Rollback = submit_signed_execute(Config,
+        <<"animals::((transaction((findall(X, ((X=1;X=2), assertz(cut_remove(X)), third::assertz(cut_remove(X)), !), [1]), fail))); X=rolled_back).">>),
+    ?assertMatch({ok, _, {normalized, {answers, _, [_]}}}, Rollback),
+    {ok, _, {normalized, {answers, _, [RollbackBinding]}}} = Rollback,
+    ?assertEqual({ok, [{<<"X">>, rolled_back}]}, quod_durable_term:decode_result(RollbackBinding)),
+    lists:foreach(fun({Peer, Ns}) ->
+        ?assertMatch({ok, [_], _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_keep, 1}])),
+        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_keep, 2}])),
+        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_remove, {'X'}}]))
     end, [{?config(target, Config), ?NS}, {?config(third, Config), ?THIRD_NS}]).
 
 init_per_suite(Config) ->

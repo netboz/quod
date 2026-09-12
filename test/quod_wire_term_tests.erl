@@ -152,6 +152,43 @@ independent_with_other_arity_does_not_materialize_data_test() ->
         ?assertError(badarg, binary_to_existing_atom(Name, utf8))
     end, [independent, {'$quod_symbol', <<"independent">>}]).
 
+transaction_owned_goal_positions_test_() ->
+    [{atom_to_list(Form), fun() ->
+        Suffix = integer_to_binary(erlang:unique_integer([positive])),
+        Head = <<"tx_wire_owned_", Suffix/binary>>,
+        Remote = <<"tx_wire_remote_", Suffix/binary>>,
+        Data = <<"tx_wire_data_", Suffix/binary>>,
+        S = fun(N) -> {'$quod_symbol', N} end,
+        Wrapper = case Form of atom -> transaction; opaque -> S(<<"transaction">>) end,
+        Goal = {Wrapper, {',', {S(<<"findall">>), {0},
+                 {',', {S(<<"assertz">>), {S(Head), S(Data)}},
+                       {'::', S(<<"other">>), {S(Remote), {0}}}}, []},
+                              S(<<"true">>)}},
+        {ok, Names} = quod_wire_term:goal_symbol_names(Goal),
+        ?assert(lists:member(Head, Names)),
+        ?assertNot(lists:member(Remote, Names)),
+        ?assertNot(lists:member(Data, Names)),
+        {ok, {transaction, {',', {findall, {0},
+                    {',', {assertz, {HeadAtom, {'$quod_symbol', Data}}},
+                          {'::', other, {{'$quod_symbol', Remote}, {0}}}}, []}, true}}} =
+            quod_wire_term:materialize_goal_symbols(Goal),
+        ?assertEqual(Head, atom_to_binary(HeadAtom, utf8)),
+        ?assertError(badarg, binary_to_existing_atom(Remote, utf8)),
+        ?assertError(badarg, binary_to_existing_atom(Data, utf8))
+    end} || Form <- [atom, opaque]].
+
+transaction_other_arity_keeps_data_opaque_test() ->
+    Name = <<"tx_wire_data_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Data = {'$quod_symbol', Name},
+    lists:foreach(fun(Wrapper) ->
+        Goal = {Wrapper, Data, another_argument},
+        {ok, Names} = quod_wire_term:goal_symbol_names(Goal),
+        ?assertNot(lists:member(Name, Names)),
+        ?assertEqual({ok, {transaction, Data, another_argument}},
+                     quod_wire_term:materialize_goal_symbols(Goal)),
+        ?assertError(badarg, binary_to_existing_atom(Name, utf8))
+    end, [transaction, {'$quod_symbol', <<"transaction">>}]).
+
 depth_limit_test() ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, ok, lists:seq(1, 70)),
     ?assertEqual({error, bad_term}, quod_wire_term:encode(Deep)).

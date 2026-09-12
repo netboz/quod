@@ -34,6 +34,7 @@
          remote_group_recovers_after_origin_crash/1,
          remote_four_scope_chain_recovers_empty_routes/1]).
 -export([run_scope_proofs/3]).
+-export([remote_signed_transaction_savepoints/1]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
@@ -46,7 +47,8 @@
 -define(ROOT_NS, <<"quod:root">>).
 -define(SCOPE_WAVE_SIZE, 8).
 
-all() -> [remote_plain_read_excludes_live_observer,
+all() -> [remote_signed_transaction_savepoints,
+          remote_plain_read_excludes_live_observer,
           remote_plain_read_rejects_lying_validator,
           remote_scope_solutions, remote_scope_trace_parentage,
           remote_scope_symbol_safety,
@@ -73,6 +75,28 @@ all() -> [remote_plain_read_excludes_live_observer,
           remote_signed_group_uses_exact_agent_request,
           remote_group_recovers_after_origin_crash,
           remote_four_scope_chain_recovers_empty_routes].
+
+remote_signed_transaction_savepoints(Config) ->
+    %% Fresh callable names cannot be made accidentally executable by a
+    %% previously loaded test beam or another proof's atom allocation.
+    Suffix = integer_to_binary(erlang:unique_integer([positive])),
+    Removed = <<"tx_wire_removed_", Suffix/binary>>,
+    Kept = <<"tx_wire_kept_", Suffix/binary>>,
+    Failed = iolist_to_binary(["animals::(transaction((assertz(", Removed,
+      "(1)), third::assertz(", Removed, "(1)), fail)); true)."]),
+    ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+                 submit_signed_execute(Config, Failed)),
+    Fallback = iolist_to_binary(["animals::transaction(((assertz(", Removed,
+      "(2)), third::assertz(", Removed, "(2)), fail); (assertz(", Kept,
+      "(3)), third::assertz(", Kept, "(3)))))."]),
+    ?assertMatch({ok, _, {normalized, {committed, [_], {group_outcome, _, _, _}}}},
+                 submit_signed_execute(Config, Fallback)),
+    lists:foreach(fun({Peer, Ns}) ->
+        RemoveAtom = peer:call(Peer, erlang, binary_to_existing_atom, [Removed, utf8]),
+        KeepAtom = peer:call(Peer, erlang, binary_to_existing_atom, [Kept, utf8]),
+        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {RemoveAtom, {'X'}}])),
+        ?assertMatch({ok, [_], _}, peer:call(Peer, quod_prolog, prove, [Ns, {KeepAtom, 3}]))
+    end, [{?config(target, Config), ?NS}, {?config(third, Config), ?THIRD_NS}]).
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),

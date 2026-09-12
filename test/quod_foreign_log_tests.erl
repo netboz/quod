@@ -516,6 +516,14 @@ page_decode_owner_replacement_cannot_accept_old_page_test() ->
           end
       end).
 
+page_trace_parent_selection_ignores_prior_real_fixture_test() ->
+    %% This actual upstream fixture leaves correctly exported spans from its
+    %% mocked byte transport. They have a tip-confirm/page-fetch ancestry but
+    %% no real page-wait child. A name-only parent selector must fail here;
+    %% the following assertions must follow only their own request's trace.
+    quod_foreign_queue_observation_tests:current_queue_names_the_actual_exact_predecessor_test(),
+    page_decode_trace_crosses_real_owner_and_confirmation_probe_test().
+
 page_decode_trace_crosses_real_owner_and_confirmation_probe_test() ->
     with_page_decode_fixture(
       fun(C) ->
@@ -529,8 +537,12 @@ page_decode_trace_crosses_real_owner_and_confirmation_probe_test() ->
           quod_trace_tests:with_tracer(fun() ->
               TestPid = self(),
               Tag = make_ref(),
+              {RequestContext, RequestSpan} = quod_trace:start_span(
+                otel_ctx:new(), <<"test.page.current.request">>, internal, #{}),
+              TraceId = otel_span:trace_id(RequestSpan),
               {Caller, CallerMonitor} = spawn_monitor(fun() ->
-                  Result = quod_foreign_log:current(Routes, Identity, 5000),
+                  Result = quod_trace:with_context(RequestContext,
+                    fun() -> quod_foreign_log:current(Routes, Identity, 5000) end),
                   TestPid ! {page_trace_current_result, Tag, Result}
               end),
               try
@@ -542,8 +554,8 @@ page_decode_trace_crosses_real_owner_and_confirmation_probe_test() ->
                       Owner ! {catchup_credit, Link, Binding, crypto:strong_rand_bytes(16)},
                       ?assertMatch({ok, #{identity := Identity}},
                                    serve_page_trace_current(Owner, Link, Binding, Fixture, Tag)),
-                      Current = quod_trace_tests:take_span(<<"quod.foreign.current">>),
-                      Confirmation = quod_trace_tests:take_span(<<"quod.foreign.tip_confirm">>),
+                      Current = quod_trace_tests:take_span(<<"quod.foreign.current">>, TraceId),
+                      Confirmation = quod_trace_tests:take_span(<<"quod.foreign.tip_confirm">>, TraceId),
                       %% Select the page belonging to the spawned confirmation
                       %% probe, not an earlier bootstrap page in its parent.
                       %% The collection/worker intervals now expose expected
@@ -580,6 +592,7 @@ page_decode_trace_crosses_real_owner_and_confirmation_probe_test() ->
                   after 1000 -> error(trace_caller_survived_cleanup)
                   end,
                   stop_owner(Owner),
+                  quod_trace:finish_span(RequestSpan, ok),
                   flush_page_trace_spans()
               end
           end)

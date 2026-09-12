@@ -39,7 +39,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          enter_read_only/1, leave_read_only/2,
          get_local_changes/1, stage_event/2, get_read_set/1, get_dependencies/1,
          get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
-         absorb_live_bridges/2, get_effects/1,
+         get_effects/1,
          register_action_request/3, action_request/3,
          put_prepared_effect/5, prepared_effect/2,
          staged_desired_state/2,
@@ -623,41 +623,6 @@ absorb_read_set(
     erlang:error(absorb_read_set_without_read_ets);
 absorb_read_set(_St, _Reads) ->
     erlang:error(badarg).
-
--doc "Merge validated live-bridge markers without treating them as OCC tokens.".
--spec absorb_live_bridges(tuple(), [{atom(), arity()}]) -> ok.
-absorb_live_bridges(
-  #est{db = #db{mod = ?MODULE,
-                ref = #lp{read_ets = Ets} = Ov}}, Bridges)
-  when Ets =/= undefined, is_list(Bridges) ->
-    ensure_access(Ov),
-    case lists:all(fun valid_bridge/1, Bridges) of
-        true ->
-            lists:foreach(
-              fun(Functor) ->
-                      _ = ets:insert_new(
-                            Ets, {{'$quod_live_bridge', Functor}, true}),
-                      ok
-              end,
-              Bridges),
-            ok;
-        false ->
-            erlang:error(badarg)
-    end;
-absorb_live_bridges(
-  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, []) ->
-    ensure_access(Ov),
-    ok;
-absorb_live_bridges(
-  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, _Bridges) ->
-    ensure_access(Ov),
-    erlang:error(absorb_live_bridges_without_read_ets);
-absorb_live_bridges(_St, _Bridges) ->
-    erlang:error(badarg).
-
-valid_bridge({Name, Arity}) ->
-    is_atom(Name) andalso is_integer(Arity) andalso Arity >= 0;
-valid_bridge(_) -> false.
 
 -doc "Drop the read-set table for a finished proof (pass the final `#est{}`).".
 -spec cleanup_read_set(tuple()) -> ok.

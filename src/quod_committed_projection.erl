@@ -19,7 +19,7 @@ prepared material all pass through the existing canonical validators.
 -include("quod_ledger.hrl").
 
 -export([new_est/0, read_terms/1, new/5, apply_entry/3,
-         target/1, applied/1, est/1, outcomes/1]).
+         applied/1, est/1, outcomes/1]).
 -export_type([projection/0, result/0]).
 
 -ifdef(TEST).
@@ -86,9 +86,6 @@ new({Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer)
   when is_binary(Ns), is_integer(Applied), Applied >= 0, is_tuple(Est) ->
     #projection{target = Target, applied = Applied, est = Est,
                 outcomes = Outcomes, signer = Signer}.
-
--spec target(projection()) -> {binary(), <<_:256>>}.
-target(#projection{target = Target}) -> Target.
 
 -spec applied(projection()) -> non_neg_integer().
 applied(#projection{applied = Applied}) -> Applied.

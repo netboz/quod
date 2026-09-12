@@ -78,8 +78,7 @@ replay. Neither transition changes the global proof generation.
          participates/1, writes/1, reads_only/1, diff_ops/1, effects_count/1,
          conflict_descriptor/1,
          diff_bytes/1, read_check_bytes/1, effects_bytes/1,
-         live_bridges_bytes/1,
-         material/1, diff/1, read_check/1, effects/1, live_bridges/1,
+         material/1, diff/1, read_check/1, effects/1,
          transcript/1,
          new_manifest/1, manifest_digest/1, manifest_coordinator/1,
          manifest_participants/1,
@@ -526,10 +525,6 @@ read_check_bytes(Plan) -> maps:get(read_check, core(Plan)).
 -spec effects_bytes(plan()) -> binary().
 effects_bytes(Plan) -> maps:get(effects, core(Plan)).
 
--doc "The plan's canonical opaque live-bridge marker bytes.".
--spec live_bridges_bytes(plan()) -> binary().
-live_bridges_bytes(Plan) -> maps:get(live_bridges, core(Plan)).
-
 -doc """
 Decode, jointly materialize, and validate target-owned plan payloads once.
 
@@ -756,10 +751,6 @@ read_check(Plan) -> material_value(read_check, Plan).
 -doc "Decode the plan's typed direct effects. Owner-side only.".
 -spec effects(plan()) -> [quod_effect:effect()].
 effects(Plan) -> material_value(effects, Plan).
-
--doc "Decode the plan's signed local bridge markers. Owner-side only.".
--spec live_bridges(plan()) -> [{atom(), arity()}].
-live_bridges(Plan) -> material_value(live_bridges, Plan).
 
 -doc "Decode the plan's bounded invocation transcript. Owner-side only.".
 -spec transcript(plan()) -> [transcript_entry()].

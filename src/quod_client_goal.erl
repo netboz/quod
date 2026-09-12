@@ -16,7 +16,7 @@ when they need the complete validator check.
 -include("quod_proof_limits.hrl").
 
 -export([encode/1, decode/1, verify/2, verify_for/5,
-         digest/1, operation_ref/1,
+         operation_ref/1,
          request_auth/1, request_binding/1,
          named_bindings/2, durable_bindings/2,
          valid_request_binding/1, authorization_transcript/3,
@@ -109,19 +109,6 @@ verify_for(Bytes, Signature, ExpectedNetwork, ExpectedTarget, AdmissionMs) ->
               Request, ExpectedNetwork, ExpectedTarget, AdmissionMs, Evidence);
         {error, _} = Error ->
             Error
-    end.
-
--doc "Return the SHA-256 identity of exact canonical request bytes.".
--spec digest(request() | binary()) -> {ok, <<_:256>>} | {error, error_reason()}.
-digest(Bytes) when is_binary(Bytes) ->
-    case decode(Bytes) of
-        {ok, _} -> {ok, crypto:hash(sha256, Bytes)};
-        {error, _} = Error -> Error
-    end;
-digest(Request) ->
-    case encode(Request) of
-        {ok, Bytes} -> {ok, crypto:hash(sha256, Bytes)};
-        {error, _} = Error -> Error
     end.
 
 -doc "Return the stable anchored reference used to resolve a signed operation.".

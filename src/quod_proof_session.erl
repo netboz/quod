@@ -25,14 +25,13 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          committed_state/1, local_changes/1, effects/1,
          prepared_effect/2, sealed_plan/1, effect_reservation/1,
          signer_from_state/1,
-         read_set/1, absorb_read_set/2, absorb_live_bridges/2,
+         read_set/1, absorb_read_set/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
          dirty/1,
          checkpoint_many/2, restore_many/2, release_many/2,
          overlay_generation/1,
-         bindings/2, independent_intent/2, provenance/1, open_first/6, run_first/3,
-         run_first_with_dependencies/3]).
+         bindings/2, independent_intent/2, provenance/1, open_first/6, run_first/3]).
 
 -ifdef(TEST).
 -export([test_invocation_state/2]).
@@ -440,14 +439,6 @@ absorb_read_set(Handle, Reads) ->
     quod_erlog_db_local_prove:absorb_read_set(
       State#session_state.current, Reads).
 
--doc "Merge live bridge observations separately from committed OCC reads.".
--spec absorb_live_bridges(session(), [{atom(), arity()}]) -> ok.
-absorb_live_bridges(Handle, Bridges) ->
-    State = get_session(Handle),
-    ensure_lifecycle_mutable(State),
-    quod_erlog_db_local_prove:absorb_live_bridges(
-      State#session_state.current, Bridges).
-
 -doc "The live reality-bridge predicates this session's proofs consulted.".
 -spec live_bridges(session()) -> [{atom(), arity()}].
 live_bridges(Handle) ->
@@ -764,24 +755,6 @@ run_first(Goal, #est{} = Est, OverlayOpts) when is_map(OverlayOpts) ->
                    allowed,
                    quod_predicates:context(Est),
                    quod_transaction_scope:empty_selection())
-    after
-        stop(Handle)
-    end.
-
--doc "Run one isolated invocation and retain its typed read dependencies.".
--spec run_first_with_dependencies(term(), tuple(), map()) ->
-          {{ok, map(), list(), map()} | {fail, [term()]} | {error, term()},
-           [{atom(), arity()}]}.
-run_first_with_dependencies(Goal, #est{} = Est, OverlayOpts)
-  when is_map(OverlayOpts) ->
-    Handle = start(Est, OverlayOpts),
-    InvocationId = crypto:strong_rand_bytes(16),
-    try
-        Result = open_first(
-                   Handle, InvocationId, Goal, allowed,
-                   quod_predicates:context(Est),
-                   quod_transaction_scope:empty_selection()),
-        {Result, live_bridges(Handle)}
     after
         stop(Handle)
     end.

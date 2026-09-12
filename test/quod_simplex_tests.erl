@@ -2746,14 +2746,15 @@ dtx_source_commit_wakes_owned_coordinator_directly_test() ->
     %% current view, closing the race where its initial drive parks before the
     %% parent has recorded the child and no later commit edge occurs.
     ok = quod_simplex:test_activate_dtx_coordinator(self(), Owned),
+    Owner = self(),
     receive
-        {local_dtx_progress, {Ns, Anchor}, 5} -> ok
+        {local_dtx_progress, Owner, {Ns, Anchor}, 5, false} -> ok
     after 1000 ->
         error(local_dtx_progress_not_established)
     end,
     ok = quod_simplex:test_notify_dtx_coordinator_progress(Owned, Owned),
     receive
-        {local_dtx_progress, _, _} = Unexpected ->
+        {local_dtx_progress, _, _, _, _} = Unexpected ->
             error({unexpected_local_progress, Unexpected})
     after 0 ->
         ok
@@ -2761,7 +2762,7 @@ dtx_source_commit_wakes_owned_coordinator_directly_test() ->
     Advanced = quod_simplex:test_state_set(slot, 6, Owned),
     ok = quod_simplex:test_notify_dtx_coordinator_progress(Owned, Advanced),
     receive
-        {local_dtx_progress, {Ns, Anchor}, 6} -> ok
+        {local_dtx_progress, Owner, {Ns, Anchor}, 6, false} -> ok
     after 1000 ->
         error(local_dtx_progress_not_delivered)
     end.

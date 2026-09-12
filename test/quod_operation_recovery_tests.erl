@@ -9,6 +9,60 @@ verdict until the test explicitly delivers the worker's verified result.
 -include("quod_ledger.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
 
+operation_owner_has_one_result_store_test() ->
+    {ok, {quod_simplex, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
+        beam_lib:chunks(code:which(quod_simplex), [abstract_code]),
+    [Fields] = [Fs || {attribute, _, record, {operation_recovery_owner, Fs}} <- Forms],
+    Names = [case F of
+                 {typed_record_field, {record_field, _, {atom, _, Name}, _}, _} -> Name;
+                 {typed_record_field, {record_field, _, {atom, _, Name}}, _} -> Name
+             end || F <- Fields],
+    ?assert(lists:member(target_results, Names)),
+    ?assertNot(lists:member(target_result, Names)).
+
+canonical_result_vector_is_monotone_and_does_not_admit_l2_test() ->
+    isolated(fun canonical_result_vector_is_monotone_and_does_not_admit_l2/0).
+
+canonical_result_vector_is_monotone_and_does_not_admit_l2() ->
+    with_fixture(fun(F, _SingleState, Worker, _LifeMonitor) ->
+        %% Deliberately hand-built projection and owner-delivered results:
+        %% this tests bookkeeping, not N>1 consensus admission or certificates.
+        %% The production N>1 validator/worker refusal remains independently
+        %% tested. Neither partial nor complete synthetic vectors may reply.
+        Ref = maps:get(operation_ref, F),
+        TargetRef = maps:get(target_ref, F),
+        Other = {transaction, <<"quod:vector-other">>, <<81:256>>, <<82:256>>},
+        {ok, [First, Second] = Refs} = quod_operation_vector:references([TargetRef, Other]),
+        {Ns, _} = maps:get(origin, F),
+        Empty = quod_simplex:test_state(#{ns => Ns, prolog_ready => false}),
+        Row = #{type => operation, ref => Ref, request_digest => maps:get(request_digest, F),
+                outcome_ref => {applications, Refs}, included => [], first_slot => 7,
+                state => unresolved},
+        Projected = quod_simplex:install_operation_snapshot([Row], Empty),
+        S0 = quod_simplex:test_seed_operation_worker(Ref, Worker, Projected),
+        {Tag, S1} = wait_for_result(Ref, S0),
+        {true, S2} = quod_simplex:finish_operation_target_result(
+                       Worker, Ref, committed, Second, S1),
+        A = quod_operation_vector:target(First), B = quod_operation_vector:target(Second),
+        ?assertEqual([{A, pending}, {B, {committed, Second}}],
+                     maps:get(result_vector, owner(Ref, S2))),
+        ?assertEqual(#{B => {committed, Second}}, maps:get(results, owner(Ref, S2))),
+        assert_no_reply(Tag),
+        {true, S2} = quod_simplex:finish_operation_target_result(
+                       Worker, Ref, committed, Second, S2),
+        ?assertEqual(false, quod_simplex:finish_operation_target_result(
+                              Worker, Ref, {rejected, conflict_retry}, Second, S2)),
+        {true, S3} = quod_simplex:finish_operation_target_result(
+                       Worker, Ref, {rejected, conflict_retry}, First, S2),
+        ?assertEqual([{A, {{rejected, conflict_retry}, First}},
+                      {B, {committed, Second}}], maps:get(result_vector, owner(Ref, S3))),
+        ?assertEqual(pending, maps:get(result, owner(Ref, S3))),
+        assert_no_reply(Tag),
+        [{Monitor, _}] = maps:to_list(maps:get(waiters, owner(Ref, S3))),
+        {true, _} = quod_simplex:drop_operation_waiter(Monitor, self(), S3),
+        _ = erlang:demonitor(Monitor, [flush])
+    end).
+
 result_trace_marks_only_the_bound_delivery_test_() ->
     [{atom_to_list(Lifetime), fun() -> result_trace_marks_only_bound_delivery(Lifetime) end}
      || Lifetime <- [live_parent, ended_parent]].
@@ -256,7 +310,7 @@ terminal_worker_crash_is_itself_a_restart_wake_test() ->
         assert_no_reply(Tag),
         %% No projection/receipt is sent between DOWN and the replacement's
         %% result. pending is immediately eligible in the same existing lane.
-        with_worker(fun(Replacement, ReplacementMonitor) ->
+        with_worker(Ref, fun(Replacement, ReplacementMonitor) ->
             S4 = quod_simplex:test_seed_operation_worker(Ref, Replacement, S3),
             ?assertEqual(false, quod_simplex:finish_operation_target_result(
                                   Worker, Ref, committed, Target, S4)),
@@ -467,37 +521,49 @@ timed_wait_owner(Test) ->
             timed_wait_owner(Test)
     end.
 
+isolated(Fun) ->
+    {Pid, Monitor} = spawn_monitor(Fun),
+    receive
+        {'DOWN', Monitor, process, Pid, normal} -> ok;
+        {'DOWN', Monitor, process, Pid, Reason} -> error({isolated_fixture_failed, Reason})
+    after 4000 ->
+        exit(Pid, kill),
+        erlang:demonitor(Monitor, [flush]),
+        error(isolated_fixture_timeout)
+    end.
+
 with_fixture(Fun) ->
     Fixture = quod_ct:remote_operation_fixture(#{}),
     Claim = maps:get(claim, Fixture),
     {ok, #{operation_ref := Ref, digest := Digest}} =
         quod_transaction:request_claim(Claim),
-    {Ns, _Anchor} = maps:get(origin, Fixture),
-    S0 = quod_simplex:test_state(#{ns => Ns, prolog_ready => false}),
+    {Ns, Anchor} = maps:get(origin, Fixture),
+    S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, prolog_ready => false}),
     S1 = quod_simplex:apply_operation_projection(7, Claim, S0),
-    with_worker(fun(Worker, LifeMonitor) ->
+    with_worker(Ref, fun(Worker, LifeMonitor) ->
         S2 = quod_simplex:test_seed_operation_worker(Ref, Worker, S1),
         Fun(Fixture#{operation_ref => Ref, request_digest => Digest},
             S2, Worker, LifeMonitor)
     end).
 
-with_worker(Fun) ->
+with_worker(Ref, Fun) ->
     Parent = self(),
-    {Worker, Monitor} = spawn_monitor(fun() -> worker_loop(Parent) end),
+    {Worker, Monitor} = spawn_monitor(fun() -> worker_loop(Parent, Ref) end),
     try Fun(Worker, Monitor)
     after
         _ = erlang:demonitor(Monitor, [flush]),
         exit(Worker, kill)
     end.
 
-worker_loop(Parent) ->
+worker_loop(Parent, Ref = {operation, Ns, Anchor, _, _}) ->
     receive
-        {operation_wake, Ref} ->
+        {local_dtx_progress, Parent, {Ns, Anchor}, Slot, Ready}
+          when is_integer(Slot), Slot >= 0, is_boolean(Ready) ->
             Parent ! {worker_wake, self(), Ref},
-            worker_loop(Parent);
+            worker_loop(Parent, Ref);
         {barrier, Tag} ->
             Parent ! {worker_barrier, self(), Tag},
-            worker_loop(Parent)
+            worker_loop(Parent, Ref)
     end.
 
 worker_wakes(Worker) ->

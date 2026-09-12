@@ -25,12 +25,12 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
             ?assertEqual(Parent#span.trace_id, Worker#span.trace_id),
             ?assertEqual(Parent#span.span_id, Worker#span.parent_span_id),
             ?assertEqual(Worker#span.trace_id, Local#span.trace_id),
-            ?assertEqual(Worker#span.span_id, Local#span.parent_span_id),
+            assert_operation_wave_ancestry(Local, Worker),
             ?assert(Local#span.end_time =< Resolve#span.start_time),
             ?assertEqual(
                #{'quod.namespace' => maps:get(source_ns, F)},
                otel_attributes:map(Local#span.attributes)),
-            ?assertEqual(Worker#span.span_id, Resolve#span.parent_span_id),
+            assert_operation_wave_ancestry(Resolve, Worker),
             ?assertEqual(Resolve#span.trace_id, Probe#span.trace_id),
             ?assertEqual(Resolve#span.span_id, Probe#span.parent_span_id),
             Events = lists:reverse(otel_events:list(Worker#span.events)),
@@ -48,6 +48,22 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
                              Events))
         end)
     end).
+
+assert_operation_wave_ancestry(Child, Root) ->
+    Item = take_operation_span(Child#span.parent_span_id),
+    Wave = take_operation_span(Item#span.parent_span_id),
+    ?assertEqual(<<"quod.dtx.wave.item">>, Item#span.name),
+    ?assertEqual(<<"quod.dtx.wave">>, Wave#span.name),
+    ?assertEqual(Root#span.span_id, Wave#span.parent_span_id),
+    [?assertEqual(Root#span.trace_id, Span#span.trace_id) || Span <- [Child, Item, Wave]],
+    ?assert(Wave#span.start_time =< Item#span.start_time),
+    ?assert(Item#span.start_time =< Child#span.start_time),
+    ?assert(Child#span.end_time =< Item#span.end_time),
+    ?assert(Item#span.end_time =< Wave#span.end_time).
+
+take_operation_span(Id) ->
+    receive {quod_test_span, #span{span_id = Id} = Span} -> Span
+    after 1000 -> error({missing_operation_ancestor, Id}) end.
 
 %% A hand-built source projection is deliberately not a consensus-admitted
 %% N-target claim. Until slice 8 the real worker must refuse the entire vector
@@ -293,7 +309,7 @@ unknown_operation_waits_for_its_source_projection_edge_test() ->
                 reply_operation_source(F, {error, not_found}),
                 %% Send the edge after the failed source read. It is retained
                 %% in the worker mailbox even if it arrives before parking.
-                Worker ! {operation_wake, OperationRef},
+                operation_ready(Worker, self(), OperationRef),
                 reply_operation_source(F, terminal_operation_row(F)),
                 certify_operation_result(F, Worker, committed),
                 assert_operation_result(F, Worker, Monitor, committed)
@@ -322,6 +338,18 @@ operation_source_index_corruption_is_reported_not_parked_test() ->
                 assert_operation_error(F, Worker, Monitor, outcome_index_corrupt)
             end)
       end).
+
+operation_source_worker_fault_is_reported_not_parked_test() ->
+    with_operation_fixture(fun(F = #{operation_ref := Ref}) ->
+        with_operation_worker(F, fun(Worker, Monitor) ->
+            From = expect_operation_stub_call(source, {outcome, Ref}),
+            ?assertMatch(#{wave := #{workers := 1}},
+                         quod_dtx_coordinator:test_state(Worker)),
+            exit(element(1, From), operation_source_fault_control),
+            assert_operation_error(F, Worker, Monitor,
+              {operation_worker_crash, local_outcome, operation_source_fault_control})
+        end)
+    end).
 
 terminal_operation_uses_remote_committee_when_local_cannot_vote_test_() ->
     [{atom_to_list(Reason),
@@ -368,6 +396,7 @@ terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       wake_operation_follow(F, Worker, FollowRef),
                       reply_operation_source(F, terminal_operation_row(F)),
                       certify_operation_result(F, Worker, committed),
+                      _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}),
                       assert_operation_result(F, Worker, Monitor, committed)
                   end)
             end)
@@ -411,14 +440,15 @@ terminal_operation_refuses_wrong_result_and_follows_owner_replacement_test() ->
                             %% The correct follow with the wrong anchored
                             %% identity is also status-only, never progress.
                             WrongTarget = {element(1, Target), digest(251)},
-                            send_operation_follow_notice(
-                              WrongTarget, Worker, FollowRef,
-                              operation_follow_progress()),
+                            Worker ! {quod_foreign_follow, FollowRef, make_ref(),
+                                      WrongTarget, operation_follow_progress()},
+                            _ = quod_dtx_coordinator:test_state(Worker),
                             operation_status_notices(F, Worker, FollowRef),
                             wake_operation_follow(F, Worker, FollowRef),
                             reply_operation_source(
                               F, terminal_operation_row(F)),
                             certify_operation_result(F, Worker, committed),
+                            _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}),
                             assert_operation_result(
                               F, Worker, Monitor, committed)
                         end)
@@ -426,7 +456,7 @@ terminal_operation_refuses_wrong_result_and_follows_owner_replacement_test() ->
             end)
       end).
 
-parked_operation_worker_exits_when_its_owner_dies_test() ->
+operation_worker_exits_during_held_source_read_test() ->
     with_operation_fixture(
       fun(F = #{source_ns := Ns, operation_ref := OperationRef}) ->
           Test = self(),
@@ -435,6 +465,7 @@ parked_operation_worker_exits_when_its_owner_dies_test() ->
                         {ok, Worker, _Monitor} =
                             quod_dtx_coordinator:start_operation_monitor(
                               self(), Ns, OperationRef, #{}),
+                        operation_ready(Worker, self(), OperationRef),
                         Test ! {operation_test_worker, self(), Worker},
                         receive stop -> ok end
                     end),
@@ -443,11 +474,14 @@ parked_operation_worker_exits_when_its_owner_dies_test() ->
                    end,
           Monitor = monitor(process, Worker),
           try
-              reply_operation_source(F, {error, not_found}),
+              From = expect_operation_stub_call(source, {outcome, OperationRef}),
+              IoMonitor = monitor(process, element(1, From)),
               exit(Owner, kill),
               receive {'DOWN', Monitor, process, Worker, _} -> ok
               after 1000 -> error(operation_worker_survived_owner)
               end,
+              receive {'DOWN', IoMonitor, process, _, _} -> ok
+              after 1000 -> error(operation_source_io_survived_owner) end,
               assert_no_operation_stub_calls()
           after
               exit(Owner, kill),
@@ -636,6 +670,11 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
                      end),
           Started = receive_fanout_started(length(Sources), #{}),
           ?assertEqual(lists:sort(Sources), lists:sort(maps:keys(Started))),
+          %% Actual owner processing while EVERY endpoint is held. A send
+          %% trace or mailbox snapshot alone cannot satisfy this barrier.
+          ?assertMatch(#{execution_ready := true,
+                         wave := #{running := true, stage := phase_command}},
+                       quod_dtx_coordinator:test_state(Caller)),
           Monitors = maps:map(
                        fun(_Source, Pid) ->
                            erlang:monitor(process, Pid)
@@ -663,6 +702,107 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
                     end
             end, maps:to_list(Started))
       end).
+
+prepared_endpoint_waits_for_readiness_without_renewing_deadline_test() ->
+    with_fixture(fun(F) ->
+        {ok, Blob} = quod_dtx:encode_record(maps:get('begin', F)),
+        Request = {submit, <<218:128>>, Blob},
+        Source = {remote, digest(218), [{"127.0.0.1", 3218}]},
+        Parent = self(), Deadline = quod_time:mono_ms() + 3000,
+        Target = {<<"quod:test">>, <<0:256>>},
+        {Caller, Monitor} = spawn_monitor(fun() ->
+            Result = quod_dtx_coordinator:test_submit_endpoint_requests(
+                [Source], Request,
+                #{deadline => Deadline, owner => Parent, ready => false},
+                fun(Source0) ->
+                    Parent ! {prepared_dispatched, self(), Source0},
+                    receive finish_prepared -> {error, econnrefused} end
+                end),
+            Parent ! {prepared_result, self(), Result}
+        end),
+        try
+            %% A real owner turn must show retained preparation and zero
+            %% workers, not merely the absence of a send notification.
+            Paused = quod_dtx_coordinator:test_state(Caller),
+            ?assertMatch(#{execution_ready := false,
+              wave := #{workers := 0, results := #{1 := {prepared_submit, _}},
+                        meta := #{request_deadline := Deadline}}}, Paused),
+            Caller ! {local_dtx_progress, Caller, Target, 1, true},
+            ?assertEqual(Paused, quod_dtx_coordinator:test_state(Caller)),
+            Caller ! {local_dtx_progress, Parent, Target, 1, true},
+            Worker = receive {prepared_dispatched, Pid, Source} -> Pid
+                     after 1000 -> error(prepared_endpoint_not_released) end,
+            ?assertMatch(#{execution_ready := true,
+              wave := #{workers := 1,
+                        meta := #{request_deadline := Deadline}}},
+                         quod_dtx_coordinator:test_state(Caller)),
+            Worker ! finish_prepared,
+            receive {prepared_result, Caller, Result} ->
+                ?assertEqual(not_submitted, Result)
+            after 1000 -> error(missing_prepared_result) end,
+            receive {'DOWN', Monitor, process, Caller, normal} -> ok
+            after 1000 -> error(prepared_owner_not_finished) end,
+            ?assertNot(is_process_alive(Worker))
+        after
+            exit(Caller, kill), demonitor(Monitor, [flush])
+        end
+    end).
+
+operation_source_wave_parks_continuation_with_original_deadline_test() ->
+    with_operation_fixture(fun(F = #{operation_ref := Ref}) ->
+        with_operation_worker(F, fun(Worker, Monitor) ->
+            From = expect_operation_stub_call(source, {outcome, Ref}),
+            #{wave := #{stage := operation, items := [local_outcome],
+                        meta := #{request_deadline := Deadline}}} =
+                quod_dtx_coordinator:test_state(Worker),
+            {operation, Ns, Anchor, _, _} = Ref,
+            Worker ! {local_dtx_progress, self(), {Ns, Anchor}, 0, false},
+            ?assertMatch(#{execution_ready := false, wave := #{running := true}},
+                         quod_dtx_coordinator:test_state(Worker)),
+            gen_server:reply(From, terminal_operation_row(F)),
+            Deferred = operation_await_deferred(Worker, quod_time:mono_ms() + 1000),
+            ?assertMatch(#{wave := #{running := false, items := [resolve_outcome],
+                                    meta := #{request_deadline := Deadline}}}, Deferred),
+            assert_no_operation_stub_calls(),
+            operation_ready(Worker, self(), Ref),
+            certify_operation_result(F, Worker, committed),
+            assert_operation_result(F, Worker, Monitor, committed)
+        end)
+    end).
+
+operation_await_deferred(Worker, Limit) ->
+    case quod_dtx_coordinator:test_state(Worker) of
+        #{wave := #{running := false}, progress_pending := false} = S -> S;
+        _ ->
+            true = quod_time:mono_ms() < Limit,
+            operation_await_deferred(Worker, Limit)
+    end.
+
+dispatched_endpoint_worker_death_preserves_uncertainty_test() ->
+    with_fixture(fun(F) ->
+        {ok, Blob} = quod_dtx:encode_record(maps:get('begin', F)),
+        Request = {submit, <<219:128>>, Blob},
+        Source = {remote, digest(219), [{"127.0.0.1", 3219}]},
+        Parent = self(),
+        {Caller, Monitor} = spawn_monitor(fun() ->
+            Result = quod_dtx_coordinator:test_submit_endpoint_requests(
+                [Source], Request, 1000,
+                fun(Source0) ->
+                    Parent ! {dispatched, Source0, self()},
+                    exit(endpoint_disappeared_after_dispatch)
+                end),
+            Parent ! {death_result, self(), Result}
+        end),
+        Worker = receive {dispatched, Source, W} -> W
+                 after 1000 -> error(no_real_endpoint_worker) end,
+        receive {death_result, Caller, Result} -> ?assertEqual(outcome_unknown, Result)
+        after 1000 -> error(no_endpoint_death_result) end,
+        receive {'DOWN', Monitor, process, Caller, normal} -> ok
+        after 1000 -> error(fanout_owner_did_not_finish) end,
+        ?assertNot(is_process_alive(Worker)),
+        receive {dispatched, _, _} -> error(resubmitted_uncertain_endpoint)
+        after 0 -> ok end
+    end).
 
 receive_fanout_started(0, Acc) ->
     Acc;
@@ -980,6 +1120,30 @@ applied_wave_retains_verified_siblings_when_one_target_retries_test() ->
        [{A, ACertificate}, {B, BCertificate}],
        maps:get(applied, Snapshot2)).
 
+applied_wave_rechecks_deadline_at_owner_consumption_test() ->
+    Target = {<<"quod:applied-queued">>, digest(218)},
+    Group = digest(220), Ref = dtx_test_ref(Target, 7, digest(221)),
+    Command = {applied, Target, Group, Ref, 2, commit},
+    Certificate = applied_certificate(Command, digest(223)),
+    %% The certificate is pre-verified callback input, as in the sibling
+    %% result test; this does not claim cryptographic or consensus admission.
+    %% Each owner callback is isolated so its real drive/notification messages
+    %% cannot contaminate unrelated EUnit consumers.
+    Parent = self(),
+    lists:foreach(fun({Form, Offset, Expected}) ->
+        {Pid, Monitor} = spawn_monitor(fun() ->
+            Rows = quod_dtx_coordinator:test_consume_applied_wave(
+                     Command, Certificate, quod_time:mono_ms() + Offset),
+            Parent ! {applied_consumed, self(), Rows}
+        end),
+        receive {applied_consumed, Pid, Rows} -> ?assertEqual({Form, Expected}, {Form, Rows})
+        after 2000 -> error(applied_consumer_missing)
+        end,
+        receive {'DOWN', Monitor, process, Pid, normal} -> ok
+        after 2000 -> error(applied_consumer_failed)
+        end
+    end, [{live, 1000, [{Target, Certificate}]}, {expired, -1, []}]).
+
 worker_is_owned_by_an_exact_monitor_not_a_link_test() ->
     with_fixture(
       fun(F) ->
@@ -1099,18 +1263,21 @@ source_progress_accepts_only_its_existing_commit_stream_test() ->
     Identity = {<<"quod:source-progress">>, digest(224)},
     ?assert(
        quod_dtx_coordinator:test_local_progress_event(
-         {local_dtx_progress, Identity, 7}, Identity)),
+         {local_dtx_progress, self(), Identity, 7, true}, Identity)),
     ?assertNot(
        quod_dtx_coordinator:test_local_progress_event(
-         {local_dtx_progress,
-          {<<"quod:other">>, element(2, Identity)}, 7}, Identity)),
+         {local_dtx_progress, self(),
+          {<<"quod:other">>, element(2, Identity)}, 7, true}, Identity)),
     ?assertNot(
        quod_dtx_coordinator:test_local_progress_event(
-         {local_dtx_progress,
-          {element(1, Identity), digest(225)}, 7}, Identity)),
+         {local_dtx_progress, self(),
+          {element(1, Identity), digest(225)}, 7, true}, Identity)),
     ?assertNot(
        quod_dtx_coordinator:test_local_progress_event(
-         {local_dtx_progress, Identity, -1}, Identity)),
+         {local_dtx_progress, self(), Identity, -1, true}, Identity)),
+    ?assertNot(
+       quod_dtx_coordinator:test_local_progress_event(
+         {local_dtx_progress, self(), Identity, 7, malformed}, Identity)),
     ?assertNot(
        quod_dtx_coordinator:test_local_progress_event(
          malformed, Identity)).
@@ -1180,40 +1347,110 @@ dormant_cancel_signals_one_exact_directory_demand_test() ->
 %% directory owner publishes a real route edge; that wake rebuilds only the
 %% outer correlation id around the unchanged signed submission.
 dormant_cancel_retries_exact_submission_only_on_target_route_edge_test() ->
-    Owner = self(),
-    OwnerMonitor = make_ref(),
-    Target = {<<"quod:cancel-target">>, <<232:256>>},
-    OtherTarget = {<<"quod:other-target">>, <<233:256>>},
-    ?assertEqual(
-       wait,
-       quod_dtx_coordinator:test_dormant_wait_event(
-         {quod_foreign_follow, make_ref(), make_ref(), Target,
-          {building, 0, 0}},
-         Owner, OwnerMonitor, Target)),
-    ?assertEqual(
-       wait,
-       quod_dtx_coordinator:test_dormant_wait_event(
-         {directory_route_available, OtherTarget},
-         Owner, OwnerMonitor, Target)),
-    ?assertEqual(
-       retry,
-       quod_dtx_coordinator:test_dormant_wait_event(
-         {directory_route_available, Target},
-         Owner, OwnerMonitor, Target)),
-    ?assertEqual(
-       stop,
-       quod_dtx_coordinator:test_dormant_wait_event(
-         {'DOWN', OwnerMonitor, process, Owner, shutdown},
-         Owner, OwnerMonitor, Target)),
-    SignedSubmission = <<"exact-signed-operation-submission">>,
-    Request1 = quod_dtx_coordinator:test_dormant_cancel_request(
-                 <<234:128>>, Target, SignedSubmission),
-    Request2 = quod_dtx_coordinator:test_dormant_cancel_request(
-                 <<235:128>>, Target, SignedSubmission),
-    ?assertMatch(
-       {cancel_operation_effect, <<234:128>>, Target, SignedSubmission}, Request1),
-    ?assertMatch(
-       {cancel_operation_effect, <<235:128>>, Target, SignedSubmission}, Request2).
+    with_dormant_wave_fixture(fun(F, Owner, Worker) ->
+        Target = maps:get(target, F),
+        {From1, Request1 = {cancel_operation_effect, Id1, Target, Bytes}} = dormant_endpoint_call(),
+        %% The actual endpoint call is held. The coordinator must remain
+        %% responsive, not merely emit a send trace before blocking.
+        ?assertMatch(#{wave := #{running := true, stage := dormant}},
+                     quod_dtx_coordinator:test_state(Worker)),
+        gen_statem:reply(From1, {ok, {error, Id1, not_ready}, []}),
+        dormant_await_idle(Worker),
+        Worker ! {quod_foreign_follow, make_ref(), make_ref(), Target, {building, 0, 0}},
+        Worker ! {directory_route_available, {<<"other-target">>, <<233:256>>}},
+        ?assertMatch(#{wave := none, progress_pending := false},
+                     quod_dtx_coordinator:test_state(Worker)),
+        assert_no_operation_stub_calls(),
+        Worker ! {directory_route_available, Target},
+        {From2, Request2 = {cancel_operation_effect, Id2, Target, Bytes}} = dormant_endpoint_call(),
+        ?assertNotEqual(Id1, Id2),
+        {ok, Bytes} = quod_transaction:encode_operation_submission(maps:get(submission, F)),
+        ?assertEqual(terminal, quod_dtx_coordinator:test_dormant_cancel_disposition(
+           Request2, {operation_effect_cancelled, Id2, cancelled})),
+        ?assertEqual(wait, quod_dtx_coordinator:test_dormant_cancel_disposition(
+           Request1, {operation_effect_cancelled, Id2, cancelled})),
+        %% Real owner death is observed while the second endpoint remains
+        %% held. Killing the I/O worker does not invent an acknowledgement.
+        Monitor = monitor(process, Worker),
+        IoMonitor = monitor(process, element(1, From2)),
+        exit(Owner, kill),
+        receive {'DOWN', Monitor, process, Worker, _} -> ok
+        after 1000 -> error(dormant_owner_down_blocked_by_endpoint) end,
+        receive {'DOWN', IoMonitor, process, _, _} -> ok
+        after 1000 -> error(dormant_io_outlived_owner) end
+    end).
+
+dormant_custody_release_preserves_actual_caller_pid_test() ->
+    with_dormant_wave_fixture(fun(_F, Owner, Worker) ->
+        {From, {cancel_operation_effect, Id, _Target, _Bytes}} = dormant_endpoint_call(),
+        gen_statem:reply(From, {ok, {operation_effect_cancelled, Id, cancelled}, []}),
+        receive
+            {dormant_owner_call, Owner, NativeFrom, {cancel_transaction_custody, _TxId}} ->
+                ?assertEqual(Worker, element(1, NativeFrom)),
+                ?assertMatch(#{wave := #{running := true, stage := dormant}},
+                             quod_dtx_coordinator:test_state(Worker)),
+                Monitor = monitor(process, Worker),
+                gen_statem:reply(NativeFrom, ok),
+                receive {'DOWN', Monitor, process, Worker, normal} -> ok
+                after 1000 -> error(dormant_native_reply_not_consumed) end
+        after 1000 -> error(missing_native_custody_release) end
+    end).
+
+%% Signed submission and real production worker/endpoint client; the target
+%% is a protocol fixture, not a consensus-admitted namespace. The separate
+%% Simplex exact-owner test exercises the actual custody authorization.
+with_dormant_wave_fixture(Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F = quod_ct:signed_effect_operation_submission(),
+    {TargetNs, Anchor} = maps:get(target, F),
+    Saved = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, maps:get(pubkey, maps:get(target_identity, F))),
+    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
+                    [named_table, public, set]),
+    ets:insert(Table, {anchor, Anchor}),
+    Stub = start_operation_stub(dormant, {quod_simplex, TargetNs}),
+    Test = self(),
+    Owner = spawn(fun() ->
+        {Ns, _} = maps:get(origin, F),
+        true = quod_reg:reg({quod_simplex, Ns}),
+        {ok, Worker} = quod_dtx_coordinator:start_dormant_operation_monitor(
+                         self(), Ns, maps:get(submission, F)),
+        Test ! {dormant_worker, self(), Worker},
+        dormant_source_stub(Test)
+    end),
+    Worker = receive {dormant_worker, Owner, Pid} -> Pid
+             after 1000 -> error(dormant_worker_missing) end,
+    try Fun(F, Owner, Worker)
+    after
+        exit(Worker, kill), exit(Owner, kill), stop_operation_stub(Stub), ets:delete(Table),
+        case Saved of
+            {ok, V} -> application:set_env(quod, node_pubkey, V);
+            undefined -> application:unset_env(quod, node_pubkey)
+        end
+    end.
+
+dormant_source_stub(Test) ->
+    receive
+        {'$gen_call', From, Request} ->
+            Test ! {dormant_owner_call, self(), From, Request},
+            dormant_source_stub(Test)
+    end.
+
+dormant_endpoint_call() ->
+    receive
+        {operation_stub_call, dormant, From, {dtx_endpoint_local, Request, [], _Timeout, _Trace}} ->
+            {From, Request}
+    after 1000 -> error(dormant_endpoint_not_called) end.
+
+dormant_await_idle(Worker) ->
+    dormant_await_idle(Worker, quod_time:mono_ms() + 1000).
+dormant_await_idle(Worker, Deadline) ->
+    case quod_dtx_coordinator:test_state(Worker) of
+        #{wave := none, progress_pending := false} -> ok;
+        _ ->
+            true = quod_time:mono_ms() < Deadline,
+            dormant_await_idle(Worker, Deadline)
+    end.
 
 %% ------------------------------------------------------------------
 %% Operation recovery owner-interface fixtures
@@ -1292,11 +1529,15 @@ stop_operation_stub(Pid) ->
 with_operation_worker(#{source_ns := Ns, operation_ref := OperationRef}, Fun) ->
     {ok, Worker, Monitor} = quod_dtx_coordinator:start_operation_monitor(
                               self(), Ns, OperationRef, #{}),
+    operation_ready(Worker, self(), OperationRef),
     try Fun(Worker, Monitor)
     after
         exit(Worker, kill),
         erlang:demonitor(Monitor, [flush])
     end.
+
+operation_ready(Worker, Owner, {operation, Ns, Anchor, _, _}) ->
+    Worker ! {local_dtx_progress, Owner, {Ns, Anchor}, 0, true}.
 
 with_operation_follow_owner(Fun) ->
     ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
@@ -1309,10 +1550,9 @@ attach_operation_follow(#{target := Target}, Worker) ->
     From = expect_operation_stub_call(foreign, {follow, Target}),
     FollowRef = make_ref(),
     gen_server:reply(From, {ok, FollowRef}),
-    receive
-        {operation_stub_cast, foreign, {refresh, FollowRef, Worker}} -> ok
-    after 1000 -> error(missing_foreign_follow_refresh)
-    end,
+    %% Follow admission itself schedules acquisition. The common asynchronous
+    %% owner loop consumes the real reply; no redundant refresh is required.
+    _ = Worker,
     FollowRef.
 
 wake_operation_follow(#{target := Target}, Worker, FollowRef) ->

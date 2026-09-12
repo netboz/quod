@@ -66,46 +66,51 @@ complete_projection_retires_held_child_once_test() ->
 
 done_precedes_follow_cleanup_and_natural_down_test() ->
     with_case(fun(F, S0, Parent) ->
-        G = maps:get(group_id, F),
-        Follow = make_ref(),
+        G = maps:get(group_id, F), Follow = make_ref(),
         with_foreign_sink(fun(Sink) ->
           with_env(dtx_test_observation_state,
                    {G, maps:get(complete_snapshot, F), #{maps:get(origin, F) => Follow}}, fun() ->
+           with_env(dtx_test_phase_barrier, {hold, done}, fun() ->
             with_attempt_trace(fun(Trace) ->
                 Running = start(F, Parent, S0),
                 #{pid := Pid, monitor := MRef} = owner_row(F, Running),
                 Complete = maps:get(complete_ref, F),
                 receive {dtx_coordinator, Pid, G, {done, Complete}} -> ok
                 after 2000 -> error(no_real_done) end,
-                receive {unfollow, Sink, Pid, Follow, From} ->
-                    ?assert(is_process_alive(Pid)),
-                    assert_no_root(),
-                    %% Callback-state observation: keep the authoritative
-                    %% projection before Complete, so done alone cannot retire.
-                    Before = projection_state(F, pre_complete, adopt(F, Running)),
-                    {keep_state, Kept, _} = quod_simplex:running(info,
-                      {dtx_coordinator, Pid, G, {done, Complete}}, Before),
-                    ?assertEqual(owner_row(F, Before), owner_row(F, Kept)),
-                    assert_no_root(),
-                    ?assertEqual([], end_calls(Trace)),
-                    gen_server:reply(From, ok),
-                    ?assertEqual(normal, wait_down(Pid, MRef)),
-                    Finished = projection_state(F, complete, Kept),
-                    {true, Released} = quod_simplex:test_drop_dtx_coordinator(
-                      MRef, Pid, normal, Finished),
-                    ?assertEqual(#{}, quod_simplex:test_dtx_coordinator_state(Released)),
-                    Span = root(),
-                    ?assertEqual(<<"worker_exit">>, closure(Span)),
-                    ?assertEqual(<<"normal">>, attr('quod.dtx.exit_class', Span)),
-                    Names = event_names(Span),
-                    ?assert(lists:member(<<"dtx.completed">>, Names)),
-                    ?assert(lists:member(<<"dtx.coordinator.close_observed">>, Names)),
-                    ?assert(lists:member(<<"dtx.done_observed">>, Names)),
-                    ?assertEqual(1, length(attempts(Trace))),
-                    ?assertEqual([Span#span.span_id], end_calls(Trace)),
-                    assert_no_root()
-                after 2000 -> error(no_actual_unfollow) end
+                Barrier = held(G, done),
+                ?assert(is_process_alive(Pid)),
+                assert_no_root(),
+                %% The same B ownership assertion, now held at the existing
+                %% notification barrier rather than a deleted blocking cleanup.
+                Before = projection_state(F, pre_complete, adopt(F, Running)),
+                {keep_state, Kept, _} = quod_simplex:running(info,
+                  {dtx_coordinator, Pid, G, {done, Complete}}, Before),
+                ?assertEqual(owner_row(F, Before), owner_row(F, Kept)),
+                assert_no_root(),
+                ?assertEqual([], end_calls(Trace)),
+                Pid ! {quod_dtx_test_release, Barrier},
+                From = receive {unfollow, Sink, Pid, Follow, CallFrom} -> CallFrom
+                       after 2000 -> error(no_actual_unfollow) end,
+                %% The real cleanup request is unanswered. It cannot block
+                %% coordinator termination; consumer death also owns cleanup.
+                ?assertEqual(normal, wait_down(Pid, MRef)),
+                gen_server:reply(From, ok),
+                Finished = projection_state(F, complete, Kept),
+                {true, Released} = quod_simplex:test_drop_dtx_coordinator(
+                  MRef, Pid, normal, Finished),
+                ?assertEqual(#{}, quod_simplex:test_dtx_coordinator_state(Released)),
+                Span = root(),
+                ?assertEqual(<<"worker_exit">>, closure(Span)),
+                ?assertEqual(<<"normal">>, attr('quod.dtx.exit_class', Span)),
+                Names = event_names(Span),
+                ?assert(lists:member(<<"dtx.completed">>, Names)),
+                ?assert(lists:member(<<"dtx.coordinator.close_observed">>, Names)),
+                ?assert(lists:member(<<"dtx.done_observed">>, Names)),
+                ?assertEqual(1, length(attempts(Trace))),
+                ?assertEqual([Span#span.span_id], end_calls(Trace)),
+                assert_no_root()
             end)
+           end)
           end)
         end)
     end).
@@ -472,7 +477,10 @@ entry({Ns, Anchor} = Target, Control, Slot, F) ->
     {Entry, Payload, Ref}.
 
 start(F, Parent, S0) ->
-    Seed = quod_simplex:test_seed_dtx_submission(maps:get(begin_control, F), [], S0),
+    %% These span tests supply pre-verified snapshots and exercise active
+    %% coordination. Readiness-specific tests start parked explicitly.
+    Ready = quod_simplex:test_state_set(prolog_ready, true, S0),
+    Seed = quod_simplex:test_seed_dtx_submission(maps:get(begin_control, F), [], Ready),
     quod_simplex:test_start_dtx_coordinator_worker(
       maps:get('begin', F), maps:get(group_ref, F), none, Parent, Seed).
 

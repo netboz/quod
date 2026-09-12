@@ -7,6 +7,18 @@
 %% fixtures. Finite waits below expire a caller deliberately; ordinary progress
 %% is ordered by worker messages, trace delivery and owner mailbox barriers.
 
+queued_and_running_share_one_job_record_test() ->
+    {ok, {quod_foreign_log, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
+        beam_lib:chunks(code:which(quod_foreign_log), [abstract_code]),
+    Records = [Name || {attribute, _, record, {Name, _}} <- Forms],
+    ?assert(lists:member(request, Records)),
+    ?assertNot(lists:member(queued_request, Records)),
+    %% A single row crosses the existing queue/custody/running transitions.
+    %% The old nine-argument common-field reconstruction is deleted, not
+    %% hidden behind a new record name or an extra owner.
+    ?assertEqual([4], [Arity || {function, _, launch_request_owned, Arity, _} <- Forms]),
+    ?assertEqual([3], [Arity || {function, _, park_job, Arity, _} <- Forms]).
+
 public_exact_deadline_includes_owner_mailbox_test() ->
     Fixture = fixture(exact),
     Parent = self(),
@@ -23,10 +35,12 @@ public_exact_deadline_includes_owner_mailbox_test() ->
                      quod_foreign_log:verify_reference(Ref, finalize, Contact, 2000)),
         %% Positive control: the same public call has valid evidence and fits
         %% this budget when its owner is not held before admission.
-        1 = erlang:trace(Owner, true, [procs, {tracer, self()}]),
+        1 = erlang:trace_pattern({quod_dtx_phase_index, capture, 2}, true, []),
+        1 = erlang:trace(Owner, true, [call, procs, {tracer, self()}]),
         ?assertMatch({ok, #{slot := 2}},
                      quod_foreign_log:verify_reference(Ref, finalize, Contact, 100)),
-        ?assert(owner_spawns(Owner) =/= []),
+        ?assertEqual([], owner_spawns(Owner)),
+        ?assertEqual(1, owner_capture_calls(Owner)),
         Fetches = atomics:get(Count, 1),
         ok = sys:suspend(Owner),
         Caller = spawn(fun() ->
@@ -50,8 +64,10 @@ public_exact_deadline_includes_owner_mailbox_test() ->
             %% The public return check must not conceal an owner which still
             %% admitted obsolete work and only finished it before this read.
             ?assertEqual([], owner_spawns(Owner)),
+            ?assertEqual(0, owner_capture_calls(Owner)),
             ?assertEqual(Fetches, atomics:get(Count, 1))
         after
+            _ = erlang:trace_pattern({quod_dtx_phase_index, capture, 2}, false, []),
             _ = catch sys:resume(Owner),
             exit(Caller, kill)
         end
@@ -61,10 +77,13 @@ queued_success_checks_each_caller_deadline_test() ->
     Fixture = fixture(exact), Token = make_ref(),
         with_owner(fixture_fetch(Fixture), fun(Owner) ->
             Identity = identity(Fixture),
-            %% Warm the real foreign cursor before holding only its result
-            %% handoff. The owner remains runnable during all verifier I/O.
-            ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:verify_reference(
-                maps:get(ref, Fixture), finalize, contact(Fixture), 2000)),
+            %% Warm certified genesis, then acquire the genuinely missing
+            %% Finalize. Ready reads no longer have a worker result to hold.
+            Genesis = hd(maps:get(chain, Fixture)),
+            {batch, [GenesisTx]} = element(3, quod_ledger:entry_view(Genesis)),
+            {ok, GenesisRef} = quod_dtx:certified_entry_ref(Identity, Genesis, GenesisTx),
+            ?assertMatch({ok, #{slot := 1}}, quod_foreign_log:verify_reference(
+                GenesisRef, transaction, contact(Fixture), 2000)),
             ok = gen_server:call(Owner, {test_hold_next_worker_result, self(), Token}),
             Deadline = quod_time:mono_ms() + 500,
             %% Bypass only the public return recheck: this pins the OWNER's
@@ -784,6 +803,44 @@ trace_context(unsampled) ->
     quod_trace:extract([{<<"traceparent">>,
         <<"00-22222222222222222222222222222222-2222222222222222-00">>}]).
 
+async_follow_installs_reference_before_first_notice_test() ->
+    Parent = self(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        Result = try
+            with_owner(fun(_, _, _, _, _) -> {error, unavailable} end, fun(_Owner) ->
+                Target = {<<"quod:async-follow-order">>, <<173:256>>},
+                {ok, RequestId} = quod_foreign_log:follow_request(Target),
+                %% Receive in arrival order. A selective wait for just the
+                %% reply would conceal the old notice-before-registration bug.
+                Reply = receive Message -> Message
+                        after 1000 -> error(missing_follow_registration) end,
+                {reply, {ok, FollowRef}} = gen_server:check_response(Reply, RequestId),
+                receive
+                    {quod_foreign_follow, FollowRef, NoticeRef, Target, {building, _}} ->
+                        ok = quod_foreign_log:ack(FollowRef, NoticeRef)
+                after 1000 -> error(missing_initial_follow_credit)
+                end,
+                ?assertEqual(1, maps:get(follow_consumers, quod_foreign_log:stats())),
+                {ok, CloseId} = quod_foreign_log:unfollow_request(FollowRef),
+                ?assertEqual({reply, ok}, gen_server:receive_response(CloseId, 1000)),
+                ?assertEqual(0, maps:get(follow_consumers, quod_foreign_log:stats()))
+            end),
+            ok
+        catch Class:Reason:Stack -> {raised, Class, Reason, Stack}
+        end,
+        Parent ! {async_follow_result, self(), Result}
+    end),
+    receive
+        {async_follow_result, Pid, Result} ->
+            receive {'DOWN', Monitor, process, Pid, normal} -> ok end,
+            case Result of
+                ok -> ok;
+                {raised, C, R, Stack} -> erlang:raise(C, R, Stack)
+            end;
+        {'DOWN', Monitor, process, Pid, Reason} -> error({follow_fixture_exit, Reason})
+    after 5000 -> error(follow_fixture_stalled)
+    end.
+
 with_owner(Fetch, Fun) ->
     {ok, _} = application:ensure_all_started(crypto),
     {ok, _} = application:ensure_all_started(gproc),
@@ -843,6 +900,12 @@ owner_spawns(Owner) ->
 owner_spawns(Owner, Acc) ->
     receive {trace, Owner, spawn, Child, _Entry} -> owner_spawns(Owner, [Child | Acc])
     after 0 -> lists:reverse(Acc) end.
+
+owner_capture_calls(Owner) ->
+    receive
+        {trace, Owner, call, {quod_dtx_phase_index, capture, _}} ->
+            1 + owner_capture_calls(Owner)
+    after 0 -> 0 end.
 
 request_messages(Messages, Ref) ->
     [case Message of {foreign_worker_done, _, _, _} -> done;

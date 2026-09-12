@@ -86,14 +86,17 @@ scheduled separately from the request. Empty caches are not certified resident h
 There is no numeric limit on foreign identities, follows, encoded cache, or
 materialized projections. An inactive identity retains its bounded current
 projection only after this running owner has verified it. Ledger handles,
-phase indexes, workers, and catch-up link leases remain active only for proof or
-follow work. A current-view row, once watched, keeps its existing committee
+workers and catch-up link leases remain active only for proof or follow work.
+The existing index's backend resource follows the published prefix lifetime;
+exclusive mutation custody still passes only between registered writers. A
+current-view row, once watched, keeps its existing committee
 feed registrations open so unchanged requests can reuse that verified
 projection; any missing or newer height returns to the ordinary verifier.
 At owner startup, existing per-identity writers initialize the retained disk
 caches before proof requests can use them. Requests never reconstruct a
-prefix. The owner keeps only the current committee era; exact older eras live
-in the same retained index and are read by their certified slot.
+prefix. Ready exact reads borrow the published prefix without joining a newer
+range's acquisition queue. Capture selects one historical era from the same
+retained index; point I/O and exact verification run in the existing caller.
 """.
 
 -behaviour(gen_server).
@@ -110,6 +113,7 @@ in the same retained index and are read by their certified slot.
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, refresh/1, ack/2, projection_clauses/3, unfollow/1,
+         follow_request/1, unfollow_request/1,
          required_references/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -184,23 +188,6 @@ in the same retained index and are read by their certified slot.
           memory_bytes = 0 :: non_neg_integer()
          }).
 
--record(queued_request, {
-          ref :: reference(),
-          from = none :: none |
-                  {follow, {binary(), <<_:256>>}, reference()} |
-                  {initialize, {binary(), <<_:256>>}},
-          callers = #{} :: #{gen_server:from() => #caller{}},
-          peer :: term(),
-          identity :: {binary(), <<_:256>>},
-          work :: term(),
-          fetch_fun :: undefined | function(),
-          source = none :: none | {pid(), reference()},
-          parked = false :: false | true | {custody, reference()},
-          enqueued_native :: integer(),
-          job_id = undefined :: undefined | binary(),
-          attempt = 1 :: pos_integer()
-         }).
-
 %% A routed request keeps only the caller's bounded, untrusted hints and the
 %% semantic verification it asked for.  Routes are selected again by this
 %% owner when work becomes runnable; a parked row therefore cannot fossilise
@@ -209,6 +196,15 @@ in the same retained index and are read by their certified slot.
           supplied = [] :: [{<<_:256>>, term()}],
           contact = none :: none | {<<_:256>>, term()},
           kind :: term()
+         }).
+
+%% A published prefix is an immutable read capability, not permission to
+%% resume mutation. Its resource belongs to this node owner, not a fetch job.
+-record(prefix, {
+          height :: pos_integer(),
+          projection :: map(),
+          snapshot :: quod_ledger_store:session(),
+          index :: quod_dtx_phase_index:index()
          }).
 
 -record(history, {
@@ -220,6 +216,7 @@ in the same retained index and are read by their certified slot.
           resident_verified = false :: boolean(),
           phase_session = none :: none | term(),
           cache_session = none :: none | quod_ledger_store:session(),
+          published = none :: none | #prefix{},
           waiting = {[], []} :: term(),
           last_used = 0 :: integer(),
           active = none :: none | reference(),
@@ -241,7 +238,12 @@ in the same retained index and are read by their certified slot.
           bootstrap_hints = [] :: [{<<_:256>>, term()}]
          }).
 
+%% A job keeps its semantic/caller identity across queue, custody wait and
+%% running turns. Queue membership versus the pending map determines its
+%% lifetime; transitions replace only the execution handles, not a second
+%% record's manually copied common metadata.
 -record(request, {
+          ref :: reference(),
           from = none :: none |
                   {follow, {binary(), <<_:256>>}, reference()} |
                   {initialize, {binary(), <<_:256>>}},
@@ -249,16 +251,19 @@ in the same retained index and are read by their certified slot.
           peer :: term(),
           identity :: {binary(), <<_:256>>},
           work :: term(),
-          worker :: pid(),
-          mref :: reference(),
+          worker = none :: none | pid(),
+          mref = none :: none | reference(),
           source = none :: none | {pid(), reference()} | down,
           timer = none :: none | reference(),
           progress_edge = false :: boolean(),
           custody = acquiring :: acquiring | held,
+          phase_hold = none :: none | quod_dtx_phase_index:index(),
           retiring = false :: boolean(),
           trace_ctx = undefined :: term(),
           fetch_fun = undefined :: undefined | function(),
-          job_id :: binary(),
+          parked = false :: false | true | {custody, reference()},
+          enqueued_native :: integer(),
+          job_id = undefined :: undefined | binary(),
           attempt = 1 :: pos_integer()
          }).
 
@@ -655,12 +660,41 @@ verification_call(Pid, Request, Deadline) ->
                   catch exit:_ -> {{error, retry}, owner_call_failed}
                   end
           end,
-          Reply = caller_result(Deadline, Result),
+          Consumed = case Result of
+              {ready_reference, _, _, _, _} ->
+                  with_foreign_stages(Span,
+                    fun() -> consume_reference_reply(Pid, Result, Deadline) end);
+              _ -> Result
+          end,
+          Reply = caller_result(Deadline, Consumed),
           Cause = case caller_live(Deadline) of true -> Cause0; false -> caller_expired end,
           _ = quod_trace:set_attributes(Span, #{'quod.foreign.cause' => atom_to_binary(Cause)}),
           _ = quod_trace:result(Span, Reply),
           Reply
       end).
+
+%% The owner returns a bounded, already-published read capability. Actual
+%% point I/O and the SAME exact verifier run in the existing caller, not in
+%% the node owner's mailbox or another per-identity queue. The historical era
+%% is resolved during capture; no live index handle escapes that owner turn.
+consume_reference_reply(Owner,
+  {ready_reference, Snapshot, Ref, Phase, Projection}, Deadline) ->
+    {Height, _Hash} = maps:get(history_head, Projection),
+    _ = quod_trace:set_attributes(otel_tracer:current_span_ctx(quod_trace:context()),
+          #{'quod.foreign.read_source' => <<"published_prefix">>,
+            'quod.foreign.captured_height' => Height}),
+    ?LOCAL_READ_GATE(before_read),
+    case is_process_alive(Owner) andalso caller_live(Deadline) of
+        true ->
+            Read = verify_resident_snapshot(Snapshot, ref_slot(Ref),
+                        cache_namespace(ref_identity(Ref)), Ref, Phase, Projection),
+            ?LOCAL_READ_GATE(after_read),
+            case is_process_alive(Owner) andalso caller_live(Deadline) of
+                true -> Read;
+                false -> {error, retry}
+            end;
+        false -> {error, retry}
+    end.
 
 %% Later appends preserve a borrowed view. Only replacing or losing its exact
 %% owner makes it unavailable; never recapture a newer session for an old view.
@@ -687,11 +721,11 @@ local_view_fetch(_View, _Ns, _From, _To) ->
 %% bookkeeping is unavailable, never permission to reconstruct it here.
 verify_resident_local_reference(Snapshot, Ref, ExpectedPhase, Projection) ->
     case quod_dtx:certified_ref_binding(Ref) of
-        {ok, Identity = {Ns, Anchor}, Slot, _Digest} ->
+        {ok, Identity = {Ns, _Anchor}, Slot, _Digest} ->
             case valid_projection(Projection, Identity) of
                 true ->
-                    verify_resident_local_snapshot(
-                      Snapshot, Slot, Ns, Anchor, Ref, ExpectedPhase,
+                    verify_resident_snapshot(
+                      Snapshot, Slot, Ns, Ref, ExpectedPhase,
                       Projection);
                 false ->
                     {error, bad_foreign_reference}
@@ -700,14 +734,14 @@ verify_resident_local_reference(Snapshot, Ref, ExpectedPhase, Projection) ->
             {error, bad_foreign_reference}
     end.
 
-verify_resident_local_snapshot(
-  Snapshot, Slot, Ns, _Anchor, Ref, ExpectedPhase, Projection) ->
+verify_resident_snapshot(
+  Snapshot, Slot, Ns, Ref, ExpectedPhase, Projection) ->
     case quod_ledger_store:open_ro_snapshot(Snapshot) of
         {ok, Store} ->
             try
                 case quod_ledger_store:namespace(Store) of
                     Ns ->
-                        verify_resident_local_store(
+                        verify_resident_store(
                           Store, Slot, Ref, ExpectedPhase, Projection);
                     _OtherNamespace ->
                         {error, bad_foreign_reference}
@@ -719,9 +753,11 @@ verify_resident_local_snapshot(
             {error, retry}
     end.
 
-verify_resident_local_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
-    case {quod_ledger_store:read_at(Store, Slot),
-          reference_projection(Slot, Slot, Projection)} of
+verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
+    Lookup = trace_foreign_stage(exact_lookup, fun() ->
+        {quod_ledger_store:read_at(Store, Slot), reference_projection(Slot, Slot, Projection)}
+    end),
+    case Lookup of
         {{ok, Entry}, {ok, EvidenceProjection}} ->
             #entry{index = Slot} = quod_ledger:entry_view(Entry),
             verify_exact_reference_entry(
@@ -805,6 +841,27 @@ follow(Identity) ->
             end;
         false ->
             {error, invalid_identity}
+    end.
+
+-doc "Register from the consumer's own receive loop without a helper owner.".
+-spec follow_request({binary(), <<_:256>>}) ->
+          {ok, gen_server:request_id()} | {error, invalid_identity | unavailable}.
+follow_request(Identity) ->
+    case valid_identity(Identity) of
+        true -> send_follow_request({follow, Identity});
+        false -> {error, invalid_identity}
+    end.
+
+-doc "Remove this consumer's follow without blocking its shutdown.".
+-spec unfollow_request(reference()) ->
+          {ok, gen_server:request_id()} | {error, unavailable}.
+unfollow_request(FollowRef) when is_reference(FollowRef) ->
+    send_follow_request({unfollow, FollowRef}).
+
+send_follow_request(Request) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) -> {ok, gen_server:send_request(Pid, Request)};
+        undefined -> {error, unavailable}
     end.
 
 -doc "Request an immediate certified refresh for one follow owned by this process.".
@@ -1115,9 +1172,7 @@ handle_call(stats, _From, S) ->
               bootstrap_evicted => S#s.bootstrap_evicted},
     {reply, Reply, S};
 handle_call({follow, Identity}, From, S0) ->
-    {ConsumerPid, _Tag} = From,
-    {FollowRef, S1} = add_follow(Identity, ConsumerPid, S0),
-    {reply, {ok, FollowRef}, S1};
+    {noreply, add_follow(Identity, From, S0)};
 handle_call({unfollow, FollowRef}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
@@ -1153,8 +1208,27 @@ handle_call({claim_cache_custody, RequestRef}, {Worker, _}, S0) ->
                     S2 = S1#s{pending = (S1#s.pending)#{RequestRef =>
                                       Request#request{custody = held,
                                           callers = Running}}},
-                    {reply, {ok, Resident, worker_trace(Identity, Callers,
+                    Keep = [Index || Index <- [H0#history.phase_session,
+                                                prefix_index(H0#history.published)],
+                                     Index =/= none],
+                    {reply, {ok, Resident, Keep, worker_trace(Identity, Callers,
                               Request#request.job_id, Request#request.attempt)}, S2};
+                false -> {reply, {error, retry}, S0}
+            end;
+        _ -> {reply, {error, retry}, S0}
+    end;
+handle_call({retain_phase_index, RequestRef, Index}, {Worker, _}, S0) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{worker = Worker, custody = held, phase_hold = none,
+                 retiring = false} = Request ->
+            case request_source_live(Request) of
+                true ->
+                    case quod_dtx_phase_index:retain_empty(Index) of
+                        {ok, Hold} ->
+                            {reply, ok, S0#s{pending = (S0#s.pending)#{RequestRef =>
+                                              Request#request{phase_hold = Hold}}}};
+                        {error, _} = Error -> {reply, Error, S0}
+                    end;
                 false -> {reply, {error, retry}, S0}
             end;
         _ -> {reply, {error, retry}, S0}
@@ -1275,11 +1349,11 @@ handle_private_call(test_lifecycle_state, _From, S) ->
           end,
           #{active => Active, height => H#history.height,
             resident_verified => H#history.resident_verified,
-            waiting => [#{ref => Q#queued_request.ref,
-                          job_id => Q#queued_request.job_id,
-                          work => Q#queued_request.work,
-                          wait_reason => test_wait_reason(Q#queued_request.parked),
-                          callers => test_caller_rows(Q#queued_request.callers),
+            waiting => [#{ref => Q#request.ref,
+                          job_id => Q#request.job_id,
+                          work => Q#request.work,
+                          wait_reason => test_wait_reason(Q#request.parked),
+                          callers => test_caller_rows(Q#request.callers),
                           edge => false} || Q <- queue:to_list(H#history.waiting)]}
       end, S#s.histories),
     {reply, Rows, S};
@@ -1390,9 +1464,11 @@ handle_verification(
   {verify, Peer, Endpoint, Ref, Phase, TimeoutMs}, Caller, From, S0) ->
     case validate_route_request(Peer, Endpoint, Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            begin_verification(
+            begin_exact_verification(Identity, Ref, Phase, Caller, S0, fun() ->
+              begin_verification(
               Peer, Endpoint, Ref, Phase, Caller,
-              S0#s.fetch_fun, Identity, From, S0);
+              S0#s.fetch_fun, Identity, From, S0)
+            end);
         {error, Reason} ->
             observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
             {reply, {error, Reason}, S0}
@@ -1401,10 +1477,12 @@ handle_verification(
   {verify_reference, Ref, Phase, Contact, EntryHint, TimeoutMs}, Caller, From, S0) ->
     case validate_reference_request(Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            begin_current_worker(
+            begin_exact_verification(Identity, Ref, Phase, Caller, S0, fun() ->
+              begin_current_worker(
               Identity, [], Contact, Caller,
               {exact_reference, Ref, Phase, EntryHint},
-              From, S0);
+              From, S0)
+            end);
         {error, Reason} ->
             observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
             {reply, {error, Reason}, S0}
@@ -1425,6 +1503,28 @@ handle_verification(
     end.
 
 valid_caller_deadline(_Request, Deadline) -> is_integer(Deadline).
+
+begin_exact_verification(Identity, Ref, Phase, Caller, S, MissingRange) ->
+    {ok, Identity, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
+    case maps:get(Identity, S#s.histories, undefined) of
+        #history{published = #prefix{height = Height, index = Hold,
+                                     snapshot = Snapshot, projection = Projection}}
+          when Slot =< Height ->
+            Reply = case quod_dtx_phase_index:capture(Hold, Height) of
+                {ok, View} ->
+                    case quod_dtx_phase_index:committee(View, Slot) of
+                        {ok, Era} ->
+                            %% One immutable era, not an eras/history copy.
+                            Exact = (maps:remove(history_index, Projection))#{committee_views := [Era]},
+                            {ready_reference, Snapshot, Ref, Phase, Exact};
+                        _ -> {error, retry}
+                    end;
+                {error, _} -> {error, retry}
+            end,
+            observe_unadmitted_caller(Caller, ready_prefix_capture),
+            {reply, Reply, S};
+        _ -> MissingRange()
+    end.
 
 begin_verification(Peer, Endpoint, Ref, Phase, TimeoutMs, FetchFun,
                    Identity, From, S0) ->
@@ -1468,7 +1568,7 @@ start_distinct_routed_worker(Identity, TimeoutMs, Work, From, S0) ->
     S1 = open_progress_signals(Identity, ensure_history(Identity, S0)),
     RequestRef = make_ref(),
     {InternalFrom, Callers} = request_owners(RequestRef, From, TimeoutMs),
-    Queued = #queued_request{
+    Queued = #request{
                 ref = RequestRef, from = InternalFrom,
                 callers = stage_callers(Callers, queued),
                 peer = none, identity = Identity, work = Work,
@@ -1512,32 +1612,27 @@ start_distinct_worker(
     RequestRef = make_ref(),
     {InternalFrom, Callers} = request_owners(
                                 RequestRef, From, TimeoutMs),
-    Queued = #queued_request{
+    Queued = #request{
                 ref = RequestRef, from = InternalFrom,
                 callers = stage_callers(Callers, queued), peer = Peer,
                 identity = Identity, work = Work, fetch_fun = FetchFun,
                 enqueued_native = erlang:monotonic_time()},
     {ok, enqueue_request(Queued, S1)}.
 
-enqueue_request(#queued_request{identity = Identity} = Queued, S0) ->
+enqueue_request(#request{identity = Identity} = Queued, S0) ->
     %% Every arrival uses the same selector: distinct routes may bypass a
     %% route park, but no new arrival may bypass this cache's custody wait.
     H0 = maps:get(Identity, S0#s.histories),
     {_, JobId, _} = launch_identity(queued_launch_identity(Queued)),
     H1 = H0#history{waiting = queue:in(
-          Queued#queued_request{job_id = JobId}, H0#history.waiting)},
+          Queued#request{job_id = JobId}, H0#history.waiting)},
     start_next_request(Identity, put_history(Identity, H1, S0)).
 
-launch_request_owned(RequestRef, Peer, Identity,
-                     Work, FetchFun, InternalFrom, Callers, S0) ->
-    launch_request_owned(
-      RequestRef, Peer, Identity, Work, Work, FetchFun,
-      InternalFrom, Callers, S0).
-
-launch_request_owned(LaunchIdentity, Peer, Identity,
-                     RequestWork, WorkerWork, FetchFun,
-                     InternalFrom, Callers0, S0) ->
-    {RequestRef, JobId, Attempt} = launch_identity(LaunchIdentity),
+launch_request_owned(
+  Job = #request{identity = Identity, work = RequestWork,
+                 fetch_fun = FetchFun, callers = Callers0},
+  Peer, WorkerWork, S0) ->
+    {RequestRef, JobId, Attempt} = launch_identity(queued_launch_identity(Job)),
     Callers = stage_callers(Callers0, acquiring),
     annotate_caller_stages(Callers, work_lifetime_attributes(RequestWork)),
     ResidentStarted = erlang:monotonic_time(),
@@ -1557,27 +1652,25 @@ launch_request_owned(LaunchIdentity, Peer, Identity,
             Owner = self(),
             Root = S0#s.root,
             PageTimeout = S0#s.page_timeout_ms,
-            Source = none,
             Worker = spawn_verification_worker(
                        RequestRef, RequestWork,
                        fun() ->
                            case acquire_cache_custody(Owner, RequestRef, Identity) of
-                               {ok, Resident, Trace} ->
+                               {ok, Resident, Keep, Trace} ->
                                    verification_custody_acquired(RequestRef),
                                    verification_worker(
                                      Owner, RequestRef, WorkerWork, Root, FetchFun,
-                                     PageTimeout, Resident, Trace);
+                                     PageTimeout, Resident, Keep, Trace);
                                denied -> ok
                            end
                        end),
             MRef = erlang:monitor(process, Worker),
             _ = quod_process:kill_when_owner_dies(Owner, Worker),
             Timer = request_work_timer(RequestWork, RequestRef),
-            Request = #request{from = InternalFrom, callers = Callers,
-                               peer = Peer, identity = Identity,
-                               worker = Worker, work = RequestWork,
-                               mref = MRef, source = Source, timer = Timer,
-                               fetch_fun = FetchFun, job_id = JobId, attempt = Attempt},
+            Request = Job#request{callers = Callers, peer = Peer,
+                                   worker = Worker, mref = MRef,
+                                   source = none, timer = Timer, parked = false,
+                                   job_id = JobId, attempt = Attempt},
             H0 = maps:get(Identity, S0#s.histories),
             %% Transfer the suspended phase session only after this worker
             %% holds its registered cache name. Contention owns no disk state.
@@ -1592,18 +1685,14 @@ launch_identity({Ref, undefined, Attempt}) ->
 launch_identity({Ref, Id, Attempt}) -> {Ref, Id, Attempt}.
 
 queued_launch_identity(Q) ->
-    {Q#queued_request.ref, Q#queued_request.job_id, Q#queued_request.attempt}.
+    {Q#request.ref, Q#request.job_id, Q#request.attempt}.
 
 cache_writer_key(Identity) -> {foreign_cache_writer, Identity}.
 
-prepare_cache_custody(Root, Identity, Resident) ->
+prepare_cache_custody(Root, Identity, Retained) ->
     %% Admission inspection was read-only. Re-read/recover through the ordinary
     %% verifier; only this registered writer may sweep abandoned files.
     CacheNs = cache_namespace(Identity),
-    Retained = case Resident of
-        {verified_session, _, _, PhaseSession, _} -> PhaseSession;
-        none -> none
-    end,
     ok = cleanup_cache_temps(cache_dir(Root, CacheNs)),
     ok = quod_dtx_phase_index:cleanup(Root, CacheNs, Retained).
 
@@ -1616,7 +1705,7 @@ acquire_cache_custody(Owner, RequestRef, Identity) ->
             %% The owner and source lifetimes are monitored. This local
             %% handoff does not borrow a detachable caller's deadline.
             case gen_server:call(Owner, {claim_cache_custody, RequestRef}, infinity) of
-                {ok, _, _} = Grant -> Grant;
+                {ok, _, _, _} = Grant -> Grant;
                 {error, _} -> denied
             end;
         false ->
@@ -1997,21 +2086,21 @@ join_waiting_item(_Work, _From, _TimeoutMs, _Identity, []) ->
     no;
 join_waiting_item(
   Work, From, TimeoutMs, Identity,
-  [#queued_request{ref = RequestRef, from = none,
+  [#request{ref = RequestRef, from = none,
                    callers = Callers, work = QueuedWork,
                    parked = Parked} = Queued | Rest]) ->
     case shareable_waiting_work(
            Work, QueuedWork, Parked, Identity) of
         wake ->
             {joined,
-             [Queued#queued_request{
+             [Queued#request{
                 callers = stage_callers(add_request_caller(
                             RequestRef, From, TimeoutMs, Callers), queued),
                 parked = false} | Rest],
              true};
         true ->
             {joined,
-             [Queued#queued_request{
+             [Queued#request{
                 callers = stage_callers(add_request_caller(
                             RequestRef, From, TimeoutMs, Callers), waiting_stage(Parked))} | Rest],
              false};
@@ -2245,19 +2334,22 @@ terminate(_Reason, #s{page_bindings = Bindings,
                       feed_registrations = FeedRegistrations,
                       transport_monitor = TransportMonitor, pending = Pending}) ->
     maps:foreach(fun(_Ref, R) ->
+        release_phase_hold(R#request.phase_hold),
         maps:foreach(fun(_From, C) -> end_caller_residence(C, owner_down) end,
                      R#request.callers)
     end, Pending),
     maps:foreach(
       fun(Identity, #history{materializer = Materializer,
-                            waiting = Waiting, phase_session = PhaseSession}) ->
+                            waiting = Waiting, phase_session = PhaseSession,
+                            published = Published}) ->
               lists:foreach(fun(Q) ->
                   release_custody_monitor(Identity, Q),
                   maps:foreach(fun(_From, C) -> end_caller_residence(C, owner_down) end,
-                               Q#queued_request.callers)
+                               Q#request.callers)
               end, queue:to_list(Waiting)),
               stop_materializer(Materializer),
-              close_phase_session(PhaseSession)
+              close_phase_session(PhaseSession),
+              release_prefix(Published)
       end, Histories),
     maps:foreach(fun release_page_binding/2, Bindings),
     _ = [catch quod_reg:unsubscribe({channel, Chan})
@@ -2631,11 +2723,15 @@ reset_cache_accounting(RequestRef, S0) ->
                  end,
             H0 = maps:get(Identity, S1#s.histories),
             close_phase_session(H0#history.phase_session),
+            release_prefix(H0#history.published),
+            Request = maps:get(RequestRef, S1#s.pending),
+            release_phase_hold(Request#request.phase_hold),
             H1 = H0#history{height = 0, bytes = 0,
                             projection = undefined,
                             resident_verified = false,
-                            phase_session = none},
+                            phase_session = none, published = none, cache_session = none},
             {ok, S1#s{histories = (S1#s.histories)#{Identity => H1},
+                      pending = (S1#s.pending)#{RequestRef => Request#request{phase_hold = none}},
                       total_bytes = max(
                                       0, S1#s.total_bytes - H0#history.bytes)}};
         error -> error
@@ -2741,12 +2837,12 @@ queued_source_down(Identity, RequestRef, MRef, Owner, S0) ->
 
 drop_queued_source(Identity, RequestRef, MRef, Owner, H0, S0) ->
     {Drop, Keep} = lists:partition(
-                     fun(#queued_request{ref = Ref, source = Source}) ->
+                     fun(#request{ref = Ref, source = Source}) ->
                              Ref =:= RequestRef andalso Source =:= {Owner, MRef}
                      end, queue:to_list(H0#history.waiting)),
     case Drop of
         [] -> S0;
-        [#queued_request{callers = Callers, source = Source} = Queued] ->
+        [#request{callers = Callers, source = Source} = Queued] ->
             release_custody_monitor(Identity, Queued),
             release_source_monitor(Source),
             cancel_caller_timers(Callers),
@@ -2771,10 +2867,11 @@ request_by_monitor(MRef, Pending) ->
 
 park_failed_routed_request(RequestRef, S0) ->
     case maps:take(RequestRef, S0#s.pending) of
-        {#request{from = From, callers = Callers0,
-                  identity = Identity, work = #routed_work{} = Work,
+        {Job = #request{from = From, callers = Callers0,
+                  identity = Identity, work = #routed_work{},
                   mref = MRef, timer = Timer, progress_edge = Edge,
-                  job_id = JobId, attempt = Attempt}, Pending1} ->
+                  attempt = Attempt}, Pending1} ->
+            release_phase_hold(Job#request.phase_hold),
             Callers = live_request_callers(Callers0),
             annotate_caller_stages(Callers, #{'quod.owner.progress_edge_consumed' => Edge}),
             cancel_optional_timer(Timer),
@@ -2790,18 +2887,15 @@ park_failed_routed_request(RequestRef, S0) ->
                       Identity, maybe_close_progress_signals(Identity, S1));
                 false ->
                     H0 = maps:get(Identity, S1#s.histories),
-                    Parked = #queued_request{
-                                ref = RequestRef, from = From,
-                                callers = case Edge of
-                                    true -> stage_callers(Callers, queued);
-                                    false -> park_routed_callers(Callers, no_progress_edge)
-                                end,
-                                peer = none,
-                                identity = Identity, work = Work,
-                                fetch_fun = S1#s.fetch_fun,
-                                parked = not Edge,
-                                job_id = JobId, attempt = Attempt + 1,
-                                enqueued_native = erlang:monotonic_time()},
+                    WaitingCallers = case Edge of
+                        true -> stage_callers(Callers, queued);
+                        false -> park_routed_callers(Callers, no_progress_edge)
+                    end,
+                    Parked = park_job(
+                               Job#request{ref = RequestRef, peer = none, source = none,
+                                           fetch_fun = S1#s.fetch_fun,
+                                           attempt = Attempt + 1},
+                               WaitingCallers, not Edge),
                     S2 = put_history(
                            Identity,
                            H0#history{
@@ -2816,10 +2910,9 @@ park_failed_routed_request(RequestRef, S0) ->
 
 park_cache_custody(RequestRef, Worker, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
-        #request{worker = Worker, custody = acquiring, retiring = false, from = From,
-                 callers = Callers, identity = Identity, peer = Peer,
-                 work = Work, source = Source, mref = MRef, timer = Timer,
-                 fetch_fun = FetchFun, job_id = JobId, attempt = Attempt} ->
+        Job = #request{worker = Worker, custody = acquiring, retiring = false,
+                       callers = Callers, identity = Identity,
+                       mref = MRef, timer = Timer} ->
             %% An absent name immediately emits unreg. Installing the monitor
             %% before the row is safe because this owner serializes both turns.
             %% A registry outage here fails this owner, never strands an
@@ -2829,13 +2922,8 @@ park_cache_custody(RequestRef, Worker, S0) ->
             _ = erlang:demonitor(MRef, [flush]),
             Histories = clear_active_request(Identity, RequestRef, S0#s.histories),
             H0 = maps:get(Identity, Histories),
-            Queued = #queued_request{ref = RequestRef, from = From,
-                        callers = stage_callers(Callers, custody_wait),
-                        identity = Identity, peer = Peer, work = Work,
-                        source = Source, fetch_fun = FetchFun,
-                        parked = {custody, Monitor},
-                        job_id = JobId, attempt = Attempt,
-                        enqueued_native = erlang:monotonic_time()},
+            Queued = park_job(Job#request{ref = RequestRef},
+                               stage_callers(Callers, custody_wait), {custody, Monitor}),
             observe_queue_blockers(Identity, S0#s{
                  pending = maps:remove(RequestRef, S0#s.pending),
                  histories = Histories#{Identity => H0#history{
@@ -2843,17 +2931,27 @@ park_cache_custody(RequestRef, Worker, S0) ->
         _ -> S0
     end.
 
+%% Called only after the transition has released its actual worker monitor
+%% and timer. Semantic identity and caller ownership stay on this same row;
+%% no running transport/span handle survives into a queued attempt.
+park_job(Job, Callers, Parked) ->
+    Job#request{callers = Callers, parked = Parked,
+                phase_hold = none,
+                worker = none, mref = none, timer = none,
+                progress_edge = false, custody = acquiring, retiring = false,
+                trace_ctx = undefined, enqueued_native = erlang:monotonic_time()}.
+
 release_cache_custody(Identity, Monitor, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{waiting = Waiting} = H0 ->
             Items = queue:to_list(Waiting),
-            case lists:any(fun(Q) -> Q#queued_request.parked =:= {custody, Monitor} end,
+            case lists:any(fun(Q) -> Q#request.parked =:= {custody, Monitor} end,
                            Items) of
                 true ->
                     _ = quod_reg:demonitor_name(cache_writer_key(Identity), Monitor),
-                    Ready = [case Q#queued_request.parked of
-                                 {custody, Monitor} -> Q#queued_request{parked = false,
-                                     callers = stage_callers(Q#queued_request.callers, queued)};
+                    Ready = [case Q#request.parked of
+                                 {custody, Monitor} -> Q#request{parked = false,
+                                     callers = stage_callers(Q#request.callers, queued)};
                                  _ -> Q
                              end || Q <- Items],
                     start_next_request(Identity, put_history(
@@ -2863,7 +2961,7 @@ release_cache_custody(Identity, Monitor, S0) ->
         _ -> S0
     end.
 
-release_custody_monitor(Identity, #queued_request{parked = {custody, Monitor}}) ->
+release_custody_monitor(Identity, #request{parked = {custody, Monitor}}) ->
     _ = catch quod_reg:demonitor_name(cache_writer_key(Identity), Monitor),
     ok;
 release_custody_monitor(_Identity, _Queued) -> ok.
@@ -2882,7 +2980,8 @@ finish_request(RequestRef, Reply, Cause, S0) ->
     case maps:take(RequestRef, S0#s.pending) of
         {#request{from = From, callers = Callers,
                   identity = Identity, source = Source,
-                  mref = MRef, timer = Timer}, Pending1} ->
+                  mref = MRef, timer = Timer, phase_hold = PhaseHold}, Pending1} ->
+            release_phase_hold(PhaseHold),
             cancel_optional_timer(Timer),
             cancel_caller_timers(Callers),
             release_source_monitor(Source),
@@ -2965,27 +3064,13 @@ select_next_request(Identity, S0) ->
                 {ready, Queued, Peer, WorkerWork, Rest} ->
                     %% Admission remains in this owner turn. If the source died
                     %% during transfer, the new monitor immediately reports DOWN.
-                    release_source_monitor(Queued#queued_request.source),
+                    release_source_monitor(Queued#request.source),
                     H1 = H0#history{waiting = queue:from_list(Rest)},
                     S1 = put_history(Identity, H1, S0),
                     observe_foreign_stage(
                       queue_wait, ok,
-                      Queued#queued_request.enqueued_native),
-                    case Queued#queued_request.work of
-                        #routed_work{} = RequestWork ->
-                            launch_request_owned(
-                              queued_launch_identity(Queued), Peer, Identity,
-                                              RequestWork, WorkerWork,
-                              Queued#queued_request.fetch_fun,
-                              Queued#queued_request.from,
-                              Queued#queued_request.callers, S1);
-                        _ ->
-                            launch_request_owned(
-                              queued_launch_identity(Queued), Peer, Identity,
-                                              WorkerWork, Queued#queued_request.fetch_fun,
-                              Queued#queued_request.from,
-                              Queued#queued_request.callers, S1)
-                    end;
+                      Queued#request.enqueued_native),
+                    launch_request_owned(Queued, Peer, WorkerWork, S1);
                 {waiting, Rest} ->
                     H1 = H0#history{waiting = queue:from_list(Rest)},
                     S1 = put_history(Identity, H1, S0),
@@ -3016,7 +3101,7 @@ observe_queue_blockers(Identity, S0) ->
                     end,
                     {Rows, _} = lists:mapfoldl(
                       fun(Q, Earlier) ->
-                          Own = case Q#queued_request.parked of
+                          Own = case Q#request.parked of
                               true -> queued_descriptor(route_park, Q, false);
                               {custody, _} -> queued_descriptor(custody_wait, Q, false);
                               false -> case Earlier of
@@ -3026,14 +3111,14 @@ observe_queue_blockers(Identity, S0) ->
                           end,
                           Callers = maps:map(fun(_From, C) ->
                               observe_queue_caller(C, Identity, Own)
-                          end, Q#queued_request.callers),
-                          Next = case {Earlier, Q#queued_request.parked} of
+                          end, Q#request.callers),
+                          Next = case {Earlier, Q#request.parked} of
                               {none, {custody, _}} ->
                                   queued_descriptor(earlier_custody_wait, Q, true);
                               {none, false} -> queued_descriptor(earlier_queued, Q, true);
                               _ -> Earlier
                           end,
-                          {Q#queued_request{callers = Callers}, Next}
+                          {Q#request{callers = Callers}, Next}
                       end, Blocker, queue:to_list(Waiting)),
                     put_history(Identity, H#history{waiting = queue:from_list(Rows)}, S0)
             end;
@@ -3055,18 +3140,18 @@ active_queue_descriptor(R) ->
 queued_descriptor(Class, Q, LinkCaller) ->
     Context = case LinkCaller of
         false -> undefined;
-        true -> case worker_trace(Q#queued_request.identity,
-                        Q#queued_request.callers, Q#queued_request.job_id,
-                        Q#queued_request.attempt) of
+        true -> case worker_trace(Q#request.identity,
+                        Q#request.callers, Q#request.job_id,
+                        Q#request.attempt) of
             none -> undefined;
             {Ctx, _, _} -> Ctx
         end
     end,
-    queue_descriptor(Class, Q#queued_request.job_id, Q#queued_request.attempt,
-      Q#queued_request.work, Context,
+    queue_descriptor(Class, Q#request.job_id, Q#request.attempt,
+      Q#request.work, Context,
       #{'quod.owner.blocker_age_kind' => <<"queue_row">>,
         'quod.owner.blocker_age_native' =>
-            erlang:monotonic_time() - Q#queued_request.enqueued_native}).
+            erlang:monotonic_time() - Q#request.enqueued_native}).
 
 queue_descriptor(Class, JobId, Attempt, Work, Context, Age) ->
     Span = case Context of
@@ -3115,46 +3200,46 @@ take_runnable_request(Identity, Waiting, S0) ->
 take_runnable_request(_Identity, [], Skipped, _S0) ->
     {waiting, lists:reverse(Skipped)};
 take_runnable_request(
-  _Identity, [#queued_request{work = {initialize, _, _}, parked = true} | _] = Rest,
+  _Identity, [#request{work = {initialize, _, _}, parked = true} | _] = Rest,
   Skipped, _S0) ->
     %% An unavailable startup dependency cannot be repaired by a caller.
     {waiting, lists:reverse(Skipped) ++ Rest};
 take_runnable_request(
-  _Identity, [#queued_request{parked = {custody, _}} | _] = Rest, Skipped, _S0) ->
+  _Identity, [#request{parked = {custody, _}} | _] = Rest, Skipped, _S0) ->
     %% Custody excludes every job for this cache, not just one routed row.
     {waiting, lists:reverse(Skipped) ++ Rest};
 take_runnable_request(
   Identity,
-  [Queued = #queued_request{work = #routed_work{}, parked = true} | Rest],
+  [Queued = #request{work = #routed_work{}, parked = true} | Rest],
   Skipped, S0) ->
     take_runnable_request(Identity, Rest, [Queued | Skipped], S0);
 take_runnable_request(
   Identity,
-  [Queued = #queued_request{work = #routed_work{} = Work} | Rest],
+  [Queued = #request{work = #routed_work{} = Work} | Rest],
   Skipped, S0) ->
-    Callers = stage_callers(Queued#queued_request.callers, route_selection),
+    Callers = stage_callers(Queued#request.callers, route_selection),
     case resolve_routed_work(Identity, Work, S0) of
         {ready, Peer, WorkerWork} ->
             annotate_caller_stages(Callers, #{'quod.owner.route_result' => <<"ready">>}),
-            {ready, Queued#queued_request{callers = Callers}, Peer, WorkerWork,
+            {ready, Queued#request{callers = Callers}, Peer, WorkerWork,
              lists:reverse(Skipped) ++ Rest};
         {wait, Reason} ->
             annotate_caller_stages(Callers,
                 #{'quod.owner.route_result' => atom_to_binary(Reason)}),
             take_runnable_request(
               Identity, Rest,
-              [Queued#queued_request{parked = true,
+              [Queued#request{parked = true,
                   callers = park_routed_callers(Callers, Reason)} | Skipped], S0)
     end;
 take_runnable_request(
   _Identity, [Queued | Rest], Skipped, _S0) ->
-    {ready, Queued, Queued#queued_request.peer,
-     Queued#queued_request.work, lists:reverse(Skipped) ++ Rest}.
+    {ready, Queued, Queued#request.peer,
+     Queued#request.work, lists:reverse(Skipped) ++ Rest}.
 
 release_route_waiters(Identity, EventClass, S0) ->
     S1 = case maps:get(Identity, S0#s.histories, undefined) of
         #history{active = Ref, waiting = Waiting} ->
-            lists:foreach(fun(#queued_request{parked = Parked, callers = Callers}) ->
+            lists:foreach(fun(#request{parked = Parked, callers = Callers}) ->
                 case Parked of
                     true -> annotate_caller_stages(Callers,
                               #{'quod.owner.wake' => atom_to_binary(EventClass)});
@@ -3187,15 +3272,15 @@ release_queued_route_waiters(Identity, S0) ->
             S0
     end.
 
-release_route_waiter(#queued_request{work = #routed_work{}, parked = true} = Queued) ->
-    Queued#queued_request{parked = false,
-        callers = stage_callers(Queued#queued_request.callers, queued)};
+release_route_waiter(#request{work = #routed_work{}, parked = true} = Queued) ->
+    Queued#request{parked = false,
+        callers = stage_callers(Queued#request.callers, queued)};
 release_route_waiter(Queued) ->
     Queued.
 
 has_parked_route_waiter(#history{waiting = Waiting}) ->
     lists:any(
-      fun(#queued_request{work = #routed_work{}, parked = true}) -> true;
+      fun(#request{work = #routed_work{}, parked = true}) -> true;
          (_) -> false
       end, queue:to_list(Waiting)).
 
@@ -3243,18 +3328,18 @@ update_queued_caller(_RequestRef, _From, []) ->
     not_found;
 update_queued_caller(
   RequestRef, From,
-  [#queued_request{ref = RequestRef, callers = Callers,
+  [#request{ref = RequestRef, callers = Callers,
                    parked = Parked} = Queued | Rest]) ->
     case maps:take(From, Callers) of
         {Caller, Callers1} ->
             end_caller_residence(Caller, expired),
             case Parked =:= true andalso map_size(Callers1) =:= 0 of
                 true ->
-                    release_source_monitor(Queued#queued_request.source),
+                    release_source_monitor(Queued#request.source),
                     {updated, Rest};
                 false ->
                     {updated,
-                     [Queued#queued_request{callers = Callers1} | Rest]}
+                     [Queued#request{callers = Callers1} | Rest]}
             end;
         error ->
             found
@@ -3269,7 +3354,7 @@ update_queued_caller(RequestRef, From, [Queued | Rest]) ->
 %%% Continuous certified follow lifecycle
 %%%===================================================================
 
-add_follow(Identity, ConsumerPid, S0)
+add_follow(Identity, From = {ConsumerPid, _Tag}, S0)
   when is_pid(ConsumerPid) ->
     S1 = ensure_history(Identity, S0),
     H0 = maps:get(Identity, S1#s.histories),
@@ -3284,6 +3369,10 @@ add_follow(Identity, ConsumerPid, S0)
     S2 = S1#s{
            histories = (S1#s.histories)#{Identity => H1},
            follows = (S1#s.follows)#{FollowRef => Identity}},
+    %% Both signals come from this exact owner. An asynchronous consumer
+    %% installs the correlated reference before seeing its first credit-bearing
+    %% notice; no early-notice buffer or second registration turn is needed.
+    ok = gen_server:reply(From, {ok, FollowRef}),
     S3 = notify_follow(
            FollowRef,
            {building, materialized_height(H1)}, S2),
@@ -3291,11 +3380,10 @@ add_follow(Identity, ConsumerPid, S0)
              true -> open_progress_signals(Identity, S3);
              false -> S3
          end,
-    {FollowRef,
-     case WasIdle of
+    case WasIdle of
          true -> wake_follow(Identity, S4);
          false -> S4
-     end}.
+    end.
 
 acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0) ->
     case follow_consumer(FollowRef, S0) of
@@ -3435,6 +3523,8 @@ hibernate_history(Identity, S0) ->
 
 hibernate_idle_history(_Identity,
                        #history{resident_verified = true}, S0) ->
+    S0;
+hibernate_idle_history(_Identity, #history{published = #prefix{}}, S0) ->
     S0;
 hibernate_idle_history(Identity, H, S0) ->
     close_phase_session(H#history.phase_session),
@@ -3949,7 +4039,7 @@ cancel_active_follow(Identity, S0) ->
 
 queued_follow(
   Identity,
-  #queued_request{from = {follow, RequestIdentity, _Token}}) ->
+  #request{from = {follow, RequestIdentity, _Token}}) ->
     RequestIdentity =:= Identity;
 queued_follow(_Identity, _Queued) ->
     false.
@@ -4006,6 +4096,8 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                                        _ -> none
                                    end,
                     CacheSession = maps:get(cache_session, Meta, PriorSession),
+                    {Published, S1} = publish_prefix(RequestRef, ResidentVerified,
+                        Height, Projection, PhaseSession, CacheSession, H0#history.published, S0),
                     close_replaced_phase_session(
                       H0#history.phase_session, PhaseSession),
                     CurrentView = case ResidentVerified andalso
@@ -4020,6 +4112,7 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                                     resident_verified = ResidentVerified,
                                     phase_session = PhaseSession,
                                     cache_session = CacheSession,
+                                    published = Published,
                                     current_view = CurrentView,
                                     bootstrap_hints = Bootstrap},
                     Total1 = max(
@@ -4027,14 +4120,43 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                                       ActualBytes),
                     reconcile_feed_registrations(
                       Identity,
-                      S0#s{histories =
-                               (S0#s.histories)#{Identity => H1},
+                      S1#s{histories =
+                               (S1#s.histories)#{Identity => H1},
                            total_bytes = Total1});
                 undefined -> S0
             end;
         error -> S0
     end;
 install_worker_meta(_RequestRef, _Meta, S) -> S.
+
+publish_prefix(RequestRef, true, Height, Projection, Session, Snapshot, Previous, S0)
+  when Height > 0, is_map(Projection), Snapshot =/= none ->
+    Request = maps:get(RequestRef, S0#s.pending),
+    Hold = case Request#request.phase_hold of
+        none -> prefix_index(Previous);
+        New -> New
+    end,
+    true = quod_dtx_phase_index:same_session(Hold, Session),
+    case Request#request.phase_hold of
+        none -> ok;
+        _ -> release_prefix(Previous)
+    end,
+    Prefix = #prefix{height = Height, projection = Projection,
+                     snapshot = Snapshot, index = Hold},
+    {Prefix, S0#s{pending = (S0#s.pending)#{RequestRef => Request#request{phase_hold = none}}}};
+publish_prefix(_RequestRef, false, _Height, _Projection, _Session, _Snapshot, Previous, S) ->
+    {Previous, S}.
+
+prefix_index(none) -> none;
+prefix_index(#prefix{index = Hold}) -> Hold.
+
+release_prefix(Prefix) -> release_phase_hold(prefix_index(Prefix)).
+release_phase_hold(none) -> ok;
+release_phase_hold(Hold) ->
+    %% Resource release grants no writer permission and does not unlink a
+    %% file beneath a dying worker. Ordinary next-custody cleanup reclaims it.
+    _ = quod_dtx_phase_index:release(Hold),
+    ok.
 
 close_replaced_phase_session(Session, Session) -> ok;
 close_replaced_phase_session(Old, _New) -> close_phase_session(Old).
@@ -4866,8 +4988,8 @@ page_identity_interested(Identity, S) ->
                 #request{} -> true
             end,
             map_size(Consumers) > 0 orelse ActiveNetwork orelse
-                lists:any(fun(#queued_request{work = {initialize, _, _}}) -> false;
-                             (#queued_request{}) -> true
+                lists:any(fun(#request{work = {initialize, _, _}}) -> false;
+                             (#request{}) -> true
                           end, queue:to_list(Waiting));
         undefined -> false
     end.
@@ -4877,7 +4999,7 @@ page_identity_interested(Identity, S) ->
 %%%===================================================================
 
 verification_worker(
-  Owner, RequestRef, Work, Root, FetchFun, PageTimeout, Resident, Trace) ->
+  Owner, RequestRef, Work, Root, FetchFun, PageTimeout, Resident, Keep, Trace) ->
     %% Probe children are linked so terminating their verification worker also
     %% terminates every in-flight route fetch. Expected transport exits are
     %% normalized where the dependency is called; an internal fault takes
@@ -4887,7 +5009,7 @@ verification_worker(
       Trace, Work, Owner, RequestRef,
       fun(SpanCtx) ->
           trace_foreign_stage(cache_prepare,
-            fun() -> prepare_cache_custody(Root, verification_identity(Work), Resident) end),
+            fun() -> prepare_cache_custody(Root, verification_identity(Work), Keep) end),
           Result0 = verification_work(
                       Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
                       Resident),
@@ -4922,19 +5044,22 @@ traced_verification_work({TraceCtx, Links, JobAttributes}, Work,
       maps:merge(JobAttributes, verification_trace_attributes(Work)), Links,
       fun(SpanCtx) ->
           Owner ! {verification_trace, RequestRef, self(), SpanCtx},
-          Previous = put(?TRACE_STAGE_ACTIVE, otel_span:is_recording(SpanCtx)),
-          PreviousCounts = put({?MODULE, trace_counts}, #{}),
-          try
-              Fun(SpanCtx)
-          catch Class:Reason:Stack ->
-              trace_foreign_exception(SpanCtx, Class),
-              erlang:raise(Class, Reason, Stack)
-          after
-              _ = quod_trace:set_attributes(SpanCtx, trace_count_attributes()),
-              restore_trace_counts(PreviousCounts),
-              restore_trace_stage(Previous)
-          end
+          with_foreign_stages(SpanCtx, fun() -> Fun(SpanCtx) end)
       end).
+
+with_foreign_stages(SpanCtx, Fun) ->
+    Previous = put(?TRACE_STAGE_ACTIVE, otel_span:is_recording(SpanCtx)),
+    PreviousCounts = put({?MODULE, trace_counts}, #{}),
+    try
+        Fun()
+    catch Class:Reason:Stack ->
+        trace_foreign_exception(SpanCtx, Class),
+        erlang:raise(Class, Reason, Stack)
+    after
+        _ = quod_trace:set_attributes(SpanCtx, trace_count_attributes()),
+        restore_trace_counts(PreviousCounts),
+        restore_trace_stage(Previous)
+    end.
 
 restore_trace_stage(undefined) -> erase(?TRACE_STAGE_ACTIVE);
 restore_trace_stage(Previous) -> put(?TRACE_STAGE_ACTIVE, Previous).
@@ -5372,7 +5497,7 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
     case fetch_exact_reference(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                                Identity, Cursor, Root, FetchFun, PageTimeout, EntryHint) of
         {ok, Next = #verified_cursor{store = Store}, {projection, EvidenceProjection}} ->
-            {verify_exact_reference(Store, Ref, Phase, EvidenceProjection), Next};
+            {verify_resident_store(Store, ref_slot(Ref), Ref, Phase, EvidenceProjection), Next};
         {ok, Next, {evidence, Evidence}} ->
             {{ok, Evidence}, Next};
         {error, _Reason, Next} ->
@@ -5504,12 +5629,12 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, Mode)
                     case Checkpoint of
                         {ok, CheckpointProjection} when Mode =/= none ->
                             open_replayed_cache(
-                              Root, CacheNs, Ns, Anchor, Store,
+                              Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store,
                               Height, CheckpointProjection);
                         new when Height =:= 0 ->
                             case measure_foreign_stage(
                                    phase_open,
-                                   fun() -> fresh_phase_index(Root, CacheNs) end) of
+                                   fun() -> fresh_phase_index(Owner, RequestRef, Root, CacheNs) end) of
                                 {ok, PhaseIndex} ->
                                     Projection = quod_simplex:history_projection(
                                                    {Ns, Anchor}),
@@ -5536,18 +5661,18 @@ retained_cache_matches(Store, CacheNs, Height, Projection, Identity) ->
     catch _:_ -> false
     end.
 
-open_replayed_cache(Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProjection) ->
+open_replayed_cache(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProjection) ->
     trace_foreign_stage(cache_reconstruction,
       #{'quod.foreign.disk_height' => Height},
       fun() ->
-          open_replayed_cache_raw(Root, CacheNs, Ns, Anchor, Store, Height,
+          open_replayed_cache_raw(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Height,
                                   CheckpointProjection)
       end).
 
-open_replayed_cache_raw(Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProjection) ->
+open_replayed_cache_raw(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProjection) ->
     case measure_foreign_stage(
            phase_open,
-           fun() -> fresh_phase_index(Root, CacheNs) end) of
+           fun() -> fresh_phase_index(Owner, RequestRef, Root, CacheNs) end) of
         {ok, PhaseIndex} ->
             Projection0 = quod_simplex:history_projection({Ns, Anchor}),
             ReplayResult = measure_foreign_stage(cache_replay,
@@ -5577,8 +5702,18 @@ open_replayed_cache_raw(Root, CacheNs, Ns, Anchor, Store, Height, CheckpointProj
             {error, cache_io}
     end.
 
-fresh_phase_index(Root, CacheNs) ->
-    quod_dtx_phase_index:open(Root, CacheNs).
+fresh_phase_index(Owner, RequestRef, Root, CacheNs) ->
+    case quod_dtx_phase_index:open(Root, CacheNs) of
+        {ok, Index} ->
+            %% Creation is worker I/O; the existing owner attaches its read
+            %% lifetime while the table is still empty, before any replay.
+            case gen_server:call(Owner, {retain_phase_index, RequestRef, Index}, infinity) of
+                ok -> {ok, Index};
+                {error, _} = Error ->
+                    _ = quod_dtx_phase_index:close(Index), Error
+            end;
+        {error, _} = Error -> Error
+    end.
 
 close_cache(Store, PhaseIndex, Reason) ->
     release_cache(Store, PhaseIndex, {error, Reason}).
@@ -6493,23 +6628,6 @@ entry_index(Entry) ->
     catch error:_ -> error
     end.
 
-verify_exact_reference(Store, Ref, ExpectedPhase, Projection) ->
-    Slot = ref_slot(Ref),
-    Lookup = trace_foreign_stage(exact_lookup,
-               fun() ->
-                   {quod_ledger_store:read_at(Store, Slot),
-                    reference_projection(Slot, Slot, Projection)}
-               end),
-    case Lookup of
-        {{ok, Entry}, {ok, EvidenceProjection}} ->
-            verify_exact_reference_entry(
-              Ref, ExpectedPhase, Entry, EvidenceProjection);
-        {not_found, _} ->
-            {error, retry};
-        {_, error} ->
-            {error, retry}
-    end.
-
 verify_exact_reference_entry(
   Ref, ExpectedPhase, Entry, Projection) ->
     trace_foreign_stage(exact_validate,
@@ -6786,7 +6904,7 @@ finish_history_initialization(Identity, {error, Reason}, S0) ->
     H0 = maps:get(Identity, S0#s.histories),
     %% No retry timer and no caller-triggered replay. Keep this existing work
     %% row in front of callers; an actual dependency edge can resume it.
-    Queued = #queued_request{ref = make_ref(), from = {initialize, Identity},
+    Queued = #request{ref = make_ref(), from = {initialize, Identity},
         identity = Identity, peer = none, work = {initialize, Identity, Reason},
         parked = true, enqueued_native = erlang:monotonic_time()},
     put_history(Identity, H0#history{waiting = queue:in_r(Queued, H0#history.waiting)}, S0).
@@ -6799,7 +6917,7 @@ schedule_history_reconstruction(RequestRef, Identity, Cause, S0) ->
     %% revokes the resumable capability until the explicit reconstruction.
     %% Only a diagnosed corrupt store is discarded by its initialization writer.
     close_phase_session(H0#history.phase_session),
-    Queued = #queued_request{ref = make_ref(), from = {initialize, Identity},
+    Queued = #request{ref = make_ref(), from = {initialize, Identity},
         identity = Identity, peer = none, work = {initialize, Identity, Cause},
         enqueued_native = erlang:monotonic_time()},
     put_history(Identity, H0#history{resident_verified = false, phase_session = none,
@@ -6816,8 +6934,8 @@ count_history_integrity_loss(phase_index_lost, S) ->
 resume_history_initializations(S0) ->
     maps:fold(fun(Identity, H, S) ->
         Waiting = queue:from_list([case Q of
-            #queued_request{work = {initialize, Identity, network_identity}, parked = true} ->
-                Q#queued_request{parked = false};
+            #request{work = {initialize, Identity, network_identity}, parked = true} ->
+                Q#request{parked = false};
             _ -> Q
         end || Q <- queue:to_list(H#history.waiting)]),
         start_next_request(Identity, put_history(Identity, H#history{waiting = Waiting}, S))

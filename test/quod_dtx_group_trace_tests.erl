@@ -9,10 +9,10 @@
 -export([with_fixture/1, with_live_admission/1]).
 
 %% Real Prolog and Simplex callbacks own reserve -> admission -> activation;
-%% the real coordinator and endpoint submit worker then cross both spawn
-%% boundaries. Consensus is deliberately not ready, so this fixture observes
-%% a parked durable Begin without fabricating a successful transaction.
-group_admission_spawn_and_endpoint_keep_request_context_test_() ->
+%% the real coordinator inherits the request while execution is paused.
+%% R3 forbids endpoint dispatch before readiness. The separate fanout case
+%% below checks context across the actual endpoint-worker spawn boundary.
+group_admission_keeps_request_context_while_paused_test_() ->
     [{atom_to_list(Sampling), fun() -> group_admission_trace(Sampling) end}
      || Sampling <- [recording, unsampled]].
 
@@ -37,32 +37,19 @@ group_admission_trace(Sampling) ->
               {reserve_dtx_begin, Ref, Begin, GroupRef, RootCtx})),
             ?assertEqual(ok, gen_server:call(Engine,
               {activate_dtx_begin, Ref, GroupRef})),
-            {EndpointRequest, EndpointCtx} = take_endpoint_request(Owner),
-            EndpointSpan = otel_tracer:current_span_ctx(EndpointCtx),
-            ?assertEqual(otel_span:trace_id(RootSpan),
-                         otel_span:trace_id(EndpointSpan)),
-            ?assertNotEqual(otel_span:span_id(RootSpan),
-                            otel_span:span_id(EndpointSpan)),
-            ?assertMatch({submit, _, BeginBytes}, EndpointRequest),
-            %% Exercise the existing endpoint carrier/decoder, not a newly
-            %% invented transport representation. The semantic inner bytes
-            %% remain identical with and without observation.
-            {Ns, _} = maps:get(target, F),
-            Carrier = quod_trace:inject(EndpointCtx),
-            ?assertMatch([_ | _], Carrier),
-            {ok, Traced} = quod_dtx_endpoint:encode_request(
-                            Ns, EndpointRequest, [], Carrier),
-            {ok, Plain} = quod_dtx_endpoint:encode_request(
-                           Ns, EndpointRequest, []),
-            {quod_dtx_endpoint, 11, Ns, Semantic, Carrier} =
-                binary_to_term(Traced, [safe]),
-            ?assertEqual({quod_dtx_endpoint, 11, Ns, Semantic, []},
-                         binary_to_term(Plain, [safe])),
-            ?assertEqual({ok, EndpointRequest, [], Carrier},
-                         quod_dtx_endpoint:decode_request(Ns, Traced)),
             {running, S1} = sys:get_state(Owner),
             Owners1 = quod_simplex:test_dtx_coordinator_state(S1),
             #{GroupId := #{pid := Worker}} = Owners1,
+            #{execution_ready := false, wave := none,
+              trace_context := WorkerCtx} = quod_dtx_coordinator:test_state(Worker),
+            WorkerSpan = otel_tracer:current_span_ctx(WorkerCtx),
+            ?assertEqual(otel_span:trace_id(RootSpan),
+                         otel_span:trace_id(WorkerSpan)),
+            ?assertNotEqual(otel_span:span_id(RootSpan),
+                            otel_span:span_id(WorkerSpan)),
+            assert_no_endpoint_request(Owner),
+            %% Signed semantic bytes are unchanged by admission or pausing.
+            ?assertEqual({ok, BeginBytes}, quod_dtx:encode_record(Begin)),
             Monitor = monitor(process, Worker),
             %% A later/different caller does not alter identity, restart the
             %% coordinator, or replace its already-established parent.
@@ -88,7 +75,7 @@ group_admission_trace(Sampling) ->
                     Coordinate = quod_trace_tests:take_span(<<"quod.dtx.coordinate">>),
                     ?assertEqual(otel_span:trace_id(RootSpan), Coordinate#span.trace_id),
                     ?assertEqual(otel_span:span_id(RootSpan), Coordinate#span.parent_span_id),
-                    ?assertEqual(Coordinate#span.span_id, otel_span:span_id(EndpointSpan)),
+                    ?assertEqual(Coordinate#span.span_id, otel_span:span_id(WorkerSpan)),
                     ?assertEqual(<<"owner_terminating">>, maps:get(
                       'quod.dtx.closure', otel_attributes:map(Coordinate#span.attributes))),
                     ?assertEqual(quod_trace:tx_id(GroupId), maps:get(
@@ -225,24 +212,41 @@ group_submit_fanout_preserves_context_and_result_test() ->
             {ok, {phase, <<19:128>>, 0, not_found},
              {reply_source, local, []}}
         end,
-        Result = quod_trace:with_context(Ctx, fun() ->
-            quod_dtx_coordinator:test_submit_endpoint_requests(
-              [local], Request, 1000, RequestFun)
+        {Caller, Monitor} = spawn_monitor(fun() ->
+            Result0 = quod_trace:with_context(Ctx, fun() ->
+                quod_dtx_coordinator:test_submit_endpoint_requests(
+                  [local], Request, 1000, RequestFun)
+            end),
+            Parent ! {fanout_result, self(), Result0}
         end),
         receive {fanout_context, local, ChildCtx} ->
             ?assertEqual(otel_span:trace_id(Span),
-              otel_span:trace_id(otel_tracer:current_span_ctx(ChildCtx)))
+              otel_span:trace_id(otel_tracer:current_span_ctx(ChildCtx))),
+            assert_endpoint_carrier(<<"quod:trace-fanout">>, Request, ChildCtx)
         after 1000 -> error(no_fanout_context)
         end,
-        ?assertMatch({reply, {phase, <<19:128>>, 0, not_found}, _}, Result),
+        receive {fanout_result, Caller, Result} ->
+            ?assertMatch({reply, {phase, <<19:128>>, 0, not_found}, _}, Result)
+        after 1000 -> error(no_fanout_result) end,
+        receive {'DOWN', Monitor, process, Caller, normal} -> ok
+        after 1000 -> error(fanout_owner_survived) end,
         quod_trace:finish_span(Span, ok)
     end).
 
-take_endpoint_request(Owner) ->
+assert_endpoint_carrier(Ns, Request, Context) ->
+    Carrier = quod_trace:inject(Context),
+    ?assertMatch([_ | _], Carrier),
+    {ok, Traced} = quod_dtx_endpoint:encode_request(Ns, Request, [], Carrier),
+    {ok, Plain} = quod_dtx_endpoint:encode_request(Ns, Request, []),
+    {quod_dtx_endpoint, 11, Ns, Semantic, Carrier} = binary_to_term(Traced, [safe]),
+    ?assertEqual({quod_dtx_endpoint, 11, Ns, Semantic, []}, binary_to_term(Plain, [safe])),
+    ?assertEqual({ok, Request, [], Carrier}, quod_dtx_endpoint:decode_request(Ns, Traced)).
+
+assert_no_endpoint_request(Owner) ->
     receive
         {trace, Owner, 'receive', {'$gen_call', _,
-          {dtx_endpoint_local, Request, _, _, Context}}} -> {Request, Context}
-    after 3000 -> error(missing_group_endpoint_context)
+          {dtx_endpoint_local, _, _, _, _}}} -> error(endpoint_dispatched_while_unready)
+    after 0 -> ok
     end.
 
 with_live_admission(Fun) ->

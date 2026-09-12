@@ -244,29 +244,28 @@ confirmed_binding_survives_only_the_same_verified_head_test_() ->
      || Mode <- [same_head, advanced_head]].
 
 confirmed_binding(Mode) ->
-    {Identity, RequestRef, State0, Projection1, Projection2} = installation_state(),
-    {Height, Projection, Expected} = case Mode of
-        same_head -> {1, Projection1, confirmed};
-        advanced_head -> {2, Projection2, unconfirmed}
+    {Height, Expected} = case Mode of
+        same_head -> {1, confirmed};
+        advanced_head -> {2, unconfirmed}
     end,
-    %% The original implementation never supplied reusable failure metadata;
-    %% this deliberately injects the newly approved lifetime at the original
-    %% common installer. It pins the proof obligation, not a claim that the
-    %% pre-cut public fast path could authenticate an unverified history.
-    Meta = #{height => Height, projection => Projection,
-             resident_verified => true, phase_session => none},
+    with_installation_state(Height, fun(Identity, RequestRef, State0, Meta) ->
     State1 = quod_foreign_log:test_install_worker_meta(RequestRef, Meta, State0),
     H1 = state_history(Identity, State1),
     ?assertEqual(Height, record_field(history, height, H1)),
-    ?assertEqual(Projection, record_field(history, projection, H1)),
-    ?assertEqual(Expected, record_field(history, current_view, H1)).
+    ?assertEqual(maps:get(projection, Meta), record_field(history, projection, H1)),
+    ?assertEqual(Expected, record_field(history, current_view, H1))
+    end).
 
 resident_failure_only_wakes_waiters_on_real_advance_test_() ->
     [{atom_to_list(Mode), fun() -> resident_failure_wakes(Mode) end}
      || Mode <- [unchanged_prefix, advanced_prefix]].
 
 resident_failure_wakes(Mode) ->
-    {Identity, RequestRef, State0, Projection1, Projection2} = installation_state(),
+    {Height, Expected} = case Mode of
+        unchanged_prefix -> {1, [true, true]};
+        advanced_prefix -> {2, [false, false]}
+    end,
+    with_installation_state(Height, fun(Identity, RequestRef, State0, Meta) ->
     Request = maps:get(RequestRef, record_field(s, pending, State0)),
     {exact_reference, Ref, prepare, none} = record_field(
         routed_work, kind, record_field(request, work, Request)),
@@ -274,7 +273,7 @@ resident_failure_wakes(Mode) ->
     WorkB = make_record(routed_work, #{kind => {exact_reference, Ref, finalize, none}}),
     Caller = make_record(caller, #{deadline => infinity,
                                   enqueued_native => erlang:monotonic_time()}),
-    Rows = [make_record(queued_request,
+    Rows = [make_record(request,
                        #{ref => make_ref(), identity => Identity, work => Work,
                          callers => #{{self(), make_ref()} => Caller},
                          enqueued_native => erlang:monotonic_time(), parked => true})
@@ -282,12 +281,6 @@ resident_failure_wakes(Mode) ->
     H0 = state_history(Identity, State0),
     State = put_record(s, histories,
         #{Identity => put_record(history, waiting, queue:from_list(Rows), H0)}, State0),
-    {Height, Projection, Expected} = case Mode of
-        unchanged_prefix -> {1, Projection1, [true, true]};
-        advanced_prefix -> {2, Projection2, [false, false]}
-    end,
-    Meta = #{height => Height, projection => Projection,
-             resident_verified => true, phase_session => none},
     %% A real active-row guard holds dispatch while we inspect both distinct
     %% live callers' park permissions. Repeated unchanged installations model
     %% each unsuccessful job finishing: neither may grant the other's retry.
@@ -297,43 +290,68 @@ resident_failure_wakes(Mode) ->
     ?assertEqual(Expected, parked_flags(Identity, State2)),
     ?assertEqual(RequestRef, record_field(history, active, state_history(Identity, State2))),
     ?assertEqual(2, length(queue:to_list(
-        record_field(history, waiting, state_history(Identity, State2))))).
+        record_field(history, waiting, state_history(Identity, State2)))))
+    end).
 
-installation_state() ->
+with_installation_state(Height, Fun) ->
     Fixture = quod_foreign_log_tests:prepared_then_committed_fixture(
                 quod_foreign_log_tests:unique_ns()),
     Ns = maps:get(ns, Fixture), Anchor = maps:get(anchor, Fixture),
     Identity = {Ns, Anchor},
     [Genesis, Prepare, _] = maps:get(chain, Fixture),
     PhaseDir = quod_foreign_log_tests:temp_dir("installation-projection"),
-    {ok, PhaseIndex} = quod_dtx_phase_index:open(PhaseDir, Ns),
-    {Projection1, Projection2} = try
+    CacheNs = quod_foreign_log:cache_namespace(Identity),
+    {ok, PhaseIndex} = quod_dtx_phase_index:open(PhaseDir, CacheNs),
+    {ok, Hold} = quod_dtx_phase_index:retain_empty(PhaseIndex),
+    {ok, Store0} = quod_ledger_store:open(CacheNs, PhaseDir, wrapped),
+    try
+        %% Callback-state fixture, not an admitted consensus job. Its read
+        %% capability and returned cursor now use real verified disk resources;
+        %% resident_verified with no index/snapshot is not a valid state.
         {ok, [_], P1, D1} = quod_catchup:verify_forward(
             Ns, Anchor, quod_simplex:history_projection(Identity), 1, [Genesis], PhaseIndex),
         ok = quod_dtx_phase_index:commit_delta(PhaseIndex, D1),
-        {ok, [_], P2, _D2} = quod_catchup:verify_forward(
+        {ok, Store1} = quod_ledger_store:append(Store0, [Genesis]),
+        Snapshot1 = quod_ledger_store:snapshot(Store1),
+        {ok, [_], P2, D2} = quod_catchup:verify_forward(
             Ns, Anchor, P1, 2, [Prepare], PhaseIndex),
-        {P1, P2}
+        {Projection, Store} = case Height of
+            1 -> {P1, Store1};
+            2 ->
+                {ok, Store2} = quod_ledger_store:append(Store1, [Prepare]),
+                ok = quod_dtx_phase_index:commit_delta(PhaseIndex, D2),
+                {P2, Store2}
+        end,
+        {ok, Session} = quod_dtx_phase_index:suspend(PhaseIndex),
+        RequestRef = make_ref(),
+        Published = make_record(prefix, #{height => 1, projection => P1,
+                                          snapshot => Snapshot1, index => Hold}),
+        History = make_record(history,
+            #{height => 1, projection => P1, resident_verified => false,
+              published => Published, current_view => confirmed, active => RequestRef}),
+        Request = make_record(request,
+            #{identity => Identity, worker => self(), mref => make_ref(),
+              work => make_record(routed_work,
+                  #{kind => {exact_reference, maps:get(prepare_ref, Fixture), prepare, none}})}),
+        State = make_record(s,
+            #{histories => #{Identity => History}, pending => #{RequestRef => Request}}),
+        Meta = #{height => Height, projection => Projection, resident_verified => true,
+                 phase_session => Session, cache_session => quod_ledger_store:snapshot(Store)},
+        try Fun(Identity, RequestRef, State, Meta)
+        after ok = quod_dtx_phase_index:release(Hold),
+              ok = quod_dtx_phase_index:close(Session)
+        end
     after
-        ok = quod_dtx_phase_index:close(PhaseIndex),
+        _ = quod_dtx_phase_index:release(Hold),
+        _ = quod_dtx_phase_index:close(PhaseIndex),
+        _ = quod_ledger_store:close(Store0),
         _ = file:del_dir_r(PhaseDir)
-    end,
-    RequestRef = make_ref(),
-    History = make_record(history,
-        #{height => 1, projection => Projection1, resident_verified => true,
-          current_view => confirmed, active => RequestRef}),
-    Request = make_record(request,
-        #{identity => Identity, worker => self(), mref => make_ref(),
-          work => make_record(routed_work,
-              #{kind => {exact_reference, maps:get(prepare_ref, Fixture), prepare, none}})}),
-    State = make_record(s,
-        #{histories => #{Identity => History}, pending => #{RequestRef => Request}}),
-    {Identity, RequestRef, State, Projection1, Projection2}.
+    end.
 
 state_history(Identity, State) -> maps:get(Identity, record_field(s, histories, State)).
 
 parked_flags(Identity, State) ->
-    [record_field(queued_request, parked, Row) || Row <- queue:to_list(
+    [record_field(request, parked, Row) || Row <- queue:to_list(
         record_field(history, waiting, state_history(Identity, State)))].
 
 warm_exact_routes(Mode, PrefixHeight) ->

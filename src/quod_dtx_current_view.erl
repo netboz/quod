@@ -376,7 +376,7 @@ remaining_positive(Deadline) ->
     max(1, remaining(Deadline)).
 
 -doc """
-Build participant-applied certificates concurrently under one bounded deadline.
+Build participant-applied certificates under the original absolute deadline.
 
 Each request carries the exact Finalize evidence already verified by the
 coordinator. For valid input the returned list is aligned with `Requests`. An
@@ -384,11 +384,11 @@ exact certificate is retained as `{verified, Certificate}` even when another
 participant is temporarily unavailable; only that participant's row is
 `retry`. A caller authorizing Complete must still require every row.
 """.
--spec certify_applied_many(binary(), [{source(), claim(), map()}], pos_integer()) ->
-          {ok, [many_result()]} | {error, invalid_request}.
-certify_applied_many(OwnerNs, Requests, TimeoutMs) ->
+-spec certify_applied_many(binary(), [{source(), claim(), map()}], integer()) ->
+          {ok, [many_result()]} | {error, invalid_request | retry}.
+certify_applied_many(OwnerNs, Requests, Deadline) ->
     certify_applied_many_with(
-      OwnerNs, Requests, TimeoutMs, production_dependencies()).
+      OwnerNs, Requests, Deadline, production_dependencies()).
 
 -doc "Build one `f + 1` certificate within the original absolute monotonic deadline.".
 -spec certify_reads(binary(), {source(), binary()}, integer()) ->
@@ -521,11 +521,19 @@ read_anchor_source({remote, _Routes} = Source, _Identity, _Claim, _Deadline) ->
 read_anchor_source(_Source, _Identity, _Claim, _Deadline) ->
     {error, invalid_request}.
 
-certify_applied_with(
-  OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
+certify_applied_before_deadline(
+  OwnerNs, Source, Claim, Evidence, Deadline, Dependencies) ->
+    case remaining(Deadline) of
+        0 -> {error, retry};
+        TimeoutMs -> certify_applied_request(
+                       OwnerNs, Source, Claim, Evidence, TimeoutMs,
+                       Deadline, Dependencies)
+    end.
+
+certify_applied_request(
+  OwnerNs, Source, Claim, Evidence, TimeoutMs, Deadline, Dependencies) ->
     case valid_request(OwnerNs, Source, Claim, TimeoutMs) of
         {ok, Target, GroupId, FinalizeRef, Generation, Verdict} ->
-            Deadline = quod_time:mono_ms() + TimeoutMs,
             case dependency_network_identity(Dependencies) of
                 {ok, NetworkIdentity} ->
                     verify_view(
@@ -648,7 +656,18 @@ collect_read_votes(
             {error, retry}
     end.
 
-certify_applied_many_with(OwnerNs, Requests, TimeoutMs, Dependencies)
+certify_applied_many_with(OwnerNs, Requests, Deadline, Dependencies)
+  when is_integer(Deadline) ->
+    case remaining(Deadline) of
+        0 -> {error, retry};
+        TimeoutMs -> certify_applied_many_before_deadline(
+                       OwnerNs, Requests, TimeoutMs, Deadline, Dependencies)
+    end;
+certify_applied_many_with(_OwnerNs, _Requests, _Deadline, _Dependencies) ->
+    {error, invalid_request}.
+
+certify_applied_many_before_deadline(
+  OwnerNs, Requests, TimeoutMs, Deadline, Dependencies)
   when is_list(Requests), Requests =/= [],
        length(Requests) =< ?QUOD_MAX_DTX_PARTICIPANTS,
        is_integer(TimeoutMs), TimeoutMs > 0,
@@ -668,14 +687,15 @@ certify_applied_many_with(OwnerNs, Requests, TimeoutMs, Dependencies)
            end, Requests) of
         true ->
             certify_applied_many_requests(
-              OwnerNs, Requests, TimeoutMs, Dependencies);
+              OwnerNs, Requests, Deadline, Dependencies);
         false ->
             {error, invalid_request}
     end;
-certify_applied_many_with(_OwnerNs, _Requests, _TimeoutMs, _Dependencies) ->
+certify_applied_many_before_deadline(
+  _OwnerNs, _Requests, _TimeoutMs, _Deadline, _Dependencies) ->
     {error, invalid_request}.
 
-certify_applied_many_requests(OwnerNs, Requests, TimeoutMs, Dependencies) ->
+certify_applied_many_requests(OwnerNs, Requests, Deadline, Dependencies) ->
     Parent = self(),
     TraceCtx = quod_trace:context(),
     VerifyRef = make_ref(),
@@ -686,15 +706,14 @@ certify_applied_many_requests(OwnerNs, Requests, TimeoutMs, Dependencies) ->
                     fun() ->
                         Result = quod_trace:with_optional_span(
                                    TraceCtx, <<"quod.dtx.applied.verify">>, internal, #{},
-                                   fun() -> certify_applied_with(
+                                   fun() -> certify_applied_before_deadline(
                                               OwnerNs, Source, Claim, Evidence,
-                                              TimeoutMs, Dependencies) end),
+                                              Deadline, Dependencies) end),
                         Parent ! {dtx_current_view_many, VerifyRef, self(),
                                   Index, Result}
                     end, [link, monitor]),
                   Acc#{Pid => {Monitor, Index}}
           end, #{}, lists:enumerate(Requests)),
-    Deadline = quod_time:mono_ms() + TimeoutMs,
     collect_many_results(VerifyRef, Pending, #{}, Deadline).
 
 collect_many_results(VerifyRef, Pending, Results, _Deadline)
@@ -713,9 +732,16 @@ collect_many_results(VerifyRef, Pending, Results, Deadline) ->
                     case maps:take(Pid, Pending) of
                         {{Monitor, Index}, Rest} ->
                             _ = erlang:demonitor(Monitor, [flush]),
+                            %% A result can already be queued when its caller
+                            %% resumes after the deadline. Consumption, not the
+                            %% worker's send time, admits this certificate.
+                            Result = case remaining(Deadline) of
+                                         0 -> retry;
+                                         _ -> {verified, View}
+                                     end,
                             collect_many_results(
                               VerifyRef, Rest,
-                              Results#{Index => {verified, View}},
+                              Results#{Index => Result},
                               Deadline);
                         {{Monitor, ExpectedIndex}, Rest} ->
                             _ = erlang:demonitor(Monitor, [flush]),
@@ -1679,12 +1705,13 @@ walk_remote_candidates(
 -ifdef(TEST).
 test_certify_applied(
   OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
-    certify_applied_with(
-      OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies).
+    certify_applied_before_deadline(
+      OwnerNs, Source, Claim, Evidence,
+      quod_time:mono_ms() + TimeoutMs, Dependencies).
 
-test_certify_applied_many(OwnerNs, Requests, TimeoutMs, Dependencies) ->
+test_certify_applied_many(OwnerNs, Requests, Deadline, Dependencies) ->
     certify_applied_many_with(
-      OwnerNs, Requests, TimeoutMs, Dependencies).
+      OwnerNs, Requests, Deadline, Dependencies).
 
 test_certify_reads(OwnerNs, Request, Deadline, Dependencies) ->
     certify_reads_with(OwnerNs, Request, Deadline, Dependencies).

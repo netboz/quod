@@ -152,23 +152,35 @@ exact_startup_replay_and_warm_requests_are_separate_test() ->
               ?assertEqual(2, maps:get(replayed_entries, Startup, 0)),
               ?assertEqual(1, maps:get(initialize_opens, Startup, 0)),
               lists:foreach(fun(Name) ->
-                  {Result, Worker, Spans} = traced_request(Name, fun() -> explicit(Fixture) end),
+                  {Result, Read, Spans, Counts} = traced_ready_request(
+                      Name, Restarted, fun() -> explicit(Fixture) end),
                   ?assertMatch({ok, #{phase := finalize}}, Result),
-                  Attributes = attrs(Worker),
-                  ?assertEqual(2, maps:get('quod.foreign.resident_start_height', Attributes)),
-                  ?assertEqual(2, maps:get('quod.foreign.disk_start_height', Attributes)),
+                  Attributes = attrs(Read),
+                  ?assertEqual(<<"published_prefix">>, maps:get('quod.foreign.read_source', Attributes)),
+                  ?assertEqual(2, maps:get('quod.foreign.captured_height', Attributes)),
                   ?assertEqual(0, maps:get('quod.foreign.cold_opens', Attributes)),
                   ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
                   ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', Attributes)),
-                  ?assertEqual(2, maps:get('quod.foreign.final_verified_height', Attributes)),
-                  ?assertNot(maps:is_key('quod.foreign.verified_suffix', Attributes)),
-                  ?assertEqual(maps:get(ns, Fixture), maps:get('quod.namespace', Attributes)),
-                  assert_stages(Worker, Spans,
-                    [cache_open, ledger_resume, phase_resume, phase_suspend,
-                     ledger_suspend, exact_lookup, exact_validate, worker_handoff]),
-                  assert_no_stage(cache_reconstruction, Spans),
-                  assert_no_stage(cache_replay, Spans),
-                  assert_successful_stage(ledger_suspend, Spans)
+                  %% Count actual API work independently of SDK export. A
+                  %% silent worker or hidden resume cannot pass as a read.
+                  ?assertEqual(1, maps:get(exact_reads, Counts, 0)),
+                  ?assertEqual(1, maps:get(captures, Counts, 0)),
+                  ?assertEqual(1, maps:get(read_opens, Counts, 0)),
+                  lists:foreach(fun(Key) -> ?assertEqual(0, maps:get(Key, Counts, 0)) end,
+                      [worker_calls, cache_opens, ledger_resumes, phase_resumes,
+                       replays, replayed_entries, verified_entries]),
+                  lists:foreach(fun(Stage) -> assert_no_stage(Stage, Spans) end,
+                      [verification_worker, cache_open, cache_reconstruction, cache_replay,
+                       ledger_resume, phase_resume, phase_suspend, ledger_suspend, worker_handoff]),
+                  lists:foreach(fun(Stage) ->
+                      Span = one(<<"quod.foreign.", (atom_to_binary(Stage))/binary>>, Spans),
+                      ?assertEqual(Read#span.span_id, Span#span.parent_span_id),
+                      ?assert(Span#span.start_time >= Read#span.start_time),
+                      ?assert(Span#span.end_time =< Read#span.end_time),
+                      assert_successful_stage(Stage, Spans)
+                  end, [exact_lookup, exact_validate]),
+                  ?assertEqual(2, maps:get('quod.foreign.stages_started', Attributes)),
+                  ?assertEqual(2, maps:get('quod.foreign.stages_completed', Attributes))
               end, [<<"test.foreign.exact.first-after-startup">>,
                     <<"test.foreign.exact.warm">>])
           after quod_foreign_log_tests:stop_owner(Restarted)
@@ -656,15 +668,24 @@ shared_fetches(Token) ->
 %% intentionally has no request-root span; these counters are test evidence,
 %% not synthetic SDK spans or a second verifier.
 traced_work(Fun) ->
+    traced_work(Fun, []).
+
+traced_work(Fun, Existing) ->
     MFAs = [{quod_foreign_log, replay_cache, 6},
             {quod_foreign_log, open_cache_raw, 5},
-            {quod_foreign_log, open_replayed_cache_raw, 7},
+            {quod_foreign_log, open_replayed_cache_raw, '_'},
+            {quod_foreign_log, verification_worker, '_'},
             {quod_catchup, verify_forward, 6},
+            {quod_dtx_phase_index, capture, 2},
+            {quod_dtx_phase_index, resume, 1},
+            {quod_ledger_store, open_ro_snapshot, 1},
+            {quod_ledger_store, resume, 1},
             {quod_ledger_store, read_at, 2}],
     [code:ensure_loaded(M) || {M, _, _} <- MFAs],
-    [erlang:trace_pattern(MFA, [{'_', [], [{return_trace}]}], [local]) || MFA <- MFAs],
+    [true = erlang:trace_pattern(MFA, [{'_', [], [{return_trace}]}], [local]) > 0 || MFA <- MFAs],
     Parent = self(), Tag = make_ref(),
-    Tracer = spawn(fun() -> collect_work(#{}, []) end),
+    Tracer = spawn(fun() -> collect_work(#{}, Existing) end),
+    [1 = erlang:trace(Pid, true, [call, procs, set_on_spawn, {tracer, Tracer}]) || Pid <- Existing],
     {Runner, Monitor} = spawn_monitor(fun() ->
         receive {go, Tag} -> ok end,
         Result = Fun(),
@@ -707,9 +728,19 @@ collect_work(Counts, Pids) ->
             collect_work(add_count(Kind, 1, add_count(cache_opens, 1, Counts)), [P | Pids]);
         {trace, P, call, {quod_ledger_store, read_at, _}} ->
             collect_work(add_count(exact_reads, 1, Counts), [P | Pids]);
+        {trace, P, call, {quod_ledger_store, open_ro_snapshot, _}} ->
+            collect_work(add_count(read_opens, 1, Counts), [P | Pids]);
+        {trace, P, call, {quod_ledger_store, resume, _}} ->
+            collect_work(add_count(ledger_resumes, 1, Counts), [P | Pids]);
+        {trace, P, call, {quod_dtx_phase_index, resume, _}} ->
+            collect_work(add_count(phase_resumes, 1, Counts), [P | Pids]);
+        {trace, P, call, {quod_dtx_phase_index, capture, _}} ->
+            collect_work(add_count(captures, 1, Counts), [P | Pids]);
+        {trace, P, call, {quod_foreign_log, verification_worker, _}} ->
+            collect_work(add_count(worker_calls, 1, Counts), [P | Pids]);
         {trace, P, call, {quod_catchup, verify_forward, [_, _, _, _, Entries, _]}} ->
             collect_work(add_count(verified_entries, length(Entries), Counts), [P | Pids]);
-        {trace, P, return_from, {quod_foreign_log, open_replayed_cache_raw, 7},
+        {trace, P, return_from, {quod_foreign_log, open_replayed_cache_raw, _Arity},
          {error, cache_corrupt}} ->
             collect_work(add_count(reconstruction_rejected, 1, Counts), [P | Pids]);
         {trace, P, spawn, Child, _} -> collect_work(Counts, [P, Child | Pids]);
@@ -745,6 +776,17 @@ traced_request(Name, Fun) ->
              end,
     Worker = quod_trace_tests:take_span(<<"quod.foreign.verification_worker">>, TraceId),
     {Result, Worker, exported_spans(TraceId)}.
+
+traced_ready_request(Name, Owner, Fun) ->
+    {Context, Parent} = quod_trace:start_span(otel_ctx:new(), Name, internal, #{}),
+    TraceId = otel_span:trace_id(Parent),
+    {Result, Counts} = try
+        traced_work(fun() -> quod_trace:with_context(Context, Fun) end, [Owner])
+    after quod_trace:finish_span(Parent, ok) end,
+    %% Runner's result message follows its direct-read span exports to this
+    %% same test process. No foreign worker is expected or manufactured.
+    Read = quod_trace_tests:take_span(<<"quod.foreign.owner_request">>, TraceId),
+    {Result, Read, exported_spans(TraceId), Counts}.
 
 exported_spans(any) ->
     receive {quod_test_span, Span} -> [Span | exported_spans(any)]

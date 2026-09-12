@@ -87,6 +87,32 @@ reply_hints_and_contact_are_route_neutral_test_() ->
     end}} || Mode <- [wave, accepted, observed],
              Form <- [local, remote, local_reply, remote_reply, malformed_hint]].
 
+uncertain_submission_becomes_pinned_reference_before_verification_test() ->
+    with_fixture(true, fun(F) ->
+        Target = maps:get(target, F), Group = maps:get(group_id, F),
+        Ref = maps:get(ref, F), Source = remote_source(F),
+        %% Actual owner transitions with a signed reference from this fixture.
+        %% The deliberately unavailable verification result is not a proof or
+        %% consensus admission; it must preserve the reference, never submission.
+        ?assertEqual(#{{Target, finalize} =>
+                         {reference, Target, Group, finalize, Ref, Source}},
+                     quod_dtx_coordinator:test_pending_phase_reference(
+                         Target, Group, finalize, Ref, Source))
+    end).
+
+phase_verification_keeps_command_deadline_while_paused_test_() ->
+    [{atom_to_list(Form), fun() ->
+        with_fixture(true, fun(F) ->
+            #{target := Target, group_id := Group, ref := Ref} = F,
+            Deadline = quod_time:mono_ms() + case Form of live -> 1000; expired -> -1 end,
+            {Meta, Pending} = quod_dtx_coordinator:test_phase_verification_deadline(
+                                Target, Group, finalize, Ref, Deadline),
+            ?assertMatch(#{request_deadline := Deadline}, Meta),
+            ?assertEqual(#{{Target, finalize} =>
+                           {reference, Target, Group, finalize, Ref, local}}, Pending)
+        end)
+    end} || Form <- [live, expired]].
+
 authenticated_contact_positive_control_test() ->
     with_fixture(false, fun(F) ->
         #{target := Target, ref := Ref, hint := Hint, winner := Peer,
@@ -100,6 +126,89 @@ authenticated_contact_positive_control_test() ->
                      calls(quod_foreign_log, resolve_reference, Calls)),
         ?assertEqual([[Ref, finalize, Contact, Hint, Deadline]],
                      calls(quod_foreign_log, verify_reference_deadline, Calls))
+    end).
+
+submission_result_observes_once_before_waiting_test_() ->
+    [{atom_to_list(Form), fun() ->
+        with_fixture(true, fun(F) ->
+            Target = maps:get(target, F), Record = maps:get(record, F),
+            Group = quod_dtx:group_id(Record), Kind = quod_dtx:record_kind(Record),
+            ?assertEqual({observe, parked,
+                           #{{Target, Kind} => {submission, Target, Group, Kind}}},
+                         quod_dtx_coordinator:test_submission_observation_transition(
+                           Target, Record, Form))
+        end)
+    end} || Form <- [refused, unknown, worker_down]].
+
+absent_finalize_rediscovers_certified_prepare_test() ->
+    with_prepare_race_fixture(not_found, committed, fun(F) ->
+        #{target := Target, owner_ns := OwnerNs, group_id := Group,
+          ref := Ref, control := Control, foreign := Foreign} = F,
+        Deadline = quod_time:mono_ms() + 2000,
+        {Result, Calls} = traced([Foreign], fun() ->
+            quod_dtx_coordinator:test_finalize_rediscovery(
+                OwnerNs, Target, Group, Deadline)
+        end),
+        ?assertMatch({verified, {Target, Group, prepare, Ref, _}, _, #{}, _,
+                      [{prepared, Target}], true, false, none}, Result),
+        {verified, {_, _, _, _, Source}, Pending, #{}, Snapshot, _, _, _, _} = Result,
+        ?assertEqual(#{{Target, prepare} =>
+                         {reference, Target, Group, prepare, Ref, Source}}, Pending),
+        ?assertEqual([{Target, Control, Ref}], maps:get(evidence, Snapshot)),
+        %% A certified Prepare replaces the stale unsigned hint, not vice versa.
+        ?assertNotEqual([{Target, 999}], maps:get(generations, Snapshot)),
+        ?assertEqual([Deadline], lists:usort(
+            [maps:get(request_deadline, Context) || [_, _, _, _, Context, _, _, _, _]
+              <- calls(quod_dtx_coordinator, phase_command_sources, Calls)])),
+        ?assertEqual([[Target, Ref, prepare, none, maps:get(hint, F), Deadline]],
+                     calls(quod_foreign_log, resolve_reference, Calls)),
+        ?assertEqual([finalize, finalize, finalize, prepare],
+                     phase_queries(maps:get(router, F)))
+    end).
+
+unresolved_finalize_never_becomes_prepare_permission_test() ->
+    with_prepare_race_fixture(pending, committed, fun(F) ->
+        #{target := Target, owner_ns := OwnerNs, group_id := Group} = F,
+        ?assertEqual({waiting, #{{Target, finalize} =>
+                                   {submission, Target, Group, finalize}}},
+                     quod_dtx_coordinator:test_finalize_rediscovery(
+                         OwnerNs, Target, Group, quod_time:mono_ms() + 2000)),
+        ?assertEqual([finalize, finalize, finalize], phase_queries(maps:get(router, F)))
+    end).
+
+absent_finalize_unavailable_prepare_parks_test() ->
+    with_prepare_race_fixture(not_found, unavailable, fun(F) ->
+        #{target := Target, owner_ns := OwnerNs, group_id := Group} = F,
+        ?assertEqual({waiting, #{}}, quod_dtx_coordinator:test_finalize_rediscovery(
+                         OwnerNs, Target, Group, quod_time:mono_ms() + 2000)),
+        ?assertEqual([finalize, finalize, finalize, prepare, prepare, prepare],
+                     phase_queries(maps:get(router, F)))
+    end).
+
+phase_queries(Router) ->
+    Ref = make_ref(), Router ! {query_barrier, self(), Ref},
+    receive {query_barrier, Router, Ref} -> drain_phase_queries(Router, [])
+    after 1000 -> error(query_barrier_not_received)
+    end.
+
+drain_phase_queries(Router, Acc) ->
+    receive {race_phase_query, Router, Kind} -> drain_phase_queries(Router, [Kind | Acc])
+    after 0 -> lists:reverse(Acc)
+    end.
+
+with_prepare_race_fixture(FinalizeStatus, PrepareStatus, Fun) ->
+    F0 = quod_foreign_log_tests:prepared_then_committed_fixture(
+             quod_foreign_log_tests:unique_ns()),
+    %% Keep the real founded, signed Prepare prefix only. Endpoint replies
+    %% are protocol fixtures, not a claim that consensus admitted this race.
+    F1 = F0#{chain := lists:sublist(maps:get(chain, F0), 2)},
+    with_fixture(false, F1, fun(F) ->
+        Router = maps:get(router, F),
+        Router ! {prepare_race, FinalizeStatus, PrepareStatus, self()},
+        receive {prepare_race_ready, Router} -> ok
+        after 1000 -> error(prepare_race_not_ready)
+        end,
+        Fun(F)
     end).
 
 resolver_errors_keep_coordinator_retry_policy_test_() ->
@@ -300,8 +409,8 @@ outer_phase_walk_proof_and_delivery_control_test_() ->
 attempt_deadline_is_captured_before_worker_admission_test() ->
     {ok, {quod_dtx_coordinator, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
         beam_lib:chunks(code:which(quod_dtx_coordinator), [abstract_code]),
-    [{function, _, start_typed_wave, 4, [{clause, _, _, _, Body}]}] =
-        [F || F = {function, _, start_typed_wave, 4, _} <- Forms],
+    [{function, _, launch_wave, 4, [{clause, _, _, _, Body}]}] =
+        [F || F = {function, _, launch_wave, 4, _} <- Forms],
     ContextPositions = [I || {I, {match, _, {var, _, 'Context'}, Expr}} <- indexed(Body),
                             contains_atom(evidence_deadline, Expr)],
     WorkerPositions = [I || {I, {match, _, {var, _, 'Workers'}, _}} <- indexed(Body)],
@@ -315,7 +424,37 @@ attempt_deadline_is_captured_before_worker_admission_test() ->
     ?assertEqual([], [Name || {function, _, Name, _, _} <- Forms,
                              lists:member(Name, [phase_evidence_sources,
                                                  verify_accepted_phase_sources,
-                                                 endpoint_evidence_source])]).
+                                                 endpoint_evidence_source,
+                                                 drive_one_command, run_command,
+                                                 uncertain_phase_sources,
+                                                 collect_submit_endpoint_results])]).
+
+follow_cleanup_has_no_blocking_call_test() ->
+    {ok, {quod_dtx_coordinator, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
+        beam_lib:chunks(code:which(quod_dtx_coordinator), [abstract_code]),
+    [Cleanup] = [F || F = {function, _, close_follow, 1, _} <- Forms],
+    ?assert(contains_atom(unfollow_request, Cleanup)),
+    ?assertNot(contains_atom(unfollow, Cleanup)),
+    ?assertNot(contains_atom(call, Cleanup)).
+
+applied_collection_keeps_the_wave_deadline_through_child_admission_test() ->
+    {ok, {quod_dtx_coordinator, [{abstract_code, {raw_abstract_v1, Coordinator}}]}} =
+        beam_lib:chunks(code:which(quod_dtx_coordinator), [abstract_code]),
+    [Applied] = [F || F = {function, _, verify_prepared_applied, 2, _} <- Coordinator],
+    ?assert(contains_atom(request_deadline, Applied)),
+    ?assertNot(contains_atom(request_timeout_ms, Applied)),
+    {ok, {quod_dtx_current_view, [{abstract_code, {raw_abstract_v1, View}}]}} =
+        beam_lib:chunks(code:which(quod_dtx_current_view), [abstract_code]),
+    %% These are the compiled production admission/walk bodies, not copies.
+    %% No child scheduling, request validation or collector entry may create
+    %% a replacement absolute deadline from a fresh relative allowance.
+    Names = [certify_applied_many_with, certify_applied_many_before_deadline,
+             certify_applied_many_requests, certify_applied_before_deadline,
+             certify_applied_request, collect_many_results],
+    Bodies = [F || F = {function, _, Name, _, _} <- View, lists:member(Name, Names)],
+    ?assertEqual(length(Names), length(Bodies)),
+    ?assertNot(contains_atom(mono_ms, Bodies)),
+    ?assert(contains_atom(remaining, Bodies)).
 
 indexed(List) -> lists:zip(lists:seq(1, length(List)), List).
 contains_atom(Atom, {atom, _, Atom}) -> true;
@@ -345,8 +484,11 @@ resolve_reply(Mode, F, Source, Timeout) ->
       finalize, maps:get(ref, F), Source, Timeout).
 
 with_fixture(Cohosted, Fun) ->
-    {ok, _} = application:ensure_all_started(gproc),
     F0 = quod_foreign_log_tests:foreign_fixture(quod_foreign_log_tests:unique_ns()),
+    with_fixture(Cohosted, F0, Fun).
+
+with_fixture(Cohosted, F0, Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
     #{ns := Ns, anchor := Anchor, pub := Pub, chain := Chain, control := Control,
       ref := Ref} = F0,
     Target = {Ns, Anchor}, OwnerNs = <<"coordinator-source:", Ns/binary>>,
@@ -443,6 +585,9 @@ router_loop(Parent, Ns, Winner, Ref, Record, Hint) ->
     router_loop(Parent, Ns, Winner, Ref, Record, Hint, none).
 router_loop(Parent, Ns, Winner, Ref, Record, Hint, FailedPhasePeer) ->
     receive
+        {prepare_race, FinalizeStatus, PrepareStatus, Test} ->
+            Test ! {prepare_race_ready, self()},
+            prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus);
         {phase_reference, NewRef, Test} ->
             Test ! {phase_reference_ready, self()},
             router_loop(Parent, Ns, Winner, NewRef, Record, Hint, FailedPhasePeer);
@@ -474,6 +619,27 @@ router_loop(Parent, Ns, Winner, Ref, Record, Hint, FailedPhasePeer) ->
         stop -> ok
     end.
 
+prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus) ->
+    receive
+        {'$gen_call', From, {dtx_endpoint_request, Ns, _Peer, _Endpoint,
+                            {phase, Id, _Group, Kind}, _, _, _}} ->
+            {Response, Hints} = case {Kind, PrepareStatus} of
+                {finalize, _} -> {{phase, Id, 999, FinalizeStatus}, []};
+                {prepare, committed} -> {{phase, Id, 999, {committed, Ref}}, [{Ref, Hint}]};
+                {prepare, unavailable} -> {{error, Id, not_ready}, []}
+            end,
+            {ok, Bytes} = quod_dtx_endpoint:encode_response(Ns, Response, Hints),
+            %% The explicit same-sender barrier proves delivery to the test;
+            %% an endpoint reply delivered to a different process cannot.
+            Parent ! {race_phase_query, self(), Kind},
+            gen:reply(From, quod_dtx_endpoint:decode_response(Ns, Bytes)),
+            prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus);
+        {query_barrier, Test, Barrier} ->
+            Test ! {query_barrier, self(), Barrier},
+            prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus);
+        stop -> ok
+    end.
+
 stop_process(none) -> ok;
 stop_process(Pid) ->
     MRef = monitor(process, Pid), Pid ! stop,
@@ -488,6 +654,7 @@ stop_process(Pid) ->
 traced(Owners, Fun) -> traced(Owners, Fun, fun(_Runner) -> ok end).
 traced(Owners, Fun, Drive) ->
     MFAs = [{quod_foreign_log, resolve_reference, 6},
+            {quod_dtx_coordinator, phase_command_sources, 9},
             {quod_foreign_log, verify_reference_deadline, 5},
             {quod_foreign_log, spawn_verification_worker, 3},
             {quod_simplex, history_view_at, 3},

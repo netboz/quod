@@ -153,6 +153,8 @@ page_decode_worker_death_closes_link_and_preserves_queued_deadline_test() ->
           #{owner := Owner, link1 := Link1, link2 := Link2,
             first := A, second := B, peer := Peer, endpoint := Endpoint, ns := Ns} = C,
           Token = make_ref(),
+          InitGate = make_ref(),
+          ok = gen_server:call(Owner, {test_hold_next_initialization, self(), InitGate}),
           ok = hold_next_page_decode(Owner, Token, before_completion),
           #{first_call := First, second_call := Second, lease := Lease1,
             binding := Binding, grant := Grant1, first_id := Req1,
@@ -176,6 +178,8 @@ page_decode_worker_death_closes_link_and_preserves_queued_deadline_test() ->
               after 0 -> ok end,
               exit(Worker, kill),
               ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
+              Initializer = receive {initialization_held, InitGate, _, InitPid} -> InitPid
+                            after 2000 -> error(missing_decode_loss_initialization) end,
               {Lease2, Owner} = receive_page_open(Peer, Endpoint, Ns),
               ?assertNotEqual(Lease1, Lease2),
               ?assertNot(is_process_alive(Link1)),
@@ -196,6 +200,14 @@ page_decode_worker_death_closes_link_and_preserves_queued_deadline_test() ->
                        {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
               ?assertMatch({reply, {ok, #{phase := finalize}}},
                            gen_server:wait_response(Second, 3000)),
+              %% Link cleanup is immediate; the separate disk reconstruction
+              %% need not finish before another identity replies. Hold it to
+              %% make that independence structural, not a scheduling race.
+              ?assertMatch(#{pending := 1, pulls := 0, page_bindings := 0},
+                           quod_foreign_log:stats()),
+              Initializer ! {release_initialization, InitGate},
+              await_history_idle({maps:get(ns, A), maps:get(anchor, A)},
+                                  quod_time:mono_ms() + 3000),
               assert_page_owner_drained()
           after
               exit(Worker, kill)
@@ -849,6 +861,16 @@ page_owner_monitor_count(Owner, Worker) ->
     length([Pid || {process, Pid} <- Monitors, Pid =:= Worker]).
 
 assert_page_owner_drained() ->
+    %% Transport cleanup is immediate. A different identity's reply cannot
+    %% also order disk-only custody reconstruction; observe that existing
+    %% owner job explicitly, never wait for a lingering transport/other job.
+    ?assertMatch(#{pulls := 0, page_bindings := 0}, quod_foreign_log:stats()),
+    Rows = quod_foreign_log:test_lifecycle_state(),
+    maps:foreach(fun
+        (Identity, #{active := #{work := {initialize, Identity, _}}}) ->
+            await_history_idle(Identity, quod_time:mono_ms() + 3000);
+        (_Identity, #{active := Active}) -> ?assertEqual(none, Active)
+    end, Rows),
     ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0},
                  quod_foreign_log:stats()).
 
@@ -2039,11 +2061,15 @@ resident_cache_session_height_mismatch_requires_explicit_reconstruction_test() -
 
         %% The immutable ledger session still resumes because its file is
         %% unchanged, but the deliberately inconsistent retained height must
-        %% close that handle. The request refuses; an explicitly scheduled
+        %% close that handle on the next acquisition. A published read remains
+        %% valid: it is not mutation permission. The current-view request
+        %% refuses; an explicitly scheduled
         %% initialization restores retained disk, never refetching the prefix.
         ok = quod_foreign_log:test_corrupt_resident_height(Pid, Identity, 3),
-        ?assertEqual({error, retry}, quod_foreign_log:verify(
+        ?assertMatch({ok, #{identity := Identity}}, quod_foreign_log:verify(
              Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        ?assertEqual({error, retry}, quod_foreign_log:current(
+             route_candidates([{Peer, Endpoint}]), Identity, 5000)),
         await_history_ready(Identity, length(maps:get(chain, Fixture))),
         ?assertMatch(
            {ok, #{identity := Identity}},
@@ -2068,12 +2094,13 @@ live_corruption_reconstruction_is_not_counted_twice_test() ->
     try
         ?assertMatch({ok, _}, quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
         CacheDir = quod_ledger_store:ns_dir(Dir, quod_foreign_log:cache_namespace(Identity)),
-        %% The first read diagnoses an inconsistent resident cursor. Its
+        %% The next current-view acquisition diagnoses an inconsistent cursor. Its
         %% separately queued initialization then finds a corrupt checkpoint.
         %% These are the same corruption-driven reconstruction, not two.
         ok = file:write_file(filename:join(CacheDir, "checkpoint.term"), <<"corrupt">>),
         ok = quod_foreign_log:test_corrupt_resident_height(Pid, Identity, 3),
-        ?assertEqual({error, retry}, quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        ?assertEqual({error, retry}, quod_foreign_log:current(
+             route_candidates([{Peer, Endpoint}]), Identity, 5000)),
         ?assertMatch({ok, _}, quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
         assert_history_integrity_counts(0, 1, 0)
     after
@@ -2135,6 +2162,106 @@ pending_prepare_to_finalize_resumes_phase_history_and_fetches_only_delta_test() 
         _ = file:del_dir_r(Dir)
     end.
 
+ready_prefix_read_does_not_wait_for_a_higher_window_test() ->
+    F = prepared_then_committed_fixture(unique_ns()),
+    Ns = maps:get(ns, F), Identity = {Ns, maps:get(anchor, F)},
+    Peer = maps:get(pub, F), Endpoint = {"127.0.0.1", 31980},
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, F), [Peer]),
+    Parent = self(), Mode = atomics:new(1, []),
+    Fetch = fun(P, E, N, From, To) ->
+        case atomics:get(Mode, 1) of
+            0 -> ok;
+            1 when From =:= 3 ->
+                Parent ! {higher_window_held, self()},
+                receive release_higher_window -> ok end;
+            1 -> error({old_prefix_refetched, From})
+        end,
+        BaseFetch(P, E, N, From, To)
+    end,
+    Dir = temp_dir("ready-prefix-higher-window"), Owner = start_owner(Dir, Fetch),
+    try
+        ?assertMatch({ok, #{phase := prepare}}, quod_foreign_log:verify(
+            Peer, Endpoint, maps:get(prepare_ref, F), prepare, 5000)),
+        atomics:put(Mode, 1, 1),
+        {Caller, Mon} = spawn_monitor(fun() ->
+            Parent ! {higher_window_result, self(), quod_foreign_log:verify(
+                Peer, Endpoint, maps:get(finalize_ref, F), finalize, 5000)}
+        end),
+        Fetcher = receive {higher_window_held, Pid} -> Pid
+                  after 2000 -> error(no_higher_window) end,
+        try
+            ?assertMatch(#{pending := 1, resident_verified := 0}, quod_foreign_log:stats()),
+            ?assertMatch({ok, #{identity := Identity, slot := 2, phase := prepare}},
+                quod_foreign_log:verify_reference(maps:get(prepare_ref, F), prepare, 1000)),
+            ?assertMatch(#{pending := 1, resident_verified := 0}, quod_foreign_log:stats()),
+            ?assert(is_process_alive(Fetcher)),
+            Fetcher ! release_higher_window,
+            receive {higher_window_result, Caller, Result} ->
+                ?assertMatch({ok, #{identity := Identity, slot := 3, phase := finalize}}, Result)
+            after 3000 -> error(no_higher_window_result) end,
+            receive {'DOWN', Mon, process, Caller, normal} -> ok
+            after 1000 -> error(higher_window_caller_alive) end
+        after
+            Fetcher ! release_higher_window, exit(Caller, kill), demonitor(Mon, [flush])
+        end
+    after
+        stop_owner(Owner), _ = file:del_dir_r(Dir)
+    end.
+
+ready_prefix_borrow_rejects_owner_death_before_read_test() ->
+    ready_prefix_borrow_lifetime(before_read, owner_down).
+
+ready_prefix_borrow_rejects_owner_death_after_read_test() ->
+    ready_prefix_borrow_lifetime(after_read, owner_down).
+
+ready_prefix_borrow_rechecks_original_deadline_test() ->
+    ready_prefix_borrow_lifetime(after_read, deadline).
+
+ready_prefix_borrow_lifetime(Stage, Event) ->
+    F = foreign_fixture(unique_ns()), Ref = maps:get(ref, F), Ns = maps:get(ns, F),
+    Identity = {Ns, maps:get(anchor, F)}, Peer = maps:get(pub, F),
+    Dir = temp_dir("ready-borrow-lifetime"),
+    Owner = start_owner(Dir, chain_fetch(Ns, maps:get(chain, F))),
+    Parent = self(), Token = make_ref(),
+    try
+        ?assertMatch({ok, _}, quod_foreign_log:verify(
+            Peer, {"127.0.0.1", 31979}, Ref, finalize, 5000)),
+        Deadline = quod_time:mono_ms() + 1500,
+        {Caller, Mon} = spawn_monitor(fun() ->
+            put({quod_foreign_log, local_read_gate}, {Stage, Parent, Token}),
+            Parent ! {ready_borrow_result, self(), quod_foreign_log:resolve_reference(
+                Identity, Ref, finalize, none, none, Deadline)}
+        end),
+        try
+            receive {local_read_held, Token, Caller} -> ok
+            after 1000 -> error(ready_read_not_captured) end,
+            ?assertMatch(#{pending := 0}, quod_foreign_log:stats()),
+            case Event of
+                owner_down ->
+                    OwnerMon = monitor(process, Owner), stop_owner(Owner),
+                    receive {'DOWN', OwnerMon, process, Owner, _} -> ok
+                    after 1000 -> error(captured_owner_not_down) end;
+                deadline ->
+                    %% This is the tested absolute expiry, not a sleep used
+                    %% as a mailbox-delivery barrier.
+                    Timer = erlang:start_timer(max(0, Deadline - quod_time:mono_ms()), self(), Token),
+                    receive {timeout, Timer, Token} -> ok
+                    after 2000 -> error(original_deadline_did_not_expire) end,
+                    ?assert(quod_time:mono_ms() >= Deadline)
+            end,
+            Caller ! {release_local_read, Token},
+            receive {ready_borrow_result, Caller, Result} -> ?assertEqual({error, retry}, Result)
+            after 1000 -> error(no_ready_borrow_result) end,
+            receive {'DOWN', Mon, process, Caller, normal} -> ok
+            after 1000 -> error(ready_reader_alive) end
+        after
+            exit(Caller, kill), demonitor(Mon, [flush])
+        end
+    after
+        case is_process_alive(Owner) of true -> stop_owner(Owner); false -> ok end,
+        _ = file:del_dir_r(Dir)
+    end.
+
 worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
@@ -2183,6 +2310,13 @@ worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test() ->
         ?assertMatch(#{active := #{work := {initialize, Identity, custody_lost}}},
                      maps:get(Identity, quod_foreign_log:test_lifecycle_state())),
         assert_history_integrity_counts(1, 0, 0),
+        %% The published read resource belongs to the node owner. Actual
+        %% mutable-writer death and a held reconstruction cannot revoke it
+        %% or enqueue this ready-prefix read behind the new initializer.
+        ?assertMatch({ok, #{identity := Identity}},
+                     quod_foreign_log:verify_reference(maps:get(ref, Fixture), finalize, 1000)),
+        ?assertMatch(#{pending := 1, resident_verified := 0}, quod_foreign_log:stats()),
+        ?assert(is_process_alive(Initializer)),
         Initializer ! {release_initialization, Gate},
         %% Network fetch is still set to crash. The rebuild and next exact
         %% reference must both succeed from the retained certified prefix.
@@ -6238,6 +6372,15 @@ start_owner(Dir, Fetch) ->
 
 await_history_ready(Identity, Height) ->
     await_history_ready(Identity, Height, quod_time:mono_ms() + 3000).
+
+await_history_idle(Identity, Deadline) ->
+    case maps:get(Identity, quod_foreign_log:test_lifecycle_state(), absent) of
+        absent -> ok;
+        #{active := none, waiting := []} -> ok;
+        _ ->
+            ?assert(quod_time:mono_ms() < Deadline),
+            await_history_idle(Identity, Deadline)
+    end.
 
 await_history_ready(Identity, Height, Deadline) ->
     Row = maps:get(Identity, quod_foreign_log:test_lifecycle_state()),

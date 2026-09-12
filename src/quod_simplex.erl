@@ -1193,14 +1193,13 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     claim_slot = none :: none | pos_integer(),
     claim_tx_id = none :: none | <<_:256>>,
     target_refs = none :: none | [term()],
+    %% One target-keyed volatile result set; no scalar result cache beside it.
     target_results = #{} :: map(),
     request_digest = none :: none | <<_:256>>,
     status = pending ::
         pending | running | blocked | settling,
     pid = none :: none | pid(),
     monitor = none :: none | reference(),
-    target_result = pending ::
-      pending | {committed, term()} | {{rejected, atom()}, term()},
     waiters = #{} :: #{reference() => {gen_statem:from(), reference()}}
 }).
 
@@ -1940,7 +1939,7 @@ test_operation_target_result(Result, TargetRef) ->
     Duplicate = finish_operation_target_result(
                   self(), OperationRef, Result, TargetRef, SFinished),
     #{reply => Reply,
-      stored => Stored#operation_recovery_owner.target_result,
+      stored => operation_client_result(Stored),
       waiters => map_size(Stored#operation_recovery_owner.waiters),
       duplicate => Duplicate}.
 test_operation_wait_before_projection(Slot, Claim = #transaction{}) ->
@@ -1966,13 +1965,15 @@ test_operation_wait_before_projection(Slot, Claim = #transaction{}) ->
           map_size(Projected#operation_recovery_owner.waiters)}.
 test_operation_recoveries(#s{operation_recoveries = Recoveries}) ->
     maps:map(
-      fun(_Ref, #operation_recovery_owner{
+      fun(_Ref, Owner = #operation_recovery_owner{
                   claim_state = State, status = Status, claim_slot = Slot,
                   target_refs = Target, request_digest = Digest, pid = Pid,
-                  monitor = Monitor, target_result = Result, waiters = Waiters}) ->
+                  monitor = Monitor, target_results = Results, waiters = Waiters}) ->
           #{claim_state => State, status => Status, slot => Slot,
             target_ref => Target, digest => Digest, pid => Pid,
-            monitor => Monitor, result => Result, waiters => Waiters}
+            monitor => Monitor, result => operation_client_result(Owner),
+            results => Results, result_vector => operation_result_vector(Owner),
+            waiters => Waiters}
       end, Recoveries).
 test_seed_operation_worker(Ref, Pid, S = #s{operation_recoveries = Recoveries}) ->
     Owner = maps:get(Ref, Recoveries),
@@ -4512,9 +4513,17 @@ close_signing_journal_handle(Journal) ->
 %%% durable distributed-control ownership
 %%%===================================================================
 
-current_dtx_binding(
+current_dtx_binding(#s{sync = ready} = S) ->
+    dtx_owner_binding(S);
+current_dtx_binding(#s{ns = Ns}) ->
+    {error, {ontology_unavailable, Ns}}.
+
+%% Membership/admission owns recovery; readiness only grants execution.
+%% Keep the public admission check above strict while retaining durable work
+%% across a transient sync or Prolog-readiness dip.
+dtx_owner_binding(
   #s{ns = Ns, genesis_hash = <<_:256>> = Anchor, self = Self,
-     author_admissions = Admissions, sync = ready,
+     author_admissions = Admissions,
      dtx_projection = Projection} = S)
   when is_map(Projection) ->
     case {is_participant(S), maps:get(Self, Admissions, undefined)} of
@@ -4523,7 +4532,7 @@ current_dtx_binding(
         _ ->
             {error, not_in_charge}
     end;
-current_dtx_binding(#s{ns = Ns}) ->
+dtx_owner_binding(#s{ns = Ns}) ->
     {error, {ontology_unavailable, Ns}}.
 
 enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
@@ -4827,7 +4836,7 @@ apply_operation_projection(
                           claim_state = merge_operation_claim_state(
                                           Bound#operation_recovery_owner.claim_state,
                                           unresolved)},
-            put_operation_owner(wake_operation_owner(Projected), S);
+            put_operation_owner(wake_operation_owner(Projected, S), S);
         _ ->
             error({invalid_operation_projection, Ns, Slot})
     end;
@@ -4842,7 +4851,7 @@ apply_operation_projection(
             %% A different validator may append the receipt before this
             %% replica's worker finishes. Keep result custody for its callers.
             Completed = Bound#operation_recovery_owner{claim_state = terminal},
-            put_operation_owner(wake_operation_owner(Completed), S);
+            put_operation_owner(wake_operation_owner(Completed, S), S);
         undefined ->
             S
     end;
@@ -4853,11 +4862,11 @@ await_operation_recovery(
   From, WaitRef, OperationRef,
   S = #s{operation_recoveries = Recoveries}) ->
     case maps:get(OperationRef, Recoveries, undefined) of
-        Owner = #operation_recovery_owner{target_result = pending,
-                                           waiters = _Waiters} ->
-            park_operation_waiter(From, WaitRef, OperationRef, Owner, S);
-        #operation_recovery_owner{target_result = Result} ->
-            {reply, Result, S};
+        Owner = #operation_recovery_owner{} ->
+            case operation_client_result(Owner) of
+                pending -> park_operation_waiter(From, WaitRef, OperationRef, Owner, S);
+                Result -> {reply, Result, S}
+            end;
         undefined ->
             %% The claim may be ahead of local apply OR already completed.
             %% The same worker reads the outcome index to distinguish them;
@@ -4915,34 +4924,29 @@ finish_operation_target_result(
     Result = operation_target_result(Result0, TargetRef),
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{
-                  status = running, pid = Pid,
+                  status = Status, pid = Pid,
                   target_refs = TargetRefs, target_results = Results,
-                  target_result = pending,
                   waiters = Waiters}
-          when Result =/= error ->
-            case is_list(TargetRefs) andalso lists:member(TargetRef, TargetRefs) andalso
-                 (not is_map_key(TargetRef, Results) orelse
-                  map_get(TargetRef, Results) =:= Result) of
+          when Result =/= error,
+               (Status =:= running orelse Status =:= settling) ->
+            case is_list(TargetRefs) andalso lists:member(TargetRef, TargetRefs) of
                 false -> false;
                 true ->
-                    Results1 = Results#{TargetRef => Result},
-                    Bound = Owner#operation_recovery_owner{target_results = Results1},
-                    case TargetRefs of
-                        [TargetRef] ->
-                            finish_operation_result_delivery(Bound, Result, Waiters, OperationRef, S);
-                        _ ->
-                            %% Multi-target dispatch/publication is unavailable
-                            %% until slice 8. Keep per-target facts monotone;
-                            %% never let one reply release the whole vector.
-                            {true, put_operation_owner(Bound, S)}
+                    Target = quod_operation_vector:target(TargetRef),
+                    case maps:find(Target, Results) of
+                        {ok, Result} -> {true, S};
+                        {ok, _Conflict} -> false;
+                        error when Status =:= running ->
+                            Bound = Owner#operation_recovery_owner{
+                                      target_results = Results#{Target => Result}},
+                            case operation_client_result(Bound) of
+                                pending -> {true, put_operation_owner(Bound, S)};
+                                Reply -> finish_operation_result_delivery(
+                                           Bound, Reply, Waiters, OperationRef, S)
+                            end;
+                        error -> false
                     end
             end;
-        #operation_recovery_owner{
-           status = Status, pid = Pid, target_results = Results}
-          when Result =/= error,
-               (Status =:= running orelse Status =:= settling),
-               is_map_key(TargetRef, Results), map_get(TargetRef, Results) =:= Result ->
-            {true, S};
         _ ->
             false
     end.
@@ -4966,7 +4970,25 @@ finish_operation_result_delivery(Owner, Result, Waiters, OperationRef, S) ->
               end),
             {true, put_operation_owner(
                      Owner#operation_recovery_owner{
-                       target_result = Result, waiters = #{}}, S)}.
+                       waiters = #{}}, S)}.
+
+%% Canonical order comes only from the bound claim, never arrival order.
+%% This is volatile verified-result bookkeeping, not receipt evidence: an
+%% included receipt row cannot manufacture one of these verdicts.
+operation_result_vector(#operation_recovery_owner{target_refs = none}) -> pending;
+operation_result_vector(#operation_recovery_owner{
+                          target_refs = Refs, target_results = Results}) ->
+    [{quod_operation_vector:target(Ref),
+      maps:get(quod_operation_vector:target(Ref), Results, pending)} || Ref <- Refs].
+
+%% Keep the released N=1 client grammar at this boundary only. N>1 admission
+%% and dispatch remain refused until the certified L2 result scope; even a
+%% complete hand-built vector is not yet authority for a multi-target reply.
+operation_client_result(Owner) ->
+    case operation_result_vector(Owner) of
+        [{_Target, Result}] -> Result;
+        _ -> pending
+    end.
 
 operation_target_result(committed, TargetRef) ->
     {committed, TargetRef};
@@ -5063,7 +5085,7 @@ install_operation_desired(
                           end,
                   Retiring = Owner#operation_recovery_owner{claim_state = State},
                   case operation_owner_needed(Retiring) of
-                      true -> Acc#{OperationRef => wake_operation_owner(Retiring)};
+                      true -> Acc#{OperationRef => wake_operation_owner(Retiring, S)};
                       false -> stop_operation_recovery_process(Retiring), Acc
                   end
           end
@@ -5085,7 +5107,7 @@ start_operation_recovery(
   Owner = #operation_recovery_owner{
             status = pending,
             operation_ref = OperationRef, trace_ctx = TraceCtx},
-  #s{ns = Ns}) ->
+  S = #s{ns = Ns}) ->
     trace_operation_event(
       TraceCtx, <<"operation.recovery_spawn">>, OperationRef, Ns, #{}),
     case quod_trace:with_context(TraceCtx, fun() ->
@@ -5093,6 +5115,7 @@ start_operation_recovery(
                self(), Ns, OperationRef, #{})
          end) of
         {ok, Pid, Monitor} ->
+            activate_dtx_coordinator(Pid, S),
             Owner#operation_recovery_owner{
               status = running, pid = Pid, monitor = Monitor};
         {error, Reason} ->
@@ -5150,7 +5173,7 @@ drop_operation_recovery_owner(
             %% Operational termination is itself a wake. A programming fault
             %% is instead loud and blocked: repeatedly spawning the same
             %% crashing function is not recovery or progress.
-            Status = case {Reason, Owner#operation_recovery_owner.target_result} of
+            Status = case {Reason, operation_client_result(Owner)} of
                          {normal, Result} when Result =/= pending -> settling;
                          {Signal, _} when Signal =:= killed; Signal =:= shutdown;
                                           Signal =:= noproc -> pending;
@@ -5170,16 +5193,16 @@ drop_operation_recovery_owner(
 wake_operation_recoveries(
   S = #s{operation_recoveries = Recoveries}) ->
     Recoveries1 = maps:map(
-                    fun(_Ref, Owner) -> wake_operation_owner(Owner) end, Recoveries),
+                    fun(_Ref, Owner) -> wake_operation_owner(Owner, S) end, Recoveries),
     S#s{operation_recoveries = Recoveries1}.
 
 wake_operation_owner(Owner = #operation_recovery_owner{
-                              operation_ref = Ref, status = running, pid = Pid}) ->
-    Pid ! {operation_wake, Ref},
+                              status = running, pid = Pid}, S) ->
+    activate_dtx_coordinator(Pid, S),
     Owner;
-wake_operation_owner(Owner = #operation_recovery_owner{status = blocked}) ->
+wake_operation_owner(Owner = #operation_recovery_owner{status = blocked}, _S) ->
     Owner#operation_recovery_owner{status = pending};
-wake_operation_owner(Owner) -> Owner.
+wake_operation_owner(Owner, _S) -> Owner.
 
 bind_operation_claim(Owner = #operation_recovery_owner{
                               operation_ref = Ref, claim_slot = OldSlot,
@@ -5237,30 +5260,37 @@ reconcile_dtx_coordinator(S) ->
 %% evidence, and the coordinator rechecks the authoritative local snapshot
 %% before making progress.
 notify_dtx_coordinator_progress(
-  S0, S1 = #s{dtx_coordinators = Coordinators}) ->
-    case map_size(Coordinators) > 0 andalso
+  S0, S1 = #s{dtx_coordinators = Coordinators, operation_recoveries = Operations}) ->
+    case (map_size(Coordinators) > 0 orelse map_size(Operations) > 0) andalso
          local_dtx_progress_changed(S0, S1) of
         true ->
             Identity = target_identity(S1),
             Slot = S1#s.slot,
+            Ready = endpoint_write_ready(S1),
             maps:foreach(
               fun(_GroupId,
                   #dtx_coordinator_owner{status = running, pid = Pid})
                     when is_pid(Pid) ->
-                      send_dtx_coordinator_progress(Pid, Identity, Slot);
+                      send_dtx_coordinator_progress(Pid, Identity, Slot, Ready);
                  (_GroupId, _RecoveringOrMalformed) ->
                       ok
               end, Coordinators),
+            maps:foreach(
+              fun(_Ref, #operation_recovery_owner{status = running, pid = Pid}) when is_pid(Pid) ->
+                      send_dtx_coordinator_progress(Pid, Identity, Slot, Ready);
+                 (_, _) -> ok
+              end, Operations),
             ok;
         false ->
             ok
     end.
 
 activate_dtx_coordinator(Pid, S) when is_pid(Pid) ->
-    send_dtx_coordinator_progress(Pid, target_identity(S), S#s.slot).
+    send_dtx_coordinator_progress(
+        Pid, target_identity(S), S#s.slot, endpoint_write_ready(S)).
 
-send_dtx_coordinator_progress(Pid, Identity, Slot) ->
-    Pid ! {local_dtx_progress, Identity, Slot},
+send_dtx_coordinator_progress(Pid, Identity, Slot, Ready) ->
+    Pid ! {local_dtx_progress, self(), Identity, Slot, Ready},
     ok.
 
 local_dtx_progress_changed(S0, S1) ->
@@ -5269,7 +5299,7 @@ local_dtx_progress_changed(S0, S1) ->
         endpoint_write_ready(S0) =/= endpoint_write_ready(S1).
 
 dtx_coordinator_desired(S) ->
-    case current_dtx_binding(S) of
+    case dtx_owner_binding(S) of
         {ok, Binding} ->
             %% A not-yet-committed journal row is the more exact source during
             %% the brief finality/reconciliation overlap for the same GroupId.
@@ -5291,7 +5321,7 @@ pending_origin_begins(#s{retained_dtx = Registry}, Binding) ->
             group_ref_binding(GroupRef) =:= Binding]).
 
 committed_origin_recoveries(
-  #s{prolog_ready = true, dtx_projection = Projection})
+  #s{dtx_projection = Projection})
   when is_map(Projection) ->
     maps:from_list(
       [{GroupId, {reference, GroupId, BeginRef}}
@@ -5386,10 +5416,8 @@ start_dtx_coordinator(
 start_dtx_coordinator(
   {reference, GroupId, BeginRef},
   TraceCtx, S) ->
-    %% Each worker receives its own immutable snapshot. Current-era controls
-    %% are independent reads; references from older committee eras fall back
-    %% inside the shared certified-history owner, which already serializes
-    %% work for one identity.
+    %% Every era is an exact indexed read of this owner-lifetime capture.
+    %% No foreign job or reconstruction is involved in recovering the Begin.
     Owner = self(),
     LocalSource = local_history_view(S),
     {Pid, Monitor} =
@@ -5437,10 +5465,9 @@ start_dtx_coordinator_worker(
         {ok, Pid, Monitor} ->
             S1 = put_dtx_coordinator(
                    Owner#dtx_coordinator_owner{pid = Pid, monitor = Monitor}, S),
-            %% Establish the owner-to-child progress stream after recording
-            %% its exact pid. The child's initial drive may already have
-            %% observed a temporarily unavailable local view; this edge makes
-            %% that race self-closing without a timer or a foreign self-follow.
+            %% Establish execution capability after recording the exact pid.
+            %% Before this stream arrives the child is parked, not allowed to
+            %% race its initial drive against installation of the owner row.
             ok = activate_dtx_coordinator(Pid, S1),
             S1;
         {error, Reason} ->
@@ -12303,13 +12330,9 @@ keep_progress(S0, S1, Actions, TimerMode) ->
 keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
     ActionsRev0 = lists:reverse(Actions),
     BeforeIngress = (refresh_ingress_view(S0))#s.ingress,
-    SWoken = case S1#s.slot > S0#s.slot of
-                 true -> wake_operation_recoveries(S1);
-                 false -> S1
-             end,
-    SReady = timed_step(SWoken, readiness,
+    SReady = timed_step(S1, readiness,
                         fun() -> settle_readiness(
-                                   S0, maybe_mark_ready(SWoken, ReadyBoundary)) end),
+                                   S0, maybe_mark_ready(S1, ReadyBoundary)) end),
     SRecovered = timed_step(SReady, reconcile,
                             fun() -> reconcile_block_requests(SReady) end),
     SCoordinated = timed_step(

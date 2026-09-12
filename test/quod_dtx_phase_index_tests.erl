@@ -93,21 +93,80 @@ capture_cost_is_constant_by_call_count_test() ->
     Counts = [capture_cost(N) || N <- [8, 64, 257]],
     ?assertEqual([1, 1, 1], Counts).
 
+retained_capture_cost_is_constant_by_call_count_test() ->
+    ?assertEqual([1, 1, 1], [capture_cost(N, retained) || N <- [8, 64, 257]]).
+
+retained_read_capture_survives_mutable_writer_death_test() ->
+    with_tmp(fun(Dir, Ns) ->
+        Parent = self(),
+        Era1 = {1, [key(770)], key(771), #{}},
+        Era2 = {2, [key(770)], key(772), #{}},
+        {Writer, Mon} = spawn_monitor(fun() ->
+            {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+            Parent ! {empty_index, self(), Index},
+            receive populate -> ok end,
+            ok = quod_dtx_phase_index:commit_delta(Index, era_delta([Era1])),
+            {ok, DisposableView} = quod_dtx_phase_index:capture(Index, 1),
+            Parent ! {published, self(), DisposableView},
+            receive append -> ok end,
+            ok = quod_dtx_phase_index:commit_delta(Index, era_delta([Era2])),
+            Parent ! {appended, self()},
+            receive stop -> ok end
+        end),
+        Index = receive {empty_index, Writer, I} -> I after 1000 -> error(no_empty_index) end,
+        {ok, Hold} = quod_dtx_phase_index:retain_empty(Index),
+        try
+            ?assert(quod_dtx_phase_index:same_session(Hold, Index)),
+            ?assertEqual({error, bad_phase_index_delta},
+                         quod_dtx_phase_index:commit_delta(Hold, era_delta([Era1]))),
+            ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:suspend(Hold)),
+            ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:resume(Hold)),
+            Writer ! populate,
+            Disposable = receive {published, Writer, V} -> V after 1000 -> error(no_publication) end,
+            {ok, View} = quod_dtx_phase_index:capture(Hold, 1),
+            ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:retain_empty(Index)),
+            Writer ! append,
+            receive {appended, Writer} -> ok after 1000 -> error(no_append) end,
+            exit(Writer, kill),
+            receive {'DOWN', Mon, process, Writer, killed} -> ok after 1000 -> error(writer_alive) end,
+            ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:committee(Disposable, 1)),
+            ?assertEqual({ok, Era1}, quod_dtx_phase_index:committee(View, 1)),
+            ?assertEqual(not_found, quod_dtx_phase_index:committee(View, 2)),
+            {ok, NewView} = quod_dtx_phase_index:capture(Hold, 2),
+            ?assertEqual({ok, Era2}, quod_dtx_phase_index:committee(NewView, 2)),
+            ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:release(View))
+        after
+            exit(Writer, kill), demonitor(Mon, [flush]),
+            ok = quod_dtx_phase_index:release(Hold)
+        end
+    end).
+
 capture_cost(N) ->
+    capture_cost(N, mutable).
+
+capture_cost(N, Kind) ->
     with_tmp(fun(Dir, Ns) ->
         Parent = self(),
         {Owner, Mon} = spawn_monitor(fun() ->
             {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+            ReadIndex = case Kind of
+                mutable -> Index;
+                retained ->
+                    {ok, Hold} = quod_dtx_phase_index:retain_empty(Index), Hold
+            end,
             %% One distinct era per entry is the worst case, not an empty
             %% prefix or one unchanging committee hiding a linear capture.
             ok = quod_dtx_phase_index:commit_delta(Index, era_delta(
                 [{H, [key(740)], key(1000 + H), #{}} || H <- lists:seq(1, N)])),
             Parent ! {index_ready, self()},
             receive capture ->
-                {ok, View} = quod_dtx_phase_index:capture(Index, N),
+                {ok, View} = quod_dtx_phase_index:capture(ReadIndex, N),
                 Parent ! {captured_index, self(), View}
             end,
-            receive stop -> ok = quod_dtx_phase_index:close(Index) end
+            receive stop ->
+                case Kind of mutable -> ok; retained -> ok = quod_dtx_phase_index:release(ReadIndex) end,
+                ok = quod_dtx_phase_index:close(Index)
+            end
         end),
         receive {index_ready, Owner} -> ok after 1000 -> error(index_not_ready) end,
         %% All DETS API work by the capture owner is counted, not merely one

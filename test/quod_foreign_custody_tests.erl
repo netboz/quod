@@ -227,7 +227,10 @@ queue_case(Root) ->
 session_case(Root) ->
     Fixture = fixture(), Identity = identity(Fixture),
     Owner = start_owner(Root, fetch(Fixture)),
-    assert_verified(request(Owner, Fixture, 5000)),
+    %% Ready reads deliberately do not claim mutation custody anymore. Seed
+    %% a genuine certified prefix at 1, then request the missing Finalize at 2
+    %% so this still tests the actual writer handoff and exact-path sweep.
+    seed_genesis(Owner, Fixture),
     await_name_free(Identity),
     Session = history_field(Owner, Identity, phase_session),
     Path = quod_dtx_phase_index:test_path(Session),
@@ -257,10 +260,10 @@ session_case(Root) ->
     {ok, Old} = quod_dtx_phase_index:suspend(Old0),
     {ok, Next0} = quod_dtx_phase_index:open(Root, <<"index-control">>),
     ?assertEqual({error, bad_phase_index_argument},
-                 quod_dtx_phase_index:cleanup(Root, <<"index-control">>, Next0)),
+                 quod_dtx_phase_index:cleanup(Root, <<"index-control">>, [Next0])),
     {ok, Next} = quod_dtx_phase_index:suspend(Next0),
     ?assertEqual({error, bad_phase_index_argument},
-                 quod_dtx_phase_index:cleanup(Root, <<"other-index">>, Next)),
+                 quod_dtx_phase_index:cleanup(Root, <<"other-index">>, [Next])),
     ok = quod_dtx_phase_index:close(Old),
     ?assert(filelib:is_file(quod_dtx_phase_index:test_path(Next))),
     {ok, Resumed} = quod_dtx_phase_index:resume(Next),
@@ -397,7 +400,7 @@ follow_cancel_case(Root) ->
       waiting := [#{ref := FollowJob, wait_reason := custody},
                    #{ref := SiblingJob, wait_reason := runnable}]} = lifecycle(Owner, Identity),
     [QueuedFollow, _] = queue:to_list(history_field(Owner, Identity, waiting)),
-    {custody, FollowMonitor} = field(queued_request, parked, QueuedFollow),
+    {custody, FollowMonitor} = field(request, parked, QueuedFollow),
     ?assert(lists:member({Owner, FollowMonitor, info}, name_monitors(Holder, Identity))),
     ok = quod_foreign_log:unfollow(Follow),
     State = lifecycle(Owner, Identity),
@@ -529,7 +532,7 @@ custody_fifo_case(Root, Mode) ->
       waiting := [#{ref := HeadJob, wait_reason := custody},
                    #{ref := SecondJob, wait_reason := runnable}]} = lifecycle(Owner, Identity),
     [HeadRow, _] = queue:to_list(history_field(Owner, Identity, waiting)),
-    ?assertEqual({custody, HeadMonitor}, field(queued_request, parked, HeadRow)),
+    ?assertEqual({custody, HeadMonitor}, field(request, parked, HeadRow)),
     Barrier = erlang:trace_delivered(Owner),
     receive {trace_delivered, Owner, Barrier} -> ok
     after 5000 -> error(spawn_trace_barrier_missing) end,
@@ -645,7 +648,7 @@ history_field(Owner, Identity, Field) ->
     field(history, Field, maps:get(Identity, Histories)).
 queued_field(Owner, Identity, Field) ->
     [Q] = queue:to_list(history_field(Owner, Identity, waiting)),
-    field(queued_request, Field, Q).
+    field(request, Field, Q).
 field(Record, Field, Tuple) ->
     Forms = original_forms(quod_foreign_log),
     [Fields] = [Fs || {attribute, _, record, {Tag, Fs}} <- Forms, Tag =:= Record],

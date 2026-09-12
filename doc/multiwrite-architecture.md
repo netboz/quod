@@ -801,3 +801,49 @@ commit. The separate coordination scope still owes operation/dormant-loop
 conversion, actual target double-delivery idempotence, and ready-prefix reads
 that survive mutable-writer loss. No deployment or performance result, F6
 checkpoint completion, or completion of the morning minimum is claimed here.
+
+## Coordination R3/R4 completion candidate — implementation status, 2026-09-12
+
+This appendix supersedes the pending-work status above, not the approved
+architecture. History and its counter delta are published through .169;
+dead-adapter deletion and the reviewed Erlog revision are published through
+.171. This coordination tree is an uncommitted candidate requiring full gates
+and exact-tree review. No deployment or performance acceptance is claimed.
+
+Group, operation and dormant-cancellation work now use the same responsive
+wave/result lifecycle. Ordered work is a one-item wave. Source-custody calls
+use native asynchronous OTP requests from the actual coordinator PID, with
+the same wave correlation, deadlines and cancellation; no proxy bypasses the
+source's caller-identity check. Exact durable claim bytes and deterministic
+application identity remain pinned across progress-edge redelivery. The real
+target double-delivery regression asserts exactly one ledger application.
+
+The foreign owner's published prefix and the temporary writer's resumable
+cursor have separate validity, not separate owners or indexes. The owner
+retains read access to the existing index while it is still empty, before
+the writer populates it. Mutation access still passes through the existing
+registered writer's suspend/resume custody. A read hold cannot install deltas.
+DETS requires matching underlying open options: read-only access is enforced
+by the opaque library capability, not claimed as DETS read-mode protection.
+
+Physical resource accounting is explicit: an existing DETS table process now
+lives with each retained foreign prefix instead of closing between writers.
+During reconstruction the previous published resource and the tentative new
+resource coexist. There is no new application actor, watchdog, retry timer,
+polling loop, queue, global inventory or alternative storage backend.
+
+Ready exact reads do not join a newer range's acquisition queue. The owner
+captures one historical era at the published height in its own turn; the
+existing caller performs one point read and the shared exact verifier. No
+DETS handle escapes that capture turn, no Prolog state moves, and neither an
+unavailable capture nor an invalid proof authorizes another route/replay.
+Published views survive mutable-writer loss; the exact node-owner lifetime
+and original absolute caller deadline still bound result consumption.
+
+Direct reads and acquisition use one point-read/verifier implementation and
+one stage-tracing helper. Direct-read timing belongs to the real caller span;
+there is no fabricated verification-worker span. Controls count capture/read
+work independently of SDK export and preserve O-A1/O-A2 analysis discipline.
+N>1 remains the ruled lane-unavailable boundary until slice 8. F6, the action
+savepoint scope, R-RESTART-RACE-01, both EUnit ledger items, c4 and +8.7% remain
+open; this candidate does not retire them.

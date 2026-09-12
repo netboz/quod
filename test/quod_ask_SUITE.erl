@@ -38,6 +38,7 @@
 -export([cut_findall_local_and_cohosted/1,
          cut_findall_remote_boundaries/1,
          cut_findall_signed_multiscope_savepoints/1]).
+-export([remote_exact_claim_redelivery/1, claim_application_occurrences/2]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
@@ -66,6 +67,7 @@ all() -> [remote_signed_transaction_savepoints,
           remote_scope_cancel, remote_scope_transport_reuse,
           remote_signed_gateway_read_execute_cursor,
           remote_signed_read_certified_write,
+          remote_exact_claim_redelivery,
           local_write_with_foreign_read,
           read_certificate_stale_rejected,
           remote_signed_origin_read_certificate_stale_rejected,
@@ -866,6 +868,76 @@ remote_signed_read_certified_write(Config) ->
        completed_remote_operation(
          Asker, maps:get(operation_ref, Evidence), 600)),
     assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag).
+
+%% R4-UNCERTAIN-CLAIM-DELIVERY-01: this is a real signed operation admitted
+%% through the ordinary client, source consensus, and remote target. Once it
+%% is accepted, deliver the SAME durable claim twice more through the real
+%% endpoint. Only the transport correlation id changes. No hand-built claim,
+%% new signed goal, new application identity, or admission bypass is used.
+remote_exact_claim_redelivery(Config) ->
+    Asker = ?config(asker, Config),
+    Third = ?config(third, Config),
+    Tag = erlang:unique_integer([positive]),
+    Goal = iolist_to_binary(io_lib:format(
+             "\"animals\"::diet(dog, kibble), \"third\"::dtx_write(~B).", [Tag])),
+    {ok, Evidence, {normalized, {committed, [_],
+        {transaction, ?THIRD_NS, Anchor, TxId} = TargetRef}}} =
+        submit_signed_execute(Config, Goal),
+    OperationRef = maps:get(operation_ref, Evidence),
+    ?assertEqual(TargetRef, completed_remote_operation(Asker, OperationRef, 600)),
+    {ok, #{height := ClaimSlot}} = peer:call(
+        Asker, quod_prolog, local_outcome, [?ASKER_NS, OperationRef]),
+    Deadline = peer:call(Asker, quod_time, mono_ms, []) + 5000,
+    {ok, CertifiedClaimRef, Claim} = peer:call(
+        Asker, quod_simplex, operation_claim_evidence,
+        [?ASKER_NS, ClaimSlot, OperationRef, Deadline]),
+    {ok, ClaimBytes} = quod_transaction:encode_evidence(CertifiedClaimRef, Claim),
+    Target = {?THIRD_NS, Anchor},
+    StableClaimRef = quod_transaction:stable_ref(CertifiedClaimRef),
+    ?assertMatch(#transaction{tx_id = TxId},
+        quod_transaction:remote_application(StableClaimRef, Claim, Target)),
+    Before = peer:call(Third, ?MODULE, claim_application_occurrences,
+                       [?THIRD_NS, TxId]),
+    ?assertMatch([_], Before),
+    lists:foreach(fun(_) ->
+        ?assertEqual({ok, ClaimBytes},
+                     quod_transaction:encode_evidence(CertifiedClaimRef, Claim)),
+        RequestId = crypto:strong_rand_bytes(16),
+        Request = {apply_claim, RequestId, Target, ClaimBytes},
+        {ok, {application, RequestId, committed, ApplicationBytes} = Response} =
+            peer:call(Asker, quod_dtx_current_view, submit_claim_application,
+                      [?ASKER_NS, Target, Claim, Request, 5000], 10000),
+        ?assert(quod_dtx_endpoint:correlates(Request, Response)),
+        {ok, ApplicationRef, #transaction{tx_id = TxId,
+            role = {remote_application, _, _, _}}} =
+            quod_transaction:decode_evidence(ApplicationBytes),
+        ?assertEqual(TargetRef, quod_transaction:stable_ref(ApplicationRef)),
+        ?assertEqual(Before, peer:call(Third, ?MODULE,
+            claim_application_occurrences, [?THIRD_NS, TxId])),
+        assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag)
+    end, [first_redelivery, second_redelivery]).
+
+%% Test-side audit only, executed ON the target. An ordinary immutable owner
+%% snapshot is read without returning any store or interpreter state to the
+%% caller. Count ledger occurrences as well as visible facts: an extra inert
+%% or rejected envelope must not hide a second application under the same id.
+claim_application_occurrences(Ns, TxId) ->
+    {ok, #{snapshot := Snapshot, slot := Height}} =
+        quod_simplex:history_view(Ns, any, quod_time:mono_ms() + 5000),
+    {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
+    try
+        lists:reverse(quod_ledger_store:fold(Store, 1, Height,
+            fun(Entry, Acc) ->
+                case quod_ledger:entry_view(Entry) of
+                    #entry{index = Slot, data = {batch, Transactions}} ->
+                        [Slot || #transaction{tx_id = Id,
+                            role = {remote_application, _, _, _}} <- Transactions,
+                            Id =:= TxId] ++ Acc;
+                    _ -> Acc
+                end
+            end, []))
+    after quod_ledger_store:close(Store)
+    end.
 
 %% A writes locally while B contributes only a certified read. The result is
 %% A's ordinary transaction; there is no source claim and no DTX group.

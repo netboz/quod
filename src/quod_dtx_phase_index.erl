@@ -16,8 +16,10 @@ singleton controls use those same batch APIs rather than separate wrappers.
 The hosted Simplex owner retains the mutable table for its whole lifetime.
 Its read-only captures pin height and era count; bounded immutable phase
 records and append-only committee eras hide subsequent writer advancement.
-Foreign-history custody instead suspends/resumes the same table between its
-ordered writers. These are distinct lifetimes, not interchangeable handoffs.
+Foreign-history custody suspends/resumes mutation access between its ordered
+writers. Its existing node owner retains read access from the empty index's
+creation, so a published prefix outlives a disposable writer. Resource lifetime
+and mutation custody are distinct; a read holder cannot apply a delta.
 The derived file is never repaired or datasync'd; `close/1` deletes it. Startup
 cleanup removes only abandoned files of this exact session-file family.
 """.
@@ -25,6 +27,7 @@ cleanup removes only abandoned files of this exact session-file family.
 -include("quod_proof_limits.hrl").
 
 -export([open/2, suspend/1, resume/1, close/1, cleanup/2, cleanup/3, stats/1,
+         retain_empty/1, release/1, same_session/2,
          capture/2, is_capture/2, history/2, committee/2, preview_committee/2, preview_histories/2,
          new_delta/0, preview_batch/4, commit_delta/2,
          apply_batch/3]).
@@ -55,7 +58,8 @@ cleanup removes only abandoned files of this exact session-file family.
           table :: term(),
           path :: file:filename_all(),
           owner :: pid(),
-          state = open :: open | suspended | {view, non_neg_integer(), non_neg_integer()}
+          state = open :: open | suspended | retained |
+                             {view, non_neg_integer(), non_neg_integer()}
          }).
 
 -record(delta, {
@@ -116,6 +120,38 @@ table_options(Path) ->
     [{file, Path}, {type, set}, {keypos, 1}, {repair, false},
      {auto_save, infinity}].
 
+-doc "Retain resource lifetime before the exclusive writer populates a new index.".
+-spec retain_empty(index()) -> {ok, index()} | {error, index_error()}.
+retain_empty(Index = #index{table = Table, path = Path, state = open}) ->
+    %% The writer waits for this handoff before its first insertion. Even if
+    %% it dies during registration, this can only open an EMPTY scratch file,
+    %% never cold-open a retained prefix in the node owner's mailbox. DETS
+    %% requires identical access options for shared users; the opaque retained
+    %% capability, not an incompatible DETS read-mode open, excludes mutation.
+    case dets:info(Table, size) of
+        0 ->
+            case dets:open_file(Path, table_options(Path)) of
+                {ok, Path} -> {ok, Index#index{owner = self(), state = retained}};
+                {error, Reason} -> {error, {phase_index_io, Reason}}
+            end;
+        _ -> {error, bad_phase_index_argument}
+    end;
+retain_empty(_) -> {error, bad_phase_index_argument}.
+
+-doc "Release this owner's read hold; the next custody sweep reclaims its file.".
+-spec release(index()) -> ok | {error, index_error()}.
+release(#index{table = Table, owner = Owner, state = retained}) when Owner =:= self() ->
+    case close_table(Table) of
+        ok -> ok;
+        {error, Reason} -> {error, {phase_index_io, Reason}}
+    end;
+release(_) -> {error, bad_phase_index_argument}.
+
+-doc "Bind a read hold to its exact session, independently of writer incarnation.".
+-spec same_session(index(), index()) -> boolean().
+same_session(#index{table = Table, path = Path}, #index{table = Table, path = Path}) -> true;
+same_session(_, _) -> false.
+
 -doc "Close the table while retaining its session-owned derived rows.".
 -spec suspend(index()) -> {ok, index()} | {error, index_error()}.
 suspend(Index = #index{table = Table, owner = Owner, state = open}) when Owner =:= self() ->
@@ -171,8 +207,9 @@ close(_NotOwned) -> {error, bad_phase_index_argument}.
 
 -doc "Capture an owner-bound read-only index at H with one metadata lookup.".
 -spec capture(index(), non_neg_integer()) -> {ok, index()} | {error, index_error()}.
-capture(Index = #index{table = Table, owner = Owner, state = open}, Height)
-  when Owner =:= self(), is_integer(Height), Height >= 0 ->
+capture(Index = #index{table = Table, owner = Owner, state = State}, Height)
+  when Owner =:= self(), (State =:= open orelse State =:= retained),
+       is_integer(Height), Height >= 0 ->
     case era_tip(Table) of
         {ok, Count, _Last} -> {ok, Index#index{state = {view, Height, Count}}};
         {error, _} = Error -> Error
@@ -193,7 +230,7 @@ history(Index = #index{owner = Owner, state = State}, GroupId)
     end;
 history(_Index, _GroupId) -> {error, bad_phase_index_argument}.
 
-bounded_history(History, open) -> {ok, History};
+bounded_history(History, State) when State =:= open; State =:= retained -> {ok, History};
 bounded_history(#{group_id := GroupId, records := Records}, {view, Height, _})
   when is_map(Records), map_size(Records) =< ?MAX_GROUP_RECORDS ->
     %% The reducer never overwrites a phase's first exact reference. Filtering
@@ -284,16 +321,16 @@ close_result(ok, {error, Reason}) -> {error, {phase_index_io, Reason}}.
 -spec cleanup(file:filename_all(), binary()) ->
           ok | {error, index_error()}.
 cleanup(LedgerDir, Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
-    cleanup(LedgerDir, Ns, none);
+    cleanup(LedgerDir, Ns, []);
 cleanup(_LedgerDir, _Ns) ->
     {error, bad_phase_index_argument}.
 
--doc "Sweep abandoned scratch files while preserving the exact handed-off session.".
--spec cleanup(file:filename_all(), binary(), none | index()) ->
+-doc "Sweep abandoned files, preserving the exact cursor and published read resource.".
+-spec cleanup(file:filename_all(), binary(), [index()]) ->
           ok | {error, index_error()}.
 cleanup(LedgerDir, Ns, Retained) when is_binary(Ns), byte_size(Ns) > 0 ->
     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
-    case retained_cleanup_path(Dir, Retained) of
+    case retained_cleanup_paths(Dir, Retained) of
         {ok, Keep} ->
             case file:list_dir(Dir) of
                 {ok, Names} -> cleanup_names(Dir, Names, Keep);
@@ -305,15 +342,19 @@ cleanup(LedgerDir, Ns, Retained) when is_binary(Ns), byte_size(Ns) > 0 ->
 cleanup(_LedgerDir, _Ns, _Retained) ->
     {error, bad_phase_index_argument}.
 
-retained_cleanup_path(_Dir, none) -> {ok, none};
-retained_cleanup_path(Dir, #index{path = Path, state = suspended}) ->
-    case filename:dirname(Path) =:= Dir of true -> {ok, Path}; false -> error end;
-retained_cleanup_path(_Dir, _Retained) -> error.
+retained_cleanup_paths(_Dir, []) -> {ok, []};
+retained_cleanup_paths(Dir, [#index{path = Path, state = State} | Rest])
+  when State =:= suspended; State =:= retained ->
+    case {filename:dirname(Path) =:= Dir, retained_cleanup_paths(Dir, Rest)} of
+        {true, {ok, Paths}} -> {ok, [Path | Paths]};
+        _ -> error
+    end;
+retained_cleanup_paths(_, _) -> error.
 
 cleanup_names(_Dir, [], _Keep) -> ok;
 cleanup_names(Dir, [Name | Rest], Keep) ->
     Path = filename:join(Dir, Name),
-    case is_scratch_name(Name) andalso Path =/= Keep of
+    case is_scratch_name(Name) andalso not lists:member(Path, Keep) of
         false -> cleanup_names(Dir, Rest, Keep);
         true ->
             case delete_file(Path) of

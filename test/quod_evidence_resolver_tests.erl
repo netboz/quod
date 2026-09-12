@@ -199,7 +199,11 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
             T = traces(),
             ?assertEqual(0, calls(T, quod_foreign_log, replay_cache, 6)),
             ?assertEqual(0, calls(T, quod_ledger_store, open, 3)),
-            ?assertEqual(1, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
+            %% The published prefix serves an exact read in its caller. It
+            %% neither reacquires mutable custody nor starts a history job.
+            ?assertEqual(0, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
+            ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
+            ?assertEqual(1, calls(T, quod_ledger_store, read_at, 2)),
             assert_no_fetch()
         after
             stop_trace(Launcher),

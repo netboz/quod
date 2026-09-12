@@ -857,7 +857,25 @@ many_certification_preserves_aligned_successes_and_retries_test() ->
        {ok, [{verified, {quod_dtx_applied_certificate, 1, _, _, _, _, _, _, _, _}},
              retry]},
        quod_dtx_current_view:test_certify_applied_many(
-         maps:get(owner_ns, Good), Requests, 1000, Deps)).
+         maps:get(owner_ns, Good), Requests, deadline(1000), Deps)).
+
+many_certification_expired_deadline_starts_no_observation_test() ->
+    F = fixture(1),
+    Never = fun() -> error(observation_after_deadline) end,
+    Deps = (dependencies(F, fun(_, _) -> error(endpoint_after_deadline) end))#{
+             network_identity => Never,
+             view => fun(_, _, _) -> error(view_after_deadline) end},
+    ?assertEqual({error, retry},
+                 quod_dtx_current_view:test_certify_applied_many(
+                   maps:get(owner_ns, F), many_requests(F, 2),
+                   deadline(-1), Deps)).
+
+many_certification_refuses_non_deadline_input_test() ->
+    F = fixture(1),
+    ?assertEqual({error, invalid_request},
+                 quod_dtx_current_view:test_certify_applied_many(
+                   maps:get(owner_ns, F), many_requests(F, 1),
+                   infinity, #{})).
 
 many_certification_children_follow_caller_death_test() ->
     F = fixture(1),
@@ -873,7 +891,7 @@ many_certification_children_follow_caller_death_test() ->
     {Certifier, CertifierMonitor} = spawn_monitor(
       fun() ->
           _ = quod_dtx_current_view:test_certify_applied_many(
-                maps:get(owner_ns, F), Requests, 1000, BlockedDeps),
+                maps:get(owner_ns, F), Requests, deadline(1000), BlockedDeps),
           ok
       end),
     Children = collect_many_children(2, []),

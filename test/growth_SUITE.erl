@@ -209,8 +209,9 @@ byzantine_on_grown_committee(Config) ->
                                    author_seq = (1 bsl 60) + V}),
     {ok, Evil} = quod_transaction:sign(Binding, Unsigned, Identity),
     Ts     = erlang:system_time(millisecond) + 1000,
-    Block  = #block{slot = V, parent = H,
-                    payload = {batch, [Evil]}, timestamp = Ts},
+    %% A canonical block must reach the validators. A raw record view is
+    %% refused by the encoder before the invalid membership test can run.
+    {ok, Block} = quod_ledger:new_block(V, H, {batch, [Evil]}, Ts),
     Chan   = term_to_binary({log, ?NS}, [deterministic]),
     Frame  = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fp, Chan, Frame]) || Fp <- Pubs, Fp =/= LeaderPub],
@@ -331,6 +332,7 @@ start_node(Port, {Pub, Seed}, Config, EnvOverrides, Extra) ->
     maps:foreach(Set, EnvOverrides),
     DataDir = quod_ct:datadir(Config, Port),
     Set(effect_journal_data_dir, DataDir),
+    Set(foreign_log, #{cache_dir => filename:join(DataDir, "foreign-history")}),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     Cfg = maps:merge(#{node_id => Pub, identity => #{pubkey => Pub, key => KeyTerm}, data_dir => DataDir},
                      Extra),

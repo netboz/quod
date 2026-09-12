@@ -551,15 +551,36 @@ history_page(Ns, Mode, Deadline) ->
 
 trace_history_reads(Fun) ->
     quod_trace_tests:with_tracer(fun() ->
-        Result = quod_trace:with_span(
+        {Result, TraceId} = quod_trace:with_span(
                    otel_ctx:new(), <<"explorer.history.test">>, internal, #{},
-                   fun(_) -> Fun() end),
-        {Result, history_span_names([])}
+                   fun(Span) -> {Fun(), otel_span:trace_id(Span)} end),
+        {Result, history_span_names(TraceId, [])}
     end).
 
-history_span_names(Acc) ->
-    receive {quod_test_span, #span{name = Name}} -> history_span_names([Name | Acc])
+history_span_names(TraceId, Acc) ->
+    receive {quod_test_span, #span{name = Name, trace_id = TraceId}} ->
+        history_span_names(TraceId, [Name | Acc])
     after 0 -> lists:reverse(Acc)
+    end.
+
+history_read_counts_exclude_unrelated_request_test() ->
+    with_history_source(fun(Ns, _Owner) ->
+        {Page, Names} = trace_history_reads(fun() ->
+            %% A real second ledger read under an independent SDK trace must
+            %% not inflate this request's count. No fabricated exporter row.
+            quod_trace:with_span(otel_ctx:new(), <<"unrelated.history">>, internal, #{},
+              fun(_) -> history_page(Ns, live, quod_time:mono_ms() + 1000) end),
+            history_page(Ns, live, quod_time:mono_ms() + 1000)
+        end),
+        ?assertMatch(#{height := 2}, Page),
+        ?assertEqual(1, length([ok || <<"quod.ledger.file_open">> <- Names])),
+        %% These exports deliberately belonged to no counted request.
+        drain_unrelated_history_spans()
+    end).
+
+drain_unrelated_history_spans() ->
+    receive {quod_test_span, #span{}} -> drain_unrelated_history_spans()
+    after 0 -> ok
     end.
 
 with_history_source(Fun) ->

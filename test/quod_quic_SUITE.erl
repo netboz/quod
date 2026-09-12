@@ -66,6 +66,11 @@ init_per_suite(Config) ->
     EffectJournalDir =
         filename:join(?config(priv_dir, Config), "effect-journal"),
     application:set_env(quod, effect_journal_data_dir, EffectJournalDir),
+    %% The foreign history owner is also started by the real application.
+    %% Transport tests must not inspect or mutate a developer's retained cache.
+    application:set_env(quod, foreign_log,
+                        #{cache_dir => filename:join(?config(priv_dir, Config),
+                                                      "foreign-history")}),
     %% the node's per-node Ed25519 identity cert — the production transport cert that
     %% quod_quic presents and verifies under mutual TLS (verify => true).
     {ok, #{pubkey := Pub, cert := Cert, key := Key}} = quod_identity:ensure(
@@ -88,7 +93,7 @@ end_per_suite(_Config) ->
     %% to avoid leaking a stale cert/port into any later same-node suite.
     _ = [application:unset_env(quod, K)
          || K <- [listen_port, node_addr, node_pubkey, identity_cert, identity_key,
-                  effect_journal_data_dir]],
+                  effect_journal_data_dir, foreign_log]],
     ok.
 
 %% Opening a link to our own listener over loopback yields a usable link pid.

@@ -179,6 +179,7 @@ start_node(Port, {Pub, Seed}, Config, Extra) ->
                 ?config(priv_dir, Config),
                 "data_" ++ integer_to_list(Port)),
     Set(effect_journal_data_dir, DataDir),
+    Set(foreign_log, #{cache_dir => filename:join(DataDir, "foreign-history")}),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     Cfg = maps:merge(#{node_id => Pub, identity => #{pubkey => Pub, key => KeyTerm}, data_dir => DataDir},
                      Extra),

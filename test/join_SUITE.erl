@@ -126,6 +126,7 @@ start_app_node(Port, {Pub, Seed}, Config) ->
     %% Configuration-free CT nodes still need the one node-wide effect journal
     %% in the same private durability domain as their ledgers.
     Set(effect_journal_data_dir, DataDir),
+    Set(foreign_log, #{cache_dir => filename:join(DataDir, "foreign-history")}),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     {Peer, DataDir}.
 
@@ -308,6 +309,11 @@ runtime_join_action_catches_up(Config) ->
               data_dir => list_to_binary(DataDir), seeds => []},
         {RootNs, RootConfig} =
             peer:call(ActionNode, quod_app, build_ns_config, [RootContent]),
+        %% Match application bootstrap: lifecycle creation derives its storage
+        %% from the configured root, not merely from a live Prolog process.
+        %% Both the root and the node ontology must stay inside this CT run.
+        ok = peer:call(ActionNode, application, set_env,
+                      [quod, namespace_desired, #{content => #{RootNs => RootConfig}}]),
         {ok, _} =
             peer:call(
               ActionNode, quod_namespace_manager, start_content,

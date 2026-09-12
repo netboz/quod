@@ -91,7 +91,6 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -record(s, {ns       :: binary(),
             genesis_hash :: <<_:256>>,
             self     :: node_id(),
-            ledger_root :: file:filename_all(),
             chan     :: binary(),                                       %% term_to_binary({feed, Ns}, [deterministic])
             digests  :: atom(),                  %% the per-ns liveness table (digest_table/1) this process owns
             %% cached consensus snapshot {Height, HistoryProjection, Syncing} — folded forward per commit/ingest,
@@ -286,7 +285,6 @@ start(Ns, Config) ->
             ok = quod_conn:reset_inbound_channel(Chan),
             arm_anti_entropy(),
             {ok, #s{ns = Ns, genesis_hash = GenesisHash, self = Self,
-                    ledger_root = quod_ledger_store:ledger_dir(Config),
                     chan = Chan, digests = Digests}};
         _ ->
             {stop, missing_consensus_anchor}
@@ -418,7 +416,7 @@ on_block(Entry,
                         {ok, [_], Projection1} ->
                             case ingest(
                                    quod_reg:via({quod_simplex, Ns}), [Entry], Projection1,
-                                   ?INGEST_MS, live) of
+                                   quod_dtx_phase_index:new_delta(), ?INGEST_MS, live) of
                                 {ok, _View} -> %% our height advanced to Slot — fold the snapshot forward too
                                               S1 = fold_snap(Entry, S),
                                               eager_push(Entry, S1#s{ingested = S1#s.ingested + 1});
@@ -694,11 +692,11 @@ invalidate_transient(S) -> S.
 %% rejected there and surfaces as {error, _}. A verified next-block push is `live` for this settled
 %% observer and drives P incrementally. An anti-entropy gap window is `replay`: P reconciles once at
 %% its explicit ready edge, so best-effort effects are not reconstructed from missed history.
-ingest(Server, Entries, Projection, Timeout, Mode)
+ingest(Server, Entries, Projection, Delta, Timeout, Mode)
   when Mode =:= live; Mode =:= replay ->
     Source = {feed, Mode},
     try gen_server:call(Server,
-                        {sink_catchup, Source, Entries, Projection}, Timeout)
+                        {sink_catchup, Source, Entries, Projection, Delta}, Timeout)
     catch exit:_ -> {error, unavailable} end.
 
 %%%===================================================================
@@ -818,8 +816,7 @@ digest_counts(Table) ->
 %% (the sole writer, contiguity-checked). `From > 1` here (a follower is past genesis), but the pinned
 %% anchor still derives the signature domain for every mid-chain certificate. One worker
 %% at a time (`pulling`); its `DOWN` clears the latch.
-start_pull(Peer, S = #s{ns = Ns, genesis_hash = GenesisHash,
-                  ledger_root = LedgerRoot}) ->
+start_pull(Peer, S = #s{ns = Ns, genesis_hash = GenesisHash}) ->
     %% The initial capture uses the existing pull-window budget, starting
     %% before worker scheduling. This is not a new deadline for the entire
     %% multi-page recovery: fetch and sink windows keep their own bounds.
@@ -831,8 +828,8 @@ start_pull(Peer, S = #s{ns = Ns, genesis_hash = GenesisHash,
         fun() ->
             _ = quod_process:kill_when_owner_dies(Feed, self()),
             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
-            Sink  = fun(Es, Projection1) ->
-                        ingest(Owner, Es, Projection1,
+            Sink  = fun(Es, Projection1, Delta) ->
+                        ingest(Owner, Es, Projection1, Delta,
                                ?PULL_SINK_MS, replay)
                     end,
             case quod_simplex:history_view(
@@ -842,7 +839,7 @@ start_pull(Peer, S = #s{ns = Ns, genesis_hash = GenesisHash,
                         try
                             quod_catchup:catch_up(
                               Ns, GenesisHash, Fetch, Sink, Height + 1, Projection,
-                              #{ledger_root => LedgerRoot, history_view => View})
+                              #{history_view => View})
                         after
                             %% Close only the same writer's replay, including a
                             %% partial pull. A replacement receives no stale completion.

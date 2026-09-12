@@ -2240,7 +2240,8 @@ dtx_catchup_complete_promotes_fifo_on_a_quiet_namespace_test() ->
         {keep_state, Recovered, Actions} =
             quod_simplex:running(
               {call, SinkFrom},
-              {sink_catchup, {recovery, self()}, [CompleteEntry], Projection},
+              {sink_catchup, {recovery, self()}, [CompleteEntry], Projection,
+               quod_dtx_phase_index:new_delta()},
               Pulling),
         [{reply, SinkFrom, {ok, SinkView}}] =
             [A || {reply, F, _} = A <- Actions, F =:= SinkFrom],
@@ -2855,7 +2856,7 @@ dtx_committed_begin_bootstrap_uses_owned_ledger_source_test() ->
         %% liveness guard as a real Simplex recovery worker.
         true = quod_reg:reg({quod_simplex, Ns}),
         Base0 = st(#{ns => Ns, genesis_hash => Anchor,
-                     ledger_root => Dir, store => Store1, slot => 2,
+                     store => Store1, slot => 2,
                      self => Coordinator, validators => [Coordinator],
                      author_admissions => #{Coordinator => Admission},
                      sync => ready, prolog_ready => true,
@@ -2910,7 +2911,7 @@ dtx_committed_begin_bootstraps_use_independent_snapshots_test() ->
     {ok, Store} = quod_ledger_store:open(Ns, Dir),
     try
         Base = st(#{ns => Ns, genesis_hash => Anchor,
-                    ledger_root => Dir, store => Store, slot => 1,
+                    store => Store, slot => 1,
                     self => Coordinator, validators => [Coordinator],
                     author_admissions => #{Coordinator => Admission},
                     sync => ready, prolog_ready => true}),
@@ -10239,11 +10240,17 @@ validator_routes_follow_the_committee_history_test() ->
     ?assertEqual(
        #{A => {"10.0.0.9", 9009}, B => {"10.0.0.2", 9002}},
        quod_simplex:history_validator_routes(P2)),
-    [{1, Committee, CommitteeId, RefreshedRoutes}] =
+    [{2, Committee, CommitteeId, RefreshedRoutes},
+     {1, Committee, CommitteeId, OriginalRoutes}] =
         maps:get(committee_views, P2),
     ?assertEqual(lists:sort([A, B]), Committee),
     ?assertEqual(maps:get(committee_id, P1), CommitteeId),
     ?assertEqual(quod_simplex:history_validator_routes(P2), RefreshedRoutes),
+    ?assertEqual(quod_simplex:history_validator_routes(P1), OriginalRoutes),
+    ?assertEqual({ok, Committee, CommitteeId, OriginalRoutes},
+                 quod_simplex:history_committee_view(1, P2)),
+    ?assertEqual({ok, Committee, CommitteeId, RefreshedRoutes},
+                 quod_simplex:history_committee_view(2, P2)),
     E3 = entry(3,
                {batch, [tx(Ns, [
                     {retract,
@@ -10252,7 +10259,7 @@ validator_routes_follow_the_committee_history_test() ->
     P3 = quod_simplex:history_advance(Ns, E3, P2),
     ?assertEqual(#{B => {"10.0.0.2", 9002}},
                  quod_simplex:history_validator_routes(P3)),
-    ?assertEqual(2, length(maps:get(committee_views, P3))).
+    ?assertEqual(3, length(maps:get(committee_views, P3))).
 
 content_only_catchup_repopulates_verified_validator_routes_test() ->
     [Self, Peer | _] = [P || {P, _} <- committee(3)],

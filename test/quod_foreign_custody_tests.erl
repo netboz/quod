@@ -137,7 +137,10 @@ restart_case(Root, Mode) ->
     ?assertNotEqual(OldWorker, NewWorker),
     ?assertNotEqual(element(4, OldStore), element(4, NewStore)),
     ?assertEqual(maps:remove(path, OldFile), maps:remove(path, NewFile)),
-    ?assert(lists:member({NewWorker, quod_ledger_store, open}, mutations())),
+    Mutations = mutations(),
+    [Initializer] = [P || {P, quod_ledger_store, open} <- Mutations],
+    ?assertNotEqual(NewWorker, Initializer),
+    ?assert(lists:member({NewWorker, quod_ledger_store, resume}, Mutations)),
     case Mode of
         watcher_only ->
             OldWorker ! {release_append, self()},
@@ -285,8 +288,8 @@ discovery_case(Root, Mode) ->
     install_mutation_observers(),
     Owner = start_owner(Root, Fetch),
     trace_owner(Owner),
-    %% Inspect routes through the actual lazy admission reader while custody
-    %% is occupied. Corrupt metadata is not permission to remove the cache.
+    %% The startup initializer and then the request wait behind the same
+    %% custody. Corrupt metadata is not permission to remove the cache early.
     _ = gen_server:call(Owner, {route_hints, Identity, []}),
     Request = request(Owner, Fixture, 10000),
     await_park(Owner, Identity),
@@ -423,61 +426,56 @@ name_monitors(Holder, Identity) ->
     [{_, Options}] = ets:lookup(gproc, {Holder, quod_reg:name(writer_key(Identity))}),
     case Options of r -> []; _ -> proplists:get_value(monitor, Options, []) end.
 
-cancel_denied_case(Root, Mode) ->
-    Fixture = case Mode of
-        source_down -> quod_foreign_log_tests:membership_after_finalize_fixture(
-                         <<"foreign:custody:borrow-race">>);
-        follow_cancel -> fixture()
-    end,
+cancel_denied_case(Root, source_down) ->
+    %% The old historical-local job (and therefore its custody-denial race)
+    %% no longer exists. Pin that absence against real occupied custody, and
+    %% keep the source-death validity check on the direct reader itself.
+    Fixture = quod_foreign_log_tests:membership_after_finalize_fixture(
+                <<"foreign:custody:direct-borrow">>),
     Identity = identity(Fixture), Holder = holder(Identity),
-    Source = case Mode of
-        source_down ->
-            quod_foreign_log_tests:start_local_borrow_source(
-              filename:join(Root, "source"), Fixture);
-        follow_cancel -> none
+    {SourcePid, SourceMonitor, View} =
+        quod_foreign_log_tests:start_local_borrow_source(
+            filename:join(Root, "source"), Fixture),
+    CacheRoot = filename:join(Root, "cache"),
+    Owner = start_owner(CacheRoot, fun(_, _, _, _, _) -> error(local_read_used_network) end),
+    try
+        ?assertMatch({ok, #{phase := finalize}},
+            quod_foreign_log:verify_local(View, maps:get(ref, Fixture), finalize, infinity)),
+        {Reader, Token} = quod_foreign_log_tests:hold_direct_local(
+            View, maps:get(ref, Fixture), infinity, after_read),
+        try
+            ?assertEqual(#{}, gen_server:call(Owner, test_lifecycle_state)),
+            exit(SourcePid, kill), await_down(SourceMonitor, SourcePid, killed),
+            Reader ! {release_local_read, Token},
+            ?assertEqual({error, retry},
+                quod_foreign_log_tests:receive_local_borrow_result(Reader)),
+            ?assertEqual(#{}, gen_server:call(Owner, test_lifecycle_state)),
+            ?assertEqual(Holder, quod_reg:where(writer_key(Identity))),
+            ?assertNot(lists:keymember(Owner, 1, name_monitors(Holder, Identity))),
+            ?assertNot(filelib:is_file(log_path(CacheRoot, Identity)))
+        after exit(Reader, kill)
+        end
+    after
+        exit(SourcePid, kill), demonitor(SourceMonitor, [flush]),
+        Holder ! stop, stop_owner(Owner)
     end,
+    ok;
+cancel_denied_case(Root, follow_cancel) ->
+    Fixture = fixture(), Identity = identity(Fixture), Holder = holder(Identity),
     CacheRoot = filename:join(Root, "cache"),
     Owner = start_owner(CacheRoot, fetch(Fixture)),
     trace_owner(Owner),
     install_registration_barrier(),
     persistent_term:put({?MODULE, registration_gate}, writer_key(Identity)),
-    Parent = self(),
-    CallerOrFollow = case Source of
-        {_, _, View} ->
-            spawn(fun() -> Parent ! {borrow_result, self(),
-                quod_foreign_log:verify_local(View, maps:get(ref, Fixture), finalize, infinity)} end);
-        none ->
-            ok = quod_foreign_log:observe_candidate(
-                   Identity, {maps:get(pub, Fixture), {"127.0.0.1", 31997}}),
-            {ok, Follow} = quod_foreign_log:follow(Identity), Follow
-    end,
+    ok = quod_foreign_log:observe_candidate(
+           Identity, {maps:get(pub, Fixture), {"127.0.0.1", 31997}}),
+    {ok, Follow} = quod_foreign_log:follow(Identity),
     Worker = receive {registration_held, W} -> W
              after 5000 -> error(canceled_worker_did_not_enter_registration) end,
     #{active := #{ref := Job, worker := Worker}} = lifecycle(Owner, Identity),
     WorkerRef = monitor(process, Worker),
     ok = sys:suspend(Owner),
-    CancelRequest = case Source of
-        {SourcePid, SourceRef, _} ->
-            exit(SourcePid, kill), await_down(SourceRef, SourcePid, killed),
-            %% DOWN delivery to two recipients has no relative ordering.
-            %% Let the suspended system loop process incoming signals and
-            %% wait for THIS owner's actual receive trace, not our own DOWN.
-            _ = sys:get_state(Owner),
-            receive
-                {trace, Owner, 'receive',
-                 {{borrow_down, Identity, Job}, _, process, SourcePid, killed}} -> ok
-            after 5000 -> error(owner_source_down_delivery_not_observed)
-            end,
-            %% The real tagged source monitor signal is already enqueued
-            %% before allowing this worker to send its actual custody denial.
-            {messages, Messages0} = process_info(Owner, messages),
-            ?assert(lists:any(fun
-                ({{borrow_down, I, J}, _, process, P, killed}) ->
-                    I =:= Identity andalso J =:= Job andalso P =:= SourcePid;
-                (_) -> false end, Messages0)),
-            none;
-        none -> gen_server:send_request(Owner, {unfollow, CallerOrFollow})
-    end,
+    CancelRequest = gen_server:send_request(Owner, {unfollow, Follow}),
     persistent_term:erase({?MODULE, registration_gate}),
     Worker ! {release_registration, self()},
     await_down(WorkerRef, Worker, normal),
@@ -492,15 +490,10 @@ cancel_denied_case(Root, Mode) ->
     ok = sys:resume(Owner),
     State = gen_server:call(Owner, test_lifecycle_state),
     %% A name holder still lives, so no release can rescue a wrongly requeued
-    %% infinite borrow/follow. Only the real worker DOWN may retire this job.
+    %% follow. Only the real worker DOWN may retire this cancelled job.
     Row = maps:get(Identity, State, #{active => none, waiting => []}),
     ?assertMatch(#{active := none, waiting := []}, Row),
-    case CancelRequest of
-        none -> receive
-            {borrow_result, CallerOrFollow, Reply} -> ?assertEqual({error, retry}, Reply)
-        after 2000 -> error(infinite_borrow_stranded_after_source_death) end;
-        _ -> ?assertEqual({reply, ok}, gen_server:wait_response(CancelRequest, 1000))
-    end,
+    ?assertEqual({reply, ok}, gen_server:wait_response(CancelRequest, 1000)),
     ?assert(is_process_alive(Holder)),
     ?assertEqual(Holder, quod_reg:where(writer_key(Identity))),
     ?assertNot(lists:keymember(Owner, 1, name_monitors(Holder, Identity))),
@@ -570,9 +563,23 @@ writer_key(Identity) -> {foreign_cache_writer, Identity}.
 fetch(F) -> quod_foreign_log_tests:chain_fetch(maps:get(ns, F), maps:get(chain, F)).
 
 start_owner(Root, Fetch) ->
-    {ok, Pid} = quod_foreign_log:start_link(
-                  #{cache_dir => Root, fetch_fun => Fetch, page_timeout_ms => 1000}),
-    unlink(Pid), Pid.
+    %% Install tracing before init: retained-cache custody acquisition is now
+    %% startup work and may legitimately finish before start_link returns.
+    Parent = self(), Tag = make_ref(),
+    {Launcher, Monitor} = spawn_monitor(fun() ->
+        receive {start, Tag} -> ok end,
+        {ok, Pid} = quod_foreign_log:start_link(
+            #{cache_dir => Root, fetch_fun => Fetch, page_timeout_ms => 1000}),
+        unlink(Pid), Parent ! {Tag, Pid}
+    end),
+    1 = erlang:trace(Launcher, true, ['receive', set_on_spawn, {tracer, Parent}]),
+    Launcher ! {start, Tag},
+    receive
+        {Tag, Pid} ->
+            receive {'DOWN', Monitor, process, Launcher, normal} -> ok end,
+            Pid;
+        {'DOWN', Monitor, process, Launcher, Reason} -> error({owner_start_failed, Reason})
+    end.
 stop_owner(Owner) -> gen_server:stop(Owner).
 
 request(Owner, F, Timeout) ->
@@ -615,8 +622,13 @@ await_name_free(Identity) ->
 trace_owner(Owner) -> 1 = erlang:trace(Owner, true, ['receive']), ok.
 await_park(Owner, Identity) ->
     {Job, Worker} = await_denial(Owner),
-    ?assertMatch(#{active := none, waiting := [#{ref := Job, wait_reason := custody}]},
-                 lifecycle(Owner, Identity)),
+    #{active := none, waiting := [Head | Tail]} = lifecycle(Owner, Identity),
+    ?assertMatch(#{ref := Job, wait_reason := custody}, Head),
+    case maps:get(work, Head) of
+        {initialize, Identity, startup} ->
+            ?assertMatch([#{wait_reason := runnable, callers := [_]}], Tail);
+        _ -> ?assertEqual([], Tail)
+    end,
     {Job, Worker}.
 await_denial(Owner) ->
     receive

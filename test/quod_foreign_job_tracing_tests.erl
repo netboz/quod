@@ -133,45 +133,45 @@ with_stage_trace(Fun) ->
         end
     end).
 
-exact_cold_and_warm_cache_trace_test() ->
+exact_startup_replay_and_warm_requests_are_separate_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
           ?assertMatch({ok, #{phase := finalize}}, explicit(Fixture)),
           quod_foreign_log_tests:stop_owner(Owner),
-          Restarted = quod_foreign_log_tests:start_owner(Dir, Fetch),
+          {Restarted, Startup} = traced_work(fun() ->
+              Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
+              unlink(Pid),
+              await_initialized(Pid, Fixture, 2),
+              Pid
+          end),
           try
-              {ColdResult, Cold, ColdSpans} = traced_request(
-                <<"test.foreign.exact.cold">>, fun() -> explicit(Fixture) end),
-              ?assertMatch({ok, #{phase := finalize}}, ColdResult),
-              ColdAttrs = attrs(Cold),
-              ?assertEqual(0, maps:get('quod.foreign.resident_start_height', ColdAttrs)),
-              ?assertEqual(2, maps:get('quod.foreign.disk_start_height', ColdAttrs)),
-              ?assertEqual(2, maps:get('quod.foreign.disk_replayed_entries', ColdAttrs)),
-              ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', ColdAttrs)),
-              ?assertEqual(2, maps:get('quod.foreign.final_verified_height', ColdAttrs)),
-              ?assertNot(maps:is_key('quod.foreign.verified_suffix', ColdAttrs)),
-              ?assertEqual(maps:get(ns, Fixture), maps:get('quod.namespace', ColdAttrs)),
-              assert_stages(Cold, ColdSpans,
-                [cache_open, cache_reconstruction, cache_replay,
-                 checkpoint_compare, phase_suspend, ledger_suspend,
-                 exact_lookup, exact_validate, worker_handoff]),
-              assert_successful_stage(ledger_suspend, ColdSpans),
-              {WarmResult, Warm, WarmSpans} = traced_request(
-                <<"test.foreign.exact.warm">>, fun() -> explicit(Fixture) end),
-              ?assertMatch({ok, #{phase := finalize}}, WarmResult),
-              WarmAttrs = attrs(Warm),
-              ?assertEqual(2, maps:get('quod.foreign.resident_start_height', WarmAttrs)),
-              ?assertEqual(0, maps:get('quod.foreign.cold_opens', WarmAttrs)),
-              ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', WarmAttrs)),
-              assert_stages(Warm, WarmSpans,
-                [cache_open, ledger_resume, phase_resume, phase_suspend,
-                 ledger_suspend, exact_lookup, exact_validate, worker_handoff]),
-              assert_no_stage(cache_reconstruction, WarmSpans),
-              assert_no_stage(cache_replay, WarmSpans),
-              assert_successful_stage(ledger_suspend, WarmSpans)
-          after
-              quod_foreign_log_tests:stop_owner(Restarted)
+              %% Startup has no caller and does not manufacture an SDK root.
+              %% Function tracing begins before init and counts its real replay.
+              ?assertEqual(1, maps:get(replays, Startup, 0)),
+              ?assertEqual(2, maps:get(replayed_entries, Startup, 0)),
+              ?assertEqual(1, maps:get(initialize_opens, Startup, 0)),
+              lists:foreach(fun(Name) ->
+                  {Result, Worker, Spans} = traced_request(Name, fun() -> explicit(Fixture) end),
+                  ?assertMatch({ok, #{phase := finalize}}, Result),
+                  Attributes = attrs(Worker),
+                  ?assertEqual(2, maps:get('quod.foreign.resident_start_height', Attributes)),
+                  ?assertEqual(2, maps:get('quod.foreign.disk_start_height', Attributes)),
+                  ?assertEqual(0, maps:get('quod.foreign.cold_opens', Attributes)),
+                  ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
+                  ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', Attributes)),
+                  ?assertEqual(2, maps:get('quod.foreign.final_verified_height', Attributes)),
+                  ?assertNot(maps:is_key('quod.foreign.verified_suffix', Attributes)),
+                  ?assertEqual(maps:get(ns, Fixture), maps:get('quod.namespace', Attributes)),
+                  assert_stages(Worker, Spans,
+                    [cache_open, ledger_resume, phase_resume, phase_suspend,
+                     ledger_suspend, exact_lookup, exact_validate, worker_handoff]),
+                  assert_no_stage(cache_reconstruction, Spans),
+                  assert_no_stage(cache_replay, Spans),
+                  assert_successful_stage(ledger_suspend, Spans)
+              end, [<<"test.foreign.exact.first-after-startup">>,
+                    <<"test.foreign.exact.warm">>])
+          after quod_foreign_log_tests:stop_owner(Restarted)
           end
       end).
 
@@ -191,7 +191,7 @@ routed_exact_has_the_same_worker_children_test() ->
              exact_lookup, exact_validate, phase_suspend, ledger_suspend, worker_handoff])
       end).
 
-changed_checkpoint_trace_rejects_reconstruction_before_recovery_test() ->
+changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
@@ -206,27 +206,33 @@ changed_checkpoint_trace_rejects_reconstruction_before_recovery_test() ->
           Changed = Projection#{timestamp := maps:get(timestamp, Projection) + 1},
           ?assert(quod_foreign_log:valid_projection(Changed, Identity)),
           ok = file:write_file(Path, term_to_binary(setelement(7, Checkpoint, Changed), [deterministic])),
-          Restarted = quod_foreign_log_tests:start_owner(Dir, Fetch),
+          {Restarted, Startup} = traced_work(fun() ->
+              Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
+              unlink(Pid),
+              await_initialized(Pid, Fixture, 0),
+              Pid
+          end),
           try
+              %% Replayed certified bytes contradict the altered checkpoint.
+              %% The actual return from reconstruction is cache_corrupt, not
+              %% an inferred error from a missing observation span.
+              ?assertEqual(1, maps:get(reconstruction_rejected, Startup, 0)),
+              ?assertEqual(1, maps:get(replays, Startup, 0)),
+              ?assertEqual(2, maps:get(replayed_entries, Startup, 0)),
+              ?assertEqual(1, maps:get(initialize_opens, Startup, 0)),
+              ?assertEqual(1, maps:get(empty_opens, Startup, 0)),
               {Result, Worker, Spans} = traced_request(
-                <<"test.foreign.checkpoint.changed">>, fun() -> explicit(Fixture) end),
-              %% The false checkpoint is rejected, but the existing certified
-              %% recovery path may still authenticate the public reference.
+                <<"test.foreign.checkpoint.after-rejection">>, fun() -> explicit(Fixture) end),
               ?assertMatch({ok, #{phase := finalize}}, Result),
-              Compare = one(<<"quod.foreign.checkpoint_compare">>, Spans),
-              ?assertEqual(<<"rejected">>, maps:get('quod.foreign.reason', attrs(Compare))),
-              Reconstruction = one(<<"quod.foreign.cache_reconstruction">>, Spans),
-              ?assertEqual(<<"cache_corrupt">>,
-                           maps:get('quod.foreign.reason', attrs(Reconstruction))),
-              ?assertEqual(2, maps:get('quod.foreign.cold_opens', attrs(Worker))),
-              ?assertEqual(2, maps:get('quod.foreign.disk_replayed_entries', attrs(Worker))),
+              ?assertEqual(0, maps:get('quod.foreign.resident_start_height', attrs(Worker))),
+              ?assertEqual(1, maps:get('quod.foreign.cold_opens', attrs(Worker))),
+              ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', attrs(Worker))),
               ?assertEqual(2, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
+              assert_no_stage(cache_reconstruction, Spans),
+              assert_no_stage(cache_replay, Spans),
               assert_stages(Worker, Spans,
-                [cache_prepare, cache_open, cache_reconstruction, cache_replay,
-                 checkpoint_compare, cache_cleanup, page_verify,
-                 exact_validate, worker_handoff])
-          after
-              quod_foreign_log_tests:stop_owner(Restarted)
+                [cache_prepare, cache_open, page_verify, exact_validate, worker_handoff])
+          after quod_foreign_log_tests:stop_owner(Restarted)
           end
       end).
 
@@ -295,30 +301,38 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
                                        exact_validate, worker_handoff])
       end).
 
-current_cold_replay_is_not_network_advance_test() ->
+current_after_startup_does_not_replay_prefix_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
           ?assertMatch({ok, #{phase := finalize}}, explicit(Fixture)),
           quod_foreign_log_tests:stop_owner(Owner),
-          Restarted = quod_foreign_log_tests:start_owner(Dir, Fetch),
+          {Restarted, Startup} = traced_work(fun() ->
+              Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
+              unlink(Pid),
+              await_initialized(Pid, Fixture, 2),
+              Pid
+          end),
           try
+              ?assertEqual(2, maps:get(replayed_entries, Startup, 0)),
               Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
               {Peer, Endpoint} = contact(Fixture),
               {Result, Worker, Spans} = traced_request(
-                <<"test.foreign.current.cold">>,
+                <<"test.foreign.current.after-startup">>,
                 fun() -> quod_foreign_log:current(
                            [{Peer, [Endpoint]}], Identity, contact(Fixture), 5000)
                 end),
               ?assertMatch({ok, #{slot := 2}}, Result),
               Attributes = attrs(Worker),
-              ?assertEqual(2, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
+              ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
+              ?assertEqual(0, maps:get('quod.foreign.cold_opens', Attributes)),
               ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', Attributes)),
               ?assert(maps:get('quod.foreign.probe_children_started', Attributes) > 0),
               assert_stages(Worker, Spans,
-                [cache_open, cache_reconstruction, cache_replay,
-                 checkpoint_compare, tip_confirm, phase_suspend,
+                [cache_open, ledger_resume, phase_resume, tip_confirm, phase_suspend,
                  ledger_suspend, worker_handoff]),
+              assert_no_stage(cache_reconstruction, Spans),
+              assert_no_stage(cache_replay, Spans),
               Probes = named(<<"quod.foreign.probe_worker">>, Spans),
               assert_successful_stage(probe_collection, Spans),
               assert_successful_stage(ledger_suspend, Spans),
@@ -329,8 +343,7 @@ current_cold_replay_is_not_network_advance_test() ->
                   ?assertEqual(maps:get('quod.foreign.stages_started', A),
                                maps:get('quod.foreign.stages_completed', A))
               end, Probes)
-          after
-              quod_foreign_log_tests:stop_owner(Restarted)
+          after quod_foreign_log_tests:stop_owner(Restarted)
           end
       end).
 
@@ -344,20 +357,25 @@ historical_local_trace_keeps_local_reads_distinct_test() ->
                   CacheDir, fun(_, _, _, _, _) -> error(local_trace_used_network) end),
         {SourcePid, SourceMRef, Source} =
             quod_foreign_log_tests:start_local_borrow_source(SourceDir, Fixture),
+        {Context, Parent} = quod_trace:start_span(
+            otel_ctx:new(), <<"test.foreign.local">>, internal, #{}),
         try
-            {Result, Worker, Spans} = traced_request(
-              <<"test.foreign.local">>,
-              fun() -> quod_foreign_log:verify_local(
-                         Source, maps:get(ref, Fixture), finalize, 5000)
-              end),
+            {Result, Work} = traced_work(fun() ->
+                quod_trace:with_context(Context, fun() ->
+                    quod_foreign_log:verify_local(
+                        Source, maps:get(ref, Fixture), finalize, 5000)
+                end)
+            end),
             ?assertMatch({ok, #{phase := finalize}}, Result),
-            Attributes = attrs(Worker),
-            ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', Attributes)),
-            ?assert(maps:get('quod.foreign.local_advance_verified_entries', Attributes) > 0),
-            assert_stages(Worker, Spans,
-              [cache_open, page_fetch, page_verify, exact_lookup,
-               exact_validate, phase_suspend, ledger_suspend, worker_handoff])
+            ?assertEqual(1, maps:get(exact_reads, Work, 0)),
+            ?assertEqual(0, maps:get(verified_entries, Work, 0)),
+            ?assertEqual(0, maps:get(replays, Work, 0)),
+            ?assertEqual(0, maps:get(cache_opens, Work, 0)),
+            ?assertEqual(#{}, gen_server:call(Owner, test_lifecycle_state)),
+            ?assertEqual([], named(<<"quod.foreign.verification_worker">>,
+                                  exported_spans(otel_span:trace_id(Parent))))
         after
+            quod_trace:finish_span(Parent, ok),
             quod_foreign_log_tests:stop_local_borrow_source(SourcePid, SourceMRef),
             quod_foreign_log_tests:stop_owner(Owner),
             _ = file:del_dir_r(SourceDir),
@@ -631,6 +649,92 @@ owner_request(Owner, Context, Request) ->
 shared_fetches(Token) ->
     receive {shared_fetch, Token, From, Value} -> [{From, Value} | shared_fetches(Token)]
     after 0 -> []
+    end.
+
+
+%% Observe real initialization before start_link returns. Callerless startup
+%% intentionally has no request-root span; these counters are test evidence,
+%% not synthetic SDK spans or a second verifier.
+traced_work(Fun) ->
+    MFAs = [{quod_foreign_log, replay_cache, 6},
+            {quod_foreign_log, open_cache_raw, 5},
+            {quod_foreign_log, open_replayed_cache_raw, 7},
+            {quod_catchup, verify_forward, 6},
+            {quod_ledger_store, read_at, 2}],
+    [code:ensure_loaded(M) || {M, _, _} <- MFAs],
+    [erlang:trace_pattern(MFA, [{'_', [], [{return_trace}]}], [local]) || MFA <- MFAs],
+    Parent = self(), Tag = make_ref(),
+    Tracer = spawn(fun() -> collect_work(#{}, []) end),
+    {Runner, Monitor} = spawn_monitor(fun() ->
+        receive {go, Tag} -> ok end,
+        Result = Fun(),
+        Parent ! {Tag, Result},
+        receive {stop, Tag} -> ok end
+    end),
+    1 = erlang:trace(Runner, true, [call, procs, set_on_spawn, {tracer, Tracer}]),
+    try
+        Runner ! {go, Tag},
+        Result = receive
+            {Tag, R} -> R;
+            {'DOWN', Monitor, process, Runner, Why} -> error({traced_work_failed, Why})
+        after 5000 -> error(traced_work_stalled)
+        end,
+        Delivered = erlang:trace_delivered(all),
+        receive {trace_delivered, all, Delivered} -> ok end,
+        Tracer ! {take, self()},
+        {Counts, Pids} = receive {work_trace, Tracer, C, Ps} -> {C, Ps} end,
+        [catch erlang:trace(P, false, [all]) || P <- lists:uniq(Pids)],
+        {Result, Counts}
+    after
+        [erlang:trace_pattern(MFA, false, [local]) || MFA <- MFAs],
+        Tracer ! {take, self()},
+        receive {work_trace, Tracer, _, Seen} ->
+            [catch erlang:trace(P, false, [all]) || P <- lists:uniq([Runner | Seen])]
+        end,
+        exit(Tracer, kill),
+        Runner ! {stop, Tag},
+        demonitor(Monitor, [flush])
+    end.
+
+collect_work(Counts, Pids) ->
+    receive
+        {trace, P, call, {quod_foreign_log, replay_cache, [_, _, _, Height, _, _]}} ->
+            collect_work(add_count(replayed_entries, Height, add_count(replays, 1, Counts)), [P | Pids]);
+        {trace, P, call, {quod_foreign_log, open_cache_raw, [_, _, _, _, Mode]}} ->
+            Kind = case Mode of {initialize, _} -> initialize_opens;
+                                {verified_session, _, _, _, _} -> resident_opens;
+                                none -> empty_opens end,
+            collect_work(add_count(Kind, 1, add_count(cache_opens, 1, Counts)), [P | Pids]);
+        {trace, P, call, {quod_ledger_store, read_at, _}} ->
+            collect_work(add_count(exact_reads, 1, Counts), [P | Pids]);
+        {trace, P, call, {quod_catchup, verify_forward, [_, _, _, _, Entries, _]}} ->
+            collect_work(add_count(verified_entries, length(Entries), Counts), [P | Pids]);
+        {trace, P, return_from, {quod_foreign_log, open_replayed_cache_raw, 7},
+         {error, cache_corrupt}} ->
+            collect_work(add_count(reconstruction_rejected, 1, Counts), [P | Pids]);
+        {trace, P, spawn, Child, _} -> collect_work(Counts, [P, Child | Pids]);
+        {trace, P, _, _} -> collect_work(Counts, [P | Pids]);
+        {trace, P, _, _, _} -> collect_work(Counts, [P | Pids]);
+        {take, Parent} ->
+            Parent ! {work_trace, self(), Counts, Pids}, collect_work(Counts, Pids)
+    end.
+
+add_count(Key, N, Counts) ->
+    maps:update_with(Key, fun(Old) -> Old + N end, N, Counts).
+
+await_initialized(Owner, Fixture, Height) ->
+    await_initialized(Owner, {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+                      Height, quod_time:mono_ms() + 3000).
+await_initialized(Owner, Identity, Height, Deadline) ->
+    Row = maps:get(Identity, gen_server:call(Owner, test_lifecycle_state), none),
+    case Row of
+        none when Height =:= 0 -> ok;
+        #{active := none, waiting := []} ->
+            ?assertEqual(Height, maps:get(height, Row)),
+            ?assertEqual(Height > 0, maps:get(resident_verified, Row));
+        _ ->
+            ?assert(quod_time:mono_ms() < Deadline),
+            await_initialized(Owner, Identity, Height, Deadline)
     end.
 
 traced_request(Name, Fun) ->

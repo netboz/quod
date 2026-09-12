@@ -3,6 +3,11 @@
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
+%% Counted suffix-only control: real signed entries and retained writer index,
+%% NOT a live consensus-admitted multiwrite campaign. The unchanged-source
+%% baseline and its original probe are frozen separately in the handoff.
+-export([history_replay_baseline_probe/0]).
+
 -define(NS, <<"ns">>).
 -define(GENESIS_NONCE, <<16#5c:256>>).
 
@@ -510,7 +515,7 @@ implicit_entries(Domain, C) ->
        #implicit_cert{support = Support, child = Child, commit = Commit}),
      quod_ledger:entry(Child, Commit)}.
 
-%%%--- catch_up/5,/7 driver (mocked transport, real writer snapshots) ---
+%%%--- catch_up/7 driver (mocked transport, real writer snapshots) ---
 
 %% a Fetch serving a pre-built Chain (entries 1..H) in windows of W; From > H ⇒ empty.
 mock_fetch(Chain, W) ->
@@ -537,18 +542,20 @@ catchup_options() ->
 
 run_catch_up(GenesisHash, Fetch, Sink) ->
     with_disk_sink(GenesisHash, [], Sink,
-      fun(DurableSink, _View, Options) ->
+      fun(DurableSink, View = #{projection := Projection}, Options) ->
           quod_catchup:catch_up(
-            ?NS, GenesisHash, Fetch, DurableSink, Options)
+            ?NS, GenesisHash, Fetch, DurableSink, 1, Projection,
+            Options#{history_view => View})
       end).
 
 with_disk_sink(GenesisHash, Prefix, Sink, Fun) ->
     Options = #{ledger_root := Scratch} = catchup_options(),
-    %% Intentionally different from scratch: the backfill must consume the
-    %% captured writer session, not reconstruct a path from its output root.
+    %% The driver has no path authority. Only this fixture writer opens the
+    %% real ledger and retained index; every borrowed view is read-only.
     LedgerRoot = Scratch ++ "-ledger",
     Key = make_ref(),
     {ok, Empty} = quod_ledger_store:open(?NS, LedgerRoot),
+    {ok, Index} = quod_dtx_phase_index:open(LedgerRoot, ?NS),
     put(Key, Empty),
     try
         {ok, Store} = quod_ledger_store:append(Empty, Prefix),
@@ -558,43 +565,49 @@ with_disk_sink(GenesisHash, Prefix, Sink, Fun) ->
         Projection = case Prefix of
             [] -> Projection0;
             _ ->
-                {ok, Prefix, VerifiedProjection} = quod_catchup:verify_forward(
-                    ?NS, GenesisHash, Projection0, 1, Prefix),
+                {ok, Prefix, VerifiedProjection, Delta} = quod_catchup:verify_forward(
+                    ?NS, GenesisHash, Projection0, 1, Prefix, Index),
+                ok = quod_dtx_phase_index:commit_delta(Index, Delta),
                 VerifiedProjection
         end,
-        View = sink_view(Store, Identity, Projection),
-        DurableSink = fun(Entries, Projection1) ->
+        View = sink_view(Store, Identity, Projection, Index),
+        DurableSink = fun(Entries, Projection1, Delta1) ->
             case Sink(Entries, Projection1) of
                 ok ->
                     {ok, Next} = quod_ledger_store:append(get(Key), Entries),
                     put(Key, Next),
-                    {ok, sink_view(Next, Identity, Projection1)};
+                    ok = quod_dtx_phase_index:commit_delta(Index, Delta1),
+                    {ok, sink_view(Next, Identity, Projection1, Index)};
                 {error, _} = Error -> Error
             end
         end,
         Fun(DurableSink, View, Options)
     after
+        quod_dtx_phase_index:close(Index),
         quod_ledger_store:close(erase(Key)),
         _ = file:del_dir_r(Scratch),
         _ = file:del_dir_r(LedgerRoot)
     end.
 
-sink_view(Store, Identity, Projection) ->
+sink_view(Store, Identity, Projection, Index) ->
     Height = quod_ledger_store:last(Store),
+    {ok, IndexView} = quod_dtx_phase_index:capture(Index, Height),
+    Bounded = Projection#{history_index => IndexView,
+                         committee_views := lists:sublist(maps:get(committee_views, Projection), 1)},
     #{owner => self(), identity => Identity, slot => Height, applied => Height,
-      snapshot => quod_ledger_store:snapshot(Store), projection => Projection}.
+      snapshot => quod_ledger_store:snapshot(Store), projection => Bounded}.
 
-phase_backfill_uses_sink_snapshot_not_scratch_path_test() ->
+phase_window_uses_retained_owner_index_test() ->
     C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
     Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
     Finalize = direct_abort_entry(258, C),
     Chain = Prefix ++ [Finalize],
     %% The first DTX control arrives after successful content-only sink turns;
-    %% its phase backfill uses the view returned with the preceding sink.
+    %% it uses the read-only index returned with the preceding sink.
     ?assertEqual({ok, 258}, run_catch_up(GH, mock_fetch(Chain, 128), sink())),
     ?assertEqual(Chain, sunk()).
 
-resumed_phase_backfill_uses_initial_owner_snapshot_test() ->
+resumed_phase_window_uses_initial_owner_capture_test() ->
     C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
     Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
     Finalize = direct_abort_entry(258, C),
@@ -608,6 +621,108 @@ resumed_phase_backfill_uses_initial_owner_snapshot_test() ->
               ?NS, GH, fun(_) -> error(mismatched_view_fetched) end, Sink,
               258, Projection, Options#{history_view => View#{slot => 256}}))
       end).
+
+history_suffix_only_work_is_counted_test() ->
+    lists:foreach(fun(Counts) ->
+        ?assertEqual(0, maps:get(prefix_entries_read, Counts)),
+        ?assertEqual(0, maps:get(prefix_entries_reverified, Counts)),
+        ?assertEqual(1, maps:get(suffix_entries_verified, Counts))
+    end, history_replay_baseline_probe()).
+
+history_replay_baseline_probe() ->
+    [{module, M} = code:ensure_loaded(M)
+     || M <- [quod_catchup, quod_ledger_store]],
+    MFAs = [{{quod_catchup, verify_forward, 5}, [local]},
+            {{quod_catchup, verify_forward, 6}, [local]},
+            {{quod_ledger_store, read_range, 3}, []}],
+    lists:foreach(fun({MFA, Flags}) ->
+        1 = erlang:trace_pattern(MFA, true, Flags)
+    end, MFAs),
+    try
+        [history_replay_baseline_case(Height, Kind)
+         || Height <- [8, 64, 257], Kind <- [noop, dtx]]
+    after
+        lists:foreach(fun({MFA, Flags}) ->
+            erlang:trace_pattern(MFA, false, Flags)
+        end, MFAs)
+    end.
+
+history_replay_baseline_case(Height, Kind) ->
+    Parent = self(),
+    {Worker, Monitor} = spawn_monitor(fun() ->
+        try
+            C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
+            Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, Height)]],
+            Last = case Kind of
+                noop -> skipped(Height + 1, C, 3);
+                dtx -> direct_abort_entry(Height + 1, C)
+            end,
+            with_disk_sink(GH, Prefix, sink(),
+              fun(Sink, View = #{projection := Projection}, Options) ->
+                  %% Startup/setup verification has completed BEFORE tracing.
+                  Parent ! {history_probe_ready, self()},
+                  receive history_probe_go -> ok end,
+                  Result = quod_catchup:catch_up(
+                    ?NS, GH, mock_fetch(Prefix ++ [Last], 128), Sink,
+                    Height + 1, Projection, Options#{history_view => View}),
+                  Parent ! {history_probe_result, self(), Result, sunk()},
+                  receive history_probe_finish -> ok end
+              end)
+        catch Class:Reason:Stack ->
+            Parent ! {history_probe_failed, self(), Class, Reason, Stack}
+        end
+    end),
+    try
+        receive
+            {history_probe_ready, Worker} -> ok;
+            {history_probe_failed, Worker, C0, R0, S0} -> erlang:raise(C0, R0, S0)
+        after 10000 -> error(history_probe_setup_stalled)
+        end,
+        1 = erlang:trace(Worker, true, [call, {tracer, self()}]),
+        Worker ! history_probe_go,
+        receive
+            {history_probe_result, Worker, Result, Sunk} ->
+                ?assertEqual({ok, Height + 1}, Result),
+                ?assertEqual(1, length(Sunk));
+            {history_probe_failed, Worker, C1, R1, S1} -> erlang:raise(C1, R1, S1)
+        after 10000 -> error(history_probe_catchup_stalled)
+        end,
+        Barrier = erlang:trace_delivered(Worker),
+        Counts = history_probe_trace(Worker, Barrier, Height,
+                    #{prefix_entries_read => 0, prefix_entries_reverified => 0,
+                      prefix_backfills => 0, suffix_entries_verified => 0}),
+        _ = erlang:trace(Worker, false, [call]),
+        Counts#{prefix_height => Height, missing_blocks => 1,
+                suffix_kind => atom_to_binary(Kind),
+                target_invariant_passed =>
+                    maps:get(prefix_entries_read, Counts) =:= 0 andalso
+                    maps:get(prefix_entries_reverified, Counts) =:= 0}
+    after
+        Worker ! history_probe_finish,
+        receive {'DOWN', Monitor, process, Worker, normal} -> ok
+        after 10000 ->
+            exit(Worker, kill),
+            receive {'DOWN', Monitor, process, Worker, _} -> ok end,
+            error(history_probe_cleanup_stalled)
+        end
+    end.
+
+history_probe_trace(Worker, Barrier, Height, Counts) ->
+    receive
+        {trace, Worker, call, {quod_ledger_store, read_range, [_Store, From, To]}} ->
+            N = max(0, min(To, Height) - From + 1),
+            history_probe_trace(Worker, Barrier, Height,
+                maps:update_with(prefix_entries_read, fun(V) -> V + N end, Counts));
+        {trace, Worker, call, {quod_catchup, verify_forward,
+                              [_Ns, _GH, _Projection, From, Entries | _Rest]}} ->
+            N = max(0, min(length(Entries), Height - From + 1)),
+            C1 = maps:update_with(prefix_entries_reverified, fun(V) -> V + N end, Counts),
+            C2 = maps:update_with(suffix_entries_verified,
+                                 fun(V) -> V + length(Entries) - N end, C1),
+            history_probe_trace(Worker, Barrier, Height, C2);
+        {trace_delivered, Worker, Barrier} -> Counts
+    after 10000 -> error(history_probe_trace_barrier_stalled)
+    end.
 
 direct_abort_entry(Slot, C) ->
     Target = {?NS, genesis_hash(C)},
@@ -683,21 +798,22 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
     StateKey = make_ref(), ViewsKey = make_ref(),
     try
         {ok, Store} = quod_ledger_store:open(?NS, LedgerRoot),
+        {ok, Index} = quod_dtx_phase_index:open(LedgerRoot, ?NS),
         try
             %% Use the actual sink callback and its actual same-turn capture,
             %% not the disk fixture's handwritten echo of the input projection.
             State0 = quod_simplex:test_state(
                        #{ns => ?NS, genesis_hash => GH,
-                         consensus_domain => domain(C4), store => Store,
+                         consensus_domain => domain(C4), store => Store, phase_index => Index,
                          eng => quod_simplex:eng_with_certs(0, []),
                          sync => {pulling, self()}}),
             put(StateKey, State0),
             put(ViewsKey, []),
-            Sink = fun(Entries, VerifiedProjection) ->
+            Sink = fun(Entries, VerifiedProjection, Delta) ->
                 From = {self(), make_ref()},
                 {keep_state, State1, Actions} = quod_simplex:running(
                     {call, From},
-                    {sink_catchup, {recovery, self()}, Entries, VerifiedProjection},
+                    {sink_catchup, {recovery, self()}, Entries, VerifiedProjection, Delta},
                     get(StateKey)),
                 put(StateKey, State1),
                 [{reply, From, {ok, View}}] =
@@ -708,18 +824,28 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
             Fetch = fun(1) -> {ok, [G, B2], 3};
                        (3) -> {ok, [B3], 3}
                     end,
+            InitialView = #{projection := InitialProjection} = sink_view(
+                Store, {?NS, GH}, quod_simplex:history_projection({?NS, GH}), Index),
             ?assertEqual({ok, 3}, quod_catchup:catch_up(
-                                   ?NS, GH, Fetch, Sink, Options)),
+                ?NS, GH, Fetch, Sink, 1, InitialProjection,
+                Options#{history_view => InitialView})),
             [{Verified2, View2}, {Verified3, View3}] = lists:reverse(get(ViewsKey)),
+            ?assertEqual(2, length(maps:get(committee_views, Verified2))),
+            ?assertEqual(1, length(maps:get(committee_views, Verified3))),
             lists:foreach(
               fun({Verified, #{owner := Owner, projection := Published}}) ->
                   ?assertEqual(self(), Owner),
-                  ?assertEqual(2, length(maps:get(committee_views, Verified))),
                   ?assertEqual(1, length(maps:get(committee_views, Published))),
                   ?assertNotEqual(Verified, Published),
                   ?assertEqual(maps:get(history_head, Verified),
                                maps:get(history_head, Published)),
-                  ?assertEqual(pubs(C5), quod_simplex:history_committee(Published))
+                  ?assertEqual(pubs(C5), quod_simplex:history_committee(Published)),
+                  %% Every intermediate era is installed before this reply;
+                  %% the current-only projection resolves old slots by index.
+                  ?assertMatch({ok, _, _, _},
+                               quod_simplex:history_committee_view(1, Published)),
+                  {ok, OldCommittee, _, _} = quod_simplex:history_committee_view(1, Published),
+                  ?assertEqual(pubs(C4), OldCommittee)
               end, [{Verified2, View2}, {Verified3, View3}]),
             ?assertEqual(2, maps:get(slot, View2)),
             ?assertEqual(3, maps:get(slot, View3)),
@@ -733,6 +859,7 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
             end
         after
             erase(StateKey), erase(ViewsKey),
+            quod_dtx_phase_index:close(Index),
             quod_ledger_store:close(Store)
         end
     after
@@ -740,9 +867,173 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
         _ = file:del_dir_r(LedgerRoot)
     end.
 
+catch_up_overtaken_same_group_window_cannot_reinstall_old_state_test() ->
+    with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
+        Ns = maps:get(ns, F), Anchor = maps:get(anchor, F),
+        [_, _, Finalize] = maps:get(chain, F),
+        #{projection := #{history_index := Capture} = Projection} = View,
+        {ok, [Finalize], NextProjection, Delta} = quod_catchup:verify_forward(
+            Ns, Anchor, Projection, 3, [Finalize], Capture),
+        %% Another owner-applied window overtakes the verified borrow. The
+        %% actual sink advances; the earlier view still hides this same-group
+        %% Finalize. This is the production applier seam, not consensus admission.
+        {ok, _} = Sink([Finalize], NextProjection, Delta),
+        {ok, OldHistory} = quod_dtx_phase_index:history(Capture, maps:get(group_id, F)),
+        ?assertEqual(not_found, quod_dtx:history_phase(finalize, OldHistory)),
+        {ok, NewHistory} = quod_dtx_phase_index:history(Index, maps:get(group_id, F)),
+        ?assertEqual({ok, maps:get(finalize_ref, F)}, quod_dtx:history_phase(finalize, NewHistory)),
+        Installed = get(StateKey),
+        IndexStats = quod_dtx_phase_index:stats(Index),
+        ?assertEqual({error, stale_window}, Sink([Finalize], NextProjection, Delta)),
+        ?assertEqual(Installed, get(StateKey)),
+        ?assertEqual(IndexStats, quod_dtx_phase_index:stats(Index)),
+        {3, Store} = quod_simplex:test_committed_store(Installed),
+        ?assertEqual({ok, maps:get(chain, F)}, quod_ledger_store:read_range(Store, 1, 3))
+    end).
+
+catch_up_failed_append_leaves_retained_index_unchanged_test() ->
+    with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
+        [_, _, Finalize] = maps:get(chain, F),
+        #{projection := #{history_index := Capture} = Projection} = View,
+        {ok, _, NextProjection, Delta} = quod_catchup:verify_forward(
+            maps:get(ns, F), maps:get(anchor, F), Projection, 3, [Finalize], Capture),
+        Installed = get(StateKey),
+        Before = quod_dtx_phase_index:stats(Index),
+        {2, Store} = quod_simplex:test_committed_store(Installed),
+        ok = quod_ledger_store:close(Store),
+        ?assertMatch({error, _}, Sink([Finalize], NextProjection, Delta)),
+        ?assertEqual(Installed, get(StateKey)),
+        ?assertEqual(Before, quod_dtx_phase_index:stats(Index)),
+        {ok, History} = quod_dtx_phase_index:history(Index, maps:get(group_id, F)),
+        ?assertEqual(not_found, quod_dtx:history_phase(finalize, History))
+    end).
+
+catch_up_index_install_failure_is_loud_before_any_publication_test() ->
+    with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
+        Ns = maps:get(ns, F),
+        [_, _, Finalize] = maps:get(chain, F),
+        #{projection := #{history_index := Capture} = Projection} = View,
+        {ok, _, NextProjection, Delta} = quod_catchup:verify_forward(
+            Ns, maps:get(anchor, F), Projection, 3, [Finalize], Capture),
+        true = quod_reg:reg({quod_prolog, Ns}),
+        true = quod_reg:subscribe({committed, Ns}),
+        try
+            %% The actual table disappears after verification but before
+            %% installation. Appending may succeed; publishing the old index
+            %% or converting the failure to a recoverable sink reply may not.
+            ok = quod_dtx_phase_index:close(Index),
+            ?assertException(error, {badmatch, {error, {phase_index_io, _}}},
+                             Sink([Finalize], NextProjection, Delta)),
+            ?assertEqual([], writer_publications([])),
+            {2, OldStore} = quod_simplex:test_committed_store(get(StateKey)),
+            ok = quod_ledger_store:close(OldStore),
+            {ok, Reopened} = quod_ledger_store:open(Ns, maps:get(root, F)),
+            try
+                ?assertEqual(3, quod_ledger_store:last(Reopened)),
+                ?assertEqual({ok, Finalize}, quod_ledger_store:read_at(Reopened, 3))
+            after quod_ledger_store:close(Reopened)
+            end
+        after
+            true = quod_reg:unsubscribe({committed, Ns}),
+            true = gproc:unreg(quod_reg:name({quod_prolog, Ns}))
+        end
+    end).
+
+writer_publications(Acc) ->
+    receive
+        {'$gen_cast', _} = Cast -> writer_publications([Cast | Acc]);
+        {certified_head, _, _} = Head -> writer_publications([Head | Acc]);
+        {committed, _, _} = Commit -> writer_publications([Commit | Acc])
+    after 0 -> lists:reverse(Acc)
+    end.
+
+with_phase_writer(Fun) ->
+    %% The owner publications belong to this fixture's mailbox, not EUnit's
+    %% shared executor, which may contain another fixture's production casts.
+    Parent = self(), Tag = make_ref(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        Outcome = try with_phase_writer_owned(Fun) of
+            Result -> {ok, Result}
+        catch Class:Reason:Stack -> {exception, Class, Reason, Stack}
+        end,
+        Parent ! {Tag, Outcome}
+    end),
+    receive
+        {Tag, Outcome} ->
+            receive {'DOWN', Monitor, process, Pid, normal} -> ok end,
+            case Outcome of
+                {ok, Result} -> Result;
+                {exception, Class, Reason, Stack} -> erlang:raise(Class, Reason, Stack)
+            end;
+        {'DOWN', Monitor, process, Pid, Reason} -> error({phase_writer_died, Reason})
+    end.
+
+phase_writer_mailbox_isolation_test() ->
+    %% Reproduce the combined-suite contaminator without consuming or filtering
+    %% away any publication: only the fixture owner may supply the assertion.
+    Cast = {'$gen_cast', {unrelated_fixture, make_ref()}},
+    self() ! Cast,
+    try
+        with_phase_writer(fun(_, _, _, _, _) ->
+            ?assertEqual([], writer_publications([]))
+        end),
+        receive Cast -> ok after 0 -> error(parent_publication_consumed) end
+    after receive Cast -> ok after 0 -> ok end
+    end.
+
+with_phase_writer_owned(Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F = quod_foreign_log_tests:prepared_then_committed_fixture(
+          quod_foreign_log_tests:unique_ns()),
+    Ns = maps:get(ns, F), Anchor = maps:get(anchor, F),
+    Root = quod_foreign_log_tests:temp_dir("catchup-owner-phase"),
+    {ok, Store} = quod_ledger_store:open(Ns, Root),
+    {ok, Index} = quod_dtx_phase_index:open(Root, Ns),
+    StateKey = make_ref(),
+    put(StateKey, quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+        consensus_domain => quod_simplex:consensus_domain(Ns, Anchor),
+        store => Store, phase_index => Index, eng => quod_simplex:eng_with_certs(0, []),
+        sync => {pulling, self()}})),
+    Sink = fun(Entries, P, Delta) ->
+        From = {self(), make_ref()},
+        {keep_state, State, Actions} = quod_simplex:running({call, From},
+            {sink_catchup, {recovery, self()}, Entries, P, Delta}, get(StateKey)),
+        put(StateKey, State),
+        [Reply] = [R || {reply, Who, R} <- Actions, Who =:= From],
+        Reply
+    end,
+    try
+        Prefix = lists:sublist(maps:get(chain, F), 2),
+        {ok, Prefix, P, Delta} = quod_catchup:verify_forward(
+            Ns, Anchor, quod_simplex:history_projection({Ns, Anchor}), 1, Prefix, Index),
+        {ok, View} = Sink(Prefix, P, Delta),
+        Fun(F#{root => Root}, Index, Sink, View, StateKey)
+    after
+        erase(StateKey),
+        quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store),
+        _ = file:del_dir_r(Root)
+    end.
+
+catch_up_owner_death_during_empty_fetch_is_not_completion_test() ->
+    C = committee(4), G = genesis(pubs(C)),
+    with_disk_sink(gen_hash(G), [G], fun(_, _) -> error(unexpected_sink) end,
+      fun(Sink, View = #{projection := Projection}, Options) ->
+          {Owner, Monitor} = spawn_monitor(fun() -> receive stop -> ok end end),
+          Fetch = fun(2) ->
+              Owner ! stop,
+              receive {'DOWN', Monitor, process, Owner, normal} -> ok end,
+              {ok, [], 1}
+          end,
+          %% Only the identity/lifetime subject is replaced for this control;
+          %% the retained index and prefix are the ordinary real disk fixture.
+          ?assertEqual({error, owner_down}, quod_catchup:catch_up(
+              ?NS, gen_hash(G), Fetch, Sink, 2, Projection,
+              Options#{history_view => View#{owner := Owner}}))
+      end).
+
 recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Options = #{ledger_root := Root} = catchup_options(),
+    #{ledger_root := Root} = catchup_options(),
     Ns = iolist_to_binary([<<"recovery:owner-death:">>,
                           binary:encode_hex(crypto:strong_rand_bytes(8))]),
     Anchor = crypto:hash(sha256, Ns),
@@ -758,11 +1049,11 @@ recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
         end,
         {Owner, OwnerRef} = spawn_monitor(fun() ->
             {ok, Store} = quod_ledger_store:open(Ns, Root),
+            {ok, Index} = quod_dtx_phase_index:open(Root, Ns),
             try
                 true = quod_reg:reg({quod_simplex, Ns}),
                 State0 = quod_simplex:test_state(
-                           #{ns => Ns, genesis_hash => Anchor, store => Store,
-                             ledger_root => maps:get(ledger_root, Options),
+                           #{ns => Ns, genesis_hash => Anchor, store => Store, phase_index => Index,
                              eng => quod_simplex:eng_with_certs(0, []),
                              sync => unconfirmed}),
                 %% The production tick arms the real monitored recovery worker.
@@ -771,7 +1062,7 @@ recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
                 {pulling, Worker} = quod_simplex:test_sync(State1),
                 Parent ! {recovery_worker_started, self(), Worker},
                 recovery_capture_owner(State1)
-            after quod_ledger_store:close(Store)
+            after quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store)
             end
         end),
         try

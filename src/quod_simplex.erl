@@ -144,7 +144,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
          cancel_dtx_begin/3, dtx_group_barrier/3,
          dtx_endpoint_request/7, dtx_endpoint_local/4,
-         history_view/3, history_view_live/1, transaction_evidence/4,
+         history_view/3, history_view_at/3, history_view_live/1, transaction_evidence/4,
          operation_claim_evidence/4,
          dtx_local_evidence/4, dtx_applied_source/2,
          dtx_outcome_lookup/2,
@@ -565,7 +565,7 @@ eng_new(Domain, Validators, Base)
   when is_binary(Domain), byte_size(Domain) =:= 32 ->
     #eng{domain = Domain, validators = Validators, base = Base}.
 
-%% Swap the engine's voting set to the ACTIVE validator set (`active_validators/1`) when `adopt_history/2`
+%% Swap the engine's voting set to the ACTIVE validator set (`active_validators/1`) when `adopt_projection/3`
 %% crosses a boundary. Today (epoch length 1) the active set IS the committee facts, so this fires on every
 %% committee-changing commit; under real epochs it fires only at an epoch boundary, and a mid-epoch facts
 %% change leaves the engine's set untouched. Retained share buckets are projected onto the new set when
@@ -1260,7 +1260,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             self         :: node_id(),               %% our pubkey == node_id
             id           :: signer() | undefined,    %% signing identity (pubkey + private key)
             store        :: quod_ledger_store:handle() | undefined,
-            ledger_root  :: file:filename_all() | undefined,
             signing_journal :: signing_journal(),
             eng          :: #eng{} | undefined,      %% the consensus engine (certificate pool + block tree)
             chan         :: binary() | undefined,    %% term_to_binary({log, Ns}) — the transport channel
@@ -1359,6 +1358,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             operation_recoveries = #{} ::
               #{term() => #operation_recovery_owner{}},
             history_head = none :: none | {slot(), <<_:256>>},
+            phase_index = undefined :: undefined | quod_dtx_phase_index:index(),
             next_author_seq = 1 :: pos_integer(),
             prolog_ready = false :: boolean(),
             %% Recovery is one explicit state machine. `unconfirmed` means the durable prefix is valid but
@@ -1516,7 +1516,6 @@ test_state_set(ns, V, S)         -> S#s{ns = V};
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(id, V, S)         -> S#s{id = V};
 test_state_set(genesis_hash, V, S) -> S#s{genesis_hash = V};
-test_state_set(ledger_root, V, S) -> S#s{ledger_root = V};
 test_state_set(consensus_domain, V, S) -> S#s{consensus_domain = V};
 test_state_set(validators, V, S) ->
     S#s{validators = V,
@@ -1534,6 +1533,7 @@ test_state_set(dtx_projection, V, S) -> S#s{dtx_projection = V};
 test_state_set(dtx_lanes, V, S) -> S#s{dtx_lanes = V};
 test_state_set(dtx_pending, V, S) -> S#s{dtx_pending = V};
 test_state_set(history_head, V, S) -> S#s{history_head = V};
+test_state_set(phase_index, V, S) -> S#s{phase_index = V};
 test_state_set(store, V, S)       -> S#s{store = V};
 test_state_set(signing_journal, V, S) -> S#s{signing_journal = V};
 test_state_set(commit_buf, V, S)  -> S#s{commit_buf = V};
@@ -2291,9 +2291,9 @@ test_log_projection(Ns, Entries, Seed) ->
     log_projection(Ns, Entries, Seed).
 test_apply_catchup_window(Source, Entries, S) ->
     Projection = log_projection(S#s.ns, Entries, state_projection(S)),
-    apply_catchup_window(Source, Entries, Projection, S).
+    apply_catchup_window(Source, Entries, Projection, quod_dtx_phase_index:new_delta(), S).
 test_apply_catchup_window(Source, Entries, Projection, S) ->
-    apply_catchup_window(Source, Entries, Projection, S).
+    apply_catchup_window(Source, Entries, Projection, quod_dtx_phase_index:new_delta(), S).
 -endif.
 
 callback_mode() -> [state_functions].
@@ -2692,6 +2692,92 @@ registered_history_view(Ns, Identity, Requirement, Deadline) ->
     catch _:_ -> {error, not_ready}
     end.
 
+-doc """
+Capture one sufficient hosted view, waiting only for actual committed progress.
+
+The request's exact owner and original deadline stay pinned while waiting.
+An insufficient prefix returns only its height, not a snapshot: the one view
+is captured only when the requested slot exists. Subscribe before checking so
+a commit cannot cross the check/wait boundary unnoticed. Progress is a wake
+hint, never evidence; the owner still supplies the coherent capture.
+
+This blocking reader belongs in the existing proof/evidence workers, never in
+the consensus owner. It opens no store, starts no process and uses no polling
+or retry timer. An absent but still desired exact owner stays unavailable;
+only an identity not hosted here may use the foreign owner.
+""".
+-spec history_view_at({binary(), <<_:256>>}, pos_integer(), integer()) ->
+          {ok, history_view()} |
+          {error, timeout | not_ready | not_hosted | invalid_identity}.
+history_view_at({Ns, <<_:256>> = Anchor} = Identity, Slot, Deadline)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(Slot), Slot > 0, is_integer(Deadline) ->
+    case Deadline > quod_time:mono_ms() of
+        false -> {error, timeout};
+        true ->
+            try quod_reg:where({quod_simplex, Ns}) of
+                Owner when is_pid(Owner) ->
+                    capture_hosted_at(Owner, Identity, Slot, Deadline);
+                undefined ->
+                    case quod_ontology:genesis_anchor(Ns) of
+                        {ok, Anchor} -> {error, not_ready};
+                        {error, genesis_unavailable} -> {error, not_ready};
+                        _ -> {error, not_hosted}
+                    end
+            catch
+                error:badarg -> {error, not_ready};
+                exit:_ -> {error, not_ready}
+            end
+    end;
+history_view_at(_Identity, _Slot, _Deadline) -> {error, invalid_identity}.
+
+capture_hosted_at(Owner, {Ns, _Anchor} = Identity, Slot, Deadline) ->
+    Key = {committed, Ns},
+    Subscribed =
+        try gproc:get_value(quod_reg:prop(Key)) of
+            _ -> false
+        catch error:badarg -> quod_reg:subscribe(Key)
+        end,
+    Monitor = erlang:monitor(process, Owner),
+    try capture_hosted_progress(Owner, Identity, Slot, Deadline, Monitor)
+    after
+        erlang:demonitor(Monitor, [flush]),
+        case Subscribed of
+            true -> _ = catch quod_reg:unsubscribe(Key);
+            false -> ok
+        end
+    end.
+
+capture_hosted_progress(Owner, {Ns, _Anchor} = Identity, Slot, Deadline, Monitor) ->
+    case call_history_view(Owner, Ns, Identity, {committed, Slot}, Deadline) of
+        {pending, Height} ->
+            await_hosted_progress(Owner, Identity, Slot, Height, Deadline, Monitor);
+        Result -> Result
+    end.
+
+await_hosted_progress(Owner, {Ns, _Anchor} = Identity, Slot, Height, Deadline, Monitor) ->
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            receive
+                {committed, Ns, Advanced, _Entry} ->
+                    continue_hosted_progress(
+                      Advanced, Owner, Identity, Slot, Height, Deadline, Monitor);
+                {certified_head, Ns, Advanced} ->
+                    continue_hosted_progress(
+                      Advanced, Owner, Identity, Slot, Height, Deadline, Monitor);
+                {'DOWN', Monitor, process, Owner, _Reason} ->
+                    {error, not_ready}
+            after Remaining -> {error, timeout}
+            end;
+        _ -> {error, timeout}
+    end.
+
+continue_hosted_progress(Advanced, Owner, Identity, Slot, Height, Deadline, Monitor)
+  when is_integer(Advanced), Advanced > Height, Advanced >= Slot ->
+    capture_hosted_progress(Owner, Identity, Slot, Deadline, Monitor);
+continue_hosted_progress(_Advanced, Owner, Identity, Slot, Height, Deadline, Monitor) ->
+    await_hosted_progress(Owner, Identity, Slot, Height, Deadline, Monitor).
+
 call_history_view(Owner, Ns, Identity, Requirement, Deadline) ->
     case max(0, Deadline - quod_time:mono_ms()) of
         0 -> {error, timeout};
@@ -2706,6 +2792,13 @@ call_history_view(Owner, Ns, Identity, Requirement, Deadline) ->
                                 {false, _} -> {error, timeout};
                                 {true, true} -> {ok, View};
                                 {true, false} -> {error, not_ready}
+                            end;
+                        {pending, Height} when is_integer(Height), Height >= 0 ->
+                            case {Deadline > quod_time:mono_ms(),
+                                  history_owner_live(Owner, Ns)} of
+                                {false, _} -> {error, timeout};
+                                {true, false} -> {error, not_ready};
+                                {true, true} -> {pending, Height}
                             end;
                         {error, _} = Error -> Error;
                         _ -> {error, not_ready}
@@ -3085,7 +3178,6 @@ init_store(Ns, Cfg, Id) ->
     quod_reg:subscribe({channel, DtxChan}),               %% receive bounded DTX recovery requests/replies
     RelayTimeout = relay_timeout_ms(Cfg),
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
-            ledger_root = quod_ledger_store:ledger_dir(Cfg),
             chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
             relay_timeout_ms = RelayTimeout,
             batch_window_ms = maps:get(batch_window_ms, Cfg),
@@ -3356,12 +3448,20 @@ relay_timeout_ms(Cfg) ->
 %% catch-up can append anything. The complete semantic fold precedes the sole
 %% reconciliation/pruning call, so raw height can never erase signing evidence.
 restore_storage(S0 = #s{store = Store}, Cfg) ->
-    case quod_ledger_store:last(Store) of
-        0 -> initialize_empty_storage(S0, Cfg);
-        Last -> recover_existing_storage(S0, Cfg, Last)
+    Root = quod_ledger_store:ledger_dir(Cfg),
+    ok = quod_dtx_phase_index:cleanup(Root, S0#s.ns),
+    {ok, Index} = quod_dtx_phase_index:open(Root, S0#s.ns),
+    S = S0#s{phase_index = Index},
+    try case quod_ledger_store:last(Store) of
+        0 -> initialize_empty_storage(S, Cfg);
+        Last -> recover_existing_storage(S, Cfg, Last)
+    end
+    catch Class:Reason:Stack ->
+        _ = quod_dtx_phase_index:close(Index),
+        erlang:raise(Class, Reason, Stack)
     end.
 
-recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
+recover_existing_storage(S0 = #s{ns = Ns, store = Store, phase_index = PhaseIndex}, Cfg, Last) ->
     Anchor =
         case local_genesis_hash(S0) of
             <<_:256>> = Hash -> Hash;
@@ -3372,27 +3472,20 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
     {ok, Journal0} = quod_signing_journal:recover(
                        Ns, Domain, data_dir(Cfg)),
     Binding = {Ns, Anchor},
-    ScratchRoot = quod_ledger_store:ledger_dir(Cfg),
-    ok = quod_dtx_phase_index:cleanup(ScratchRoot, Ns),
-    {ok, PhaseIndex} = quod_dtx_phase_index:open(ScratchRoot, Ns),
     Projection0 = seed_pending_begins(
                     Journal0, history_projection(Binding)),
     PendingTransactions0 =
         quod_signing_journal:pending_transactions(Journal0),
     {Projection, UncommittedTransactions} =
-        try
             quod_ledger_store:fold(
               Store, 1, Last,
               fun(E, {Acc, PendingEffects}) ->
                       #entry{data = Data} = quod_ledger:entry_view(E),
-                      {checked_log_projection_step(
-                         Binding, E, Acc, PhaseIndex),
+                      P = checked_log_projection_step(Binding, E, Acc, PhaseIndex),
+                      {retain_owner_projection(P, quod_dtx_phase_index:new_delta(), S0),
                        remove_committed_effect_ids(Data, PendingEffects)}
               end,
-              {Projection0, PendingTransactions0})
-        after
-            _ = quod_dtx_phase_index:close(PhaseIndex)
-        end,
+              {Projection0, PendingTransactions0}),
     S1 = install_projection(Projection, S0#s{slot = Last}),
     {ok, Journal1} = reconcile_signing_journal(
                        Last, Projection, Journal0),
@@ -3444,9 +3537,10 @@ initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := create} = Cfg) ->
     {ok, Journal0} = quod_signing_journal:initialize(
                        Ns, Domain, data_dir(Cfg)),
     SAppended = append_genesis(Entry, S0),
-    Projection = checked_log_projection_step(
+    Projection0 = checked_log_projection_step(
                    {Ns, Anchor}, Entry,
                    history_projection({Ns, Anchor})),
+    Projection = retain_owner_projection(Projection0, quod_dtx_phase_index:new_delta(), SAppended),
     S1 = install_projection(Projection, SAppended#s{slot = 1}),
     {ok, Journal1} = reconcile_signing_journal(1, Projection, Journal0),
     finalize_restored_storage(S1, Anchor, Journal1).
@@ -4315,15 +4409,15 @@ running_impl(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};
 %% window here to persist + replay in slot order. The caller presents an explicit source capability:
 %% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
 %% observer. This keeps the sole-writer rule local and makes a promotion crossing deterministic.
-running_impl({call, From}, {sink_catchup, Source, Es, Projection}, S0) ->
+running_impl({call, From}, {sink_catchup, Source, Es, Projection, Delta}, S0) ->
     case may_sink(Source, S0) of
         %% `reseat_engine` discards the obsolete volatile round and its head watchdog. The common
         %% transition helper cancels the named timer before the recovered member can vote again.
         true  -> {S1, Reply} = apply_catchup_window(
-                                Source, Es, Projection, S0),
+                                Source, Es, Projection, Delta, S0),
                  %% Return the same writer-turn view with the sink acknowledgement.
-                 %% The recovery driver can backfill its phase index from this
-                 %% prefix without recapturing or reopening the ledger path.
+                 %% The next window borrows this installed index, without
+                 %% recapturing or reopening the ledger path.
                  Result = case Reply of
                               ok -> {ok, local_history_view(S1)};
                               {error, _} = Error -> Error
@@ -4351,7 +4445,7 @@ running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 terminate(
   _Reason, _State,
   #s{chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
-     store = Store, signing_journal = Journal,
+     store = Store, signing_journal = Journal, phase_index = PhaseIndex,
      dtx_correlations = DtxCorrelations,
      dtx_out_channels = DtxOutChannels,
      dtx_workers = DtxWorkers,
@@ -4390,6 +4484,10 @@ terminate(
     _ = case Store of
             undefined -> ok;
             _         -> try quod_ledger_store:close(Store) catch _:_ -> ok end
+        end,
+    _ = case PhaseIndex of
+            undefined -> ok;
+            _ -> catch quod_dtx_phase_index:close(PhaseIndex)
         end,
     _ = close_signing_journal(Journal),
     ok.
@@ -9726,6 +9824,8 @@ commit_block(Slot, #block{payload = Payload} = Block,
             {ok, Store1} = timed_step(S, persist,
                                       fun() -> persist_entry(Store, E, Slot, S) end),
             trace_block_event(Slot, BH, <<"consensus.durable">>, #{}, S),
+            {Projected, IndexDelta} = committed_projection(E, BH, round_state(Slot, S), S),
+            Projection1 = retain_owner_projection(Projected, IndexDelta, S),
             timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
             SCommitted = timed_step(S, resolve, fun() ->
                              resolve_committed_submissions(
@@ -9735,8 +9835,6 @@ commit_block(Slot, #block{payload = Payload} = Block,
                          end),
             SResolved = resolve_committed_dtx(E, Payload, SCommitted),
             S0 = ack_local(Slot, probe_committed(Slot, SResolved)),
-            Projection1 = committed_projection(
-                            E, BH, round_state(Slot, S0), S0),
             {S1, PendingTransition} = reconcile_signing_state(
                                         adopt_projection(
                                           E, Projection1,
@@ -9982,10 +10080,6 @@ engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
 %% after the next round had started. The facts are a pure function of the committed prefix and every node
 %% crosses the boundary at the same logical point. The delta folds via the SAME
 %% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
-adopt_history(Entry, S = #s{ns = Ns}) ->
-    Projection1 = history_advance(Ns, Entry, state_projection(S)),
-    adopt_projection(Entry, Projection1, S).
-
 adopt_projection(Entry, Projection1,
                  S = #s{validators = V, self = Self, eng = Eng}) ->
     #entry{data = Change} = quod_ledger:entry_view(Entry),
@@ -10018,14 +10112,15 @@ committed_projection(
     #entry{index = Slot, data = Payload} = quod_ledger:entry_view(Entry),
     case quod_ledger:classify(Payload) of
         {content, _Transactions} ->
-            history_advance_known(Ns, Entry, BH, state_projection(S));
+            {history_advance_known(Ns, Entry, BH, state_projection(S)),
+             quod_dtx_phase_index:new_delta()};
         {controls, Classified} ->
             live_dtx_projection(
               [Control || {_Kind, Control} <- Classified],
               Entry, BH, Round, S);
         noop ->
-            history_advance_known(Ns, Entry, entry_history_hash(Entry),
-                                  state_projection(S));
+            {history_advance_known(Ns, Entry, entry_history_hash(Entry),
+                                   state_projection(S)), quod_dtx_phase_index:new_delta()};
         invalid ->
             error({invalid_committed_history, Slot})
     end.
@@ -10042,10 +10137,12 @@ live_dtx_projection(
         {ok, ControlRefs, LaneSequences} ->
             case quod_dtx:reduce_batch(
                    ControlRefs, Histories, ParentDtx) of
-                {ok, _Histories1, _Dtx1, Items} ->
-                    (project_dtx_batch_items(
+                {ok, Histories1, _Dtx1, Items} ->
+                    {ok, Delta} = quod_dtx_phase_index:preview_histories(
+                        quod_dtx_phase_index:new_delta(), Histories1),
+                    {(project_dtx_batch_items(
                        Items, LaneSequences, Entry, Projection0))#{
-                      history_head := {Slot, BH}};
+                      history_head := {Slot, BH}}, Delta};
                 {error, Reason} ->
                     error({invalid_committed_dtx, Slot, Reason})
             end;
@@ -10097,11 +10194,14 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
         Cert ->
             E = quod_ledger:noop_entry(Slot, Cert),
             {ok, Store1} = persist_entry(Store, E, Slot, S),
+            Projection1 = retain_owner_projection(
+                history_advance(S#s.ns, E, state_projection(S)),
+                quod_dtx_phase_index:new_delta(), S),
             publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
             S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
             {S1, PendingTransition} = reconcile_signing_state(
-                                        adopt_history(
-                                          E, finalize(Slot, S0))),
+                                        adopt_projection(
+                                          E, Projection1, finalize(Slot, S0))),
             S2 = S1#s{approved = max(S1#s.approved, Slot)},
             S3 = apply_live(E, confirm_live(S2)),
             finish_pending_begins_reconciliation(PendingTransition, S3)
@@ -11696,7 +11796,37 @@ local_history_view(S = #s{store = Store, slot = Slot, last_applied = Applied}) -
     #{owner => self(), identity => target_identity(S),
       slot => Slot, applied => Applied,
       snapshot => quod_ledger_store:snapshot(Store),
-      projection => state_projection(S)}.
+      projection => captured_history_projection(S)}.
+
+-ifdef(TEST).
+%% Pure gate fixtures may omit storage. Every founded production owner has
+%% an index; retained-history regressions use the real index, never this arm.
+captured_history_projection(S = #s{phase_index = undefined}) -> state_projection(S);
+captured_history_projection(S) -> captured_history_projection_indexed(S).
+-else.
+captured_history_projection(S) -> captured_history_projection_indexed(S).
+-endif.
+
+captured_history_projection_indexed(S = #s{phase_index = Index, slot = H}) ->
+    {ok, View} = quod_dtx_phase_index:capture(Index, H),
+    (state_projection(S))#{history_index => View}.
+
+-ifdef(TEST).
+retain_owner_projection(P, _Delta, #s{phase_index = undefined}) -> P;
+retain_owner_projection(P, Delta, S) -> retain_owner_projection_indexed(P, Delta, S).
+-else.
+retain_owner_projection(P, Delta, S) -> retain_owner_projection_indexed(P, Delta, S).
+-endif.
+
+retain_owner_projection_indexed(P = #{committee_views := Views}, Delta0, #s{phase_index = Index}) ->
+    Delta = case Views of
+        [Current | _] -> quod_dtx_phase_index:preview_committee(Delta0, Current);
+        [] -> Delta0
+    end,
+    %% The ledger is already durable. Failure here is engine death, never a
+    %% return to a pre-append state or publication with an outdated index.
+    ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+    P#{committee_views := lists:sublist(Views, 1)}.
 
 verify_local_dtx_reference_result(
   {ok, #{transaction := _Transaction} = Evidence}) ->
@@ -11744,16 +11874,22 @@ local_history_view(Identity, Requirement, Deadline, S) ->
 
 local_history_view(Identity, Requirement, S = #s{ns = Ns, store = Store}) ->
     ExactIdentity = target_identity(S),
+    {Committed, Minimum} = case Requirement of
+        {committed, Slot} when is_integer(Slot), Slot > 0 -> {true, Slot};
+        committed -> {true, 0};
+        _ -> {false, 0}
+    end,
     case {Identity =:= Ns orelse Identity =:= ExactIdentity,
           Requirement =/= validator orelse is_participant(S),
-          Requirement =:= committed orelse endpoint_read_ready(S),
+          Committed orelse endpoint_read_ready(S),
           ExactIdentity, Store} of
         {false, _, _, _, _} -> {error, invalid_identity};
         {true, false, _, _, _} -> {error, read_certificate_unavailable};
         {true, true, true, {Ns, <<_:256>>}, Store} when Store =/= undefined ->
             case quod_ledger_store:last(Store) =:= S#s.slot andalso
-                 (S#s.slot > 0 orelse Requirement =:= committed) of
-                true -> {ok, local_history_view(S)};
+                 (S#s.slot > 0 orelse Committed) of
+                true when S#s.slot >= Minimum -> {ok, local_history_view(S)};
+                true -> {pending, S#s.slot};
                 false -> {error, not_ready}
             end;
         _ -> {error, not_ready}
@@ -14673,21 +14809,20 @@ may_sink(_Source, _S) -> false.
 %% durable snapshot before each source fetch, and reports `ready` only after the final height is corroborated by
 %% a certificate quorum of the current committee. A raw `{ok, Height}` from one catch-up server is therefore
 %% progress, never authority to vote.
-start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH,
-                         ledger_root = LedgerRoot}) ->
+start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH}) ->
     Statem = self(),
     {Pid, _Ref} = spawn_monitor(
         fun() ->
             _ = quod_process:kill_when_owner_dies(Statem, self()),
             Owner = self(),
-            Sink = fun(Es, Projection1) ->
+            Sink = fun(Es, Projection1, Delta) ->
                        gen_statem:call(
                          Statem,
-                         {sink_catchup, {recovery, Owner}, Es, Projection1},
+                         {sink_catchup, {recovery, Owner}, Es, Projection1, Delta},
                          ?SINK_MS)
                    end,
             Result = run_recovery(
-                       Ns, GH, Statem, Self, Sink, LedgerRoot),
+                       Ns, GH, Statem, Self, Sink),
             gen_statem:cast(Statem, {sync_done, Owner, Result})
         end),
     S#s{sync = {pulling, Pid}}.
@@ -14709,12 +14844,12 @@ committee_contacts(Self, Committee) ->
 %% This avoids both old failure modes: the first stale `{ok, [], H}` can never declare readiness, and cold
 %% startup costs one network timeout rather than `committee_size * timeout`. A bootstrap endpoint may fetch
 %% history but never corroborates a voting member because endpoint requests are not identity-bound.
-run_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot) ->
-    recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+run_recovery(Ns, GH, Statem, Self, Sink) ->
+    recover_tip(Ns, GH, Statem, Self, Sink,
                 ?RECOVERY_FETCHES, false,
                 ?RECOVERY_HINT_WARMS).
 
-recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+recover_tip(Ns, GH, Statem, Self, Sink,
             FetchesLeft, FallbackUsed, HintWarms) ->
     case recovery_snapshot(Statem, Ns, GH) of
         {ok, #{slot := Height, projection := Projection}} when Height > 0 ->
@@ -14732,18 +14867,18 @@ recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
                             %% bounded set with tiny identified pulls; each TLS-bound link teaches the
                             %% resolver, then the NEXT pass remains the normal identity-bound quorum probe.
                             warm_contact_hints(Ns, Height),
-                            recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+                            recover_tip(Ns, GH, Statem, Self, Sink,
                                         FetchesLeft,
                                         FallbackUsed, HintWarms - 1);
                         false ->
                             Failure = {tip_unconfirmed, Height, length(lists:usort(Exact))},
                             continue_recovery(Ns, GH, Statem, Self, Sink,
-                                              LedgerRoot, FetchesLeft,
+                                              FetchesLeft,
                                               FallbackUsed, ahead_contacts(Probes), Exact, Failure)
                     end
             end;
         {ok, #{slot := 0}} ->
-            continue_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot,
+            continue_recovery(Ns, GH, Statem, Self, Sink,
                               FetchesLeft,
                               FallbackUsed, [], [], empty_namespace);
         {error, R} -> {error, {status, R}}
@@ -14758,7 +14893,7 @@ needs_hint_warm(Committee, Self) ->
     Resolvable < Needed.
 
 %% Direct endpoint pulls authenticate their link headers and populate the pubkey=>endpoint cache. Their
-%% replies are intentionally discarded: only catch_up_from/6 is allowed to put data into the ledger.
+%% replies are intentionally discarded: only catch_up_from/5 is allowed to put data into the ledger.
 warm_contact_hints(Ns, Height) ->
     Contacts = quod_catchup:contacts(Ns, ?RECOVERY_WARM_CONTACTS),
     Parent = self(),
@@ -14795,18 +14930,18 @@ tip_ready(Committee, Self, ExactPeers) ->
 ahead_contacts(Probes) ->
     lists:usort([Peer || {Peer, {ok, [_ | _], _Height}} <- Probes]).
 
-continue_recovery(_Ns, _GH, _Statem, _Self, _Sink, _LedgerRoot, 0,
+continue_recovery(_Ns, _GH, _Statem, _Self, _Sink, 0,
                   _FallbackUsed, _Ahead, _Exact, Failure) ->
     {error, Failure};
-continue_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot, FetchesLeft,
+continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
                   FallbackUsed, Ahead, Exact, Failure) ->
     case recovery_sources(Ns, Ahead, Exact, FallbackUsed) of
         {[], _} -> {error, Failure};
         {Sources, FallbackUsed1} ->
             case try_recovery_sources(
-                   Ns, GH, Statem, Sources, Sink, LedgerRoot) of
+                   Ns, GH, Statem, Sources, Sink) of
                 {ok, _} ->
-                    recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+                    recover_tip(Ns, GH, Statem, Self, Sink,
                                 FetchesLeft - 1, FallbackUsed1,
                                 ?RECOVERY_HINT_WARMS);
                 {error, _} -> {error, Failure}
@@ -14826,16 +14961,16 @@ recovery_sources(Ns, [], [], false) ->
     end;
 recovery_sources(_Ns, [], _Exact, FallbackUsed) -> {[], FallbackUsed}.
 
-try_recovery_sources(_Ns, _GH, _Statem, [], _Sink, _LedgerRoot) ->
+try_recovery_sources(_Ns, _GH, _Statem, [], _Sink) ->
     {error, no_source};
-try_recovery_sources(Ns, GH, Statem, [Contact | Rest], Sink, LedgerRoot) ->
+try_recovery_sources(Ns, GH, Statem, [Contact | Rest], Sink) ->
     case recovery_snapshot(Statem, Ns, GH) of
         {ok, View} ->
             case catch_up_from(
-                   Ns, GH, View, Contact, Sink, LedgerRoot) of
+                   Ns, GH, View, Contact, Sink) of
                 {ok, _} = Ok -> Ok;
                 {error, _}   -> try_recovery_sources(
-                                  Ns, GH, Statem, Rest, Sink, LedgerRoot)
+                                  Ns, GH, Statem, Rest, Sink)
             end;
         {error, R} -> {error, {status, R}}
     end.
@@ -14886,11 +15021,11 @@ tip_quorum(Committee, Self, Peers) ->
     length(Confirmed) >= quorum(length(Committee)).
 
 catch_up_from(Ns, GH, View = #{slot := Height, projection := Projection},
-              Contact, Sink, LedgerRoot) ->
+              Contact, Sink) ->
     Fetch = fun(F) -> quod_catchup:pull(Ns, F, F + ?SYNC_WINDOW - 1, Contact) end,
     quod_catchup:catch_up(
       Ns, GH, Fetch, Sink, Height + 1, Projection,
-      #{ledger_root => LedgerRoot, history_view => View}).
+      #{history_view => View}).
 
 %% The single recovery armer, run each tick off the commit hot path. It owns gap hysteresis and failure
 %% backoff; the recovery enum enforces single flight.
@@ -14942,9 +15077,9 @@ sibling_up(#s{ns = Ns}) -> quod_reg:where({quod_catchup, Ns}) =/= undefined.
 %% live bytes — so a post-append failure (a store read-back error in the replay) crashes the statem
 %% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
 %% Both projections (validator set, KB) advance together from the one appended log.
-apply_catchup_window(_Source, [], _Projection, S) -> {S, ok};
+apply_catchup_window(_Source, [], _Projection, _Delta, S) -> {S, ok};
 apply_catchup_window(
-  Source, Es, Projection1,
+  Source, Es, Projection, Delta,
   S = #s{store = Store}) ->
     %% The verifier's projection is bound to its exact starting snapshot. If
     %% live consensus advanced while it fetched, reject the whole stale window
@@ -14959,6 +15094,10 @@ apply_catchup_window(
     case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
+            %% Install before routes, owner reconciliation, Prolog application,
+            %% or any published head. Failure after append must unwind; an old
+            %% index is not a state to which the owner can return.
+            Projection1 = retain_owner_projection(Projection, Delta, S),
             Included = committed_submission_slots(Es),
             learn_validator_routes(Projection1, S#s.self),
             #entry{index = Slot} = quod_ledger:entry_view(lists:last(Es)),
@@ -15232,8 +15371,7 @@ reply_recovery_exclusion(Waiter, _Context, _NewHead, S) ->
 %% The target identity every ordinary transaction signature binds. The
 %% admission id changes only when this exact author leaves and later rejoins;
 %% unrelated membership changes therefore preserve retained custody.
-target_identity(#s{ns = Ns, genesis_hash = Anchor})
-  when is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+target_identity(#s{ns = Ns, genesis_hash = <<_:256>> = Anchor}) ->
     {Ns, Anchor}.
 
 binding(#s{author_admissions = Admissions} = S, Author) ->
@@ -15294,7 +15432,9 @@ block_from_entry(Entry) -> quod_ledger:block_from_entry(Entry).
           dtx := undefined | quod_dtx:projection(),
           dtx_lanes := #{{binary(), node_id()} => non_neg_integer()},
           dtx_pending := #{<<_:256>> => {<<_:256>>, <<_:256>>}},
-          history_head := none | {slot(), <<_:256>>}}.
+          history_head := none | {slot(), <<_:256>>},
+          %% Ephemeral owner capture only; never persisted as projection data.
+          history_index => quod_dtx_phase_index:index()}.
 
 -doc "Return the empty authoritative history projection used before genesis.".
 -spec history_projection() -> history_projection().
@@ -15416,9 +15556,21 @@ history_committee(#{committee := Committee}) -> Committee.
           {ok, [node_id()], binary(),
            #{node_id() => {term(), pos_integer()}}} | error.
 history_committee_view(
-  Slot, #{history_head := {Height, _Hash}, committee_views := Views})
+  Slot, #{history_head := {Height, _Hash}, committee_views := Views} = Projection)
   when is_integer(Slot), Slot > 0, Slot =< Height, is_list(Views) ->
-    committee_view_at(Slot, Views);
+    case committee_view_at(Slot, Views) of
+        {ok, _, _, _} = Found -> Found;
+        error ->
+            case maps:find(history_index, Projection) of
+                {ok, Index} ->
+                    case quod_dtx_phase_index:committee(Index, Slot) of
+                        {ok, {_Start, Committee, Id, Routes}} -> {ok, Committee, Id, Routes};
+                        not_found -> error;
+                        {error, Reason} -> erlang:error({history_index_unavailable, Reason})
+                    end;
+                error -> error
+            end
+    end;
 history_committee_view(_Slot, _Projection) ->
     error.
 
@@ -15604,8 +15756,8 @@ current_committee_start(
 current_committee_start(CommitteeId, CommitteeViews) ->
     error({invalid_current_committee_view, CommitteeId, CommitteeViews}).
 
-%% Views are ordered newest first. One row represents one committee era; route
-%% refreshes update that era instead of creating per-slot history. Routes are
+%% Views are ordered newest first. A row starts only when the committee or its
+%% routes change; preserving the previous row keeps as-of captures stable. Routes are
 %% reachability hints, while the committee and id are the authority fixed by
 %% the certified history fold.
 record_committee_view(
@@ -15622,7 +15774,7 @@ record_committee_view(
                                                   byte_size(CommitteeId) =:= 32 ->
     View = {Slot, Committee, CommitteeId, Routes},
     case Views of
-        [{Start, Committee, CommitteeId, _OldRoutes} | Rest] ->
+        [{Start, Committee, CommitteeId, Routes} | Rest] ->
             Projection#{committee_views :=
                             [{Start, Committee, CommitteeId, Routes} | Rest]};
         _ ->
@@ -15901,8 +16053,8 @@ history_preview_advance(
                         invalid ->
                             {error, {invalid_transaction, I}}
                     end;
-                {error, _} ->
-                    {error, {invalid_transaction, I}}
+                {error, _} = Error ->
+                    Error
             end;
         error ->
             {error, {invalid_transaction, I}}
@@ -15910,7 +16062,14 @@ history_preview_advance(
 
 preview_content(Binding, Entry, Projection, Delta) ->
     case history_validate_content(Binding, Entry, Projection) of
-        {ok, Projection1} -> {ok, Projection1, [], Delta};
+        {ok, #{committee_views := Views} = Projection1} ->
+            %% Stage every changed era in this window, not just its final era.
+            %% No historical rows are copied from the borrowed index.
+            Delta1 = case Views of
+                [Current | _] -> quod_dtx_phase_index:preview_committee(Delta, Current);
+                [] -> Delta
+            end,
+            {ok, Projection1, [], Delta1};
         {error, _} = Error -> Error
     end.
 

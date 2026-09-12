@@ -48,6 +48,7 @@ Two collection paths:
 | `quod_runtime_reaction_seconds{namespace,result}` | histogram | | local and subscribed reaction matching, owner resolution, and handler time by bounded result |
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
+| `quod_foreign_history_custody_losses/corruptions/index_losses` | gauge | | separate owner-lifetime integrity-loss totals; worker loss never counts as corruption unless corruption is independently diagnosed |
 | `quod_foreign_feed_registrations` | gauge | | live target-validator height-wake registrations owned by the node-wide certified follower |
 | `quod_directory_desired_hosts{visibility}` / `quod_directory_advertisement_generation` / `quod_directory_route_*` | gauge | | fact-derived local hosting, the current signed generation, and exact route demand/wake activity; only fixed visibility labels are used |
 | `quod_directory_rebuild_seconds{result}` | histogram | | exact route demand to directory-availability wake time, using only fixed result labels |
@@ -114,6 +115,7 @@ Two collection paths:
 
 -ifdef(TEST).
 -export([consensus_stat_keys/0, declare/1, test_observe_commit/2,
+         test_refresh_foreign_log/0,
          test_remove_stale_consensus_metrics/1]).
 -endif.
 
@@ -357,6 +359,9 @@ declare(NodeId) ->
     _ = N(quod_foreign_follow_coalesced, "Total source-view notices collapsed behind an unacknowledged notice (only ever goes up)."),
     _ = N(quod_foreign_follow_resnapshots, "Total state-only follow resnapshots delivered for initial attachment, rebuild, or lost occurrence continuity (only ever goes up)."),
     _ = N(quod_foreign_projection_rebuilds, "Total foreign fact-projection generations started (only ever goes up)."),
+    _ = N(quod_foreign_history_custody_losses, "Total foreign mutable cursors lost on actual writer death since owner startup."),
+    _ = N(quod_foreign_history_corruptions, "Total diagnosed foreign history integrity corruptions since owner startup; excludes mere writer loss."),
+    _ = N(quod_foreign_history_index_losses, "Total foreign phase-index handoff losses since owner startup; excludes writer death and diagnosed corruption."),
     _ = N(quod_foreign_follow_max_lag, "Largest certified source height lag observed since this owner started."),
     _ = N(quod_foreign_feed_registrations, "Live target-validator height-wake registrations owned by the node-wide certified follower."),
     _ = N(quod_foreign_bootstrap_candidates, "TLS-authenticated foreign route candidates retained separately from dormant verified histories."),
@@ -671,6 +676,10 @@ remove_runtime_metrics(Ns) ->
     _ = [prometheus_gauge:remove(Name, Labels) || Name <- Names],
     ok.
 
+-ifdef(TEST).
+test_refresh_foreign_log() -> refresh_foreign_log().
+-endif.
+
 refresh_foreign_log() ->
     Stats = quod_foreign_log:stats(),
     Set = fun(Name, Key) ->
@@ -689,6 +698,9 @@ refresh_foreign_log() ->
     _ = Set(quod_foreign_follow_coalesced, follow_coalesced),
     _ = Set(quod_foreign_follow_resnapshots, follow_resnapshots),
     _ = Set(quod_foreign_projection_rebuilds, projection_rebuilds),
+    _ = Set(quod_foreign_history_custody_losses, history_custody_losses),
+    _ = Set(quod_foreign_history_corruptions, history_corruptions),
+    _ = Set(quod_foreign_history_index_losses, history_index_losses),
     _ = Set(quod_foreign_follow_max_lag, max_follow_lag),
     _ = Set(quod_foreign_feed_registrations, feed_registrations),
     _ = Set(quod_foreign_bootstrap_candidates, bootstrap_candidates),

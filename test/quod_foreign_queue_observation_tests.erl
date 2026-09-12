@@ -141,55 +141,63 @@ route_park_names_itself_without_inventing_a_predecessor_test() ->
         end)
     end).
 
-source_death_observes_retirement_and_infinity_without_a_new_deadline_test() ->
+infinite_local_read_does_not_queue_foreign_work_test() ->
     quod_trace_tests:with_tracer(fun() ->
-        Fixture = fixture(),
+        Fixture = fixture(), Parent = self(), Gate = make_ref(),
         SourceDir = temp_dir("source"),
         {SourcePid, SourceMonitor, Source} =
             quod_foreign_log_tests:start_local_borrow_source(SourceDir, Fixture),
         try
             with_owner(fetch(Fixture), fun(Owner) ->
-                {FirstContext, FirstSpan} = parent(<<"test.queue.infinite-borrow">>),
-                {Context, Span} = parent(<<"test.queue.retiring">>),
-                Gate = make_ref(),
-                ok = gen_server:call(Owner, {test_hold_next_local_worker, self(), Gate}),
+                {FirstContext, FirstSpan} = parent(<<"test.queue.direct-infinite">>),
+                {Context, Span} = parent(<<"test.queue.foreign-current">>),
+                Reader = spawn(fun() ->
+                    put({quod_foreign_log, local_read_gate}, {after_read, Parent, Gate}),
+                    Result = quod_trace:with_context(FirstContext, fun() ->
+                        quod_foreign_log:verify_local(
+                            Source, maps:get(ref, Fixture), finalize, infinity)
+                    end),
+                    Parent ! {local_read_result, Gate, Result}
+                end),
+                ReaderMonitor = monitor(process, Reader),
                 try
-                    First = send_request(Owner,
-                        {verify_local, Source, maps:get(ref, Fixture), finalize, infinity},
-                        FirstContext),
-                    receive {local_worker_held, Gate, _, _} -> ok
-                    after 1000 -> error(local_worker_not_held) end,
+                    receive {local_read_held, Gate, Reader} -> ok
+                    after 1000 -> error(local_read_not_held) end,
+                    ?assertEqual(#{}, gen_server:call(Owner, test_lifecycle_state)),
                     Current = send_request(Owner, current_request(Fixture, 5000), Context),
-                    Active = span(<<"quod.foreign.queue_blocker">>, Span),
-                    ?assertEqual(<<"active">>, maps:get('quod.owner.blocker', attrs(Active))),
-                    exit(SourcePid, kill),
-                    Retiring = span(<<"quod.foreign.queue_blocker">>, Span),
-                    ?assertEqual(<<"retiring">>, maps:get('quod.owner.blocker', attrs(Retiring))),
-                    ?assertEqual(maps:get('quod.owner.blocker_job_id', attrs(Active)),
-                                 maps:get('quod.owner.blocker_job_id', attrs(Retiring))),
-                    ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 1000)),
+                    %% Same identity, real certified foreign work: it finishes
+                    %% while the direct infinite-budget read remains held.
                     ?assertMatch({reply, {ok, _}}, gen_server:wait_response(Current, 5000)),
-                    Residence = span(<<"quod.foreign.caller_residence">>, FirstSpan),
-                    ?assertEqual(<<"infinity">>, maps:get('quod.caller.budget_kind', attrs(Residence))),
-                    ?assertNot(maps:is_key('quod.caller.remaining_ms', attrs(Residence))),
-                    Stages = owner_stages(Residence),
-                    ?assert(lists:all(fun(S) ->
-                        maps:get('quod.caller.budget_kind', attrs(S)) =:= <<"infinity">> andalso
-                        not maps:is_key('quod.caller.remaining_ms', attrs(S))
-                    end, Stages)),
-                    [Running] = [S || S <- Stages,
-                        maps:get('quod.owner.stage', attrs(S)) =:= <<"running">>],
-                    ?assertEqual(<<"source_lifetime">>,
-                                 maps:get('quod.foreign.work_lifetime', attrs(Running))),
+                    ?assert(is_process_alive(Reader)),
                     CurrentResidence = span(<<"quod.foreign.caller_residence">>, Span),
-                    ?assertEqual(2, maps:get('quod.owner.blockers_expected', attrs(CurrentResidence)))
+                    ?assertEqual(0, maps:get('quod.owner.blockers_expected',
+                                            attrs(CurrentResidence))),
+                    exit(SourcePid, kill),
+                    receive {'DOWN', SourceMonitor, process, SourcePid, killed} -> ok end,
+                    Reader ! {release_local_read, Gate},
+                    receive {local_read_result, Gate, Result} ->
+                        ?assertEqual({error, retry}, Result)
+                    after 1000 -> error(local_read_not_completed) end,
+                    receive {'DOWN', ReaderMonitor, process, Reader, normal} -> ok end,
+                    %% No foreign residence, blocker or worker span is honest
+                    %% for the direct read. Exact reader exit is the barrier.
+                    TraceId = otel_span:trace_id(FirstSpan),
+                    receive {quod_test_span, #span{trace_id = TraceId,
+                                  name = <<"quod.foreign.", _/binary>>}} ->
+                        error(direct_read_manufactured_foreign_work)
+                    after 0 -> ok end
                 after
+                    exit(Reader, kill),
                     quod_trace:finish_span(Span, ok),
                     quod_trace:finish_span(FirstSpan, ok)
                 end
             end)
         after
-            quod_foreign_log_tests:stop_local_borrow_source(SourcePid, SourceMonitor),
+            %% The source DOWN was consumed above; use a fresh exact monitor
+            %% for cleanup rather than waiting twice on the same notification.
+            Cleanup = monitor(process, SourcePid),
+            quod_foreign_log_tests:stop_local_borrow_source(SourcePid, Cleanup),
+            demonitor(SourceMonitor, [flush]),
             _ = file:del_dir_r(SourceDir)
         end
     end).

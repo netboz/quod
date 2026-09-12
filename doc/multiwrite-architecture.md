@@ -396,3 +396,408 @@ nothing, because redelivery is safe independent of whether the prior
 delivery was accepted. The operation loop may now be converted to the shared
 wave under this ruling. This ruling also gives the standing duplicate-receipt
 gate its target-side test obligation.
+
+## 12. Integration note — Yan's confirmed product decisions
+
+Yan confirmed on 2026-09-12 that independent writes must reuse existing actions;
+§11 A1's condition is satisfied. Yan also explicitly requested fast ontology
+restart from durable snapshots plus a suffix. This confirms AM2/F6's inclusion;
+no snapshot cadence or fleet wipe is authorized by that request.
+
+### Process and messaging constraints (Yan, 2026-09-12)
+
+This refactor is for performance, not another layer of services. Use the
+existing `quod_reg` gproc naming, subscriptions and name monitors. Registration
+does not make a synchronous call asynchronous: long work must leave the owner
+free to consume its normal result, progress, expiry and death messages.
+
+| Process role | Cardinality and lifetime | Exclusive responsibility |
+| --- | --- | --- |
+| Simplex | One per hosted ontology, under the existing namespace supervisor | Consensus, signing/ledger custody, ordered publication, retained certified-history index |
+| Prolog | One per hosted ontology, after Simplex in the existing restart order | Committed facts/outcomes and proof/session lifecycle; temporary proof data remains in existing workers/stores |
+| Catch-up, feed, runtime | Existing three per-ontology siblings, not three new state owners | Range transport, dissemination, derived runtime respectively; no private authoritative ledger or KB |
+| Multiwrite coordinator | Existing monitored child per exact durable obligation, retained across temporary unreadiness | Pending actions and verified results through one asynchronous wave/result loop; completion and real ownership changes end it |
+| Foreign-history custodian | Existing node owner plus exact anchored-identity writer custody | Non-hosted retained history only; no duplicate hosted-history work |
+| I/O and proof workers | Existing operation-scoped work, not permanent per-phase actors | Explicit input/view, original deadline, correlated result to the owning loop; no independent signing or commit authority |
+
+Transport, routing, directory, effect-journal and Brahms processes retain their
+existing responsibilities. This is the affected-process inventory, not a
+claim that the whole node contains only the two primary state owners.
+
+Message rules:
+
+- Discover named owners through gproc. Pin the exact owner PID/incarnation
+  for an admitted request; a replacement registration cannot inherit its
+  response or authority. Use the existing gproc properties for progress and
+  route notifications, with subscription before checking state to close the
+  missed-wakeup window. A notification is a hint, never certified evidence.
+- Owner-to-owner work uses correlated asynchronous requests/results in the
+  ordinary receive loop, not a synchronous call chain or a nested collector.
+  Required same-turn captures may be requested by an existing I/O worker;
+  they must not make the consensus or facts owner wait on another owner.
+- Start deadlines before dispatch and check them when consuming results.
+  Sending is neither mailbox delivery nor processing; a committed signal is
+  not delivery. Preserve the existing uncertainty and credit protocols.
+- No polling process, retry timer, second queue owner, or per-target actor
+  framework. Keep existing safety/format bounds without inventing worker caps
+  to disguise saturation. Account for actual mailbox residence separately
+  from send-to-dispatch time.
+- Count all spawned workers and existing one-shot death watchers, not merely
+  named actors. Existing watchers protect custody even when a worker cannot
+  receive; they cannot be silently deleted or multiplied as an optimization.
+  Each worker must have one explicit owner and a tested termination path.
+
+For F6, use a verified immutable save image and asynchronous completion through
+existing ownership. Do not invent a snapshot-manager actor or block either
+primary owner on bulk serialization/disk I/O. The saved manifest must bind
+the certified history and applied facts to their actual frontiers; committed
+and applied heights are not interchangeable. Startup restores usable saved
+state plus its suffix; absent or invalid saves take the one reported rebuild
+path. Replay must not re-fire historic effects or reactions. Publication,
+crash consistency and cadence remain F6 implementation-review obligations;
+this paragraph does not claim they are implemented.
+
+The approved revision-2 structural text and deletion ledger are embedded below
+so this document is self-contained. Their original proposal/status wording is
+preserved for exact provenance; §§1–11 above settle and supersede those pending
+ruling/status statements. The embedded texts are not competing alternatives.
+
+---
+
+# Appendix A — Approved structural text (original revision 2)
+
+# Multiwrites — structural rewrites and simplified architecture, revision 2
+
+Proposed for Claude's architecture ruling. Supersedes the earlier convergence
+text, not the approved correctness invariants. No production changes in this
+review. Implementation baseline: published S7/.165 `91c94d527d1ef81ac5882310f43f0fbae584a9a3`.
+
+## 1. One write pipeline, explicit semantics
+
+```
+signed goal → existing temporary proof state → sealed plans
+                                              │
+                                  select by intent + writers
+                                     /                 \
+                       ordinary atomic rules      explicit independent
+                                     \                 /
+                               same target validation/apply
+                                              │
+                                  verified client result
+```
+
+Keep the existing read/single-target cases. Atomic multiwrites remain the
+default. Independent multiwrites share target execution and delivery machinery,
+but not atomic decision semantics. N=1 is the ordinary case of the generalized
+target vector, not a second implementation. No framework, new service or lane
+fallback is needed to express this distinction.
+
+Proof/backtracking, retained staged writes, signed intent, provenance veto,
+policy validation, durable effects and the C1/C3 result rules are unchanged.
+Do not simplify by dropping their checks or conflating their different states.
+
+## 2. Four responsibilities in existing owners
+
+| Responsibility | Existing owner | State that genuinely belongs there |
+| --- | --- | --- |
+| Hosted certified history | Simplex | Durable prefix, retained phase/committee lookup, coherent immutable read views |
+| Non-hosted certified history | Foreign-log owner and its existing registered writer custody | One verified prefix per anchored identity; missing-range acquisition and followers |
+| Facts and proof | Prolog plus its existing worker-local proof/session libraries | Applied facts/outcomes and temporary proof state; no second facts owner |
+| One multiwrite's progress | Existing group/operation coordinator | Exact obligation, pending actions and verified results; no duplicate ledger or facts projection |
+
+Libraries may share algorithms, but do not own another copy of the same truth.
+Committed and applied heights remain distinct: consensus inclusion is not
+execution completion. Historical membership is not fresh identity authority.
+These are necessary distinctions, not redundant flags to delete.
+
+### Structural rewrite of the three oversized modules
+
+The target is a rewritten internal design, not cosmetic extraction. Keep each
+existing actor's identity and externally required behaviour while replacing
+its oversized internals with explicit state and small transitions. There is
+no permanent old implementation, runtime switch or second actor alongside it.
+
+- **Simplex becomes the consensus/ledger owner.** Extract its pure certificate
+  pool/block-tree transition into one consensus-core library; reuse the
+  existing quorum, ledger, signing-journal and ingress-state libraries. Shared
+  certified-history transitions belong in one owner-free history library,
+  used by hosted and foreign owners. Target validation stays in the existing
+  validation/projection libraries and workers. Endpoint transport correlation
+  uses one lifecycle, not several nested owner loops. The Simplex actor alone
+  performs signing, durable append and ordered publication; grouping fields
+  must not hide a second copy or move signing authority elsewhere.
+- **Prolog becomes the facts/proof-lifecycle owner.** Keep the existing
+  `quod_committed_projection` applier rather than inventing another one. Use
+  the already-existing proof-context/session/scope implementations for both
+  local and remote execution. Rewrite the surrounding request/session/result
+  handling into one explicit lifecycle with transport-specific bindings at
+  admission. Remove duplicate adapters and obsolete public-prove rendering.
+  Remote authentication, sequence checks, cancellation and temporary-store
+  semantics stay real; they are not collapsed into an untrusted local call.
+- **Foreign-log becomes the non-hosted history custodian.** Rewrite its
+  acquisition and verification lifecycle around one retained verified prefix
+  and one job state per identity, with the existing writer-custody proof.
+  Drop local-host verification jobs entirely. Use the common history library
+  instead of a second reconstruction design, and the existing foreign
+  projection library for genuinely needed materialized remote facts. Ready
+  prefix reads no longer join the queue for a higher missing range.
+
+These are responsibility boundaries, not instructions to create one new file
+for each old section. New pure libraries are justified only where they remove
+duplicate implementations or actor-specific dependence on shared algorithms.
+They must not receive the entire actor record and become disguised extensions
+of the same god module. No generic workflow framework or service layer.
+
+Replace one closed responsibility at a time, across whichever of these actors
+it touches. Maintain one runnable implementation after each reviewed scope.
+This is a rewrite of internals, not a new consensus protocol, a format migration
+or a whole-project restart. The current protocol/cryptographic invariants and
+real regression controls constrain the new code, not the old function layout.
+
+## 3. History: initialize once, advance, read
+
+One history transition implementation serves startup, live commits and missing
+windows. Startup retains its verified phase/era bookkeeping. Live work previews
+only new entries, then the sole writer appends, installs the matching index
+delta and publishes progress. A captured view at H never exposes later rows.
+
+Keep the existing indexed backend; no replacement storage engine or separate
+index service. Keep historical entries on disk and current/active state bounded
+by its real work. Do not copy all historical groups into a new Erlang map.
+
+Delete catch-up's empty-index creation/backfill path and hosted historical
+`local_exact` reconstruction. Delete hosted-to-foreign-cache fallback. Known
+retained foreign prefixes initialize during explicit owner startup, not first
+request. Unknown remote history is acquired once as new data. An unavailable
+owner stays unavailable; it does not trigger hidden repair/replay in a request.
+
+One owner-view evidence interface retains A's target checks, sufficient-view
+pinning and absolute deadline. A hosted but lagging identity waits on existing
+progress under that deadline, or returns the existing typed unavailable result.
+Fetching new bytes still uses peers; peers are not a second local history owner.
+Fresh committee corroboration remains a different authority check.
+
+Preserve registered writer custody until actual death. Consolidating a verified
+prefix's representation must not create a concurrent writer during shutdown.
+Do not turn an untrusted checkpoint into authority to avoid reconstruction.
+
+## 4. Coordination: one action lifecycle
+
+Use the existing asynchronous wave mechanism for all I/O actions, including
+Begin/Decision/Complete, phase discovery and operation recovery. Ordered work
+is a one-item wave; independent targets are a vector wave. All results return
+through the normal owner loop, under the action's original deadline.
+
+Delete the separate synchronous command driver, nested owner-side endpoint
+collector and duplicate response-consumption paths. Keep one checked transport
+primitive and one result-correlation/cleanup lifecycle. Shared I/O does not
+mean one giant generic protocol state machine: L3 and L2 retain their small,
+explicit protocol planners.
+
+The coordinator remains owned while its exact durable obligation exists.
+Temporary sync/Prolog unreadiness disables actions; it does not erase the owner
+row. Actual progress wakes existing work. Completion or real ownership change
+retires it. Delete the readiness-driven teardown/rebootstrap cycle. Keep all
+signing, admission, apply and proof-readiness checks.
+
+Keep only one authoritative representation of pending work. In particular,
+fold separately maintained queued/running job metadata into a single lifecycle
+where the ownership proof permits it; do not add a parallel queue or scheduler.
+Distinct caller deadlines, shared-work lifetime and write uncertainty remain
+explicit. Never substitute a retry timer, renewed allowance or resubmission.
+
+## 5. L2 finishes on this machinery
+
+One source claim, the canonical N-target set, independent target actions, one
+complete certified result vector to the client, then asynchronous source receipt.
+No final partial vector; timeout means uncertainty. No verdict label inferred
+from an inclusion reference, transport reply or peer-supplied intent Boolean.
+
+Recommend extending the existing applied-certificate family for exact operation
+results, not introducing another target-facts replay engine. Its statement must
+bind network, claim/operation, anchored target, exact application occurrence and
+canonical terminal result, attested only after durable outcome publication.
+The stronger verdict authority still requires the slice-8 quorum/committee/key
+lifetime ruling. Existing f+1 current-view lookup is not its substitute.
+
+Keep S7's single-format receipt union and its reviewed historical included arm.
+Remove the temporary N>1 lane-unavailable guards only with signed-intent
+authority and the genuinely admitted partial-outcome control in place.
+
+## 6. Delete as part of replacing
+
+`DELETIONS.md` is the implementation checklist, with separate dispositions:
+unreferenced code, test-only/obsolete adapters, active paths to replace, and
+required runtime entry points that must not be mistaken for dead code.
+
+Every replacement commit must delete the superseded implementation and its
+exclusive callers/helpers, message variants, state, metrics and stale comments.
+No old/new selector, compatibility wrapper or permanent second path. A new
+abstraction must name what it removes; moving code between files earns no
+complexity-reduction claim. No process is introduced merely to shrink a module.
+
+Test helpers may construct inputs; they must not keep a second implementation
+of removed production behavior behind TEST. Port useful assertions to the one
+live path, then delete obsolete-behavior tests. Preserve failures and controls
+in frozen evidence. Do not remove feature or fault coverage to hit a line count.
+
+## 7. Completion means both correctness and removal
+
+- Close the complete unused-export/caller inventory, including dynamic roots,
+  and remove each genuinely unused implementation plus newly dead descendants.
+- Record before/after production functions, exports, state fields, message
+  variants, duplicate execution paths and physical source lines. Distinguish
+  actual deletion from relocation, comments, tests and generated assets.
+- Prove zero old-prefix replay after initialization, coherent views, one writer,
+  responsive coordination and retained obligations during temporary unreadiness.
+- Prove signed N-target admission, certified mixed outcomes, one final vector
+  and asynchronous receipt through the actual production path.
+- Clean sequential gates, full logs, true exits, flake triage and exact-tree
+  review; separately labeled hardware evidence for latency. No skipped gate
+  or speculative 50,000-line reduction becomes a completion claim.
+
+Claude's remaining architecture rulings are the coherent retained-index view,
+hosted-lag ownership amendment, readiness-vs-retirement policy, and L2 exact
+verdict authority. No wipe is authorized; .165 remains undeployed. Frozen
+evidence, Yan's files, R-RESTART-RACE-01 and both EUnit ledger items stay intact.
+
+---
+
+# Appendix B — Approved deletion checklist (original text)
+
+# Deletion ledger — required by architecture revision 2
+
+All references below are to .165 `91c94d527d1ef81ac5882310f43f0fbae584a9a3`.
+This is a reviewed-design input, not a claim that production deletions have
+already happened. A missing static call is a candidate, not sufficient proof
+that an exported function has no runtime, operator or test consumer.
+
+## A. Concrete unreferenced implementations
+
+The production call graph plus repository search identify these specific
+removal candidates. Before the implementation commit, check dynamic roots and
+operator contracts and close each row explicitly. Remove exports/specs/docs
+with the functions and rerun the graph for newly orphaned private helpers.
+
+| Candidate | Evidence / intended disposition |
+| --- | --- |
+| `quod_proof_session:run_first_with_dependencies/3` (775) | No repository caller. A second one-solution adapter, while `run_first/3` and explicit session access are live. Delete this unused adapter; retain the live dependency-capture path. |
+| `quod_proof_session:absorb_live_bridges/2` (445) | No repository caller. Its only delegated call is to the following unused subtree. Delete the entry point, not live bridge tracking generally. |
+| `quod_erlog_db_local_prove:absorb_live_bridges/2` (629), private `valid_bridge/1` (658) | The unused session adapter is the only known caller of the merge API; its validator is exclusive to it. Delete the closed subtree after removing that root. Ordinary `absorb_read_set`, bridge recording and proof authorization remain. |
+| `quod_dtx:live_bridges_bytes/1` (531), `live_bridges/1` (762) | No repository consumers found for these accessor functions. The underlying signed material remains in the canonical plan and validation; deleting an accessor does not delete its wire field or authority check. |
+| `quod_committed_projection:target/1` (91) | Unreferenced getter. Do not remove the anchored target from projection state. |
+| `quod_client_goal:digest/1` (116) | Unreferenced convenience accessor. Preserve canonical request digests and every caller's verification. |
+
+These examples establish real deletion opportunities, not a basis for claiming
+50,000 lines are dead. Public/trusted in-VM APIs need explicit disposition even
+when no in-repository runtime caller exists.
+
+## B. Obsolete or test-only production surfaces
+
+| Candidate | Required replacement / evidence |
+| --- | --- |
+| `quod_explorer_http:prove_result/1` (131), `participant_slots_json/2` (201), `bindings_json/1` (215) | Explorer now serves ledger/status reads; this proof-response renderer is called only by its tests. The latter two helpers are exclusive to it. Port any still-required protocol assertions to the signed client result path (`quod_client_http:signed_proof_result` and its normalizer), then delete the old renderer and exclusive helpers. Do not delete shared history/outcome JSON builders. |
+| `quod_prolog:submit_plan/4` (594) | Only tests call this unsigned convenience wrapper; production uses `submit_plan_encoded` and the scoped protocol. Remove the wrapper after tests exercise the current target-owned path. The actual submit-plan owner handler is live and must remain. Correct stale comments claiming this arity is the production entry point. |
+| `quod_foreign_log:verify/5` (370) | Documented explicit-source fixture API; no static production caller. Port controls through the canonical resolver with source/transport fixtures, then remove this alternate public request and exclusive admission arms if the dynamic/operator audit confirms no other consumer. Never replace real verification with a fake test result. |
+| `quod_catchup:catch_up/5` (643) | Genesis-only adapter used by tests, while production calls the owner-view form. Port initialization controls through the one canonical initialized-owner interface; remove the second adapter, not genesis verification. |
+| `quod_client_auth:materialize_goal/3` (132) | Tests use this goal-only message; production uses the full authenticated request. Port atom-budget/security assertions to that path before deleting the wrapper and exclusive handler. No budget/check removal. |
+| Other test-only accessors/constructors, e.g. DTX transcript/read access and operation `included/1` builder | Inventory individually. Prefer the existing canonical inspection/construction API. A minimal test-only input constructor can remain in test code; a duplicate verifier or execution path cannot. S7 historical included rows remain valid. |
+| `quod_ns_sup:stop_namespace/1`, `namespaces/0` | No literal repository callers found. Audit operator tools before deleting these facade APIs; keep the actual supervisor child operations and namespace-manager authority. This is not permission to remove hosting features. |
+
+## C. Active duplication that the new architecture removes
+
+These paths are reachable today, so a dead-code checker will not flag them.
+They must be deleted in the same implementation scope as their replacement.
+
+| Delete | Retain / replace with | Structural proof |
+| --- | --- | --- |
+| Catch-up `window_has_dtx`-driven scratch initialization, `open_phase_index`, `backfill_phase_index`, `backfill_phase_windows` and exclusive cleanup/error paths | Retained owner phase/era view; one missing-window verifier | Existing 8/64/257-prefix control becomes zero old-prefix reads and verification for a one-block gap, with real retained-owner fixtures |
+| Hosted `verify_historical_local_reference` / `local_exact` reconstruction job, its source-owner gate and exclusive queue/worker clauses | Exact indexed historical committee/reference lookup on the captured hosted view | Old-epoch reference succeeds without prefix replay; stale/lost/superseded view still fails closed |
+| Hosted-insufficient-view route-to-self-cache behavior | Same anchored local owner, existing progress/deadline | Lagging or unavailable hosted view launches zero duplicate foreign-cache jobs |
+| Request-triggered `open_replayed_cache` reconstruction of retained history, and repair-on-next-request fallback | Explicit owner initialization plus retained verified prefix through failure/idle | Startup work is counted separately; route failure and later callers cannot trigger an old-prefix replay; one-writer custody remains |
+| Coordinator's separate synchronous `drive_one_command`/`run_command` path and owner-side `collect_submit_endpoint_results` receive loop | Existing asynchronous wave/result lifecycle for ordered and parallel actions | Hold actual endpoint I/O; coordinator still handles owner/progress/deadline events; one outcome correlator and original deadline |
+| Duplicated ordinary/uncertain phase delivery walks and their I/O lifecycle | One action mechanism with explicit ordinary/uncertain response policy | Fresh correlated absence remains required before uncertain write resubmission; invalid/abstain distinctions preserved |
+| Readiness-driven removal/rebootstrap of a still-owned coordinator | Existing obligation row survives; only execution is gated | Existing real-child controls become same-child retention under temporary sync/Prolog unreadiness, with no signing/dispatch while prohibited |
+| Duplicated queued/running common job metadata and conversions | One existing-owner job lifecycle where the custody proof supports consolidation | Correlated result/death handling, caller detach and actual-death writer exclusion preserved |
+| Permanent N=1 selection/refusal fork in the operation worker | N-target action/result vector including N=1 | Real admitted N>1 partial outcome; no first-target shortcut, partial final reply or receipt-before-client delay |
+
+The three giant actors are rewrite targets, not untouchable hosts for these
+patches. The accompanying architecture names their final responsibilities.
+During that rewrite, the operation owner's scalar `target_result` and vector
+`target_results` must converge on the canonical target vector and an explicit
+delivery obligation; do not retain both singleton and N-target result models.
+The distinct receipt-custody and outstanding-client obligations must survive.
+
+Shared lower-level request/certificate checks can remain in workers. The old
+owner-blocking path must not merely be moved wholesale under another owner or
+wrapped as a second permanent executor.
+
+For every row, remove associated obsolete metrics and documentation only after
+checking actual consumers. Keep ordinary diagnostic spans and all frozen C4/O
+evidence; the shelved Phase-2 tree is not production and remains untouched.
+
+## D. Do not mistake these for waste
+
+- OTP behaviours, supervisor child-start MFAs, statem state functions, Cowboy
+  handlers, logger formatters, configured extension modules and Erlog callbacks
+  are runtime roots even when xref finds no direct caller.
+- `independent/1`, transaction/action/ontology predicates and Erlog database
+  callbacks are dynamically dispatched. They are not removable dead exports.
+- Trusted console APIs are separate intentional entry points; unreferenced
+  does not alone mean obsolete. Removing an actual feature requires scope
+  agreement, not a line-count target.
+- C4 compile-gated SDK observation is absent from ordinary call edges but used
+  by the separate diagnostic build and harness. Keep it while that contract
+  and the pending observations require it.
+- Ledger inclusion vs Prolog application, historical membership vs current
+  identity, caller lifetime vs durable/shared work, and control-plane metadata
+  vs proof/session state are distinct safety responsibilities. Keep those
+  boundaries while eliminating repeated implementations around them.
+- Existing death/custody monitors, original deadlines, size limits guarding
+  untrusted input, signature checks, refused-format tests and ordered apply
+  guards are not deleted to make the program look smaller.
+
+## E. Closure and accounting
+
+Maintain an explicit disposition for every static candidate: delete, convert
+to a test input helper, keep with a concrete runtime/operator root, or unresolved
+pending review. No unresolved row is silently counted as removed. Follow
+private descendants after deleting a public root; a clean locals-not-used
+check alone cannot discover an unused exported subtree.
+
+The scoped refactor must show a net removal of superseded production machinery.
+Report functions, exported surfaces, unique state fields/message variants and
+execution paths as well as physical lines. Compare the same build profiles,
+include subdirectories, exclude generated bundles/dependencies, and separate
+new L2 functionality from replacement/deletion. Moving code or deleting comments
+does not count as eliminating execution complexity.
+
+No user-owned plan/figures or frozen files are edited. Shared dead-adapter
+cleanup outside the measured core is its own reviewed scope; it does not hold
+the multiwrite fixes hostage to a whole-project cosmetic rewrite.
+
+---
+
+## History R1/R2 publication candidate — implementation status, 2026-09-12
+
+The current approved body, including its morning section 12, is preserved
+byte-for-byte above. The original architecture/deletion appendices are retained
+as design inputs; their historical pending-ruling and deployment statements
+do not override that body or Yan's subsequent explicit authority.
+
+The history implementation now records separate owner-lifetime totals for
+`custody_lost`, `cache_corrupt`, and `phase_index_lost`. The existing foreign
+owner stores three diagnostic integers; its existing metrics collector exports
+fixed-name node-wide gauges. Index handoff loss is not mislabeled as ledger
+corruption or worker death. Repeated callers do not increment the cause again,
+and a corruption rebuild does not count its reset acknowledgement twice.
+No new timer, polling loop, process, durable format or repair authority is added.
+Five targeted tests check actual death, inconsistent resident state, startup
+corruption, live corruption without double-counting, and metrics exposition.
+
+This is the narrow counter delta required by the morning history verdict.
+Full assembled gates and exact-tree delta review remain required before its
+commit. The separate coordination scope still owes operation/dormant-loop
+conversion, actual target double-delivery idempotence, and ready-prefix reads
+that survive mutable-writer loss. No deployment or performance result, F6
+checkpoint completion, or completion of the morning minimum is claimed here.

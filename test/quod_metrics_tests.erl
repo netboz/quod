@@ -42,6 +42,13 @@ renders_without_non_ascii_help_test() ->
        nomatch,
        binary:match(
          Bin, <<"# HELP quod_directory_rebuild_seconds ">>)),
+    lists:foreach(
+      fun(Name) ->
+          ?assertNotEqual(nomatch, binary:match(Bin, <<"# HELP ", Name/binary, " ">>))
+      end,
+      [<<"quod_foreign_history_custody_losses">>,
+       <<"quod_foreign_history_corruptions">>,
+       <<"quod_foreign_history_index_losses">>]),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 

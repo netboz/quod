@@ -12,14 +12,15 @@
 %% borrowed-source seams; do not build a second verifier or genesis fixture.
 -export([foreign_fixture/1, prepared_then_committed_fixture/1,
          membership_after_finalize_fixture/1,
-         chain_fetch/2, peer_chain_fetch/3, local_fixture_view/2,
+         chain_fetch/2, peer_chain_fetch/3, local_fixture_view/2, local_fixture_view/3,
          start_local_borrow_source/2, stop_local_borrow_source/2,
+         hold_direct_local/4, receive_local_borrow_result/1,
          start_owner/2, stop_owner/1, unique_ns/0, temp_dir/1,
          with_page_decode_fixture/2, receive_page_open/3,
          install_page_test_link/5, receive_page_request/3,
          hold_next_page_decode/3, receive_page_decode_gate/2,
          page_gate_complete/4, fixture_entry_blobs/1,
-         assert_page_owner_drained/0]).
+         assert_page_owner_drained/0, await_history_ready/2]).
 -endif.
 
 -define(GENESIS_TX_VERSION, 1).
@@ -1455,6 +1456,12 @@ cancel_held_confirmation(Worker, Call) ->
     %% assertion that must precede whole-request cancellation.
     exit(Worker, kill),
     ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 3000)),
+    %% Pull cleanup is immediate even if losing writer custody starts the
+    %% separate disk-only reconstruction. That job may not own a page lease.
+    ?assertMatch(#{pulls := 0, page_bindings := 0}, quod_foreign_log:stats()),
+    maps:foreach(fun(Identity, #{height := Height}) ->
+        await_history_ready(Identity, Height)
+    end, quod_foreign_log:test_lifecycle_state()),
     assert_page_owner_drained().
 
 assert_confirmation_pull_reaped(#{owner := Owner}, Call, Worker,
@@ -2007,7 +2014,7 @@ resident_current_after_exact_uses_same_height_wake_without_fetch_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-resident_cache_session_height_mismatch_recovers_through_one_cache_path_test() ->
+resident_cache_session_height_mismatch_requires_explicit_reconstruction_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
@@ -2027,17 +2034,48 @@ resident_cache_session_height_mismatch_recovers_through_one_cache_path_test() ->
            {ok, #{identity := Identity}},
            quod_foreign_log:verify(
              Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        assert_history_integrity_counts(0, 0, 0),
         flush_resident_mismatch_fetches(),
 
         %% The immutable ledger session still resumes because its file is
         %% unchanged, but the deliberately inconsistent retained height must
-        %% close that handle and recover through the ordinary verifier.
+        %% close that handle. The request refuses; an explicitly scheduled
+        %% initialization restores retained disk, never refetching the prefix.
         ok = quod_foreign_log:test_corrupt_resident_height(Pid, Identity, 3),
+        ?assertEqual({error, retry}, quod_foreign_log:verify(
+             Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
+        await_history_ready(Identity, length(maps:get(chain, Fixture))),
         ?assertMatch(
            {ok, #{identity := Identity}},
            quod_foreign_log:verify(
              Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000)),
-        ?assert(lists:member(1, collect_resident_mismatch_fetches([])))
+        ?assertEqual([], collect_resident_mismatch_fetches([])),
+        assert_history_integrity_counts(0, 1, 0)
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+live_corruption_reconstruction_is_not_counted_twice_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Ref = maps:get(ref, Fixture),
+    Endpoint = {"127.0.0.1", 31994},
+    Dir = temp_dir("live-corrupt-counter"),
+    Pid = start_owner(Dir, chain_fetch(Ns, maps:get(chain, Fixture))),
+    try
+        ?assertMatch({ok, _}, quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        CacheDir = quod_ledger_store:ns_dir(Dir, quod_foreign_log:cache_namespace(Identity)),
+        %% The first read diagnoses an inconsistent resident cursor. Its
+        %% separately queued initialization then finds a corrupt checkpoint.
+        %% These are the same corruption-driven reconstruction, not two.
+        ok = file:write_file(filename:join(CacheDir, "checkpoint.term"), <<"corrupt">>),
+        ok = quod_foreign_log:test_corrupt_resident_height(Pid, Identity, 3),
+        ?assertEqual({error, retry}, quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        ?assertMatch({ok, _}, quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        assert_history_integrity_counts(0, 1, 0)
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -2122,24 +2160,56 @@ worker_down_after_phase_session_transfer_does_not_leave_fake_resident_test() ->
         ?assertMatch(
            #{histories := 1, resident_verified := 1},
            quod_foreign_log:stats()),
+        assert_history_integrity_counts(0, 0, 0),
 
         %% Launch transfers the only suspended phase session to the worker.
         %% If that worker dies before returning it, the owner has a durable
-        %% cache but no reusable in-memory verification state and must unload
-        %% the row.  Keeping `resident_verified=true` here would strand a
+        %% cache but no reusable in-memory verification state. Keeping
+        %% `resident_verified=true` here would strand a
         %% history that resident_cache/2 can never actually resume.
+        Gate = make_ref(),
+        ok = gen_server:call(Pid, {test_hold_next_initialization, self(), Gate}),
         ok = atomics:put(Crash, 1, 1),
         ?assertEqual(
            {error, retry},
            quod_foreign_log:current(
              route_candidates([{Peer, Endpoint}]), Identity, 5000)),
-        ?assertMatch(
-           #{pending := 0, histories := 0, resident_verified := 0},
-           quod_foreign_log:stats())
+        Initializer = receive
+            {initialization_held, Gate, _, W} -> W
+        after 2000 -> error(no_explicit_reconstruction)
+        end,
+        ?assertMatch(#{pending := 1, histories := 1, resident_verified := 0},
+                     quod_foreign_log:stats()),
+        ?assertMatch(#{active := #{work := {initialize, Identity, custody_lost}}},
+                     maps:get(Identity, quod_foreign_log:test_lifecycle_state())),
+        assert_history_integrity_counts(1, 0, 0),
+        Initializer ! {release_initialization, Gate},
+        %% Network fetch is still set to crash. The rebuild and next exact
+        %% reference must both succeed from the retained certified prefix.
+        await_history_ready(Identity, length(maps:get(chain, Fixture))),
+        ?assertMatch({ok, #{identity := Identity}},
+                     quod_foreign_log:verify_reference(maps:get(ref, Fixture), finalize, 5000)),
+        ?assertMatch(#{pending := 0, resident_verified := 1}, quod_foreign_log:stats()),
+        assert_history_integrity_counts(1, 0, 0)
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.
+
+%% Counts live in the existing owner, so SDK/metrics availability cannot hide
+%% a custody loss or classify it as diagnosed corruption. No new polling.
+assert_history_integrity_counts(Custody, Corrupt, Index) ->
+    ?assertEqual(
+       #{history_custody_losses => Custody, history_corruptions => Corrupt,
+         history_index_losses => Index},
+       maps:with([history_custody_losses, history_corruptions,
+                  history_index_losses], quod_foreign_log:stats())),
+    {ok, _} = application:ensure_all_started(prometheus),
+    ok = quod_metrics:declare(<<"kp_testnode">>),
+    ok = quod_metrics:test_refresh_foreign_log(),
+    ?assertEqual(Custody, prometheus_gauge:value(quod_foreign_history_custody_losses)),
+    ?assertEqual(Corrupt, prometheus_gauge:value(quod_foreign_history_corruptions)),
+    ?assertEqual(Index, prometheus_gauge:value(quod_foreign_history_index_losses)).
 
 accepted_entry_hint_advances_through_the_one_verified_cache_path_test() ->
     Fixture = prepared_then_committed_fixture(unique_ns()),
@@ -2292,7 +2362,7 @@ bootstrap_candidates_do_not_impose_a_global_history_cap_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
+retained_history_is_initialized_at_startup_before_proof_requests_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
@@ -2314,12 +2384,12 @@ inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
         ?assertEqual(0, maps:get(page_bindings, quod_foreign_log:stats())),
         stop_owner(Pid1),
 
-        %% Restart does not scan or materialize dormant caches. The next
-        %% ordinary verification opens the exact cache on demand and uses its
-        %% certified route without any caller-supplied route.
-        Pid2 = start_owner(Dir, Fetch),
+        %% Initialization precedes proof work and uses no network. A later
+        %% ordinary verification uses the now-resident certified history.
+        Pid2 = start_owner(Dir, fun(_, _, _, _, _) -> error(startup_used_network) end),
         try
-            ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
+            await_history_ready(Identity, length(maps:get(chain, Fixture))),
+            ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
             ?assertMatch(
                {ok, #{identity := Identity, phase := finalize}},
                quod_foreign_log:verify_reference(Ref, finalize, 5000)),
@@ -3675,122 +3745,48 @@ verify_local_uses_exact_historical_projection_test() ->
         _ = file:del_dir_r(CacheDir)
     end.
 
-verify_local_recovery_wait_has_no_caller_deadline_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ns = maps:get(ns, Fixture),
-    Ref = maps:get(ref, Fixture),
-    SourceDir = temp_dir("local-recovery-source"),
-    {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
-    {ok, Store1} = quod_ledger_store:append(Store0, maps:get(chain, Fixture)),
-    FullView = local_fixture_view(Store1, Fixture),
-    FullProjection = maps:get(projection, FullView),
-    [CurrentEra | _] = maps:get(committee_views, FullProjection),
-    Source = FullView#{projection := FullProjection#{committee_views := [CurrentEra]}},
-    ok = quod_ledger_store:close(Store1),
-    Parent = self(),
-    Owner = spawn(
-              fun() ->
-                  true = quod_reg:reg({foreign_log, node}),
-                  Parent ! {owner_ready, self()},
-                  receive
-                      {'$gen_call', {Caller, Tag},
-                       {verification, infinity, _Ctx, _Enqueued,
-                        {verify_local, Source, Ref, finalize, infinity}}} ->
-                          Parent ! {recovery_waiting, self()},
-                          receive release -> Caller ! {Tag, {error, retry}} end
-                  end
-              end),
-    receive {owner_ready, Owner} -> ok after 1000 ->
-        error(owner_registration_timeout)
-    end,
-    Caller = spawn(
-               fun() ->
-                   Parent ! {recovery_result, self(),
-                             quod_foreign_log:verify_local(
-                               Source, Ref, finalize, infinity)}
-               end),
-    try
-        receive {recovery_waiting, Owner} -> ok after 1000 ->
-            error(recovery_request_not_received)
-        end,
-        receive
-            {recovery_result, Caller, Early} ->
-                error({recovery_returned_before_completion, Early})
-        after 50 ->
-            ok
-        end,
-        Owner ! release,
-        receive
-            {recovery_result, Caller, Result} ->
-                ?assertEqual({error, retry}, Result)
-        after 1000 ->
-            error(recovery_result_timeout)
-        end
-    after
-        true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
-        case is_process_alive(Owner) of true -> exit(Owner, kill); false -> ok end,
-        case is_process_alive(Caller) of true -> exit(Caller, kill); false -> ok end,
-        _ = file:del_dir_r(SourceDir)
-    end.
-
-verify_local_infinite_borrow_source_kill_retires_only_its_worker_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ns = maps:get(ns, Fixture),
-    Ref = maps:get(ref, Fixture),
-    SourceDir = temp_dir("local-borrow-kill-source"),
-    CacheDir = temp_dir("local-borrow-kill-cache"),
-    RemoteGate = make_ref(),
-    Fetch = gated_local_borrow_fetch(Fixture, self(), RemoteGate),
-    Pid = start_owner(CacheDir, Fetch),
-    {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
-    try
-        Borrow = {Caller, Worker, WorkerMRef, RequestRef, _Token} =
-            hold_local_borrow(Pid, Source, Ref),
+verify_local_infinite_read_needs_no_foreign_owner_test() ->
+    with_indexed_local_source(fun(F, _SourcePid, Source) ->
+        ?assertEqual(undefined, quod_reg:where({foreign_log, node})),
+        {Caller, Token} = hold_direct_local(Source, maps:get(ref, F), infinity, after_read),
         try
-            %% The public infinity call has a real admitted reader and one
-            %% source monitor. Distinct remote work must remain independent.
-            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
-            Remote = gen_server:send_request(
-                       Pid, owner_request({verify, maps:get(pub, Fixture),
-                                           {"127.0.0.1", 19000}, Ref, finalize, 5000})),
-            ?assertMatch(#{pending := 1, queued := 1}, quod_foreign_log:stats()),
-            exit(SourcePid, kill),
-            ?assertEqual({error, retry}, receive_local_borrow_result(Caller)),
-            receive
-                {'DOWN', WorkerMRef, process, Worker, killed} -> ok
-            after 2000 -> error(local_borrow_reader_survived_source)
-            end,
-            RemoteWorker = receive
-                               {remote_borrow_worker_held, RemoteGate, W} -> W
-                           after 2000 -> error(independent_request_not_started)
-                           end,
-            try
-                ?assertNot(is_process_alive(Worker)),
-                ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid)),
-                %% A completion from the retired request cannot install a
-                %% result into the next writer for this same identity.
-                Pid ! {foreign_worker_done, RequestRef, {ok, stale},
-                       #{identity => {Ns, maps:get(anchor, Fixture)},
-                         height => 999, resident_verified => true}},
-                ?assertMatch(#{pending := 1, queued := 0,
-                               resident_verified := 0}, quod_foreign_log:stats()),
-                RemoteWorker ! {release_remote_borrow_worker, RemoteGate},
-                ?assertMatch({reply, {ok, #{phase := finalize}}},
-                             gen_server:wait_response(Remote, 3000)),
-                ?assertMatch(#{pending := 0, queued := 0, pulls := 0},
-                             quod_foreign_log:stats())
-            after
-                exit(RemoteWorker, kill)
-            end
-        after
-            stop_held_local_borrow(Borrow)
+            Caller ! {release_local_read, Token},
+            ?assertMatch({ok, #{phase := finalize}}, receive_local_borrow_result(Caller))
+        after exit(Caller, kill)
         end
-    after
-        stop_local_borrow_source(SourcePid, SourceMRef),
-        stop_owner(Pid),
-        _ = file:del_dir_r(SourceDir),
-        _ = file:del_dir_r(CacheDir)
-    end.
+    end).
+
+verify_local_source_death_cannot_publish_or_disrupt_foreign_work_test() ->
+    with_indexed_local_source(fun(F, SourcePid, Source) ->
+        CacheDir = temp_dir("local-death-foreign"), Gate = make_ref(),
+        Pid = start_owner(CacheDir, gated_local_borrow_fetch(F, self(), Gate)),
+        try
+            Remote = gen_server:send_request(Pid, owner_request(
+                {verify, maps:get(pub, F), {"127.0.0.1", 19000}, maps:get(ref, F), finalize, 5000})),
+            RemoteWorker = receive {remote_borrow_worker_held, Gate, W} -> W
+                           after 2000 -> error(remote_not_held)
+                           end,
+            {Caller, Token} = hold_direct_local(Source, maps:get(ref, F), infinity, after_read),
+            try
+                ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid)),
+                ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+                SourceDown = monitor(process, SourcePid),
+                exit(SourcePid, kill),
+                receive {'DOWN', SourceDown, process, SourcePid, killed} -> ok
+                after 1000 -> error(source_not_dead)
+                end,
+                Caller ! {release_local_read, Token},
+                ?assertEqual({error, retry}, receive_local_borrow_result(Caller)),
+                ?assert(is_process_alive(RemoteWorker)),
+                ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+                RemoteWorker ! {release_remote_borrow_worker, Gate},
+                ?assertMatch({reply, {ok, #{phase := finalize}}},
+                             gen_server:wait_response(Remote, 3000))
+            after exit(Caller, kill), exit(RemoteWorker, kill)
+            end
+        after stop_owner(Pid), _ = file:del_dir_r(CacheDir)
+        end
+    end).
 
 local_follow_capture_uses_original_operation_budget_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
@@ -3896,100 +3892,72 @@ hold_source_capture(SourcePid) ->
     after 1000 -> error(local_capture_gate_timeout)
     end.
 
-verify_local_queued_infinite_borrow_source_kill_removes_its_row_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ref = maps:get(ref, Fixture),
-    SourceDir = temp_dir("local-queued-borrow-source"),
-    CacheDir = temp_dir("local-queued-borrow-cache"),
-    RemoteGate = make_ref(),
-    Pid = start_owner(CacheDir, gated_local_borrow_fetch(Fixture, self(), RemoteGate)),
-    {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
-    try
-        Remote = gen_server:send_request(
-                   Pid, owner_request({verify, maps:get(pub, Fixture),
-                                       {"127.0.0.1", 19000}, Ref, finalize, 5000})),
-        RemoteWorker = receive
-                           {remote_borrow_worker_held, RemoteGate, W} -> W
-                       after 2000 -> error(remote_request_not_started)
-                       end,
+verify_local_does_not_queue_behind_same_identity_foreign_work_test() ->
+    with_indexed_local_source(fun(F, SourcePid, Source) ->
+        CacheDir = temp_dir("local-busy-foreign"), Gate = make_ref(),
+        Pid = start_owner(CacheDir, gated_local_borrow_fetch(F, self(), Gate)),
         try
-            Local = gen_server:send_request(
-                      Pid, owner_request({verify_local, Source, Ref, finalize, infinity})),
-            ?assertMatch(#{pending := 1, queued := 1}, quod_foreign_log:stats()),
-            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
-            exit(SourcePid, kill),
-            ?assertEqual({reply, {error, retry}},
-                         gen_server:wait_response(Local, 2000)),
-            ?assert(is_process_alive(RemoteWorker)),
-            ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid)),
-            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
-            RemoteWorker ! {release_remote_borrow_worker, RemoteGate},
-            ?assertMatch({reply, {ok, #{phase := finalize}}},
-                         gen_server:wait_response(Remote, 3000)),
-            ?assertMatch(#{pending := 0, queued := 0, pulls := 0},
-                         quod_foreign_log:stats())
-        after
-            exit(RemoteWorker, kill)
+            Remote = gen_server:send_request(Pid, owner_request(
+                {verify, maps:get(pub, F), {"127.0.0.1", 19000}, maps:get(ref, F), finalize, 5000})),
+            Worker = receive {remote_borrow_worker_held, Gate, W} -> W
+                     after 2000 -> error(remote_not_held)
+                     end,
+            try
+                ?assertMatch({ok, #{phase := finalize}},
+                             quod_foreign_log:verify_local(Source, maps:get(ref, F), finalize, infinity)),
+                ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
+                ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid)),
+                Worker ! {release_remote_borrow_worker, Gate},
+                ?assertMatch({reply, {ok, #{phase := finalize}}},
+                             gen_server:wait_response(Remote, 3000))
+            after exit(Worker, kill)
+            end
+        after stop_owner(Pid), _ = file:del_dir_r(CacheDir)
         end
-    after
-        stop_local_borrow_source(SourcePid, SourceMRef),
-        stop_owner(Pid),
-        _ = file:del_dir_r(SourceDir),
-        _ = file:del_dir_r(CacheDir)
+    end).
+
+verify_local_callers_keep_independent_deadlines_test() ->
+    with_indexed_local_source(fun(F, _SourcePid, Source) ->
+        Ref = maps:get(ref, F),
+        {Long, LongToken} = hold_direct_local(Source, Ref, infinity, after_read),
+        Deadline = quod_time:mono_ms() + 500,
+        {Short, ShortToken} = hold_direct_local(Source, Ref, Deadline, after_read),
+        try
+            %% Waiting for the actual deadline is intentional; the read gates,
+            %% not this elapsed time, establish which work has completed.
+            receive after max(0, Deadline - quod_time:mono_ms()) + 1 -> ok end,
+            ?assert(quod_time:mono_ms() >= Deadline),
+            Short ! {release_local_read, ShortToken},
+            ?assertEqual({error, retry}, receive_local_borrow_result(Short)),
+            ?assert(is_process_alive(Long)),
+            Long ! {release_local_read, LongToken},
+            ?assertMatch({ok, #{phase := finalize}}, receive_local_borrow_result(Long))
+        after exit(Short, kill), exit(Long, kill)
+        end
+    end).
+
+with_indexed_local_source(Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    F = membership_after_finalize_fixture(unique_ns()),
+    Dir = temp_dir("indexed-local-source"),
+    {Pid, Monitor, View} = start_local_borrow_source(Dir, F),
+    try Fun(F, Pid, View)
+    after stop_local_borrow_source(Pid, Monitor), _ = file:del_dir_r(Dir)
     end.
 
-verify_local_shared_borrow_caller_timeout_keeps_source_monitor_test() ->
-    Fixture = membership_after_finalize_fixture(unique_ns()),
-    Ref = maps:get(ref, Fixture),
-    SourceDir = temp_dir("local-shared-borrow-source"),
-    CacheDir = temp_dir("local-shared-borrow-cache"),
-    Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    {SourcePid, SourceMRef, Source} = start_local_borrow_source(SourceDir, Fixture),
-    try
-        Borrow = {Caller, Worker, _WorkerMRef, _RequestRef, Token} =
-            hold_local_borrow(Pid, Source, Ref),
-        try
-            Short = gen_server:send_request(
-                      Pid, owner_request({verify_local, Source, Ref, finalize, 20})),
-            %% Same-sender stats is an admission barrier for the short caller:
-            %% identical views share the held reader, not a second queue row.
-            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
-            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
-            ?assertEqual({reply, {error, retry}},
-                         gen_server:wait_response(Short, 2000)),
-            ?assert(is_process_alive(Worker)),
-            ?assertEqual(1, local_borrow_monitor_count(Pid, SourcePid)),
-            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
-            Worker ! {release_local_worker, Token},
-            ?assertMatch({ok, #{phase := finalize}}, receive_local_borrow_result(Caller)),
-            ?assertMatch(#{pending := 0, queued := 0, pulls := 0},
-                         quod_foreign_log:stats()),
-            ?assertEqual(0, local_borrow_monitor_count(Pid, SourcePid))
-        after
-            stop_held_local_borrow(Borrow)
-        end
-    after
-        stop_local_borrow_source(SourcePid, SourceMRef),
-        stop_owner(Pid),
-        _ = file:del_dir_r(SourceDir),
-        _ = file:del_dir_r(CacheDir)
-    end.
-
-%% A separate registered source owns the real ledger snapshot. Removing old
-%% committee views forces the public verifier into its historical-owner path;
-%% the source can then be killed without relying on terminate/2 cleanup.
+%% A separate registered source owns a real ledger and retained read-only
+%% index. Its current-only projection resolves old eras without a foreign job.
 start_local_borrow_source(Dir, Fixture) ->
     Parent = self(),
     {SourcePid, SourceMRef} = spawn_monitor(
       fun() ->
           {ok, Store0} = quod_ledger_store:open(maps:get(ns, Fixture), Dir),
           {ok, Store} = quod_ledger_store:append(Store0, maps:get(chain, Fixture)),
-          FullView = local_fixture_view(Store, Fixture),
-          Projection = maps:get(projection, FullView),
-          [CurrentEra | _] = maps:get(committee_views, Projection),
-          View = FullView#{projection := Projection#{committee_views := [CurrentEra]}},
+          {ok, Index} = quod_dtx_phase_index:open(Dir, maps:get(ns, Fixture)),
+          View = local_fixture_view(Store, Fixture, Index),
           Parent ! {local_borrow_source, self(), View},
           local_borrow_source_loop(View, none),
+          quod_dtx_phase_index:close(Index),
           quod_ledger_store:close(Store)
       end),
     receive
@@ -4028,30 +3996,16 @@ stop_local_borrow_source(SourcePid, SourceMRef) ->
     after 2000 -> error(local_borrow_source_stop_timeout)
     end.
 
-hold_local_borrow(Pid, Source, Ref) ->
-    Token = make_ref(),
-    ok = gen_server:call(Pid, {test_hold_next_local_worker, self(), Token}),
-    Parent = self(),
+hold_direct_local(Source, Ref, Deadline, Stage) ->
+    Token = make_ref(), Parent = self(),
     Caller = spawn(fun() ->
-                       Parent ! {local_borrow_result, self(),
-                                 quod_foreign_log:verify_local(
-                                   Source, Ref, finalize, infinity)}
-                   end),
-    receive
-        {local_worker_held, Token, RequestRef, Worker} ->
-            WorkerMRef = erlang:monitor(process, Worker),
-            ?assertMatch(#{pending := 1, queued := 0}, quod_foreign_log:stats()),
-            {Caller, Worker, WorkerMRef, RequestRef, Token}
-    after 2000 ->
-        exit(Caller, kill),
-        error(local_borrow_worker_not_started)
+        put({quod_foreign_log, local_read_gate}, {Stage, Parent, Token}),
+        Parent ! {local_borrow_result, self(),
+                  quod_foreign_log:verify_local_deadline(Source, Ref, finalize, Deadline)}
+    end),
+    receive {local_read_held, Token, Caller} -> {Caller, Token}
+    after 2000 -> exit(Caller, kill), error(local_read_not_held)
     end.
-
-stop_held_local_borrow({Caller, Worker, WorkerMRef, _RequestRef, _Token}) ->
-    exit(Caller, kill),
-    exit(Worker, kill),
-    _ = erlang:demonitor(WorkerMRef, [flush]),
-    ok.
 
 receive_local_borrow_result(Caller) ->
     receive {local_borrow_result, Caller, Result} -> Result
@@ -4195,6 +4149,16 @@ verify_local_reuses_current_committee_control_without_history_owner_test() ->
         _ = file:del_dir_r(SourceDir)
     end.
 
+local_fixture_view(Store, Fixture, Index) ->
+    Ns = maps:get(ns, Fixture), Anchor = maps:get(anchor, Fixture),
+    {ok, _, Projection, Delta} = quod_catchup:verify_forward(
+        Ns, Anchor, quod_simplex:history_projection({Ns, Anchor}),
+        1, maps:get(chain, Fixture), Index),
+    ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+    {ok, Borrow} = quod_dtx_phase_index:capture(Index, quod_ledger_store:last(Store)),
+    local_test_view(Store, Projection#{history_index => Borrow,
+        committee_views := lists:sublist(maps:get(committee_views, Projection), 1)}).
+
 local_fixture_view(Store, Fixture) ->
     Ns = maps:get(ns, Fixture),
     Anchor = maps:get(anchor, Fixture),
@@ -4236,7 +4200,7 @@ verify_local_in_worker(Source, Ref, Phase) ->
         error(verify_local_worker_timeout)
     end.
 
-verify_local_current_entry_falls_back_for_historical_committee_test() ->
+verify_local_current_entry_uses_exact_historical_committee_test() ->
     Fixture = long_identity_fixture(unique_ns(), 2),
     Ns = maps:get(ns, Fixture),
     Anchor = maps:get(anchor, Fixture),
@@ -4362,20 +4326,19 @@ verify_local_committee_shrink_never_relabels_historical_entry_test() ->
         maps:get(committee_views, FullProjection),
     ?assertEqual(5, length(OldCommittee)),
     ?assertEqual(4, length(CurrentCommittee)),
-    %% This is the live Simplex shape: one exact row for the current era, not
-    %% the foreign follower's full historical index. Before the fix, the old
+    %% This is the live Simplex shape: one exact row for the current era plus
+    %% its retained read-only index. Before the old-era fix, the old
     %% 4-of-5 certificate also satisfied the smaller current 3-of-4 quorum and
     %% the fast path returned CurrentCommitteeId for slot 2.
-    CurrentProjection = FullProjection#{
-                          committee_views :=
-                              [{3, CurrentCommittee, CurrentCommitteeId,
-                                CurrentRoutes}]},
     SourceDir = temp_dir("shrink-local-source"),
     CacheDir = temp_dir("shrink-local-cache"),
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(Store0, Chain),
+    {ok, Index} = quod_dtx_phase_index:open(SourceDir, Ns),
     Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    Source = local_test_view(Store1, CurrentProjection),
+    Source = local_fixture_view(Store1, #{ns => Ns, anchor => Anchor, chain => Chain}, Index),
+    ?assertEqual([{3, CurrentCommittee, CurrentCommitteeId, CurrentRoutes}],
+                 maps:get(committee_views, maps:get(projection, Source))),
     try
         ?assertMatch(
            {ok, #{phase := transaction,
@@ -4386,6 +4349,7 @@ verify_local_committee_shrink_never_relabels_historical_entry_test() ->
     after
         true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),
+        quod_dtx_phase_index:close(Index),
         quod_ledger_store:close(Store1),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(CacheDir)
@@ -5409,7 +5373,8 @@ corrupt_cache_is_discarded_and_refetched_from_genesis_test() ->
             {corrupt_cache_fetch_from, 1} -> ok
         after 1000 ->
             error(cache_was_not_refetched_from_genesis)
-        end
+        end,
+        assert_history_integrity_counts(0, 1, 0)
     after
         stop_owner(Pid2),
         _ = file:del_dir_r(Dir)
@@ -6270,6 +6235,20 @@ owner_request(Request) ->
 
 start_owner(Dir, Fetch) ->
     start_owner_opts(Dir, Fetch, #{}).
+
+await_history_ready(Identity, Height) ->
+    await_history_ready(Identity, Height, quod_time:mono_ms() + 3000).
+
+await_history_ready(Identity, Height, Deadline) ->
+    Row = maps:get(Identity, quod_foreign_log:test_lifecycle_state()),
+    case Row of
+        #{active := none, waiting := [], resident_verified := true, height := Height} -> ok;
+        _ ->
+            %% Bounded test-only observation of installed owner state, not a
+            %% sleep or an assumption about cross-recipient message delivery.
+            ?assert(quod_time:mono_ms() < Deadline),
+            await_history_ready(Identity, Height, Deadline)
+    end.
 
 start_owner_opts(Dir, Fetch, Extra) ->
     {ok, _} = application:ensure_all_started(gproc),

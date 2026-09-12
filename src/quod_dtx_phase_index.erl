@@ -1,8 +1,8 @@
 -module(quod_dtx_phase_index).
 -moduledoc """
-Ephemeral exact group-history index for DTX ledger folds.
+Retained exact phase/committee index for verified ledger history.
 
-Startup replay and catch-up sometimes need the complete history of an old
+Live verification and catch-up sometimes need the complete history of an old
 `GroupId`, but retaining every group in an Erlang map would make heap use grow
 with the ledger.  This library keeps one canonical, bounded history row per
 group in a session-unique DETS file instead.  It owns no process and carries no
@@ -13,15 +13,19 @@ reads the durable scratch rows plus an opaque window delta but does not mutate
 DETS. Only after the ledger sink succeeds does `commit_delta/2` install every
 changed row with one DETS insert. Startup replay may use `apply_batch/3`;
 singleton controls use those same batch APIs rather than separate wrappers.
-The scratch file is never repaired or datasync'd. Its single owner may suspend
-and resume it between ordered verification workers; `close/1` deletes it. A
-namespace owner may call `cleanup/2` during startup to remove files abandoned
-by killed replay/catch-up workers.
+The hosted Simplex owner retains the mutable table for its whole lifetime.
+Its read-only captures pin height and era count; bounded immutable phase
+records and append-only committee eras hide subsequent writer advancement.
+Foreign-history custody instead suspends/resumes the same table between its
+ordered writers. These are distinct lifetimes, not interchangeable handoffs.
+The derived file is never repaired or datasync'd; `close/1` deletes it. Startup
+cleanup removes only abandoned files of this exact session-file family.
 """.
 
 -include("quod_proof_limits.hrl").
 
 -export([open/2, suspend/1, resume/1, close/1, cleanup/2, cleanup/3, stats/1,
+         capture/2, is_capture/2, history/2, committee/2, preview_committee/2, preview_histories/2,
          new_delta/0, preview_batch/4, commit_delta/2,
          apply_batch/3]).
 -export_type([index/0, delta/0]).
@@ -50,13 +54,15 @@ by killed replay/catch-up workers.
 -record(index, {
           table :: term(),
           path :: file:filename_all(),
-          state = open :: open | suspended
+          owner :: pid(),
+          state = open :: open | suspended | {view, non_neg_integer(), non_neg_integer()}
          }).
 
 -record(delta, {
           rows = #{} :: #{binary() => {quod_dtx:group_history(),
                                        non_neg_integer()}},
-          bytes = 0 :: non_neg_integer()
+          bytes = 0 :: non_neg_integer(),
+          eras = #{} :: #{pos_integer() => tuple()}
          }).
 
 -opaque index() :: #index{}.
@@ -96,7 +102,7 @@ open_unique(Dir, Attempts) ->
 open_table(Path, Dir, Attempts) ->
     case dets:open_file(Path, table_options(Path)) of
         {ok, Path} ->
-            {ok, #index{table = Path, path = Path}};
+            {ok, #index{table = Path, path = Path, owner = self()}};
         {error, {already_started, _}} ->
             open_unique(Dir, Attempts - 1);
         {error, Reason} ->
@@ -112,7 +118,7 @@ table_options(Path) ->
 
 -doc "Close the table while retaining its session-owned derived rows.".
 -spec suspend(index()) -> {ok, index()} | {error, index_error()}.
-suspend(Index = #index{table = Table, state = open}) ->
+suspend(Index = #index{table = Table, owner = Owner, state = open}) when Owner =:= self() ->
     case close_table(Table) of
         ok -> {ok, Index#index{state = suspended}};
         {error, Reason} -> {error, {phase_index_io, Reason}}
@@ -126,7 +132,7 @@ resume(Index = #index{path = Path, state = suspended}) ->
     case filelib:is_file(Path) of
         true ->
             case dets:open_file(Path, table_options(Path)) of
-                {ok, Path} -> {ok, Index#index{state = open}};
+                {ok, Path} -> {ok, Index#index{state = open, owner = self()}};
                 {error, Reason} -> {error, {phase_index_io, Reason}}
             end;
         false ->
@@ -155,12 +161,105 @@ stats(_Index) ->
 
 -doc "Close this session's DETS table and remove only its own scratch file.".
 -spec close(index()) -> ok | {error, index_error()}.
-close(#index{table = Table, path = Path, state = open}) ->
+close(#index{table = Table, path = Path, owner = Owner, state = open}) when Owner =:= self() ->
     CloseResult = close_table(Table),
     DeleteResult = delete_file(Path),
     close_result(CloseResult, DeleteResult);
 close(#index{path = Path, state = suspended}) ->
-    delete_file(Path).
+    delete_file(Path);
+close(_NotOwned) -> {error, bad_phase_index_argument}.
+
+-doc "Capture an owner-bound read-only index at H with one metadata lookup.".
+-spec capture(index(), non_neg_integer()) -> {ok, index()} | {error, index_error()}.
+capture(Index = #index{table = Table, owner = Owner, state = open}, Height)
+  when Owner =:= self(), is_integer(Height), Height >= 0 ->
+    case era_tip(Table) of
+        {ok, Count, _Last} -> {ok, Index#index{state = {view, Height, Count}}};
+        {error, _} = Error -> Error
+    end;
+capture(_Index, _Height) -> {error, bad_phase_index_argument}.
+
+-doc "Read one bounded exact group history, excluding records after a captured H.".
+-spec history(index(), <<_:256>>) -> {ok, quod_dtx:group_history()} | {error, index_error()}.
+history(Index = #index{owner = Owner, state = State}, GroupId)
+  when State =/= suspended, is_binary(GroupId), byte_size(GroupId) =:= 32 ->
+    case is_process_alive(Owner) of
+        true ->
+            case load_history(Index, GroupId) of
+                {ok, History} -> bounded_history(History, State);
+                {error, _} = Error -> Error
+            end;
+        false -> {error, bad_phase_index_argument}
+    end;
+history(_Index, _GroupId) -> {error, bad_phase_index_argument}.
+
+bounded_history(History, open) -> {ok, History};
+bounded_history(#{group_id := GroupId, records := Records}, {view, Height, _})
+  when is_map(Records), map_size(Records) =< ?MAX_GROUP_RECORDS ->
+    %% The reducer never overwrites a phase's first exact reference. Filtering
+    %% these at-most-five immutable records is MVCC without copying a prefix.
+    try maps:filter(fun(_Kind, #{ref := Ref}) ->
+            {ok, _Identity, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
+            Slot =< Height
+        end, Records) of
+        Kept when map_size(Kept) =:= 0 -> {ok, quod_dtx:initial_group_history()};
+        Kept -> {ok, #{group_id => GroupId, records => Kept}}
+    catch error:_ -> {error, phase_index_corrupt}
+    end;
+bounded_history(_History, _View) -> {error, phase_index_corrupt}.
+
+-doc "Check the opaque read-only capture's bound height, without touching storage.".
+-spec is_capture(term(), non_neg_integer()) -> boolean().
+is_capture(#index{owner = Owner, state = {view, Height, Count}}, Height)
+  when is_pid(Owner), is_integer(Height), Height >= 0,
+       is_integer(Count), Count >= 0 -> true;
+is_capture(_, _) -> false.
+
+-doc "Stage a post-slot committee/route change in the existing window delta.".
+-spec preview_committee(delta(), tuple()) -> delta().
+preview_committee(Delta = #delta{eras = Eras}, {Start, Committee, <<_:256>>, Routes} = Era)
+  when is_integer(Start), Start > 0, is_list(Committee), is_map(Routes) ->
+    Delta#delta{eras = Eras#{Start => Era}}.
+
+-doc "Stage the exact histories returned by the shared live-finality reducer.".
+-spec preview_histories(delta(), #{binary() => quod_dtx:group_history()}) ->
+    {ok, delta()} | {error, index_error()}.
+preview_histories(Delta, Histories) when is_map(Histories) ->
+    maps:fold(fun(Group, History, {ok, D}) -> stage_history(D, Group, undefined, History);
+                 (_Group, _History, {error, _} = Error) -> Error
+              end, {ok, Delta}, Histories).
+
+-doc "Indexed post-slot committee lookup bounded by the captured height and era count.".
+-spec committee(index(), pos_integer()) -> {ok, tuple()} | not_found | {error, index_error()}.
+committee(#index{table = Table, owner = Owner, state = {view, H, Count}}, Slot)
+  when is_integer(Slot), Slot > 0, Slot =< H ->
+    case is_process_alive(Owner) of
+        true -> committee_search(Table, Slot, 1, Count, not_found);
+        false -> {error, bad_phase_index_argument}
+    end;
+committee(_Index, _Slot) -> not_found.
+
+committee_search(_Table, _Slot, Low, High, Best) when Low > High -> Best;
+committee_search(Table, Slot, Low, High, Best) ->
+    Mid = (Low + High) div 2,
+    case dets_lookup(Table, {era, Mid}) of
+        {ok, [{{era, Mid}, {Start, _Committee, _Id, _Routes} = Era}]} ->
+            case Start =< Slot of
+                true -> committee_search(Table, Slot, Mid + 1, High, {ok, Era});
+                false -> committee_search(Table, Slot, Low, Mid - 1, Best)
+            end;
+        {ok, _} -> {error, phase_index_corrupt};
+        {error, Reason} -> {error, {phase_index_io, Reason}}
+    end.
+
+era_tip(Table) ->
+    case dets_lookup(Table, era_tip) of
+        {ok, []} -> {ok, 0, none};
+        {ok, [{era_tip, Count, Last}]} when is_integer(Count), Count > 0 ->
+            {ok, Count, Last};
+        {ok, _} -> {error, phase_index_corrupt};
+        {error, Reason} -> {error, {phase_index_io, Reason}}
+    end.
 
 close_table(Table) ->
     try dets:close(Table) of
@@ -307,7 +406,7 @@ delta_history(_Index, #delta{rows = Rows}, GroupId)
     {History, _Bytes} = maps:get(GroupId, Rows),
     {ok, History};
 delta_history(Index, _Delta, GroupId) ->
-    load_history(Index, GroupId).
+    history(Index, GroupId).
 
 stage_history(Delta, _GroupId, History, History) ->
     {ok, Delta};
@@ -331,8 +430,9 @@ stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
 
 -doc "Install one fully previewed window delta after its ledger sink succeeds.".
 -spec commit_delta(index(), delta()) -> ok | {error, index_error()}.
-commit_delta(#index{table = Table}, #delta{} = Delta) ->
-    case encode_delta(Delta) of
+commit_delta(#index{table = Table, owner = Owner, state = open}, #delta{} = Delta)
+  when Owner =:= self() ->
+    case index_delta_rows(Table, Delta) of
         {ok, []} ->
             ok;
         {ok, Rows} ->
@@ -345,6 +445,26 @@ commit_delta(#index{table = Table}, #delta{} = Delta) ->
     end;
 commit_delta(_Index, _Delta) ->
     {error, bad_phase_index_delta}.
+
+index_delta_rows(Table, #delta{eras = Eras} = Delta) ->
+    case encode_delta(Delta) of
+        {ok, Rows} when map_size(Eras) =:= 0 -> {ok, Rows};
+        {ok, Rows} ->
+            case era_tip(Table) of
+                {ok, Count, Last} ->
+                    append_era_rows(lists:sort(maps:to_list(Eras)), Count, Last, Rows);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+append_era_rows([], Count, Last, Rows) -> {ok, [{era_tip, Count, Last} | Rows]};
+append_era_rows([{_Start, Last} | Rest], Count, Last, Rows) ->
+    append_era_rows(Rest, Count, Last, Rows);
+append_era_rows([{Start, {Start, _, _, _} = Era} | Rest], Count, Last, Rows)
+  when Last =:= none; Start > element(1, Last) ->
+    append_era_rows(Rest, Count + 1, Era, [{{era, Count + 1}, Era} | Rows]);
+append_era_rows(_Conflicting, _Count, _Last, _Rows) -> {error, bad_phase_index_delta}.
 
 encode_delta(#delta{rows = Rows, bytes = ExpectedBytes})
   when is_map(Rows), is_integer(ExpectedBytes), ExpectedBytes >= 0 ->

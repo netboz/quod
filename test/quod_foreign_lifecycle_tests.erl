@@ -58,21 +58,23 @@ public_exact_deadline_includes_owner_mailbox_test() ->
     end).
 
 queued_success_checks_each_caller_deadline_test() ->
-    with_local_source(fun(Fixture, Source, _SourcePid) ->
-        with_owner(no_network(), fun(Owner) ->
-            Ref = maps:get(ref, Fixture),
+    Fixture = fixture(exact), Token = make_ref(),
+        with_owner(fixture_fetch(Fixture), fun(Owner) ->
             Identity = identity(Fixture),
-            ?assertMatch({ok, #{slot := 2}},
-                         quod_foreign_log:verify_local(Source, Ref, finalize, 2000)),
-            Token = make_ref(),
-            ok = gen_server:call(Owner, {test_hold_next_local_worker, self(), Token}),
+            %% Warm the real foreign cursor before holding only its result
+            %% handoff. The owner remains runnable during all verifier I/O.
+            ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:verify_reference(
+                maps:get(ref, Fixture), finalize, contact(Fixture), 2000)),
+            ok = gen_server:call(Owner, {test_hold_next_worker_result, self(), Token}),
             Deadline = quod_time:mono_ms() + 500,
             %% Bypass only the public return recheck: this pins the OWNER's
             %% refusal, which otherwise a fixed API boundary could conceal.
             Short = gen_server:send_request(Owner, envelope(
-                {verify_local, Source, Ref, finalize, 500}, Deadline, trace_context(sampled))),
-            {RequestRef, Worker} = receive_local_worker(Token),
-            Long = send_request(Owner, {verify_local, Source, Ref, finalize, 3000},
+                exact_request(Fixture, 500), Deadline, trace_context(sampled))),
+            Worker = receive {worker_result_held, Token, _, W} -> W
+                     after 1000 -> error(worker_result_not_held) end,
+            #{active := #{ref := RequestRef}} = lifecycle(Owner, Identity),
+            Long = send_request(Owner, exact_request(Fixture, 3000),
                                 trace_context(unsampled)),
             #{active := Active} = lifecycle(Owner, Identity),
             ?assertEqual(RequestRef, maps:get(ref, Active)),
@@ -80,7 +82,7 @@ queued_success_checks_each_caller_deadline_test() ->
             ok = sys:suspend(Owner),
             try
                 1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]),
-                Worker ! {release_local_worker, Token},
+                Worker ! {release_worker_result, Token},
                 await_local_completion_delivery(Owner, RequestRef, 1000),
                 ?assert(quod_time:mono_ms() < Deadline),
                 {messages, Before} = process_info(Owner, messages),
@@ -96,10 +98,9 @@ queued_success_checks_each_caller_deadline_test() ->
             after
                 stop_fixture_trace(Owner),
                 _ = catch sys:resume(Owner),
-                Worker ! {release_local_worker, Token}
+                Worker ! {release_worker_result, Token}
             end
-        end)
-    end).
+        end).
 
 %% A VM-suspended recipient has not processed its incoming message signals.
 %% A genuine sender trace is therefore available before recipient delivery
@@ -278,71 +279,63 @@ callerless_route_park_is_retired_test() ->
         ?assertMatch(#{pending := 0, queued := 0, histories := 0}, quod_foreign_log:stats())
     end).
 
-infinite_borrow_ends_on_exact_source_death_test() ->
+infinite_direct_read_checks_source_after_read_test() ->
     with_local_source(fun(Fixture, Source, SourcePid) ->
-        with_owner(no_network(), fun(Owner) ->
-            Token = make_ref(),
-            ok = gen_server:call(Owner, {test_hold_next_local_worker, self(), Token}),
-            Call = send_request(Owner,
-                {verify_local, Source, maps:get(ref, Fixture), finalize, infinity},
-                trace_context(sampled)),
-            {_, Worker} = receive_local_worker(Token),
-            Monitor = erlang:monitor(process, Worker),
-            #{active := #{callers := [#{deadline := infinity}]}} = lifecycle(Owner, identity(Fixture)),
-            exit(SourcePid, kill),
-            ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 2000)),
-            receive {'DOWN', Monitor, process, Worker, _} -> ok
-            after 1000 -> error(orphaned_infinite_borrow) end,
-            ?assertMatch(#{pending := 0, queued := 0}, quod_foreign_log:stats())
+        with_owner(no_network(), fun(_Owner) ->
+            {Caller, Token} = quod_foreign_log_tests:hold_direct_local(
+                Source, maps:get(ref, Fixture), infinity, after_read),
+            try
+                ?assertMatch(#{pending := 0, queued := 0, histories := 0},
+                             quod_foreign_log:stats()),
+                source_down(SourcePid),
+                Caller ! {release_local_read, Token},
+                ?assertEqual({error, retry},
+                             quod_foreign_log_tests:receive_local_borrow_result(Caller)),
+                ?assertMatch(#{pending := 0, queued := 0, histories := 0},
+                             quod_foreign_log:stats())
+            after exit(Caller, kill)
+            end
         end)
     end).
 
-custody_denial_after_source_death_cannot_park_cancelled_borrow_test() ->
+local_read_does_not_acquire_foreign_custody_test() ->
     with_local_source(fun(Fixture, Source, SourcePid) ->
-        with_owner(no_network(), fun(Owner) ->
-            Identity = identity(Fixture),
-            Name = {foreign_cache_writer, Identity},
+        with_owner(no_network(), fun(_Owner) ->
+            Name = {foreign_cache_writer, identity(Fixture)},
             true = quod_reg:reg(Name),
             Registry = whereis(gproc),
-            %% Hold the actual registry call, not a substitute writer. This
-            %% orders a real borrowed-source DOWN before the real registration
-            %% refusal and worker DOWN in the suspended owner's mailbox.
             ok = sys:suspend(Registry),
-            SourceMonitor = monitor(process, SourcePid),
             try
-                Call = send_request(Owner,
-                    {verify_local, Source, maps:get(ref, Fixture), finalize, infinity},
-                    trace_context(sampled)),
-                #{active := #{ref := Ref, worker := Worker, custody := acquiring}} =
-                    lifecycle(Owner, Identity),
-                WorkerMonitor = monitor(process, Worker),
-                ok = sys:suspend(Owner),
-                exit(SourcePid, kill),
-                receive {'DOWN', SourceMonitor, process, SourcePid, killed} -> ok
-                after 1000 -> error(borrowed_source_did_not_die)
-                end,
-                {messages, Before} = process_info(Owner, messages),
-                ?assertEqual([borrow_down], cancellation_messages(Before, Ref, Worker)),
-                ok = sys:resume(Registry),
-                receive {'DOWN', WorkerMonitor, process, Worker, normal} -> ok
-                after 1000 -> error(refused_custody_worker_did_not_finish)
-                end,
-                {messages, Queued} = process_info(Owner, messages),
-                ?assertEqual([borrow_down, denied, worker_down],
-                             cancellation_messages(Queued, Ref, Worker)),
-                ok = sys:resume(Owner),
-                ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 1000)),
-                %% No name-release event can conceal a lost terminal wake.
-                ?assertEqual(self(), quod_reg:where(Name)),
-                ?assertMatch(#{pending := 0, queued := 0}, quod_foreign_log:stats())
+                %% Local evidence uses the immutable owned index, even while
+                %% foreign writer registration is unavailable. There is no
+                %% custody-denial queue for this read to become stranded in.
+                ?assertMatch({ok, #{phase := finalize}},
+                    quod_foreign_log:verify_local(
+                        Source, maps:get(ref, Fixture), finalize, infinity)),
+                {Caller, Token} = quod_foreign_log_tests:hold_direct_local(
+                    Source, maps:get(ref, Fixture), infinity, after_read),
+                try
+                    source_down(SourcePid),
+                    Caller ! {release_local_read, Token},
+                    ?assertEqual({error, retry},
+                        quod_foreign_log_tests:receive_local_borrow_result(Caller)),
+                    ?assertMatch(#{pending := 0, queued := 0, histories := 0},
+                                 quod_foreign_log:stats())
+                after exit(Caller, kill)
+                end
             after
                 _ = catch sys:resume(Registry),
-                _ = catch sys:resume(Owner),
-                _ = demonitor(SourceMonitor, [flush]),
                 _ = catch quod_reg:unreg(Name)
             end
         end)
     end).
+
+source_down(SourcePid) ->
+    MRef = monitor(process, SourcePid),
+    exit(SourcePid, kill),
+    receive {'DOWN', MRef, process, SourcePid, killed} -> ok
+    after 1000 -> error(local_source_did_not_die)
+    end.
 
 late_sampled_caller_links_surviving_job_after_original_expiry_test() ->
     quod_trace_tests:with_tracer(fun() ->
@@ -550,33 +543,49 @@ unadmitted_malformed_public_reference_closes_diagnostic_residence_test() ->
         end)
     end).
 
-infinite_borrow_source_death_closes_residence_with_source_cause_test() ->
+direct_source_death_does_not_fabricate_a_foreign_residence_test() ->
     quod_trace_tests:with_tracer(fun() ->
         with_local_source(fun(Fixture, Source, SourcePid) ->
-            with_owner(no_network(), fun(Owner) ->
-                {Context, Span} = sdk_parent(<<"test.lifecycle.source-death">>),
-                Gate = make_ref(),
-                ok = gen_server:call(Owner, {test_hold_next_local_worker, self(), Gate}),
+            with_owner(no_network(), fun(_Owner) ->
+                {Context, Span} = sdk_parent(<<"test.lifecycle.direct-source-death">>),
+                Parent = self(), Token = make_ref(),
+                Caller = spawn(fun() ->
+                    put({quod_foreign_log, local_read_gate}, {after_read, Parent, Token}),
+                    Result = quod_trace:with_context(Context, fun() ->
+                        quod_foreign_log:verify_local(
+                            Source, maps:get(ref, Fixture), finalize, infinity)
+                    end),
+                    Parent ! {direct_read_result, Token, Result}
+                end),
+                Monitor = monitor(process, Caller),
                 try
-                    Call = send_request(Owner,
-                        {verify_local, Source, maps:get(ref, Fixture), finalize, infinity}, Context),
-                    {_, Worker} = receive_local_worker(Gate),
-                    Monitor = monitor(process, Worker),
-                    exit(SourcePid, kill),
-                    ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 1000)),
-                    receive {'DOWN', Monitor, process, Worker, killed} -> ok
-                    after 1000 -> error(source_dead_worker_not_retired)
-                    end,
-                    Residence = sdk_span(<<"quod.foreign.caller_residence">>, Span),
-                    Stages = sdk_owner_stages(Residence, <<"source_down">>),
-                    ?assertEqual(1, length([S || S <- Stages,
-                        maps:get('quod.owner.stage', sdk_attrs(S)) =:= <<"running">>])),
-                    ?assertMatch(#{pending := 0, queued := 0}, quod_foreign_log:stats())
-                after quod_trace:finish_span(Span, ok)
+                    receive {local_read_held, Token, Caller} -> ok
+                    after 1000 -> error(direct_read_not_held) end,
+                    source_down(SourcePid),
+                    Caller ! {release_local_read, Token},
+                    receive {direct_read_result, Token, Result} ->
+                        ?assertEqual({error, retry}, Result)
+                    after 1000 -> error(direct_read_did_not_finish) end,
+                    receive {'DOWN', Monitor, process, Caller, normal} -> ok end,
+                    %% Caller exit is the SDK export barrier. No foreign job
+                    %% was admitted, so inventing its residence would be false.
+                    TraceId = otel_span:trace_id(Span),
+                    ForeignSpans = [S || S <- direct_trace_spans(TraceId),
+                        binary:match(S#span.name, <<"quod.foreign.">>) =/= nomatch],
+                    ?assertEqual([], ForeignSpans),
+                    ?assertMatch(#{pending := 0, queued := 0, histories := 0},
+                                 quod_foreign_log:stats())
+                after exit(Caller, kill), quod_trace:finish_span(Span, ok)
                 end
             end)
         end)
     end).
+
+direct_trace_spans(TraceId) ->
+    receive {quod_test_span, S = #span{trace_id = TraceId}} ->
+        [S | direct_trace_spans(TraceId)]
+    after 0 -> []
+    end.
 
 parked_sharing_ignores_trace_context_test_() ->
     [{atom_to_list(A) ++ " -> " ++ atom_to_list(B),
@@ -811,9 +820,6 @@ receive_public_result(Caller) ->
     receive {public_result, Caller, Result} -> Result
     after 2000 -> error(public_result_missing) end.
 
-receive_local_worker(Token) ->
-    receive {local_worker_held, Token, Ref, Worker} -> {Ref, Worker}
-    after 1000 -> error(local_worker_not_started) end.
 
 trace_owner(Owner) ->
     1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]), ok.
@@ -846,16 +852,6 @@ is_request_message({foreign_worker_done, Ref, _, _}, Ref) -> true;
 is_request_message({verification_caller_timeout, Ref, _}, Ref) -> true;
 is_request_message(_, _) -> false.
 
-cancellation_messages(Messages, Ref, Worker) ->
-    lists:filtermap(
-      fun({{borrow_down, _, R}, _, process, _, _}) when R =:= Ref ->
-              {true, borrow_down};
-         ({cache_custody_denied, R, W}) when R =:= Ref, W =:= Worker ->
-              {true, denied};
-         ({'DOWN', _, process, W, _}) when W =:= Worker ->
-              {true, worker_down};
-         (_) -> false
-      end, Messages).
 
 wait_until(Deadline) ->
     receive after max(0, Deadline - quod_time:mono_ms()) -> ok end.

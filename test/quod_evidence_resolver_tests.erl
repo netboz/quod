@@ -3,7 +3,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
-%% Resolver-only sidecar for contract A. No coordinator dependency injection:
+%% Resolver sidecar for A's evidence rules and R2's hosted-only ownership rule.
+%% R2 replaces A's insufficient-local fallback, not its proof/deadline checks.
+%% No coordinator dependency injection:
 %% every result below comes from real signed bytes and the production verifier.
 %% The registered source implements the existing private history_view protocol,
 %% just as the foreign-log/current-view fixtures do; it is not a consensus node.
@@ -19,9 +21,9 @@ current_era_hit_has_one_committed_capture_and_zero_foreign_work_test() ->
     with_case(F, current, fun(C) ->
         D = deadline(3000),
         ?assertMatch({ok, #{phase := finalize}}, resolve(C, maps:get(ref, F), finalize, D)),
-        ?assertEqual([{identity(F), committed, D}], captures(C)),
+        ?assertEqual([capture_request(F, D)], captures(C)),
         T = traces(),
-        ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
+        ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
         ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
         ?assertEqual(1, calls(T, quod_ledger_store, read_at, 2)),
@@ -49,6 +51,7 @@ malformed_requests_are_refused_before_owner_work_test() ->
         ?assertEqual([], captures(C)),
         T = traces(),
         ?assertEqual(0, calls(T, quod_simplex, history_view, 3)),
+        ?assertEqual(0, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, verification_call, 2)),
         assert_no_foreign_work(T),
         assert_no_fetch()
@@ -76,16 +79,17 @@ wrong_target_refusal_has_a_real_routed_primitive_control_test() ->
         ?assertEqual([], captures(C)),
         Negative = traces(),
         ?assertEqual(0, calls(Negative, quod_simplex, history_view, 3)),
+        ?assertEqual(0, calls(Negative, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(Negative, quod_foreign_log, verification_call, 2)),
         assert_no_foreign_work(Negative),
         assert_no_fetch()
     end).
 
-unavailable_local_copy_routes_once_test_() ->
-    [{atom_to_list(Mode), fun() -> unavailable_local_copy_routes_once(Mode) end}
-     || Mode <- [none, lagging, replaced_incarnation, capture_unavailable]].
+nonhosted_identity_routes_once_test_() ->
+    [{atom_to_list(Mode), fun() -> nonhosted_identity_routes_once(Mode) end}
+     || Mode <- [none, replaced_incarnation]].
 
-unavailable_local_copy_routes_once(Mode) ->
+nonhosted_identity_routes_once(Mode) ->
     F = fixture(),
     with_case(F, Mode, fun(C) ->
         D = deadline(3000),
@@ -94,12 +98,12 @@ unavailable_local_copy_routes_once(Mode) ->
         ?assertMatch({ok, #{phase := finalize}},
                      resolve(C#{hint := Hint}, Ref, finalize, D)),
         T = traces(),
-        ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
+        ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
         assert_one_routed(T, C, Ref, finalize, Hint, D),
         %% Cold routed work positively controls full-open and forward-fold
         %% tracing. Persisted-cache replay has its own restart control below.
-        ?assert(calls(T, quod_foreign_log, open_cache, 6) > 0),
+        ?assert(calls(T, quod_foreign_log, open_cache, 5) > 0),
         ?assert(calls(T, quod_catchup, verify_forward, 6) > 0),
         ?assert(calls(T, quod_ledger_store, open, 3) > 0),
         receive {resolver_fetch, _, _} -> ok
@@ -107,11 +111,62 @@ unavailable_local_copy_routes_once(Mode) ->
         end,
         case Mode of
             none -> ok;
-            _ -> ?assertEqual([{identity(F), committed, D}], captures(C))
+            _ -> ?assertEqual([capture_request(F, D)], captures(C))
         end
     end).
 
-persisted_cache_restart_is_a_positive_replay_trace_control_test() ->
+lagging_hosted_prefix_waits_for_verified_suffix_without_foreign_work_test() ->
+    F = fixture(),
+    with_case(F, lagging, fun(C) ->
+        D = deadline(3000),
+        Caller = resolve_async(C, maps:get(ref, F), finalize, D),
+        Source = source_pid(C),
+        try
+            wait_pending(Source, D),
+            ?assertEqual([capture_request(F, D)], captures(C)),
+            %% The owner verifies and appends the actual signed suffix before
+            %% publishing its existing progress edge. No fabricated evidence.
+            ok = gen_server:call(Source, {append, tl(maps:get(chain, F))}),
+            ?assertMatch({ok, #{phase := finalize}}, result(Caller)),
+            ?assertEqual(lists:duplicate(2, capture_request(F, D)), captures(C)),
+            T = traces(),
+            ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
+            ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
+            ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
+            assert_no_foreign_work(T),
+            assert_no_fetch()
+        after exit(Caller, kill)
+        end
+    end).
+
+lagging_hosted_prefix_expires_without_routed_repair_test() ->
+    F = fixture(),
+    with_case(F, lagging, fun(C) ->
+        D = deadline(400),
+        Caller = resolve_async(C, maps:get(ref, F), finalize, D),
+        try
+            wait_pending(source_pid(C), D),
+            ?assertEqual({error, retry}, result(Caller)),
+            ?assertEqual([capture_request(F, D)], captures(C)),
+            T = traces(),
+            ?assertEqual(0, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
+            assert_no_foreign_work(T),
+            assert_no_fetch()
+        after exit(Caller, kill)
+        end
+    end).
+
+unavailable_hosted_capture_does_not_route_test() ->
+    F = fixture(),
+    with_case(F, capture_unavailable, fun(C) ->
+        D = deadline(3000),
+        ?assertEqual({error, not_ready}, resolve(C, maps:get(ref, F), finalize, D)),
+        ?assertEqual([capture_request(F, D)], captures(C)),
+        assert_no_foreign_work(traces()),
+        assert_no_fetch()
+    end).
+
+persisted_cache_replays_at_startup_not_on_later_requests_test() ->
     F = fixture(),
     with_case(F, none, fun(C) ->
         Ref = maps:get(ref, F),
@@ -119,22 +174,42 @@ persisted_cache_restart_is_a_positive_replay_trace_control_test() ->
         _ = traces(),
         flush_fetches(),
         quod_foreign_log_tests:stop_owner(maps:get(foreign, C)),
-        New = quod_foreign_log_tests:start_owner(maps:get(cache_dir, C), maps:get(fetch, C)),
+        Parent = self(),
+        %% Trace the launcher before it starts the real owner. Inheritance
+        %% covers initialization from its first instruction, not after init/1.
+        Launcher = spawn(fun() ->
+            receive start -> ok end,
+            Owner = quod_foreign_log_tests:start_owner(maps:get(cache_dir, C), maps:get(fetch, C)),
+            Parent ! {started_history_owner, self(), Owner},
+            receive stop -> ok end
+        end),
+        start_trace(Launcher),
+        Launcher ! start,
+        New = receive {started_history_owner, Launcher, Pid} -> Pid
+              after 2000 -> error(history_owner_not_started)
+              end,
         try
-            start_trace(New),
+            quod_foreign_log_tests:await_history_ready(identity(F), length(maps:get(chain, F))),
+            Startup = traces(),
+            ?assert(calls(Startup, quod_foreign_log, replay_cache, 6) > 0),
+            ?assert(calls(Startup, quod_ledger_store, open, 3) > 0),
+            ?assertEqual(1, calls(Startup, quod_foreign_log, spawn_verification_worker, 3)),
+            assert_no_fetch(),
             ?assertMatch({ok, _}, resolve(C#{foreign := New}, Ref, finalize, deadline(3000))),
             T = traces(),
-            ?assert(calls(T, quod_foreign_log, replay_cache, 7) > 0),
-            ?assert(calls(T, quod_ledger_store, open, 3) > 0),
+            ?assertEqual(0, calls(T, quod_foreign_log, replay_cache, 6)),
+            ?assertEqual(0, calls(T, quod_ledger_store, open, 3)),
             ?assertEqual(1, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
             assert_no_fetch()
         after
+            stop_trace(Launcher),
             stop_trace(New),
-            quod_foreign_log_tests:stop_owner(New)
+            quod_foreign_log_tests:stop_owner(New),
+            Launcher ! stop
         end
     end).
 
-capture_owner_death_before_a_usable_view_routes_once_test() ->
+capture_owner_death_before_a_usable_view_stays_unavailable_test() ->
     F = fixture(),
     with_case(F, hold_capture, fun(C) ->
         D = deadline(3000),
@@ -146,10 +221,11 @@ capture_owner_death_before_a_usable_view_routes_once_test() ->
         end,
         try
             stop_source(maps:get(source, C)),
-            ?assertMatch({ok, #{phase := finalize}}, result(Caller)),
+            ?assertEqual({error, not_ready}, result(Caller)),
             T = traces(),
-            ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
-            assert_one_routed(T, C, Ref, finalize, none, D)
+            ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
+            assert_no_foreign_work(T),
+            assert_no_fetch()
         after
             exit(Caller, kill)
         end
@@ -171,7 +247,7 @@ sufficient_invalid_local_evidence_never_falls_back_test() ->
             ?assertEqual({error, Error}, resolve(C, R, Phase, deadline(3000)))
         end, Cases),
         T = traces(),
-        ?assertEqual(length(Cases), calls(T, quod_simplex, history_view, 3)),
+        ?assertEqual(length(Cases), calls(T, quod_simplex, history_view_at, 3)),
         assert_no_foreign_work(T),
         assert_no_fetch()
     end).
@@ -222,8 +298,8 @@ historical_era_keeps_its_committee_and_checks_supplied_proofs_test() ->
                          resolve(C, R, transaction, deadline(3000)))
         end, [WrongEra, BadSig, setelement(8, Ref, <<"malformed-finality">>)]),
         T = traces(),
-        ?assertEqual(5, calls(T, quod_simplex, history_view, 3)),
-        ?assertEqual(5, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
+        ?assertEqual(5, calls(T, quod_simplex, history_view_at, 3)),
+        ?assertEqual(0, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, start_distinct_routed_worker, 5)),
         assert_no_fetch()
     end).
@@ -235,41 +311,26 @@ pinned_owner_loss_never_recaptures_or_routes_test_() ->
 pinned_owner_loss(Stage) ->
     F = historical_fixture(),
     with_case(F, current, fun(C) ->
-        Owner = maps:get(foreign, C),
-        case Stage of after_verification -> warm_historical_cache(C); _ -> ok end,
-        {Caller, Worker, Request, Token} = held_historical_call(C, deadline(3000)),
+        Gate = case Stage of before_verification -> before_read; after_verification -> after_read end,
+        {Caller, Token} = held_historical_call(C, deadline(3000), Gate),
         try
-            case Stage of
-                before_verification -> ok;
-                after_verification ->
-                    ok = sys:suspend(Owner),
-                    Worker ! {release_local_worker, Token},
-                    wait_completion(Owner, Request)
-            end,
             ?assertEqual(1, length(captures(C))),
             stop_source(maps:get(source, C)),
             ReplacementDir = temp_dir("replacement"),
             Replacement = start_source(ReplacementDir, F, current),
             try
-                case Stage of
-                    before_verification -> Worker ! {release_local_worker, Token};
-                    after_verification -> ok = sys:resume(Owner)
-                end,
+                Caller ! {release_local_read, Token},
                 ?assertEqual({error, retry}, result(Caller)),
                 ?assertEqual([], source_captures(Replacement)),
                 T = traces(),
-                ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
-                ?assertEqual(1, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
-                ?assertEqual(0, calls(T, quod_foreign_log, start_distinct_routed_worker, 5)),
+                ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
+                assert_no_foreign_work(T),
                 assert_no_fetch()
             after
                 stop_source(Replacement),
                 _ = file:del_dir_r(ReplacementDir)
             end
-        after
-            _ = catch sys:resume(Owner),
-            exit(Caller, kill),
-            exit(Worker, kill)
+        after exit(Caller, kill)
         end
     end).
 
@@ -283,6 +344,7 @@ expired_or_invalid_deadline_never_starts_capture_test() ->
         ?assertEqual([], captures(C)),
         T = traces(),
         ?assertEqual(0, calls(T, quod_simplex, history_view, 3)),
+        ?assertEqual(0, calls(T, quod_simplex, history_view_at, 3)),
         assert_no_foreign_work(T)
     end).
 
@@ -299,9 +361,9 @@ queued_capture_cannot_launch_after_expiry_test() ->
             wait_expired(D),
             Source ! release_capture,
             ?assertEqual({error, retry}, result(Caller)),
-            ?assertEqual([{identity(F), committed, D}], captures(C)),
+            ?assertEqual([capture_request(F, D)], captures(C)),
             T = traces(),
-            ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
+            ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
             ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
             assert_no_foreign_work(T),
             assert_no_fetch()
@@ -311,16 +373,9 @@ queued_capture_cannot_launch_after_expiry_test() ->
         end
     end).
 
-queued_admission_preserves_capture_deadline_test_() ->
-    [{atom_to_list(Kind), fun() -> queued_admission_preserves_capture_deadline(Kind) end}
-     || Kind <- [routed, historical_local]].
-
-queued_admission_preserves_capture_deadline(Kind) ->
-    {F, Mode, RequestKind} = case Kind of
-        routed -> {fixture(), held_unavailable, verify_reference};
-        historical_local -> {historical_fixture(), hold_capture, verify_local}
-    end,
-    with_case(F, Mode, fun(C) ->
+queued_routed_admission_preserves_capture_deadline_test() ->
+    F = fixture(),
+    with_case(F, held_other_incarnation, fun(C) ->
         Owner = maps:get(foreign, C),
         Source = source_pid(C),
         D = deadline(600),
@@ -332,7 +387,7 @@ queued_admission_preserves_capture_deadline(Kind) ->
             ok = sys:suspend(Owner),
             Source ! release_capture,
             Envelope = wait_message(Owner, fun
-                ({'$gen_call', _, {verification, _, _, _, Request}}) -> element(1, Request) =:= RequestKind;
+                ({'$gen_call', _, {verification, _, _, _, {verify_reference, _, _, _, _, _}}}) -> true;
                 (_) -> false
             end),
             {'$gen_call', _, {verification, ActualDeadline, _, _, _}} = Envelope,
@@ -341,7 +396,7 @@ queued_admission_preserves_capture_deadline(Kind) ->
             wait_expired(D),
             ok = sys:resume(Owner),
             ?assertEqual({error, retry}, result(Caller)),
-            ?assertEqual([{identity(F), committed, D}], captures(C)),
+            ?assertEqual([capture_request(F, D)], captures(C)),
             T = traces(),
             ?assertEqual(1, calls(T, quod_foreign_log, verification_call, 2)),
             assert_no_foreign_work(T),
@@ -353,30 +408,36 @@ queued_admission_preserves_capture_deadline(Kind) ->
         end
     end).
 
-queued_verified_success_cannot_publish_after_expiry_test() ->
+historical_local_read_never_queues_at_foreign_owner_test() ->
     F = historical_fixture(),
     with_case(F, current, fun(C) ->
         Owner = maps:get(foreign, C),
-        warm_historical_cache(C),
-        D = deadline(1000),
-        {Caller, Worker, Request, Token} = held_historical_call(C, D),
+        ok = sys:suspend(Owner),
         try
-            ok = sys:suspend(Owner),
-            Worker ! {release_local_worker, Token},
-            wait_completion(Owner, Request),
+            ?assertMatch({ok, #{phase := finalize}},
+                         resolve(C, maps:get(ref, F), finalize, deadline(1000))),
+            T = traces(),
+            ?assertEqual(0, calls(T, quod_foreign_log, verification_call, 2)),
+            assert_no_foreign_work(T),
+            assert_no_fetch()
+        after ok = sys:resume(Owner)
+        end
+    end).
+
+verified_local_success_cannot_publish_after_expiry_test() ->
+    F = historical_fixture(),
+    with_case(F, current, fun(C) ->
+        D = deadline(1000),
+        {Caller, Token} = held_historical_call(C, D, after_read),
+        try
             ?assert(D > quod_time:mono_ms()),
             wait_expired(D),
-            ok = sys:resume(Owner),
+            Caller ! {release_local_read, Token},
             ?assertEqual({error, retry}, result(Caller)),
-            ?assertEqual([{identity(F), committed, D}], captures(C)),
-            T = traces(),
-            ?assertEqual(1, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
-            ?assertEqual(0, calls(T, quod_foreign_log, start_distinct_routed_worker, 5)),
+            ?assertEqual([capture_request(F, D)], captures(C)),
+            assert_no_foreign_work(traces()),
             assert_no_fetch()
-        after
-            _ = catch sys:resume(Owner),
-            exit(Caller, kill),
-            exit(Worker, kill)
+        after exit(Caller, kill)
         end
     end).
 
@@ -389,7 +450,7 @@ append_after_capture_preserves_the_borrowed_prefix_test() ->
                      resolve(C, maps:get(ref, F), finalize, deadline(3000))),
         ?assertEqual(3, gen_server:call(source_pid(C), height)),
         T = traces(),
-        ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
+        ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
         assert_no_foreign_work(T),
         assert_no_fetch()
@@ -494,6 +555,7 @@ fixture() -> quod_foreign_log_tests:foreign_fixture(quod_foreign_log_tests:uniqu
 historical_fixture() ->
     quod_foreign_log_tests:membership_after_finalize_fixture(quod_foreign_log_tests:unique_ns()).
 identity(F) -> {maps:get(ns, F), maps:get(anchor, F)}.
+capture_request(F, D) -> {identity(F), {committed, element(5, maps:get(ref, F))}, D}.
 deadline(Ms) -> quod_time:mono_ms() + Ms.
 digest(Term) -> crypto:hash(sha256, term_to_binary({resolver_test, Term})).
 temp_dir(Label) -> quod_foreign_log_tests:temp_dir("resolver-" ++ Label).
@@ -514,6 +576,8 @@ with_case(F, Mode, Fun) ->
         lagging -> start_source(SourceDir, F#{chain := [hd(maps:get(chain, F))]}, current);
         replaced_incarnation ->
             start_source(SourceDir, quod_foreign_log_tests:foreign_fixture(maps:get(ns, F)), current);
+        held_other_incarnation ->
+            start_source(SourceDir, quod_foreign_log_tests:foreign_fixture(maps:get(ns, F)), hold_capture);
         _ -> start_source(SourceDir, F, Mode)
     end,
     C = #{fixture => F, target => identity(F), foreign => Owner, source => Source,
@@ -536,14 +600,18 @@ start_source(Dir, F, Mode) ->
     {Pid, Monitor} = spawn_monitor(fun() ->
         {ok, Store0} = quod_ledger_store:open(maps:get(ns, F), Dir),
         {ok, Store} = quod_ledger_store:append(Store0, maps:get(chain, F)),
-        FullView = quod_foreign_log_tests:local_fixture_view(Store, F),
-        Projection = maps:get(projection, FullView),
-        [Current | _] = maps:get(committee_views, Projection),
+        {Ns, Anchor} = identity(F),
+        {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+        {ok, _, Projection, Delta} = quod_catchup:verify_forward(
+            Ns, Anchor, quod_simplex:history_projection(identity(F)), 1,
+            maps:get(chain, F), Index),
+        ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+        true = quod_reg:reg({quod_simplex, Ns}),
         %% Applied=0 deliberately proves this is a committed-history borrow,
         %% not an execution-readiness requirement. Keep only the real live era.
-        View = FullView#{applied := 0, projection := Projection#{committee_views := [Current]}},
+        View = indexed_source_view(Store, Projection, Index),
         Parent ! {resolver_source_ready, self()},
-        source_loop(Store, View, Mode, Parent, [])
+        source_loop(Store, View, Index, Mode, Parent, [])
     end),
     receive
         {resolver_source_ready, Pid} -> {Pid, Monitor};
@@ -551,24 +619,17 @@ start_source(Dir, F, Mode) ->
     after 3000 -> exit(Pid, kill), error(source_start_timeout)
     end.
 
-source_loop(Store, View, Mode, Parent, Captures) ->
+source_loop(Store, View, Index, Mode, Parent, Captures) ->
     receive
         {'$gen_call', From, {history_view, Target, Requirement, D}} ->
             Captures1 = [{Target, Requirement, D} | Captures],
             case Mode of
                 hold_capture -> hold_capture(Parent, D);
-                held_unavailable -> hold_capture(Parent, D);
                 _ -> ok
             end,
             {Store1, View1} = case Mode of
                 {append_before_reply, Entries} ->
-                    {ok, Appended} = quod_ledger_store:append(Store, Entries),
-                    {Ns, _} = maps:get(identity, View),
-                    Projection = lists:foldl(fun(E, P) -> quod_simplex:history_advance(Ns, E, P) end,
-                                             maps:get(projection, View), Entries),
-                    {Appended, View#{slot := quod_ledger_store:last(Appended),
-                                     snapshot := quod_ledger_store:snapshot(Appended),
-                                     projection := Projection}};
+                    append_verified_suffix(Store, View, Index, Entries);
                 _ -> {Store, View}
             end,
             Reply = case {Target =:= maps:get(identity, View), Requirement,
@@ -576,22 +637,61 @@ source_loop(Store, View, Mode, Parent, Captures) ->
                 {_, _, _, false} -> {error, timeout};
                 {false, _, _, true} -> {error, invalid_identity};
                 {true, _, capture_unavailable, true} -> {error, not_ready};
-                {true, _, held_unavailable, true} -> {error, not_ready};
+                {true, {committed, Required}, _, true} ->
+                    case maps:get(slot, View) >= Required of
+                        true -> {ok, View};
+                        false -> {pending, maps:get(slot, View)}
+                    end;
                 {true, R, _, true} when R =:= committed; R =:= any -> {ok, View};
                 _ -> {error, not_ready}
             end,
             gen:reply(From, Reply),
-            source_loop(Store1, View1, current, Parent, Captures1);
+            case Reply of
+                {pending, _} -> Parent ! {resolver_pending, self(), D};
+                _ -> ok
+            end,
+            source_loop(Store1, View1, Index, current, Parent, Captures1);
+        {'$gen_call', From, {append, Entries}} ->
+            {Store1, View1} = append_verified_suffix(Store, View, Index, Entries),
+            {Ns, _} = maps:get(identity, View1),
+            _ = quod_reg:publish({committed, Ns}, {certified_head, Ns, maps:get(slot, View1)}),
+            gen:reply(From, ok),
+            source_loop(Store1, View1, Index, Mode, Parent, Captures);
         {'$gen_call', From, captures} ->
             gen:reply(From, lists:reverse(Captures)),
-            source_loop(Store, View, Mode, Parent, Captures);
+            source_loop(Store, View, Index, Mode, Parent, Captures);
         {'$gen_call', From, height} ->
             gen:reply(From, quod_ledger_store:last(Store)),
-            source_loop(Store, View, Mode, Parent, Captures);
+            source_loop(Store, View, Index, Mode, Parent, Captures);
         {'$gen_call', From, view} ->
             gen:reply(From, View),
-            source_loop(Store, View, Mode, Parent, Captures);
-        stop -> quod_ledger_store:close(Store)
+            source_loop(Store, View, Index, Mode, Parent, Captures);
+        stop -> quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store)
+    end.
+
+%% Protocol fixture, not consensus admission: real window verification and
+%% append-then-index installation, with one retained owner index throughout.
+append_verified_suffix(Store, View, Index, Entries) ->
+    {Ns, Anchor} = maps:get(identity, View),
+    Projection0 = maps:get(projection, View),
+    {ok, Entries, Projection, Delta} = quod_catchup:verify_forward(
+        Ns, Anchor, Projection0, maps:get(slot, View) + 1, Entries,
+        maps:get(history_index, Projection0)),
+    {ok, Store1} = quod_ledger_store:append(Store, Entries),
+    ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+    {Store1, indexed_source_view(Store1, Projection, Index)}.
+
+indexed_source_view(Store, Projection, Index) ->
+    H = quod_ledger_store:last(Store),
+    {ok, Borrow} = quod_dtx_phase_index:capture(Index, H),
+    #{owner => self(), identity => maps:get(target, maps:get(dtx, Projection)),
+      slot => H, applied => 0, snapshot => quod_ledger_store:snapshot(Store),
+      projection => Projection#{history_index => Borrow,
+          committee_views := lists:sublist(maps:get(committee_views, Projection), 1)}}.
+
+wait_pending(Source, D) ->
+    receive {resolver_pending, Source, D} -> ok
+    after 1000 -> error(local_prefix_did_not_wait)
     end.
 
 hold_capture(Parent, D) ->
@@ -645,30 +745,17 @@ result(Caller) ->
     after 4000 -> exit(Caller, kill), error(resolver_result_timeout)
     end.
 
-warm_historical_cache(C) ->
-    %% First populate it through the real historical verifier. A subsequent
-    %% held reader can finish with the owner suspended: cold append would need
-    %% reserve_page/set_cache_size admission before reaching publication.
-    View = gen_server:call(source_pid(C), view),
-    ?assertMatch({ok, #{phase := finalize}},
-                 quod_foreign_log:verify_local(View, maps:get(ref, maps:get(fixture, C)), finalize, 3000)),
-    _ = traces(),
-    ok.
-
-held_historical_call(C, D) ->
-    Token = make_ref(),
-    ok = gen_server:call(maps:get(foreign, C), {test_hold_next_local_worker, self(), Token}),
-    Caller = resolve_async(C, maps:get(ref, maps:get(fixture, C)), finalize, D),
-    receive {local_worker_held, Token, Request, Worker} -> {Caller, Worker, Request, Token}
-    after 2000 -> exit(Caller, kill), error(historical_worker_not_held)
-    end.
-
-wait_completion(Owner, Request) ->
-    _ = wait_message(Owner, fun
-        ({foreign_worker_done, R, {ok, _}, _}) when R =:= Request -> true;
-        (_) -> false
+held_historical_call(C, D, Stage) ->
+    Token = make_ref(), Parent = self(),
+    Caller = traced_async(fun() ->
+        put({quod_foreign_log, local_read_gate}, {Stage, Parent, Token}),
+        quod_foreign_log:resolve_reference(
+            maps:get(target, C), maps:get(ref, maps:get(fixture, C)), finalize,
+            maps:get(contact, C), maps:get(hint, C), D)
     end),
-    ok.
+    receive {local_read_held, Token, Caller} -> {Caller, Token}
+    after 2000 -> exit(Caller, kill), error(historical_read_not_held)
+    end.
 
 wait_message(Pid, Predicate) -> wait_message(Pid, Predicate, deadline(2000)).
 wait_message(Pid, Predicate, D) ->
@@ -686,13 +773,14 @@ wait_expired(D) -> receive after max(0, D - quod_time:mono_ms()) + 20 -> ok end.
 
 trace_patterns() ->
     [{quod_simplex, history_view, 3},
+     {quod_simplex, history_view_at, 3},
      {quod_foreign_log, verification_call, 2},
      {quod_foreign_log, verify_local_deadline, 4},
      {quod_foreign_log, verify_resident_local_reference, 4},
      {quod_foreign_log, start_distinct_routed_worker, 5},
      {quod_foreign_log, spawn_verification_worker, 3},
-     {quod_foreign_log, open_cache, 6},
-     {quod_foreign_log, replay_cache, 7},
+     {quod_foreign_log, open_cache, 5},
+     {quod_foreign_log, replay_cache, 6},
      {quod_catchup, verify_forward, 6},
      {quod_ledger_store, open, 3},
      {quod_ledger_store, open_ro, 3},
@@ -729,8 +817,8 @@ assert_no_foreign_work(T) ->
     lists:foreach(fun({M, F, A}) -> ?assertEqual(0, calls(T, M, F, A)) end,
                   [{quod_foreign_log, start_distinct_routed_worker, 5},
                    {quod_foreign_log, spawn_verification_worker, 3},
-                   {quod_foreign_log, open_cache, 6},
-                   {quod_foreign_log, replay_cache, 7},
+                   {quod_foreign_log, open_cache, 5},
+                   {quod_foreign_log, replay_cache, 6},
                    {quod_catchup, verify_forward, 6},
                    {quod_ledger_store, open, 3},
                    {quod_ledger_store, open_ro, 3}]).

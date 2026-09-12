@@ -35,7 +35,7 @@ verification at the caller, never from the serving peer.
 -export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, read_blocks/3, stats/1,
          channel/1, encode_frame/2, decode_frame/2, decode_entries/2, page_stats/1,
          verify_forward/5, verify_forward/6, verify_entry/3,
-         catch_up/5, catch_up/7]).
+         catch_up/7]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3]).
@@ -395,9 +395,9 @@ verify_forward(_Ns, _GenesisHash, _Projection0, _From, _Entries) ->
 -doc """
 Verify one fetched window through the exact DTX phase index without mutating it.
 
-The returned opaque delta contains every phase-history change in this window.
-The catch-up driver commits it only after the same window and its resulting
-projection have been accepted by the ledger sink.
+The returned opaque delta contains every phase-history and committee-era
+change in this window. The sole ledger owner appends and installs it before
+publishing the resulting projection.
 """.
 -spec verify_forward(binary(), binary(), quod_simplex:history_projection(),
                      pos_integer(), [quod_ledger:entry_artifact()],
@@ -609,279 +609,97 @@ verify_finalizer(_Domain, _Cert, _K, Sl, _BH, _Committee) ->
     {error, {cert_mismatch, Sl}}.
 
 -doc """
-Drive trustless catch-up to completion for a fresh or partially caught-up
-joiner. Each fetched window is verified forward and handed to the sink together
-with its resulting authoritative projection.
+Drive trustless catch-up from one same-turn owner capture, including height zero.
+Each window is verified once against that read-only phase/era index. The worker
+never opens an index, replays a prefix, or mutates the owner's table.
 
-`GenesisHash` is the out-of-band-pinned slot-1 block hash. `Fetch(From)` returns
-one bounded entry window and the untrusted server height. `Sink(Entries,
-Projection)` atomically appends that verified window and returns `{ok, View}`:
-the writer's immutable history view from that same turn.
+`Sink(Entries, Projection, Delta)` checks the base, appends, installs the
+verified delta, and returns the new owner view before any next window. An
+overtaken window is refused, never trimmed or verified a second time.
+The exact initial owner remains pinned throughout the run.
 
-`Options` contains the local `ledger_root` for scratch phase-index output only.
-Resumed catch-up also carries the initial `history_view`, matching `From` and
-`Projection`. Content-only catch-up never opens a phase index. On the first fetched DTX control, the driver
-opens one session-unique phase index, backfills the exact already-sunk local
-prefix from the retained writer snapshot, and retains the index for every remaining window. A window
-is first previewed into a bounded phase delta; the sink runs next; only a
-successful sink is followed by `quod_dtx_phase_index:commit_delta/2`. The index
-is always closed and deleted when the catch-up attempt ends.
-
-The target height is the maximum ever reported in this run, so a regressing or
-under-reporting contact cannot truncate catch-up. Use `catch_up/7` to resume:
-`From` is the local height plus one and `Projection` is the complete projection
-at that point. `catch_up/5` starts at slot 1 and checks the genesis anchor.
+The target height is the maximum reported in this run: a regressing contact
+cannot truncate catch-up. The slot-1 genesis hash is pinned out of band.
 """.
 -spec catch_up(
         binary(), binary(),
         fun((pos_integer()) ->
                 {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}),
-        fun(([quod_ledger:entry_artifact()], quod_simplex:history_projection()) ->
-                {ok, quod_simplex:history_view()} | {error, term()}),
-        #{ledger_root := file:filename_all()}) ->
-          {ok, log_index()} | {error, term()}.
-catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink,
-         #{ledger_root := LedgerRoot})
-  when is_binary(Ns), byte_size(Ns) > 0,
-       is_function(Fetch, 1), is_function(Sink, 2) ->
-    Projection = quod_simplex:history_projection({Ns, GenesisHash}),
-    catch_up_loop(
-      Ns, GenesisHash, Fetch, Sink, {LedgerRoot, none}, 1, Projection, 0, none);
-catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _Options) ->
-    {error, bad_catchup_options}.
-
--spec catch_up(
-        binary(), binary(),
-        fun((pos_integer()) ->
-                {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}),
-        fun(([quod_ledger:entry_artifact()], quod_simplex:history_projection()) ->
+        fun(([quod_ledger:entry_artifact()], quod_simplex:history_projection(),
+             quod_dtx_phase_index:delta()) ->
                 {ok, quod_simplex:history_view()} | {error, term()}),
         pos_integer(), quod_simplex:history_projection(),
-        #{ledger_root := file:filename_all(),
-          history_view := quod_simplex:history_view()}) ->
+        #{history_view := quod_simplex:history_view()}) ->
           {ok, log_index()} | {error, term()}.
-catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink, From, Projection,
-         #{ledger_root := LedgerRoot,
-           history_view := #{identity := {Ns, GenesisHash}, slot := Height,
+catch_up(Ns, <<_:256>> = GenesisHash, Fetch, Sink, From,
+         #{history_index := _} = Projection,
+         #{history_view := #{identity := {Ns, GenesisHash}, slot := Height,
                              owner := Owner, snapshot := _,
                              projection := Projection} = View})
   when is_binary(Ns), byte_size(Ns) > 0,
-       is_function(Fetch, 1), is_function(Sink, 2),
+       is_function(Fetch, 1), is_function(Sink, 3),
        is_integer(From), From >= 1, From =:= Height + 1,
-       is_map(Projection), is_pid(Owner) ->
-    catch_up_loop(
-      Ns, GenesisHash, Fetch, Sink, {LedgerRoot, View},
-      From, Projection, 0, none);
+       is_pid(Owner) ->
+    catch_up_loop(Ns, GenesisHash, Fetch, Sink, View, From, 0);
 catch_up(_Ns, _GenesisHash, _Fetch, _Sink, _From, _Projection, _Options) ->
     {error, bad_catchup_options}.
 
-catch_up_loop(Ns, GenesisHash, Fetch, Sink, Context,
-              From, Projection, MaxH, PhaseIndex) ->
-    case Fetch(From) of
-        {error, R} ->
-            {error, {fetch, R}};
-        {ok, Entries, H} when is_integer(H), H >= 0 ->
-            Target = max(MaxH, H),
-            case Entries of
-                [] when From > Target -> {ok, Target};
-                [] -> {error, no_progress};
-                _ ->
-                    catch_up_entries(
-                      Ns, GenesisHash, Fetch, Sink, Context,
-                      From, Projection, Target, Entries, PhaseIndex)
-            end;
-        _MalformedResponse ->
-            {error, {fetch, bad_response}}
-    end.
-
-catch_up_entries(Ns, GenesisHash, Fetch, Sink, Context,
-                 From, Projection, Target, Entries, none) ->
-    case window_has_dtx(Entries) of
-        false ->
-            catch_up_content_window(
-              Ns, GenesisHash, Fetch, Sink, Context,
-              From, Projection, Target, Entries);
+catch_up_loop(Ns, GenesisHash, Fetch, Sink, View = #{owner := Owner}, From, MaxH) ->
+    case is_process_alive(Owner) of
+        false -> {error, owner_down};
         true ->
-            case open_phase_index(Ns, GenesisHash, Context, From) of
-                {ok, PhaseIndex} ->
-                    try
-                        catch_up_phase_window(
-                          Ns, GenesisHash, Fetch, Sink, Context,
-                          From, Projection, Target, Entries, PhaseIndex)
-                    after
-                        _ = quod_dtx_phase_index:close(PhaseIndex)
+            Fetched = Fetch(From),
+            case is_process_alive(Owner) of
+                false -> {error, owner_down};
+                true -> case Fetched of
+                {error, R} ->
+                    {error, {fetch, R}};
+                {ok, Entries, H} when is_integer(H), H >= 0 ->
+                    Target = max(MaxH, H),
+                    case Entries of
+                        [] when From > Target -> {ok, Target};
+                        [] -> {error, no_progress};
+                        _ -> catch_up_window(Ns, GenesisHash, Fetch, Sink,
+                                             View, From, Target, Entries)
                     end;
-                {error, _} = Error ->
-                    Error
+                _MalformedResponse ->
+                    {error, {fetch, bad_response}}
+                end
             end
-    end;
-catch_up_entries(Ns, GenesisHash, Fetch, Sink, Context,
-                 From, Projection, Target, Entries, PhaseIndex) ->
-    catch_up_phase_window(
-      Ns, GenesisHash, Fetch, Sink, Context,
-      From, Projection, Target, Entries, PhaseIndex).
-
-catch_up_content_window(Ns, GenesisHash, Fetch, Sink, Context,
-                        From, Projection, Target, Entries) ->
-    case verify_forward(Ns, GenesisHash, Projection, From, Entries) of
-        {ok, Verified, Projection1} ->
-            case sink_window(Sink, Verified, Projection1, Context,
-                             {Ns, GenesisHash}) of
-                {ok, NextContext} ->
-                    continue_catch_up(
-                      Ns, GenesisHash, Fetch, Sink,
-                      NextContext,
-                      From, Verified, Projection1, Target, none);
-                {error, R} ->
-                    {error, {sink, R}}
-            end;
-        {error, bad_anchor} ->
-            {error, bad_anchor};
-        {error, R} ->
-            {error, {verify, R}}
     end.
 
-catch_up_phase_window(Ns, GenesisHash, Fetch, Sink, Context,
-                      From, Projection, Target, Entries, PhaseIndex) ->
-    case verify_forward(
-           Ns, GenesisHash, Projection, From, Entries, PhaseIndex) of
+catch_up_window(Ns, GenesisHash, Fetch, Sink,
+                #{projection := #{history_index := Index} = Projection} = View,
+                From, Target, Entries) ->
+    case verify_forward(Ns, GenesisHash, Projection, From, Entries, Index) of
         {ok, Verified, Projection1, Delta} ->
-            case sink_window(Sink, Verified, Projection1, Context,
-                             {Ns, GenesisHash}) of
-                {ok, NextContext} ->
-                    case quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) of
-                        ok ->
-                            continue_catch_up(
-                              Ns, GenesisHash, Fetch, Sink,
-                              NextContext,
-                              From, Verified, Projection1, Target, PhaseIndex);
-                        {error, R} ->
-                            {error, {phase_index, R}}
+            case sink_window(Sink, Verified, Projection1, Delta, View) of
+                {ok, NextView} ->
+                    Next = From + length(Verified),
+                    case Next > Target of
+                        true -> {ok, Target};
+                        false -> catch_up_loop(Ns, GenesisHash, Fetch, Sink,
+                                               NextView, Next, Target)
                     end;
-                {error, R} ->
-                    {error, {sink, R}}
+                {error, R} -> {error, {sink, R}}
             end;
-        {error, bad_anchor} ->
-            {error, bad_anchor};
-        {error, R} ->
-            {error, {verify, R}}
+        {error, bad_anchor} -> {error, bad_anchor};
+        {error, R} -> {error, {verify, R}}
     end.
 
-%% Bind the sink acknowledgement to the exact window and original writer.
-%% This is source coherence, not a second certificate check: verify_forward
-%% remains the one verifier, and the writer remains the one append owner.
-sink_window(Sink, Verified, Projection, {Scratch, Previous}, Identity) ->
+%% Bind the acknowledgement to the exact window and original writer. Continue
+%% from its new capture, not a projection carrying the previous window's index.
+sink_window(Sink, Verified, Projection, Delta,
+            #{owner := Owner, identity := Identity}) ->
     Height = (quod_ledger:entry_view(lists:last(Verified)))#entry.index,
     Head = maps:get(history_head, Projection),
-    case Sink(Verified, Projection) of
+    case Sink(Verified, Projection, Delta) of
         {ok, #{owner := Owner, identity := Identity, slot := Height,
-               snapshot := _, projection := #{history_head := Head}} = View}
-          when is_pid(Owner) ->
-            %% The verifier retains historical committee eras; the live
-            %% writer retains its current era only. Their map representations
-            %% need not match. Bind the immutable committed head, not that
-            %% historical bookkeeping, and keep the verifier's own projection.
-            case Previous of
-                none -> {ok, {Scratch, View}};
-                #{owner := Owner} -> {ok, {Scratch, View}};
-                _ -> {error, invalid_history_view}
-            end;
+               snapshot := _, projection := #{history_head := Head,
+                                              history_index := _}} = View} ->
+            {ok, View};
         {error, _} = Error -> Error;
         _ -> {error, invalid_history_view}
-    end.
-
-continue_catch_up(Ns, GenesisHash, Fetch, Sink, Context,
-                  From, Verified, Projection, Target, PhaseIndex) ->
-    Next = From + length(Verified),
-    case Next > Target of
-        true ->
-            {ok, Target};
-        false ->
-            catch_up_loop(
-              Ns, GenesisHash, Fetch, Sink, Context,
-              Next, Projection, Target, PhaseIndex)
-    end.
-
-window_has_dtx([Entry | Rest]) ->
-    try quod_ledger:classify(entry_data(Entry)) of
-        {controls, _Controls} -> true;
-        {content, _} -> window_has_dtx(Rest);
-        noop -> window_has_dtx(Rest);
-        invalid -> window_has_dtx(Rest)
-    catch error:_ -> window_has_dtx(Rest)
-    end;
-window_has_dtx(_) ->
-    false.
-
-open_phase_index(Ns, GenesisHash, {LedgerRoot, View}, From) ->
-    case quod_dtx_phase_index:open(LedgerRoot, Ns) of
-        {ok, PhaseIndex} ->
-            case backfill_phase_index(
-                   Ns, GenesisHash, View, From - 1, PhaseIndex) of
-                ok ->
-                    {ok, PhaseIndex};
-                {error, _} = Error ->
-                    _ = quod_dtx_phase_index:close(PhaseIndex),
-                    Error
-            end;
-        {error, R} ->
-            {error, {phase_index, R}}
-    end.
-
-backfill_phase_index(_Ns, _GenesisHash, _View, 0, _PhaseIndex) ->
-    ok;
-backfill_phase_index(Ns, GenesisHash,
-                     #{identity := {Ns, GenesisHash}, slot := PrefixHeight,
-                       snapshot := Snapshot}, PrefixHeight, PhaseIndex) ->
-    case quod_ledger_store:open_ro_snapshot(Snapshot) of
-        {ok, Store} ->
-            try
-                case quod_ledger_store:namespace(Store) =:= Ns andalso
-                     quod_ledger_store:last(Store) =:= PrefixHeight of
-                    true ->
-                        Projection = quod_simplex:history_projection(
-                                       {Ns, GenesisHash}),
-                        backfill_phase_windows(
-                          Store, Ns, GenesisHash, 1, PrefixHeight,
-                          Projection, PhaseIndex);
-                    false ->
-                        {error, {phase_index_backfill, incomplete_prefix}}
-                end
-            after
-                quod_ledger_store:close(Store)
-            end;
-        {error, R} ->
-            {error, {phase_index_backfill, R}}
-    end;
-backfill_phase_index(_Ns, _GenesisHash, _View, _PrefixHeight, _PhaseIndex) ->
-    {error, {phase_index_backfill, invalid_history_view}}.
-
-backfill_phase_windows(_Store, _Ns, _GenesisHash, From, PrefixHeight,
-                       _Projection, _PhaseIndex)
-  when From > PrefixHeight ->
-    ok;
-backfill_phase_windows(Store, Ns, GenesisHash, From, PrefixHeight,
-                       Projection, PhaseIndex) ->
-    To = min(PrefixHeight, From + ?MAX_BLOCKS - 1),
-    case quod_ledger_store:read_range(Store, From, To) of
-        {ok, Entries} ->
-            case verify_forward(
-                   Ns, GenesisHash, Projection, From, Entries, PhaseIndex) of
-                {ok, Verified, Projection1, Delta}
-                  when length(Verified) =:= To - From + 1 ->
-                    case quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) of
-                        ok ->
-                            backfill_phase_windows(
-                              Store, Ns, GenesisHash, To + 1,
-                              PrefixHeight, Projection1, PhaseIndex);
-                        {error, R} ->
-                            {error, {phase_index_backfill, R}}
-                    end;
-                {ok, _Short, _Projection1, _Delta} ->
-                    {error, {phase_index_backfill, incomplete_prefix}};
-                {error, R} ->
-                    {error, {phase_index_backfill, R}}
-            end
     end.
 
 %% Only the FIRST window (From=1, containing genesis at slot 1) is anchor-checked: the genesis block must

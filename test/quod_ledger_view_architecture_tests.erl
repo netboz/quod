@@ -21,7 +21,7 @@ reviewed_sites() ->
      %% Pre-owner create/join/resume inspects the durable founding identity.
      {{quod_ontology, existing_ledger, 2}, {call, open_ro, 2}},
      %% The existing foreign cache owner reconstructs its first/recovery index.
-     {{quod_foreign_log, open_cache_raw, 6}, {call, open, 3}},
+     {{quod_foreign_log, open_cache_raw, 5}, {call, open, 3}},
      %% Explicit stopped-ledger inspection, never a live-view failure fallback.
      {{quod_explorer_http, with_offline_store, 3}, {call, open_ro, 2}},
      %% Public default-mode API delegation, not additional recovery owners.

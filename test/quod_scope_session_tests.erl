@@ -513,7 +513,6 @@ observer_scope_refuses_read_certification_before_any_signature_test() ->
     OtherValidator = key(309),
     State = quod_simplex:test_state(
               #{ns => Ns, self => Self, genesis_hash => Anchor,
-                ledger_root => <<"/tmp/observer-certificate">>,
                 store => ready, sync => ready, prolog_ready => true,
                 validators => [OtherValidator]}),
     Parent = self(),

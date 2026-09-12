@@ -2,6 +2,143 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+same_group_append_is_invisible_to_an_older_capture_test() ->
+    with_index(fun(Index, _Dir) ->
+        F = quod_foreign_log_tests:prepared_then_committed_fixture(<<"index:as-of:signed">>),
+        Identity = {maps:get(ns, F), maps:get(anchor, F)},
+        [Genesis, Prepare, Finalize] = maps:get(chain, F),
+        {ok, P1, _} = quod_simplex:history_advance(
+            Identity, Genesis, quod_simplex:history_projection(Identity), Index),
+        {ok, P2, _} = quod_simplex:history_advance(Identity, Prepare, P1, Index),
+        {ok, Before} = quod_dtx_phase_index:capture(Index, 2),
+        {ok, _P3, _} = quod_simplex:history_advance(Identity, Finalize, P2, Index),
+        Group = maps:get(group_id, F),
+        {ok, Old} = quod_dtx_phase_index:history(Before, Group),
+        {ok, New} = quod_dtx_phase_index:history(Index, Group),
+        ?assertEqual({ok, maps:get(prepare_ref, F)}, quod_dtx:history_phase(prepare, Old)),
+        ?assertEqual(not_found, quod_dtx:history_phase(finalize, Old)),
+        ?assertEqual({ok, maps:get(finalize_ref, F)}, quod_dtx:history_phase(finalize, New)),
+        %% Real production suffix verification still sees Prepare, not the
+        %% subsequently installed Finalize. The sink must separately reject
+        %% the overtaken base; readers never mutate the live index.
+        ?assertMatch({ok, [Finalize], _, _},
+            quod_catchup:verify_forward(element(1, Identity), element(2, Identity),
+                                       P2, 3, [Finalize], Before)),
+        ?assertEqual({error, bad_phase_index_delta},
+            quod_dtx_phase_index:commit_delta(Before, quod_dtx_phase_index:new_delta())),
+        ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:close(Before))
+    end).
+
+different_group_append_is_absent_from_an_older_capture_test() ->
+    with_index(fun(Index, _Dir) ->
+        Target = {<<"index:as-of:groups">>, key(700)},
+        P = quod_dtx:initial_projection(Target, 0),
+        Signer = signer(),
+        {A, ARef} = direct_abort(Target, key(701), key(702), 1, Signer),
+        {B, BRef} = direct_abort(Target, key(703), key(704), 2, Signer),
+        {ok, P, [_]} = phase_apply(Index, A, ARef, P),
+        {ok, View} = quod_dtx_phase_index:capture(Index, 11),
+        {ok, P, [_]} = phase_apply(Index, B, BRef, P),
+        ?assertMatch({ok, #{records := #{finalize := _}}}, quod_dtx_phase_index:history(View, key(701))),
+        ?assertEqual({ok, quod_dtx:initial_group_history()}, quod_dtx_phase_index:history(View, key(703))),
+        ?assertMatch({ok, #{records := #{finalize := _}}}, quod_dtx_phase_index:history(Index, key(703)))
+    end).
+
+committee_capture_keeps_old_eras_and_route_values_test() ->
+    with_index(fun(Index, _Dir) ->
+        Era1 = {1, [key(710)], key(711), #{key(710) => {"old", 1}}},
+        Era2 = {4, [key(710), key(712)], key(713), #{}},
+        Era3 = {7, [key(710), key(712)], key(713), #{key(710) => {"new", 2}}},
+        ok = quod_dtx_phase_index:commit_delta(Index, era_delta([Era1, Era2])),
+        {ok, Before} = quod_dtx_phase_index:capture(Index, 6),
+        ok = quod_dtx_phase_index:commit_delta(Index, era_delta([Era2, Era3])),
+        {ok, After} = quod_dtx_phase_index:capture(Index, 7),
+        ?assertEqual({ok, Era1}, quod_dtx_phase_index:committee(Before, 3)),
+        ?assertEqual({ok, Era2}, quod_dtx_phase_index:committee(Before, 6)),
+        ?assertEqual(not_found, quod_dtx_phase_index:committee(Before, 7)),
+        ?assertEqual({ok, Era2}, quod_dtx_phase_index:committee(After, 6)),
+        ?assertEqual({ok, Era3}, quod_dtx_phase_index:committee(After, 7)),
+        ?assertEqual({error, bad_phase_index_delta},
+            quod_dtx_phase_index:commit_delta(Index, era_delta([setelement(4, Era2, #{key(710) => {"overwrite", 3}})]))),
+        ?assertEqual({ok, Era2}, quod_dtx_phase_index:committee(Before, 4))
+    end).
+
+discarded_committee_delta_does_not_mutate_the_index_test() ->
+    with_index(fun(Index, _Dir) ->
+        _Discarded = era_delta([{1, [key(720)], key(721), #{}}]),
+        {ok, View} = quod_dtx_phase_index:capture(Index, 1),
+        ?assertEqual(not_found, quod_dtx_phase_index:committee(View, 1)),
+        ?assertMatch({ok, #{rows := 0}}, quod_dtx_phase_index:stats(Index))
+    end).
+
+owner_death_voids_a_read_only_capture_test() ->
+    with_tmp(fun(Dir, Ns) ->
+        Parent = self(),
+        {Owner, Mon} = spawn_monitor(fun() ->
+            {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+            ok = quod_dtx_phase_index:commit_delta(Index, era_delta([{1, [key(730)], key(731), #{}}])),
+            {ok, View} = quod_dtx_phase_index:capture(Index, 1),
+            Parent ! {captured_index, self(), View},
+            receive stop -> ok end
+        end),
+        View = receive {captured_index, Owner, V} -> V after 1000 -> error(capture_missing) end,
+        ?assertMatch({ok, _}, quod_dtx_phase_index:committee(View, 1)),
+        exit(Owner, kill),
+        receive {'DOWN', Mon, process, Owner, killed} -> ok after 1000 -> error(owner_not_down) end,
+        ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:history(View, key(732))),
+        ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:committee(View, 1))
+    end).
+
+capture_cost_is_constant_by_call_count_test() ->
+    Counts = [capture_cost(N) || N <- [8, 64, 257]],
+    ?assertEqual([1, 1, 1], Counts).
+
+capture_cost(N) ->
+    with_tmp(fun(Dir, Ns) ->
+        Parent = self(),
+        {Owner, Mon} = spawn_monitor(fun() ->
+            {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+            %% One distinct era per entry is the worst case, not an empty
+            %% prefix or one unchanging committee hiding a linear capture.
+            ok = quod_dtx_phase_index:commit_delta(Index, era_delta(
+                [{H, [key(740)], key(1000 + H), #{}} || H <- lists:seq(1, N)])),
+            Parent ! {index_ready, self()},
+            receive capture ->
+                {ok, View} = quod_dtx_phase_index:capture(Index, N),
+                Parent ! {captured_index, self(), View}
+            end,
+            receive stop -> ok = quod_dtx_phase_index:close(Index) end
+        end),
+        receive {index_ready, Owner} -> ok after 1000 -> error(index_not_ready) end,
+        %% All DETS API work by the capture owner is counted, not merely one
+        %% convenient lookup helper; a scan/copy variant cannot hide a fold.
+        _ = erlang:trace_pattern({dets, '_', '_'}, true, []),
+        1 = erlang:trace(Owner, true, [call, {tracer, self()}]),
+        try
+            Owner ! capture,
+            receive {captured_index, Owner, _} -> ok after 1000 -> error(capture_missing) end,
+            Barrier = erlang:trace_delivered(Owner),
+            Calls = capture_calls(Owner, Barrier, []),
+            ?assertMatch([{lookup, [_Table, era_tip]}], Calls),
+            length(Calls)
+        after
+            _ = erlang:trace(Owner, false, [call]),
+            _ = erlang:trace_pattern({dets, '_', '_'}, false, []),
+            Owner ! stop,
+            receive {'DOWN', Mon, process, Owner, normal} -> ok after 1000 -> error(owner_not_stopped) end
+        end
+    end).
+
+capture_calls(Owner, Barrier, Acc) ->
+    receive
+        {trace, Owner, call, {dets, Function, Args}} -> capture_calls(Owner, Barrier, [{Function, Args} | Acc]);
+        {trace_delivered, Owner, Barrier} -> lists:reverse(Acc)
+    after 1000 -> error(capture_trace_missing)
+    end.
+
+era_delta(Eras) -> lists:foldl(fun(Era, D) -> quod_dtx_phase_index:preview_committee(D, Era) end,
+                              quod_dtx_phase_index:new_delta(), Eras).
+
 constant_work_extent_stats_follow_committed_rows_test() ->
     with_index(
       fun(Index, _DataDir) ->

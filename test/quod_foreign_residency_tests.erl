@@ -383,7 +383,7 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
     end,
     Dir = quod_foreign_log_tests:temp_dir("verified-cursor"),
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
-    MFAs = [{quod_ledger_store, open, 3}, {quod_foreign_log, replay_cache, 7}],
+    MFAs = [{quod_ledger_store, open, 3}, {quod_foreign_log, replay_cache, 6}],
     try
         {module, quod_ledger_store} = code:ensure_loaded(quod_ledger_store),
         [1 = erlang:trace_pattern(MFA, true, [local]) || MFA <- MFAs],
@@ -395,7 +395,7 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
         %% Positive control: this exact trace observes the real initial full
         %% open. A disabled hook cannot satisfy the subsequent zero-work test.
         ?assertEqual(1, call_count({quod_ledger_store, open, 3}, WarmCalls)),
-        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 7}, WarmCalls)),
+        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 6}, WarmCalls)),
         FilesBefore = phase_files(Dir, Identity),
         ?assertEqual(1, length(FilesBefore)),
         _ = drain_fetches(),
@@ -421,7 +421,7 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
                    <<"quod.foreign.verification_worker">>, RootSpan#span.trace_id),
         Attributes = otel_attributes:map(Worker#span.attributes),
         ?assertEqual(0, call_count({quod_ledger_store, open, 3}, Calls)),
-        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 7}, Calls)),
+        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 6}, Calls)),
         ?assertEqual(FilesBefore, phase_files(Dir, Identity)),
         ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
         ?assertEqual(0, maps:get('quod.foreign.cold_opens', Attributes)),

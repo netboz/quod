@@ -55,7 +55,7 @@ reviewed_sites() ->
      %% Local and foreign installation all use the sole store append API.
      {{quod_simplex, append_genesis, 2}, {call, quod_ledger_store, append, 2}},
      {{quod_simplex, persist_entry, 4}, {call, quod_ledger_store, append, 2}},
-     {{quod_simplex, apply_catchup_window, 4}, {call, quod_ledger_store, append, 2}},
+     {{quod_simplex, apply_catchup_window, 5}, {call, quod_ledger_store, append, 2}},
      {{quod_foreign_log, persist_verified_page, 6}, {call, quod_ledger_store, append, 2}},
      %% The existing predicate registry is the sole unresolved dynamic MFA.
      {{quod_predicates, dispatch, 3}, dynamic_dispatch}].

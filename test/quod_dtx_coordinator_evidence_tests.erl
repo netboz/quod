@@ -111,7 +111,7 @@ resolver_errors_keep_coordinator_retry_policy_test_() ->
                 resolve_reply(Mode, Wrong, remote_source(F), 2000)
             end),
             ?assertEqual(retry, Result),
-            ?assertEqual([], calls(quod_simplex, history_view, Calls)),
+            ?assertEqual([], calls(quod_simplex, history_view_at, Calls)),
             ?assertEqual([], calls(quod_foreign_log, spawn_verification_worker, Calls))
         end)
     end}} || Mode <- [wave, accepted, observed]].
@@ -208,8 +208,8 @@ outer_phase_walk_stops_after_committed_reference_test_() ->
             io:format("outer_phase_probe ~p: ~p~n", [Mode,
               #{resolver_attempts => length(Admissions),
                 deadlines => [D || [_, _, _, _, _, D] <- Admissions],
-                captures => length([ok || [T, committed, _] <-
-                                  calls(quod_simplex, history_view, Calls), T =:= Target]),
+                captures => length([ok || [T, _, _] <-
+                                  calls(quod_simplex, history_view_at, Calls), T =:= Target]),
                 foreign_jobs => length(calls(quod_foreign_log, spawn_verification_worker, Calls)),
                 outcome => case Result of {ok, _} -> verified; Other -> Other end}]),
             ?assertEqual(1, length(Admissions)),
@@ -263,8 +263,8 @@ outer_phase_walk_proof_and_delivery_control_test_() ->
             Admissions = calls(quod_foreign_log, resolve_reference, Calls),
             io:format("outer_proof_probe ~p/~p: ~p~n", [Mode, Proof,
               #{resolver_attempts => length(Admissions),
-                captures => length([ok || [T, committed, _] <-
-                                  calls(quod_simplex, history_view, Calls), T =:= Target]),
+                captures => length([ok || [T, _, _] <-
+                                  calls(quod_simplex, history_view_at, Calls), T =:= Target]),
                 outcome => case Result of {ok, _} -> verified; Other -> Other end}]),
             ?assertEqual(1, length(Admissions)),
             assert_resolver_admission(F, Hint, Calls),
@@ -331,12 +331,10 @@ assert_resolver_admission(#{target := Target, ref := Ref}, Hint, Calls) ->
     [[_, _, _, _, _, Deadline]] = Admissions,
     ?assert(is_integer(Deadline)),
     ?assert(Deadline =< quod_time:mono_ms() + 2000),
-    case calls(quod_simplex, history_view, Calls) of
-        [[Target, committed, Deadline]] -> ok;
-        %% The history API's public clause calls its exact-PID clause.
-        [[Target, committed, Deadline], [{_, Target}, committed, Deadline]] -> ok;
-        Other -> error({wrong_capture_budget, Other})
-    end.
+    %% The original allowance reaches the sufficient-view API once, with the
+    %% exact required height. No private recursive-call allowance is needed.
+    ?assertEqual([[Target, element(5, Ref), Deadline]],
+                 calls(quod_simplex, history_view_at, Calls)).
 
 remote_source(#{ref := Ref, hint := Hint, winner := Peer}) ->
     {reply_source, remote, Peer, [{Ref, Hint}]}.
@@ -395,16 +393,19 @@ start_local_owner(F, Dir) ->
         Ns = maps:get(ns, F),
         {ok, Empty} = quod_ledger_store:open(Ns, Dir),
         {ok, Store} = quod_ledger_store:append(Empty, maps:get(chain, F)),
+        {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
         try
             %% Reuse the signed history's existing owner-view constructor;
             %% it replays once during fixture setup, before tracing starts.
-            View = quod_foreign_log_tests:local_fixture_view(Store, F),
+            View = quod_foreign_log_tests:local_fixture_view(Store, F, Index),
             Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
                             [named_table, protected, set]),
             true = ets:insert(Table, {anchor, maps:get(anchor, F)}),
             Parent ! {local_owner_ready, self()},
             local_owner_loop(Parent, View)
-        after quod_ledger_store:close(Store)
+        after
+            quod_dtx_phase_index:close(Index),
+            quod_ledger_store:close(Store)
         end
     end),
     receive
@@ -418,7 +419,8 @@ local_owner_loop(Parent, #{identity := Identity} = View, Gate) ->
     receive
         {hold_capture, Test} ->
             Test ! {capture_gate_ready, self()}, local_owner_loop(Parent, View, Test);
-        {'$gen_call', From, {history_view, Identity, committed, Deadline}} ->
+        {'$gen_call', From, {history_view, Identity, {committed, Slot}, Deadline}} ->
+            ?assert(Slot =< maps:get(slot, View)),
             case Gate of
                 none -> ok;
                 Test -> Test ! {capture_held, self(), Deadline}, receive release_capture -> ok end
@@ -488,7 +490,7 @@ traced(Owners, Fun, Drive) ->
     MFAs = [{quod_foreign_log, resolve_reference, 6},
             {quod_foreign_log, verify_reference_deadline, 5},
             {quod_foreign_log, spawn_verification_worker, 3},
-            {quod_simplex, history_view, 3},
+            {quod_simplex, history_view_at, 3},
             {quod_catchup, verify_forward, 6},
             {quod_ledger_store, open, 2}, {quod_ledger_store, open, 3},
             {quod_ledger_store, open_ro, 2}, {quod_ledger_store, open_ro, 3},

@@ -217,12 +217,19 @@ init_per_suite(Config) ->
     lists:foreach(
       fun(Peer) -> set_network_identity(Peer, NetworkId) end,
       [Target, Asker, Third]),
-    %% Root's seed/spec requires a local replica on every node before durable
-    %% effects. Its only validator and effect author remains Target. The
-    %% signed Root-effect proof below must route around these real observers,
-    %% not mistake co-hosting for write eligibility.
+    %% Root's seed/spec requires a local replica before durable effects.
+    %% The old fixture declared its anchor as locally desired on every peer
+    %% but left Asker/Third without the corresponding owner. R2 correctly
+    %% treats that as unavailable local history, never as foreign permission.
+    %% Pin the refusal, then establish real non-voting replicas. Root writes
+    %% and effect custody still execute on Target, its sole validator.
     start_brahms(Target, ?ROOT_NS, TargetAddr, []),
     lists:foreach(fun({RootPeer, RootPub, RootAddr}) ->
+        ?assertEqual(undefined,
+            peer:call(RootPeer, quod_reg, where, [{quod_simplex, ?ROOT_NS}])),
+        RootDeadline = peer:call(RootPeer, quod_time, mono_ms, []) + 1000,
+        ?assertEqual({error, not_ready}, peer:call(RootPeer, quod_simplex,
+            history_view_at, [{?ROOT_NS, RootAnchor}, 1, RootDeadline])),
         start_join_namespace(RootPeer, RootPub, ?ROOT_NS, RootAnchor, [TargetAddr], Config),
         start_brahms(RootPeer, ?ROOT_NS, RootAddr, [TargetAddr]),
         wait_ready(RootPeer, ?ROOT_NS, {effect_custody_capacity, 64}),

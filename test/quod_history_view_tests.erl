@@ -2,6 +2,123 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+future_view_waits_for_sufficient_progress_without_capturing_prefix_test() ->
+    with_owner(fun(Owner, Ns, Identity, Entry, _Claim, _OperationRef) ->
+        H = (quod_ledger:entry_view(Entry))#entry.index,
+        observe_history(Owner),
+        D = quod_time:mono_ms() + 3000,
+        Reader = future_reader(Identity, H + 2, D),
+        ?assertEqual({pending, H}, observed_history(Owner, H + 2, D)),
+        %% Duplicate and below-target progress cannot initiate another query.
+        quod_reg:publish({committed, Ns}, {certified_head, Ns, H}),
+        append_owner(Owner, H + 1),
+        append_owner(Owner, H + 2),
+        {ok, View} = future_result(Reader),
+        Expected = H + 2,
+        ?assertMatch(#{owner := Owner, identity := Identity, slot := Expected}, View),
+        ?assertEqual({ok, View}, observed_history(Owner, H + 2, D)),
+        receive {history_observed, Owner, _, _, _} -> error(extra_capture)
+        after 0 -> ok end
+    end).
+
+future_view_owner_loss_returns_unavailable_without_replacement_test() ->
+    with_owner(fun(Owner, _Ns, Identity, Entry, _Claim, _OperationRef) ->
+        H = (quod_ledger:entry_view(Entry))#entry.index,
+        observe_history(Owner),
+        D = quod_time:mono_ms() + 3000,
+        Reader = future_reader(Identity, H + 1, D),
+        ?assertEqual({pending, H}, observed_history(Owner, H + 1, D)),
+        stop_owner(Owner),
+        ?assertEqual({error, not_ready}, future_result(Reader))
+    end).
+
+future_view_uses_the_original_deadline_test() ->
+    with_owner(fun(Owner, Ns, Identity, Entry, _Claim, _OperationRef) ->
+        H = (quod_ledger:entry_view(Entry))#entry.index,
+        observe_history(Owner),
+        D = quod_time:mono_ms() + 100,
+        Reader = future_reader(Identity, H + 1, D),
+        ?assertEqual({pending, H}, observed_history(Owner, H + 1, D)),
+        quod_reg:publish({committed, Ns}, {certified_head, Ns, H}),
+        ?assertEqual({error, timeout}, future_result(Reader)),
+        ?assert(quod_time:mono_ms() >= D),
+        receive {history_observed, Owner, _, _, _} -> error(deadline_renewed)
+        after 0 -> ok end
+    end).
+
+future_view_keeps_an_existing_progress_subscription_test() ->
+    with_owner(fun(_Owner, Ns, Identity, Entry, _Claim, _OperationRef) ->
+        H = (quod_ledger:entry_view(Entry))#entry.index,
+        Key = {committed, Ns},
+        true = quod_reg:subscribe(Key),
+        try
+            Before = gproc:get_value(quod_reg:prop(Key)),
+            ?assertMatch({ok, _}, quod_simplex:history_view_at(
+                                   Identity, H, quod_time:mono_ms() + 1000)),
+            ?assertEqual(Before, gproc:get_value(quod_reg:prop(Key)))
+        after quod_reg:unsubscribe(Key) end
+    end).
+
+future_view_does_not_keep_a_temporary_subscription_test() ->
+    with_owner(fun(_Owner, Ns, Identity, Entry, _Claim, _OperationRef) ->
+        H = (quod_ledger:entry_view(Entry))#entry.index,
+        ?assertMatch({ok, _}, quod_simplex:history_view_at(
+                               Identity, H, quod_time:mono_ms() + 1000)),
+        ?assertError(badarg, gproc:get_value(quod_reg:prop({committed, Ns})))
+    end).
+
+future_view_different_anchor_is_not_local_evidence_test() ->
+    with_owner(fun(_Owner, Ns, _Identity, _Entry, _Claim, _OperationRef) ->
+        ?assertEqual({error, invalid_identity},
+                     quod_simplex:history_view_at(
+                       {Ns, <<19:256>>}, 1, quod_time:mono_ms() + 1000))
+    end).
+
+absent_desired_exact_owner_is_not_foreign_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"history-view:absent-desired">>,
+    Anchor = <<97:256>>,
+    Saved = application:get_env(quod, namespace_desired),
+    application:set_env(quod, namespace_desired,
+                        #{content => #{Ns => #{genesis_hash => Anchor}}}),
+    try
+        D = quod_time:mono_ms() + 1000,
+        ?assertEqual({error, not_ready},
+                     quod_simplex:history_view_at({Ns, Anchor}, 1, D)),
+        ?assertEqual({error, not_hosted},
+                     quod_simplex:history_view_at({Ns, <<98:256>>}, 1, D))
+    after
+        case Saved of
+            {ok, Value} -> application:set_env(quod, namespace_desired, Value);
+            undefined -> application:unset_env(quod, namespace_desired)
+        end
+    end.
+
+observe_history(Owner) ->
+    Owner ! {observe_history, self()},
+    receive {observing_history, Owner} -> ok
+    after 1000 -> error(history_observer_not_installed) end.
+
+observed_history(Owner, Slot, D) ->
+    receive {history_observed, Owner, {committed, Slot}, D, Reply} -> Reply
+    after 1000 -> error(history_query_not_observed) end.
+
+future_reader(Identity, Slot, D) ->
+    Parent = self(),
+    spawn(fun() ->
+        Parent ! {future_view_result, self(),
+                  quod_simplex:history_view_at(Identity, Slot, D)}
+    end).
+
+future_result(Reader) ->
+    receive {future_view_result, Reader, Result} -> Result
+    after 1500 -> error(future_view_stalled) end.
+
+append_owner(Owner, Expected) ->
+    Owner ! {append_noop, self()},
+    receive {appended, Owner, Expected} -> ok
+    after 1000 -> error(owner_did_not_append) end.
+
 %% These tests exercise the public evidence reader and the real owner-view
 %% constructor over a durable sparse index. The owner fixture is deliberately
 %% not a consensus simulation; certificates use real keys, while append and
@@ -263,12 +380,22 @@ with_owner(Fun) ->
         _ = file:del_dir_r(Dir)
     end.
 
-owner_loop(State, Store) ->
+owner_loop(State, Store) -> owner_loop(State, Store, none).
+
+owner_loop(State, Store, Observer) ->
     receive
         {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
-            gen:reply(From, quod_simplex:test_local_history_view(
-                             Identity, Requirement, Deadline, State)),
-            owner_loop(State, Store);
+            Reply = quod_simplex:test_local_history_view(
+                      Identity, Requirement, Deadline, State),
+            gen:reply(From, Reply),
+            case Observer of
+                none -> ok;
+                _ -> Observer ! {history_observed, self(), Requirement, Deadline, Reply}
+            end,
+            owner_loop(State, Store, Observer);
+        {observe_history, Caller} ->
+            Caller ! {observing_history, self()},
+            owner_loop(State, Store, Caller);
         {pause_capture, Caller} ->
             receive
                 {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
@@ -278,7 +405,7 @@ owner_loop(State, Store) ->
                                Identity, Requirement, Deadline, State),
                     Caller ! {owner_capture_result, self(), Result},
                     gen:reply(From, Result),
-                    owner_loop(State, Store)
+                    owner_loop(State, Store, Observer)
             end;
         {append_noop, Caller} ->
             Next = quod_ledger_store:last(Store) + 1,
@@ -286,8 +413,10 @@ owner_loop(State, Store) ->
             {ok, Store1} = quod_ledger_store:append(Store, [Entry]),
             State1 = quod_simplex:test_state_set(
                        slot, Next, quod_simplex:test_state_set(store, Store1, State)),
+            Ns = quod_ledger_store:namespace(Store1),
+            quod_reg:publish({committed, Ns}, {certified_head, Ns, Next}),
             Caller ! {appended, self(), Next},
-            owner_loop(State1, Store1);
+            owner_loop(State1, Store1, Observer);
         stop -> ok
     end.
 

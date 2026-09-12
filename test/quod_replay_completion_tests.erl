@@ -381,7 +381,8 @@ sink(F = #{worker := W}, Source, Es, P) ->
                                feed -> {feed, replay};
                                live_feed -> {feed, live}
                  end,
-    gen_statem:call(owner(F), {sink_catchup, Capability, Es, P}, 5000).
+    gen_statem:call(owner(F), {sink_catchup, Capability, Es, P,
+                              quod_dtx_phase_index:new_delta()}, 5000).
 target(F) -> {namespace(F), quod_simplex:genesis_hash(namespace(F))}.
 domain(F) -> quod_simplex:consensus_domain(namespace(F), element(2, target(F))).
 entry(F, H, noop, _P) -> skipped(F, H);

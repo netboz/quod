@@ -1,4 +1,5 @@
 -module(quod_simplex).
+-include("quod_dtx_owner.hrl").
 -moduledoc """
 Per-namespace **DispersedSimplex** Byzantine consensus — quod's ordering layer,
 replacing the earlier hand-rolled Raft ledger. One consensus instance per
@@ -228,7 +229,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_outbox/1,
          test_ingress_needs_drain/2,
          test_round_probe/1, test_route/4,
-         test_trace_block/5, test_start_content_validation/5,
+         test_trace_block/5, test_trace_block_event/5, test_start_content_validation/5,
          on_content_foreign_verdict/6,
          proposal_visible/2, reseat_engine/2,
          committee_view_id/4, test_committee_id/1,
@@ -1092,42 +1093,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     waiting :: queue:queue(#dtx_intent{})
 }).
 
-%% Keep each retained semantic control and its exact signed envelope once and
-%% re-drive it; never copy it into the ordinary transaction custody queues.
-%% Logical readiness, not a compiled population cap, controls scheduling.
--record(dtx_submission, {
-    record :: quod_dtx:control_record(),
-    control :: quod_dtx:control(),
-    envelope :: binary(),
-    group_id :: <<_:256>>,
-    digest :: <<_:256>>,
-    inserted_at :: integer(),
-    observation_started_at :: integer(),
-    %% Observation follows this existing volatile control row, never its
-    %% signed envelope or journal. Recovered controls have no caller parent.
-    trace_ctx = #{} :: quod_trace:context(),
-    validation_sidecar = [] :: [quod_dtx_endpoint:validation_item()],
-    placement :: ready | blocked,
-    %% Volatile placement on the existing consensus link.  The retained row
-    %% remains the sole custody owner; this marker only prevents unrelated
-    %% mailbox traffic from enqueueing the same reliable relay repeatedly.
-    %% A replacement link has a different pid and therefore re-drives it.
-    relay_placement = none :: none | {node_id(), pid()},
-    bytes :: non_neg_integer(),
-    waiters = #{} :: #{pid() => true}
-}).
-
-%% One bundled invariant for retained signed controls. All fields are mutated
-%% together by this Simplex process; this is not another runtime owner.
--record(retained_dtx, {
-    rows = #{} :: #{<<_:256>> => #dtx_submission{}},
-    ready = gb_sets:empty() :: gb_sets:set({term(), <<_:256>>}),
-    blocked = gb_sets:empty() :: gb_sets:set({term(), <<_:256>>}),
-    waiter_index = #{} :: #{pid() => <<_:256>>},
-    bytes = 0 :: non_neg_integer(),
-    fingerprint = undefined :: undefined | term()
-}).
-
 %% Volatile request ownership for the process-free DTX endpoint. The request is
 %% not sent until the exact pinned link authenticates; its monitor then owns the
 %% only accepted reply path. The timeout is a final silent-peer safeguard, not a
@@ -1336,10 +1301,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
             dtx_projection = undefined :: undefined | quod_dtx:projection(),
             dtx_lanes = #{} :: #{{binary(), node_id()} => non_neg_integer()},
-            dtx_pending = #{}
-              :: #{<<_:256>> => {<<_:256>>, <<_:256>>}},
             dtx_admission = none :: none | #dtx_admission{},
-            retained_dtx = #retained_dtx{} :: #retained_dtx{},
+            retained_dtx = quod_dtx_owner:new() :: quod_dtx_owner:state(),
             %% One mailbox edge coalesces every control already admitted by
             %% this process. It is deliberately a message, not a batching
             %% timer: controls already waiting in the mailbox join the same
@@ -1530,7 +1493,6 @@ test_state_set(author_seqs, V, S) -> S#s{author_seqs = V};
 test_state_set(author_admissions, V, S) -> S#s{author_admissions = V};
 test_state_set(dtx_projection, V, S) -> S#s{dtx_projection = V};
 test_state_set(dtx_lanes, V, S) -> S#s{dtx_lanes = V};
-test_state_set(dtx_pending, V, S) -> S#s{dtx_pending = V};
 test_state_set(history_head, V, S) -> S#s{history_head = V};
 test_state_set(phase_index, V, S) -> S#s{phase_index = V};
 test_state_set(store, V, S)       -> S#s{store = V};
@@ -1566,7 +1528,7 @@ test_state_set(trace_owner_turns, V, S) -> S#s{trace_owner_turns = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
 test_state_set(dtx_chan, V, S) -> S#s{dtx_chan = V};
 test_state_set(retained_dtx, empty, S) ->
-    S#s{retained_dtx = #retained_dtx{}};
+    S#s{retained_dtx = quod_dtx_owner:new()};
 test_state_set(dtx_coordinators, V, S) -> S#s{dtx_coordinators = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
@@ -1799,7 +1761,7 @@ test_seed_dtx_submission_at(
     Digest = quod_dtx:record_digest(Control),
     {ok, Envelope} = quod_dtx:encode_control(Control),
     Placement = test_retained_placement(
-                  retention_disposition(
+                  quod_dtx_owner:placement(
                     quod_dtx:control_body(Control),
                     S#s.dtx_projection)),
     Submission =
@@ -1810,7 +1772,7 @@ test_seed_dtx_submission_at(
           observation_started_at = InsertedAt,
           placement = Placement, bytes = byte_size(Envelope),
           waiters = test_dtx_waiter_set(Waiters)},
-    S#s{retained_dtx = retained_put_new(Submission, Registry)}.
+    S#s{retained_dtx = quod_dtx_owner:put_new(Submission, Registry)}.
 test_retained_placement(ready) -> ready;
 test_retained_placement({blocked, _}) -> blocked;
 test_retained_placement(stale) -> error(stale_test_dtx_submission).
@@ -1826,25 +1788,18 @@ test_resolve_committed_dtx(Entry, Payload, S) ->
     resolve_committed_dtx(Entry, Payload, S).
 test_retain_dtx_record(Record, Waiter, S) ->
     retain_dtx_record(Record, Waiter, [], S).
-test_dtx_retain_admissible(
-  Record, #s{dtx_projection = Projection}) ->
-    case retention_disposition(Record, Projection) of
+test_dtx_retain_admissible(Record, S) ->
+    case retention_disposition(Record, S) of
+        {included, _} -> false;
         ready -> true;
         {blocked, _} -> true;
         {refused, _} -> false;
         stale -> false
     end.
 test_dtx_submission_waiters(#s{retained_dtx = Registry}) ->
-    retained_waiter_count(Registry).
+    quod_dtx_owner:waiter_count(Registry).
 test_retained_dtx_state(#s{retained_dtx = Registry}) ->
-    #{retained => retained_count(Registry),
-      ready => retained_ready_count(Registry),
-      blocked => retained_blocked_count(Registry),
-      waiters => retained_waiter_count(Registry),
-      bytes => Registry#retained_dtx.bytes,
-      ready_order => gb_sets:to_list(Registry#retained_dtx.ready),
-      blocked_order => gb_sets:to_list(Registry#retained_dtx.blocked),
-      waiter_index => Registry#retained_dtx.waiter_index,
+    (quod_dtx_owner:stats(Registry))#{
       rows => maps:map(
                 fun(_Digest,
                     #dtx_submission{inserted_at = InsertedAt,
@@ -1859,8 +1814,7 @@ test_retained_dtx_state(#s{retained_dtx = Registry}) ->
                           validation_sidecar => ValidationSidecar,
                           placement => Placement,
                           relay_placement => RelayPlacement}
-                end, retained_rows(Registry)),
-      fingerprint => Registry#retained_dtx.fingerprint}.
+                end, quod_dtx_owner:rows(Registry))}.
 test_refresh_retained_readiness(S) ->
     finish_pending_begins_reconciliation(refresh_retained_readiness(S)).
 test_refresh_retained_dtx_signatures(S) ->
@@ -1908,7 +1862,7 @@ test_dtx_endpoint_counts(
      dtx_workers = Workers, retained_dtx = Registry}) ->
     #{correlations => map_size(Correlations),
       channels => map_size(Channels), workers => map_size(Workers),
-      submissions => retained_count(Registry)}.
+      submissions => quod_dtx_owner:count(Registry)}.
 test_owner_stats(S) ->
     {Current, CurrentBytes} = simplex_owner_current(S),
     #{owner_current => Current,
@@ -2284,6 +2238,8 @@ test_route(Pass, Origin, Change, S) ->
 test_round_probe(#s{round_probe = Probe}) -> Probe.
 test_trace_block(Slot, Hash, Name, S, Fun) ->
     trace_block_work(Slot, Hash, Name, #{}, S, Fun).
+test_trace_block_event(Slot, Hash, Name, Attributes, S) ->
+    trace_block_event(Slot, Hash, Name, Attributes, S).
 test_start_content_validation(Transactions, Timestamp, Slot, Hash, S) ->
     start_content_validation(Transactions, Timestamp, Slot, Hash, S).
 test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
@@ -3415,7 +3371,7 @@ restore_pending_dtx(
                           placement = retained_installation_placement(
                                         Record, Control, Digest, none, S),
                           bytes = byte_size(Envelope)},
-                    S#s{retained_dtx = retained_put_new(
+                    S#s{retained_dtx = quod_dtx_owner:put_new(
                                           Submission, S#s.retained_dtx)};
                 false ->
                     error({signing_journal_bad_pending, GroupId})
@@ -3473,8 +3429,7 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store, phase_index = PhaseInde
     {ok, Journal0} = quod_signing_journal:recover(
                        Ns, Domain, data_dir(Cfg)),
     Binding = {Ns, Anchor},
-    Projection0 = seed_pending_begins(
-                    Journal0, history_projection(Binding)),
+    Projection0 = history_projection(Binding),
     PendingTransactions0 =
         quod_signing_journal:pending_transactions(Journal0),
     {Projection, UncommittedTransactions} =
@@ -3488,8 +3443,8 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store, phase_index = PhaseInde
               end,
               {Projection0, PendingTransactions0}),
     S1 = install_projection(Projection, S0#s{slot = Last}),
-    {ok, Journal1} = reconcile_signing_journal(
-                       Last, Projection, Journal0),
+    {ok, Journal1} = quod_dtx_owner:reconcile_journal(
+                       Last, Projection, PhaseIndex, Journal0),
     Journal2 = retire_recovered_transactions(
                  PendingTransactions0, UncommittedTransactions, Journal1),
     S2 = reconcile_transaction_signing_custody(
@@ -3526,7 +3481,8 @@ initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := join} = Cfg) ->
     {ok, Journal0} = quod_signing_journal:initialize(
                        Ns, Domain, data_dir(Cfg)),
     Projection = history_projection({Ns, Anchor}),
-    {ok, Journal1} = reconcile_signing_journal(0, Projection, Journal0),
+    {ok, Journal1} = quod_dtx_owner:reconcile_journal(
+                       0, Projection, S0#s.phase_index, Journal0),
     finalize_restored_storage(
       install_projection(Projection, S0), Anchor, Journal1);
 initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := create} = Cfg) ->
@@ -3543,7 +3499,8 @@ initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := create} = Cfg) ->
                    history_projection({Ns, Anchor})),
     Projection = retain_owner_projection(Projection0, quod_dtx_phase_index:new_delta(), SAppended),
     S1 = install_projection(Projection, SAppended#s{slot = 1}),
-    {ok, Journal1} = reconcile_signing_journal(1, Projection, Journal0),
+    {ok, Journal1} = quod_dtx_owner:reconcile_journal(
+                       1, Projection, S1#s.phase_index, Journal0),
     finalize_restored_storage(S1, Anchor, Journal1).
 
 finalize_restored_storage(S0, Anchor, Journal) ->
@@ -3551,28 +3508,6 @@ finalize_restored_storage(S0, Anchor, Journal) ->
               next_author_seq =
                   maps:get(S0#s.self, S0#s.author_seqs, 0) + 1},
     {S1, Anchor, Journal}.
-
-reconcile_signing_journal(Slot, Projection, Journal) ->
-    PendingBegins = reconciled_pending_begins(Projection),
-    quod_signing_journal:reconcile(
-      Journal,
-      #{committed_slot => Slot,
-        live_dtx_lanes => maps:get(dtx_lanes, Projection),
-        current_admissions => maps:get(admissions, Projection),
-        pending_begins => PendingBegins}).
-
-seed_pending_begins(Journal, Projection) ->
-    PendingBegins = maps:map(
-                      fun(_GroupId, #{lane := Lane}) -> Lane end,
-                      quod_signing_journal:pending_begins(Journal)),
-    Projection#{dtx_pending := PendingBegins}.
-
-reconciled_pending_begins(
-  #{dtx_pending := PendingBegins, admissions := Admissions}) ->
-    maps:filter(
-      fun(_GroupId, {Admission, Author}) ->
-              maps:get(Author, Admissions, undefined) =:= Admission
-      end, PendingBegins).
 
 require_configured_anchor(_Anchor, #{mode := create}) -> ok;
 require_configured_anchor(Anchor, #{mode := join, genesis_hash := Anchor}) -> ok;
@@ -4522,18 +4457,10 @@ current_dtx_binding(#s{ns = Ns}) ->
 %% Keep the public admission check above strict while retaining durable work
 %% across a transient sync or Prolog-readiness dip.
 dtx_owner_binding(
-  #s{ns = Ns, genesis_hash = <<_:256>> = Anchor, self = Self,
+  #s{ns = Ns, genesis_hash = Anchor, self = Self,
      author_admissions = Admissions,
-     dtx_projection = Projection} = S)
-  when is_map(Projection) ->
-    case {is_participant(S), maps:get(Self, Admissions, undefined)} of
-        {true, <<_:256>> = Admission} ->
-            {ok, {Ns, Anchor, Self, Admission}};
-        _ ->
-            {error, not_in_charge}
-    end;
-dtx_owner_binding(#s{ns = Ns}) ->
-    {error, {ontology_unavailable, Ns}}.
+     dtx_projection = Projection} = S) ->
+    quod_dtx_owner:binding(Ns, Anchor, Self, Admissions, is_participant(S), Projection).
 
 enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
                    S = #s{ns = Ns, dtx_admission = Admission0}) ->
@@ -4701,7 +4628,7 @@ dtx_group_registered(GroupId,
         maps:fold(
           fun(_Digest, #dtx_submission{group_id = Registered}, Found) ->
                   Found orelse Registered =:= GroupId
-          end, false, retained_rows(Registry)).
+          end, false, quod_dtx_owner:rows(Registry)).
 
 dtx_intent_binding_status(Begin, GroupRef, S = #s{sync = Sync}) ->
     case {current_dtx_binding(S), quod_dtx:begin_group_ref(Begin)} of
@@ -5298,36 +5225,8 @@ local_dtx_progress_changed(S0, S1) ->
         endpoint_read_ready(S0) =/= endpoint_read_ready(S1) orelse
         endpoint_write_ready(S0) =/= endpoint_write_ready(S1).
 
-dtx_coordinator_desired(S) ->
-    case dtx_owner_binding(S) of
-        {ok, Binding} ->
-            %% A not-yet-committed journal row is the more exact source during
-            %% the brief finality/reconciliation overlap for the same GroupId.
-            maps:merge(
-              committed_origin_recoveries(S),
-              pending_origin_begins(S, Binding));
-        {error, _} ->
-            #{}
-    end.
-
-pending_origin_begins(#s{retained_dtx = Registry}, Binding) ->
-    maps:from_list(
-      [{GroupId, {record, GroupId, Begin, GroupRef}}
-         || #dtx_submission{
-              record = {quod_dtx_begin, 3, _, _, _} = Begin,
-              group_id = GroupId}
-                <- maps:values(retained_rows(Registry)),
-            {ok, GroupRef} <- [quod_dtx:begin_group_ref(Begin)],
-            group_ref_binding(GroupRef) =:= Binding]).
-
-committed_origin_recoveries(
-  #s{dtx_projection = Projection})
-  when is_map(Projection) ->
-    maps:from_list(
-      [{GroupId, {reference, GroupId, BeginRef}}
-       || {GroupId, BeginRef} <- quod_dtx:origin_recoveries(Projection)]);
-committed_origin_recoveries(_S) ->
-    #{}.
+dtx_coordinator_desired(S = #s{dtx_projection = Projection, retained_dtx = Registry}) ->
+    quod_dtx_owner:desired(dtx_owner_binding(S), Projection, Registry).
 
 reconcile_dtx_coordinators(
   Desired, S0 = #s{dtx_coordinators = Existing}) ->
@@ -5397,7 +5296,7 @@ desired_dtx_trace_context(_Recovered, _S) ->
     otel_ctx:new().
 
 retained_dtx_trace_context(Record, #s{retained_dtx = Registry}) ->
-    case maps:get(quod_dtx:record_digest(Record), retained_rows(Registry), none) of
+    case maps:get(quod_dtx:record_digest(Record), quod_dtx_owner:rows(Registry), none) of
         #dtx_submission{trace_ctx = Context} -> Context;
         none -> otel_ctx:new()
     end.
@@ -5660,7 +5559,7 @@ classify_dtx_group_barrier(GroupRef, _AppliedFloor, _S) ->
 local_group_pending(
   GroupId, GroupRef,
   #s{dtx_admission = Admission, retained_dtx = Registry}) ->
-    Submissions = retained_rows(Registry),
+    Submissions = quod_dtx_owner:rows(Registry),
     dormant_group_matches(GroupId, GroupRef, Admission) orelse
         maps:fold(
           fun(_Digest, #dtx_submission{group_id = PendingGroup}, Found) ->
@@ -6702,10 +6601,10 @@ dtx_endpoint_result_response(
   {submit, RequestId, RecordBlob}, {submit_result, Digest, Result}, S) ->
     TargetIdentity = target_identity(S),
     case Result of
-        {ok, Ref, Entry} ->
+        {ok, Ref, ValidationSidecar} ->
             case quod_dtx:certified_ref_binding(Ref) of
                 {ok, TargetIdentity, _Slot, Digest} ->
-                    {{accepted, RequestId, Digest, Ref}, [{Ref, Entry}]};
+                    {{accepted, RequestId, Digest, Ref}, ValidationSidecar};
                 _ ->
                     {{error, RequestId, not_ready}, []}
             end;
@@ -6890,7 +6789,7 @@ local_dtx_phase_pending(GroupId, Kind, S) ->
 
 retained_dtx_phase_pending(
   GroupId, Kind, #s{retained_dtx = Registry}) ->
-    Submissions = retained_rows(Registry),
+    Submissions = quod_dtx_owner:rows(Registry),
     maps:fold(
       fun(_Digest,
           #dtx_submission{group_id = PendingGroup, control = Control}, Found) ->
@@ -7155,7 +7054,7 @@ drop_dtx_worker_caller(
 
 detach_dtx_endpoint_waiter(
   Pid, S = #s{retained_dtx = Registry}) ->
-    {_Found, Registry1} = retained_detach_waiter(Pid, Registry),
+    {_Found, Registry1} = quod_dtx_owner:detach_waiter(Pid, Registry),
     S#s{retained_dtx = Registry1}.
 
 drop_dtx_correlation_owner(
@@ -7384,19 +7283,25 @@ retain_relayed_dtx_control(Control, Envelope, ValidationSidecar, S)
 retain_dtx_submission(Kind, Record, Digest, Waiter, ValidationSidecar,
                       NewSubmission,
                       S = #s{retained_dtx = Registry}) ->
-    case retention_disposition(Record, S#s.dtx_projection) of
+    case retention_disposition(Record, S) of
+        {included, Ref} ->
+            %% No signature, registry row or proposal for already-certified
+            %% work. The ordinary response carries its exact reference; the
+            %% consumer verifies it through the existing evidence resolver.
+            Waiters = [{dtx_endpoint, Pid} || Pid <- maps:keys(dtx_waiter_set(Waiter))],
+            {ok, reply_waiters(Waiters, {ok, Ref, []}, S)};
         {refused, conflict} when Kind =:= prepare ->
             invalid_dtx_submission_reply(
               prepare, Digest, [conflict], S#s.dtx_projection, S);
         stale ->
             {error, stale_dtx_submission};
         _Retained ->
-            case maps:get(Digest, retained_rows(Registry), undefined) of
+            case maps:get(Digest, quod_dtx_owner:rows(Registry), undefined) of
                 Existing = #dtx_submission{} ->
                     Updated = merge_submission_validation_sidecar(
                                 Existing, ValidationSidecar),
-                    Registry0 = retained_replace(Updated, Registry),
-                    case retained_attach_waiter(Digest, Waiter, Registry0) of
+                    Registry0 = quod_dtx_owner:replace(Updated, Registry),
+                    case quod_dtx_owner:attach_waiter(Digest, Waiter, Registry0) of
                         {ok, Registry1} ->
                             {ok, schedule_dtx_drive(
                                    S#s{retained_dtx = Registry1})};
@@ -7424,13 +7329,24 @@ schedule_dtx_drive(S) ->
     self() ! dtx_drive,
     S#s{dtx_drive_scheduled = true}.
 
-%% The committed multi-group projection is the sole phase owner.  Retained
-%% controls use its public readiness verdict directly; there is no parallel
-%% singular-group marker or proposal rule in Simplex.
-retention_disposition(Record, Projection) when is_map(Projection) ->
-    quod_dtx:proposal_readiness(Record, Projection);
-retention_disposition(_Record, _Projection) ->
-    stale.
+%% One monotone admission rule: indexed inclusion before active readiness.
+%% The index is already current in this owner turn; no history replay, copied
+%% inventory or additional process is needed to recognize a late delivery.
+retention_disposition(Record, S) ->
+    quod_dtx_owner:admission(
+      Record, retention_history(quod_dtx:group_id(Record), S), S#s.dtx_projection).
+
+-ifdef(TEST).
+retention_history(_GroupId, #s{phase_index = undefined}) ->
+    quod_dtx:initial_group_history();
+retention_history(GroupId, S) -> indexed_retention_history(GroupId, S).
+-else.
+retention_history(GroupId, S) -> indexed_retention_history(GroupId, S).
+-endif.
+
+indexed_retention_history(GroupId, #s{phase_index = Index}) ->
+    {ok, History} = quod_dtx_phase_index:history(Index, GroupId),
+    History.
 
 retained_placement(ready) -> ready;
 retained_placement({blocked, _}) -> blocked;
@@ -7501,10 +7417,10 @@ install_dtx_submission(Record, Control, Envelope, Digest, Waiter,
               validation_sidecar_bytes(ValidationSidecar),
           waiters = dtx_waiter_set(Waiter)},
     {ok, schedule_dtx_drive(
-           S#s{retained_dtx = retained_put_new(Submission, Registry)})}.
+           S#s{retained_dtx = quod_dtx_owner:put_new(Submission, Registry)})}.
 
 retained_installation_placement(Record, Control, Digest, OldSequence, S) ->
-    Disposition = retention_disposition(Record, S#s.dtx_projection),
+    Disposition = quod_dtx_owner:placement(Record, S#s.dtx_projection),
     case Disposition of
         stale ->
             %% Emit the bounded identifiers before the ordinary invariant
@@ -7556,172 +7472,21 @@ maybe_project_pending_begins(_Kind, _Ns, _Journal) ->
 dtx_waiter_set(none) -> #{};
 dtx_waiter_set({dtx_endpoint, Pid}) when is_pid(Pid) -> #{Pid => true}.
 
-retained_rows(#retained_dtx{rows = Rows}) -> Rows.
-
-retained_count(#retained_dtx{rows = Rows}) -> map_size(Rows).
-
-retained_waiter_count(#retained_dtx{waiter_index = Waiters}) ->
-    map_size(Waiters).
-
-retained_ready_count(#retained_dtx{ready = Ready}) -> gb_sets:size(Ready).
-
-retained_blocked_count(#retained_dtx{blocked = Blocked}) ->
-    gb_sets:size(Blocked).
-
-retained_order_key(#dtx_submission{control = Control, digest = Digest}) ->
-    {quod_dtx:control_order_key(Control), Digest}.
-
-retained_put_new(Row = #dtx_submission{digest = Digest,
-                                       bytes = Bytes,
-                                       waiters = Waiters,
-                                       placement = Placement},
-                 Registry = #retained_dtx{rows = Rows,
-                                          waiter_index = WaiterIndex,
-                                          bytes = Total}) ->
-    false = maps:is_key(Digest, Rows),
-    true = is_integer(Bytes) andalso Bytes >= 0,
-    true = maps:fold(
-             fun(Pid, true, Unique) ->
-                     Unique andalso not maps:is_key(Pid, WaiterIndex)
-             end, true, Waiters),
-    Registry1 = retained_add_order_key(Row, Placement, Registry),
-    Registry1#retained_dtx{
-      rows = Rows#{Digest => Row},
-      waiter_index = maps:fold(
-                       fun(Pid, true, Acc) -> Acc#{Pid => Digest} end,
-                       WaiterIndex, Waiters),
-      bytes = Total + Bytes}.
-
-retained_add_order_key(Row, ready,
-                       Registry = #retained_dtx{ready = Ready}) ->
-    Registry#retained_dtx{ready = gb_sets:add(
-                                    retained_order_key(Row), Ready)};
-retained_add_order_key(Row, blocked,
-                       Registry = #retained_dtx{blocked = Blocked}) ->
-    Registry#retained_dtx{blocked = gb_sets:add(
-                                      retained_order_key(Row), Blocked)}.
-
-retained_delete_order_key(Row, ready,
-                          Registry = #retained_dtx{ready = Ready}) ->
-    Registry#retained_dtx{ready = gb_sets:delete_any(
-                                    retained_order_key(Row), Ready)};
-retained_delete_order_key(Row, blocked,
-                          Registry = #retained_dtx{blocked = Blocked}) ->
-    Registry#retained_dtx{blocked = gb_sets:delete_any(
-                                      retained_order_key(Row), Blocked)}.
-
-retained_take(Digest,
-              Registry = #retained_dtx{rows = Rows,
-                                       waiter_index = WaiterIndex,
-                                       bytes = Total}) ->
-    case maps:take(Digest, Rows) of
-        {Row = #dtx_submission{bytes = Bytes, waiters = Waiters,
-                               placement = Placement}, Rest} ->
-            Registry1 = retained_delete_order_key(Row, Placement, Registry),
-            {Row,
-             Registry1#retained_dtx{
-               rows = Rest,
-               waiter_index = maps:fold(
-                                fun(Pid, true, Acc) -> maps:remove(Pid, Acc) end,
-                                WaiterIndex, Waiters),
-               bytes = Total - Bytes}};
-        error ->
-            error
-    end.
-
-retained_replace(Row = #dtx_submission{digest = Digest}, Registry) ->
-    case retained_take(Digest, Registry) of
-        {_Old, Registry1} -> retained_put_new(Row, Registry1);
-        error -> error({missing_retained_dtx, Digest})
-    end.
-
-retained_attach_waiter(_Digest, none, Registry) ->
-    {ok, Registry};
-retained_attach_waiter(
-  Digest, {dtx_endpoint, Pid},
-  Registry = #retained_dtx{rows = Rows, waiter_index = WaiterIndex})
-  when is_pid(Pid) ->
-    case {maps:get(Digest, Rows, undefined),
-          maps:get(Pid, WaiterIndex, undefined)} of
-        {#dtx_submission{}, Digest} ->
-            {ok, Registry};
-        {#dtx_submission{waiters = Waiters} = Row, undefined} ->
-            Row1 = Row#dtx_submission{waiters = Waiters#{Pid => true}},
-            {ok, Registry#retained_dtx{
-                   rows = Rows#{Digest => Row1},
-                   waiter_index = WaiterIndex#{Pid => Digest}}};
-        {#dtx_submission{}, _OtherDigest} ->
-            {error, waiter_already_owned};
-        {undefined, _} ->
-            {error, missing_retained_dtx}
-    end.
-
-retained_detach_waiter(
-  Pid, Registry = #retained_dtx{rows = Rows, waiter_index = WaiterIndex}) ->
-    case maps:take(Pid, WaiterIndex) of
-        {Digest, RestIndex} ->
-            Row = #dtx_submission{waiters = Waiters} = maps:get(Digest, Rows),
-            Row1 = Row#dtx_submission{waiters = maps:remove(Pid, Waiters)},
-            {true, Registry#retained_dtx{
-                     rows = Rows#{Digest => Row1},
-                     waiter_index = RestIndex}};
-        error ->
-            {false, Registry}
-    end.
-
-retained_waiter_tags(#dtx_submission{waiters = Waiters}) ->
-    [{dtx_endpoint, Pid} || Pid <- maps:keys(Waiters)].
-
-retained_readiness_fingerprint(#s{dtx_projection = Projection}) ->
-    Projection.
-
 refresh_retained_readiness(
-  S = #s{retained_dtx = #retained_dtx{fingerprint = Fingerprint}}) ->
-    Current = retained_readiness_fingerprint(S),
-    case Fingerprint =:= Current of
-        true -> {S, none};
-        false -> reclassify_retained_rows(Current, S)
-    end.
-
-reclassify_retained_rows(
-  Fingerprint,
-  S0 = #s{retained_dtx = #retained_dtx{rows = Rows}}) ->
-    {S1, Transition} = lists:foldl(
-           fun(Digest, {S, Pending}) ->
-                   {Next, Cleared} = reclassify_retained_row(Digest, S),
-                   {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
-           end, {S0, none}, maps:keys(Rows)),
-    Registry = S1#s.retained_dtx,
-    {S1#s{retained_dtx = Registry#retained_dtx{
-                                fingerprint = Fingerprint}}, Transition}.
-
-reclassify_retained_row(
-  Digest, S = #s{retained_dtx = Registry,
-                 dtx_projection = Projection}) ->
-    case maps:get(Digest, retained_rows(Registry), undefined) of
-        undefined ->
-            {S, none};
-        Row = #dtx_submission{record = Record, placement = OldPlacement} ->
-            case retention_disposition(Record, Projection) of
-                {refused, conflict} ->
-                    Reply = invalid_dtx_submission_reply(
-                              quod_dtx:record_kind(Record), Digest,
-                              [conflict], Projection, S),
-                    finish_retained_dtx(Digest, rejected, Reply, S);
-                stale ->
-                    retire_dtx_submission(
-                      Digest, stale_dtx_submission, S);
-                Disposition ->
-                    NewPlacement = retained_placement(Disposition),
-                    case NewPlacement =:= OldPlacement of
-                        true -> {S, none};
-                        false ->
-                            {S#s{retained_dtx = retained_replace(
-                                  Row#dtx_submission{
-                                    placement = NewPlacement}, Registry)}, none}
-                    end
-            end
-    end.
+  S0 = #s{retained_dtx = Registry, dtx_projection = Projection}) ->
+    {Classified, Retired} = quod_dtx_owner:classify(Projection, Registry),
+    lists:foldl(
+      fun({Row = #dtx_submission{record = Record, digest = Digest}, Reason}, {S, Pending}) ->
+          {Result, Reply} = case Reason of
+              {refused, conflict} ->
+                  {rejected, invalid_dtx_submission_reply(
+                               quod_dtx:record_kind(Record), Digest, [conflict], Projection, S)};
+              stale ->
+                  {dtx_retirement_result(stale_dtx_submission), {error, stale_dtx_submission}}
+          end,
+          {Next, Cleared} = finish_detached_retained_dtx(Row, Result, Reply, S),
+          {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
+      end, {S0#s{retained_dtx = Classified}, none}, Retired).
 
 %%%===================================================================
 %%% append (propose) → engine → commit → apply
@@ -9467,7 +9232,7 @@ propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
 drive_retained_dtx(S = #s{dtx_drive_scheduled = true}) ->
     S;
 drive_retained_dtx(S = #s{retained_dtx = Registry}) ->
-    case retained_count(Registry) of
+    case quod_dtx_owner:count(Registry) of
         0 -> S;
         _ -> drive_retained_dtx_nonempty(S)
     end.
@@ -9495,13 +9260,10 @@ drive_retained_dtx_nonempty(S) ->
             end
     end.
 
-eligible_dtx_wave(
-  S = #s{retained_dtx = #retained_dtx{rows = Rows, ready = Ready}}) ->
-    case gb_sets:is_empty(Ready) of
-        true -> [];
-        false ->
-            Ordered = [{Digest, maps:get(Digest, Rows)}
-                       || {_ControlOrderKey, Digest} <- gb_sets:to_list(Ready)],
+eligible_dtx_wave(S = #s{retained_dtx = Registry}) ->
+    case quod_dtx_owner:ready_rows(Registry) of
+        [] -> [];
+        Ordered ->
             [{_FirstDigest,
               #dtx_submission{control = FirstControl}} | _] = Ordered,
             Phase = quod_dtx:control_kind(FirstControl),
@@ -9707,7 +9469,7 @@ prioritize_validation_sidecar(Hints0) ->
 update_dtx_submission(Digest, Submission,
                       S = #s{retained_dtx = Registry}) ->
     Digest = Submission#dtx_submission.digest,
-    S#s{retained_dtx = retained_replace(Submission, Registry)}.
+    S#s{retained_dtx = quod_dtx_owner:replace(Submission, Registry)}.
 
 reject_collected_batch(Items, Count, S) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
@@ -9744,7 +9506,7 @@ consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
                   Sl > Committed andalso dtx_validation_active(Round)
           end, maps:to_list(Rounds)),
     RetainedDtx = RetainedMode =:= include_retained_dtx
-                  andalso retained_ready_count(Registry) > 0,
+                  andalso quod_dtx_owner:ready_count(Registry) > 0,
     DurableLock orelse VolatileBlock orelse PendingDtx orelse RetainedDtx.
 
 dtx_durable_lock(_Projection, strict_lock) -> false;
@@ -10036,13 +9798,13 @@ resolve_committed_dtx(
 
 resolve_committed_dtx_control(Entry, Control, Identity, Registry, S) ->
     Digest = quod_dtx:record_digest(Control),
-    case maps:is_key(Digest, retained_rows(Registry)) of
+    case maps:is_key(Digest, quod_dtx_owner:rows(Registry)) of
         true ->
             case quod_dtx:certified_entry_ref(Identity, Entry, Control) of
                 {ok, Ref} ->
                     S1 = adopt_committed_begin_owner(Control, Ref, S),
                     {S2, none} = finish_retained_dtx(
-                                   Digest, completed, {ok, Ref, Entry}, S1),
+                                   Digest, completed, {ok, Ref, [{Ref, Entry}]}, S1),
                     S2;
                 {error, Reason} ->
                     error({invalid_committed_dtx_reference,
@@ -10055,7 +9817,7 @@ resolve_committed_dtx_control(Entry, Control, Identity, Registry, S) ->
 %% The journaled Begin and its certified ledger reference are two durable
 %% representations of the same semantic record.  Certification changes only
 %% the owner's metadata: the live coordinator keeps running and receives the
-%% exact `{ok, Ref, Entry}` response through its existing endpoint waiter.
+%% exact reference and entry sidecar through its existing endpoint waiter.
 %% Killing it here would discard that response and reread the entry it just
 %% caused from disk before continuing.
 adopt_committed_begin_owner(Control, Ref, S) ->
@@ -10204,10 +9966,10 @@ validated_dtx_entries(
 
 project_dtx_batch_items(Items, LaneSequences, Entry, Projection0) ->
     lists:foldl(
-      fun({#{control := Control, projection := DtxAfterItem},
+      fun({#{projection := DtxAfterItem},
            {Lane, Sequence}}, Projection) ->
               project_dtx_transition(
-                Control, Entry, DtxAfterItem, Lane, Sequence, Projection)
+                Entry, DtxAfterItem, Lane, Sequence, Projection)
       end, Projection0, lists:zip(Items, LaneSequences)).
 
 %% A complaint cert skipped this slot: persist an empty `noop` entry so the
@@ -10569,29 +10331,13 @@ trace_for_block(Slot, Hash, S = #s{local_proposals = Local}) ->
         _ -> none
     end.
 
-trace_block_attributes(Slot, none, Attributes, #s{ns = Ns}) ->
-    Attributes#{'quod.namespace' => Ns, 'quod.consensus.slot' => Slot};
-trace_block_attributes(Slot, Hash, Attributes, #s{ns = Ns}) ->
-    Attributes#{'quod.namespace' => Ns, 'quod.consensus.slot' => Slot,
-                'quod.consensus.block_hash' => binary:encode_hex(Hash, lowercase)}.
-
 trace_block_work(Slot, Hash, Name, Attributes, S, Fun) ->
-    trace_shared_work(trace_for_block(Slot, Hash, S), Name,
-                     trace_block_attributes(Slot, Hash, Attributes, S), Fun).
-
-trace_shared_work(none, _Name, _Attributes, Fun) -> Fun();
-trace_shared_work({Ctx, Links}, Name, Attributes, Fun) ->
-    quod_trace:with_span(Ctx, Name, internal, Attributes, Links,
-                        fun(_Span) -> Fun() end).
+    quod_consensus_trace:work(trace_for_block(Slot, Hash, S),
+                             {S#s.ns, Slot, Hash}, Name, Attributes, Fun).
 
 trace_block_event(Slot, Hash, Name, Attributes, S) ->
-    case trace_for_block(Slot, Hash, S) of
-        none -> ok;
-        {Ctx, _Links} ->
-            _ = quod_trace:add_event(
-                  Ctx, Name, trace_block_attributes(Slot, Hash, Attributes, S)),
-            ok
-    end.
+    quod_consensus_trace:event(trace_for_block(Slot, Hash, S),
+                              {S#s.ns, Slot, Hash}, Name, Attributes).
 
 trace_slot_event(Slot, Name, Attributes, S) ->
     trace_block_event(Slot, none, Name, Attributes, S).
@@ -10634,8 +10380,8 @@ reconcile_signing_state(S) -> reconcile_signing_state_journal(S).
 reconcile_signing_state_journal(
   S = #s{slot = Slot, signing_journal = Journal, ns = Ns}) ->
     Pending0 = pending_begins_snapshot(Journal),
-    {ok, Journal1} = reconcile_signing_journal(
-                       Slot, state_projection(S), Journal),
+    {ok, Journal1} = quod_dtx_owner:reconcile_journal(
+                       Slot, state_projection(S), S#s.phase_index, Journal),
     Pending1 = pending_begins_snapshot(Journal1),
     Transition = pending_begins_reconciliation(Pending0, Pending1, S),
     %% This cast precedes the ordered ledger apply.  The matching resolution
@@ -10735,73 +10481,49 @@ finish_pending_begins_reconciliation(none, S) ->
 
 refresh_retained_dtx_signatures(
   S = #s{retained_dtx = Registry}) ->
-    case retained_count(Registry) of
+    case quod_dtx_owner:count(Registry) of
         0 -> {S, none};
         _ -> refresh_retained_dtx_signatures_nonempty(S)
     end.
 
 refresh_retained_dtx_signatures_nonempty(S0) ->
-    Rows = retained_rows(S0#s.retained_dtx),
-    case current_dtx_binding(S0) of
-        {ok, {_Ns, _Anchor, Self, Admission}} ->
-            CurrentLane = {Admission, Self},
-            maps:fold(
-              fun(Digest, Submission, {Acc, Pending}) ->
-                      {Next, Cleared} = refresh_dtx_submission(
-                                         Digest, Submission, CurrentLane, Acc),
-                      {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
-              end, {S0, none}, Rows);
-        {error, _} ->
-            abandon_retained_dtx(not_in_charge, S0)
-    end.
+    Actions = quod_dtx_owner:signature_actions(
+                dtx_owner_binding(S0), endpoint_write_ready(S0),
+                S0#s.author_admissions, S0#s.dtx_lanes, S0#s.retained_dtx),
+    lists:foldl(
+      fun({Row = #dtx_submission{digest = Digest}, Action}, {S, Pending}) ->
+          {Next, Cleared} = case Action of
+              retire -> retire_dtx_submission(Digest, not_in_charge, S);
+              renew -> renew_dtx_submission(Row, S)
+          end,
+          {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
+      end, {S0, none}, Actions).
 
-refresh_dtx_submission(
-  Digest,
-  #dtx_submission{control = Control, record = Record,
+renew_dtx_submission(
+  #dtx_submission{digest = Digest, control = Control, record = Record,
                   observation_started_at = ObservationStartedAt,
                   validation_sidecar = ValidationSidecar},
-  CurrentLane,
-  S = #s{dtx_lanes = CommittedFloors}) ->
+  S) ->
     Meta = quod_dtx:control_metadata(Control),
-    Lane = {maps:get(author_admission, Meta), maps:get(author, Meta)},
     Sequence = maps:get(sequence, Meta),
-    case {Lane =:= CurrentLane,
-          Sequence =< maps:get(Lane, CommittedFloors, 0)} of
-        {false, _} ->
-            %% A relayed control keeps its original admitted author.  It is
-            %% live only while that exact author/admission/sequence remains
-            %% acceptable in the current view; locally authored rows whose
-            %% admission changed fail the same check and retire.
-            case dtx_control_acceptable(
-                   Control, S#s.author_admissions, CommittedFloors, S) of
-                true -> {S, none};
-                false -> retire_dtx_submission(Digest, not_in_charge, S)
-            end;
-        {true, false} ->
-            {S, none};
-        {true, true} ->
-            {Old, RegistryWithout} = retained_take(
-                                       Digest, S#s.retained_dtx),
-            SWithout = S#s{retained_dtx = RegistryWithout},
-            case sign_and_retain_dtx(
-                   quod_dtx:control_kind(Control), Record, Digest,
-                   none, ValidationSidecar, Sequence, SWithout) of
-                {ok, S1 = #s{retained_dtx = Renewed}} ->
-                    New = maps:get(Digest, retained_rows(Renewed)),
-                    {update_dtx_submission(
-                      Digest,
-                      New#dtx_submission{waiters = Old#dtx_submission.waiters,
-                                         trace_ctx = Old#dtx_submission.trace_ctx,
-                                         observation_started_at =
-                                           ObservationStartedAt}, S1), none};
-                {error, Reason} ->
-                    logger:error(
-                      "quod[~s]: unable to re-envelope retained DTX control: ~p",
-                      [S#s.ns, Reason]),
-                    finish_detached_retained_dtx(
-                      Old, dtx_retirement_result(Reason),
-                      {error, Reason}, SWithout)
-            end
+    {Old, RegistryWithout} = quod_dtx_owner:take(Digest, S#s.retained_dtx),
+    SWithout = S#s{retained_dtx = RegistryWithout},
+    case sign_and_retain_dtx(
+           quod_dtx:control_kind(Control), Record, Digest,
+           none, ValidationSidecar, Sequence, SWithout) of
+        {ok, S1 = #s{retained_dtx = Renewed}} ->
+            New = maps:get(Digest, quod_dtx_owner:rows(Renewed)),
+            {update_dtx_submission(
+              Digest,
+              New#dtx_submission{waiters = Old#dtx_submission.waiters,
+                                 trace_ctx = Old#dtx_submission.trace_ctx,
+                                 observation_started_at = ObservationStartedAt}, S1), none};
+        {error, Reason} ->
+            logger:error(
+              "quod[~s]: unable to re-envelope retained DTX control: ~p",
+              [S#s.ns, Reason]),
+            finish_detached_retained_dtx(
+              Old, dtx_retirement_result(Reason), {error, Reason}, SWithout)
     end.
 
 retire_dtx_submission(Digest, Reason, S) ->
@@ -10810,7 +10532,7 @@ retire_dtx_submission(Digest, Reason, S) ->
 
 finish_retained_dtx(Digest, Result, Reply,
                     S = #s{retained_dtx = Registry}) ->
-    case retained_take(Digest, Registry) of
+    case quod_dtx_owner:take(Digest, Registry) of
         {Row, Registry1} ->
             finish_detached_retained_dtx(
               Row, Result, Reply, S#s{retained_dtx = Registry1});
@@ -10822,17 +10544,17 @@ finish_detached_retained_dtx(
   Row = #dtx_submission{control = Control,
                         observation_started_at = StartedAt},
   Result, Reply, S0) ->
-    %% A Begin is the only control whose uncommitted custody is also projected
-    %% as a durable pending group.  Any terminal retirement other than its
-    %% certified commit must remove both representations together; otherwise
-    %% restart resurrects work which this owner already proved cannot commit.
+    %% The journal is the durable authority for an uncommitted Begin; the
+    %% retained row owns its current delivery and waiters. Terminal retirement
+    %% must remove the journal body as well, or restart resurrects rejected
+    %% work. The public Prolog pending view is derived, not another owner.
     %% The signing-journal reconciliation below preserves the exposed sequence
     %% floor while removing the exact pending body and reuses the existing
     %% outcome-projection/resolution path.
     {S, Transition} = retire_uncommitted_begin(Result, Control, S0),
     observe_simplex_owner_terminal(
       S, dtx_control, quod_dtx:control_kind(Control), Result, StartedAt),
-    {reply_waiters(retained_waiter_tags(Row), Reply, S), Transition}.
+    {reply_waiters(quod_dtx_owner:waiter_tags(Row), Reply, S), Transition}.
 
 retire_uncommitted_begin(completed, _Control, S) ->
     %% The commit path removes the pending row only after installing the
@@ -10847,8 +10569,8 @@ retire_uncommitted_begin(_Result, Control, S) ->
 
 -ifdef(TEST).
 retire_uncommitted_begin_state(
-  GroupId, S = #s{signing_journal = memory, dtx_pending = Pending}) ->
-    {S#s{dtx_pending = maps:remove(GroupId, Pending)}, none};
+  _GroupId, S = #s{signing_journal = memory}) ->
+    {S, none};
 retire_uncommitted_begin_state(GroupId, S) ->
     retire_durable_uncommitted_begin(GroupId, S).
 -else.
@@ -10858,32 +10580,20 @@ retire_uncommitted_begin_state(GroupId, S) ->
 
 retire_durable_uncommitted_begin(
   GroupId,
-  S0 = #s{slot = Slot, signing_journal = Journal0, ns = Ns,
-          dtx_pending = Pending}) ->
+  S = #s{slot = Slot, signing_journal = Journal0, ns = Ns}) ->
     Before = pending_begins_snapshot(Journal0),
-    S1 = S0#s{dtx_pending = maps:remove(GroupId, Pending)},
     case maps:is_key(GroupId, Before) of
         false ->
-            %% A surrounding journal reconciliation may already own this
-            %% retirement. Keep the in-memory projection in step without
-            %% emitting its public transition twice.
-            {S1, none};
+            %% A surrounding reconciliation already owns this transition.
+            {S, none};
         true ->
-            {ok, Journal1} = reconcile_signing_journal(
-                               Slot, state_projection(S1), Journal0),
+            {ok, Journal1} = quod_dtx_owner:retire_begin(
+                               GroupId, Slot, state_projection(S), S#s.phase_index, Journal0),
             After = pending_begins_snapshot(Journal1),
-            Transition = pending_begins_reconciliation(Before, After, S1),
+            Transition = pending_begins_reconciliation(Before, After, S),
             ok = project_pending_begins(Ns, Journal1),
-            {S1#s{signing_journal = Journal1}, Transition}
+            {S#s{signing_journal = Journal1}, Transition}
     end.
-
-abandon_retained_dtx(Reason,
-                     S = #s{retained_dtx = Registry}) ->
-    lists:foldl(
-      fun(Digest, {Acc, Pending}) ->
-              {Next, Cleared} = retire_dtx_submission(Digest, Reason, Acc),
-              {Next, merge_pending_begins_reconciliation(Pending, Cleared)}
-      end, {S, none}, maps:keys(retained_rows(Registry))).
 
 prune_block_requests(Committed, Requests) ->
     maps:filter(fun({Slot, _BH}, _Retry) -> Slot > Committed end, Requests).
@@ -11303,14 +11013,13 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
             Contacts = content_reference_contacts(
                          ReferencePlan, DtxWorkers, LocalIdentity),
             Trace = trace_for_block(Sl, BH, S),
-            TraceAttributes = trace_block_attributes(
-                                Sl, BH,
-                                #{'quod.validation.transactions' => length(ReferencePlan)}, S),
+            TraceLocation = {S#s.ns, Sl, BH},
+            TraceAttributes = #{'quod.validation.transactions' => length(ReferencePlan)},
             trace_block_event(Sl, BH, <<"consensus.foreign_validation_queued">>, #{}, S),
             Worker = spawn(
                        fun() ->
-                           Verdict = trace_shared_work(
-                             Trace, <<"quod.consensus.foreign_validation">>, TraceAttributes,
+                           Verdict = quod_consensus_trace:work(
+                             Trace, TraceLocation, <<"quod.consensus.foreign_validation">>, TraceAttributes,
                              fun() ->
                                  Result = verify_content_foreign_references(
                                             ReferencePlan, LocalIdentity, LocalSource,
@@ -12029,7 +11738,7 @@ retire_invalid_dtx_submission(
                       Digest = quod_dtx:record_digest(Control),
                       case maps:is_key(
                              Digest,
-                             retained_rows(Acc#s.retained_dtx)) of
+                             quod_dtx_owner:rows(Acc#s.retained_dtx)) of
                           true ->
                               Reply = invalid_dtx_submission_reply(
                                         Kind, Digest, Reasons,
@@ -12345,7 +12054,7 @@ keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
     SClassified = timed_step(
                     SOperations, dtx_reclassify,
                     fun() -> finish_pending_begins_reconciliation(
-                               refresh_retained_readiness(SOperations)) end),
+                               settle_retained_dtx(S0, SOperations)) end),
     SDtx = timed_step(SClassified, dtx_drive,
                       fun() -> drive_retained_dtx(SClassified) end),
     {SAdmitted, ActionsRevAdmission} =
@@ -12433,6 +12142,17 @@ advertise_readiness(Height, Ready, Now, S = #s{self = Self}) ->
 
 %% One capability edge owns recovery reconciliation. This catches explicit sync completion, periodic
 %% readiness, and live commit/skip self-corroboration without each caller remembering a special hook.
+%% A pause retains custody but cannot renew its signature. The original owner
+%% readiness edge resumes the same classified rows before their next drive.
+settle_retained_dtx(S0, S1) ->
+    {Classified, Retired} = refresh_retained_readiness(S1),
+    case not endpoint_write_ready(S0) andalso endpoint_write_ready(Classified) of
+        true ->
+            {Renewed, Cleared} = refresh_retained_dtx_signatures(Classified),
+            {Renewed, merge_pending_begins_reconciliation(Retired, Cleared)};
+        false -> {Classified, Retired}
+    end.
+
 settle_readiness(S0, S1) ->
     case {may_vote(S0), may_vote(S1)} of
         {false, true} -> resume_ready_rounds(S1);
@@ -13695,8 +13415,8 @@ mark_dtx_relay_placed(Pending, Peer, LinkPid,
     Registry1 =
         lists:foldl(
           fun({Digest, _Row}, Registry) ->
-                  Current = maps:get(Digest, retained_rows(Registry)),
-                  retained_replace(
+                  Current = maps:get(Digest, quod_dtx_owner:rows(Registry)),
+                  quod_dtx_owner:replace(
                     Current#dtx_submission{
                       relay_placement = {Peer, LinkPid}},
                     Registry)
@@ -15454,7 +15174,6 @@ block_from_entry(Entry) -> quod_ledger:block_from_entry(Entry).
           timestamp := non_neg_integer(),
           dtx := undefined | quod_dtx:projection(),
           dtx_lanes := #{{binary(), node_id()} => non_neg_integer()},
-          dtx_pending := #{<<_:256>> => {<<_:256>>, <<_:256>>}},
           history_head := none | {slot(), <<_:256>>},
           %% Ephemeral owner capture only; never persisted as projection data.
           history_index => quod_dtx_phase_index:index()}.
@@ -15480,7 +15199,7 @@ history_projection(Committee, CommitteeId, Admissions, Sequences, Timestamp) ->
       committee_views => [],
       admissions => Admissions, sequences => Sequences,
       timestamp => Timestamp, dtx => undefined, dtx_lanes => #{},
-      dtx_pending => #{}, history_head => none}.
+      history_head => none}.
 
 state_projection(
   #s{validators = Committee, validator_routes = ValidatorRoutes,
@@ -15488,12 +15207,12 @@ state_projection(
      committee_start = CommitteeStart,
      author_admissions = Admissions, author_seqs = Sequences,
      last_ts = Timestamp, dtx_projection = Dtx, dtx_lanes = DtxLanes,
-     dtx_pending = Pending, history_head = HistoryHead}) ->
+     history_head = HistoryHead}) ->
     Projection = (history_projection(
        Committee, CommitteeId, Admissions, Sequences, Timestamp))#{
       validator_routes := ValidatorRoutes,
       dtx := Dtx, dtx_lanes := DtxLanes,
-      dtx_pending := Pending, history_head := HistoryHead},
+      history_head := HistoryHead},
     seed_current_committee_view(Projection, CommitteeStart).
 
 install_projection(
@@ -15502,7 +15221,6 @@ install_projection(
     committee_views := CommitteeViews,
     admissions := Admissions, sequences := Sequences,
     timestamp := Timestamp, dtx := Dtx, dtx_lanes := DtxLanes,
-    dtx_pending := Pending,
     history_head := HistoryHead},
   S = #s{self = Self, author_admissions = OldAdmissions,
          next_author_seq = Next}) ->
@@ -15521,7 +15239,7 @@ install_projection(
              author_admissions = Admissions, author_seqs = Sequences,
              last_ts = Timestamp, dtx_projection = Dtx,
              dtx_lanes = DtxLanes,
-             dtx_pending = Pending, history_head = HistoryHead,
+             history_head = HistoryHead,
              next_author_seq = Next1},
     S2 = retire_changed_admissions(OldAdmissions, Admissions, S1),
     refresh_proof_gate(S, S2).
@@ -16036,13 +15754,11 @@ validated_dtx_entry(
     end.
 
 project_dtx_transition(
-  Control, Entry, Dtx1, Lane, Sequence,
-  #{dtx_lanes := Lanes0, timestamp := Timestamp0,
-    dtx_pending := Pending0} = Projection) ->
+  Entry, Dtx1, Lane, Sequence,
+  #{dtx_lanes := Lanes0, timestamp := Timestamp0} = Projection) ->
     #entry{timestamp = Timestamp} = quod_ledger:entry_view(Entry),
     Projection#{dtx := Dtx1,
                 dtx_lanes := Lanes0#{Lane => Sequence},
-                dtx_pending := dtx_pending_after(Control, Pending0),
                 timestamp := max(Timestamp, Timestamp0)}.
 
 -doc "Preview one catch-up entry against an uncommitted phase-index delta.".
@@ -16124,14 +15840,6 @@ preview_dtx_batch(Binding, Entry, Controls,
             {error, Unavailable};
         invalid ->
             {error, {invalid_transaction, I}}
-    end.
-
-dtx_pending_after(Control, Pending) when is_map(Pending) ->
-    case quod_dtx:control_kind(Control) of
-        'begin' ->
-            maps:remove(quod_dtx:group_id(Control), Pending);
-        _OtherKind ->
-            Pending
     end.
 
 %% Project one persisted entry onto the authoritative committee view. Reconstructing the committed block
@@ -16509,13 +16217,13 @@ stats_map(S) ->
 simplex_owner_current(
   #s{retained_dtx = Registry, dtx_correlations = Correlations,
      dtx_workers = Workers}) ->
-    {#{dtx_control => #{retained => retained_count(Registry),
-                        ready => retained_ready_count(Registry),
-                        blocked => retained_blocked_count(Registry),
-                        waiters => retained_waiter_count(Registry)},
+    {#{dtx_control => #{retained => quod_dtx_owner:count(Registry),
+                        ready => quod_dtx_owner:ready_count(Registry),
+                        blocked => quod_dtx_owner:blocked_count(Registry),
+                        waiters => quod_dtx_owner:waiter_count(Registry)},
        dtx_endpoint => #{outbound => map_size(Correlations),
                          inbound => map_size(Workers)}},
-     #{dtx_control => Registry#retained_dtx.bytes}}.
+     #{dtx_control => quod_dtx_owner:bytes(Registry)}}.
 
 track_owner_peaks(S = #s{owner_row_peaks = RowPeaks0,
                          owner_byte_peaks = BytePeaks0}) ->

@@ -437,7 +437,7 @@ advance_target(#{dir := Dir, target := Target, storage_ns := StorageNs,
 
 committed_reply(Target, Entry, Control) ->
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
-    {ok, Ref, Entry}.
+    {ok, Ref, [{Ref, Entry}]}.
 
 rows(S) -> maps:get(rows, quod_simplex:test_retained_dtx_state(S)).
 wave_digests(S) -> [D || {D, _} <- quod_simplex:test_eligible_dtx_wave(S)].
@@ -467,7 +467,8 @@ genesis(Ns, Committee) ->
 state({Ns, Anchor}, Projection, Signer = #{pubkey := Pub}, Journal) ->
     quod_simplex:test_install_projection(Projection, quod_simplex:test_state(
       #{ns => Ns, genesis_hash => Anchor, slot => 1,
-        self => Pub, id => Signer, sync => ready, signing_journal => Journal,
+        self => Pub, id => Signer, sync => ready, prolog_ready => true,
+        signing_journal => Journal,
         consensus_domain => quod_simplex:consensus_domain(Ns, Anchor)})).
 
 certified_entries({Ns, Anchor}, Slot, Parent, Controls, Identities, Committee) ->

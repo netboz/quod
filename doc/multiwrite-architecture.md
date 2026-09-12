@@ -847,3 +847,132 @@ work independently of SDK export and preserve O-A1/O-A2 analysis discipline.
 N>1 remains the ruled lane-unavailable boundary until slice 8. F6, the action
 savepoint scope, R-RESTART-RACE-01, both EUnit ledger items, c4 and +8.7% remain
 open; this candidate does not retire them.
+
+## Transaction-owner integration candidate — implementation status, 2026-09-12
+
+This appendix supersedes the publication status above, not the approved
+architecture prefix. History and coordination are published through .172.
+The .172 hardware witness exposed an incomplete ownership integration: the
+coordinator retained work across catch-up, but signing reconciliation still
+interpreted the same temporary pause as loss of ownership. A second local
+pending inventory inside the history projection could also erase a Begin
+admitted after a recovery worker's capture. The following is a local candidate
+for exact-tree review. Yan has explicitly prohibited deployment for now.
+
+### Responsibilities and deletion
+
+`quod_dtx_owner` is a library called by the existing Simplex process, not a
+second actor. It owns the opaque retained-control registry, anchored ownership
+decision, classification, signature-action selection and desired obligations.
+It reconciles the signing journal against current admissions and the current
+installed phase index. It receives neither the Simplex actor record nor keys.
+Simplex alone performs signing, append/install and ordered Prolog publication.
+`quod_dtx_coordinator` remains the one group/operation/dormant execution engine.
+
+| Previous implementation | Disposition |
+| --- | --- |
+| Simplex `retained_*` registry helpers and private registry record | Relocated once into `quod_dtx_owner`; old definitions deleted |
+| `pending_origin_begins` and `committed_origin_recoveries` | One desired-obligation function in that library |
+| `reclassify_retained_rows` / `reclassify_retained_row` | One classifier returning the updated registry and removed rows before effects |
+| `refresh_dtx_submission` and bulk `abandon_retained_dtx` | Deleted; anchored ownership and execution readiness are separate inputs to one signature policy |
+| Actor/history `dtx_pending`, seed, reducer and reconciliation helpers | Deleted, not moved or kept as padding; the signing journal is the sole durable pending-Begin authority |
+| `trace_shared_work` / `trace_block_attributes` | Relocated into `quod_consensus_trace`; existing actor adapters only select exact slot/hash ancestry |
+| Appending consensus boundary events to ended proof spans | Replaced by short boundary spans using the same ancestry, links and sampler |
+
+A temporary sync or KB pause preserves the exact signed envelope, body,
+waiters and exposed floor. It does not renew a consumed sequence. The existing
+readiness transition classifies then renews the same retained row before its
+next drive. Actual admission/membership loss still retires it. Classification
+precedes renewal, and commit, skip and catch-up retain their existing
+post-application resolution boundary. No new readiness flag, message, queue,
+retry timer, polling loop, process or alternative execution path is added.
+
+Admission is monotone across active-row retirement: `quod_dtx_owner:admission`
+consults one current indexed group history before applying that same active
+readiness rule. An exact previously certified phase returns its reference
+through the ordinary submit-result channel, with no signature, retained row
+or proposal. A different digest for an already-included phase is not accepted.
+Local endpoint requests, remote endpoint requests and relayed signed controls
+all enter this same rule. The same-turn installation assertion uses the active
+placement rule without repeating the admission's history lookup. Live commits
+still attach the available entry as a validation sidecar; historical inclusion
+returns its reference without fetching an entry merely to forward it. The
+consumer must verify the reference through A's existing resolver. Wire grammar,
+cryptographic checks, observation authority and deadlines are unchanged.
+
+Journal reconciliation reads the current pending rows and one indexed group
+history per surviving admission. Work is bounded by pending groups and their
+fixed phase family, not ledger-prefix length. Inclusion remains provable after
+Complete removes an active group. Captured committed projections contain no
+local pending custody and therefore cannot overwrite requests admitted later.
+The public Prolog pending view remains derived from the journal; it does not
+authorize or own execution. No proof/Prolog database state is copied to another
+node. Proof, backtracking, cut, signing and caller-deadline rules are unchanged.
+
+### Process and messaging inventory delta
+
+Both new modules are libraries with **zero processes**. The existing Simplex
+process still owns the journal and mutable local index. The existing
+coordinator owns its asynchronous wave, and existing foreign-validation
+workers perform their same bounded verification. Existing `quod_reg`/gproc
+routes, monitors, cancellation, Prolog apply channel and readiness/progress
+notifications are unchanged. The validation closure receives a small trace
+location, not a copy of the actor state. No new service or wake-up path exists.
+
+### Explicit derived-cache format break
+
+Removing `dtx_pending` changes the committed projection stored in foreign-cache
+checkpoints. The foreign-cache identity/manifest/checkpoint version moves from
+3 to 4 together. V3 is refused as `unsupported_foreign_cache_format, 3` at
+owner startup, without mutation, corruption accounting, a legacy decoder or
+automatic request-time refetch. Compact/resident/captured projections have
+9/10/11 fields, respectively. There is no obsolete-field compatibility padding.
+
+This is **not** a deployable image-only preserved-cache swap. A future deployment
+must explicitly retire the old derived foreign-cache directories, retain their
+evidence if needed, and record that the new cache starts cold. Source ontology
+ledgers, transaction encoding, signing journals and identities do not change
+format in this scope and do not require wiping. No cache reset is performed by
+this candidate. The format test constructs the actual .172 manifest and
+checkpoint encoding around a real empty ledger store; it is a format-admission
+fixture, not a claimed certified-history replay witness.
+
+### Timing evidence and acceptance boundary
+
+An ended proof span is still valid ancestry, but the SDK cannot append later
+events to it. `quod_consensus_trace` distinguishes enclosed work spans from
+short `quod.consensus.observation = boundary` spans. Only the latter's **start
+timestamp** denotes the observed boundary; its tiny duration is not a consensus
+round or mailbox-wait measurement. Exact slot/hash binding, trace parents,
+shared links and sampling remain intact. Missing ancestry produces no invented
+root. SDK errors in a boundary observation cannot change the protocol result.
+
+The retained .172 witness does not establish that the entire slow interval was
+mailbox waiting, and this correctness refactor claims no measured speedup.
+Future testing must use a fresh label, the existing shape and deadlines,
+independent request/attempt denominators, full logs and true exits, and stop
+on the first failure. Use the reviewed full-sampling configuration window and
+restore its exact previous value; never clear STOP/BENCH_STOP or resubmit an
+uncertain operation. Compare submitter latency, coordinator work, exact consensus
+boundaries and application, keeping unknown gaps unknown. O-A1/O-A2 apply:
+excluded/dropped/tied evidence stays counted and listed, never removed from
+the denominator. Account separately for the explicitly cold derived cache.
+
+Local real-journal, certified-window, SDK and fail-before controls accompany
+this candidate. Exact-tree review and clean sequential gates remain the
+publication boundary. R-RESTART-RACE-01, both standing EUnit ledger items,
+c4, +8.7%, L2 slice 8, F6 restart checkpoints and action savepoints remain open.
+The fixture-only explorer trace-correlation correction is identified separately
+in the handoff; unrelated spans must not inflate one request's read count.
+The QUIC and N=4/join/growth/feed app fixtures also isolate their foreign caches
+under CT's private directory, as they already isolate effect journals. The ask
+fixture already did so; the app-start inventory is now covered. This prevents test
+startup from inheriting a developer's old cache format; no old cache is deleted
+or migrated to make the gate pass. All original protocol assertions remain.
+The join-action fixture also registers its actual root bootstrap configuration
+before invoking lifecycle creation; starting a Prolog process alone is not
+that configuration. The missing-configuration failure reproduces against
+unchanged .172 production code, and the corrected fixture passes against it.
+The growth fixture constructs its deliberately invalid membership proposal as
+a canonical block artifact, not a raw record view rejected by the wire encoder
+before reaching any validator. No membership-rejection assertion is weakened.

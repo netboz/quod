@@ -140,7 +140,7 @@ retained index; point I/O and exact verification run in the existing caller.
 -define(MANIFEST, "identity.term").
 -define(CHECKPOINT, "checkpoint.term").
 -define(LOG, "log.0001").
--define(CACHE_VERSION, 3). %% V6 ledger and transaction-V14 projection/checkpoint
+-define(CACHE_VERSION, 4). %% Committed-only projection; no local pending custody
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
@@ -6958,6 +6958,14 @@ load_history_dir(Root, Dir) ->
                                   bytes = Bytes, last_used = 0}};
                 false -> error
             end;
+        {ok, {quod_foreign_log_cache, Version, Ns, <<_:256>>, <<_:256>>}}
+          when is_integer(Version), Version > 0, Version < ?CACHE_VERSION,
+               is_binary(Ns) ->
+            %% A clean break is not corruption or an unknown cold identity.
+            %% Refuse before requests can refetch this known retained prefix.
+            %% Deployment must explicitly retire the old derived cache; no
+            %% legacy decoder, automatic deletion or request-time rebuild.
+            error({unsupported_foreign_cache_format, Version});
         _ -> error
     end.
 
@@ -6982,6 +6990,7 @@ valid_projection(
   #{committee := Committee, validator_routes := Routes,
     committee_id := CommitteeId,
     admissions := Admissions, sequences := Sequences,
+    timestamp := _Timestamp, history_head := _Head,
     dtx := Dtx, dtx_lanes := DtxLanes} = Projection,
   ExpectedIdentity)
   when is_map(Routes), is_map(Admissions), is_map(Sequences),
@@ -7008,17 +7017,18 @@ checkpoint_projection(Projection) ->
 
 valid_committee_views(#{committee_views := Views, history_index := Index,
                         history_head := {Height, _}} = Projection, _ExpectedIdentity)
-  when is_list(Views), map_size(Projection) =:= 12 ->
+  when is_list(Views), map_size(Projection) =:= 11 ->
     quod_dtx_phase_index:is_capture(Index, Height) andalso
         valid_committee_view_rows(Views);
 valid_committee_views(#{committee_views := Views} = Projection,
                       _ExpectedIdentity)
-  when is_list(Views), map_size(Projection) =:= 11 ->
+  when is_list(Views), map_size(Projection) =:= 10 ->
     valid_committee_view_rows(Views);
 valid_committee_views(Projection, _ExpectedIdentity) ->
     %% Compact persisted checkpoints deliberately omit the resident-only era
-    %% index and retain the exact ten-field shape.
-    map_size(Projection) =:= 10.
+    %% index and retain the exact nine-field committed-only shape. Local
+    %% pending Begin custody belongs to the signing journal, never history.
+    map_size(Projection) =:= 9.
 
 valid_committee_view_rows([]) -> true;
 valid_committee_view_rows(

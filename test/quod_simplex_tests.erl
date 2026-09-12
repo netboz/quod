@@ -674,7 +674,7 @@ dtx_endpoint_accepted_response_carries_exact_committed_entry_test() ->
     ?assertEqual(
        {{accepted, RequestId, Digest, Ref}, [{Ref, Entry}]},
        quod_simplex:test_dtx_endpoint_result_with_hints(
-         Request, {submit_result, Digest, {ok, Ref, Entry}},
+         Request, {submit_result, Digest, {ok, Ref, [{Ref, Entry}]}},
          st(#{ns => Ns, genesis_hash => Anchor}))).
 
 %% Replies travel back on the request's bidirectional stream.  An outbound
@@ -1114,10 +1114,10 @@ dtx_submission_shares_one_envelope_between_waiters_test() ->
         {Entry, Payload} = committed_dtx_test_entry(Control, 1),
         Done = quod_simplex:test_resolve_committed_dtx(
                  Entry, Payload, Shared),
-        receive {dtx_waiter_probe, first, {ok, _, Entry}} -> ok after 1000 ->
+        receive {dtx_waiter_probe, first, {ok, _, [{_, Entry}]}} -> ok after 1000 ->
             error(missing_first_dtx_waiter_reply)
         end,
-        receive {dtx_waiter_probe, second, {ok, _, Entry}} -> ok after 1000 ->
+        receive {dtx_waiter_probe, second, {ok, _, [{_, Entry}]}} -> ok after 1000 ->
             error(missing_second_dtx_waiter_reply)
         end,
         ?assertEqual(0, quod_simplex:test_dtx_submission_waiters(Done))
@@ -2133,7 +2133,7 @@ dtx_catchup_retires_retained_submission_and_replies_exact_ref_test() ->
               recovery, [Entry], quod_simplex:history_projection(Origin),
               Seeded),
         receive
-            {dtx_submit_result, {ok, Ref, Entry}} ->
+            {dtx_submit_result, {ok, Ref, [{Ref, Entry}]}} ->
                 ?assert(quod_dtx:validate_certified_ref(Ref)),
                 {quod_dtx_ref, _Version, Ns, Anchor, 1, BlockHash,
                  RecordDigest, _FinalityProof} = Ref,
@@ -2657,7 +2657,7 @@ dtx_retained_resign_updates_exact_bytes_and_preserves_observation_test() ->
     try
         S0 = st(#{ns => Ns, genesis_hash => Anchor,
                   self => Self, id => Signer, validators => [Self],
-                  sync => ready,
+                  sync => ready, prolog_ready => true,
                   author_admissions => #{Self => Admission},
                   signing_journal => Journal0,
                   dtx_projection => quod_dtx:initial_projection(Target, 0),
@@ -2973,7 +2973,6 @@ pending_begin_reconciliation_retires_old_admission_in_order_test() ->
                     author_admissions => #{Coordinator => Admission},
                     sync => ready, prolog_ready => true, slot => 1,
                     signing_journal => Journal1,
-                    dtx_pending => #{GroupId => Lane},
                     dtx_lanes => #{Lane => Sequence}}),
         Pending = quod_simplex:test_seed_dtx_submission(
                     Control, [{dtx_endpoint, self()}], Base),
@@ -3055,6 +3054,7 @@ pending_begin_same_admission_stale_sequence_reenvelopes_test() ->
     Sequence = maps:get(sequence, Meta),
     Lane = {Admission, Coordinator},
     Dir = relay_store_dir("pending_begin_reenvelope"),
+    {ok, PhaseIndex} = quod_dtx_phase_index:open(Dir, Ns),
     true = quod_reg:reg({quod_prolog, Ns}),
     try
         {ok, Journal0} = quod_signing_journal:initialize(
@@ -3066,8 +3066,7 @@ pending_begin_same_admission_stale_sequence_reenvelopes_test() ->
                     validators => [Coordinator],
                     author_admissions => #{Coordinator => Admission},
                     sync => ready, prolog_ready => true, slot => 1,
-                    signing_journal => Journal1,
-                    dtx_pending => #{GroupId => Lane},
+                    signing_journal => Journal1, phase_index => PhaseIndex,
                     dtx_lanes => #{Lane => Sequence}}),
         Pending = quod_simplex:test_seed_dtx_submission(
                     Control, [{dtx_endpoint, self()}], Base),
@@ -3105,6 +3104,7 @@ pending_begin_same_admission_stale_sequence_reenvelopes_test() ->
         ok = quod_signing_journal:close(
                quod_simplex:test_signing_journal(Reconciled))
     after
+        ok = quod_dtx_phase_index:close(PhaseIndex),
         true = gproc:unreg(quod_reg:name({quod_prolog, Ns})),
         file:del_dir_r(Dir)
     end.
@@ -3887,7 +3887,6 @@ dtx_invalid_begin_retires_durable_pending_projection_test() ->
                     author_admissions => #{Coordinator => Admission},
                     sync => ready, prolog_ready => true, slot => 1,
                     signing_journal => Journal1,
-                    dtx_pending => #{GroupId => Lane},
                     dtx_lanes => #{Lane => Sequence}}),
         Retained = quod_simplex:test_seed_dtx_submission(
                      Control, [{dtx_endpoint, self()}], Base),
@@ -3897,9 +3896,7 @@ dtx_invalid_begin_retires_durable_pending_projection_test() ->
            #{},
            quod_signing_journal:pending_begins(
              quod_simplex:test_signing_journal(Done))),
-        ?assertEqual(
-           #{}, maps:get(dtx_pending,
-                         quod_simplex:test_state_projection(Done))),
+        ?assertNot(maps:is_key(dtx_pending, quod_simplex:test_state_projection(Done))),
         ?assertEqual(
            0, maps:get(submissions,
                        quod_simplex:test_dtx_endpoint_counts(Done))),
@@ -9578,20 +9575,17 @@ latched_leader_still_redrives_proposal_test() ->
             quod_trace:finish_span(TraceSpan, ok)
         end,
         Span = quod_trace_tests:take_span(<<"consensus.redrive.test">>),
-        Events = otel_events:list(Span#span.events),
-        [Watchdog] = [E || E = #event{name = N} <- Events,
-                           N =:= <<"consensus.watchdog_fired">>],
-        [Redrive] = [E || E = #event{name = N} <- Events,
-                          N =:= <<"consensus.proposal_redriven">>],
-        WatchdogAttrs = otel_attributes:map(Watchdog#event.attributes),
+        Watchdog = quod_trace_tests:take_span(<<"consensus.watchdog_fired">>, Span#span.trace_id),
+        Redrive = quod_trace_tests:take_span(<<"consensus.proposal_redriven">>, Span#span.trace_id),
+        WatchdogAttrs = otel_attributes:map(Watchdog#span.attributes),
         ?assertEqual(4, maps:get('quod.consensus.slot', WatchdogAttrs)),
         ?assertEqual(<<"awaiting_proposal">>, maps:get('quod.consensus.phase', WatchdogAttrs)),
         %% A watchdog is a slot event; only the actual resend identifies a
         %% block. This prevents a timeout from claiming another proposal's hash.
         ?assertNot(maps:is_key('quod.consensus.block_hash', WatchdogAttrs)),
         ?assertEqual(binary:encode_hex(BH, lowercase), maps:get(
-          'quod.consensus.block_hash', otel_attributes:map(Redrive#event.attributes))),
-        ?assert(Watchdog#event.system_time_native =< Redrive#event.system_time_native)
+          'quod.consensus.block_hash', otel_attributes:map(Redrive#span.attributes))),
+        ?assert(Watchdog#span.start_time =< Redrive#span.start_time)
     end).
 
 %% The quod_metrics matcher and stats_map can never drift: every key the Prometheus

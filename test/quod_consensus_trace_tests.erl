@@ -143,6 +143,45 @@ same_slot_other_hash_does_not_claim_request_trace_test() ->
         end
     end).
 
+consensus_boundary_survives_ended_proof_parent_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        {Ctx, Parent} = quod_trace:start_span(otel_ctx:new(), <<"ended.proof">>, internal, #{}),
+        quod_trace:finish_span(Parent, ok),
+        Proof = quod_trace_tests:take_span(<<"ended.proof">>),
+        %% Dedicated pinned SDK control: ended spans cannot accept events.
+        ?assertNot(quod_trace:add_event(Ctx, <<"too.late">>, #{})),
+        Ns = <<"trace:ended-proof">>, Slot = 11, Hash = crypto:hash(sha256, <<"begin">>),
+        S = quod_simplex:test_state(#{ns => Ns, local_proposal => {Slot, Hash, [Ctx]}}),
+        Name = <<"consensus.parent_verdict_received">>,
+        ok = quod_simplex:test_trace_block_event(Slot, Hash, Name, #{}, S),
+        Boundary = quod_trace_tests:take_span(Name, otel_span:trace_id(Parent)),
+        assert_parent_and_block(Boundary, Parent, Ns, Slot, Hash),
+        ?assert(Boundary#span.start_time >= Proof#span.end_time),
+        ?assert(Boundary#span.end_time >= Boundary#span.start_time),
+        ?assertEqual(<<"boundary">>, owner_attribute('quod.consensus.observation', Boundary)),
+        %% No mutation of the ended proof and no long-lived synthetic round.
+        ?assertEqual([], otel_events:list(Proof#span.events)),
+        Other = crypto:hash(sha256, <<"other">>),
+        ok = quod_simplex:test_trace_block_event(Slot, Other, <<"wrong.boundary">>, #{}, S),
+        receive {quod_test_span, #span{name = <<"wrong.boundary">>}} -> error(wrong_block_parent)
+        after 0 -> ok end
+    end).
+
+consensus_boundary_keeps_all_participating_links_test() ->
+    with_request_spans(fun(Unsampled, Sampled, Parent) ->
+        Ns = <<"trace:boundary-links">>, Slot = 12, Hash = crypto:hash(sha256, <<"shared">>),
+        S = quod_simplex:test_state(#{ns => Ns, local_proposal => {Slot, Hash, [Unsampled, Sampled]}}),
+        ok = quod_simplex:test_trace_block_event(Slot, Hash, <<"boundary.links">>, #{}, S),
+        Span = quod_trace_tests:take_span(<<"boundary.links">>),
+        assert_parent_and_block(Span, Parent, Ns, Slot, Hash),
+        [Link] = otel_links:list(Span#span.links),
+        ?assertEqual(otel_span:span_id(otel_tracer:current_span_ctx(Unsampled)), Link#link.span_id),
+        OnlyUnsampled = quod_simplex:test_state(#{ns => Ns, local_proposal => {Slot, Hash, [Unsampled]}}),
+        ok = quod_simplex:test_trace_block_event(Slot, Hash, <<"boundary.unsampled">>, #{}, OnlyUnsampled),
+        receive {quod_test_span, #span{name = <<"boundary.unsampled">>}} -> error(sampling_overridden)
+        after 0 -> ok end
+    end).
+
 foreign_validation_worker_inherits_trace_and_records_terminal_verdict_test_() ->
     [{atom_to_list(Case), fun() ->
         with_certified_history(fun(State0, Transaction, Ref) ->

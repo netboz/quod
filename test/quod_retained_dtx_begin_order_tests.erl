@@ -27,6 +27,9 @@ live_commit_renews_but_retains_blocked_begin_test_() ->
 catchup_window_renews_but_retains_blocked_begin_test_() ->
     {timeout, 30, fun() -> isolated_scenario({blocked, catchup}) end}.
 
+catchup_pause_preserves_begin_and_renews_on_real_readiness_edge_test_() ->
+    {timeout, 30, fun() -> isolated_scenario({blocked, catchup_paused}) end}.
+
 isolated_scenario(Mode) ->
     Parent = self(),
     Ref = make_ref(),
@@ -96,6 +99,7 @@ scenario(Scenario) ->
                                self => Author, id => Signer,
                                consensus_domain => Domain,
                                store => Store1, signing_journal => Journal0,
+                               phase_index => PhaseIndex,
                                slot => 1, last_applied => 1, sync => ready,
                                prolog_ready => true,
                                eng => quod_simplex:eng_new(
@@ -116,10 +120,9 @@ scenario(Scenario) ->
                     ?assertEqual(lists:sort([G1, G2]),
                                  lists:sort(maps:keys(
                                    quod_signing_journal:pending_begins(Journal)))),
-                    %% The live intent owner projects these journaled
-                    %% obligations into the same committed-history seed.
-                    SBoth = quod_simplex:test_state_set(
-                              dtx_pending, #{G1 => Lane, G2 => Lane}, SBoth0),
+                    %% Pending custody exists only in the actual journal;
+                    %% never inject a synthetic history-side pending list.
+                    SBoth = SBoth0,
                     ProjectionBefore = quod_simplex:test_state_projection(SBoth),
                     {Block, Entry} = certified_entry(
                                        Identity, Control1, Identities, Committee),
@@ -130,8 +133,7 @@ scenario(Scenario) ->
                       fun() -> quod_simplex:history_advance(
                                  Identity, Entry, ProjectionBefore, PhaseIndex)
                       end),
-                    ?assertEqual(#{G2 => Lane},
-                                 maps:get(dtx_pending, ProjectionAfter)),
+                    ?assertNot(maps:is_key(dtx_pending, ProjectionAfter)),
                     ?assertEqual(Disposition,
                                  quod_dtx:proposal_readiness(
                                    Begin2, maps:get(dtx, ProjectionAfter))),
@@ -168,11 +170,32 @@ scenario(Scenario) ->
                         ?assertEqual(ExpectedPending,
                                      quod_signing_journal:pending_begins(Reopened)),
                         ?assertEqual(ExpectedFloor,
-                                     quod_signing_journal:dtx_floor(Reopened, Lane))
+                                     quod_signing_journal:dtx_floor(Reopened, Lane)),
+                        case Mode of
+                            catchup_paused ->
+                                Paused = quod_simplex:test_state_set(signing_journal, Reopened, After),
+                                Ready = quod_simplex:test_state_set(sync, ready, Paused),
+                                {keep_state, Resumed, _} =
+                                    quod_simplex:test_keep_progress_transition(Paused, Ready),
+                                try
+                                    Renewed = retained_control(Begin2, Resumed),
+                                    ?assertEqual(Begin2, quod_dtx:control_body(Renewed)),
+                                    ?assertEqual(3, sequence(Renewed)),
+                                    ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(Resumed)),
+                                    ?assertEqual([G2], maps:keys(quod_signing_journal:pending_begins(
+                                               quod_simplex:test_signing_journal(Resumed))))
+                                after
+                                    _ = quod_simplex:test_stop_dtx_coordinator(Resumed)
+                                end;
+                            _ -> ok
+                        end
                     after
                         ok = quod_signing_journal:close(Reopened)
                     end,
-                    ?assertEqual([], receiver_messages(Receiver))
+                    case Mode of
+                        catchup_paused -> _ = receiver_messages(Receiver), ok;
+                        _ -> ?assertEqual([], receiver_messages(Receiver))
+                    end
                 after
                     catch quod_dtx_phase_index:close(PhaseIndex)
                 end
@@ -193,40 +216,51 @@ assert_retirement_or_blocking(
     assert_order(Mode, Entry, GroupRef, GroupId, Messages),
     assert_begin_reply(),
     ?assertEqual(0, maps:get(retained, quod_simplex:test_retained_dtx_state(S))),
-    ?assertEqual(#{}, maps:get(dtx_pending, quod_simplex:test_state_projection(S))),
+    ?assertNot(maps:is_key(dtx_pending, quod_simplex:test_state_projection(S))),
     {#{}, 2};
 assert_retirement_or_blocking(
   {blocked, active_group}, Mode, Entry, GroupRef, GroupId, Lane, Begin, S, Messages) ->
     ?assertMatch(#{retained := 1, blocked := 1, ready := 0, waiters := 1},
                  quod_simplex:test_retained_dtx_state(S)),
-    ?assertEqual(#{GroupId => Lane},
-                 maps:get(dtx_pending, quod_simplex:test_state_projection(S))),
+    ?assertNot(maps:is_key(dtx_pending, quod_simplex:test_state_projection(S))),
     Control = retained_control(Begin, S),
     ?assertEqual(Begin, quod_dtx:control_body(Control)),
-    ?assertEqual(3, sequence(Control)),
+    ExpectedSequence = case Mode of catchup_paused -> 1; _ -> 3 end,
+    ?assertEqual(ExpectedSequence, sequence(Control)),
     Pending = quod_signing_journal:pending_begins(
                 quod_simplex:test_signing_journal(S)),
     ?assertEqual([GroupId], maps:keys(Pending)),
-    #{GroupId := #{sequence := 3, lane := Lane, envelope := Envelope}} = Pending,
+    #{GroupId := #{sequence := ExpectedSequence, lane := Lane, envelope := Envelope}} = Pending,
     ?assertEqual({ok, Control}, quod_dtx:decode_control(Envelope)),
     ?assertEqual([], [Ref || {dtx_group_resolved, Ref} <- Messages,
                             Ref =:= GroupRef]),
     [{AppliedAt, ActualEntry, Origin}] =
         [{I, E, O} || {I, {apply_entry, E, O}} <- numbered(Messages)],
     ?assertEqual(quod_ledger:encode_entry(Entry), quod_ledger:encode_entry(ActualEntry)),
-    ?assertEqual(case Mode of live -> live; catchup -> replay end, Origin),
+    ?assertEqual(case Mode of live -> live; _ -> replay end, Origin),
     RenewedProjections =
         [I || {I, {project_pending_begins, Rows}} <- numbered(Messages),
               lists:any(fun(#{group_id := G, sequence := Seq}) ->
                                 G =:= GroupId andalso Seq =:= 3
                         end, Rows)],
-    ?assertNotEqual([], RenewedProjections),
-    ?assert(lists:last(RenewedProjections) < AppliedAt),
+    case Mode of
+        catchup_paused ->
+            ?assertEqual([], RenewedProjections),
+            %% The complete production sink ran with sync={pulling,...}.
+            %% Repeat journal reconciliation while paused: no new signature,
+            %% exact durable bytes and waiter survive, no closure is emitted.
+            {StillPaused, none} = quod_simplex:test_reconcile_signing_state(S),
+            ?assertEqual(Pending, quod_signing_journal:pending_begins(
+                                  quod_simplex:test_signing_journal(StillPaused)));
+        _ ->
+            ?assertNotEqual([], RenewedProjections),
+            ?assert(lists:last(RenewedProjections) < AppliedAt)
+    end,
     receive
         {dtx_submit_result, Unexpected} -> error({blocked_waiter_released, Unexpected})
     after 0 -> ok
     end,
-    {Pending, 3}.
+    {Pending, case Mode of catchup_paused -> 2; _ -> 3 end}.
 
 apply_scenario(live, Block, _Entry, Before, _After, OtherPeers,
                Identities, Domain, S0) ->
@@ -258,6 +292,10 @@ apply_scenario(catchup, _Block, Entry, _Before, After, _Peers,
     {S, ok} = quod_simplex:test_apply_catchup_window(
                 recovery, [Entry], After, S0),
     S;
+apply_scenario(catchup_paused, Block, Entry, Before, After, Peers,
+               Identities, Domain, S0) ->
+    Pulling = quod_simplex:test_state_set(sync, {pulling, self()}, S0),
+    apply_scenario(catchup, Block, Entry, Before, After, Peers, Identities, Domain, Pulling);
 apply_scenario(ordinary, Block, Entry, _Before, After, _Peers,
                _Identities, _Domain, S0) ->
     %% This boundary is already after application, not nested in a new
@@ -299,7 +337,7 @@ assert_order(Mode, Entry, GroupRef, GroupId, Messages) ->
             [{AppliedAt, ActualEntry, Origin}] = Applies,
             ?assertEqual(quod_ledger:encode_entry(Entry),
                          quod_ledger:encode_entry(ActualEntry)),
-            ?assertEqual(case Mode of live -> live; catchup -> replay end, Origin),
+            ?assertEqual(case Mode of live -> live; _ -> replay end, Origin),
             case AppliedAt < ResolvedAt of
                 true -> ok;
                 false -> error({resolution_before_apply, Mode, Messages})

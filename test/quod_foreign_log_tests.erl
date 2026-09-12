@@ -2142,7 +2142,7 @@ pending_prepare_to_finalize_resumes_phase_history_and_fetches_only_delta_test() 
         %% the public projection.  Its exact group history lives only in the
         %% phase index, so accepting the Finalize from slot 3 alone below is
         %% the non-vacuous proof that the suspended index was resumed.
-        ?assertEqual(#{}, maps:get(dtx_pending, PrepareProjection)),
+        ?assertNot(maps:is_key(dtx_pending, PrepareProjection)),
         [SessionFile] = phase_session_files(Dir, Identity),
 
         %% Finalize depends on the exact Prepare history kept in the suspended

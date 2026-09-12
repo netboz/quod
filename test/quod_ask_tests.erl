@@ -85,6 +85,16 @@ plain_reads_never_select_advertised_observers_test() ->
     ?assertEqual([Validator],
                  quod_ask:test_eligible_routes([Observer, Validator])).
 
+cohosted_write_selection_uses_eligibility_not_location_test() ->
+    Target = {<<"quod:cohosted-route">>, <<174:256>>},
+    ?assertEqual(local, quod_ask:test_cohosted_scope_route(Target, {ok, #{identity => Target}})),
+    ?assertEqual(remote, quod_ask:test_cohosted_scope_route(Target, {error, not_validator})),
+    ?assertEqual({error, {ontology_rebuilding, element(1, Target)}},
+                 quod_ask:test_cohosted_scope_route(Target, {error, unavailable})),
+    ?assertEqual({error, {anchor_conflict, element(1, Target)}},
+                 quod_ask:test_cohosted_scope_route(Target,
+                     {ok, #{identity => {element(1, Target), <<175:256>>}}})).
+
 advertised_validator_must_belong_to_certified_committee_test() ->
     HonestKey = <<3:256>>, LiarKey = <<4:256>>,
     Honest = #{role => validator, node_key => HonestKey},

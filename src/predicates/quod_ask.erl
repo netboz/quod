@@ -33,7 +33,8 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
          test_await_remote_scope_open/4,
          test_remote_open_error/2,
          test_remember_route_error/2, test_bind_answer/2,
-         test_eligible_routes/1, test_committee_routes/2]).
+         test_eligible_routes/1, test_committee_routes/2,
+         test_cohosted_scope_route/2]).
 -endif.
 
 -doc "Register the `::` handler onto a freshly-built kb (`#est{}`).".
@@ -292,6 +293,42 @@ origin_scope_admitted(Target) ->
     end.
 
 open_cohosted_scope(Target, Anchor, ScopeId) ->
+    %% Location is not write eligibility. The existing committed proof gate
+    %% distinguishes an observer from a temporarily unavailable validator.
+    %% Selection happens only inside get_or_open_scope's opener: an existing
+    %% invocation keeps its exact pinned scope across redo/backtracking.
+    Route = case quod_proof_context:read_only() of
+        true -> local;
+        false -> cohosted_scope_route({Target, Anchor}, quod_simplex:identity_view(Target))
+    end,
+    case Route of
+        local -> open_local_scope(Target, Anchor, ScopeId);
+        remote -> open_cohosted_validator_scope(Target, Anchor, ScopeId);
+        {error, _} = Error -> Error
+    end.
+
+cohosted_scope_route(Identity, {ok, #{identity := Identity}}) -> local;
+cohosted_scope_route({Target, _}, {ok, _OtherIdentity}) ->
+    {error, {anchor_conflict, Target}};
+cohosted_scope_route(_Identity, {error, not_validator}) -> remote;
+cohosted_scope_route({Target, _}, {error, unavailable}) ->
+    {error, {ontology_rebuilding, Target}}.
+
+open_cohosted_validator_scope(Target, Anchor, ScopeId) ->
+    case execution_remaining_ms() of
+        0 -> {error, current_proof_limit()};
+        Remaining ->
+            %% This exact-identity route API already handles ready routes,
+            %% progress waits and anchor conflicts. No second scope/session
+            %% is registered, and no local writable invocation was attempted.
+            case quod_directory:await_validator_routes({Target, Anchor}, Remaining) of
+                {ok, Routes} -> open_remote_routes(Target, Anchor, ScopeId, Routes);
+                {error, anchor_conflict} -> {error, {anchor_conflict, Target}};
+                {error, unavailable} -> {error, {ontology_unreachable, Target}}
+            end
+    end.
+
+open_local_scope(Target, Anchor, ScopeId) ->
     case quod_reg:where({quod_prolog, Target}) of
         undefined -> {error, {ontology_unreachable, Target}};
         Engine ->
@@ -613,6 +650,7 @@ test_remember_route_error(Current, Reason) ->
     remember_route_error(Current, Reason).
 test_eligible_routes(Routes) -> eligible_routes(Routes).
 test_committee_routes(Routes, Committee) -> committee_routes(Routes, Committee).
+test_cohosted_scope_route(Identity, View) -> cohosted_scope_route(Identity, View).
 test_await_remote_scope_open(Target, Router, Generation, OpenRef) ->
     await_remote_scope_open(Target, Router, Generation, OpenRef).
 -endif.

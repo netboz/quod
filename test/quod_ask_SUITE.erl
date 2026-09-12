@@ -193,6 +193,18 @@ init_per_suite(Config) ->
     lists:foreach(
       fun(Peer) -> set_network_identity(Peer, NetworkId) end,
       [Target, Asker, Third]),
+    %% Root's seed/spec requires a local replica on every node before durable
+    %% effects. Its only validator and effect author remains Target. The
+    %% signed Root-effect proof below must route around these real observers,
+    %% not mistake co-hosting for write eligibility.
+    start_brahms(Target, ?ROOT_NS, TargetAddr, []),
+    lists:foreach(fun({RootPeer, RootPub, RootAddr}) ->
+        start_join_namespace(RootPeer, RootPub, ?ROOT_NS, RootAnchor, [TargetAddr], Config),
+        start_brahms(RootPeer, ?ROOT_NS, RootAddr, [TargetAddr]),
+        wait_ready(RootPeer, ?ROOT_NS, {effect_custody_capacity, 64}),
+        ?assertMatch(#{role := observer},
+            peer:call(RootPeer, quod_simplex, status, [?ROOT_NS]))
+    end, [{Asker, AskerPub, AskerAddr}, {Third, ThirdPub, ThirdAddr}]),
     %% The third node is a real, fully synchronized observer of `animals`.
     %% Its key sorts before the sole validator so the live selection tests
     %% below would choose it first if advertised roles were trusted.

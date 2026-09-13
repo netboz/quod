@@ -196,10 +196,10 @@ start_operation_monitor(Owner, OwnerNs, OperationRef, Options)
             TraceCtx = quod_trace:context(),
             {Pid, Monitor} = spawn_monitor(
                                fun() ->
-                                   quod_trace:with_optional_span(
-                                     TraceCtx, <<"quod.operation.recover">>, internal,
-                                     #{'quod.namespace' => OwnerNs,
-                                       'quod.operation.id' => quod_trace:tx_id(element(5, OperationRef))},
+                                   %% The installed Simplex row owns this attempt
+                                   %% span. External retirement cannot execute a
+                                   %% child-owned span wrapper's after clause.
+                                   quod_trace:with_context(TraceCtx,
                                      fun() -> operation_init(Owner, OwnerNs, OperationRef) end)
                                end),
             {ok, Pid, Monitor};
@@ -537,6 +537,11 @@ set_operation_context(Context, S) -> S#state{protocol = {operation, Context}}.
 operation_stop(Reason, S = #state{owner = Owner,
   protocol = {operation, #{operation_ref := OperationRef}}}) ->
     Event = case Reason of done -> {done, OperationRef}; _ -> {error, Reason} end,
+    %% Finish child root-event writes before notification may release the
+    %% owner's handle. Cleanup and operational notification order are unchanged.
+    _ = catch quod_trace:add_event(quod_trace:context(),
+      <<"operation.close_observed">>,
+      #{'quod.operation.result' => case Reason of done -> <<"done">>; _ -> <<"error">> end}),
     Owner ! {dtx_coordinator, self(), OperationRef, Event},
     close_coordinator(case Reason of done -> ok; _ -> failed end, S),
     stop.

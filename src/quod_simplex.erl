@@ -162,8 +162,9 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          cancel_operation_waiter/4,
          finish_operation_target_result/5, install_operation_snapshot/2,
          drop_operation_recovery_owner/4, drop_operation_waiter/3,
-         settle_operation_recovery/3, reconcile_operation_recoveries/1,
-         test_operation_recoveries/1, test_seed_operation_worker/3]).
+         settle_operation_recovery/3, block_operation_recovery/4, reconcile_operation_recoveries/1,
+         test_operation_recoveries/1, test_seed_operation_worker/3,
+         test_start_operation_recovery/3]).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([append/2, history_binding/3,
          form_cert/6,
@@ -1142,8 +1143,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     %% Keep the original parent separate: a replacement is another attempt,
     %% never a child of the span this owner has already released.
     trace_ctx = #{} :: quod_trace:context(),
-    coordinate_span = none
-        :: none | {quod_trace:context(), quod_trace:span_ctx()},
+    coordinate_span = none :: quod_attempt_span:handle(),
     pid = none :: none | pid(),
     monitor = none :: none | reference()
 }).
@@ -1156,6 +1156,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     operation_ref :: term(),
     %% Live request ancestry only; reconstructed history has no trace parent.
     trace_ctx = #{} :: quod_trace:context(),
+    attempt_span = none :: quod_attempt_span:handle(),
     claim_state = unknown :: unknown | unresolved | terminal,
     claim_slot = none :: none | pos_integer(),
     claim_tx_id = none :: none | <<_:256>>,
@@ -1929,8 +1930,14 @@ test_operation_recoveries(#s{operation_recoveries = Recoveries}) ->
             target_ref => Target, digest => Digest, pid => Pid,
             monitor => Monitor, result => operation_client_result(Owner),
             results => Results, result_vector => operation_result_vector(Owner),
-            waiters => Waiters}
+            waiters => Waiters, trace_ctx => Owner#operation_recovery_owner.trace_ctx,
+            attempt_span => Owner#operation_recovery_owner.attempt_span}
       end, Recoveries).
+
+test_start_operation_recovery(Ref, TraceCtx, S) ->
+    Owner = #operation_recovery_owner{operation_ref = Ref,
+              trace_ctx = TraceCtx, claim_state = unresolved},
+    put_operation_owner(start_operation_recovery(Owner, S), S).
 operation_result_vector(#operation_recovery_owner{target_refs = none}) -> pending;
 operation_result_vector(#operation_recovery_owner{
                           target_refs = Refs, target_results = Results}) ->
@@ -4430,6 +4437,7 @@ terminate(
      dtx_out_channels = DtxOutChannels,
      dtx_workers = DtxWorkers,
      dtx_coordinators = DtxCoordinators,
+     operation_recoveries = OperationRecoveries,
      conns = Conns, inbound_conns = Inbound,
      relay_conns = RelayConns,
      relay_inbound_conns = RelayInbound,
@@ -4461,6 +4469,11 @@ terminate(
               stop_dtx_coordinator_process(Released)
       end,
       DtxCoordinators),
+    %% Operation workers already monitor this owner. Preserve that shutdown
+    %% behavior; release only the handles in the installed owner snapshot.
+    maps:foreach(fun(_Ref, Owner) ->
+        _ = close_operation_span(Owner, <<"owner_terminating">>, #{}), ok
+    end, OperationRecoveries),
     _ = case Store of
             undefined -> ok;
             _         -> try quod_ledger_store:close(Store) catch _:_ -> ok end
@@ -4855,9 +4868,6 @@ await_live_operation(
             park_operation_waiter(From, WaitRef, OperationRef, Deadline, Owner, S)
     end.
 
-operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx})
-  when map_size(TraceCtx) =:= 0 ->
-    quod_trace:context();
 operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx}) ->
     TraceCtx.
 
@@ -5086,19 +5096,33 @@ start_operation_recovery(
   S = #s{ns = Ns}) ->
     trace_operation_event(
       TraceCtx, <<"operation.recovery_spawn">>, OperationRef, Ns, #{}),
-    case quod_trace:with_context(TraceCtx, fun() ->
+    {ChildCtx, Span} = quod_trace:start_span(
+      TraceCtx, <<"quod.operation.recover">>, internal,
+      #{'quod.namespace' => Ns,
+        'quod.operation.id' => quod_trace:tx_id(element(5, OperationRef)),
+        'quod.operation.ancestry' => quod_attempt_span:ancestry(TraceCtx),
+        'quod.operation.duration_scope' => <<"owner_observed_attempt">>}),
+    Tentative = Owner#operation_recovery_owner{
+      attempt_span = quod_attempt_span:owned(TraceCtx, ChildCtx, Span)},
+    Started = try quod_trace:with_context(ChildCtx, fun() ->
              quod_dtx_coordinator:start_operation_monitor(
                self(), Ns, OperationRef, #{})
-         end) of
+         end)
+         catch StartClass:StartReason:StartStack ->
+             _ = close_operation_span(Tentative, <<"start_failed">>, #{}),
+             erlang:raise(StartClass, StartReason, StartStack)
+         end,
+    case Started of
         {ok, Pid, Monitor} ->
             activate_dtx_coordinator(Pid, S),
-            Owner#operation_recovery_owner{
+            Tentative#operation_recovery_owner{
               status = running, pid = Pid, monitor = Monitor};
         {error, Reason} ->
             logger:error(
               "quod[~s]: operation recovery start failed for ~p: ~p",
               [Ns, OperationRef, Reason]),
-            Owner#operation_recovery_owner{status = blocked}
+            Released = close_operation_span(Tentative, <<"start_failed">>, #{}),
+            Released#operation_recovery_owner{status = blocked}
     end;
 start_operation_recovery(Owner, _S) ->
     Owner.
@@ -5110,9 +5134,10 @@ settle_operation_recovery(
         Owner = #operation_recovery_owner{
                   status = running, pid = Pid, monitor = Monitor} ->
             _ = erlang:demonitor(Monitor, [flush]),
+            Released = close_operation_span(Owner, <<"done_observed">>, #{}),
             {true,
              S#s{operation_recoveries = Recoveries#{
-                   OperationRef => Owner#operation_recovery_owner{
+                   OperationRef => Released#operation_recovery_owner{
                      status = settling, pid = none, monitor = none}}}};
         _ -> false
     end.
@@ -5127,9 +5152,10 @@ block_operation_recovery(
             logger:error(
               "quod[~ts]: durable remote operation ~p blocked: ~p",
               [Ns, OperationRef, Reason]),
+            Released = close_operation_span(Owner, <<"error_observed">>, #{}),
             {true,
              S#s{operation_recoveries = Recoveries#{
-                   OperationRef => Owner#operation_recovery_owner{
+                   OperationRef => Released#operation_recovery_owner{
                      status = blocked, pid = none, monitor = none}}}};
         _ -> false
     end.
@@ -5160,8 +5186,10 @@ drop_operation_recovery_owner(
                                 Reason]),
                              blocked
                      end,
+            Released = close_operation_span(Owner, <<"worker_exit">>,
+              #{'quod.operation.exit_class' => quod_attempt_span:exit_class(Reason)}),
             {true, put_operation_owner(
-                     Owner#operation_recovery_owner{
+                     Released#operation_recovery_owner{
                        status = Status, pid = none, monitor = none}, S)};
         [] -> false
     end.
@@ -5210,14 +5238,23 @@ put_operation_owner(Owner = #operation_recovery_owner{operation_ref = Ref},
             S#s{operation_recoveries = maps:remove(Ref, Recoveries)}
     end.
 
-stop_operation_recovery_process(
+stop_operation_recovery_process(Owner) ->
+    Released = close_operation_span(Owner, <<"retirement_requested">>, #{}),
+    stop_operation_recovery_worker(Released).
+
+close_operation_span(Owner = #operation_recovery_owner{attempt_span = Handle}, Closure, Attributes) ->
+    Released = Owner#operation_recovery_owner{attempt_span = none},
+    ok = quod_attempt_span:close(Handle, Attributes#{'quod.operation.closure' => Closure}),
+    Released.
+
+stop_operation_recovery_worker(
   #operation_recovery_owner{pid = Pid, monitor = Monitor, waiters = Waiters})
   when is_pid(Pid), is_reference(Monitor) ->
     0 = map_size(Waiters),
     _ = erlang:demonitor(Monitor, [flush]),
     exit(Pid, shutdown),
     ok;
-stop_operation_recovery_process(#operation_recovery_owner{waiters = Waiters}) ->
+stop_operation_recovery_worker(#operation_recovery_owner{waiters = Waiters}) ->
     0 = map_size(Waiters),
     ok.
 
@@ -5390,13 +5427,13 @@ start_dtx_coordinator_worker(
       TraceCtx, <<"quod.dtx.coordinate">>, internal,
       #{'quod.namespace' => Ns,
         'quod.dtx.group_id' => quod_trace:tx_id(GroupId),
-        'quod.dtx.ancestry' => dtx_coordinator_ancestry(TraceCtx),
+        'quod.dtx.ancestry' => quod_attempt_span:ancestry(TraceCtx),
         'quod.dtx.duration_scope' => <<"owner_observed_attempt">>}),
     Owner = #dtx_coordinator_owner{
               status = running, group_id = GroupId,
               begin_ref = BeginRef, group_ref = GroupRef,
               trace_ctx = TraceCtx,
-              coordinate_span = owned_dtx_coordinator_span(TraceCtx, ChildCtx, Span)},
+              coordinate_span = quod_attempt_span:owned(TraceCtx, ChildCtx, Span)},
     %% Only child start is inside this catch. OTP installs the returned row
     %% only when the whole callback returns. A later uncaught unwind can lose
     %% this tentative span; terminate has the old snapshot (see B amendment).
@@ -5484,7 +5521,7 @@ drop_dtx_coordinator_owner(
             S1 = remove_dtx_coordinator(GroupId, S),
             _ = close_dtx_coordinator_span(
                   Owner, <<"worker_exit">>,
-                  #{'quod.dtx.exit_class' => dtx_coordinator_exit_class(Reason)}),
+                  #{'quod.dtx.exit_class' => quod_attempt_span:exit_class(Reason)}),
             case Reason of
                 normal -> ok;
                 shutdown -> ok;
@@ -5530,50 +5567,16 @@ stop_dtx_coordinator(GroupId, S) ->
 %% End-once applies to installed states. On fatal callback unwind, terminate
 %% can see a stale token: the pinned SDK's end-after-take no-op is intentional.
 close_dtx_coordinator_span(
-  Owner = #dtx_coordinator_owner{coordinate_span = none}, _Closure, _Attributes) ->
-    Owner;
-close_dtx_coordinator_span(
-  Owner = #dtx_coordinator_owner{coordinate_span = {_Ctx, Span}},
+  Owner = #dtx_coordinator_owner{coordinate_span = Handle},
   Closure, Attributes) ->
     Released = Owner#dtx_coordinator_owner{coordinate_span = none},
     %% Observation release must never mask the original start exception or
     %% interrupt the existing shutdown path if the SDK has already stopped.
-    _ = catch quod_trace:set_attributes(
-          Span, Attributes#{'quod.dtx.closure' => Closure}),
-    _ = catch otel_span:end_span(Span),
+    ok = quod_attempt_span:close(Handle, Attributes#{'quod.dtx.closure' => Closure}),
     Released.
 
-dtx_coordinator_ancestry(TraceCtx) ->
-    case otel_span:is_valid(otel_tracer:current_span_ctx(TraceCtx)) of
-        true -> <<"retained_parent">>;
-        false -> <<"no_retained_parent">>
-    end.
-
-%% The API's disabled tracer can return the existing parent verbatim instead
-%% of allocating a span. That borrowed parent is never this row's token.
-%% Unsampled *new* spans retain ordinary ownership; validity/identity here is
-%% allocation detection, not an is_recording-based mutable ended flag.
-owned_dtx_coordinator_span(ParentCtx, ChildCtx, Span) ->
-    Parent = otel_tracer:current_span_ctx(ParentCtx),
-    case otel_span:is_valid(Span) andalso
-         (not otel_span:is_valid(Parent) orelse
-          {otel_span:trace_id(Span), otel_span:span_id(Span)} =/=
-          {otel_span:trace_id(Parent), otel_span:span_id(Parent)}) of
-        true -> {ChildCtx, Span};
-        false -> none
-    end.
-
-dtx_coordinator_event(#dtx_coordinator_owner{coordinate_span = none}, _Name) ->
-    ok;
-dtx_coordinator_event(#dtx_coordinator_owner{coordinate_span = {Ctx, _}}, Name) ->
-    _ = catch quod_trace:add_event(Ctx, Name, #{}),
-    ok.
-
-dtx_coordinator_exit_class(normal) -> <<"normal">>;
-dtx_coordinator_exit_class(shutdown) -> <<"shutdown">>;
-dtx_coordinator_exit_class({shutdown, _}) -> <<"shutdown">>;
-dtx_coordinator_exit_class(killed) -> <<"killed">>;
-dtx_coordinator_exit_class(_) -> <<"abnormal">>.
+dtx_coordinator_event(#dtx_coordinator_owner{coordinate_span = Handle}, Name) ->
+    quod_attempt_span:event(Handle, Name, #{}).
 
 stop_dtx_coordinator_process(
   #dtx_coordinator_owner{pid = Pid, monitor = Monitor})

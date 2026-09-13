@@ -30,7 +30,17 @@ disable(Window) ->
     end.
 
 allocate_span(Ctx, Tracer, <<"quod.dtx.coordinate">>,
-              #{'quod.namespace' := Ns, 'quod.dtx.group_id' := Group}, Operation)
+              #{'quod.namespace' := Ns, 'quod.dtx.group_id' := Group}, Operation) ->
+    allocate_attempt(Ctx, Tracer, Ns, Group, Operation);
+allocate_span(Ctx, Tracer, <<"quod.operation.recover">>,
+              #{'quod.namespace' := Ns, 'quod.operation.id' := Group}, Operation) ->
+    allocate_attempt(Ctx, Tracer, Ns, Group, Operation);
+allocate_span(_Ctx, _Tracer, _Name, _Attributes, Operation) -> Operation().
+
+%% Both identities use the same closed metadata and SDK delegation. The
+%% selected start denominator defines the identity domain (L3 group or L2
+%% operation); an allocation record alone is never evidence of a worker start.
+allocate_attempt(Ctx, Tracer, Ns, Group, Operation)
   when is_binary(Ns), is_binary(Group), byte_size(Group) =:= 64 ->
     case selected(Ns) of
         off -> Operation();
@@ -42,7 +52,7 @@ allocate_span(Ctx, Tracer, <<"quod.dtx.coordinate">>,
                 erlang:raise(Class, Reason, Stack)
             end
     end;
-allocate_span(_Ctx, _Tracer, _Name, _Attributes, Operation) -> Operation().
+allocate_attempt(_Ctx, _Tracer, _Ns, _Group, Operation) -> Operation().
 
 selected(Ns) ->
     try persistent_term:get(?CONFIG, off) of

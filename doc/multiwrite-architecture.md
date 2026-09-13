@@ -1241,3 +1241,38 @@ unchanged; the original descriptor is asserted at the real worker return.
 Action composition does not imply action transactions are atomic under L2:
 only candidate staging rolls back; independent target outcomes may differ.
 Sampler/root-lifecycle attribution and Begin performance remain separate work.
+
+## Implementation status — shared attempt-span ownership (2026-09-13)
+
+L2 operation attempts now follow B's installed-owner token discipline. The
+existing Simplex operation row starts and closes `quod.operation.recover`;
+the worker inherits its context and no longer creates a child-owned root.
+Receipt retirement can stop a worker without running its `after` clause, so
+that old wrapper could leave an allocated root unended. A real-SDK control
+proves allocation before actual child entry/shutdown and the old leaked handle.
+This identifies a mechanism, not the fraction of historical missing roots it
+explains. Hardware attribution requires the independent start denominator.
+
+`quod_attempt_span` extracts B's allocation/close/event/ancestry mechanics into
+one process-free library shared by group and operation owners. The original
+caller context stays separate from the handle; carrying-row restarts are
+siblings, history-only rows stay parentless even on adoption. Returned start
+errors, worker results, DOWN, retirement and owner termination release their
+tokens. Closures report owner observations, not successful application or a
+queue measurement. A child writes its final root event before notifying the
+owner; notification, cleanup and worker shutdown semantics are unchanged.
+
+B's exception boundary remains: installed states are end-once; fatal callback
+unwind may expose a stale token to best-effort termination or lose a tentative
+one. SDK end-after-take is pinned as a no-op, and a lost root is a discrepancy,
+never idleness. SDK failure cannot prevent operational shutdown. No new timer,
+owner, queue, registry, gproc name, acknowledgement or delivery path is added.
+The existing Simplex and coordinator processes and progress messages remain.
+
+The compile-time diagnostic allocation decorator accepts both existing root
+names through one implementation. Its bounded metadata identifies the exact
+span, sampled/recording flags and effective sampler; it does not create a
+start denominator. The collector's selected group/operation identity domain
+must accompany the record, and unknown or missing metadata stays explicit.
+Default builds still erase the decorator call. Retained formats and deployment
+configuration are unchanged; ordinary spans suffice at full diagnostic sampling.

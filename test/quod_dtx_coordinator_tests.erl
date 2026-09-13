@@ -11,9 +11,11 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
             quod_trace:with_span(otel_ctx:new(), <<"operation.test.parent">>, internal, #{},
               fun(_) ->
                   with_operation_worker(F, fun(Worker, Monitor) ->
-                      reply_operation_source(F, terminal_operation_row(F)),
-                      certify_operation_result(F, Worker, committed),
-                      assert_operation_result(F, Worker, Monitor, committed)
+                      with_operation_close_order(Worker, maps:get(operation_ref, F), fun() ->
+                          reply_operation_source(F, terminal_operation_row(F)),
+                          certify_operation_result(F, Worker, committed),
+                          assert_operation_result(F, Worker, Monitor, committed)
+                      end)
                   end)
               end),
             Parent = quod_trace_tests:take_span(<<"operation.test.parent">>),
@@ -37,9 +39,9 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
             ProbeWave = take_operation_span(ProbeItem#span.parent_span_id),
             ?assertEqual(Worker#span.span_id, ProbeWave#span.parent_span_id),
             Events = lists:reverse(otel_events:list(Worker#span.events)),
-            ?assertEqual([<<"operation.worker_started">>],
+            ?assertEqual([<<"operation.worker_started">>, <<"operation.close_observed">>],
                          [E#event.name || E <- Events]),
-            [Started] = Events,
+            [Started, Closed] = Events,
             [Sent] = otel_events:list(Notify#span.events),
             ?assertEqual(Worker#span.trace_id, Notify#span.trace_id),
             ?assertEqual(Worker#span.span_id, Notify#span.parent_span_id),
@@ -47,8 +49,10 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
             ?assert(Started#event.system_time_native =< Local#span.start_time),
             ?assert(Resolve#span.end_time =< Sent#event.system_time_native),
             ?assertEqual(#{}, otel_attributes:map(Sent#event.attributes)),
-            ?assert(lists:all(fun(E) -> otel_attributes:map(E#event.attributes) =:= #{} end,
-                             Events))
+            ?assertEqual(#{}, otel_attributes:map(Started#event.attributes)),
+            ?assertEqual(#{'quod.operation.result' => <<"done">>},
+                         otel_attributes:map(Closed#event.attributes)),
+            ?assert(Sent#event.system_time_native =< Closed#event.system_time_native)
         end)
     end).
 
@@ -63,6 +67,25 @@ assert_operation_wave_ancestry(Child, Root) ->
     ?assert(Item#span.start_time =< Child#span.start_time),
     ?assert(Child#span.end_time =< Item#span.end_time),
     ?assert(Item#span.end_time =< Wave#span.end_time).
+
+with_operation_close_order(Worker, Op, Fun) ->
+    Session = trace:session_create(operation_close_order, self(), []),
+    1 = trace:function(Session, {quod_trace, add_event, 3}, true, [local]),
+    1 = trace:process(Session, Worker, true, [call, send]),
+    try
+        Result = Fun(),
+        %% Both records originate in this same worker: this pins program
+        %% order, not delivery/processing order across different recipients.
+        receive
+            {trace, Worker, call, {quod_trace, add_event,
+              [_Ctx, <<"operation.close_observed">>, _Attrs]}} -> ok;
+            {trace, Worker, send, {dtx_coordinator, Worker, Op, {done, Op}}, _} ->
+                error(operation_notification_before_final_event)
+        after 1000 -> error(missing_final_event_trace) end,
+        receive {trace, Worker, send, {dtx_coordinator, Worker, Op, {done, Op}}, _} -> ok
+        after 1000 -> error(missing_done_notification_trace) end,
+        Result
+    after trace:session_destroy(Session) end.
 
 take_operation_span(Id) ->
     receive {quod_test_span, #span{span_id = Id} = Span} -> Span
@@ -153,7 +176,7 @@ fresh_operation_result_trace(Class) ->
         with_operation_follow_owner(fun(_Foreign) ->
             quod_trace_tests:with_tracer(fun() ->
                 quod_trace:with_span(otel_ctx:new(), <<"operation.fresh.test">>, internal, #{},
-                  fun(_) -> with_operation_worker(F, fun(Worker, Monitor) ->
+                  fun(_) -> with_operation_owner(F, fun(Worker, Monitor, OwnerState) ->
                     {ok, Row} = terminal_operation_row(F),
                     reply_operation_source(F, {ok, Row#{operation_state := unresolved,
                                                        receipt_height := none, included := []}}),
@@ -199,6 +222,7 @@ fresh_operation_result_trace(Class) ->
                             after 1000 -> error(missing_fresh_operation_done) end,
                             receive {'DOWN', Monitor, process, Worker, normal} -> ok
                             after 1000 -> error(fresh_operation_worker_did_not_finish) end,
+                            {true, _Released} = quod_simplex:settle_operation_recovery(Worker, Op, OwnerState),
                             Root = quod_trace_tests:take_span(<<"quod.operation.recover">>),
                             Decode = quod_trace_tests:take_span(<<"quod.operation.result_evidence_decode">>),
                             Receipt = quod_trace_tests:take_span(<<"quod.operation.receipt">>),
@@ -1557,12 +1581,21 @@ stop_operation_stub(Pid) ->
         erlang:demonitor(Monitor, [flush])
     end.
 
-with_operation_worker(#{source_ns := Ns, operation_ref := OperationRef}, Fun) ->
-    {ok, Worker, Monitor} = quod_dtx_coordinator:start_operation_monitor(
-                              self(), Ns, OperationRef, #{}),
+with_operation_worker(F, Fun) ->
+    with_operation_owner(F, fun(Worker, Monitor, _OwnerState) -> Fun(Worker, Monitor) end).
+
+%% The real Simplex transition owns the attempt span. These are owner-interface
+%% protocol fixtures, not founded consensus nodes. Cleanup uses the same SDK
+%% end-after-take guarantee as other direct-callback fixtures.
+with_operation_owner(#{source_ns := Ns, operation_ref := OperationRef}, Fun) ->
+    Base = quod_simplex:test_state(#{ns => Ns, genesis_hash => element(3, OperationRef),
+                                     prolog_ready => false}),
+    State = quod_simplex:test_start_operation_recovery(OperationRef, quod_trace:context(), Base),
+    #{OperationRef := #{pid := Worker, monitor := Monitor}} = quod_simplex:test_operation_recoveries(State),
     operation_ready(Worker, self(), OperationRef),
-    try Fun(Worker, Monitor)
+    try Fun(Worker, Monitor, State)
     after
+        _ = quod_simplex:terminate(fixture_cleanup, running, State),
         exit(Worker, kill),
         erlang:demonitor(Monitor, [flush])
     end.

@@ -7,7 +7,7 @@
 
 %% Also used by the isolated compiled-start fault control, which stops SDK
 %% storage between the real span creation and the unchanged real start body.
--export([start_failure/2, callback_unwind_inventory/0]).
+-export([start_failure/2, callback_unwind_inventory/0, with_sdk/1]).
 
 %% B's callback-unwind amendment deliberately does not add a second owner or
 %% rollback registry. These fixtures exercise production callbacks and real

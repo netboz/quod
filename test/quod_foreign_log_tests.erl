@@ -638,7 +638,14 @@ page_credit_worker_death_resets_sent_page_and_rebinds_unsent_deadline_test() ->
         Rows = gen_server:call(Pid, test_page_rows),
         #{caller := PageOwner} = maps:get(Req1, Rows),
         [{Req2, Unsent}] = maps:to_list(maps:remove(Req1, Rows)),
+        %% Writer death queues a disk-only custody-loss reconstruction of A.
+        %% B's reply is not an ordering barrier for that independent work.
+        Gate = make_ref(),
+        ok = gen_server:call(Pid, {test_hold_next_initialization, self(), Gate}),
         exit(PageOwner, kill),
+        IdentityA = {Ns, maps:get(anchor, A)},
+        Initializer = receive {initialization_held, Gate, _RequestRef, W} -> W
+                      after 2000 -> error(no_custody_loss_reconstruction) end,
         ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
         {Lease2, Pid} = receive_page_open(Peer, Endpoint, Ns),
         ?assert(Lease1 =/= Lease2),
@@ -658,6 +665,11 @@ page_credit_worker_death_resets_sent_page_and_rebinds_unsent_deadline_test() ->
         Pid ! {catchup_page, Link2, Binding, Grant2, Req2,
                {ok, fixture_entry_blobs(B), 2}, crypto:strong_rand_bytes(16)},
         ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(Second, 3000)),
+        ?assertMatch(#{pending := 1, pulls := 0, page_bindings := 0}, quod_foreign_log:stats()),
+        ?assertMatch(#{active := #{work := {initialize, IdentityA, custody_lost}}},
+                     maps:get(IdentityA, quod_foreign_log:test_lifecycle_state())),
+        Initializer ! {release_initialization, Gate},
+        await_history_idle(IdentityA, quod_time:mono_ms() + 3000),
         ?assertMatch(#{pending := 0, pulls := 0, page_bindings := 0}, quod_foreign_log:stats())
     after
         Link1 ! close,

@@ -104,6 +104,7 @@ request_session_binding(_Request, _ExpectedMode, _PublicKey, _SessionExpires) ->
     {error, session_principal_mismatch}.
 
 resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
+    Deadline = quod_time:mono_ms() + 5000,
     case quod_client_goal:verify(RequestBytes, Signature) of
         {ok, #{request := #{signing_public_key := PublicKey,
                             network_identity := RequestNetwork},
@@ -113,7 +114,7 @@ resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
                 {ok, RequestNetwork} ->
                     resolved_operation(
                       Evidence, Digest, OperationRef,
-                      quod_prolog:outcome(OperationRef));
+                      quod_prolog:outcome(OperationRef), Deadline);
                 {ok, _OtherNetwork} ->
                     {error, wrong_network};
                 {error, _} = Error ->
@@ -128,34 +129,42 @@ resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
 resolved_operation(
   Evidence, Digest, OperationRef,
   {ok, #{status := claimed, request_digest := Digest,
-         outcome_ref := OutcomeRef} = Claim}) ->
-    case resolve_claim_outcome(OutcomeRef) of
+         outcome_ref := OutcomeRef} = Claim}, Deadline) ->
+    case resolve_claim_outcome(OutcomeRef, Claim, OperationRef, Deadline) of
         {ok, Outcome} ->
             {ok, Evidence, {operation_outcome, Claim, Outcome}};
         {error, _} ->
             {ok, Evidence, {operation_pending, OperationRef}}
     end;
-resolved_operation(Evidence, _Digest, OperationRef, {error, _}) ->
+resolved_operation(Evidence, _Digest, OperationRef, {error, _}, _Deadline) ->
     %% Absence is never permission to create a fresh operation: the request
     %% could be between durable custody and publication on the queried node.
     {ok, Evidence, {operation_pending, OperationRef}};
 resolved_operation(
   _Evidence, Digest, _OperationRef,
-  {ok, #{status := claimed, request_digest := OtherDigest}})
+  {ok, #{status := claimed, request_digest := OtherDigest}}, _Deadline)
   when is_binary(OtherDigest), OtherDigest =/= Digest ->
     {error, operation_conflict};
-resolved_operation(_Evidence, _Digest, _OperationRef, {ok, _BadClaim}) ->
+resolved_operation(_Evidence, _Digest, _OperationRef, {ok, _BadClaim}, _Deadline) ->
     {error, outcome_index_corrupt}.
 
-resolve_claim_outcome({applications, [Ref]}) ->
-    %% Preserve the existing one-target client grammar over the generalized
-    %% durable vector. Inclusion remains a reference, never a result verdict.
-    quod_prolog:outcome(Ref);
-resolve_claim_outcome({applications, _}) ->
-    %% N-target execution/result publication is the reviewed slice-8 scope.
-    %% Do not resolve a prefix and present it as a completed operation.
-    {error, independent_lane_unavailable};
-resolve_claim_outcome(OrdinaryOrGroupRef) -> quod_prolog:outcome(OrdinaryOrGroupRef).
+resolve_claim_outcome({applications, Refs}, #{request_digest := Digest} = Claim, Op, Deadline) ->
+    case lists:sort(quod_simplex:namespaces()) of
+        [OwnerNs | _] ->
+            case quod_dtx_current_view:operation_result(OwnerNs, Op, Digest, Claim, Deadline) of
+                {ok, Rows} ->
+                    case quod_operation_vector:result_rows(Rows) of
+                        {ok, Refs} ->
+                            {ok, #{status => completed, ref => Op, targets => Rows,
+                                   aggregate => quod_operation_vector:aggregate(Rows)}};
+                        _ -> {error, invalid_operation_result}
+                    end;
+                {error, _} = Error -> Error
+            end;
+        [] -> {error, not_ready}
+    end;
+resolve_claim_outcome(OrdinaryOrGroupRef, _Claim, _Op, _Deadline) ->
+    quod_prolog:outcome(OrdinaryOrGroupRef).
 
 verified_gateway(SessionId, RequestBytes, Signature, PublicKey, Peer) ->
     case trace_stage(

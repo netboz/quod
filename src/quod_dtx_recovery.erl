@@ -49,7 +49,7 @@ authoritative lookup proves that its semantic record is absent.
 -type phase_evidence() ::
         {identity(), quod_dtx:control(), quod_dtx:certified_ref()}.
 -type applied_evidence() ::
-        {identity(), quod_dtx_current_view:applied_certificate()}.
+        {identity(), quod_applied_certificate:applied_certificate()}.
 -type snapshot() ::
         #{evidence := [phase_evidence()],
           generations := [{identity(), non_neg_integer()}],
@@ -314,7 +314,7 @@ index_applied(
   [{Target, Certificate} = Row | Rest], Previous, Count, Index, Context, Acc)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
        (Previous =:= none orelse Previous < Target) ->
-    case quod_dtx_current_view:applied_certificate_binding(Certificate) of
+    case quod_applied_certificate:applied_certificate_binding(Certificate) of
         {ok, #{target := Target, group_id := GroupId,
                finalize_ref := FinalizeRef, generation := Generation,
                verdict := Verdict}} ->

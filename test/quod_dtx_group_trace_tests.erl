@@ -238,8 +238,8 @@ assert_endpoint_carrier(Ns, Request, Context) ->
     ?assertMatch([_ | _], Carrier),
     {ok, Traced} = quod_dtx_endpoint:encode_request(Ns, Request, [], Carrier),
     {ok, Plain} = quod_dtx_endpoint:encode_request(Ns, Request, []),
-    {quod_dtx_endpoint, 11, Ns, Semantic, Carrier} = binary_to_term(Traced, [safe]),
-    ?assertEqual({quod_dtx_endpoint, 11, Ns, Semantic, []}, binary_to_term(Plain, [safe])),
+    {quod_dtx_endpoint, 12, Ns, Semantic, Carrier} = binary_to_term(Traced, [safe]),
+    ?assertEqual({quod_dtx_endpoint, 12, Ns, Semantic, []}, binary_to_term(Plain, [safe])),
     ?assertEqual({ok, Request, [], Carrier}, quod_dtx_endpoint:decode_request(Ns, Traced)).
 
 assert_no_endpoint_request(Owner) ->

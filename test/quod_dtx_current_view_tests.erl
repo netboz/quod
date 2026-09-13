@@ -280,8 +280,8 @@ exact_f_plus_one_finalize_committee_certificate_succeeds_test() ->
     F = fixture(4),
     [A, B | _] = maps:get(committee, F),
     Certificate = certificate(F, [A, B], #{}),
-    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(Certificate)),
-    ?assert(quod_dtx_current_view:verify_applied_certificate(
+    ?assert(quod_applied_certificate:valid_applied_certificate_shape(Certificate)),
+    ?assert(quod_applied_certificate:verify_applied_certificate(
               Certificate, maps:get(network_identity, F),
               maps:get(evidence, F))).
 
@@ -319,7 +319,7 @@ applied_certificate_accepts_an_equivalent_finalize_quorum_subset_test() ->
     F = F0#{claim => Claim, evidence => Evidence},
     Certificate = certificate(F, [A, B], #{}),
     ?assertNotEqual(RetainedCert, SuppliedCert),
-    ?assert(quod_dtx_current_view:verify_applied_certificate(
+    ?assert(quod_applied_certificate:verify_applied_certificate(
               Certificate, maps:get(network_identity, F), Evidence)).
 
 insufficient_duplicate_nonmember_and_bad_signatures_fail_test() ->
@@ -340,7 +340,7 @@ insufficient_duplicate_nonmember_and_bad_signatures_fail_test() ->
                                       signed_row(F, B, #{})])},
     lists:foreach(
       fun(Certificate) ->
-          ?assertNot(quod_dtx_current_view:verify_applied_certificate(
+          ?assertNot(quod_applied_certificate:verify_applied_certificate(
                        Certificate, Network, maps:get(evidence, F)))
       end, [One, Duplicate, NonMember, BadSignature]).
 
@@ -365,9 +365,9 @@ every_signed_statement_field_is_bound_test() ->
     lists:foreach(
       fun({Overrides, ExpectedNetwork}) ->
           Certificate = certificate(F, Keys, Overrides),
-          ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+          ?assert(quod_applied_certificate:valid_applied_certificate_shape(
                     Certificate)),
-          ?assertNot(quod_dtx_current_view:verify_applied_certificate(
+          ?assertNot(quod_applied_certificate:verify_applied_certificate(
                        Certificate, ExpectedNetwork, maps:get(evidence, F)))
       end, Cases).
 
@@ -387,7 +387,7 @@ certification_uses_exact_finalize_committee_without_current_view_lookup_test() -
     %% for one, because the exact certified Finalize freezes its signer set.
     Deps = Deps0#{view => fun(_, _, _) -> error(stale_current_view_path) end},
     {ok, Certificate} = certify(F, Deps),
-    ?assert(quod_dtx_current_view:verify_applied_certificate(
+    ?assert(quod_applied_certificate:verify_applied_certificate(
               Certificate, maps:get(network_identity, F),
               maps:get(evidence, F))).
 
@@ -951,7 +951,7 @@ operation_outcome_requires_f_plus_one_current_validators_test() ->
     [A, B | _] = maps:get(committee, F),
     Ref = outcome_operation_ref(F),
     Status = #{status => claimed, operation_state => terminal,
-               height => 14, ref => Ref,
+               height => 14, receipt_height => 14, ref => Ref,
                request_digest => digest(13),
                outcome_ref => outcome_transaction_ref(F), included => []},
     Matching = maps:from_keys([A, B], true),
@@ -1223,7 +1223,7 @@ applied_reply(
   {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict}) ->
     Target = maps:get(target, F),
     CommitteeId = maps:get(committee_id, F),
-    {ok, {Signer, Signature}} = quod_dtx_current_view:sign_applied_vote(
+    {ok, {Signer, Signature}} = quod_applied_certificate:sign_applied_vote(
                                  maps:get(network_identity, F), Target,
                                  CommitteeId, GroupId, FinalizeRef,
                                  Generation, Verdict, Identity),
@@ -1393,7 +1393,7 @@ signed_row_with_signer(
     finalize_ref := FinalizeRef, generation := Generation,
     verdict := Verdict},
   Signer) ->
-    {ok, Row} = quod_dtx_current_view:sign_applied_vote(
+    {ok, Row} = quod_applied_certificate:sign_applied_vote(
                   NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
                   Generation, Verdict, Signer),
     Row.

@@ -47,6 +47,60 @@ independent_intent_belongs_to_an_invocation_not_the_shared_revision_test() ->
     after quod_proof_session:stop(Session)
     end.
 
+sealed_scope_records_independent_eligibility_not_selected_lane_test() ->
+    Wrapped = {independent, {assertz, {wrapped, retained}}},
+    Ordinary = {assertz, {ordinary, retained}},
+    lists:foreach(
+      fun({Goal, Mask, Selected, ExpectedMode}) ->
+          {Plan, Manifest, Attestation} = sealed_scope_attestation(Goal, Mask, Selected),
+          %% The live session has already been destroyed. The target's signed
+          %% decision still binds the exact plan and manifest for admission.
+          Target = quod_dtx:target(Plan),
+          ?assert(quod_dtx:verify_plan_attestation(Target, Plan, Manifest, Attestation)),
+          ?assertEqual(ExpectedMode, quod_dtx:attestation_mode(Attestation)),
+          {ok, Blob} = quod_dtx:encode_attestation(Attestation),
+          ?assertEqual({ok, Attestation}, quod_dtx:decode_attestation(Blob)),
+          OtherTag = case ExpectedMode of
+                         ordinary -> quod_dtx_independent_attestation;
+                         independent -> quod_dtx_attestation
+                     end,
+          %% A source cannot turn its target's ordinary signature into an
+          %% independent grant (or strip the mode while keeping the signature).
+          ?assertNot(quod_dtx:verify_plan_attestation(
+                       Target, Plan, Manifest, setelement(1, Attestation, OtherTag)))
+      end,
+      [{Ordinary, 1, false, ordinary},
+       {Wrapped, 2, true, independent},
+       {{',', Wrapped, Ordinary}, 3, true, ordinary},
+       %% F1: eligible residual material does not restore discarded intent.
+       {{';', {',', Wrapped, fail}, true}, 2, false, independent}]).
+
+sealed_scope_attestation(Goal, Mask, Selected) ->
+    {Pubkey, Signer} = signer(),
+    Target = {<<"quod:session-test">>, key(200)},
+    Origin = {<<"quod:origin">>, key(201)},
+    Bindings = #{target => Target, base_height => 7,
+                 proof_id => key(202), origin => Origin,
+                 principal => anonymous, request_binding => none},
+    Session = quod_proof_session:start(
+                quod_transaction_predicates:load(committed([])),
+                #{read_set => true, signed_request => true,
+                  proof_context => {test, independent_attestation}, signer => Signer}),
+    Invocation = invocation_id(44),
+    try
+        ok = quod_proof_session:open(
+               Session, Invocation, Goal, allowed, context(), empty_selection()),
+        ?assertMatch({solution, _}, quod_proof_session:next(Session, Invocation)),
+        ?assertEqual(Mask, quod_proof_session:provenance(Session)),
+        ?assertEqual(Selected, quod_proof_session:independent_intent(Session, Invocation)),
+        {ok, Plan} = quod_proof_session:seal(Session, Bindings),
+        Manifest = manifest(Plan, key(204), Pubkey),
+        {ok, Attestation} = quod_proof_session:attest(Session, Manifest),
+        ?assertEqual({ok, Attestation}, quod_proof_session:attest(Session, Manifest)),
+        {Plan, Manifest, Attestation}
+    after quod_proof_session:stop(Session)
+    end.
+
 repeated_invocations_share_staged_writes_test() ->
     Session = quod_proof_session:start(committed([]), #{read_set => true}),
     Context = context(),
@@ -331,7 +385,7 @@ seal_latches_state_and_first_manifest_attestation_test() ->
         %% below therefore proves the first-manifest latch, not shape checking.
         ?assertMatch(
            {ok, _},
-           quod_dtx:attest_plan(Target, Plan, Manifest2, Signer)),
+           quod_dtx:attest_plan(1, Target, Plan, Manifest2, Signer)),
         {ok, Attestation} = quod_proof_session:attest(Session, Manifest1),
         {ok, AttestationBytes} =
             quod_dtx:encode_attestation(Attestation),

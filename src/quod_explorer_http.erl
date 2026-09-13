@@ -600,9 +600,19 @@ role_details(
   {remote_complete, OperationRef, RequestDigest, Receipt}) ->
     #{operation_ref => operation_ref_json(OperationRef),
       request_digest => digest_json(RequestDigest),
-      targets => [#{target => origin_json(Target), kind => included,
-                    application_ref => anchored_outcome_ref_json(Ref)}
-                  || {Target, {included, Ref}} <- Receipt]}.
+      targets => [operation_receipt_row_json(Row) || Row <- Receipt]}.
+
+operation_receipt_row_json({Target, {included, Ref}}) ->
+    #{target => origin_json(Target), kind => included,
+      application_ref => anchored_outcome_ref_json(Ref)};
+operation_receipt_row_json({Target, {certified, Ref, Certificate}}) ->
+    {ok, #{result := Result, slot := Slot, committee_id := Committee}} =
+        quod_applied_certificate:operation_certificate_binding(Certificate),
+    #{target => origin_json(Target), kind => certified,
+      application_ref => anchored_outcome_ref_json(Ref),
+      result => case Result of applied -> applied; {rejected, _} -> rejected end,
+      reason => case Result of applied -> null; {rejected, Reason} -> Reason end,
+      height => Slot, committee_id => digest_json(Committee)}.
 
 evidence_ref_json(none) -> null;
 evidence_ref_json({applications, Pairs}) ->

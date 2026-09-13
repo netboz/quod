@@ -578,7 +578,7 @@ attest_checked(Handle, State, Manifest) ->
 latch_attestation(Handle, State, Plan, Manifest) ->
     Target = quod_dtx:target(Plan),
     case quod_dtx:attest_plan(
-           Target, Plan, Manifest, State#session_state.signer) of
+           provenance(Handle), Target, Plan, Manifest, State#session_state.signer) of
         {ok, Attestation} = Result ->
             Digest = quod_dtx:manifest_digest(Manifest),
             Coordinator = quod_dtx:manifest_coordinator(Manifest),

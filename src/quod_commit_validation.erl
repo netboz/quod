@@ -22,7 +22,7 @@ liveness observations while preserving the one existing authorization path
 
 -export([new/5, outcomes/1, content/4, dtx/4, read_only_plan/2,
          prepared_material/4,
-         remote_application/2, validate_foreign_reads/2]).
+         remote_application/2, validate_evidence/2]).
 -export_type([context/0, mode/0]).
 
 -record(context, {
@@ -50,20 +50,51 @@ new({_Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer)
 -spec outcomes(context()) -> quod_outcome:index().
 outcomes(#context{outcomes = Outcomes}) -> Outcomes.
 
--doc "Verify carried read certificates against exact certified-entry evidence.".
--spec validate_foreign_reads(#transaction{}, map()) -> ok | {error, term()}.
-validate_foreign_reads(#transaction{role = {remote_complete, _, _, _},
-                                    foreign_reads = []}, _Evidence) ->
-    ok;
-validate_foreign_reads(#transaction{role = {remote_complete, _, _, _}},
+-doc "Verify carried certificates against the already-verified exact entries.".
+-spec validate_evidence(#transaction{}, map()) -> ok | abstain | {error, term()}.
+validate_evidence(#transaction{role = {remote_complete, _, _, Receipt},
+                    evidence = {applications, Pairs}, foreign_reads = []}, Evidence) ->
+    case quod_operation_vector:receipt_references(Receipt) of
+        {ok, _} -> validate_receipt_evidence(Receipt, Pairs, Evidence);
+        error -> {error, invalid_operation_receipt}
+    end;
+validate_evidence(#transaction{role = {remote_complete, _, _, _}},
                        _Evidence) ->
     {error, malformed_foreign_reads};
-validate_foreign_reads(#transaction{foreign_reads = Certificates,
+validate_evidence(#transaction{foreign_reads = Certificates,
                                     proof_id = ProofId}, Evidence)
   when is_list(Certificates), is_map(Evidence) ->
     validate_foreign_reads(Certificates, ProofId, Evidence);
-validate_foreign_reads(#transaction{}, _Evidence) ->
+validate_evidence(#transaction{}, _Evidence) ->
     {error, malformed_foreign_reads}.
+
+validate_receipt_evidence([], [], _Evidence) -> ok;
+validate_receipt_evidence([{_Target, {included, Ref}} | Rest],
+                          [{CertifiedRef, _Transaction} | Pairs], Evidence) ->
+    %% Historical S7 rows assert inclusion only. New admission separately
+    %% requires the certified arm; old rows never manufacture outcome labels.
+    case quod_transaction:stable_ref(CertifiedRef) =:= Ref of
+        true -> validate_receipt_evidence(Rest, Pairs, Evidence);
+        false -> {error, operation_receipt_reference_binding}
+    end;
+validate_receipt_evidence([{Target, {certified, Ref, Certificate}} | Rest],
+                          [{CertifiedRef, Transaction} | Pairs], Evidence) ->
+    case {quod_transaction:stable_ref(CertifiedRef), maps:get(CertifiedRef, Evidence, none)} of
+        {Ref, #{identity := Target, transaction := ExactTransaction} = Exact} ->
+            case {quod_transaction:same_ledger_transaction(Transaction, ExactTransaction),
+                  quod_ontology:network_identity()} of
+                {false, _} -> {error, operation_receipt_reference_binding};
+                {true, {ok, Network}} ->
+                    case quod_applied_certificate:verify_operation_certificate(
+                           Certificate, Network, Exact) of
+                        true -> validate_receipt_evidence(Rest, Pairs, Evidence);
+                        false -> {error, invalid_operation_result_certificate}
+                    end;
+                {true, {error, _}} -> abstain
+            end;
+        _ -> {error, operation_receipt_reference_binding}
+    end;
+validate_receipt_evidence(_, _, _) -> {error, invalid_operation_receipt}.
 
 validate_foreign_reads([], _ProofId, _Evidence) ->
     ok;
@@ -171,15 +202,6 @@ validate_content_transactions(
   [], _Network, _BlockTimestamp, _Mode, _Seen, Context) ->
     {ok, valid, Context};
 validate_content_transactions(
-  [#transaction{role = {remote_claim, _, Bundles, _}} | _],
-  _Network, _BlockTimestamp, _Mode, _Seen, Context)
-  when is_list(Bundles), length(Bundles) > 1 ->
-    %% C1's temporary slice-7 availability boundary applies to admission too.
-    %% A node author must not bypass the public proof route by submitting an
-    %% N-target claim directly. Slice 8 replaces this guard only with its
-    %% reviewed original-signed-goal intent authority and verdict evidence.
-    {ok, {invalid, independent_lane_unavailable}, Context};
-validate_content_transactions(
   [#transaction{role = {remote_application, _, _, _}} = Change | Rest],
   Network, BlockTimestamp, Mode, Seen, Context0) ->
     case remote_application(Change, Context0) of
@@ -214,17 +236,19 @@ validate_content_transactions(
     case Transition of
         {TransitionKind, Outcomes1}
           when TransitionKind =:= new; TransitionKind =:= replay ->
-            validate_content_transactions(
-              Rest, Network, BlockTimestamp, Mode, Seen,
-              Context0#context{outcomes = Outcomes1});
+            case Mode =:= check andalso not quod_operation_vector:certified(TargetRef) of
+                true -> {ok, {invalid, operation_result_certificate_required}, Context0};
+                false -> validate_content_transactions(
+                  Rest, Network, BlockTimestamp, Mode, Seen,
+                  Context0#context{outcomes = Outcomes1})
+            end;
         {error, Reason} ->
             {outcome_error, Reason}
     end;
 validate_content_transactions(
   [#transaction{} = Change | Rest], Network, BlockTimestamp,
   Mode, Seen, Context0 = #context{target = Target}) ->
-    case quod_transaction:validate_request(
-           Network, Target, BlockTimestamp, Change) of
+    case content_request(Network, Target, BlockTimestamp, Change) of
         {ok, none} ->
             continue_content_validation(
               Change, Rest, Network, BlockTimestamp,
@@ -248,12 +272,28 @@ validate_content_transactions(
                 {outcome_error, _} = Error ->
                     Error
             end;
+        {error, independent_scope_required} ->
+            {ok, {invalid, independent_scope_required}, Context0};
         {error, _} ->
             {ok, {invalid, invalid_request_auth}, Context0}
     end;
 validate_content_transactions(
   _Malformed, _Network, _BlockTimestamp, _Mode, _Seen, Context) ->
     {ok, {invalid, malformed_content}, Context}.
+
+content_request(Network, Target, Timestamp, Change) ->
+    case quod_transaction:validate_request(Network, Target, Timestamp, Change) of
+        {ok, _} = Valid ->
+            case Change#transaction.role of
+                {remote_claim, _, _, _} ->
+                    case quod_transaction:validate_independent_claim(Change) of
+                        ok -> Valid;
+                        {error, _} = Error -> Error
+                    end;
+                _ -> Valid
+            end;
+        {error, _} = Error -> Error
+    end.
 
 continue_content_validation(
   Change, Rest, Network, BlockTimestamp, Mode, Seen,
@@ -387,6 +427,16 @@ remote_application(
                            role = {remote_claim, Manifest,
                                    Bundles, _Predicted}} = Claim}},
   Context = #context{target = Target}) ->
+    case quod_transaction:validate_independent_claim(Claim) of
+        ok -> remote_application_checked(Change, CertifiedRef, ClaimRef, Claim,
+                                         Manifest, Bundles, Target, Context);
+        {error, Reason} -> {invalid, Reason}
+    end;
+remote_application(_Change, _Context) ->
+    {invalid, malformed_remote_application}.
+
+remote_application_checked(Change, CertifiedRef, ClaimRef, Claim,
+                           Manifest, Bundles, Target, Context) ->
     Expected = try quod_transaction:remote_application(ClaimRef, Claim, Target)
                catch _:_ -> invalid
                end,
@@ -411,9 +461,7 @@ remote_application(
             end;
         _ ->
             {invalid, remote_application_binding}
-    end;
-remote_application(_Change, _Context) ->
-    {invalid, malformed_remote_application}.
+    end.
 
 prepared_application(Manifest, PlanDigest, PlanBlob, Context) ->
     %% Authenticate and bind the opaque plan before materializing its

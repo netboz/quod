@@ -34,8 +34,7 @@ does not cancel or resubmit the uncertain operation.
          test_install_applied_results/3,
          test_dormant_cancel_disposition/2,
          test_dormant_cancel_request/3,
-         test_operation_target_response_disposition/2,
-         test_operation_target_result/7,
+         test_operation_application_evidence/2,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
          test_endpoint_request_candidates/5,
@@ -360,131 +359,139 @@ operation_init(Owner, OwnerNs, OperationRef) ->
     loop(#state{owner = Owner, owner_monitor = erlang:monitor(process, Owner),
                 owner_ns = OwnerNs, origin = {OwnerNs, Anchor}, config = #config{},
                 protocol = {operation, #{owner_ns => OwnerNs,
-                  operation_ref => OperationRef, state => claim}}}).
+                  operation_ref => OperationRef, receipt => unresolved}}}).
 
-%% Source publication can precede the waiter, or follow a relay reply. Read
-%% the same durable index on start and on a real progress edge; absence is not
-%% completion and a completion receipt is not the target's verdict.
+%% Only startup and genuine owner/follower progress admit another attempt.
+%% Custody outlives caller deadlines; every I/O attempt keeps one absolute
+%% allowance through discovery, verification, certification and queued replies.
 operation_refresh(S) ->
-    %% This is one recovery read attempt, not the lifetime of durable custody.
-    %% Only startup or a genuine source/follower progress event calls here;
-    %% capture and outcome corroboration share the existing request budget.
-    Deadline = quod_time:mono_ms() + ?DEFAULT_REQUEST_TIMEOUT_MS,
-    start_typed_wave(operation, [local_outcome], #{request_deadline => Deadline}, S).
+    start_typed_wave(operation, [local_outcome], #{}, S).
 
 operation_refresh_result(Outcome, Deadline,
-  S = #state{owner = Owner, owner_ns = OwnerNs, protocol = {operation,
+  S = #state{owner = Owner, protocol = {operation,
     #{operation_ref := OperationRef} = Context}}) ->
     case Outcome of
-        {ok, #{status := claimed, ref := OperationRef,
-               operation_state := ClaimState, height := Slot,
-               request_digest := <<_:256>> = Digest,
-               outcome_ref := {applications,
-                 [{transaction, TargetNs, <<_:256>> = Anchor, <<_:256>>} = TargetRef]}}}
-          when (ClaimState =:= unresolved orelse ClaimState =:= terminal),
-               is_integer(Slot), Slot > 0,
-               is_binary(TargetNs), byte_size(TargetNs) > 0 ->
-            Owner ! {dtx_coordinator, self(), OperationRef,
-                     {claim_state, ClaimState, Slot, Digest, [TargetRef]}},
-            Bound = set_operation_context(Context#{target => {TargetNs, Anchor},
-                             target_ref => TargetRef, request_digest => Digest}, S),
-            case {ClaimState, map_get(state, Context)} of
-                {terminal, source} ->
-                    %% This worker already delivered the verified result.
-                    operation_stop(done, Bound);
-                {terminal, _} ->
-                    operation_resolve_target(Deadline, operation_mode(resolve, Bound));
-                {unresolved, claim} ->
-                    start_typed_wave(operation, [{claim_evidence, Slot}],
-                                      #{request_deadline => Deadline}, Bound);
-                {unresolved, resolve} ->
-                    %% Replay can temporarily expose an earlier source row.
-                    %% Once terminal was observed, this worker stays read-only.
-                    operation_resolve_target(Deadline, Bound);
-                {unresolved, _} ->
-                    operation_drive(Bound)
+        {ok, #{status := claimed, ref := OperationRef, height := Slot,
+               operation_state := ClaimState, receipt_height := ReceiptHeight,
+               request_digest := Digest, outcome_ref := {applications, Refs}}}
+          when is_integer(Slot), Slot > 0 ->
+            case quod_operation_vector:references(Refs) of
+                {ok, Refs} ->
+                    Owner ! {dtx_coordinator, self(), OperationRef,
+                             {claim_state, ClaimState, Slot, Digest, Refs}},
+                    Receipt = case {maps:get(receipt, Context), ClaimState} of
+                        {unresolved, terminal} -> {terminal, ReceiptHeight};
+                        {Old, _} -> Old
+                    end,
+                    Bound = Context#{refs => Refs, request_digest => Digest,
+                                      receipt => Receipt},
+                    case maps:find(model, Context) of
+                        error ->
+                            start_typed_wave(operation, [{claim_evidence, Slot}],
+                              #{request_deadline => Deadline}, set_operation_context(Bound, S));
+                        {ok, Model} ->
+                            case {quod_operation:references(Model),
+                                  quod_operation:request_digest(Model)} of
+                                {Refs, Digest} ->
+                                    operation_drive(Deadline, set_operation_context(Bound, S));
+                                _ -> operation_stop(invalid_operation_claim, S)
+                            end
+                    end;
+                error -> operation_stop(invalid_operation_claim, S)
             end;
-        {ok, #{outcome_ref := {applications, Refs}}} when length(Refs) > 1 ->
-            %% Temporary release boundary ruled in C1: the canonical storage
-            %% and target applier accept vectors, but the N-target execution
-            %% owner is slice 8. Never pick the first target or fall back to L3.
-            operation_stop(independent_lane_unavailable, S);
-        {error, not_found} ->
-            {next, S};
-        {error, {outcome_unknown, OperationRef}} ->
-            {next, S};
-        {error, {ontology_unreachable, OwnerNs}} ->
-            {next, S};
-        {error, {ontology_rebuilding, OwnerNs}} ->
-            {next, S};
-        {error, Reason} ->
-            operation_stop(Reason, S);
-        _ ->
-            operation_stop(invalid_operation_claim, S)
+        {error, not_found} -> {next, S};
+        {error, {outcome_unknown, OperationRef}} -> {next, S};
+        {error, {ontology_unreachable, _}} -> {next, S};
+        {error, {ontology_rebuilding, _}} -> {next, S};
+        {error, Reason} -> operation_stop(Reason, S);
+        _ -> operation_stop(invalid_operation_claim, S)
     end.
 
-operation_claim_result(Result, S = #state{owner_ns = OwnerNs, protocol = {operation,
-  #{operation_ref := OperationRef, target_ref := TargetRef, request_digest := Digest} = Bound}}) ->
-    case Result of
-        {ok, ClaimRef, Claim} ->
-            case operation_context(OwnerNs, OperationRef, ClaimRef, Claim) of
-                {ok, #{target_ref := TargetRef, request_digest := Digest} = Context} ->
-                    {ok, ClaimBytes} = quod_transaction:encode_evidence(ClaimRef, Claim),
-                    Target = maps:get(target, Context),
-                    StableClaim = quod_transaction:stable_ref(ClaimRef),
-                    #transaction{tx_id = ApplicationId} =
-                        quod_transaction:remote_application(StableClaim, Claim, Target),
-                    {transaction, _, _, ApplicationId} = TargetRef,
-                    operation_drive(set_operation_context(
-                      (maps:merge(Bound, Context))#{claim_ref => ClaimRef,
-                                                   claim => Claim, claim_bytes => ClaimBytes}, S));
-                {ok, _WrongBinding} ->
-                    operation_stop(invalid_operation_claim, S);
-                {error, Reason} ->
-                    operation_stop(Reason, S)
+operation_claim_result({ok, ClaimRef, Claim}, Deadline,
+  S = #state{owner_ns = Ns, protocol = {operation,
+    #{operation_ref := OperationRef, refs := Refs, request_digest := Digest} = Context}}) ->
+    case quod_operation:new(Ns, OperationRef, ClaimRef, Claim) of
+        {ok, Model} ->
+            case {quod_operation:references(Model), quod_operation:request_digest(Model)} of
+                {Refs, Digest} ->
+                    operation_drive(Deadline, set_operation_context(Context#{model => Model}, S));
+                _ -> operation_stop(invalid_operation_claim, S)
             end;
-        {error, Reason} when Reason =:= not_ready; Reason =:= timeout ->
-            {next, S};
-        {error, Reason} ->
-            operation_stop(Reason, S)
+        {error, Reason} -> operation_stop(Reason, S)
+    end;
+operation_claim_result({error, Reason}, _Deadline, S)
+  when Reason =:= not_ready; Reason =:= not_found; Reason =:= timeout -> {next, S};
+operation_claim_result({error, Reason}, _Deadline, S) -> operation_stop(Reason, S).
+
+operation_drive(Deadline, S = #state{protocol = {operation,
+  #{receipt := {terminal, Height}}}}) ->
+    start_typed_wave(operation, [{completion_evidence, Height}],
+                     #{request_deadline => Deadline}, S);
+operation_drive(Deadline, S = #state{protocol = {operation, #{model := Model}}}) ->
+    case quod_operation:work(Model) of
+        [] -> operation_finish_targets(S);
+        Items -> start_typed_wave(operation, Items, #{request_deadline => Deadline}, S)
     end.
 
-operation_resolve_target(Deadline, S) ->
-    start_typed_wave(operation, [resolve_outcome], #{request_deadline => Deadline}, S).
+operation_completion_result({ok, _Ref, Complete}, Deadline,
+  S = #state{protocol = {operation, #{model := Model} = Context}}) ->
+    case quod_operation:restore_receipt(Complete, Model) of
+        {ok, Restored} ->
+            S1 = set_operation_context(Context#{model => Restored, receipt => restored}, S),
+            operation_notify_results(Restored, S1),
+            operation_drive(Deadline, S1);
+        {error, Reason} -> operation_stop(Reason, S)
+    end;
+operation_completion_result({error, Reason}, _Deadline, S)
+  when Reason =:= not_ready; Reason =:= not_found; Reason =:= timeout -> {next, S};
+operation_completion_result({error, Reason}, _Deadline, S) -> operation_stop(Reason, S).
 
-operation_resolve_io(#{owner_ns := OwnerNs, target := Target, target_ref := TargetRef}, Deadline) ->
-    case operation_outcome_source(Target, Deadline) of
-        {ok, Source} ->
-            quod_dtx_current_view:lookup_outcome(OwnerNs, Source, TargetRef, Deadline);
-        {error, _} = Error -> Error
+operation_finish_targets(S = #state{protocol = {operation,
+  #{model := Model, receipt := Receipt}}}) ->
+    case {quod_operation:results(Model), Receipt} of
+        {{ok, _}, restored} -> operation_stop(done, S);
+        {{ok, _}, unresolved} ->
+            {ok, Complete} = quod_operation:completion(Model),
+            start_typed_wave(operation, [{receipt, Complete}], #{}, S);
+        {pending, _} -> operation_wait_targets(S)
     end.
 
-operation_resolve_result(Result, S = #state{protocol = {operation, #{target_ref := TargetRef}}}) ->
-    case Result of
-        {ok, #{ref := TargetRef, status := committed}} ->
-            operation_deliver_resolved(committed, S);
-        {ok, #{ref := TargetRef, status := rejected, reason := Reason}} when is_atom(Reason) ->
-            operation_deliver_resolved({rejected, Reason}, S);
-        _ -> operation_wait_target(S)
-    end.
-
-operation_outcome_source(Target, Deadline) ->
-    %% A co-hosted observer is a byte source, not a voting source. If the
-    %% local validator is unavailable, use the ordinary certified routes.
-    case quod_simplex:history_view(Target, validator, Deadline) of
-        {ok, View} -> {ok, {local, View}};
-        {error, timeout} -> {error, retry};
-        {error, _} ->
-            case routes(Target) of
-                [] -> {error, retry};
-                Rows -> {ok, {remote, Rows}}
+%% Results are installed as each existing wave item returns, not at a
+%% cross-target stage barrier. Another target can still be submitting while
+%% this target has already applied, certified and notified its source owner.
+operation_record_result({ok, Ref, Evidence, Certificate}, Target, Deadline,
+  S = #state{owner = Owner, protocol = {operation,
+    #{model := Model, operation_ref := OperationRef} = Context}}) ->
+    case quod_time:mono_ms() < Deadline of
+        false -> {{error, timeout}, S};
+        true ->
+            case quod_operation:accept(Target, Ref, Evidence, Certificate, Model) of
+                {ok, Updated} ->
+                    S1 = set_operation_context(Context#{model => Updated}, S),
+                    case Certificate of
+                        none -> ok;
+                        _ ->
+                            {ok, #{result := Result}} =
+                                quod_applied_certificate:operation_certificate_binding(Certificate),
+                            Verdict = case Result of applied -> committed; _ -> Result end,
+                            notify_operation_target_result(Owner, OperationRef, Verdict,
+                                                            quod_transaction:stable_ref(Ref))
+                    end,
+                    {observed, S1};
+                {error, _} = Error -> {Error, S}
             end
-    end.
+    end;
+operation_record_result(Result, _Target, _Deadline, S) -> {Result, S}.
 
-operation_deliver_resolved(Result, S = #state{owner = Owner,
-  protocol = {operation, #{operation_ref := OperationRef, target_ref := TargetRef}}}) ->
-    notify_operation_target_result(Owner, OperationRef, Result, TargetRef),
-    operation_stop(done, S).
+operation_notify_results(Model, #state{owner = Owner,
+  protocol = {operation, #{operation_ref := OperationRef}}}) ->
+    case quod_operation:results(Model) of
+        pending -> ok;
+        {ok, Rows} ->
+            lists:foreach(fun({_Target, {Result, Ref}}) ->
+                notify_operation_target_result(Owner, OperationRef, Result, Ref)
+            end, Rows)
+    end.
 
 %% One existing owner-message seam for fresh application and read-only
 %% recovery alike. Finish this short span before driving the receipt: the
@@ -504,85 +511,6 @@ notify_operation_target_result(
                    {target_result, Result, TargetRef}}
       end).
 
-operation_context(
-  OwnerNs, OperationRef,
-  ClaimRef,
-  #transaction{origin = {OwnerNs, <<_:256>>} = Origin,
-               role = {remote_claim, _Manifest, _Bundles,
-                       [{transaction, TargetNs, <<_:256>> = TargetAnchor,
-                         <<_:256>> = TargetTxId}]}} = Claim)
-  when is_binary(TargetNs), byte_size(TargetNs) > 0 ->
-    case {quod_dtx:certified_ref_binding(ClaimRef),
-          quod_transaction:request_claim(Claim)} of
-        {{ok, Origin, _Slot, ClaimTxId},
-         {ok, #{operation_ref := OperationRef,
-                digest := <<_:256>> = RequestDigest}}}
-          when ClaimTxId =:= Claim#transaction.tx_id ->
-            Target = {TargetNs, TargetAnchor},
-            case quod_transaction:remote_claim_route(Claim, Target) of
-                Route when Route =:= shared; element(1, Route) =:= private ->
-                    {ok, #{owner_ns => OwnerNs, origin => Origin,
-                           operation_ref => OperationRef,
-                           request_digest => RequestDigest,
-                           target => Target,
-                           target_ref => {transaction, TargetNs,
-                                          TargetAnchor, TargetTxId},
-                           state => target}};
-                error ->
-                    {error, invalid_operation_claim}
-            end;
-        _ ->
-            {error, invalid_operation_claim}
-    end;
-operation_context(_OwnerNs, _OperationRef, _ClaimRef, _Claim) ->
-    {error, invalid_operation_claim}.
-
-operation_drive(S = #state{protocol = {operation,
-  #{state := target, target := Target, claim_bytes := ClaimBytes}}}) ->
-    RequestId = crypto:strong_rand_bytes(
-                  ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8),
-    %% Only the transport correlation id changes. The durable signed claim
-    %% artifact and its deterministic application identity stay pinned.
-    Request = {apply_claim, RequestId, Target, ClaimBytes},
-    start_typed_wave(operation, [{target_application, Request}], #{}, S);
-operation_drive(S = #state{protocol = {operation, #{state := source}}}) ->
-    operation_submit_complete(S).
-
-operation_target_response(
-  Request,
-  {application, _RequestId, committed, EvidenceBlob} = Response,
-  S) ->
-    operation_target_result(
-      Request, Response, committed, EvidenceBlob, S);
-operation_target_response(
-  Request,
-  {application, _RequestId, {rejected, Reason}, EvidenceBlob} = Response,
-  S) when is_atom(Reason) ->
-    operation_target_result(
-      Request, Response, {rejected, Reason}, EvidenceBlob, S);
-operation_target_response(
-  Request, Response, S) ->
-    case operation_target_response_disposition(Request, Response) of
-        wait ->
-            operation_wait_target(S);
-        invalid_operation_claim ->
-            operation_stop(invalid_operation_claim, S);
-        invalid_target_response ->
-            operation_stop(invalid_target_response, S)
-    end.
-
-operation_target_response_disposition(Request, Response) ->
-    case quod_dtx_endpoint:correlates(Request, Response) of
-        true -> operation_target_error_disposition(Response);
-        false -> invalid_target_response
-    end.
-
-operation_target_error_disposition({error, _RequestId, invalid_request}) ->
-    invalid_operation_claim;
-operation_target_error_disposition({error, _RequestId, _Temporary}) ->
-    wait;
-operation_target_error_disposition(_Response) ->
-    invalid_target_response.
 
 -ifdef(TEST).
 %% Observation fixtures enter with a pre-verified planner snapshot, not a
@@ -595,89 +523,16 @@ test_observation_state(S = #state{group_id = GroupId}) ->
         _ -> S
     end.
 
-test_operation_target_response_disposition(Request, Response) ->
-    operation_target_response_disposition(Request, Response).
-test_operation_target_result(
-  Owner, OwnerMonitor, Request, Response, Result, EvidenceBlob, Context) ->
-    S = #state{owner = Owner, owner_monitor = OwnerMonitor,
-                owner_ns = maps:get(owner_ns, Context), origin = maps:get(origin, Context),
-                protocol = {operation, Context}, config = #config{}, execution_ready = true},
-    continue(operation_target_result(Request, Response, Result, EvidenceBlob, S)).
+test_operation_application_evidence(Request, Result) ->
+    operation_application_evidence(Request, Result).
+
 -endif.
 
-operation_target_result(
-  Request, Response, Result, EvidenceBlob,
-  S = #state{owner = Owner, protocol = {operation,
-    #{operation_ref := OperationRef, target_ref := TargetRef} = Context}}) ->
-    case {quod_dtx_endpoint:correlates(Request, Response),
-          %% This is codec/shape checking of the existing reply, not a new
-          %% authentication step. Keep it inside the same eager tuple so
-          %% malformed or mismatched replies follow the unchanged contract.
-          quod_trace:with_optional_span(
-            quod_trace:context(), <<"quod.operation.result_evidence_decode">>, internal,
-            #{}, fun() -> quod_transaction:decode_evidence(EvidenceBlob) end)} of
-        {true, {ok, TargetCertifiedRef,
-                #transaction{tx_id = TargetTxId,
-                             role = {remote_application, _, _, _}}
-                  = TargetTransaction}} ->
-            case stable_transaction_ref(TargetCertifiedRef, TargetTxId) of
-                TargetRef ->
-                    %% The durable operation owner is also the sole live
-                    %% submission owner.  Publish its certified target result
-                    %% before asynchronously appending the source receipt so a
-                    %% waiting client never needs a second target submission.
-                    notify_operation_target_result(
-                      Owner, OperationRef, Result, TargetRef),
-                    operation_drive(set_operation_context(
-                      Context#{state => source,
-                               target_certified_ref => TargetCertifiedRef,
-                               target_transaction => TargetTransaction}, S));
-                _ ->
-                    operation_stop(invalid_target_evidence, S)
-            end;
-        _ ->
-            operation_stop(invalid_target_evidence, S)
-    end.
-
-stable_transaction_ref(Ref, TxId) ->
-    case quod_transaction:stable_ref(Ref) of
-        {transaction, _Ns, _Anchor, TxId} = StableRef -> StableRef;
-        _ -> invalid
-    end.
-
-operation_submit_complete(
-  S = #state{protocol = {operation, #{origin := Origin,
-    operation_ref := OperationRef, request_digest := RequestDigest,
-    target_ref := TargetRef, target_certified_ref := TargetCertifiedRef,
-    target_transaction := TargetTransaction}}}) ->
-    try
-        Complete0 = quod_transaction:remote_complete(
-                      Origin, OperationRef, RequestDigest,
-                      [{quod_operation_vector:target(TargetRef), {included, TargetRef}}]),
-        quod_transaction:attach_receipt_evidence(
-                     Complete0, [{TargetCertifiedRef, TargetTransaction}])
-    of Complete -> start_typed_wave(operation, [{receipt, Complete}], #{}, S)
-    catch _:_ ->
-        operation_stop(invalid_completion, S)
-    end.
-
-operation_target_metric_result(
-  {ok, {application, _, committed, _}}) -> ok;
-operation_target_metric_result(
-  {ok, {application, _, {rejected, _}, _}}) -> rejected;
-operation_target_metric_result({error, _}) -> uncertain;
-operation_target_metric_result(_) -> failed.
-
-operation_completion_metric_result({ok, _, _, _}) -> ok;
-operation_completion_metric_result({error, {outcome_unknown, _}}) -> uncertain;
-operation_completion_metric_result({error, _}) -> uncertain.
-
-operation_wait_target(S = #state{protocol = {operation, #{target := Target}}}) ->
-    {next, wait_for_progress(Target, S)}.
+operation_wait_targets(S = #state{protocol = {operation, #{model := Model}}}) ->
+    Targets = [element(2, Item) || Item <- quod_operation:work(Model)],
+    {next, lists:foldl(fun wait_for_progress/2, S, Targets)}.
 
 set_operation_context(Context, S) -> S#state{protocol = {operation, Context}}.
-operation_mode(Mode, S = #state{protocol = {operation, Context}}) ->
-    set_operation_context(Context#{state => Mode}, S).
 
 operation_stop(Reason, S = #state{owner = Owner,
   protocol = {operation, #{operation_ref := OperationRef}}}) ->
@@ -699,18 +554,26 @@ operation_item_io({claim_evidence, Slot}, #{owner_ns := Ns, operation_ref := Ref
     quod_trace:with_optional_span(quod_trace:context(), <<"quod.operation.claim_evidence">>,
       internal, #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot},
       fun() -> quod_simplex:operation_claim_evidence(Ns, Slot, Ref, Deadline) end);
-operation_item_io(resolve_outcome, #{target := {Ns, _}} = Context, Deadline, _Remaining) ->
-    quod_trace:with_optional_span(quod_trace:context(), <<"quod.operation.resolve_outcome">>,
-      internal, #{'quod.namespace' => Ns}, fun() -> operation_resolve_io(Context, Deadline) end);
-operation_item_io({target_application, Request},
-  #{owner_ns := Ns, target := {TargetNs, _} = Target, claim := Claim}, _Deadline, Remaining) ->
+operation_item_io({completion_evidence, Slot}, #{owner_ns := Ns, operation_ref := Ref}, Deadline, _Remaining) ->
+    quod_trace:with_optional_span(quod_trace:context(), <<"quod.operation.completion_evidence">>,
+      internal, #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot},
+      fun() -> quod_simplex:operation_completion_evidence(Ns, Slot, Ref, Deadline) end);
+operation_item_io({application, {TargetNs, _} = Target},
+  #{owner_ns := Ns, model := Model}, Deadline, Remaining) ->
+    Request = {apply_claim, request_id(), Target, quod_operation:claim_bytes(Model)},
     Started = erlang:monotonic_time(),
     Result = quod_trace:with_optional_span(quod_trace:context(), <<"quod.operation.target_application">>,
       client, #{'quod.namespace' => TargetNs},
-      fun() -> quod_dtx_current_view:submit_claim_application(Ns, Target, Claim, Request, Remaining) end),
+      fun() -> quod_dtx_current_view:submit_claim_application(
+                 Ns, Target, quod_operation:claim(Model), Request, Remaining) end),
     ok = quod_metrics:observe_remote_operation_stage(TargetNs, target_application,
            operation_target_metric_result(Result), erlang:monotonic_time() - Started),
-    Result;
+    case operation_application_evidence(Request, Result) of
+        {ok, Ref, Tx} -> quod_dtx_current_view:certify_operation_evidence(Ns, Target, Ref, #{transaction => Tx}, none, Deadline);
+        {error, _} = Error -> Error
+    end;
+operation_item_io({certify, Target, Ref, Evidence}, #{owner_ns := Ns}, Deadline, _Remaining) ->
+    quod_dtx_current_view:certify_operation_evidence(Ns, Target, Ref, Evidence, none, Deadline);
 operation_item_io({receipt, Complete}, #{owner_ns := Ns}, _Deadline, Remaining) ->
     Started = erlang:monotonic_time(),
     Result = quod_trace:with_optional_span(quod_trace:context(), <<"quod.operation.receipt">>,
@@ -720,33 +583,75 @@ operation_item_io({receipt, Complete}, #{owner_ns := Ns}, _Deadline, Remaining) 
            operation_completion_metric_result(Result), erlang:monotonic_time() - Started),
     Result.
 
-finish_operation_wave([Item], [Result], #{request_deadline := Deadline}, S) ->
-    %% A completed worker may still have queued its reply past the admitted
-    %% deadline. Late success is uncertainty, never a newly published verdict.
-    case quod_time:mono_ms() < Deadline of
-        true -> operation_item_result(Item, Result, Deadline, S);
-        false -> operation_item_wait(Item, S)
+%% A reply is discovery only, INCLUDING its result label. Exact history and
+%% AM3 decide the result. Never turn an unavailable vote into a rejection.
+operation_application_evidence(Request, {ok, {application, _, _, Blob} = Response}) ->
+    case {quod_dtx_endpoint:correlates(Request, Response),
+          quod_trace:with_optional_span(
+            quod_trace:context(), <<"quod.operation.result_evidence_decode">>, internal,
+            #{}, fun() -> quod_transaction:decode_evidence(Blob) end)} of
+        {true, {ok, Ref, #transaction{role = {remote_application, _, _, _}} = Tx}} ->
+            {ok, Ref, Tx};
+        _ -> {error, invalid_target_evidence}
+    end;
+operation_application_evidence(Request, {ok, Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        false -> {error, invalid_target_response};
+        true ->
+            case Response of
+                {error, _, invalid_request} -> {error, invalid_operation_claim};
+                {error, _, independent_scope_required} -> {error, independent_scope_required};
+                _ -> {error, retry}
+            end
+    end;
+operation_application_evidence(_, {error, invalid_request}) -> {error, invalid_operation_claim};
+operation_application_evidence(_, _) -> {error, retry}.
+
+
+operation_target_metric_result({ok, {application, _, committed, _}}) -> ok;
+operation_target_metric_result({ok, {application, _, {rejected, _}, _}}) -> rejected;
+operation_target_metric_result({error, _}) -> uncertain;
+operation_target_metric_result(_) -> failed.
+
+operation_completion_metric_result({ok, _, _, _}) -> ok;
+operation_completion_metric_result({error, _}) -> uncertain.
+
+finish_operation_wave([local_outcome], [Result], #{request_deadline := Deadline}, S) ->
+    operation_stage_result(local_outcome, Result, Deadline, S);
+finish_operation_wave([{claim_evidence, _} = Item], [Result], #{request_deadline := Deadline}, S) ->
+    operation_stage_result(Item, Result, Deadline, S);
+finish_operation_wave([{completion_evidence, _} = Item], [Result], #{request_deadline := Deadline}, S) ->
+    operation_stage_result(Item, Result, Deadline, S);
+finish_operation_wave([{receipt, _} = Item], [Result], #{request_deadline := Deadline}, S) ->
+    operation_stage_result(Item, Result, Deadline, S);
+finish_operation_wave(_TargetItems, Results, _Meta, S) ->
+    case [Reason || Result <- Results, {fatal, Reason} <- [operation_work_disposition(Result)]] of
+        [Reason | _] -> operation_stop(Reason, S);
+        [] -> operation_finish_targets(S)
     end.
 
-operation_item_result(Item, {worker_down, timeout}, _Deadline, S) -> operation_item_wait(Item, S);
-operation_item_result(Item, {worker_down, Reason}, _Deadline, S) ->
-    Stage = case is_atom(Item) of true -> Item; false -> element(1, Item) end,
-    operation_stop({operation_worker_crash, Stage, Reason}, S);
-operation_item_result(local_outcome, Result, Deadline, S) ->
-    operation_refresh_result(Result, Deadline, S);
-operation_item_result({claim_evidence, _}, Result, _Deadline, S) -> operation_claim_result(Result, S);
-operation_item_result(resolve_outcome, Result, _Deadline, S) -> operation_resolve_result(Result, S);
-operation_item_result({target_application, Request}, {ok, Response}, _Deadline, S) ->
-    operation_target_response(Request, Response, S);
-operation_item_result({target_application, _}, {error, invalid_request}, _Deadline, S) ->
-    operation_stop(invalid_operation_claim, S);
-operation_item_result({target_application, _}, _Temporary, _Deadline, S) -> operation_wait_target(S);
-operation_item_result({receipt, _}, {ok, _Bindings, _Slot, _TxId}, _Deadline, S) -> operation_stop(done, S);
-operation_item_result({receipt, _}, _Temporary, _Deadline, S) -> {next, S}.
+operation_stage_result(_Item, {worker_down, timeout}, _Deadline, S) -> {next, S};
+operation_stage_result(Item, Result, Deadline, S) ->
+    case {quod_time:mono_ms() < Deadline, operation_work_disposition(Result)} of
+        {false, _} -> {next, S};
+        {_, {fatal, Reason}} -> operation_stop(Reason, S);
+        {true, _} ->
+            case Item of
+                local_outcome -> operation_refresh_result(Result, Deadline, S);
+                {claim_evidence, _} -> operation_claim_result(Result, Deadline, S);
+                {completion_evidence, _} -> operation_completion_result(Result, Deadline, S);
+                {receipt, _} ->
+                    case Result of {ok, _, _, _} -> operation_stop(done, S); _ -> {next, S} end
+            end
+    end.
 
-operation_item_wait({target_application, _}, S) -> operation_wait_target(S);
-operation_item_wait(resolve_outcome, S) -> operation_wait_target(S);
-operation_item_wait(_Item, S) -> {next, S}.
+operation_work_disposition({worker_down, timeout}) -> wait;
+operation_work_disposition({worker_down, Reason}) -> {fatal, {operation_worker_crash, Reason}};
+operation_work_disposition({error, Reason})
+  when Reason =:= invalid_operation_claim; Reason =:= invalid_target_evidence;
+       Reason =:= conflicting_target_evidence; Reason =:= invalid_target_response;
+       Reason =:= independent_scope_required -> {fatal, Reason};
+operation_work_disposition(_) -> wait.
 
 initial_state(Owner, OwnerNs, Begin, BeginEvidence, Options) ->
     case {options(Options), quod_dtx:begin_recovery_rows(Begin),
@@ -1135,6 +1040,19 @@ logical_item(Index) -> Index.
 %% Expand one target's prepared routes in this SAME wave. A fast target
 %% does not wait for another target's discovery, and a paused owner retains
 %% preparations without starting another endpoint. Results stay target-keyed.
+record_wave_result(Index, Result,
+  S = #state{wave = #wave{stage = operation, items = Items,
+                          meta = #{request_deadline := Deadline}}}) when is_integer(Index) ->
+    Item = lists:nth(Index, Items),
+    case Item of
+        {application, Target} ->
+            {Stored, S1} = operation_record_result(Result, Target, Deadline, S),
+            put_wave_result(Index, Stored, S1);
+        {certify, Target, _, _} ->
+            {Stored, S1} = operation_record_result(Result, Target, Deadline, S),
+            put_wave_result(Index, Stored, S1);
+        _ -> put_wave_result(Index, Result, S)
+    end;
 record_wave_result(Index, {prepared_submit, Plan}, S) when is_integer(Index) ->
     put_wave_result(Index, {prepared_submit, Plan}, S);
 record_wave_result({Index, Endpoint}, Result,
@@ -1813,7 +1731,7 @@ complete_rows(_Record) -> [].
 applied_certificate(Target, Ref, Applied) ->
     case lists:keyfind(Target, 1, Applied) of
         {Target, Certificate} ->
-            case quod_dtx_current_view:applied_certificate_binding(
+            case quod_applied_certificate:applied_certificate_binding(
                    Certificate) of
                 {ok, #{target := Target, finalize_ref := Ref}} ->
                     {ok, Certificate};
@@ -1858,7 +1776,7 @@ install_applied_wave(
   [{applied, Target, GroupId, FinalizeRef, Generation, Verdict} | Commands],
   [{verified, Certificate} | Views],
   S0, Targets, Waiting, Progress0) ->
-    case quod_dtx_current_view:applied_certificate_binding(Certificate) of
+    case quod_applied_certificate:applied_certificate_binding(Certificate) of
         {ok, #{target := Target, group_id := GroupId,
                finalize_ref := FinalizeRef, generation := Generation,
                verdict := Verdict}} ->

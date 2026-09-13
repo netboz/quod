@@ -147,6 +147,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_endpoint_request/7, dtx_endpoint_local/4,
          history_view/3, history_view_at/3, history_view_live/1, transaction_evidence/4,
          operation_claim_evidence/4,
+         operation_completion_evidence/4,
+         operation_completion_evidence/3,
          dtx_local_evidence/4, dtx_applied_source/2,
          dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
@@ -156,7 +158,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
--export([apply_operation_projection/3, await_operation_recovery/4,
+-export([apply_operation_projection/3, await_operation_recovery/5,
          cancel_operation_waiter/4,
          finish_operation_target_result/5, install_operation_snapshot/2,
          drop_operation_recovery_owner/4, drop_operation_waiter/3,
@@ -1165,7 +1167,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
         pending | running | blocked | settling,
     pid = none :: none | pid(),
     monitor = none :: none | reference(),
-    waiters = #{} :: #{reference() => {gen_statem:from(), reference()}}
+    waiters = #{} :: #{reference() => {gen_statem:from(), reference(), integer()}}
 }).
 
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
@@ -1882,7 +1884,7 @@ test_operation_target_result(Result, TargetRef) ->
     S0 = #s{operation_recoveries = #{OperationRef => Owner}},
     Tag = make_ref(),
     {wait, S1} = await_operation_recovery(
-                   {self(), Tag}, make_ref(), OperationRef, S0),
+                   {self(), Tag}, make_ref(), OperationRef, quod_time:mono_ms() + 1000, S0),
     {true, SFinished} = finish_operation_target_result(
                           self(), OperationRef, Result, TargetRef, S1),
     Reply = receive
@@ -1903,7 +1905,7 @@ test_operation_wait_before_projection(Slot, Claim = #transaction{}) ->
     {OriginNs, _} = Claim#transaction.origin,
     S0 = #s{ns = OriginNs, operation_recoveries = #{}},
     {wait, S1} = await_operation_recovery(
-                   {self(), Tag}, make_ref(), OperationRef, S0),
+                   {self(), Tag}, make_ref(), OperationRef, quod_time:mono_ms() + 1000, S0),
     Waiting = maps:get(OperationRef, S1#s.operation_recoveries),
     [Monitor] = maps:keys(Waiting#operation_recovery_owner.waiters),
     {true, Abandoned} = drop_operation_waiter(Monitor, self(), S1),
@@ -1929,6 +1931,12 @@ test_operation_recoveries(#s{operation_recoveries = Recoveries}) ->
             results => Results, result_vector => operation_result_vector(Owner),
             waiters => Waiters}
       end, Recoveries).
+operation_result_vector(#operation_recovery_owner{target_refs = none}) -> pending;
+operation_result_vector(#operation_recovery_owner{
+                          target_refs = Refs, target_results = Results}) ->
+    [{quod_operation_vector:target(Ref),
+      maps:get(quod_operation_vector:target(Ref), Results, pending)} || Ref <- Refs].
+
 test_seed_operation_worker(Ref, Pid, S = #s{operation_recoveries = Recoveries}) ->
     Owner = maps:get(Ref, Recoveries),
     S#s{operation_recoveries = Recoveries#{
@@ -2404,7 +2412,7 @@ prolog_ready(Ns, PrologPid, Height, Unresolved)
               {prolog_ready, PrologPid, Height, Unresolved})
     end.
 
--doc "Project one committed one-target claim/completion into recovery custody.".
+-doc "Project one committed target-vector claim/completion into recovery custody.".
 -spec operation_projection(binary(), pos_integer(), #transaction{},
                            quod_trace:context()) -> ok.
 operation_projection(
@@ -2415,7 +2423,7 @@ operation_projection(
     %% feeding replay entries to Prolog. On a locally executed live submit,
     %% Prolog sends this cast before releasing the parked submit_role caller,
     %% so mailbox order installs the owner first. A relayed leader reply may
-    %% overtake this replica's apply; await_operation_recovery/4 parks that
+    %% overtake this replica's apply; await_operation_recovery/5 parks that
     %% waiter in the same owner until this cast arrives.
     gen_statem:cast(
       quod_reg:via({quod_simplex, Ns}),
@@ -2423,10 +2431,11 @@ operation_projection(
 
 -doc "Wait for the one durable recovery owner to certify the target result.".
 -spec await_operation_result(binary(), term(), pos_integer()) ->
-          {committed, term()} | {{rejected, atom()}, term()} |
+          {operation_results, list()} |
           {error, {outcome_unknown, term()}}.
 await_operation_result(Ns, OperationRef, TimeoutMs)
   when is_binary(Ns), is_integer(TimeoutMs), TimeoutMs > 0 ->
+    Deadline = quod_time:mono_ms() + TimeoutMs,
     WaitRef = make_ref(),
     %% Bind cleanup to this exact owner incarnation, caller and request. A
     %% timeout expires the call alias, not the caller PID; its monitor alone
@@ -2437,7 +2446,12 @@ await_operation_result(Ns, OperationRef, TimeoutMs)
       TraceCtx, <<"operation.result_wait_sent">>, OperationRef, Ns, #{}),
     try gen_statem:call(
           Server, {await_operation_result, WaitRef, OperationRef,
-                   TraceCtx}, TimeoutMs)
+                   Deadline, TraceCtx}, TimeoutMs) of
+        Reply ->
+            case quod_time:mono_ms() < Deadline of
+                true -> Reply;
+                false -> {error, {outcome_unknown, OperationRef}}
+            end
     catch
         exit:_ -> {error, {outcome_unknown, OperationRef}}
     after
@@ -2808,6 +2822,32 @@ operation_claim_evidence(Ns, Slot, OperationRef, Deadline)
 operation_claim_evidence(_Ns, _Slot, _OperationRef, _Deadline) ->
     {error, invalid_request}.
 
+-doc "Read the exact completion at the durable outcome's receipt height.".
+-spec operation_completion_evidence(binary(), pos_integer(), term(), integer()) ->
+          {ok, quod_dtx:certified_ref(), #transaction{}} |
+          {error, timeout | not_ready | not_found | invalid_request}.
+operation_completion_evidence(Ns, Slot, OperationRef, Deadline)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(Slot), Slot > 0, is_integer(Deadline) ->
+    case history_view(Ns, any, Deadline) of
+        {ok, View} -> operation_completion_evidence(View, Slot, OperationRef);
+        {error, _} = Error -> Error
+    end;
+operation_completion_evidence(_, _, _, _) -> {error, invalid_request}.
+
+-doc "Use one already-pinned source view for a completion point read; never recapture.".
+-spec operation_completion_evidence(history_view(), pos_integer(), term()) ->
+          {ok, quod_dtx:certified_ref(), #transaction{}} | {error, term()}.
+operation_completion_evidence(#{identity := {Ns, Anchor}} = View, Slot,
+                              {operation, Ns, Anchor, _, _} = OperationRef) ->
+    case history_view_live(View) of
+        true ->
+            Result = evidence_at(View, Slot, {completion, OperationRef}),
+            case history_view_live(View) of true -> Result; false -> {error, not_ready} end;
+        false -> {error, not_ready}
+    end;
+operation_completion_evidence(_, _, _) -> {error, invalid_request}.
+
 evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
             Slot, {Kind, _} = Selection) ->
     Attributes = #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
@@ -2844,6 +2884,10 @@ evidence_in_entry(Identity, Entry, Transactions, {claim, OperationRef}) ->
                       <- Transactions,
                   operation_ref_matches(Claim, OperationRef)],
     certify_evidence_match(Identity, Entry, Matches);
+evidence_in_entry(Identity, Entry, Transactions, {completion, OperationRef}) ->
+    certify_evidence_match(Identity, Entry,
+      [T || #transaction{role = {remote_complete, Ref, _, _}} = T <- Transactions,
+            Ref =:= OperationRef]);
 evidence_in_entry(Identity, Entry, Transactions, {application, TxId}) ->
     certify_evidence_match(
       Identity, Entry,
@@ -3947,12 +3991,12 @@ running_impl(
 running_impl(cast, {prolog_ready, _PrologPid, _Height, _Unresolved}, S) ->
     {keep_state, S};
 running_impl(
-  {call, From}, {await_operation_result, WaitRef, OperationRef, TraceCtx}, S0)
-  when is_reference(WaitRef) ->
+  {call, From}, {await_operation_result, WaitRef, OperationRef, Deadline, TraceCtx}, S0)
+  when is_reference(WaitRef), is_integer(Deadline) ->
     trace_operation_event(
       TraceCtx, <<"operation.result_wait_received">>, OperationRef, S0#s.ns, #{}),
     case quod_trace:with_context(TraceCtx, fun() ->
-             await_operation_recovery(From, WaitRef, OperationRef, S0)
+             await_operation_recovery(From, WaitRef, OperationRef, Deadline, S0)
          end) of
         {reply, Reply, S1} ->
             trace_operation_event(
@@ -4786,12 +4830,19 @@ apply_operation_projection(_Slot, #transaction{}, S) ->
     S.
 
 await_operation_recovery(
-  From, WaitRef, OperationRef,
+  From, WaitRef, OperationRef, Deadline, S) ->
+    case quod_time:mono_ms() < Deadline of
+        true -> await_live_operation(From, WaitRef, OperationRef, Deadline, S);
+        false -> {reply, {error, {outcome_unknown, OperationRef}}, S}
+    end.
+
+await_live_operation(
+  From, WaitRef, OperationRef, Deadline,
   S = #s{operation_recoveries = Recoveries}) ->
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{} ->
             case operation_client_result(Owner) of
-                pending -> park_operation_waiter(From, WaitRef, OperationRef, Owner, S);
+                pending -> park_operation_waiter(From, WaitRef, OperationRef, Deadline, Owner, S);
                 Result -> {reply, Result, S}
             end;
         undefined ->
@@ -4801,7 +4852,7 @@ await_operation_recovery(
             Owner = #operation_recovery_owner{
                        operation_ref = OperationRef,
                        trace_ctx = quod_trace:context()},
-            park_operation_waiter(From, WaitRef, OperationRef, Owner, S)
+            park_operation_waiter(From, WaitRef, OperationRef, Deadline, Owner, S)
     end.
 
 operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx})
@@ -4820,14 +4871,14 @@ trace_operation_event(Ctx, Name, {operation, _, <<_:256>>, _, <<_:256>> = Id},
 trace_operation_event(_Ctx, _Name, _Ref, _Ns, _Attributes) -> ok.
 
 park_operation_waiter(
-  From = {Caller, _Tag}, WaitRef, OperationRef,
+  From = {Caller, _Tag}, WaitRef, OperationRef, Deadline,
   Owner = #operation_recovery_owner{waiters = Waiters},
   S = #s{operation_recoveries = Recoveries}) ->
     Monitor = erlang:monitor(process, Caller),
     {wait,
      S#s{operation_recoveries = Recoveries#{
            OperationRef => Owner#operation_recovery_owner{
-             waiters = Waiters#{Monitor => {From, WaitRef}}}}}}.
+             waiters = Waiters#{Monitor => {From, WaitRef, Deadline}}}}}}.
 
 cancel_operation_waiter(
   Caller, WaitRef, OperationRef,
@@ -4835,7 +4886,7 @@ cancel_operation_waiter(
     case maps:get(OperationRef, Recoveries, undefined) of
         Owner = #operation_recovery_owner{waiters = Waiters} ->
             Remaining = maps:filter(
-              fun(Monitor, {{Pid, _Tag}, Ref})
+              fun(Monitor, {{Pid, _Tag}, Ref, _Deadline})
                     when Pid =:= Caller, Ref =:= WaitRef ->
                       _ = erlang:demonitor(Monitor, [flush]),
                       false;
@@ -4893,7 +4944,7 @@ finish_operation_result_delivery(Owner, Result, Waiters, OperationRef, S) ->
                   trace_operation_event(
                     quod_trace:context(), <<"operation.result_reply_ready">>,
                     OperationRef, S#s.ns, #{}),
-                  reply_operation_waiters(Waiters, Result)
+                  reply_operation_waiters(Waiters, Result, OperationRef)
               end),
             {true, put_operation_owner(
                      Owner#operation_recovery_owner{
@@ -4902,19 +4953,13 @@ finish_operation_result_delivery(Owner, Result, Waiters, OperationRef, S) ->
 %% Canonical order comes only from the bound claim, never arrival order.
 %% This is volatile verified-result bookkeeping, not receipt evidence: an
 %% included receipt row cannot manufacture one of these verdicts.
-operation_result_vector(#operation_recovery_owner{target_refs = none}) -> pending;
-operation_result_vector(#operation_recovery_owner{
-                          target_refs = Refs, target_results = Results}) ->
-    [{quod_operation_vector:target(Ref),
-      maps:get(quod_operation_vector:target(Ref), Results, pending)} || Ref <- Refs].
-
-%% Keep the released N=1 client grammar at this boundary only. N>1 admission
-%% and dispatch remain refused until the certified L2 result scope; even a
-%% complete hand-built vector is not yet authority for a multi-target reply.
-operation_client_result(Owner) ->
-    case operation_result_vector(Owner) of
-        [{_Target, Result}] -> Result;
-        _ -> pending
+%% The owner always returns a vector. Scalar presentation belongs at the
+%% public proof API, never in recovery or completion bookkeeping.
+operation_client_result(#operation_recovery_owner{target_refs = none}) -> pending;
+operation_client_result(#operation_recovery_owner{target_refs = Refs, target_results = Results}) ->
+    case quod_operation_vector:results(Refs, Results) of
+        {ok, Rows} -> {operation_results, Rows};
+        pending -> pending
     end.
 
 operation_target_result(committed, TargetRef) ->
@@ -4924,11 +4969,15 @@ operation_target_result({rejected, Reason}, TargetRef) when is_atom(Reason) ->
 operation_target_result(_Result, _TargetRef) ->
     error.
 
-reply_operation_waiters(Waiters, Reply) ->
+reply_operation_waiters(Waiters, Reply, OperationRef) ->
     maps:foreach(
-      fun(Monitor, {From, _WaitRef}) ->
+      fun(Monitor, {From, _WaitRef, Deadline}) ->
           _ = erlang:demonitor(Monitor, [flush]),
-          gen_statem:reply(From, Reply)
+          Published = case quod_time:mono_ms() < Deadline of
+              true -> Reply;
+              false -> {error, {outcome_unknown, OperationRef}}
+          end,
+          gen_statem:reply(From, Published)
       end, Waiters).
 
 drop_operation_waiter(
@@ -4938,7 +4987,7 @@ drop_operation_waiter(
           Owner = #operation_recovery_owner{waiters = Waiters},
           {Found0, Acc}) ->
           case maps:get(Monitor, Waiters, undefined) of
-              {{Pid, _Tag}, _WaitRef} ->
+              {{Pid, _Tag}, _WaitRef, _Deadline} ->
                   Remaining = maps:remove(Monitor, Waiters),
                   Updated = Owner#operation_recovery_owner{waiters = Remaining},
                   case operation_owner_needed(Updated) of
@@ -5993,7 +6042,7 @@ run_dtx_endpoint_worker(Parent, Ns, Peer, Request, Deadline) ->
     %% Subscribe before reading: committed-height feed notices can precede
     %% Prolog apply/replay readiness, including at an otherwise quiet head.
     IsSnapshot andalso quod_reg:subscribe({runtime, Ns}),
-    Context = {Parent, ParentMonitor, Ns, Peer, Request, Deadline},
+    Context = {Parent, ParentMonitor, Ns, Peer, Request, Deadline, none},
     try run_dtx_endpoint_query(Context)
     after
         _ = erlang:demonitor(ParentMonitor, [flush]),
@@ -6001,20 +6050,21 @@ run_dtx_endpoint_worker(Parent, Ns, Peer, Request, Deadline) ->
     end.
 
 run_dtx_endpoint_query(
-  Context = {Parent, _ParentMonitor, Ns, Peer, Request, Deadline}) ->
+  Context = {Parent, _ParentMonitor, Ns, Peer, Request, Deadline, Evidence}) ->
     case max(0, Deadline - quod_time:mono_ms()) of
         0 -> endpoint_worker_expired(Parent);
         Remaining ->
-            Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining, Deadline),
+            Result = execute_dtx_endpoint_request(Ns, Peer, Request, Remaining, Deadline, Evidence),
+            Pinned = pin_endpoint_evidence(Context, Result),
             case waiting_applied_key(Request, Result) of
                 {wait, Key} ->
-                    wait_dtx_endpoint_progress(Context, {applied, Key});
+                    wait_dtx_endpoint_progress(Pinned, {applied, Key});
                 ready ->
                     Parent ! {dtx_endpoint_worker_result, self(), Result},
                     case outcome_request_claim(Request) of
                         none -> ok;
                         _ -> wait_dtx_snapshot_decision(
-                               Context, outcome_snapshot_floor(Result))
+                               Pinned, outcome_snapshot_floor(Result))
                     end
             end
     end.
@@ -6023,7 +6073,7 @@ run_dtx_endpoint_query(
 %% consensus owner accepts it against its current era/head or retains this
 %% same worker. Runtime messages stay queued until that serialized decision.
 wait_dtx_snapshot_decision(
-  Context = {Parent, ParentMonitor, _Ns, _Peer, _Request, Deadline}, Floor) ->
+  Context = {Parent, ParentMonitor, _Ns, _Peer, _Request, Deadline, _Evidence}, Floor) ->
     Remaining = max(0, Deadline - quod_time:mono_ms()),
     receive
         {dtx_snapshot_decision, Parent, done} -> ok;
@@ -6036,7 +6086,7 @@ wait_dtx_snapshot_decision(
     end.
 
 wait_dtx_endpoint_progress(
-  Context = {Parent, ParentMonitor, _Ns, _Peer, _Request, Deadline}, Requirement) ->
+  Context = {Parent, ParentMonitor, _Ns, _Peer, _Request, Deadline, _Evidence}, Requirement) ->
     Remaining = max(0, Deadline - quod_time:mono_ms()),
     receive
         {'DOWN', ParentMonitor, process, Parent, _Reason} -> ok;
@@ -6062,7 +6112,17 @@ endpoint_worker_expired(Parent) ->
 
 outcome_snapshot_floor({outcome_state, #{applied_floor := Floor}})
   when is_integer(Floor), Floor >= 0 -> Floor;
+outcome_snapshot_floor({operation_applied_state, _Evidence, #{applied_floor := Floor}})
+  when is_integer(Floor), Floor >= 0 -> Floor;
 outcome_snapshot_floor(_Result) -> -1.
+
+%% Exact entry evidence is immutable for this owner-bound request. Waiting for
+%% Prolog publication may refresh the outcome, never re-read/re-verify history.
+pin_endpoint_evidence(Context, {applied_state, Evidence, _State}) ->
+    setelement(7, Context, Evidence);
+pin_endpoint_evidence(Context, {operation_applied_state, Evidence, _Snapshot}) ->
+    setelement(7, Context, Evidence);
+pin_endpoint_evidence(Context, _Result) -> Context.
 
 waiting_applied_key(
   {applied, _RequestId, GroupId, FinalizeRef, Generation, Verdict},
@@ -6152,7 +6212,8 @@ content_reference_contacts(ReferencePlan, Workers, TargetIdentity) ->
       fun(_Pid,
           #dtx_server_worker{
             contact = {<<_:256>>, _} = Contact,
-            request = {apply_claim, _RequestId, TargetIdentity, EvidenceBlob}}, Acc) ->
+            request = {apply_claim, _RequestId, WorkerTarget, EvidenceBlob}}, Acc)
+            when WorkerTarget =:= TargetIdentity ->
               case decode_claimed_application(TargetIdentity, EvidenceBlob) of
                   {ok, _ClaimRef,
                    #transaction{origin = Identity},
@@ -6248,18 +6309,23 @@ dtx_endpoint_operation_ready({outcome_barrier, _, _, _, _} = Request, S) ->
     outcome_request_binding(Request, S);
 dtx_endpoint_operation_ready({read_attest, _, _}, S) ->
     endpoint_read_ready(S);
+dtx_endpoint_operation_ready({operation_applied, _, _} = Request, S) ->
+    endpoint_read_ready(S) andalso outcome_request_binding(Request, S);
+dtx_endpoint_operation_ready({operation_receipt, _, {operation, Ns, Anchor, _, _}, _},
+                            S = #s{ns = Ns, genesis_hash = Anchor}) ->
+    endpoint_read_ready(S);
 dtx_endpoint_operation_ready({applied, _, _, _, _, _}, S) ->
     endpoint_read_ready(S);
 dtx_endpoint_operation_ready(_, _S) ->
     false.
 
 execute_dtx_endpoint_request(
-  Ns, _Peer, {apply_claim, _RequestId, {Ns, _} = Target, EvidenceBlob}, _TimeoutMs, Deadline) ->
+  Ns, _Peer, {apply_claim, _RequestId, {Ns, _} = Target, EvidenceBlob}, _TimeoutMs, Deadline, _Evidence) ->
     execute_claimed_application(Target, EvidenceBlob, Deadline);
 execute_dtx_endpoint_request(
   Ns, Peer,
   {cancel_operation_effect, _RequestId, {Ns, _} = Target, SubmissionBlob},
-  _TimeoutMs, _Deadline) ->
+  _TimeoutMs, _Deadline, _Evidence) ->
     case quod_effect_journal:cancel_operation(
            Peer, Target, SubmissionBlob) of
         cancelled -> {operation_effect_cancelled, cancelled};
@@ -6267,21 +6333,21 @@ execute_dtx_endpoint_request(
         {error, _} -> {error, invalid_request}
     end;
 execute_dtx_endpoint_request(
-  Ns, _Peer, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs, _Deadline) ->
+  Ns, _Peer, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs, _Deadline, _Evidence) ->
     case quod_prolog:dtx_group_state(Ns, GroupId) of
         {ok, State} -> {phase_state, State};
         {error, _} -> {error, not_ready}
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome, _RequestId, OutcomeRef, _CommitteeId,
-       _MinimumSlot}, TimeoutMs, _Deadline) ->
+       _MinimumSlot}, TimeoutMs, _Deadline, _Evidence) ->
     execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs);
 execute_dtx_endpoint_request(
   Ns, _Peer, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
-       _MinimumSlot}, TimeoutMs, _Deadline) ->
+       _MinimumSlot}, TimeoutMs, _Deadline, _Evidence) ->
     execute_outcome_snapshot(Ns, GroupRef, TimeoutMs);
 execute_dtx_endpoint_request(
-  Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs, _Deadline) ->
+  Ns, _Peer, {read_attest, _RequestId, PlanBlob}, TimeoutMs, _Deadline, _Evidence) ->
     case quod_dtx:decode(PlanBlob) of
         {ok, Plan} ->
             case quod_prolog:validate_read_plan(Ns, Plan, TimeoutMs) of
@@ -6295,8 +6361,8 @@ execute_dtx_endpoint_request(
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {applied, _RequestId, GroupId, FinalizeRef,
-       _Generation, _Verdict}, _TimeoutMs, Deadline) ->
-    case dtx_local_evidence(Ns, FinalizeRef, finalize, Deadline) of
+       _Generation, _Verdict}, _TimeoutMs, Deadline, CachedEvidence) ->
+    case endpoint_exact_evidence(Ns, FinalizeRef, finalize, Deadline, CachedEvidence) of
         {ok, Evidence} ->
             case quod_prolog:dtx_group_state(Ns, GroupId) of
                 {ok, State} -> {applied_state, Evidence, State};
@@ -6308,7 +6374,38 @@ execute_dtx_endpoint_request(
             {error, not_found};
         {error, not_ready} ->
             {error, not_ready}
+    end;
+execute_dtx_endpoint_request(
+  Ns, _Peer, {operation_receipt, _RequestId, OperationRef, Slot}, _TimeoutMs, Deadline, _Cached) ->
+    case operation_completion_evidence(Ns, Slot, OperationRef, Deadline) of
+        {ok, Ref, Complete} ->
+            case quod_transaction:encode_evidence(Ref, Complete) of
+                {ok, Blob} -> {operation_receipt_evidence, Blob};
+                {error, _} -> {error, not_ready}
+            end;
+        {error, _} -> {error, not_ready}
+    end;
+execute_dtx_endpoint_request(
+  Ns, _Peer, {operation_applied, _RequestId, Ref}, _TimeoutMs, Deadline, CachedEvidence) ->
+    case endpoint_exact_evidence(Ns, Ref, transaction, Deadline, CachedEvidence) of
+        {ok, Evidence} ->
+            case max(0, Deadline - quod_time:mono_ms()) of
+                0 -> {error, timeout};
+                Remaining ->
+                    case execute_outcome_snapshot(
+                           Ns, quod_transaction:stable_ref(Ref), Remaining) of
+                        {outcome_state, Snapshot} -> {operation_applied_state, Evidence, Snapshot};
+                        {error, not_ready} -> {operation_applied_state, Evidence, not_ready};
+                        Error -> Error
+                    end
+            end;
+        {error, Reason} -> {error, Reason}
     end.
+
+endpoint_exact_evidence(Ns, Ref, Phase, Deadline, none) ->
+    dtx_local_evidence(Ns, Ref, Phase, Deadline);
+endpoint_exact_evidence(_Ns, _Ref, _Phase, _Deadline, Evidence) when is_map(Evidence) ->
+    {ok, Evidence}.
 
 execute_claimed_application({Ns, _} = Target, EvidenceBlob, Deadline) ->
     Started = erlang:monotonic_time(),
@@ -6317,8 +6414,11 @@ execute_claimed_application({Ns, _} = Target, EvidenceBlob, Deadline) ->
             ok = quod_metrics:observe_remote_operation_stage(
                    Ns, claim_verification, ok,
                    erlang:monotonic_time() - Started),
-            claimed_application_result(
-              Ns, ClaimRef, Claim, Application, Deadline);
+            case quod_transaction:validate_independent_claim(Claim) of
+                ok -> claimed_application_result(Ns, ClaimRef, Claim, Application, Deadline);
+                {error, independent_scope_required} -> {error, independent_scope_required};
+                {error, _} -> {error, invalid_request}
+            end;
         error ->
             ok = quod_metrics:observe_remote_operation_stage(
                    Ns, claim_verification, failed,
@@ -6502,6 +6602,17 @@ finish_dtx_server_worker(
 
 outcome_snapshot_wait(Request, Result, S) ->
     case outcome_request_claim(Request) of
+        {exact, Ref} ->
+            case {outcome_request_binding(Request, S), endpoint_read_ready(S), Result} of
+                {true, true, {operation_applied_state, Evidence, Snapshot}} ->
+                    case quod_operation:applied_result(Ref, Evidence, Snapshot) =:= pending of
+                        true -> wait;
+                        false -> ready
+                    end;
+                {true, false, _} -> wait;
+                {true, _, {error, not_ready}} -> wait;
+                _ -> ready
+            end;
         {OutcomeRef, CommitteeId, MinimumSlot} ->
             case {outcome_request_binding(Request, S), Result} of
                 {true, {outcome_state,
@@ -6522,10 +6633,16 @@ outcome_snapshot_wait(Request, Result, S) ->
 outcome_request_claim({Kind, _RequestId, Ref, CommitteeId, MinimumSlot})
   when Kind =:= outcome; Kind =:= outcome_barrier ->
     {Ref, CommitteeId, MinimumSlot};
+outcome_request_claim({operation_applied, _RequestId, Ref}) -> {exact, Ref};
 outcome_request_claim(_Request) -> none.
 
 outcome_request_binding(Request, S = #s{committee_id = CommitteeId, self = Self}) ->
     case outcome_request_claim(Request) of
+        {exact, Ref} ->
+            case quod_dtx:certified_ref_binding(Ref) of
+                {ok, Target, _Slot, _Digest} -> Target =:= target_identity(S);
+                _ -> false
+            end;
         {Ref, CommitteeId, MinimumSlot}
           when is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
                is_integer(MinimumSlot), MinimumSlot >= 0 ->
@@ -6646,6 +6763,14 @@ dtx_endpoint_result_response(
     {outcome_barrier_endpoint_response(
        RequestId, GroupRef, CommitteeId, MinimumSlot, Snapshot, S), []};
 dtx_endpoint_result_response(
+  {operation_receipt, RequestId, OperationRef, Slot},
+  {operation_receipt_evidence, Blob}, _S) ->
+    {{operation_receipt, RequestId, OperationRef, Slot, Blob}, []};
+dtx_endpoint_result_response(
+  {operation_applied, RequestId, Ref},
+  {operation_applied_state, Evidence, Snapshot}, S) ->
+    {operation_applied_response(RequestId, Ref, Evidence, Snapshot, S), []};
+dtx_endpoint_result_response(
   {read_attest, RequestId, _PlanBlob},
   {read_plan_valid, Plan, Applied}, S) ->
     Attestation = dtx_endpoint_attestation(
@@ -6658,12 +6783,11 @@ dtx_endpoint_result_response(
     {applied_endpoint_response(
        RequestId, GroupId, FinalizeRef, Generation, Verdict,
        Evidence, State, S), []};
-dtx_endpoint_result_response(Request, {error, Reason}, _S)
-  when Reason =:= busy; Reason =:= not_ready;
-       Reason =:= not_found; Reason =:= invalid_request;
-       Reason =:= conflict_retry;
-       Reason =:= read_certificate_unavailable ->
-    {{error, quod_dtx_endpoint:request_id(Request), Reason}, []};
+dtx_endpoint_result_response(Request, {error, Reason}, _S) ->
+    %% The endpoint codec owns the refusal vocabulary. A duplicate allowlist
+    %% here used to erase newly typed refusals into transient not_ready.
+    Id = quod_dtx_endpoint:request_id(Request),
+    {quod_dtx_endpoint:error_response(Id, Reason), []};
 dtx_endpoint_result_response(Request, _Result, _S) ->
     {{error, quod_dtx_endpoint:request_id(Request), not_ready}, []}.
 
@@ -6798,6 +6922,22 @@ retained_dtx_phase_pending(
                    quod_dtx:control_kind(Control) =:= Kind)
       end, false, Submissions).
 
+operation_applied_response(RequestId, Ref, Evidence, Snapshot,
+                           S = #s{self = Self, id = Signer}) ->
+    case {endpoint_read_ready(S), quod_operation:applied_result(Ref, Evidence, Snapshot),
+          applied_finalize_committee(target_identity(S), Evidence),
+          quod_ontology:network_identity()} of
+        {true, {ok, Result}, {ok, Committee, _CommitteeId}, {ok, Network}} ->
+            case lists:member(Self, Committee) andalso applied_signer_matches(Self, Signer) of
+                true ->
+                    {ok, Statement} = quod_applied_certificate:operation_statement(Network, Evidence, Result),
+                    {ok, {Self, Signature}} = quod_applied_certificate:sign_operation_vote(Statement, Signer),
+                    {operation_applied, RequestId, Ref, Statement, Self, Signature};
+                false -> {error, RequestId, not_ready}
+            end;
+        _ -> {error, RequestId, not_ready}
+    end.
+
 applied_endpoint_response(
   RequestId, GroupId, FinalizeRef, Generation, Verdict,
   Evidence, State,
@@ -6814,7 +6954,7 @@ applied_endpoint_response(
             case lists:member(Self, Committee) andalso
                  applied_signer_matches(Self, Signer) of
                 true ->
-                    case quod_dtx_current_view:sign_applied_vote(
+                    case quod_applied_certificate:sign_applied_vote(
                            NetworkIdentity, CurrentTarget,
                            FinalizeCommitteeId, GroupId, FinalizeRef,
                            Generation, Verdict, Signer) of
@@ -11176,11 +11316,12 @@ reference_evidence_satisfies(_Phase, _Evidence) -> false.
 verify_content_reference_binding(Transaction, Rest,
                                  LocalIdentity, LedgerRoot, Contacts, Seen, Deadline) ->
     case {verify_role_reference_binding(Transaction, Seen),
-          quod_commit_validation:validate_foreign_reads(Transaction, Seen)} of
+          quod_commit_validation:validate_evidence(Transaction, Seen)} of
         {true, ok} ->
             verify_content_foreign_references(
               Rest, LocalIdentity, LedgerRoot, Contacts, Seen, Deadline);
         {false, _} -> {invalid, foreign_reference_binding};
+        {true, abstain} -> abstain;
         {_, {error, Reason}} -> {invalid, Reason}
     end.
 
@@ -11490,7 +11631,7 @@ verify_complete_applied_rows(
             Key = {applied, Target, FinalizeRef},
             case maps:find(Key, ValidationSidecar) of
                 {ok, Certificate} ->
-                    case quod_dtx_current_view:verify_applied_certificate(
+                    case quod_applied_certificate:verify_applied_certificate(
                            Certificate, NetworkIdentity, Evidence) of
                         true ->
                             verify_complete_applied_rows(

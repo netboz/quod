@@ -24,6 +24,7 @@
          remote_signed_two_gateway_race/1,
          remote_signed_gateway_group/1,
          remote_independent_routes/1,
+         remote_independent_partial_outcome/1,
          remote_independent_branch_provenance/1,
          remote_independent_nesting_and_auth/1,
          remote_independent_cursor_selects_only_accepted_answer/1,
@@ -74,6 +75,7 @@ all() -> [remote_signed_transaction_savepoints,
           remote_signed_two_gateway_race,
           remote_signed_gateway_group,
           remote_independent_routes,
+          remote_independent_partial_outcome,
           remote_independent_branch_provenance,
           remote_independent_nesting_and_auth,
           remote_independent_cursor_selects_only_accepted_answer,
@@ -1122,7 +1124,8 @@ remote_signed_two_gateway_race(Config) ->
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
-                #{status := committed}}},
+                #{status := completed, aggregate := all_applied,
+                  targets := [{{?NS, TargetAnchor}, {committed, OutcomeRef}}]}}},
        wait_remote_operation(
          Asker, maps:get(session_id, AskerSession), RequestBytes,
          Signature, ClientPeer, 8)),
@@ -1137,7 +1140,8 @@ remote_signed_two_gateway_race(Config) ->
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
-                #{status := committed}}},
+                #{status := completed, aggregate := all_applied,
+                  targets := [{{?NS, TargetAnchor}, {committed, OutcomeRef}}]}}},
        peer:call(
          Third, quod_client_goal_ingress, resolve_operation,
          [maps:get(session_id, ThirdSession), RequestBytes,
@@ -1161,14 +1165,104 @@ remote_independent_routes(Config) ->
                        Asker, maps:get(operation_ref, Evidence), 600)),
     assert_fact_once(Target, ?NS, s6_remote, Tag),
     lists:foreach(fun(Goal) ->
-        ?assertMatch({ok, _, {normalized, {error, independent_lane_unavailable}}},
+        ?assertMatch({ok, _, {normalized, {committed, [_], {operation_outcome, _, [_, _]}}}},
                      submit_signed_execute(Config, Goal))
     end, [<<"independent((assertz(s6_ab), animals::assertz(s6_ab))).">>,
           <<"animals::independent((assertz(s6_bc), third::assertz(s6_bc))).">>]),
     lists:foreach(fun({Peer, Ns, Fact}) ->
-        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, Fact]))
+        ?assertMatch({ok, [_], _}, peer:call(Peer, quod_prolog, prove, [Ns, Fact]))
     end, [{Asker, ?ASKER_NS, s6_ab}, {Target, ?NS, s6_ab},
           {Target, ?NS, s6_bc}, {?config(third, Config), ?THIRD_NS, s6_bc}]).
+
+%% L2-S8-DEFERRED-7.4-ADMITTED-PARTIAL-OUTCOME: both plans are genuinely
+%% sealed, then one target's read becomes stale before claim admission. The
+%% shared applier rejects ONLY that target. No hand-built claim or bypass.
+remote_independent_partial_outcome(Config) ->
+    require_third_route_at_target(Config),
+    Asker = ?config(asker, Config), Target = ?config(target, Config),
+    Third = ?config(third, Config), Tag = erlang:unique_integer([positive]),
+    Goal = iolist_to_binary(io_lib:format(
+      "animals::independent((diet(dog, kibble), assertz(s8_rejected(~B)), third::dtx_write(~B))).",
+      [Tag, Tag])),
+    ok = peer:call(Asker, quod_prolog, test_install_read_certificate_barrier, []),
+    Parent = self(), RequestRef = make_ref(),
+    _ = spawn(fun() -> Parent ! {RequestRef, submit_signed_execute(Config, Goal)} end),
+    try
+        ok = peer:call(Asker, quod_prolog, test_await_read_certificate_barrier, [3000]),
+        ?assertMatch({ok, [_], _}, peer:call(Target, quod_prolog, prove,
+          [?NS, {assertz, {diet, dog, {s8_stale_marker, Tag}}}], 60000))
+    after
+        _ = peer:call(Asker, quod_prolog, test_release_read_certificate_barrier, [])
+    end,
+    {ok, Evidence, {normalized, {committed, [_], {operation_outcome, Op, Rows}}}} =
+        receive {RequestRef, Value} -> Value
+        after 60000 -> ct:fail(independent_partial_outcome_timeout) end,
+    ?assertEqual(maps:get(operation_ref, Evidence), Op),
+    ?assertEqual(mixed, quod_operation_vector:aggregate(Rows)),
+    ?assertMatch([{{?NS, _}, {{rejected, conflict_retry}, _}},
+                  {{?THIRD_NS, _}, {committed, _}}], Rows),
+    assert_fact_absent(Target, ?NS, s8_rejected, Tag),
+    assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag),
+    %% Repeat exact delivery after mixed completion: rejected A stays rejected,
+    %% committed B stays exactly once, and neither gets a fresh application id.
+    assert_operation_redelivery(Config, Op, Rows, #{?NS => Target, ?THIRD_NS => Third}),
+    assert_fact_absent(Target, ?NS, s8_rejected, Tag),
+    assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag),
+    %% The source owner must recover the same complete vector for a later
+    %% caller. A different gateway then verifies the source receipt and the
+    %% exact AM3 target evidence; current-view status labels are insufficient.
+    SessionId = maps:get(session_id, ?config(client_session, Config)),
+    RequestBytes = maps:get(request_bytes, Evidence), Signature = maps:get(signature, Evidence),
+    ?assertMatch({ok, _, {operation_outcome, _, #{status := completed, targets := Rows}}},
+      peer:call(Asker, quod_client_goal_ingress, resolve_operation,
+        [SessionId, RequestBytes, Signature, ?config(client_peer, Config)], 10000)),
+    ForeignSession = open_client_session(Target, ?config(network_id, Config),
+      ?config(target_pub, Config), ?config(agent_key, Config), ?config(client_peer, Config)),
+    ?assertMatch({ok, _, {operation_outcome, _, #{status := completed, targets := Rows}}},
+      wait_remote_operation(Target, maps:get(session_id, ForeignSession), RequestBytes,
+        Signature, ?config(client_peer, Config), 8)).
+
+
+assert_operation_redelivery(Config, Op, Rows, Owners) ->
+    Asker = ?config(asker, Config),
+    {ok, #{height := Slot}} = peer:call(Asker, quod_prolog, local_outcome, [?ASKER_NS, Op]),
+    Deadline = peer:call(Asker, quod_time, mono_ms, []) + 5000,
+    {ok, ClaimRef, Claim} = peer:call(Asker, quod_simplex, operation_claim_evidence,
+                                    [?ASKER_NS, Slot, Op, Deadline]),
+    {ok, Bytes} = quod_transaction:encode_evidence(ClaimRef, Claim),
+    lists:foreach(fun({Identity = {Ns, _}, {Verdict, Ref}}) ->
+        Peer = maps:get(Ns, Owners),
+        {transaction, _, _, TxId} = Ref,
+        Before = peer:call(Peer, ?MODULE, claim_application_occurrences, [Ns, TxId]),
+        ?assertMatch([_], Before),
+        lists:foreach(fun(_) ->
+            ?assertEqual({ok, Bytes}, quod_transaction:encode_evidence(ClaimRef, Claim)),
+            Id = crypto:strong_rand_bytes(16), Request = {apply_claim, Id, Identity, Bytes},
+            ?assertMatch({ok, {application, Id, Verdict, _}}, peer:call(
+              Asker, quod_dtx_current_view, submit_claim_application,
+              [?ASKER_NS, Identity, Claim, Request, 5000], 10000)),
+            ?assertEqual(Before, peer:call(Peer, ?MODULE, claim_application_occurrences, [Ns, TxId]))
+        end, [first, second])
+    end, Rows).
+
+%% Positive reconnect cases establish their own route precondition. A prior
+%% case may already have installed this exact fixture route; verify it then,
+%% never erase it or rely on a particular suite order. Negative/recovery
+%% route cases use the separately isolated read-set suite.
+require_third_route_at_target(Config) ->
+    Peer = ?config(target, Config), Key = ?config(third_pub, Config),
+    Endpoint = ?config(third_addr, Config),
+    Identity = {?THIRD_NS, ?config(third_anchor, Config)},
+    case peer:call(Peer, quod_foreign_log, route_hints, [Identity, []]) of
+        {error, unavailable} ->
+            {ok, _} = peer:call(Peer, quod_ct, install_directory_generation,
+              [Key, Endpoint, [{?THIRD_NS, element(2, Identity), validator}], 1, 1]);
+        {ok, _} -> ok
+    end,
+    {ok, Routes} = peer:call(Peer, quod_foreign_log, route_hints, [Identity, []]),
+    {Key, Endpoints} = lists:keyfind(Key, 1, Routes),
+    ?assert(lists:member(Endpoint, Endpoints)),
+    ok.
 
 remote_independent_branch_provenance(Config) ->
     Target = ?config(target, Config),
@@ -1183,7 +1277,7 @@ remote_independent_branch_provenance(Config) ->
     ?assertMatch({ok, _, {normalized, {error, independent_mixed_writes}}},
       submit_signed_execute(Config,
         <<"animals::(((assertz(s6_f2), fail); true), independent(third::assertz(s6_f2))).">>)),
-    ?assertMatch({ok, _, {normalized, {error, independent_lane_unavailable}}},
+    ?assertMatch({ok, _, {normalized, {committed, [_], {operation_outcome, _, [_, _]}}}},
       submit_signed_execute(Config,
         <<"animals::((independent((assertz(s6_f3), fail)); true), independent(third::assertz(s6_f3))).">>)),
     %% A remotely-produced successful marker must unwind at its caller too.
@@ -1193,7 +1287,9 @@ remote_independent_branch_provenance(Config) ->
     lists:foreach(fun(Fact) ->
         ?assertMatch({fail, _}, peer:call(Target, quod_prolog, prove, [?NS, Fact])),
         ?assertMatch({fail, _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, Fact]))
-    end, [s6_f2, s6_f3]).
+    end, [s6_f2]),
+    ?assertMatch({ok, [_], _}, peer:call(Target, quod_prolog, prove, [?NS, s6_f3])),
+    ?assertMatch({ok, [_], _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, s6_f3])).
 
 remote_independent_nesting_and_auth(Config) ->
     lists:foreach(fun(Text) ->
@@ -1244,9 +1340,10 @@ remote_independent_cursor_selects_only_accepted_answer(Config) ->
                           [SessionId, CursorId, accept, ClientPeer], 60000),
         case AcceptSecond of
             false ->
-                ?assertMatch({ok, _, {normalized, {error, independent_lane_unavailable}}}, Result),
-                assert_fact_absent(?config(target, Config), ?NS, s6_cursor, Tag),
-                assert_fact_absent(?config(third, Config), ?THIRD_NS, s6_cursor, Tag);
+                ?assertMatch({ok, _, {normalized,
+                             {committed, [_], {operation_outcome, _, [_, _]}}}}, Result),
+                assert_fact_once(?config(target, Config), ?NS, s6_cursor, Tag),
+                assert_fact_once(?config(third, Config), ?THIRD_NS, s6_cursor, Tag);
             true ->
                 ?assertMatch({ok, _, {normalized,
                                      {committed, [_], {group_outcome, _, _, _}}}}, Result),
@@ -1266,13 +1363,7 @@ remote_signed_gateway_group(Config) ->
     Peer = ?config(client_peer, Config),
 
     AgentAnchor = ?config(asker_anchor, Config),
-    ThirdPub = ?config(third_pub, Config),
-    ThirdAddr = ?config(third_addr, Config),
-    ThirdAnchor = peer:call(Third, quod_simplex, genesis_hash, [?THIRD_NS]),
-    {ok, _} = peer:call(
-                Target, quod_ct, install_directory_generation,
-                [ThirdPub, ThirdAddr,
-                 [{?THIRD_NS, ThirdAnchor, validator}], 1, 1]),
+    ok = require_third_route_at_target(Config),
     %% Third already received Target's exact current record in suite setup.
     %% Reinstalling sequence 1 here would correctly be rejected as stale.
     Tag = erlang:unique_integer([positive]),
@@ -2044,8 +2135,8 @@ completed_remote_operation(Target, OperationRef, Remaining) ->
     case peer:call(Target, quod_prolog, outcome, [OperationRef]) of
         {ok, #{status := claimed, operation_state := terminal,
                outcome_ref := {applications, [OutcomeRef]}, included := Included}} ->
-            ?assertEqual([{quod_operation_vector:target(OutcomeRef),
-                           {included, OutcomeRef}}], Included),
+            ?assertMatch([{_, {certified, OutcomeRef, _}}], Included),
+            ?assertEqual({ok, [OutcomeRef]}, quod_operation_vector:receipt_references(Included)),
             case peer:call(Target, quod_prolog, outcome, [OutcomeRef]) of
                 {ok, #{status := committed, ref := OutcomeRef}} -> OutcomeRef;
                 _ ->

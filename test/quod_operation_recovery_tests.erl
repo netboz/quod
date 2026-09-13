@@ -20,15 +20,15 @@ operation_owner_has_one_result_store_test() ->
     ?assert(lists:member(target_results, Names)),
     ?assertNot(lists:member(target_result, Names)).
 
-canonical_result_vector_is_monotone_and_does_not_admit_l2_test() ->
-    isolated(fun canonical_result_vector_is_monotone_and_does_not_admit_l2/0).
+canonical_result_vector_is_monotone_and_replies_only_when_complete_test() ->
+    isolated(fun canonical_result_vector_is_monotone_and_replies_only_when_complete/0).
 
-canonical_result_vector_is_monotone_and_does_not_admit_l2() ->
+canonical_result_vector_is_monotone_and_replies_only_when_complete() ->
     with_fixture(fun(F, _SingleState, Worker, _LifeMonitor) ->
         %% Deliberately hand-built projection and owner-delivered results:
         %% this tests bookkeeping, not N>1 consensus admission or certificates.
-        %% The production N>1 validator/worker refusal remains independently
-        %% tested. Neither partial nor complete synthetic vectors may reply.
+        %% The real admitted partial-outcome CT covers certificate authority.
+        %% Here only a complete verified-result vector may release the waiter.
         Ref = maps:get(operation_ref, F),
         TargetRef = maps:get(target_ref, F),
         Other = {transaction, <<"quod:vector-other">>, <<81:256>>, <<82:256>>},
@@ -56,16 +56,48 @@ canonical_result_vector_is_monotone_and_does_not_admit_l2() ->
                        Worker, Ref, {rejected, conflict_retry}, First, S2),
         ?assertEqual([{A, {{rejected, conflict_retry}, First}},
                       {B, {committed, Second}}], maps:get(result_vector, owner(Ref, S3))),
-        ?assertEqual(pending, maps:get(result, owner(Ref, S3))),
-        assert_no_reply(Tag),
-        [{Monitor, _}] = maps:to_list(maps:get(waiters, owner(Ref, S3))),
-        {true, _} = quod_simplex:drop_operation_waiter(Monitor, self(), S3),
-        _ = erlang:demonitor(Monitor, [flush])
+        Expected = {operation_results, [{A, {{rejected, conflict_retry}, First}},
+                                        {B, {committed, Second}}]},
+        ?assertEqual(Expected, maps:get(result, owner(Ref, S3))),
+        ?assertEqual(Expected, reply(Tag)),
+        ?assertEqual(#{}, maps:get(waiters, owner(Ref, S3))),
+        {true, S3} = quod_simplex:finish_operation_target_result(
+                       Worker, Ref, committed, Second, S3),
+        assert_no_reply(Tag)
     end).
 
 result_trace_marks_only_the_bound_delivery_test_() ->
     [{atom_to_list(Lifetime), fun() -> result_trace_marks_only_bound_delivery(Lifetime) end}
      || Lifetime <- [live_parent, ended_parent]].
+
+each_parked_caller_keeps_its_own_absolute_deadline_test() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Worker, _LifeMonitor) ->
+        Ref = maps:get(operation_ref, F), Target = maps:get(target_ref, F),
+        ExpiredTag = make_ref(), LiveTag = make_ref(),
+        Deadline = quod_time:mono_ms() + 20,
+        {wait, S1} = quod_simplex:await_operation_recovery(
+            {self(), ExpiredTag}, make_ref(), Ref, Deadline, S0),
+        {wait, S2} = quod_simplex:await_operation_recovery(
+            {self(), LiveTag}, make_ref(), Ref, Deadline + 1000, S1),
+        %% This timer represents the deadline under test, not a sleep used as
+        %% a mailbox-delivery barrier. The same monotonic deadline is pinned
+        %% before parking and explicitly expired before result publication.
+        Timer = erlang:start_timer(Deadline, self(), caller_deadline, [{abs, true}]),
+        receive {timeout, Timer, caller_deadline} -> ok
+        after 1000 -> error(caller_deadline_did_not_expire) end,
+        ?assert(quod_time:mono_ms() >= Deadline),
+        {true, S3} = quod_simplex:finish_operation_target_result(
+            Worker, Ref, committed, Target, S2),
+        ?assertEqual({error, {outcome_unknown, Ref}}, reply(ExpiredTag)),
+        ?assertEqual(single_result(committed, Target), reply(LiveTag)),
+        ?assertEqual(#{}, maps:get(waiters, owner(Ref, S3))),
+        ?assertEqual({reply, {error, {outcome_unknown, Ref}}, S3},
+          quod_simplex:await_operation_recovery(
+            {self(), make_ref()}, make_ref(), Ref, Deadline, S3)),
+        {true, S3} = quod_simplex:finish_operation_target_result(
+            Worker, Ref, committed, Target, S3),
+        assert_no_reply(ExpiredTag), assert_no_reply(LiveTag)
+    end) end).
 
 result_trace_marks_only_bound_delivery(Lifetime) ->
     quod_trace_tests:with_tracer(fun() ->
@@ -86,7 +118,7 @@ result_trace_marks_only_bound_delivery(Lifetime) ->
                   assert_no_reply(Tag),
                   {true, S2} = quod_simplex:finish_operation_target_result(
                                  Worker, Ref, committed, Target, S1),
-                  ?assertEqual({committed, Target}, reply(Tag)),
+                  ?assertEqual(single_result(committed, Target), reply(Tag)),
                   {true, S2} = quod_simplex:finish_operation_target_result(
                                  Worker, Ref, committed, Target, S2),
                   assert_no_reply(Tag)
@@ -126,7 +158,7 @@ receipt_before_result_keeps_the_waiting_caller_test() ->
         ?assertEqual([Ref], worker_wakes(Worker)),
         {true, S3} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, S2),
-        ?assertEqual({committed, Target}, reply(Tag)),
+        ?assertEqual(single_result(committed, Target), reply(Tag)),
         assert_no_reply(Tag),
         ?assertEqual(#{}, owners(S3)),
         assert_worker_stopped(Worker, LifeMonitor)
@@ -139,15 +171,15 @@ result_before_receipt_replies_once_then_retires_test() ->
         {Tag, S1} = wait_for_result(Ref, S0),
         {true, S2} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, S1),
-        ?assertEqual({committed, Target}, reply(Tag)),
+        ?assertEqual(single_result(committed, Target), reply(Tag)),
         ?assertMatch(#{claim_state := unresolved, waiters := #{},
-                       result := {committed, Target}}, owner(Ref, S2)),
+                       result := {operation_results, [{_, {committed, Target}}]}}, owner(Ref, S2)),
         ?assertEqual(#{}, maps:get(waiters, owner(Ref, S2))),
         %% Reuse while the unresolved operation still owns this worker is not
         %% a terminal cache: the receipt below removes the entire owner.
-        ?assertEqual({reply, {committed, Target}, S2},
+        ?assertEqual({reply, single_result(committed, Target), S2},
                      quod_simplex:await_operation_recovery(
-                       {self(), make_ref()}, make_ref(), Ref, S2)),
+                       {self(), make_ref()}, make_ref(), Ref, quod_time:mono_ms() + 1000, S2)),
         {true, S2} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, S2),
         assert_no_reply(Tag),
@@ -166,7 +198,7 @@ receipt_is_not_a_success_verdict_test() ->
         assert_no_reply(Tag),
         {true, S3} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, {rejected, conflict_retry}, Target, S2),
-        ?assertEqual({{rejected, conflict_retry}, Target}, reply(Tag)),
+        ?assertEqual(single_result({rejected, conflict_retry}, Target), reply(Tag)),
         ?assertEqual(#{}, owners(S3)),
         assert_worker_stopped(Worker, LifeMonitor)
     end).
@@ -225,7 +257,7 @@ receipt_binding_cannot_replace_the_claim_test() ->
         S2 = complete(F, S1),
         {true, S3} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, S2),
-        ?assertEqual({committed, Target}, reply(Tag)),
+        ?assertEqual(single_result(committed, Target), reply(Tag)),
         ?assertEqual(#{}, owners(S3)),
         assert_worker_stopped(Worker, LifeMonitor)
     end).
@@ -244,7 +276,7 @@ snapshot_without_unresolved_row_preserves_result_delivery_test() ->
         assert_no_reply(Tag),
         {true, S3} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, S2),
-        ?assertEqual({committed, Target}, reply(Tag)),
+        ?assertEqual(single_result(committed, Target), reply(Tag)),
         ?assertEqual(#{}, owners(S3)),
         assert_worker_stopped(Worker, LifeMonitor)
     end).
@@ -283,7 +315,7 @@ stale_worker_messages_cannot_take_result_custody_test() ->
         assert_no_reply(Tag),
         {true, S2} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, complete(F, S1)),
-        ?assertEqual({committed, Target}, reply(Tag)),
+        ?assertEqual(single_result(committed, Target), reply(Tag)),
         ?assertEqual(false, quod_simplex:finish_operation_target_result(
                               Worker, Ref, committed, Target, S2)),
         assert_no_reply(Tag),
@@ -316,7 +348,7 @@ terminal_worker_crash_is_itself_a_restart_wake_test() ->
                                   Worker, Ref, committed, Target, S4)),
             {true, S5} = quod_simplex:finish_operation_target_result(
                            Replacement, Ref, committed, Target, S4),
-            ?assertEqual({committed, Target}, reply(Tag)),
+            ?assertEqual(single_result(committed, Target), reply(Tag)),
             ?assertEqual(#{}, owners(S5)),
             assert_worker_stopped(Replacement, ReplacementMonitor)
         end)
@@ -328,7 +360,7 @@ last_terminal_caller_down_retires_worker_and_monitors_test() ->
         Caller = spawn(fun() -> receive stop -> ok end end),
         try
             {wait, S1} = quod_simplex:await_operation_recovery(
-                           {Caller, make_ref()}, make_ref(), Ref, S0),
+                           {Caller, make_ref()}, make_ref(), Ref, quod_time:mono_ms() + 1000, S0),
             S2 = complete(F, S1),
             [CallerMonitor] = maps:keys(maps:get(waiters, owner(Ref, S2))),
             WorkerMonitor = maps:get(monitor, owner(Ref, S2)),
@@ -406,7 +438,7 @@ exact_wait_cancellation_releases_a_live_callers_terminal_worker_test() ->
         Caller = self(),
         {Tag, S1} = wait_for_result(Ref, S0),
         S2 = complete(F, S1),
-        [{CallerMonitor, {{Caller, Tag}, WaitRef}}] =
+        [{CallerMonitor, {{Caller, Tag}, WaitRef, _Deadline}}] =
             maps:to_list(maps:get(waiters, owner(Ref, S2))),
         WorkerMonitor = maps:get(monitor, owner(Ref, S2)),
         ?assertEqual(S2, quod_simplex:cancel_operation_waiter(
@@ -436,7 +468,7 @@ cancel_one_wait_keeps_another_wait_from_the_same_caller_test() ->
         S3 = complete(F, S2),
         Waiters = maps:get(waiters, owner(Ref, S3)),
         [{FirstMonitor, FirstWaitRef}] =
-            [{M, W} || {M, {{P, T}, W}} <- maps:to_list(Waiters),
+            [{M, W} || {M, {{P, T}, W, _Deadline}} <- maps:to_list(Waiters),
                        P =:= Caller, T =:= FirstTag],
         S4 = quod_simplex:cancel_operation_waiter(
                Caller, FirstWaitRef, Ref, S3),
@@ -445,7 +477,7 @@ cancel_one_wait_keeps_another_wait_from_the_same_caller_test() ->
         ?assert(is_process_alive(Worker)),
         {true, S5} = quod_simplex:finish_operation_target_result(
                        Worker, Ref, committed, Target, S4),
-        ?assertEqual({committed, Target}, reply(SecondTag)),
+        ?assertEqual(single_result(committed, Target), reply(SecondTag)),
         assert_no_reply(FirstTag),
         ?assertEqual(#{}, owners(S5)),
         assert_worker_stopped(Worker, LifeMonitor)
@@ -468,7 +500,7 @@ deterministic_worker_fault_parks_instead_of_respawning_forever_test() ->
                        pid := none, monitor := none, result := pending},
                      owner(Ref, S3)),
         assert_no_reply(Tag),
-        [{_Monitor, {{Caller, Tag}, WaitRef}}] =
+        [{_Monitor, {{Caller, Tag}, WaitRef, _Deadline}}] =
             maps:to_list(maps:get(waiters, owner(Ref, S3))),
         ?assertEqual(#{}, owners(quod_simplex:cancel_operation_waiter(
                                    Caller, WaitRef, Ref, S3)))
@@ -496,7 +528,7 @@ public_wait_timeout_cancels_the_exact_wait_without_caller_death_test() ->
                      quod_simplex:await_operation_result(Ns, Ref, 1)),
         WaitRef = receive
             {timed_wait_call, Fake, {Test, _ReplyTag},
-             {await_operation_result, W, Ref, _TraceCtx}} when is_reference(W) -> W
+             {await_operation_result, W, Ref, _Deadline, _TraceCtx}} when is_reference(W) -> W
         after 1000 -> error(tagged_wait_request_missing)
         end,
         receive
@@ -581,8 +613,11 @@ worker_wakes(Worker, Tag, Acc) ->
 wait_for_result(Ref, S0) ->
     Tag = make_ref(),
     {wait, S1} = quod_simplex:await_operation_recovery(
-                   {self(), Tag}, make_ref(), Ref, S0),
+                   {self(), Tag}, make_ref(), Ref, quod_time:mono_ms() + 1000, S0),
     {Tag, S1}.
+
+single_result(Result, Target) ->
+    {operation_results, [{quod_operation_vector:target(Target), {Result, Target}}]}.
 
 complete(Fixture, S) ->
     quod_simplex:apply_operation_projection(8, maps:get(completion, Fixture), S).

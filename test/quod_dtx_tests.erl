@@ -193,21 +193,21 @@ read_only_participant_seals_empty_diff_with_read_check_test() ->
         quod_proof_session:stop(Session)
     end.
 
-independent_lane_is_explicit_and_unavailable_until_slice_eight_test() ->
+independent_lane_is_explicit_and_selects_the_canonical_vector_test() ->
     Origin = {<<"quod:origin">>, key(3)},
     Target = {<<"quod:target">>, key(4)},
     Binding = {agent_goal_v1, key(45)},
     OriginPlan = sealed_route_plan([], {assertz, p}, Origin, Origin, Binding),
     TargetPlan = sealed_route_plan([], {assertz, q}, Target, Origin, Binding),
     Plans = #{Origin => OriginPlan, Target => TargetPlan},
-    ?assertEqual({error, independent_lane_unavailable},
+    ?assertEqual({remote_claim, lists:sort([Origin, Target]), []},
                  quod_prolog:test_route_plans(Plans, Origin, true, true)),
     ?assertMatch({group, [_, _]},
                  quod_prolog:test_route_plans(Plans, Origin, true, false)),
     ?assertEqual(read, quod_prolog:test_route_plans(#{}, Origin, true, true)),
     ?assertMatch({single, Origin, []},
                  quod_prolog:test_route_plans(#{Origin => OriginPlan}, Origin, true, true)),
-    ?assertMatch({remote_claim, Target, []},
+    ?assertMatch({remote_claim, [Target], []},
                  quod_prolog:test_route_plans(#{Target => TargetPlan}, Origin, true, true)),
     lists:foreach(fun(P) ->
         ?assertEqual({error, independent_requires_signed_request},
@@ -250,12 +250,12 @@ write_lane_routing_is_derived_only_from_sealed_plans_test() ->
        quod_prolog:test_route_plans(
          #{Origin => OriginWrite}, Origin, true)),
     ?assertMatch(
-       {remote_claim, RemoteA, [_, _]},
+       {remote_claim, [RemoteA], [_, _]},
        quod_prolog:test_route_plans(
          #{Origin => OriginRead, RemoteA => RemoteWriteA,
            RemoteC => RemoteReadC}, Origin, true)),
     ?assertMatch(
-       {remote_claim, RemoteA, []},
+       {remote_claim, [RemoteA], []},
        quod_prolog:test_route_plans(
          #{Origin => OriginClaim, RemoteA => RemoteWriteA}, Origin, true)),
     ?assertMatch(
@@ -982,7 +982,7 @@ signed_foreign_only_synthetic_begin_is_not_a_dtx_group_test() ->
                                request_binding => none,
                                participants =>
                                    [{Foreign, quod_dtx:digest(Plan)}]}),
-          {ok, Attestation} = quod_dtx:attest_plan(
+          {ok, Attestation} = quod_dtx:attest_plan(1,
                                 Foreign, Plan, Manifest, Signer),
           SingleBundle =
               {Foreign, quod_dtx:digest(Plan), PlanBlob, Attestation},
@@ -1264,7 +1264,7 @@ plan_attestation_rejects_a_different_valid_plan_test() ->
                  Target, OtherPlan, Manifest, Attestation)),
     ?assertEqual(
        {error, invalid_plan_attestation},
-       quod_dtx:attest_plan(
+       quod_dtx:attest_plan(1,
          Target, OtherPlan, Manifest, maps:get(signer, F))),
     ?assertNot(quod_dtx:verify_plan_attestation(
                  Target, malformed_plan, Manifest, Attestation)).
@@ -1300,9 +1300,9 @@ effect_only_plan_is_admitted_once_by_the_shared_dtx_validator_test() ->
                                goal => Goal, result => Result,
                                request_binding => none,
                                participants => Participants}),
-          {ok, EffectAttestation} = quod_dtx:attest_plan(
+          {ok, EffectAttestation} = quod_dtx:attest_plan(1,
                                       TargetA, EffectPlan, Manifest, Signer),
-          {ok, PlainAttestation} = quod_dtx:attest_plan(
+          {ok, PlainAttestation} = quod_dtx:attest_plan(1,
                                      TargetB, PlainPlan, Manifest, Signer),
           {ok, EffectBlob} = quod_dtx:encode(EffectPlan),
           {ok, PlainBlob} = quod_dtx:encode(PlainPlan),
@@ -1332,7 +1332,7 @@ effect_only_plan_is_admitted_once_by_the_shared_dtx_validator_test() ->
                        WrongActorPlan, WrongActorMaterial)),
           ?assertEqual(
              {error, invalid_plan_attestation},
-             quod_dtx:attest_plan(
+             quod_dtx:attest_plan(1,
                TargetA, WrongActorPlan,
                manifest_with_plan(
                  Manifest, TargetA, quod_dtx:digest(WrongActorPlan)),
@@ -1343,7 +1343,7 @@ effect_only_plan_is_admitted_once_by_the_shared_dtx_validator_test() ->
              quod_dtx:material(DiffAndEffectPlan)),
           ?assertEqual(
              {error, invalid_plan_attestation},
-             quod_dtx:attest_plan(
+             quod_dtx:attest_plan(1,
                TargetA, DiffAndEffectPlan,
                manifest_with_plan(
                  Manifest, TargetA, quod_dtx:digest(DiffAndEffectPlan)),
@@ -1516,10 +1516,10 @@ reference_validation_is_exhaustive_and_rejects_cross_group_or_verdict_test() ->
     ForeignManifestInput =
         (maps:get(manifest_input, F))#{nonce := key(197)},
     {ok, ForeignManifest} = quod_dtx:new_manifest(ForeignManifestInput),
-    {ok, ForeignAttA} = quod_dtx:attest_plan(
+    {ok, ForeignAttA} = quod_dtx:attest_plan(1,
                           maps:get(target_a, F), PlanA,
                           ForeignManifest, maps:get(signer, F)),
-    {ok, ForeignAttB} = quod_dtx:attest_plan(
+    {ok, ForeignAttB} = quod_dtx:attest_plan(1,
                           maps:get(target_b, F), PlanB,
                           ForeignManifest, maps:get(signer, F)),
     {ok, ForeignBegin} = quod_dtx:new_begin(
@@ -2788,9 +2788,9 @@ source_fused_protocol_fixture_with_plan(
                          participants =>
                              [{Origin, quod_dtx:digest(SourcePlan)},
                               {Remote, quod_dtx:digest(RemotePlan)}]}),
-    {ok, SourceAtt} = quod_dtx:attest_plan(
+    {ok, SourceAtt} = quod_dtx:attest_plan(1,
                         Origin, SourcePlan, Manifest, Signer),
-    {ok, RemoteAtt} = quod_dtx:attest_plan(
+    {ok, RemoteAtt} = quod_dtx:attest_plan(1,
                         Remote, RemotePlan, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
                     Manifest, none,
@@ -2869,8 +2869,8 @@ protocol_fixture(Pub) ->
                 request_binding => none,
                 participants => Participants},
           {ok, Manifest} = quod_dtx:new_manifest(ManifestInput),
-          {ok, AttA} = quod_dtx:attest_plan(A, PlanA, Manifest, Signer),
-          {ok, AttB} = quod_dtx:attest_plan(B, PlanB, Manifest, Signer),
+          {ok, AttA} = quod_dtx:attest_plan(1, A, PlanA, Manifest, Signer),
+          {ok, AttB} = quod_dtx:attest_plan(1, B, PlanB, Manifest, Signer),
           Bundles =
               [{B, quod_dtx:digest(PlanB), PlanBBlob, AttB},
                {A, quod_dtx:digest(PlanA), PlanABlob, AttA}],
@@ -3064,8 +3064,8 @@ origin_only_group(F, Origin) ->
               [{C, quod_dtx:digest(PlanC)},
                {A, quod_dtx:digest(PlanA)}]},
     {ok, Manifest} = quod_dtx:new_manifest(ManifestInput),
-    {ok, AttA} = quod_dtx:attest_plan(A, PlanA, Manifest, Signer),
-    {ok, AttC} = quod_dtx:attest_plan(C, PlanC, Manifest, Signer),
+    {ok, AttA} = quod_dtx:attest_plan(1, A, PlanA, Manifest, Signer),
+    {ok, AttC} = quod_dtx:attest_plan(1, C, PlanC, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
           Manifest, none,
@@ -3295,8 +3295,8 @@ participant_prepare_from_plan(Target, Origin, ProofId, Plan, PlanBlob, N) ->
                          participants =>
                              [{Target, quod_dtx:digest(Plan)},
                               {DummyTarget, quod_dtx:digest(DummyPlan)}]}),
-    {ok, Attestation} = quod_dtx:attest_plan(Target, Plan, Manifest, Signer),
-    {ok, DummyAttestation} = quod_dtx:attest_plan(
+    {ok, Attestation} = quod_dtx:attest_plan(1, Target, Plan, Manifest, Signer),
+    {ok, DummyAttestation} = quod_dtx:attest_plan(1,
                                DummyTarget, DummyPlan, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
                     Manifest, none,

@@ -1,6 +1,17 @@
 -module(quod_dtx_endpoint_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+
+owner_errors_use_the_wire_refusal_vocabulary_test() ->
+    Id = <<77:128>>,
+    lists:foreach(fun(Reason) ->
+        Response = {error, Id, Reason},
+        ?assertEqual(Response, quod_dtx_endpoint:error_response(Id, Reason)),
+        {ok, Bytes} = quod_dtx_endpoint:encode_response(<<"target">>, Response, []),
+        ?assertEqual({ok, Response, []}, quod_dtx_endpoint:decode_response(<<"target">>, Bytes))
+    end, [busy, not_ready, not_found, invalid_request, conflict_retry,
+          read_certificate_unavailable, independent_scope_required]),
+    ?assertEqual({error, Id, not_ready}, quod_dtx_endpoint:error_response(Id, {untrusted, <<"details">>})).
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_transport_limits.hrl").
@@ -25,8 +36,8 @@ trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
     {ok, Plain} = quod_dtx_endpoint:encode_request(Ns, Request, []),
     ?assertNotEqual(Traced, Plain),
     ?assertEqual({ok, Request, [], Carrier}, quod_dtx_endpoint:decode_request(Ns, Traced)),
-    {quod_dtx_endpoint, 11, Ns, Inner, Carrier} = binary_to_term(Traced, [safe]),
-    {quod_dtx_endpoint, 11, Ns, Inner, []} = binary_to_term(Plain, [safe]),
+    {quod_dtx_endpoint, 12, Ns, Inner, Carrier} = binary_to_term(Traced, [safe]),
+    {quod_dtx_endpoint, 12, Ns, Inner, []} = binary_to_term(Plain, [safe]),
     ?assert(quod_dtx_endpoint:correlates(Request, Response)),
     ?assertNot(quod_dtx_endpoint:correlates(Request, setelement(2, Response, id(2)))),
     BadCarrier = [{<<"baggage">>, <<"not-authority">>}],
@@ -34,7 +45,7 @@ trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
                  quod_dtx_endpoint:encode_request(Ns, Request, [], BadCarrier)),
     ?assertEqual({error, {protocol_error, bad_trace_context}},
       quod_dtx_endpoint:decode_request(Ns, term_to_binary(
-        {quod_dtx_endpoint, 11, Ns, Inner, BadCarrier}, [deterministic]))),
+        {quod_dtx_endpoint, 12, Ns, Inner, BadCarrier}, [deterministic]))),
     ?assertMatch({error, _}, quod_dtx_endpoint:decode_request(Ns, term_to_binary(
         {quod_dtx_endpoint, 9, Ns, Inner}, [deterministic]))).
 
@@ -89,10 +100,10 @@ all_response_shapes_roundtrip_and_correlate_test() ->
            participant_slots => participant_slots()},
          #{status => rejected, reason => coordinator_retired,
            ref => GroupRef},
-         #{status => claimed, operation_state => unresolved, height => 14,
+         #{status => claimed, operation_state => unresolved, height => 14, receipt_height => none,
            ref => operation_ref(), request_digest => digest(13),
            outcome_ref => {applications, [TxRef]}, included => []},
-         #{status => claimed, operation_state => terminal, height => 14,
+         #{status => claimed, operation_state => terminal, height => 14, receipt_height => 15,
            ref => operation_ref(), request_digest => digest(13),
            outcome_ref => {applications, [target_transaction_ref()]},
            included => [{quod_operation_vector:target(target_transaction_ref()),
@@ -256,7 +267,7 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
     Entry = quod_ledger:noop_entry(7, none),
     Hints = [{Ref, Entry}],
     {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, Hints),
-    {quod_dtx_endpoint, 11, Ns, InnerBinary, []} =
+    {quod_dtx_endpoint, 12, Ns, InnerBinary, []} =
         binary_to_term(Frame, [safe]),
     {Request, [{entry_bytes, Ref, EntryBytes}]} =
         binary_to_term(InnerBinary, [safe]),
@@ -277,7 +288,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     %% The wire never accepts a decoded entry record. A malformed or
     %% old-shaped hint disappears without changing the semantic request.
     Inner = term_to_binary({Request, [{Ref, WrongSlot}]}, [deterministic]),
-    Frame = outer(Ns, 11, Inner),
+    Frame = outer(Ns, 12, Inner),
     ?assertEqual({ok, Request, [], []},
                  quod_dtx_endpoint:decode_request(Ns, Frame)),
     MalformedInner =
@@ -287,7 +298,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     ?assertEqual(
        {ok, Request, [], []},
        quod_dtx_endpoint:decode_request(
-         Ns, outer(Ns, 11, MalformedInner))),
+         Ns, outer(Ns, 12, MalformedInner))),
     ?assertEqual(
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
@@ -298,7 +309,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     ArtifactInner = term_to_binary({Request, [{Ref, Entry}]}, [deterministic]),
     ?assertEqual({ok, Request, [], []},
                  quod_dtx_endpoint:decode_request(
-                   Ns, outer(Ns, 11, ArtifactInner))),
+                   Ns, outer(Ns, 12, ArtifactInner))),
     ?assertEqual(
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
@@ -444,7 +455,7 @@ unknown_atoms_are_not_created_test() ->
               118, (byte_size(AtomName)):16, AtomName/binary>>,
     InnerTerm = binary:part(Inner, 1, byte_size(Inner) - 1),
     Wrapped = <<131, 104, 2, InnerTerm/binary, 106>>,
-    Frame = outer(Ns, 11, Wrapped),
+    Frame = outer(Ns, 12, Wrapped),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},

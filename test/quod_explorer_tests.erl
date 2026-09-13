@@ -1001,9 +1001,9 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
                          participants =>
                              [{Target, PlanDigest},
                               {OtherTarget, OtherPlanDigest}]}),
-    {ok, Attestation} = quod_dtx:attest_plan(
+    {ok, Attestation} = quod_dtx:attest_plan(1,
                           Target, Plan, Manifest, Signer),
-    {ok, OtherAttestation} = quod_dtx:attest_plan(
+    {ok, OtherAttestation} = quod_dtx:attest_plan(1,
                                OtherTarget, OtherPlan, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
                     Manifest, none,

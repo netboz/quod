@@ -13,13 +13,15 @@ materializing vocabulary. This library neither creates atoms nor drops reads.
 
 -export([encode/1, pairs/1, valid_pairs/1, valid/1]).
 
--spec encode(term()) -> {ok, binary()} | {error, bad_term | too_large}.
+-doc "Encode a valid read set in canonical name/arity order without allocating atoms.".
+-spec encode(term()) -> {ok, binary()} | {error, bad_term}.
 encode(ReadSet) ->
     case pairs(ReadSet) of
         {ok, Pairs} -> quod_wire_term:encode_canonical(Pairs);
         error -> {error, bad_term}
     end.
 
+-doc "Return canonical ordered pairs, refusing malformed entries and name/arity aliases.".
 -spec pairs(term()) -> {ok, list()} | error.
 pairs(ReadSet) when is_map(ReadSet) ->
     case indexed_pairs(maps:to_list(ReadSet), #{}, []) of
@@ -29,6 +31,7 @@ pairs(ReadSet) when is_map(ReadSet) ->
     end;
 pairs(_) -> error.
 
+-doc "Validate a lookup map's key/token alphabet and representation-independent uniqueness.".
 -spec valid(term()) -> boolean().
 valid(ReadSet) when is_map(ReadSet) ->
     case indexed_pairs(maps:to_list(ReadSet), #{}, []) of
@@ -45,6 +48,7 @@ indexed_pairs([Pair | Rest], Seen, Acc) ->
     end;
 indexed_pairs([], _Seen, Acc) -> {ok, Acc}.
 
+-doc "Validate the carried order, unique name/arity keys and tokens before materialization.".
 -spec valid_pairs(term()) -> boolean().
 valid_pairs(Pairs) -> valid_pairs(Pairs, none).
 

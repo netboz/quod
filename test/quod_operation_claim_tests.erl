@@ -6,7 +6,8 @@
 %% The dedicated target matrix below hand-builds and cryptographically checks
 %% real quorum certificates. The older shape-only evidence case explicitly
 %% uses arbitrary QC bytes and claims no finality. Admitted N>1 partial-outcome
-%% control 7.4 is deferred by ruling to L2-S8-DEFERRED-7.4-ADMITTED-PARTIAL-OUTCOME.
+%% control 7.4 is now covered by quod_ask_SUITE's real-node
+%% remote_independent_partial_outcome case, not by this fixture matrix.
 canonical_prediction_one_two_four_test() ->
     lists:foreach(fun(N) ->
         F = fixture(N, false),
@@ -47,7 +48,7 @@ direct_multi_claim_cannot_bypass_slice8_authority_gate_test() ->
     try
         quod_ct:with_network_identity(maps:get(network, F), fun() ->
             lists:foreach(fun(Mode) ->
-                ?assertMatch({ok, {invalid, independent_lane_unavailable}, _},
+                ?assertMatch({ok, {invalid, independent_scope_required}, _},
                              quod_commit_validation:content([Claim], 1, Mode, Context))
             end, [check, {claim, 2}])
         end)
@@ -117,7 +118,11 @@ altered_bundle_and_request_bindings_refused_test() ->
 %% admission is called or implied. In particular, certificate inclusion is
 %% not an authenticated execution verdict and is never persisted as one.
 certified_vector_selects_each_target_and_preserves_ids_test() ->
-    F = fixture(4, true), Origin = maps:get(origin, F),
+    F0 = fixture(4, true), Origin = maps:get(origin, F0),
+    %% Deliberately supplied fixture provenance, not a live scope witness.
+    F = quod_ct:operation_plan_fixture(
+          #{target => Origin, participant_target => maps:get(participant_target, F0),
+            provenance => 2}, maps:get(participant_targets, F0)),
     Claim = signed(F, Origin, claim(F, maps:get(bundles, F))),
     ClaimRef = ref(Origin, Claim#transaction.tx_id),
     {CertA, CertB} = certificate_variants(Origin, Claim),

@@ -473,6 +473,53 @@ bound_owner_death_retires_live_unactivated_row_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+vector_effect_custody_binds_only_its_target_and_cancel_survives_restart_test() ->
+    with_operation_journal(#{additional_writer => true},
+      fun(Dir, Journal, Fixture, Binding) ->
+          Claim = maps:get(claim, Fixture), Target = maps:get(target, Binding),
+          {ok, Refs} = quod_transaction:remote_claim_references(Claim),
+          ?assertEqual(2, length(Refs)),
+          ?assertEqual(ok, quod_transaction:validate_independent_claim(Claim)),
+          ?assertEqual({ok, [Target]}, quod_transaction:operation_submission_targets(
+                                         maps:get(submission, Fixture))),
+          Blob = operation_blob(Fixture),
+          ?assertEqual({error, invalid_operation_submission},
+                       quod_transaction:decode_operation_submission(Blob, maps:get(origin, Fixture))),
+          Token = stage_operation_reservation(Fixture, Binding, #{}),
+          {ok, EffectId} = quod_effect_journal:bind_operation(Token, Target, Blob),
+          ?assertMatch({ok, #{state := operation_pending}}, quod_effect_journal:status(EffectId)),
+          %% Binding is durable private custody, not activation of either
+          %% target. The existing dormant source cancellation remains exact.
+          stop(Journal),
+          {ok, Restarted} = quod_effect_journal:start_link(#{data_dir => Dir}),
+          unlink(Restarted),
+          ?assertMatch({ok, #{state := operation_pending}}, quod_effect_journal:status(EffectId)),
+          ?assertEqual(cancelled, cancel_operation(Binding, Blob)),
+          ?assertMatch({ok, #{state := retired, result := source_intent_cancelled}},
+                       quod_effect_journal:status(EffectId)),
+          ?assertEqual(cancelled, cancel_operation(Binding, Blob)),
+          stop(Restarted)
+      end).
+
+vector_effect_cancel_before_bind_preserves_the_existing_owner_loss_rule_test() ->
+    with_operation_journal(#{additional_writer => true},
+      fun(_Dir, _Journal, Fixture, Binding) ->
+          Blob = operation_blob(Fixture), Parent = self(),
+          {Owner, M} = spawn_monitor(fun() ->
+              Token = stage_operation_reservation(Fixture, Binding, #{}),
+              Parent ! {vector_reservation, self(), Token}
+          end),
+          Token = receive {vector_reservation, Owner, T} -> T
+                  after 1000 -> error(no_vector_reservation) end,
+          receive {'DOWN', M, process, Owner, normal} -> ok
+          after 1000 -> error(vector_reservation_owner_retained) end,
+          ok = wait_reservations(0, 100),
+          ?assertEqual({error, missing_effect_preparation},
+                       quod_effect_journal:bind_operation(Token, maps:get(target, Binding), Blob)),
+          ?assertEqual(not_found, cancel_operation(Binding, Blob)),
+          ?assertMatch(#{reservations := 0, active := 0}, quod_effect_journal:stats())
+      end).
+
 operation_cancel_before_bind_removes_every_exact_reservation_test() ->
     with_operation_journal(
       fun(_Dir, _Journal, Fixture, Binding) ->
@@ -760,7 +807,8 @@ group_binding_survives_owner_death_and_restart_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-with_operation_journal(Fun) ->
+with_operation_journal(Fun) -> with_operation_journal(#{}, Fun).
+with_operation_journal(Options, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     Dir = unique_tmp_dir("quod_operation_effect_journal_"),
     SavedDesired = application:get_env(quod, namespace_desired),
@@ -775,7 +823,7 @@ with_operation_journal(Fun) ->
     application:set_env(quod, node_pubkey, PreparationKey),
     try
         Fixture = quod_ct:signed_effect_operation_submission(
-                    #{prepared_effect => true}),
+                    Options#{prepared_effect => true}),
         Blob = operation_blob(Fixture),
         {ok, Binding} =
             quod_transaction:decode_operation_submission(Blob, maps:get(target, Fixture)),

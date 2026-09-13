@@ -64,15 +64,24 @@ committed_request(Config) ->
     ?assert(lists:member({<<"can_invoke">>, 4}, Names)),
     F = #{request => Request, evidence => Evidence, ref => Ref, certified => Certified,
           tx_bytes => TxBytes, name => Name, tag => Tag, session => gateway_session(Config)},
+    #{included := Included} = peer:call(?config(asker, Config), quod_ct, await_operation_complete,
+      [<<"pets">>, maps:get(operation_ref, Evidence), 5000], 10000),
+    ?assertMatch([{_, {certified, Ref, _}}], Included),
     assert_unknown(Config, F),
     F.
 
 verify_reconnect(Config, F) ->
-    %% The .174 client uses current-view outcomes, whereas S8 additionally
-    %% requires exact historical application evidence. Exercise that shared
-    %% production reconnect seam here without importing S8's AM3/vector API.
+    %% S8's result remains a complete vector even for N=1. The target fact,
+    %% exact historical application bytes and no-atom-allocation oracles from
+    %% the .175 regression are unchanged; no current-view label substitutes.
     ?assertEqual({ok, maps:get(tx_bytes, F)}, resolve_evidence(Config, F)),
-    ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}}, reconnect(Config, F)),
+    Ref = maps:get(ref, F), Target = quod_operation_vector:target(Ref),
+    Evidence = maps:get(evidence, F), Op = maps:get(operation_ref, Evidence),
+    {ok, Projection} = peer:call(?config(target, Config), quod_prolog, outcome, [Op]),
+    ?assertMatch(#{operation_state := terminal, receipt_height := H} when H > 0, Projection),
+    ?assertMatch({ok, _, {operation_outcome, _,
+      #{status := completed, aggregate := all_applied, targets := [{Target, {committed, Ref}}]}}},
+      reconnect(Config, F)),
     assert_unknown(Config, F),
     assert_target_fact(Config, F).
 

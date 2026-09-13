@@ -1056,7 +1056,7 @@ worker_seals_its_session_on_request_test() ->
         Manifest2 = manifest_for_plan(Plan, key(88), TargetKey),
         ?assertMatch(
            {ok, _},
-           quod_dtx:attest_plan(
+           quod_dtx:attest_plan(1,
              quod_dtx:target(Plan), Plan, Manifest2, Signer)),
         {ok, Attestation} =
             quod_scope_session:attest_plan(Handle, Plan, Manifest1),
@@ -1272,7 +1272,7 @@ send_router_event(_Mode, _Owner, _Handle, _RequestId, _Operation) ->
     ok.
 
 send_fixture_attestation(Owner, Handle, RequestId, Plan, Manifest, Signer) ->
-    {ok, Attestation} = quod_dtx:attest_plan(
+    {ok, Attestation} = quod_dtx:attest_plan(1,
                           quod_dtx:target(Plan), Plan, Manifest, Signer),
     {ok, AttestationBlob} = quod_scope_wire:encode_payload(
                               attestation, Attestation),

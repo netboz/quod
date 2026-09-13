@@ -247,7 +247,7 @@ seal_operations_round_trip_and_stay_bounded_test() ->
                        quod_scope_wire:decode_response(EncodedError))
       end,
       [independent_requires_signed_request, independent_nesting,
-       independent_mixed_writes, independent_lane_unavailable,
+       independent_mixed_writes, independent_scope_required,
        {too_large, transcript}, {too_large, plan}, {too_large, result},
        {non_transactional_dependency, {directory_host, 5}},
        {network_identity_unavailable, <<"quod:target">>}]),

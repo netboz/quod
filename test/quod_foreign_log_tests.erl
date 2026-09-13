@@ -4653,7 +4653,7 @@ certified_current_view_advances_past_finalize_membership_test() ->
         %% the current head's committee view must fail.
         NetworkIdentity = key(179),
         GroupId = quod_dtx:group_id(maps:get(control, Fixture)),
-        {ok, Vote} = quod_dtx_current_view:sign_applied_vote(
+        {ok, Vote} = quod_applied_certificate:sign_applied_vote(
                        NetworkIdentity, {Ns, maps:get(anchor, Fixture)},
                        maps:get(committee_id, Historical), GroupId,
                        maps:get(ref, Fixture),
@@ -4665,9 +4665,9 @@ certified_current_view_advances_past_finalize_membership_test() ->
              maps:get(committee_id, Historical), GroupId,
              maps:get(ref, Fixture), maps:get(generation, Historical),
              abort, [Vote]},
-        ?assert(quod_dtx_current_view:verify_applied_certificate(
+        ?assert(quod_applied_certificate:verify_applied_certificate(
                   AppliedCertificate, NetworkIdentity, HistoricalAgain)),
-        ?assertNot(quod_dtx_current_view:verify_applied_certificate(
+        ?assertNot(quod_applied_certificate:verify_applied_certificate(
                      AppliedCertificate, NetworkIdentity, Current)),
         ?assertEqual(
            lists:keysort(1, Routes), maps:get(route_candidates, Current))

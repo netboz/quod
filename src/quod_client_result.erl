@@ -29,14 +29,15 @@ where the proof ran.
 -type participant_slot() ::
         {{binary(), <<_:256>>}, pos_integer(), non_neg_integer()}.
 -type outcome() :: transaction_ref() |
-        {group_outcome, group_ref(), pos_integer(), [participant_slot()]}.
+        {group_outcome, group_ref(), pos_integer(), [participant_slot()]} |
+        {operation_outcome, operation_ref(), list()}.
 -type public_error() ::
         read_only | target_unavailable | ontology_rebuilding | ontology_busy |
         cursor_not_found | cursor_not_ready | cursor_busy | invalid_action |
         non_backtrackable_action | conflict_retry | proof_unavailable |
         result_too_large | independent_requires_signed_request |
         independent_nesting | independent_mixed_writes |
-        independent_lane_unavailable.
+        independent_scope_required.
 -type result() ::
         {answers, non_neg_integer(), [binary()]} |
         {solution, <<_:256>>, non_neg_integer(), binary()} |
@@ -199,6 +200,11 @@ normalize_outcome(
         false ->
             error
     end;
+normalize_outcome({operation_outcome, Ref, Rows} = Outcome) ->
+    case valid_operation_ref(Ref) andalso quod_operation_vector:result_rows(Rows) =/= error of
+        true -> {ok, Outcome};
+        false -> error
+    end;
 normalize_outcome(_Outcome) ->
     error.
 
@@ -217,7 +223,7 @@ public_error(result_too_large) -> result_too_large;
 public_error(independent_requires_signed_request) -> independent_requires_signed_request;
 public_error(independent_nesting) -> independent_nesting;
 public_error(independent_mixed_writes) -> independent_mixed_writes;
-public_error(independent_lane_unavailable) -> independent_lane_unavailable;
+public_error(independent_scope_required) -> independent_scope_required;
 public_error(_Reason) -> proof_unavailable.
 
 -doc "Encode one canonical normalized result.".
@@ -295,6 +301,8 @@ valid_normalized_outcome(Ref = {transaction, _, _, _}) ->
 valid_normalized_outcome({group_outcome, Ref, Height, Slots}) ->
     valid_group_ref(Ref) andalso valid_positive_slot(Height) andalso
         valid_participant_slots(Slots);
+valid_normalized_outcome({operation_outcome, Ref, Rows}) ->
+    valid_operation_ref(Ref) andalso quod_operation_vector:result_rows(Rows) =/= error;
 valid_normalized_outcome(_) -> false.
 
 valid_outcome_ref(Ref = {transaction, _, _, _}) -> valid_transaction_ref(Ref);
@@ -349,7 +357,7 @@ valid_public_error(Reason) ->
         Reason =:= independent_requires_signed_request orelse
         Reason =:= independent_nesting orelse
         Reason =:= independent_mixed_writes orelse
-        Reason =:= independent_lane_unavailable.
+        Reason =:= independent_scope_required.
 
 -doc "Render one already-normalized local or forwarded result.".
 -spec http_normalized(quod_client_goal:evidence(), result()) ->
@@ -415,8 +423,8 @@ http_error({error, independent_nesting}) ->
     {400, #{error => independent_nesting}};
 http_error({error, independent_mixed_writes}) ->
     {400, #{error => independent_mixed_writes}};
-http_error({error, independent_lane_unavailable}) ->
-    {503, #{error => independent_lane_unavailable}};
+http_error({error, independent_scope_required}) ->
+    {400, #{error => independent_scope_required}};
 http_error({error, proof_unavailable}) ->
     {503, #{error => proof_unavailable}}.
 
@@ -434,7 +442,15 @@ committed_json(Ref = {transaction, _, _, _}) -> outcome_ref_json(Ref);
 committed_json({group_outcome, Ref, Height, Slots}) ->
     (outcome_ref_json(Ref))#{height => Height,
                              participant_slots =>
-                                 [participant_slot_json(S) || S <- Slots]}.
+                                 [participant_slot_json(S) || S <- Slots]};
+committed_json({operation_outcome, Ref, Rows}) ->
+    (outcome_ref_json(Ref))#{aggregate => quod_operation_vector:aggregate(Rows),
+                           targets => [operation_result_json(Row) || Row <- Rows]}.
+
+operation_result_json({_Target, {committed, Ref}}) ->
+    (outcome_ref_json(Ref))#{status => committed};
+operation_result_json({_Target, {{rejected, Reason}, Ref}}) ->
+    (outcome_ref_json(Ref))#{status => rejected, reason => Reason}.
 
 outcome_ref_json({transaction, Ns, Anchor, TxId}) ->
     #{ns => Ns, anchor => hex(Anchor), tx_id => hex(TxId)};

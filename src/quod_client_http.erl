@@ -303,6 +303,12 @@ signed_goal_result({error, Reason}) ->
     end.
 
 signed_operation_outcome(
+  Evidence, #{height := ClaimHeight}, #{status := completed, ref := Ref, targets := Rows}) ->
+    {200, Result} = quod_client_result:http_normalized(
+                     Evidence, {committed, [], {operation_outcome, Ref, Rows}}),
+    {200, Result#{result := operation_outcome, status => completed,
+                  terminal => true, claim_height => ClaimHeight}};
+signed_operation_outcome(
   Evidence, #{height := ClaimHeight}, #{status := Status} = Outcome)
   when is_integer(ClaimHeight), ClaimHeight > 0 ->
     Terminal = Status =:= committed orelse Status =:= rejected orelse

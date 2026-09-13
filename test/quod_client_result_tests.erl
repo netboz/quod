@@ -13,7 +13,7 @@ independent_refusals_remain_typed_through_the_client_boundary_test() ->
                      quod_client_result:http_normalized(#{}, Error))
     end, [{independent_requires_signed_request, 400},
           {independent_nesting, 400}, {independent_mixed_writes, 400},
-          {independent_lane_unavailable, 503}]).
+          {independent_scope_required, 400}]).
 
 all_normalized_results_roundtrip_test() ->
     Fixture = fixture(),
@@ -64,6 +64,31 @@ bare_engine_states_and_tagged_cursor_states_have_distinct_names_test() ->
     ?assertEqual({error, cursor_not_ready},
                  quod_client_result:normalize(#{},
                                               {error, cursor_not_ready})).
+
+independent_complete_vectors_keep_every_target_in_success_shaped_replies_test() ->
+    Evidence = maps:get(evidence, fixture()),
+    Op = {operation, <<"quod:a">>, <<1:256>>,
+          agent_ref(<<"quod:agent">>, <<8:256>>, 8), <<9:256>>},
+    A = {transaction, <<"quod:a">>, <<1:256>>, <<2:256>>},
+    B = {transaction, <<"quod:b">>, <<3:256>>, <<4:256>>},
+    lists:foreach(fun({Labels, Aggregate}) ->
+        Rows = [{quod_operation_vector:target(Ref), {Label, Ref}}
+                || {Label, Ref} <- lists:zip(Labels, [A, B])],
+        Result = {committed, [], {operation_outcome, Op, Rows}},
+        {ok, Bytes} = quod_client_result:encode(Result),
+        ?assertEqual({ok, Result}, quod_client_result:decode(Bytes)),
+        {200, Json} = quod_client_result:http_normalized(Evidence, Result),
+        ?assertEqual(Aggregate, maps:get(aggregate, Json)),
+        [JA, JB] = maps:get(targets, Json),
+        ?assertEqual([<<"quod:a">>, <<"quod:b">>],
+                     [maps:get(ns, JA), maps:get(ns, JB)]),
+        ?assertEqual([case L of committed -> committed; _ -> rejected end || L <- Labels],
+                     [maps:get(status, JA), maps:get(status, JB)])
+    end, [{[committed, committed], all_applied},
+          {[committed, {rejected, conflict_retry}], mixed},
+          {[{rejected, not_authorized}, {rejected, conflict_retry}], all_rejected}]),
+    ?assertEqual({error, invalid_result}, quod_client_result:encode(
+      {committed, [], {operation_outcome, Op, [{quod_operation_vector:target(A), pending}]}})).
 
 local_http_uses_the_normalized_binary_name_result_test() ->
     Evidence = maps:get(evidence, fixture()),

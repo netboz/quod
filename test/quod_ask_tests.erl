@@ -360,17 +360,14 @@ fresh_ledgers_single_target_uses_vector_receipt_test_() ->
         ?assertMatch({ok, [_], _}, quod_prolog:execute_signed(
             maps:get(evidence, F), Goal, maps:get(principal, F))),
         Op = maps:get(operation_ref, F),
-        ok = quod_ct:wait_until(fun() ->
-            case quod_prolog:local_outcome(B, Op) of
-                {ok, #{operation_state := terminal}} -> true;
-                _ -> false
-            end
-        end),
-        {ok, #{operation_state := terminal, outcome_ref := {applications, [Ref]},
-               included := Included}} = quod_prolog:local_outcome(B, Op),
+        #{operation_state := terminal, outcome_ref := {applications, [Ref]},
+          included := Included} = quod_ct:await_operation_complete(B, Op, 5000),
         Target = {C, quod_simplex:genesis_hash(C)},
         ?assertEqual(Target, quod_operation_vector:target(Ref)),
-        ?assertEqual([{Target, {included, Ref}}], Included),
+        ?assertMatch([{Target, {certified, Ref, _}}], Included),
+        [{Target, {certified, Ref, Certificate}}] = Included,
+        ?assertMatch({ok, #{target := Target, application_ref := Ref, result := applied}},
+          quod_applied_certificate:operation_certificate_binding(Certificate)),
         ?assertMatch({ok, #{status := committed}}, quod_prolog:local_outcome(C, Ref)),
         ?assertMatch({ok, [_], _}, prove(C, s7_single_vector_live)),
         ?assertMatch({fail, _}, prove(B, s7_single_vector_live)),
@@ -601,12 +598,12 @@ t_independent_signed_routes(#{chain_b := B, chain_c := C, animals := A}) ->
     ?assertMatch({ok, [_], _}, independent_signed(
                                B, <<"independent(chain_c::assertz(s6_remote)).">>)),
     ?assertMatch({ok, [_], _}, prove(C, s6_remote)),
-    ?assertEqual({error, independent_lane_unavailable}, independent_signed(
+    ?assertMatch({ok, [_], {operation_outcome, _, [_, _]}}, independent_signed(
       B, <<"independent((assertz(s6_ab), chain_c::assertz(s6_ab))).">>)),
-    ?assertEqual({error, independent_lane_unavailable}, independent_signed(
+    ?assertMatch({ok, [_], {operation_outcome, _, [_, _]}}, independent_signed(
       B, <<"independent((chain_c::assertz(s6_bc), animals::assertz(s6_bc))).">>)),
     lists:foreach(fun({Ns, Fact}) ->
-        ?assertMatch({fail, _}, prove(Ns, Fact))
+        ?assertMatch({ok, [_], _}, prove(Ns, Fact))
     end, [{B, s6_ab}, {C, s6_ab}, {C, s6_bc}, {A, s6_bc}]),
     lists:foreach(fun(Inner) ->
         ?assertEqual({error, independent_requires_signed_request},
@@ -625,7 +622,7 @@ t_independent_retained_branch_routes(#{chain_b := B, chain_c := C}) ->
     ?assertMatch({ok, [_], _}, prove(C, s6_f1)),
     ?assertEqual({error, independent_mixed_writes}, independent_signed(B,
       <<"((assertz(s6_f2), fail); true), independent(chain_c::assertz(s6_f2)).">>)),
-    ?assertEqual({error, independent_lane_unavailable}, independent_signed(B,
+    ?assertMatch({ok, [_], {operation_outcome, _, [_, _]}}, independent_signed(B,
       <<"(independent((assertz(s6_f3), fail)); true), independent(chain_c::assertz(s6_f3)).">>)),
     %% A descendant's successful marker belongs to the caller's answer trail.
     ?assertMatch({ok, [_], _}, independent_signed(B,
@@ -638,7 +635,9 @@ t_independent_retained_branch_routes(#{chain_b := B, chain_c := C}) ->
     lists:foreach(fun(Fact) ->
         ?assertMatch({fail, _}, prove(B, Fact)),
         ?assertMatch({fail, _}, prove(C, Fact))
-    end, [s6_f2, s6_f3, s6_late, s6_outside, s6_total_fail]).
+    end, [s6_f2, s6_late, s6_outside, s6_total_fail]),
+    ?assertMatch({ok, [_], _}, prove(B, s6_f3)),
+    ?assertMatch({ok, [_], _}, prove(C, s6_f3)).
 
 t_independent_mixed_residue_fallback_commits(#{chain_b := B, chain_c := C}) ->
     %% Adding a wrapper to a failed branch must not change an ordinary
@@ -665,7 +664,7 @@ t_independent_cross_scope_nesting(#{chain_b := B}) ->
           <<"chain_c::transaction(chain_b::independent(true)).">>,
           <<"chain_c::independent(chain_b::independent(true)).">>]),
     %% Wrapper begun inside a selected scope, then reentering its origin.
-    ?assertEqual({error, independent_lane_unavailable}, independent_signed(B,
+    ?assertMatch({ok, [_], {operation_outcome, _, [_, _]}}, independent_signed(B,
       <<"chain_c::independent((assertz(s6_reentry), chain_b::assertz(s6_reentry))).">>)).
 
 independent_signed(Ns, Text) ->

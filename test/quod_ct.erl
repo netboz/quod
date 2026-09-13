@@ -17,7 +17,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 -export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
-         peer_prove/3, await_applied/3,
+         peer_prove/3, await_applied/3, await_operation_complete/3,
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
          committed_entry/3,
@@ -107,9 +107,9 @@ dtx_prepare_fixture() ->
                 [{Origin, quod_dtx:digest(OriginPlan)},
                  {Target, quod_dtx:digest(TargetPlan)}]}),
     {ok, OriginAttestation} =
-        quod_dtx:attest_plan(Origin, OriginPlan, Manifest, Signer),
+        quod_dtx:attest_plan(1, Origin, OriginPlan, Manifest, Signer),
     {ok, TargetAttestation} =
-        quod_dtx:attest_plan(Target, TargetPlan, Manifest, Signer),
+        quod_dtx:attest_plan(1, Target, TargetPlan, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
           Manifest, none,
@@ -284,7 +284,8 @@ signed_plan_fixture(Overrides, ParticipantTargets0) ->
                  || {Participant, Plan, _PlanBlob} <- PlanRows]}),
     BundleRows =
         [begin
-             {ok, Attestation} = quod_dtx:attest_plan(
+             %% Explicit fixture provenance, not a claim of a live session.
+             {ok, Attestation} = quod_dtx:attest_plan(maps:get(provenance, Overrides, 1),
                                    Participant, Plan, Manifest, NodeIdentity),
              {Participant, quod_dtx:digest(Plan), PlanBlob, Attestation}
          end || {Participant, Plan, PlanBlob} <- PlanRows],
@@ -430,9 +431,23 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
                                  TargetNs, TargetAnchor, 3, <<214:256>>,
                                  Application#transaction.tx_id, <<"target-qc">>),
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
+    Receipt = case maps:get(receipt_kind, Overrides, included) of
+        included -> [{Target, {included, TargetRef}}];
+        certified ->
+            %% Already-verified-history input for pure admission tests; real
+            %% SDK/owner and admitted-node controls live in their own suites.
+            E = #{identity => Target, phase => transaction, slot => 3,
+                  block_hash => <<214:256>>, committee_id => <<215:256>>,
+                  transaction => Application, committee => [NodeKey]},
+            {ok, Statement} = quod_applied_certificate:operation_statement(
+                                maps:get(network, Fixture), E, applied),
+            {ok, Vote} = quod_applied_certificate:sign_operation_vote(Statement, NodeIdentity),
+            {ok, Certificate} = quod_applied_certificate:operation_certificate(Statement, [Vote]),
+            [{Target, {certified, TargetRef, Certificate}}]
+    end,
     Completion0 = quod_transaction:remote_complete(
                     Origin, maps:get(operation_ref, ClaimData),
-                    maps:get(digest, ClaimData), [{Target, {included, TargetRef}}]),
+                    maps:get(digest, ClaimData), Receipt),
     Completion = quod_transaction:attach_receipt_evidence(
                    Completion0, [{CertifiedTargetRef, Application}]),
     Fixture#{origin => Origin, participant_target => Target,
@@ -508,7 +523,13 @@ signed_effect_operation_submission(Options) ->
     true = quod_dtx:verify(Plan),
     {ok, Material} = quod_dtx:material(Plan),
     true = quod_effect:validate_plan(Plan, Material),
-    PlanDigest = quod_dtx:digest(Plan),
+    PlanRows = case maps:get(additional_writer, Options, false) of
+        false -> [{Target, Plan, TargetIdentity}];
+        true ->
+            {Writer, _} = signed_fixture_plan(Origin, Origin, {assertz, {saved, ok}},
+                                               ProofId, Request, SourceIdentity),
+            lists:sort([{Target, Plan, TargetIdentity}, {Origin, Writer, SourceIdentity}])
+    end,
     {ok, Manifest} = quod_dtx:new_manifest(
                        #{proof_id => ProofId,
                          coordinator =>
@@ -519,13 +540,16 @@ signed_effect_operation_submission(Options) ->
                          goal => maps:get(goal_blob, Request),
                          result => durable_empty_result(),
                          request_binding => maps:get(binding, Request),
-                         participants => [{Target, PlanDigest}]}),
-    {ok, Attestation} = quod_dtx:attest_plan(
-                          Target, Plan, Manifest, TargetIdentity),
-    {ok, PlanBlob} = quod_dtx:encode(Plan),
+                         participants => [{T, quod_dtx:digest(P)} || {T, P, _} <- PlanRows]}),
+    %% Supplied custody-fixture provenance, not a consensus-admitted proof.
+    Provenance = case length(PlanRows) of 1 -> 1; _ -> 2 end,
+    Bundles = [begin
+        {ok, Attestation} = quod_dtx:attest_plan(Provenance, T, P, Manifest, Id),
+        {ok, PlanBlob} = quod_dtx:encode(P),
+        {T, quod_dtx:digest(P), PlanBlob, Attestation}
+    end || {T, P, Id} <- PlanRows],
     Claim0 = quod_transaction:remote_claim(
-               Origin, Manifest,
-               [{Target, PlanDigest, PlanBlob, Attestation}],
+               Origin, Manifest, Bundles,
                maps:get(auth, Request), []),
     {ok, Claim, Submission} = quod_transaction:sign_submission(
                                 {OriginNs, OriginAnchor, Admission},
@@ -754,6 +778,16 @@ peer_prove(Peer, Ns, Goal) ->
 await_applied(Ns, Height, TimeoutMs)
   when is_binary(Ns), is_integer(Height), Height >= 0,
        is_integer(TimeoutMs), TimeoutMs > 0 ->
+    await_projection(Ns, Height, TimeoutMs).
+
+%% Receipt publication is asynchronous after client results. Reuse the same
+%% subscribed, incarnation-pinned wait as applied-height tests, not a polling
+%% resolve loop or a new submission of an uncertain operation.
+await_operation_complete(Ns, {operation, Ns, _, _, _} = Ref, TimeoutMs)
+  when is_binary(Ns), is_integer(TimeoutMs), TimeoutMs > 0 ->
+    await_projection(Ns, {operation, Ref}, TimeoutMs).
+
+await_projection(Ns, Height, TimeoutMs) ->
     Deadline = erlang:monotonic_time(millisecond) + TimeoutMs,
     Topic = {runtime, Ns},
     true = quod_reg:subscribe(Topic),
@@ -772,18 +806,33 @@ await_applied(Ns, Height, TimeoutMs)
 
 await_applied_read(Owner, Monitor, Ns, Height, Deadline) ->
     Remaining = applied_wait_budget(Ns, Height, Deadline),
-    Stats = try gen_server:call(Owner, get_stats, Remaining)
+    Request = case Height of
+        {operation, Ref} -> {outcome, Ref};
+        _ -> get_stats
+    end,
+    Stats = try gen_server:call(Owner, Request, Remaining)
             catch
                 exit:{timeout, _} -> error({await_applied_timeout, Ns, Height});
                 exit:Reason -> error({await_applied_owner_down, Ns, Reason})
             end,
     _ = applied_wait_budget(Ns, Height, Deadline),
-    case Stats of
-        #{applied := Applied} when is_integer(Applied), Applied >= Height -> ok;
-        #{applied := Applied} when is_integer(Applied) ->
+    case applied_wait_state(Height, Stats) of
+        {ready, Result} -> Result;
+        pending ->
             await_applied_event(Owner, Monitor, Ns, Height, Deadline);
-        Other -> error({await_applied_bad_stats, Ns, Other})
+        invalid -> error({await_applied_bad_stats, Ns, Stats})
     end.
+
+applied_wait_state({operation, Ref},
+  {ok, #{ref := Ref, operation_state := terminal, receipt_height := Height} = Row})
+  when is_integer(Height), Height > 0 -> {ready, Row};
+applied_wait_state({operation, Ref}, {ok, #{ref := Ref, operation_state := unresolved}}) -> pending;
+applied_wait_state({operation, _}, {error, not_found}) -> pending;
+applied_wait_state(Height, #{applied := Applied})
+  when is_integer(Height), is_integer(Applied), Applied >= Height -> {ready, ok};
+applied_wait_state(Height, #{applied := Applied})
+  when is_integer(Height), is_integer(Applied) -> pending;
+applied_wait_state(_, _) -> invalid.
 
 await_applied_event(Owner, Monitor, Ns, Height, Deadline) ->
     Remaining = applied_wait_budget(Ns, Height, Deadline),

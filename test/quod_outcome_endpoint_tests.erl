@@ -1,6 +1,7 @@
 -module(quod_outcome_endpoint_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 
 %% Real endpoint workers and owner transitions, with only the Prolog snapshot
 %% reply held by a message-controlled fixture. No ledger timing is assumed.
@@ -135,12 +136,191 @@ owner_death_releases_parked_worker_and_subscription_test() ->
         ?assertEqual([], subscribers(F))
     end).
 
+operation_applied_pins_history_and_waits_for_durable_publication_test() ->
+    with_operation_endpoint(fun(F) ->
+        start_request(F, operation_applied, 3000),
+        {Worker, From} = snapshot_call(F),
+        assert_subscribed(F, Worker),
+        assert_one_history_capture(F),
+        %% Included bytes exist at slot 2, but the outcome owner has only
+        %% published slot 1. Even a terminal-looking row is not signable yet.
+        Pending = operation_snapshot(F, 1, committed),
+        gen_server:reply(From, Pending),
+        await_operation_snapshot(F, Pending),
+        {Worker, From2} = snapshot_call(F),
+        gen_server:reply(From2, Pending),
+        await_operation_snapshot(F, Pending),
+        assert_no_reply(F),
+        assert_no_snapshot(F),
+        Ns = maps:get(ns, F),
+        quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 1}),
+        assert_no_snapshot(F),
+        quod_reg:publish({runtime, Ns}, {projection_advanced, self(), 2}),
+        {Worker, From3} = snapshot_call(F),
+        gen_server:reply(From3, operation_snapshot(F, 2, committed)),
+        assert_operation_vote(F, applied),
+        assert_worker_gone(F, Worker),
+        assert_no_history_capture(F)
+    end).
+
+operation_applied_signs_historical_not_current_committee_test() ->
+    with_operation_endpoint(fun(F) ->
+        start_request(F, operation_applied, 3000),
+        {Worker, From} = snapshot_call(F),
+        %% Membership has advanced, but this signer belonged to the exact
+        %% application's historical committee. A current committee cannot
+        %% reinterpret the statement or substitute its identity.
+        update_owner(F, #{committee_id => <<91:256>>, validators => [<<92:256>>]}),
+        gen_server:reply(From, operation_snapshot(F, 2, {rejected, conflict_retry})),
+        assert_operation_vote(F, {rejected, conflict_retry}),
+        assert_worker_gone(F, Worker),
+        assert_one_history_capture(F),
+        assert_no_history_capture(F)
+    end).
+
+operation_applied_current_member_cannot_replace_historical_signer_test() ->
+    with_operation_endpoint(fun(F) ->
+        start_request(F, operation_applied, 3000),
+        {Worker, From} = snapshot_call(F),
+        {Pub, Seed} = quod_identity:generate(),
+        update_owner(F, #{self => Pub, validators => [Pub],
+                          id => #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}),
+        gen_server:reply(From, operation_snapshot(F, 2, committed)),
+        assert_refused(F),
+        assert_worker_gone(F, Worker)
+    end).
+
+operation_applied_wrong_occurrence_is_not_signed_test() ->
+    with_operation_endpoint(fun(F) ->
+        start_request(F, operation_applied, 3000),
+        {Worker, From} = snapshot_call(F),
+        {ok, Snapshot = #{outcome := Row}} = operation_snapshot(F, 2, committed),
+        gen_server:reply(From, {ok, Snapshot#{outcome := Row#{height := 1}}}),
+        assert_refused(F),
+        assert_worker_gone(F, Worker)
+    end).
+
+operation_applied_deadline_does_not_restart_while_parked_test() ->
+    with_operation_endpoint(fun(F) ->
+        start_request(F, operation_applied, 150),
+        {Worker, From} = snapshot_call(F),
+        gen_server:reply(From, operation_snapshot(F, 1, committed)),
+        {Worker, From2} = snapshot_call(F),
+        gen_server:reply(From2, operation_snapshot(F, 1, committed)),
+        assert_refused(F),
+        assert_worker_gone(F, Worker),
+        assert_one_history_capture(F),
+        assert_no_history_capture(F)
+    end).
+
+operation_applied_owner_death_releases_the_pinned_capture_test() ->
+    with_operation_endpoint(fun(F) ->
+        start_request(F, operation_applied, 3000),
+        {Worker, From} = snapshot_call(F),
+        Pending = operation_snapshot(F, 1, committed),
+        gen_server:reply(From, Pending),
+        {Worker, From2} = snapshot_call(F),
+        gen_server:reply(From2, Pending),
+        await_operation_snapshot(F, Pending),
+        M = monitor(process, Worker),
+        exit(maps:get(owner, F), kill),
+        receive {'DOWN', M, process, Worker, normal} -> ok
+        after 1000 -> error(operation_worker_survived_owner)
+        end,
+        ?assertEqual([], subscribers(F)),
+        assert_no_reply(F)
+    end).
+
+operation_collector_uses_the_real_endpoint_and_exact_result_test() ->
+    with_operation_endpoint(fun(F = #{ns := Ns, target := Target,
+      certified_target_ref := Ref, evidence := E0, network := Network}) ->
+        E = E0#{routes => #{}}, Parent = self(),
+        {Collector, M} = spawn_monitor(fun() ->
+            Parent ! {collected, self(), quod_dtx_current_view:certify_operation_evidence(
+              Ns, Target, Ref, E, none, quod_time:mono_ms() + 3000)}
+        end),
+        {Worker, From} = snapshot_call(F),
+        gen_server:reply(From, operation_snapshot(F, 2, {rejected, conflict_retry})),
+        receive {collected, Collector, {ok, Ref, E, Cert}} ->
+            ?assert(quod_applied_certificate:verify_operation_certificate(Cert, Network, E)),
+            ?assertMatch({ok, #{result := {rejected, conflict_retry}}},
+                         quod_applied_certificate:operation_certificate_binding(Cert))
+        after 1000 -> error(collector_did_not_certify)
+        end,
+        receive {'DOWN', M, process, Collector, normal} -> ok after 1000 -> error(collector_retained) end,
+        assert_worker_gone(F, Worker),
+        assert_one_history_capture(F), assert_no_history_capture(F)
+    end).
+
+operation_collector_expiry_keeps_inclusion_but_invents_no_verdict_test() ->
+    with_operation_endpoint(fun(F = #{ns := Ns, target := Target,
+      certified_target_ref := Ref, evidence := E0}) ->
+        E = E0#{routes => #{}}, Parent = self(),
+        {Collector, M} = spawn_monitor(fun() ->
+            Parent ! {collected, self(), quod_dtx_current_view:certify_operation_evidence(
+              Ns, Target, Ref, E, none, quod_time:mono_ms() + 200)}
+        end),
+        {Worker, From} = snapshot_call(F),
+        gen_server:reply(From, operation_snapshot(F, 1, committed)),
+        {Worker, From2} = snapshot_call(F),
+        gen_server:reply(From2, operation_snapshot(F, 1, committed)),
+        receive {collected, Collector, {error, retry}} -> ok
+        after 1000 -> error(expired_collector_invented_verdict)
+        end,
+        receive {'DOWN', M, process, Collector, normal} -> ok after 1000 -> error(collector_retained) end,
+        %% The worker's existing deadline/owner protocol performs cleanup.
+        assert_worker_gone(F, Worker)
+    end).
+
+target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test() ->
+    with_operation_endpoint(2, fun(F = #{target := Target, origin := {SourceNs, SourceAnchor} = Origin,
+      claim := Claim, node_identity := Signer, admission := Admission, tag := Tag}) ->
+        #transaction{role = {remote_claim, Manifest, Bundles, _}} = Claim,
+        {ok, Plan} = quod_transaction:remote_claim_plan(Claim, Target),
+        {ok, Ordinary} = quod_dtx:attest_plan(1, Target, Plan, Manifest, Signer),
+        Own = lists:keyfind(Target, 1, Bundles),
+        Refused0 = quod_transaction:remote_claim(Origin, Manifest,
+          lists:keyreplace(Target, 1, Bundles, setelement(4, Own, Ordinary)),
+          Claim#transaction.request_auth, []),
+        {ok, Refused} = quod_transaction:sign({SourceNs, SourceAnchor, Admission},
+          Refused0#transaction{author = maps:get(pubkey, Signer), author_seq = 1, submitted_at = 1}, Signer),
+        Entry = quod_operation_fixture:entry(Origin, Signer, 2, Refused),
+        {ok, ClaimRef} = quod_dtx:certified_entry_ref(Origin, Entry, Refused),
+        {ok, Blob} = quod_transaction:encode_evidence(ClaimRef, Refused),
+        Id = maps:get(request_id, F),
+        ?assertEqual(ok, admit(F, {apply_claim, Id, Target, Blob}, 3000)),
+        receive {Tag, Reply} -> ?assertEqual({ok, {error, Id, independent_scope_required}, []}, Reply)
+        after 1000 -> error(ordinary_target_seal_admitted)
+        end,
+        ?assertEqual(0, worker_count(F)),
+        assert_no_snapshot(F), assert_no_history_capture(F),
+        ?assertEqual(2, quod_ledger_store:last(maps:get(store, F)))
+    end).
+
+with_operation_endpoint(Test) -> with_operation_endpoint(1, Test).
+with_operation_endpoint(N, Test) ->
+    quod_operation_fixture:with(N, fun(F = #{target := {Ns, Anchor},
+      store := Store, projection := P, entry := Entry, node_identity := Signer}) ->
+        View = quod_operation_fixture:view(Store, P, Entry),
+        S0 = quod_simplex:test_state(#{ns => Ns, self => maps:get(pubkey, Signer),
+          id => Signer, genesis_hash => Anchor, store => Store, slot => 2,
+          last_applied => 2, sync => ready, prolog_ready => true}),
+        S = quod_simplex:test_install_projection(maps:get(projection, View), S0),
+        with_endpoint_state(Ns, Anchor, maps:get(committee_id, P), S, F, Test)
+    end).
+
 with_endpoint(Ready, Test) ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"outcome-wait-", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
     Anchor = <<11:256>>,
     Committee = <<12:256>>,
     Key = <<13:256>>,
+    S = quod_simplex:test_state(#{ns => Ns, self => Key, validators => [Key],
+          genesis_hash => Anchor, committee_id => Committee, slot => 3,
+          last_applied => 3, sync => ready, prolog_ready => Ready, store => memory}),
+    with_endpoint_state(Ns, Anchor, Committee, S, #{}, Test).
+
+with_endpoint_state(Ns, Anchor, Committee, S, Extra, Test) ->
     Parent = self(),
     Stub = spawn(fun() ->
         true = quod_reg:reg({quod_prolog, Ns}),
@@ -148,11 +328,12 @@ with_endpoint(Ready, Test) ->
         prolog_stub(Ns, Parent)
     end),
     receive {stub_ready, Stub} -> ok after 1000 -> error(stub_not_ready) end,
-    S = quod_simplex:test_state(#{ns => Ns, self => Key, validators => [Key],
-          genesis_hash => Anchor, committee_id => Committee, slot => 3,
-          last_applied => 3, sync => ready, prolog_ready => Ready, store => memory}),
-    Owner = spawn(fun() -> owner_loop(Parent, S) end),
-    F = #{ns => Ns, anchor => Anchor, committee => Committee, owner => Owner,
+    Owner = spawn(fun() ->
+        true = quod_reg:reg({quod_simplex, Ns}),
+        Parent ! {owner_ready, self()}, owner_loop(Parent, S)
+    end),
+    receive {owner_ready, Owner} -> ok after 1000 -> error(owner_not_ready) end,
+    F = Extra#{ns => Ns, anchor => Anchor, committee => Committee, owner => Owner,
           tag => make_ref(), request_id => crypto:strong_rand_bytes(16)},
     try Test(F)
     after
@@ -169,6 +350,16 @@ prolog_stub(Ns, Parent) ->
 
 owner_loop(Parent, S) ->
     receive
+        {'$gen_call', From, {dtx_endpoint_local, Request, [], Timeout, _TraceCtx}} ->
+            case quod_simplex:test_start_local_dtx_endpoint_request(Request, [], Timeout, From, S) of
+                {ok, S1} -> owner_loop(Parent, S1);
+                Error -> gen_statem:reply(From, Error), owner_loop(Parent, S)
+            end;
+        {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
+            Result = quod_simplex:test_local_history_view(Identity, Requirement, Deadline, S),
+            Parent ! {history_capture, self(), Identity, Requirement, Result},
+            gen_statem:reply(From, Result),
+            owner_loop(Parent, S);
         {call, Ref, {start, Request, Timeout, From}} ->
             case quod_simplex:test_start_local_dtx_endpoint_request(
                    Request, [], Timeout, From, S) of
@@ -191,6 +382,8 @@ owner_loop(Parent, S) ->
         {'DOWN', _, process, _, _} -> owner_loop(Parent, S)
     end.
 
+request(#{request_id := Id, certified_target_ref := Ref}, operation_applied) ->
+    {operation_applied, Id, Ref};
 request(F, Kind) ->
     #{ns := Ns, anchor := Anchor, committee := Cid, request_id := Id} = F,
     Ref = case Kind of
@@ -202,6 +395,41 @@ request(F, Kind) ->
     {Kind, Id, Ref, Cid, 3}.
 
 snapshot(Height) -> {ok, #{applied_floor => Height, outcome => not_found}}.
+
+operation_snapshot(#{target_ref := Ref}, Floor, Verdict) ->
+    Row = case Verdict of
+        committed -> #{ref => Ref, height => 2, status => committed};
+        {rejected, Reason} -> #{ref => Ref, height => 2, status => rejected, reason => Reason}
+    end,
+    {ok, #{applied_floor => Floor, outcome => Row}}.
+
+await_operation_snapshot(#{owner := Owner}, {ok, Snapshot}) ->
+    receive {endpoint_result, Owner, {operation_applied_state, _, Snapshot}} -> ok
+    after 1000 -> error(operation_snapshot_not_processed)
+    end.
+
+assert_one_history_capture(#{owner := Owner, target := Target}) ->
+    receive {history_capture, Owner, Target, any, {ok, #{slot := 2}}} -> ok;
+            {history_capture, Owner, Identity, Requirement, Result} ->
+                error({unexpected_history_capture, Identity, Requirement, Result})
+    after 1000 -> error(no_exact_history_capture)
+    end.
+assert_no_history_capture(#{owner := Owner}) ->
+    receive {history_capture, Owner, _, _, _} -> error(recaptured_pinned_history)
+    after 0 -> ok
+    end.
+assert_no_reply(#{tag := Tag}) ->
+    receive {Tag, Reply} -> error({signed_before_publication, Reply})
+    after 0 -> ok
+    end.
+assert_operation_vote(F = #{tag := Tag, certified_target_ref := Ref, request_id := Id,
+                            network := Network, evidence := Evidence}, Expected) ->
+    receive {Tag, {ok, {operation_applied, Id, Ref, Statement, Key, Signature}, []}} ->
+        ?assertEqual({ok, Statement}, quod_applied_certificate:operation_statement(Network, Evidence, Expected)),
+        ?assertEqual(maps:get(pubkey, maps:get(node_identity, F)), Key),
+        ?assert(quod_applied_certificate:verify_operation_vote(Statement, Key, Signature))
+    after 1000 -> error(operation_vote_not_received)
+    end.
 
 start_request(F, Kind, Timeout) -> ?assertEqual(ok, admit(F, request(F, Kind), Timeout)).
 admit(F, Request, Timeout) ->

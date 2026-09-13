@@ -19,9 +19,9 @@ accepted.
 
 -export([from_plan/5, remote_claim/5, remote_application/3,
          remote_complete/4, attach_evidence/3, attach_receipt_evidence/2,
-         remote_claim_references/1, remote_claim_plan/2,
+         remote_claim_references/1, remote_claim_plan/2, validate_independent_claim/1,
          encode_foreign_reads/1, decode_foreign_reads/1,
-         encode_evidence/2, decode_evidence/1,
+         encode_evidence/2, decode_evidence/1, same_ledger_transaction/2,
          stable_ref/1,
          role/1, evidence/1, required_references/1,
          bind_id/2, valid_id/2,
@@ -213,7 +213,7 @@ declared_application_matches(Claim, Target, Id) ->
         error -> false
     end.
 
--doc "Build the complete reference-only receipt; inclusion asserts no verdict.".
+-doc "Build a canonical complete receipt; only certified arms assert exact outcomes.".
 -spec remote_complete({binary(), <<_:256>>}, term(), binary(), term()) ->
           #transaction{}.
 remote_complete({Ns, <<_:256>> = Anchor} = Origin, OperationRef,
@@ -316,6 +316,18 @@ decode_evidence(Blob)
         _ -> {error, bad_remote_evidence}
     end;
 decode_evidence(_) -> {error, bad_remote_evidence}.
+
+-doc "Compare complete canonical envelopes, independent of local symbol representation.".
+-spec same_ledger_transaction(term(), term()) -> boolean().
+same_ledger_transaction(#transaction{} = A, #transaction{} = B) ->
+    %% Exact signed bytes, not semantic IDs: an opaque foreign symbol and an
+    %% owner's atom may denote the same bytes. Malformed inputs never compare
+    %% equal, and another author/signature/evidence envelope is not substituted.
+    case {encode_ledger_transaction(A), encode_ledger_transaction(B)} of
+        {{ok, Bytes}, {ok, Bytes}} -> true;
+        _ -> false
+    end;
+same_ledger_transaction(_, _) -> false.
 
 -spec role(#transaction{}) -> term().
 role(#transaction{role = Role}) -> Role.
@@ -610,6 +622,25 @@ claim_plans(Origin, Manifest, Bundles) ->
     catch _:_ -> error
     end.
 
+%% The eligibility grant is the executing target's existing signed manifest
+%% attestation, derived from its own sealed session. No source Boolean or
+%% surviving live session is an authority input to validator/recovery reads.
+-spec validate_independent_claim(#transaction{}) -> ok | {error, atom()}.
+validate_independent_claim(#transaction{role = {remote_claim, _, [_], _}}) -> ok;
+validate_independent_claim(#transaction{origin = Origin,
+    role = {remote_claim, Manifest, [_ | _] = Bundles, _}}) ->
+    case claim_plans(Origin, Manifest, Bundles) of
+        {ok, _Plans} ->
+            case lists:all(fun({_Target, _Digest, _Blob, Attestation}) ->
+                               quod_dtx:attestation_mode(Attestation) =:= independent
+                           end, Bundles) of
+                true -> ok;
+                false -> {error, independent_scope_required}
+            end;
+        error -> {error, invalid_plan_attestation}
+    end;
+validate_independent_claim(_) -> {error, invalid_operation_claim}.
+
 authenticated_claim_plan(Origin, Manifest, Target, Digest, Blob, Attestation) ->
     case quod_dtx:decode(Blob) of
         {ok, Plan} ->
@@ -751,6 +782,9 @@ semantic_id_parts(Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
 %% construction cycle. Every other role field participates in its semantic id.
 semantic_role({remote_claim, Manifest, Bundles, Predicted}) when is_list(Predicted) ->
     {remote_claim, Manifest, Bundles};
+semantic_role({remote_complete, OperationRef, RequestDigest, Receipt}) ->
+    {ok, Identity} = quod_operation_vector:receipt_identity(Receipt),
+    {remote_complete, OperationRef, RequestDigest, Identity};
 semantic_role(Role) -> Role.
 
 -doc "Canonical bytes signed by a transaction author, bound to the target identity.".

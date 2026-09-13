@@ -84,7 +84,7 @@ replay. Neither transition changes the global proof generation.
          manifest_participants/1,
          manifest_group_ref/2,
          encode_manifest/1, decode_manifest/1,
-         attest_plan/4, verify_plan_attestation/4,
+         attest_plan/5, verify_plan_attestation/4, attestation_mode/1,
          encode_attestation/1, decode_attestation/1,
          certified_ref/6, certified_entry_ref/3,
          certified_entry_ref_matches/5, certified_ref_claim/1,
@@ -151,7 +151,8 @@ replay. Neither transition changes the global proof generation.
          quod_client_goal:request_binding(),
          [{identity(), <<_:256>>}]}.
 -type attestation() ::
-        {quod_dtx_attestation, 2, identity(), <<_:256>>, <<_:256>>,
+        {quod_dtx_attestation | quod_dtx_independent_attestation,
+         2, identity(), <<_:256>>, <<_:256>>,
          <<_:256>>, <<_:512>>}.
 -type certified_ref() ::
         {quod_dtx_ref, 2, binary(), <<_:256>>, pos_integer(),
@@ -607,7 +608,6 @@ materialize_decoded(Core, Decoded) ->
                          andalso exact_length(
                                    Effects, maps:get(effects_count, Core), 0)
                          andalso quod_diff:valid_ops(Diff)
-                         andalso quod_diff:valid_read_check(ReadCheck)
                          andalso quod_effect:validate_list(Effects)
                          andalso valid_live_bridges(Bridges)
                          andalso seal_admissible(
@@ -849,11 +849,21 @@ decode_manifest(Blob) when is_binary(Blob) ->
 decode_manifest(_) ->
     {error, {protocol_error, bad_payload}}.
 
--doc "Sign this target's unchanged local plan into one manifest.".
--spec attest_plan(identity(), plan(), manifest(), quod_identity:signer()) ->
+-doc """
+Sign this target's unchanged local plan into one manifest.
+
+The scope owner supplies its own sealed material provenance, never a value
+from the origin. Exactly mask 2 grants independent eligibility. This is a
+permission on this target's material, not selection of the operation's lane:
+ordinary fallback may still use an independently eligible plan atomically.
+Both arms remain useful protocol statements; the ordinary arm retains its
+exact signature bytes for L3 and single-target claims.
+""".
+-spec attest_plan(0..3, identity(), plan(), manifest(), quod_identity:signer()) ->
           {ok, attestation()} | {error, term()}.
-attest_plan(Target, Plan, Manifest,
-            #{pubkey := <<_:256>> = Pubkey} = Identity) ->
+attest_plan(Provenance, Target, Plan, Manifest,
+            #{pubkey := <<_:256>> = Pubkey} = Identity)
+  when is_integer(Provenance), Provenance >= 0, Provenance =< 3 ->
     case valid_manifest(Manifest) andalso valid_identity(Target) andalso
          valid_signed_plan(Plan) andalso effect_plan_valid(Plan) of
         true ->
@@ -861,12 +871,16 @@ attest_plan(Target, Plan, Manifest,
             PlanDigest = digest(Plan),
             case plan_matches_manifest(
                    Target, Plan, PlanDigest, Manifest) andalso
-                 signer(Plan) =:= Pubkey of
+                signer(Plan) =:= Pubkey of
                 true ->
+                    Tag = case Provenance of
+                              2 -> quod_dtx_independent_attestation;
+                              _ -> quod_dtx_attestation
+                          end,
                     Bytes = attestation_bytes(
-                              Target, PlanDigest, ManifestDigest),
+                              Tag, Target, PlanDigest, ManifestDigest),
                     {ok,
-                     {quod_dtx_attestation, ?ATTESTATION_VERSION, Target,
+                     {Tag, ?ATTESTATION_VERSION, Target,
                       PlanDigest, ManifestDigest, Pubkey,
                       quod_identity:sign(Bytes, Identity)}};
                 false ->
@@ -875,8 +889,20 @@ attest_plan(Target, Plan, Manifest,
         false ->
             {error, invalid_plan_attestation}
     end;
-attest_plan(_, _, _, _) ->
+attest_plan(_, _, _, _, _) ->
     {error, invalid_plan_attestation}.
+
+-doc "Inspect target eligibility only after verifying the exact attestation.".
+-spec attestation_mode(attestation()) -> ordinary | independent | invalid.
+attestation_mode(Attestation) ->
+    case valid_attestation(Attestation) of
+        true ->
+            case element(1, Attestation) of
+                quod_dtx_attestation -> ordinary;
+                quod_dtx_independent_attestation -> independent
+            end;
+        false -> invalid
+    end.
 
 -doc "Verify the exact target/plan/manifest binding of one attestation.".
 -spec verify_plan_attestation(identity(), plan(), manifest(), attestation()) ->
@@ -891,15 +917,17 @@ verify_plan_attestation(
 
 verify_plan_attestation_preverified(
   Target, Plan, Manifest, ManifestDigest,
-  {quod_dtx_attestation, ?ATTESTATION_VERSION, Target,
+  {Tag, ?ATTESTATION_VERSION, Target,
    <<_:256>> = PlanDigest, ManifestDigest, <<_:256>> = Attestor,
-   <<_:512>> = Signature}) ->
+   <<_:512>> = Signature})
+  when Tag =:= quod_dtx_attestation;
+       Tag =:= quod_dtx_independent_attestation ->
     digest(Plan) =:= PlanDigest andalso
         plan_matches_manifest(Target, Plan, PlanDigest, Manifest) andalso
         signer(Plan) =:= Attestor andalso
         quod_identity:verify(
           Signature,
-          attestation_bytes(Target, PlanDigest, ManifestDigest),
+          attestation_bytes(Tag, Target, PlanDigest, ManifestDigest),
           Attestor);
 verify_plan_attestation_preverified(_, _, _, _, _) -> false.
 
@@ -931,8 +959,10 @@ decode_attestation(_) ->
     {error, {protocol_error, bad_payload}}.
 
 valid_attestation(
-  {quod_dtx_attestation, ?ATTESTATION_VERSION, Target,
-   <<_:256>>, <<_:256>>, <<_:256>>, <<_:512>>}) ->
+  {Tag, ?ATTESTATION_VERSION, Target,
+   <<_:256>>, <<_:256>>, <<_:256>>, <<_:512>>})
+  when Tag =:= quod_dtx_attestation;
+       Tag =:= quod_dtx_independent_attestation ->
     valid_identity(Target);
 valid_attestation(_) ->
     false.
@@ -958,9 +988,13 @@ valid_signed_plan({quod_plan, Core, <<_:256>>, <<_:512>>} = Plan) ->
     valid_core(Core) andalso verify(Plan);
 valid_signed_plan(_) -> false.
 
-attestation_bytes(Target, PlanDigest, ManifestDigest) ->
+attestation_bytes(quod_dtx_attestation, Target, PlanDigest, ManifestDigest) ->
     deterministic(
       {?ATTESTATION_DOMAIN, ?ATTESTATION_VERSION,
+       {Target, PlanDigest, ManifestDigest}});
+attestation_bytes(quod_dtx_independent_attestation, Target, PlanDigest, ManifestDigest) ->
+    deterministic(
+      {<<"quod.dtx.independent_attestation">>, ?ATTESTATION_VERSION,
        {Target, PlanDigest, ManifestDigest}}).
 
 -doc "Construct the fixed certified-ledger-reference value.".
@@ -2299,10 +2333,9 @@ bounded_bundle_shape(Bundles) ->
     case bounded_length(Bundles, ?QUOD_MAX_DTX_PARTICIPANTS) of
         {ok, Length} when Length >= 2 ->
             lists:all(
-              fun({Target, <<_:256>>, PlanBlob,
-                   {quod_dtx_attestation, ?ATTESTATION_VERSION, _, _, _,
-                    <<_:256>>, <<_:512>>}}) ->
-                      valid_identity(Target) andalso is_binary(PlanBlob) andalso
+              fun({Target, <<_:256>>, PlanBlob, Attestation}) ->
+                      valid_attestation(Attestation) andalso
+                          valid_identity(Target) andalso is_binary(PlanBlob) andalso
                           byte_size(PlanBlob) =<
                               ?QUOD_MAX_PLAN_ENVELOPE_BYTES;
                  (_) -> false
@@ -2603,8 +2636,10 @@ valid_bundle_plan(Target, PlanBlob, Manifest, ManifestDigest, Attestation) ->
     end.
 
 valid_attestation_shape(
-  {quod_dtx_attestation, ?ATTESTATION_VERSION, Target, PlanDigest,
-   ManifestDigest, <<_:256>>, <<_:512>>}, Target, PlanDigest, ManifestDigest) ->
+  {Tag, ?ATTESTATION_VERSION, Target, PlanDigest,
+   ManifestDigest, <<_:256>>, <<_:512>>}, Target, PlanDigest, ManifestDigest)
+  when Tag =:= quod_dtx_attestation;
+       Tag =:= quod_dtx_independent_attestation ->
     valid_identity(Target);
 valid_attestation_shape(_, _, _, _) -> false.
 

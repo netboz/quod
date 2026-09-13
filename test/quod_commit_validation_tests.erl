@@ -3,6 +3,58 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+receipt_application_envelope_equality_ignores_symbol_representation_test() ->
+    F = quod_ct:remote_operation_fixture(#{receipt_kind => certified,
+      goal_text => <<"\\+(receipt_absent(ok)), assertz(saved(ok)).">>}),
+    App = maps:get(application, F), Ref = maps:get(certified_target_ref, F),
+    Wrapped = App#transaction{read_check = maps:from_list([
+      {{{'$quod_symbol', atom_to_binary(Name, utf8)}, Arity}, Value}
+      || {{Name, Arity}, Value} <- maps:to_list(App#transaction.read_check)])},
+    ?assertNotEqual(App, Wrapped),
+    ?assert(quod_transaction:same_ledger_transaction(App, Wrapped)),
+    Complete0 = maps:get(completion, F),
+    Complete = Complete0#transaction{evidence = {applications, [{Ref, Wrapped}]}},
+    Exact = #{identity => maps:get(participant_target, F), phase => transaction,
+      slot => 3, block_hash => <<214:256>>, committee_id => <<215:256>>,
+      transaction => App, committee => [maps:get(pubkey, maps:get(node_identity, F))]},
+    quod_ct:with_network_identity(maps:get(network, F), fun() ->
+        ?assertEqual(ok, quod_commit_validation:validate_evidence(Complete, #{Ref => Exact})),
+        ?assertEqual({error, operation_receipt_reference_binding},
+          quod_commit_validation:validate_evidence(Complete, #{})),
+        ?assertEqual({error, operation_receipt_reference_binding},
+          quod_commit_validation:validate_evidence(Complete, #{Ref => Exact#{transaction := App#transaction{sig = <<0:512>>}}}))
+    end).
+
+included_receipts_replay_but_new_admission_requires_certified_results_test() ->
+    lists:foreach(fun(Kind) ->
+        F = quod_ct:remote_operation_fixture(#{receipt_kind => Kind}),
+        Origin = {Ns, Anchor} = maps:get(origin, F),
+        Completion = maps:get(completion, F),
+        {ok, ClaimData} = quod_transaction:request_claim(maps:get(claim, F)),
+        Op = maps:get(operation_ref, ClaimData),
+        {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+        try
+            {new, I1} = quod_outcome:claim_operation(
+                         I0, 2, ClaimData, {applications, [maps:get(target_ref, F)]}),
+            C0 = quod_commit_validation:new(Origin, 1, quod_ct:committed_kb([]), I1, none),
+            Expected = case Kind of
+                included -> {invalid, operation_result_certificate_required};
+                certified -> valid
+            end,
+            %% Admission is stricter than certified-history projection, not
+            %% a second decoder. Neither an included row nor replay invents
+            %% a result certificate; the historical bytes remain unchanged.
+            {ok, Expected, Checked} = quod_commit_validation:content([Completion], 1, check, C0),
+            {{ok, #{state := unresolved}}, _} = quod_outcome:lookup_ref(
+                                                quod_commit_validation:outcomes(Checked), Op),
+            {ok, valid, Replayed} = quod_commit_validation:content(
+                                      [Completion], 1, {claim, 4}, C0),
+            {{ok, #{state := {terminal, 4}}}, _} = quod_outcome:lookup_ref(
+                                                  quod_commit_validation:outcomes(Replayed), Op),
+            {ok, Expected, _} = quod_commit_validation:content([Completion], 1, check, Replayed)
+        after ok = quod_outcome:close(I0) end
+    end, [included, certified]).
+
 read_certificate(ProofId, N) ->
     Target = {<<"quod:certified-read-", (integer_to_binary(N))/binary>>,
               <<N:256>>},
@@ -37,25 +89,25 @@ foreign_read_certificates_use_exact_reference_committees_test() ->
                                goal = <<>>, result = <<>>, diff = [],
                                read_check = #{}, effects = []},
     Evidence = #{RefA => EvidenceA, RefB => EvidenceB},
-    ?assertEqual(ok, quod_commit_validation:validate_foreign_reads(
+    ?assertEqual(ok, quod_commit_validation:validate_evidence(
                        Transaction, Evidence)),
     ?assertEqual(
        {error, foreign_read_reference_binding},
-       quod_commit_validation:validate_foreign_reads(
+       quod_commit_validation:validate_evidence(
          Transaction, maps:remove(RefB, Evidence))),
     ?assertEqual(
        {error, foreign_read_reference_binding},
-       quod_commit_validation:validate_foreign_reads(
+       quod_commit_validation:validate_evidence(
          Transaction,
          Evidence#{RefA := EvidenceA#{committee_id => <<0:256>>}})),
     ?assertEqual(
        {error, foreign_read_proof_binding},
-       quod_commit_validation:validate_foreign_reads(
+       quod_commit_validation:validate_evidence(
          Transaction#transaction{proof_id = <<76:256>>}, Evidence)),
     #{committee := [_Signer]} = EvidenceA,
     ?assertEqual(
        {error, invalid_foreign_read_certificate},
-       quod_commit_validation:validate_foreign_reads(
+       quod_commit_validation:validate_evidence(
          Transaction, Evidence#{RefA := EvidenceA#{committee => []}})).
 
 remote_completion_cannot_carry_foreign_reads_test() ->
@@ -70,10 +122,10 @@ remote_completion_cannot_carry_foreign_reads_test() ->
                               read_check = #{}, effects = []},
     ?assertEqual(
        {error, malformed_foreign_reads},
-       quod_commit_validation:validate_foreign_reads(Completion, #{})).
+       quod_commit_validation:validate_evidence(Completion, #{})).
 
 duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->
-    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Fixture = quod_ct:remote_operation_fixture(#{receipt_kind => certified}),
     Origin = {Ns, Anchor} = maps:get(origin, Fixture),
     Claim = maps:get(claim, Fixture),
     Completion = maps:get(completion, Fixture),
@@ -108,7 +160,7 @@ duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->
     end.
 
 non_identical_remote_completion_remains_invalid_in_proposal_check_test() ->
-    Fixture = quod_ct:remote_operation_fixture(#{}),
+    Fixture = quod_ct:remote_operation_fixture(#{receipt_kind => certified}),
     Origin = {Ns, Anchor} = maps:get(origin, Fixture),
     Claim = maps:get(claim, Fixture),
     Completion = maps:get(completion, Fixture),

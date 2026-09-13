@@ -104,7 +104,7 @@ one_operation_projection_arbitrates_transaction_and_begin_test() ->
        {ok, #{status => claimed, ref => OperationRef,
               request_digest => maps:get(digest, TransactionClaim),
               outcome_ref => TransactionRef, height => 2,
-              included => [], operation_state => terminal}},
+              included => [], operation_state => terminal, receipt_height => 2}},
        quod_outcome:public(Existing)),
     ?assertEqual(Target, maps:get(target, TransactionClaim)),
     ok = quod_outcome:close(Index3).
@@ -142,7 +142,7 @@ remote_claim_and_completion_form_one_durable_operation_test() ->
     ?assertEqual(
        {ok, #{status => claimed, operation_state => terminal,
               ref => OperationRef, request_digest => Digest,
-              outcome_ref => References, included => Receipt, height => 2}},
+              outcome_ref => References, included => Receipt, height => 2, receipt_height => 4}},
        quod_outcome:public(Stored)),
     ?assertMatch(
        {replay, _},
@@ -1086,8 +1086,8 @@ group_fixture(Ns, Anchor, Pub, Signer, Verdict) ->
                          goal => GoalBlob, result => ResultBlob,
                          request_binding => none,
                          participants => Participants}),
-    {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
-    {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
+    {ok, AttA} = quod_dtx:attest_plan(1, Origin, PlanA, Manifest, Signer),
+    {ok, AttB} = quod_dtx:attest_plan(1, Other, PlanB, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
                     Manifest, none,
                     [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},

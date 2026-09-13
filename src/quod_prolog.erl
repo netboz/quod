@@ -4487,8 +4487,8 @@ run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
 %% open, then routes the immutable participant set once. Only write/effect
 %% plans consume consensus slots; read-only dependencies become certificates
 %% for the ordinary single-writer path. Two or more writers remain atomic unless
-%% the selected proof explicitly requested independent commits; slice 6 refuses
-%% that lane by name until its dispatch implementation lands in slice 8.
+%% the selected proof explicitly requested independent commits. Each target's
+%% own sealed eligibility attestation is required by independent admission.
 %% Read-only proof kinds and failed proofs pass through; failed proofs close
 %% without sealing.
 finish_pinned_proof(prove, Origin, Goal, {ok, Bindings, _Diff, ReadSet}) ->
@@ -4532,12 +4532,12 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans, SealStarted) ->
                     Origin, Target, maps:get(Target, Plans), Goal, Bindings,
                     ForeignReads)
               end);
-        {remote_claim, Target, ReadRows} ->
+        {remote_claim, Targets, ReadRows} ->
             with_certified_read_dependencies(
               ReadRows,
               fun(ForeignReads) ->
                   submit_remote_claim(
-                    Origin, Target, maps:get(Target, Plans), Goal, Bindings,
+                    Origin, Targets, Plans, Goal, Bindings,
                     ForeignReads)
               end);
         {group, Participants} ->
@@ -4559,11 +4559,11 @@ route_plans(Plans, OriginIdentity, SignedRequest, Independent) ->
         [] ->
             read;
         [{Target, _Plan}] when SignedRequest, Target =/= OriginIdentity ->
-            {remote_claim, Target, Readers};
+            {remote_claim, [Target], Readers};
         [{Target, _Plan}] ->
             {single, Target, Readers};
         [_ | _] when Independent ->
-            {error, independent_lane_unavailable};
+            {remote_claim, [Target || {Target, _} <- Writers], Readers};
         [_ | _] ->
             %% L3 is unchanged: only writers and their OCC readers consume
             %% Prepare/Finalize slots. A pure signed-origin claim is already
@@ -4709,83 +4709,58 @@ observe_remote_seal(_Origin, false, _SealStarted) -> ok.
 submit_remote_claim(
   #pinned_origin{namespace = OriginNs, anchor = OriginAnchor,
                  proof_id = ProofId} = Origin,
-  Target, Plan, Goal, Bindings, ForeignReads) ->
+  Targets, Plans, Goal, Bindings, ForeignReads) ->
     RequestAuth = quod_proof_context:request_auth(),
     RequestBinding = quod_proof_context:request_binding(),
-    case {encode_proof_submission(Goal, Bindings),
-          quod_simplex:dtx_binding(OriginNs),
-          quod_proof_context:scope_handle(Target),
-          quod_dtx:encode(Plan)} of
+    Participants = [{Target, quod_dtx:digest(maps:get(Target, Plans))} || Target <- Targets],
+    case {encode_proof_submission(Goal, Bindings), quod_simplex:dtx_binding(OriginNs)} of
         {{ok, GoalBlob, ResultBlob},
-         {ok, {OriginNs, OriginAnchor, _Coordinator, _Admission}
-                = Coordinator},
-         {ok, Handle}, {ok, PlanBlob}} ->
-            ManifestInput =
-                #{proof_id => ProofId,
-                  coordinator => Coordinator,
+         {ok, {OriginNs, OriginAnchor, _Coordinator, _Admission} = Coordinator}} ->
+            ManifestInput = #{proof_id => ProofId, coordinator => Coordinator,
                   nonce => crypto:strong_rand_bytes(32),
-                  principal => quod_dtx:principal(Plan),
+                  principal => quod_dtx:principal(maps:get(hd(Targets), Plans)),
                   goal => GoalBlob, result => ResultBlob,
-                  request_binding => RequestBinding,
-                  participants => [{Target, quod_dtx:digest(Plan)}]},
-            submit_signed_foreign_manifest(
-              Origin, Target, Plan, PlanBlob, Handle,
-              ManifestInput, RequestAuth, ForeignReads,
-              Bindings);
-        {{error, _} = Error, _, _, _} -> Error;
-        {_, {error, _} = Error, _, _} -> Error;
-        {_, _, error, _} -> {error, {protocol_error, session_binding}};
-        {_, _, _, {error, _} = Error} -> Error;
-        _ -> {error, {protocol_error, remote_claim}}
-    end.
-
-submit_signed_foreign_manifest(
-  #pinned_origin{namespace = OriginNs, anchor = OriginAnchor} = Origin,
-  Target, Plan, PlanBlob, Handle, ManifestInput, RequestAuth,
-  ForeignReads, Bindings) ->
-    case quod_dtx:new_manifest(ManifestInput) of
-        {ok, Manifest} ->
-            AttestationResult = quod_trace:with_span(
-              quod_trace:context(), <<"quod.prolog.plan_attestation">>,
-              internal, #{},
-              fun(_Span) ->
-                  quod_scope_session:attest_plan(Handle, Plan, Manifest)
-              end),
-            case AttestationResult of
-                {ok, Attestation} ->
-                    Bundle = {Target, quod_dtx:digest(Plan),
-                              PlanBlob, Attestation},
-                    try quod_transaction:remote_claim(
-                          {OriginNs, OriginAnchor}, Manifest,
-                          [Bundle], RequestAuth, ForeignReads) of
-                        Claim ->
-                            submit_signed_foreign_claim(
-                              Origin, Target, Plan, Handle,
-                              Claim, Bindings)
-                    catch _:_ ->
-                        {error, {protocol_error, remote_claim}}
+                  request_binding => RequestBinding, participants => Participants},
+            case quod_dtx:new_manifest(ManifestInput) of
+                {ok, Manifest} ->
+                    Attestations = quod_trace:with_span(
+                      quod_trace:context(), <<"quod.prolog.plan_attestation">>, internal, #{},
+                      fun(_) -> attest_plans(Participants, Plans, Manifest, []) end),
+                    case Attestations of
+                        {ok, Bundles} ->
+                            Claim = quod_transaction:remote_claim(
+                                      {OriginNs, OriginAnchor}, Manifest,
+                                      Bundles, RequestAuth, ForeignReads),
+                            submit_signed_foreign_claim(Origin, Targets, Plans, Claim, Bindings);
+                        {error, _} = Error -> Error
                     end;
                 {error, _} = Error -> Error
             end;
-        {error, _} = Error -> Error
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error;
+        _ -> {error, {protocol_error, remote_claim}}
     end.
 
-submit_signed_foreign_claim(
-  Origin, Target, Plan, Handle, Claim, Bindings) ->
-    case quod_dtx:effects_count(Plan) of
-        0 ->
-            submit_unbound_foreign_claim(
-              Origin, Target, Claim, Bindings);
-        1 ->
-            submit_effect_foreign_claim(
-              Origin, Target, Plan, Handle, Claim, Bindings);
-        _ ->
-            {error, invalid_direct_effect}
+submit_signed_foreign_claim(Origin, Targets, Plans, Claim, Bindings) ->
+    Counts = [{Target, quod_dtx:effects_count(maps:get(Target, Plans))} || Target <- Targets],
+    case lists:all(fun({_, Count}) -> Count =:= 0 orelse Count =:= 1 end, Counts) of
+        false -> {error, invalid_direct_effect};
+        true ->
+            %% The exact claim already binds every private target. Activation
+            %% follows ALL bindings. A lost/failed bind leaves it dormant and
+            %% the existing cancellation owner settles the possible bound set.
+            Handles = [begin
+                {ok, Handle} = quod_proof_context:scope_handle(Target), Handle
+            end || {Target, 1} <- Counts],
+            case Handles of
+                [] -> submit_unbound_foreign_claim(Origin, Claim, Bindings);
+                _ -> submit_effect_foreign_claim(Origin, Handles, Claim, Bindings)
+            end
     end.
 
 submit_unbound_foreign_claim(
   #pinned_origin{namespace = OriginNs} = Origin,
-  _Target, Claim = #transaction{tx_id = ClaimTxId}, Bindings) ->
+  Claim = #transaction{tx_id = ClaimTxId}, Bindings) ->
     case quod_transaction:request_claim(Claim) of
         {ok, #{operation_ref := OperationRef}} ->
             ok = checkpoint_and_release_origin_snapshot(Origin, OperationRef),
@@ -4814,8 +4789,7 @@ submit_unbound_foreign_claim(
 
 submit_effect_foreign_claim(
   #pinned_origin{namespace = OriginNs} = Origin,
-  _Target, _Plan, Handle,
-  Claim = #transaction{role = {remote_claim, _, _, _TargetTxId}},
+  Handles, Claim = #transaction{role = {remote_claim, _, _, _}},
   Bindings) ->
     case {quod_transaction:request_claim(Claim),
           quod_simplex:dtx_binding(OriginNs)} of
@@ -4829,7 +4803,7 @@ submit_effect_foreign_claim(
                    OriginNs, Admission, CustodyClaim) of
                 {ok, Submission} ->
                     bind_and_activate_effect_claim(
-                      Origin, Handle, Submission, CustodyClaim,
+                      Origin, Handles, Submission, CustodyClaim,
                       OperationRef, Bindings);
                 {error, _} = Error -> Error
             end;
@@ -4839,12 +4813,10 @@ submit_effect_foreign_claim(
 
 bind_and_activate_effect_claim(
   #pinned_origin{namespace = OriginNs} = Origin,
-  Handle, Submission, #transaction{tx_id = ClaimTxId},
+  Handles, Submission, #transaction{tx_id = ClaimTxId},
   OperationRef, Bindings) ->
-    case quod_scope_session:bind_operation_effect(
-           Handle, Submission,
-           max(1, quod_proof_context:remaining_ms())) of
-        {ok, _EffectId} ->
+    case bind_operation_effects(Handles, Submission) of
+        ok ->
             case checkpoint_and_release_origin_snapshot(
                    Origin, OperationRef) of
                 ok ->
@@ -4882,6 +4854,17 @@ bind_and_activate_effect_claim(
               OriginNs, ClaimTxId, OperationRef)
     end.
 
+bind_operation_effects([], _Submission) -> ok;
+bind_operation_effects([Handle | Rest], Submission) ->
+    case quod_proof_context:remaining_ms() of
+        Remaining when Remaining > 0 ->
+            case quod_scope_session:bind_operation_effect(Handle, Submission, Remaining) of
+                {ok, _EffectId} -> bind_operation_effects(Rest, Submission);
+                {error, _} = Error -> Error
+            end;
+        _ -> {error, timeout}
+    end.
+
 cancel_dormant_effect_claim(OriginNs, ClaimTxId, OperationRef) ->
     case quod_simplex:start_transaction_custody_cancellation(
            OriginNs, ClaimTxId) of
@@ -4903,13 +4886,16 @@ await_recovered_foreign_application(
             max(1, quod_proof_context:remaining_ms()))
       end),
     case Outcome of
-        {committed,
-         {transaction, _TargetNs, <<_:256>>, <<_:256>>} = TargetRef} ->
+        {operation_results, [{_Target, {committed,
+         {transaction, _TargetNs, <<_:256>>, <<_:256>>} = TargetRef}}]} ->
             {committed, Bindings, TargetRef};
-        {{rejected, Reason},
-         {transaction, _TargetNs, <<_:256>>, <<_:256>>}}
+        {operation_results, [{_Target, {{rejected, Reason},
+         {transaction, _TargetNs, <<_:256>>, <<_:256>>}}}]}
           when is_atom(Reason) ->
             {error, Reason};
+        {operation_results, [_ | _] = Rows} ->
+            {ok, _} = quod_operation_vector:result_rows(Rows),
+            {committed, Bindings, {operation_outcome, OperationRef, Rows}};
         {error, {outcome_unknown, OperationRef}} = Error ->
             Error;
         Other ->
@@ -5200,7 +5186,7 @@ build_and_register_group(
   RequestAuth, Ns, StartedNative) ->
     case quod_dtx:new_manifest(ManifestInput) of
         {ok, Manifest} ->
-            case attest_group_plans(
+            case attest_plans(
                    ParticipantRows, Plans, Manifest, []) of
                 {ok, Bundles} ->
                     case quod_dtx:new_begin(Manifest, RequestAuth, Bundles) of
@@ -5304,9 +5290,9 @@ bind_group_effect_rows(Rows, GroupRef) ->
               BindRows, GroupRef, RemainingMs)
     end.
 
-attest_group_plans([], _Plans, _Manifest, RevBundles) ->
+attest_plans([], _Plans, _Manifest, RevBundles) ->
     {ok, lists:reverse(RevBundles)};
-attest_group_plans(
+attest_plans(
   [{Identity, PlanDigest} | Rest], Plans, Manifest, RevBundles) ->
     Plan = maps:get(Identity, Plans),
     case {quod_proof_context:scope_handle(Identity), quod_dtx:encode(Plan)} of
@@ -5314,7 +5300,7 @@ attest_group_plans(
             case quod_scope_session:attest_plan(Handle, Plan, Manifest) of
                 {ok, Attestation} ->
                     Bundle = {Identity, PlanDigest, PlanBlob, Attestation},
-                    attest_group_plans(
+                    attest_plans(
                       Rest, Plans, Manifest, [Bundle | RevBundles]);
                 {error, _} = Error -> Error
             end;

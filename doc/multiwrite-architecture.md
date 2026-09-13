@@ -1112,3 +1112,92 @@ unchanged .172 production code, and the corrected fixture passes against it.
 The growth fixture constructs its deliberately invalid membership proposal as
 a canonical block artifact, not a raw record view rejected by the wire encoder
 before reaching any validator. No membership-rejection assertion is weakened.
+
+## S8 implementation status — independent target vectors (2026-09-13)
+
+This appendix reports implementation of §13/§14; the approved prefix above
+is unchanged. Gate results, exact input hashes and failed controls belong to
+the per-commit frozen handoff, not an unqualified claim in this document.
+
+The existing proof evaluator seals once. Ordinary multiwrites remain atomic;
+only surviving independent intent selects the independent vector. Each host's
+own sealed provenance determines its signed eligibility attestation. An
+ordinary target attestation cannot be relabelled as independent without
+invalidating its signature. Source validation and the target application
+endpoint both refuse a multi-target claim lacking that eligibility. Remote
+intent flags are not admission authority. S6 failure, cut, cursor, mixing,
+signing and public nesting rules are unchanged.
+
+`quod_operation` is a pure library: zero processes, timers, stores, keys or
+network calls. One canonical durable source claim feeds target-keyed work in
+the existing coordinator wave. Each target can apply, verify and certify while
+other targets remain blocked. N=1 follows this same model; only the public
+single-target presentation is scalar. The former scalar coordinator workers
+and current-view-as-verdict path are deleted, not retained as fallback engines.
+
+`quod_applied_certificate` owns the common applied-certificate algorithms.
+L3 Finalize and L2 application statements have separate signature domains.
+AM3 binds the network, exact anchored target and historical committee, source
+operation and claim, exact application occurrence, and canonical result. The
+existing target endpoint worker captures exact history once and retains it
+while the outcome owner catches up. Only a durably published outcome permits
+a vote; existing progress edges and the original deadline govern the wait.
+No snapshot loop, second owner or new timer is introduced. The endpoint codec
+owns the refusal vocabulary, including `independent_scope_required`; Simplex
+does not duplicate a list that can silently erase a typed refusal.
+
+The Simplex operation owner accumulates verified target results monotonically
+and publishes one complete vector per live caller, rechecking that caller's
+absolute deadline at delivery. Mixed outcomes are success-shaped. A partial
+vector is never final, absence is never rejection, and expiry remains unknown.
+The source receipt commits asynchronously after client delivery. New receipts
+contain certified rows; historical included-only rows remain valid bytes but
+provide no verdict authority and cannot be newly admitted as certified results.
+
+Owned reconnects use the existing operation owner. An unowned reconnect uses
+the discovered source receipt height, verifies that exact receipt and every
+exact application, then verifies its AM3. Before the receipt exists it remains
+pending; it submits nothing. All history goes through the shared pinned-view
+resolver. Exact envelope comparison uses canonical signed bytes, not Erlang
+term representation or semantic IDs alone. The observation model must never
+construct a target application just to predict its ID: the shared envelope
+validator already checks predictions from authenticated opaque plan bytes.
+Only the target constructs/materializes its application. The cross-gateway
+regression pins both exact byte equality and no foreign atom allocation.
+
+Process/messaging inventory: Simplex retains signing, ledger custody and its
+operation waiter registry; Prolog retains proof/session and durable outcome
+publication; the existing coordinator is one monitored operation attempt with
+its existing bounded target workers; the existing foreign-history owner holds
+published views; the existing effect journal retains private effect custody.
+All owner addressing/subscriptions use `quod_reg`/gproc. No Prolog database or
+interpreter state is transferred between nodes. Claims carry sealed material,
+dependency/proof metadata and exact references, not a remote KB snapshot.
+
+Effect-bearing claims bind their possible private-custody target set before
+source activation. Uncertain binding uses the existing exact dormant-claim
+cancellation owner, including a reply lost after durable binding. No new
+outbox, effect executor, fact/effect co-admission rule or submission identity
+is introduced. Generalized custody controls include an effect plus a source
+writer, cancellation/restart and reservation-owner loss. The real Root
+`create_ontology` convenience predicate invokes the action evaluator, so its
+independent acceptance case requires the separate, already-ruled internal
+action-savepoint scope. Its current `independent_nesting` failure is retained
+as that scope's fail-before; S8 alone does not claim action composition works.
+
+Deployment changes the endpoint/scope vocabulary across the fleet together;
+it does not change S7's durable format or require a wipe. Preserve ledgers,
+journals, identities, derived caches, old campaigns and stop markers. Measure
+under fresh labels, full true-exit logs and an independent request/attempt
+denominator. Report the initial concurrent cohort separately from a striped
+follow-on request: a fifth request's overlap can differ even at the same c4
+setting. Neither small-sample non-significance nor a codec microbenchmark
+proves performance equivalence. No sub-500 ms or one-hop latency is promised.
+Use ordinary spans with sampler reconciliation and O-A1/O-A2 exclusions. Begin
+finality optimization remains deferred until both lanes can be compared.
+
+R-RESTART-RACE-01, both EUnit ledger items, broad c4 acceptance, the historical
++8.7% question, restart checkpoints and action savepoints are not retired here.
+Yan's overnight authority permits internally gated stage commits and tests
+without waiting for Claude; it does not permit concealing a red gate or
+resubmitting an uncertain operation.

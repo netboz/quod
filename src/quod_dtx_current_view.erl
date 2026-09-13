@@ -27,15 +27,14 @@ keeps the plan vocabulary opaque.
 """.
 
 -include("quod_proof_limits.hrl").
+-include("quod_ledger.hrl").
 
 -export([submit_operation/4, submit_claim_application/5,
          submit_operation_to/5,
-         certify_applied_many/3, certify_reads/3, lookup_outcome/4,
-         threshold/1,
-         sign_applied_vote/8, verify_applied_certificate/3,
-         valid_applied_certificate_shape/1,
-         applied_certificate_binding/1]).
--export_type([source/0, claim/0, applied_certificate/0]).
+         certify_applied_many/3, certify_operation/4, certify_reads/3, lookup_outcome/4,
+         operation_result/5, certify_operation_evidence/6,
+         threshold/1]).
+-export_type([source/0, claim/0]).
 
 -ifdef(TEST).
 -export([test_certify_applied/6, test_certify_applied_many/4,
@@ -49,8 +48,6 @@ keeps the plan vocabulary opaque.
 
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(PROBE_CLEANUP_MS, 1000).
--define(APPLIED_CERTIFICATE_VERSION, 1).
--define(APPLIED_VOTE_VERSION, 1).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type local_source() :: quod_simplex:history_view().
@@ -63,117 +60,9 @@ keeps the plan vocabulary opaque.
           finalize_ref := quod_dtx:certified_ref(),
           generation := non_neg_integer(),
           verdict := commit | abort}.
--type applied_certificate() ::
-        {quod_dtx_applied_certificate, 1, <<_:256>>, identity(), <<_:256>>,
-         <<_:256>>, quod_dtx:certified_ref(), non_neg_integer(),
-         commit | abort, [{<<_:256>>, <<_:512>>}]}.
--type many_result() :: {verified, applied_certificate()} | retry.
+-type many_result() :: {verified, quod_applied_certificate:applied_certificate()} | retry.
 -type outcome_result() ::
         {ok, map()} | {error, retry | not_found | invalid_request}.
-
--doc "Sign one exact Finalize-applied vote with a validator's node identity.".
--spec sign_applied_vote(<<_:256>>, identity(), <<_:256>>, <<_:256>>,
-                        quod_dtx:certified_ref(), non_neg_integer(),
-                        commit | abort, quod_identity:signer()) ->
-          {ok, {<<_:256>>, <<_:512>>}} | error.
-sign_applied_vote(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-                  Generation, Verdict,
-                  #{pubkey := <<_:256>> = Signer, key := _} = Identity) ->
-    case applied_statement(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-           Generation, Verdict) of
-        {ok, Statement} ->
-            Signature = quod_identity:sign(
-                          applied_vote_bytes(Statement), Identity),
-            case Signature of
-                <<_:512>> -> {ok, {Signer, Signature}};
-                _ -> error
-            end;
-        error ->
-            error
-    end;
-sign_applied_vote(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
-                  _FinalizeRef, _Generation, _Verdict, _Identity) ->
-    error.
-
--doc "Return the exact statement carried by a bounded applied certificate.".
--spec applied_certificate_binding(applied_certificate()) -> {ok, map()} | error.
-applied_certificate_binding(
-  {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
-   <<_:256>> = NetworkIdentity, Target, <<_:256>> = CommitteeId,
-   <<_:256>> = GroupId, FinalizeRef, Generation, Verdict, Signatures}
-  = Certificate) ->
-    case applied_statement(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-           Generation, Verdict) of
-        {ok, Statement} ->
-            {ok, Target, AppliedThrough, _Digest} =
-                quod_dtx:certified_ref_binding(FinalizeRef),
-            case valid_applied_signatures(Signatures) andalso
-                 erlang:external_size(Certificate) =<
-                     ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
-                true ->
-                    {ok, #{network_identity => NetworkIdentity,
-                           target => Target, committee_id => CommitteeId,
-                           group_id => GroupId, finalize_ref => FinalizeRef,
-                           applied_through => AppliedThrough,
-                           generation => Generation, verdict => Verdict,
-                           statement => Statement,
-                           signatures => Signatures}};
-                false -> error
-            end;
-        error -> error
-    end;
-applied_certificate_binding(_Certificate) ->
-    error.
-
--doc "Cheap bounded shape check for an untrusted applied certificate.".
--spec valid_applied_certificate_shape(term()) -> boolean().
-valid_applied_certificate_shape(Certificate) ->
-    case applied_certificate_binding(Certificate) of
-        {ok, _} -> true;
-        error -> false
-    end.
-
--doc "Verify one certificate against the exact certified Finalize evidence.".
--spec verify_applied_certificate(applied_certificate(), <<_:256>>, map()) ->
-          boolean().
-verify_applied_certificate(Certificate, NetworkIdentity,
-                           #{identity := Target,
-                             committee := Committee,
-                             committee_id := CommitteeId} = Evidence) ->
-    case applied_certificate_binding(Certificate) of
-        {ok, #{network_identity := NetworkIdentity,
-               target := Target, committee_id := CommitteeId,
-               group_id := GroupId, finalize_ref := FinalizeRef,
-               generation := Generation, verdict := Verdict,
-               statement := Statement, signatures := Signatures}} ->
-            case exact_finalize_binding(Evidence, FinalizeRef) of
-                {ok, GroupId, FinalizeRef, Generation, Verdict} ->
-                    case quod_quorum:committee_size(Committee) of
-                        {ok, N} when N > 0 ->
-                            Needed = applied_threshold(N),
-                            case length(Signatures) =:= Needed of
-                                true ->
-                                    case quod_quorum:sanitize_at_least(
-                                           Committee,
-                                           applied_vote_bytes(Statement),
-                                           Signatures, Needed) of
-                                        {ok, Signatures} -> true;
-                                        _ -> false
-                                    end;
-                                false -> false
-                            end;
-                        _ -> false
-                    end;
-                _ ->
-                    false
-            end;
-        _ ->
-            false
-    end;
-verify_applied_certificate(_Certificate, _NetworkIdentity, _Evidence) ->
-    false.
 
 -doc """
 Submit one correlated durable-operation request to an exact ontology.
@@ -389,6 +278,199 @@ participant is temporarily unavailable; only that participant's row is
 certify_applied_many(OwnerNs, Requests, Deadline) ->
     certify_applied_many_with(
       OwnerNs, Requests, Deadline, production_dependencies()).
+
+-doc "Collect an exact operation result from its application-era committee.".
+-spec certify_operation(binary(), quod_dtx:certified_ref(), map(), integer()) ->
+          {ok, quod_applied_certificate:operation_certificate()} |
+          {error, retry | invalid_request}.
+certify_operation(OwnerNs, Ref, Evidence, Deadline) ->
+    certify_operation_with(OwnerNs, Ref, Evidence, Deadline, production_dependencies()).
+
+certify_operation_with(OwnerNs, Ref,
+  Evidence = #{identity := Target, phase := transaction, slot := Slot,
+               block_hash := Hash, record_digest := Digest}, Deadline, Dependencies)
+  when is_binary(OwnerNs), is_integer(Deadline) ->
+    case {quod_dtx:certified_ref_claim(Ref), historical_committee_view(Target, Evidence),
+          dependency_network_identity(Dependencies)} of
+        {{ok, {Target, Slot, Hash, Digest}}, {ok, Committee, _CommitteeId, Routes}, {ok, Network}} ->
+            %% This local hint is transport selection only. The exact historical
+            %% evidence was already resolved by A/R2; do not capture a new view.
+            %% Local endpoint admission still checks this reference's anchor.
+            Sources = probe_sources({local, Target}, Committee, Routes, Dependencies),
+            Needed = threshold(length(Committee)),
+            Probe = fun(Key, Source) ->
+                Request = {operation_applied, request_id(), Ref},
+                Verify = fun(Result) ->
+                    operation_response_vote(Request, Network, Evidence, Key, Result)
+                end,
+                case probe_applied_source(Source, OwnerNs, element(1, Target), Key,
+                                          Request, Deadline, Dependencies, Verify) of
+                    {ok, Statement, Vote} -> {signed, {operation, Statement}, Vote, none};
+                    ignore -> ignore
+                end
+            end,
+            case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
+                false -> {error, retry};
+                true ->
+                    case collect_quorum(dtx_applied_probe, Sources, Needed, Deadline, Probe) of
+                        {ok, {signed, {operation, Statement}, Rows}} ->
+                            {ok, Certificate} = quod_applied_certificate:operation_certificate(
+                                                  Statement, signed_rows(Rows)),
+                            case quod_applied_certificate:verify_operation_certificate(
+                                   Certificate, Network, Evidence) andalso remaining(Deadline) > 0 of
+                                true -> {ok, Certificate};
+                                false -> {error, retry}
+                            end;
+                        _ -> {error, retry}
+                    end
+            end;
+        {_, _, {error, _}} -> {error, retry};
+        _ -> {error, invalid_request}
+    end;
+certify_operation_with(_, _, _, _, _) -> {error, invalid_request}.
+
+%% The same finite verify/certify work serves live delivery, restarted owners
+%% and read-only receipt lookup. Known is either an already-verified capture
+%% or just discovery bytes. Never recapture a sufficient verified entry.
+certify_operation_evidence(OwnerNs, Target, Ref,
+                           #{transaction := Transaction} = Known, Certificate, Deadline) ->
+    Exact = case Known of
+        #{phase := transaction, committee := _} -> {ok, Known};
+        _ -> quod_foreign_log:resolve_reference(Target, Ref, transaction, none, none, Deadline)
+    end,
+    case Exact of
+        {ok, #{transaction := ExactTransaction} = Evidence} ->
+            certify_matching_operation_evidence(
+              quod_transaction:same_ledger_transaction(Transaction, ExactTransaction),
+              OwnerNs, Ref, Evidence, Certificate, Deadline);
+        {ok, _} -> {error, invalid_target_evidence};
+        {error, _} -> {error, retry}
+    end.
+
+certify_matching_operation_evidence(false, _, _, _, _, _) ->
+    {error, invalid_target_evidence};
+certify_matching_operation_evidence(true, OwnerNs, Ref, Evidence, Certificate, Deadline) ->
+    Result = case Certificate of
+        none -> certify_operation(OwnerNs, Ref, Evidence, Deadline);
+        _ ->
+            case quod_ontology:network_identity() of
+                {ok, Network} ->
+                    case quod_applied_certificate:verify_operation_certificate(
+                           Certificate, Network, Evidence) of
+                        true -> {ok, Certificate};
+                        false -> {error, invalid_operation_result_certificate}
+                    end;
+                {error, _} -> {error, retry}
+            end
+    end,
+    case {remaining(Deadline), Result} of
+        {0, _} -> {error, retry};
+        {_, {ok, Verified}} -> {ok, Ref, Evidence, Verified};
+        {_, {error, invalid_operation_result_certificate} = Error} -> Error;
+        _ -> {ok, Ref, Evidence, none}
+    end.
+
+%% A current-view operation projection supplies only a discovery height.
+%% Owned operations use the existing recovery owner. An unowned completed
+%% operation is a bounded read: exact source receipt -> exact applications ->
+%% AM3. Current-view labels never become target verdicts. Before its async
+%% receipt exists, a remote reconnect remains uncertain; it submits nothing.
+operation_result(OwnerNs, {operation, Ns, Anchor, _, _} = Op, Digest,
+  #{ref := Op, request_digest := Digest, height := ClaimHeight} = Projection, Deadline) ->
+    case quod_simplex:history_view_at({Ns, Anchor}, ClaimHeight, Deadline) of
+        {ok, _View} ->
+            case remaining(Deadline) of
+                0 -> {error, retry};
+                Remaining ->
+                    case quod_simplex:await_operation_result(Ns, Op, Remaining) of
+                        {operation_results, Rows} -> {ok, Rows};
+                        {error, _} -> {error, retry}
+                    end
+            end;
+        {error, NonHosted} when NonHosted =:= not_hosted; NonHosted =:= invalid_identity ->
+            remote_operation_receipt(OwnerNs, Op, Digest, Projection, Deadline);
+        {error, _} -> {error, retry}
+    end;
+operation_result(_, _, _, _, _) -> {error, invalid_request}.
+
+remote_operation_receipt(OwnerNs, {operation, Ns, Anchor, _, _} = Op, Digest,
+  #{operation_state := terminal, receipt_height := Slot}, Deadline)
+  when is_integer(Slot), Slot > 0 ->
+    Request = {operation_receipt, request_id(), Op, Slot},
+    case submit_operation_routes(OwnerNs, {Ns, Anchor}, Request, Deadline) of
+        {ok, {operation_receipt, _, Op, Slot, Blob} = Response} ->
+            case quod_dtx_endpoint:correlates(Request, Response) of
+                true ->
+                    {ok, Ref, Complete} = quod_transaction:decode_evidence(Blob),
+                    case quod_foreign_log:resolve_reference(
+                           {Ns, Anchor}, Ref, transaction, none, none, Deadline) of
+                        {ok, #{transaction := ExactComplete}} ->
+                            case quod_transaction:same_ledger_transaction(Complete, ExactComplete) of
+                                true -> resolve_receipt_results(OwnerNs, Op, Digest, ExactComplete, Deadline);
+                                false -> {error, invalid_completion}
+                            end;
+                        _ -> {error, retry}
+                    end;
+                false -> {error, invalid_request}
+            end;
+        _ -> {error, retry}
+    end;
+remote_operation_receipt(_, _, _, _, _) -> {error, retry}.
+
+resolve_receipt_results(OwnerNs, {operation, Ns, _, _, _} = Op, Digest,
+  #transaction{role = {remote_complete, Op, Digest, Rows},
+    evidence = {applications, [{_, #transaction{evidence = {ClaimRef, Claim}}} | _] = Pairs}}
+    = Receipt,
+  Deadline) ->
+    case quod_operation:new(Ns, Op, ClaimRef, Claim) of
+        {ok, Model} ->
+            case quod_operation:request_digest(Model) =:= Digest andalso
+                 quod_operation_vector:receipt_references(Rows) =:=
+                   {ok, quod_operation:references(Model)} of
+                true ->
+                    %% Validates canonical completeness and pair/claim binding;
+                    %% the restored model is NOT used as verdict authority.
+                    case quod_operation:restore_receipt(Receipt, Model) of
+                        {ok, _} -> certify_receipt_rows(OwnerNs, Rows, Pairs, Model, Deadline);
+                        {error, _} = Error -> Error
+                    end;
+                false -> {error, invalid_completion}
+            end;
+        {error, _} = Error -> Error
+    end;
+resolve_receipt_results(_, _, _, _, _) -> {error, invalid_completion}.
+
+certify_receipt_rows(_OwnerNs, [], [], Model, Deadline) ->
+    case {remaining(Deadline), quod_operation:results(Model)} of
+        {0, _} -> {error, retry};
+        {_, {ok, Rows}} -> {ok, Rows};
+        _ -> {error, retry}
+    end;
+certify_receipt_rows(OwnerNs, [{Target, Arm} | Rows], [{Ref, Tx} | Pairs], Model, Deadline) ->
+    Certificate = case Arm of {included, _} -> none; {certified, _, Cert} -> Cert end,
+    case certify_operation_evidence(OwnerNs, Target, Ref, #{transaction => Tx}, Certificate, Deadline) of
+        {ok, Ref, Evidence, Verified} when Verified =/= none ->
+            case quod_operation:accept(Target, Ref, Evidence, Verified, Model) of
+                {ok, Updated} -> certify_receipt_rows(OwnerNs, Rows, Pairs, Updated, Deadline);
+                {error, _} = Error -> Error
+            end;
+        _ -> {error, retry}
+    end;
+certify_receipt_rows(_, _, _, _, _) -> {error, invalid_completion}.
+
+operation_response_vote(Request, Network, Evidence, Key,
+  {ok, {operation_applied, _RequestId, _Ref, Statement, Key, Signature} = Response}) ->
+    case quod_applied_certificate:operation_statement_binding(Statement) of
+        {ok, #{result := Result}} ->
+            case quod_dtx_endpoint:correlates(Request, Response) andalso
+                 quod_applied_certificate:operation_statement(Network, Evidence, Result) =:= {ok, Statement} andalso
+                 quod_applied_certificate:verify_operation_vote(Statement, Key, Signature) of
+                true -> {ok, Statement, {Key, Signature}};
+                false -> ignore
+            end;
+        error -> ignore
+    end;
+operation_response_vote(_, _, _, _, _) -> ignore.
 
 -doc "Build one `f + 1` certificate within the original absolute monotonic deadline.".
 -spec certify_reads(binary(), {source(), binary()}, integer()) ->
@@ -946,42 +1028,15 @@ verify_view(OwnerNs, Source, NetworkIdentity, Target, GroupId, FinalizeRef,
 
 valid_finalize_evidence(Target, GroupId, FinalizeRef, Generation, Verdict,
                         Evidence) ->
-    case {exact_finalize_binding(Evidence, FinalizeRef),
-          finalize_committee_view(Target, Evidence)} of
+    case {quod_applied_certificate:exact_finalize_binding(Evidence, FinalizeRef),
+          historical_committee_view(Target, Evidence)} of
         {{ok, GroupId, FinalizeRef, Generation, Verdict},
          {ok, Committee, CommitteeId, Routes}} ->
             {ok, Committee, CommitteeId, Routes};
         _ -> error
     end.
 
-exact_finalize_binding(
-  #{identity := Target, phase := finalize, control := Control,
-    entry := Entry}, FinalizeRef) ->
-    %% Certified-history verification owns proof authority.  The applied
-    %% certificate and this replica's entry may carry different valid quorum
-    %% subsets, but both must name one immutable Finalize claim.
-    case {quod_dtx:control_kind(Control),
-          quod_dtx:recovery_phase(quod_dtx:control_body(Control)),
-          quod_dtx:certified_entry_ref(Target, Entry, Control)} of
-        {finalize,
-         {ok, #{kind := finalize, group_id := <<_:256>> = GroupId,
-                generation := Generation, verdict := Verdict}},
-         {ok, EntryRef}}
-          when is_integer(Generation), Generation >= 0,
-               Generation =< ?MAX_UINT64,
-               (Verdict =:= commit orelse Verdict =:= abort) ->
-            case quod_dtx:same_certified_ref(EntryRef, FinalizeRef) of
-                true ->
-                    {ok, GroupId, FinalizeRef, Generation, Verdict};
-                false ->
-                    error
-            end;
-        _ -> error
-    end;
-exact_finalize_binding(_Evidence, _FinalizeRef) ->
-    error.
-
-finalize_committee_view(
+historical_committee_view(
   Target,
   #{identity := Target, committee := Committee,
     committee_id := <<_:256>> = CommitteeId, routes := RouteMap})
@@ -998,7 +1053,7 @@ finalize_committee_view(
         true -> {ok, Committee, CommitteeId, Routes};
         false -> error
     end;
-finalize_committee_view(_Target, _Evidence) ->
+historical_committee_view(_Target, _Evidence) ->
     error.
 
 %% A co-hosted validator needs no transport route to attest. Historical
@@ -1144,7 +1199,7 @@ collect_applied(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
     case collect_quorum(
            dtx_applied_probe, Sources, Needed, Deadline, Probe) of
         {ok, {signed, applied, Rows}} ->
-            applied_certificate(Claim, signed_rows(Rows));
+            quod_applied_certificate:applied_certificate(Claim, signed_rows(Rows));
         _ ->
             retry
     end.
@@ -1566,12 +1621,14 @@ probe_applied(OwnerNs, PeerKey, Source,
     Request = {applied, request_id(), GroupId, FinalizeRef,
                Generation, Verdict},
     probe_applied_source(
-      Source, OwnerNs, TargetNs, PeerKey, Request, Target,
-      NetworkIdentity, CommitteeId, Deadline, Dependencies).
+      Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
+      fun(Result) -> applied_response_vote(
+                       Request, NetworkIdentity, Target, CommitteeId, PeerKey, Result)
+      end).
 
 probe_applied_source(
   {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
-  Target, NetworkIdentity, CommitteeId, Deadline, Dependencies) ->
+  Deadline, Dependencies, Verify) ->
     walk_remote_candidates(
       Endpoints, Deadline,
       fun(Endpoint, AttemptDeadline) ->
@@ -1580,22 +1637,19 @@ probe_applied_source(
             AttemptDeadline, Dependencies)
       end,
       fun(Result) ->
-          case applied_response_vote(
-                 Request, NetworkIdentity, Target, CommitteeId, PeerKey,
-                 Result) of
-              {ok, _} = Vote -> {done, Vote};
-              ignore -> continue
+          case Verify(Result) of
+              ignore -> continue;
+              Vote -> {done, Vote}
           end
       end,
       ignore);
 probe_applied_source(
   local, OwnerNs, TargetNs, PeerKey, Request,
-  Target, NetworkIdentity, CommitteeId, Deadline, Dependencies) ->
+  Deadline, Dependencies, Verify) ->
     Result = call_endpoint(
                OwnerNs, TargetNs, PeerKey, local, Request,
                Deadline, Dependencies),
-    applied_response_vote(
-      Request, NetworkIdentity, Target, CommitteeId, PeerKey, Result).
+    Verify(Result).
 
 applied_response_vote(
   Request, NetworkIdentity, Target, CommitteeId, ExpectedSigner,
@@ -1603,7 +1657,7 @@ applied_response_vote(
          FinalizeRef, Generation, Verdict, ExpectedSigner, Signature}
        = Response}) ->
     case quod_dtx_endpoint:correlates(Request, Response) andalso
-         applied_vote_valid(
+         quod_applied_certificate:applied_vote_valid(
            NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
            Generation, Verdict, ExpectedSigner, Signature) of
         true -> {ok, {ExpectedSigner, Signature}};
@@ -1613,70 +1667,11 @@ applied_response_vote(_Request, _NetworkIdentity, _Target, _CommitteeId,
                       _ExpectedSigner, _Result) ->
     ignore.
 
-applied_certificate(
-  {NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-   Generation, Verdict}, Signatures) ->
-    Certificate =
-        {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
-         NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-         Generation, Verdict, Signatures},
-    case valid_applied_certificate_shape(Certificate) of
-        true -> {ok, Certificate};
-        false -> retry
-    end.
-
-applied_statement(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-                  Generation, Verdict)
-  when is_binary(NetworkIdentity), byte_size(NetworkIdentity) =:= 32,
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64,
-       (Verdict =:= commit orelse Verdict =:= abort) ->
-    case {valid_identity(Target), quod_dtx:certified_ref_binding(FinalizeRef)} of
-        {true, {ok, Target, _Slot, _Digest}}
-          when is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
-               is_binary(GroupId), byte_size(GroupId) =:= 32 ->
-            {ok, {quod_dtx_applied_vote, ?APPLIED_VOTE_VERSION,
-                  NetworkIdentity, Target, CommitteeId, GroupId,
-                  FinalizeRef, Generation, Verdict}};
-        _ -> error
-    end;
-applied_statement(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
-                  _FinalizeRef, _Generation, _Verdict) ->
-    error.
-
-applied_vote_bytes(Statement) ->
-    term_to_binary(Statement, [deterministic]).
-
-applied_vote_valid(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-                   Generation, Verdict, Signer, Signature) ->
-    case applied_statement(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
-           Generation, Verdict) of
-        {ok, Statement} ->
-            quod_identity:verify(
-              Signature, applied_vote_bytes(Statement), Signer);
-        error -> false
-    end.
-
-valid_applied_signatures([_ | _] = Signatures) ->
-    quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
-        Signatures =:= lists:ukeysort(1, Signatures);
-valid_applied_signatures(_) ->
-    false.
-
-valid_identity({Ns, <<_:256>>}) ->
-    is_binary(Ns) andalso byte_size(Ns) > 0;
-valid_identity(_) ->
-    false.
-
 request_id() ->
     crypto:strong_rand_bytes(?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8).
 
 threshold(N) ->
     N - quod_simplex:quorum(N) + 1.
-
-applied_threshold(N) ->
-    threshold(N).
 
 remaining(Deadline) ->
     max(0, Deadline - quod_time:mono_ms()).

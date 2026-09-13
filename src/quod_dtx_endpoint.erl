@@ -1,6 +1,6 @@
 -module(quod_dtx_endpoint).
 -moduledoc """
-Pure v11 wire boundary for durable operation and read-attestation traffic.
+Pure v12 wire boundary for durable operation and read-attestation traffic.
 
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
@@ -38,6 +38,7 @@ outside the semantic request, evidence, signatures and correlation checks.
 -include("quod_transport_limits.hrl").
 
 -export([channel/1,
+         error_response/2,
          encode_request/3, encode_request/4, encode_response/3,
          decode_request/2, decode_response/2,
          encode_validation_sidecar/1, decode_validation_sidecar/1,
@@ -47,7 +48,7 @@ outside the semantic request, evidence, signatures and correlation checks.
               public_outcome_status/0]).
 
 -define(DOMAIN, quod_dtx_endpoint).
--define(VERSION, 11). %% exact anchored operation target in request vocabulary
+-define(VERSION, 12). %% exact post-apply operation-result attestations
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -70,7 +71,7 @@ outside the semantic request, evidence, signatures and correlation checks.
 -type validation_item() ::
         entry_hint() |
         {{applied, identity(), quod_dtx:certified_ref()},
-         quod_dtx_current_view:applied_certificate()}.
+         quod_applied_certificate:applied_certificate()}.
 -type request() ::
         {submit, request_id(), binary()} |
         {apply_claim, request_id(), identity(), binary()} |
@@ -80,6 +81,8 @@ outside the semantic request, evidence, signatures and correlation checks.
         {outcome_barrier, request_id(), group_ref(), <<_:256>>,
          pos_integer()} |
         {read_attest, request_id(), binary()} |
+        {operation_applied, request_id(), quod_dtx:certified_ref()} |
+        {operation_receipt, request_id(), operation_ref(), pos_integer()} |
         {applied, request_id(), <<_:256>>, quod_dtx:certified_ref(),
          non_neg_integer(), verdict()}.
 -type public_outcome_status() :: map().
@@ -89,6 +92,9 @@ outside the semantic request, evidence, signatures and correlation checks.
         {accepted, request_id(), <<_:256>>, quod_dtx:certified_ref()} |
         {application, request_id(), committed | {rejected, atom()}, binary()} |
         {operation_effect_cancelled, request_id(), cancelled | not_found} |
+        {operation_applied, request_id(), quod_dtx:certified_ref(), tuple(),
+         <<_:256>>, <<_:512>>} |
+        {operation_receipt, request_id(), operation_ref(), pos_integer(), binary()} |
         {refused, request_id(), identity(), <<_:256>>, non_neg_integer(),
          binary()} |
         {phase, request_id(), non_neg_integer(),
@@ -362,7 +368,7 @@ valid_entry_hint_view(_Ref, _Entry, _View) -> false.
 
 valid_validation_item(
   {{applied, Target, FinalizeRef}, Certificate}) ->
-    case quod_dtx_current_view:applied_certificate_binding(Certificate) of
+    case quod_applied_certificate:applied_certificate_binding(Certificate) of
         {ok, #{target := Target, finalize_ref := FinalizeRef}} -> true;
         _ -> false
     end;
@@ -410,6 +416,10 @@ validate_request(
           valid_slot(MinimumSlot));
 validate_request({read_attest, RequestId, PlanBlob}) ->
     validate_request_fields(RequestId, valid_read_plan(PlanBlob));
+validate_request({operation_applied, RequestId, Ref}) ->
+    validate_request_fields(RequestId, valid_certified_ref(Ref));
+validate_request({operation_receipt, RequestId, OperationRef, Slot}) ->
+    validate_request_fields(RequestId, valid_operation_ref(OperationRef) andalso valid_slot(Slot));
 validate_request(
   {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict}) ->
     validate_request_fields(
@@ -503,6 +513,12 @@ validate_response(
           valid_uint64(Generation) andalso valid_verdict(Verdict) andalso
           valid_digest(Signer) andalso is_binary(Signature) andalso
           byte_size(Signature) =:= 64);
+validate_response({operation_applied, RequestId, Ref, Statement, Signer, Signature}) ->
+    validate_response_fields(RequestId,
+      valid_operation_vote_binding(Ref, Statement) andalso valid_digest(Signer) andalso
+          is_binary(Signature) andalso byte_size(Signature) =:= 64);
+validate_response({operation_receipt, RequestId, OperationRef, Slot, Blob}) ->
+    validate_response_fields(RequestId, valid_operation_receipt(OperationRef, Slot, Blob));
 validate_response({error, RequestId, Reason}) ->
     validate_response_fields(RequestId, valid_error_reason(Reason));
 validate_response(_) ->
@@ -569,11 +585,12 @@ valid_public_outcome_status(
 valid_public_outcome_status(
   #{status := claimed, height := Height, ref := OperationRef,
     request_digest := RequestDigest, outcome_ref := OutcomeRef, included := Included,
-    operation_state := OperationState} = Status)
-  when map_size(Status) =:= 7 ->
+    operation_state := OperationState, receipt_height := ReceiptHeight} = Status)
+  when map_size(Status) =:= 8 ->
     valid_slot(Height) andalso valid_operation_ref(OperationRef) andalso
         is_binary(RequestDigest) andalso byte_size(RequestDigest) =:= 32 andalso
         valid_operation_state(OperationState) andalso
+        valid_receipt_height(OperationState, Height, ReceiptHeight) andalso
         valid_operation_projection(OutcomeRef, Included, OperationState);
 valid_public_outcome_status(_) ->
     false.
@@ -590,6 +607,11 @@ valid_operation_projection(_, _, _) -> false.
 valid_operation_state(unresolved) -> true;
 valid_operation_state(terminal) -> true;
 valid_operation_state(_) -> false.
+
+valid_receipt_height(unresolved, _, none) -> true;
+valid_receipt_height(terminal, ClaimHeight, Height) ->
+    valid_slot(Height) andalso Height >= ClaimHeight;
+valid_receipt_height(_, _, _) -> false.
 
 valid_pending_phase(pending_begin) -> true;
 valid_pending_phase(begun) -> true;
@@ -639,6 +661,8 @@ request_id({outcome_barrier, RequestId, _, _, _}) ->
     valid_id_or_error(RequestId);
 request_id({read_attest, RequestId, _}) -> valid_id_or_error(RequestId);
 request_id({applied, RequestId, _, _, _, _}) -> valid_id_or_error(RequestId);
+request_id({operation_applied, RequestId, _}) -> valid_id_or_error(RequestId);
+request_id({operation_receipt, RequestId, _, _}) -> valid_id_or_error(RequestId);
 request_id(_) -> error.
 
 -spec response_id(term()) -> request_id() | error.
@@ -656,6 +680,8 @@ response_id({read_attest, RequestId, _, _, _, _, _, _, _}) ->
     valid_id_or_error(RequestId);
 response_id({applied, RequestId, _, _, _, _, _, _, _, _}) ->
     valid_id_or_error(RequestId);
+response_id({operation_applied, RequestId, _, _, _, _}) -> valid_id_or_error(RequestId);
+response_id({operation_receipt, RequestId, _, _, _}) -> valid_id_or_error(RequestId);
 response_id({error, RequestId, _}) -> valid_id_or_error(RequestId);
 response_id(_) -> error.
 
@@ -722,11 +748,26 @@ correlates(
   {applied, RequestId, _TargetIdentity, _CommitteeId, GroupId, FinalizeRef,
    Generation, Verdict, _Signer, _Signature} = Response) ->
     valid_pair(Request, Response);
+correlates({operation_receipt, RequestId, OperationRef, Slot} = Request,
+           {operation_receipt, RequestId, OperationRef, Slot, _} = Response) ->
+    valid_pair(Request, Response);
+correlates({operation_applied, RequestId, Ref} = Request,
+           {operation_applied, RequestId, Ref, _, _, _} = Response) ->
+    valid_pair(Request, Response);
 correlates(_Request, _Response) ->
     false.
 
 valid_pair(Request, Response) ->
     validate_request(Request) =:= ok andalso validate_response(Response) =:= ok.
+
+valid_operation_vote_binding(Ref, Statement) ->
+    case {quod_dtx:certified_ref_claim(Ref),
+          quod_applied_certificate:operation_statement_binding(Statement)} of
+        {{ok, {{Ns, Anchor}, Slot, BlockHash, TxId}},
+         {ok, #{application_ref := {transaction, Ns, Anchor, TxId},
+                slot := Slot, entry_digest := BlockHash}}} -> true;
+        _ -> false
+    end.
 
 outcome_matches_ref(not_found, _OutcomeRef) -> true;
 outcome_matches_ref(#{ref := OutcomeRef}, OutcomeRef) -> true;
@@ -881,12 +922,30 @@ valid_refusal_reasons({Ns, Anchor}, ReasonsBlob) ->
         _ -> false
     end.
 
+valid_operation_receipt({operation, Ns, Anchor, _, _} = OperationRef, Slot, Blob) ->
+    case quod_transaction:decode_evidence(Blob) of
+        {ok, Ref, #transaction{tx_id = TxId,
+          role = {remote_complete, OperationRef, _, _}}} ->
+            quod_dtx:certified_ref_binding(Ref) =:= {ok, {Ns, Anchor}, Slot, TxId};
+        _ -> false
+    end;
+valid_operation_receipt(_, _, _) -> false.
+
+-doc "Normalize an owner failure through the endpoint's one refusal vocabulary.".
+-spec error_response(request_id(), term()) -> response().
+error_response(Id, Reason) ->
+    case valid_error_reason(Reason) of
+        true -> {error, Id, Reason};
+        false -> {error, Id, not_ready}
+    end.
+
 valid_error_reason(busy) -> true;
 valid_error_reason(not_ready) -> true;
 valid_error_reason(not_found) -> true;
 valid_error_reason(invalid_request) -> true;
 valid_error_reason(conflict_retry) -> true;
 valid_error_reason(read_certificate_unavailable) -> true;
+valid_error_reason(independent_scope_required) -> true;
 valid_error_reason(_) -> false.
 
 too_large(Kind) -> {error, {too_large, Kind}}.

@@ -19,7 +19,7 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
             Parent = quod_trace_tests:take_span(<<"operation.test.parent">>),
             Worker = quod_trace_tests:take_span(<<"quod.operation.recover">>),
             Local = quod_trace_tests:take_span(<<"quod.operation.local_outcome">>),
-            Resolve = quod_trace_tests:take_span(<<"quod.operation.resolve_outcome">>),
+            Resolve = quod_trace_tests:take_span(<<"quod.operation.completion_evidence">>),
             Notify = quod_trace_tests:take_span(<<"quod.operation.result_notify">>),
             Probe = quod_trace_tests:take_span(<<"quod.dtx.quorum.probe">>),
             ?assertEqual(Parent#span.trace_id, Worker#span.trace_id),
@@ -32,7 +32,10 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
                otel_attributes:map(Local#span.attributes)),
             assert_operation_wave_ancestry(Resolve, Worker),
             ?assertEqual(Resolve#span.trace_id, Probe#span.trace_id),
-            ?assertEqual(Resolve#span.span_id, Probe#span.parent_span_id),
+            ProbeItem = take_operation_span(Probe#span.parent_span_id),
+            ?assertEqual(<<"quod.dtx.wave.item">>, ProbeItem#span.name),
+            ProbeWave = take_operation_span(ProbeItem#span.parent_span_id),
+            ?assertEqual(Worker#span.span_id, ProbeWave#span.parent_span_id),
             Events = lists:reverse(otel_events:list(Worker#span.events)),
             ?assertEqual([<<"operation.worker_started">>],
                          [E#event.name || E <- Events]),
@@ -65,10 +68,9 @@ take_operation_span(Id) ->
     receive {quod_test_span, #span{span_id = Id} = Span} -> Span
     after 1000 -> error({missing_operation_ancestor, Id}) end.
 
-%% A hand-built source projection is deliberately not a consensus-admitted
-%% N-target claim. Until slice 8 the real worker must refuse the entire vector
-%% before loading a claim, selecting a target, probing, or sending a receipt.
-multi_target_operation_worker_refuses_without_dispatch_test() ->
+%% A source projection is discovery, not permission to add another target.
+%% The certified claim fixes the vector before any target is dispatched.
+operation_projection_cannot_add_a_target_to_the_certified_claim_test() ->
     with_operation_fixture(fun(F) ->
         with_operation_worker(F, fun(Worker, Monitor) ->
             {ok, Row} = terminal_operation_row(F),
@@ -78,15 +80,13 @@ multi_target_operation_worker_refuses_without_dispatch_test() ->
             reply_operation_source(F, {ok, Row#{outcome_ref := {applications, Refs}}}),
             Op = maps:get(operation_ref, F),
             receive
-                {dtx_coordinator, Worker, Op, {error, independent_lane_unavailable}} -> ok;
+                {dtx_coordinator, Worker, Op, {claim_state, terminal, 2, _, Refs}} -> ok;
                 {dtx_coordinator, Worker, Op, OtherMessage} ->
                     error({multi_target_worker_dispatched, OtherMessage})
-            after 1000 -> error(multi_target_worker_refusal_missing)
+            after 1000 -> error(multi_target_projection_not_observed)
             end,
-            receive {'DOWN', Monitor, process, Worker, normal} -> ok
-            after 1000 -> error(multi_target_worker_did_not_stop)
-            end,
-            assert_no_operation_stub_calls(),
+            reply_operation_claim(F),
+            assert_operation_error(F, Worker, Monitor, invalid_operation_claim),
             assert_no_target_result(Worker)
         end)
     end).
@@ -99,131 +99,169 @@ fresh_operation_result_decode_and_send_are_traced_test_() ->
         fresh_operation_result_trace(Class)
       end} || Class <- [committed, rejected, malformed, wrong_target]].
 
-fresh_operation_result_trace(Class) ->
-    with_operation_fixture(fun(#{source_ns := Ns, target := Target}) ->
-        Fixture = quod_ct:remote_operation_fixture(
-                    #{target => {Ns, digest(242)}, participant_target => Target}),
-        Claim = maps:get(claim, Fixture),
-        {ok, #{operation_ref := OperationRef, digest := Digest}} =
-            quod_transaction:request_claim(Claim),
-        {ok, ClaimEvidence} = quod_transaction:encode_evidence(
-                               maps:get(certified_claim_ref, Fixture), Claim),
-        {ok, Evidence0} = quod_transaction:encode_evidence(
-                           maps:get(certified_target_ref, Fixture),
-                           maps:get(application, Fixture)),
-        Evidence = case Class of malformed -> <<"not an evidence blob">>; _ -> Evidence0 end,
-        TargetRef = maps:get(target_ref, Fixture),
-        BoundTarget = case Class of
-                          wrong_target -> setelement(4, TargetRef, digest(250));
-                          _ -> TargetRef
-                      end,
-        Result = case Class of rejected -> {rejected, conflict_retry}; _ -> committed end,
-        RequestId = <<251:128>>,
-        Request = {apply_claim, RequestId, Target, ClaimEvidence},
-        Response = {application, RequestId, Result, Evidence},
-        Context = #{owner_ns => Ns, origin => maps:get(origin, Fixture),
-                    operation_ref => OperationRef, request_digest => Digest,
-                    target => Target, target_ref => BoundTarget},
-        Test = self(),
-        quod_trace_tests:with_tracer(fun() ->
-            {Worker, Monitor} = spawn_monitor(fun() ->
-                OwnerMonitor = monitor(process, Test),
-                try
-                    quod_trace:with_span(
-                      otel_ctx:new(), <<"operation.fresh.test">>, internal, #{},
-                      fun(_) ->
-                          quod_dtx_coordinator:test_operation_target_result(
-                            Test, OwnerMonitor, Request, Response, Result, Evidence, Context)
-                      end)
-                after demonitor(OwnerMonitor, [flush])
-                end
-            end),
-            try
-                Notification = case Class of
-                    C when C =:= committed; C =:= rejected ->
-                        receive
-                            {dtx_coordinator, Worker, OperationRef,
-                             {target_result, Result, TargetRef}} -> ok
-                        after 1000 -> error(missing_fresh_target_result)
-                        end,
-                        ReceiptFrom = receive
-                            {operation_stub_call, source, From,
-                             {submit_role,
-                              #transaction{role = {remote_complete, OperationRef, Digest,
-                                                   [{Target, {included, TargetRef}}]}},
-                              [], _TraceCtx}} -> From
-                        after 1000 -> error(missing_fresh_source_receipt)
-                        end,
-                        ?assert(is_process_alive(Worker)),
-                        %% The notification has exported while the recovery
-                        %% call is held in receipt work. Ending/killing that
-                        %% parent later cannot hide this client handoff.
-                        Notify0 = quod_trace_tests:take_span(<<"quod.operation.result_notify">>),
-                        ?assertNot(Notify0#span.is_recording),
-                        receive
-                            {quod_test_span, #span{name = <<"operation.fresh.test">>}} ->
-                                error(recovery_parent_ended_before_receipt)
-                        after 0 -> ok
-                        end,
-                        receive
-                            {dtx_coordinator, Worker, OperationRef, {done, _}} ->
-                                error(receipt_drain_was_not_waited)
-                        after 0 -> ok
-                        end,
-                        gen_server:reply(ReceiptFrom, {ok, [], 4, digest(252)}),
-                        receive
-                            {dtx_coordinator, Worker, OperationRef, {done, OperationRef}} -> ok
-                        after 1000 -> error(missing_fresh_operation_done)
-                        end,
-                        Notify0;
-                    _ ->
-                        receive
-                            {dtx_coordinator, Worker, OperationRef,
-                             {error, invalid_target_evidence}} -> ok
-                        after 1000 -> error(missing_typed_target_evidence_error)
-                        end,
-                        none
-                end,
-                receive {'DOWN', Monitor, process, Worker, normal} -> ok
-                after 1000 -> error(fresh_operation_worker_did_not_finish)
-                end,
-                assert_no_operation_stub_calls(),
-                Parent = quod_trace_tests:take_span(<<"operation.fresh.test">>),
-                Decode = quod_trace_tests:take_span(<<"quod.operation.result_evidence_decode">>),
-                ?assertEqual(Parent#span.trace_id, Decode#span.trace_id),
-                ?assertEqual(Parent#span.span_id, Decode#span.parent_span_id),
-                ?assertEqual(#{}, otel_attributes:map(Decode#span.attributes)),
-                ?assertEqual([], otel_events:list(Parent#span.events)),
-                case Class of
-                    C2 when C2 =:= committed; C2 =:= rejected ->
-                        [Sent] = otel_events:list(Notification#span.events),
-                        ?assertEqual(Parent#span.trace_id, Notification#span.trace_id),
-                        ?assertEqual(Parent#span.span_id, Notification#span.parent_span_id),
-                        ?assertEqual(
-                           #{'quod.namespace' => Ns,
-                             'quod.operation.id' => quod_trace:tx_id(element(5, OperationRef))},
-                           otel_attributes:map(Notification#span.attributes)),
-                        ?assertEqual(<<"operation.result_sent">>, Sent#event.name),
-                        ?assert(Decode#span.end_time =< Sent#event.system_time_native),
-                        Receipt = quod_trace_tests:take_span(<<"quod.operation.receipt">>),
-                        ?assertEqual(Parent#span.trace_id, Receipt#span.trace_id),
-                        ?assert(Notification#span.end_time =< Receipt#span.start_time);
-                    _ ->
-                        ?assertEqual(none, Notification),
-                        receive
-                            {dtx_coordinator, Worker, OperationRef, {target_result, _, _}} ->
-                                error(invalid_evidence_produced_a_target_result);
-                            {quod_test_span, #span{name = <<"quod.operation.result_notify">>}} ->
-                                error(invalid_evidence_produced_a_notification)
-                        after 0 -> ok
-                        end
-                end
-            after
-                exit(Worker, kill),
-                demonitor(Monitor, [flush])
-            end
+held_target_cannot_delay_another_targets_application_and_certificate_test() ->
+    with_operation_fixture(2, fun(F = #{operation_ref := Op, target_refs := Refs,
+                                      targets := [A, B], target_data := Data}) ->
+        FA = maps:merge(F, maps:get(A, Data)), FB = maps:merge(F, maps:get(B, Data)),
+        RefA = maps:get(target_ref, FA), RefB = maps:get(target_ref, FB),
+        with_operation_worker(F, fun(Worker, Monitor) ->
+            {ok, Row} = terminal_operation_row(F),
+            reply_operation_source(F, {ok, Row#{operation_state := unresolved,
+                                               receipt_height := none, included := []}}),
+            receive {dtx_coordinator, Worker, Op, {claim_state, unresolved, 2, _, Refs}} -> ok
+            after 1000 -> error(missing_vector_claim_binding) end,
+            reply_operation_claim(F),
+            {FromA, RequestA} = expect_operation_application(FA),
+            {FromB, RequestB} = expect_operation_application(FB),
+            reply_operation_application(FA, FromA, RequestA),
+            {VoteFromA, VoteRequestA, _} = operation_vote_request(FA, local),
+            reply_operation_vote(FA, VoteFromA, VoteRequestA,
+                                 #{status => committed, height => 2, ref => RefA}),
+            receive {dtx_coordinator, Worker, Op, {target_result, committed, RefA}} -> ok
+            after 1000 -> error(held_target_blocked_other_certificate) end,
+            %% B's actual endpoint reply is still held. A has already been
+            %% verified, certified and installed through the production loop.
+            ?assertMatch(#{wave := #{workers := 1}, protocol := {operation,
+              #{model := #{observations := #{A := #{certificate := _}}}}}},
+              quod_dtx_coordinator:test_state(Worker)),
+            assert_no_operation_stub_calls(),
+            reply_operation_application(FB, FromB, RequestB),
+            {VoteFromB, VoteRequestB, _} = operation_vote_request(FB, local),
+            reply_operation_vote(FB, VoteFromB, VoteRequestB,
+              #{status => rejected, reason => conflict_retry, height => 2, ref => RefB}),
+            receive {dtx_coordinator, Worker, Op,
+                     {target_result, {rejected, conflict_retry}, RefB}} -> ok
+            after 1000 -> error(missing_second_target_certificate) end,
+            ReceiptFrom = expect_vector_receipt(F,
+              [{A, {committed, RefA}}, {B, {{rejected, conflict_retry}, RefB}}]),
+            gen_server:reply(ReceiptFrom, {ok, [], 4, digest(252)}),
+            receive {dtx_coordinator, Worker, Op, {done, Op}} -> ok
+            after 1000 -> error(vector_receipt_not_completed) end,
+            receive {'DOWN', Monitor, process, Worker, normal} -> ok
+            after 1000 -> error(vector_worker_not_finished) end,
+            assert_no_operation_stub_calls()
         end)
     end).
+
+reply_operation_application(F, From, {apply_claim, Id, _, _}) ->
+    {ok, Blob} = quod_transaction:encode_evidence(
+      maps:get(certified_target_ref, F), maps:get(application, F)),
+    gen_server:reply(From, {ok, {application, Id, committed, Blob}, []}).
+
+fresh_operation_result_trace(Class) ->
+    with_operation_fixture(fun(F = #{operation_ref := Op, target_ref := TargetRef}) ->
+        with_operation_follow_owner(fun(_Foreign) ->
+            quod_trace_tests:with_tracer(fun() ->
+                quod_trace:with_span(otel_ctx:new(), <<"operation.fresh.test">>, internal, #{},
+                  fun(_) -> with_operation_worker(F, fun(Worker, Monitor) ->
+                    {ok, Row} = terminal_operation_row(F),
+                    reply_operation_source(F, {ok, Row#{operation_state := unresolved,
+                                                       receipt_height := none, included := []}}),
+                    receive {dtx_coordinator, Worker, Op, {claim_state, unresolved, 2, _, [TargetRef]}} -> ok
+                    after 1000 -> error(missing_fresh_claim_binding) end,
+                    reply_operation_claim(F),
+                    {From, {apply_claim, Id, _, _}} = expect_operation_application(F),
+                    {Ref, Tx} = case Class of
+                        wrong_target ->
+                            Other = quod_ct:remote_operation_fixture(#{}),
+                            {maps:get(certified_target_ref, Other), maps:get(application, Other)};
+                        _ -> {maps:get(certified_target_ref, F), maps:get(application, F)}
+                    end,
+                    {ok, Encoded} = quod_transaction:encode_evidence(Ref, Tx),
+                    Blob = case Class of malformed -> <<"not an evidence blob">>; _ -> Encoded end,
+                    %% Deliberately lie in the transport result label for the
+                    %% rejected case: only the independently signed AM3 wins.
+                    gen_server:reply(From, {ok, {application, Id, committed, Blob}, []}),
+                    case Class of
+                        C when C =:= committed; C =:= rejected ->
+                            {VoteFrom, VoteRequest, _} = operation_vote_request(F, local),
+                            Result = case C of committed -> committed; rejected -> {rejected, conflict_retry} end,
+                            Outcome = case Result of
+                                committed -> #{status => committed, height => 2, ref => TargetRef};
+                                {rejected, Reason} -> #{status => rejected, reason => Reason,
+                                                       height => 2, ref => TargetRef}
+                            end,
+                            reply_operation_vote(F, VoteFrom, VoteRequest, Outcome),
+                            receive {dtx_coordinator, Worker, Op, {target_result, Result, TargetRef}} -> ok
+                            after 1000 -> error(missing_fresh_target_result) end,
+                            ReceiptFrom = expect_operation_receipt(F, Result),
+                            ?assert(is_process_alive(Worker)),
+                            Notify = quod_trace_tests:take_span(<<"quod.operation.result_notify">>),
+                            ?assertNot(Notify#span.is_recording),
+                            receive {dtx_coordinator, Worker, Op, {done, _}} ->
+                                error(receipt_drain_was_not_waited)
+                            after 0 -> ok end,
+                            receive {quod_test_span, #span{name = <<"quod.operation.recover">>}} ->
+                                error(recovery_parent_ended_before_receipt)
+                            after 0 -> ok end,
+                            gen_server:reply(ReceiptFrom, {ok, [], 4, digest(252)}),
+                            receive {dtx_coordinator, Worker, Op, {done, Op}} -> ok
+                            after 1000 -> error(missing_fresh_operation_done) end,
+                            receive {'DOWN', Monitor, process, Worker, normal} -> ok
+                            after 1000 -> error(fresh_operation_worker_did_not_finish) end,
+                            Root = quod_trace_tests:take_span(<<"quod.operation.recover">>),
+                            Decode = quod_trace_tests:take_span(<<"quod.operation.result_evidence_decode">>),
+                            Receipt = quod_trace_tests:take_span(<<"quod.operation.receipt">>),
+                            ?assertEqual(Root#span.trace_id, Notify#span.trace_id),
+                            ?assertEqual(Root#span.span_id, Notify#span.parent_span_id),
+                            ?assertEqual(#{}, otel_attributes:map(Decode#span.attributes)),
+                            [Sent] = otel_events:list(Notify#span.events),
+                            ?assertEqual(<<"operation.result_sent">>, Sent#event.name),
+                            ?assert(Decode#span.end_time =< Sent#event.system_time_native),
+                            ?assert(Notify#span.end_time =< Receipt#span.start_time),
+                            ?assertEqual(Root#span.trace_id, Receipt#span.trace_id);
+                        malformed ->
+                            %% The ordinary endpoint client rejects this at
+                            %% correlation, before the worker's evidence walk.
+                            assert_operation_error(F, Worker, Monitor, invalid_operation_claim),
+                            assert_no_target_result(Worker);
+                        wrong_target ->
+                            %% Correlation also binds the application to this
+                            %% claim/target before evidence or route work.
+                            assert_operation_error(F, Worker, Monitor, invalid_operation_claim),
+                            assert_no_target_result(Worker)
+                    end
+                  end) end),
+                assert_no_operation_stub_calls()
+            end)
+        end)
+    end).
+
+reply_operation_claim(F = #{source_ns := Ns}) ->
+    receive
+        {operation_stub_call, source_consensus, From, {history_view, Ns, any, Deadline}} ->
+            ?assert(Deadline > quod_time:mono_ms()),
+            gen_server:reply(From, {ok, maps:get(source_view, F)})
+    after 1000 -> error(missing_exact_source_claim_read) end.
+
+expect_operation_application(#{target := Target, claim := Claim, certified_claim_ref := ClaimRef}) ->
+    receive
+        {operation_stub_call, target, From,
+         {dtx_endpoint_local, {apply_claim, _, Target, Bytes} = Request, [], Timeout, _Trace}} ->
+            ?assert(Timeout > 0),
+            ?assertEqual({ok, Bytes}, quod_transaction:encode_evidence(ClaimRef, Claim)),
+            {From, Request}
+    after 1000 -> error(missing_exact_claim_application) end.
+
+expect_operation_receipt(F = #{target := Target, target_ref := Ref}, Result) ->
+    expect_vector_receipt(F, [{Target, {Result, Ref}}]).
+
+expect_vector_receipt(F = #{operation_ref := Op, request_digest := Digest,
+                           target_data := Data}, Expected) ->
+    receive
+        {operation_stub_call, source, From,
+         {submit_role, #transaction{role = {remote_complete, Op, Digest, Rows}}, [], _Trace}} ->
+            ?assertEqual(maps:get(targets, F), [T || {T, _} <- Rows]),
+            Actual = [begin
+                ?assert(quod_applied_certificate:verify_operation_certificate(
+                  Certificate, maps:get(network, F), maps:get(evidence, maps:get(Target, Data)))),
+                {ok, #{result := Certified}} =
+                    quod_applied_certificate:operation_certificate_binding(Certificate),
+                {Target, {case Certified of applied -> committed; _ -> Certified end, Ref}}
+            end || {Target, {certified, Ref, Certificate}} <- Rows],
+            ?assertEqual(Expected, Actual),
+            From
+    after 1000 -> error(missing_certified_source_receipt) end.
 
 options_are_strict_and_share_the_endpoint_deadline_test() ->
     ?assertMatch({ok, _}, quod_dtx_coordinator:test_options(#{})),
@@ -254,27 +292,27 @@ remote_operation_temporary_reply_parks_on_progress_test() ->
     lists:foreach(
       fun(Reason) ->
           ?assertEqual(
-             wait,
+             {error, retry},
              quod_dtx_coordinator:
-               test_operation_target_response_disposition(
-                 Request, {error, RequestId, Reason}))
+               test_operation_application_evidence(
+                 Request, {ok, {error, RequestId, Reason}}))
       end,
       [busy, not_ready, not_found, conflict_retry,
        read_certificate_unavailable]),
     ?assertEqual(
-       invalid_operation_claim,
-       quod_dtx_coordinator:test_operation_target_response_disposition(
-         Request, {error, RequestId, invalid_request})),
+       {error, invalid_operation_claim},
+       quod_dtx_coordinator:test_operation_application_evidence(
+         Request, {ok, {error, RequestId, invalid_request}})),
     ?assertEqual(
-       invalid_target_response,
-       quod_dtx_coordinator:test_operation_target_response_disposition(
-         Request, {error, <<200:128>>, not_ready})),
+       {error, invalid_target_response},
+       quod_dtx_coordinator:test_operation_application_evidence(
+         Request, {ok, {error, <<200:128>>, not_ready}})),
     ?assertEqual(
-       invalid_target_response,
-       quod_dtx_coordinator:test_operation_target_response_disposition(
-         Request, malformed)).
+       {error, invalid_target_response},
+       quod_dtx_coordinator:test_operation_application_evidence(
+         Request, {ok, malformed})).
 
-%% These run the actual operation worker and the current-view quorum
+%% These run the actual operation worker and the exact-result certificate
 %% collector. Only the existing owner process interfaces are stubs: every
 %% call is exposed to the test, so a terminal recovery that loads/re-applies
 %% the claim or submits another receipt fails rather than silently passing.
@@ -347,7 +385,7 @@ operation_source_worker_fault_is_reported_not_parked_test() ->
                          quod_dtx_coordinator:test_state(Worker)),
             exit(element(1, From), operation_source_fault_control),
             assert_operation_error(F, Worker, Monitor,
-              {operation_worker_crash, local_outcome, operation_source_fault_control})
+              {operation_worker_crash, operation_source_fault_control})
         end)
     end).
 
@@ -366,7 +404,7 @@ terminal_operation_uses_remote_committee_when_local_cannot_vote_test_() ->
                         end)
                   end)
             end)
-      end} || Reason <- [read_certificate_unavailable, not_ready]].
+      end} || Reason <- [observer, no_local_identity]].
 
 terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
     with_operation_fixture(
@@ -761,7 +799,7 @@ operation_source_wave_parks_continuation_with_original_deadline_test() ->
                          quod_dtx_coordinator:test_state(Worker)),
             gen_server:reply(From, terminal_operation_row(F)),
             Deferred = operation_await_deferred(Worker, quod_time:mono_ms() + 1000),
-            ?assertMatch(#{wave := #{running := false, items := [resolve_outcome],
+            ?assertMatch(#{wave := #{running := false, items := [{claim_evidence, 2}],
                                     meta := #{request_deadline := Deadline}}}, Deferred),
             assert_no_operation_stub_calls(),
             operation_ready(Worker, self(), Ref),
@@ -1456,38 +1494,31 @@ dormant_await_idle(Worker, Deadline) ->
 %% Operation recovery owner-interface fixtures
 %% ------------------------------------------------------------------
 
-with_operation_fixture(Fun) ->
-    {ok, _} = application:ensure_all_started(gproc),
-    Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
-    Ns = <<"quod:operation-result-source-", Suffix/binary>>,
-    TargetNs = <<"quod:operation-result-target-", Suffix/binary>>,
-    Anchor = digest(242),
-    Target = {TargetNs, digest(243)},
-    {ok, #{blob := AgentRef}} =
-        quod_agent_ref:from_text(Ns, Anchor, <<"recovery_worker.">>, 2),
-    OperationRef = {operation, Ns, Anchor, AgentRef, digest(244)},
-    TargetRef = {transaction, TargetNs, element(2, Target), digest(245)},
-    NodeKey = digest(246),
-    CommitteeId = digest(247),
-    View = #{identity => Target, slot => 3, generation => 0,
-             committee => [NodeKey], committee_id => CommitteeId,
-             route_candidates => []},
-    SavedNodeKey = application:get_env(quod, node_pubkey),
-    Stubs = [start_operation_stub(source, {quod_prolog, Ns}),
-             start_operation_stub(source_consensus, {quod_simplex, Ns}),
-             start_operation_stub(target, {quod_simplex, TargetNs})],
-    application:set_env(quod, node_pubkey, NodeKey),
-    try
-        Fun(#{source_ns => Ns, operation_ref => OperationRef,
-              target => Target, target_ref => TargetRef,
-              request_digest => digest(248), view => View})
-    after
-        [stop_operation_stub(Pid) || Pid <- Stubs],
-        case SavedNodeKey of
-            {ok, Value} -> application:set_env(quod, node_pubkey, Value);
-            undefined -> application:unset_env(quod, node_pubkey)
+with_operation_fixture(Fun) -> with_operation_fixture(1, Fun).
+
+with_operation_fixture(N, Fun) ->
+    quod_operation_fixture:with(N, fun(F0 = #{source_ns := Ns, targets := Targets}) ->
+        Tables = [begin
+            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
+                            [named_table, protected, set]),
+            true = ets:insert(Table, {anchor, Anchor}), Table
+        end || {TargetNs, Anchor} <- Targets],
+        Stubs = [start_operation_stub(source, {quod_prolog, Ns}),
+                 start_operation_stub(source_consensus, {quod_simplex, Ns}) |
+                 [start_operation_stub(target, {quod_simplex, TargetNs}) || {TargetNs, _} <- Targets]],
+        try
+            Data = maps:map(fun(_, D = #{store := Store, projection := P, entry := E}) ->
+                D#{target_view => quod_operation_fixture:view(Store, P, E)}
+            end, maps:get(target_data, F0)),
+            View = quod_operation_fixture:view(maps:get(source_store, F0),
+              maps:get(source_projection, F0), maps:get(source_entry, F0)),
+            F = F0#{target_data := Data, source_view => View},
+            Fun(maps:merge(F, maps:get(hd(Targets), Data)))
+        after
+            [stop_operation_stub(Pid) || Pid <- Stubs],
+            [true = ets:delete(Table) || Table <- Tables]
         end
-    end.
+    end).
 
 start_operation_stub(Role, Key) ->
     Test = self(),
@@ -1586,12 +1617,13 @@ assert_no_target_result(Worker) ->
 
 terminal_operation_row(#{operation_ref := OperationRef,
                          request_digest := Digest,
-                         target_ref := TargetRef}) ->
+                         target_refs := Refs}) ->
+    {ok, Included} = quod_operation_vector:included(Refs),
     {ok, #{status => claimed, operation_state => terminal,
            ref => OperationRef, request_digest => Digest,
-           outcome_ref => {applications, [TargetRef]},
-           included => [{quod_operation_vector:target(TargetRef), {included, TargetRef}}],
-           height => 2}}.
+           outcome_ref => {applications, Refs},
+           included => Included,
+           height => 2, receipt_height => 3}}.
 
 reply_operation_source(#{operation_ref := OperationRef}, Reply) ->
     From = expect_operation_stub_call(source, {outcome, OperationRef}),
@@ -1608,94 +1640,74 @@ expect_operation_stub_call(Role, Request) ->
         error({missing_operation_call, Role, Request})
     end.
 
-expect_operation_history_capture(Target) ->
-    receive
-        {operation_stub_call, target, From,
-         {history_view, Target, validator, Deadline}} ->
-            ?assert(Deadline > quod_time:mono_ms()),
-            {From, Deadline}
-    after 1000 -> error(missing_operation_history_capture)
-    end.
-
 certify_operation_result(F = #{target_ref := TargetRef}, Worker, committed) ->
     certify_operation_result(
-      F, Worker, #{status => committed, height => 3, ref => TargetRef});
+      F, Worker, #{status => committed, height => 2, ref => TargetRef});
 certify_operation_result(F = #{target_ref := TargetRef}, Worker,
                          {rejected, Reason}) ->
     certify_operation_result(
       F, Worker, #{status => rejected, reason => Reason,
-                   height => 3, ref => TargetRef});
-certify_operation_result(
-  F = #{target := Target, target_ref := TargetRef,
-        view := #{committee_id := CommitteeId} = View}, Worker, Outcome) ->
+                   height => 2, ref => TargetRef});
+certify_operation_result(F, Worker, Outcome) ->
     assert_terminal_operation_binding(F, Worker),
-    {SourceFrom, Deadline} = expect_operation_history_capture(Target),
-    #{slot := Applied, generation := Generation,
-      committee := Committee} = View,
-    Source = #{owner => quod_reg:where({quod_simplex, element(1, Target)}),
-               identity => Target, slot => Applied, applied => Applied,
-               snapshot => unused,
-               projection => #{committee => Committee,
-                               committee_id => CommitteeId,
-                               validator_routes => #{},
-                               dtx => #{generation => Generation}}},
-    RemainingAfterCapture = max(0, Deadline - quod_time:mono_ms()),
-    gen_server:reply(SourceFrom, {ok, Source}),
+    {From, Request, Timeout} = operation_vote_request(F, local),
+    ?assert(Timeout > 0),
+    reply_operation_vote(F, From, Request, Outcome).
+
+operation_vote_request(F, Location) ->
     receive
+        {operation_stub_call, Role, From, {history_view, Identity, Requirement, Deadline}}
+          when Role =:= source_consensus; Role =:= target ->
+            {Identity, Requirement} = case Role of
+                source_consensus -> {maps:get(source_ns, F), any};
+                target -> {maps:get(target, F), {committed, 2}}
+            end,
+            ?assert(Deadline > quod_time:mono_ms()),
+            ViewKey = case Role of source_consensus -> source_view; target -> target_view end,
+            gen_server:reply(From, {ok, maps:get(ViewKey, F)}),
+            operation_vote_request(F, Location);
         {operation_stub_call, target, From,
-         {dtx_endpoint_local,
-          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout, _TraceCtx}} ->
-            ?assert(Timeout > 0),
-            ?assert(Timeout =< RemainingAfterCapture),
-            gen_server:reply(
-              From, {ok, {outcome, RequestId, Target, CommitteeId, 3,
-                          Outcome}, []});
+         {dtx_endpoint_local, {operation_applied, _, _} = Request, [], Timeout, _TraceCtx}}
+          when Location =:= local ->
+            {From, Request, Timeout};
+        {operation_stub_call, source_consensus, From,
+         {dtx_endpoint_request, Ns, Key, {"127.0.0.1", 34249},
+          {operation_applied, _, _} = Request, [], Timeout, _TraceCtx}}
+          when Location =:= remote ->
+            ?assertEqual(element(1, maps:get(target, F)), Ns),
+            ?assertEqual(maps:get(pubkey, maps:get(node_identity, F)), Key),
+            {From, Request, Timeout};
         {operation_stub_call, Role, _From, Request} ->
             error({unexpected_operation_call, Role, Request})
-    after 1000 -> error(missing_current_committee_outcome_probe)
+    after 1000 -> error(missing_exact_application_vote)
     end.
 
-certify_operation_remote_result(
-  F = #{target := {TargetNs, _} = Target, target_ref := TargetRef,
-        view := #{committee_id := CommitteeId} = View0}, Worker, LocalReason) ->
-    assert_terminal_operation_binding(F, Worker),
-    {SourceFrom, Deadline} = expect_operation_history_capture(Target),
-    gen_server:reply(SourceFrom, {error, LocalReason}),
-    Peer = digest(249),
-    Endpoint = {"127.0.0.1", 34249},
-    Routes = [{Peer, [Endpoint]}],
-    View = View0#{committee => [Peer], route_candidates => Routes},
-    RoutesFrom = expect_operation_stub_call(
-                   foreign, {route_hints, Target, []}),
-    RemainingAfterCapture = max(0, Deadline - quod_time:mono_ms()),
-    gen_server:reply(RoutesFrom, {ok, Routes}),
-    receive
-        {operation_stub_call, foreign, ViewFrom,
-         {verification, _Deadline, _TraceCtx, _EnqueuedNative,
-          {current, Routes, Target, none, Timeout}}} ->
-            ?assert(Timeout > 0),
-            ?assert(Timeout =< RemainingAfterCapture),
-            gen_server:reply(ViewFrom, {ok, View});
-        {operation_stub_call, Role, _From, Request} ->
-            error({unexpected_operation_call, Role, Request})
-    after 1000 -> error(missing_certified_remote_current_view)
-    end,
-    %% A local observer has no vote: only the member returned by the
-    %% certified view receives the ordinary outcome request. An accidental
-    %% local probe or any apply/submit request takes the failure branch.
-    receive
-        {operation_stub_call, source_consensus, From,
-         {dtx_endpoint_request, TargetNs, Peer, Endpoint,
-          {outcome, RequestId, TargetRef, CommitteeId, 3}, [], Timeout2, _ProbeTraceCtx}} ->
-            ?assert(Timeout2 > 0),
-            gen_server:reply(
-              From, {ok, {outcome, RequestId, Target, CommitteeId, 3,
-                          #{status => committed, height => 3, ref => TargetRef}},
-                     []});
-        {operation_stub_call, Role2, _From2, Request2} ->
-            error({unexpected_operation_call, Role2, Request2})
-    after 1000 -> error(missing_certified_remote_outcome_probe)
+reply_operation_vote(F, From, {operation_applied, Id, Ref}, Outcome) ->
+    ?assertEqual(maps:get(certified_target_ref, F), Ref),
+    Evidence = maps:get(evidence, F),
+    case quod_operation:applied_result(Ref, Evidence,
+        #{applied_floor => 2, outcome => Outcome}) of
+        {ok, Result} ->
+            {ok, Statement} = quod_applied_certificate:operation_statement(
+              maps:get(network, F), Evidence, Result),
+            {ok, {Key, Signature}} = quod_applied_certificate:sign_operation_vote(
+              Statement, maps:get(node_identity, F)),
+            gen_server:reply(From, {ok, {operation_applied, Id, Ref, Statement, Key, Signature}, []});
+        _ -> gen_server:reply(From, {ok, {error, Id, not_ready}, []})
     end.
+
+certify_operation_remote_result(F, Worker, LocalRole) ->
+    %% Historical membership, not current local voting readiness, selects
+    %% result signers. The local owner still supplies exact immutable bytes.
+    case LocalRole of
+        observer -> application:set_env(quod, node_pubkey, digest(249));
+        no_local_identity -> application:unset_env(quod, node_pubkey)
+    end,
+    assert_terminal_operation_binding(F, Worker),
+    {From, Request, Timeout} = operation_vote_request(F, remote),
+    ?assert(Timeout > 0),
+    reply_operation_vote(F, From, Request,
+      #{status => committed, height => 2, ref => maps:get(target_ref, F)}).
 
 assert_terminal_operation_binding(
   #{operation_ref := OperationRef, request_digest := Digest,
@@ -1774,8 +1786,8 @@ fixture(#{pubkey := Pub} = Signer) ->
             participants =>
                 [{Origin, quod_dtx:digest(PlanA)},
                  {Other, quod_dtx:digest(PlanB)}]}),
-    {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
-    {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
+    {ok, AttA} = quod_dtx:attest_plan(1, Origin, PlanA, Manifest, Signer),
+    {ok, AttB} = quod_dtx:attest_plan(1, Other, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
           Manifest, none,
@@ -1841,7 +1853,7 @@ applied_certificate(
         {quod_dtx_applied_certificate, 1,
          digest(226), Target, CommitteeId, GroupId, FinalizeRef,
          Generation, Verdict, [{digest(227), <<228:512>>}]},
-    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
               Certificate)),
     Certificate.
 

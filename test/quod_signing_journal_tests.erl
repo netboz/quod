@@ -995,7 +995,7 @@ signed_plan(Variant, Participant, Origin, ProofId) ->
 
 bundle(Target, Plan, Manifest, Signer) ->
     {ok, PlanBlob} = quod_dtx:encode(Plan),
-    {ok, Attestation} = quod_dtx:attest_plan(
+    {ok, Attestation} = quod_dtx:attest_plan(1,
                           Target, Plan, Manifest, Signer),
     {Target, quod_dtx:digest(Plan), PlanBlob, Attestation}.
 

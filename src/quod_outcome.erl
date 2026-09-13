@@ -1034,8 +1034,12 @@ check_completion(Index,
                         included := [], state := unresolved}},
                  Index1} -> {new, Index1};
                 {{ok, #{ref := OperationRef, request_digest := Digest,
-                        outcome_ref := {applications, Refs}, included := Receipt,
-                        state := {terminal, _}}}, Index1} -> {replay, Index1};
+                        outcome_ref := {applications, Refs}, included := Existing,
+                        state := {terminal, _}}}, Index1} ->
+                    case quod_operation_vector:same_receipt(Existing, Receipt) of
+                        true -> {replay, Index1};
+                        false -> {error, outcome_index_conflict}
+                    end;
                 {{ok, _}, _Index1} -> {error, outcome_index_conflict};
                 {not_found, _Index1} -> {error, outcome_index_bad_operation};
                 {{error, Reason}, _Index1} -> {error, Reason}
@@ -1065,7 +1069,7 @@ complete_operation(Index, Slot,
                     Index2 = stage_row(Key, Row1, Index1),
                     {new, cache_put(Key, Row1, Index2)};
                 {{ok, #{ref := OperationRef, request_digest := Digest,
-                        outcome_ref := {applications, Refs}, included := Receipt,
+                        outcome_ref := {applications, Refs}, included := ExistingReceipt,
                         state := {terminal, Existing}}}, Index1}
                   when Existing =< Slot ->
                     %% Several validators may observe the same target outcome
@@ -1074,7 +1078,10 @@ complete_operation(Index, Slot,
                     %% commit that exact transaction again in a later slot.
                     %% Preserve the first terminal slot, just as ordinary
                     %% duplicate transactions preserve their first outcome.
-                    {replay, Index1};
+                    case quod_operation_vector:same_receipt(ExistingReceipt, Receipt) of
+                        true -> {replay, Index1};
+                        false -> {error, outcome_index_conflict}
+                    end;
                 {{ok, _Conflict}, _Index1} ->
                     {error, outcome_index_conflict};
                 {not_found, _Index1} ->
@@ -1288,9 +1295,11 @@ public(#{type := operation,
                       unresolved -> unresolved;
                       {terminal, _} -> terminal
                   end,
+    ReceiptHeight = case State of unresolved -> none; {terminal, H} -> H end,
     {ok, #{status => claimed, operation_state => PublicState, ref => Ref,
            request_digest => RequestDigest,
-           outcome_ref => OutcomeRef, included => Included, height => Slot}};
+           outcome_ref => OutcomeRef, included => Included, height => Slot,
+           receipt_height => ReceiptHeight}};
 public(_Other) ->
     {error, outcome_index_corrupt}.
 

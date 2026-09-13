@@ -70,6 +70,26 @@ sign_and_verify_test() ->
     ?assertEqual(quod_transaction:bytes(?BINDING, Tx#transaction{sig = none}),
                  quod_transaction:bytes(?BINDING, Tx)).
 
+exact_envelope_equality_is_symbol_representation_independent_test() ->
+    {Tx, _} = signed(),
+    Wrapped = Tx#transaction{read_check = maps:from_list([
+      {{{'$quod_symbol', atom_to_binary(Name, utf8)}, Arity}, Value}
+      || {{Name, Arity}, Value} <- maps:to_list(Tx#transaction.read_check)])},
+    ?assertNotEqual(Tx, Wrapped),
+    ?assertEqual(quod_transaction:encode_ledger_transaction(Tx),
+                 quod_transaction:encode_ledger_transaction(Wrapped)),
+    ?assert(quod_transaction:same_ledger_transaction(Tx, Wrapped)),
+    ?assert(quod_transaction:same_ledger_transaction(Wrapped, Tx)),
+    %% An unchanged semantic identity does not authorize another envelope.
+    lists:foreach(fun(Other) ->
+        ?assertEqual(Tx#transaction.tx_id, Other#transaction.tx_id),
+        ?assertNot(quod_transaction:same_ledger_transaction(Tx, Other))
+    end, [Tx#transaction{sig = <<0:512>>},
+          Tx#transaction{author_seq = Tx#transaction.author_seq + 1},
+          Tx#transaction{read_check = #{}}]),
+    ?assertNot(quod_transaction:same_ledger_transaction(invalid, invalid)),
+    ?assertNot(quod_transaction:same_ledger_transaction(Tx, invalid)).
+
 sign_submission_matches_separate_operations_test() ->
     {Pub, Identity} = identity(),
     Unsigned = unsigned(Pub),

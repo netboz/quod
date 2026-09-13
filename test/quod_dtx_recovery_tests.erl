@@ -751,8 +751,8 @@ fixture(#{pubkey := Pub} = Signer) ->
             participants =>
                 [{A, quod_dtx:digest(PlanA)},
                  {B, quod_dtx:digest(PlanB)}]}),
-    {ok, AttA} = quod_dtx:attest_plan(A, PlanA, Manifest, Signer),
-    {ok, AttB} = quod_dtx:attest_plan(B, PlanB, Manifest, Signer),
+    {ok, AttA} = quod_dtx:attest_plan(1, A, PlanA, Manifest, Signer),
+    {ok, AttB} = quod_dtx:attest_plan(1, B, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
           Manifest, none,
@@ -782,8 +782,8 @@ fused_fixture(#{pubkey := Pub} = Signer) ->
             participants =>
                 [{Origin, quod_dtx:digest(PlanA)},
                  {Remote, quod_dtx:digest(PlanB)}]}),
-    {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
-    {ok, AttB} = quod_dtx:attest_plan(Remote, PlanB, Manifest, Signer),
+    {ok, AttA} = quod_dtx:attest_plan(1, Origin, PlanA, Manifest, Signer),
+    {ok, AttB} = quod_dtx:attest_plan(1, Remote, PlanB, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
                     Manifest, none,
                     [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
@@ -844,7 +844,7 @@ applied(Target, GroupId, FinalizeEvidence, Generation, Verdict) ->
     %% Finalize-era quorum verifier produced it.  This pure planner rechecks
     %% the complete semantic binding and bounded certificate shape; signature
     %% verification deliberately remains at that verifier boundary.
-    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
               Certificate)),
     {Target, Certificate}.
 
@@ -857,7 +857,7 @@ replace_applied_signer(
         {quod_dtx_applied_certificate, 1, NetworkIdentity, Target,
          CommitteeId, GroupId, FinalizeRef, Generation, Verdict,
          [{Signer, Signature}]},
-    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
               Certificate)),
     {Target, Certificate}.
 

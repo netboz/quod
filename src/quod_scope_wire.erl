@@ -921,7 +921,7 @@ validate_public_error(signed_scope_unavailable) -> ok;
 validate_public_error(independent_requires_signed_request) -> ok;
 validate_public_error(independent_nesting) -> ok;
 validate_public_error(independent_mixed_writes) -> ok;
-validate_public_error(independent_lane_unavailable) -> ok;
+validate_public_error(independent_scope_required) -> ok;
 validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
 validate_public_error({Tag, Value} = Reason) ->

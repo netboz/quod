@@ -593,14 +593,14 @@ owner_terminal_results_follow_the_retired_row_not_the_wrapper_test() ->
 operation_recovery_owner_replies_once_and_retains_exact_result_test() ->
     TargetRef = {transaction, <<"quod:target">>, <<1:256>>, <<2:256>>},
     ?assertMatch(
-       #{reply := {committed, TargetRef},
-         stored := {committed, TargetRef},
+       #{reply := {operation_results, [{_, {committed, TargetRef}}]},
+         stored := {operation_results, [{_, {committed, TargetRef}}]},
          waiters := 0,
          duplicate := {true, _}},
        quod_simplex:test_operation_target_result(committed, TargetRef)),
     ?assertMatch(
-       #{reply := {{rejected, not_authorized}, TargetRef},
-         stored := {{rejected, not_authorized}, TargetRef},
+       #{reply := {operation_results, [{_, {{rejected, not_authorized}, TargetRef}}]},
+         stored := {operation_results, [{_, {{rejected, not_authorized}, TargetRef}}]},
          waiters := 0,
          duplicate := {true, _}},
        quod_simplex:test_operation_target_result(
@@ -1630,7 +1630,12 @@ content_reference_contact_is_claim_only_test() ->
         ?assertEqual(
            #{ClaimRef => {maps:get(origin, Fixture), {Peer, Endpoint}}},
            Contacts),
-        ?assertEqual(false, maps:is_key(EntryRef, Contacts))
+        ?assertEqual(false, maps:is_key(EntryRef, Contacts)),
+        %% A worker for another target cannot lend this owner its contact,
+        %% even when a caller supplies the same candidate transaction plan.
+        ?assertEqual(#{}, quod_simplex:test_content_reference_contacts(
+          [{Application, [{transaction, ClaimRef}]}],
+          {element(1, Target), <<82:256>>}, State))
     after
         exit(Worker, kill)
     end.
@@ -3149,7 +3154,7 @@ dtx_endpoint_applied_uses_finalize_committee_test() ->
       NetworkIdentity,
       fun() ->
           {ok, {Author, Signature}} =
-              quod_dtx_current_view:sign_applied_vote(
+              quod_applied_certificate:sign_applied_vote(
                 NetworkIdentity, Target, HistoricalCommitteeId, GroupId,
                 FinalizeRef, Generation, commit, AuthorId),
           ?assertEqual(
@@ -3466,7 +3471,7 @@ dtx_endpoint_applied_waits_for_exact_projection_message_test() ->
       NetworkIdentity,
       fun() ->
           {ok, {Author, Signature}} =
-              quod_dtx_current_view:sign_applied_vote(
+              quod_applied_certificate:sign_applied_vote(
                 NetworkIdentity, Target, FinalizeCommitteeId, GroupId,
                 FinalizeRef, Generation, commit, AuthorId),
           ?assertEqual(
@@ -3673,7 +3678,7 @@ dtx_complete_verifies_remote_applied_certificate_locally_test() ->
     Signers = maps:from_list(Identities),
     SignedRows =
         [begin
-             {ok, Row} = quod_dtx_current_view:sign_applied_vote(
+             {ok, Row} = quod_applied_certificate:sign_applied_vote(
                            NetworkIdentity, Target, CommitteeId, GroupId,
                            PreparedFinalizeRef, TargetGeneration, abort,
                            maps:get(Key, Signers)),
@@ -3729,9 +3734,9 @@ dtx_complete_validation_sidecar_replaces_and_preserves_certificate_test() ->
          GroupId, FinalizeRef, 5, commit, [{<<88:256>>, <<89:512>>}]},
     Certificate1 = setelement(
                      10, Certificate0, [{<<88:256>>, <<90:512>>}]),
-    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
               Certificate0)),
-    ?assert(quod_dtx_current_view:valid_applied_certificate_shape(
+    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
               Certificate1)),
     Item0 = {Key, Certificate0},
     Item1 = {Key, Certificate1},

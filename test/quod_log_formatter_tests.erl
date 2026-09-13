@@ -2,6 +2,42 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
+binary_report_and_metadata_keep_original_message_test() ->
+    lists:foreach(fun(Byte) ->
+        Report = #{label => original_report, data => <<Byte>>},
+        Decoded = json:decode(iolist_to_binary(quod_log_formatter:format(
+          #{level => warning, msg => {report, Report},
+            meta => #{time => 0, data => <<Byte>>}}, #{}))),
+        Message = maps:get(<<"msg">>, Decoded),
+        ?assertNotEqual(nomatch, binary:match(Message, <<"original_report">>)),
+        ?assertEqual(nomatch, binary:match(Message, <<"log encode failure">>)),
+        ?assertEqual(<<"warning">>, maps:get(<<"level">>, Decoded)),
+        ?assert(is_binary(maps:get(<<"data">>, Decoded)))
+    end, [128, 192, 226, 255]).
+
+unicode_truncation_preserves_prefix_and_exact_omitted_count_test() ->
+    lists:foreach(fun({Point, Split}) ->
+        Prefix = binary:copy(<<$a>>, 4096 - Split),
+        Codepoint = unicode:characters_to_binary([Point]),
+        Input = <<Prefix/binary, Codepoint/binary, "tail">>,
+        Decoded = json:decode(iolist_to_binary(quod_log_formatter:format(
+          #{level => info, msg => {string, Input}, meta => #{time => 0}}, #{}))),
+        Expected = <<Prefix/binary, "...[+",
+                     (integer_to_binary(byte_size(Codepoint) + 4))/binary, " bytes]">>,
+        ?assertEqual(Expected, maps:get(<<"msg">>, Decoded))
+    end, [{16#e9, 1}, {16#20ac, 1}, {16#20ac, 2},
+          {16#1f600, 1}, {16#1f600, 2}, {16#1f600, 3}]).
+
+unicode_report_redaction_precedes_rendering_test() ->
+    Secret = <<"not-for-the-log">>,
+    Decoded = json:decode(iolist_to_binary(quod_log_formatter:format(
+      #{level => error, msg => {report, #{data => <<192>>, private_key => Secret}},
+        meta => #{time => 0}}, #{}))),
+    Message = maps:get(<<"msg">>, Decoded),
+    ?assertEqual(nomatch, binary:match(Message, Secret)),
+    ?assertNotEqual(nomatch, binary:match(Message, <<"redacted_private_key">>)),
+    ?assertEqual(nomatch, binary:match(Message, <<"log encode failure">>)).
+
 private_keys_removed_from_every_structured_report_surface_test() ->
     Seed = <<"secret-test-seed-01234567890123456">>,
     Key = #'ECPrivateKey'{version = 1, privateKey = Seed},

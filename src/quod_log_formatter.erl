@@ -18,7 +18,8 @@ One line per event:
 
 ## Rules
 
-- `msg` is truncated at 4096 bytes before encoding — BEAM crash reports can
+- `msg` is truncated to a UTF-8 boundary at most 4096 bytes, then receives
+  an omitted-byte count before encoding — BEAM crash reports can
   exceed Loki's `max_line_size`, and a dropped line helps no one.
 - Private-key records and labelled secret fields are removed from structured
   reports, arguments and metadata BEFORE rendering. TLS libraries still need
@@ -28,9 +29,9 @@ One line per event:
   never interpolate secrets before submitting a logger event.
 - `ts` is ISO-8601 UTC, microsecond precision, from the event's own `time`.
 - Metadata that is not JSON-safe (pids, refs, ports, funs, non-UTF-8 binaries)
-  round-trips through `~p`, so the formatter can never crash the handler — a
-  crashing formatter would take stdout down, which is the exact failure this
-  module exists to prevent.
+  uses the same Unicode term renderer as reports. OTP catches formatter
+  exceptions, but its fallback can render the original unredacted message;
+  the JSON encoder guard does not cover earlier rendering failures.
 
 Wired as the `default` handler's formatter in `config/sys.config`; `node_id`
 arrives via the primary logger metadata that `m:quod_app` stamps at boot.
@@ -92,8 +93,8 @@ redact_field(Name, Value) when is_binary(Name) ->
     end;
 redact_field(_Name, Value) -> redact(Value).
 
-%% Encode, but never let a bad term crash the handler: fall back to a minimal
-%% line that still carries ts/level and names the failure.
+%% Guard JSON encoding only; earlier rendering is outside this boundary.
+%% The minimal fallback retains ts/level and names the encoding failure.
 encode(Event, Base) ->
     try encode_json(Event)
     catch C:R ->
@@ -118,16 +119,20 @@ encode_ascii(Value, Encode) ->
 
 -spec render_msg(term()) -> binary().
 render_msg({string, Str})              -> unicode:characters_to_binary(Str);
-render_msg({report, Report})           -> iolist_to_binary(io_lib:format("~p", [Report]));
+render_msg({report, Report})           -> fallback(Report);
 render_msg({Format, Args}) when is_list(Format) ->
     unicode:characters_to_binary(io_lib:format(Format, Args)).
 
 -spec truncate(binary()) -> binary().
 truncate(Bin) when byte_size(Bin) =< ?MSG_MAX_BYTES -> Bin;
 truncate(Bin) ->
-    Head = binary:part(Bin, 0, ?MSG_MAX_BYTES),
+    %% The input is UTF-8; a byte-limited prefix may end inside one codepoint.
+    Head = case unicode:characters_to_binary(binary:part(Bin, 0, ?MSG_MAX_BYTES)) of
+               Complete when is_binary(Complete) -> Complete;
+               {incomplete, Complete, _Suffix} -> Complete
+           end,
     Tail = iolist_to_binary(io_lib:format("...[+~p bytes]",
-                                          [byte_size(Bin) - ?MSG_MAX_BYTES])),
+                                          [byte_size(Bin) - byte_size(Head)])),
     <<Head/binary, Tail/binary>>.
 
 -spec iso8601(integer()) -> binary().
@@ -161,4 +166,4 @@ value(V) when is_list(V) ->
 value(V) when is_map(V) -> maps:fold(fun entry/3, #{}, V);
 value(V)                -> fallback(V).
 
-fallback(V) -> iolist_to_binary(io_lib:format("~p", [V])).
+fallback(V) -> unicode:characters_to_binary(io_lib:format("~tp", [V])).

@@ -115,15 +115,12 @@ verify(Certificate, Committee, CommitteeId) ->
 
 -doc "Encode one canonical bounded certificate for an opaque carrier.".
 -spec encode(certificate()) ->
-          {ok, binary()} | {error, invalid_read_certificate | too_large}.
+          {ok, binary()} | {error, invalid_read_certificate}.
 encode(Certificate) ->
     case valid_shape(Certificate) of
         true ->
-            Blob = term_to_binary(Certificate, [deterministic]),
-            case byte_size(Blob) =< ?MAX_CERTIFICATE_BYTES of
-                true -> {ok, Blob};
-                false -> {error, too_large}
-            end;
+            %% binding/1 already bounded this uncompressed ETF representation.
+            {ok, term_to_binary(Certificate, [deterministic])};
         false ->
             {error, invalid_read_certificate}
     end.

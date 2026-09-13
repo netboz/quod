@@ -79,11 +79,11 @@ sealed_plan_carries_exact_diff_and_read_tokens_test() ->
         {_Id, {solution, Solution}} = first(Session, Goal),
         {ok, Plan} = quod_dtx:seal_session(Session, bind()),
         ?assertEqual(quod_proof_session:local_changes(Session),
-                     quod_dtx:diff(Plan)),
+                     quod_ct:plan_material(diff, Plan)),
         ?assertEqual(quod_proof_session:read_set(Session),
-                     quod_dtx:read_check(Plan)),
+                     quod_ct:plan_material(read_check, Plan)),
         ?assertMatch(#{{parent, 2} := {present, 1}},
-                     quod_dtx:read_check(Plan)),
+                     quod_ct:plan_material(read_check, Plan)),
         ?assertEqual({?NS, key(1)}, quod_dtx:target(Plan)),
         ?assertEqual(1, quod_dtx:base_height(Plan)),
         ?assertEqual(key(2), quod_dtx:proof_id(Plan)),
@@ -95,12 +95,12 @@ sealed_plan_carries_exact_diff_and_read_tokens_test() ->
         %% The signed op count lets a foreign holder classify the plan as a
         %% writer without decoding its atoms; the digest is what an ordinary
         %% transaction envelope binds.
-        ?assertEqual(length(quod_dtx:diff(Plan)), quod_dtx:diff_ops(Plan)),
+        ?assertEqual(length(quod_ct:plan_material(diff, Plan)), quod_dtx:diff_ops(Plan)),
         ?assertMatch(<<_:256>>, quod_dtx:digest(Plan)),
         %% The transcript binds this exact invocation: goal bytes, the full
         %% semantic chain, and the chained digest of the one answer taken.
         [{_InvocationId, Chain, GoalBin, allowed, 1, Digest, active}] =
-            quod_dtx:transcript(Plan),
+            quod_ct:plan_material(transcript, Plan),
         ?assertEqual([{?NS, <<0:256>>}], Chain),
         ?assertEqual(wire_blob(Goal), GoalBin),
         SolutionDigest =
@@ -159,8 +159,8 @@ signed_origin_scope_seals_operation_claim_without_database_diff_test() ->
         ?assertEqual(Identity, quod_dtx:target(Plan)),
         ?assertEqual(Identity, quod_dtx:origin(Plan)),
         ?assertEqual(Binding, quod_dtx:request_binding(Plan)),
-        ?assertEqual([], quod_dtx:diff(Plan)),
-        ?assertEqual(#{}, quod_dtx:read_check(Plan)),
+        ?assertEqual([], quod_ct:plan_material(diff, Plan)),
+        ?assertEqual(#{}, quod_ct:plan_material(read_check, Plan)),
         ?assert(quod_dtx:participates(Plan)),
         ?assertNot(quod_dtx:writes(Plan)),
         ?assertNot(quod_dtx:reads_only(Plan))
@@ -186,9 +186,9 @@ read_only_participant_seals_empty_diff_with_read_check_test() ->
     try
         {_Id, {solution, _}} = first(Session, {parent, tom, {'X'}}),
         {ok, Plan} = quod_dtx:seal_session(Session, bind()),
-        ?assertEqual([], quod_dtx:diff(Plan)),
+        ?assertEqual([], quod_ct:plan_material(diff, Plan)),
         ?assertMatch(#{{parent, 2} := {present, 1}},
-                     quod_dtx:read_check(Plan))
+                     quod_ct:plan_material(read_check, Plan))
     after
         quod_proof_session:stop(Session)
     end.
@@ -527,7 +527,7 @@ legacy_or_unclassified_transcript_is_rejected_test() ->
         {ok, Plan} = quod_dtx:seal_session(Session, bind()),
         {quod_plan, Core, Signer, Signature} = tuple(Plan),
         [{InvocationId, Chain, GoalBin, allowed,
-          Count, Digest, Tag}] = quod_dtx:transcript(Plan),
+          Count, Digest, Tag}] = quod_ct:plan_material(transcript, Plan),
         Legacy = [{InvocationId, Chain, GoalBin, Count, Digest, Tag}],
         Unclassified =
             [{InvocationId, Chain, GoalBin, undecided,
@@ -575,10 +575,10 @@ bridge_use_without_a_diff_still_seals_test() ->
         ok = quod_proof_session:absorb_read_set(
                Session, #{{'$quod_live_bridge', {directory_host, 5}} => true}),
         {ok, Plan} = quod_dtx:seal_session(Session, bind()),
-        ?assertEqual([], quod_dtx:diff(Plan)),
+        ?assertEqual([], quod_ct:plan_material(diff, Plan)),
         %% The marker never leaks into the OCC read tokens.
         ?assertNot(maps:is_key({'$quod_live_bridge', {directory_host, 5}},
-                               quod_dtx:read_check(Plan)))
+                               quod_ct:plan_material(read_check, Plan)))
     after
         quod_proof_session:stop(Session)
     end.
@@ -780,7 +780,7 @@ finalize_seals_local_scope_and_stores_the_plan_test() ->
         ?assertEqual(ok, quod_proof_context:finalize(commit)),
         #{Identity := Plan} = Plans,
         ?assertEqual(quod_proof_session:local_changes(Session),
-                     quod_dtx:diff(Plan)),
+                     quod_ct:plan_material(diff, Plan)),
         ?assertEqual(Identity, quod_dtx:target(Plan)),
         ?assertEqual(Identity, quod_dtx:origin(Plan)),
         ?assertEqual(ProofId, quod_dtx:proof_id(Plan)),
@@ -1419,8 +1419,8 @@ prepare_payload_is_self_contained_and_confined_to_prepare_controls_test() ->
         PlanBlob},
        quod_dtx:prepare_payload(maps:get(prepare_a_control, F))),
     ?assert(
-       quod_dtx:prepare_matches_begin(
-         maps:get(prepare_a_control, F), maps:get(begin_control, F))),
+       quod_dtx:prepare_matches_certified_begin(
+         maps:get(prepare_a_control, F), maps:get(begin_control, F), maps:get(begin_ref, F))),
     ?assertEqual(
        error,
        quod_dtx:prepare_payload(maps:get(begin_control, F))),
@@ -1433,7 +1433,7 @@ prepare_is_derived_from_the_exact_begin_target_without_legacy_shape_test() ->
     Target = maps:get(target_a, F),
     {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Target),
     ?assertEqual(maps:get(prepare_a_record, F), Prepare),
-    ?assert(quod_dtx:prepare_matches_begin(Prepare, Begin)),
+    ?assert(quod_dtx:prepare_matches_certified_begin(Prepare, Begin, BeginRef)),
     ?assertEqual(
        {error, invalid_prepare},
        quod_dtx:new_prepare(Begin, BeginRef, {<<"quod:absent">>, key(198)})),
@@ -1459,7 +1459,7 @@ prepare_manifest_is_checked_against_begin_and_yields_exact_event_context_test() 
     Tampered = {quod_dtx_prepare, 3, GroupId, BeginRef, TamperedManifest,
                 PlanDigest, PlanBlob},
     ?assertEqual(error, quod_dtx:prepare_payload(Tampered)),
-    ?assertNot(quod_dtx:prepare_matches_begin(Tampered, Begin)),
+    ?assertNot(quod_dtx:prepare_matches_certified_begin(Tampered, Begin, BeginRef)),
     {ok, Context} = quod_dtx:event_context(Manifest, Plan),
     ?assertEqual(maps:get(proof_id, F), maps:get(proof_id, Context)),
     ?assertEqual(maps:get(origin, F), maps:get(origin, Context)),
@@ -2600,7 +2600,7 @@ expected_conflict_reduction(Holder, Contender) ->
 plan_descriptor_from_prepare(#{control := Control}) ->
     {ok, _Manifest, _Digest, Blob} = quod_dtx:prepare_payload(Control),
     {ok, Plan} = quod_dtx:decode(Blob),
-    quod_dtx:conflict_descriptor(Plan).
+    maps:get(conflict_descriptor, quod_dtx:core(Plan)).
 
 transaction_from_prepare(#{control := Control}) ->
     {ok, _Manifest, _Digest, Blob} = quod_dtx:prepare_payload(Control),

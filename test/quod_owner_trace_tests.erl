@@ -9,6 +9,105 @@
 -define(STEP, <<"quod.consensus.owner_step">>).
 -define(OWNER_CONTEXT, {quod_trace, owner_context}).
 
+owner_sdk_loss_preserves_callback_test_() ->
+    [{atom_to_list(Api) ++ "/" ++ atom_to_list(Outcome), fun() ->
+        quod_dtx_coordinator_unwind_tests:with_sdk(fun(Storage) ->
+            Ambient = otel_ctx:set_value(otel_ctx:new(), owner_sdk_test, make_ref()),
+            PreviousOwner = otel_ctx:new(), Ref = make_ref(),
+            Stack = [{?MODULE, sdk_loss_callback, 0, [{line, 42}]}],
+            Work = fun() ->
+                self() ! {owner_work, Ref},
+                ?assertEqual(Ambient, quod_trace:context()),
+                ok = gen_server:stop(Storage),
+                case Outcome of
+                    returned -> {error, original_owner_failure};
+                    _ -> erlang:raise(Outcome, original_owner_failure, Stack)
+                end
+            end,
+            with_test_owner_context(PreviousOwner, fun() ->
+                quod_trace:with_context(Ambient, fun() ->
+                    Result = try quod_trace:with_owner_turn(#{}, fun() ->
+                        case Api of
+                            turn -> Work();
+                            step -> quod_trace:with_owner_step(callback, Work)
+                        end
+                    end) of Value -> {returned, Value}
+                    catch C:R:S -> {raised, C, R, S}
+                    end,
+                    Expected = case Outcome of
+                        returned -> {returned, {error, original_owner_failure}};
+                        _ -> {raised, Outcome, original_owner_failure, Stack}
+                    end,
+                    ?assertEqual(Expected, Result),
+                    ?assertEqual(Ambient, quod_trace:context()),
+                    ?assertEqual(PreviousOwner, get(?OWNER_CONTEXT)),
+                    assert_owner_work_once(Ref)
+                end)
+            end)
+        end)
+    end} || Api <- [turn, step], Outcome <- [returned, error, throw, exit]].
+
+owner_allocation_failure_preserves_work_test_() ->
+    [{atom_to_list(Api), fun() ->
+        quod_trace_tests:with_tracer(fun() ->
+            Key = {opentelemetry, global, tracer, opentelemetry:get_application(quod_trace)},
+            {Ctx, Parent} = quod_trace:start_span(otel_ctx:new(), <<"owner.start.parent">>, internal, #{}),
+            {Module, Tracer} = Original = persistent_term:get(Key),
+            Broken = {Module, Tracer#tracer{
+                on_start_processors = fun(_, _) -> error(owner_allocation_failed) end}},
+            true = opentelemetry:verify_and_set_term(Broken, Key, otel_tracer),
+            Ref = make_ref(), Ambient = quod_trace:context(),
+            try with_test_owner_context(Ctx, fun() ->
+                Work = fun() -> self() ! {owner_work, Ref}, unchanged end,
+                Result = case Api of
+                    turn -> quod_trace:with_owner_turn(#{}, Work);
+                    step -> quod_trace:with_owner_step(callback, Work)
+                end,
+                ?assertEqual(unchanged, Result),
+                ?assertEqual(Ctx, get(?OWNER_CONTEXT)),
+                ?assertEqual(Ambient, quod_trace:context()),
+                assert_owner_work_once(Ref),
+                ?assert(quod_trace:add_event(Ctx, <<"owner.parent.still.open">>, #{}))
+            end)
+            after
+                persistent_term:put(Key, Original),
+                quod_attempt_span:close({Ctx, Parent}, #{})
+            end,
+            _ = quod_trace_tests:take_span(<<"owner.start.parent">>, otel_span:trace_id(Parent))
+        end)
+    end} || Api <- [turn, step]].
+
+owner_step_noop_does_not_close_parent_test() ->
+    quod_trace_tests:with_tracer(fun() ->
+        Key = {opentelemetry, global, tracer, opentelemetry:get_application(quod_trace)},
+        Original = persistent_term:get(Key),
+        {Ctx, Parent} = quod_trace:start_span(otel_ctx:new(), <<"owner.noop.parent">>, internal, #{}),
+        true = opentelemetry:verify_and_set_term({otel_tracer_noop, []}, Key, otel_tracer),
+        try with_test_owner_context(Ctx, fun() ->
+            ?assertEqual(unchanged, quod_trace:with_owner_step(noop, fun() -> unchanged end)),
+            ?assertEqual(Ctx, get(?OWNER_CONTEXT)),
+            ?assert(quod_trace:add_event(Ctx, <<"owner.parent.still.open">>, #{}))
+        end)
+        after persistent_term:put(Key, Original)
+        end,
+        quod_attempt_span:close({Ctx, Parent}, #{}),
+        Span = quod_trace_tests:take_span(<<"owner.noop.parent">>, otel_span:trace_id(Parent)),
+        ?assertEqual([<<"owner.parent.still.open">>], [E#event.name || E <- otel_events:list(Span#span.events)])
+    end).
+
+with_test_owner_context(Ctx, Fun) ->
+    Previous = put(?OWNER_CONTEXT, Ctx),
+    try Fun() after
+        case Previous of
+            undefined -> erase(?OWNER_CONTEXT);
+            _ -> put(?OWNER_CONTEXT, Previous)
+        end
+    end.
+
+assert_owner_work_once(Ref) ->
+    receive {owner_work, Ref} -> ok after 0 -> error(owner_work_missing) end,
+    receive {owner_work, Ref} -> error(owner_work_repeated) after 0 -> ok end.
+
 callback_result_is_exact_and_each_callback_runs_once_test() ->
     with_worker(fun(Pid, Ns) ->
         Secret = unique(<<"private-result:">>),

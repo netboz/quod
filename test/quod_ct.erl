@@ -24,7 +24,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
          remote_operation_fixture/1,
-         signed_plan_fixture/2, included_receipt/1, valid_applied_certificate_shape/1,
+         signed_plan_fixture/2, plan_material/2, included_receipt/1, valid_applied_certificate_shape/1,
          signed_effect_operation_submission/0,
          signed_effect_operation_submission/1,
          signed_agent_facts/1,
@@ -33,6 +33,12 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          install_directory_generation/5]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
 -export([proof_gate_row/3]).
+
+%% Assertions inspect one decoded owner-side material object; production has
+%% no field getter which silently decodes the whole plan on every access.
+plan_material(Key, Plan) ->
+    {ok, Material} = quod_dtx:material(Plan),
+    maps:get(Key, Material).
 
 %% Test-only constructor for the protected Simplex proof-gate row. Production
 %% deliberately accepts only the current layout; fixtures must not become a

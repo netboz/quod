@@ -886,8 +886,7 @@ participant_plan_json(
                    Target, Plan, Manifest, Attestation)),
             case BindingValid of
                 true ->
-                    Effects = quod_dtx:effects(Plan),
-                    Diff = quod_dtx:diff(Plan),
+                    {ok, #{effects := Effects, diff := Diff}} = quod_dtx:material(Plan),
                     Base#{status => bound,
                           signer => id_json(quod_dtx:signer(Plan)),
                           diff_ops => quod_dtx:diff_ops(Plan),

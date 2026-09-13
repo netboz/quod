@@ -29,8 +29,7 @@ accepted.
          plan_outcome_ref/4, encode_durable_submission/2,
          bytes/2, sign/3, sign_submission/3, verify/2,
          submission/2, submission_id/1, verify_submission/1,
-         encode_ledger_transaction/1, decode_ledger_transaction/1,
-         decode_ledger_transaction/2,
+         encode_ledger_transaction/1, decode_ledger_transaction/2,
          encoded_ledger_transaction_size/1,
          decode_canonical_transaction/2,
          relay_attempt_id/5, decode_verified_submission/2,
@@ -435,10 +434,7 @@ semantic_id_or_error(Target, Transaction) ->
 -doc "Bind a transaction's stable id to its target and complete semantic write.".
 -spec bind_id({binary(), binary()}, #transaction{}) -> #transaction{}.
 bind_id(Target, Transaction = #transaction{}) ->
-    case semantic_id(Target, Transaction) of
-        {ok, TxId} -> Transaction#transaction{tx_id = TxId};
-        error -> error(bad_transaction_material)
-    end.
+    Transaction#transaction{tx_id = semantic_id_or_error(Target, Transaction)}.
 
 -doc "Whether `tx_id` is the canonical id of this target-bound semantic write.".
 -spec valid_id({binary(), binary()}, #transaction{}) -> boolean().
@@ -1210,12 +1206,6 @@ encode_genesis_transaction(
     end;
 encode_genesis_transaction(_Genesis) ->
     {error, bad_term}.
-
--doc "Decode and verify one exact transaction artifact from a canonical block.".
--spec decode_ledger_transaction(binary()) ->
-          {ok, #transaction{}} | {error, term()}.
-decode_ledger_transaction(Blob) ->
-    decode_ledger_transaction(Blob, materialized).
 
 -doc "Decode a ledger transaction with target-owned or opaque foreign symbols.".
 -spec decode_ledger_transaction(binary(), materialized | wrapped) ->

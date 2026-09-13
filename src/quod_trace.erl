@@ -64,15 +64,34 @@ with_context(Ctx, Fun) ->
 with_span(Ctx, Name, Kind, Attributes, Fun) ->
     with_span(Ctx, Name, Kind, Attributes, [], Fun).
 
--doc "Trace shared work once, with SDK links to the other participating spans.".
+-doc """
+Trace shared work once, linking its other participants. SDK allocation/closure
+cannot replace the work's result or exception. Reuse the existing handle rule:
+a disabled tracer's borrowed parent is not ours to close.
+""".
 -spec with_span(context(), binary(), atom(), map(), [opentelemetry:link()],
                 fun((span_ctx()) -> T)) -> T.
 with_span(Ctx, Name, Kind, Attributes, Links, Fun) ->
-    otel_tracer:with_span(
-      Ctx, tracer(), Name,
-      #{kind => Kind, attributes => trace_attributes(Attributes), links => Links},
-      Fun).
+    Handle = start_owned_span(Ctx, Name, Kind, Attributes, Links),
+    {NextCtx, Span} = case Handle of
+        none -> {Ctx, otel_tracer:current_span_ctx(Ctx)};
+        Owned -> Owned
+    end,
+    with_context(NextCtx, fun() ->
+        try Fun(Span)
+        after quod_attempt_span:close(Handle, #{})
+        end
+    end).
 
+start_owned_span(Ctx, Name, Kind, Attributes, Links) ->
+    try
+        Child = otel_tracer:start_span(Ctx, tracer(), Name,
+          #{kind => Kind, attributes => trace_attributes(Attributes), links => Links}),
+        quod_attempt_span:owned(Ctx, otel_tracer:set_current_span(Ctx, Child), Child)
+    catch _:_ -> none
+    end.
+
+-doc "Observe a call through the shared span boundary, or run directly without a context.".
 -spec with_optional_span(context() | undefined, binary(), atom(), map(),
                          fun(() -> T)) -> T.
 with_optional_span(undefined, _Name, _Kind, _Attributes, Fun) ->
@@ -99,18 +118,20 @@ with_owner_turn(Attributes, Fun) ->
     end,
     put(?OWNER_SEQUENCE, {Incarnation, Sequence}),
     Before = owner_observation(),
-    {Ctx, Span} = start_span(otel_ctx:new(), <<"quod.consensus.owner_turn">>, internal,
+    Handle = start_owned_span(otel_ctx:new(), <<"quod.consensus.owner_turn">>, internal,
         Attributes#{'quod.owner.incarnation' => Incarnation,
                     'quod.owner.sequence' => Sequence,
-                    'quod.owner.pid' => list_to_binary(pid_to_list(self()))}),
-    PreviousContext = put(?OWNER_CONTEXT, Ctx),
+                    'quod.owner.pid' => list_to_binary(pid_to_list(self()))}, []),
+    PreviousContext = case Handle of
+        none -> erase(?OWNER_CONTEXT);
+        {Ctx, _Span} -> put(?OWNER_CONTEXT, Ctx)
+    end,
     try Fun()
     after
         After = owner_observation(),
         restore_owner_context(PreviousContext),
-        _ = set_attributes(Span, owner_observation_attributes(Before, After)),
         %% No result/error payload is inspected or serialized, even on an exit.
-        _ = otel_span:end_span(Span)
+        quod_attempt_span:close(Handle, owner_observation_attributes(Before, After))
     end.
 
 -doc "A synchronous substep of the current diagnostic turn, not a request span.".
@@ -119,13 +140,16 @@ with_owner_step(Step, Fun) ->
     case get(?OWNER_CONTEXT) of
         undefined -> Fun();
         Parent ->
-            {Ctx, Span} = start_span(Parent, <<"quod.consensus.owner_step">>, internal,
-                                    #{'quod.owner.step' => atom_to_binary(Step)}),
-            put(?OWNER_CONTEXT, Ctx),
+            Handle = start_owned_span(Parent, <<"quod.consensus.owner_step">>, internal,
+                                      #{'quod.owner.step' => atom_to_binary(Step)}, []),
+            case Handle of
+                none -> ok;
+                {Ctx, _Span} -> put(?OWNER_CONTEXT, Ctx)
+            end,
             try Fun()
             after
                 restore_owner_context(Parent),
-                _ = otel_span:end_span(Span)
+                quod_attempt_span:close(Handle, #{})
             end
     end.
 

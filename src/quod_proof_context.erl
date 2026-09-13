@@ -13,7 +13,7 @@ the scope wire as Erlang references.
 
 -export([start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
          request_evidence/0, request_auth/0, request_binding/0,
-         scope_authentication/0, ensure_scope_authentication/0,
+         ensure_scope_authentication/0,
          durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0,
          finalize/1, seal_plans/0, scope_handle/1, select_independent/1, independent/0,
@@ -175,7 +175,7 @@ select_independent(Selected) when is_boolean(Selected) ->
 -spec independent() -> boolean().
 independent() -> (context())#ctx.independent.
 
--doc "Return the one scope-wire authentication object for this proof.".
+%% The one scope-wire authentication object for this proof.
 -spec scope_authentication() -> quod_scope_wire:authentication().
 scope_authentication() ->
     case {(context())#ctx.request_evidence,

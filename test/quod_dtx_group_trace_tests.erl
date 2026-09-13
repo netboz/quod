@@ -103,12 +103,14 @@ mixed_local_group_wave_links_recording_request_without_reparenting_test_() ->
     %% This production-callback fixture receives projection casts as well as
     %% spans. Keep its mailbox private: unrelated admission tests must not
     %% mistake these casts for their own one-row/two-row acknowledgements.
-    {spawn, fun mixed_local_group_wave_links_recording_request_without_reparenting/0}.
+    [{atom_to_list(Lifetime), {spawn, fun() ->
+        mixed_local_group_wave_links_recording_request_without_reparenting(Lifetime)
+    end}} || Lifetime <- [live, ended]].
 
-mixed_local_group_wave_links_recording_request_without_reparenting() ->
+mixed_local_group_wave_links_recording_request_without_reparenting(Lifetime) ->
     quod_trace_tests:with_tracer(fun() ->
         with_fixture(fun(F, S0, _Journal) ->
-            {Ns, _} = Origin = maps:get(target, F),
+            {Ns, Anchor} = Origin = maps:get(target, F),
             true = quod_reg:reg({quod_prolog, Ns}),
             {Ctx, Parent} = quod_trace:start_span(
               otel_ctx:new(), <<"mixed.group.request">>, internal, #{}),
@@ -140,7 +142,62 @@ mixed_local_group_wave_links_recording_request_without_reparenting() ->
                 Rows = maps:get(rows, quod_simplex:test_retained_dtx_state(Retained)),
                 Envelopes = [maps:get(envelope, maps:get(quod_dtx:record_digest(B), Rows))
                              || B <- [Begin1, Begin2]],
-                S3 = quod_simplex:test_propose_dtx_wave(2, Envelopes, [], Retained),
+                case Lifetime of
+                    live -> ok;
+                    ended -> quod_trace:finish_span(Parent, ok)
+                end,
+                %% This callback fixture needs an explicit installed parent
+                %% token to request a verdict. It still proves no admission or
+                %% execution: the registered Prolog target below is this mailbox.
+                ParentToken = {1, Anchor},
+                AtParent = quod_simplex:test_state_set(history_head, ParentToken, Retained),
+                S3 = quod_trace:with_context(Ctx, fun() ->
+                    quod_simplex:test_propose_dtx_wave(2, Envelopes, [], AtParent)
+                end),
+                Proposed = quod_trace_tests:take_span(
+                             <<"consensus.proposal_created">>, otel_span:trace_id(Parent)),
+                ?assertEqual(otel_span:span_id(Parent), Proposed#span.parent_span_id),
+                ProposedAttrs = otel_attributes:map(Proposed#span.attributes),
+                ?assertEqual(2, maps:get('quod.consensus.slot', ProposedAttrs)),
+                ?assertEqual(1, maps:get('quod.consensus.parent', ProposedAttrs)),
+                ?assertEqual(<<"dtx">>, maps:get('quod.proposal.kind', ProposedAttrs)),
+                ?assertEqual(2, maps:get('quod.batch.transactions', ProposedAttrs)),
+                ?assertEqual(<<"boundary">>, maps:get('quod.consensus.observation', ProposedAttrs)),
+                {Hash, Engine} = receive
+                    {'$gen_cast', {dtx_verdict_req, _Controls, _Timestamp, 2,
+                                   ReplyTo, {2, CandidateHash, ParentToken}, _Context}} ->
+                        ?assertEqual(self(), ReplyTo),
+                        {CandidateHash, self()}
+                after 1000 -> error(parent_validation_not_sent)
+                end,
+                _ = quod_simplex:test_on_dtx_verdict(
+                      2, Hash, ParentToken, Engine, 1, abstain, S3),
+                Verdict = quod_trace_tests:take_span(
+                  <<"consensus.parent_verdict_received">>, otel_span:trace_id(Parent)),
+                ?assert(Proposed#span.end_time =< Verdict#span.start_time),
+                ?assertEqual(<<"dtx_parent">>, maps:get('quod.validation.kind',
+                                   otel_attributes:map(Verdict#span.attributes))),
+                ?assertEqual(<<"abstain">>, maps:get('quod.validation.verdict',
+                                   otel_attributes:map(Verdict#span.attributes))),
+                quod_attempt_span:close({Ctx, Parent}, #{}),
+                Closed = quod_trace_tests:take_span(
+                  <<"mixed.group.request">>, otel_span:trace_id(Parent)),
+                Queued = [E || E = #event{name = <<"quod.consensus.parent_request_queued">>}
+                               <- otel_events:list(Closed#span.events)],
+                %% Keep the existing request event as the sole send boundary.
+                %% An ended ambient parent cannot receive it: disclose that gap.
+                case Lifetime of
+                    live -> ?assertEqual(1, length(Queued));
+                    ended ->
+                        ?assertEqual([], Queued),
+                        ?assert(Closed#span.end_time =< Proposed#span.start_time)
+                end,
+                TraceId = otel_span:trace_id(Parent),
+                receive {quod_test_span, #span{trace_id = TraceId,
+                              name = <<"consensus.parent_validation_requested">>}} ->
+                    error(duplicate_parent_request_boundary)
+                after 0 -> ok
+                end,
                 ?assertEqual(unchanged, quod_simplex:test_trace_block(
                   2, none, <<"mixed.group.validation">>, S3, fun() -> unchanged end)),
                 Span = quod_trace_tests:take_span(<<"mixed.group.validation">>),

@@ -350,7 +350,6 @@ encode_payload(attestation, Attestation) ->
 encode_payload(read_certificate, Certificate) ->
     case quod_read_certificate:encode(Certificate) of
         {ok, _} = Result -> Result;
-        {error, too_large} -> too_large(read_certificate);
         {error, invalid_read_certificate} -> protocol_error(bad_payload)
     end;
 encode_payload(foreign_reads, Certificates) ->

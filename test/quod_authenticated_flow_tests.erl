@@ -9,7 +9,7 @@ decode_to_target_validation_authenticates_once_test() ->
         App = maps:get(application, F), Target = maps:get(target, F),
         {ok, Bytes} = quod_transaction:encode_ledger_transaction(App),
         Plan = maps:get(Target, maps:get(plans, F)),
-        [{_, Chain, GoalBlob, _, _, _, _}] = quod_dtx:transcript(Plan),
+        [{_, Chain, GoalBlob, _, _, _, _}] = quod_ct:plan_material(transcript, Plan),
         {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
         {ok, Principal} = quod_agent_ref:materialize_principal(quod_dtx:principal(Plan)),
         Key = maps:get(pubkey, maps:get(node_identity, F)),
@@ -21,7 +21,7 @@ decode_to_target_validation_authenticates_once_test() ->
         try
             Context = quod_commit_validation:new(Target, 1, Est, Index, none),
             {Result, Counts} = counted(fun() ->
-                {ok, Decoded} = quod_transaction:decode_ledger_transaction(Bytes),
+                {ok, Decoded} = quod_transaction:decode_ledger_transaction(Bytes, materialized),
                 quod_commit_validation:remote_application(Decoded, Context)
             end),
             ?assertMatch({apply, _, #{diff := [_ | _]}}, Result),

@@ -7,6 +7,83 @@
 
 -export([with_tracer/1, take_span/1, take_span/2]).
 
+optional_span_sdk_loss_preserves_work_and_context_test_() ->
+    [{atom_to_list(Api) ++ "/" ++ atom_to_list(Outcome), fun() ->
+        quod_dtx_coordinator_unwind_tests:with_sdk(fun(Storage) ->
+            {Ctx, Parent} = quod_trace:start_span(
+              otel_ctx:new(), <<"optional.loss.parent">>, internal, #{}),
+            Before = quod_trace:context(), Ref = make_ref(),
+            Work = fun() ->
+                self() ! {optional_entered, Ref},
+                ok = gen_server:stop(Storage),
+                case Outcome of
+                    returned -> {error, original_failure};
+                    error -> error(original_failure);
+                    throw -> throw(original_failure);
+                    exit -> exit(original_failure)
+                end
+            end,
+            Result = try case Api of
+                optional -> with_context_for_optional_probe(Ctx, Work);
+                explicit -> quod_trace:with_span(
+                  Ctx, <<"explicit.sdk.probe">>, internal, #{}, fun(_) -> Work() end)
+            end of Value -> {returned, Value}
+            catch Class:Reason -> {raised, Class, Reason}
+            end,
+            Expected = case Outcome of
+                returned -> {returned, {error, original_failure}};
+                _ -> {raised, Outcome, original_failure}
+            end,
+            ?assertEqual(Expected, Result),
+            ?assertEqual(Before, quod_trace:context()),
+            assert_optional_once(Ref),
+            %% The parent is also a lost SDK observation, not execution state.
+            quod_attempt_span:close({Ctx, Parent}, #{})
+        end)
+    end} || Api <- [optional, explicit], Outcome <- [returned, error, throw, exit]].
+
+optional_span_start_failure_runs_work_once_test() ->
+    with_tracer(fun() ->
+        Key = {opentelemetry, global, tracer, opentelemetry:get_application(quod_trace)},
+        {Module, Tracer} = Original = persistent_term:get(Key),
+        Broken = {Module, Tracer#tracer{
+          on_start_processors = fun(_, _) -> error(diagnostic_start_failed) end}},
+        true = opentelemetry:verify_and_set_term(Broken, Key, otel_tracer),
+        Before = quod_trace:context(), Ref = make_ref(),
+        try
+            ?assertEqual(original_result, with_context_for_optional_probe(otel_ctx:new(),
+              fun() -> self() ! {optional_entered, Ref}, original_result end)),
+            assert_optional_once(Ref),
+            ?assertEqual(Before, quod_trace:context())
+        after persistent_term:put(Key, Original)
+        end
+    end).
+
+optional_span_noop_does_not_end_borrowed_parent_test() ->
+    with_tracer(fun() ->
+        {Ctx, Parent} = quod_trace:start_span(
+          otel_ctx:new(), <<"optional.borrowed.parent">>, internal, #{}),
+        Key = {opentelemetry, global, tracer, opentelemetry:get_application(quod_trace)},
+        Original = persistent_term:get(Key),
+        true = opentelemetry:verify_and_set_term({otel_tracer_noop, []}, Key, otel_tracer),
+        try
+            ?assertEqual(unchanged, with_context_for_optional_probe(Ctx, fun() -> unchanged end)),
+            ?assert(quod_trace:add_event(Ctx, <<"parent.still.open">>, #{}))
+        after persistent_term:put(Key, Original)
+        end,
+        quod_trace:finish_span(Parent, ok),
+        Span = take_span(<<"optional.borrowed.parent">>, otel_span:trace_id(Parent)),
+        ?assertEqual([<<"parent.still.open">>],
+                     [E#event.name || E <- otel_events:list(Span#span.events)])
+    end).
+
+with_context_for_optional_probe(Ctx, Fun) ->
+    quod_trace:with_optional_span(Ctx, <<"optional.sdk.probe">>, internal, #{}, Fun).
+
+assert_optional_once(Ref) ->
+    receive {optional_entered, Ref} -> ok after 0 -> error(optional_work_not_called) end,
+    receive {optional_entered, Ref} -> error(optional_work_repeated) after 0 -> ok end.
+
 %% Real SDK storage, parent-based sampling, attachment and span completion;
 %% only the exporter is replaced by a test mailbox. Do not start an SDK app or
 %% mutate deployment sampling/export configuration. Sequential fixtures restore

@@ -90,14 +90,6 @@ applied_certificate_binding(
 applied_certificate_binding(_Certificate) ->
     error.
 
-%% Bounded constructor validation; this is not a public verdict authority.
--spec valid_applied_certificate_shape(term()) -> boolean().
-valid_applied_certificate_shape(Certificate) ->
-    case applied_certificate_binding(Certificate) of
-        {ok, _} -> true;
-        error -> false
-    end.
-
 -doc "Verify one certificate against the exact certified Finalize evidence.".
 -spec verify_applied_certificate(applied_certificate(), <<_:256>>, map()) ->
           boolean().
@@ -162,9 +154,9 @@ applied_certificate(
         {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
          NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
          Generation, Verdict, Signatures},
-    case valid_applied_certificate_shape(Certificate) of
-        true -> {ok, Certificate};
-        false -> retry
+    case applied_certificate_binding(Certificate) of
+        {ok, _} -> {ok, Certificate};
+        error -> retry
     end.
 
 applied_statement(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,

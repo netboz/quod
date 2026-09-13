@@ -144,13 +144,13 @@ worker_heap_cap_and_public_local_errors_test() ->
     try
         {ok, RefusedPlan, 0} =
             quod_scope_session:seal(Handle, Origin, anonymous, none),
-        ?assertEqual([], quod_dtx:diff(RefusedPlan)),
+        ?assertEqual([], quod_ct:plan_material(diff, RefusedPlan)),
         ?assertMatch(
            [{InvocationId, [{Ns, Anchor}, Origin], _, denied,
              0, <<0:256>>, complete}],
-           quod_dtx:transcript(RefusedPlan)),
+           quod_ct:plan_material(transcript, RefusedPlan)),
         [{InvocationId, _Chain, RequestedGoalBin, denied,
-          0, <<0:256>>, complete}] = quod_dtx:transcript(RefusedPlan),
+          0, <<0:256>>, complete}] = quod_ct:plan_material(transcript, RefusedPlan),
         {ok, ExpectedGoalBin} =
             quod_wire_term:encode_canonical(RequestedGoal),
         ?assertEqual(
@@ -1050,7 +1050,7 @@ worker_seals_its_session_on_request_test() ->
         ?assertEqual(Origin, quod_dtx:origin(Plan)),
         ?assertEqual({node, key(83)}, quod_dtx:principal(Plan)),
         ?assertMatch([{assert, {{sealed_fact, 1}, _Body}}],
-                     quod_dtx:diff(Plan)),
+                     quod_ct:plan_material(diff, Plan)),
         ?assert(quod_dtx:verify(Plan)),
         Manifest1 = manifest_for_plan(Plan, key(87), TargetKey),
         Manifest2 = manifest_for_plan(Plan, key(88), TargetKey),

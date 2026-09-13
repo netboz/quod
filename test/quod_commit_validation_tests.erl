@@ -216,7 +216,7 @@ remote_application_uses_one_target_evaluator_for_apply_reject_and_invalid_test()
     {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
     [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
-      _ReadDigest, _Tag}] = quod_dtx:transcript(Plan),
+      _ReadDigest, _Tag}] = quod_ct:plan_material(transcript, Plan),
     {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
     {ok, Principal} = quod_agent_ref:materialize_principal(
                         quod_dtx:principal(Plan)),
@@ -382,7 +382,7 @@ prepare_validation_and_materialization_are_owned_here_test() ->
         quod_dtx:prepare_payload(Control),
     {ok, Plan} = quod_dtx:decode(PlanBlob),
     [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
-      _Digest, _Tag}] = quod_dtx:transcript(Plan),
+      _Digest, _Tag}] = quod_ct:plan_material(transcript, Plan),
     {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
     CallerNamespaces = [Ns || {Ns, _Anchor} <- tl(FullChain)],
     {ok, PolicyPrincipal} = quod_agent_ref:materialize_principal(
@@ -432,7 +432,7 @@ read_certificate_refuses_a_stale_read_token_test() ->
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
     Plan = maps:get(plan, Fixture),
     [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
-      _ReadDigest, _Tag}] = quod_dtx:transcript(Plan),
+      _ReadDigest, _Tag}] = quod_ct:plan_material(transcript, Plan),
     {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
     CallerNamespaces = [Ns || {Ns, _Anchor} <- tl(FullChain)],
     {ok, Principal} = quod_agent_ref:materialize_principal(

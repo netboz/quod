@@ -15,7 +15,8 @@ The wire/memory form is one term:
 
     {quod_plan, Core, Signer, Signature}
 
-`Core` is a map whose `diff`, `read_check`, and `transcript` values are
+`Core` is a map whose `diff`, `read_check`, `effects`, `live_bridges`, and
+`transcript` values are
 **nested deterministic ETF binaries of `quod_wire_term` values**, not raw
 atom-bearing terms. A plan travels target →
 origin → (later) back to the target: the origin verifies the signature and the
@@ -76,10 +77,8 @@ replay. Neither transition changes the global proof generation.
          principal/1, request_binding/1, overlay_generation/1, signer/1,
          valid_principal/1,
          participates/1, writes/1, reads_only/1, diff_ops/1, effects_count/1,
-         conflict_descriptor/1,
          diff_bytes/1, read_check_bytes/1, effects_bytes/1,
-         material/1, diff/1, read_check/1, effects/1,
-         transcript/1,
+         material/1,
          new_manifest/1, manifest_digest/1, manifest_coordinator/1,
          manifest_participants/1,
          manifest_group_ref/2,
@@ -101,7 +100,7 @@ replay. Neither transition changes the global proof generation.
          begin_participant_payload/2,
          request_auth/1,
          request_claim/1, validate_request/4, requires_network_identity/1,
-         prepare_matches_begin/2, prepare_matches_certified_begin/3,
+         prepare_matches_certified_begin/3,
          validate_references/2, event_context/2,
          record_digest/1, group_id/1, decision_failure_reasons/1,
          record_kind/1,
@@ -372,8 +371,8 @@ encode({quod_plan, _Core, _Signer, _Signature} = Plan) ->
 Decode and shape-validate an untrusted plan blob.
 
 Validates the bounded outer envelope only; the nested `diff`, `read_check`,
-and `transcript` binaries stay opaque until the ontology that owns their
-symbols decodes them (`diff/1`, `read_check/1`, `transcript/1`).
+`effects`, `live_bridges`, and `transcript` binaries stay opaque until the
+ontology that owns their symbols decodes them through `material/1`.
 """.
 -spec decode(binary()) -> {ok, plan()} | {error, term()}.
 decode(Blob) when is_binary(Blob) ->
@@ -633,7 +632,7 @@ materialize_decoded(Core, Decoded) ->
             {error, Reason}
     end.
 
--doc "Signed atom-safe read/write/effect conflict keys.".
+%% Signed atom-safe read/write/effect conflict keys used by this reducer.
 conflict_descriptor(Plan) -> maps:get(conflict_descriptor, core(Plan)).
 
 build_conflict_descriptor(Diff, ReadCheck, Effects) ->
@@ -731,28 +730,6 @@ valid_chain([Identity | Rest], Depth)
     valid_identity(Identity) andalso valid_chain(Rest, Depth + 1);
 valid_chain(_ImproperOrTooDeep, _Depth) ->
     false.
-
--doc "Decode the plan's staged fact mutations and event occurrences. Owner-side only: allocates its atoms.".
--spec diff(plan()) -> [op()].
-diff(Plan) -> material_value(diff, Plan).
-
--doc "Decode the plan's exact OCC read tokens. Owner-side only.".
--spec read_check(plan()) -> map().
-read_check(Plan) -> material_value(read_check, Plan).
-
--doc "Decode the plan's typed direct effects. Owner-side only.".
--spec effects(plan()) -> [quod_effect:effect()].
-effects(Plan) -> material_value(effects, Plan).
-
--doc "Decode the plan's bounded invocation transcript. Owner-side only.".
--spec transcript(plan()) -> [transcript_entry()].
-transcript(Plan) -> material_value(transcript, Plan).
-
-material_value(Key, Plan) ->
-    case material(Plan) of
-        {ok, Material} -> maps:get(Key, Material);
-        {error, _} -> error(bad_plan)
-    end.
 
 %% ===================================================================
 %% Durable multi-ontology control protocol
@@ -857,7 +834,8 @@ from the origin. Exactly mask 2 grants independent eligibility. This is a
 permission on this target's material, not selection of the operation's lane:
 ordinary fallback may still use an independently eligible plan atomically.
 Both arms remain useful protocol statements; the ordinary arm retains its
-exact signature bytes for L3 and single-target claims.
+exact signature bytes for L3 and ordinary single-target claims. Multi-target
+independent claims require each target's independent attestation.
 """.
 -spec attest_plan(0..3, identity(), plan(), manifest(), quod_identity:signer()) ->
           {ok, attestation()} | {error, term()}.
@@ -1581,7 +1559,7 @@ prepare_payload_fields(
    <<_:256>> = PlanDigest, PlanBlob}) ->
     {ok, Manifest, PlanDigest, PlanBlob}.
 
--doc "Verify that one Prepare copied its context and target plan from this Begin.".
+%% Content binding inside the exact certified-Begin check below.
 -spec prepare_matches_begin(control() | control_record(),
                             control() | control_record()) -> boolean().
 prepare_matches_begin(

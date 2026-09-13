@@ -34,7 +34,7 @@ verify_honest(Committee, Bytes, Signatures) ->
             Needed = honest_threshold(N),
             valid_signature_list(Signatures, Needed) andalso
                 length(Signatures) =:= Needed andalso
-                sanitize_at_least(Committee, Bytes, Signatures, Needed) =:= {ok, Signatures};
+                sanitize_at_least(Committee, N, Bytes, Signatures, Needed) =:= {ok, Signatures};
         _ -> false
     end.
 
@@ -57,41 +57,34 @@ committee_size(_MalformedDuplicateOrTooLarge, _Count, _Seen) ->
 sanitize(Committee, Bytes, Signatures) when is_binary(Bytes) ->
     case committee_size(Committee) of
         {ok, N} when N > 0 ->
-            sanitize_at_least(Committee, Bytes, Signatures, threshold(N));
+            sanitize_at_least(Committee, N, Bytes, Signatures, threshold(N));
         _ ->
             error
     end;
 sanitize(_Committee, _Bytes, _Signatures) ->
     error.
 
-%% Shared private verifier for the public consensus and exact-f+1 policies.
--spec sanitize_at_least(term(), binary(), term(), pos_integer()) ->
+%% Both public policies already validated this committee and derived Needed
+%% from its size. Keep that boundary once, then verify the bounded votes once.
+-spec sanitize_at_least([node_key()], pos_integer(), binary(), term(), pos_integer()) ->
           {ok, [signed_row()]} | error.
-sanitize_at_least(Committee, Bytes, Signatures, Needed)
-  when is_binary(Bytes), is_integer(Needed), Needed > 0 ->
-    case committee_size(Committee) of
-        {ok, N} when N >= Needed ->
-            case bounded_signatures(Signatures, N) of
-                true ->
-                    Members = ordsets:from_list(Committee),
-                    Valid = lists:ukeysort(
-                              1,
-                              [{Signer, Signature}
-                               || {Signer, Signature} <- Signatures,
-                                  ordsets:is_element(Signer, Members),
-                                  quod_identity:verify(
-                                    Signature, Bytes, Signer)]),
-                    case length(Valid) >= Needed of
-                        true -> {ok, Valid};
-                        false -> error
-                    end;
-                false ->
-                    error
+sanitize_at_least(Committee, N, Bytes, Signatures, Needed) when is_binary(Bytes) ->
+    case bounded_signatures(Signatures, N) of
+        true ->
+            Members = ordsets:from_list(Committee),
+            Valid = lists:ukeysort(
+                      1,
+                      [{Signer, Signature}
+                       || {Signer, Signature} <- Signatures,
+                          ordsets:is_element(Signer, Members),
+                          quod_identity:verify(Signature, Bytes, Signer)]),
+            case length(Valid) >= Needed of
+                true -> {ok, Valid};
+                false -> error
             end;
-        _ ->
-            error
+        false -> error
     end;
-sanitize_at_least(_Committee, _Bytes, _Signatures, _Needed) ->
+sanitize_at_least(_Committee, _N, _Bytes, _Signatures, _Needed) ->
     error.
 
 -spec valid_signature_list(term(), non_neg_integer()) -> boolean().

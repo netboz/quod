@@ -9386,6 +9386,10 @@ propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
              proposals = S#s.proposals + 1,
              batched_txs = S#s.batched_txs + Count,
              round_probe = (S#s.round_probe)#{Slot => {quod_time:mono_ms(), none}}},
+    trace_block_event(
+      Slot, BH, <<"consensus.proposal_created">>,
+      #{'quod.consensus.parent' => Parent, 'quod.proposal.kind' => <<"content">>,
+        'quod.batch.transactions' => Count, 'quod.batch.wait_ms' => WaitMs}, S1),
     S2 = broadcast({propose, Block, []}, S1),
     S3 = engine_step([{block, BH, Block}], S2),
     case block_for(BH, S3#s.eng) of
@@ -9582,6 +9586,14 @@ propose_dtx_wave(Slot, Envelopes, ValidationSidecar0, S = #s{approved = Parent})
                    round_probe =
                      (S#s.round_probe)#{Slot =>
                                            {quod_time:mono_ms(), none}}},
+            %% An ended submitter cannot accept another event. Record the
+            %% actual proposal as its own boundary under the existing local
+            %% proposal's parent/links, before any broadcast or local verdict.
+            trace_block_event(
+              Slot, BH, <<"consensus.proposal_created">>,
+              #{'quod.consensus.parent' => Parent,
+                'quod.proposal.kind' => <<"dtx">>,
+                'quod.batch.transactions' => length(Controls)}, S1),
             S2 = broadcast({propose, Block, ValidationSidecar}, S1),
             %% Local and relayed leaders must enter through the same DTX
             %% candidate/validation path as an inbound leader proposal.  A
@@ -10507,6 +10519,7 @@ trace_slot_event(Slot, Name, Attributes, S) ->
     trace_block_event(Slot, none, Name, Attributes, S).
 
 trace_validation_class(valid) -> <<"valid">>;
+trace_validation_class({valid, _Histories}) -> <<"valid">>;
 trace_validation_class({invalid, _Reason}) -> <<"invalid">>;
 trace_validation_class(abstain) -> <<"abstain">>;
 trace_validation_class(_) -> <<"unexpected">>.
@@ -11407,6 +11420,10 @@ on_dtx_verdict(Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict,
           Round#round.candidate} of
         {BH, {dtx, ParentToken, EnginePid, _Monitor},
          {BH, #block{payload = Payload} = Block}} ->
+            trace_block_event(
+              Sl, BH, <<"consensus.parent_verdict_received">>,
+              #{'quod.validation.kind' => trace_validation_kind(Round),
+                'quod.validation.verdict' => trace_validation_class(Verdict)}, S),
             Round0 = release_dtx_validation_round(Round),
             S0 = put_round(Sl, Round0, S),
             continue_dtx_verdict(

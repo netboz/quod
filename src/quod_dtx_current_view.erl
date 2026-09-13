@@ -29,7 +29,7 @@ keeps the plan vocabulary opaque.
 -include("quod_proof_limits.hrl").
 -include("quod_ledger.hrl").
 
--export([submit_operation/4, submit_claim_application/5,
+-export([submit_claim_application/5,
          submit_operation_to/5,
          certify_applied_many/3, certify_reads/3, lookup_outcome/4,
          operation_result/5, certify_operation_evidence/6]).
@@ -64,14 +64,8 @@ keeps the plan vocabulary opaque.
 -type outcome_result() ::
         {ok, map()} | {error, retry | not_found | invalid_request}.
 
--doc """
-Submit one correlated durable-operation request to an exact ontology.
-
-The co-hosted and remote cases deliberately share this owner.  Route hints
-remain transport hints: the endpoint response must still correlate with the
-exact request, and the target transaction's foreign evidence is verified by
-the ordinary consensus path independently on every validator.
-""".
+%% The co-hosted and remote cases share one correlated submission walk.
+%% Routes remain hints; the target independently verifies foreign evidence.
 -spec submit_operation(binary(), identity(), quod_dtx_endpoint:request(),
                        pos_integer()) ->
           {ok, quod_dtx_endpoint:response()} |
@@ -303,8 +297,8 @@ certify_operation_with(OwnerNs, Ref,
                 Verify = fun(Result) ->
                     operation_response_vote(Request, Network, Evidence, Key, Result)
                 end,
-                case probe_applied_source(Source, OwnerNs, element(1, Target), Key,
-                                          Request, Deadline, Dependencies, Verify) of
+                case probe_source(Source, OwnerNs, element(1, Target), Key,
+                                  Request, Deadline, Dependencies, Verify, ignore) of
                     {ok, Statement, Vote} -> {signed, {operation, Statement}, Vote, none};
                     ignore -> ignore
                 end
@@ -340,10 +334,16 @@ certify_operation_with(_, _, _, _, _) -> {error, invalid_request}.
           {error, term()}.
 certify_operation_evidence(OwnerNs, Target, Ref,
                            #{transaction := Transaction} = Known, Certificate, Deadline) ->
-    Exact = case Known of
-        #{phase := transaction, committee := _} -> {ok, Known};
-        _ -> quod_foreign_log:resolve_reference(Target, Ref, transaction, none, none, Deadline)
-    end,
+    Exact = quod_trace:with_optional_span(
+      quod_trace:context(), <<"quod.operation.exact_evidence">>, internal,
+      #{'quod.owner.namespace' => OwnerNs},
+      fun() ->
+          case Known of
+              #{phase := transaction, committee := _} -> {ok, Known};
+              _ -> quod_foreign_log:resolve_reference(
+                     Target, Ref, transaction, none, none, Deadline)
+          end
+      end),
     case Exact of
         {ok, #{transaction := ExactTransaction} = Evidence} ->
             certify_matching_operation_evidence(
@@ -361,8 +361,11 @@ certify_matching_operation_evidence(true, OwnerNs, Ref, Evidence, Certificate, D
         _ ->
             case quod_ontology:network_identity() of
                 {ok, Network} ->
-                    case quod_applied_certificate:verify_operation_certificate(
-                           Certificate, Network, Evidence) of
+                    case quod_trace:with_optional_span(
+                           quod_trace:context(), <<"quod.operation.certificate_verify">>,
+                           internal, #{},
+                           fun() -> quod_applied_certificate:verify_operation_certificate(
+                                      Certificate, Network, Evidence) end) of
                         true -> {ok, Certificate};
                         false -> {error, invalid_operation_result_certificate}
                     end;
@@ -1226,10 +1229,15 @@ collect_outcomes(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
     end.
 
 collect_quorum(Tag, Sources, Needed, Deadline, Probe) ->
-    Parent = self(),
-    TraceCtx = quod_trace:context(),
-    ProbeRef = make_ref(),
-    Pending = lists:foldl(
+    quod_trace:with_optional_span(
+      quod_trace:context(), <<"quod.dtx.quorum.collect">>, internal,
+      #{'quod.probe.family' => atom_to_binary(Tag, utf8),
+        'quod.quorum.required' => Needed, 'quod.quorum.sources' => length(Sources)},
+      fun() ->
+          Parent = self(),
+          TraceCtx = quod_trace:context(),
+          ProbeRef = make_ref(),
+          Pending = lists:foldl(
                 fun({Key, Source}, Acc) ->
                     {Pid, Monitor} = spawn_opt(
                       fun() ->
@@ -1241,8 +1249,9 @@ collect_quorum(Tag, Sources, Needed, Deadline, Probe) ->
                       end, [link, monitor]),
                     Acc#{Pid => {Monitor, Key}}
                 end, #{}, Sources),
-    collect_quorum_results(
-      Tag, ProbeRef, Pending, Needed, #{}, Deadline).
+          collect_quorum_results(
+            Tag, ProbeRef, Pending, Needed, #{}, Deadline)
+      end).
 
 collect_quorum_results(Tag, ProbeRef, Pending, _Needed, _Counts, _Deadline)
   when map_size(Pending) =:= 0 ->
@@ -1421,35 +1430,10 @@ probe_outcome(OwnerNs, PeerKey, Source,
               Deadline, Dependencies) ->
     Request = {outcome, request_id(), OutcomeRef,
                CommitteeId, MinimumSlot},
-    probe_outcome_source(
-      Source, OwnerNs, TargetNs, PeerKey, Request, Target,
-      CommitteeId, Deadline, Dependencies).
-
-probe_outcome_source(
-  {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
-  Target, CommitteeId, Deadline, Dependencies) ->
-    walk_remote_candidates(
-      Endpoints, Deadline,
-      fun(Endpoint, AttemptDeadline) ->
-          call_endpoint(
-            OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
-            AttemptDeadline, Dependencies)
-      end,
-      fun(Result) ->
-          case outcome_response(Request, Target, CommitteeId, Result) of
-              ignore -> continue;
-              Accepted -> {done, Accepted}
-          end
-      end,
-      ignore);
-probe_outcome_source(
-  local, OwnerNs, TargetNs, PeerKey, Request, Target,
-  CommitteeId, Deadline, Dependencies) ->
-    outcome_response(
-      Request, Target, CommitteeId,
-      call_endpoint(
-        OwnerNs, TargetNs, PeerKey, local, Request,
-        Deadline, Dependencies)).
+    probe_source(
+      Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
+      fun(Result) -> outcome_response(Request, Target, CommitteeId, Result) end,
+      ignore).
 
 outcome_response(
   Request, Target, CommitteeId,
@@ -1478,36 +1462,10 @@ probe_outcome_barrier(
   Deadline, Dependencies) ->
     Request = {outcome_barrier, request_id(), GroupRef,
                CommitteeId, MinimumSlot},
-    probe_outcome_barrier_source(
-      Source, OwnerNs, TargetNs, Coordinator, Request, Target,
-      CommitteeId, GroupRef, Deadline, Dependencies).
-
-probe_outcome_barrier_source(
-  {remote, Endpoints}, OwnerNs, TargetNs, Coordinator, Request,
-  Target, CommitteeId, GroupRef, Deadline, Dependencies) ->
-    walk_remote_candidates(
-      Endpoints, Deadline,
-      fun(Endpoint, AttemptDeadline) ->
-          call_endpoint(
-            OwnerNs, TargetNs, Coordinator, {remote, Endpoint}, Request,
-            AttemptDeadline, Dependencies)
-      end,
-      fun(Result) ->
-          case barrier_response(
-                 Request, Target, CommitteeId, GroupRef, Result) of
-              {error, retry} -> continue;
-              Accepted -> {done, Accepted}
-          end
-      end,
-      {error, retry});
-probe_outcome_barrier_source(
-  local, OwnerNs, TargetNs, Coordinator, Request, Target,
-  CommitteeId, GroupRef, Deadline, Dependencies) ->
-    barrier_response(
-      Request, Target, CommitteeId, GroupRef,
-      call_endpoint(
-        OwnerNs, TargetNs, Coordinator, local, Request,
-        Deadline, Dependencies)).
+    probe_source(
+      Source, OwnerNs, TargetNs, Coordinator, Request, Deadline, Dependencies,
+      fun(Result) -> barrier_response(Request, Target, CommitteeId, GroupRef, Result) end,
+      {error, retry}).
 
 barrier_response(
   Request, Target, CommitteeId, GroupRef,
@@ -1558,39 +1516,13 @@ probe_read_attest(
   Dependencies) ->
     {TargetNs, _Anchor} = Target = quod_dtx:target(Plan),
     Request = {read_attest, request_id(), PlanBlob},
-    probe_read_attest_source(
-      Source, OwnerNs, TargetNs, PeerKey, Request, Target,
-      quod_dtx:proof_id(Plan), quod_dtx:digest(Plan),
-      CommitteeId, Deadline, Dependencies).
-
-probe_read_attest_source(
-  {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
-  Target, ProofId, PlanDigest, CommitteeId, Deadline, Dependencies) ->
-    walk_remote_candidates(
-      Endpoints, Deadline,
-      fun(Endpoint, AttemptDeadline) ->
-          call_endpoint(
-            OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
-            AttemptDeadline, Dependencies)
-      end,
-      fun(Result) ->
-          case read_attest_response_vote(
-                 Request, Target, ProofId, PlanDigest, CommitteeId,
-                 PeerKey, Result) of
-              {ok, _, _, _} = Vote -> {done, Vote};
-              conflict_retry -> {done, conflict_retry};
-              ignore -> continue
-          end
-      end,
-      ignore);
-probe_read_attest_source(
-  local, OwnerNs, TargetNs, PeerKey, Request,
-  Target, ProofId, PlanDigest, CommitteeId, Deadline, Dependencies) ->
-    read_attest_response_vote(
-      Request, Target, ProofId, PlanDigest, CommitteeId, PeerKey,
-      call_endpoint(
-        OwnerNs, TargetNs, PeerKey, local, Request,
-        Deadline, Dependencies)).
+    ProofId = quod_dtx:proof_id(Plan),
+    PlanDigest = quod_dtx:digest(Plan),
+    probe_source(
+      Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
+      fun(Result) -> read_attest_response_vote(
+                       Request, Target, ProofId, PlanDigest, CommitteeId, PeerKey, Result)
+      end, ignore).
 
 read_attest_response_vote(
   Request, Target, ProofId, PlanDigest, CommitteeId, ExpectedSigner,
@@ -1630,15 +1562,18 @@ probe_applied(OwnerNs, PeerKey, Source,
               Deadline, Dependencies) ->
     Request = {applied, request_id(), GroupId, FinalizeRef,
                Generation, Verdict},
-    probe_applied_source(
+    probe_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
       fun(Result) -> applied_response_vote(
                        Request, NetworkIdentity, Target, CommitteeId, PeerKey, Result)
-      end).
+      end, ignore).
 
-probe_applied_source(
+%% One endpoint walk for every observation family. The verifier alone decides
+%% what is terminal; Exhausted is its existing non-evidence result. In
+%% particular a read conflict or a barrier's not_found must stop this walk.
+probe_source(
   {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
-  Deadline, Dependencies, Verify) ->
+  Deadline, Dependencies, Verify, Exhausted) ->
     walk_remote_candidates(
       Endpoints, Deadline,
       fun(Endpoint, AttemptDeadline) ->
@@ -1648,14 +1583,14 @@ probe_applied_source(
       end,
       fun(Result) ->
           case Verify(Result) of
-              ignore -> continue;
-              Vote -> {done, Vote}
+              Exhausted -> continue;
+              Accepted -> {done, Accepted}
           end
       end,
-      ignore);
-probe_applied_source(
+      Exhausted);
+probe_source(
   local, OwnerNs, TargetNs, PeerKey, Request,
-  Deadline, Dependencies, Verify) ->
+  Deadline, Dependencies, Verify, _Exhausted) ->
     Result = call_endpoint(
                OwnerNs, TargetNs, PeerKey, local, Request,
                Deadline, Dependencies),

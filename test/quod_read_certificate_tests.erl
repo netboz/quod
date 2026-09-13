@@ -52,6 +52,28 @@ codec_bound_is_owned_by_the_dtx_body_limit_test() ->
        {error, too_large},
        quod_read_certificate:decode(AboveLimit)).
 
+encoder_bound_is_already_enforced_by_binding_test() ->
+    F = fixture(1), Certificate = certificate(F, maps:get(signers, F)),
+    {ok, Blob} = quod_read_certificate:encode(Certificate),
+    ?assertEqual(erlang:external_size(Certificate), byte_size(Blob)),
+    Ref = element(6, Certificate),
+    Overhead = byte_size(Blob) - byte_size(element(8, Ref)),
+    AtRef = setelement(8, Ref, binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES - Overhead)),
+    AtLimit = setelement(6, Certificate, AtRef),
+    {ok, AtBytes} = quod_read_certificate:encode(AtLimit),
+    ?assertEqual(?QUOD_MAX_DTX_BODY_BYTES, byte_size(AtBytes)),
+    ?assertEqual({ok, AtBytes}, quod_scope_wire:encode_payload(read_certificate, AtLimit)),
+    AboveRef = setelement(8, AtRef, <<(element(8, AtRef))/binary, 0>>),
+    %% Each carried reference is individually well-formed. Only the complete
+    %% certificate's byte bound distinguishes these two inputs; no signatures
+    %% or finality authority are claimed by this shape-only control.
+    ?assert(quod_dtx:validate_certified_ref(AboveRef)),
+    Oversized = setelement(6, Certificate, AboveRef),
+    ?assertEqual(error, quod_read_certificate:binding(Oversized)),
+    ?assertEqual({error, invalid_read_certificate}, quod_read_certificate:encode(Oversized)),
+    ?assertEqual({error, {protocol_error, bad_payload}},
+                 quod_scope_wire:encode_payload(read_certificate, Oversized)).
+
 every_read_statement_field_is_signature_bound_test() ->
     F = fixture(1),
     [A] = maps:get(signers, F),

@@ -1,10 +1,84 @@
 -module(quod_dtx_current_view_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
 deadline(TimeoutMs) -> quod_time:mono_ms() + TimeoutMs.
+
+quorum_collection_has_one_parent_and_preserves_result_test_() ->
+    [{atom_to_list(Outcome), fun() ->
+        quod_trace_tests:with_tracer(fun() ->
+            F = fixture(1),
+            Reply = case Outcome of
+                committed -> fun(Key, Request) -> applied_reply(F, Key, Request) end;
+                retry -> fun(_Key, _Request) -> {error, not_ready} end
+            end,
+            Deps = dependencies(F, Reply),
+            {Ctx, Parent} = quod_trace:start_span(
+              otel_ctx:new(), <<"quorum.collection.test">>, internal, #{}),
+            try
+                Result = quod_trace:with_context(Ctx, fun() -> certify(F, Deps) end),
+                case Outcome of
+                    committed -> ?assertMatch({ok, _}, Result);
+                    retry -> ?assertEqual({error, retry}, Result)
+                end,
+                TraceId = otel_span:trace_id(Parent),
+                Collection = quod_trace_tests:take_span(<<"quod.dtx.quorum.collect">>, TraceId),
+                Probe = quod_trace_tests:take_span(<<"quod.dtx.quorum.probe">>, TraceId),
+                ?assertEqual(otel_span:span_id(Parent), Collection#span.parent_span_id),
+                ?assertEqual(Collection#span.span_id, Probe#span.parent_span_id),
+                ?assert(Probe#span.start_time >= Collection#span.start_time),
+                ?assert(Probe#span.end_time =< Collection#span.end_time),
+                Attrs = otel_attributes:map(Collection#span.attributes),
+                ?assertEqual(1, maps:get('quod.quorum.required', Attrs)),
+                ?assertEqual(1, maps:get('quod.quorum.sources', Attrs)),
+                receive
+                    {quod_test_span, #span{name = <<"quod.dtx.quorum.collect">>,
+                                           trace_id = TraceId}} -> error(duplicate_collection_span)
+                after 0 -> ok
+                end
+            after quod_trace:finish_span(Parent, ok)
+            end
+        end)
+    end} || Outcome <- [committed, retry]].
+
+exact_evidence_and_certificate_boundaries_preserve_validation_test_() ->
+    [{atom_to_list(Outcome), fun() ->
+        quod_trace_tests:with_tracer(fun() ->
+            quod_operation_fixture:with(1, fun(F) ->
+                Evidence = maps:get(evidence, F),
+                Ref = maps:get(certified_target_ref, F),
+                {ok, Statement} = quod_applied_certificate:operation_statement(
+                                    maps:get(network, F), Evidence, applied),
+                {ok, Vote} = quod_applied_certificate:sign_operation_vote(
+                               Statement, maps:get(node_identity, F)),
+                {ok, Valid} = quod_applied_certificate:operation_certificate(Statement, [Vote]),
+                Certificate = case Outcome of valid -> Valid; invalid -> invalid_certificate end,
+                {Ctx, Parent} = quod_trace:start_span(
+                  otel_ctx:new(), <<"operation.evidence.test">>, internal, #{}),
+                try
+                    Result = quod_trace:with_context(Ctx, fun() ->
+                        quod_dtx_current_view:certify_operation_evidence(
+                          maps:get(source_ns, F), maps:get(target, F), Ref,
+                          Evidence, Certificate, deadline(1000))
+                    end),
+                    case Outcome of
+                        valid -> ?assertEqual({ok, Ref, Evidence, Valid}, Result);
+                        invalid -> ?assertEqual({error, invalid_operation_result_certificate}, Result)
+                    end,
+                    TraceId = otel_span:trace_id(Parent),
+                    Exact = quod_trace_tests:take_span(<<"quod.operation.exact_evidence">>, TraceId),
+                    Verify = quod_trace_tests:take_span(<<"quod.operation.certificate_verify">>, TraceId),
+                    ?assertEqual(otel_span:span_id(Parent), Exact#span.parent_span_id),
+                    ?assertEqual(otel_span:span_id(Parent), Verify#span.parent_span_id),
+                    ?assert(Exact#span.end_time =< Verify#span.start_time)
+                after quod_trace:finish_span(Parent, ok)
+                end
+            end)
+        end)
+    end} || Outcome <- [valid, invalid]].
 
 local_current_view_uses_the_captured_projection_and_apply_sent_frontier_test() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -514,6 +588,41 @@ read_certificate_f_plus_one_stale_refusals_remain_typed_test() ->
        {error, conflict_retry},
        quod_dtx_current_view:test_certify_reads(
          maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
+
+observation_walk_preserves_family_terminal_results_test_() ->
+    [{atom_to_list(Family), fun() ->
+        F0 = fixture(1), [Key] = maps:get(committee, F0),
+        First = {"127.0.0.1", 21201}, Second = {"127.0.0.1", 21202},
+        Routes = [{Key, [First, Second]}],
+        View = (maps:get(view, F0))#{route_candidates := Routes},
+        F = F0#{source_routes := Routes, view := View},
+        Calls = atomics:new(1, []),
+        Deps0 = dependencies(F, fun(_, _) -> error(unused_transport) end),
+        Ref = outcome_group_ref(F, Key),
+        Deps = Deps0#{remote := fun(_, _, Pinned, _Endpoint, Request, _) ->
+            ?assertEqual(Key, Pinned),
+            case element(1, Request) of
+                outcome -> outcome_reply(Request, maps:get(target, F),
+                                         maps:get(committee_id, F), 8, not_found);
+                _ ->
+                    atomics:add(Calls, 1, 1),
+                    case Family of
+                        read -> read_attest_conflict(Request);
+                        barrier -> barrier_reply(Request, maps:get(target, F),
+                                                 maps:get(committee_id, F), 8, not_found)
+                    end
+            end
+        end},
+        Result = case Family of
+            read -> quod_dtx_current_view:test_certify_reads(
+                      maps:get(owner_ns, F), {source(F), read_plan_blob(F, <<"terminal_read">>)},
+                      deadline(1000), Deps);
+            barrier -> lookup(F, Ref, Deps)
+        end,
+        Expected = case Family of read -> conflict_retry; barrier -> not_found end,
+        ?assertEqual({error, Expected}, Result),
+        ?assertEqual(1, atomics:get(Calls, 1))
+    end} || Family <- [read, barrier]].
 
 read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
     F = fixture(4),

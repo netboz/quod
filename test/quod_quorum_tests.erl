@@ -27,6 +27,20 @@ honest_threshold_has_one_arithmetic_owner_test() ->
     ?assertEqual([1, 1, 2, 3, 22],
                  [quod_quorum:honest_threshold(N) || N <- [1, 3, 4, 7, 64]]).
 
+committee_is_validated_once_at_each_public_policy_test() ->
+    {Pub, Identity} = identity(), Bytes = <<"one-committee-boundary">>,
+    Rows = [{Pub, quod_identity:sign(Bytes, Identity)}],
+    {module, quod_quorum} = code:ensure_loaded(quod_quorum),
+    {ok, {call_count, Counts}} = tprof:profile(fun() ->
+        ?assertEqual({ok, Rows}, quod_quorum:sanitize([Pub], Bytes, Rows)),
+        ?assert(quod_quorum:verify([Pub], Bytes, Rows)),
+        ?assert(quod_quorum:verify_honest([Pub], Bytes, Rows)),
+        ok
+    end, #{type => call_count, report => return,
+           pattern => {quod_quorum, committee_size, 1}}),
+    ?assertEqual(3, lists:sum([N || {quod_quorum, committee_size, 1, Ps} <- Counts,
+                                  {_, N, _} <- Ps])).
+
 exact_honest_verifier_rejects_noncanonical_and_extra_rows_test() ->
     Identities = [identity() || _ <- lists:seq(1, 4)],
     Committee = [P || {P, _} <- Identities], Bytes = <<"shared/exact-f-plus-one">>,

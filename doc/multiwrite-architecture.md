@@ -1327,3 +1327,34 @@ The claim-context control rebuilds source and target IDs to ensure that an
 unrelated stale-ID rejection cannot conceal a missing context comparison.
 This scope reduces shared codec work, not the remaining consensus or target
 result-collection latency measured in the separately labeled .180 witness.
+
+## Target-keyed progress continuations — implementation status (.181 base)
+
+The existing coordinator wave is also the unit of retry scheduling. Returned
+independent target work no longer waits for unrelated in-flight target workers.
+Each real owner/follow/route progress edge is coalesced per unfinished logical
+target inside that wave; it survives a still-running target and is consumed
+once when the target returns and can continue. Early unresolved results attach
+the same existing progress follow immediately, not after a cross-target join.
+Follow admission and building/unreachable status are not progress.
+Ordered re-plan messages are not a second retry allowance: a target vector
+consumes its preceding plan edge on admission and never reuses target progress
+again at the whole-wave boundary. Unconsumed continuations stay parked under
+the same timer if readiness is lost, even after all workers return.
+
+The admitted vector and logical indices remain immutable. The installed pure
+operation model chooses each next action: an exact retained application needs
+only certification, and a certified target has no further work. The worker map
+still admits at most one worker per index, rejects stale worker results, and
+uses the original wave deadline and timer. No new process, timer, polling loop,
+durable inventory, signing/evidence authority or retry engine is introduced.
+The bounded progress-edge set is disposable scheduling state, not truth about
+an operation. Pending actions and running indices are indexed once per owner
+turn; progress dispatch does not rewalk the target vector once per target.
+
+Readiness pauses admission, expiry starts nothing, and fatal target evidence
+blocks further continuation admissions. The source publishes only certified
+target results and joins exactly once for the complete vector/receipt through
+the unchanged owner. Atomic phase barriers and endpoint fan-out are unchanged.
+The scope's frozen handoff, controls and actual full-gate result determine
+publication readiness; this status text alone is not a gate claim.

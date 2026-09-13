@@ -166,6 +166,248 @@ held_target_cannot_delay_another_targets_application_and_certificate_test() ->
         end)
     end).
 
+target_continuation_admission_boundaries_test_() ->
+    [{atom_to_list(Kind), fun() ->
+      isolated_continuation_fixture(fun() ->
+        %% These are direct production scheduling transitions with signed
+        %% fixture models, not a consensus-admitted or live-latency witness.
+        with_operation_fixture(2, fun(F) ->
+            {ok, Model} = quod_operation:new(maps:get(source_ns, F),
+              maps:get(operation_ref, F), maps:get(certified_claim_ref, F), maps:get(claim, F)),
+            Now = quod_time:mono_ms(),
+            {Ready, Deadline, Progress, Busy, Result, Expected} = case Kind of
+                admitted -> {true, Now + 1000, true, false, {error, retry}, 1};
+                no_progress -> {true, Now + 1000, false, false, {error, retry}, 0};
+                paused -> {false, Now + 1000, true, false, {error, retry}, 0};
+                expired -> {true, Now - 1, true, false, {error, retry}, 0};
+                already_running -> {true, Now + 1000, true, true, {error, retry}, 0};
+                fatal -> {true, Now + 1000, true, false, {error, invalid_target_evidence}, 0}
+            end,
+            ?assertMatch(#{admitted := Expected, deadline := Deadline},
+              quod_dtx_coordinator:test_operation_continuation_admission(
+                Model, Ready, Deadline, Progress, Busy, Result))
+        end)
+      end)
+    end} || Kind <- [admitted, no_progress, paused, expired, already_running, fatal]].
+
+isolated_continuation_fixture(Fun) ->
+    %% Even the positive admission case may have an endpoint signal in flight
+    %% when its synthetic callback owner reaps the worker. Keep every such
+    %% fixture message in a disposable process, never the combined-suite inbox.
+    {Pid, Monitor} = spawn_monitor(Fun),
+    receive {'DOWN', Monitor, process, Pid, Reason} -> ?assertEqual(normal, Reason)
+    after 3000 -> exit(Pid, kill), demonitor(Monitor, [flush]), error(continuation_fixture_timeout)
+    end.
+
+independent_retry_does_not_join_a_held_sibling_test_() ->
+    [{atom_to_list(Order), fun() -> independent_retry_continuation(Order) end}
+      || Order <- [progress_before_result, progress_after_result, paused_then_ready,
+                   foreign_progress, retained_application]].
+
+independent_retry_continuation(Order) ->
+    with_operation_fixture(2, fun(F = #{operation_ref := Op, target_refs := Refs,
+                                      targets := [A, B], target_data := Data}) ->
+        FA = maps:merge(F, maps:get(A, Data)), FB = maps:merge(F, maps:get(B, Data)),
+        RefA = maps:get(target_ref, FA), RefB = maps:get(target_ref, FB),
+      with_continuation_follow(Order, fun() ->
+        with_operation_worker(F, fun(Worker, Monitor) ->
+            {ok, Row} = terminal_operation_row(F),
+            reply_operation_source(F, {ok, Row#{operation_state := unresolved,
+                                               receipt_height := none, included := []}}),
+            receive {dtx_coordinator, Worker, Op, {claim_state, unresolved, 2, _, Refs}} -> ok
+            after 1000 -> error(missing_retry_claim_binding) end,
+            reply_operation_claim(F),
+            {FromA, RequestA = {apply_claim, IdA, A, ClaimBytes}} = expect_operation_application(FA),
+            {FromB, RequestB} = expect_operation_application(FB),
+            #{wave := #{correlation := WaveRef, meta := #{request_deadline := Deadline}}} =
+                quod_dtx_coordinator:test_state(Worker),
+            case Order of
+                progress_before_result ->
+                    %% Multiple real owner turns coalesce; no second worker
+                    %% may run for A while its first endpoint is still held.
+                    [operation_ready(Worker, self(), Op) || _ <- lists:seq(1, 3)],
+                    ?assertMatch(#{wave := #{workers := 2}},
+                                 quod_dtx_coordinator:test_state(Worker)),
+                    assert_no_operation_stub_calls();
+                paused_then_ready ->
+                    {operation, Ns, Anchor, _, _} = Op,
+                    Worker ! {local_dtx_progress, self(), {Ns, Anchor}, 0, false},
+                    ?assertMatch(#{execution_ready := false},
+                                 quod_dtx_coordinator:test_state(Worker));
+                _ -> ok
+            end,
+            ExpectedStored = case Order of
+                retained_application ->
+                    reply_operation_application(FA, FromA, RequestA),
+                    {PendingFrom, PendingRequest, _} = operation_vote_request(FA, local),
+                    reply_operation_vote(FA, PendingFrom, PendingRequest,
+                                         #{status => pending, ref => RefA}),
+                    observed;
+                _ -> gen_server:reply(FromA, {ok, {error, IdA, not_ready}, []}), {error, retry}
+            end,
+            FollowRef = case Order of
+                progress_before_result -> none;
+                foreign_progress ->
+                    Follow = attach_operation_follow(FA, Worker),
+                    _ = await_operation_target_result(Worker, ExpectedStored, quod_time:mono_ms() + 1000),
+                    operation_status_notices(FA, Worker, Follow),
+                    wake_operation_follow(FA, Worker, Follow),
+                    Follow;
+                _ ->
+                    Parked = await_operation_target_result(Worker, ExpectedStored, quod_time:mono_ms() + 1000),
+                    ?assertMatch(#{wave := #{workers := 1,
+                        meta := #{request_deadline := Deadline}}}, Parked),
+                    %% Same-owner state responses establish processing, not
+                    %% cross-recipient send notifications or sleeps.
+                    [quod_dtx_coordinator:test_state(Worker) || _ <- lists:seq(1, 3)],
+                    assert_no_operation_stub_calls(),
+                    operation_ready(Worker, self(), Op),
+                    none
+            end,
+            case Order of
+                retained_application -> ok;
+                _ ->
+                    {RetryFrom, RetryRequest = {apply_claim, RetryId, A, RetryBytes}} =
+                        expect_operation_application(FA),
+                    ?assertNotEqual(IdA, RetryId),
+                    ?assertEqual(ClaimBytes, RetryBytes),
+                    reply_operation_application(FA, RetryFrom, RetryRequest)
+            end,
+            %% A retained application continues with a vote, never another
+            %% application call or sufficient-history recapture. This helper
+            %% would fail on an apply_claim instead of the expected vote.
+            {VoteFromA, VoteRequestA, _} = operation_vote_request(FA, local),
+            %% Reusing the logical wave/index must not let an old worker's
+            %% delayed result poison the newly admitted target attempt.
+            Worker ! {dtx_wave_result, WaveRef, element(1, FromA), 1,
+                       {error, invalid_target_evidence}},
+            #{wave := #{workers := 2, results := PendingResults,
+                        meta := #{request_deadline := Deadline}}} =
+                quod_dtx_coordinator:test_state(Worker),
+            ?assertNot(maps:is_key(1, PendingResults)),
+            reply_operation_vote(FA, VoteFromA, VoteRequestA,
+                                 #{status => committed, height => 2, ref => RefA}),
+            receive {dtx_coordinator, Worker, Op, {target_result, committed, RefA}} -> ok
+            after 1000 -> error(retry_waited_for_held_sibling) end,
+            operation_ready(Worker, self(), Op),
+            ?assertMatch(#{wave := #{workers := 1}}, quod_dtx_coordinator:test_state(Worker)),
+            assert_no_operation_stub_calls(),
+            %% A's certified result is installed while B's original request
+            %% has never been released. Complete-vector publication still joins.
+            reply_operation_application(FB, FromB, RequestB),
+            {VoteFromB, VoteRequestB, _} = operation_vote_request(FB, local),
+            reply_operation_vote(FB, VoteFromB, VoteRequestB,
+                                 #{status => committed, height => 2, ref => RefB}),
+            receive {dtx_coordinator, Worker, Op, {target_result, committed, RefB}} -> ok
+            after 1000 -> error(missing_held_sibling_result) end,
+            ReceiptFrom = expect_vector_receipt(F, [{A, {committed, RefA}}, {B, {committed, RefB}}]),
+            gen_server:reply(ReceiptFrom, {ok, [], 4, digest(253)}),
+            receive {dtx_coordinator, Worker, Op, {done, Op}} -> ok
+            after 1000 -> error(retry_receipt_not_completed) end,
+            receive {'DOWN', Monitor, process, Worker, normal} -> ok
+            after 1000 -> error(retry_worker_not_finished) end,
+            case FollowRef of
+                none -> ok;
+                _ -> _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}), ok
+            end,
+            assert_no_operation_stub_calls(),
+            ?assertMatch({apply_claim, IdA, A, ClaimBytes}, RequestA)
+        end)
+      end)
+    end).
+
+with_continuation_follow(foreign_progress, Fun) ->
+    with_operation_follow_owner(fun(_) -> Fun() end);
+with_continuation_follow(_, Fun) -> Fun().
+
+all_returned_targets_park_with_the_original_deadline_test() ->
+    with_operation_fixture(2, fun(F = #{operation_ref := Op, target_refs := Refs,
+                                      targets := [A, B], target_data := Data}) ->
+        FA = maps:merge(F, maps:get(A, Data)), FB = maps:merge(F, maps:get(B, Data)),
+        with_operation_worker(F, fun(Worker, _Monitor) ->
+            {ok, Row} = terminal_operation_row(F),
+            reply_operation_source(F, {ok, Row#{operation_state := unresolved,
+                                               receipt_height := none, included := []}}),
+            receive {dtx_coordinator, Worker, Op, {claim_state, unresolved, 2, _, Refs}} -> ok
+            after 1000 -> error(missing_parked_claim_binding) end,
+            reply_operation_claim(F),
+            {FromA, {apply_claim, IdA, A, Bytes}} = expect_operation_application(FA),
+            {FromB, {apply_claim, IdB, B, Bytes}} = expect_operation_application(FB),
+            #{wave := #{correlation := WaveRef, meta := #{request_deadline := Deadline}}} =
+                quod_dtx_coordinator:test_state(Worker),
+            {operation, Ns, Anchor, _, _} = Op,
+            Worker ! {local_dtx_progress, self(), {Ns, Anchor}, 0, false},
+            ?assertMatch(#{execution_ready := false}, quod_dtx_coordinator:test_state(Worker)),
+            gen_server:reply(FromA, {ok, {error, IdA, not_ready}, []}),
+            gen_server:reply(FromB, {ok, {error, IdB, not_ready}, []}),
+            Parked = await_all_targets_parked(Worker, quod_time:mono_ms() + 1000),
+            ?assertMatch(#{wave := #{running := true, correlation := WaveRef, workers := 0,
+                                    meta := #{request_deadline := Deadline}}}, Parked),
+            operation_ready(Worker, self(), Op),
+            {_, {apply_claim, NewA, A, Bytes}} = expect_operation_application(FA),
+            {_, {apply_claim, NewB, B, Bytes}} = expect_operation_application(FB),
+            ?assertNotEqual(IdA, NewA), ?assertNotEqual(IdB, NewB),
+            ?assertMatch(#{wave := #{workers := 2, correlation := WaveRef,
+                                    meta := #{request_deadline := Deadline}}},
+                         quod_dtx_coordinator:test_state(Worker)),
+            assert_no_operation_stub_calls()
+        end)
+    end).
+
+await_all_targets_parked(Worker, Limit) ->
+    case quod_dtx_coordinator:test_state(Worker) of
+        #{wave := #{workers := 0}} = State -> State;
+        #{wave := none} -> error(discarded_paused_target_wave);
+        _ -> true = quod_time:mono_ms() < Limit, await_all_targets_parked(Worker, Limit)
+    end.
+
+one_progress_edge_cannot_be_reused_after_the_target_wave_test() ->
+    with_operation_fixture(2, fun(F = #{operation_ref := Op, target_refs := Refs,
+                                      targets := [A, B], target_data := Data}) ->
+        FA = maps:merge(F, maps:get(A, Data)), FB = maps:merge(F, maps:get(B, Data)),
+        with_operation_worker(F, fun(Worker, _Monitor) ->
+            {ok, Row} = terminal_operation_row(F),
+            reply_operation_source(F, {ok, Row#{operation_state := unresolved,
+                                               receipt_height := none, included := []}}),
+            receive {dtx_coordinator, Worker, Op, {claim_state, unresolved, 2, _, Refs}} -> ok
+            after 1000 -> error(missing_edge_claim_binding) end,
+            reply_operation_claim(F),
+            {FromA, {apply_claim, IdA, A, Bytes}} = expect_operation_application(FA),
+            {FromB, RequestB} = expect_operation_application(FB),
+            gen_server:reply(FromA, {ok, {error, IdA, not_ready}, []}),
+            _ = await_operation_target_result(Worker, {error, retry}, quod_time:mono_ms() + 1000),
+            operation_ready(Worker, self(), Op),
+            {RetryFrom, {apply_claim, RetryId, A, Bytes}} = expect_operation_application(FA),
+            gen_server:reply(RetryFrom, {ok, {error, RetryId, not_ready}, []}),
+            _ = await_operation_target_result(Worker, {error, retry}, quod_time:mono_ms() + 1000),
+            reply_operation_application(FB, FromB, RequestB),
+            {VoteFrom, VoteRequest, _} = operation_vote_request(FB, local),
+            RefB = maps:get(target_ref, FB),
+            reply_operation_vote(FB, VoteFrom, VoteRequest,
+                                 #{status => committed, height => 2, ref => RefB}),
+            receive {dtx_coordinator, Worker, Op, {target_result, committed, RefB}} -> ok
+            after 1000 -> error(missing_edge_sibling_result) end,
+            ?assertMatch(#{wave := none, progress_pending := false},
+                         quod_dtx_coordinator:test_state(Worker)),
+            %% A second owner turn catches an already-queued old drive. It
+            %% must not refresh the source or mint another target allowance.
+            ?assertMatch(#{wave := none, progress_pending := false},
+                         quod_dtx_coordinator:test_state(Worker)),
+            assert_no_operation_stub_calls()
+        end)
+    end).
+
+await_operation_target_result(Worker, Expected, Limit) ->
+    receive
+        {operation_stub_call, target, _, {dtx_endpoint_local, {apply_claim, _, _, _}, _, _, _}} ->
+            error(unprompted_target_redelivery)
+    after 0 -> ok
+    end,
+    case quod_dtx_coordinator:test_state(Worker) of
+        #{wave := #{workers := 1, results := #{1 := Expected}}} = State -> State;
+        _ -> true = quod_time:mono_ms() < Limit, await_operation_target_result(Worker, Expected, Limit)
+    end.
+
 reply_operation_application(F, From, {apply_claim, Id, _, _}) ->
     {ok, Blob} = quod_transaction:encode_evidence(
       maps:get(certified_target_ref, F), maps:get(application, F)),

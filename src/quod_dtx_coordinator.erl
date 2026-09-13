@@ -35,6 +35,7 @@ does not cancel or resubmit the uncertain operation.
          test_dormant_cancel_disposition/2,
          test_dormant_cancel_request/3,
          test_operation_application_evidence/2,
+         test_operation_continuation_admission/6,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
          test_endpoint_request_candidates/5,
@@ -85,6 +86,10 @@ does not cancel or resubmit the uncertain operation.
       #{pid() | gen_statem:request_id() =>
           {reference() | owner_call, non_neg_integer() | {pos_integer(), pos_integer()}}},
     results = #{} :: #{non_neg_integer() => term()},
+    %% Real progress is coalesced per logical target until that target can
+    %% consume it. This is bounded wave scheduling, not an outcome inventory.
+    %% A busy sibling cannot hold a returned target's continuation hostage.
+    progress_edges = #{} :: #{pos_integer() => true},
     context = #{} :: map(),
     trace_context = undefined :: undefined | quod_trace:context(),
     meta = #{} :: map(),
@@ -125,9 +130,9 @@ does not cancel or resubmit the uncertain operation.
                        reference() | {pending, gen_server:request_id()}},
     route_subscriptions = #{} :: #{{binary(), <<_:256>>} => true},
     foreign_log_monitor = none :: none | reference(),
-    %% A progress edge received while I/O is in flight must survive that
-    %% wave. One boolean coalesces any number of exact follow/route/owner
-    %% notifications into one immediate re-plan after the wave finishes.
+    %% Ordered protocol work still re-plans at the wave boundary. Independent
+    %% target continuations consume their own coalesced edges inside the wave;
+    %% this bit is never a second target-retry allowance.
     progress_pending = false :: boolean(),
     %% Once every participant Finalize is certified applied, the visible
     %% result is already safe.  Notify the namespace owner once, then keep this
@@ -526,6 +531,27 @@ test_observation_state(S = #state{group_id = GroupId}) ->
 test_operation_application_evidence(Request, Result) ->
     operation_application_evidence(Request, Result).
 
+%% Direct scheduling-boundary fixture: the caller supplies a genuine signed
+%% operation model, never a bypass into target validation or consensus. Count
+%% admissions before any worker reply can be processed, then reap test work.
+test_operation_continuation_admission(Model, Ready, Deadline, Progress, Busy, Result) ->
+    Items = quod_operation:work(Model),
+    Workers = case Busy of true -> #{self() => {make_ref(), 1}}; false -> #{} end,
+    Edges = case Progress of true -> #{1 => true}; false -> #{} end,
+    Operation = #{owner_ns => <<"quod:test-continuation">>, model => Model},
+    Context = #{owner_ns => <<"quod:test-continuation">>, operation => Operation,
+                request_deadline => Deadline},
+    Wave = #wave{ref = make_ref(), stage = operation, items = Items,
+      workers = Workers, results = #{1 => Result}, progress_edges = Edges,
+      context = Context, meta = #{request_deadline => Deadline}},
+    S = #state{owner = self(), owner_ns = <<"quod:test-continuation">>,
+      execution_ready = Ready, protocol = {operation, Operation}, wave = Wave},
+    #state{wave = After} = resume_wave_work(S),
+    Added = maps:without(maps:keys(Workers), After#wave.workers),
+    maps:foreach(fun(Pid, {Monitor, _}) -> stop_wave_item_owner(Pid, Monitor) end, Added),
+    #{admitted => map_size(Added), deadline => maps:get(request_deadline, After#wave.context),
+      pending_edges => map_size(After#wave.progress_edges)}.
+
 -endif.
 
 operation_wait_targets(S = #state{protocol = {operation, #{model := Model}}}) ->
@@ -726,12 +752,16 @@ loop(S) ->
     end.
 
 handle_loop_message(
-  {drive, EnqueuedNative}, S = #state{wave = #wave{ref = Ref}})
+  {drive, EnqueuedNative}, S = #state{wave = Wave = #wave{ref = Ref}})
   when is_reference(Ref) ->
-    %% A progress edge cannot be consumed while its current observation wave
-    %% is still running. `finish_wave/1` re-enqueues the retained edge.
+    %% A queued re-plan belongs to the preceding ordered action. A target
+    %% vector already planned from that state; only directly consumed real
+    %% progress may authorize another target attempt inside it.
     observe_stage(S, coordinator_mailbox, ok, EnqueuedNative),
-    loop(S#state{progress_pending = true});
+    case target_wave(Wave) of
+        true -> loop(S);
+        false -> loop(S#state{progress_pending = true})
+    end;
 handle_loop_message({drive, EnqueuedNative}, S) ->
     observe_stage(S, coordinator_mailbox, ok, EnqueuedNative),
     continue(drive(S#state{progress_pending = false}));
@@ -1019,7 +1049,15 @@ launch_wave(Stage, Items, Meta0, S) ->
     Workers = spawn_wave_items(lists:zip(lists:seq(1, length(Items)), Items), Wave0),
     Timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
                               self(), {dtx_wave_timeout, Ref}),
-    {next, S#state{commands = none, wave = Wave0#wave{workers = Workers, timer = Timer}}}.
+    Planned = case target_wave(Wave0) of
+        true -> S#state{progress_pending = false};
+        false -> S
+    end,
+    {next, Planned#state{commands = none, wave = Wave0#wave{workers = Workers, timer = Timer}}}.
+
+target_wave(#wave{stage = operation, items = [{application, _} | _]}) -> true;
+target_wave(#wave{stage = operation, items = [{certify, _, _, _} | _]}) -> true;
+target_wave(_) -> false.
 
 spawn_wave_items(Items, Wave) ->
     maps:from_list([start_wave_item(Key, Item, Wave) || {Key, Item} <- Items]).
@@ -1052,10 +1090,10 @@ record_wave_result(Index, Result,
     case Item of
         {application, Target} ->
             {Stored, S1} = operation_record_result(Result, Target, Deadline, S),
-            put_wave_result(Index, Stored, S1);
+            retain_target_result(Index, Target, Stored, S1);
         {certify, Target, _, _} ->
             {Stored, S1} = operation_record_result(Result, Target, Deadline, S),
-            put_wave_result(Index, Stored, S1);
+            retain_target_result(Index, Target, Stored, S1);
         _ -> put_wave_result(Index, Result, S)
     end;
 record_wave_result(Index, {prepared_submit, Plan}, S) when is_integer(Index) ->
@@ -1088,6 +1126,16 @@ record_wave_result({Index, Endpoint}, Result,
 record_wave_result(Index, Result, S) ->
     put_wave_result(Index, Result, S).
 
+retain_target_result(Index, Target, Result, S0) ->
+    S = put_wave_result(Index, Result, S0),
+    case {operation_work_disposition(Result), maps:is_key(Target, operation_work(S))} of
+        {wait, true} -> wait_for_progress(Target, S);
+        _ -> S
+    end.
+
+operation_work(#state{protocol = {operation, #{model := Model}}}) ->
+    maps:from_list([{element(2, Item), Item} || Item <- quod_operation:work(Model)]).
+
 put_wave_result(Index, Result, S = #state{wave = Wave = #wave{results = Results}}) ->
     S#state{wave = Wave#wave{results = Results#{Index => Result}}}.
 
@@ -1107,21 +1155,77 @@ submit_plan_result({Target, GroupId, Kind, Request, _Sidecar, _Sources}, Outcome
     {ok, Target, GroupId, Kind, Request, Outcome}.
 
 advance_wave(S0) ->
-    S = resume_wave_submissions(S0),
-    #wave{workers = Workers, results = Results} = S#state.wave,
+    S = resume_wave_work(S0),
+    #wave{workers = Workers, results = Results, progress_edges = Edges} = S#state.wave,
     Prepared = lists:any(fun({prepared_submit, _}) -> true; (_) -> false end,
                          maps:values(Results)),
-    case map_size(Workers) =:= 0 andalso not Prepared of
+    PausedContinuation = not S#state.execution_ready andalso map_size(Edges) > 0,
+    case map_size(Workers) =:= 0 andalso not Prepared andalso not PausedContinuation of
         true -> finish_wave(S);
         false -> {next, S}
     end.
 
-resume_wave_submissions(S = #state{execution_ready = false}) -> S;
-resume_wave_submissions(S0 = #state{wave = #wave{results = Results}}) ->
-    lists:foldl(fun
+resume_wave_work(S = #state{execution_ready = false}) -> S;
+resume_wave_work(S0 = #state{wave = #wave{results = Results}}) ->
+    S1 = lists:foldl(fun
         ({Index, {prepared_submit, Plan}}, S) -> dispatch_wave_submission(Index, Plan, S);
         (_, S) -> S
-    end, S0, lists:sort(maps:to_list(Results))).
+    end, S0, lists:sort(maps:to_list(Results))),
+    resume_target_continuations(S1).
+
+%% The existing wave is the only scheduler. Each target spends one real
+%% progress edge on one next action, with the same index and absolute deadline.
+%% An edge arriving during I/O survives until its result is consumed. No
+%% endpoint reply, follow admission or timer manufactures a retry edge.
+retain_wave_progress(S = #state{wave = W = #wave{stage = operation, items = Items},
+                                protocol = {operation, #{model := _}}}) ->
+    Pending = operation_work(S),
+    Edges = maps:from_list([{Index, true}
+      || {Index, Item} <- lists:zip(lists:seq(1, length(Items)), Items),
+         is_tuple(Item),
+         element(1, Item) =:= application orelse element(1, Item) =:= certify,
+         maps:is_key(element(2, Item), Pending)]),
+    S#state{wave = W#wave{progress_edges = Edges}};
+retain_wave_progress(S) -> S.
+
+resume_target_continuations(S = #state{wave = #wave{stage = operation,
+    items = Items, workers = Workers, results = Results, progress_edges = Edges}})
+  when map_size(Edges) > 0 ->
+    case lists:any(fun(Result) ->
+        case operation_work_disposition(Result) of {fatal, _} -> true; wait -> false end
+    end, maps:values(Results)) of
+        true -> S;
+        false ->
+            Pending = operation_work(S),
+            Running = maps:from_list([{logical_item(Key), true}
+                         || {_Monitor, Key} <- maps:values(Workers)]),
+            lists:foldl(fun({Index, Admitted}, Acc) ->
+                resume_target_continuation(Index, Admitted, Pending, Running, Acc)
+            end, S, lists:zip(lists:seq(1, length(Items)), Items))
+    end;
+resume_target_continuations(S) -> S.
+
+resume_target_continuation(Index, Admitted, Pending, Running,
+  S = #state{wave = W = #wave{workers = Workers, progress_edges = Edges,
+                              results = Results, context = Context}}) ->
+    case {maps:is_key(Index, Edges), maps:is_key(Index, Running), maps:find(Index, Results),
+          maps:find(element(2, Admitted), Pending), context_timeout(Context) > 0} of
+        {true, false, {ok, _Result}, {ok, Item}, true} ->
+            %% The whole wave's fatal boundary was checked once above. Read
+            %% the installed model, not the earlier wave capture: a retained
+            %% exact application needs certification, never resubmission.
+            FreshContext = (wave_context(S))#{
+              request_deadline => maps:get(request_deadline, Context)},
+            %% Items retain the logical admission vector. Both target action
+            %% kinds correlate by that same immutable target; only the model
+            %% selects the concrete continuation.
+            W1 = W#wave{context = FreshContext,
+              results = maps:remove(Index, Results),
+              progress_edges = maps:remove(Index, W#wave.progress_edges)},
+            {Worker, MonitorKey} = start_wave_item(Index, Item, W1),
+            S#state{wave = W1#wave{workers = Workers#{Worker => MonitorKey}}};
+        _ -> S
+    end.
 
 dispatch_wave_submission(Index,
   Plan = {Target, _GroupId, _Kind, Request, Sidecar, Sources},
@@ -1858,8 +1962,11 @@ queue_drive() ->
     self() ! {drive, erlang:monotonic_time()},
     ok.
 
-request_progress_drive(S = #state{wave = #wave{ref = Ref}}) when is_reference(Ref) ->
-    S#state{progress_pending = true};
+request_progress_drive(S = #state{wave = Wave = #wave{ref = Ref}}) when is_reference(Ref) ->
+    case target_wave(Wave) of
+        true -> resume_wave_work(retain_wave_progress(S));
+        false -> S#state{progress_pending = true}
+    end;
 request_progress_drive(S = #state{progress_pending = true}) ->
     S;
 request_progress_drive(S) ->
@@ -2565,7 +2672,7 @@ test_loop_message({test_state, From, Ref}, S) ->
         none -> none;
         #wave{ref = WaveRef, stage = Stage, items = Items, meta = Meta,
               workers = Workers, results = Results} ->
-            #{running => is_reference(WaveRef), stage => Stage,
+            #{running => is_reference(WaveRef), correlation => WaveRef, stage => Stage,
               items => Items, meta => Meta, workers => map_size(Workers),
               results => Results}
     end,

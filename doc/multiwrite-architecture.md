@@ -1086,6 +1086,8 @@ attribution gaps; F6 fast-restart checkpoints; dependency-taxonomy enforcement;
 R-RESTART-RACE-01; all three EUnit ledger items (B-EUNIT-UNIDENTIFIED-01,
 EUNIT-SEND-TRACE-MAILBOX-01, EUNIT-OPERATION-FOLLOW-RACE-01); and the historical +8.7%
 question (its earlier retained state was retired, not its question solved).
+CT-JOIN-STARTUP-TIMEOUT-01 also remains open: a peer application-start timeout
+has been observed in a combined gate run, followed by clean isolated reruns.
 No gate is retired by this cleanup. Full clean sequential gates, retained true
 exits and exact-tree review govern its publication. Yan's write-lanes and
 performance-roadmap documents are reported separately, not edited here.
@@ -1100,9 +1102,10 @@ Request-scoped contact matching runs in the existing foreign verifier, by exact
 candidate claim bytes, not by decoding every active request in Simplex. Contacts
 remain untrusted hints until the candidate's references verify.
 
-Atomic retained rows carry the exact authenticated record, digest and opaque
-plans alongside the original signed envelope. Admission and journal restoration
-create that material; owner queries use it against the current installed
+Atomic queued intents and retained rows share the authenticated record, digest
+and opaque plans; retained rows also hold the original signed envelope.
+Admission and journal restoration create that material, and handoff reuses it.
+Owner queries use it against the current installed
 projection without reauthenticating history. Classification still precedes
 signature renewal and publication still follows application. Slot/barrier
 and relay-readiness eligibility precede candidate construction. Selection advances one
@@ -1114,3 +1117,7 @@ timer or durable format is introduced. Existing parent/author/finality checks
 remain validation boundaries. Performance acceptance requires a fresh witness,
 including target-owner admission-to-proposal residence; local call counts alone
 do not establish fleet latency.
+Queue progress still checks the current binding, deadline and projection;
+carried authentication is not permission to sign after ownership changes.
+Peer-candidate material failure uses the existing rejection and exact-retirement
+transition, not a callback assertion or a second validation engine.

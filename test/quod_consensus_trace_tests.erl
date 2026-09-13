@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
+-include_lib("opentelemetry_api/include/opentelemetry.hrl").
 -include("quod_ledger.hrl").
 
 owner_turns_cover_real_statem_calls_casts_and_info_test() ->
@@ -143,6 +144,44 @@ same_slot_other_hash_does_not_claim_request_trace_test() ->
         end
     end).
 
+relayed_block_uses_only_opt_in_owner_ancestry_test() ->
+    with_request_spans(fun(Unsampled, Sampled, _Parent) ->
+        Ns = <<"trace:relay-owner">>, Slot = 23, OwnHash = <<1:256>>, OtherHash = <<2:256>>,
+        S = quod_simplex:test_state(#{ns => Ns,
+              local_proposal => {Slot, OwnHash, [Sampled]}}),
+        Before = quod_trace:context(), Once = make_ref(),
+        %% An unrelated ambient request must not become the relayed block's parent.
+        quod_trace:with_context(Sampled, fun() ->
+            quod_trace:with_owner_turn(#{'quod.namespace' => Ns}, fun() ->
+                ?assertEqual(unchanged, quod_simplex:test_trace_block(
+                    Slot, OtherHash, <<"relay.owner.work">>, S,
+                    fun() -> self() ! {called, Once}, unchanged end)),
+                ok = quod_simplex:test_trace_block_event(
+                    Slot, OtherHash, <<"relay.owner.boundary">>, #{}, S),
+                ?assertError(original_work_error, quod_simplex:test_trace_block(
+                    Slot, OtherHash, <<"relay.owner.failure">>, S,
+                    fun() -> error(original_work_error) end)),
+                %% A valid unsampled caller still controls its own block's sampling.
+                Unrecorded = quod_simplex:test_state_set(
+                    local_proposal, {Slot, OwnHash, [Unsampled]}, S),
+                ok = quod_simplex:test_trace_block_event(
+                    Slot, OwnHash, <<"relay.owner.unsampled">>, #{}, Unrecorded)
+            end)
+        end),
+        assert_called_once(Once),
+        Turn = take_owner_turn(Ns),
+        lists:foreach(fun(Name) ->
+            Span = quod_trace_tests:take_span(Name, Turn#span.trace_id),
+            ?assertEqual(Turn#span.span_id, Span#span.parent_span_id),
+            ?assertEqual(binary:encode_hex(OtherHash, lowercase),
+                         owner_attribute('quod.consensus.block_hash', Span)),
+            ?assertEqual([], otel_links:list(Span#span.links))
+        end, [<<"relay.owner.work">>, <<"relay.owner.boundary">>, <<"relay.owner.failure">>]),
+        ?assertEqual(Before, quod_trace:context()),
+        receive {quod_test_span, #span{name = <<"relay.owner.unsampled">>}} -> error(sampling_overridden)
+        after 0 -> ok end
+    end).
+
 consensus_boundary_survives_ended_proof_parent_test() ->
     quod_trace_tests:with_tracer(fun() ->
         {Ctx, Parent} = quod_trace:start_span(otel_ctx:new(), <<"ended.proof">>, internal, #{}),
@@ -190,7 +229,7 @@ foreign_validation_worker_inherits_trace_and_records_terminal_verdict_test_() ->
                   Case, State0, Transaction, Ref, Unsampled, Sampled, Parent)
             end)
         end)
-      end} || Case <- [valid, invalid]].
+      end} || Case <- [valid, invalid, owner]].
 
 exercise_foreign_validation(Case, State0, Transaction, Ref0,
                             Unsampled, Sampled, Parent) ->
@@ -198,7 +237,7 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
     %% worker and certified-history verifier. Only transport is unnecessary;
     %% no verifier result is stubbed and a changed exact block hash is refused.
     Ref = case Case of
-              valid -> Ref0;
+              Case when Case =:= valid; Case =:= owner -> Ref0;
               invalid -> setelement(6, Ref0, crypto:hash(sha256, <<"wrong-block">>))
           end,
     {ok, {Ns, _}, _, _} = quod_dtx:certified_ref_binding(Ref),
@@ -210,14 +249,23 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
     ?assertEqual([{transaction, Ref}], quod_transaction:required_references(Receipt)),
     Slot = 3,
     Hash = crypto:hash(sha256, <<"receipt-validation-proposal">>),
-    State = quod_simplex:test_state_set(
-              local_proposal, {Slot, Hash, [Unsampled, Sampled]}, State0),
-    Started = quod_simplex:test_start_content_validation([Receipt], 0, Slot, Hash, State),
+    {Started, ExpectedParent} = case Case of
+        owner ->
+            OwnerStarted = quod_trace:with_owner_turn(#{'quod.namespace' => Ns}, fun() ->
+                quod_simplex:test_start_content_validation([Receipt], 0, Slot, Hash, State0)
+            end),
+            Turn = take_owner_turn(Ns),
+            {OwnerStarted, #span_ctx{trace_id = Turn#span.trace_id, span_id = Turn#span.span_id}};
+        _ ->
+            State = quod_simplex:test_state_set(
+                      local_proposal, {Slot, Hash, [Unsampled, Sampled]}, State0),
+            {quod_simplex:test_start_content_validation([Receipt], 0, Slot, Hash, State), Parent}
+    end,
     {Hash, {content_foreign, Worker, Monitor}, _, _, _} =
         quod_simplex:test_dtx_round(Slot, Started),
     try
         Expected = case Case of
-                       valid -> valid;
+                       Case when Case =:= valid; Case =:= owner -> valid;
                        invalid -> {invalid, foreign_reference}
                    end,
         receive
@@ -230,10 +278,10 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
         after 3000 -> error(foreign_validation_worker_not_retired)
         end,
         Span = quod_trace_tests:take_span(<<"quod.consensus.foreign_validation">>),
-        assert_parent_and_block(Span, Parent, Ns, Slot, Hash),
+        assert_parent_and_block(Span, ExpectedParent, Ns, Slot, Hash),
         [Finished] = [Event || Event = #event{name = Name} <- otel_events:list(Span#span.events),
                                Name =:= <<"consensus.foreign_validation_finished">>],
-        ?assertEqual(atom_to_binary(Case), maps:get(
+        ?assertEqual(case Case of invalid -> <<"invalid">>; _ -> <<"valid">> end, maps:get(
           'quod.validation.verdict', otel_attributes:map(Finished#event.attributes))),
         ?assertEqual(1, maps:get('quod.validation.transactions',
                                 otel_attributes:map(Span#span.attributes)))

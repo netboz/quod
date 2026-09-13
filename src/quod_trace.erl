@@ -16,7 +16,7 @@ excluded from the authenticated relay surface.
 
 -export([context/0, shared_context/1,
          with_context/2, with_span/5, with_span/6, with_optional_span/5,
-         with_owner_turn/2, with_owner_step/2,
+         with_owner_turn/2, with_owner_step/2, owner_context/0,
          start_span/4, finish_span/2,
          set_attributes/2, add_event/3, inject/1, extract/1,
          valid_carrier/1, tx_id/1, result/2]).
@@ -105,8 +105,9 @@ Opt-in synchronous owner occupancy, independent of request sampling/parenting.
 The caller gates this diagnostic. One root per callback also covers autonomous
 work. Its incarnation and sequence are process-local, constant-space diagnostics,
 not consensus state; sequence gaps expose sampled/dropped turns. The active
-diagnostic context is scoped with try/after and NEVER attached to the SDK ambient
-context: existing request parenting and asynchronous propagation stay unchanged.
+diagnostic context is scoped with try/after, without attaching it to SDK ambient
+context. Block-validation sites can explicitly capture it; unrelated request
+parenting stays unchanged.
 Wall duration includes descheduling; reductions are not CPU time. OTP actions
 returned by the callback, internal event queues and time outside it are excluded.
 """.
@@ -155,6 +156,10 @@ with_owner_step(Step, Fun) ->
 
 restore_owner_context(undefined) -> erase(?OWNER_CONTEXT);
 restore_owner_context(Ctx) -> put(?OWNER_CONTEXT, Ctx).
+
+-doc "Capture the opt-in owner diagnostic ancestry; never borrow ambient request context.".
+-spec owner_context() -> context() | undefined.
+owner_context() -> get(?OWNER_CONTEXT).
 
 owner_observation() ->
     Time = erlang:monotonic_time(nanosecond),

@@ -12,7 +12,6 @@ caller continuation. Public nesting policy belongs to the caller, not here.
 -export([load/1, run/4, commit_1/3]).
 -define(COMMIT, '$quod_savepoint_commit').
 -define(FAILED, '$quod_savepoint_failed').
--define(CALLER_ERROR, '$quod_savepoint_caller_error').
 -record(savepoint, {ref :: reference(),
                     scope_tx :: disabled | <<_:128>>,
                     entry :: term(),
@@ -46,23 +45,22 @@ run(Inner, Next, #est{bs = Bs, cps = OuterCps, vn = Vn,
     run_inner(Savepoint, Inner, Enabled#est{cps = [Sentinel | OuterCps]}).
 
 run_inner(#savepoint{ref = Ref} = Savepoint, Inner, Active) ->
-    try
+    quod_proof_continuation:run(Ref, fun() ->
         %% The candidate cut is local; only its first complete answer survives.
         erlog_int:prove_body([{call, {once, Inner}}, {?COMMIT, Ref}], Active)
-    catch
-        throw:{?FAILED, Ref, Clean} -> erlog_int:fail(Clean);
-        throw:{?CALLER_ERROR, Ref, Class, Reason, Stacktrace} ->
-            erlang:raise(Class, Reason, Stacktrace);
-        throw:{erlog_error, Error, ErrorSt} ->
-            erlog_int:erlog_error(Error, rollback(ErrorSt, Savepoint));
-        throw:{erlog_error, Error} ->
-            erlog_int:erlog_error(Error, rollback(Active, Savepoint));
-        Class:Reason:Stacktrace ->
-            %% An aborted whole proof has no reusable state. Existing proof
-            %% cleanup remains authoritative if remote custody is already lost.
-            ok = quod_transaction_scope:discard(Savepoint#savepoint.scope_tx),
-            erlang:raise(Class, Reason, Stacktrace)
-    end.
+    end, fun inner_error/4, {Savepoint, Active}).
+
+inner_error(throw, {?FAILED, Ref, Clean}, _, {#savepoint{ref = Ref}, _}) ->
+    erlog_int:fail(Clean);
+inner_error(throw, {erlog_error, Error, ErrorSt}, _, {Savepoint, _}) ->
+    erlog_int:erlog_error(Error, rollback(ErrorSt, Savepoint));
+inner_error(throw, {erlog_error, Error}, _, {Savepoint, Active}) ->
+    erlog_int:erlog_error(Error, rollback(Active, Savepoint));
+inner_error(Class, Reason, Stacktrace, {Savepoint, _}) ->
+    %% An aborted whole proof has no reusable state. Existing proof cleanup
+    %% remains authoritative if remote custody is already lost.
+    ok = quod_transaction_scope:discard(Savepoint#savepoint.scope_tx),
+    erlang:raise(Class, Reason, Stacktrace).
 
 -doc "Consume the exact internal continuation once; never callable with wire data.".
 -spec commit_1(term(), list(), tuple()) -> term().
@@ -75,14 +73,8 @@ commit_1(Goal, _InternalNext, #est{bs = Bs, cps = Cps} = St) ->
             Writable = quod_erlog_db_local_prove:set_write_intent(
                          erlog_int:leave_choicepoint_checkpoints(
                            St#est{cps = OuterCps}), ParentMode),
-            prove_caller(S, CallerNext, Writable);
+            quod_proof_continuation:prove(Ref, CallerNext, Writable);
         error -> erlog_int:erlog_error({system_error, missing_savepoint_boundary}, St)
-    end.
-
-prove_caller(#savepoint{ref = Ref}, Next, St) ->
-    try erlog_int:prove_body(Next, St)
-    catch Class:Reason:Stacktrace ->
-        throw({?CALLER_ERROR, Ref, Class, Reason, Stacktrace})
     end.
 
 -spec failed(tuple(), list(), tuple()) -> no_return().

@@ -23,35 +23,46 @@ committee_and_signature_bounds_are_shared_test() ->
        quod_quorum:valid_signature_list(
          Rows ++ [{<<0:256>>, <<0:512>>}], ?MAX_VALIDATORS)).
 
-caller_selected_threshold_reuses_the_shared_signature_verifier_test() ->
+honest_threshold_has_one_arithmetic_owner_test() ->
+    ?assertEqual([1, 1, 2, 3, 22],
+                 [quod_quorum:honest_threshold(N) || N <- [1, 3, 4, 7, 64]]).
+
+exact_honest_verifier_rejects_noncanonical_and_extra_rows_test() ->
+    Identities = [identity() || _ <- lists:seq(1, 4)],
+    Committee = [P || {P, _} <- Identities], Bytes = <<"shared/exact-f-plus-one">>,
+    [A, B, C, _] = lists:sort([{P, quod_identity:sign(Bytes, I)} || {P, I} <- Identities]),
+    ?assert(quod_quorum:verify_honest(Committee, Bytes, [A, B])),
+    lists:foreach(fun(Rows) ->
+        ?assertNot(quod_quorum:verify_honest(Committee, Bytes, Rows))
+    end, [[], [A], [B, A], [A, A], [A, B, C], [A | invalid],
+          [A, setelement(2, B, <<0:512>>)]]),
+    ?assertNot(quod_quorum:verify_honest([], Bytes, [A, B])),
+    ?assertNot(quod_quorum:verify_honest([hd(Committee) | Committee], Bytes, [A, B])),
+    ?assertNot(quod_quorum:verify_honest(Committee, <<"other-domain">>, [A, B])).
+
+public_policies_share_member_signature_checks_test() ->
     Identities = [identity() || _ <- lists:seq(1, 4)],
     Committee = lists:sort([Pub || {Pub, _} <- Identities]),
-    Bytes = <<"quod/test/custom-threshold">>,
+    Bytes = <<"quod/test/public-quorum-policies">>,
     Rows = lists:keysort(
              1,
              [{Pub, quod_identity:sign(Bytes, Identity)}
               || {Pub, Identity} <- Identities]),
-    [A, B | _] = Rows,
-    ?assertEqual({ok, [A, B]},
-                 quod_quorum:sanitize_at_least(
-                   Committee, Bytes, [B, A], 2)),
-    ?assertEqual(error,
-                 quod_quorum:sanitize_at_least(
-                   Committee, Bytes, [A], 2)),
+    [A, B, C | _] = Rows,
+    ?assertEqual({ok, [A, B, C]},
+                 quod_quorum:sanitize(Committee, Bytes, [C, B, A])),
+    ?assert(quod_quorum:verify(Committee, Bytes, [C, B, A])),
+    %% N=4 needs three votes for consensus, but exactly two for an honest
+    %% witness. Both public policies use the same membership/signature checks.
+    ?assert(quod_quorum:verify_honest(Committee, Bytes, [A, B])),
     {Outsider, OutsiderIdentity} = identity(),
     OutsiderRow = {Outsider, quod_identity:sign(Bytes, OutsiderIdentity)},
-    ?assertEqual(error,
-                 quod_quorum:sanitize_at_least(
-                   Committee, Bytes, [A, OutsiderRow], 2)),
-    ?assertEqual(error,
-                 quod_quorum:sanitize_at_least(
-                   Committee, Bytes, [A, A], 2)),
-    ?assertEqual(error,
-                 quod_quorum:sanitize_at_least(
-                   Committee, Bytes, [A, setelement(2, B, <<0:512>>)], 2)),
-    ?assertEqual(error,
-                 quod_quorum:sanitize_at_least(
-                   Committee, Bytes, Rows, 5)).
+    ?assertNot(quod_quorum:verify_honest(Committee, Bytes, [A, OutsiderRow])),
+    lists:foreach(fun(Invalid) ->
+        ?assertEqual(error, quod_quorum:sanitize(Committee, Bytes, Invalid)),
+        ?assertNot(quod_quorum:verify(Committee, Bytes, Invalid))
+    end, [[], [A], [A, B], [A, B, OutsiderRow], [A, A, B],
+          [A, B, setelement(2, C, <<0:512>>)], Rows ++ [OutsiderRow]]).
 
 identity() ->
     {Pub, Seed} = quod_identity:generate(),

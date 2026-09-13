@@ -17,7 +17,6 @@ does not select atomic intent; no generic savepoint control is exposed.
 -define(ACTION_SHAPE, '$quod_action_shape').
 -define(STATE_CHECK, '$quod_state_check').
 -define(STATE_CHECK_YIELD, '$quod_state_check_yield').
--define(CALLER_ERROR, '$quod_state_check_caller_error').
 -define(CANDIDATE, '$quod_action_candidate').
 
 -record(read_scope, {
@@ -101,7 +100,7 @@ state_check_yield_1({?STATE_CHECK_YIELD, Ref}, _InternalNext,
                        data = fun state_check_redo/3, next = RedoData,
                        bs = Bs, vn = Vn},
             WithRedo = erlog_int:push_choicepoint(Redo, Writable),
-            prove_caller(Scope, CallerNext, WithRedo);
+            quod_proof_continuation:prove(Ref, CallerNext, WithRedo);
         error ->
             erlog_int:erlog_error(
               {system_error, missing_state_check_boundary}, St)
@@ -125,28 +124,17 @@ state_check_failed(#cp{next = #read_scope{frame = Frame}}, OuterCps, St) ->
     erlog_int:fail(Writable).
 
 run_read_only(Fun, #read_scope{ref = Ref, frame = Frame}, Active) ->
-    try Fun()
-    catch
-        throw:{?CALLER_ERROR, Ref, Class, Reason, Stacktrace} ->
-            erlang:raise(Class, Reason, Stacktrace);
-        throw:{erlog_error, Error, ErrorSt} ->
-            erlog_int:erlog_error(
-              Error,
-              quod_erlog_db_local_prove:leave_read_only(ErrorSt, Frame));
-        throw:{erlog_error, Error} ->
-            erlog_int:erlog_error(
-              Error,
-              quod_erlog_db_local_prove:leave_read_only(Active, Frame));
-        Class:Reason:Stacktrace ->
-            erlang:raise(Class, Reason, Stacktrace)
-    end.
+    quod_proof_continuation:run(Ref, Fun, fun read_only_error/4, {Frame, Active}).
 
-prove_caller(#read_scope{ref = Ref}, Next, St) ->
-    try erlog_int:prove_body(Next, St)
-    catch
-        Class:Reason:Stacktrace ->
-            throw({?CALLER_ERROR, Ref, Class, Reason, Stacktrace})
-    end.
+-spec read_only_error(atom(), term(), list(), {term(), tuple()}) -> no_return().
+read_only_error(throw, {erlog_error, Error, ErrorSt}, _, {Frame, _}) ->
+    erlog_int:erlog_error(
+      Error, quod_erlog_db_local_prove:leave_read_only(ErrorSt, Frame));
+read_only_error(throw, {erlog_error, Error}, _, {Frame, Active}) ->
+    erlog_int:erlog_error(
+      Error, quod_erlog_db_local_prove:leave_read_only(Active, Frame));
+read_only_error(Class, Reason, Stacktrace, _) ->
+    erlang:raise(Class, Reason, Stacktrace).
 
 take_boundary(Ref,
               [#cp{type = compiled, label = {?MODULE, Ref},

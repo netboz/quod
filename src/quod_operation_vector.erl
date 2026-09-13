@@ -10,7 +10,7 @@ its exact historical application. This module owns no state or dispatch.
 
 -include("quod_proof_limits.hrl").
 
--export([references/1, receipt/1, receipt_references/1, included/1,
+-export([references/1, receipt/1, receipt_references/1,
          receipt_identity/1, same_receipt/2, certified/1, target/1, lookup/2,
          results/2, result_rows/1, aggregate/1]).
 
@@ -21,6 +21,7 @@ its exact historical application. This module owns no state or dispatch.
                     quod_applied_certificate:operation_certificate()}}.
 -export_type([target/0, application_ref/0, receipt_row/0]).
 
+-doc "Canonicalize a bounded reference set, rejecting duplicate target identities.".
 -spec references(term()) -> {ok, [application_ref()]} | error.
 references(Refs) when is_list(Refs), length(Refs) > 0,
                       length(Refs) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
@@ -35,6 +36,7 @@ references(Refs) when is_list(Refs), length(Refs) > 0,
     end;
 references(_) -> error.
 
+-doc "Canonicalize included/certified receipt rows without granting certificate authority.".
 -spec receipt(term()) -> {ok, [receipt_row()]} | error.
 receipt(Rows) when is_list(Rows), length(Rows) > 0,
                    length(Rows) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
@@ -50,6 +52,7 @@ receipt(_) -> error.
 
 %% Validation paths insist on canonical stored bytes, not a normalized view
 %% which would conceal a duplicate, omission or noncanonical target order.
+-doc "Validate canonical stored receipt order and return its complete reference vector.".
 -spec receipt_references(term()) -> {ok, [application_ref()]} | error.
 receipt_references(Rows) ->
     case receipt(Rows) of
@@ -62,6 +65,7 @@ receipt_references(Rows) ->
 %% Certificate proof subsets may differ between honest source replicas. The
 %% receipt's semantic identity binds the outcome statement, not which valid
 %% f+1 subset arrived first. Included rows keep their unchanged identity.
+-doc "Return statement identity, independent of an honest certificate's signature subset.".
 -spec receipt_identity(term()) -> {ok, list()} | error.
 receipt_identity(Rows) ->
     case receipt_references(Rows) of
@@ -69,6 +73,7 @@ receipt_identity(Rows) ->
         error -> error
     end.
 
+-doc "Compare complete receipt statements, never signature-subset bytes.".
 -spec same_receipt(term(), term()) -> boolean().
 same_receipt(A, B) ->
     case receipt_identity(A) of
@@ -82,6 +87,7 @@ row_identity({Target, {certified, Ref, Certificate}}) ->
         quod_applied_certificate:operation_certificate_binding(Certificate),
     {Target, {certified, Ref, Statement}}.
 
+-doc "Whether every row of a canonical receipt carries a result certificate.".
 -spec certified(term()) -> boolean().
 certified(Rows) ->
     case receipt_references(Rows) of
@@ -91,16 +97,11 @@ certified(Rows) ->
         error -> false
     end.
 
--spec included(term()) -> {ok, [receipt_row()]} | error.
-included(Refs) ->
-    case references(Refs) of
-        {ok, Sorted} -> {ok, [{target(R), {included, R}} || R <- Sorted]};
-        error -> error
-    end.
-
+-doc "Extract the exact anchored target identity from an application reference.".
 -spec target(application_ref()) -> target().
 target({transaction, Ns, Anchor, _TxId}) -> {Ns, Anchor}.
 
+-doc "Find one target in an already-canonical complete reference vector.".
 -spec lookup(target(), term()) -> {ok, application_ref()} | error.
 lookup(Target, Refs) ->
     case references(Refs) of
@@ -114,6 +115,8 @@ lookup(Target, Refs) ->
 
 %% Only an exact, complete target map can become a final result. The result
 %% labels here have already passed the certificate authority boundary.
+-doc "Require an exact complete target map before returning a final result vector.".
+-spec results(term(), map()) -> {ok, list()} | pending.
 results(Refs, Results) when is_map(Results) ->
     case references(Refs) of
         {ok, Refs} when map_size(Results) =:= length(Refs) ->
@@ -125,6 +128,8 @@ results(Refs, Results) when is_map(Results) ->
         _ -> pending
     end.
 
+-doc "Validate canonical complete result rows and return their application references.".
+-spec result_rows(term()) -> {ok, [application_ref()]} | error.
 result_rows(Rows) when is_list(Rows) ->
     try
         Refs = [begin
@@ -144,6 +149,8 @@ valid_result_label({rejected, _} = Result) ->
     quod_applied_certificate:valid_operation_result(Result);
 valid_result_label(_) -> false.
 
+-doc "Derive the summary label from the complete vector; never replace the vector.".
+-spec aggregate(list()) -> all_applied | all_rejected | mixed.
 aggregate(Rows) ->
     {ok, _} = result_rows(Rows),
     Applied = length([ok || {_, {committed, _}} <- Rows]),

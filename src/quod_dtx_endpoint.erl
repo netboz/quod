@@ -10,7 +10,9 @@ the responder's anchored identity and applied floor. The separate group-only
 certified-current quorum absence. Applied requests bind one exact Finalize,
 generation, and verdict; each validator response carries its signed vote for
 the caller to combine into the portable certificate owned by
-`quod_dtx_current_view`. Entry hints travel as the canonical ledger entry
+`quod_applied_certificate`. `operation_applied` attests an exact target result;
+`operation_receipt` returns its source receipt as certified evidence.
+Entry hints travel as the canonical ledger entry
 bytes; checked entry artifacts carry their local views at this boundary.
 Operation-effect cancellation carries the exact
 signed source submission; `quod_transaction` remains its sole semantic decoder.
@@ -24,7 +26,7 @@ second copy of that namespace in a hard-break envelope. The direction-aware
 channel the caller subscribed to. Semantic DTX record bytes stay opaque to
 this module. A validation sidecar may carry exact committed entries or applied
 certificates beside the semantic term. This module only bounds and shape-checks
-them: `quod_foreign_log` verifies entries and `quod_dtx_current_view` verifies
+them: `quod_foreign_log` verifies entries and `quod_applied_certificate` verifies
 certificates. An application request carries an exact anchored target and a
 canonical certified vector claim owned by `quod_transaction`; that target
 reconstructs only its own deterministic application. It enters the existing
@@ -109,7 +111,7 @@ outside the semantic request, evidence, signatures and correlation checks.
          quod_dtx:certified_ref(), non_neg_integer(), verdict(),
          <<_:256>>, <<_:512>>} |
         {error, request_id(), busy | not_ready | not_found | invalid_request |
-         conflict_retry | read_certificate_unavailable}.
+         conflict_retry | read_certificate_unavailable | independent_scope_required}.
 -type wire_error() ::
         {error, {too_large, dtx_endpoint | record}} |
         {error, {protocol_error, atom()}}.
@@ -267,7 +269,7 @@ validate_direction(Term, response) -> validate_response(Term).
 
 %% Hints are deliberately only shape-checked here. Exact-entry authority stays
 %% in quod_foreign_log; applied-certificate authority stays in
-%% quod_dtx_current_view. A malformed received sidecar becomes no hint and can
+%% quod_applied_certificate. A malformed received sidecar becomes no hint and can
 %% never change the semantic request or response.
 valid_validation_sidecar(Hints) when is_list(Hints) ->
     normalize_sidecar(Hints) =:= Hints;
@@ -376,7 +378,7 @@ valid_validation_item({Ref, _Entry} = Hint) ->
     quod_dtx:validate_certified_ref(Ref) andalso valid_entry_hint(Hint).
 
 %% ------------------------------------------------------------------
-%% Fixed v9 operation algebra
+%% Fixed v12 operation algebra
 %% ------------------------------------------------------------------
 
 validate_bound_direction(Ns, {Kind, _, {Ns, _}, _} = Inner, request)

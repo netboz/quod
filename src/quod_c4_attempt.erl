@@ -3,8 +3,10 @@
 Removable Phase-1 observation at rare coordinator span allocation only.
 No callback hooks, execution state, counters, parent replacement, exporter
 decoration, messages or new production owner. The independent start denominator
-is the existing VM call counter on Simplex's start function, not this record.
-Default builds erase the one call site. Metadata failure never changes the SDK
+uses existing VM call counters on Simplex's group and operation start functions,
+not these allocation records. Both `quod.dtx.coordinate` and
+`quod.operation.recover` are observed. Default builds erase the call sites.
+Metadata failure never changes the SDK
 call's result or original exception; missing metadata stays an unknown start.
 """.
 -export([enable/2, disable/1, allocate_span/5, record/1]).

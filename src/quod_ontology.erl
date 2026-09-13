@@ -633,11 +633,15 @@ prepared_effect(_Action, _Prepared, _Executor, _Actor) ->
 -doc "Canonical bounded bytes retained only in the local prepared-action journal.".
 -spec prepared_bytes(prepared_descriptor()) -> {ok, binary()} | {error, term()}.
 prepared_bytes(#prepared_lifecycle{} = Prepared) ->
-    Bytes = term_to_binary({quod_prepared_lifecycle, 1, Prepared},
-                           [deterministic]),
-    case byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES of
-        true -> {ok, Bytes};
-        false -> {error, initial_content_too_large}
+    try
+        Stored = prepared_descriptor(encode, Prepared),
+        Bytes = term_to_binary({quod_prepared_lifecycle, 1, Stored},
+                               [deterministic]),
+        case byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES of
+            true -> {ok, Bytes};
+            false -> {error, initial_content_too_large}
+        end
+    catch error:_ -> {error, invalid_action}
     end;
 prepared_bytes(_) -> {error, invalid_action}.
 
@@ -650,16 +654,64 @@ decode_prepared(Bytes)
     %% the journal only when their SHA-256 digest matches the certified public
     %% effect descriptor. They may legitimately contain atoms introduced by
     %% the prepared genesis which do not exist yet after a full VM restart.
-    try binary_to_term(Bytes) of
-        {quod_prepared_lifecycle, 1, #prepared_lifecycle{} = Prepared} ->
+    try
+      case binary_to_term(Bytes) of
+        {quod_prepared_lifecycle, 1, #prepared_lifecycle{} = Stored} ->
+            Prepared = prepared_descriptor(decode, Stored),
             case prepared_bytes(Prepared) of
                 {ok, Bytes} -> {ok, Prepared};
                 _ -> {error, invalid_action}
             end;
         _ -> {error, invalid_action}
+      end
     catch _:_ -> {error, invalid_action}
     end;
 decode_prepared(_) -> {error, invalid_action}.
+
+%% This journal's single v1 schema contains a native genesis entry. Spell out
+%% its persisted transaction fields: runtime-only authenticated views must not
+%% change prepared bytes or the digest already certified by an effect. This is
+%% the existing schema in both directions, not an alternate/legacy decoder.
+prepared_descriptor(Direction, #prepared_lifecycle{config = Config} = Prepared) ->
+    case Config of
+        #{prepared_genesis_entry := Entry} ->
+            Prepared#prepared_lifecycle{config = Config#{prepared_genesis_entry =>
+                prepared_genesis_entry(Direction, Entry)}};
+        _ -> Prepared
+    end.
+
+prepared_genesis_entry(encode, #entry{index = 1, data = {batch, [Tx]},
+                                    timestamp = Timestamp, block_bytes = Bytes,
+                                    cert = none}) ->
+    {entry, 1, {batch, [prepared_transaction(encode, Tx)]}, Timestamp, Bytes, none};
+prepared_genesis_entry(decode, {entry, 1, {batch, [Tx]}, Timestamp, Bytes, none}) ->
+    #entry{index = 1, data = {batch, [prepared_transaction(decode, Tx)]},
+           timestamp = Timestamp, block_bytes = Bytes, cert = none}.
+
+prepared_transaction(encode,
+    #transaction{tx_id = Id, role = Role, evidence = Evidence,
+                 foreign_reads = ForeignReads, origin = Origin,
+                 proof_id = ProofId, plan_digest = Digest, goal = Goal,
+                 result = Result, diff = Diff, read_check = Reads,
+                 effects = Effects, request_auth = Auth,
+                 auth_transcript = Transcript, author = Author,
+                 author_seq = Sequence, submitted_at = Submitted,
+                 sig = Signature, signed_bytes = Signed}) ->
+    {transaction, Id, Role, Evidence, ForeignReads, Origin, ProofId, Digest,
+     Goal, Result, Diff, Reads, Effects, Auth, Transcript, Author, Sequence,
+     Submitted, Signature, Signed};
+prepared_transaction(decode,
+    {transaction, Id, Role, Evidence, ForeignReads, Origin, ProofId, Digest,
+     Goal, Result, Diff, Reads, Effects, Auth, Transcript, Author, Sequence,
+     Submitted, Signature, Signed}) ->
+    #transaction{tx_id = Id, role = Role, evidence = Evidence,
+                 foreign_reads = ForeignReads, origin = Origin,
+                 proof_id = ProofId, plan_digest = Digest, goal = Goal,
+                 result = Result, diff = Diff, read_check = Reads,
+                 effects = Effects, request_auth = Auth,
+                 auth_transcript = Transcript, author = Author,
+                 author_seq = Sequence, submitted_at = Submitted,
+                 sig = Signature, signed_bytes = Signed}.
 
 start(Ns, Config, Status) ->
     Result =

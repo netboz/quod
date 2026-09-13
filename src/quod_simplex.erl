@@ -148,7 +148,6 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          history_view/3, history_view_at/3, history_view_live/1, transaction_evidence/4,
          operation_claim_evidence/4,
          operation_completion_evidence/4,
-         operation_completion_evidence/3,
          dtx_local_evidence/4, dtx_applied_source/2,
          dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
@@ -162,7 +161,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          cancel_operation_waiter/4,
          finish_operation_target_result/5, install_operation_snapshot/2,
          drop_operation_recovery_owner/4, drop_operation_waiter/3,
-         settle_operation_recovery/3, block_operation_recovery/4, reconcile_operation_recoveries/1,
+         settle_operation_recovery/3, block_operation_recovery/4,
          test_operation_recoveries/1, test_seed_operation_worker/3,
          test_start_operation_recovery/3]).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
@@ -2436,7 +2435,7 @@ operation_projection(
       quod_reg:via({quod_simplex, Ns}),
       {operation_projection, Slot, Change, TraceCtx}).
 
--doc "Wait for the one durable recovery owner to certify the target result.".
+-doc "Wait for the durable recovery owner to certify one complete target-result vector.".
 -spec await_operation_result(binary(), term(), pos_integer()) ->
           {operation_results, list()} |
           {error, {outcome_unknown, term()}}.
@@ -2842,7 +2841,7 @@ operation_completion_evidence(Ns, Slot, OperationRef, Deadline)
     end;
 operation_completion_evidence(_, _, _, _) -> {error, invalid_request}.
 
--doc "Use one already-pinned source view for a completion point read; never recapture.".
+%% Read the completion from the caller's pinned source view, without recapture.
 -spec operation_completion_evidence(history_view(), pos_integer(), term()) ->
           {ok, quod_dtx:certified_ref(), #transaction{}} | {error, term()}.
 operation_completion_evidence(#{identity := {Ns, Anchor}} = View, Slot,
@@ -4816,7 +4815,6 @@ apply_operation_projection(
             end,
             Projected = Bound#operation_recovery_owner{
                           claim_tx_id = ClaimTxId,
-                          trace_ctx = operation_trace_context(Bound),
                           claim_state = merge_operation_claim_state(
                                           Bound#operation_recovery_owner.claim_state,
                                           unresolved)},
@@ -4867,9 +4865,6 @@ await_live_operation(
                        trace_ctx = quod_trace:context()},
             park_operation_waiter(From, WaitRef, OperationRef, Deadline, Owner, S)
     end.
-
-operation_trace_context(#operation_recovery_owner{trace_ctx = TraceCtx}) ->
-    TraceCtx.
 
 %% Correlation only: never log principal bytes, payloads or failure terms.
 %% These events use the existing owner/request context, not another waiter map.
@@ -5576,7 +5571,7 @@ close_dtx_coordinator_span(
     Released.
 
 dtx_coordinator_event(#dtx_coordinator_owner{coordinate_span = Handle}, Name) ->
-    quod_attempt_span:event(Handle, Name, #{}).
+    quod_attempt_span:event(Handle, Name).
 
 stop_dtx_coordinator_process(
   #dtx_coordinator_owner{pid = Pid, monitor = Monitor})
@@ -6386,7 +6381,7 @@ execute_dtx_endpoint_request(
                 {ok, Blob} -> {operation_receipt_evidence, Blob};
                 {error, _} -> {error, not_ready}
             end;
-        {error, _} -> {error, not_ready}
+        {error, Reason} -> {error, Reason}
     end;
 execute_dtx_endpoint_request(
   Ns, _Peer, {operation_applied, _RequestId, Ref}, _TimeoutMs, Deadline, CachedEvidence) ->
@@ -6814,8 +6809,7 @@ dtx_endpoint_result_response(
        RequestId, GroupId, FinalizeRef, Generation, Verdict,
        Evidence, State, S), []};
 dtx_endpoint_result_response(Request, {error, Reason}, _S) ->
-    %% The endpoint codec owns the refusal vocabulary. A duplicate allowlist
-    %% here used to erase newly typed refusals into transient not_ready.
+    %% The endpoint codec is the sole owner of the bounded refusal vocabulary.
     Id = quod_dtx_endpoint:request_id(Request),
     {quod_dtx_endpoint:error_response(Id, Reason), []};
 dtx_endpoint_result_response(Request, _Result, _S) ->
@@ -11345,36 +11339,13 @@ reference_evidence_satisfies(_Phase, _Evidence) -> false.
 
 verify_content_reference_binding(Transaction, Rest,
                                  LocalIdentity, LedgerRoot, Contacts, Seen, Deadline) ->
-    case {verify_role_reference_binding(Transaction, Seen),
-          quod_commit_validation:validate_evidence(Transaction, Seen)} of
-        {true, ok} ->
+    case quod_commit_validation:validate_evidence(Transaction, Seen) of
+        ok ->
             verify_content_foreign_references(
               Rest, LocalIdentity, LedgerRoot, Contacts, Seen, Deadline);
-        {false, _} -> {invalid, foreign_reference_binding};
-        {true, abstain} -> abstain;
-        {_, {error, Reason}} -> {invalid, Reason}
+        abstain -> abstain;
+        {error, Reason} -> {invalid, Reason}
     end.
-
-verify_role_reference_binding(
-  #transaction{role = {remote_application, _, _, _},
-               evidence = {Ref, Referenced}}, Seen) ->
-    case maps:get(Ref, Seen, none) of
-        #{transaction := Referenced} -> true;
-        _ -> false
-    end;
-verify_role_reference_binding(
-  #transaction{role = {remote_complete, _, _, _},
-               evidence = {applications, Pairs}}, Seen) when is_list(Pairs), Pairs =/= [] ->
-    lists:all(fun
-        ({Ref, #transaction{} = Referenced}) ->
-            case maps:get(Ref, Seen, none) of
-                #{transaction := Referenced} -> true;
-                _ -> false
-            end;
-        (_) -> false
-    end, Pairs);
-verify_role_reference_binding(#transaction{evidence = none}, _Seen) -> true;
-verify_role_reference_binding(#transaction{}, _Seen) -> false.
 
 verify_content_reference(Ref, Phase, LocalIdentity, LedgerRoot, Contacts, Deadline) ->
     case quod_dtx:certified_ref_binding(Ref) of

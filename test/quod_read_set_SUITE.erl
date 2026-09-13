@@ -80,7 +80,7 @@ verify_reconnect(Config, F) ->
     {ok, Projection} = peer:call(?config(target, Config), quod_prolog, outcome, [Op]),
     ?assertMatch(#{operation_state := terminal, receipt_height := H} when H > 0, Projection),
     ?assertMatch({ok, _, {operation_outcome, _,
-      #{status := completed, aggregate := all_applied, targets := [{Target, {committed, Ref}}]}}},
+      #{status := completed, targets := [{Target, {committed, Ref}}]}}},
       reconnect(Config, F)),
     assert_unknown(Config, F),
     assert_target_fact(Config, F).

@@ -192,7 +192,7 @@ activate_frame(#frame{frame_id = FrameId, tx_id = none} = Frame, ByFrame) ->
 activate_frame(Frame, _ByFrame) ->
     Frame.
 
--doc "Finish the exact innermost local transaction frame.".
+-doc "Finish the exact innermost proof-savepoint frame (transaction or action candidate).".
 -spec finish(disabled | opaque_id()) -> ok.
 finish(disabled) -> ok;
 finish(FrameId) -> finish_frame(FrameId, strict).

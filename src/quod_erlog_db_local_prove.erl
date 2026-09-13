@@ -640,7 +640,7 @@ new({OutRef, OutMod}) ->
         scope_id = make_ref()}.
 
 %% Erlog's opt-in choice-point hooks reuse the same immutable overlay token as
-%% the explicit transaction entry savepoint. Neither callback traverses clause
+%% transaction and action-candidate entry savepoints. Neither callback traverses clause
 %% data; restore retains the current monotonic read-set and overlay metadata.
 choicepoint_checkpoint(
   #lp{scope_id = ScopeId, local = Local, event_ops_rev = EventOpsRev,

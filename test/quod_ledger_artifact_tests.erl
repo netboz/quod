@@ -17,7 +17,7 @@ golden_vectors(Codec) ->
                          [frame(entry_bytes(Codec, Entry))
                           || {_, Entry} <- maps:get(entries, F)])),
       signed_transaction => digest((maps:get(transaction, F))#transaction.signed_bytes),
-      implicit_certificate => digest(term_to_binary(maps:get(implicit, F), [deterministic]))}.
+      implicit_runtime_view => digest(term_to_binary(maps:get(implicit, F), [deterministic]))}.
 
 artifact_matches_v14_v6_golden_bytes_test() ->
     ?assertEqual(expected_golden_vectors(), golden_vectors(quod_ledger)).
@@ -414,6 +414,12 @@ expected_golden_vectors() ->
       signed_transaction =>
           <<239,200,57,157,72,191,95,54,78,159,204,35,96,7,228,17,243,133,
             247,242,157,134,103,125,132,166,69,39,238,11,47,111>>,
-      implicit_certificate =>
-          <<69,197,37,4,127,149,43,152,167,83,224,8,112,160,98,79,227,149,
-            117,174,3,88,105,64,13,21,124,43,27,35,153,118>>}.
+      %% This is a native runtime tuple, NOT a certificate wire encoding. Its
+      %% layout now includes the decode-owned claim view. The unchanged
+      %% `implicit` envelope and frame goldens above pin the actual stored
+      %% certificate and child bytes; native records are refused on the wire.
+      implicit_runtime_view =>
+          <<16#26,16#ff,16#65,16#9a,16#f1,16#ed,16#8f,16#95,
+            16#3d,16#a5,16#33,16#ec,16#2a,16#12,16#bc,16#97,
+            16#1e,16#da,16#c1,16#30,16#5a,16#43,16#a1,16#ce,
+            16#eb,16#e5,16#80,16#67,16#6e,16#81,16#46,16#80>>}.

@@ -184,9 +184,9 @@ Start the one recovery/result worker for an exact foreign operation.
 The worker owns no durable state. The existing local outcome index decides
 whether the claim still needs target/receipt recovery or only certified result
 delivery. A completed operation is resolved read-only, never reapplied. An
-unresolved claim reconstructs its exact target transaction from certified local
-evidence and uses the existing endpoint and receipt path. Unavailability uses
-the shared
+unresolved claim is delivered unchanged; each target endpoint reconstructs its
+own exact application. The worker verifies target evidence and publishes one
+complete result vector before asynchronous source receipt submission. Unavailability uses the shared
 foreign-history follower's messages; source progress is supplied by the
 owning Simplex.  No retry polling loop is created here.
 """.
@@ -233,12 +233,12 @@ start_dormant_operation_monitor(_Owner, _OwnerNs, _Submission) ->
 
 dormant_operation_context(OwnerNs, Submission) ->
     try
-        {ok, SubmissionBlob} = quod_transaction:encode_operation_submission(Submission),
-        {ok, Targets} = quod_transaction:operation_submission_targets(Submission),
+        {ok, SubmissionBlob, Claim, Plans} =
+            quod_transaction:operation_submission_context(Submission),
         Contexts = [begin
             {ok, C} = dormant_operation_binding(OwnerNs, SubmissionBlob,
-                quod_transaction:decode_operation_submission(SubmissionBlob, Target)), C
-        end || Target <- Targets],
+                                               Claim, Plan), C
+        end || Plan <- Plans],
         [First | Rest] = Contexts,
         {ok, First#{remaining_targets => Rest}}
     catch _:_ -> {error, invalid_operation_claim}
@@ -246,10 +246,8 @@ dormant_operation_context(OwnerNs, Submission) ->
 
 dormant_operation_binding(
   OwnerNs, SubmissionBlob,
-  {ok,
-   #{claim := #transaction{origin = {OwnerNs, _} = Origin,
-                           tx_id = ClaimTxId},
-     target := Target, plan := Plan}}) ->
+  #transaction{origin = {OwnerNs, _} = Origin, tx_id = ClaimTxId}, Plan) ->
+    Target = quod_dtx:target(Plan),
     case quod_dtx:signer(Plan) of
         <<_:256>> = TargetNode ->
             {ok, #{owner_ns => OwnerNs, origin => Origin,
@@ -259,7 +257,7 @@ dormant_operation_binding(
                    submission_blob => SubmissionBlob}};
         _ -> {error, invalid_operation_claim}
     end;
-dormant_operation_binding(_OwnerNs, _SubmissionBlob, _Decoded) ->
+dormant_operation_binding(_OwnerNs, _SubmissionBlob, _Claim, _Plan) ->
     {error, invalid_operation_claim}.
 
 dormant_operation_init(Owner, Context = #{owner_ns := OwnerNs, origin := Origin,
@@ -287,8 +285,7 @@ dormant_operation_drive(S = #state{protocol = {dormant,
   #{owner_ns := OwnerNs, target := Target, target_node := TargetNode,
     submission_blob := SubmissionBlob}}}) ->
     Request = dormant_cancel_request(
-                crypto:strong_rand_bytes(
-                  ?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8),
+                request_id(),
                 Target, SubmissionBlob),
     start_typed_wave(dormant,
       [{cancel, OwnerNs, Target, TargetNode, Request}], #{}, S).
@@ -473,14 +470,11 @@ operation_record_result({ok, Ref, Evidence, Certificate}, Target, Deadline,
             case quod_operation:accept(Target, Ref, Evidence, Certificate, Model) of
                 {ok, Updated} ->
                     S1 = set_operation_context(Context#{model => Updated}, S),
-                    case Certificate of
-                        none -> ok;
-                        _ ->
-                            {ok, #{result := Result}} =
-                                quod_applied_certificate:operation_certificate_binding(Certificate),
-                            Verdict = case Result of applied -> committed; _ -> Result end,
+                    case quod_operation:result(Target, Updated) of
+                        pending -> ok;
+                        {ok, {Verdict, StableRef}} ->
                             notify_operation_target_result(Owner, OperationRef, Verdict,
-                                                            quod_transaction:stable_ref(Ref))
+                                                            StableRef)
                     end,
                     {observed, S1};
                 {error, _} = Error -> {Error, S}
@@ -564,7 +558,7 @@ operation_stop(Reason, S = #state{owner = Owner,
   protocol = {operation, #{operation_ref := OperationRef}}}) ->
     Event = case Reason of done -> {done, OperationRef}; _ -> {error, Reason} end,
     %% Finish child root-event writes before notification may release the
-    %% owner's handle. Cleanup and operational notification order are unchanged.
+    %% owner's handle; operational notification precedes local worker cleanup.
     _ = catch quod_trace:add_event(quod_trace:context(),
       <<"operation.close_observed">>,
       #{'quod.operation.result' => case Reason of done -> <<"done">>; _ -> <<"error">> end}),
@@ -1080,22 +1074,19 @@ start_wave_item(Key, Item, #wave{ref = Ref, stage = Stage, context = Context,
 logical_item({Index, _Endpoint}) -> Index;
 logical_item(Index) -> Index.
 
-%% Expand one target's prepared routes in this SAME wave. A fast target
-%% does not wait for another target's discovery, and a paused owner retains
-%% preparations without starting another endpoint. Results stay target-keyed.
 record_wave_result(Index, Result,
   S = #state{wave = #wave{stage = operation, items = Items,
                           meta = #{request_deadline := Deadline}}}) when is_integer(Index) ->
     Item = lists:nth(Index, Items),
     case Item of
-        {application, Target} ->
-            {Stored, S1} = operation_record_result(Result, Target, Deadline, S),
-            retain_target_result(Index, Target, Stored, S1);
-        {certify, Target, _, _} ->
+        Item when element(1, Item) =:= application; element(1, Item) =:= certify ->
+            Target = element(2, Item),
             {Stored, S1} = operation_record_result(Result, Target, Deadline, S),
             retain_target_result(Index, Target, Stored, S1);
         _ -> put_wave_result(Index, Result, S)
     end;
+%% Expand prepared routes in this SAME wave. A fast target does not wait for
+%% another target's discovery; a paused owner retains preparations without I/O.
 record_wave_result(Index, {prepared_submit, Plan}, S) when is_integer(Index) ->
     put_wave_result(Index, {prepared_submit, Plan}, S);
 record_wave_result({Index, Endpoint}, Result,
@@ -1182,11 +1173,8 @@ retain_wave_progress(S = #state{wave = W = #wave{stage = operation, items = Item
     Pending = operation_work(S),
     Edges = maps:from_list([{Index, true}
       || {Index, Item} <- lists:zip(lists:seq(1, length(Items)), Items),
-         is_tuple(Item),
-         element(1, Item) =:= application orelse element(1, Item) =:= certify,
          maps:is_key(element(2, Item), Pending)]),
-    S#state{wave = W#wave{progress_edges = Edges}};
-retain_wave_progress(S) -> S.
+    S#state{wave = W#wave{progress_edges = Edges}}.
 
 resume_target_continuations(S = #state{wave = #wave{stage = operation,
     items = Items, workers = Workers, results = Results, progress_edges = Edges}})

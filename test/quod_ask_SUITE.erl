@@ -1133,7 +1133,7 @@ remote_signed_two_gateway_race(Config) ->
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
-                #{status := completed, aggregate := all_applied,
+                #{status := completed,
                   targets := [{{?NS, TargetAnchor}, {committed, OutcomeRef}}]}}},
        wait_remote_operation(
          Asker, maps:get(session_id, AskerSession), RequestBytes,
@@ -1149,7 +1149,7 @@ remote_signed_two_gateway_race(Config) ->
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
-                #{status := completed, aggregate := all_applied,
+                #{status := completed,
                   targets := [{{?NS, TargetAnchor}, {committed, OutcomeRef}}]}}},
        peer:call(
          Third, quod_client_goal_ingress, resolve_operation,

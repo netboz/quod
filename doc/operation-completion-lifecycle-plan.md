@@ -1,9 +1,10 @@
 # Remote-operation completion lifecycle
 
-**Status:** implementation reviewed and approved for commit/deployment;
-hardware acceptance remains outstanding.
-This is a bounded correction to the existing single-writer operation/result
-path. It does not implement the finality cut, H2, or L2.
+**Historical diagnosis and lifecycle contract.** The single-target
+implementation described here has been superseded by the shared N-target
+operation model and coordinator. Current architecture is defined in
+[multiwrite-architecture.md](multiwrite-architecture.md); the original failure
+measurements below remain evidence, not current performance claims.
 
 ## 1. Observed failure and scope
 
@@ -30,10 +31,10 @@ on normal successful progress. Two related lifecycle holes belong to the same
 correction: a late waiter can arrive after the owner was removed, and rebuilding
 the unresolved-operation snapshot can remove an owner with pending waiters.
 
-The receipt records completion of source recovery bookkeeping. It contains
-the exact target reference and carried transaction evidence, **not the target's
-committed-versus-rejected verdict**. Its arrival may not synthesize a successful
-write, nor may it cancel delivery of the actual verified result.
+The original receipt recorded inclusion only. Current receipts carry the
+complete target vector, exact application evidence and AM3 result certificates.
+Historical included-only rows remain discovery, not verdict authority. Receipt
+arrival may not cancel delivery: every target result still has to be verified.
 
 ## 2. One owner, two independent facts
 
@@ -76,10 +77,11 @@ neither a worker nor a permanent result cache.
    Recovery uses the already-claimed exact operation; it never re-proves or
    creates another operation id.
 4. For a terminal source row, perform **read-only target-result resolution**
-   through the existing `quod_dtx_current_view:lookup_outcome` verifier. That
-   owner obtains a certified current view and corroborated target outcome. A
-   ready co-hosted validator can supply its local view; a co-hosted observer or
-   unavailable local validator must not shadow the normal remote route path. No
+   through `quod_dtx_current_view:operation_result/5`. An owned operation joins
+   its existing recovery owner. An unowned operation uses the source receipt
+   height as discovery, verifies the exact receipt and applications, then their
+   historical-committee AM3 certificates. Current-view labels are not exact
+   outcome evidence. No
    fresh `apply_claim`, target submission, or completion receipt is permitted
    after the worker observes the source row as terminal.
 5. Both cases deliver the verified result through the existing owner message

@@ -3734,9 +3734,9 @@ dtx_complete_validation_sidecar_replaces_and_preserves_certificate_test() ->
          GroupId, FinalizeRef, 5, commit, [{<<88:256>>, <<89:512>>}]},
     Certificate1 = setelement(
                      10, Certificate0, [{<<88:256>>, <<90:512>>}]),
-    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
+    ?assert(quod_ct:valid_applied_certificate_shape(
               Certificate0)),
-    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
+    ?assert(quod_ct:valid_applied_certificate_shape(
               Certificate1)),
     Item0 = {Key, Certificate0},
     Item1 = {Key, Certificate1},

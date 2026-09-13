@@ -107,6 +107,24 @@ stateful_candidate_error_restores_the_actual_error_revision_test() ->
 stateful_fixture_error_0(stateful_fixture_error, _Next, St) ->
     erlog_int:erlog_error(pinned_stateful_error, St).
 
+released_action_does_not_rollback_a_callers_stateful_error_test() ->
+    with_state(<<"finish :- assertz(done), trigger_event(done_event).\n"
+                 "action(finish, [], done).">>, fun(St) ->
+        {erlog_error, pinned_stateful_error, Final} = catch erlog_int:prove_goal(
+            {',', {goal, done}, stateful_fixture_error}, St),
+        ?assertEqual([done], facts(Final)),
+        ?assertEqual([done_event], events(Final)),
+        selected(Final, false, 1)
+    end).
+
+released_readonly_statecheck_preserves_the_callers_error_state_test() ->
+    with_state(<<"done.">>, fun(St) ->
+        {erlog_error, pinned_stateful_error, Final} = catch erlog_int:prove_goal(
+            {',', {goal, done}, {',', {assertz, after_check}, stateful_fixture_error}}, St),
+        ?assertEqual([after_check], facts(Final)),
+        selected(Final, false, 1)
+    end).
+
 stage_fixture_effect_0(stage_fixture_effect, Next, St) ->
     Prepared = quod_erlog_db_local_prove:put_prepared_effect(
                  St, fixture_action, fixture_desired, fixture_effect(), fixture_private),

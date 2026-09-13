@@ -1,4 +1,4 @@
--module(quod_proof_savepoint_tests).
+-module(quod_proof_session_savepoint_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_proof_limits.hrl").

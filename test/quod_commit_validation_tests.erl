@@ -121,7 +121,7 @@ remote_completion_cannot_carry_foreign_reads_test() ->
                               goal = <<>>, result = <<>>, diff = [],
                               read_check = #{}, effects = []},
     ?assertEqual(
-       {error, malformed_foreign_reads},
+       {error, invalid_operation_receipt},
        quod_commit_validation:validate_evidence(Completion, #{})).
 
 duplicate_remote_completion_is_valid_and_keeps_first_terminal_slot_test() ->

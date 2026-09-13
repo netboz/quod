@@ -1,5 +1,13 @@
 # L2 slice 6 — explicit independent-write intent
 
+**Historical slice contract, superseded for current implementation status.**
+The selection/mixing rules below remain design history. Slice 8 now enables
+independent target vectors; its admission requires each target's own signed
+independent attestation. Scope wire is v13, and `independent_scope_required`
+is a current refusal. The intermediate lane-unavailable boundary is gone.
+See [the consolidated architecture](multiwrite-architecture.md) for current
+interfaces, action-savepoint composition and remaining work.
+
 Implementation of the reviewed September 11, 2026 C1 clarification. This
 records that ruling without editing Yan's write-lanes plan or the frozen
 overnight slices-6–8 draft. The objective remains faster common multi-ontology

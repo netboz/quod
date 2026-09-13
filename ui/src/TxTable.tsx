@@ -69,8 +69,8 @@ export function TxTable({
           )
         }
         if (row.role !== 'application') {
-          const target = row.role_details && 'target_transaction' in row.role_details
-            ? row.role_details.target_transaction.ns
+          const target = row.role_details && 'targets' in row.role_details
+            ? row.role_details.targets.map(t => t.target.ns).join(', ')
             : row.role_details && 'source_claim' in row.role_details
               ? row.ns
               : 'invalid target'

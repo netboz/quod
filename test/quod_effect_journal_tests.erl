@@ -480,8 +480,9 @@ vector_effect_custody_binds_only_its_target_and_cancel_survives_restart_test() -
           {ok, Refs} = quod_transaction:remote_claim_references(Claim),
           ?assertEqual(2, length(Refs)),
           ?assertEqual(ok, quod_transaction:validate_independent_claim(Claim)),
-          ?assertEqual({ok, [Target]}, quod_transaction:operation_submission_targets(
-                                         maps:get(submission, Fixture))),
+          {ok, _, _, EffectPlans} = quod_transaction:operation_submission_context(
+                                     maps:get(submission, Fixture)),
+          ?assertEqual([Target], [quod_dtx:target(P) || P <- EffectPlans]),
           Blob = operation_blob(Fixture),
           ?assertEqual({error, invalid_operation_submission},
                        quod_transaction:decode_operation_submission(Blob, maps:get(origin, Fixture))),

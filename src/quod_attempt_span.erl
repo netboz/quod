@@ -8,7 +8,7 @@ loss cannot interrupt operational cleanup. Fatal callback unwind may expose
 an old token or discard a tentative one, under the pinned B SDK assumptions.
 This module has no registry, process dictionary, process, timer or retry.
 """.
--export([owned/3, close/2, event/3, ancestry/1, exit_class/1]).
+-export([owned/3, close/2, event/2, ancestry/1, exit_class/1]).
 -export_type([handle/0]).
 -type handle() :: none | {quod_trace:context(), quod_trace:span_ctx()}.
 
@@ -33,10 +33,10 @@ close({_Ctx, Span}, Attributes) ->
     ok.
 
 -doc "Add an observation without making it an execution dependency.".
--spec event(handle(), binary(), map()) -> ok.
-event(none, _Name, _Attributes) -> ok;
-event({Ctx, _Span}, Name, Attributes) ->
-    _ = catch quod_trace:add_event(Ctx, Name, Attributes),
+-spec event(handle(), binary()) -> ok.
+event(none, _Name) -> ok;
+event({Ctx, _Span}, Name) ->
+    _ = catch quod_trace:add_event(Ctx, Name, #{}),
     ok.
 
 -doc "Describe only the original caller context actually carried by the owner row.".

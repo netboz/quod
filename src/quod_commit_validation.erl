@@ -60,9 +60,16 @@ validate_evidence(#transaction{role = {remote_complete, _, _, Receipt},
     end;
 validate_evidence(#transaction{role = {remote_complete, _, _, _}},
                        _Evidence) ->
-    {error, malformed_foreign_reads};
+    {error, invalid_operation_receipt};
+validate_evidence(#transaction{role = {remote_application, _, _, _},
+                               evidence = {Ref, Referenced},
+                               foreign_reads = Certificates, proof_id = ProofId}, Evidence) ->
+    case matching_evidence(Ref, Referenced, Evidence) of
+        {ok, _} -> validate_foreign_reads(Certificates, ProofId, Evidence);
+        error -> {error, foreign_reference_binding}
+    end;
 validate_evidence(#transaction{foreign_reads = Certificates,
-                                    proof_id = ProofId}, Evidence)
+                              evidence = none, proof_id = ProofId}, Evidence)
   when is_list(Certificates), is_map(Evidence) ->
     validate_foreign_reads(Certificates, ProofId, Evidence);
 validate_evidence(#transaction{}, _Evidence) ->
@@ -70,31 +77,47 @@ validate_evidence(#transaction{}, _Evidence) ->
 
 validate_receipt_evidence([], [], _Evidence) -> ok;
 validate_receipt_evidence([{_Target, {included, Ref}} | Rest],
-                          [{CertifiedRef, _Transaction} | Pairs], Evidence) ->
+                          [{CertifiedRef, Transaction} | Pairs], Evidence) ->
     %% Historical S7 rows assert inclusion only. New admission separately
     %% requires the certified arm; old rows never manufacture outcome labels.
-    case quod_transaction:stable_ref(CertifiedRef) =:= Ref of
-        true -> validate_receipt_evidence(Rest, Pairs, Evidence);
-        false -> {error, operation_receipt_reference_binding}
+    case {quod_transaction:stable_ref(CertifiedRef),
+          matching_evidence(CertifiedRef, Transaction, Evidence)} of
+        {Ref, {ok, _}} -> validate_receipt_evidence(Rest, Pairs, Evidence);
+        _ -> {error, operation_receipt_reference_binding}
     end;
 validate_receipt_evidence([{Target, {certified, Ref, Certificate}} | Rest],
                           [{CertifiedRef, Transaction} | Pairs], Evidence) ->
-    case {quod_transaction:stable_ref(CertifiedRef), maps:get(CertifiedRef, Evidence, none)} of
-        {Ref, #{identity := Target, transaction := ExactTransaction} = Exact} ->
-            case {quod_transaction:same_ledger_transaction(Transaction, ExactTransaction),
-                  quod_ontology:network_identity()} of
-                {false, _} -> {error, operation_receipt_reference_binding};
-                {true, {ok, Network}} ->
+    case {quod_transaction:stable_ref(CertifiedRef),
+          matching_evidence(CertifiedRef, Transaction, Evidence)} of
+        {Ref, {ok, #{identity := Target} = Exact}} ->
+            case quod_ontology:network_identity() of
+                {ok, Network} ->
                     case quod_applied_certificate:verify_operation_certificate(
                            Certificate, Network, Exact) of
                         true -> validate_receipt_evidence(Rest, Pairs, Evidence);
                         false -> {error, invalid_operation_result_certificate}
                     end;
-                {true, {error, _}} -> abstain
+                {error, _} -> abstain
             end;
         _ -> {error, operation_receipt_reference_binding}
     end;
 validate_receipt_evidence(_, _, _) -> {error, invalid_operation_receipt}.
+
+%% Both inputs have already crossed their signed decode boundary. Identical
+%% values need no re-encoding or crypto. Independently decoded owner/foreign
+%% representations may differ; only their complete canonical envelopes can
+%% establish equality, never the semantic ID or an unchecked signed_bytes field.
+matching_evidence(Ref, Transaction = #transaction{}, Evidence) ->
+    case maps:get(Ref, Evidence, none) of
+        #{transaction := Transaction} = Exact -> {ok, Exact};
+        #{transaction := Other} = Exact ->
+            case quod_transaction:same_ledger_transaction(Transaction, Other) of
+                true -> {ok, Exact};
+                false -> error
+            end;
+        _ -> error
+    end;
+matching_evidence(_, _, _) -> error.
 
 validate_foreign_reads([], _ProofId, _Evidence) ->
     ok;
@@ -172,7 +195,7 @@ read_only_plan(Plan, Context = #context{target = Target}) ->
          quod_dtx:effects_count(Plan) =:= 0 andalso
          maps:get(read_functors, quod_dtx:core(Plan), 0) > 0 of
         true ->
-            case validate_prepared_plan_header(Plan, Context) of
+            case validate_prepared_plan(Plan, Context) of
                 {ok, _Material} -> ok;
                 {error, _} = Error -> Error
             end;
@@ -424,24 +447,23 @@ remote_application(
              role = {remote_application, ClaimRef, _OperationRef, _Digest},
              evidence = {CertifiedRef,
                          #transaction{
-                           role = {remote_claim, Manifest,
-                                   Bundles, _Predicted}} = Claim}},
+                           role = {remote_claim, _, _, _}} = Claim}},
   Context = #context{target = Target}) ->
     case quod_transaction:validate_independent_claim(Claim) of
         ok -> remote_application_checked(Change, CertifiedRef, ClaimRef, Claim,
-                                         Manifest, Bundles, Target, Context);
+                                         Target, Context);
         {error, Reason} -> {invalid, Reason}
     end;
 remote_application(_Change, _Context) ->
     {invalid, malformed_remote_application}.
 
 remote_application_checked(Change, CertifiedRef, ClaimRef, Claim,
-                           Manifest, Bundles, Target, Context) ->
-    Expected = try quod_transaction:remote_application(ClaimRef, Claim, Target)
+                           Target, Context) ->
+    Expected = try quod_transaction:remote_application_material(ClaimRef, Claim, Target)
                catch _:_ -> invalid
                end,
     case Expected of
-        #transaction{tx_id = TxId}
+        {#transaction{tx_id = TxId}, Plan, EventContext, Material}
           when TxId =:= Change#transaction.tx_id ->
             case quod_dtx:certified_ref_binding(CertifiedRef) of
                 {ok, _ClaimIdentity, _Slot, ClaimTxId}
@@ -449,11 +471,9 @@ remote_application_checked(Change, CertifiedRef, ClaimRef, Claim,
                     case quod_transaction:valid_id(
                            Context#context.target, Change) of
                         true ->
-                            {Target, PlanDigest, PlanBlob, _Attestation} =
-                                lists:keyfind(Target, 1, Bundles),
                             classify_remote_prepared(
-                              prepared_application(
-                                Manifest, PlanDigest, PlanBlob, Context));
+                              prepared_application_material(
+                                Plan, EventContext, Material, Context));
                         false ->
                             {invalid, remote_application_target}
                     end;
@@ -469,12 +489,26 @@ prepared_application(Manifest, PlanDigest, PlanBlob, Context) ->
     %% validation and application classification cannot decode it twice.
     case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
         {ok, Plan, EventContext} ->
-            case validate_prepared_plan_header(Plan, Context) of
+            case validate_prepared_plan(Plan, Context) of
                 {ok, Material} -> {ok, EventContext, Material};
                 {error, _} = Error -> Error
             end;
         {error, _} = Error ->
             Error
+    end.
+
+prepared_application_material(Plan, EventContext, Material, Context) ->
+    case validate_prepared_plan_header(Plan, Context) of
+        ok ->
+            case quod_effect:validate_plan(Plan, Material) of
+                true ->
+                    case validate_prepared_plan_material(Plan, Material, Context) of
+                        {ok, Material} -> {ok, EventContext, Material};
+                        {error, _} = Error -> Error
+                    end;
+                false -> {error, invalid_direct_effect}
+            end;
+        {error, _} = Error -> Error
     end.
 
 classify_remote_prepared(
@@ -589,8 +623,8 @@ decode_prepared_plan(
                 false ->
                     {error, bad_plan_binding};
                 true ->
-                    %% event_context/2 is the one successful-path signature,
-                    %% digest, and manifest-binding owner.  The fallback
+                    %% Standalone atomic plans authenticate here; claim plans
+                    %% arrive with their decode-owned attested context. The fallback
                     %% verify is reached only on rejection, solely to preserve
                     %% the existing bad-plan versus bad-manifest reason.
                     case quod_dtx:event_context(Manifest, Plan) of
@@ -610,7 +644,7 @@ decode_prepared_plan(
     end.
 
 validate_prepared_plan_header(
-  Plan, Context = #context{applied = Parent, est = Est}) ->
+  Plan, Context = #context{applied = Parent}) ->
     case prepared_signer_admitted(quod_dtx:signer(Plan), Context) of
         false ->
             {error, signer_not_admitted};
@@ -619,22 +653,26 @@ validate_prepared_plan_header(
                   quod_dtx:base_height(Plan) =< Parent} of
                 {false, _} -> {error, not_material};
                 {_, false} -> {error, future_base_height};
-                {true, true} ->
-                    validate_prepared_plan_material(Plan, Est, Context)
+                {true, true} -> ok
             end
     end.
 
-validate_prepared_plan_material(Plan, Est, Context) ->
-    case materialize_prepared_plan(Plan) of
-        {ok, #{diff := Diff, read_check := ReadCheck,
-               transcript := Transcript} = Material} ->
-            case validate_prepared_material(
-                   Plan, Diff, ReadCheck, Transcript, Est, Context) of
-                ok -> {ok, Material};
+validate_prepared_plan(Plan, Context) ->
+    case validate_prepared_plan_header(Plan, Context) of
+        ok ->
+            case materialize_prepared_plan(Plan) of
+                {ok, Material} -> validate_prepared_plan_material(Plan, Material, Context);
                 {error, _} = Error -> Error
             end;
-        {error, _} = Error ->
-            Error
+        {error, _} = Error -> Error
+    end.
+
+validate_prepared_plan_material(Plan,
+  #{diff := Diff, read_check := ReadCheck, transcript := Transcript} = Material,
+  Context = #context{est = Est}) ->
+    case validate_prepared_material(Plan, Diff, ReadCheck, Transcript, Est, Context) of
+        ok -> {ok, Material};
+        {error, _} = Error -> Error
     end.
 
 materialize_prepared_plan(Plan) ->
@@ -650,18 +688,9 @@ materialize_prepared_plan(Plan) ->
 
 validate_prepared_material(
   Plan, Diff, ReadCheck, Transcript, Est, Context) ->
-    case quod_diff:valid_ops(Diff) andalso
-         quod_diff:valid_read_check(ReadCheck) of
-        false ->
-            {error, malformed_plan_material};
-        true ->
-            case quod_diff:touches_functor(
-                   Diff, {external_predicate_modules, 1}) of
-                true -> {error, immutable_external_predicate_manifest};
-                false ->
-                    validate_prepared_occ(
-                      Plan, Diff, ReadCheck, Transcript, Est, Context)
-            end
+    case quod_diff:touches_functor(Diff, {external_predicate_modules, 1}) of
+        true -> {error, immutable_external_predicate_manifest};
+        false -> validate_prepared_occ(Plan, Diff, ReadCheck, Transcript, Est, Context)
     end.
 
 validate_prepared_occ(

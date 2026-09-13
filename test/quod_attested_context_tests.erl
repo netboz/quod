@@ -98,7 +98,7 @@ fixture(N) ->
     Origin = {<<"quod:context-source">>, <<71:256>>},
     Targets = [{<<"quod:context-target-", (integer_to_binary(I))/binary>>, <<I:256>>}
                || I <- lists:seq(1,N)],
-    quod_ct:operation_plan_fixture(#{target => Origin, participant_target => hd(Targets)}, Targets).
+    quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets)}, Targets).
 construct(F) ->
     quod_transaction:remote_claim(maps:get(origin, F), maps:get(manifest, F),
                                   maps:get(bundles, F), maps:get(auth, F), []).

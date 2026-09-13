@@ -203,7 +203,7 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
           end,
     {ok, {Ns, _}, _, _} = quod_dtx:certified_ref_binding(Ref),
     TargetRef = quod_transaction:stable_ref(Ref),
-    {ok, Included} = quod_operation_vector:included([TargetRef]),
+    {ok, Included} = quod_ct:included_receipt([TargetRef]),
     Receipt = #transaction{
                  role = {remote_complete, unused_operation, unused_request, Included},
                  evidence = {applications, [{Ref, Transaction}]}, foreign_reads = []},
@@ -265,7 +265,7 @@ foreign_validation_queued_success_respects_original_deadline_test_() ->
     [{atom_to_list(When), {timeout, 12, fun() ->
         with_certified_history(fun(State0, Transaction, Ref) ->
             {ok, {Ns, Anchor}, _, _} = quod_dtx:certified_ref_binding(Ref),
-            {ok, Included} = quod_operation_vector:included(
+            {ok, Included} = quod_ct:included_receipt(
                                [quod_transaction:stable_ref(Ref)]),
             Receipt = #transaction{
               role = {remote_complete, unused_operation, unused_request,

@@ -6,11 +6,6 @@
 
 deadline(TimeoutMs) -> quod_time:mono_ms() + TimeoutMs.
 
-thresholds_are_f_plus_one_at_every_committee_boundary_test() ->
-    ?assertEqual(
-       [{1, 1}, {4, 2}, {7, 3}, {64, 22}],
-       [{N, quod_dtx_current_view:threshold(N)} || N <- [1, 4, 7, 64]]).
-
 local_current_view_uses_the_captured_projection_and_apply_sent_frontier_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"quod:captured-current-", (integer_to_binary(
@@ -280,7 +275,7 @@ exact_f_plus_one_finalize_committee_certificate_succeeds_test() ->
     F = fixture(4),
     [A, B | _] = maps:get(committee, F),
     Certificate = certificate(F, [A, B], #{}),
-    ?assert(quod_applied_certificate:valid_applied_certificate_shape(Certificate)),
+    ?assert(quod_ct:valid_applied_certificate_shape(Certificate)),
     ?assert(quod_applied_certificate:verify_applied_certificate(
               Certificate, maps:get(network_identity, F),
               maps:get(evidence, F))).
@@ -365,7 +360,7 @@ every_signed_statement_field_is_bound_test() ->
     lists:foreach(
       fun({Overrides, ExpectedNetwork}) ->
           Certificate = certificate(F, Keys, Overrides),
-          ?assert(quod_applied_certificate:valid_applied_certificate_shape(
+          ?assert(quod_ct:valid_applied_certificate_shape(
                     Certificate)),
           ?assertNot(quod_applied_certificate:verify_applied_certificate(
                        Certificate, ExpectedNetwork, maps:get(evidence, F)))

@@ -24,7 +24,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
          remote_operation_fixture/1,
-         operation_plan_fixture/2,
+         signed_plan_fixture/2, included_receipt/1, valid_applied_certificate_shape/1,
          signed_effect_operation_submission/0,
          signed_effect_operation_submission/1,
          signed_agent_facts/1,
@@ -238,11 +238,7 @@ signed_remote_plan_fixture(Overrides) when is_map(Overrides) ->
     signed_plan_fixture(
       Overrides#{target => Origin, participant_target => Target}, [Target]).
 
-%% Codec/validation fixtures may exercise N-target metadata before slice 8
-%% enables its public routing row. This helper performs no dispatch.
-operation_plan_fixture(Overrides, Targets) ->
-    signed_plan_fixture(Overrides, Targets).
-
+%% Signed multi-target protocol fixtures: construction alone performs no dispatch.
 signed_plan_fixture(Overrides, ParticipantTargets0) ->
     Request = signed_goal_fixture(Overrides),
     Origin = {Ns, Anchor} = maps:get(target, Request),
@@ -972,4 +968,18 @@ wait_until(F, N) ->
     case F() of
         true -> ok;
         _    -> timer:sleep(50), wait_until(F, N - 1)
+    end.
+
+%% Historical inclusion-only receipts are constructed in fixtures, never production.
+included_receipt(Refs) ->
+    case quod_operation_vector:references(Refs) of
+        {ok, Sorted} ->
+            {ok, [{quod_operation_vector:target(R), {included, R}} || R <- Sorted]};
+        error -> error
+    end.
+
+valid_applied_certificate_shape(Certificate) ->
+    case quod_applied_certificate:applied_certificate_binding(Certificate) of
+        {ok, _} -> true;
+        error -> false
     end.

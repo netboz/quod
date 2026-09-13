@@ -112,7 +112,7 @@ fixture(N) ->
     Origin = {<<"quod:identity-source">>, <<71:256>>},
     Targets = [{<<"quod:identity-target-", (integer_to_binary(I))/binary>>, <<I:256>>}
                || I <- lists:seq(1, N)],
-    F = quod_ct:operation_plan_fixture(
+    F = quod_ct:signed_plan_fixture(
           #{target => Origin, participant_target => hd(Targets)}, Targets),
     F#{origin => Origin, targets => Targets}.
 

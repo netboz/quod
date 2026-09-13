@@ -185,7 +185,8 @@ prerequisites are read-only state checks, while explicit `goal(State)` and
 `Ns::goal(State)` prerequisites may establish another state recursively.
 
 Each candidate's prerequisites, transition, and exact postcondition run inside
-`transaction/1`. That predicate is semidet: it adopts only the first complete
+an internal proof savepoint. It inherits the caller's commit intent and is
+semidet: it adopts only the first complete
 inner solution and exposes no inner redo. A failed candidate restores every
 assertion, retraction, and abolish it staged before another declaration is
 tried; failure reasons remain available. Term-identity cycle detection prevents
@@ -352,7 +353,7 @@ authority; those remain separate authorized operations.
    alternatives sharing one desired state, single and ordered-list
    transitions, prerequisite order, recursive `goal/1`, cycle rejection, and
    rollback of assertions, retractions, and abolishes after transition or
-   postcondition failure. `transaction/1` keeps only its first complete inner
+   postcondition failure. The candidate savepoint keeps only its first complete inner
    solution. A common term that collides with a compiled functor is rejected.
    Building a fresh KB does not duplicate common clauses, and
    `terms_to_diff/1` never returns them in a genesis diff.

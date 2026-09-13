@@ -9,15 +9,17 @@ key, clock, transport, scheduler or alternative application implementation.
 
 -include("quod_ledger.hrl").
 -export([new/4, work/1, accept/5, restore_receipt/2, results/1, completion/1,
-         references/1, request_digest/1, claim_bytes/1, claim/1, applied_result/3]).
+         references/1, request_digest/1, claim_bytes/1, claim/1,
+         observations/1, result/2, applied_result/3]).
 
-%% This is the coordinator's disposable, bounded observation state. The claim
+%% Existing owners and read-only resolution use this bounded observation state. The claim
 %% and the installed receipt remain the only durable authorities. A missing
 %% certificate is not a rejection, and an included application is not work to
-%% submit again. N=1 uses this same map and command selection.
+%% submit again. Every target count uses the same transitions and work selection.
 -opaque operation() :: map().
 -export_type([operation/0]).
 
+-doc "Bind a signed durable claim to one disposable target-work model.".
 -spec new(binary(), term(), quod_dtx:certified_ref(), #transaction{}) ->
           {ok, operation()} | {error, invalid_operation_claim}.
 new(OwnerNs, OperationRef, ClaimRef,
@@ -51,17 +53,22 @@ new(OwnerNs, OperationRef, ClaimRef,
     end;
 new(_, _, _, _) -> {error, invalid_operation_claim}.
 
+-doc "Return the canonical complete target-reference vector.".
 -spec references(operation()) -> [quod_operation_vector:application_ref()].
 references(#{refs := Refs}) -> Refs.
+-doc "Return the signed client-request digest bound to this operation.".
 -spec request_digest(operation()) -> <<_:256>>.
 request_digest(#{request_digest := Digest}) -> Digest.
+-doc "Return the unchanged certified claim envelope for exact redelivery.".
 -spec claim_bytes(operation()) -> binary().
 claim_bytes(#{claim_bytes := Bytes}) -> Bytes.
+-doc "Return the authenticated source claim without materializing target vocabulary.".
 -spec claim(operation()) -> #transaction{}.
 claim(#{claim := Claim}) -> Claim.
 
 %% Target workers execute each command through apply -> verify -> certify,
 %% independently of every other target's stage. Only the final vector joins.
+-doc "Select unfinished target work; an included application needs certification, never reapplication.".
 -spec work(operation()) -> [{application, quod_operation_vector:target()} |
           {certify, quod_operation_vector:target(), quod_dtx:certified_ref(), map()}].
 work(#{refs := Refs, observations := Observations}) ->
@@ -79,6 +86,7 @@ work(#{refs := Refs, observations := Observations}) ->
 %% authority boundary; this transition pins their output to THIS claim. No
 %% transport result label enters this function. Certificates are immutable
 %% semantic statements: another valid signature subset cannot replace a row.
+-doc "Install one externally verified observation monotonically, bound to this claim and target.".
 -spec accept(quod_operation_vector:target(), quod_dtx:certified_ref(), map(),
              none | quod_applied_certificate:operation_certificate(), operation()) ->
           {ok, operation()} | {error, atom()}.
@@ -111,8 +119,11 @@ certificate_row(Cert, Target, StableRef, Slot, Hash, OperationRef, ClaimRef, Row
     case quod_applied_certificate:operation_certificate_binding(Cert) of
         {ok, #{target := Target, application_ref := StableRef,
                operation_ref := OperationRef, claim_ref := ClaimRef,
-               slot := Slot, entry_digest := Hash, result := _}} ->
-            {ok, Row#{certificate => Cert}};
+               slot := Slot, entry_digest := Hash, result := Result,
+               statement := Statement}} ->
+            Verdict = case Result of applied -> committed; {rejected, _} -> Result end,
+            {ok, Row#{certificate => Cert, statement => Statement,
+                      result => {Verdict, StableRef}}};
         _ -> error
     end.
 
@@ -124,12 +135,10 @@ merge_observation(#{reference := OldRef} = Old, #{reference := NewRef} = New) ->
             case {maps:find(certificate, Old), maps:find(certificate, New)} of
                 {error, _} -> {ok, New};
                 {{ok, _}, error} -> {ok, Old};
-                {{ok, A}, {ok, B}} ->
-                    {ok, #{statement := SA}} =
-                        quod_applied_certificate:operation_certificate_binding(A),
-                    {ok, #{statement := SB}} =
-                        quod_applied_certificate:operation_certificate_binding(B),
-                    case SA =:= SB of true -> {ok, Old}; false -> error end
+                {{ok, _}, {ok, _}} ->
+                    case maps:get(statement, Old) =:= maps:get(statement, New) of
+                        true -> {ok, Old}; false -> error
+                    end
             end
     end.
 
@@ -137,6 +146,7 @@ merge_observation(#{reference := OldRef} = Old, #{reference := NewRef} = New) ->
 %% not an endpoint projection. Its application pairs are certified history.
 %% Old included rows provide discovery only; work/1 still requires an AM3
 %% certificate. No legacy decoder, receipt rewriting, or completed redelivery.
+-doc "Restore canonical receipt discovery from verified source history; this performs no signature verification.".
 -spec restore_receipt(#transaction{}, operation()) -> {ok, operation()} | {error, atom()}.
 restore_receipt(
   #transaction{role = {remote_complete, OperationRef, Digest, Rows},
@@ -146,23 +156,38 @@ restore_receipt(
         {ok, Refs} when length(Pairs) =:= length(Refs) ->
             lists:foldl(fun
                 (_, {error, _} = Error) -> Error;
-                ({Target, Arm}, {ok, Acc}) ->
+                ({{Target, Arm}, {Ref, #transaction{} = Tx}}, {ok, Acc}) ->
                     StableRef = element(2, Arm),
-                    case [{Ref, Tx} || {Ref, #transaction{} = Tx} <- Pairs,
-                                      quod_transaction:stable_ref(Ref) =:= StableRef] of
-                        [{Ref, Tx}] ->
+                    case quod_transaction:stable_ref(Ref) =:= StableRef of
+                        true ->
                             Certificate = case Arm of
                                 {included, _} -> none;
                                 {certified, _, Cert} -> Cert
                             end,
                             accept(Target, Ref, #{transaction => Tx}, Certificate, Acc);
-                        _ -> {error, invalid_completion}
-                    end
-            end, {ok, Operation}, Rows);
+                        false -> {error, invalid_completion}
+                    end;
+                (_, {ok, _}) -> {error, invalid_completion}
+            end, {ok, Operation}, lists:zip(Rows, Pairs));
         _ -> {error, invalid_completion}
     end;
 restore_receipt(_, _) -> {error, invalid_completion}.
 
+-doc "Return target-ordered observations; restored discovery still requires external certification.".
+-spec observations(operation()) -> [{quod_operation_vector:target(), map()}].
+observations(#{refs := Refs, observations := Observations}) ->
+    [{Target, Row} || Ref <- Refs, Target <- [quod_operation_vector:target(Ref)],
+                      {ok, Row} <- [maps:find(Target, Observations)]].
+
+-doc "Read one bound result, or pending when that target has no certificate.".
+-spec result(quod_operation_vector:target(), operation()) -> {ok, tuple()} | pending.
+result(Target, #{observations := Observations}) ->
+    case maps:get(Target, Observations, none) of
+        #{result := Result} -> {ok, Result};
+        _ -> pending
+    end.
+
+-doc "Return one complete certified result vector, or pending; never a partial final result.".
 -spec results(operation()) -> pending | {ok, list()}.
 results(#{refs := Refs, observations := Observations}) ->
     case lists:all(fun(Ref) ->
@@ -177,12 +202,10 @@ results(#{refs := Refs, observations := Observations}) ->
 
 result_row(Ref, Observations) ->
     Target = quod_operation_vector:target(Ref),
-    #{certificate := Certificate} = maps:get(Target, Observations),
-    {ok, #{result := Result}} =
-        quod_applied_certificate:operation_certificate_binding(Certificate),
-    Verdict = case Result of applied -> committed; {rejected, _} -> Result end,
-    {Target, {Verdict, Ref}}.
+    #{result := Result} = maps:get(Target, Observations),
+    {Target, Result}.
 
+-doc "Construct the source receipt only after every target result is certified.".
 -spec completion(operation()) -> pending | {ok, #transaction{}}.
 completion(#{origin := Origin, operation_ref := Ref, request_digest := Digest,
              refs := Refs, observations := Observations} = Operation) ->

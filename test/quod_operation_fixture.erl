@@ -17,7 +17,7 @@ with(N, Fun) ->
       <<"quod:operation-result-target-", Suffix/binary, "-", (integer_to_binary(I))/binary>>, Signer)
       || I <- lists:seq(1, N)],
     Targets = [Target || {Target, _, _} <- TargetGenesis],
-    F0 = quod_ct:operation_plan_fixture(#{target => Origin, participant_target => hd(Targets),
+    F0 = quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets),
       node_identity => Signer, provenance => case N of 1 -> 1; _ -> 2 end}, Targets),
     Admission = maps:get(admission, F0),
     Claim0 = quod_transaction:remote_claim(Origin, maps:get(manifest, F0),
@@ -50,7 +50,7 @@ with(N, Fun) ->
     Pairs = [{maps:get(certified_target_ref, maps:get(T, Applications)),
               maps:get(application, maps:get(T, Applications))} || T <- Targets],
     Refs = [maps:get(target_ref, maps:get(T, Applications)) || T <- Targets],
-    {ok, Included} = quod_operation_vector:included(Refs),
+    {ok, Included} = quod_ct:included_receipt(Refs),
     Completion0 = quod_transaction:attach_receipt_evidence(
       quod_transaction:remote_complete(Origin, OperationRef, Digest, Included), Pairs),
     {ok, Completion} = quod_transaction:sign({Ns, element(2, Origin), Admission},

@@ -118,8 +118,8 @@ co-hosted, and remote paths.
 ### 2.2 Preserve Erlog semantics; do not invent remote semantics
 
 Ordinary Quod overlays retain Erlog's existing database behavior: assertions
-and retractions survive ordinary backtracking. Only an explicit
-`transaction/1` enables database checkpoints at choice points. A remote
+and retractions survive ordinary backtracking. Public `transaction/1` and
+internal action-candidate savepoints enable database checkpoints at choice points. A remote
 completion therefore
 returns its resulting scope state even when the remote goal has no solution.
 For example, the remote form behaves like the local form:
@@ -129,7 +129,7 @@ For example, the remote form behaves like the local form:
 ```
 
 The second branch sees `x`. The pinned Erlog fork adds an opt-in checkpoint
-hook to choice points for `transaction/1`; outside that mode its execution is
+hook to choice points for those savepoints; outside that mode its execution is
 the same single cons operation as before.
 
 A cut only selects Prolog alternatives. It neither commits a ledger nor creates
@@ -138,12 +138,14 @@ outermost proof has selected a complete solution.
 
 ### 2.3 `transaction/1` is the explicit rollback boundary
 
-Register one compiled `transaction/1` predicate in every Quod ontology. It uses
-Erlog's existing continuation/fail machinery and Quod's immutable-overlay
-representation, plus one boundary choice point and the checkpoint/restore APIs
-specified in section 4.1. There is no existing transactional nested-prove API
-to pretend to reuse. The pinned Erlog fork therefore exposes an explicit,
-nestable choice-point-checkpoint mode; ordinary proofs never enter it.
+The compiled `transaction/1` predicate selects public atomic intent and calls
+`quod_proof_savepoint`, the same library used by action candidates without
+selecting intent. It uses Erlog's continuation/fail machinery, the immutable
+overlay, one boundary choice point and the shared checkpoint/restore APIs.
+The pinned Erlog fork's checkpoint mode is scoped to these savepoints;
+ordinary backtracking outside them keeps staged changes. Public atomic and
+independent wrappers still cannot nest in either direction. Internal candidate
+rollback is not a public wrapper and does not create a nesting exemption.
 
 `transaction(Goal)` is semidet: it searches for the first complete solution,
 commits that selected staged state, and exposes no inner redo to its caller. It
@@ -211,7 +213,7 @@ reach the same desired state, and transitions may reach it in different ways.
    already true, cut and succeed without a transition;
 2. otherwise enumerate matching `action(Transition, Prerequisites,
    DesiredState)` clauses in Prolog order;
-3. inside one `transaction/1`, prove the prerequisites in order, run the
+3. inside one internal proof savepoint, prove the prerequisites in order, run the
    transition, then prove `DesiredState` again;
 4. if that candidate fails, its assertions and retractions in every touched
    ontology are restored and the next matching action clause may be tried;
@@ -228,7 +230,7 @@ not a second policy evaluator.
 Prerequisites are a finite proper list. The common Prolog runner distinguishes
 their shapes explicitly: `goal(State)` and `Ns::goal(State)` run normally and
 may achieve that state recursively inside the candidate's surrounding
-`transaction/1`; every other callable term is passed to the internal read-only
+savepoint, inheriting its commit intent; every other callable term is passed to the internal read-only
 state-check helper. `Transition` is either one non-variable callable goal or a
 non-empty proper list of such goals, executed in order and allowed to stage D
 writes. Invalid shapes fail before any candidate goal runs. This removes the

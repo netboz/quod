@@ -61,7 +61,7 @@ complete_receipt_is_monotone_and_target_complete_across_reopen_test() ->
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
     Op = maps:get(operation_ref, ClaimData), Digest = maps:get(digest, ClaimData),
     {ok, Refs} = quod_transaction:remote_claim_references(Claim),
-    {ok, Receipt} = quod_operation_vector:included(Refs),
+    {ok, Receipt} = quod_ct:included_receipt(Refs),
     Dir = filename:join("/tmp", "quod_s7_projection_" ++
         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
     Config = #{data_dir => Dir, outcome_backend => disk},
@@ -120,7 +120,7 @@ altered_bundle_and_request_bindings_refused_test() ->
 certified_vector_selects_each_target_and_preserves_ids_test() ->
     F0 = fixture(4, true), Origin = maps:get(origin, F0),
     %% Deliberately supplied fixture provenance, not a live scope witness.
-    F = quod_ct:operation_plan_fixture(
+    F = quod_ct:signed_plan_fixture(
           #{target => Origin, participant_target => maps:get(participant_target, F0),
             provenance => 2}, maps:get(participant_targets, F0)),
     Claim = signed(F, Origin, claim(F, maps:get(bundles, F))),
@@ -190,7 +190,7 @@ receipt_complete_set_and_evidence_independence_test() ->
     F = fixture(4, true), Claim = claim(F, maps:get(bundles, F)),
     Origin = maps:get(origin, F), ClaimRef = ref(Origin, Claim#transaction.tx_id),
     {ok, Refs} = quod_transaction:remote_claim_references(Claim),
-    {ok, Receipt} = quod_operation_vector:included(Refs),
+    {ok, Receipt} = quod_ct:included_receipt(Refs),
     {ok, #{operation_ref := Op, digest := Digest}} = quod_transaction:request_claim(Claim),
     Complete = quod_transaction:remote_complete(Origin, Op, Digest, Receipt),
     ?assertEqual(Complete, quod_transaction:remote_complete(
@@ -216,7 +216,7 @@ fixture(N, Local) ->
     Foreign = [{<<"quod:operation-target", (integer_to_binary(I))/binary>>, <<I:256>>}
                || I <- lists:seq(1, N)],
     Targets = case Local of true -> [Origin | tl(Foreign)]; false -> Foreign end,
-    quod_ct:operation_plan_fixture(#{target => Origin, participant_target => hd(Targets)}, Targets).
+    quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets)}, Targets).
 
 claim(F, Bundles) -> quod_transaction:remote_claim(maps:get(origin, F),
     maps:get(manifest, F), Bundles, maps:get(auth, F), []).

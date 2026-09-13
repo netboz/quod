@@ -31,13 +31,13 @@ keeps the plan vocabulary opaque.
 
 -export([submit_operation/4, submit_claim_application/5,
          submit_operation_to/5,
-         certify_applied_many/3, certify_operation/4, certify_reads/3, lookup_outcome/4,
-         operation_result/5, certify_operation_evidence/6,
-         threshold/1]).
+         certify_applied_many/3, certify_reads/3, lookup_outcome/4,
+         operation_result/5, certify_operation_evidence/6]).
 -export_type([source/0, claim/0]).
 
 -ifdef(TEST).
 -export([test_certify_applied/6, test_certify_applied_many/4,
+         test_certify_operation/5,
          test_certify_reads/4,
          test_lookup_outcome/5,
          test_production_dependencies/0,
@@ -279,7 +279,7 @@ certify_applied_many(OwnerNs, Requests, Deadline) ->
     certify_applied_many_with(
       OwnerNs, Requests, Deadline, production_dependencies()).
 
--doc "Collect an exact operation result from its application-era committee.".
+%% Collect an exact operation result from its application-era committee.
 -spec certify_operation(binary(), quod_dtx:certified_ref(), map(), integer()) ->
           {ok, quod_applied_certificate:operation_certificate()} |
           {error, retry | invalid_request}.
@@ -297,7 +297,7 @@ certify_operation_with(OwnerNs, Ref,
             %% evidence was already resolved by A/R2; do not capture a new view.
             %% Local endpoint admission still checks this reference's anchor.
             Sources = probe_sources({local, Target}, Committee, Routes, Dependencies),
-            Needed = threshold(length(Committee)),
+            Needed = quod_quorum:honest_threshold(length(Committee)),
             Probe = fun(Key, Source) ->
                 Request = {operation_applied, request_id(), Ref},
                 Verify = fun(Result) ->
@@ -316,8 +316,9 @@ certify_operation_with(OwnerNs, Ref,
                         {ok, {signed, {operation, Statement}, Rows}} ->
                             {ok, Certificate} = quod_applied_certificate:operation_certificate(
                                                   Statement, signed_rows(Rows)),
-                            case quod_applied_certificate:verify_operation_certificate(
-                                   Certificate, Network, Evidence) andalso remaining(Deadline) > 0 of
+                            %% Each collected row was authenticated against this
+                            %% exact statement and historical member at receipt.
+                            case remaining(Deadline) > 0 of
                                 true -> {ok, Certificate};
                                 false -> {error, retry}
                             end;
@@ -332,6 +333,11 @@ certify_operation_with(_, _, _, _, _) -> {error, invalid_request}.
 %% The same finite verify/certify work serves live delivery, restarted owners
 %% and read-only receipt lookup. Known is either an already-verified capture
 %% or just discovery bytes. Never recapture a sufficient verified entry.
+-doc "Verify or certify exact application evidence within the original absolute deadline.".
+-spec certify_operation_evidence(binary(), identity(), quod_dtx:certified_ref(), map(),
+                                  none | quod_applied_certificate:operation_certificate(), integer()) ->
+          {ok, quod_dtx:certified_ref(), map(), none | quod_applied_certificate:operation_certificate()} |
+          {error, term()}.
 certify_operation_evidence(OwnerNs, Target, Ref,
                            #{transaction := Transaction} = Known, Certificate, Deadline) ->
     Exact = case Known of
@@ -375,6 +381,9 @@ certify_matching_operation_evidence(true, OwnerNs, Ref, Evidence, Certificate, D
 %% operation is a bounded read: exact source receipt -> exact applications ->
 %% AM3. Current-view labels never become target verdicts. Before its async
 %% receipt exists, a remote reconnect remains uncertain; it submits nothing.
+-doc "Resolve one complete certified operation vector under an absolute observation deadline.".
+-spec operation_result(binary(), term(), binary(), map(), integer()) ->
+          {ok, list()} | {error, term()}.
 operation_result(OwnerNs, {operation, Ns, Anchor, _, _} = Op, Digest,
   #{ref := Op, request_digest := Digest, height := ClaimHeight} = Projection, Deadline) ->
     case quod_simplex:history_view_at({Ns, Anchor}, ClaimHeight, Deadline) of
@@ -419,7 +428,7 @@ remote_operation_receipt(_, _, _, _, _) -> {error, retry}.
 
 resolve_receipt_results(OwnerNs, {operation, Ns, _, _, _} = Op, Digest,
   #transaction{role = {remote_complete, Op, Digest, Rows},
-    evidence = {applications, [{_, #transaction{evidence = {ClaimRef, Claim}}} | _] = Pairs}}
+    evidence = {applications, [{_, #transaction{evidence = {ClaimRef, Claim}}} | _]}}
     = Receipt,
   Deadline) ->
     case quod_operation:new(Ns, Op, ClaimRef, Claim) of
@@ -431,7 +440,8 @@ resolve_receipt_results(OwnerNs, {operation, Ns, _, _, _} = Op, Digest,
                     %% Validates canonical completeness and pair/claim binding;
                     %% the restored model is NOT used as verdict authority.
                     case quod_operation:restore_receipt(Receipt, Model) of
-                        {ok, _} -> certify_receipt_rows(OwnerNs, Rows, Pairs, Model, Deadline);
+                        {ok, Restored} -> certify_receipt_rows(
+                            OwnerNs, quod_operation:observations(Restored), Model, Deadline);
                         {error, _} = Error -> Error
                     end;
                 false -> {error, invalid_completion}
@@ -440,23 +450,23 @@ resolve_receipt_results(OwnerNs, {operation, Ns, _, _, _} = Op, Digest,
     end;
 resolve_receipt_results(_, _, _, _, _) -> {error, invalid_completion}.
 
-certify_receipt_rows(_OwnerNs, [], [], Model, Deadline) ->
+certify_receipt_rows(_OwnerNs, [], Model, Deadline) ->
     case {remaining(Deadline), quod_operation:results(Model)} of
         {0, _} -> {error, retry};
         {_, {ok, Rows}} -> {ok, Rows};
         _ -> {error, retry}
     end;
-certify_receipt_rows(OwnerNs, [{Target, Arm} | Rows], [{Ref, Tx} | Pairs], Model, Deadline) ->
-    Certificate = case Arm of {included, _} -> none; {certified, _, Cert} -> Cert end,
-    case certify_operation_evidence(OwnerNs, Target, Ref, #{transaction => Tx}, Certificate, Deadline) of
+certify_receipt_rows(OwnerNs, [{Target, #{reference := Ref, evidence := Discovery} = Row} | Rows],
+                     Model, Deadline) ->
+    Certificate = maps:get(certificate, Row, none),
+    case certify_operation_evidence(OwnerNs, Target, Ref, Discovery, Certificate, Deadline) of
         {ok, Ref, Evidence, Verified} when Verified =/= none ->
             case quod_operation:accept(Target, Ref, Evidence, Verified, Model) of
-                {ok, Updated} -> certify_receipt_rows(OwnerNs, Rows, Pairs, Updated, Deadline);
+                {ok, Updated} -> certify_receipt_rows(OwnerNs, Rows, Updated, Deadline);
                 {error, _} = Error -> Error
             end;
         _ -> {error, retry}
-    end;
-certify_receipt_rows(_, _, _, _, _) -> {error, invalid_completion}.
+    end.
 
 operation_response_vote(Request, Network, Evidence, Key,
   {ok, {operation_applied, _RequestId, _Ref, Statement, Key, Signature} = Response}) ->
@@ -682,7 +692,7 @@ certify_reads_view(
                 true ->
                     Sources = probe_sources(
                                 Source, Committee, Routes, Dependencies),
-                    Needed = threshold(length(Committee)),
+                    Needed = quod_quorum:honest_threshold(length(Committee)),
                     case length(Sources) >= Needed andalso
                          remaining(Deadline) > 0 of
                         true ->
@@ -915,7 +925,7 @@ lookup_outcome_view(OwnerNs, Source, OutcomeRef, Target, View,
         {ok, Committee, CommitteeId, MinimumSlot, Routes} ->
             Sources = probe_sources(
                         Source, Committee, Routes, Dependencies),
-            Needed = threshold(length(Committee)),
+            Needed = quod_quorum:honest_threshold(length(Committee)),
             case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
                 true ->
                     Claim = {Target, CommitteeId, MinimumSlot, OutcomeRef},
@@ -1008,7 +1018,7 @@ verify_view(OwnerNs, Source, NetworkIdentity, Target, GroupId, FinalizeRef,
         {ok, Committee, CommitteeId, Routes} ->
             Sources = probe_sources(
                         Source, Committee, Routes, Dependencies),
-            Needed = threshold(length(Committee)),
+            Needed = quod_quorum:honest_threshold(length(Committee)),
             case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
                 true ->
                     Claim = {NetworkIdentity, Target, CommitteeId, GroupId,
@@ -1670,9 +1680,6 @@ applied_response_vote(_Request, _NetworkIdentity, _Target, _CommitteeId,
 request_id() ->
     crypto:strong_rand_bytes(?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8).
 
-threshold(N) ->
-    N - quod_simplex:quorum(N) + 1.
-
 remaining(Deadline) ->
     max(0, Deadline - quod_time:mono_ms()).
 
@@ -1698,6 +1705,9 @@ walk_remote_candidates(
     end.
 
 -ifdef(TEST).
+test_certify_operation(OwnerNs, Ref, Evidence, Deadline, Dependencies) ->
+    certify_operation_with(OwnerNs, Ref, Evidence, Deadline, Dependencies).
+
 test_certify_applied(
   OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
     certify_applied_before_deadline(

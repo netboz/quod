@@ -115,7 +115,7 @@ remote_claim_and_completion_form_one_durable_operation_test() ->
     Claim = maps:get(claim, Fixture),
     TargetRef = maps:get(target_ref, Fixture),
     References = {applications, [TargetRef]},
-    {ok, Receipt} = quod_operation_vector:included([TargetRef]),
+    {ok, Receipt} = quod_ct:included_receipt([TargetRef]),
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
     OperationRef = maps:get(operation_ref, ClaimData),
     Digest = maps:get(digest, ClaimData),

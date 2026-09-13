@@ -106,17 +106,10 @@ valid_shape(Certificate) ->
 -doc "Verify exactly `f + 1` signatures from the certified anchor committee.".
 -spec verify(certificate(), [<<_:256>>], <<_:256>>) -> boolean().
 verify(Certificate, Committee, CommitteeId) ->
-    case {binding(Certificate), quod_quorum:committee_size(Committee)} of
-        {{ok, #{committee_id := CommitteeId, statement := Statement,
-                signatures := Signatures}},
-         {ok, N}} when N > 0 ->
-            Needed = quod_dtx_current_view:threshold(N),
-            length(Signatures) =:= Needed andalso
-                case quod_quorum:sanitize_at_least(
-                       Committee, vote_bytes(Statement), Signatures, Needed) of
-                    {ok, Signatures} -> true;
-                    _ -> false
-                end;
+    case binding(Certificate) of
+        {ok, #{committee_id := CommitteeId, statement := Statement,
+               signatures := Signatures}} ->
+            quod_quorum:verify_honest(Committee, vote_bytes(Statement), Signatures);
         _ -> false
     end.
 

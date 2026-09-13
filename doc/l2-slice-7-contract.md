@@ -1,5 +1,15 @@
 # L2 slice 7 — canonical claim and inclusion vectors, clean format break
 
+**Historical slice contract, superseded for current implementation status.**
+The C2 break below has shipped. Slice 8 enables N-target admission using each
+target's signed independent attestation, removes the intermediate refusals,
+and admits only certified receipt rows; included rows remain valid history,
+not verdict evidence. The deferred admitted-partial-outcome control is now in
+the permanent S8 suite. Scope wire is v13 and endpoint wire is v12; derived
+foreign-cache format is v4. Historical deployment restrictions below record
+this slice's review boundary, not current authorization. See
+[the consolidated architecture](multiwrite-architecture.md) for current status.
+
 This implements the approved slices 6–8 contract's slice-7 invariants 1–6,
 with the relayed C2, receipt-evidence and intermediate-admission rulings.
 Multi-ontology writes are a primary workload. This slice prepares their common

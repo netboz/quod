@@ -267,12 +267,14 @@ candidate before invoking it, then tries matching `action/3` clauses in Prolog
 declaration order. Normal prerequisites are read-only state checks; explicit
 `goal(State)` and `Ns::goal(State)` prerequisites may establish another state
 recursively. The prerequisites, transition, and final exact desired-state check
-run inside `transaction/1`.
+run inside the evaluator's internal proof savepoint, not public `transaction/1`.
+It inherits ordinary/atomic/independent intent; `independent(goal(State))` uses
+this same evaluator and rollback machinery.
 
-`transaction/1` is semidet: it keeps the first complete inner solution and
+The candidate savepoint is semidet: it keeps the first complete inner solution and
 does not expose inner alternatives to its caller. A failed candidate restores
 every assertion, retraction, and abolish it staged before the next matching
-action is tried. Total failure restores the transaction's entry state; an
+action is tried. Total failure restores the candidate's entry state; an
 Erlog error restores it before the same error propagates. A selected candidate
 succeeds only after its desired state has been proved again.
 

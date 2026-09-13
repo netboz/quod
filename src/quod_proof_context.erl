@@ -4,7 +4,7 @@ Private coordination state for one top-level ontology proof.
 
 The origin proof worker owns this state.  It pins ontology scopes, binds every
 nested invocation to an exact `{ScopeId, InvocationId}` actor, and coordinates the
-bounded logical savepoint batches used by distributed `transaction/1`.
+bounded logical savepoint batches shared by transactions and action candidates.
 Controller ids are proof-local 128-bit binaries; they never enter consensus or
 the scope wire as Erlang references.
 """.

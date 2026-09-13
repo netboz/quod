@@ -2,8 +2,8 @@
 -moduledoc """
 Portable attestations of exact, durably published application outcomes.
 
-One pure certificate family, no collector or process. Finalize statements keep
-their existing bytes. Operation statements bind the exact target application
+Two domain-separated certificate families, with no collector or process.
+Finalize statements bind atomic publication; operation statements bind the exact target application
 occurrence and canonical outcome under a different signature domain. The
 caller supplies already-verified historical entry/committee evidence; routes,
 current views and inclusion without an outcome are never verdict authority.
@@ -14,7 +14,7 @@ The owning Simplex must establish local durable publication before signing.
 -include("quod_ledger.hrl").
 
 -export([sign_applied_vote/8, verify_applied_certificate/3,
-         valid_applied_certificate_shape/1, applied_certificate_binding/1,
+         applied_certificate_binding/1,
          applied_certificate/2, applied_vote_valid/9, exact_finalize_binding/2,
          operation_statement/3, sign_operation_vote/2,
          verify_operation_vote/3, operation_certificate/2,
@@ -25,6 +25,8 @@ The owning Simplex must establish local durable publication before signing.
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(APPLIED_CERTIFICATE_VERSION, 1).
 -define(APPLIED_VOTE_VERSION, 1).
+-define(OPERATION_CERTIFICATE_VERSION, 1).
+-define(OPERATION_VOTE_VERSION, 1).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type applied_certificate() ::
@@ -71,8 +73,6 @@ applied_certificate_binding(
            NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
            Generation, Verdict) of
         {ok, Statement} ->
-            {ok, Target, AppliedThrough, _Digest} =
-                quod_dtx:certified_ref_binding(FinalizeRef),
             case valid_applied_signatures(Signatures) andalso
                  erlang:external_size(Certificate) =<
                      ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
@@ -80,7 +80,6 @@ applied_certificate_binding(
                     {ok, #{network_identity => NetworkIdentity,
                            target => Target, committee_id => CommitteeId,
                            group_id => GroupId, finalize_ref => FinalizeRef,
-                           applied_through => AppliedThrough,
                            generation => Generation, verdict => Verdict,
                            statement => Statement,
                            signatures => Signatures}};
@@ -91,7 +90,7 @@ applied_certificate_binding(
 applied_certificate_binding(_Certificate) ->
     error.
 
--doc "Cheap bounded shape check for an untrusted applied certificate.".
+%% Bounded constructor validation; this is not a public verdict authority.
 -spec valid_applied_certificate_shape(term()) -> boolean().
 valid_applied_certificate_shape(Certificate) ->
     case applied_certificate_binding(Certificate) of
@@ -124,6 +123,9 @@ verify_applied_certificate(Certificate, NetworkIdentity,
 verify_applied_certificate(_Certificate, _NetworkIdentity, _Evidence) ->
     false.
 
+-doc "Bind a Finalize statement to an already-verified exact history entry.".
+-spec exact_finalize_binding(map(), quod_dtx:certified_ref()) ->
+          {ok, binary(), quod_dtx:certified_ref(), non_neg_integer(), commit | abort} | error.
 exact_finalize_binding(
   #{identity := Target, phase := finalize, control := Control,
     entry := Entry}, FinalizeRef) ->
@@ -151,6 +153,8 @@ exact_finalize_binding(
 exact_finalize_binding(_Evidence, _FinalizeRef) ->
     error.
 
+-doc "Assemble bounded Finalize evidence from already-authenticated collector rows.".
+-spec applied_certificate(tuple(), list()) -> {ok, applied_certificate()} | retry.
 applied_certificate(
   {NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
    Generation, Verdict}, Signatures) ->
@@ -185,6 +189,9 @@ applied_statement(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
 applied_vote_bytes(Statement) ->
     term_to_binary(Statement, [deterministic]).
 
+-doc "Verify one signer over the exact domain-separated Finalize statement.".
+-spec applied_vote_valid(binary(), identity(), binary(), binary(), quod_dtx:certified_ref(),
+                         non_neg_integer(), commit | abort, binary(), binary()) -> boolean().
 applied_vote_valid(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
                    Generation, Verdict, Signer, Signature) ->
     case applied_statement(
@@ -211,7 +218,7 @@ operation_statement(
     block_hash := <<_:256>> = EntryDigest, committee_id := <<_:256>> = CommitteeId,
     transaction := #transaction{tx_id = <<_:256>> = TxId,
       role = {remote_application, ClaimRef, OperationRef, <<_:256>>}}}, Result) ->
-    Statement = {quod_operation_applied_vote, 1, Network, Target, CommitteeId,
+    Statement = {quod_operation_applied_vote, ?OPERATION_VOTE_VERSION, Network, Target, CommitteeId,
                  OperationRef, ClaimRef, {TxId, Slot, EntryDigest}, Result},
     case operation_statement_binding(Statement) of
         {ok, _} -> {ok, Statement};
@@ -231,24 +238,27 @@ sign_operation_vote(Statement, #{pubkey := <<_:256>> = Signer, key := _} = Ident
     end;
 sign_operation_vote(_, _) -> error.
 
+-doc "Verify one exact application-result vote; committee membership belongs to the collector.".
 -spec verify_operation_vote(tuple(), <<_:256>>, <<_:512>>) -> boolean().
 verify_operation_vote(Statement, <<_:256>> = Signer, <<_:512>> = Signature) ->
     operation_statement_binding(Statement) =/= error andalso
         quod_identity:verify(Signature, applied_vote_bytes(Statement), Signer);
 verify_operation_vote(_, _, _) -> false.
 
+-doc "Assemble a bounded operation certificate without re-verifying collector signatures.".
 -spec operation_certificate(tuple(), list()) ->
           {ok, operation_certificate()} | error.
 operation_certificate(Statement, Signatures) ->
-    Certificate = {quod_operation_applied_certificate, 1, Statement, Signatures},
+    Certificate = {quod_operation_applied_certificate, ?OPERATION_CERTIFICATE_VERSION, Statement, Signatures},
     case operation_certificate_binding(Certificate) of
         {ok, _} -> {ok, Certificate};
         error -> error
     end.
 
+-doc "Decode the bounded statement and signature rows; shape alone grants no authority.".
 -spec operation_certificate_binding(term()) -> {ok, map()} | error.
 operation_certificate_binding(
-  {quod_operation_applied_certificate, 1, Statement, Signatures} = Certificate) ->
+  {quod_operation_applied_certificate, ?OPERATION_CERTIFICATE_VERSION, Statement, Signatures} = Certificate) ->
     case operation_statement_binding(Statement) of
         {ok, Binding} ->
             case valid_applied_signatures(Signatures) andalso
@@ -260,6 +270,7 @@ operation_certificate_binding(
     end;
 operation_certificate_binding(_) -> error.
 
+-doc "Verify exactly f+1 signatures against the application occurrence and its historical committee.".
 -spec verify_operation_certificate(term(), <<_:256>>, map()) -> boolean().
 verify_operation_certificate(Certificate, Network, #{committee := Committee} = Evidence) ->
     case operation_certificate_binding(Certificate) of
@@ -270,8 +281,10 @@ verify_operation_certificate(Certificate, Network, #{committee := Committee} = E
     end;
 verify_operation_certificate(_, _, _) -> false.
 
+-doc "Validate an application statement's canonical identity and outcome vocabulary.".
+-spec operation_statement_binding(term()) -> {ok, map()} | error.
 operation_statement_binding(
-  {quod_operation_applied_vote, 1, <<_:256>> = Network,
+  {quod_operation_applied_vote, ?OPERATION_VOTE_VERSION, <<_:256>> = Network,
    {Ns, <<_:256>> = Anchor} = Target, <<_:256>> = CommitteeId,
    {operation, SourceNs, <<_:256>> = SourceAnchor, Principal, <<_:256>>} = OperationRef,
    {transaction, SourceNs, SourceAnchor, <<_:256>>} = ClaimRef,
@@ -289,6 +302,7 @@ operation_statement_binding(
     end;
 operation_statement_binding(_) -> error.
 
+-doc "Whether a value names one admissible published target outcome.".
 -spec valid_operation_result(term()) -> boolean().
 valid_operation_result(applied) -> true;
 valid_operation_result({rejected, Reason}) ->
@@ -297,17 +311,7 @@ valid_operation_result({rejected, Reason}) ->
 valid_operation_result(_) -> false.
 
 verify_signatures(Statement, Signatures, Committee) ->
-    case quod_quorum:committee_size(Committee) of
-        {ok, N} when N > 0 ->
-            Needed = applied_threshold(N),
-            length(Signatures) =:= Needed andalso
-                quod_quorum:sanitize_at_least(
-                  Committee, applied_vote_bytes(Statement), Signatures, Needed) =:=
-                    {ok, Signatures};
-        _ -> false
-    end.
-
-applied_threshold(N) -> N - quod_quorum:threshold(N) + 1.
+    quod_quorum:verify_honest(Committee, applied_vote_bytes(Statement), Signatures).
 
 valid_identity({Ns, <<_:256>>}) -> is_binary(Ns) andalso byte_size(Ns) > 0;
 valid_identity(_) -> false.

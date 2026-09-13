@@ -125,12 +125,34 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
                 <dd className="font-mono break-all text-gray">{transactionRefText(full.role_details.source_claim)}</dd>
               </>
             )}
-            {full.role_details && 'target_transaction' in full.role_details && (
+            {full.role_details && 'target_transactions' in full.role_details && (
               <>
-                <Dt>Target transaction</Dt>
-                <dd className="font-mono break-all text-gray">{transactionRefText(full.role_details.target_transaction)}</dd>
+                <Dt>Target transactions</Dt>
+                <dd className="font-mono break-all text-gray">
+                  {full.role_details.target_transactions.map(ref => (
+                    <div key={`${ref.ns}:${ref.anchor}`}>{transactionRefText(ref)}</div>
+                  ))}
+                </dd>
               </>
             )}
+            {full.role_details && 'targets' in full.role_details && full.role_details.targets.map(row => (
+              <div key={`${row.target.ns}:${row.target.anchor}`} className="col-span-2 border-t border-gray/20 py-2">
+                <div className="font-mono break-all">{row.target.ns} · {row.target.anchor}</div>
+                {'plan_digest' in row ? (
+                  <div className="font-mono break-all text-gray">Plan: {row.plan_digest}</div>
+                ) : (
+                  <>
+                    <div className="font-mono break-all text-gray">{transactionRefText(row.application_ref)}</div>
+                    {row.kind === 'certified' ? (
+                      <>
+                        <div>Certified result: {row.result}{row.reason ? ` (${row.reason})` : ''} · height {row.height}</div>
+                        <div className="font-mono break-all text-gray">Committee: {row.committee_id}</div>
+                      </>
+                    ) : <div>Historical inclusion only — no certified result</div>}
+                  </>
+                )}
+              </div>
+            ))}
             {full.role_details && 'operation_ref' in full.role_details && full.role_details.operation_ref && (
               <>
                 <Dt>Operation</Dt>
@@ -148,7 +170,11 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
             {full.evidence_ref && (
               <>
                 <Dt>Certified evidence</Dt>
-                <dd className="font-mono break-all text-gray">{transactionRefText(full.evidence_ref)}</dd>
+                <dd className="font-mono break-all text-gray">
+                  {(Array.isArray(full.evidence_ref) ? full.evidence_ref : [full.evidence_ref]).map(ref => (
+                    <div key={`${ref.ns}:${ref.anchor}:${ref.tx_id}`}>{transactionRefText(ref)}</div>
+                  ))}
+                </dd>
               </>
             )}
           </dl>

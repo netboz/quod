@@ -1002,6 +1002,9 @@ operation_candidate(
             {ok, Key,
              #{type => operation, ref => OperationRef,
                request_digest => Digest, outcome_ref => OutcomeRef,
+               %% `included` is the durable row's receipt field, not a verdict.
+               %% It retains this format's key for both included and certified
+               %% arms. [] means no source receipt; the whole vector installs once.
                included => [], first_slot => Slot, state => State}};
         false ->
             error
@@ -1018,7 +1021,7 @@ operation_outcome_ref(
     is_binary(Ns) andalso byte_size(Ns) > 0;
 operation_outcome_ref(_Ref) -> false.
 
--doc "Install the complete exact inclusion vector without inventing target verdicts.".
+-doc "Check a complete receipt vector; only certified arms carry authenticated target verdicts.".
 -spec check_completion(index(), term(), <<_:256>>, term()) ->
           {new, index()} | {replay, index()} | {error, index_error()}.
 check_completion(Index,
@@ -1049,7 +1052,7 @@ check_completion(Index,
 check_completion(_Index, _OperationRef, _Digest, _OutcomeRef) ->
     {error, outcome_index_bad_operation}.
 
--doc "Mark one exact foreign operation target as durably observed.".
+-doc "Install the complete foreign-operation receipt and preserve its first terminal slot.".
 -spec complete_operation(index(), pos_integer(), term(), <<_:256>>, term()) ->
           {new | replay, index()} | {error, index_error()}.
 complete_operation(Index, Slot,
@@ -1072,12 +1075,11 @@ complete_operation(Index, Slot,
                         outcome_ref := {applications, Refs}, included := ExistingReceipt,
                         state := {terminal, Existing}}}, Index1}
                   when Existing =< Slot ->
-                    %% Several validators may observe the same target outcome
-                    %% and submit the same deterministic receipt before the
-                    %% first receipt is applied locally.  Consensus can then
-                    %% commit that exact transaction again in a later slot.
-                    %% Preserve the first terminal slot, just as ordinary
-                    %% duplicate transactions preserve their first outcome.
+                    %% Honest replicas may submit receipts with different valid
+                    %% certificate subsets for the same complete statements.
+                    %% Compare semantic receipt identity and preserve the first
+                    %% terminal slot; neither certificate bytes nor arrival order
+                    %% may change an already-published outcome.
                     case quod_operation_vector:same_receipt(ExistingReceipt, Receipt) of
                         true -> {replay, Index1};
                         false -> {error, outcome_index_conflict}

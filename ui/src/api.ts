@@ -18,11 +18,17 @@ export type TransactionRef = {
 
 export type TxRole = 'application' | 'remote_claim' | 'remote_application' | 'remote_complete'
 
+export type OperationTarget = { target: NonNullable<Origin>; plan_digest: string }
+export type ReceiptTarget =
+  | { target: NonNullable<Origin>; kind: 'included'; application_ref: TransactionRef }
+  | { target: NonNullable<Origin>; kind: 'certified'; application_ref: TransactionRef;
+      result: 'applied' | 'rejected'; reason: string | null; height: number; committee_id: string }
+
 export type TxRoleDetails =
   | null
-  | { target: NonNullable<Origin>; target_transaction: TransactionRef; plan_digest: string }
+  | { targets: OperationTarget[]; target_transactions: TransactionRef[] }
   | { source_claim: TransactionRef; operation_ref: SignedRequest['operation_ref']; request_digest: string }
-  | { operation_ref: SignedRequest['operation_ref']; request_digest: string; target_transaction: TransactionRef }
+  | { operation_ref: SignedRequest['operation_ref']; request_digest: string; targets: ReceiptTarget[] }
 
 export type TxRow = {
   row_type: 'transaction'
@@ -88,7 +94,7 @@ export type TxFull = TxRow & {
   request?: SignedRequest | null
   signature: string | null
   signature_status: 'verified' | 'genesis' | 'unsigned' | 'invalid' | 'unknown'
-  evidence_ref: TransactionRef | null
+  evidence_ref: TransactionRef | TransactionRef[] | null
 }
 
 export type SignedRequest = {

@@ -5,7 +5,7 @@ canonical_one_two_four_targets_test() ->
     lists:foreach(fun(N) ->
         Refs = [ref(I) || I <- lists:seq(1, N)],
         ?assertEqual({ok, Refs}, quod_operation_vector:references(lists:reverse(Refs))),
-        {ok, Rows} = quod_operation_vector:included(lists:reverse(Refs)),
+        {ok, Rows} = quod_ct:included_receipt(lists:reverse(Refs)),
         ?assertEqual([{quod_operation_vector:target(R), {included, R}} || R <- Refs], Rows),
         ?assertEqual({ok, Refs}, quod_operation_vector:receipt_references(Rows)),
         lists:foreach(fun(R) ->
@@ -19,7 +19,7 @@ duplicate_target_cannot_be_hidden_by_another_transaction_id_test() ->
     OtherId = setelement(4, R, <<99:256>>),
     ?assertEqual(error, quod_operation_vector:references([R, R])),
     ?assertEqual(error, quod_operation_vector:references([R, OtherId])),
-    ?assertEqual(error, quod_operation_vector:included([R, OtherId])).
+    ?assertEqual(error, quod_ct:included_receipt([R, OtherId])).
 
 receipt_rejects_uncertified_verdict_labels_test() ->
     R = ref(1), T = quod_operation_vector:target(R),
@@ -31,7 +31,7 @@ wrong_anchor_and_noncanonical_storage_refused_test() ->
     R = ref(1),
     ?assertEqual(error, quod_operation_vector:receipt([
         {{<<"target1">>, <<99:256>>}, {included, R}}])),
-    {ok, Rows} = quod_operation_vector:included([R, ref(2)]),
+    {ok, Rows} = quod_ct:included_receipt([R, ref(2)]),
     ?assertEqual(error, quod_operation_vector:receipt_references(lists:reverse(Rows))),
     ?assertEqual(error, quod_operation_vector:lookup({<<"target1">>, <<99:256>>}, [R])).
 

@@ -54,7 +54,7 @@ restoring_included_receipt_requires_certification_not_claim_delivery_test() ->
                        M0, maps:get(targets, F)),
     {ok, Complete} = quod_operation:completion(Final),
     #transaction{role = {remote_complete, Op, Digest, _}, evidence = {applications, Pairs}} = Complete,
-    {ok, Included} = quod_operation_vector:included(quod_operation:references(M0)),
+    {ok, Included} = quod_ct:included_receipt(quod_operation:references(M0)),
     Old = quod_transaction:attach_receipt_evidence(
             quod_transaction:remote_complete(maps:get(origin, F), Op, Digest, Included), Pairs),
     {ok, Restored} = quod_operation:restore_receipt(Old, M0),
@@ -71,6 +71,24 @@ target_binding_cannot_be_substituted_test() ->
     #{transaction := Tx} = E,
     ?assertEqual({error, invalid_target_evidence}, quod_operation:accept(
                    A, Ref, E#{transaction := Tx#transaction{tx_id = <<99:256>>}}, Cert, M)).
+
+receipt_pair_order_is_canonical_and_result_reads_do_not_rebind_test() ->
+    F = fixture(2), M = maps:get(model, F), [A, B] = maps:get(targets, F),
+    CompleteModel = observe(F, B, {rejected, conflict_retry}, observe(F, A, applied, M)),
+    {ok, Complete} = quod_operation:completion(CompleteModel),
+    #transaction{evidence = {applications, Pairs}} = Complete,
+    ?assertEqual({error, invalid_completion}, quod_operation:restore_receipt(
+                   Complete#transaction{evidence = {applications, lists:reverse(Pairs)}}, M)),
+    {ok, Restored} = quod_operation:restore_receipt(Complete, M),
+    {{RA, RB, All}, {call_count, Counts}} = tprof:profile(fun() ->
+        {quod_operation:result(A, Restored), quod_operation:result(B, Restored),
+         quod_operation:results(Restored)}
+    end, #{type => call_count, report => return,
+           pattern => [{quod_applied_certificate, operation_certificate_binding, 1}]}),
+    ?assertMatch({ok, {committed, _}}, RA),
+    ?assertMatch({ok, {{rejected, conflict_retry}, _}}, RB),
+    ?assertMatch({ok, [{A, _}, {B, _}]}, All),
+    ?assertEqual(0, lists:sum([N || {_, _, _, Ps} <- Counts, {_, N, _} <- Ps])).
 
 publication_floor_and_exact_outcome_are_required_test() ->
     F = fixture(1), [A] = maps:get(targets, F), {Ref, E, _} = vote(F, A, applied),
@@ -92,7 +110,7 @@ fixture(N) ->
     Origin = {<<"quod:s8-model-source">>, <<71:256>>},
     Targets = [{<<"quod:s8-model-target-", (integer_to_binary(I))/binary>>, <<I:256>>}
                || I <- lists:seq(1, N)],
-    F = quod_ct:operation_plan_fixture(#{target => Origin, participant_target => hd(Targets)}, Targets),
+    F = quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets)}, Targets),
     Signer = #{pubkey := Key} = maps:get(node_identity, F),
     Admission = maps:get(admission, F),
     Claim0 = quod_transaction:remote_claim(Origin, maps:get(manifest, F),

@@ -21,6 +21,10 @@ each target applies its ordinary `can_invoke/4` policy to that principal.
 
 -include("quod_client_goal_limits.hrl").
 
+%% Resolution is read-only and may follow an expired write. Its observation
+%% budget starts before authentication and is never renewed during lookup.
+-define(OPERATION_RESOLVE_BUDGET_MS, 5000).
+
 -type mode() :: read | execute | cursor.
 -type result() ::
         {ok, quod_client_goal:evidence(), term()} | {error, term()}.
@@ -104,7 +108,7 @@ request_session_binding(_Request, _ExpectedMode, _PublicKey, _SessionExpires) ->
     {error, session_principal_mismatch}.
 
 resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
-    Deadline = quod_time:mono_ms() + 5000,
+    Deadline = quod_time:mono_ms() + ?OPERATION_RESOLVE_BUDGET_MS,
     case quod_client_goal:verify(RequestBytes, Signature) of
         {ok, #{request := #{signing_public_key := PublicKey,
                             network_identity := RequestNetwork},
@@ -133,7 +137,7 @@ resolved_operation(
     case resolve_claim_outcome(OutcomeRef, Claim, OperationRef, Deadline) of
         {ok, Outcome} ->
             {ok, Evidence, {operation_outcome, Claim, Outcome}};
-        {error, _} ->
+        pending ->
             {ok, Evidence, {operation_pending, OperationRef}}
     end;
 resolved_operation(Evidence, _Digest, OperationRef, {error, _}, _Deadline) ->
@@ -155,16 +159,18 @@ resolve_claim_outcome({applications, Refs}, #{request_digest := Digest} = Claim,
                 {ok, Rows} ->
                     case quod_operation_vector:result_rows(Rows) of
                         {ok, Refs} ->
-                            {ok, #{status => completed, ref => Op, targets => Rows,
-                                   aggregate => quod_operation_vector:aggregate(Rows)}};
-                        _ -> {error, invalid_operation_result}
+                            {ok, #{status => completed, ref => Op, targets => Rows}};
+                        _ -> pending
                     end;
-                {error, _} = Error -> Error
+                {error, _} -> pending
             end;
-        [] -> {error, not_ready}
+        [] -> pending
     end;
 resolve_claim_outcome(OrdinaryOrGroupRef, _Claim, _Op, _Deadline) ->
-    quod_prolog:outcome(OrdinaryOrGroupRef).
+    case quod_prolog:outcome(OrdinaryOrGroupRef) of
+        {ok, _} = Found -> Found;
+        {error, _} -> pending
+    end.
 
 verified_gateway(SessionId, RequestBytes, Signature, PublicKey, Peer) ->
     case trace_stage(

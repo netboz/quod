@@ -844,7 +844,7 @@ applied(Target, GroupId, FinalizeEvidence, Generation, Verdict) ->
     %% Finalize-era quorum verifier produced it.  This pure planner rechecks
     %% the complete semantic binding and bounded certificate shape; signature
     %% verification deliberately remains at that verifier boundary.
-    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
+    ?assert(quod_ct:valid_applied_certificate_shape(
               Certificate)),
     {Target, Certificate}.
 
@@ -857,7 +857,7 @@ replace_applied_signer(
         {quod_dtx_applied_certificate, 1, NetworkIdentity, Target,
          CommitteeId, GroupId, FinalizeRef, Generation, Verdict,
          [{Signer, Signature}]},
-    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
+    ?assert(quod_ct:valid_applied_certificate_shape(
               Certificate)),
     {Target, Certificate}.
 

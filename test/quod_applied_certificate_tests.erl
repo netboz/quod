@@ -78,7 +78,7 @@ receipt_identity_excludes_interchangeable_signature_subsets_test() ->
     ?assertEqual({ok, [Ref]}, quod_operation_vector:receipt_references(Rows1)),
     ?assert(quod_operation_vector:certified(Rows1)),
     ?assert(quod_operation_vector:same_receipt(Rows1, Rows2)),
-    {ok, Included} = quod_operation_vector:included([Ref]),
+    {ok, Included} = quod_ct:included_receipt([Ref]),
     ?assertNot(quod_operation_vector:certified(Included)),
     ?assertNot(quod_operation_vector:same_receipt(Included, Rows1)),
     Tx1 = quod_transaction:remote_complete({<<"source">>, <<1:256>>}, operation_ref(), <<7:256>>, Rows1),

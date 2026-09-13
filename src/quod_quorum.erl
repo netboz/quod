@@ -9,8 +9,9 @@ the same rules without sharing either protocol's statement format.
 
 -include("quod_ingress_limits.hrl").
 
--export([threshold/1, committee_size/1, valid_signature_list/2,
-         sanitize/3, sanitize_at_least/4, verify/3]).
+-export([threshold/1, honest_threshold/1, verify_honest/3,
+         committee_size/1, valid_signature_list/2,
+         sanitize/3, verify/3]).
 
 -type node_key() :: <<_:256>>.
 -type signature() :: <<_:512>>.
@@ -19,6 +20,23 @@ the same rules without sharing either protocol's statement format.
 -spec threshold(pos_integer()) -> pos_integer().
 threshold(N) when is_integer(N), N >= 1 ->
     N - (N - 1) div 3.
+
+-doc "Minimum signatures guaranteeing one honest signer in a certified committee (`f + 1`).".
+-spec honest_threshold(pos_integer()) -> pos_integer().
+honest_threshold(N) when is_integer(N), N >= 1 ->
+    N - threshold(N) + 1.
+
+-doc "Verify exactly `f + 1` sorted, distinct member signatures over a protocol statement.".
+-spec verify_honest(term(), binary(), term()) -> boolean().
+verify_honest(Committee, Bytes, Signatures) ->
+    case committee_size(Committee) of
+        {ok, N} when N > 0 ->
+            Needed = honest_threshold(N),
+            valid_signature_list(Signatures, Needed) andalso
+                length(Signatures) =:= Needed andalso
+                sanitize_at_least(Committee, Bytes, Signatures, Needed) =:= {ok, Signatures};
+        _ -> false
+    end.
 
 -spec committee_size(term()) -> {ok, non_neg_integer()} | error.
 committee_size(Committee) ->
@@ -46,7 +64,7 @@ sanitize(Committee, Bytes, Signatures) when is_binary(Bytes) ->
 sanitize(_Committee, _Bytes, _Signatures) ->
     error.
 
--doc "Return valid member signatures when the caller's protocol threshold is met.".
+%% Shared private verifier for the public consensus and exact-f+1 policies.
 -spec sanitize_at_least(term(), binary(), term(), pos_integer()) ->
           {ok, [signed_row()]} | error.
 sanitize_at_least(Committee, Bytes, Signatures, Needed)

@@ -1893,7 +1893,7 @@ assert_no_target_result(Worker) ->
 terminal_operation_row(#{operation_ref := OperationRef,
                          request_digest := Digest,
                          target_refs := Refs}) ->
-    {ok, Included} = quod_operation_vector:included(Refs),
+    {ok, Included} = quod_ct:included_receipt(Refs),
     {ok, #{status => claimed, operation_state => terminal,
            ref => OperationRef, request_digest => Digest,
            outcome_ref => {applications, Refs},
@@ -2128,7 +2128,7 @@ applied_certificate(
         {quod_dtx_applied_certificate, 1,
          digest(226), Target, CommitteeId, GroupId, FinalizeRef,
          Generation, Verdict, [{digest(227), <<228:512>>}]},
-    ?assert(quod_applied_certificate:valid_applied_certificate_shape(
+    ?assert(quod_ct:valid_applied_certificate_shape(
               Certificate)),
     Certificate.
 

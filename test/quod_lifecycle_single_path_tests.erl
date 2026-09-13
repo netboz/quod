@@ -492,6 +492,15 @@ prepared_genesis_native_format_golden_test() ->
          68,213,145,224,40,105,56,46,160,46,56,15,160,231,197,214>>,
        crypto:hash(sha256, Bytes)),
     ?assertEqual({ok, Prepared}, quod_ontology:decode_prepared(Bytes)),
+    %% The private journal owns one fixed native schema, not the runtime
+    %% transaction tuple layout. Extra runtime fields are not a second format.
+    ?assertEqual({error, invalid_action}, quod_ontology:decode_prepared(
+        term_to_binary({quod_prepared_lifecycle, 1, Prepared}, [deterministic]))),
+    CachedNative = Native#entry{data = {batch,
+        [Genesis#transaction{claim_view = {untrusted_runtime_metadata}}]}},
+    CachedPrepared = setelement(5, Prepared,
+        Config#{prepared_genesis_entry => CachedNative}),
+    ?assertEqual({ok, Bytes}, quod_ontology:prepared_bytes(CachedPrepared)),
     ?assertEqual({ok, Entry}, quod_ledger:from_entry_view(Native)),
     ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Native)),
     Action = {create_ontology, Ns, []},

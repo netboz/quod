@@ -533,7 +533,7 @@ standalone and combined runs must exercise identical setup. Recommended:
 commit the codec correction as its OWN scope ahead of S8 (pre-existing,
 L2-independent, byte-preserving), with the reconnect CT as its regression.
 
-## 12. Integration note — Yan's confirmed product decisions
+## 15. Integration note — Yan's confirmed product decisions
 
 Yan confirmed on 2026-09-12 that independent writes must reuse existing actions;
 §11 A1's condition is satisfied. Yan also explicitly requested fast ontology
@@ -914,447 +914,167 @@ the multiwrite fixes hostage to a whole-project cosmetic rewrite.
 
 ---
 
-## History R1/R2 publication candidate — implementation status, 2026-09-12
+## Current implementation status
 
-The current approved body, including its morning section 12, is preserved
-byte-for-byte above. The original architecture/deletion appendices are retained
-as design inputs; their historical pending-ruling and deployment statements
-do not override that body or Yan's subsequent explicit authority.
+This section is the single implementation-status reference. The byte-pinned
+rulings above and the original structural/deletion appendices remain design
+inputs, not competing deployment diaries. Commit-specific gates, controls,
+measurements and authorization are recorded in their frozen handoffs.
 
-The history implementation now records separate owner-lifetime totals for
-`custody_lost`, `cache_corrupt`, and `phase_index_lost`. The existing foreign
-owner stores three diagnostic integers; its existing metrics collector exports
-fixed-name node-wide gauges. Index handoff loss is not mislabeled as ledger
-corruption or worker death. Repeated callers do not increment the cause again,
-and a corruption rebuild does not count its reset acknowledgement twice.
-No new timer, polling loop, process, durable format or repair authority is added.
-Five targeted tests check actual death, inconsistent resident state, startup
-corruption, live corruption without double-counting, and metrics exposition.
+### Shared history and coordination
 
-This is the narrow counter delta required by the morning history verdict.
-Full assembled gates and exact-tree delta review remain required before its
-commit. The separate coordination scope still owes operation/dormant-loop
-conversion, actual target double-delivery idempotence, and ready-prefix reads
-that survive mutable-writer loss. No deployment or performance result, F6
-checkpoint completion, or completion of the morning minimum is claimed here.
+Simplex is the sole local ledger/signing/phase-index mutator. Catch-up captures
+one short read-only prefix, verifies its window, and returns a delta; the owner
+checks its base, appends and installs before publication. Exact ready-prefix
+reads do not queue behind newer acquisitions or replay old history. Foreign
+writer custody remains sequential. Published immutable views survive writer
+loss; the existing foreign owner rebuilds only the affected derived index.
+Custody loss, diagnosed corruption and phase-index handoff loss have separate
+counters. A published DETS prefix retains its read hold; old and tentative
+resources may coexist during reconstruction. This is not a second index owner.
 
-## Coordination R3/R4 completion candidate — implementation status, 2026-09-12
+Group, operation-recovery and dormant-cancellation work share
+`quod_dtx_coordinator`'s asynchronous wave/result lifecycle. The replaced
+blocking loops are deleted. Existing owners, progress messages, monitors and
+absolute deadlines govern work; timers do not authorize redelivery.
+Exact durable claim redelivery preserves its deterministic application identity
+and relies on proven target deduplication. Uncertainty never creates a new
+submission instance.
 
-This appendix supersedes the pending-work status above, not the approved
-architecture. History and its counter delta are published through .169;
-dead-adapter deletion and the reviewed Erlog revision are published through
-.171. This coordination tree is an uncommitted candidate requiring full gates
-and exact-tree review. No deployment or performance acceptance is claimed.
+`quod_dtx_owner` is a pure registry/transition library, not an actor. Simplex
+executes its signing and publication decisions. The signing journal is the
+single pending-Begin authority; the `dtx_pending` shadow inventory is deleted.
+Indexed inclusion precedes readiness: late exact Prepares return certified
+references without signing, retention or proposals. Conflicting phase digests
+still refuse. Temporary catch-up preserves ownership; real admission loss
+retires it. Classification precedes renewal, and resolutions publish after
+commit/skip/catch-up application.
 
-Group, operation and dormant-cancellation work now use the same responsive
-wave/result lifecycle. Ordered work is a one-item wave. Source-custody calls
-use native asynchronous OTP requests from the actual coordinator PID, with
-the same wave correlation, deadlines and cancellation; no proxy bypasses the
-source's caller-identity check. Exact durable claim bytes and deterministic
-application identity remain pinned across progress-edge redelivery. The real
-target double-delivery regression asserts exactly one ledger application.
+### Independent writes and authenticated data
 
-The foreign owner's published prefix and the temporary writer's resumable
-cursor have separate validity, not separate owners or indexes. The owner
-retains read access to the existing index while it is still empty, before
-the writer populates it. Mutation access still passes through the existing
-registered writer's suspend/resume custody. A read hold cannot install deltas.
-DETS requires matching underlying open options: read-only access is enforced
-by the opaque library capability, not claimed as DETS read-mode protection.
+One proof evaluator stages and seals once. Ordinary multiwrites stay atomic;
+only surviving independent intent selects L2. Every target supplies its own
+signed independent eligibility attestation. Source and target admission refuse
+a multi-target claim missing that attestation as `independent_scope_required`.
+Peer-supplied intent flags are not authority. The intermediate N>1 lane-unavailable
+refusals and the scalar worker fork are deleted.
 
-Physical resource accounting is explicit: an existing DETS table process now
-lives with each retained foreign prefix instead of closing between writers.
-During reconstruction the previous published resource and the tentative new
-resource coexist. There is no new application actor, watchdog, retry timer,
-polling loop, queue, global inventory or alternative storage backend.
+`quod_operation` is the same pure target-keyed model in existing owners and
+read-only resolution. A durable claim feeds apply/verify/certify work on each
+target independently. Real progress edges are coalesced and spent per unfinished
+target; an included target needs certification, never reapplication. One
+worker per logical index, stale-result rejection, readiness pauses and the
+original wave deadline remain. Only the complete certified vector joins.
 
-Ready exact reads do not join a newer range's acquisition queue. The owner
-captures one historical era at the published height in its own turn; the
-existing caller performs one point read and the shared exact verifier. No
-DETS handle escapes that capture turn, no Prolog state moves, and neither an
-unavailable capture nor an invalid proof authorizes another route/replay.
-Published views survive mutable-writer loss; the exact node-owner lifetime
-and original absolute caller deadline still bound result consumption.
+Claim construction and canonical decode authenticate each opaque bundle once.
+The transaction carries its authenticated plan/context view, bound to the exact
+origin, manifest and bundles; it is not a wire field, store, global cache or
+caller-supplied token. Target validation materializes only its own plan once
+and carries that material through ordinary effect, OCC, membership and ACL
+checks. Source cancellation reads opaque effect-plan headers and delivers the
+unchanged signed claim. Foreign evidence does not allocate target vocabulary.
 
-Direct reads and acquisition use one point-read/verifier implementation and
-one stage-tracing helper. Direct-read timing belongs to the real caller span;
-there is no fabricated verification-worker span. Controls count capture/read
-work independently of SDK export and preserve O-A1/O-A2 analysis discipline.
-N>1 remains the ruled lane-unavailable boundary until slice 8. F6, the action
-savepoint scope, R-RESTART-RACE-01, both EUnit ledger items, c4 and +8.7% remain
-open; this candidate does not retire them.
+The source semantic identity and client binding are derived once per prediction
+vector. Every plan still binds the exact request. Signed bytes, signatures,
+semantic IDs and durable schemas are unchanged by carrying decoded views.
+The private prepared-genesis journal explicitly encodes its existing native
+transaction schema instead of serializing the evolving runtime record. Its
+original byte-count/hash oracle is unchanged; runtime-sized native tuples are
+not accepted as a second journal format.
+Canonical read sets use UTF-8 name plus arity; opaque symbols do not become atoms
+on receipt. Receipt evidence has one binding/verification owner. Exact decoded
+values need no re-encoding; different symbol representations require complete
+canonical-envelope equality, never unchecked IDs or signed-byte fields.
 
-## Transaction-owner integration candidate — implementation status, 2026-09-12
+`quod_applied_certificate` owns domain-separated L3-Finalize and L2-application
+statements. The latter bind network, historical committee, anchored target,
+source claim/operation, exact application occurrence and terminal result.
+`quod_quorum` owns the shared exact-f+1 verifier used by read and applied
+certificates. Collectors authenticate votes once, assemble their certificate,
+and recheck the original deadline; they do not verify their own votes again.
 
-This appendix supersedes the publication status above, not the approved
-architecture prefix. History and coordination are published through .172.
-The .172 hardware witness exposed an incomplete ownership integration: the
-coordinator retained work across catch-up, but signing reconciliation still
-interpreted the same temporary pause as loss of ownership. A second local
-pending inventory inside the history projection could also erase a Begin
-admitted after a recovery worker's capture. The following is a local candidate
-for exact-tree review. Yan has explicitly prohibited deployment for now.
+New source receipts contain the complete certified result vector. Historical
+included-only rows remain valid discovery, not verdict authority. The durable
+outcome row retains the format key `included` for its installed receipt,
+regardless of arm. Receipt identity compares complete statements, not an
+interchangeable honest signature subset. Pairing is canonical and shared;
+the model carries the checked result for notification without rebinding it.
 
-### Responsibilities and deletion
+Each live caller receives one complete vector internally, with its deadline
+checked at delivery. Mixed outcomes are success-shaped; partial vectors never
+finalize, and expiry stays uncertain. The source receipt commits asynchronously.
+Unowned reconnect resolution follows exact source receipt and target application
+evidence, then AM3, without submitting anything. Its separate named observation
+budget permits resolution after the original write expired.
 
-`quod_dtx_owner` is a library called by the existing Simplex process, not a
-second actor. It owns the opaque retained-control registry, anchored ownership
-decision, classification, signature-action selection and desired obligations.
-It reconciles the signing journal against current admissions and the current
-installed phase index. It receives neither the Simplex actor record nor keys.
-Simplex alone performs signing, append/install and ordered Prolog publication.
-`quod_dtx_coordinator` remains the one group/operation/dormant execution engine.
+The existing API presentation is unchanged: live N=1 execute presents a scalar
+commit/rejection, while resolve presents a complete vector even for N=1.
+Both use the same operation machinery. Uniform vector presentation for durable
+operations would simplify clients, but changing that API is not a cleanup
+side effect; ordinary single-target writes retain their scalar grammar.
 
-| Previous implementation | Disposition |
-| --- | --- |
-| Simplex `retained_*` registry helpers and private registry record | Relocated once into `quod_dtx_owner`; old definitions deleted |
-| `pending_origin_begins` and `committed_origin_recoveries` | One desired-obligation function in that library |
-| `reclassify_retained_rows` / `reclassify_retained_row` | One classifier returning the updated registry and removed rows before effects |
-| `refresh_dtx_submission` and bulk `abandon_retained_dtx` | Deleted; anchored ownership and execution readiness are separate inputs to one signature policy |
-| Actor/history `dtx_pending`, seed, reducer and reconciliation helpers | Deleted, not moved or kept as padding; the signing journal is the sole durable pending-Begin authority |
-| `trace_shared_work` / `trace_block_attributes` | Relocated into `quod_consensus_trace`; existing actor adapters only select exact slot/hash ancestry |
-| Appending consensus boundary events to ended proof spans | Replaced by short boundary spans using the same ancestry, links and sampler |
+### Proof, actions and process boundaries
 
-A temporary sync or KB pause preserves the exact signed envelope, body,
-waiters and exposed floor. It does not renew a consumed sequence. The existing
-readiness transition classifies then renews the same retained row before its
-next drive. Actual admission/membership loss still retires it. Classification
-precedes renewal, and commit, skip and catch-up retain their existing
-post-application resolution boundary. No new readiness flag, message, queue,
-retry timer, polling loop, process or alternative execution path is added.
+Public `transaction/1` selects atomic intent and calls the internal
+`quod_proof_savepoint` library. Action candidates call that same library with
+inherited intent, so `independent(goal(State))` and the signed Root effect
+compose without a hidden public wrapper. Failed candidates restore facts,
+events, effects, provenance and cross-scope tokens together; reads remain
+monotonic. Ordinary backtracking retains staged material. Public nesting rules,
+successful-intent selection and the mixed-material veto remain unchanged.
+`quod_proof_continuation` owns the shared released-scope/caller-error boundary:
+a caller error cannot restore a candidate or read-only frame already released.
 
-Admission is monotone across active-row retirement: `quod_dtx_owner:admission`
-consults one current indexed group history before applying that same active
-readiness rule. An exact previously certified phase returns its reference
-through the ordinary submit-result channel, with no signature, retained row
-or proposal. A different digest for an already-included phase is not accepted.
-Local endpoint requests, remote endpoint requests and relayed signed controls
-all enter this same rule. The same-turn installation assertion uses the active
-placement rule without repeating the admission's history lookup. Live commits
-still attach the available entry as a validation sidecar; historical inclusion
-returns its reference without fetching an entry merely to forward it. The
-consumer must verify the reference through A's existing resolver. Wire grammar,
-cryptographic checks, observation authority and deadlines are unchanged.
+The pinned Erlog dependency contains the findall cut-barrier and sibling
+cut-presence correction. Cuts select alternatives, not commits. Local,
+co-hosted, remote, action, event and savepoint regressions remain required.
+Effects keep their existing empty-diff/custody rules and executor. Exact outcome
+lookup before redelivery covers both fact and effect applications; the journal
+does not gain retention exceptions or become an outbox.
 
-Journal reconciliation reads the current pending rows and one indexed group
-history per surviving admission. Work is bounded by pending groups and their
-fixed phase family, not ledger-prefix length. Inclusion remains provable after
-Complete removes an active group. Captured committed projections contain no
-local pending custody and therefore cannot overwrite requests admitted later.
-The public Prolog pending view remains derived from the journal; it does not
-authorize or own execution. No proof/Prolog database state is copied to another
-node. Proof, backtracking, cut, signing and caller-deadline rules are unchanged.
+No new application processes, timers, polling loops, queues, gproc identities
+or proof-state transfer protocol are introduced. Simplex owns signing and
+ledger custody; Prolog owns proof/session/outcome publication; the coordinator
+owns its existing monitored target workers; foreign history owns published
+prefixes; the effect journal owns private effect custody. Addressing and progress
+subscriptions use `quod_reg`/gproc. Nodes exchange goals, bindings, sealed material,
+dependency metadata and certified references, never a Prolog database snapshot.
+The system-ontology evaluator and ACL interfaces remain; agent/FIPA hosting
+and delivery remain outside this implemented multiwrite work.
 
-### Process and messaging inventory delta
+### Observation, formats and remaining acceptance
 
-Both new modules are libraries with **zero processes**. The existing Simplex
-process still owns the journal and mutable local index. The existing
-coordinator owns its asynchronous wave, and existing foreign-validation
-workers perform their same bounded verification. Existing `quod_reg`/gproc
-routes, monitors, cancellation, Prolog apply channel and readiness/progress
-notifications are unchanged. The validation closure receives a small trace
-location, not a copy of the actor state. No new service or wake-up path exists.
+Group and operation span handles follow B's installed-owner token discipline
+through `quod_attempt_span`. Caller ancestry stays separate from ownership.
+Children write their final root event before owner notification. Fatal unwind
+may expose a stale released token or lose a tentative handle; SDK end-after-take
+idempotence is pinned, and lost roots are discrepancies, not idleness. SDK
+failure cannot prevent shutdown. Boundary-span timestamps denote transitions;
+their tiny durations are not queue-wait measurements.
 
-### Explicit derived-cache format break
+The optional Phase-1 diagnostic decorator records both attempt families,
+sampled/recording flags and effective SDK configuration. Independent VM counters
+provide the start denominator. Normal builds erase allocation observation.
+Analysis retains O-A1/O-A2: dropped/tied/unknown evidence stays counted and listed,
+and coverage is a lower bound. Sampler reconciliation is explicit.
 
-Removing `dtx_pending` changes the committed projection stored in foreign-cache
-checkpoints. The foreign-cache identity/manifest/checkpoint version moves from
-3 to 4 together. V3 is refused as `unsupported_foreign_cache_format, 3` at
-owner startup, without mutation, corruption accounting, a legacy decoder or
-automatic request-time refetch. Compact/resident/captured projections have
-9/10/11 fields, respectively. There is no obsolete-field compatibility padding.
+Durable transaction V14, ledger V6, signing QSJ4 and effect QEJ2 remain the current
+single formats. Derived foreign-cache v4 supersedes v3 by name. Scope wire v13
+and endpoint v12 require a coordinated full-fleet upgrade. This cleanup adds no
+format break, ledger wipe or cache retirement. Existing frozen evidence and
+STOP/BENCH_STOP markers remain untouched.
 
-This is **not** a deployable image-only preserved-cache swap. A future deployment
-must explicitly retire the old derived foreign-cache directories, retain their
-evidence if needed, and record that the new cache starts cold. Source ontology
-ledgers, transaction encoding, signing journals and identities do not change
-format in this scope and do not require wiping. No cache reset is performed by
-this candidate. The format test constructs the actual .172 manifest and
-checkpoint encoding around a real empty ledger store; it is a format-admission
-fixture, not a claimed certified-history replay witness.
+The .182 small retained-fleet witness completed 20/20 writes across atomic and
+independent c1/c4, with 90/90 attempt roots captured. That establishes neither
+broad performance acceptance nor a sub-500 ms L2 result. Compare the initial
+concurrent four separately from the striped fifth request. Per-run details and
+failed launches/analysis checks remain in the retained evidence, not erased by
+a successful later witness.
 
-### Timing evidence and acceptance boundary
-
-An ended proof span is still valid ancestry, but the SDK cannot append later
-events to it. `quod_consensus_trace` distinguishes enclosed work spans from
-short `quod.consensus.observation = boundary` spans. Only the latter's **start
-timestamp** denotes the observed boundary; its tiny duration is not a consensus
-round or mailbox-wait measurement. Exact slot/hash binding, trace parents,
-shared links and sampling remain intact. Missing ancestry produces no invented
-root. SDK errors in a boundary observation cannot change the protocol result.
-
-The retained .172 witness does not establish that the entire slow interval was
-mailbox waiting, and this correctness refactor claims no measured speedup.
-Future testing must use a fresh label, the existing shape and deadlines,
-independent request/attempt denominators, full logs and true exits, and stop
-on the first failure. Use the reviewed full-sampling configuration window and
-restore its exact previous value; never clear STOP/BENCH_STOP or resubmit an
-uncertain operation. Compare submitter latency, coordinator work, exact consensus
-boundaries and application, keeping unknown gaps unknown. O-A1/O-A2 apply:
-excluded/dropped/tied evidence stays counted and listed, never removed from
-the denominator. Account separately for the explicitly cold derived cache.
-
-Local real-journal, certified-window, SDK and fail-before controls accompany
-this candidate. Exact-tree review and clean sequential gates remain the
-publication boundary. R-RESTART-RACE-01, both standing EUnit ledger items,
-c4, +8.7%, L2 slice 8, F6 restart checkpoints and action savepoints remain open.
-The fixture-only explorer trace-correlation correction is identified separately
-in the handoff; unrelated spans must not inflate one request's read count.
-The QUIC and N=4/join/growth/feed app fixtures also isolate their foreign caches
-under CT's private directory, as they already isolate effect journals. The ask
-fixture already did so; the app-start inventory is now covered. This prevents test
-startup from inheriting a developer's old cache format; no old cache is deleted
-or migrated to make the gate pass. All original protocol assertions remain.
-The join-action fixture also registers its actual root bootstrap configuration
-before invoking lifecycle creation; starting a Prolog process alone is not
-that configuration. The missing-configuration failure reproduces against
-unchanged .172 production code, and the corrected fixture passes against it.
-The growth fixture constructs its deliberately invalid membership proposal as
-a canonical block artifact, not a raw record view rejected by the wire encoder
-before reaching any validator. No membership-rejection assertion is weakened.
-
-## S8 implementation status — independent target vectors (2026-09-13)
-
-This appendix reports implementation of §13/§14; the approved prefix above
-is unchanged. Gate results, exact input hashes and failed controls belong to
-the per-commit frozen handoff, not an unqualified claim in this document.
-
-The existing proof evaluator seals once. Ordinary multiwrites remain atomic;
-only surviving independent intent selects the independent vector. Each host's
-own sealed provenance determines its signed eligibility attestation. An
-ordinary target attestation cannot be relabelled as independent without
-invalidating its signature. Source validation and the target application
-endpoint both refuse a multi-target claim lacking that eligibility. Remote
-intent flags are not admission authority. S6 failure, cut, cursor, mixing,
-signing and public nesting rules are unchanged.
-
-`quod_operation` is a pure library: zero processes, timers, stores, keys or
-network calls. One canonical durable source claim feeds target-keyed work in
-the existing coordinator wave. Each target can apply, verify and certify while
-other targets remain blocked. N=1 follows this same model; only the public
-single-target presentation is scalar. The former scalar coordinator workers
-and current-view-as-verdict path are deleted, not retained as fallback engines.
-
-`quod_applied_certificate` owns the common applied-certificate algorithms.
-L3 Finalize and L2 application statements have separate signature domains.
-AM3 binds the network, exact anchored target and historical committee, source
-operation and claim, exact application occurrence, and canonical result. The
-existing target endpoint worker captures exact history once and retains it
-while the outcome owner catches up. Only a durably published outcome permits
-a vote; existing progress edges and the original deadline govern the wait.
-No snapshot loop, second owner or new timer is introduced. The endpoint codec
-owns the refusal vocabulary, including `independent_scope_required`; Simplex
-does not duplicate a list that can silently erase a typed refusal.
-
-The Simplex operation owner accumulates verified target results monotonically
-and publishes one complete vector per live caller, rechecking that caller's
-absolute deadline at delivery. Mixed outcomes are success-shaped. A partial
-vector is never final, absence is never rejection, and expiry remains unknown.
-The source receipt commits asynchronously after client delivery. New receipts
-contain certified rows; historical included-only rows remain valid bytes but
-provide no verdict authority and cannot be newly admitted as certified results.
-
-Owned reconnects use the existing operation owner. An unowned reconnect uses
-the discovered source receipt height, verifies that exact receipt and every
-exact application, then verifies its AM3. Before the receipt exists it remains
-pending; it submits nothing. All history goes through the shared pinned-view
-resolver. Exact envelope comparison uses canonical signed bytes, not Erlang
-term representation or semantic IDs alone. The observation model must never
-construct a target application just to predict its ID: the shared envelope
-validator already checks predictions from authenticated opaque plan bytes.
-Only the target constructs/materializes its application. The cross-gateway
-regression pins both exact byte equality and no foreign atom allocation.
-
-Process/messaging inventory: Simplex retains signing, ledger custody and its
-operation waiter registry; Prolog retains proof/session and durable outcome
-publication; the existing coordinator is one monitored operation attempt with
-its existing bounded target workers; the existing foreign-history owner holds
-published views; the existing effect journal retains private effect custody.
-All owner addressing/subscriptions use `quod_reg`/gproc. No Prolog database or
-interpreter state is transferred between nodes. Claims carry sealed material,
-dependency/proof metadata and exact references, not a remote KB snapshot.
-
-Effect-bearing claims bind their possible private-custody target set before
-source activation. Uncertain binding uses the existing exact dormant-claim
-cancellation owner, including a reply lost after durable binding. No new
-outbox, effect executor, fact/effect co-admission rule or submission identity
-is introduced. Generalized custody controls include an effect plus a source
-writer, cancellation/restart and reservation-owner loss. The real Root
-`create_ontology` convenience predicate invokes the action evaluator, so its
-independent acceptance case requires the separate, already-ruled internal
-action-savepoint scope. Its current `independent_nesting` failure is retained
-as that scope's fail-before; S8 alone does not claim action composition works.
-
-Deployment changes the endpoint/scope vocabulary across the fleet together;
-it does not change S7's durable format or require a wipe. Preserve ledgers,
-journals, identities, derived caches, old campaigns and stop markers. Measure
-under fresh labels, full true-exit logs and an independent request/attempt
-denominator. Report the initial concurrent cohort separately from a striped
-follow-on request: a fifth request's overlap can differ even at the same c4
-setting. Neither small-sample non-significance nor a codec microbenchmark
-proves performance equivalence. No sub-500 ms or one-hop latency is promised.
-Use ordinary spans with sampler reconciliation and O-A1/O-A2 exclusions. Begin
-finality optimization remains deferred until both lanes can be compared.
-
-R-RESTART-RACE-01, both EUnit ledger items, broad c4 acceptance, the historical
-+8.7% question, restart checkpoints and action savepoints are not retired here.
-Yan's overnight authority permits internally gated stage commits and tests
-without waiting for Claude; it does not permit concealing a red gate or
-resubmitting an uncertain operation.
-
-## Implementation status — action savepoints (2026-09-13)
-
-This dated appendix implements §11 A1; the approved prefix is unchanged.
-`quod_proof_savepoint` is one process-free interpreter library, extracted from
-the public transaction predicate rather than a second rollback engine. Public
-`transaction/1` selects atomic mode; the existing action evaluator calls the
-same savepoint with its inherited mode. The action-specific private compiled
-helper retains the existing Prolog prerequisites, transitions and checked
-postcondition. No generic Prolog `savepoint/1` control is introduced.
-
-Invocation mode is ordinary/atomic/independent; distributed savepoint lineage
-is independent of that mode. This replaces the old checkpoint-depth nesting
-test: private rollback no longer means public atomic intent. Every return,
-failure and stateful language error restores the parent invocation mode.
-Facts, staged events, prepared effects and provenance use the existing overlay
-checkpoint; read dependencies stay monotonic. Scope wire 13 carries this
-distinction and refuses wire 12. A coordinated full-fleet swap is required;
-there is no durable-format change or ledger reset. No process, timer, owner,
-gproc address, subscription or Prolog state-transfer protocol is added.
-
-The newly reachable signed Root-effect L2 acceptance exposed a pre-existing
-redelivery defect: after completion, the private journal may no longer retain
-the operation-pending row. Application delivery now checks the exact durable
-outcome first for both fact and effect claims, then enters the existing
-submission path only on absence. The same deadline-bound result resolver
-serves post-submission uncertainty. No effect is reconstructed or run again;
-the already-certified target application supplies the result. This is the
-existing exact-redelivery/idempotence rule applied uniformly, not a journal
-retention exception. The Root acceptance asserts repeated production delivery,
-one ledger application, stable created anchor and the complete certified receipt.
-
-Local controls cover candidate failure, cuts, postconditions, errors, prepared
-effects, read retention, invocation-mode restoration and wrapper nesting.
-Signed multi-scope controls check actual facts and event bytes on local,
-co-hosted and remote targets. Public language-error sanitization remains
-unchanged; the original descriptor is asserted at the real worker return.
-Action composition does not imply action transactions are atomic under L2:
-only candidate staging rolls back; independent target outcomes may differ.
-Sampler/root-lifecycle attribution and Begin performance remain separate work.
-
-## Implementation status — shared attempt-span ownership (2026-09-13)
-
-L2 operation attempts now follow B's installed-owner token discipline. The
-existing Simplex operation row starts and closes `quod.operation.recover`;
-the worker inherits its context and no longer creates a child-owned root.
-Receipt retirement can stop a worker without running its `after` clause, so
-that old wrapper could leave an allocated root unended. A real-SDK control
-proves allocation before actual child entry/shutdown and the old leaked handle.
-This identifies a mechanism, not the fraction of historical missing roots it
-explains. Hardware attribution requires the independent start denominator.
-
-`quod_attempt_span` extracts B's allocation/close/event/ancestry mechanics into
-one process-free library shared by group and operation owners. The original
-caller context stays separate from the handle; carrying-row restarts are
-siblings, history-only rows stay parentless even on adoption. Returned start
-errors, worker results, DOWN, retirement and owner termination release their
-tokens. Closures report owner observations, not successful application or a
-queue measurement. A child writes its final root event before notifying the
-owner; notification, cleanup and worker shutdown semantics are unchanged.
-
-B's exception boundary remains: installed states are end-once; fatal callback
-unwind may expose a stale token to best-effort termination or lose a tentative
-one. SDK end-after-take is pinned as a no-op, and a lost root is a discrepancy,
-never idleness. SDK failure cannot prevent operational shutdown. No new timer,
-owner, queue, registry, gproc name, acknowledgement or delivery path is added.
-The existing Simplex and coordinator processes and progress messages remain.
-
-The compile-time diagnostic allocation decorator accepts both existing root
-names through one implementation. Its bounded metadata identifies the exact
-span, sampled/recording flags and effective sampler; it does not create a
-start denominator. The collector's selected group/operation identity domain
-must accompany the record, and unknown or missing metadata stays explicit.
-Default builds still erase the decorator call. Retained formats and deployment
-configuration are unchanged; ordinary spans suffice at full diagnostic sampling.
-
-## 2026-09-13 implementation status — one source identity per target vector
-
-The source claim's semantic identity and signed client request are invariants
-of its entire target vector, not per-target work. Construction and canonical
-validation now derive them once into a private call-local value, then project
-each application ID from that value and the target's authenticated plan. The
-former per-target source derivation and the validator's redundant preliminary
-request verification are deleted. N=1 follows the same traversal as N=8.
-
-Each plan still has to bind the exact verified client request; an authentically
-signed request for the same goal but a different operation cannot borrow the
-old sealed plans. Explicit claim references, stored claim IDs, the complete
-prediction vector and source/target anchoring retain their existing checks.
-The local value is not stored, exported or caller-supplied. No trust cache,
-process, flag, owner, timer, deadline change or additional execution path is
-introduced. Existing foreign-evidence and admission validation remain intact.
-
-Permanent controls count one source derivation and one durable client-request
-verification for construction and decoding at N=1/2/4/8. Generated signed
-fixtures encoded by the actual .179 codec preserve exact signed bytes and
-predicted application IDs; they are honestly not described as fleet history.
-Re-signed envelopes with corrupt inner signatures or substituted identities
-still fail closed. The durable/wire schema does not change.
-
-This removes one demonstrated repeated-work source in the shared codec. It
-does not claim that all nested evidence revalidation has disappeared, that
-the Begin residual is solved, or that the broad L2 latency gate has passed.
-
-## 2026-09-13 implementation status — reuse attested plan context
-
-An authenticated target bundle now carries its event context through the same
-private, call-local transaction-codec traversal. The attestation boundary
-validates exactly the existing signed plan, target and manifest bindings and
-returns the context it just established. The codec's second verification pass
-to obtain that context is deleted. The context fields still have to match the
-source claim; carrying verified data does not remove its consuming checks.
-
-The boolean attestation verifier remains the single authentication algorithm
-for its existing scope and explorer consumers. Standalone event-context reads
-without an attestation still perform their own required authentication. Both
-use one private projection builder. No public unchecked token, trusted cache,
-process, flag, timer, deadline, durable format or additional execution engine.
-
-Controls count one plan signature verification per target for both construction
-and decoding at N=1/2/4/8, retain exact .179 golden signed bytes and predicted
-IDs, and reject corrupt plan/attestation signatures and substituted bindings.
-The claim-context control rebuilds source and target IDs to ensure that an
-unrelated stale-ID rejection cannot conceal a missing context comparison.
-This scope reduces shared codec work, not the remaining consensus or target
-result-collection latency measured in the separately labeled .180 witness.
-
-## Target-keyed progress continuations — implementation status (.181 base)
-
-The existing coordinator wave is also the unit of retry scheduling. Returned
-independent target work no longer waits for unrelated in-flight target workers.
-Each real owner/follow/route progress edge is coalesced per unfinished logical
-target inside that wave; it survives a still-running target and is consumed
-once when the target returns and can continue. Early unresolved results attach
-the same existing progress follow immediately, not after a cross-target join.
-Follow admission and building/unreachable status are not progress.
-Ordered re-plan messages are not a second retry allowance: a target vector
-consumes its preceding plan edge on admission and never reuses target progress
-again at the whole-wave boundary. Unconsumed continuations stay parked under
-the same timer if readiness is lost, even after all workers return.
-
-The admitted vector and logical indices remain immutable. The installed pure
-operation model chooses each next action: an exact retained application needs
-only certification, and a certified target has no further work. The worker map
-still admits at most one worker per index, rejects stale worker results, and
-uses the original wave deadline and timer. No new process, timer, polling loop,
-durable inventory, signing/evidence authority or retry engine is introduced.
-The bounded progress-edge set is disposable scheduling state, not truth about
-an operation. Pending actions and running indices are indexed once per owner
-turn; progress dispatch does not rewalk the target vector once per target.
-
-Readiness pauses admission, expiry starts nothing, and fatal target evidence
-blocks further continuation admissions. The source publishes only certified
-target results and joins exactly once for the complete vector/receipt through
-the unchanged owner. Atomic phase barriers and endpoint fan-out are unchanged.
-The scope's frozen handoff, controls and actual full-gate result determine
-publication readiness; this status text alone is not a gate claim.
+Still open: Begin consensus/finality latency; broad c4/L2 acceptance and trace
+attribution gaps; F6 fast-restart checkpoints; dependency-taxonomy enforcement;
+R-RESTART-RACE-01; both standing EUnit ledger items; and the historical +8.7%
+question (its earlier retained state was retired, not its question solved).
+No gate is retired by this cleanup. Full clean sequential gates, retained true
+exits and exact-tree review govern its publication. Yan's write-lanes and
+performance-roadmap documents are reported separately, not edited here.

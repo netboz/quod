@@ -176,7 +176,7 @@ action(Transition, Prerequisites, DesiredState).
 `goal(DesiredState)` first proves the desired state and cuts if it is already
 true. Otherwise it enumerates every matching action clause in Prolog order. One
 candidate consists of its ordered prerequisites, its single/list transition,
-and its final desired-state check, all inside `transaction/1`. Candidate
+and its final desired-state check, all inside the internal proof savepoint. Candidate
 failure restores assertions, retractions, and abolishes in every selected
 ontology, preserves the bounded failure reasons, and allows the next action
 clause reaching the same state to run. Candidate success adopts its staged
@@ -186,26 +186,29 @@ Prerequisites are a finite proper list of callable state checks and, like the
 initial/final desired-state checks, run through Quod's existing strict read-only
 overlay against the current staged view. Recursive state achievement is written
 explicitly as `goal(State)` and may transition inside the surrounding
-transaction; `Ns::goal(State)` does the same in the selected ontology. Every
+candidate savepoint; `Ns::goal(State)` does the same in the selected ontology. Every
 other cross-ontology prerequisite uses the same read-only state-check context
 under `Ns::Goal`. `Transition` is one non-variable callable predicate or a
 non-empty proper list of them and may stage D writes. Invalid shapes fail before
 invocation. Keep term-identity cycle detection.
 
-`transaction/1` is a Quod compiled predicate over the existing immutable
-overlay and, once distributed scopes land, their shared proof context. It is
+The internal `quod_proof_savepoint` library uses the existing immutable overlay
+and shared distributed proof context. Public `transaction/1` calls that same
+library while selecting atomic intent; action candidates inherit the current
+intent without introducing a public wrapper. Each candidate is
 semidet: it searches alternatives until the first complete solution, adopts
 that state, and exposes no inner redo. The pinned Erlog fork supplies an
 explicit checkpoint mode so each alternative restores the staged database it
-was created from; ordinary proofs never enter that mode. On total failure or
+was created from; ordinary backtracking outside savepoints does not enter that mode. On total failure or
 error it restores local and foreign assertions, retractions, and abolishes;
 failure reasons remain available. A cut has only normal Prolog scope and never
-commits a ledger. Only outermost proof success starts the atomic commit
-described by `distributed-proof-plan.md`.
+commits a ledger. Only outermost proof success submits the sealed writes:
+atomic by default, or independent when successful intent and all retained
+material permit it, as defined by `multiwrite-architecture.md`.
 
 Framework-owned transitions are named predicates. Their bodies may use
 `assertz/1` and `retract/1`; failed candidates are rolled back by
-`transaction/1`, and `goal/1` never infers or asserts a desired state. Remove
+the same internal savepoint, and `goal/1` never infers or asserts a desired state. Remove
 the old catch-all `assert_fact/1` and
 `remove_fact/1` actions entirely: under target-driven semantics they cannot
 soundly distinguish an exact stored fact from a fact proved by a rule, and no

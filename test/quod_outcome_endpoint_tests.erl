@@ -297,9 +297,78 @@ target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test() 
         ?assertEqual(2, quod_ledger_store:last(maps:get(store, F)))
     end).
 
+%% Real Prolog admission/apply and real endpoint workers; the consensus owner
+%% interface is held, not a second consensus implementation. The signed fixture
+%% history is deliberately not claimed as consensus-admitted (the CT redelivery
+%% witness covers that). No receipt or unrelated block releases these callers.
+pending_application_joins_the_existing_owner_test_() ->
+    [{atom_to_list(Result), fun() -> pending_application_joins_owner(Result) end}
+     || Result <- [committed, rejected]].
+pending_application_joins_owner(Result) ->
+    Diff = case Result of
+        committed -> quod_prolog:terms_to_diff([{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]);
+        rejected -> []
+    end,
+    with_operation_endpoint(2, Diff, fun(F = #{target := {Ns, Anchor} = Target,
+      store := Store, entry := Entry, node_identity := Signer,
+      claim := Claim, certified_claim_ref := ClaimRef, target_ref := TargetRef}) ->
+        stop_process(quod_reg:where({quod_prolog, Ns})),
+        Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
+                        [named_table, protected]),
+        true = ets:insert(Table, {anchor, Anchor}),
+        {ok, Prolog} = quod_prolog:start_link(Ns, #{node_id => maps:get(pubkey, Signer),
+          identity => Signer, outcome_backend => memory}),
+        unlink(Prolog),
+        try
+            {ok, [Genesis]} = quod_ledger_store:read_range(Store, 1, 1),
+            ok = quod_prolog:apply_entry(Ns, Genesis, replay),
+            ok = quod_prolog:mark_ready(Ns),
+            ?assertEqual(1, quod_prolog:applied(Ns)),
+            {ok, Bytes} = quod_transaction:encode_evidence(ClaimRef, Claim),
+            A = maps:get(request_id, F), B = crypto:strong_rand_bytes(16),
+            ?assertEqual(ok, admit(F, {apply_claim, A, Target, Bytes}, 3000)),
+            receive {append_call, #transaction{tx_id = TxId}} ->
+                ?assertEqual(element(4, TargetRef), TxId)
+            after 1000 -> error(no_first_admission) end,
+            erlang:trace_pattern({quod_prolog, admit_bound_plan, 9}, true, [local]),
+            erlang:trace_pattern({quod_prolog, submit_new_plan, 6}, true, [local]),
+            erlang:trace(Prolog, true, [call, {tracer, self()}]),
+            ?assertEqual(ok, admit(F, {apply_claim, B, Target, Bytes}, 3000)),
+            receive {trace, Prolog, call, {quod_prolog, admit_bound_plan, _}} -> ok
+            after 1000 -> error(pending_delivery_bypassed_owner) end,
+            ?assertEqual(1, maps:get(parked, quod_prolog:stats(Ns))),
+            Barrier = erlang:trace_delivered(Prolog),
+            receive {trace_delivered, Prolog, Barrier} -> ok after 1000 -> error(no_trace_barrier) end,
+            receive {trace, Prolog, call, {quod_prolog, submit_new_plan, _}} ->
+                error(duplicate_proposal) after 0 -> ok end,
+            assert_no_reply(F),
+            ok = quod_prolog:apply_entry(Ns, Entry, live),
+            ?assertMatch({ok, #{outcome := #{status := Result}}},
+                         quod_prolog:outcome_snapshot(Ns, TargetRef, 1000)),
+            Expected = case Result of committed -> committed; rejected -> {rejected, not_authorized} end,
+            Results = lists:map(fun(Id) ->
+                Tag = maps:get(tag, F),
+                receive {Tag, {ok, {application, Id, Expected, Evidence}, []}} ->
+                    {ok, Ref, _} = quod_transaction:decode_evidence(Evidence),
+                    ?assertEqual(TargetRef, quod_transaction:stable_ref(Ref)), Evidence;
+                    {Tag, {ok, Reply, []}} when element(2, Reply) =:= Id ->
+                        error({unexpected_application_result, element(1, Reply)})
+                after 1000 -> error({missing_own_block_result, Id}) end
+            end, [A, B]),
+            ?assertEqual(1, length(lists:usort(Results))),
+            ?assertEqual(2, quod_prolog:applied(Ns)),
+            ?assertEqual(0, maps:get(parked, quod_prolog:stats(Ns)))
+        after
+            erlang:trace_pattern({quod_prolog, admit_bound_plan, 9}, false, [local]),
+            erlang:trace_pattern({quod_prolog, submit_new_plan, 6}, false, [local]),
+            stop_process(Prolog), ets:delete(Table)
+        end
+    end).
+
 with_operation_endpoint(Test) -> with_operation_endpoint(1, Test).
-with_operation_endpoint(N, Test) ->
-    quod_operation_fixture:with(N, fun(F = #{target := {Ns, Anchor},
+with_operation_endpoint(N, Test) -> with_operation_endpoint(N, [], Test).
+with_operation_endpoint(N, GenesisDiff, Test) ->
+    quod_operation_fixture:with(N, GenesisDiff, fun(F = #{target := {Ns, Anchor},
       store := Store, projection := P, entry := Entry, node_identity := Signer}) ->
         View = quod_operation_fixture:view(Store, P, Entry),
         S0 = quod_simplex:test_state(#{ns => Ns, self => maps:get(pubkey, Signer),
@@ -350,6 +419,8 @@ prolog_stub(Ns, Parent) ->
 
 owner_loop(Parent, S) ->
     receive
+        {'$gen_call', _From, {append, Change, _Trace}} ->
+            Parent ! {append_call, Change}, owner_loop(Parent, S);
         {'$gen_call', From, {dtx_endpoint_local, Request, [], Timeout, _TraceCtx}} ->
             case quod_simplex:test_start_local_dtx_endpoint_request(Request, [], Timeout, From, S) of
                 {ok, S1} -> owner_loop(Parent, S1);

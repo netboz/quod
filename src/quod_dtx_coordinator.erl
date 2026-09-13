@@ -523,7 +523,7 @@ test_observation_state(S = #state{group_id = GroupId}) ->
     end.
 
 test_operation_application_evidence(Request, Result) ->
-    operation_application_evidence(Request, Result).
+    operation_application_evidence(#{}, Request, Result).
 
 %% Direct scheduling-boundary fixture: the caller supplies a genuine signed
 %% operation model, never a bypass into target validation or consensus. Count
@@ -593,7 +593,7 @@ operation_item_io({application, {TargetNs, _} = Target},
                  Ns, Target, quod_operation:claim(Model), Request, Remaining) end),
     ok = quod_metrics:observe_remote_operation_stage(TargetNs, target_application,
            operation_target_metric_result(Result), erlang:monotonic_time() - Started),
-    case operation_application_evidence(Request, Result) of
+    case operation_application_evidence(Model, Request, Result) of
         {ok, Ref, Tx} -> quod_dtx_current_view:certify_operation_evidence(Ns, Target, Ref, #{transaction => Tx}, none, Deadline);
         {error, _} = Error -> Error
     end;
@@ -610,16 +610,22 @@ operation_item_io({receipt, Complete}, #{owner_ns := Ns}, _Deadline, Remaining) 
 
 %% A reply is discovery only, INCLUDING its result label. Exact history and
 %% AM3 decide the result. Never turn an unavailable vote into a rejection.
-operation_application_evidence(Request, {ok, {application, _, _, Blob} = Response}) ->
+operation_application_evidence(Model, {apply_claim, _, Target, _} = Request,
+                               {ok, {application, _, _, Blob} = Response}) ->
     case {quod_dtx_endpoint:correlates(Request, Response),
           quod_trace:with_optional_span(
             quod_trace:context(), <<"quod.operation.result_evidence_decode">>, internal,
             #{}, fun() -> quod_transaction:decode_evidence(Blob) end)} of
         {true, {ok, Ref, #transaction{role = {remote_application, _, _, _}} = Tx}} ->
-            {ok, Ref, Tx};
-        _ -> {error, invalid_target_evidence}
+            %% Transport correlation is not authority. Bind the decoded
+            %% evidence to the model's exact claim/target before any AM3 work.
+            case quod_operation:accept(Target, Ref, #{transaction => Tx}, none, Model) of
+                {ok, _} -> {ok, Ref, Tx};
+                {error, _} -> {error, invalid_operation_claim}
+            end;
+        _ -> {error, invalid_operation_claim}
     end;
-operation_application_evidence(Request, {ok, Response}) ->
+operation_application_evidence(_Model, Request, {ok, Response}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         false -> {error, invalid_target_response};
         true ->
@@ -629,8 +635,8 @@ operation_application_evidence(Request, {ok, Response}) ->
                 _ -> {error, retry}
             end
     end;
-operation_application_evidence(_, {error, invalid_request}) -> {error, invalid_operation_claim};
-operation_application_evidence(_, _) -> {error, retry}.
+operation_application_evidence(_, _, {error, invalid_request}) -> {error, invalid_operation_claim};
+operation_application_evidence(_, _, _) -> {error, retry}.
 
 
 operation_target_metric_result({ok, {application, _, committed, _}}) -> ok;

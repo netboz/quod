@@ -479,12 +479,12 @@ fresh_operation_result_trace(Class) ->
                             ?assert(Notify#span.end_time =< Receipt#span.start_time),
                             ?assertEqual(Root#span.trace_id, Receipt#span.trace_id);
                         malformed ->
-                            %% The ordinary endpoint client rejects this at
-                            %% correlation, before the worker's evidence walk.
+                            %% The existing worker authenticates opaque reply
+                            %% evidence before any exact-history/AM3 work.
                             assert_operation_error(F, Worker, Monitor, invalid_operation_claim),
                             assert_no_target_result(Worker);
                         wrong_target ->
-                            %% Correlation also binds the application to this
+                            %% The model binds the application to this exact
                             %% claim/target before evidence or route work.
                             assert_operation_error(F, Worker, Monitor, invalid_operation_claim),
                             assert_no_target_result(Worker)
@@ -691,6 +691,7 @@ terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       %% blocks on our unanswered source call and cannot ack
                       %% the second one. No time-based quiet-period assertion.
                       operation_status_notices(F, Worker, FollowRef),
+                      dormant_await_idle(Worker),
                       send_operation_follow_notice(
                         Target, Worker, FollowRef,
                         {resnapshot, 3, digest(250), #{}}),
@@ -699,6 +700,9 @@ terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       %% Still unavailable after real progress: retain this
                       %% exact follow, without unfollow/follow/refresh churn.
                       operation_status_notices(F, Worker, FollowRef),
+                      %% A notice ack is not a barrier for a certification
+                      %% wave's result (it arrives through another sender).
+                      dormant_await_idle(Worker),
                       wake_operation_follow(F, Worker, FollowRef),
                       reply_operation_source(F, terminal_operation_row(F)),
                       certify_operation_result(F, Worker, committed),

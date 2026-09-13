@@ -28,9 +28,12 @@ this module. A validation sidecar may carry exact committed entries or applied
 certificates beside the semantic term. This module only bounds and shape-checks
 them: `quod_foreign_log` verifies entries and `quod_applied_certificate` verifies
 certificates. An application request carries an exact anchored target and a
-canonical certified vector claim owned by `quod_transaction`; that target
+opaque certified vector claim owned by `quod_transaction`; that target
 reconstructs only its own deterministic application. It enters the existing
-target signing and consensus machinery.
+target signing and consensus machinery. Framing and correlation do not
+authenticate claim/application blobs: the existing endpoint worker decodes
+the claim, and the coordinator worker binds returned evidence to its already
+authenticated operation before exact-history/AM3 verification.
 The outer request also carries W3C trace context. It is transient metadata,
 outside the semantic request, evidence, signatures and correlation checks.
 """.
@@ -396,14 +399,14 @@ validate_request({submit, RequestId, RecordBlob}) ->
     end;
 validate_request({apply_claim, RequestId, Target, EvidenceBlob}) ->
     validate_request_fields(
-      RequestId, valid_identity(Target) andalso valid_claim_evidence(Target, EvidenceBlob));
+      RequestId, valid_identity(Target) andalso valid_payload(EvidenceBlob));
 validate_request({phase, RequestId, GroupId, Kind}) ->
     validate_request_fields(
       RequestId, valid_digest(GroupId) andalso valid_phase_kind(Kind));
 validate_request(
   {cancel_operation_effect, RequestId, Target, SubmissionBlob}) ->
     validate_request_fields(
-      RequestId, valid_identity(Target) andalso valid_operation_submission(SubmissionBlob));
+      RequestId, valid_identity(Target) andalso valid_payload(SubmissionBlob));
 validate_request(
   {outcome, RequestId, OutcomeRef, CommitteeId, MinimumSlot}) ->
     validate_request_fields(
@@ -449,10 +452,10 @@ validate_record_blob(RecordBlob) ->
 %% The target engine invokes the transaction codec exactly once after its
 %% authenticated peer/readiness checks; this framing layer never parses or
 %% verifies the signed submission a second time.
-valid_operation_submission(SubmissionBlob) when is_binary(SubmissionBlob) ->
-    byte_size(SubmissionBlob) > 0 andalso
-        byte_size(SubmissionBlob) < ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES;
-valid_operation_submission(_SubmissionBlob) ->
+valid_payload(Blob) when is_binary(Blob) ->
+    byte_size(Blob) > 0 andalso
+        byte_size(Blob) < ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES;
+valid_payload(_Blob) ->
     false.
 
 validate_response({accepted, RequestId, SemanticDigest, CertifiedRef}) ->
@@ -464,7 +467,7 @@ validate_response({application, RequestId, Result, EvidenceBlob}) ->
     validate_response_fields(
       RequestId,
       valid_application_result(Result) andalso
-          valid_application_evidence(EvidenceBlob));
+          valid_payload(EvidenceBlob));
 validate_response(
   {operation_effect_cancelled, RequestId, Status}) ->
     validate_response_fields(
@@ -707,10 +710,9 @@ correlates({submit, RequestId, RecordBlob} = Request,
     valid_pair(Request, Response) andalso
         prepare_blob_digest(RecordBlob) =:= SemanticDigest;
 correlates(
-  {apply_claim, RequestId, Target, ClaimEvidence} = Request,
-  {application, RequestId, _Result, TargetEvidence} = Response) ->
-    valid_pair(Request, Response) andalso
-        application_response_matches(Target, ClaimEvidence, TargetEvidence);
+  {apply_claim, RequestId, _, _} = Request,
+  {application, RequestId, _, _} = Response) ->
+    valid_pair(Request, Response);
 correlates(
   {cancel_operation_effect, RequestId, _, _} = Request,
   {operation_effect_cancelled, RequestId, _} = Response) ->
@@ -789,23 +791,6 @@ prepare_blob_digest(RecordBlob) ->
             error
     end.
 
-valid_claim_evidence(Target, Blob) ->
-    case quod_transaction:decode_evidence(Blob) of
-        {ok, ClaimRef,
-         #transaction{role = {remote_claim, _, _, _}} = Claim} ->
-            case quod_transaction:stable_ref(ClaimRef) of
-                {transaction, _, _, _} ->
-                    case {quod_transaction:remote_claim_references(Claim),
-                          quod_transaction:remote_claim_plan(Claim, Target)} of
-                        {{ok, Refs}, {ok, _Plan}} ->
-                            quod_operation_vector:lookup(Target, Refs) =/= error;
-                        _ -> false
-                    end;
-                invalid -> false
-            end;
-        _ -> false
-    end.
-
 valid_read_plan(PlanBlob) when is_binary(PlanBlob) ->
     case quod_dtx:decode(PlanBlob) of
         {ok, Plan} -> quod_dtx:verify(Plan);
@@ -820,35 +805,9 @@ certified_ref_identity(Ref) ->
         _ -> error
     end.
 
-valid_application_evidence(Blob) ->
-    case quod_transaction:decode_evidence(Blob) of
-        {ok, _Ref, #transaction{role = {remote_application, _, _, _}}} ->
-            true;
-        _ -> false
-    end.
-
 valid_application_result(committed) -> true;
 valid_application_result({rejected, Reason}) when is_atom(Reason) -> true;
 valid_application_result(_) -> false.
-
-application_response_matches(Target, ClaimBlob, TargetBlob) ->
-    case {quod_transaction:decode_evidence(ClaimBlob),
-          quod_transaction:decode_evidence(TargetBlob)} of
-        {{ok, ClaimRef, #transaction{} = Claim},
-         {ok, TargetRef, #transaction{} = TargetTx}} ->
-            case {quod_transaction:stable_ref(ClaimRef), certified_ref_identity(TargetRef)} of
-                {{transaction, _, _, _} = StableRef, Target} ->
-                    try quod_transaction:remote_application(
-                          StableRef, Claim, Target) of
-                        Expected ->
-                            Expected#transaction.tx_id =:=
-                                TargetTx#transaction.tx_id
-                    catch _:_ -> false
-                    end;
-                _ -> false
-            end;
-        _ -> false
-    end.
 
 %% ------------------------------------------------------------------
 %% Scalar validation

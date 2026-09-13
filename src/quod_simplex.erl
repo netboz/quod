@@ -6198,34 +6198,27 @@ foreign_ref_source(Ref, TargetIdentity) ->
     end.
 
 %% Transport contacts stay inside the endpoint workers that already own the
-%% corresponding request. They are selected only for the exact certified
-%% reference derived from that request and become reusable only after the
-%% ordinary foreign-reference verifier accepts the complete candidate.
+%% corresponding request. Match its exact claim bytes to the candidate's
+%% attached evidence, encoded once per candidate (never decoded per worker).
+%% This is only contact selection, not authentication: the ordinary reference
+%% verifier still verifies the candidate and owns any reusable route promotion.
 content_reference_contacts(ReferencePlan, Workers, TargetIdentity) ->
-    ReferencesByTransaction = maps:from_list(
-                                [{TxId, References}
-                                 || {#transaction{tx_id = <<_:256>> = TxId},
-                                     References} <- ReferencePlan]),
+    Claims = maps:from_list(
+      [{Bytes, {Ref, Identity}}
+       || {#transaction{evidence = {Ref, #transaction{origin = Identity} = Claim}},
+           References} <- ReferencePlan,
+          Identity =/= TargetIdentity,
+          lists:member({transaction, Ref}, References),
+          {ok, Bytes} <- [quod_transaction:encode_evidence(Ref, Claim)]]),
     maps:fold(
       fun(_Pid,
           #dtx_server_worker{
             contact = {<<_:256>>, _} = Contact,
             request = {apply_claim, _RequestId, WorkerTarget, EvidenceBlob}}, Acc)
             when WorkerTarget =:= TargetIdentity ->
-              case decode_claimed_application(TargetIdentity, EvidenceBlob) of
-                  {ok, _ClaimRef,
-                   #transaction{origin = Identity},
-                   #transaction{tx_id = TxId}}
-                    when Identity =/= TargetIdentity ->
-                      case maps:get(TxId, ReferencesByTransaction, []) of
-                          References ->
-                              case [Ref || {transaction, Ref} <- References] of
-                                  [Ref] -> Acc#{Ref => {Identity, Contact}};
-                                  _ -> Acc
-                              end
-                      end;
-                  _ ->
-                      Acc
+              case maps:find(EvidenceBlob, Claims) of
+                  {ok, {Ref, Identity}} -> Acc#{Ref => {Identity, Contact}};
+                  error -> Acc
               end;
          (_Pid, _Worker, Acc) ->
               Acc
@@ -6405,7 +6398,7 @@ endpoint_exact_evidence(Ns, Ref, Phase, Deadline, none) ->
 endpoint_exact_evidence(_Ns, _Ref, _Phase, _Deadline, Evidence) when is_map(Evidence) ->
     {ok, Evidence}.
 
-execute_claimed_application({Ns, _} = Target, EvidenceBlob, Deadline) ->
+execute_claimed_application({Ns, Anchor} = Target, EvidenceBlob, Deadline) ->
     Started = erlang:monotonic_time(),
     case decode_claimed_application(Target, EvidenceBlob) of
         {ok, ClaimRef, Claim, Application} ->
@@ -6413,7 +6406,9 @@ execute_claimed_application({Ns, _} = Target, EvidenceBlob, Deadline) ->
                    Ns, claim_verification, ok,
                    erlang:monotonic_time() - Started),
             case quod_transaction:validate_independent_claim(Claim) of
-                ok -> claimed_application_result(Ns, ClaimRef, Claim, Application, Deadline);
+                ok ->
+                    TargetRef = {transaction, Ns, Anchor, Application#transaction.tx_id},
+                    submit_claimed_application(Ns, TargetRef, ClaimRef, Application, Deadline);
                 {error, independent_scope_required} -> {error, independent_scope_required};
                 {error, _} -> {error, invalid_request}
             end;
@@ -6443,83 +6438,42 @@ decode_claimed_application(Target, EvidenceBlob) ->
             error
     end.
 
-%% A durable application result is authoritative for every kind of claim.
-%% Private prepared material may already be retired after completion; exact
-%% redelivery must never require it again. Only an absent outcome enters the
-%% existing submission machinery, under the same caller deadline.
-claimed_application_result(Ns, ClaimRef, Claim,
-                           #transaction{tx_id = TxId} = Application, Deadline) ->
-    case genesis_hash(Ns) of
-        <<_:256>> = Anchor ->
-            TargetRef = {transaction, Ns, Anchor, TxId},
-            case claimed_terminal_application(Ns, TargetRef, TxId, Deadline) of
-                absent -> submit_claimed_application(Ns, ClaimRef, Claim, Application, Deadline);
-                Result -> Result
-            end;
-        _ -> {error, not_ready}
-    end.
-
+%% Ordinary applications go straight to Prolog's single new/pending/terminal
+%% admission: an exact pending delivery joins its existing waiters. Only private
+%% effects need a terminal lookup before journal custody, because their prepared
+%% material may already be retired. Neither path creates another application.
 submit_claimed_application(
-  Ns, _ClaimRef, _Claim,
+  Ns, TargetRef, _ClaimRef,
   #transaction{tx_id = TxId, effects = []} = Application, Deadline) ->
-    case genesis_hash(Ns) of
-        <<_:256>> = Anchor ->
-            TargetRef = {transaction, Ns, Anchor, TxId},
-            Submission = case max(0, Deadline - quod_time:mono_ms()) of
-                             0 -> {error, timeout};
-                             Remaining -> quod_prolog:submit_role(
-                                            Ns, Application, [], Remaining)
-                         end,
-            claimed_application_outcome(
-              Ns, TargetRef, TxId, Submission, Deadline);
-        _ ->
-            {error, not_ready}
-    end;
+    Submission = case max(0, Deadline - quod_time:mono_ms()) of
+                     0 -> {error, timeout};
+                     Remaining -> quod_prolog:submit_role(Ns, Application, [], Remaining)
+                 end,
+    claimed_application_outcome(Ns, TargetRef, TxId, Submission, Deadline);
 submit_claimed_application(
-  Ns, ClaimRef, Claim,
-  Application0 = #transaction{tx_id = TxId, effects = [Effect]}, Deadline) ->
-    case {genesis_hash(Ns), current_application_signer(Ns, Claim)} of
-        {<<_:256>> = Anchor, {ok, Self, _Admission}} ->
-            case Self =:= quod_effect:executor(Effect) of
-                true ->
-                    TargetRef = {transaction, Ns, Anchor, TxId},
-                    Application = Application0#transaction{
-                                    author = Self,
-                                    submitted_at = quod_time:now_ms()},
-                    case quod_effect_journal:bind_operation_transaction(
-                           ClaimRef, TargetRef, Application) of
-                        {ok, EffectId} ->
-                            claimed_effect_application(
-                              Ns, TargetRef, TxId, EffectId, Deadline);
-                        {error, Reason} ->
-                            logger:warning(
-                              "quod[~ts]: operation effect binding failed: ~p",
-                              [Ns, Reason]),
-                            {error, not_ready}
-                    end;
-                false ->
-                    {error, not_ready}
-            end;
-        _ ->
-            %% Only the node that sealed the target plan owns its prepared
-            %% private effect. Route walking will try that exact validator.
-            {error, not_ready}
+  Ns, TargetRef, ClaimRef, Application = #transaction{tx_id = TxId, effects = [_]}, Deadline) ->
+    case claimed_terminal_application(Ns, TargetRef, TxId, Deadline) of
+        nonterminal -> bind_claimed_effect(Ns, TargetRef, ClaimRef, Application, Deadline);
+        Result -> Result
     end;
-submit_claimed_application(_Ns, _ClaimRef, _Claim, _Application, _Deadline) ->
+submit_claimed_application(_Ns, _TargetRef, _ClaimRef, _Application, _Deadline) ->
     {error, invalid_request}.
 
-current_application_signer(Ns, Claim) ->
+%% The journal already checks its persisted plan signer, executor, exact
+%% application and prepared material. Do not duplicate that custody decision.
+bind_claimed_effect(Ns, TargetRef, ClaimRef, Application0, Deadline) ->
     case dtx_binding(Ns) of
-        {ok, {Ns, Anchor, Self, Admission}} ->
-            case quod_transaction:remote_claim_plan(Claim, {Ns, Anchor}) of
-                {ok, Plan} ->
-                    case quod_dtx:signer(Plan) of
-                        Self -> {ok, Self, Admission};
-                        _ -> error
-                    end;
-                _ -> error
+        {ok, {Ns, _, Self, _}} ->
+            Application = Application0#transaction{author = Self, submitted_at = quod_time:now_ms()},
+            case quod_effect_journal:bind_operation_transaction(ClaimRef, TargetRef, Application) of
+                {ok, EffectId} ->
+                    claimed_effect_application(Ns, TargetRef, Application#transaction.tx_id,
+                                               EffectId, Deadline);
+                {error, Reason} ->
+                    logger:warning("quod[~ts]: operation effect binding failed: ~p", [Ns, Reason]),
+                    {error, not_ready}
             end;
-        _ -> error
+        _ -> {error, not_ready}
     end.
 
 claimed_effect_application(
@@ -6549,7 +6503,7 @@ claimed_application_outcome(
     claimed_application_evidence(Ns, Slot, TxId, committed, Deadline);
 claimed_application_outcome(Ns, TargetRef, TxId, {error, _Reason}, Deadline) ->
     case claimed_terminal_application(Ns, TargetRef, TxId, Deadline) of
-        absent -> {error, not_ready};
+        nonterminal -> {error, not_ready};
         Result -> Result
     end;
 claimed_application_outcome(_Ns, _TargetRef, _TxId, _Other, _Deadline) ->
@@ -6561,7 +6515,8 @@ claimed_terminal_application(Ns, TargetRef, TxId, Deadline) ->
                    Remaining -> quod_prolog:outcome_snapshot(Ns, TargetRef, Remaining)
                end,
     case Snapshot of
-        {ok, #{outcome := not_found}} -> absent;
+        {ok, #{outcome := not_found}} -> nonterminal;
+        {ok, #{outcome := #{status := pending}}} -> nonterminal;
         {ok, #{outcome := #{status := committed, height := Slot}}} ->
             claimed_application_evidence(Ns, Slot, TxId, committed, Deadline);
         {ok, #{outcome := #{status := rejected, reason := Reason, height := Slot}}}
@@ -11187,14 +11142,14 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
             Owner = self(),
             LocalIdentity = target_identity(S),
             LocalSource = local_history_view(S),
-            Contacts = content_reference_contacts(
-                         ReferencePlan, DtxWorkers, LocalIdentity),
             Trace = trace_for_block(Sl, BH, S),
             TraceLocation = {S#s.ns, Sl, BH},
             TraceAttributes = #{'quod.validation.transactions' => length(ReferencePlan)},
             trace_block_event(Sl, BH, <<"consensus.foreign_validation_queued">>, #{}, S),
             Worker = spawn(
                        fun() ->
+                           Contacts = content_reference_contacts(
+                                        ReferencePlan, DtxWorkers, LocalIdentity),
                            Verdict = quod_consensus_trace:work(
                              Trace, TraceLocation, <<"quod.consensus.foreign_validation">>, TraceAttributes,
                              fun() ->

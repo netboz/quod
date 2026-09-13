@@ -1,20 +1,21 @@
 -module(quod_operation_fixture).
 -include("quod_ledger.hrl").
--export([with/2, view/3, entry/4]).
+-export([with/2, with/3, view/3, entry/4]).
 
 %% One real signed/certified history constructor for owner-interface controls.
 %% These genesis-derived projections are trusted owner inputs, not a witness
 %% that the generated claims/applications were consensus-admitted or applied.
 %% Callers own their process stubs and decide which production callbacks run.
-with(N, Fun) ->
+with(N, Fun) -> with(N, [], Fun).
+with(N, GenesisDiff, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
     Ns = <<"quod:operation-result-source-", Suffix/binary>>,
     {NodeKey, Seed} = quod_identity:generate(),
     Signer = #{pubkey => NodeKey, key => quod_identity:key_term({NodeKey, Seed})},
-    {Origin, Genesis, SourceProjection} = operation_genesis(Ns, Signer),
+    {Origin, Genesis, SourceProjection} = operation_genesis(Ns, Signer, GenesisDiff),
     TargetGenesis = [operation_genesis(
-      <<"quod:operation-result-target-", Suffix/binary, "-", (integer_to_binary(I))/binary>>, Signer)
+      <<"quod:operation-result-target-", Suffix/binary, "-", (integer_to_binary(I))/binary>>, Signer, GenesisDiff)
       || I <- lists:seq(1, N)],
     Targets = [Target || {Target, _, _} <- TargetGenesis],
     F0 = quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets),
@@ -79,9 +80,10 @@ with(N, Fun) ->
         end
     end.
 
-operation_genesis(Ns, #{pubkey := Key}) ->
+operation_genesis(Ns, #{pubkey := Key}, GenesisDiff) ->
     Tx = quod_simplex:test_genesis_tx(#{node_id => Key, mode => create, committee => [],
-      node_addr => {"127.0.0.1", 34249}}, Ns, Key, crypto:hash(sha256, <<243:64>>)),
+      genesis_diff => GenesisDiff, node_addr => {"127.0.0.1", 34249}},
+      Ns, Key, crypto:hash(sha256, <<243:64>>)),
     {ok, Genesis} = quod_ledger:new_entry(1, {batch, [Tx]}, 0, none),
     Anchor = operation_entry_hash(Genesis),
     {ok, [_], Projection} = quod_catchup:verify_forward(

@@ -1083,8 +1083,19 @@ a successful later witness.
 
 Still open: Begin consensus/finality latency; broad c4/L2 acceptance and trace
 attribution gaps; F6 fast-restart checkpoints; dependency-taxonomy enforcement;
-R-RESTART-RACE-01; both standing EUnit ledger items; and the historical +8.7%
+R-RESTART-RACE-01; all three EUnit ledger items (B-EUNIT-UNIDENTIFIED-01,
+EUNIT-SEND-TRACE-MAILBOX-01, EUNIT-OPERATION-FOLLOW-RACE-01); and the historical +8.7%
 question (its earlier retained state was retired, not its question solved).
 No gate is retired by this cleanup. Full clean sequential gates, retained true
 exits and exact-tree review govern its publication. Yan's write-lanes and
 performance-roadmap documents are reported separately, not edited here.
+
+Exact ordinary application redelivery enters Prolog's one admission transition:
+new work submits, pending work joins existing waiters, terminal work returns its
+durable outcome. Private effects retain journal custody and a terminal lookup
+before accessing possibly retired prepared material. Transport only frames and
+correlates opaque claim/application blobs; existing workers authenticate them
+and bind returned evidence to the exact operation before history/AM3 work.
+Request-scoped contact matching runs in the existing foreign verifier, by exact
+candidate claim bytes, not by decoding every active request in Simplex. Contacts
+remain untrusted hints until the candidate's references verify.

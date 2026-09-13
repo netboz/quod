@@ -44,16 +44,7 @@ Pure helpers over the committed erlog database for the content layer.
 
 -doc "Whether an untrusted read check uses only valid functor keys and durable MVCC tokens.".
 -spec valid_read_check(term()) -> boolean().
-valid_read_check(ReadCheck) when is_map(ReadCheck) ->
-    maps:fold(
-      fun({Functor, Arity}, Token, true) ->
-              quod_wire_term:is_symbol(Functor)
-                  andalso is_integer(Arity) andalso Arity >= 0
-                  andalso valid_read_token(Token);
-         (_Key, _Token, _Acc) ->
-              false
-      end, true, ReadCheck);
-valid_read_check(_) -> false.
+valid_read_check(ReadCheck) -> quod_read_set:valid(ReadCheck).
 
 -doc "Whether an untrusted diff is a proper list of legal durable operations.".
 -spec valid_ops(term()) -> boolean().
@@ -177,12 +168,6 @@ interpreted_clauses(_Est, _Functor) ->
 %%%===================================================================
 %%% internals
 %%%===================================================================
-
-valid_read_token(never_present) -> true;
-valid_read_token(static) -> true;
-valid_read_token({present, Slot}) -> is_integer(Slot) andalso Slot >= 0;
-valid_read_token({absent, Slot}) -> is_integer(Slot) andalso Slot >= 0;
-valid_read_token(_) -> false.
 
 valid_op({Kind, {Head, Body}}) when Kind =:= assert; Kind =:= retract ->
     callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);

@@ -397,6 +397,142 @@ delivery was accepted. The operation loop may now be converted to the shared
 wave under this ruling. This ruling also gives the standing duplicate-receipt
 gate its target-side test obligation.
 
+## 13. Addendum 2026-09-13 (same authority): S8 design ruling — §3 closed
+
+**S8 design (/tmp/quod-L2-s8-design-FYxCz2/REVIEW.md) is ENDORSED** as the
+S8 implementation contract with the corrections below. Execution model,
+owner table, one coordinator engine with target-keyed work, the pure
+`quod_operation` transition library (no process), AM3 certificates with
+domain-separated L3-Finalize vs L2-application statements, the certified
+receipt arm, complete-vector-once reply, redelivery per §12, effects
+unchanged, and the deletion list all stand as written.
+
+**§3 CLOSED — selected-intent authority is STRUCTURAL; no control-flow
+witness is required.** The question "how do validators prove `independent`
+sat on the successful branch" rests on a premise this architecture does not
+hold: branch-selection fidelity is EXECUTION fidelity, which quod already
+delegates to each executing host. Targets today verify the client signature,
+re-prove `can_invoke` for the invocations they executed, and bind plan/request/
+manifest digests — they do not and cannot verify that a source's derivation
+was the correct consequence of the goal. Independent dispatch changes nothing
+about that trust boundary, for two reasons:
+1. Forging surviving intent grants a Byzantine source NO new capability.
+   Atomicity protects against partial FAILURE; a source that controls
+   execution can already produce a partial commit of authorized writes by
+   submitting one target's write alone. Lane selection is therefore an
+   execution-fidelity property, not an authorization property.
+2. Authorization for independent treatment is bounded by PROVENANCE, which
+   each executing host records for its OWN material (S6: invocation mode
+   threaded on the wire; each scope seals with its own provenance mask).
+   No host can obtain independent treatment for material it did not itself
+   stage under a wrapper.
+The sufficient existing mechanism, made mandatory for S8 admission:
+(a) client-signed request bound to the claim (S7, exists);
+(b) source-owner-signed claim bound to request and plan digests (S7, exists);
+(c) NEW ADMISSION CHECK: every target admitted to an independent claim must
+    find its OWN sealed material staged under independent mode per its own
+    scope-session record (provenance mask 2, no ordinary bit) — a target whose
+    own seal says ordinary REFUSES independent participation by name; the
+    source's word is never substituted for the target's own record;
+(d) the origin's S6 mixing veto (exists): a remote intent flag can only ever
+    cause a REFUSAL (mixing) or select L2 for material every executing host
+    itself marked wrapped — never an unauthorized downgrade; this is codified,
+    and the remote flag is explicitly NOT an authority input, only a selection
+    hint checked by (c) and (d).
+Consequences: the temporary N>1 route/validator/worker refusals are removed
+in the same scope that lands (c) with its controls. Rules within remote
+ontologies may themselves declare independence for their own sub-actions
+(the ontology author's prerogative, executed on its own trusted host) — this
+is by design, not a hole. No second evaluator, no KB transfer, no request
+replay, no extra client signing, no restricted top-level-wrapper shortcut.
+
+Additional controls (join §7 of the design): (i) target-side refusal when
+its own mask lacks the independent bit, exercised at the validator endpoint;
+(ii) forged/stripped remote flag with origin-local ordinary material → mixed
+refusal, and with all-wrapped material → L2 with every target's own mask
+honest (documented as by-design); (iii) source claim marking a target
+independent whose seal is ordinary → refused by (c). The action-savepoint
+scope precedes the action-based acceptance case, as already ruled.
+
+## 14. Addendum 2026-09-13 (same authority): S8-READSET-SYMBOL-ORDER-01
+
+**Diagnosis CONFIRMED** (independently: term-order probe). Read-set material
+is canonicalized through an Erlang map round-trip; small maps (≤32 keys) list
+atoms in a fixed name-based traversal, an opaque foreign symbol (a tuple)
+falls outside that order, and large maps (>32 keys) iterate in hash order —
+not ordered at all. So a verifier that lacks an atom re-encodes different
+bytes and correctly refuses as noncanonical, and >32-key read-sets were never
+representation-stable. Pre-existing in the S7 format; surfaced by S8's
+cross-gateway reconnect.
+
+**RULING — one shared, representation-independent read-set codec; no format
+break for the real population; no S8-only path.**
+1. Canonical read-set order is ASCENDING by the key pair
+   `{UTF-8 predicate name, Arity}` — name bytes first, arity second — never by
+   term order, map iteration or symbol representation. **Arity is part of key
+   identity** (amended 2026-09-13 from "symbol NAME" after the golden-byte
+   evidence: read-set keys are name/arity pairs, not bare names; `foo/1` and
+   `foo/2` are two distinct keys). The SAME codec serves plan read-sets,
+   semantic IDs and signed envelopes (`quod_dtx:encode_material`,
+   `quod_transaction:semantic_material_bytes`, `encode/decode_material`).
+2. The exact traversal direction is whatever the current all-atom small-map
+   path emits today, pinned by GOLDEN-BYTE controls against real .174
+   encodings — the codec must reproduce those bytes exactly. This makes the
+   correction BYTE-PRESERVING for every producer that held its symbols as
+   atoms with ≤32 read keys, i.e. the expected entire population: signatures,
+   semantic IDs and stored bytes unchanged. Not a format break.
+3. Verification never depends on a map: decode into the ordered pair list,
+   validate name-order and name-uniqueness on the wire form, use a map only as
+   a lookup index. Opaque symbols compare by name; no atom allocation on the
+   consumer; no read-set omission; no relaxed signature/ID/canonical checks.
+4. Duplicate/alias keys (atom and opaque tuple with the same name AND arity)
+   are one key and are rejected as duplicates. Same name with different arity
+   is not an alias.
+5. Large maps: name order REPLACES hash order. Before commit, a read-only
+   scan of all retained ledgers, signing/effect journals and caches must count
+   read-sets with >32 keys. Zero (expected) → no break occurs. Any → that
+   subset would become undecodable, and under the clean-break policy this is
+   an EXPLICIT decision for Yan, never silently absorbed.
+Controls: cross-VM producer-atoms/consumer-opaque byte-equal round trip;
+consumer atom-table unchanged; golden signature + semantic-ID bytes vs .174
+fixtures; alias-key rejection; key-set sizes 2, 32, 33, 64 encode identically
+regardless of representation and of map iteration; mixed-representation
+producer equals all-atom producer; the failed reconnect CT becomes the
+permanent regression. This settles a correctness defect; S8 lane design and
+intent authority (§13) are untouched.
+
+**CLOSURE 2026-09-13 — both pre-commit obligations DISCHARGED**
+(evidence `/tmp/quod-S8-readset-evidence-XfLvIS/HANDOFF.md`):
+- §14.5 scan: read-only, in place, all ten .174-c4p1 allocations — 768
+  distinct files, 1,510 read-set occurrences across active state, inactive
+  pre-refound cloud state and retired caches; **zero above 32 keys, largest
+  11**. Positive 33-key controls detected in all seven carriers (ledger,
+  signing journal, effect journal, manifest, checkpoint, outcome DETS, phase
+  DETS), so zero is a real zero. **No format break occurs; no decision is
+  owed to Yan.**
+- §14.2 golden bytes: real .174 encodings (2 keys, 32 keys) confirm ascending
+  `{name, arity}` order; entire signed envelopes, signatures, semantic IDs,
+  plan sealing and plan digests reproduce byte-exact. **Byte preservation
+  proven on real vectors.**
+- Codec shape as ruled: one pure library shared by all three encoders; wire
+  order and uniqueness validated before any map is built; maps as index only;
+  the old builder and the duplicated validator deleted.
+
+**Reconnect residual — fixture precondition, not a second defect.** After the
+codec correction, the standalone partial-outcome reconnect case still failed
+because gateway B had no route to C (the suite withholds it in setup for a
+different case); B's lookup waited out its caller budget and returned retry.
+That is the CORRECT fail-closed behaviour under R2. A route-only
+counterfactual (the ordinary C directory record added, same signed request,
+no resubmission, no production change) returned the exact earlier complete
+mixed vector. Pins: (a) the fixture establishes every route precondition
+EXPLICITLY inside the case that needs it; (b) route absence and route
+recovery are each their own isolated case with its own oracle; (c) no case
+may depend on suite order or clear a route another case needs — the
+standalone and combined runs must exercise identical setup. Recommended:
+commit the codec correction as its OWN scope ahead of S8 (pre-existing,
+L2-independent, byte-preserving), with the reconnect CT as its regression.
+
 ## 12. Integration note — Yan's confirmed product decisions
 
 Yan confirmed on 2026-09-12 that independent writes must reuse existing actions;

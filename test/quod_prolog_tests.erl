@@ -1790,8 +1790,9 @@ t_lockstep({Ns, _}) ->
     fun() ->
         PkB = <<"pkB">>,
         ok = ab(Ns, 1, batch(canjoin_open(Ns))),
-        %% membership assert with a DELIBERATELY STALE read_check → still applies
-        StaleMem = #{{peer_admitted, 4} => 999999},
+        %% A valid durable token with the wrong version tests OCC, not the
+        %% codec's malformed-token refusal. Membership still bypasses OCC.
+        StaleMem = #{{peer_admitted, 4} => {present, 999999}},
         MemTx0 = (mem_assert(Ns, PkB, "h", 1))#transaction{
                    read_check = StaleMem},
         MemTx = quod_transaction:bind_id({Ns, <<0:256>>}, MemTx0),
@@ -1801,7 +1802,7 @@ t_lockstep({Ns, _}) ->
         %% get_procedure path production uses (a direct prove of peer_admitted is a separate erlog quirk).
         ?assertEqual({invalid, already_admitted}, verdict(Ns, mem_assert(Ns, PkB, "h", 1), 3, lk)),
         %% content tx with an equally-stale read_check → still rejected (widget/z never asserted)
-        StaleContent = change(Ns, diff_for({widget, z}), #{{widget, 1} => 12345}),
+        StaleContent = change(Ns, diff_for({widget, z}), #{{widget, 1} => {present, 12345}}),
         ok = ab(Ns, 3, batch(StaleContent)),
         ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {widget, z}))
     end.
@@ -1974,7 +1975,7 @@ t_reject_not_direct_sent({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
         ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
-        ok = ab(Ns, 1, batch(change(Ns, diff_for({widget, z}), #{{widget, 1} => 12345}))),
+        ok = ab(Ns, 1, batch(change(Ns, diff_for({widget, z}), #{{widget, 1} => {present, 12345}}))),
         ?assertMatch({rejected_live, _}, recv_rt(rejected_live)),
         receive {applied_live, _, _} = M -> erlang:error({unexpected_direct, M})
         after 200 -> ok end

@@ -713,7 +713,7 @@ semantic_id({Ns, <<_:256>> = Anchor},
 semantic_material_bytes(Diff, ReadCheck, Effects)
   when is_list(Diff), is_map(ReadCheck), is_list(Effects) ->
     case {quod_wire_term:encode_canonical(Diff),
-          quod_wire_term:encode_canonical(maps:to_list(ReadCheck)),
+          quod_read_set:encode(ReadCheck),
           quod_wire_term:encode_canonical(Effects)} of
         {{ok, DiffBytes}, {ok, ReadCheckBytes}, {ok, EffectsBytes}} ->
             {ok, DiffBytes, ReadCheckBytes, EffectsBytes};
@@ -812,16 +812,22 @@ canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
 
 encode_material(Diff, ReadCheck, Effects)
   when is_list(Diff), is_map(ReadCheck), is_list(Effects) ->
+    case quod_read_set:pairs(ReadCheck) of
+        {ok, ReadPairs} -> encode_material_pairs(Diff, ReadPairs, Effects);
+        error -> {error, bad_term}
+    end;
+encode_material(_Diff, _ReadCheck, _Effects) ->
+    {error, bad_term}.
+
+encode_material_pairs(Diff, ReadPairs, Effects) ->
     case {quod_wire_term:encode_canonical(
-            {Diff, maps:to_list(ReadCheck)}),
+            {Diff, ReadPairs}),
           quod_wire_term:encode_canonical(Effects)} of
         {{ok, MaterialWire}, {ok, EffectsWire}} ->
             {ok, MaterialWire, EffectsWire};
         _ ->
             {error, bad_term}
-    end;
-encode_material(_Diff, _ReadCheck, _Effects) ->
-    {error, bad_term}.
+    end.
 
 encode_signed_evidence(none) ->
     {ok, none};
@@ -1667,20 +1673,26 @@ decode_material(MaterialWire, EffectsWire, SymbolMode) ->
             EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
         {{ok, {Diff0, ReadPairs0}}, {ok, Effects0}}
           when is_list(Diff0), is_list(ReadPairs0), is_list(Effects0) ->
-            case materialize_decoded(
-                   {Diff0, ReadPairs0, Effects0}, SymbolMode) of
-                {ok, {Diff, ReadPairs, Effects}} ->
-                    ReadCheck = maps:from_list(ReadPairs),
-                    case map_size(ReadCheck) =:= length(ReadPairs) andalso
-                         quod_effect:validate_list(Effects) of
-                        true -> {ok, Diff, ReadCheck, Effects};
-                        false -> {error, malformed_material}
-                    end;
-                {error, _} = Error ->
-                    Error
+            case quod_read_set:valid_pairs(ReadPairs0) of
+                true -> decode_material_pairs(Diff0, ReadPairs0, Effects0, SymbolMode);
+                false -> {error, malformed_material}
             end;
         _ ->
             {error, malformed_material}
+    end.
+
+decode_material_pairs(Diff0, ReadPairs0, Effects0, SymbolMode) ->
+    case materialize_decoded({Diff0, ReadPairs0, Effects0}, SymbolMode) of
+        {ok, {Diff, ReadPairs, Effects}} ->
+            %% The wire list was checked before materialization;
+            %% a map cannot establish canonicality or uniqueness.
+            ReadCheck = maps:from_list(ReadPairs),
+            case quod_effect:validate_list(Effects) of
+                true -> {ok, Diff, ReadCheck, Effects};
+                false -> {error, malformed_material}
+            end;
+        {error, _} = Error ->
+            Error
     end.
 
 materialize_decoded(Term, wrapped) -> {ok, Term};

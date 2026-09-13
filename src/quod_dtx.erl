@@ -278,7 +278,7 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
 
 encode_material(Diff, ReadCheck, Effects, Bridges, Transcript) ->
     case {quod_wire_term:encode_canonical(Diff),
-          quod_wire_term:encode_canonical(maps:to_list(ReadCheck)),
+          quod_read_set:encode(ReadCheck),
           quod_wire_term:encode_canonical(Effects),
           quod_wire_term:encode_canonical(Bridges),
           quod_wire_term:encode_canonical(Transcript)} of
@@ -557,11 +557,15 @@ decode_material(Core) ->
          {ok, Transcript}}
           when is_list(Diff), is_list(ReadPairs), is_list(Effects),
                is_list(Bridges), is_list(Transcript) ->
-            case attach_transcript_goals(Transcript, 0, []) of
-                {ok, AnnotatedTranscript} ->
+            %% Validate the carried order and aliases before vocabulary can
+            %% materialize. The eventual map is only a lookup index.
+            case {quod_read_set:valid_pairs(ReadPairs),
+                  exact_length(ReadPairs, maps:get(read_functors, Core), 0),
+                  attach_transcript_goals(Transcript, 0, [])} of
+                {true, true, {ok, AnnotatedTranscript}} ->
                     {ok, {Diff, ReadPairs, Effects, Bridges,
                           AnnotatedTranscript}};
-                error ->
+                _ ->
                     error
             end;
         _ ->
@@ -595,10 +599,10 @@ attach_transcript_goals(_MalformedOrTooLong, _Count, _Acc) ->
 materialize_decoded(Core, Decoded) ->
     case quod_wire_term:materialize_symbols(Decoded) of
         {ok, {Diff, ReadPairs, Effects, Bridges, AnnotatedTranscript}} ->
-            case {build_read_check(
-                    ReadPairs, maps:get(read_functors, Core), 0, #{}),
-                  strip_transcript_goals(AnnotatedTranscript, [])} of
-                {{ok, ReadCheck}, {ok, Transcript}} ->
+            %% decode_material/1 already validated the ordered pair list.
+            ReadCheck = maps:from_list(ReadPairs),
+            case strip_transcript_goals(AnnotatedTranscript, []) of
+                {ok, Transcript} ->
                     case exact_length(Diff, maps:get(diff_ops, Core), 0)
                          andalso exact_length(
                                    Effects, maps:get(effects_count, Core), 0)
@@ -665,18 +669,6 @@ valid_conflict_identities([Identity | Rest], Previous)
     valid_identity(Identity) andalso
         valid_conflict_identities(Rest, Identity);
 valid_conflict_identities(_, _) -> false.
-
-build_read_check([], Expected, Expected, Acc) ->
-    {ok, Acc};
-build_read_check([{Key, Token} | Rest], Expected, Count, Acc)
-  when Count < Expected ->
-    case maps:is_key(Key, Acc) of
-        false -> build_read_check(Rest, Expected, Count + 1,
-                                  Acc#{Key => Token});
-        true -> error
-    end;
-build_read_check(_Malformed, _Expected, _Count, _Acc) ->
-    error.
 
 strip_transcript_goals([], Acc) ->
     {ok, lists:reverse(Acc)};

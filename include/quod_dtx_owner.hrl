@@ -1,8 +1,10 @@
 %% Keep each retained semantic control and its exact signed envelope once and
 %% re-drive it; never copy it into the ordinary transaction custody queues.
 %% Logical readiness, not a compiled population cap, controls scheduling.
+%% Material replaces the duplicate raw record; its plans stay vocabulary-opaque
+%% and are never serialized. The journal retains only the original bytes.
 -record(dtx_submission, {
-    record :: quod_dtx:control_record(),
+    material :: quod_dtx:admission_material(),
     control :: quod_dtx:control(),
     envelope :: binary(),
     group_id :: <<_:256>>,

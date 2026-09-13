@@ -40,7 +40,6 @@ authenticated_claim_consumers_do_not_verify_or_materialize_test() ->
         {ok, Counts} = counted(fun() ->
             ok = quod_transaction:validate_independent_claim(Decoded),
             lists:foreach(fun(Target) ->
-                ?assertMatch({ok, _}, quod_transaction:remote_claim_plan(Decoded, Target)),
                 ?assertEqual(shared, quod_transaction:remote_claim_route(Decoded, Target))
             end, maps:get(targets, F))
         end),
@@ -56,7 +55,7 @@ claim_view_cannot_survive_changed_authentication_inputs_test() ->
         {Target, Digest, Blob, A} = B,
         Forged = {Target, Digest, Blob, setelement(tuple_size(A), A, <<0:512>>)},
         lists:foreach(fun(Bad) ->
-            ?assertEqual(error, quod_transaction:remote_claim_plan(Bad, T)),
+            ?assertEqual(error, quod_transaction:remote_claim_route(Bad, T)),
             ?assertEqual({error, invalid_plan_attestation},
                          quod_transaction:validate_independent_claim(Bad)),
             {Ns, Anchor} = C#transaction.origin,

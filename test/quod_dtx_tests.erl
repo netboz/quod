@@ -1859,7 +1859,7 @@ prepared_remote_complete_replay_needs_no_applied_sidecar_test() ->
         quod_dtx:reduce(DecisionControl, DecisionRef, H1, P1),
     ?assertEqual(
        {blocked, apply},
-       quod_dtx:proposal_readiness(
+       readiness(
          quod_dtx:control_body(CompleteControl), P2)),
 
     %% The live owner opens its source fence after ordered apply.  The
@@ -1904,7 +1904,7 @@ source_event_only_commit_retains_nonblocking_marker_until_complete_test() ->
     ?assert(quod_dtx:valid_projection(P2)),
     ?assertEqual(
        ready,
-       quod_dtx:proposal_readiness(
+       readiness(
          quod_dtx:control_body(maps:get(complete_control, F)), P2)),
     {ok, _H3, P3, [_]} = quod_dtx:reduce(
                            maps:get(complete_control, F),
@@ -1951,7 +1951,7 @@ source_abort_retains_exact_nonblocking_marker(Pub) ->
          blocking => false},
        maps:get(GroupId, maps:get(apply_fences, P2))),
     ?assert(quod_dtx:valid_projection(P2)),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(
+    ?assertEqual(ready, readiness(
                           quod_dtx:control_body(CompleteControl), P2)),
     {ok, _H3, P3, [{completed, GroupId, abort, CompleteRef, Reasons}]} =
         quod_dtx:reduce(CompleteControl, CompleteRef, H2, P2),
@@ -2018,12 +2018,12 @@ proposal_admission_follows_the_active_group_phase_test() ->
     Begin = maps:get(begin_record, F),
     Decision = quod_dtx:control_body(maps:get(decision_control, F)),
     Complete = quod_dtx:control_body(maps:get(complete_control, F)),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Begin, P0)),
-    ?assertEqual(stale, quod_dtx:proposal_readiness(Decision, P0)),
+    ?assertEqual(ready, readiness(Begin, P0)),
+    ?assertEqual(stale, readiness(Decision, P0)),
     ApplyWindow0 = P0#{apply_fences :=
                            #{<<99:256>> => #{slot => 1, generation => 0,
                                              blocking => true}}},
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Begin, ApplyWindow0)),
+    ?assertEqual(ready, readiness(Begin, ApplyWindow0)),
     ?assertMatch(
        {ok, _, _, _},
        quod_dtx:reduce(
@@ -2033,12 +2033,12 @@ proposal_admission_follows_the_active_group_phase_test() ->
         quod_dtx:reduce(
           maps:get(begin_control, F), maps:get(begin_ref, F), H0, P0),
     ?assertEqual(#{}, maps:get(apply_fences, P1)),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Decision, P1)),
+    ?assertEqual(ready, readiness(Decision, P1)),
     {ok, H2, P2, [_, _]} =
         quod_dtx:reduce(
           maps:get(decision_control, F), maps:get(decision_ref, F), H1, P1),
     ?assertEqual(
-       {blocked, apply}, quod_dtx:proposal_readiness(Complete, P2)),
+       {blocked, apply}, readiness(Complete, P2)),
     ?assertEqual(
        {error, {invalid_transition, apply}},
        dtx_preview(
@@ -2053,7 +2053,7 @@ proposal_admission_follows_the_active_group_phase_test() ->
     {ok, _H3, P6, _} = quod_dtx:reduce(
                            maps:get(complete_control, F),
                            maps:get(complete_ref, F), H2, P5),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Complete, P5)),
+    ?assertEqual(ready, readiness(Complete, P5)),
     ?assertEqual([], quod_dtx:origin_recoveries(P6)).
 
 %% The valid local gate shapes are a closed set. Cross every phase with every
@@ -2071,25 +2071,25 @@ proposal_readiness_covers_the_reducer_gate_matrix_test() ->
     Begin = maps:get(begin_record, F),
     Decision = quod_dtx:control_body(maps:get(decision_control, F)),
     Complete = quod_dtx:control_body(maps:get(complete_control, F)),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Begin, P0)),
-    ?assertEqual(stale, quod_dtx:proposal_readiness(Decision, P0)),
-    ?assertEqual(stale, quod_dtx:proposal_readiness(Complete, P0)),
+    ?assertEqual(ready, readiness(Begin, P0)),
+    ?assertEqual(stale, readiness(Decision, P0)),
+    ?assertEqual(stale, readiness(Complete, P0)),
     {ok, H1, P1, [_, _]} = quod_dtx:reduce(
                          maps:get(begin_control, F),
                          maps:get(begin_ref, F), H0, P0),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Decision, P1)),
+    ?assertEqual(ready, readiness(Decision, P1)),
     {ok, H2, P2, [_, _]} = quod_dtx:reduce(
                          maps:get(decision_control, F),
                          maps:get(decision_ref, F), H1, P1),
     ?assertEqual(
-       {blocked, apply}, quod_dtx:proposal_readiness(Complete, P2)),
+       {blocked, apply}, readiness(Complete, P2)),
     ?assertEqual(
        {error, {invalid_transition, apply}},
        dtx_preview(
          maps:get(complete_control, F), Target, 61, key(246), H2, P2)),
     {ok, P3} = quod_dtx:acknowledge_finalize(
                  GroupId, ref_slot_test(maps:get(decision_ref, F)), 2, P2),
-    ?assertEqual(ready, quod_dtx:proposal_readiness(Complete, P3)),
+    ?assertEqual(ready, readiness(Complete, P3)),
     ?assertMatch(
        {ok, _, _, _},
        quod_dtx:reduce(
@@ -2523,7 +2523,7 @@ overlapping_writes_block_and_batch_failure_is_atomic() ->
                           quod_dtx:initial_group_history(), P0),
     ?assertEqual(
        expected_conflict_readiness(A, B),
-       quod_dtx:proposal_readiness(
+       readiness(
          quod_dtx:control_body(maps:get(control, B)), P1)),
     ?assertEqual(
        expected_conflict_reduction(A, B),
@@ -2675,7 +2675,7 @@ assert_second_prepare_conflicts(Target, First, Second) ->
                          quod_dtx:initial_group_history(), P0),
     ?assertEqual(
        expected_conflict_readiness(First, Second),
-       quod_dtx:proposal_readiness(
+       readiness(
          quod_dtx:control_body(maps:get(control, Second)), P1)).
 
 expected_conflict_readiness(Holder, Contender) ->
@@ -3435,8 +3435,9 @@ assert_symbols_absent(Names) ->
 
 dtx_preview(Control, Target, Slot, BlockHash, History, Projection) ->
     GroupId = quod_dtx:group_id(Control),
+    {ok, Material} = quod_dtx:admission_material(quod_dtx:control_body(Control)),
     case quod_dtx:preview_batch(
-           [{Control, Target, Slot, BlockHash}],
+           [{Control, Material, Target, Slot, BlockHash}],
            #{GroupId => History}, Projection) of
         {ok, Histories, Projection1, [#{effects := Effects}]} ->
             {ok, maps:get(GroupId, Histories), Projection1, Effects};
@@ -3459,3 +3460,7 @@ tuple(Plan) -> Plan.
 plan(Tuple) -> Tuple.
 record_tuple(Record) -> Record.
 record(Tuple) -> Tuple.
+
+readiness(Record, Projection) ->
+    {ok, Material} = quod_dtx:admission_material(Record),
+    quod_dtx:proposal_readiness(Material, Projection).

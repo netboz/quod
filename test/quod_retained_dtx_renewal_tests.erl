@@ -229,8 +229,8 @@ exercise(Mode, F = #{target := Target, projection := Before,
     After = advance_target(F, Entry),
     ?assertEqual(2, maps:get(Lane, maps:get(dtx_lanes, After))),
     ?assertEqual(case Mode of unrelated_only -> ready; _ -> stale end,
-                 quod_dtx:proposal_readiness(P1, maps:get(dtx, After))),
-    ?assertEqual(stale, quod_dtx:proposal_readiness(Q, maps:get(dtx, After))),
+                 readiness(P1, maps:get(dtx, After))),
+    ?assertEqual(stale, readiness(Q, maps:get(dtx, After))),
     Resolved = quod_simplex:test_resolve_committed_dtx(Entry, payload(Controls), A2),
     ?assertEqual(case Mode of exact -> []; _ -> [D1] end,
                  maps:keys(rows(Resolved))),
@@ -540,3 +540,7 @@ trace_signing(Fun) ->
     after
         stop_recorder(Tracer, Monitor)
     end.
+
+readiness(Record, Projection) ->
+    {ok, Material} = quod_dtx:admission_material(Record),
+    quod_dtx:proposal_readiness(Material, Projection).

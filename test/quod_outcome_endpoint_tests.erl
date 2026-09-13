@@ -276,7 +276,8 @@ target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test() 
     with_operation_endpoint(2, fun(F = #{target := Target, origin := {SourceNs, SourceAnchor} = Origin,
       claim := Claim, node_identity := Signer, admission := Admission, tag := Tag}) ->
         #transaction{role = {remote_claim, Manifest, Bundles, _}} = Claim,
-        {ok, Plan} = quod_transaction:remote_claim_plan(Claim, Target),
+        {_, Plan, _, _} = quod_transaction:remote_application_material(
+            {transaction, SourceNs, SourceAnchor, Claim#transaction.tx_id}, Claim, Target),
         {ok, Ordinary} = quod_dtx:attest_plan(1, Target, Plan, Manifest, Signer),
         Own = lists:keyfind(Target, 1, Bundles),
         Refused0 = quod_transaction:remote_claim(Origin, Manifest,

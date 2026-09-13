@@ -189,7 +189,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
          test_dtx_source_identity/2,
          test_local_history_view/3, test_local_history_view/4,
-         test_consensus_barrier/1, test_dtx_consensus_barrier/2,
+         test_consensus_barrier/1, test_dtx_consensus_barrier/1,
          test_requested/1,
          test_progress_counts/1, test_engine_pool_sizes/1,
          test_committed_store/1, test_link_peers/1,
@@ -271,7 +271,9 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_seed_dtx_submission/3,
          test_seed_dtx_submission_at/4,
          test_eligible_dtx_wave/1,
+         test_blocked_dtx_owner/2, test_drive_retained_dtx/1,
          test_propose_dtx_wave/4,
+         test_bind_claimed_effect/5,
          test_dtx_drive_scheduled/1,
          test_resolve_committed_dtx/3,
          test_retain_dtx_record/3,
@@ -1624,7 +1626,7 @@ test_local_history_view(Identity, Requirement, S) ->
 test_local_history_view(Identity, Requirement, Deadline, S) ->
     local_history_view(Identity, Requirement, Deadline, S).
 test_consensus_barrier(S) -> consensus_barrier(S).
-test_dtx_consensus_barrier(Record, S) -> dtx_consensus_barrier(Record, S).
+test_dtx_consensus_barrier(S) -> consensus_barrier(S, ignore_retained_dtx).
 test_dtx_slot_route(Slot, S) -> dtx_slot_route(Slot, S).
 test_dtx_endpoint_ready(Request, S) ->
     dtx_endpoint_operation_ready(Request, S).
@@ -1762,13 +1764,14 @@ test_seed_dtx_submission_at(
   Control, Waiters, InsertedAt, S = #s{retained_dtx = Registry}) ->
     Digest = quod_dtx:record_digest(Control),
     {ok, Envelope} = quod_dtx:encode_control(Control),
+    {ok, Material} = quod_dtx:admission_material(quod_dtx:control_body(Control)),
     Placement = test_retained_placement(
                   quod_dtx_owner:placement(
-                    quod_dtx:control_body(Control),
+                    Material,
                     S#s.dtx_projection)),
     Submission =
         #dtx_submission{
-          record = quod_dtx:control_body(Control), control = Control,
+          material = Material, control = Control,
           envelope = Envelope, group_id = quod_dtx:group_id(Control),
           digest = Digest, inserted_at = InsertedAt,
           observation_started_at = InsertedAt,
@@ -1781,17 +1784,35 @@ test_retained_placement(stale) -> error(stale_test_dtx_submission).
 test_dtx_waiter_set(Waiters) ->
     maps:from_list([{Pid, true} || {dtx_endpoint, Pid} <- Waiters]).
 test_eligible_dtx_wave(S) ->
-    [{Digest, Record}
-     || {Digest, #dtx_submission{record = Record}} <- eligible_dtx_wave(S)].
-test_propose_dtx_wave(Slot, Envelopes, Hints, S) ->
-    propose_dtx_wave(Slot, Envelopes, Hints, S).
+    case eligible_dtx_wave(S) of
+        none -> [];
+        {Wave, _Block} ->
+            [{Digest, Record} || {Digest, #dtx_submission{material = {Record, _, _}}} <- Wave]
+    end.
+test_drive_retained_dtx(S) -> drive_retained_dtx(S).
+test_bind_claimed_effect(Ns, TargetRef, ClaimRef, Application, Deadline) ->
+    bind_claimed_effect(Ns, TargetRef, ClaimRef, Application, Deadline).
+test_blocked_dtx_owner(Parent, S) ->
+    H = Parent#block.slot, Eng = S#s.eng,
+    Owners = maps:map(fun(G, {record, G, _Begin, Ref}) ->
+        #dtx_coordinator_owner{status = running, group_id = G, group_ref = Ref,
+                               pid = self(), monitor = make_ref()}
+    end, dtx_coordinator_desired(S)),
+    S#s{slot = H - 1, approved = H, eng = Eng#eng{tree = #{H => Parent}},
+        dtx_coordinators = Owners}.
 test_dtx_drive_scheduled(#s{dtx_drive_scheduled = Scheduled}) -> Scheduled.
+test_propose_dtx_wave(Slot, Envelopes, Hints, S) ->
+    Parent = S#s.approved,
+    {ok, Block} = quod_ledger:new_block(Slot, Parent, dtx_wave_payload(Envelopes),
+                      max(quod_time:now_ms(), parent_timestamp(Parent, S))),
+    propose_dtx_wave(Block, Hints, S).
 test_resolve_committed_dtx(Entry, Payload, S) ->
     resolve_committed_dtx(Entry, Payload, S).
 test_retain_dtx_record(Record, Waiter, S) ->
     retain_dtx_record(Record, Waiter, [], S).
 test_dtx_retain_admissible(Record, S) ->
-    case retention_disposition(Record, S) of
+    {ok, Material} = quod_dtx:admission_material(Record),
+    case retention_disposition(Material, S) of
         {included, _} -> false;
         ready -> true;
         {blocked, _} -> true;
@@ -3406,24 +3427,24 @@ restore_pending_dtx(
     case quod_dtx:decode_control(Envelope) of
         {ok, Control} ->
             Record = quod_dtx:control_body(Control),
-            case quod_dtx:group_id(Record) =:= GroupId andalso
-                 term_to_binary(Record, [deterministic]) =:= Body of
-                true ->
-                    Digest = quod_dtx:record_digest(Record),
+            case quod_dtx:group_id(Control) =:= GroupId andalso
+                 term_to_binary(Record, [deterministic]) =:= Body andalso
+                 quod_dtx:admission_material(Record) of
+                {ok, Material = {Record, Digest, _}} ->
                     InsertedAt = quod_time:mono_ms(),
                     Submission =
                         #dtx_submission{
-                          record = Record, control = Control,
+                          material = Material, control = Control,
                           envelope = Envelope, group_id = GroupId,
                           digest = Digest,
                           inserted_at = InsertedAt,
                           observation_started_at = InsertedAt,
                           placement = retained_installation_placement(
-                                        Record, Control, Digest, none, S),
+                                        Material, Control, none, S),
                           bytes = byte_size(Envelope)},
                     S#s{retained_dtx = quod_dtx_owner:put_new(
                                           Submission, S#s.retained_dtx)};
-                false ->
+                _ ->
                     error({signing_journal_bad_pending, GroupId})
             end;
         {error, Reason} ->
@@ -4671,7 +4692,9 @@ dtx_intent_readiness(Begin, GroupRef,
             case maps:is_key(GroupId, Dormant) orelse
                  dtx_group_registered(GroupId, S) of
                 true -> stale;
-                false -> quod_dtx:proposal_readiness(Begin, Projection)
+                false ->
+                    {ok, Material} = quod_dtx:admission_material(Begin),
+                    quod_dtx:proposal_readiness(Material, Projection)
             end;
         wait -> wait;
         invalid -> stale
@@ -6469,6 +6492,7 @@ bind_claimed_effect(Ns, TargetRef, ClaimRef, Application0, Deadline) ->
                 {ok, EffectId} ->
                     claimed_effect_application(Ns, TargetRef, Application#transaction.tx_id,
                                                EffectId, Deadline);
+                {error, not_found} -> {error, not_ready};
                 {error, Reason} ->
                     logger:warning("quod[~ts]: operation effect binding failed: ~p", [Ns, Reason]),
                     {error, not_ready}
@@ -7338,7 +7362,7 @@ drop_optional_entry_hint([{_Ref, _Entry} | Rest], Prefix) ->
     {ok, lists:reverse(Rest) ++ lists:reverse(Prefix)}.
 
 merge_submission_validation_sidecar(
-  Row = #dtx_submission{record = Record, validation_sidecar = Existing,
+  Row = #dtx_submission{material = {Record, _, _}, validation_sidecar = Existing,
                         bytes = Bytes}, NewHints) ->
     Merged = relevant_control_validation_sidecar(
                Record, merge_validation_sidecars(Existing, NewHints)),
@@ -7375,10 +7399,10 @@ validation_sidecar_bytes(Hints) ->
     byte_size(term_to_binary(WireHints, [deterministic])).
 
 retain_dtx_record(Record, Waiter, ValidationSidecar, S) ->
-    case validated_dtx_record(Record) of
-        {ok, Kind, Digest} ->
+    case quod_dtx:admission_material(Record) of
+        {ok, Material} ->
             retain_dtx_submission(
-              Kind, Record, Digest, Waiter, ValidationSidecar, sign, S);
+              Material, Waiter, ValidationSidecar, sign, S);
         {error, _} ->
             {error, invalid_dtx_submission}
     end.
@@ -7390,19 +7414,20 @@ retain_dtx_record(Record, Waiter, ValidationSidecar, S) ->
 retain_relayed_dtx_control(Control, Envelope, ValidationSidecar, S)
   when is_binary(Envelope) ->
     Record = quod_dtx:control_body(Control),
-    case {validated_dtx_record(Record), quod_dtx:encode_control(Control)} of
-        {{ok, Kind, Digest}, {ok, Envelope}} ->
+    case {quod_dtx:admission_material(Record), quod_dtx:encode_control(Control)} of
+        {{ok, Material}, {ok, Envelope}} ->
             retain_dtx_submission(
-              Kind, Record, Digest, none, ValidationSidecar,
+              Material, none, ValidationSidecar,
               {signed, Control, Envelope}, S);
         _ ->
             {error, invalid_dtx_submission}
     end.
 
-retain_dtx_submission(Kind, Record, Digest, Waiter, ValidationSidecar,
+retain_dtx_submission(Material = {Record, Digest, _}, Waiter, ValidationSidecar,
                       NewSubmission,
                       S = #s{retained_dtx = Registry}) ->
-    case retention_disposition(Record, S) of
+    Kind = quod_dtx:record_kind(Record),
+    case retention_disposition(Material, S) of
         {included, Ref} ->
             %% No signature, registry row or proposal for already-certified
             %% work. The ordinary response carries its exact reference; the
@@ -7433,10 +7458,10 @@ retain_dtx_submission(Kind, Record, Digest, Waiter, ValidationSidecar,
                     case NewSubmission of
                         sign ->
                             sign_and_retain_dtx(
-                              Kind, Record, Digest, Waiter, Hints, none, S);
+                              Material, Waiter, Hints, none, S);
                         {signed, Control, Envelope} ->
                             install_dtx_submission(
-                              Record, Control, Envelope, Digest,
+                              Material, Control, Envelope,
                               Waiter, Hints, none, S)
                     end
             end
@@ -7451,9 +7476,13 @@ schedule_dtx_drive(S) ->
 %% One monotone admission rule: indexed inclusion before active readiness.
 %% The index is already current in this owner turn; no history replay, copied
 %% inventory or additional process is needed to recognize a late delivery.
-retention_disposition(Record, S) ->
+retention_disposition(Material = {Record, Digest, _}, S) ->
+    GroupId = case quod_dtx:record_kind(Record) of
+                  'begin' -> Digest;
+                  _ -> quod_dtx:group_id(Record)
+              end,
     quod_dtx_owner:admission(
-      Record, retention_history(quod_dtx:group_id(Record), S), S#s.dtx_projection).
+      Material, retention_history(GroupId, S), S#s.dtx_projection).
 
 -ifdef(TEST).
 retention_history(_GroupId, #s{phase_index = undefined}) ->
@@ -7471,17 +7500,7 @@ retained_placement(ready) -> ready;
 retained_placement({blocked, _}) -> blocked;
 retained_placement(stale) -> error(stale_retained_dtx).
 
-validated_dtx_record(Record) ->
-    case {quod_dtx:record_kind(Record), quod_dtx:encode_record(Record)} of
-        {invalid, _} ->
-            {error, invalid_record};
-        {_Kind, {error, _} = Error} ->
-            Error;
-        {Kind, {ok, _Canonical}} ->
-            {ok, Kind, quod_dtx:record_digest(Record)}
-    end.
-
-sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar, OldSequence,
+sign_and_retain_dtx(Material = {Record, _, _}, Waiter, ValidationSidecar, OldSequence,
                     S = #s{id = Signer, self = Self,
                            signing_journal = Journal,
                            dtx_lanes = CommittedFloors}) ->
@@ -7503,9 +7522,9 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar, OldSequence
                                 quod_signing_journal:record_dtx(
                                   Journal, Control),
                             ok = maybe_project_pending_begins(
-                                   Kind, S#s.ns, Journal1),
+                                   quod_dtx:record_kind(Record), S#s.ns, Journal1),
                             install_dtx_submission(
-                              Record, Control, Envelope, Digest, Waiter,
+                              Material, Control, Envelope, Waiter,
                               ValidationSidecar, OldSequence,
                               S#s{signing_journal = Journal1});
                         {error, Reason} ->
@@ -7518,28 +7537,28 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter, ValidationSidecar, OldSequence
             {error, Reason}
     end.
 
-install_dtx_submission(Record, Control, Envelope, Digest, Waiter,
+install_dtx_submission(Material = {_Record, Digest, _}, Control, Envelope, Waiter,
                        ValidationSidecar, OldSequence,
                        S = #s{retained_dtx = Registry}) ->
     InsertedAt = quod_time:mono_ms(),
     Submission =
         #dtx_submission{
-          record = Record, control = Control, envelope = Envelope,
-          group_id = quod_dtx:group_id(Record), digest = Digest,
+          material = Material, control = Control, envelope = Envelope,
+          group_id = quod_dtx:group_id(Control), digest = Digest,
           inserted_at = InsertedAt,
           observation_started_at = InsertedAt,
           trace_ctx = quod_trace:context(),
           validation_sidecar = ValidationSidecar,
           placement = retained_installation_placement(
-                        Record, Control, Digest, OldSequence, S),
+                        Material, Control, OldSequence, S),
           bytes = byte_size(Envelope) +
               validation_sidecar_bytes(ValidationSidecar),
           waiters = dtx_waiter_set(Waiter)},
     {ok, schedule_dtx_drive(
            S#s{retained_dtx = quod_dtx_owner:put_new(Submission, Registry)})}.
 
-retained_installation_placement(Record, Control, Digest, OldSequence, S) ->
-    Disposition = quod_dtx_owner:placement(Record, S#s.dtx_projection),
+retained_installation_placement(Material = {Record, Digest, _}, Control, OldSequence, S) ->
+    Disposition = quod_dtx_owner:placement(Material, S#s.dtx_projection),
     case Disposition of
         stale ->
             %% Emit the bounded identifiers before the ordinary invariant
@@ -7550,7 +7569,7 @@ retained_installation_placement(Record, Control, Digest, OldSequence, S) ->
             logger:error(quod_log_formatter:redact(
               #{event => stale_retained_dtx,
                 namespace => retained_diagnostic_namespace(S#s.ns),
-                group_digest => binary:encode_hex(quod_dtx:group_id(Record)),
+                group_digest => binary:encode_hex(quod_dtx:group_id(Control)),
                 record_digest => binary:encode_hex(Digest),
                 phase => quod_dtx:record_kind(Record),
                 committed_height => S#s.slot,
@@ -7595,7 +7614,7 @@ refresh_retained_readiness(
   S0 = #s{retained_dtx = Registry, dtx_projection = Projection}) ->
     {Classified, Retired} = quod_dtx_owner:classify(Projection, Registry),
     lists:foldl(
-      fun({Row = #dtx_submission{record = Record, digest = Digest}, Reason}, {S, Pending}) ->
+      fun({Row = #dtx_submission{material = {Record, _, _}, digest = Digest}, Reason}, {S, Pending}) ->
           {Result, Reply} = case Reason of
               {refused, conflict} ->
                   {rejected, invalid_dtx_submission_reply(
@@ -9116,9 +9135,6 @@ put_pending_relay(AttemptId,
 proposal_slot(S = #s{}) ->
     proposal_slot(S, consensus_barrier(S)).
 
-proposal_slot_for_dtx(Records, S = #s{}) when is_list(Records) ->
-    proposal_slot(S, dtx_consensus_barrier(Records, S)).
-
 proposal_slot(S = #s{slot = Committed, approved = Approved,
                      collecting = Collecting,
                      local_proposals = Local, commit_buf = Buf},
@@ -9365,27 +9381,27 @@ drive_retained_dtx_nonempty(S = #s{collecting = #batch{slot = Slot}}) ->
     %% the retained control takes the next legal slot.
     flush_batch(Slot, S);
 drive_retained_dtx_nonempty(S) ->
-    case may_vote(S) of
-        false ->
+    %% Classification has just used the installed projection in this owner
+    %% turn. Check the slot before constructing a wave: while a prior proposal
+    %% or validation is outstanding there is no candidate work to perform.
+    case may_vote(S) andalso
+         proposal_slot(S, consensus_barrier(S, ignore_retained_dtx)) of
+        Blocked when Blocked =:= false; Blocked =:= blocked ->
             S;
-        true ->
-            case eligible_dtx_wave(S) of
-                [] ->
-                    S;
-                Wave ->
-                    Records = [Record || {_Digest,
-                                           #dtx_submission{record = Record}}
-                                          <- Wave],
-                    case proposal_slot_for_dtx(Records, S) of
-                        blocked -> S;
-                        {ok, Slot} -> drive_dtx_at_slot(Slot, Wave, S)
+        {ok, Slot} ->
+            case dtx_slot_route(Slot, S) of
+                blocked -> S;
+                Route ->
+                    case eligible_dtx_wave(S) of
+                        none -> S;
+                        {Wave, Block} -> drive_dtx_route(Route, Wave, Block, S)
                     end
             end
     end.
 
 eligible_dtx_wave(S = #s{retained_dtx = Registry}) ->
     case quod_dtx_owner:ready_rows(Registry) of
-        [] -> [];
+        [] -> none;
         Ordered ->
             [{_FirstDigest,
               #dtx_submission{control = FirstControl}} | _] = Ordered,
@@ -9394,14 +9410,15 @@ eligible_dtx_wave(S = #s{retained_dtx = Registry}) ->
                 [Row || {_Digest, #dtx_submission{control = Control}} = Row
                             <- Ordered,
                         quod_dtx:control_kind(Control) =:= Phase],
-            select_dtx_wave(SamePhase, Phase, S, #{}, [])
+            select_dtx_wave(SamePhase, S, S#s.dtx_projection, #{}, {[], none})
     end.
 
-select_dtx_wave([], _Phase, _S, _SelectedGroups, SelectedRev) ->
-    lists:reverse(SelectedRev);
+select_dtx_wave([], _S, _Projection, _SelectedGroups, {[], none}) -> none;
+select_dtx_wave([], _S, _Projection, _SelectedGroups, {SelectedRev, Block}) ->
+    {lists:reverse(SelectedRev), Block};
 select_dtx_wave(
-  [{_Digest, #dtx_submission{control = Control}} = Candidate | Rest],
-  Phase, S, SelectedGroups, SelectedRev) ->
+  [{_Digest, #dtx_submission{control = Control} = Row} = Candidate | Rest],
+  S, Projection, SelectedGroups, {SelectedRev, _Block} = Selected) ->
     GroupId = quod_dtx:group_id(Control),
     case maps:is_key(GroupId, SelectedGroups) of
         true ->
@@ -9411,57 +9428,48 @@ select_dtx_wave(
             %% apply both against one parent. Keep the canonical retained
             %% order and let the committed first transition retire the rest.
             select_dtx_wave(
-              Rest, Phase, S, SelectedGroups, SelectedRev);
+              Rest, S, Projection, SelectedGroups, Selected);
         false ->
             Proposed = lists:reverse([Candidate | SelectedRev]),
             Envelopes = [Envelope || {_CandidateDigest,
                                       #dtx_submission{envelope = Envelope}}
                                          <- Proposed],
             Payload = dtx_wave_payload(Envelopes),
-            Controls = [CandidateControl
-                        || {_CandidateDigest,
-                            #dtx_submission{control = CandidateControl}}
-                               <- Proposed],
             case encoded_block_payload_fits(Payload)
-                     andalso dtx_wave_required_evidence_fits(
-                               Proposed, Payload, S)
-                     andalso dtx_wave_compatible(Phase, Controls, S) of
-                true ->
+                     andalso dtx_wave_candidate(Row, Proposed, Payload, S, Projection) of
+                {ok, NextProjection, Block} ->
                     select_dtx_wave(
-                      Rest, Phase, S, SelectedGroups#{GroupId => true},
-                      [Candidate | SelectedRev]);
-                false ->
+                      Rest, S, NextProjection, SelectedGroups#{GroupId => true},
+                      {[Candidate | SelectedRev], Block});
+                _ ->
                     select_dtx_wave(
-                      Rest, Phase, S, SelectedGroups, SelectedRev)
+                      Rest, S, Projection, SelectedGroups, Selected)
             end
     end.
 
-dtx_wave_required_evidence_fits(
-  Wave, Payload, S = #s{approved = Parent, ns = Ns}) ->
-    Slot = Parent + 1,
-    {ok, Block} = quod_ledger:new_block(
-                    Slot, Parent, Payload,
-                    max(quod_time:now_ms(), parent_timestamp(Parent, S))),
-    Required = [Hint || Hint = {{applied, _, _}, _} <-
-                           dtx_wave_validation_sidecar(Wave)],
-    byte_size(encode(Ns, {propose, Block, Required})) =<
-        ?QUOD_TRANSPORT_MAX_FRAME_BYTES.
-
-dtx_wave_compatible(Phase, Controls,
-                    #s{dtx_projection = Projection} = S)
-  when Phase =:= 'begin'; Phase =:= prepare ->
-    Histories = maps:from_list(
-                  [{quod_dtx:group_id(Control),
-                    quod_dtx:initial_group_history()}
-                   || Control <- Controls]),
-    Candidates = [{Control, target_identity(S), S#s.approved + 1, <<0:256>>}
-                  || Control <- Controls],
-    case quod_dtx:preview_batch(Candidates, Histories, Projection) of
-        {ok, _Histories1, _Projection1, _Items} -> true;
+%% One prospective fold, carrying only its returned projection. Rebuilding
+%% every previously selected prefix repeats both authentication and reduction.
+%% The installed owner state is never changed by this call-local preview.
+dtx_wave_candidate(#dtx_submission{control = Control, material = Material},
+                   Wave, Payload, S = #s{approved = Parent, ns = Ns}, Projection) ->
+    Preview = case quod_dtx:control_kind(Control) of
+        Phase when Phase =:= 'begin'; Phase =:= prepare ->
+            Candidate = {Control, Material, target_identity(S), S#s.approved + 1, <<0:256>>},
+            case quod_dtx:preview_batch([Candidate], #{}, Projection) of
+                {ok, _, Next, _} -> {ok, Next};
+                {error, _} = Error -> Error
+            end;
+        _ -> {ok, Projection}
+    end,
+    case Preview of
+        {ok, NextProjection} ->
+            {ok, Block} = quod_ledger:new_block(Parent + 1, Parent, Payload,
+                             max(quod_time:now_ms(), parent_timestamp(Parent, S))),
+            Required = [Hint || Hint = {{applied, _, _}, _} <- dtx_wave_validation_sidecar(Wave)],
+            byte_size(encode(Ns, {propose, Block, Required})) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES
+                andalso {ok, NextProjection, Block};
         {error, _} -> false
-    end;
-dtx_wave_compatible(_Phase, _Controls, _S) ->
-    true.
+    end.
 
 dtx_wave_payload(Envelopes) ->
     {batch, [{dtx, Envelope} || Envelope <- Envelopes]}.
@@ -9473,19 +9481,10 @@ dtx_control_trace_contexts(Controls, S) ->
     [retained_dtx_trace_context(quod_dtx:control_body(Control), S)
      || Control <- Controls].
 
-drive_dtx_at_slot(
-  Slot, Wave, S) ->
-    Envelopes = [Envelope || {_Digest,
-                              #dtx_submission{envelope = Envelope}} <- Wave],
-    ValidationSidecar = dtx_wave_validation_sidecar(Wave),
-    case dtx_slot_route(Slot, S) of
-        local ->
-            propose_dtx_wave(Slot, Envelopes, ValidationSidecar, S);
-        {relay, Peer} ->
-            send_dtx_relay(Peer, Wave, S);
-        blocked ->
-            S
-    end.
+drive_dtx_route(local, Wave, Block, S) ->
+    propose_dtx_wave(Block, dtx_wave_validation_sidecar(Wave), S);
+drive_dtx_route({relay, Peer}, Wave, _Block, S) ->
+    send_dtx_relay(Peer, Wave, S).
 
 dtx_wave_validation_sidecar(Wave) ->
     prioritize_validation_sidecar(
@@ -9514,17 +9513,13 @@ dtx_slot_route(Slot, S = #s{self = Self}) ->
         none -> blocked
     end.
 
-propose_dtx_wave(Slot, Envelopes, ValidationSidecar0, S = #s{approved = Parent}) ->
-    Payload = dtx_wave_payload(Envelopes),
+propose_dtx_wave(Block = #block{slot = Slot, parent = Parent, payload = Payload},
+                  ValidationSidecar0, S = #s{approved = Parent}) ->
     case acceptable_payload(Payload, S) of
         false -> S;
         true ->
             {controls, Classified} = quod_ledger:classify(Payload),
             Controls = [Control || {_Kind, Control} <- Classified],
-            {ok, Block} = quod_ledger:new_block(
-                            Slot, Parent, Payload,
-                            max(quod_time:now_ms(),
-                                parent_timestamp(Parent, S))),
             ValidationSidecar = fit_consensus_validation_sidecar(
                            S#s.ns,
                            fun(Hints) -> {propose, Block, Hints} end,
@@ -9616,16 +9611,9 @@ encoded_change_size(Change) ->
 consensus_barrier(S) ->
     consensus_barrier(S, include_retained_dtx).
 
-consensus_barrier(S, RetainedMode) ->
-    consensus_barrier(S, RetainedMode, strict_lock).
-
-dtx_consensus_barrier(Records, S) when is_list(Records) ->
-    consensus_barrier(S, ignore_retained_dtx, {dtx_records, Records}).
-
 consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
-                     rounds = Rounds, dtx_projection = Dtx,
-                     retained_dtx = Registry}, RetainedMode, LockMode) ->
-    DurableLock = dtx_durable_lock(Dtx, LockMode),
+                     rounds = Rounds,
+                     retained_dtx = Registry}, RetainedMode) ->
     VolatileBlock =
         lists:any(fun({Sl, #block{payload = Payload}}) ->
                           Sl > Committed
@@ -9638,14 +9626,7 @@ consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
           end, maps:to_list(Rounds)),
     RetainedDtx = RetainedMode =:= include_retained_dtx
                   andalso quod_dtx_owner:ready_count(Registry) > 0,
-    DurableLock orelse VolatileBlock orelse PendingDtx orelse RetainedDtx.
-
-dtx_durable_lock(_Projection, strict_lock) -> false;
-dtx_durable_lock(Projection, {dtx_records, Records}) ->
-    lists:any(
-      fun(Record) ->
-              quod_dtx:proposal_readiness(Record, Projection) =/= ready
-      end, Records).
+    VolatileBlock orelse PendingDtx orelse RetainedDtx.
 
 parent_timestamp(Parent, #s{slot = Parent, last_ts = Last}) -> Last;
 parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
@@ -10632,7 +10613,7 @@ refresh_retained_dtx_signatures_nonempty(S0) ->
       end, {S0, none}, Actions).
 
 renew_dtx_submission(
-  #dtx_submission{digest = Digest, control = Control, record = Record,
+  #dtx_submission{digest = Digest, control = Control, material = Material,
                   observation_started_at = ObservationStartedAt,
                   validation_sidecar = ValidationSidecar},
   S) ->
@@ -10641,8 +10622,7 @@ renew_dtx_submission(
     {Old, RegistryWithout} = quod_dtx_owner:take(Digest, S#s.retained_dtx),
     SWithout = S#s{retained_dtx = RegistryWithout},
     case sign_and_retain_dtx(
-           quod_dtx:control_kind(Control), Record, Digest,
-           none, ValidationSidecar, Sequence, SWithout) of
+           Material, none, ValidationSidecar, Sequence, SWithout) of
         {ok, S1 = #s{retained_dtx = Renewed}} ->
             New = maps:get(Digest, quod_dtx_owner:rows(Renewed)),
             {update_dtx_submission(
@@ -11785,8 +11765,11 @@ apply_dtx_verdict({valid, Histories}, Payload, Block, Sl, BH, ParentToken,
     case quod_ledger:classify(Payload) of
         {controls, Classified} ->
             Controls = [Control || {_Kind, Control} <- Classified],
-            Candidates = [{Control, target_identity(S), Sl, BH}
-                          || Control <- Controls],
+            Candidates = [begin
+                              {ok, Material} = quod_dtx:admission_material(
+                                                 quod_dtx:control_body(Control)),
+                              {Control, Material, target_identity(S), Sl, BH}
+                          end || Control <- Controls],
             case quod_dtx:preview_batch(
                    Candidates, Histories, ParentProjection) of
                 {ok, _PreviewHistories, _PreviewProjection, _Items} ->
@@ -13077,6 +13060,9 @@ transactions_require_parent_validation(Transactions) ->
     transactions_touch_committee(Transactions) orelse
         quod_transaction:requires_network_identity(Transactions).
 
+%% A DTX-tagged batch is a barrier even if malformed. The owner need not
+%% decode its signed contents to answer this conservative scheduling query.
+payload_is_consensus_barrier({batch, [{dtx, _} | _]}) -> true;
 payload_is_consensus_barrier(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} -> transactions_touch_committee(Transactions);

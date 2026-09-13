@@ -106,7 +106,7 @@ scenario(Scenario) ->
                                         Domain, Committee, 1)})),
                     %% G2 is legitimately ready when its durable custody is
                     %% accepted. Another leader may see/select G1 alone.
-                    ?assertEqual(ready, quod_dtx:proposal_readiness(
+                    ?assertEqual(ready, readiness(
                                           Begin2, maps:get(dtx, Projection0))),
                     {ok, SYounger} = quod_simplex:test_retain_dtx_record(
                                        Begin2, {dtx_endpoint, self()}, S0),
@@ -135,7 +135,7 @@ scenario(Scenario) ->
                       end),
                     ?assertNot(maps:is_key(dtx_pending, ProjectionAfter)),
                     ?assertEqual(Disposition,
-                                 quod_dtx:proposal_readiness(
+                                 readiness(
                                    Begin2, maps:get(dtx, ProjectionAfter))),
                     ?assertEqual(Admission,
                                  maps:get(Author, maps:get(admissions, ProjectionAfter))),
@@ -426,3 +426,7 @@ stop_receiver(Pid, Monitor) ->
     after 1000 -> exit(Pid, kill),
                   receive {'DOWN', Monitor, process, Pid, _} -> ok end
     end.
+
+readiness(Record, Projection) ->
+    {ok, Material} = quod_dtx:admission_material(Record),
+    quod_dtx:proposal_readiness(Material, Projection).

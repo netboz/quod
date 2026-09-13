@@ -107,7 +107,7 @@ replay. Neither transition changes the global proof generation.
          begin_group_ref/1, begin_recovery_rows/1,
          certified_ref_binding/1, recovery_phase/1, history_phase/2,
          initial_projection/2, valid_projection/1, origin_recoveries/1,
-         proposal_readiness/2,
+         admission_material/1, proposal_readiness/2,
          content_readiness/2,
          initial_group_history/0, preview_batch/3,
          reduce/4, reduce_batch/3,
@@ -115,7 +115,7 @@ replay. Neither transition changes the global proof generation.
 -export_type([plan/0, principal/0, transcript_entry/0,
               manifest/0, attestation/0, certified_ref/0,
               control_record/0, control/0, projection/0,
-              group_history/0, batch_item/0]).
+              group_history/0, batch_item/0, admission_material/0]).
 
 -define(PLAN_DOMAIN, <<"quod.dtx.plan">>).
 -define(PLAN_VERSION, 8).
@@ -175,6 +175,9 @@ replay. Neither transition changes the global proof generation.
          pos_integer(), non_neg_integer(), <<_:512>>}.
 -type projection() :: map().
 -type group_history() :: map().
+%% Process-local output of semantic authentication, bound to its exact record.
+%% Plans keep foreign vocabulary opaque. This tuple is never a wire/store arm.
+-type admission_material() :: {control_record(), <<_:256>>, #{identity() => plan()}}.
 -type batch_item() ::
         #{control := control(), ref := certified_ref(),
           history := group_history(), projection := projection(),
@@ -2038,11 +2041,15 @@ request_evidence_matches_manifest(RequestAuth, Manifest) ->
     end.
 
 valid_begin_material(
-  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
-   Bundles} = Begin) ->
+  {quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin) ->
+    begin_plans(Begin) =/= false.
+
+begin_plans({quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth, Bundles} = Begin) ->
     within_body_limit(Begin) andalso valid_manifest(Manifest) andalso
         case bounded_length(Bundles, ?QUOD_MAX_DTX_PARTICIPANTS) of
-            {ok, Count} when Count >= 2 -> valid_bundles(Manifest, Bundles);
+            {ok, Count} when Count >= 2 ->
+                bundle_plans(Bundles, manifest_participants(Manifest),
+                             Manifest, manifest_digest_unchecked(Manifest), #{});
             _ -> false
         end.
 
@@ -2433,26 +2440,28 @@ valid_bundle_structure(
           BundleRest, ParticipantRest, ManifestDigest);
 valid_bundle_structure(_, _, _) -> false.
 
-valid_record('begin',
+valid_record(Kind, Record) -> record_plans(Kind, Record) =/= false.
+
+record_plans('begin',
              {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
               _Bundles} = Begin) ->
-    valid_begin_material(Begin) andalso
-        request_evidence_matches_manifest(RequestAuth, Manifest);
-valid_record(prepare,
+    case begin_plans(Begin) of
+        {ok, Plans} -> request_evidence_matches_manifest(RequestAuth, Manifest)
+                          andalso {ok, Plans};
+        false -> false
+    end;
+record_plans(prepare,
              {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, BeginRef,
               Manifest, <<_:256>> = PlanDigest, PlanBlob} = Record)
   when is_binary(PlanBlob),
        byte_size(PlanBlob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
-    valid_prepare_record(
-      any, Record, GroupId, BeginRef, Manifest, PlanDigest, PlanBlob);
-valid_record(decision,
-             Record) ->
-    valid_record_structure(decision, Record);
-valid_record(finalize, Record) ->
-    valid_record_structure(finalize, Record);
-valid_record(complete, Record) ->
-    valid_record_structure(complete, Record);
-valid_record(_, _) -> false.
+    case prepare_record_plan(any, Record, GroupId, BeginRef, Manifest, PlanDigest, PlanBlob) of
+        {ok, Plan} -> {ok, #{target(Plan) => Plan}};
+        false -> false
+    end;
+record_plans(Kind, Record) when Kind =:= decision; Kind =:= finalize; Kind =:= complete ->
+    valid_record_structure(Kind, Record) andalso {ok, #{}};
+record_plans(_, _) -> false.
 
 valid_prepare_record(ExpectedTarget, Record, GroupId, BeginRef, Manifest,
                      PlanDigest, PlanBlob) ->
@@ -2598,40 +2607,25 @@ canonical_finalize_rows(Rows) ->
         _ -> error
     end.
 
-valid_bundles(Manifest, Bundles) ->
-    Participants = manifest_participants(Manifest),
-    case bounded_length(Bundles, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, _Length} ->
-            ManifestDigest = manifest_digest_unchecked(Manifest),
-            valid_bundles(Bundles, Participants, Manifest, ManifestDigest);
-        _ ->
-            false
-    end.
-
-valid_bundles([], [], _Manifest, _ManifestDigest) -> true;
-valid_bundles(
+bundle_plans([], [], _Manifest, _ManifestDigest, Plans) -> {ok, Plans};
+bundle_plans(
   [{Target, <<_:256>> = PlanDigest, PlanBlob, Attestation} | BundleRest],
-  [{Target, PlanDigest} | ParticipantRest], Manifest, ManifestDigest)
+  [{Target, PlanDigest} | ParticipantRest], Manifest, ManifestDigest, Plans)
   when is_binary(PlanBlob),
        byte_size(PlanBlob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES ->
     valid_attestation_shape(
       Attestation, Target, PlanDigest, ManifestDigest)
-        andalso valid_bundle_plan(
-                  Target, PlanBlob, Manifest, ManifestDigest,
-                  Attestation)
-        andalso valid_bundles(
-                  BundleRest, ParticipantRest, Manifest, ManifestDigest);
-valid_bundles(_, _, _, _) -> false.
-
-valid_bundle_plan(Target, PlanBlob, Manifest, ManifestDigest, Attestation) ->
-    case decode(PlanBlob) of
+        andalso case decode(PlanBlob) of
         {ok, Plan} ->
             valid_signed_plan(Plan) andalso
                 verify_plan_attestation_preverified(
-                  Target, Plan, Manifest, ManifestDigest, Attestation);
+                  Target, Plan, Manifest, ManifestDigest, Attestation) andalso
+                bundle_plans(BundleRest, ParticipantRest, Manifest,
+                             ManifestDigest, Plans#{Target => Plan});
         {error, _} ->
             false
-    end.
+    end;
+bundle_plans(_, _, _, _, _) -> false.
 
 valid_attestation_shape(
   {Tag, ?ATTESTATION_VERSION, Target, PlanDigest,
@@ -2765,27 +2759,40 @@ initial_projection(Target, Generation)
     #{target => Target, groups => #{}, conflicts => #{},
       apply_fences => #{}, generation => Generation}.
 
--doc "Return every active origin Begin reference in canonical GroupId order.".
+-doc "Read every active origin Begin from an installed projection in canonical GroupId order.".
 -spec origin_recoveries(projection()) ->
           [{<<_:256>>, certified_ref()}].
 origin_recoveries(Projection) ->
-    case valid_projection(Projection) of
-        true ->
+    case Projection of
+        #{groups := Groups} ->
             [{GroupId, BeginRef}
              || {GroupId, #{origin := #{begin_ref := BeginRef}}} <-
-                    lists:sort(maps:to_list(maps:get(groups, Projection)))];
-        false ->
-            []
+                    lists:sort(maps:to_list(Groups))];
+        _ -> []
     end.
 
--doc "Classify one already-validated retained control against the current projection.".
--spec proposal_readiness(control_record(), projection()) ->
-          ready | {blocked, active_group | apply} | {refused, conflict} | stale.
-proposal_readiness(Record, Projection) ->
-    case valid_projection(Projection) of
-        true -> proposal_readiness_valid(Record, Projection);
-        false -> stale
+-doc """
+Authenticate a bounded semantic record and retain its digest and opaque plans.
+This is process-local admission material, not a wire format or a certificate.
+Outer authorship, current author floors, referenced finality and current-parent
+validation remain the caller's boundaries. Never construct this tuple from
+peer-supplied metadata; journal restoration re-enters this function.
+""".
+-spec admission_material(control_record()) -> {ok, admission_material()} | {error, invalid_record}.
+admission_material(Record) ->
+    Kind = record_kind(Record),
+    case bounded_record_shape(Kind, Record) andalso within_body_limit(Record)
+             andalso record_plans(Kind, Record) of
+        {ok, Plans} -> {ok, {Record, record_digest_unchecked(Kind, Record), Plans}};
+        false -> {error, invalid_record}
     end.
+
+-doc "Classify authenticated material against the owner's current, installed projection.".
+-spec proposal_readiness(admission_material(), projection()) ->
+          ready | {blocked, active_group | apply} | {refused, conflict} | stale.
+proposal_readiness(Material, #{target := _, groups := _, conflicts := _, apply_fences := _} = Projection) ->
+    proposal_readiness_valid(Material, Projection);
+proposal_readiness(_Material, _Projection) -> stale.
 
 -doc "Classify ordinary content against exact active DTX participant intents.".
 -spec content_readiness(#transaction{}, projection()) ->
@@ -2812,12 +2819,12 @@ content_readiness(#transaction{diff = Diff, read_check = ReadCheck,
 content_readiness(_, _) -> stale.
 
 proposal_readiness_valid(
-  {quod_dtx_finalize, ?RECORD_VERSION, _GroupId, _, abort, none, _},
+  {{quod_dtx_finalize, ?RECORD_VERSION, _GroupId, _, abort, none, _}, _, _},
   _Projection) ->
     ready;
-proposal_readiness_valid(Record, Projection) ->
+proposal_readiness_valid({Record, Digest, _Plans} = Material, Projection) ->
     Kind = record_kind(Record),
-    GroupId = group_id(Record),
+    GroupId = case Kind of 'begin' -> Digest; _ -> group_id(Record) end,
     Groups = maps:get(groups, Projection),
     Fences = maps:get(apply_fences, Projection),
     Group = maps:get(GroupId, Groups, none),
@@ -2827,11 +2834,11 @@ proposal_readiness_valid(Record, Projection) ->
             _ -> false
         end,
     case {Kind, Group, Blocking} of
-        {'begin', none, _} -> readiness_for_new_participant(Record, Projection);
+        {'begin', none, _} -> readiness_for_new_participant(GroupId, Material, Projection);
         {'begin', _, _} -> stale;
-        {prepare, none, _} -> readiness_for_new_participant(Record, Projection);
+        {prepare, none, _} -> readiness_for_new_participant(GroupId, Material, Projection);
         {prepare, #{participant := none}, _} ->
-            readiness_for_new_participant(Record, Projection);
+            readiness_for_new_participant(GroupId, Material, Projection);
         {prepare, _, _} -> stale;
         {decision, #{origin := #{phase := begun}}, _} -> ready;
         {finalize, #{participant := #{phase := prepared}, origin := Origin}, _} ->
@@ -2847,36 +2854,20 @@ proposal_readiness_valid(Record, Projection) ->
         _ -> stale
     end.
 
-readiness_for_new_participant(Record, Projection) ->
-    case record_conflict_descriptor(Record, maps:get(target, Projection)) of
-        none -> ready;
-        {ok, Descriptor} ->
-            GroupId = group_id(Record),
+readiness_for_new_participant(GroupId, {Record, _Digest, Plans}, Projection) ->
+    Participant = case record_kind(Record) of
+                      'begin' -> maps:find(maps:get(target, Projection), Plans);
+                      prepare -> [Prepared] = maps:values(Plans), {ok, Prepared}
+                  end,
+    case Participant of
+        error -> ready;
+        {ok, Plan} ->
             case conflict_disposition(
-                   GroupId, Descriptor, maps:get(conflicts, Projection)) of
+                   GroupId, conflict_descriptor(Plan), maps:get(conflicts, Projection)) of
                 none -> ready;
                 wait -> {blocked, active_group};
                 refuse -> {refused, conflict}
-            end;
-        error -> stale
-    end.
-
-record_conflict_descriptor(
-  {quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin, Target) ->
-    case begin_participant_payload(Begin, Target) of
-        not_found -> none;
-        {ok, _Manifest, _Digest, Blob} -> plan_blob_descriptor(Blob);
-        error -> error
-    end;
-record_conflict_descriptor(
-  {quod_dtx_prepare, ?RECORD_VERSION, _, _, _, _, Blob}, _Target) ->
-    plan_blob_descriptor(Blob);
-record_conflict_descriptor(_, _) -> none.
-
-plan_blob_descriptor(Blob) ->
-    case decode(Blob) of
-        {ok, Plan} -> {ok, conflict_descriptor(Plan)};
-        _ -> error
+            end
     end.
 
 %% Wait-die uses the already consensus-bound GroupId as the one global order.
@@ -2943,8 +2934,20 @@ I/O and exposes no prepared diff.
 -spec reduce(control(), certified_ref(), group_history(), projection()) ->
           {ok, group_history(), projection(), list()} | {error, term()}.
 reduce(Control, Ref, History, Projection) ->
-    case reduction_inputs(Control, Ref, History, Projection) of
-        {ok, Kind, Record, GroupId, Digest, Records} ->
+    case valid_control_shallow(Control) andalso valid_group_history(History)
+         andalso valid_projection(Projection)
+         andalso admission_material(control_body(Control)) of
+        {ok, Material} -> reduce_material(Control, Material, Ref, History, Projection);
+        _ -> {error, {invalid_transition, malformed_state}}
+    end.
+
+%% The same transition engine serves certified replay and proposal preview.
+%% Replay validates its loaded state above; preview consumes the installed
+%% parent and the material authenticated on admission. Neither transition
+%% re-decodes the participant plans that its boundary has already checked.
+reduce_material(Control, Material, Ref, History, Projection) ->
+    case reduction_inputs(Control, Material, Ref, History, Projection) of
+        {ok, Kind, GroupId, Digest, Records} ->
             case maps:find(Kind, Records) of
                 {ok, #{digest := Digest}} ->
                     {ok, History, Projection, []};
@@ -2952,7 +2955,7 @@ reduce(Control, Ref, History, Projection) ->
                     {error, {invalid_transition, semantic_conflict}};
                 error ->
                     reduce_new(
-                      Kind, Record, GroupId, Digest, Ref,
+                      Kind, Material, GroupId, Digest, Ref,
                       History, Records, Projection)
             end;
         {error, _} = Error ->
@@ -2967,22 +2970,22 @@ reduce(Control, Ref, History, Projection) ->
 reduce_batch(Controls, Histories, Projection)
   when is_list(Controls), is_map(Histories) ->
     case canonical_batch(Controls) of
-        true -> reduce_batch_fold(Controls, Histories, Projection, []);
+        true -> reduce_batch_fold(Controls, Histories, Projection, [], fun reduce/4);
         false -> {error, {invalid_transition, malformed_batch}}
     end;
 reduce_batch(_, _, _) -> {error, {invalid_transition, malformed_batch}}.
 
-reduce_batch_fold([], Histories, Projection, Items) ->
+reduce_batch_fold([], Histories, Projection, Items, _Reduce) ->
     {ok, Histories, Projection, lists:reverse(Items)};
-reduce_batch_fold([{Control, Ref} | Rest], Histories0, Projection0, Items0) ->
+reduce_batch_fold([{Control, Ref} | Rest], Histories0, Projection0, Items0, Reduce) ->
     GroupId = group_id(Control),
     History0 = maps:get(GroupId, Histories0, initial_group_history()),
-    case reduce(Control, Ref, History0, Projection0) of
+    case Reduce(Control, Ref, History0, Projection0) of
         {ok, History1, Projection1, Effects} ->
             reduce_batch_fold(
               Rest, Histories0#{GroupId => History1}, Projection1,
               [#{control => Control, ref => Ref, history => History1,
-                 projection => Projection1, effects => Effects} | Items0]);
+                 projection => Projection1, effects => Effects} | Items0], Reduce);
         {error, _} = Error -> Error
     end.
 
@@ -3016,15 +3019,22 @@ unique_lane_sequences([{Lane, Sequence, _, _} | Rest], Previous) ->
     LaneSequence =/= Previous andalso
         unique_lane_sequences(Rest, LaneSequence).
 
--doc "Build prospective references then use the exact batch reducer.".
--spec preview_batch([{control(), identity(), pos_integer(), <<_:256>>}],
+-doc """
+Build prospective references and reduce authenticated material against an
+installed parent. Every material must come from `admission_material/1` for its
+exact control body; the caller already verified the outer control and owns the
+checked parent projection. Loaded histories instead enter `reduce/4`.
+""".
+-spec preview_batch([{control(), admission_material(), identity(), pos_integer(), <<_:256>>}],
                     #{<<_:256>> => group_history()}, projection()) ->
           {ok, #{<<_:256>> => group_history()}, projection(), [batch_item()]} |
           {error, term()}.
 preview_batch(Candidates, Histories, Projection) when is_list(Candidates) ->
     try
-        CandidateControls = [Control || {Control, _, _, _} <- Candidates],
-        case prospective_readiness(CandidateControls, Projection) of
+        Materials = maps:from_list([{record_digest(Control), Material}
+                                   || {Control, Material, _, _, _} <- Candidates]),
+        case prospective_readiness([Material || {_, Material, _, _, _} <- Candidates],
+                                   Projection) of
             ready ->
                 Controls =
                     [{Control,
@@ -3036,8 +3046,15 @@ preview_batch(Candidates, Histories, Projection) when is_list(Candidates) ->
                                         ?PREVIEW_PROOF),
                           Ref
                       end}
-                     || {Control, Target, Slot, BlockHash} <- Candidates],
-                reduce_batch(Controls, Histories, Projection);
+                     || {Control, _Material, Target, Slot, BlockHash} <- Candidates],
+                Reduce = fun(Control, Ref, History, Parent) ->
+                    reduce_material(Control, maps:get(record_digest(Control), Materials),
+                                    Ref, History, Parent)
+                end,
+                case canonical_batch(Controls) of
+                    true -> reduce_batch_fold(Controls, Histories, Projection, [], Reduce);
+                    false -> {error, {invalid_transition, malformed_batch}}
+                end;
             {error, _} = Error ->
                 Error
         end
@@ -3051,22 +3068,19 @@ preview_batch(_, _, _) -> {error, {invalid_transition, malformed_batch}}.
 %% directly, so a terminal Complete can deterministically consume the exact
 %% source fence that its certificate proves was cleared before voting.
 prospective_readiness([], _Projection) -> ready;
-prospective_readiness([Control | Rest], Projection) ->
-    case proposal_readiness(control_body(Control), Projection) of
+prospective_readiness([Material | Rest], Projection) ->
+    case proposal_readiness(Material, Projection) of
         ready -> prospective_readiness(Rest, Projection);
         {blocked, Reason} -> {error, {invalid_transition, Reason}};
         {refused, Reason} -> {error, {invalid_transition, Reason}};
         stale -> {error, {invalid_transition, stale}}
     end.
 
-reduction_inputs(Control, Ref, History, Projection) ->
-    case {valid_control_shallow(Control), validate_certified_ref(Ref),
-          valid_group_history(History), valid_projection(Projection)} of
-        {true, true, true, true} ->
+reduction_inputs(Control, {Record, Digest, _Plans}, Ref, History, Projection) ->
+    case validate_certified_ref(Ref) andalso control_body(Control) =:= Record of
+        true ->
             Target = control_target(Control),
-            Record = control_body(Control),
             Kind = control_kind(Control),
-            Digest = record_digest(Control),
             GroupId =
                 case Kind of
                     'begin' -> Digest;
@@ -3077,7 +3091,7 @@ reduction_inputs(Control, Ref, History, Projection) ->
                   ref_record_digest(Ref) =:= Digest,
                   history_accepts_group(History, GroupId)} of
                 {true, true, true, true} ->
-                    {ok, Kind, Record, GroupId, Digest,
+                    {ok, Kind, GroupId, Digest,
                      maps:get(records, History)};
                 _ ->
                     {error, {invalid_transition, bad_binding}}
@@ -3086,35 +3100,39 @@ reduction_inputs(Control, Ref, History, Projection) ->
             {error, {invalid_transition, malformed_state}}
     end.
 
-reduce_new('begin', Record, GroupId, Digest, Ref,
+reduce_new('begin', Material, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case map_size(Records) =:= 0 andalso
          not maps:is_key(GroupId, maps:get(groups, Projection)) of
         true ->
             begin_transition(
-              Record, GroupId, Digest, Ref, History, Projection);
+              Material, GroupId, Digest, Ref, History, Projection);
         false ->
             {error, {invalid_transition, active_group}}
     end;
-reduce_new(prepare, Record, GroupId, Digest, Ref,
+reduce_new(prepare, {Record, _, Plans}, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case prepare_transition_allowed(Record, GroupId, Records, Projection) of
         {ok, Active0} ->
             {quod_dtx_prepare, ?RECORD_VERSION, _, BeginRef,
              Manifest, PlanDigest, PlanBlob} = Record,
-            case install_prepared(
-                   prepare, GroupId, BeginRef, Ref, Manifest, PlanDigest,
-                   PlanBlob, Active0, Projection) of
-                {ok, Projection1, Effect} ->
-                    finish_reduction(
-                      prepare, Record, GroupId, Digest, Ref, History,
-                      Projection1, [Effect]);
-                {error, _} = Error -> Error
+            case maps:find(maps:get(target, Projection), Plans) of
+                {ok, Plan} ->
+                    case install_prepared(
+                           prepare, GroupId, BeginRef, Ref, Manifest, PlanDigest,
+                           PlanBlob, Plan, Active0, Projection) of
+                        {ok, Projection1, Effect} ->
+                            finish_reduction(
+                              prepare, Record, GroupId, Digest, Ref, History,
+                              Projection1, [Effect]);
+                        {error, _} = Error -> Error
+                    end;
+                error -> {error, {invalid_transition, bad_binding}}
             end;
         {error, _} = Error ->
             Error
     end;
-reduce_new(decision, Record, GroupId, Digest, Ref,
+reduce_new(decision, {Record, _, _}, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case maps:is_key('begin', Records) andalso
          decision_transition(Record, GroupId, Ref, Projection) of
@@ -3132,7 +3150,7 @@ reduce_new(decision, Record, GroupId, Digest, Ref,
         {error, _} = Error -> Error;
         false -> {error, {invalid_transition, origin_phase}}
     end;
-reduce_new(finalize, Record, GroupId, Digest, Ref,
+reduce_new(finalize, {Record, _, _}, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case finalize_transition(Record, GroupId, Ref, Records, Projection) of
         {ok, Projection1, Effects} ->
@@ -3142,7 +3160,7 @@ reduce_new(finalize, Record, GroupId, Digest, Ref,
         {error, _} = Error ->
             Error
     end;
-reduce_new(complete, Record, GroupId, Digest, Ref,
+reduce_new(complete, {Record, _, _}, GroupId, Digest, Ref,
            History, Records, Projection) ->
     case maps:is_key('begin', Records) andalso
          maps:is_key(decision, Records) andalso
@@ -3157,43 +3175,40 @@ reduce_new(complete, Record, GroupId, Digest, Ref,
         false -> {error, {invalid_transition, origin_phase}}
     end.
 
-begin_transition(Record, GroupId, Digest, Ref, History, Projection) ->
-    {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth, _} = Record,
+begin_transition({Record, _, Plans}, GroupId, Digest, Ref, History, Projection) ->
+    {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth, Bundles} = Record,
     Origin =
         #{phase => begun, begin_ref => Ref,
           manifest_digest => manifest_digest_unchecked(Manifest),
           targets => participant_identities(Manifest)},
     Group0 = #{origin => Origin, participant => none},
     Projection0 = put_group(GroupId, Group0, Projection),
-    case begin_participant_payload(Record, maps:get(target, Projection)) of
-        not_found ->
+    Target = maps:get(target, Projection),
+    case lists:keyfind(Target, 1, Bundles) of
+        false ->
             finish_reduction(
               'begin', Record, GroupId, Digest, Ref, History, Projection0,
               [{origin_started, GroupId, Ref}]);
-        {ok, Manifest, PlanDigest, PlanBlob} ->
+        {Target, PlanDigest, PlanBlob, _Attestation} ->
             case install_prepared(
                    'begin', GroupId, Ref, Ref, Manifest, PlanDigest,
-                   PlanBlob, Group0, Projection0) of
+                   PlanBlob, maps:get(Target, Plans), Group0, Projection0) of
                 {ok, Projection1, PreparedEffect} ->
                     finish_reduction(
                       'begin', Record, GroupId, Digest, Ref, History,
                       Projection1,
                       [{origin_started, GroupId, Ref}, PreparedEffect]);
                 {error, _} = Error -> Error
-            end;
-        error ->
-            {error, {invalid_transition, malformed_state}}
+            end
     end.
 
 install_prepared(PrepareKind, GroupId, BeginRef, PrepareRef,
-                 Manifest, PlanDigest, PlanBlob, Group0, Projection) ->
-    case decode(PlanBlob) of
-        {ok, Plan} ->
-            Descriptor = conflict_descriptor(Plan),
-            OtherConflicts = maps:remove(
-                               GroupId, maps:get(conflicts, Projection)),
-            case conflict_disposition(GroupId, Descriptor, OtherConflicts) of
-                none ->
+                 Manifest, PlanDigest, PlanBlob, Plan, Group0, Projection) ->
+    Descriptor = conflict_descriptor(Plan),
+    OtherConflicts = maps:remove(
+                       GroupId, maps:get(conflicts, Projection)),
+    case conflict_disposition(GroupId, Descriptor, OtherConflicts) of
+        none ->
             PreparedGeneration = overlay_generation(Plan),
             Participant =
                 #{phase => prepared, prepare_kind => PrepareKind,
@@ -3208,10 +3223,8 @@ install_prepared(PrepareKind, GroupId, BeginRef, PrepareRef,
              Projection1#{conflicts := Conflicts#{GroupId => Descriptor}},
              {prepared, GroupId, PrepareRef, Manifest, PlanDigest, PlanBlob,
               PreparedGeneration}};
-                wait -> {error, {invalid_transition, active_group}};
-                refuse -> {error, {invalid_transition, conflict_refused}}
-            end;
-        _ -> {error, {invalid_transition, malformed_state}}
+        wait -> {error, {invalid_transition, active_group}};
+        refuse -> {error, {invalid_transition, conflict_refused}}
     end.
 
 put_group(GroupId, #{origin := none, participant := none}, Projection) ->
@@ -3438,8 +3451,8 @@ apply_projection_transition(Verdict, GroupId, ApplyRef, GroupGeneration,
             case Global < ?MAX_UINT64 of
                 false -> {error, {invalid_transition, generation_exhausted}};
                 true ->
-                    %% reduction_inputs validated this participant descriptor
-                    %% against the signed plan; no second plan decode here.
+                    %% The checked parent already binds this descriptor to
+                    %% the signed plan; no second plan decode here.
                     Fences0 = maps:get(apply_fences, Projection0),
                     %% Explicit events are ordered durable occurrences but do
                     %% not mutate the fact projection. Assert/retract clauses

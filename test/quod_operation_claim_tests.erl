@@ -25,8 +25,8 @@ canonical_prediction_one_two_four_test() ->
             ?assertEqual(R, ref(Target, App#transaction.tx_id)),
             ?assert(quod_transaction:valid_id(Target, App)),
             ?assertEqual(shared, quod_transaction:remote_claim_route(Claim, Target)),
-            {ok, Plan} = quod_transaction:remote_claim_plan(Claim, Target),
-            {ok, Material} = quod_dtx:material(Plan),
+            {App, _Plan, _Context, Material} =
+                quod_transaction:remote_application_material(ClaimRef, Claim, Target),
             ?assertEqual(maps:get(diff, Material), App#transaction.diff)
         end, Refs)
     end, [1, 2, 4]).
@@ -95,7 +95,6 @@ wrong_anchored_selector_refused_before_materialization_test() ->
     F = fixture(2, false), Claim = claim(F, maps:get(bundles, F)),
     [Target | _] = maps:get(participant_targets, F),
     Wrong = setelement(2, Target, <<999:256>>),
-    ?assertEqual(error, quod_transaction:remote_claim_plan(Claim, Wrong)),
     ?assertError({badmatch, error}, quod_transaction:remote_application(
         ref(maps:get(origin, F), Claim#transaction.tx_id), Claim, Wrong)),
     ?assertEqual(error, quod_transaction:remote_claim_route(Claim, Wrong)).

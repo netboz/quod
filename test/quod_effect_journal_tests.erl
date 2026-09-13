@@ -473,6 +473,32 @@ bound_owner_death_retires_live_unactivated_row_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+missing_operation_effect_custody_is_silent_but_conflicts_warn_test() ->
+    with_operation_journal(fun(_Dir, _Journal, Fixture, Binding) ->
+        #{claim_ref := ClaimRef, target_ref := TargetRef,
+          target := {Ns, _} = Target, claim := Claim} = Binding,
+        {transaction, SourceNs, SourceAnchor, ClaimId} = ClaimRef,
+        {ok, Ref} = quod_dtx:certified_ref(SourceNs, SourceAnchor, 2,
+                     hash(8350), ClaimId, <<"fixture-qc">>),
+        App = quod_transaction:attach_evidence(
+                quod_transaction:remote_application(ClaimRef, Claim, Target), Ref, Claim),
+        %% No private custody on this host is ordinary routing unavailability.
+        %% This exercises the journal result, not an added signer pre-check.
+        ?assertEqual(0, binding_warnings(Ns, TargetRef, ClaimRef, App)),
+        Token = stage_operation_reservation(Fixture, Binding, #{}),
+        {ok, _} = quod_effect_journal:bind_operation(Token, Target, operation_blob(Fixture)),
+        ?assertEqual(1, binding_warnings(Ns, TargetRef, ClaimRef,
+                         App#transaction{plan_digest = hash(8351)}))
+    end).
+
+binding_warnings(Ns, TargetRef, ClaimRef, App) ->
+    {{{error, not_ready}, Owner}, {call_time, Rows}} = tprof:profile(fun() ->
+        {quod_simplex:test_bind_claimed_effect(Ns, TargetRef, ClaimRef, App,
+                                             quod_time:mono_ms() + 3000), self()}
+    end, #{type => call_time, report => return, set_on_spawn => false,
+           pattern => {logger, warning, 2}}),
+    lists:sum([N || {logger, warning, 2, Ps} <- Rows, {Pid, N, _} <- Ps, Pid =:= Owner]).
+
 vector_effect_custody_binds_only_its_target_and_cancel_survives_restart_test() ->
     with_operation_journal(#{additional_writer => true},
       fun(Dir, Journal, Fixture, Binding) ->

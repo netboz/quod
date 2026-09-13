@@ -63,11 +63,13 @@ order_key(#dtx_submission{control = Control, digest = Digest}) ->
     {quod_dtx:control_order_key(Control), Digest}.
 
 -spec put_new(#dtx_submission{}, state()) -> state().
-put_new(Row = #dtx_submission{digest = Digest, bytes = Bytes,
+put_new(Row = #dtx_submission{digest = Digest, bytes = Bytes, control = Control,
+                              material = {Record, Digest, _Plans},
                               waiters = Waiters, placement = Placement},
         Registry = #retained_dtx{rows = Rows, waiter_index = WaiterIndex,
                                   bytes = Total}) ->
     false = maps:is_key(Digest, Rows),
+    Record = quod_dtx:control_body(Control),
     true = is_integer(Bytes) andalso Bytes >= 0,
     true = maps:fold(
              fun(Pid, true, Unique) ->
@@ -194,18 +196,15 @@ binding(Ns, _Anchor, _Self, _Admissions, _Participant, _Projection) ->
 %% The certified projection and the retained pre-commit body are successive
 %% sources of one obligation, never two independently maintained inventories.
 -spec desired(binding_result(), undefined | quod_dtx:projection(), state()) -> map().
-desired({ok, Binding}, Projection, Registry) ->
+desired({ok, {Ns, Anchor, Author, Admission} = Binding}, Projection, Registry) ->
     Committed = maps:from_list(
       [{Group, {reference, Group, Ref}}
        || {Group, Ref} <- quod_dtx:origin_recoveries(Projection)]),
     Pending = maps:from_list(
-      [{Group, {record, Group, Begin, Ref}}
-       || #dtx_submission{record = {quod_dtx_begin, 3, _, _, _} = Begin,
+      [{Group, {record, Group, Begin, {group, Ns, Anchor, Author, Admission, Group}}}
+       || #dtx_submission{material = {{quod_dtx_begin, 3, Manifest, _, _} = Begin, Group, _},
                            group_id = Group} <- maps:values(rows(Registry)),
-          {ok, Ref = {group, Ns, Anchor, Author, Admission, BoundGroup}} <-
-              [quod_dtx:begin_group_ref(Begin)],
-          BoundGroup =:= Group,
-          {Ns, Anchor, Author, Admission} =:= Binding]),
+          quod_dtx:manifest_coordinator(Manifest) =:= Binding]),
     maps:merge(Committed, Pending);
 desired({error, _}, _Projection, _Registry) -> #{}.
 
@@ -213,26 +212,25 @@ desired({error, _}, _Projection, _Registry) -> #{}.
 %% active group has retired. Return only the exact requested semantic digest;
 %% another record for the same phase is not an acceptance of this request.
 %% A reference is evidence to verify, not permission to re-run its old plan.
--spec admission(quod_dtx:control_record(), quod_dtx:group_history(),
+-spec admission(quod_dtx:admission_material(), quod_dtx:group_history(),
                 undefined | quod_dtx:projection()) ->
           {included, quod_dtx:certified_ref()} | disposition().
-admission(Record, History, #{target := Target} = Projection) ->
+admission({Record, Digest, _Plans} = Material, History, #{target := Target} = Projection) ->
     case quod_dtx:history_phase(quod_dtx:record_kind(Record), History) of
         {ok, Ref} ->
-            Digest = quod_dtx:record_digest(Record),
             case quod_dtx:certified_ref_binding(Ref) of
                 {ok, Target, _Slot, Digest} -> {included, Ref};
                 {ok, Target, _Slot, _OtherDigest} -> stale;
                 _ -> error(phase_index_corrupt)
             end;
-        not_found -> placement(Record, Projection)
+        not_found -> placement(Material, Projection)
     end;
 admission(_Record, _History, _Projection) -> stale.
 
 %% Admission, retained reclassification and the same-turn installation
 %% assertion all use this one active-projection rule. Installation does not
 %% repeat the history lookup already performed at admission.
--spec placement(quod_dtx:control_record(), undefined | quod_dtx:projection()) ->
+-spec placement(quod_dtx:admission_material(), undefined | quod_dtx:projection()) ->
           disposition().
 placement(Record, Projection) when is_map(Projection) ->
     quod_dtx:proposal_readiness(Record, Projection);
@@ -246,8 +244,8 @@ classify(Projection, Registry = #retained_dtx{fingerprint = Projection}) ->
     {Registry, []};
 classify(Projection, Registry = #retained_dtx{rows = Rows}) ->
     {Next, Retired} = maps:fold(
-      fun(Digest, Row = #dtx_submission{record = Record, placement = Old}, {Acc, Out}) ->
-          case placement(Record, Projection) of
+      fun(Digest, Row = #dtx_submission{material = Material, placement = Old}, {Acc, Out}) ->
+          case placement(Material, Projection) of
               Reason when Reason =:= stale; Reason =:= {refused, conflict} ->
                   {Row, Rest} = take(Digest, Acc),
                   {Rest, [{Row, Reason} | Out]};

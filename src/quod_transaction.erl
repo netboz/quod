@@ -20,7 +20,7 @@ accepted.
 -export([from_plan/5, remote_claim/5, remote_application/3,
          remote_application_material/3,
          remote_complete/4, attach_evidence/3, attach_receipt_evidence/2,
-         remote_claim_references/1, remote_claim_plan/2, validate_independent_claim/1,
+         remote_claim_references/1, validate_independent_claim/1,
          encode_foreign_reads/1, decode_foreign_reads/1,
          encode_evidence/2, decode_evidence/1, same_ledger_transaction/2,
          stable_ref/1,
@@ -579,23 +579,14 @@ request_claim(#transaction{}) ->
 -spec remote_claim_route(#transaction{}, {binary(), <<_:256>>}) ->
           shared | {private, <<_:256>>} | error.
 remote_claim_route(Claim = #transaction{}, Target) ->
-    case remote_claim_plan(Claim, Target) of
-        {ok, Plan} ->
+    case claim_plan(Claim, Target) of
+        {ok, {Plan, _Context}} ->
             case {quod_dtx:signer(Plan), quod_dtx:effects_count(Plan)} of
                 {_Signer, 0} -> shared;
                 {<<_:256>> = Signer, 1} ->
                     {private, Signer};
                 _ -> error
             end;
-        error -> error
-    end.
-
--doc "Select an authenticated, exact anchored writer bundle without materializing it.".
--spec remote_claim_plan(#transaction{}, {binary(), <<_:256>>}) ->
-          {ok, quod_dtx:plan()} | error.
-remote_claim_plan(Claim, Target) ->
-    case claim_plan(Claim, Target) of
-        {ok, {Plan, _Context}} -> {ok, Plan};
         error -> error
     end.
 
@@ -1508,8 +1499,8 @@ operation_submission_metadata(
                    tx_id = <<_:256>> = ClaimTxId,
                    origin = Origin,
                    role = {remote_claim, Manifest, _Bundles, _Predicted}}} ->
-            case {quod_dtx:manifest_coordinator(Manifest), remote_claim_plan(Claim, Target)} of
-                {{OriginNs, OriginAnchor, Author, Admission}, {ok, Plan}} ->
+            case {quod_dtx:manifest_coordinator(Manifest), claim_plan(Claim, Target)} of
+                {{OriginNs, OriginAnchor, Author, Admission}, {ok, {Plan, _Context}}} ->
                     operation_submission_plan(
                       Submission, Author, Signature, Admission, Claim,
                       {transaction, OriginNs, OriginAnchor, ClaimTxId}, Target,

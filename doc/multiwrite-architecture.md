@@ -1099,3 +1099,18 @@ and bind returned evidence to the exact operation before history/AM3 work.
 Request-scoped contact matching runs in the existing foreign verifier, by exact
 candidate claim bytes, not by decoding every active request in Simplex. Contacts
 remain untrusted hints until the candidate's references verify.
+
+Atomic retained rows carry the exact authenticated record, digest and opaque
+plans alongside the original signed envelope. Admission and journal restoration
+create that material; owner queries use it against the current installed
+projection without reauthenticating history. Classification still precedes
+signature renewal and publication still follows application. Slot/barrier
+and relay-readiness eligibility precede candidate construction. Selection advances one
+temporary projection through the shared reducer, never replays each selected
+prefix, and never installs its preview in the owner. The selected block is reused
+for local proposal. The canonical codec still sizes each growing candidate to
+enforce block/frame limits; no estimated-size encoder, extra cache, process,
+timer or durable format is introduced. Existing parent/author/finality checks
+remain validation boundaries. Performance acceptance requires a fresh witness,
+including target-owner admission-to-proposal residence; local call counts alone
+do not establish fleet latency.

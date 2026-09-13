@@ -2462,7 +2462,7 @@ dtx_retained_selection_skips_an_older_ineligible_group_test() ->
                  DecisionControl, [], 20, WithOlder),
     ?assert(quod_simplex:test_consensus_barrier(WithBoth)),
     ?assertNot(
-       quod_simplex:test_dtx_consensus_barrier([Decision], WithBoth)),
+       quod_simplex:test_dtx_consensus_barrier(WithBoth)),
     ?assertEqual(
        [{quod_dtx:record_digest(Decision), Decision}],
        quod_simplex:test_eligible_dtx_wave(WithBoth)),

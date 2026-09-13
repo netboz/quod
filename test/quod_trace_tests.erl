@@ -144,6 +144,22 @@ take_span(Name, TraceId) ->
     after 2000 -> error({missing_span, Name, TraceId})
     end.
 
+result_classification_preserves_success_failure_and_redaction_test() ->
+    with_tracer(fun() ->
+        lists:foreach(fun({Result, Status, Expected}) ->
+            {_Ctx, Handle} = quod_trace:start_span(otel_ctx:new(), <<"classification.test">>, internal, #{}),
+            ok = quod_trace:finish_span(Handle, Result),
+            Span = take_span(<<"classification.test">>, otel_span:trace_id(Handle)),
+            ?assertEqual(opentelemetry:status(Status), Span#span.status),
+            ?assertEqual(#{'quod.outcome' => Expected}, otel_attributes:map(Span#span.attributes))
+        end, [{ok, ok, <<"ok">>}, {{ok, private}, ok, <<"ok">>},
+              {{ok, private, private}, ok, <<"ok">>}, {unknown, ok, <<"ok">>},
+              {fail, error, <<"fail">>}, {{fail, private}, error, <<"fail">>},
+              {{error, retry}, error, <<"retry">>},
+              {{error, {unavailable, private}}, error, <<"unavailable">>},
+              {{error, retry, private}, error, <<"retry">>}])
+    end).
+
 trace_correlated_selector_ignores_other_same_named_spans_test() ->
     with_tracer(fun() ->
         {OtherCtx, Other} = quod_trace:start_span(

@@ -1,6 +1,6 @@
 -module(quod_dtx_current_view).
 -moduledoc """
-Committee corroboration for DTX recovery and sealed read plans.
+Committee corroboration for DTX recovery, independent operations and sealed reads.
 
 Applied verification freezes the committee certified by the exact Finalize and
 asks distinct members of that committee for signed replies. `f + 1` replies
@@ -14,7 +14,7 @@ uses the shared `quod_foreign_log` cache and bounded temporary probes, and
 returns `retry` whenever history, routing, membership, application, or a reply
 is uncertain. One probe is created per validator key; that probe tries the
 shared key resolver's current endpoint, the existing live candidates, and the
-exact Finalize-era fallback sequentially after deduplication. The transport
+certified historical fallback sequentially after deduplication. The transport
 still authenticates the expected key; no endpoint creates another vote or
 request id.
 
@@ -24,6 +24,11 @@ validator at its current committed head, then signs the plan digest and the
 immutable claim of its certified ledger anchor. Different valid finality-proof
 subsets for that same claim remain interchangeable evidence. The collector
 keeps the plan vocabulary opaque.
+
+Independent application certificates bind the exact applied entry to its
+historical committee. Submission and receipt discovery share correlation,
+but retain a separate write walk: uncertain delivery is never retried at a
+different endpoint. Observation votes do not authorize a new submission.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -33,7 +38,6 @@ keeps the plan vocabulary opaque.
          submit_operation_to/5,
          certify_applied_many/3, certify_reads/3, lookup_outcome/4,
          operation_result/5, certify_operation_evidence/6]).
--export_type([source/0, claim/0]).
 
 -ifdef(TEST).
 -export([test_certify_applied/6, test_certify_applied_many/4,
@@ -288,10 +292,9 @@ certify_operation_with(OwnerNs, Ref,
           dependency_network_identity(Dependencies)} of
         {{ok, {Target, Slot, Hash, Digest}}, {ok, Committee, _CommitteeId, Routes}, {ok, Network}} ->
             %% This local hint is transport selection only. The exact historical
-            %% evidence was already resolved by A/R2; do not capture a new view.
+            %% evidence was already resolved against its exact reference;
+            %% do not capture a new view.
             %% Local endpoint admission still checks this reference's anchor.
-            Sources = probe_sources({local, Target}, Committee, Routes, Dependencies),
-            Needed = quod_quorum:honest_threshold(length(Committee)),
             Probe = fun(Key, Source) ->
                 Request = {operation_applied, request_id(), Ref},
                 Verify = fun(Result) ->
@@ -303,10 +306,9 @@ certify_operation_with(OwnerNs, Ref,
                     ignore -> ignore
                 end
             end,
-            case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
-                false -> {error, retry};
-                true ->
-                    case collect_quorum(dtx_applied_probe, Sources, Needed, Deadline, Probe) of
+            with_probe_sources({local, Target}, Committee, Routes, Deadline, Dependencies,
+                fun(Sources, Needed) ->
+                    case collect_quorum(operation_applied_probe, Sources, Needed, Deadline, Probe) of
                         {ok, {signed, {operation, Statement}, Rows}} ->
                             {ok, Certificate} = quod_applied_certificate:operation_certificate(
                                                   Statement, signed_rows(Rows)),
@@ -318,7 +320,7 @@ certify_operation_with(OwnerNs, Ref,
                             end;
                         _ -> {error, retry}
                     end
-            end;
+                end);
         {_, _, {error, _}} -> {error, retry};
         _ -> {error, invalid_request}
     end;
@@ -410,10 +412,9 @@ remote_operation_receipt(OwnerNs, {operation, Ns, Anchor, _, _} = Op, Digest,
   when is_integer(Slot), Slot > 0 ->
     Request = {operation_receipt, request_id(), Op, Slot},
     case submit_operation_routes(OwnerNs, {Ns, Anchor}, Request, Deadline) of
-        {ok, {operation_receipt, _, Op, Slot, Blob} = Response} ->
-            case quod_dtx_endpoint:correlates(Request, Response) of
-                true ->
-                    {ok, Ref, Complete} = quod_transaction:decode_evidence(Blob),
+        {ok, {operation_receipt, _, Op, Slot, Blob}} ->
+            case quod_transaction:decode_evidence(Blob) of
+                {ok, Ref, Complete} ->
                     case quod_foreign_log:resolve_reference(
                            {Ns, Anchor}, Ref, transaction, none, none, Deadline) of
                         {ok, #{transaction := ExactComplete}} ->
@@ -423,7 +424,7 @@ remote_operation_receipt(OwnerNs, {operation, Ns, Anchor, _, _} = Op, Digest,
                             end;
                         _ -> {error, retry}
                     end;
-                false -> {error, invalid_request}
+                {error, _} -> {error, retry}
             end;
         _ -> {error, retry}
     end;
@@ -616,30 +617,17 @@ read_anchor_source({remote, _Routes} = Source, _Identity, _Claim, _Deadline) ->
 read_anchor_source(_Source, _Identity, _Claim, _Deadline) ->
     {error, invalid_request}.
 
-certify_applied_before_deadline(
-  OwnerNs, Source, Claim, Evidence, Deadline, Dependencies) ->
-    case remaining(Deadline) of
-        0 -> {error, retry};
-        TimeoutMs -> certify_applied_request(
-                       OwnerNs, Source, Claim, Evidence, TimeoutMs,
-                       Deadline, Dependencies)
-    end.
-
-certify_applied_request(
-  OwnerNs, Source, Claim, Evidence, TimeoutMs, Deadline, Dependencies) ->
+prepare_applied(OwnerNs, {Source, Claim, Evidence}, TimeoutMs) ->
     case valid_request(OwnerNs, Source, Claim, TimeoutMs) of
         {ok, Target, GroupId, FinalizeRef, Generation, Verdict} ->
-            case dependency_network_identity(Dependencies) of
-                {ok, NetworkIdentity} ->
-                    verify_view(
-                      OwnerNs, Source, NetworkIdentity, Target,
-                      GroupId, FinalizeRef, Generation, Verdict,
-                      Evidence, Deadline, Dependencies);
-                {error, _} ->
-                    {error, retry}
+            case valid_finalize_evidence(
+                   Target, GroupId, FinalizeRef, Generation, Verdict, Evidence) of
+                {ok, Committee, CommitteeId, Routes} ->
+                    {ok, {Source, Committee, Routes,
+                          {Target, CommitteeId, GroupId, FinalizeRef, Generation, Verdict}}};
+                error -> {error, retry}
             end;
-        error ->
-            {error, invalid_request}
+        error -> {error, invalid_request}
     end.
 
 certify_reads_with(OwnerNs, {Source, PlanBlob}, Deadline, Dependencies)
@@ -693,19 +681,13 @@ certify_reads_view(
         {ok, Committee, CommitteeId, MinimumSlot, Routes} ->
             case MinimumSlot >= quod_dtx:base_height(Plan) of
                 true ->
-                    Sources = probe_sources(
-                                Source, Committee, Routes, Dependencies),
-                    Needed = quod_quorum:honest_threshold(length(Committee)),
-                    case length(Sources) >= Needed andalso
-                         remaining(Deadline) > 0 of
-                        true ->
+                    with_probe_sources(Source, Committee, Routes, Deadline, Dependencies,
+                        fun(Sources, Needed) ->
                             collect_read_votes(
                               OwnerNs, Source, Sources, Plan, PlanBlob,
                               CommitteeId, Needed,
-                              Deadline, Dependencies);
-                        false ->
-                            {error, retry}
-                    end;
+                              Deadline, Dependencies)
+                        end);
                 false ->
                     {error, retry}
             end;
@@ -767,28 +749,27 @@ certify_applied_many_before_deadline(
        length(Requests) =< ?QUOD_MAX_DTX_PARTICIPANTS,
        is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
-    case lists:all(
-           fun({Source, Claim, Evidence}) when is_map(Evidence) ->
-                   case valid_request(
-                          OwnerNs, Source, Claim, TimeoutMs) of
-                       {ok, Target, GroupId, FinalizeRef, Generation,
-                        Verdict} ->
-                           valid_finalize_evidence(
-                             Target, GroupId, FinalizeRef, Generation,
-                             Verdict, Evidence) =/= error;
-                       error -> false
-                   end;
-              (_) -> false
-           end, Requests) of
-        true ->
+    case prepare_applied_many(OwnerNs, Requests, TimeoutMs, []) of
+        {ok, Prepared} ->
             certify_applied_many_requests(
-              OwnerNs, Requests, Deadline, Dependencies);
-        false ->
-            {error, invalid_request}
+              OwnerNs, Prepared, Deadline, Dependencies);
+        error -> {error, invalid_request}
     end;
 certify_applied_many_before_deadline(
   _OwnerNs, _Requests, _TimeoutMs, _Deadline, _Dependencies) ->
     {error, invalid_request}.
+
+%% Validate the complete batch before spawning any child. Workers carry only
+%% authenticated statement fields and committee/routes, never re-decode input.
+prepare_applied_many(_OwnerNs, [], _TimeoutMs, Acc) ->
+    {ok, lists:reverse(Acc)};
+prepare_applied_many(OwnerNs, [{_, _, Evidence} = Request | Rest], TimeoutMs, Acc)
+  when is_map(Evidence) ->
+    case prepare_applied(OwnerNs, Request, TimeoutMs) of
+        {ok, Prepared} -> prepare_applied_many(OwnerNs, Rest, TimeoutMs, [Prepared | Acc]);
+        {error, _} -> error
+    end;
+prepare_applied_many(_OwnerNs, _Requests, _TimeoutMs, _Acc) -> error.
 
 certify_applied_many_requests(OwnerNs, Requests, Deadline, Dependencies) ->
     Parent = self(),
@@ -796,13 +777,13 @@ certify_applied_many_requests(OwnerNs, Requests, Deadline, Dependencies) ->
     VerifyRef = make_ref(),
     Pending =
         lists:foldl(
-          fun({Index, {Source, Claim, Evidence}}, Acc) ->
+          fun({Index, Prepared}, Acc) ->
                   {Pid, Monitor} = spawn_opt(
                     fun() ->
                         Result = quod_trace:with_optional_span(
                                    TraceCtx, <<"quod.dtx.applied.verify">>, internal, #{},
-                                   fun() -> certify_applied_before_deadline(
-                                              OwnerNs, Source, Claim, Evidence,
+                                   fun() -> certify_applied_prepared(
+                                              OwnerNs, Prepared,
                                               Deadline, Dependencies) end),
                         Parent ! {dtx_current_view_many, VerifyRef, self(),
                                   Index, Result}
@@ -851,14 +832,6 @@ collect_many_results(VerifyRef, Pending, Results, Deadline) ->
                     collect_many_results(
                       VerifyRef, Rest, Results#{ExpectedIndex => retry},
                       Deadline);
-                {dtx_current_view_many, VerifyRef, Pid, _Index,
-                 {error, invalid_request}}
-                  when is_map_key(Pid, Pending) ->
-                    {{Monitor, _ExpectedIndex}, Rest} =
-                        maps:take(Pid, Pending),
-                    _ = erlang:demonitor(Monitor, [flush]),
-                    stop_workers(dtx_current_view_many, VerifyRef, Rest),
-                    {error, invalid_request};
                 {'DOWN', Monitor, process, Pid, _Reason}
                   when is_map_key(Pid, Pending) ->
                     case maps:get(Pid, Pending) of
@@ -926,11 +899,8 @@ lookup_outcome_view(OwnerNs, Source, OutcomeRef, Target, View,
                     Deadline, Dependencies) ->
     case valid_identity_current_view(Target, View) of
         {ok, Committee, CommitteeId, MinimumSlot, Routes} ->
-            Sources = probe_sources(
-                        Source, Committee, Routes, Dependencies),
-            Needed = quod_quorum:honest_threshold(length(Committee)),
-            case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
-                true ->
+            with_probe_sources(Source, Committee, Routes, Deadline, Dependencies,
+                fun(Sources, Needed) ->
                     Claim = {Target, CommitteeId, MinimumSlot, OutcomeRef},
                     case collect_outcomes(
                            OwnerNs, Sources, Claim, Needed, Deadline,
@@ -943,10 +913,8 @@ lookup_outcome_view(OwnerNs, Source, OutcomeRef, Target, View,
                             {ok, Status};
                         retry ->
                             {error, retry}
-                    end;
-                false ->
-                    {error, retry}
-            end;
+                    end
+                end);
         error ->
             {error, retry}
     end.
@@ -1014,29 +982,25 @@ call_current_view(Source, Basis, Deadline, Dependencies) ->
             end
     end.
 
-verify_view(OwnerNs, Source, NetworkIdentity, Target, GroupId, FinalizeRef,
-            Generation, Verdict, Evidence, Deadline, Dependencies) ->
-    case valid_finalize_evidence(
-           Target, GroupId, FinalizeRef, Generation, Verdict, Evidence) of
-        {ok, Committee, CommitteeId, Routes} ->
-            Sources = probe_sources(
-                        Source, Committee, Routes, Dependencies),
-            Needed = quod_quorum:honest_threshold(length(Committee)),
-            case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
-                true ->
+certify_applied_prepared(OwnerNs,
+  {Source, Committee, Routes, {Target, CommitteeId, GroupId, FinalizeRef, Generation, Verdict}},
+  Deadline, Dependencies) ->
+    case remaining(Deadline) of
+        0 -> {error, retry};
+        _ ->
+            case dependency_network_identity(Dependencies) of
+                {ok, NetworkIdentity} ->
                     Claim = {NetworkIdentity, Target, CommitteeId, GroupId,
                              FinalizeRef, Generation, Verdict},
-                    case collect_applied(
-                           OwnerNs, Sources, Claim, Needed, Deadline,
-                           Dependencies) of
-                        {ok, Certificate} -> {ok, Certificate};
-                        retry -> {error, retry}
-                    end;
-                false ->
-                    {error, retry}
-            end;
-        error ->
-            {error, retry}
+                    with_probe_sources(Source, Committee, Routes, Deadline, Dependencies,
+                      fun(Sources, Needed) ->
+                          case collect_applied(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) of
+                              {ok, Certificate} -> {ok, Certificate};
+                              retry -> {error, retry}
+                          end
+                      end);
+                {error, _} -> {error, retry}
+            end
     end.
 
 valid_finalize_evidence(Target, GroupId, FinalizeRef, Generation, Verdict,
@@ -1110,6 +1074,14 @@ valid_routes(Routes, Committee) ->
           fun({Key, _Endpoints}) -> lists:member(Key, Committee) end,
           Routes).
 
+with_probe_sources(Source, Committee, Routes, Deadline, Dependencies, Collect) ->
+    Sources = probe_sources(Source, Committee, Routes, Dependencies),
+    Needed = quod_quorum:honest_threshold(length(Committee)),
+    case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
+        true -> Collect(Sources, Needed);
+        false -> {error, retry}
+    end.
+
 probe_sources(Source, Committee, Routes, Dependencies) ->
     LocalKey = case Source of
                    {local, _} -> dependency_node_key(Dependencies);
@@ -1123,7 +1095,7 @@ probe_sources(Source, Committee, Routes, Dependencies) ->
       fun(Key) when Key =:= LocalKey, LocalKey =/= none ->
               {true, {Key, local}};
          (Key) ->
-              case applied_probe_endpoints(
+              case probe_endpoints(
                      Key, dependency_resolved_endpoint(Key, Dependencies),
                      SourceRoutes, Routes) of
                   [_ | _] = Endpoints ->
@@ -1132,12 +1104,12 @@ probe_sources(Source, Committee, Routes, Dependencies) ->
               end
       end, Committee).
 
-%% The exact Finalize fixes who may attest; endpoints remain reachability
+%% The certified view fixes who may attest; endpoints remain reachability
 %% only. Merge the shared key resolver's current endpoint before the caller's
-%% identity-pinned candidates and the historical Finalize fallback, so a retired
+%% identity-pinned candidates and the certified historical fallback, so a retired
 %% holder remains reachable after moving. Transport still authenticates Key, and
 %% no route can add a signer outside Committee.
-applied_probe_endpoints(
+probe_endpoints(
   Key, ResolvedEndpoint, SourceRoutes, HistoricalRoutes) ->
     Resolved = case ResolvedEndpoint of
                    {ok, Endpoint} -> [Endpoint];
@@ -1222,11 +1194,7 @@ collect_outcomes(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
                     probe_outcome(
                       OwnerNs, Key, Source, Claim, Deadline, Dependencies)
             end,
-    case collect_quorum(
-           dtx_outcome_probe, Sources, Needed, Deadline, Probe) of
-        {ok, Outcome} -> {ok, Outcome};
-        retry -> retry
-    end.
+    collect_quorum(dtx_outcome_probe, Sources, Needed, Deadline, Probe).
 
 collect_quorum(Tag, Sources, Needed, Deadline, Probe) ->
     quod_trace:with_optional_span(
@@ -1572,22 +1540,24 @@ probe_applied(OwnerNs, PeerKey, Source,
 %% what is terminal; Exhausted is its existing non-evidence result. In
 %% particular a read conflict or a barrier's not_found must stop this walk.
 probe_source(
-  {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
+  {remote, []}, _OwnerNs, _TargetNs, _PeerKey, _Request,
+  _Deadline, _Dependencies, _Verify, Exhausted) -> Exhausted;
+probe_source(
+  {remote, [Endpoint | Rest]}, OwnerNs, TargetNs, PeerKey, Request,
   Deadline, Dependencies, Verify, Exhausted) ->
-    walk_remote_candidates(
-      Endpoints, Deadline,
-      fun(Endpoint, AttemptDeadline) ->
-          call_endpoint(
-            OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
-            AttemptDeadline, Dependencies)
-      end,
-      fun(Result) ->
-          case Verify(Result) of
-              Exhausted -> continue;
-              Accepted -> {done, Accepted}
-          end
-      end,
-      Exhausted);
+    Now = quod_time:mono_ms(),
+    Remaining = max(0, Deadline - Now),
+    AttemptDeadline = case Remaining of
+                          0 -> Deadline;
+                          _ -> Now + max(1, Remaining div (length(Rest) + 1))
+                      end,
+    Result = call_endpoint(OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
+                           AttemptDeadline, Dependencies),
+    case Verify(Result) of
+        Exhausted -> probe_source({remote, Rest}, OwnerNs, TargetNs, PeerKey, Request,
+                                   Deadline, Dependencies, Verify, Exhausted);
+        Accepted -> Accepted
+    end;
 probe_source(
   local, OwnerNs, TargetNs, PeerKey, Request,
   Deadline, Dependencies, Verify, _Exhausted) ->
@@ -1618,36 +1588,21 @@ request_id() ->
 remaining(Deadline) ->
     max(0, Deadline - quod_time:mono_ms()).
 
-candidate_deadline(Deadline, CandidatesLeft) ->
-    Now = quod_time:mono_ms(),
-    Remaining = max(0, Deadline - Now),
-    case Remaining of
-        0 -> Deadline;
-        _ -> Now + max(1, Remaining div max(1, CandidatesLeft))
-    end.
-
-walk_remote_candidates([], _Deadline, _Attempt, _Accept, Exhausted) ->
-    Exhausted;
-walk_remote_candidates(
-  [Endpoint | Rest], Deadline, Attempt, Accept, Exhausted) ->
-    Result = Attempt(
-               Endpoint, candidate_deadline(Deadline, length(Rest) + 1)),
-    case Accept(Result) of
-        {done, Accepted} -> Accepted;
-        continue ->
-            walk_remote_candidates(
-              Rest, Deadline, Attempt, Accept, Exhausted)
-    end.
-
 -ifdef(TEST).
 test_certify_operation(OwnerNs, Ref, Evidence, Deadline, Dependencies) ->
     certify_operation_with(OwnerNs, Ref, Evidence, Deadline, Dependencies).
 
 test_certify_applied(
   OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->
-    certify_applied_before_deadline(
-      OwnerNs, Source, Claim, Evidence,
-      quod_time:mono_ms() + TimeoutMs, Dependencies).
+    Deadline = quod_time:mono_ms() + TimeoutMs,
+    case remaining(Deadline) of
+        0 -> {error, retry};
+        Remaining ->
+            case prepare_applied(OwnerNs, {Source, Claim, Evidence}, Remaining) of
+                {ok, Prepared} -> certify_applied_prepared(OwnerNs, Prepared, Deadline, Dependencies);
+                {error, _} = Error -> Error
+            end
+    end.
 
 test_certify_applied_many(OwnerNs, Requests, Deadline, Dependencies) ->
     certify_applied_many_with(

@@ -60,63 +60,6 @@ render_list_and_var_test() ->
 render_quoted_atom_test() ->
     ?assertEqual("isa('My Dog', dog)", render({isa, 'My Dog', dog})).
 
-outcome_unknown_is_pending_test() ->
-    Ns = <<"quod:target">>,
-    Anchor = <<7:256>>,
-    TxId = <<8:256>>,
-    ?assertEqual(
-       {202, #{result => pending, ns => Ns,
-               anchor => binary:encode_hex(Anchor, lowercase),
-               tx_id => binary:encode_hex(TxId, lowercase)}},
-       quod_explorer_http:prove_result(
-         {error, {outcome_unknown,
-                  {transaction, Ns, Anchor, TxId}}})).
-
-group_commit_and_unknown_are_json_safe_test() ->
-    Ns = <<"quod:origin">>,
-    Anchor = <<31:256>>,
-    Coordinator = <<32:256>>,
-    Admission = <<33:256>>,
-    GroupId = <<34:256>>,
-    Ref = {group, Ns, Anchor, Coordinator, Admission, GroupId},
-    Target = {<<"quod:target">>, <<35:256>>},
-    {200, Committed} = quod_explorer_http:prove_result(
-                         {ok, [#{'X' => linked}],
-                          #{ref => Ref, height => 9,
-                            participant_slots =>
-                              [{{Ns, Anchor}, 8, 1},
-                               {Target, 7, 2}]}}),
-    ?assertEqual(ok, maps:get(result, Committed)),
-    ?assertEqual(binary:encode_hex(GroupId, lowercase),
-                 maps:get(group_id, Committed)),
-    ?assertEqual(2, length(maps:get(participant_slots, Committed))),
-    ?assert(is_binary(iolist_to_binary(json:encode(Committed)))),
-    {202, Pending} = quod_explorer_http:prove_result(
-                       {error, {outcome_unknown, Ref}}),
-    ?assertEqual(pending, maps:get(result, Pending)),
-    ?assertEqual(binary:encode_hex(Coordinator, lowercase),
-                 maps:get(coordinator, Pending)).
-
-invalid_action_is_a_bad_request_test() ->
-    ?assertEqual(
-       {400, #{error => invalid_action}},
-       quod_explorer_http:prove_result({error, invalid_action})).
-
-foreign_commit_is_json_safe_test() ->
-    Ns = <<"quod:target">>,
-    Anchor = <<12:256>>,
-    TxId = <<13:256>>,
-    Reply =
-        {200, #{result => ok, bindings => [#{}], ns => Ns,
-                anchor => binary:encode_hex(Anchor, lowercase),
-                tx_id => binary:encode_hex(TxId, lowercase)}},
-    ?assertEqual(
-       Reply,
-       quod_explorer_http:prove_result(
-         {ok, [#{}], {transaction, Ns, Anchor, TxId}})),
-    {200, JsonMap} = Reply,
-    ?assert(is_binary(iolist_to_binary(json:encode(JsonMap)))).
-
 transaction_id_parser_is_exact_test() ->
     TxId = <<9:256>>,
     ?assertEqual({ok, TxId}, quod_explorer_http:parse_tx_id(
@@ -149,13 +92,6 @@ compact_pending_outcome_json_test() ->
        quod_explorer_http:outcome_json(
          #{status => pending,
            ref => {transaction, Ns, Anchor, TxId}})).
-
-failure_reasons_are_rendered_test() ->
-    ?assertEqual(
-       {200, #{result => fail,
-               reasons => [<<"outer(bob)">>, <<"missing(bob)">>]}},
-       quod_explorer_http:prove_result(
-         {fail, [{outer, bob}, {missing, bob}]})).
 
 %%%===================================================================
 %%% summary committee observability
@@ -235,11 +171,7 @@ block_json_distinguishes_non_transaction_slots_test() ->
     ?assertEqual(abort, maps:get(verdict, Control)),
     ?assertEqual([<<"test_abort(dtx_fixture)">>], maps:get(reasons, Control)),
     ?assert(is_binary(quod_explorer_http:encode(Dtx))),
-    ?assertEqual([], quod_explorer_http:entry_txs(DtxEntry)),
-    [ControlRow] = quod_explorer_http:entry_rows(<<"ont:test">>, DtxEntry),
-    ?assertMatch(#{row_type := control, row_id := <<"dtx:", _/binary>>,
-                   height := 5, phase := decision,
-                   control := #{kind := decision}}, ControlRow).
+    ?assertEqual([], quod_explorer_http:entry_txs(DtxEntry)).
 
 dtx_control_is_visible_in_paged_history_test() ->
     with_temp_store(fun(Store0) ->
@@ -252,7 +184,8 @@ dtx_control_is_visible_in_paged_history_test() ->
                          DtxEntry]),
         #{txs := [Row, _Content], height := 2, next_before := null} =
             quod_explorer_http:txs_page(Store, undefined, 10),
-        ?assertMatch(#{row_type := control, height := 2, phase := decision,
+        ?assertMatch(#{row_type := control, row_id := <<"dtx:", _/binary>>,
+                       height := 2, phase := decision,
                        control := #{kind := decision}}, Row),
         ok
     end).

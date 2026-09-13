@@ -449,8 +449,8 @@ applied_collection_keeps_the_wave_deadline_through_child_admission_test() ->
     %% No child scheduling, request validation or collector entry may create
     %% a replacement absolute deadline from a fresh relative allowance.
     Names = [certify_applied_many_with, certify_applied_many_before_deadline,
-             certify_applied_many_requests, certify_applied_before_deadline,
-             certify_applied_request, collect_many_results],
+             prepare_applied, prepare_applied_many, certify_applied_many_requests,
+             certify_applied_prepared, with_probe_sources, collect_many_results],
     Bodies = [F || F = {function, _, Name, _, _} <- View, lists:member(Name, Names)],
     ?assertEqual(length(Names), length(Bodies)),
     ?assertNot(contains_atom(mono_ms, Bodies)),

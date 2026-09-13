@@ -9,10 +9,8 @@ one certified reference proving that claim.  Certified-history verification
 remains owned by `m:quod_foreign_log`; this module only checks the statement
 shape and committee signatures it is given.
 
-Version 3 changes the signed statement without changing the outer endpoint
-reply shape.  It therefore requires a coordinated full-fleet deployment: a
-mixed V2/V3 fleet rejects the other version's votes and manifests as an f+1
-quorum that is never reached, rather than as an envelope decode error.
+The signed statement is versioned independently of its endpoint carrier.
+All validators must use the same statement version and verification rules.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -78,7 +76,7 @@ binding(
    PlanDigest, AnchorRef, CommitteeId, Signatures} = Certificate) ->
     case statement(Target, ProofId, PlanDigest, AnchorRef, CommitteeId) of
         {ok, Statement} ->
-            case valid_signatures(Signatures) andalso
+            case quod_quorum:canonical_signatures(Signatures) andalso
                  erlang:external_size(Certificate) =<
                      ?MAX_CERTIFICATE_BYTES of
                 true ->
@@ -160,9 +158,3 @@ statement(_Target, _ProofId, _PlanDigest, _AnchorRef, _CommitteeId) ->
 
 vote_bytes(Statement) ->
     term_to_binary({?VOTE_DOMAIN, Statement}, [deterministic]).
-
-valid_signatures([_ | _] = Signatures) ->
-    quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
-        Signatures =:= lists:ukeysort(1, Signatures);
-valid_signatures(_) ->
-    false.

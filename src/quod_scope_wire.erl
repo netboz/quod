@@ -944,8 +944,7 @@ validate_public_error_pair({Tag, Max})
 validate_public_error_pair({too_large, Kind}) ->
     case payload_limit(Kind) of
         {ok, _} -> ok;
-        error when Kind =:= scope_envelope; Kind =:= transcript;
-                   Kind =:= result -> ok;
+        error when Kind =:= scope_envelope; Kind =:= transcript -> ok;
         error -> protocol_error(bad_error_code)
     end;
 validate_public_error_pair({non_transactional_dependency, {Name, Arity}})

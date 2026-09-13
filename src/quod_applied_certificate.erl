@@ -73,7 +73,7 @@ applied_certificate_binding(
            NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
            Generation, Verdict) of
         {ok, Statement} ->
-            case valid_applied_signatures(Signatures) andalso
+            case quod_quorum:canonical_signatures(Signatures) andalso
                  erlang:external_size(Certificate) =<
                      ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
                 true ->
@@ -195,13 +195,6 @@ applied_vote_valid(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
         error -> false
     end.
 
-valid_applied_signatures([_ | _] = Signatures) ->
-    quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
-        Signatures =:= lists:ukeysort(1, Signatures);
-valid_applied_signatures(_) ->
-    false.
-
-
 -doc "Build an exact result statement from an already-verified application entry.".
 -spec operation_statement(<<_:256>>, map(), term()) -> {ok, tuple()} | error.
 operation_statement(
@@ -253,7 +246,7 @@ operation_certificate_binding(
   {quod_operation_applied_certificate, ?OPERATION_CERTIFICATE_VERSION, Statement, Signatures} = Certificate) ->
     case operation_statement_binding(Statement) of
         {ok, Binding} ->
-            case valid_applied_signatures(Signatures) andalso
+            case quod_quorum:canonical_signatures(Signatures) andalso
                  erlang:external_size(Certificate) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
                 true -> {ok, Binding#{statement => Statement, signatures => Signatures}};
                 false -> error

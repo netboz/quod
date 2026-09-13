@@ -29,9 +29,9 @@ One line per event:
   never interpolate secrets before submitting a logger event.
 - `ts` is ISO-8601 UTC, microsecond precision, from the event's own `time`.
 - Metadata that is not JSON-safe (pids, refs, ports, funs, non-UTF-8 binaries)
-  uses the same Unicode term renderer as reports. OTP catches formatter
-  exceptions, but its fallback can render the original unredacted message;
-  the JSON encoder guard does not cover earlier rendering failures.
+  uses the same Unicode term renderer as reports. Rendering and encoding
+  share one guard; its fallback contains only the already-redacted message,
+  never the raw message used by OTP's formatter-crash fallback.
 
 Wired as the `default` handler's formatter in `config/sys.config`; `node_id`
 arrives via the primary logger metadata that `m:quod_app` stamps at boot.
@@ -45,12 +45,17 @@ arrives via the primary logger metadata that `m:quod_app` stamps at boot.
 format(#{level := Level, msg := RawMsg, meta := RawMeta}, _Config) ->
     Msg = redact(RawMsg),
     Meta = redact(RawMeta),
-    %% Base fields win over metadata of the same name (merge Base last).
-    Base = #{ts    => iso8601(maps:get(time, Meta, erlang:system_time(microsecond))),
-             level => atom_to_binary(Level, utf8),
-             msg   => truncate(render_msg(Msg))},
-    Event = maps:merge(safe_meta(Meta), Base),
-    [encode(Event, Base), $\n].
+    Encoded = try
+        %% Base fields win over metadata of the same name (merge Base last).
+        Base = #{ts => iso8601(maps:get(time, Meta, erlang:system_time(microsecond))),
+                 level => atom_to_binary(Level, utf8), msg => truncate(render_msg(Msg))},
+        encode_json(maps:merge(safe_meta(Meta), Base))
+    catch _:_ ->
+        %% Neither exception payloads nor raw metadata reach this fallback.
+        encode_json(#{ts => iso8601(erlang:system_time(microsecond)), level => Level,
+                      msg => truncate(fallback(Msg)), format_error => true})
+    end,
+    [Encoded, $\n].
 
 %% The same data-level sanitation is used by OTP status callbacks. Do not
 %% stringify first: private records may sit inside state, child arguments,
@@ -92,16 +97,6 @@ redact_field(Name, Value) when is_binary(Name) ->
         _ -> redact(Value)
     end;
 redact_field(_Name, Value) -> redact(Value).
-
-%% Guard JSON encoding only; earlier rendering is outside this boundary.
-%% The minimal fallback retains ts/level and names the encoding failure.
-encode(Event, Base) ->
-    try encode_json(Event)
-    catch C:R ->
-        Fallback = Base#{msg => iolist_to_binary(
-                                  io_lib:format("log encode failure ~p:~p", [C, R]))},
-        encode_json(Fallback)
-    end.
 
 %% `logger_std_h` ultimately writes through the release's standard-I/O device.
 %% Keep that boundary ASCII-only: a deployed startup notice showed that one

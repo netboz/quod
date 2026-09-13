@@ -47,11 +47,9 @@ accepted.
 %% V14 generalizes claims and included/certified receipts to canonical target
 %% vectors. V13 is deliberately not decoded. Material and referenced
 %% transactions remain canonical byte blobs, preserving the binding of an
-%% author's continuous admission
-%% generation, transaction role,
+%% author's continuous admission generation, transaction role,
 %% role evidence, certified foreign reads, signed-agent request, authorization
-%% transcript, and the
-%% atom-bearing diff/read set through the bounded Prolog wire alphabet,
+%% transcript, and the atom-bearing diff/read set through the bounded Prolog wire alphabet,
 %% including explicit event occurrences. The fixed envelope can therefore be
 %% decoded safely before a small, explicit vocabulary allocation is permitted
 %% for an authenticated committee author.

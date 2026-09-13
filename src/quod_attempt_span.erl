@@ -1,11 +1,13 @@
 -module(quod_attempt_span).
 -moduledoc """
-Process-free span-handle mechanics shared by installed coordination owners.
+Process-free span-handle mechanics for coordination owners and synchronous work.
 
-The owner's existing row is the sole token. Callers build their released state
-before invoking close/2 and return that state on every survivable path. SDK
-loss cannot interrupt operational cleanup. Fatal callback unwind may expose
-an old token or discard a tentative one, under the pinned B SDK assumptions.
+The existing owner row or synchronous call frame holds the sole token. Owners
+build released state before invoking close/2 and return it on every survivable
+path. SDK loss cannot interrupt operational cleanup. Fatal callback unwind
+may expose an old token or discard a tentative one: SDK end-after-take is a
+no-op, and the sweeper reclaims lost tentative handles. Permanent real-SDK
+controls pin these assumptions; neither is proof of an observed completion.
 This module has no registry, process dictionary, process, timer or retry.
 """.
 -export([owned/3, close/2, event/2, ancestry/1, exit_class/1]).

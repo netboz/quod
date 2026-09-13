@@ -31,9 +31,8 @@ This module also exports the shared JSON builders `m:quod_explorer_ws` reuses fo
 the live stream, so a committed record renders identically live and from history.
 """.
 -export([init/2]).
-%% shared with quod_explorer_ws — one rendering of a transaction, live or historical
--export([summary/0, block_json/2, entry_rows/2, tx_id_text/1, encode/1, prolog_text/1,
-         prove_result/1]).
+%% WS shares summary/block/id/encoding; signed client results share Prolog text.
+-export([summary/0, block_json/2, tx_id_text/1, encode/1, prolog_text/1]).
 -ifdef(TEST).
 %% Pure surfaces driven directly by eunit.
 -export([txs_page/3, parse_tx_id/1, outcome_json/1,
@@ -128,92 +127,10 @@ history_json_reply(Status, Result, Req, Deadline) ->
         false -> json_reply(503, #{error => ontology_unreachable}, Req)
     end.
 
-prove_result(
-  {ok, Bindings, {transaction, Ns, Anchor, TxId}})
-  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_binary(TxId), byte_size(TxId) =:= 32 ->
-    {200, maps:merge(
-            #{result => ok,
-              bindings => [bindings_json(B) || B <- Bindings]},
-            outcome_ref_json(Ns, Anchor, TxId))};
-prove_result(
-  {ok, Bindings,
-   #{ref := {group, Ns, Anchor, Coordinator, Admission, GroupId} = Ref,
-     height := Height, participant_slots := Slots}})
-  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_binary(Coordinator), byte_size(Coordinator) =:= 32,
-       is_binary(Admission), byte_size(Admission) =:= 32,
-       is_binary(GroupId), byte_size(GroupId) =:= 32,
-       is_integer(Height), Height > 0, is_list(Slots) ->
-    case participant_slots_json(Slots, []) of
-        {ok, PublicSlots} ->
-            {200, maps:merge(
-                    #{result => ok, height => Height,
-                      bindings => [bindings_json(B) || B <- Bindings],
-                      participant_slots => PublicSlots},
-                    group_ref_json(Ref))};
-        error ->
-            {503, #{error => invalid_group_outcome}}
-    end;
-prove_result({ok, Bindings, Height}) when is_integer(Height), Height >= 0 ->
-    {200, #{result => ok, height => Height, bindings => [bindings_json(B) || B <- Bindings]}};
-prove_result(fail) ->
-    {200, #{result => fail}};
-prove_result({fail, Reasons}) when is_list(Reasons) ->
-    {200, #{result => fail,
-            reasons => [prolog_text(Reason) || Reason <- Reasons]}};
-prove_result({error, {not_leader, Hint}}) ->
-    Leader = case Hint of none -> null; _ -> id_json(Hint) end,
-    {409, #{error => not_leader, leader => Leader}};
-prove_result(
-  {error, {outcome_unknown,
-           {transaction, Ns, Anchor, TxId}}})
-  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_binary(TxId), byte_size(TxId) =:= 32 ->
-    {202, (outcome_ref_json(Ns, Anchor, TxId))#{result => pending}};
-prove_result(
-  {error, {outcome_unknown,
-           {group, Ns, Anchor, Coordinator, Admission, GroupId} = Ref}})
-  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_binary(Coordinator), byte_size(Coordinator) =:= 32,
-       is_binary(Admission), byte_size(Admission) =:= 32,
-       is_binary(GroupId), byte_size(GroupId) =:= 32 ->
-    {202, (group_ref_json(Ref))#{result => pending}};
-%% A malformed declared lifecycle term is a caller error, not a service outage.
-prove_result({error, invalid_action}) ->
-    {400, #{error => invalid_action}};
-prove_result({error, Reason}) ->
-    {503, #{error => text(Reason)}}.
-
 outcome_ref_json(Ns, Anchor, TxId) ->
     #{ns => Ns,
       anchor => binary:encode_hex(Anchor, lowercase),
       tx_id => tx_id_text(TxId)}.
-
-group_ref_json(
-  {group, Ns, Anchor, Coordinator, Admission, GroupId}) ->
-    #{ns => Ns,
-      anchor => binary:encode_hex(Anchor, lowercase),
-      coordinator => binary:encode_hex(Coordinator, lowercase),
-      coordinator_admission => binary:encode_hex(Admission, lowercase),
-      group_id => binary:encode_hex(GroupId, lowercase)}.
-
-participant_slots_json([], Acc) ->
-    {ok, lists:reverse(Acc)};
-participant_slots_json(
-  [{{Ns, Anchor}, Slot, Generation} | Rest], Acc)
-  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_integer(Slot), Slot > 0,
-       is_integer(Generation), Generation >= 0 ->
-    participant_slots_json(
-      Rest,
-      [#{ns => Ns, anchor => binary:encode_hex(Anchor, lowercase),
-         height => Slot, generation => Generation} | Acc]);
-participant_slots_json(_Bad, _Acc) ->
-    error.
-
-bindings_json(B) when is_map(B) ->
-    maps:fold(fun(V, T, Acc) -> Acc#{atom_to_binary(V, utf8) => prolog_text(T)} end, #{}, B).
 
 %%%===================================================================
 %%% summary
@@ -500,9 +417,6 @@ entry_txs(Entry) ->
 %% same-phase DTX-control batch. Keeping this projection beside block_json/2
 %% makes paged history and the live WebSocket describe the same committed
 %% ledger; every control gets its own row while sharing the committed slot.
-entry_rows(Ns, E) ->
-    entry_rows(none, Ns, E).
-
 entry_rows(Store, Ns, E) ->
     #entry{data = Data} = quod_ledger:entry_view(E),
     case quod_ledger:classify(Data) of

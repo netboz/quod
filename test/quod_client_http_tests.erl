@@ -20,6 +20,88 @@ assertions include the absence of crash reports, not only the responses.
 
 -define(PEER, {127, 0, 0, 1}).
 
+outcome_unknown_is_pending_test() ->
+    Ns = <<"quod:target">>,
+    Anchor = <<7:256>>,
+    TxId = <<8:256>>,
+    ?assertEqual(
+       {202, #{result => pending, ns => Ns,
+               anchor => binary:encode_hex(Anchor, lowercase),
+               tx_id => binary:encode_hex(TxId, lowercase)}},
+       signed_proof_reply(
+         {error, {outcome_unknown,
+                  {transaction, Ns, Anchor, TxId}}})).
+
+group_commit_and_unknown_are_json_safe_test() ->
+    Ns = <<"quod:origin">>,
+    Anchor = <<31:256>>,
+    Coordinator = <<32:256>>,
+    Admission = <<33:256>>,
+    GroupId = <<34:256>>,
+    Ref = {group, Ns, Anchor, Coordinator, Admission, GroupId},
+    Target = {<<"quod:target">>, <<35:256>>},
+    {200, Committed} = signed_proof_reply(
+                         {ok, [#{0 => linked}],
+                          #{ref => Ref, height => 9,
+                            participant_slots =>
+                              [{{Ns, Anchor}, 8, 1},
+                               {Target, 7, 2}]}}),
+    ?assertEqual(ok, maps:get(result, Committed)),
+    ?assertEqual(binary:encode_hex(GroupId, lowercase),
+                 maps:get(group_id, Committed)),
+    ?assertEqual(2, length(maps:get(participant_slots, Committed))),
+    ?assert(is_binary(iolist_to_binary(json:encode(Committed)))),
+    {202, Pending} = signed_proof_reply(
+                       {error, {outcome_unknown, Ref}}),
+    ?assertEqual(pending, maps:get(result, Pending)),
+    ?assertEqual(binary:encode_hex(Coordinator, lowercase),
+                 maps:get(coordinator, Pending)).
+
+invalid_action_is_a_bad_request_test() ->
+    ?assertEqual(
+       {400, #{error => invalid_action}},
+       signed_proof_reply({error, invalid_action})).
+
+foreign_commit_is_json_safe_test() ->
+    Ns = <<"quod:target">>,
+    Anchor = <<12:256>>,
+    TxId = <<13:256>>,
+    Reply =
+        {200, #{result => ok, bindings => [#{}], ns => Ns,
+                anchor => binary:encode_hex(Anchor, lowercase),
+                tx_id => binary:encode_hex(TxId, lowercase)}},
+    ?assertEqual(
+       Reply,
+       signed_proof_reply(
+         {ok, [#{}], {transaction, Ns, Anchor, TxId}})),
+    {200, JsonMap} = Reply,
+    ?assert(is_binary(iolist_to_binary(json:encode(JsonMap)))).
+
+failure_reasons_are_rendered_test() ->
+    ?assertEqual(
+       {200, #{result => fail,
+               reasons => [<<"outer(bob)">>, <<"missing(bob)">>]}},
+       signed_proof_reply(
+         {fail, [{outer, bob}, {missing, bob}]})).
+
+%% These payload assertions used to keep an uncalled explorer proof API alive.
+%% Exercise the signed client normalizer/HTTP path instead, including its
+%% request binding, before comparing the same public outcome fields.
+signed_proof_reply(Raw) ->
+    Evidence = #{request_digest => <<91:256>>,
+                 request => #{operation_id => <<92:256>>},
+                 variables => [{<<"X">>, 0}]},
+    {Code, Json} = quod_client_http:signed_goal_result(
+      {ok, Evidence, {normalized, quod_client_result:normalize(Evidence, Raw)}}),
+    case Code of
+        N when N =:= 200; N =:= 202 ->
+            ?assertEqual(b64url(<<91:256>>), maps:get(request_digest, Json)),
+            ?assertEqual(b64url(<<92:256>>), maps:get(operation_id, Json));
+        _ -> ok
+    end,
+    {Code, maps:without([request_digest, operation_id], Json)}.
+
+
 signed_goal_result_keeps_parser_variable_names_test() ->
     Evidence = #{request_digest => <<1:256>>,
                  request => #{operation_id => <<2:256>>},

@@ -992,6 +992,11 @@ source claim/operation, exact application occurrence and terminal result.
 `quod_quorum` owns the shared exact-f+1 verifier used by read and applied
 certificates. Collectors authenticate votes once, assemble their certificate,
 and recheck the original deadline; they do not verify their own votes again.
+Batch certification validates every input before launching workers and carries
+the checked statement/committee forward. The four observation families share
+source selection and quorum admission, with distinct terminal policies. Stored
+participant descriptors are checked against their authenticated plans and
+reused for apply fencing; they are not an independent source of authority.
 
 New source receipts contain the complete certified result vector. Historical
 included-only rows remain valid discovery, not verdict authority. The durable
@@ -1051,6 +1056,11 @@ may expose a stale released token or lose a tentative handle; SDK end-after-take
 idempotence is pinned, and lost roots are discrepancies, not idleness. SDK
 failure cannot prevent shutdown. Boundary-span timestamps denote transitions;
 their tiny durations are not queue-wait measurements.
+
+Explorer serves history/status only; signed proof replies use the one client
+normalizer and HTTP renderer. Formatter failures remain inside the redaction
+boundary, and malformed receipt discovery bytes return retry before history
+resolution. Neither diagnostic failure changes an operation's durable outcome.
 
 The optional Phase-1 diagnostic decorator records both attempt families,
 sampled/recording flags and effective SDK configuration. Independent VM counters

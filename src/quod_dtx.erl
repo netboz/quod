@@ -1747,8 +1747,10 @@ prepare_evidence_matches(
     _Bundles} = Begin, _, _, _, _, _} = BeginControl) ->
     same_certified_ref(RowRef, BeginRef) andalso
         group_id(Begin) =:= GroupId andalso
-        begin_participant_payload(Begin, Target) =/= not_found andalso
-        begin_participant_payload(Begin, Target) =/= error andalso
+        case begin_participant_payload(Begin, Target) of
+            {ok, _, _, _} -> true;
+            _ -> false
+        end andalso
         prepare_evidence_matches(
           RowRest, Evidence, GroupId, BeginRef, BeginControl);
 prepare_evidence_matches(
@@ -1923,7 +1925,7 @@ group_id({quod_dtx_control, ?CONTROL_VERSION, 'begin', _, _, _, _, _, _, _} =
            Control) ->
     record_digest(Control);
 group_id({quod_dtx_control, ?CONTROL_VERSION, _, _, Record, _, _, _, _, _}) ->
-    record_group_id(Record);
+    group_id(Record);
 group_id({quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin) ->
     record_digest(Begin);
 group_id({quod_dtx_prepare, ?RECORD_VERSION, GroupId, _, _, _, _}) -> GroupId;
@@ -2084,7 +2086,7 @@ begin_group_ref(
     case valid_record('begin', Begin) andalso within_body_limit(Begin) of
         true ->
             {ok, {group, Ns, Anchor, Coordinator, Admission,
-                  record_digest(Begin)}};
+                  record_digest_unchecked('begin', Begin)}};
         false ->
             error
     end;
@@ -2103,7 +2105,7 @@ begin_recovery_rows(
   when is_binary(Ns), byte_size(Ns) > 0 ->
     case valid_record('begin', Begin) andalso within_body_limit(Begin) of
         true ->
-            {ok, {Ns, Anchor}, record_digest(Begin),
+            {ok, {Ns, Anchor}, record_digest_unchecked('begin', Begin),
              [{Target, PlanBlob}
               || {Target, _PlanDigest, PlanBlob, _Attestation} <- Bundles]};
         false ->
@@ -2454,6 +2456,13 @@ valid_record(_, _) -> false.
 
 valid_prepare_record(ExpectedTarget, Record, GroupId, BeginRef, Manifest,
                      PlanDigest, PlanBlob) ->
+    prepare_record_plan(ExpectedTarget, Record, GroupId, BeginRef, Manifest,
+                        PlanDigest, PlanBlob) =/= false.
+
+%% Preserve the authenticated plan for callers that also validate the stored
+%% participant projection. The record and projection share this one decoder.
+prepare_record_plan(ExpectedTarget, Record, GroupId, BeginRef, Manifest,
+                     PlanDigest, PlanBlob) ->
     validate_certified_ref(BeginRef) andalso
         ref_record_digest(BeginRef) =:= GroupId andalso
         valid_manifest(Manifest) andalso within_body_limit(Record) andalso
@@ -2466,7 +2475,8 @@ valid_prepare_record(ExpectedTarget, Record, GroupId, BeginRef, Manifest,
                     andalso digest(Plan) =:= PlanDigest
                     andalso valid_signed_plan(Plan)
                     andalso plan_matches_manifest(
-                              Target, Plan, PlanDigest, Manifest);
+                              Target, Plan, PlanDigest, Manifest)
+                    andalso {ok, Plan};
             {error, _} -> false
         end.
 
@@ -2807,7 +2817,7 @@ proposal_readiness_valid(
     ready;
 proposal_readiness_valid(Record, Projection) ->
     Kind = record_kind(Record),
-    GroupId = case Kind of 'begin' -> group_id(Record); _ -> record_group_id(Record) end,
+    GroupId = group_id(Record),
     Groups = maps:get(groups, Projection),
     Fences = maps:get(apply_fences, Projection),
     Group = maps:get(GroupId, Groups, none),
@@ -2841,10 +2851,7 @@ readiness_for_new_participant(Record, Projection) ->
     case record_conflict_descriptor(Record, maps:get(target, Projection)) of
         none -> ready;
         {ok, Descriptor} ->
-            GroupId = case record_kind(Record) of
-                          'begin' -> group_id(Record);
-                          _ -> record_group_id(Record)
-                      end,
+            GroupId = group_id(Record),
             case conflict_disposition(
                    GroupId, Descriptor, maps:get(conflicts, Projection)) of
                 none -> ready;
@@ -3063,7 +3070,7 @@ reduction_inputs(Control, Ref, History, Projection) ->
             GroupId =
                 case Kind of
                     'begin' -> Digest;
-                    _ -> record_group_id(Record)
+                    _ -> group_id(Record)
                 end,
             case {maps:get(target, Projection) =:= Target,
                   ref_identity(Ref) =:= Target,
@@ -3295,12 +3302,7 @@ finalize_transition(
            AppliedGeneration, Ref, Records, Projection) of
         {ok, Projection1, Effect} -> {ok, Projection1, [Effect]};
         {error, _} = Error -> Error
-    end;
-finalize_transition(
-  {quod_dtx_finalize, ?RECORD_VERSION, _, _, commit, none, _}, _, _, _, _) ->
-    {error, {invalid_transition, prepare_required}};
-finalize_transition(_, _, _, _, _) ->
-    {error, {invalid_transition, participant_phase}}.
+    end.
 
 finalize_source_in_decision(
   {quod_dtx_decision, ?RECORD_VERSION, GroupId, _BeginRef, Verdict,
@@ -3384,7 +3386,7 @@ finalize_prepared(
           #{phase := prepared, prepare_kind := PrepareKind,
             prepare_ref := StoredPrepareRef,
             manifest := Manifest, plan_digest := PlanDigest,
-            plan := PlanBlob,
+            plan := PlanBlob, descriptor := Descriptor,
             prepared_generation := PreparedGeneration}} ->
     case finalize_prepare_matches(
            Verdict, SuppliedPrepareRef, StoredPrepareRef) andalso
@@ -3408,7 +3410,7 @@ finalize_prepared(
                         end,
                     case apply_projection_transition(
                            Verdict, GroupId, ApplyRef, AppliedGeneration,
-                           PlanBlob, Active1, Projection) of
+                           Descriptor, Active1, Projection) of
                         {ok, Projection1} -> {ok, Projection1, Effect};
                         {error, _} = Error -> Error
                     end;
@@ -3426,7 +3428,7 @@ finalize_prepared(
     end.
 
 apply_projection_transition(Verdict, GroupId, ApplyRef, GroupGeneration,
-                            PlanBlob, Group, Projection) ->
+                            Descriptor, Group, Projection) ->
     Conflicts1 = maps:remove(GroupId, maps:get(conflicts, Projection)),
     Projection0 = put_group(GroupId, Group, Projection#{conflicts := Conflicts1}),
     case Verdict of
@@ -3436,7 +3438,8 @@ apply_projection_transition(Verdict, GroupId, ApplyRef, GroupGeneration,
             case Global < ?MAX_UINT64 of
                 false -> {error, {invalid_transition, generation_exhausted}};
                 true ->
-                    {ok, Plan} = decode(PlanBlob),
+                    %% reduction_inputs validated this participant descriptor
+                    %% against the signed plan; no second plan decode here.
                     Fences0 = maps:get(apply_fences, Projection0),
                     %% Explicit events are ordered durable occurrences but do
                     %% not mutate the fact projection. Assert/retract clauses
@@ -3444,7 +3447,7 @@ apply_projection_transition(Verdict, GroupId, ApplyRef, GroupGeneration,
                     %% the reducer later finds the individual operation a
                     %% no-op, because only that reducer owns that decision.
                     Fences1 =
-                        case maps:get(writes, conflict_descriptor(Plan)) =/= [] of
+                        case maps:get(writes, Descriptor) =/= [] of
                             true -> Fences0#{GroupId =>
                                       #{slot => ref_slot(ApplyRef),
                                         generation => GroupGeneration,
@@ -3749,12 +3752,10 @@ valid_participant_role(#{phase := prepared, begin_ref := BeginRef,
     validate_certified_ref(BeginRef) andalso
         validate_certified_ref(PrepareRef) andalso
         ref_identity(PrepareRef) =:= Target andalso
-        valid_manifest(Manifest) andalso
         valid_conflict_descriptor(Descriptor) andalso
-        prepared_role_valid(
-          PrepareKind, Target, GroupId, BeginRef, PrepareRef,
-          Manifest, PlanDigest, PlanBlob) andalso
-        case decode(PlanBlob) of
+        case prepared_role_plan(
+               PrepareKind, Target, GroupId, BeginRef, PrepareRef,
+               Manifest, PlanDigest, PlanBlob) of
             {ok, Plan} ->
                 conflict_descriptor(Plan) =:= Descriptor andalso
                     overlay_generation(Plan) =:= PreparedGeneration;
@@ -3762,9 +3763,9 @@ valid_participant_role(#{phase := prepared, begin_ref := BeginRef,
         end;
 valid_participant_role(_, _, _) -> false.
 
-prepared_role_valid('begin', Target, GroupId, BeginRef, BeginRef,
+prepared_role_plan('begin', Target, GroupId, BeginRef, BeginRef,
                     Manifest, PlanDigest, PlanBlob) ->
-    Target =:= manifest_origin(Manifest) andalso
+    valid_manifest(Manifest) andalso Target =:= manifest_origin(Manifest) andalso
         ref_identity(BeginRef) =:= Target andalso
         ref_record_digest(BeginRef) =:= GroupId andalso
         case decode(PlanBlob) of
@@ -3772,24 +3773,21 @@ prepared_role_valid('begin', Target, GroupId, BeginRef, BeginRef,
                 target(Plan) =:= Target andalso digest(Plan) =:= PlanDigest
                     andalso valid_signed_plan(Plan) andalso
                     plan_matches_manifest(
-                      Target, Plan, PlanDigest, Manifest);
+                      Target, Plan, PlanDigest, Manifest) andalso {ok, Plan};
             {error, _} -> false
         end;
-prepared_role_valid(prepare, Target, GroupId, BeginRef, PrepareRef,
+prepared_role_plan(prepare, Target, GroupId, BeginRef, PrepareRef,
                     Manifest, PlanDigest, PlanBlob) ->
-    participant_plan_valid(
-      Target, GroupId, BeginRef, PrepareRef,
-      Manifest, PlanDigest, PlanBlob);
-prepared_role_valid(_, _, _, _, _, _, _, _) -> false.
-
-participant_plan_valid(Target, GroupId, BeginRef, PrepareRef,
-                       Manifest, PlanDigest, PlanBlob) ->
     Prepare = {quod_dtx_prepare, ?RECORD_VERSION, GroupId, BeginRef,
                Manifest, PlanDigest, PlanBlob},
-    valid_prepare_record(
-      Target, Prepare, GroupId, BeginRef, Manifest, PlanDigest, PlanBlob)
-        andalso record_digest_unchecked(prepare, Prepare) =:=
-            ref_record_digest(PrepareRef).
+    case prepare_record_plan(
+           Target, Prepare, GroupId, BeginRef, Manifest, PlanDigest, PlanBlob) of
+        {ok, Plan} ->
+            record_digest_unchecked(prepare, Prepare) =:= ref_record_digest(PrepareRef)
+                andalso {ok, Plan};
+        false -> false
+    end;
+prepared_role_plan(_, _, _, _, _, _, _, _) -> false.
 
 valid_identity_list(Identities) ->
     case bounded_length(Identities, ?QUOD_MAX_DTX_PARTICIPANTS) of
@@ -3807,17 +3805,6 @@ valid_identity_list(_, _) -> false.
 history_accepts_group(#{group_id := none}, _GroupId) -> true;
 history_accepts_group(#{group_id := GroupId}, GroupId) -> true;
 history_accepts_group(_, _) -> false.
-
-record_group_id({quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin) ->
-    group_id(Begin);
-record_group_id({quod_dtx_prepare, ?RECORD_VERSION, GroupId, _, _, _, _}) ->
-    GroupId;
-record_group_id({quod_dtx_decision, ?RECORD_VERSION, GroupId, _, _, _, _}) ->
-    GroupId;
-record_group_id({quod_dtx_finalize, ?RECORD_VERSION, GroupId, _, _, _, _}) ->
-    GroupId;
-record_group_id({quod_dtx_complete, ?RECORD_VERSION, GroupId, _, _}) ->
-    GroupId.
 
 ref_identity({quod_dtx_ref, ?REF_VERSION, Ns, Anchor, _, _, _, _}) ->
     {Ns, Anchor}.

@@ -981,6 +981,38 @@ many_certification_refuses_non_deadline_input_test() ->
                    maps:get(owner_ns, F), many_requests(F, 1),
                    infinity, #{})).
 
+many_certification_validates_each_input_once_before_workers_test() ->
+    F = fixture(1),
+    Deps = dependencies(F, fun(Key, Request) -> applied_reply(F, Key, Request) end),
+    {module, quod_dtx_current_view} = code:ensure_loaded(quod_dtx_current_view),
+    {ok, {call_count, Counts}} = tprof:profile(fun() ->
+        ?assertMatch({ok, [{verified, _}, {verified, _}]},
+          quod_dtx_current_view:test_certify_applied_many(
+            maps:get(owner_ns, F), many_requests(F, 2), deadline(1000), Deps)),
+        ok
+    end, #{type => call_count, report => return,
+           pattern => [{quod_dtx_current_view, valid_request, 4},
+                       {quod_dtx_current_view, valid_finalize_evidence, 6}]}),
+    lists:foreach(fun({Name, Arity}) ->
+        ?assertEqual(2, lists:sum([N || {quod_dtx_current_view, FName, A, Ps} <- Counts,
+                                      FName =:= Name, A =:= Arity, {_, N, _} <- Ps]))
+    end, [{valid_request, 4}, {valid_finalize_evidence, 6}]).
+
+malformed_late_batch_row_starts_no_worker_test() ->
+    F = fixture(1),
+    Counter = atomics:new(1, []),
+    Deps = (dependencies(F, fun(_, _) -> error(endpoint_before_admission) end))#{
+             network_identity => fun() -> atomics:add(Counter, 1, 1),
+                                          {error, unavailable} end},
+    [{Source, Claim, Evidence} = Good] = many_requests(F, 1),
+    lists:foreach(fun(Bad) ->
+        ?assertEqual({error, invalid_request},
+          quod_dtx_current_view:test_certify_applied_many(
+            maps:get(owner_ns, F), [Good, Bad], deadline(1000), Deps)),
+        ?assertEqual(0, atomics:get(Counter, 1))
+    end, [invalid, {Source, Claim#{generation := -1}, Evidence},
+          {Source, Claim, Evidence#{committee := []}}]).
+
 many_certification_children_follow_caller_death_test() ->
     F = fixture(1),
     Requests = many_requests(F, 2),

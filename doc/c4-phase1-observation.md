@@ -10,11 +10,12 @@ If revived later, cut uncertainty needs named exclusions and controls.
 ## Shipped scope and removal
 
 Only `quod_trace:start_span/4` gets an opt-in call site, restricted to the rare
-`quod.dtx.coordinate` allocation. Ordinary builds erase it. Build the diagnostic
+`quod.dtx.coordinate` and `quod.operation.recover` allocations. Ordinary builds erase it. Build the diagnostic
 release with `rebar3 as c4_phase1,prod release`; no application configuration
-enables it accidentally. The coordinator, Prolog, Simplex, foreign-log, durable
-formats, endpoint vocabulary and deploy template are byte-identical to the
-published .163 base. This branch contains no slice-7 code.
+enables it accidentally. It changes no ownership, execution, durable format,
+endpoint vocabulary or deploy template. The sequence below is the original
+Phase-1 acceptance plan against .163, not the current deployment state; later
+campaign manifests pin their own fleet, namespace and build inputs.
 
 The allocation operation delegates exactly once to the same SDK tracer, with
 unchanged context/options/result/exception. Only closed metadata is projected:
@@ -39,7 +40,7 @@ gap still fails the strict native denominator check conservatively.
 Removal: omit `c4_phase1` to erase the hook, remove this scope's new files and
 the small include/profile/call-site edits. No state or durable cleanup required.
 
-## Configuration-only 100%-sampling window — not executed
+## Configuration-only 100%-sampling window
 
 `scripts/c4/sampling-window.mjs` produces a pure plan from the exact existing
 template: its two `OTEL_TRACES_SAMPLER=parentbased_traceidratio` values become
@@ -56,7 +57,7 @@ does not prove allocation or export. This window
 is observer-on/always-on-sampling diagnostic data, not a normal-sampler latency
 baseline. The old 17 missing roots cannot be retrospectively classified by it.
 
-## Explicit deployment/witness sequence — awaiting review and deploy go
+## Original Phase-1 deployment/witness sequence (historical)
 
 1. Claude's exact-tree review, separate source commit and patch bump; only then
    Yan's explicit coordinated fleet-swap go. No wipe or slice-7 bytes.

@@ -3,14 +3,14 @@
 Shared bounded verification for signatures made by a certified validator set.
 
 This module knows only committee membership, quorum arithmetic, and Ed25519
-signatures. Consensus certificates and proof-scoped agent identity use
-the same rules without sharing either protocol's statement format.
+signatures. Consensus, exact `f + 1` read/application certificates and
+proof-scoped agent identity share these rules, not their statement formats.
 """.
 
 -include("quod_ingress_limits.hrl").
 
 -export([threshold/1, honest_threshold/1, verify_honest/3,
-         committee_size/1, valid_signature_list/2,
+         committee_size/1, valid_signature_list/2, canonical_signatures/1,
          sanitize/3, verify/3]).
 
 -type node_key() :: <<_:256>>.
@@ -34,7 +34,7 @@ verify_honest(Committee, Bytes, Signatures) ->
             Needed = honest_threshold(N),
             valid_signature_list(Signatures, Needed) andalso
                 length(Signatures) =:= Needed andalso
-                sanitize_at_least(Committee, N, Bytes, Signatures, Needed) =:= {ok, Signatures};
+                sanitize_at_least(Committee, Bytes, Signatures, Needed) =:= {ok, Signatures};
         _ -> false
     end.
 
@@ -57,35 +57,41 @@ committee_size(_MalformedDuplicateOrTooLarge, _Count, _Seen) ->
 sanitize(Committee, Bytes, Signatures) when is_binary(Bytes) ->
     case committee_size(Committee) of
         {ok, N} when N > 0 ->
-            sanitize_at_least(Committee, N, Bytes, Signatures, threshold(N));
+            case bounded_signatures(Signatures, N) of
+                true -> sanitize_at_least(Committee, Bytes, Signatures, threshold(N));
+                false -> error
+            end;
         _ ->
             error
     end;
 sanitize(_Committee, _Bytes, _Signatures) ->
     error.
 
-%% Both public policies already validated this committee and derived Needed
-%% from its size. Keep that boundary once, then verify the bounded votes once.
--spec sanitize_at_least([node_key()], pos_integer(), binary(), term(), pos_integer()) ->
+%% Both policies validated the committee and bounded every signature row.
+%% The exact-honest policy uses Needed as its bound; consensus uses N.
+-spec sanitize_at_least([node_key()], binary(), [signed_row()], pos_integer()) ->
           {ok, [signed_row()]} | error.
-sanitize_at_least(Committee, N, Bytes, Signatures, Needed) when is_binary(Bytes) ->
-    case bounded_signatures(Signatures, N) of
-        true ->
-            Members = ordsets:from_list(Committee),
-            Valid = lists:ukeysort(
-                      1,
-                      [{Signer, Signature}
-                       || {Signer, Signature} <- Signatures,
-                          ordsets:is_element(Signer, Members),
-                          quod_identity:verify(Signature, Bytes, Signer)]),
-            case length(Valid) >= Needed of
-                true -> {ok, Valid};
-                false -> error
-            end;
+sanitize_at_least(Committee, Bytes, Signatures, Needed) when is_binary(Bytes) ->
+    Members = ordsets:from_list(Committee),
+    Valid = lists:ukeysort(
+              1,
+              [{Signer, Signature}
+               || {Signer, Signature} <- Signatures,
+                  ordsets:is_element(Signer, Members),
+                  quod_identity:verify(Signature, Bytes, Signer)]),
+    case length(Valid) >= Needed of
+        true -> {ok, Valid};
         false -> error
     end;
-sanitize_at_least(_Committee, _N, _Bytes, _Signatures, _Needed) ->
+sanitize_at_least(_Committee, _Bytes, _Signatures, _Needed) ->
     error.
+
+-doc "Check a nonempty bounded certificate signature list, sorted by distinct signer.".
+-spec canonical_signatures(term()) -> boolean().
+canonical_signatures([_ | _] = Signatures) ->
+    valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
+        Signatures =:= lists:ukeysort(1, Signatures);
+canonical_signatures(_) -> false.
 
 -spec valid_signature_list(term(), non_neg_integer()) -> boolean().
 valid_signature_list(Signatures, Maximum) when is_integer(Maximum), Maximum >= 0 ->

@@ -880,6 +880,27 @@ failed_material_proof_aborts_without_sealing_test() ->
 %% V2 durable control protocol
 %% ------------------------------------------------------------------
 
+begin_interfaces_authenticate_once_and_keep_exact_digest_test() ->
+    F = protocol_fixture(),
+    Begin = maps:get(begin_record, F),
+    {Digest, Expected} = counted_identity_verification(fun() -> quod_dtx:record_digest(Begin) end),
+    ?assert(Expected > 0),
+    {{ok, {group, _, _, _, _, Digest}}, GroupCount} =
+        counted_identity_verification(fun() -> quod_dtx:begin_group_ref(Begin) end),
+    {{ok, _, Digest, Rows}, RecoveryCount} =
+        counted_identity_verification(fun() -> quod_dtx:begin_recovery_rows(Begin) end),
+    ?assertEqual(Expected, GroupCount),
+    ?assertEqual(Expected, RecoveryCount),
+    ?assertEqual([{T, B} || {T, _, B, _} <- element(5, Begin)], Rows),
+    Bad = setelement(5, Begin, []),
+    ?assertEqual(error, quod_dtx:begin_group_ref(Bad)),
+    ?assertEqual(error, quod_dtx:begin_recovery_rows(Bad)).
+
+counted_identity_verification(Fun) ->
+    {Result, {call_count, Counts}} = tprof:profile(Fun,
+      #{type => call_count, report => return, pattern => {quod_identity, verify, 3}}),
+    {Result, lists:sum([N || {quod_identity, verify, 3, Ps} <- Counts, {_, N, _} <- Ps])}.
+
 control_codec_roundtrips_all_five_fixed_records_test() ->
     F = protocol_fixture(),
     GroupId = maps:get(group_id, F),
@@ -901,6 +922,7 @@ control_codec_roundtrips_all_five_fixed_records_test() ->
           ?assert(quod_dtx:verify_control(
                     quod_dtx:control_target(Control), Control)),
           ?assertEqual(GroupId, quod_dtx:group_id(Control)),
+          ?assertEqual(GroupId, quod_dtx:group_id(quod_dtx:control_body(Control))),
           ?assertMatch(<<_:256>>, quod_dtx:record_digest(Control)),
           Metadata = quod_dtx:control_metadata(Control),
           ?assertEqual(Kind, maps:get(kind, Metadata)),
@@ -2337,6 +2359,77 @@ prepared_projection_retains_and_validates_exact_event_context_test() ->
                           Active#{participant :=
                                     Participant#{plan_digest := key(195)}}}},
     ?assertNot(quod_dtx:valid_projection(WrongDigest)).
+
+prepared_projection_decodes_once_and_cannot_substitute_its_descriptor_test_() ->
+    [{atom_to_list(Kind), fun() ->
+        F = source_fused_protocol_fixture(),
+        {Target, Control, Ref, Next, NextRef} = case Kind of
+            source -> {maps:get(origin, F), maps:get(begin_control, F), maps:get(begin_ref, F),
+                       maps:get(decision_control, F), maps:get(decision_ref, F)};
+            participant -> {maps:get(remote, F), maps:get(prepare_remote_control, F),
+                            maps:get(prepare_remote_ref, F), maps:get(finalize_remote_control, F),
+                            maps:get(finalize_remote_ref, F)}
+        end,
+        {ok, History, Projection, _} = quod_dtx:reduce(Control, Ref,
+          quod_dtx:initial_group_history(), quod_dtx:initial_projection(Target, 0)),
+        {true, {call_count, Counts}} = tprof:profile(
+          fun() -> quod_dtx:valid_projection(Projection) end,
+          #{type => call_count, report => return, pattern => {quod_dtx, decode, 1}}),
+        ?assertEqual(1, lists:sum([N || {quod_dtx, decode, 1, Ps} <- Counts, {_, N, _} <- Ps])),
+        GroupId = maps:get(group_id, F),
+        Group = test_group(Projection, GroupId),
+        Participant = maps:get(participant, Group),
+        Descriptor = maps:get(descriptor, Participant),
+        ?assert(maps:get(writes, Descriptor) =/= []),
+        ForgedDescriptor = Descriptor#{writes := []},
+        Forged = Projection#{groups := (maps:get(groups, Projection))#{
+                    GroupId := Group#{participant := Participant#{descriptor := ForgedDescriptor}}},
+                  conflicts := (maps:get(conflicts, Projection))#{GroupId := ForgedDescriptor}},
+        %% Both carrying rows agree with each other: only the signed plan can
+        %% detect this substitution. Rejection must precede any apply effect.
+        ?assertNot(quod_dtx:valid_projection(Forged)),
+        ?assertEqual({error, {invalid_transition, malformed_state}},
+                     quod_dtx:reduce(Next, NextRef, History, Forged)),
+        {Result, {call_count, ApplyCounts}} = tprof:profile(
+          fun() -> quod_dtx:reduce(Next, NextRef, History, Projection) end,
+          #{type => call_count, report => return, pattern => {quod_dtx, decode, 1}}),
+        ?assertMatch({ok, _, _, [_ | _]}, Result),
+        %% Input validation owns the single decode; applying that validated
+        %% row uses its descriptor rather than decoding the plan again.
+        ?assertEqual(1, lists:sum([N || {quod_dtx, decode, 1, Ps} <- ApplyCounts,
+                                      {_, N, _} <- Ps]))
+    end} || Kind <- [source, participant]].
+
+source_decision_reads_its_begin_payload_once_test() ->
+    F = source_fused_protocol_fixture(),
+    {ok, {call_count, Counts}} = tprof:profile(fun() ->
+        quod_dtx:validate_references(maps:get(decision_control, F),
+          [{'begin', maps:get(begin_ref, F), maps:get(begin_control, F)},
+           {prepare, maps:get(prepare_remote_ref, F), maps:get(prepare_remote_control, F)}])
+    end, #{type => call_count, report => return, pattern => {quod_dtx, begin_participant_payload, 2}}),
+    ?assertEqual(1, lists:sum([N || {quod_dtx, begin_participant_payload, 2, Ps} <- Counts,
+                                  {_, N, _} <- Ps])).
+
+invalid_finalize_cannot_reach_the_transition_test() ->
+    F = protocol_fixture(),
+    Target = maps:get(target_a, F),
+    {ok, History, Projection, _} = quod_dtx:reduce(maps:get(prepare_a_control, F),
+      maps:get(prepare_a_ref, F), quod_dtx:initial_group_history(),
+      quod_dtx:initial_projection(Target, 0)),
+    Control = maps:get(finalize_a_control, F),
+    Record = quod_dtx:control_body(Control),
+    Ref = maps:get(finalize_a_ref, F),
+    MissingPrepare = setelement(5, Control, setelement(6, Record, none)),
+    WrongGroup = setelement(5, Control, setelement(3, Record, key(241))),
+    {ok, {call_count, Counts}} = tprof:profile(fun() ->
+        lists:foreach(fun({Bad, Reason}) ->
+            ?assertEqual({error, {invalid_transition, Reason}},
+                         quod_dtx:reduce(Bad, Ref, History, Projection))
+        end, [{MissingPrepare, malformed_state}, {WrongGroup, bad_binding}])
+    end, #{type => call_count, report => return, pattern => {quod_dtx, finalize_transition, 5}}),
+    ?assertEqual(0, lists:sum([N || {quod_dtx, finalize_transition, 5, Ps} <- Counts,
+                                  {_, N, _} <- Ps])),
+    ?assertMatch({ok, _, _, [_]}, quod_dtx:reduce(Control, Ref, History, Projection)).
 
 more_than_sixty_four_disjoint_groups_prepare_without_a_cap_test() ->
     with_identity(fun(_) -> more_than_sixty_four_disjoint_groups_prepare() end).

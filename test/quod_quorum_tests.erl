@@ -27,6 +27,28 @@ honest_threshold_has_one_arithmetic_owner_test() ->
     ?assertEqual([1, 1, 2, 3, 22],
                  [quod_quorum:honest_threshold(N) || N <- [1, 3, 4, 7, 64]]).
 
+canonical_certificate_rows_share_shape_order_and_duplicate_rules_test() ->
+    Rows = [{<<N:256>>, <<N:512>>} || N <- lists:seq(1, ?MAX_VALIDATORS)],
+    [A, B | _] = Rows,
+    ?assert(quod_quorum:canonical_signatures([A])),
+    ?assert(quod_quorum:canonical_signatures(Rows)),
+    lists:foreach(fun(Invalid) ->
+        ?assertNot(quod_quorum:canonical_signatures(Invalid))
+    end, [[], [A, A], [B, A], [A | invalid], [invalid], [{<<1>>, <<2>>}],
+          Rows ++ [{<<999:256>>, <<999:512>>}]]).
+
+honest_signature_rows_are_bounded_once_test() ->
+    {Pub, Identity} = identity(), Bytes = <<"one-signature-shape-pass">>,
+    Rows = [{Pub, quod_identity:sign(Bytes, Identity)}],
+    {module, quod_quorum} = code:ensure_loaded(quod_quorum),
+    {ok, {call_count, Counts}} = tprof:profile(fun() ->
+        ?assert(quod_quorum:verify_honest([Pub], Bytes, Rows)), ok
+    end, #{type => call_count, report => return,
+           pattern => {quod_quorum, bounded_signatures, 2}}),
+    %% One row and the terminating empty list, not a second traversal.
+    ?assertEqual(2, lists:sum([N || {quod_quorum, bounded_signatures, 2, Ps} <- Counts,
+                                  {_, N, _} <- Ps])).
+
 committee_is_validated_once_at_each_public_policy_test() ->
     {Pub, Identity} = identity(), Bytes = <<"one-committee-boundary">>,
     Rows = [{Pub, quod_identity:sign(Bytes, Identity)}],

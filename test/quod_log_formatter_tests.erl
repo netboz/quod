@@ -2,6 +2,55 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
+rendering_failures_keep_only_the_redacted_message_test_() ->
+    Secret = <<"synthetic-format-failure-secret">>,
+    Key = #'ECPrivateKey'{version = 1, privateKey = Secret},
+    [{atom_to_list(Case), fun() ->
+        assert_safe_fallback(iolist_to_binary(quod_log_formatter:format(Event, #{})), Secret)
+    end} || {Case, Event} <- [
+        {format_arguments, #{level => error, msg => {"~p ~p", [Key]}, meta => #{time => 0}}},
+        {invalid_unicode, #{level => error, msg => {string, [16#d800, Key]}, meta => #{time => 0}}},
+        {invalid_timestamp, #{level => error, msg => {report, #{key => Key}},
+                              meta => #{time => invalid, private_key => Secret}}},
+        {metadata_encoding, #{level => error, msg => {report, #{key => Key}},
+                               meta => #{time => 0, #{nested => key} => Key}}}
+    ]].
+
+otp_handler_render_failure_cannot_recover_the_raw_message_test() ->
+    %% Drive the real standard handler directly: its production formatter
+    %% fallback uses the original event if ours raises. No global handlers or
+    %% logger levels are changed, and the key below is only a sentinel.
+    Secret = <<"synthetic-otp-fallback-secret">>,
+    Key = #'ECPrivateKey'{version = 1, privateKey = Secret},
+    File = filename:join("/tmp", "quod-formatter-" ++
+                         integer_to_list(erlang:unique_integer([positive])) ++ ".log"),
+    Name = quod_formatter_fallback_test,
+    {ok, Config} = logger_std_h:adding_handler(
+      #{id => Name, module => logger_std_h, formatter => {quod_log_formatter, #{}},
+        config => #{type => file, file => File, filesync_repeat_interval => no_repeat}}),
+    try
+        ok = logger_std_h:log(
+          #{level => error, msg => {"~p ~p", [Key]}, meta => #{time => 0}}, Config),
+        %% Same sender -> handler -> file controller, not a send-trace guess.
+        ok = logger_std_h:filesync(Name),
+        {ok, Bytes} = file:read_file(File),
+        assert_safe_fallback(Bytes, Secret)
+    after
+        ok = logger_std_h:removing_handler(Config),
+        ok = file:delete(File)
+    end.
+
+assert_safe_fallback(Bytes, Secret) ->
+    ?assertEqual(nomatch, binary:match(Bytes, Secret)),
+    ?assertEqual(nomatch, binary:match(Bytes, <<"ECPrivateKey">>)),
+    Decoded = json:decode(Bytes),
+    ?assertEqual(true, maps:get(<<"format_error">>, Decoded)),
+    ?assertEqual(<<"error">>, maps:get(<<"level">>, Decoded)),
+    ?assertNotEqual(nomatch, binary:match(maps:get(<<"msg">>, Decoded),
+                                         <<"redacted_private_key">>)),
+    ?assertEqual([<<"format_error">>, <<"level">>, <<"msg">>, <<"ts">>],
+                 lists:sort(maps:keys(Decoded))).
+
 binary_report_and_metadata_keep_original_message_test() ->
     lists:foreach(fun(Byte) ->
         Report = #{label => original_report, data => <<Byte>>},

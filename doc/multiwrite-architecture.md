@@ -1276,3 +1276,31 @@ start denominator. The collector's selected group/operation identity domain
 must accompany the record, and unknown or missing metadata stays explicit.
 Default builds still erase the decorator call. Retained formats and deployment
 configuration are unchanged; ordinary spans suffice at full diagnostic sampling.
+
+## 2026-09-13 implementation status — one source identity per target vector
+
+The source claim's semantic identity and signed client request are invariants
+of its entire target vector, not per-target work. Construction and canonical
+validation now derive them once into a private call-local value, then project
+each application ID from that value and the target's authenticated plan. The
+former per-target source derivation and the validator's redundant preliminary
+request verification are deleted. N=1 follows the same traversal as N=8.
+
+Each plan still has to bind the exact verified client request; an authentically
+signed request for the same goal but a different operation cannot borrow the
+old sealed plans. Explicit claim references, stored claim IDs, the complete
+prediction vector and source/target anchoring retain their existing checks.
+The local value is not stored, exported or caller-supplied. No trust cache,
+process, flag, owner, timer, deadline change or additional execution path is
+introduced. Existing foreign-evidence and admission validation remain intact.
+
+Permanent controls count one source derivation and one durable client-request
+verification for construction and decoding at N=1/2/4/8. Generated signed
+fixtures encoded by the actual .179 codec preserve exact signed bytes and
+predicted application IDs; they are honestly not described as fleet history.
+Re-signed envelopes with corrupt inner signatures or substituted identities
+still fail closed. The durable/wire schema does not change.
+
+This removes one demonstrated repeated-work source in the shared codec. It
+does not claim that all nested evidence revalidation has disappeared, that
+the Begin residual is solved, or that the broad L2 latency gate has passed.

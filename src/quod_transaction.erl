@@ -72,6 +72,10 @@ accepted.
 
 -type target_binding() :: {binary(), binary(), binary()}.
 
+%% Call-local derivation shared by every target in one claim. Only the private
+%% constructor below can produce it; no runtime owner or retained trust cache.
+-record(operation_identity, {claim_ref, binding, operation_ref, goal, result}).
+
 -doc """
 Build the unsigned semantic transaction carried by one sealed plan.
 
@@ -142,9 +146,10 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
                      request_auth = RequestAuth,
                      auth_transcript = none,
                      author = none, sig = none},
-    ClaimId = semantic_id_or_error(Origin, Claim0),
-    ClaimRef = {transaction, OriginNs, OriginAnchor, ClaimId},
-    Predicted = predicted_applications(ClaimRef, Claim0, Plans),
+    Identity = #operation_identity{
+                  claim_ref = {transaction, OriginNs, OriginAnchor, ClaimId}} =
+        operation_identity(Claim0),
+    Predicted = predicted_applications(Identity, Plans),
     Claim0#transaction{
       tx_id = ClaimId,
       role = {remote_claim, Manifest, Bundles, Predicted}}.
@@ -164,8 +169,10 @@ remote_application(
     %% Select and authenticate the exact anchored bundle before allocating
     %% its vocabulary. Co-hosting or a namespace spelling is not a selector.
     {ok, Plan} = remote_claim_plan(Claim, Target),
+    Identity = #operation_identity{claim_ref = ClaimRef} =
+        operation_identity(Claim),
     {ApplicationId, OperationRef, RequestDigest} =
-        remote_application_identity(ClaimRef, Claim, Target, Plan),
+        application_identity(Identity, Target, Plan),
     true = declared_application_matches(Claim, Target, ApplicationId),
     {ok, Material} = quod_dtx:material(Plan),
     Application0 =
@@ -187,16 +194,26 @@ remote_application(
 remote_application(_ClaimRef, _Claim, _Target) ->
     error(bad_remote_claim).
 
-remote_application_identity(ClaimRef,
+operation_identity(
     Claim = #transaction{origin = {Ns, Anchor}, goal = Goal, result = Result,
-                         request_auth = RequestAuth}, Target, Plan) ->
+                         request_auth = RequestAuth}) ->
     ClaimId = semantic_id_or_error({Ns, Anchor}, Claim),
-    {transaction, Ns, Anchor, ClaimId} = ClaimRef,
     true = Claim#transaction.tx_id =:= <<>> orelse Claim#transaction.tx_id =:= ClaimId,
-    {agent_goal_v1, Digest} = Binding = quod_client_goal:request_binding(RequestAuth),
-    Binding = quod_dtx:request_binding(Plan),
+    {agent_goal_v1, _Digest} = Binding = quod_client_goal:request_binding(RequestAuth),
     {ok, #{claim := #{operation_ref := OperationRef}}} =
         quod_client_goal:verify_durable_request(RequestAuth, Goal),
+    #operation_identity{claim_ref = {transaction, Ns, Anchor, ClaimId},
+                        binding = Binding, operation_ref = OperationRef,
+                        goal = Goal, result = Result}.
+
+application_identity(
+    #operation_identity{claim_ref = ClaimRef,
+                        binding = {agent_goal_v1, Digest} = Binding,
+                        operation_ref = OperationRef, goal = Goal,
+                        result = Result}, Target, Plan) ->
+    %% The signed request is invariant across this vector; EACH target still
+    %% has to bind its independently authenticated plan to that exact request.
+    Binding = quod_dtx:request_binding(Plan),
     Role = {remote_application, ClaimRef, OperationRef, Digest},
     {semantic_plan_id(Target, Plan, Goal, Result, none, none, Role), OperationRef, Digest}.
 
@@ -655,10 +672,10 @@ authenticated_claim_plan(Origin, Manifest, Target, Digest, Blob, Attestation) ->
         _ -> error
     end.
 
-predicted_applications(ClaimRef, Claim, Plans) ->
+predicted_applications(Identity, Plans) ->
     [begin
          {Ns, Anchor} = Target = quod_dtx:target(Plan),
-         {Id, _, _} = remote_application_identity(ClaimRef, Claim, Target, Plan),
+         {Id, _, _} = application_identity(Identity, Target, Plan),
          {transaction, Ns, Anchor, Id}
      end || Plan <- Plans].
 
@@ -1534,12 +1551,11 @@ valid_role_fields(
             evidence = none, goal = Goal,
             diff = [], read_check = #{}, effects = [],
             request_auth =
-              {agent_goal_v1, <<_:256>>, _Bytes, <<_:512>>} = Auth,
+              {agent_goal_v1, <<_:256>>, _Bytes, <<_:512>>},
             auth_transcript = none})
   when is_list(Bundles), is_list(Predicted), is_binary(Goal) ->
-    case {quod_client_goal:verify_durable_request(Auth, Goal),
-          claim_plans(Target, Manifest, Bundles)} of
-        {{ok, _}, {ok, Plans}} ->
+    case claim_plans(Target, Manifest, Bundles) of
+        {ok, Plans} ->
             quod_dtx:manifest_digest(Manifest) =:= Claim#transaction.plan_digest andalso
                 lists:all(fun(Plan) -> quod_dtx:event_context(Manifest, Plan) =:=
                     {ok, #{proof_id => Claim#transaction.proof_id,
@@ -1548,7 +1564,7 @@ valid_role_fields(
                            goal => Claim#transaction.goal,
                            result => Claim#transaction.result,
                            plan_digest => quod_dtx:digest(Plan)}} end, Plans) andalso
-                predicted_remote_refs(Target, Claim, Plans, Predicted);
+                predicted_remote_refs(Claim, Plans, Predicted);
         _ -> false
     end;
 valid_role_fields(
@@ -1669,11 +1685,11 @@ canonical_foreign_reads(ForeignReads) when is_list(ForeignReads) ->
 canonical_foreign_reads(_ForeignReads) ->
     error.
 
-predicted_remote_refs(Origin, Claim, Plans, Predicted) ->
-    {OriginNs, OriginAnchor} = Origin,
-    ClaimId = semantic_id_or_error(Origin, Claim),
-    ClaimRef = {transaction, OriginNs, OriginAnchor, ClaimId},
-    try predicted_applications(ClaimRef, Claim, Plans) of
+predicted_remote_refs(Claim, Plans, Predicted) ->
+    %% One client-signature check and source semantic-ID derivation feed the
+    %% complete vector, including N=1. Invalid request evidence still refuses
+    %% the envelope here, before any caller can admit or dispatch it.
+    try predicted_applications(operation_identity(Claim), Plans) of
         Predicted -> true;
         _ -> false
     catch _:_ -> false

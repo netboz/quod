@@ -1304,3 +1304,26 @@ still fail closed. The durable/wire schema does not change.
 This removes one demonstrated repeated-work source in the shared codec. It
 does not claim that all nested evidence revalidation has disappeared, that
 the Begin residual is solved, or that the broad L2 latency gate has passed.
+
+## 2026-09-13 implementation status — reuse attested plan context
+
+An authenticated target bundle now carries its event context through the same
+private, call-local transaction-codec traversal. The attestation boundary
+validates exactly the existing signed plan, target and manifest bindings and
+returns the context it just established. The codec's second verification pass
+to obtain that context is deleted. The context fields still have to match the
+source claim; carrying verified data does not remove its consuming checks.
+
+The boolean attestation verifier remains the single authentication algorithm
+for its existing scope and explorer consumers. Standalone event-context reads
+without an attestation still perform their own required authentication. Both
+use one private projection builder. No public unchecked token, trusted cache,
+process, flag, timer, deadline, durable format or additional execution engine.
+
+Controls count one plan signature verification per target for both construction
+and decoding at N=1/2/4/8, retain exact .179 golden signed bytes and predicted
+IDs, and reject corrupt plan/attestation signatures and substituted bindings.
+The claim-context control rebuilds source and target IDs to ensure that an
+unrelated stale-ID rejection cannot conceal a missing context comparison.
+This scope reduces shared codec work, not the remaining consensus or target
+result-collection latency measured in the separately labeled .180 witness.

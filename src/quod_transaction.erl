@@ -129,9 +129,7 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
     ForeignReads = canonical_foreign_reads_or_error(ForeignReads0),
     Bundles = lists:sort(Bundles0),
     {ok, Plans} = claim_plans(Origin, Manifest, Bundles),
-    [Plan | _] = Plans,
-    {ok, #{goal := GoalBlob, result := ResultBlob}} =
-        quod_dtx:event_context(Manifest, Plan),
+    [{Plan, #{goal := GoalBlob, result := ResultBlob}} | _] = Plans,
     Claim0 =
         #transaction{tx_id = <<>>,
                      role = {remote_claim, Manifest, Bundles, []},
@@ -595,7 +593,9 @@ remote_claim_plan(#transaction{origin = Origin,
     try
         true = valid_bundle_set(Manifest, Bundles),
         {Target, Digest, Blob, Attestation} = lists:keyfind(Target, 1, Bundles),
-        authenticated_claim_plan(Origin, Manifest, Target, Digest, Blob, Attestation)
+        {ok, {Plan, _Context}} =
+            authenticated_claim_plan(Origin, Manifest, Target, Digest, Blob, Attestation),
+        {ok, Plan}
     catch _:_ -> error
     end;
 remote_claim_plan(_, _) -> error.
@@ -628,13 +628,15 @@ valid_bundle_set(Manifest, Bundles)
             quod_dtx:manifest_participants(Manifest);
 valid_bundle_set(_, _) -> false.
 
+%% Each call-local pair carries the context obtained during the SAME target
+%% authentication. Nothing here is a cached or caller-supplied trust token.
 claim_plans(Origin, Manifest, Bundles) ->
     try
         true = valid_bundle_set(Manifest, Bundles),
         {ok, [begin
-                  {ok, Plan} = authenticated_claim_plan(
+                  {ok, BoundPlan} = authenticated_claim_plan(
                     Origin, Manifest, Target, Digest, Blob, Attestation),
-                  Plan
+                  BoundPlan
               end || {Target, Digest, Blob, Attestation} <- Bundles]}
     catch _:_ -> error
     end.
@@ -664,9 +666,12 @@ authenticated_claim_plan(Origin, Manifest, Target, Digest, Blob, Attestation) ->
             case quod_dtx:origin(Plan) =:= Origin andalso
                  quod_dtx:target(Plan) =:= Target andalso
                  quod_dtx:digest(Plan) =:= Digest andalso
-                 quod_dtx:writes(Plan) andalso
-                 quod_dtx:verify_plan_attestation(Target, Plan, Manifest, Attestation) of
-                true -> {ok, Plan};
+                 quod_dtx:writes(Plan) of
+                true ->
+                    case quod_dtx:attested_context(Target, Plan, Manifest, Attestation) of
+                        {ok, Context} -> {ok, {Plan, Context}};
+                        error -> error
+                    end;
                 false -> error
             end;
         _ -> error
@@ -677,7 +682,7 @@ predicted_applications(Identity, Plans) ->
          {Ns, Anchor} = Target = quod_dtx:target(Plan),
          {Id, _, _} = application_identity(Identity, Target, Plan),
          {transaction, Ns, Anchor, Id}
-     end || Plan <- Plans].
+     end || {Plan, _Context} <- Plans].
 
 receipt_evidence_references(Receipt, Pairs) when is_list(Pairs) ->
     case quod_operation_vector:receipt_references(Receipt) of
@@ -1410,7 +1415,7 @@ operation_claim_submission(Submission = {submit, Author, _Signature, Bytes}) ->
             decode_verified_submission({Ns, Anchor, Admission}, Submission),
         {Ns, Anchor, Author, Admission} = quod_dtx:manifest_coordinator(Manifest),
         {ok, Plans} = claim_plans({Ns, Anchor}, Manifest, Bundles),
-        true = lists:any(fun(Plan) -> quod_dtx:effects_count(Plan) =:= 1 end, Plans),
+        true = lists:any(fun({Plan, _Context}) -> quod_dtx:effects_count(Plan) =:= 1 end, Plans),
         {ok, Claim}
     catch _:_ -> {error, invalid_operation_submission}
     end;
@@ -1422,7 +1427,8 @@ operation_submission_targets(Submission) ->
     case operation_claim_submission(Submission) of
         {ok, #transaction{origin = Origin, role = {remote_claim, Manifest, Bundles, _}}} ->
             {ok, Plans} = claim_plans(Origin, Manifest, Bundles),
-            {ok, [quod_dtx:target(P) || P <- Plans, quod_dtx:effects_count(P) =:= 1]};
+            {ok, [quod_dtx:target(P) || {P, _Context} <- Plans,
+                                      quod_dtx:effects_count(P) =:= 1]};
         _ -> error
     end.
 
@@ -1557,13 +1563,13 @@ valid_role_fields(
     case claim_plans(Target, Manifest, Bundles) of
         {ok, Plans} ->
             quod_dtx:manifest_digest(Manifest) =:= Claim#transaction.plan_digest andalso
-                lists:all(fun(Plan) -> quod_dtx:event_context(Manifest, Plan) =:=
-                    {ok, #{proof_id => Claim#transaction.proof_id,
+                lists:all(fun({Plan, Context}) -> Context =:=
+                    #{proof_id => Claim#transaction.proof_id,
                            origin => Target,
                            principal => quod_dtx:principal(Plan),
                            goal => Claim#transaction.goal,
                            result => Claim#transaction.result,
-                           plan_digest => quod_dtx:digest(Plan)}} end, Plans) andalso
+                           plan_digest => quod_dtx:digest(Plan)} end, Plans) andalso
                 predicted_remote_refs(Claim, Plans, Predicted);
         _ -> false
     end;

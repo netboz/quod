@@ -84,7 +84,7 @@ replay. Neither transition changes the global proof generation.
          manifest_participants/1,
          manifest_group_ref/2,
          encode_manifest/1, decode_manifest/1,
-         attest_plan/5, verify_plan_attestation/4, attestation_mode/1,
+         attest_plan/5, verify_plan_attestation/4, attested_context/4, attestation_mode/1,
          encode_attestation/1, decode_attestation/1,
          certified_ref/6, certified_entry_ref/3,
          certified_entry_ref_matches/5, certified_ref_claim/1,
@@ -914,6 +914,17 @@ verify_plan_attestation(
         verify_plan_attestation_preverified(
           Target, Plan, Manifest, manifest_digest_unchecked(Manifest),
           Attestation).
+
+-doc "Authenticate one target's attested plan and return its bound event context.".
+-spec attested_context(identity(), plan(), manifest(), attestation()) ->
+          {ok, map()} | error.
+attested_context(Target, Plan, Manifest, Attestation) ->
+    %% Verification is the same boundary used by boolean consumers. Carry its
+    %% authenticated projection forward instead of verifying again to read it.
+    case verify_plan_attestation(Target, Plan, Manifest, Attestation) of
+        true -> {ok, manifest_plan_context(Manifest, digest(Plan))};
+        false -> error
+    end.
 
 verify_plan_attestation_preverified(
   Target, Plan, Manifest, ManifestDigest,
@@ -1879,23 +1890,22 @@ event_context(Manifest, Plan) ->
             case plan_matches_manifest(
                    Target, Plan, PlanDigest, Manifest) of
                 true ->
-                    {OriginNs, OriginAnchor, _, _} =
-                        manifest_coordinator(Manifest),
-                    {quod_dtx_manifest, ?MANIFEST_VERSION, ProofId, _, _,
-                     Principal, Goal, _, Result, _, _RequestBinding, _} =
-                        Manifest,
-                    {ok, #{proof_id => ProofId,
-                           origin => {OriginNs, OriginAnchor},
-                           principal => Principal,
-                           goal => Goal,
-                           result => Result,
-                           plan_digest => PlanDigest}};
+                    {ok, manifest_plan_context(Manifest, PlanDigest)};
                 false ->
                     error
             end;
         false ->
             error
     end.
+
+-spec manifest_plan_context(manifest(), <<_:256>>) -> map().
+manifest_plan_context(Manifest, PlanDigest) ->
+    {OriginNs, OriginAnchor, _, _} = manifest_coordinator(Manifest),
+    {quod_dtx_manifest, ?MANIFEST_VERSION, ProofId, _, _, Principal,
+     Goal, _, Result, _, _RequestBinding, _} = Manifest,
+    #{proof_id => ProofId, origin => {OriginNs, OriginAnchor},
+      principal => Principal, goal => Goal, result => Result,
+      plan_digest => PlanDigest}.
 
 -doc "Canonical fields needed by the signing journal without opening the record.".
 -spec control_metadata(control()) -> map().

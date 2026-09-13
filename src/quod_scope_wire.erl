@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 12).
+-define(VERSION, 13).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).

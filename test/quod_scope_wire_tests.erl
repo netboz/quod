@@ -83,10 +83,25 @@ independent_metadata_roundtrips_and_refuses_malformed_values_test() ->
           {plan_sealed, <<"plan">>, -1}, {plan_sealed, <<"plan">>, 4},
           {plan_sealed, <<"plan">>},
           {nested_next, id(2), id(3), 1, {tx_selection, none, []}}]),
-    ?assertNot(quod_transaction_scope:valid_selection(
-                 {tx_selection, id(4), [], independent})),
+    ?assert(quod_transaction_scope:valid_selection(
+              {tx_selection, id(4), [], independent})),
     ?assertNot(quod_transaction_scope:valid_selection(
                  {tx_selection, none, [], true})).
+
+savepoint_lineage_and_public_intent_are_independent_wire_fields_test() ->
+    lists:foreach(fun(Mode) ->
+        Selection = {tx_selection, id(4), [id(5)], Mode},
+        ?assertEqual(1, quod_transaction_scope:checkpoint_depth(Selection)),
+        ?assertEqual(Mode, quod_transaction_scope:selection_mode(Selection)),
+        Command = command({invoke_open, id(1), Selection, chain(2), payload(goal, true)}),
+        {ok, Bytes} = quod_scope_wire:encode_command(Command),
+        ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Bytes)),
+        %% v12 conflated a private rollback lineage with atomic intent.
+        Old = term_to_binary({<<"quod.scope">>, 12, Command}, [deterministic]),
+        ?assertMatch({error, {protocol_error, _}}, quod_scope_wire:decode_request(Old))
+    end, [ordinary, atomic, independent]),
+    ?assertNot(quod_transaction_scope:valid_selection(
+                 {tx_selection, none, [id(5)], independent})).
 
 scope_v5_authentication_digest_is_exact_and_bounded_test() ->
     {ok, NodeDigest} = quod_scope_wire:authentication_digest(node),
@@ -867,7 +882,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 12, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 13, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

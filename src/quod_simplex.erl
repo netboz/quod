@@ -6445,7 +6445,23 @@ decode_claimed_application(Target, EvidenceBlob) ->
             error
     end.
 
-claimed_application_result(
+%% A durable application result is authoritative for every kind of claim.
+%% Private prepared material may already be retired after completion; exact
+%% redelivery must never require it again. Only an absent outcome enters the
+%% existing submission machinery, under the same caller deadline.
+claimed_application_result(Ns, ClaimRef, Claim,
+                           #transaction{tx_id = TxId} = Application, Deadline) ->
+    case genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            TargetRef = {transaction, Ns, Anchor, TxId},
+            case claimed_terminal_application(Ns, TargetRef, TxId, Deadline) of
+                absent -> submit_claimed_application(Ns, ClaimRef, Claim, Application, Deadline);
+                Result -> Result
+            end;
+        _ -> {error, not_ready}
+    end.
+
+submit_claimed_application(
   Ns, _ClaimRef, _Claim,
   #transaction{tx_id = TxId, effects = []} = Application, Deadline) ->
     case genesis_hash(Ns) of
@@ -6461,7 +6477,7 @@ claimed_application_result(
         _ ->
             {error, not_ready}
     end;
-claimed_application_result(
+submit_claimed_application(
   Ns, ClaimRef, Claim,
   Application0 = #transaction{tx_id = TxId, effects = [Effect]}, Deadline) ->
     case {genesis_hash(Ns), current_application_signer(Ns, Claim)} of
@@ -6491,7 +6507,7 @@ claimed_application_result(
             %% private effect. Route walking will try that exact validator.
             {error, not_ready}
     end;
-claimed_application_result(_Ns, _ClaimRef, _Claim, _Application, _Deadline) ->
+submit_claimed_application(_Ns, _ClaimRef, _Claim, _Application, _Deadline) ->
     {error, invalid_request}.
 
 current_application_signer(Ns, Claim) ->
@@ -6534,18 +6550,29 @@ claimed_application_outcome(
   Ns, _TargetRef, TxId, {ok, _Bindings, Slot, TxId}, Deadline) ->
     claimed_application_evidence(Ns, Slot, TxId, committed, Deadline);
 claimed_application_outcome(Ns, TargetRef, TxId, {error, _Reason}, Deadline) ->
-    case quod_prolog:local_outcome(Ns, TargetRef) of
-        {ok, #{status := committed, height := Slot}} ->
+    case claimed_terminal_application(Ns, TargetRef, TxId, Deadline) of
+        absent -> {error, not_ready};
+        Result -> Result
+    end;
+claimed_application_outcome(_Ns, _TargetRef, _TxId, _Other, _Deadline) ->
+    {error, not_ready}.
+
+claimed_terminal_application(Ns, TargetRef, TxId, Deadline) ->
+    Snapshot = case max(0, Deadline - quod_time:mono_ms()) of
+                   0 -> {error, timeout};
+                   Remaining -> quod_prolog:outcome_snapshot(Ns, TargetRef, Remaining)
+               end,
+    case Snapshot of
+        {ok, #{outcome := not_found}} -> absent;
+        {ok, #{outcome := #{status := committed, height := Slot}}} ->
             claimed_application_evidence(Ns, Slot, TxId, committed, Deadline);
-        {ok, #{status := rejected, reason := Reason, height := Slot}}
+        {ok, #{outcome := #{status := rejected, reason := Reason, height := Slot}}}
           when is_atom(Reason) ->
             claimed_application_evidence(
               Ns, Slot, TxId, {rejected, Reason}, Deadline);
         _ ->
             {error, not_ready}
-    end;
-claimed_application_outcome(_Ns, _TargetRef, _TxId, _Other, _Deadline) ->
-    {error, not_ready}.
+    end.
 
 claimed_application_evidence(Ns, Slot, TxId, Result, Deadline) ->
     case transaction_evidence(Ns, Slot, TxId, Deadline) of

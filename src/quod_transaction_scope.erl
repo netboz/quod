@@ -1,12 +1,15 @@
 -module(quod_transaction_scope).
 -moduledoc """
-Invocation-local transaction lineage for distributed ontology proofs.
+Invocation-local savepoint lineage and commit intent for distributed proofs.
 
 Erlog owns the local immutable overlay checkpoint.  This module adds only the
 opaque controller tokens needed when the same proof selects another ontology.
-An all-local `transaction/1` therefore creates no proof-context state.  Pending
+An all-local savepoint therefore creates no proof-context state. Pending
 frames are activated together on the first foreign selection, and later Erlog
 choice points retain one bounded controller batch for the active lineage.
+Lineage governs rollback only. The separately propagated invocation mode
+distinguishes public atomic intent from private action rollback, including
+inside an independent wrapper. No knowledge-base state crosses this boundary.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -20,7 +23,7 @@ choice points retain one bounded controller batch for the active lineage.
 
 -type opaque_id() :: <<_:128>>.
 -type lineage() :: none | opaque_id().
--type selection() :: {tx_selection, lineage(), [opaque_id()], ordinary | independent}.
+-type selection() :: {tx_selection, lineage(), [opaque_id()], ordinary | atomic | independent}.
 -type actor() :: {opaque_id(), opaque_id()}.
 -type distributed_token() :: {batch, opaque_id()} | {pending, opaque_id()}.
 
@@ -49,8 +52,7 @@ empty_selection() -> {tx_selection, none, [], ordinary}.
 
 -spec valid_selection(term()) -> boolean().
 valid_selection({tx_selection, Lineage, BatchIds, Mode}) ->
-    (Mode =:= ordinary orelse Mode =:= independent) andalso
-        (Mode =/= independent orelse Lineage =:= none) andalso
+    (Mode =:= ordinary orelse Mode =:= atomic orelse Mode =:= independent) andalso
     valid_lineage(Lineage) andalso
         valid_sorted_ids(BatchIds, none, 0) andalso
         (Lineage =/= none orelse BatchIds =:= []);
@@ -59,13 +61,13 @@ valid_selection(_) -> false.
 -spec selection_lineage(selection()) -> lineage().
 selection_lineage({tx_selection, Lineage, _BatchIds, _Mode}) -> Lineage.
 
--spec selection_mode(selection()) -> ordinary | independent.
+-spec selection_mode(selection()) -> ordinary | atomic | independent.
 selection_mode({tx_selection, _Lineage, _BatchIds, Mode}) -> Mode.
 
 -spec checkpoint_depth(selection()) -> 0 | 1.
 checkpoint_depth({tx_selection, none, [], _Mode}) -> 0;
 checkpoint_depth({tx_selection, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>,
-                  BatchIds, ordinary}) when is_list(BatchIds) -> 1.
+                  BatchIds, _Mode}) when is_list(BatchIds) -> 1.
 
 -doc "Run one proof step with an exact actor and inherited live transaction selection.".
 -spec with_invocation(actor(), selection(), term(), fun(() -> Result)) ->
@@ -119,7 +121,7 @@ current_selection(St) ->
             empty_selection()
     end.
 
--doc "Enter one local transaction frame without allocating controller state.".
+-doc "Enter one local savepoint frame without allocating controller state.".
 -spec enter(tuple()) -> disabled | opaque_id().
 enter(St) ->
     case get(?KEY) of

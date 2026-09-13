@@ -2,22 +2,23 @@
 -moduledoc """
 Internal mechanics for the common `action/3` relation.
 
-The public model remains Prolog: `goal/1` enumerates declarations and runs a
-candidate inside `transaction/1`. These compiled predicates only validate a
-declaration's shape and scope a state query to the current overlay's strict
-read-only mode. They neither select actions nor perform transitions.
+The public model remains Prolog: `goal/1` enumerates declarations. These private
+mechanics validate candidate shape, scope state queries read-only and run the
+existing candidate body under the shared internal proof savepoint. Rollback
+does not select atomic intent; no generic savepoint control is exposed.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([load/1, callable_1/3, action_shape_3/3,
-         state_check_1/3, state_check_yield_1/3]).
+         state_check_1/3, state_check_yield_1/3, candidate_4/3]).
 
 -define(CALLABLE, '$quod_callable').
 -define(ACTION_SHAPE, '$quod_action_shape').
 -define(STATE_CHECK, '$quod_state_check').
 -define(STATE_CHECK_YIELD, '$quod_state_check_yield').
 -define(CALLER_ERROR, '$quod_state_check_caller_error').
+-define(CANDIDATE, '$quod_action_candidate').
 
 -record(read_scope, {
     ref         :: reference(),
@@ -34,9 +35,19 @@ load(#est{db = Db0} = Est) ->
             {?ACTION_SHAPE, 3}, ?MODULE, action_shape_3, Db1),
     Db3 = erlog_int:add_compiled_proc(
             {?STATE_CHECK, 1}, ?MODULE, state_check_1, Db2),
+    Db4 = erlog_int:add_compiled_proc({?CANDIDATE, 4}, ?MODULE, candidate_4, Db3),
     Est#est{db = erlog_int:add_compiled_proc(
                    {?STATE_CHECK_YIELD, 1}, ?MODULE,
-                   state_check_yield_1, Db3)}.
+                   state_check_yield_1, Db4)}.
+
+%% This action-specific mechanics seam calls the same Prolog prerequisites,
+%% transition and postcondition as before. It exposes no generic rollback goal.
+-spec candidate_4(term(), list(), tuple()) -> term().
+candidate_4({?CANDIDATE, Transition, Prerequisites, DesiredState, Visited}, Next, St) ->
+    Inner = {',', {satisfy_prerequisites, Prerequisites, Visited},
+             {',', {run_transition, Transition}, {?STATE_CHECK, DesiredState}}},
+    quod_proof_savepoint:run(
+      Inner, Next, St, quod_erlog_db_local_prove:write_intent(St)).
 
 -spec callable_1(term(), list(), tuple()) -> term().
 callable_1({?CALLABLE, Term}, Next, St) ->

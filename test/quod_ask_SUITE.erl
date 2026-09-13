@@ -40,6 +40,11 @@
          cut_findall_remote_boundaries/1,
          cut_findall_signed_multiscope_savepoints/1]).
 -export([remote_exact_claim_redelivery/1, claim_application_occurrences/2]).
+-export([independent_action_multiscope_rollback/1,
+         independent_action_remote_errors/1, remote_independent_root_effect/1,
+         independent_action_remote_prepared_rollback/1,
+         action_application_changes/2, start_action_error_capture/0,
+         finish_action_error_capture/1]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
@@ -75,6 +80,10 @@ all() -> [remote_signed_transaction_savepoints,
           remote_signed_two_gateway_race,
           remote_signed_gateway_group,
           remote_independent_routes,
+          independent_action_multiscope_rollback,
+          independent_action_remote_errors,
+          remote_independent_root_effect,
+          independent_action_remote_prepared_rollback,
           remote_independent_partial_outcome,
           remote_independent_branch_provenance,
           remote_independent_nesting_and_auth,
@@ -1150,6 +1159,161 @@ remote_signed_two_gateway_race(Config) ->
 
 %% A signed agent stored in A reaches B and then C through the same nested
 %% scope and group machinery. No specialized client or agent executor exists.
+%% Real signed proofs use the same action evaluator locally at animals, on
+%% its co-hosted fourth namespace, and remotely at third. The first candidate
+%% crosses both boundaries, stages facts/events, cuts and fails. Only the
+%% complete second candidate may reach any target ledger.
+independent_action_multiscope_rollback(Config) ->
+    require_third_route_at_target(Config),
+    Tag = erlang:unique_integer([positive]),
+    Setup = iolist_to_binary(io_lib:format(
+      "animals::(assertz((action_bad(~B) :- "
+      "assertz(action_leak(~B)), trigger_event(action_leak(~B)), "
+      "fourth::(assertz(action_leak(~B)), trigger_event(action_leak(~B))), "
+      "third::(assertz(action_leak(~B)), trigger_event(action_leak(~B))), !, fail)), "
+      "assertz((action_good(~B) :- assertz(action_done(~B)), trigger_event(action_done(~B)), "
+      "fourth::(assertz(action_done(~B)), trigger_event(action_done(~B))), "
+      "third::(assertz(action_done(~B)), trigger_event(action_done(~B))))), "
+      "assertz(action(action_bad(~B), [], action_done(~B))), "
+      "assertz(action(action_good(~B), [], action_done(~B)))).", lists:duplicate(18, Tag))),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}}, submit_signed_execute(Config, Setup)),
+    Text = iolist_to_binary(io_lib:format("animals::independent(goal(action_done(~B))).", [Tag])),
+    {ok, _, {normalized, {committed, [_], {operation_outcome, _, Rows}}}} =
+        submit_signed_execute(Config, Text),
+    ?assertEqual(all_applied, quod_operation_vector:aggregate(Rows)),
+    ?assertEqual([?NS, ?FOURTH_NS, ?THIRD_NS], [Ns || {{Ns, _}, _} <- Rows]),
+    Owners = #{?NS => ?config(target, Config), ?FOURTH_NS => ?config(target, Config),
+               ?THIRD_NS => ?config(third, Config)},
+    lists:foreach(fun({{Ns, _}, {committed, {transaction, Ns, _, Id}}}) ->
+        Peer = maps:get(Ns, Owners),
+        assert_fact_once(Peer, Ns, action_done, Tag),
+        assert_fact_absent(Peer, Ns, action_leak, Tag),
+        Changes = peer:call(Peer, ?MODULE, action_application_changes, [Ns, Id]),
+        ?assertEqual([{action_done, Tag}], [E || {event, E} <- Changes])
+    end, Rows).
+
+independent_action_remote_errors(Config) ->
+    require_third_route_at_target(Config),
+    Tag = erlang:unique_integer([positive]),
+    Setup = iolist_to_binary(io_lib:format(
+      "animals::(assertz((action_error(~B) :- assertz(action_error_leak(~B)), "
+      "third::(assertz(action_error_leak(~B)), assertz(true)))), "
+      "assertz(action(action_error(~B), [], action_error_done(~B)))).", lists:duplicate(5, Tag))),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}}, submit_signed_execute(Config, Setup)),
+    Text = iolist_to_binary(io_lib:format("animals::independent(goal(action_error_done(~B))).", [Tag])),
+    Target = ?config(target, Config),
+    Capture = peer:call(Target, ?MODULE, start_action_error_capture, []),
+    {Result, Errors} = try
+        {submit_signed_execute(Config, Text),
+         peer:call(Target, ?MODULE, finish_action_error_capture, [Capture])}
+    catch Class:Reason:Stack ->
+        peer:call(Target, ?MODULE, finish_action_error_capture, [Capture]),
+        erlang:raise(Class, Reason, Stack)
+    end,
+    %% Public normalization deliberately hides language descriptors. Pin the
+    %% original error at the real worker return, then the unchanged public form.
+    ?assert(lists:member({permission_error, modify, static_procedure, {'/', true, 0}}, Errors)),
+    ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}}, Result),
+    lists:foreach(fun({Peer, Ns}) ->
+        assert_fact_absent(Peer, Ns, action_error_leak, Tag)
+    end, [{?config(target, Config), ?NS}, {?config(third, Config), ?THIRD_NS}]).
+
+start_action_error_capture() ->
+    Pid = spawn(fun() -> action_error_capture([], none) end),
+    1 = erlang:trace_pattern({quod_proof_scope, next, 1}, [{'_', [], [{return_trace}]}], [local]),
+    _ = erlang:trace(all, true, [call, {tracer, Pid}]),
+    Pid.
+
+finish_action_error_capture(Pid) ->
+    _ = erlang:trace(all, false, [call]),
+    _ = erlang:trace_pattern({quod_proof_scope, next, 1}, false, [local]),
+    Ref = make_ref(), Pid ! {finish, self(), Ref},
+    receive {Ref, Errors} -> Errors after 5000 -> erlang:error(action_trace_timeout) end.
+
+action_error_capture(Errors, Closing) ->
+    receive
+        {trace, _, return_from, {quod_proof_scope, next, 1},
+         {error, {erlog, Reason}, _, _}} ->
+            true = length(Errors) < 16,
+            action_error_capture([Reason | Errors], Closing);
+        {finish, Caller, Ref} ->
+            Delivery = erlang:trace_delivered(all),
+            action_error_capture(Errors, {Caller, Ref, Delivery});
+        {trace_delivered, all, Delivery} ->
+            {Caller, Ref, Delivery} = Closing, Caller ! {Ref, Errors};
+        _ -> action_error_capture(Errors, Closing)
+    end.
+
+action_application_changes(Ns, TxId) ->
+    {ok, #{snapshot := Snapshot, slot := Height}} =
+        quod_simplex:history_view(Ns, any, quod_time:mono_ms() + 5000),
+    {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
+    try
+        [Changes] = quod_ledger_store:fold(Store, 1, Height,
+          fun(Entry, Acc) ->
+              case quod_ledger:entry_view(Entry) of
+                  #entry{data = {batch, Txs}} ->
+                      [Diff || #transaction{tx_id = Id, diff = Diff} <- Txs,
+                               Id =:= TxId] ++ Acc;
+                  _ -> Acc
+              end
+          end, []),
+        Changes
+    after quod_ledger_store:close(Store)
+    end.
+
+%% Root's governed create_ontology bridge uses the same action evaluator and
+%% its private savepoint. The other target writes ordinary facts; Root remains
+%% effect-only, and exact durable claim redelivery cannot repeat the effect.
+independent_action_remote_prepared_rollback(Config) ->
+    Tag = erlang:unique_integer([positive]),
+    Discarded = iolist_to_binary(["ct:action-discarded-", integer_to_binary(Tag)]),
+    Kept = iolist_to_binary(["ct:action-kept-", integer_to_binary(Tag)]),
+    Setup = iolist_to_binary(io_lib:format(
+      "(assertz(signed_pets_mark(~B)), "
+      "assertz((action_effect_bad(~B) :- \"quod:root\"::create_ontology(\"~s\", [], _), !, fail)), "
+      "assertz((action_effect_good(~B) :- \"quod:root\"::create_ontology(\"~s\", [], _), assertz(action_effect_done(~B)))), "
+      "assertz(action(action_effect_bad(~B), [], action_effect_done(~B))), "
+      "assertz(action(action_effect_good(~B), [], action_effect_done(~B)))).",
+      [Tag, Tag, Discarded, Tag, Kept, Tag, Tag, Tag, Tag, Tag])),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}}, submit_signed_execute(Config, Setup)),
+    Text = iolist_to_binary(io_lib:format("independent(goal(action_effect_done(~B))).", [Tag])),
+    {ok, _, {normalized, {committed, [_], {operation_outcome, Op, Rows}}}} =
+        submit_signed_execute(Config, Text),
+    ?assertEqual(all_applied, quod_operation_vector:aggregate(Rows)),
+    ?assertEqual([?ASKER_NS, ?ROOT_NS], [Ns || {{Ns, _}, _} <- Rows]),
+    Target = ?config(target, Config), Asker = ?config(asker, Config),
+    ?assertEqual({ok, not_hosted}, peer:call(Target, quod_ontology, local_state, [Discarded])),
+    ?assertEqual({ok, ready}, peer:call(Target, quod_ontology, local_state, [Kept])),
+    assert_fact_once(Asker, ?ASKER_NS, action_effect_done, Tag),
+    assert_operation_redelivery(Config, Op, Rows, #{?ASKER_NS => Asker, ?ROOT_NS => Target}),
+    ?assertEqual({ok, not_hosted}, peer:call(Target, quod_ontology, local_state, [Discarded])).
+
+remote_independent_root_effect(Config) ->
+    Asker = ?config(asker, Config), Target = ?config(target, Config),
+    Tag = erlang:unique_integer([positive]),
+    CreatedNs = iolist_to_binary(["ct:s8-effect-", integer_to_binary(Tag)]),
+    Goal = iolist_to_binary(io_lib:format(
+      "independent((assertz(s8_effect_mark(~B)), "
+      "\"quod:root\"::create_ontology(\"~s\", "
+      "[source(\"can_invoke(_, _, _, _).\\n"
+      "s8_effect_created(ok).\\n\")], _Anchor))).", [Tag, CreatedNs])),
+    {ok, Evidence, {normalized, {committed, [_], {operation_outcome, Op, Rows}}}} =
+        submit_signed_execute(Config, Goal),
+    ?assertEqual(maps:get(operation_ref, Evidence), Op),
+    ?assertEqual(all_applied, quod_operation_vector:aggregate(Rows)),
+    ?assertEqual([?ASKER_NS, ?ROOT_NS], [Ns || {{Ns, _}, _} <- Rows]),
+    assert_fact_once(Asker, ?ASKER_NS, s8_effect_mark, Tag),
+    wait_ready(Target, CreatedNs, {s8_effect_created, ok}),
+    Anchor = peer:call(Target, quod_simplex, genesis_hash, [CreatedNs]),
+    ?assertMatch(<<_:256>>, Anchor),
+    assert_operation_redelivery(Config, Op, Rows, #{?ASKER_NS => Asker, ?ROOT_NS => Target}),
+    ?assertEqual(Anchor, peer:call(Target, quod_simplex, genesis_hash, [CreatedNs])),
+    assert_fact_once(Asker, ?ASKER_NS, s8_effect_mark, Tag),
+    #{included := Receipt} = peer:call(Asker, quod_ct, await_operation_complete,
+                                      [?ASKER_NS, Op, 5000], 10000),
+    ?assert(quod_operation_vector:certified(Receipt)).
+
 remote_independent_routes(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),

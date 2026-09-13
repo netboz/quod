@@ -51,7 +51,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
         {quod_proof_access, binary(), non_neg_integer()}.
 
 -record(fstate, {abolished = false :: boolean(),
-                 abolish_intent = ordinary :: ordinary | independent,
+                 abolish_intent = ordinary :: ordinary | atomic | independent,
                  provenance = #{} :: map(),
                  asserta   = []    :: [{integer(), term(), term()}],
                  assertz_rev = []  :: [{integer(), term(), term()}],
@@ -60,12 +60,12 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -record(lp, {out_db   :: #db{},
              scope_id = undefined :: reference() | undefined,
              local    = #{}      :: #{term() => #fstate{}},
-             event_ops_rev = [] :: [{event, term(), ordinary | independent}],
+             event_ops_rev = [] :: [{event, term(), ordinary | atomic | independent}],
              effects = []       :: [quod_effect:effect()],
              effect_provenance = #{} :: map(),
              %% Invocation-local execution mode, not the successful-proof flag.
              %% A revision rebase preserves the receiving invocation's mode.
-             write_intent = ordinary :: ordinary | independent,
+             write_intent = ordinary :: ordinary | atomic | independent,
              signed_request = false :: boolean(),
              next_tag = 1000000  :: integer(),   %% above any committed-db tag
              read_ets = undefined :: ets:tid() | undefined,
@@ -100,7 +100,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -type distributed_token() :: {batch, <<_:128>>} | {pending, <<_:128>>}.
 -record(checkpoint, {scope_id :: reference(),
                      local    :: #{term() => #fstate{}},
-                     event_ops_rev = [] :: [{event, term(), ordinary | independent}],
+                     event_ops_rev = [] :: [{event, term(), ordinary | atomic | independent}],
                      effects = [] :: [quod_effect:effect()],
                      effect_provenance = #{} :: map(),
                      prepared_effects = #{} :: map(),
@@ -298,14 +298,14 @@ proof_context(_) ->
 %% The successful-path marker lives in Erlog's binding store. Its key contains
 %% the private overlay reference and is never a Prolog variable or wire value.
 %% Ordinary backtracking therefore restores it WITHOUT restoring the database.
--spec write_intent(tuple()) -> ordinary | independent.
+-spec write_intent(tuple()) -> ordinary | atomic | independent.
 write_intent(#est{db = #db{mod = ?MODULE, ref = #lp{write_intent = Mode}}}) ->
     Mode;
 write_intent(_) -> ordinary.
 
--spec set_write_intent(tuple(), ordinary | independent) -> tuple().
+-spec set_write_intent(tuple(), ordinary | atomic | independent) -> tuple().
 set_write_intent(#est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St, Mode)
-  when Mode =:= ordinary; Mode =:= independent ->
+  when Mode =:= ordinary; Mode =:= atomic; Mode =:= independent ->
     St#est{db = Db#db{ref = Ov#lp{write_intent = Mode}}}.
 
 -spec signed_request(tuple()) -> boolean().
@@ -359,6 +359,7 @@ provenance(#lp{local = Local, event_ops_rev = Events,
       end, EventMask, Effects).
 
 intent_bit(ordinary) -> 1;
+intent_bit(atomic) -> 1;
 intent_bit(independent) -> 2.
 
 -doc "Reset interpreter-local proof data while retaining the current overlay revision.".

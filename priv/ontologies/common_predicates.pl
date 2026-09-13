@@ -7,8 +7,9 @@
 %%
 %% `goal/1` is target-driven: an already-true state needs no transition. When
 %% the state is false, every action that can reach it is tried in declaration
-%% order. Each candidate is transactional, so a failed transition or
-%% postcondition leaves no staged assertions, retractions, or abolishes behind.
+%% order. Each candidate has an internal proof savepoint, so a failed
+%% transition or postcondition leaves no staged facts, events or effects behind.
+%% Candidate rollback does not choose atomic versus independent commit intent.
 goal(DesiredState) :-
     goal(DesiredState, []).
 
@@ -27,10 +28,8 @@ resolve_goal(DesiredState, Visited) :-
     %% Validate the complete candidate before invoking even its first
     %% prerequisite. This keeps malformed declarations inert.
     '$quod_action_shape'(Transition, Prerequisites, DesiredState),
-    transaction((satisfy_prerequisites(Prerequisites,
-                                       [DesiredState | Visited]),
-                 run_transition(Transition),
-                 '$quod_state_check'(DesiredState))),
+    '$quod_action_candidate'(Transition, Prerequisites, DesiredState,
+                             [DesiredState | Visited]),
     !.
 
 %% A governed public bridge allocates `Handle` and enters this same action
@@ -47,9 +46,8 @@ run_declared_candidate(_Transition, _Prerequisites, DesiredState) :-
     '$quod_state_check'(DesiredState),
     !.
 run_declared_candidate(Transition, Prerequisites, DesiredState) :-
-    transaction((satisfy_prerequisites(Prerequisites, [DesiredState]),
-                 run_transition(Transition),
-                 '$quod_state_check'(DesiredState))).
+    '$quod_action_candidate'(Transition, Prerequisites, DesiredState,
+                             [DesiredState]).
 
 %% Explicit goal/1 prerequisites may themselves reach a state. Every other
 %% prerequisite is a strict state check over the candidate's current staged

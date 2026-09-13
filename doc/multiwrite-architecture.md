@@ -1201,3 +1201,43 @@ R-RESTART-RACE-01, both EUnit ledger items, broad c4 acceptance, the historical
 Yan's overnight authority permits internally gated stage commits and tests
 without waiting for Claude; it does not permit concealing a red gate or
 resubmitting an uncertain operation.
+
+## Implementation status — action savepoints (2026-09-13)
+
+This dated appendix implements §11 A1; the approved prefix is unchanged.
+`quod_proof_savepoint` is one process-free interpreter library, extracted from
+the public transaction predicate rather than a second rollback engine. Public
+`transaction/1` selects atomic mode; the existing action evaluator calls the
+same savepoint with its inherited mode. The action-specific private compiled
+helper retains the existing Prolog prerequisites, transitions and checked
+postcondition. No generic Prolog `savepoint/1` control is introduced.
+
+Invocation mode is ordinary/atomic/independent; distributed savepoint lineage
+is independent of that mode. This replaces the old checkpoint-depth nesting
+test: private rollback no longer means public atomic intent. Every return,
+failure and stateful language error restores the parent invocation mode.
+Facts, staged events, prepared effects and provenance use the existing overlay
+checkpoint; read dependencies stay monotonic. Scope wire 13 carries this
+distinction and refuses wire 12. A coordinated full-fleet swap is required;
+there is no durable-format change or ledger reset. No process, timer, owner,
+gproc address, subscription or Prolog state-transfer protocol is added.
+
+The newly reachable signed Root-effect L2 acceptance exposed a pre-existing
+redelivery defect: after completion, the private journal may no longer retain
+the operation-pending row. Application delivery now checks the exact durable
+outcome first for both fact and effect claims, then enters the existing
+submission path only on absence. The same deadline-bound result resolver
+serves post-submission uncertainty. No effect is reconstructed or run again;
+the already-certified target application supplies the result. This is the
+existing exact-redelivery/idempotence rule applied uniformly, not a journal
+retention exception. The Root acceptance asserts repeated production delivery,
+one ledger application, stable created anchor and the complete certified receipt.
+
+Local controls cover candidate failure, cuts, postconditions, errors, prepared
+effects, read retention, invocation-mode restoration and wrapper nesting.
+Signed multi-scope controls check actual facts and event bytes on local,
+co-hosted and remote targets. Public language-error sanitization remains
+unchanged; the original descriptor is asserted at the real worker return.
+Action composition does not imply action transactions are atomic under L2:
+only candidate staging rolls back; independent target outcomes may differ.
+Sampler/root-lifecycle attribution and Begin performance remain separate work.

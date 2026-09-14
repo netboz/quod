@@ -10808,8 +10808,8 @@ dispatch(_Peer, {cert, #cert{} = C}, S) ->
 dispatch(Peer, {block_request, Slot, BH}, S)
   when is_integer(Slot), Slot >= 1, is_binary(BH), byte_size(BH) =:= 32 ->
     serve_certified_block(Peer, Slot, BH, S);
-dispatch(Peer, {certified_block, #block{} = Block, #cert{} = Cert}, S) ->
-    ingest_certified_block(Peer, Block, Cert, S);
+dispatch(Peer, {certified_block, #block{} = Block, Hash}, S) ->
+    ingest_certified_block(Peer, Block, Hash, S);
 dispatch(Peer, {readiness, Height, Ready}, S)
   when is_integer(Height), Height >= 0, is_boolean(Ready) ->
     record_peer_readiness(Peer, Height, Ready, S);
@@ -10849,62 +10849,54 @@ well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig 
 well_formed_share(_) -> false.
 is_slot(X) -> is_integer(X) andalso X >= 0 andalso X =< ?MAX_SLOT.
 
-%% A support certificate authorizes block retrieval from any committee member: the sender is only a
-%% transport source, while the quorum certificate and block hash authenticate the content. Responses are
-%% point-to-point and demand-driven, avoiding an O(N^2 * block-size) recovery flood.
-serve_certified_block(Peer, Slot, BH, S = #s{eng = Eng}) ->
-    case lists:member(Peer, active_validators(S)) of
-        false -> S;
-        true ->
-            case {block_for(BH, Eng), persisted_cert(support, Slot, BH, Eng)} of
-                {#block{slot = Slot} = Block, #cert{} = Cert} ->
-                    send_frame(Peer, encode(S#s.ns, {certified_block, Block, Cert}), S);
-                _ ->
-                    S
-            end
+%% The requester's verified support certificate authorizes this exact hash.
+%% Serving bytes must survive the handoff from the live engine to the ledger;
+%% pruning consensus memory never makes an already-durable block unavailable.
+serve_certified_block(Peer, Slot, BH, S) ->
+    case lists:member(Peer, active_validators(S)) andalso available_block(Slot, BH, S) of
+        {ok, Block} ->
+            case block_hash(Block) =:= BH of
+                true -> send_frame(Peer, encode(S#s.ns, {certified_block, Block, BH}), S);
+                false -> S
+            end;
+        _ -> S
     end.
 
-%% Responses are accepted only for a currently outstanding exact request. Cheap
-%% source/header/certificate-shape gates precede one block hash and one shared content
-%% validation, so an authenticated faulty validator cannot amplify unsolicited
-%% recovery traffic or make the same payload pass twice.
+available_block(Slot, _BH, #s{slot = Committed, store = Store}) when Slot =< Committed ->
+    case quod_ledger_store:read_at(Store, Slot) of
+        {ok, Entry} -> quod_ledger:block_from_entry(Entry);
+        not_found -> error
+    end;
+available_block(Slot, BH, #s{eng = Eng}) ->
+    case block_for(BH, Eng) of #block{slot = Slot} = Block -> {ok, Block}; _ -> error end.
+
+%% Only an outstanding exact request backed by our authenticated certificate
+%% admits a reply. Cheap sender/header gates precede hashing and content checks.
 ingest_certified_block(
   Peer, Block = #block{slot = Slot, parent = Parent, timestamp = Timestamp},
-  Cert = #cert{kind = support, slot = Slot, block_hash = ExpectedBH},
-  S = #s{block_requests = Requests})
+  ExpectedBH, S = #s{block_requests = Requests, eng = Eng})
   when is_binary(ExpectedBH), byte_size(ExpectedBH) =:= 32 ->
     Preflight =
         maps:is_key({Slot, ExpectedBH}, Requests)
         andalso lists:member(Peer, active_validators(S))
-        andalso well_formed_block_header(Slot, Parent, Timestamp),
+        andalso well_formed_block_header(Slot, Parent, Timestamp)
+        andalso is_record(persisted_cert(support, Slot, ExpectedBH, Eng), cert),
     case Preflight andalso block_hash(Block) =:= ExpectedBH
          andalso certified_block_context(Block, ExpectedBH, S) of
         false ->
             S;
         true ->
-            %% Ingest the certificate first. The engine sanitizes every signature against the current
-            %% committee; only a certificate that survives that boundary may authorize a non-leader block.
-            S1 = engine_step([{cert, Cert}], S),
-            case persisted_cert(support, Slot, ExpectedBH, S1#s.eng) of
-                #cert{} ->
-                    Requests1 =
-                        maps:remove({Slot, ExpectedBH}, S1#s.block_requests),
-                    S2 = S1#s{block_requests = Requests1},
-                    case quod_ledger:classify(Block#block.payload) of
-                        {controls, _Controls} ->
-                            S3 = retain_dtx_candidate(
-                                   Block, ExpectedBH, [],
-                                   watch_proposal(Slot, S2)),
-                            support_or_validate(Block, ExpectedBH, S3);
-                        _ ->
-                            engine_step(
-                              [{block, ExpectedBH, Block}], S2)
-                    end;
-                none ->
-                    S1
+            %% Authority was authenticated when this request was created;
+            %% the reply supplies only the missing data, never a new verdict.
+            S1 = S#s{block_requests = maps:remove({Slot, ExpectedBH}, Requests)},
+            case quod_ledger:classify(Block#block.payload) of
+                {controls, _Controls} ->
+                    S2 = retain_dtx_candidate(Block, ExpectedBH, [], watch_proposal(Slot, S1)),
+                    support_or_validate(Block, ExpectedBH, S2);
+                _ -> engine_step([{block, ExpectedBH, Block}], S1)
             end
     end;
-ingest_certified_block(_Peer, _Block, _Cert, S) ->
+ingest_certified_block(_Peer, _Block, _Hash, S) ->
     S.
 
 certified_block_context(

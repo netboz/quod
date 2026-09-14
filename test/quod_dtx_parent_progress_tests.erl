@@ -111,6 +111,114 @@ missing_prolog_owner_never_uses_the_certificate_as_a_verdict_test_() ->
         assert_no_request()
     end) end).
 
+durable_block_remains_retrievable_after_engine_prune_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Block, Hash, Done} = committed_block(F, S0, Keys),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(2, Done)),
+        ?assertEqual({certified_block, Block, Hash}, reply(F, Keys, Hash, Done)),
+        Clean = quod_simplex:test_state_set(outbox, #{}, Done),
+        ?assertEqual(Clean, quod_simplex:dispatch(peer(Keys), {block_request, 2, <<0:256>>}, Clean)),
+        {Outsider, _} = quod_identity:generate(),
+        ?assertEqual(Clean, quod_simplex:dispatch(Outsider, {block_request, 2, Hash}, Clean)),
+        {2, Store} = quod_simplex:test_committed_store(Done),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+        ?assertEqual({ok, Block}, quod_ledger:block_from_entry(Entry)),
+        %% An explicit storage-reopen oracle, not a runtime recovery path.
+        ok = quod_ledger_store:close(Store),
+        {Ns, _} = maps:get(origin, F),
+        {ok, Reopened} = quod_ledger_store:open(Ns, maps:get(dir, F)),
+        try
+            Restored = quod_simplex:test_state_set(store, Reopened, Done),
+            ?assertEqual({certified_block, Block, Hash}, reply(F, Keys, Hash, Restored))
+        after quod_ledger_store:close(Reopened) end
+    end) end).
+
+live_block_serving_needs_no_second_support_certificate_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Block, Hash, NoCerts} = certified_first(F, S0, Keys, []),
+        Paused = quod_simplex:test_state_set(sync, {pulling, self()}, NoCerts),
+        Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Paused),
+        {Hash, Token, Owner} = take_request(2),
+        Live = quod_simplex:test_on_dtx_verdict(2, Hash, Token, Owner, 1, {valid, #{}}, Proposed),
+        ?assertEqual(1, element(1, quod_simplex:test_committed_store(Live))),
+        ?assertEqual({certified_block, Block, Hash}, reply(F, Keys, Hash, Live))
+    end) end).
+
+durable_reply_is_data_not_a_validation_verdict_test_() ->
+    [isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Block, Hash, WithCerts} = certified_first(F, S0, Keys),
+        Requested = quod_simplex:test_state_set(block_requests, #{{2, Hash} => {1, 0}}, WithCerts),
+        Received = quod_simplex:dispatch(peer(Keys), {certified_block, Block, Hash}, Requested),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(2, Received)),
+        ?assertEqual(1, element(1, quod_simplex:test_committed_store(Received))),
+        {Hash, Token, Owner} = take_request(2),
+        Done = quod_simplex:test_on_dtx_verdict(2, Hash, Token, Owner, 1, Verdict, Received),
+        Expected = case Verdict of {valid, _} -> 2; _ -> 1 end,
+        ?assertEqual(Expected, element(1, quod_simplex:test_committed_store(Done))),
+        ?assertEqual(Done, quod_simplex:dispatch(peer(Keys), {certified_block, Block, Hash}, Done)),
+        assert_no_request()
+    end) end) || Verdict <- [{valid, #{}}, abstain, {invalid, refused}]].
+
+request_bookkeeping_cannot_substitute_for_authenticated_support_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Block, Hash, NoCerts} = certified_first(F, S0, Keys, []),
+        Requested = quod_simplex:test_state_set(block_requests, #{{2, Hash} => {1, 0}}, NoCerts),
+        ?assertEqual(Requested, quod_simplex:dispatch(peer(Keys), {certified_block, Block, Hash}, Requested)),
+        assert_no_request()
+    end) end).
+
+certified_reply_rejects_nonmember_and_unavailable_parent_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Block, Hash, WithCerts} = certified_first(F, S0, Keys),
+        Requested = quod_simplex:test_state_set(block_requests, #{{2, Hash} => {1, 0}}, WithCerts),
+        {Outsider, _} = quod_identity:generate(),
+        ?assertEqual(Requested, quod_simplex:dispatch(Outsider, {certified_block, Block, Hash}, Requested)),
+        %% The actual certificate remains valid, but this structural receiver
+        %% has not installed its parent. It must not consume the reply.
+        MissingParent = quod_simplex:test_state_set(slot, 0, Requested),
+        ?assertEqual(MissingParent, quod_simplex:dispatch(peer(Keys), {certified_block, Block, Hash}, MissingParent)),
+        assert_no_request()
+    end) end).
+
+durable_lookup_is_one_bounded_read_not_history_replay_test_() ->
+    isolated(fun() ->
+        {{ok, Owner}, {call_time, Counts}} = tprof:profile(fun() ->
+            with_fixture(fun(F, S0, Keys) ->
+                {Block, Hash, Done} = committed_block(F, S0, Keys),
+                ?assertEqual({certified_block, Block, Hash}, reply(F, Keys, Hash, Done))
+            end),
+            {ok, self()}
+        end, #{type => call_time, report => return, set_on_spawn => false,
+               pattern => [{quod_ledger_store, open, 2}, {quod_ledger_store, read_at, 2},
+                           {quod_simplex, history_validate_advance, 3}]}),
+        Count = fun(M, F) -> lists:sum([N || {M0, F0, _, Ps} <- Counts, M0 =:= M, F0 =:= F,
+                                            {Pid, N, _} <- Ps, Pid =:= Owner]) end,
+        ?assertEqual(1, Count(quod_ledger_store, open)),
+        ?assertEqual(1, Count(quod_ledger_store, read_at)),
+        %% Founding validation only; neither lookup nor the live commit replays.
+        ?assertEqual(1, Count(quod_simplex, history_validate_advance))
+    end).
+
+committed_block(F, S0, Keys) ->
+    {Block, Hash, WithCerts} = certified_first(F, S0, Keys),
+    Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, WithCerts),
+    {Hash, Token, Owner} = take_request(2),
+    Done = quod_simplex:test_on_dtx_verdict(2, Hash, Token, Owner, 1, {valid, #{}}, Proposed),
+    ?assertEqual(2, element(1, quod_simplex:test_committed_store(Done))),
+    {Block, Hash, Done}.
+
+peer(Keys) -> lists:nth(2, lists:sort(maps:keys(Keys))).
+
+reply(F, Keys, Hash, S) ->
+    {Ns, _} = maps:get(origin, F),
+    Peer = peer(Keys),
+    Clean = quod_simplex:test_state_set(outbox, #{}, S),
+    Answered = quod_simplex:dispatch(Peer, {block_request, 2, Hash}, Clean),
+    ?assertMatch(#{Peer := [_]}, quod_simplex:test_outbox(Answered)),
+    [Frame] = maps:get(Peer, quod_simplex:test_outbox(Answered)),
+    {consensus, Message} = quod_relay:decode_consensus_frame(Frame, Ns),
+    Message.
+
 certified_first(F, S, Keys) ->
     certified_first(F, S, Keys, [support, commit]).
 
@@ -167,7 +275,7 @@ with_fixture(Fun) ->
                 store => Store, signing_journal => Journal, phase_index => Index,
                 slot => 1, last_applied => 1, sync => ready, prolog_ready => true,
                 eng => quod_simplex:eng_new(Domain, Committee, 1)})),
-        Fun(F, S, Keys)
+        Fun(F#{dir => Dir}, S, Keys)
     after
         catch gproc:unreg(quod_reg:name({quod_prolog, Ns})),
         quod_dtx_phase_index:close(Index),

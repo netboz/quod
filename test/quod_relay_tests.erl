@@ -97,6 +97,23 @@ decoded_block_wire_shapes_are_hard_rejected_test() ->
                        quod_relay:decode_consensus_frame(Frame, Ns))
       end, OldMessages).
 
+certified_reply_carries_hash_not_a_second_certificate_test() ->
+    Ns = <<"relay:certified-by-requester">>,
+    {ok, Block} = quod_ledger:new_block(2, 1, quod_ct:dtx_decision_payload(), 7),
+    Hash = quod_simplex:block_hash(Block),
+    Frame = quod_relay:encode_consensus_frame(Ns, {certified_block, Block, Hash}),
+    ?assertEqual({consensus, {certified_block, Block, Hash}},
+                 quod_relay:decode_consensus_frame(Frame, Ns)),
+    {sx2, Ns, Inner} = binary_to_term(Frame, [safe]),
+    ?assertEqual({certified_block_bytes, quod_ledger:block_bytes(Block), Hash},
+                 binary_to_term(Inner, [safe])),
+    %% A transport-only clean break; no legacy certificate-bearing reply arm.
+    lists:foreach(fun(OldOrMalformed) ->
+        Bytes = term_to_binary({certified_block_bytes, quod_ledger:block_bytes(Block), OldOrMalformed}),
+        ?assertEqual(error, quod_relay:decode_consensus_frame(
+                             term_to_binary({sx2, Ns, Bytes}), Ns))
+    end, [none, {cert, support, 2, Hash, []}, <<0:248>>, <<0:264>>]).
+
 bounded_result_cache_test() ->
     Now = quod_time:mono_ms(),
     AttemptId = <<1:128>>,

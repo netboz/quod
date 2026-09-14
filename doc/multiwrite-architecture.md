@@ -959,6 +959,17 @@ Only participants request the verdict, and the existing signing boundaries
 still require voting readiness. No certificate substitutes for a local verdict,
 and neither a tick nor leader redelivery is needed to notice parent progress.
 
+Certified block retrieval uses one owner-local lookup across the live engine
+and committed ledger. Pruning engine memory does not retire durable block
+availability. The durable lookup is the existing bounded sparse-index read,
+not history opening or replay. The requester already holds the authenticated
+support certificate; replies carry only canonical block bytes and their exact
+requested hash. Outstanding-request, committee, hash, parent and final-vote
+checks remain, and DTX still requires its local exact-parent verdict. The
+certificate-bearing reply is removed rather than reverified or retained in a
+second inventory. This transport-only break requires a coordinated fleet swap;
+durable formats and retained data are unchanged.
+
 ### Independent writes and authenticated data
 
 One proof evaluator stages and seals once. Ordinary multiwrites stay atomic;

@@ -4622,7 +4622,7 @@ certified_block_request_targets_one_holder_test() ->
     ?assertEqual(OutboxPeers, DialPeers),
     ?assertEqual(1, map_size(quod_simplex:test_block_requests(Requested))).
 
-%% Any active validator holding both the exact block and its support certificate may answer, but an
+%% Any active validator holding the exact block may answer the certified request, but an
 %% authenticated non-member cannot use block recovery as an oracle or make the node queue large frames.
 certified_block_request_is_committee_scoped_test() ->
     Committee = [{A, IdA}, {B, _} | _] = committee(4),
@@ -4651,7 +4651,6 @@ certified_block_from_non_leader_restores_finality_test() ->
     Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     SupportShares = supports(Block, Committee, 3),
-    {ok, Cert} = quod_simplex:form_cert(?DOMAIN, support, 6, BH, SupportShares, pubs(Committee)),
     {CertOnly, _} = feed_shares(SupportShares, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
     Requester = st(#{self => A, id => IdA, validators => pubs(Committee),
                      slot => 5, approved => 5, eng => CertOnly, sync => ready,
@@ -4659,7 +4658,7 @@ certified_block_from_non_leader_restores_finality_test() ->
     Leader = quod_simplex:leader(6, pubs(Committee)),
     Sender = hd([Peer || {Peer, _} <- Peers, Peer =/= Leader]),
 
-    Restored = quod_simplex:dispatch(Sender, {certified_block, Block, Cert}, Requester),
+    Restored = quod_simplex:dispatch(Sender, {certified_block, Block, BH}, Requester),
     ?assertEqual({none, true, false}, quod_simplex:test_round(6, Restored)),
     ?assertEqual(0, map_size(quod_simplex:test_block_requests(Restored))).
 
@@ -4675,9 +4674,6 @@ certified_dtx_block_uses_phase_aware_recovery_test() ->
     {ok, Envelope} = quod_dtx:encode_control(Control),
     Block = block(1, 0, {batch, [{dtx, Envelope}]}, 0),
     BH = quod_simplex:block_hash(Block),
-    {ok, Cert} = quod_simplex:form_cert(
-                   ?DOMAIN, support, 1, BH,
-                   supports(Block, [{Self, Identity}], 1), [Self]),
     {CertOnly, _} = feed_shares(
                       supports(Block, [{Self, Identity}], 1),
                       quod_simplex:eng_new(?DOMAIN, [Self], 0)),
@@ -4689,7 +4685,7 @@ certified_dtx_block_uses_phase_aware_recovery_test() ->
              block_requests => #{{1, BH} => {1, 0}}}),
 
     Recovered = quod_simplex:dispatch(
-                  Self, {certified_block, Block, Cert}, S),
+                  Self, {certified_block, Block, BH}, S),
     ?assertMatch({_, _, {_, #block{payload = {batch, [{dtx, _}]}}}, _, _},
                  quod_simplex:test_dtx_round(1, Recovered)),
     ?assertEqual(0, map_size(quod_simplex:test_block_requests(Recovered))).
@@ -4701,15 +4697,13 @@ certified_block_response_requires_outstanding_request_test() ->
     Block = block(6, 5, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     SupportShares = supports(Block, Committee, 3),
-    {ok, Cert} = quod_simplex:form_cert(?DOMAIN, support, 6, BH, SupportShares,
-                                        pubs(Committee)),
     {CertOnly, _} = feed_shares(SupportShares,
                                 quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
              slot => 5, approved => 5, eng => CertOnly, sync => ready}),
     Sender = element(1, hd(Peers)),
 
-    Ignored = quod_simplex:dispatch(Sender, {certified_block, Block, Cert}, S),
+    Ignored = quod_simplex:dispatch(Sender, {certified_block, Block, BH}, S),
     ?assertEqual({none, false, false}, quod_simplex:test_round(6, Ignored)),
     ?assertEqual(1, maps:get(missing_certified_blocks,
                             quod_simplex:stats_map(Ignored))).
@@ -4753,7 +4747,7 @@ certified_block_recovery_accepts_losing_local_support_test() ->
     Sender = element(1, hd(OtherValidators)),
 
     Restored = quod_simplex:dispatch(
-                 Sender, {certified_block, Winning, WinningCert}, Requested),
+                 Sender, {certified_block, Winning, WinningHash}, Requested),
     ?assertEqual({LosingHash, true, false}, quod_simplex:test_round(6, Restored)),
     ?assertEqual(0, map_size(quod_simplex:test_block_requests(Restored))).
 
@@ -4766,13 +4760,15 @@ certified_block_hash_mismatch_is_rejected_test() ->
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN,
                    support, 6, BH, supports(Block, Committee, 3), pubs(Committee)),
     Different = block(6, 5, {batch, [Tx]}, 1),
-    DifferentHash = quod_simplex:block_hash(Different),
+    {WithCert, _} = quod_simplex:eng_offer(
+                     {cert, Cert}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5)),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
              slot => 5, approved => 5,
-             eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5), sync => ready,
-             block_requests => #{{6, DifferentHash} => {1, 0}}}),
+             eng => WithCert, sync => ready,
+             block_requests => #{{6, BH} => {1, 0}}}),
     Rejected = quod_simplex:dispatch(element(1, hd(Peers)),
-                                     {certified_block, Different, Cert}, S),
+                                     {certified_block, Different, BH}, S),
+    ?assertEqual(S, Rejected),
     ?assertEqual({none, false, false}, quod_simplex:test_round(6, Rejected)).
 
 %% Recovery metrics count signatures carried by a verified certificate even when individual share frames

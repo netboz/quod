@@ -42,8 +42,8 @@ encode_consensus_message({propose, Block, ValidationSidecar}) ->
     {ok, WireSidecar} =
         quod_dtx_endpoint:encode_validation_sidecar(ValidationSidecar),
     {propose_bytes, required_block_bytes(Block), WireSidecar};
-encode_consensus_message({certified_block, Block, Cert}) ->
-    {certified_block_bytes, required_block_bytes(Block), Cert};
+encode_consensus_message({certified_block, Block, Hash}) ->
+    {certified_block_bytes, required_block_bytes(Block), Hash};
 encode_consensus_message({dtx_submit, Envelopes, ValidationSidecar}) ->
     {ok, WireSidecar} =
         quod_dtx_endpoint:encode_validation_sidecar(ValidationSidecar),
@@ -61,18 +61,21 @@ decode_consensus_message({propose_bytes, BlockBytes, WireSidecar}) ->
               quod_dtx_endpoint:decode_validation_sidecar(WireSidecar)}};
         {error, _} -> error
     end;
-decode_consensus_message({certified_block_bytes, BlockBytes, Cert}) ->
+decode_consensus_message({certified_block_bytes, BlockBytes, Hash})
+  when is_binary(Hash), byte_size(Hash) =:= 32 ->
     case quod_ledger:decode_block(BlockBytes) of
-        {ok, Block} -> {consensus, {certified_block, Block, Cert}};
+        {ok, Block} -> {consensus, {certified_block, Block, Hash}};
         {error, _} -> error
     end;
+decode_consensus_message({certified_block_bytes, _, _}) ->
+    error;
 decode_consensus_message({dtx_submit_bytes, Envelopes, WireSidecar}) ->
     {consensus,
      {dtx_submit, Envelopes,
       quod_dtx_endpoint:decode_validation_sidecar(WireSidecar)}};
 decode_consensus_message({propose, _Block, _ValidationSidecar}) ->
     error;
-decode_consensus_message({certified_block, _Block, _Cert}) ->
+decode_consensus_message({certified_block, _Block, _Hash}) ->
     error;
 decode_consensus_message({dtx_submit, _Envelopes, _ValidationSidecar}) ->
     error;

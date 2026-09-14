@@ -11395,7 +11395,7 @@ start_dtx_foreign_validation(
     ValidationSidecar = (round_state(Sl, S))#round.validation_sidecar,
     Contacts = dtx_reference_contacts(
                  ReferencePlan, DtxWorkers, LocalIdentity),
-    Worker = spawn(
+    {Worker, Monitor} = spawn_monitor(
                fun() ->
                    Verdict = verify_dtx_foreign_references(
                                ReferencePlan, LocalIdentity, LocalSource, Contacts,
@@ -11406,7 +11406,6 @@ start_dtx_foreign_validation(
                             {Sl, BH, ParentToken}, self(), Deadline,
                             reference_deadline_result(Deadline, Verdict)}
                end),
-    Monitor = erlang:monitor(process, Worker),
     Round = round_state(Sl, S),
     put_round(
       Sl,
@@ -14592,7 +14591,7 @@ behind(#s{eng = Eng, approved = Approved}) -> ahead_cert_ceiling(Eng) > Approved
 is_participant(#s{self = Self} = S) -> lists:member(Self, active_validators(S)).
 
 %% `ready` is the only recovery state with a corroborated tip. An ahead
-%% finalizer revokes voting immediately, even while its live verdict is owned.
+%% finalizer revokes voting immediately, even while its pending verdict is owned.
 caught_up(#s{sync = ready} = S) -> not behind(S);
 caught_up(_S) -> false.
 
@@ -14623,9 +14622,9 @@ ingress_capability(S) ->
 may_vote(S) ->
     ingress_capability(S) =:= accept.
 
-%% Prefer the exact, already-owned next-parent verdict to duplicate recovery.
-%% The original validation allowance bounds this preference, not execution.
-%% Expiry releases only the exception; the existing tick re-enters reconciliation.
+%% Prefer the installed next-parent request: worker exit can leave a queued verdict.
+%% Verdict or DOWN releases ownership. The original allowance bounds only this
+%% preference; existing ticks handle expiry without granting voting readiness.
 should_sync(#s{sync = unconfirmed}) -> true;
 should_sync(#s{sync = ready, approved = Approved, history_head = Token, eng = Eng} = S) ->
     case ahead_cert_ceiling(Eng) of
@@ -14633,8 +14632,8 @@ should_sync(#s{sync = ready, approved = Approved, history_head = Token, eng = En
         Next when Next =:= Approved + 1 ->
             Round = round_state(Next, S),
             case {Round#round.candidate, Round#round.validating, dtx_validation_owner(Round)} of
-                {{Hash, #block{slot = Next}}, Hash, {Token = {Approved, _}, Owner, DeadlineMs}} ->
-                    not (quod_time:mono_ms() < DeadlineMs andalso is_process_alive(Owner) andalso
+                {{Hash, #block{slot = Next}}, Hash, {Token = {Approved, _}, _Owner, DeadlineMs}} ->
+                    not (quod_time:mono_ms() < DeadlineMs andalso
                          persisted_cert(support, Next, Hash, Eng) =/= none andalso
                          persisted_cert(commit, Next, Hash, Eng) =/= none);
                 _ -> true

@@ -232,6 +232,139 @@ finality_does_not_duplicate_owned_parent_validation_test_() ->
         end
     end) end).
 
+%% The receiver is the genuine registered request owner, but its verdict is
+%% supplied at the existing Prolog boundary (not a second evaluator). A second
+%% monitor proves exit without dispatching the queued verdict or installed DOWN.
+queued_parent_verdict_owns_validation_until_consumed_test_() ->
+    [{atom_to_list(Kind), isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        with_pending_parent_owner(F, fun(Owner, ExitMonitor) ->
+            {Block, Hash, Certified} = certified_first(F, S0, Keys),
+            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            {Hash, Token, Caller} = await_parent_request(2),
+            ?assertEqual(self(), Caller),
+            Latched = {Hash, {dtx, Token, Owner, Monitor, Deadline}, _, _, _} =
+                quod_simplex:test_dtx_round(2, Proposed),
+            {Verdict, Reason} = case Kind of
+                valid -> {{valid, #{}}, normal};
+                invalid -> {{invalid, refused}, normal};
+                abstain -> {abstain, normal};
+                abnormal_after_send -> {{valid, #{}}, validation_crashed_after_send}
+            end,
+            Owner ! {finish, Verdict, Reason},
+            receive {'DOWN', ExitMonitor, process, Owner, Reason} -> ok
+            after 1000 -> error(validation_owner_did_not_exit) end,
+            ?assertNot(is_process_alive(Owner)),
+            Message = {dtx_verdict, {2, Hash, Token}, Owner, 1, Verdict},
+            Down = {'DOWN', Monitor, process, Owner, Reason},
+            {messages, Messages} = process_info(self(), messages),
+            %% Verdict-before-exit is from one sender; delivery order between
+            %% different monitors is deliberately not assumed.
+            ?assertEqual([Message], [M || M <- Messages, M =:= Message]),
+            ?assert(Deadline > quod_time:mono_ms()),
+            Reconciled = quod_simplex:reconcile_block_requests(Proposed),
+            try
+                ?assertEqual(ready, quod_simplex:test_sync(Reconciled)),
+                ?assertNot(quod_simplex:should_sync(Reconciled)),
+                ?assertNot(quod_simplex:caught_up(Reconciled)),
+                ?assertNot(quod_simplex:may_vote(Reconciled)),
+                ?assertEqual(Latched, quod_simplex:test_dtx_round(2, Reconciled)),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Reconciled))),
+                ?assertEqual(#{}, quod_signing_journal:rounds(quod_simplex:test_signing_journal(Reconciled))),
+                %% An actual second-monitor DOWN is stale for the installed
+                %% request, even though the PID matches and really is dead.
+                Stale = callback_state(quod_simplex:running(info,
+                    {'DOWN', ExitMonitor, process, Owner, Reason}, Reconciled)),
+                ?assertEqual(Latched, quod_simplex:test_dtx_round(2, Stale)),
+                ?assertEqual(ready, quod_simplex:test_sync(Stale)),
+                receive Message -> ok after 0 -> error(queued_verdict_lost) end,
+                Done = callback_state(quod_simplex:running(info, Message, Stale)),
+                try
+                    Expected = case Verdict of {valid, _} -> 2; _ -> 1 end,
+                    ?assertEqual(Expected, element(1, quod_simplex:test_committed_store(Done))),
+                    ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(2, Done)),
+                    case Expected of
+                        2 -> ?assertEqual(ready, quod_simplex:test_sync(Done));
+                        1 -> ?assertMatch({pulling, _}, quod_simplex:test_sync(Done))
+                    end,
+                    %% Any delivered DOWN is flushed on verdict consumption;
+                    %% we do not assume it arrived before the verdict callback.
+                    receive Down -> error(consumed_verdict_left_monitor_down) after 0 -> ok end
+                after stop_test_recovery(Done) end
+            after stop_test_recovery(Reconciled) end
+        end)
+    end) end)} || Kind <- [valid, invalid, abstain, abnormal_after_send]].
+
+crashed_parent_owner_releases_only_on_matching_down_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        with_pending_parent_owner(F, fun(Owner, ExitMonitor) ->
+            {Block, Hash, Certified} = certified_first(F, S0, Keys),
+            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            {Hash, Token, _} = await_parent_request(2),
+            Latched = {Hash, {dtx, Token, Owner, Monitor, Deadline}, _, _, _} =
+                quod_simplex:test_dtx_round(2, Proposed),
+            Owner ! crash,
+            receive {'DOWN', ExitMonitor, process, Owner, validation_crashed} -> ok
+            after 1000 -> error(validation_owner_did_not_crash) end,
+            ?assert(Deadline > quod_time:mono_ms()),
+            ?assertNot(quod_simplex:should_sync(Proposed)),
+            Stale = callback_state(quod_simplex:running(info,
+                {'DOWN', ExitMonitor, process, Owner, validation_crashed}, Proposed)),
+            try
+                ?assertEqual(Latched, quod_simplex:test_dtx_round(2, Stale)),
+                ?assertEqual(ready, quod_simplex:test_sync(Stale)),
+                ?assertNot(quod_simplex:may_vote(Stale)),
+                Down = receive {'DOWN', Monitor, process, Owner, validation_crashed} = D -> D
+                       after 1000 -> error(installed_monitor_down_missing) end,
+                Released = callback_state(quod_simplex:running(info, Down, Stale)),
+                try
+                    ?assertMatch({none, none, {Hash, Block}, none, undefined}, quod_simplex:test_dtx_round(2, Released)),
+                    ?assertMatch({pulling, _}, quod_simplex:test_sync(Released)),
+                    ?assertNot(quod_simplex:caught_up(Released)),
+                    ?assertNot(quod_simplex:may_vote(Released)),
+                    ?assertEqual(1, element(1, quod_simplex:test_committed_store(Released))),
+                    ?assertEqual(#{}, quod_signing_journal:rounds(quod_simplex:test_signing_journal(Released)))
+                after stop_test_recovery(Released) end
+            after stop_test_recovery(Stale) end
+        end)
+    end) end).
+
+with_pending_parent_owner(F, Fun) ->
+    {Ns, _} = maps:get(origin, F),
+    true = gproc:unreg(quod_reg:name({quod_prolog, Ns})),
+    true = quod_reg:reg({quod_simplex, Ns}),
+    true = quod_reg:reg({quod_catchup, Ns}),
+    Caller = self(),
+    {Owner, ExitMonitor} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_prolog, Ns}),
+        Caller ! {self(), ready},
+        receive {'$gen_cast', {dtx_verdict_req, [_], _, 2, ReplyTo, Tag, _}} = Request ->
+            Caller ! Request,
+            receive
+                {finish, Verdict, Reason} ->
+                    ReplyTo ! {dtx_verdict, Tag, self(), 1, Verdict},
+                    exit(Reason);
+                crash -> exit(validation_crashed)
+            end
+        end
+    end),
+    try
+        receive {Owner, ready} -> ok after 1000 -> error(validation_owner_missing) end,
+        Fun(Owner, ExitMonitor)
+    after
+        exit(Owner, kill),
+        erlang:demonitor(ExitMonitor, [flush]),
+        gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+        gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+    end.
+
+await_parent_request(Slot) ->
+    receive {'$gen_cast', {dtx_verdict_req, [_], _, Slot, Caller, {Slot, Hash, Token}, _}} ->
+        {Hash, Token, Caller}
+    after 1000 -> error(parent_progress_not_delivered) end.
+
+callback_state({keep_state, S}) -> S;
+callback_state({keep_state, S, _Actions}) -> S.
+
 validation_allowance_is_captured_at_request_not_owner_lifetime_test_() ->
     [isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
         S = quod_simplex:test_state_set(validation_ttl_ms, Ttl, S0),
@@ -340,6 +473,49 @@ foreign_validation_inherits_expired_parent_allowance_test_() ->
         erlang:demonitor(Monitor, [flush])
     end) end).
 
+foreign_validation_worker_is_atomically_monitored_test_() ->
+    isolated(fun() ->
+        {{ok, Caller}, {call_time, Counts}} = tprof:profile(fun() ->
+            with_fixture(fun(F, S0, _Keys) ->
+                Target = {Ns, Anchor} = maps:get(origin, F),
+                Begin = maps:get('begin', F),
+                %% A local reference beyond this snapshot is unavailable.
+                %% Exercise the real foreign-stage worker without any remote
+                %% resolver, and do not pretend this reference was admitted.
+                {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<90:256>>,
+                    quod_dtx:group_id(Begin), <<"structural-unavailable-reference">>),
+                {ok, Decision} = quod_dtx:new_decision(
+                    quod_dtx:group_id(Begin), Ref, {abort, [expired]}, []),
+                {ok, Control} = quod_dtx:sign_control(Target, Decision,
+                    maps:get(admission, F), 1, 1, maps:get(node_identity, F)),
+                {ok, Blob} = quod_dtx:encode_control(Control),
+                Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S0),
+                {Hash, Token, Owner} = take_request(2),
+                {_, {dtx, _, _, _, Deadline}, _, _, _} = quod_simplex:test_dtx_round(2, Proposed),
+                Pending = callback_state(quod_simplex:running(info,
+                    {dtx_verdict, {2, Hash, Token}, Owner, 1, {valid, #{}}}, Proposed)),
+                {Hash, {dtx_foreign, Token, Worker, Monitor, #{}, Deadline}, _, _, _} =
+                    quod_simplex:test_dtx_round(2, Pending),
+                ?assert(Worker =/= self()),
+                %% Selective receive leaves the earlier worker verdict queued.
+                receive {'DOWN', Monitor, process, Worker, normal} -> ok
+                after 1000 -> error(foreign_validation_worker_did_not_exit) end,
+                Message = receive
+                    {dtx_foreign_verdict, {2, Hash, Token}, Worker, _, abstain} = M -> M
+                after 0 -> error(foreign_verdict_missing_before_down) end,
+                Done = callback_state(quod_simplex:running(info, Message, Pending)),
+                ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(2, Done)),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Done)))
+            end),
+            {ok, self()}
+        end, #{type => call_time, report => return, set_on_spawn => false,
+               pattern => [{erlang, spawn_monitor, 1}]}),
+        %% Atomic construction is an observable call, not a probabilistic
+        %% attempt to win the old spawn-then-monitor race.
+        ?assertEqual(1, lists:sum([N || {erlang, spawn_monitor, 1, Ps} <- Counts,
+                                      {Pid, N, _} <- Ps, Pid =:= Caller]))
+    end).
+
 stop_test_recovery(S) ->
     case quod_simplex:test_sync(S) of
         {pulling, Worker} ->
@@ -367,10 +543,14 @@ failed_or_stale_parent_work_immediately_releases_recovery_test_() ->
                     {_, Altered} = quod_simplex:test_latch_dtx_validation(2, <<98:256>>, Token, Owner, Block, Proposed),
                     Altered;
                 dead_owner ->
-                    Dead = spawn(fun() -> ok end), M = monitor(process, Dead),
-                    receive {'DOWN', M, process, Dead, _} -> ok after 1000 -> error(owner_did_not_exit) end,
-                    {_, Altered} = quod_simplex:test_latch_dtx_validation(2, Hash, Token, Dead, Block, Proposed),
-                    Altered;
+                    %% Physical exit alone is not request completion. Consume
+                    %% the real installed monitor's DOWN through the callback.
+                    Dead = spawn(fun() -> receive crash -> exit(validation_crashed) end end),
+                    {M, Altered} = quod_simplex:test_latch_dtx_validation(2, Hash, Token, Dead, Block, Proposed),
+                    Dead ! crash,
+                    Down = receive {'DOWN', M, process, Dead, validation_crashed} = D -> D
+                           after 1000 -> error(owner_did_not_exit) end,
+                    callback_state(quod_simplex:running(info, Down, Altered));
                 higher_finalizer ->
                     Domain = quod_simplex:consensus_domain(Ns, Anchor),
                     Committee = lists:sort(maps:keys(Keys)),

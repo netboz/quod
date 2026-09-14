@@ -23,6 +23,14 @@ The absolute monotonic deadline starts before dispatch and survives the handoff
 to foreign-reference verification. That worker's separate evidence allowance
 is unchanged. Prolog's parked-request TTL uses the same configuration/default.
 
+The exact monitored request in the round is the pending-work token, until the
+owner consumes its verdict or matching `DOWN`. A worker can send its answer
+and exit before that owner turn; physical process liveness does not override
+the installed request. Foreign workers are spawned and monitored atomically.
+This preference still requires the exact next-slot candidate, committed-parent
+token and matching support and commit certificates. It does not make a behind
+node eligible to vote. Missing candidates and larger gaps use ordinary recovery.
+
 When the preference expires, the existing 300 ms tick (or earlier progress)
 may arm recovery. Expiry is not a verdict: it neither rejects the block nor
 clears the validation latch, and cannot spawn another request to a stuck owner.
@@ -34,5 +42,5 @@ monitors through the existing cleanup. The deadline grants no voting or signing 
 **DTX-INLINE-VALIDATION-EXECUTION-BOUND-01 remains open:** inline Prolog
 authorization re-proving has no hard execution bound. Bounding the recovery
 preference does not bound that computation; no executor, kill, timer or KB
-copy is introduced here. Recovery classification (scope B) awaits review of
-the post-change 16-request atomic c4 witness.
+copy is introduced here. Broader recovery classification (scope B) and the
+separately observed two-second Finalize command wait remain outside this change.

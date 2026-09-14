@@ -980,11 +980,12 @@ durable formats and retained data are unchanged.
 
 Authenticated finality beyond the approved frontier is reconciled in the owner
 turn, without two tick samples to reconfirm a cryptographically proven gap.
-An exact next-parent validation already owned by a live monitored worker is
-allowed to complete when the same hash has both support and commit certificates;
-its verdict or DOWN re-enters reconciliation. Missing/stale work or a higher
-finalizer starts the existing history-recovery worker immediately. This work
-selection never relaxes the independent `behind` voting check.
+An exact next-parent validation with an installed monitored request is preferred
+within its original validation deadline when the same hash has both support and
+commit certificates. Its verdict or matching DOWN releases that request and
+re-enters reconciliation; worker exit alone does not discard an answer still
+queued for the owner. Missing/stale/expired work or a higher finalizer uses the
+existing history-recovery worker. This selection never relaxes `behind` voting.
 Only failed acquisitions retain the existing tick-driven backoff; ordinary peer
 traffic cannot spend it. The same recovery enum enforces single flight, and the
 same history verifier, indexed delta/sink and tip corroboration own advancement.

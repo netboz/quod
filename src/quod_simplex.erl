@@ -1074,7 +1074,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                            [quod_dtx_endpoint:validation_item()]}).
 
 %% One authenticated Begin waiting at the existing pre-signing custody seam.
-%% Its caller is parked only until this exact group becomes a dormant intent.
+%% `from=none` in the FIFO means its caller has already handed off activation.
 -record(dtx_intent, {
     id :: reference(),
     from = none :: none | gen_statem:from(),
@@ -4550,7 +4550,7 @@ enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
     case {CurrentEngine =:= EnginePid,
           dtx_intent_binding_status(Material, GroupRef, S),
           DeadlineMs > quod_time:mono_ms()} of
-        {true, valid, true} ->
+        {true, Status, true} when Status =:= valid; Status =:= wait ->
             Admission = dtx_admission_owner(EnginePid, Admission0),
             {_, GroupId, _} = Material,
             case dtx_intent_exists(IntentId, Admission) orelse
@@ -4625,67 +4625,62 @@ progress_dtx_admission(
             case queue:out(Waiting0) of
                 {empty, _} ->
                     {compact_dtx_admission(S), ActionsRev};
-                {{value,
-                  #dtx_intent{id = IntentId, from = From,
-                              deadline_ms = DeadlineMs,
-                              enqueued_at = EnqueuedAt} = Intent}, Waiting} ->
-                    Now = quod_time:mono_ms(),
-                    case DeadlineMs > Now of
-                        false ->
-                            S1 = S#s{dtx_admission =
-                                       Admission#dtx_admission{
-                                         waiting = Waiting}},
-                            progress_dtx_admission(
-                              compact_dtx_admission(S1),
-                              [{reply, From,
-                                {error, {proof_limit_exceeded, Ns}}}
-                               | ActionsRev]);
-                        true ->
-                            progress_live_dtx_intent(
-                              IntentId, From, Intent, Waiting,
-                              EnqueuedAt, Now, S, Admission, ActionsRev)
+                {{value, #dtx_intent{from = none}}, _} when S#s.sync =/= ready ->
+                    %% A handed-off caller can resolve absence only at a ready
+                    %% prefix. Keep its exact row until that progress edge;
+                    %% its original deadline still forbids late signing.
+                    {S, ActionsRev};
+                {{value, Intent}, Waiting} ->
+                    Readiness = case Intent#dtx_intent.deadline_ms > quod_time:mono_ms() of
+                        true -> dtx_intent_readiness(
+                                  Intent#dtx_intent.material,
+                                  Intent#dtx_intent.group_ref, Admission, S);
+                        false -> {error, {proof_limit_exceeded, Ns}}
+                    end,
+                    case Readiness of
+                        {blocked, _} -> {S, ActionsRev};
+                        wait -> {S, ActionsRev};
+                        _ ->
+                            Removed = S#s{dtx_admission =
+                                            Admission#dtx_admission{waiting = Waiting}},
+                            {S1, NextActions} = progress_live_dtx_intent(
+                                                  Readiness, Intent, Removed, ActionsRev),
+                            progress_dtx_admission(compact_dtx_admission(S1), NextActions)
                     end
             end
     end.
 
 progress_live_dtx_intent(
-  IntentId, From,
-  #dtx_intent{material = {_, GroupId, _} = Material, group_ref = GroupRef} = Intent,
-  Waiting, EnqueuedAt, Now, S = #s{ns = Ns}, Admission, ActionsRev) ->
-    case dtx_intent_readiness(Material, GroupRef, Admission, S) of
-        {blocked, _Reason} ->
-            {S, ActionsRev};
-        wait ->
-            %% Recovery has installed the verified prefix but has not yet
-            %% corroborated its tip.  The existing sync_done event re-enters
-            %% this same FIFO once signing is safe.
-            {S, ActionsRev};
-        {refused, conflict} ->
-            %% Wait-die has made this pre-handoff refusal final.  No durable
-            %% owner exists yet, so remove only this intent and let the same
-            %% progress pass consider the next queued group immediately.
-            S1 = S#s{dtx_admission =
-                       Admission#dtx_admission{waiting = Waiting}},
-            progress_dtx_admission(
-              compact_dtx_admission(S1),
-              [{reply, From, {error, operation_conflict}} | ActionsRev]);
-        ready ->
-            quod_metrics:observe_dtx_admission_wait(
-              Ns, max(0, Now - EnqueuedAt)),
-            Dormant = (Admission#dtx_admission.dormant)#{
-                        GroupId => Intent#dtx_intent{from = none}},
-            S1 = S#s{dtx_admission =
-                       Admission#dtx_admission{
-                         dormant = Dormant, waiting = Waiting}},
-            progress_dtx_admission(
-              S1, [{reply, From, {accepted, IntentId}} | ActionsRev]);
-        stale ->
-            S1 = S#s{dtx_admission =
-                       Admission#dtx_admission{waiting = Waiting}},
-            progress_dtx_admission(
-              compact_dtx_admission(S1),
-              [{reply, From, {error, invalid_dtx_intent}} | ActionsRev])
-    end.
+  ready, #dtx_intent{from = none, material = Material, trace_ctx = TraceCtx} = Intent,
+  S, ActionsRev) ->
+    case quod_trace:with_context(TraceCtx, fun() ->
+             retain_dtx_submission(Material, none, [], sign, S)
+         end) of
+        {ok, S1} -> {S1, ActionsRev};
+        {error, Reason} ->
+            logger:error("quod[~s]: accepted DTX Begin activation failed: ~p", [S#s.ns, Reason]),
+            finish_dtx_intent(Intent, {error, Reason}, S, ActionsRev)
+    end;
+progress_live_dtx_intent(
+  ready, #dtx_intent{id = IntentId, from = From, material = {_, GroupId, _},
+                     enqueued_at = EnqueuedAt} = Intent,
+  S = #s{ns = Ns, dtx_admission = Admission}, ActionsRev) ->
+    quod_metrics:observe_dtx_admission_wait(Ns, max(0, quod_time:mono_ms() - EnqueuedAt)),
+    Dormant = (Admission#dtx_admission.dormant)#{GroupId => Intent#dtx_intent{from = none}},
+    {S#s{dtx_admission = Admission#dtx_admission{dormant = Dormant}},
+     [{reply, From, {accepted, IntentId}} | ActionsRev]};
+progress_live_dtx_intent({refused, conflict}, Intent, S, ActionsRev) ->
+    finish_dtx_intent(Intent, {error, operation_conflict}, S, ActionsRev);
+progress_live_dtx_intent(stale, Intent, S, ActionsRev) ->
+    finish_dtx_intent(Intent, {error, invalid_dtx_intent}, S, ActionsRev);
+progress_live_dtx_intent({error, _} = Error, Intent, S, ActionsRev) ->
+    finish_dtx_intent(Intent, Error, S, ActionsRev).
+
+finish_dtx_intent(#dtx_intent{from = none, group_ref = GroupRef}, _Error, S, ActionsRev) ->
+    ok = quod_prolog:dtx_group_resolved(S#s.ns, GroupRef),
+    {S, ActionsRev};
+finish_dtx_intent(#dtx_intent{from = From}, Error, S, ActionsRev) ->
+    {S, [{reply, From, Error} | ActionsRev]}.
 
 dtx_intent_readiness(Material = {_, GroupId, _}, GroupRef,
                      #dtx_admission{dormant = Dormant},
@@ -4714,11 +4709,9 @@ dtx_group_registered(GroupId,
 dtx_intent_binding_status(
   {{quod_dtx_begin, _, Manifest, _, _}, Digest, _}, GroupRef, S = #s{sync = Sync}) ->
     Binding = quod_dtx:manifest_coordinator(Manifest),
-    case {current_dtx_binding(S), quod_dtx:manifest_group_ref(Manifest, Digest)} of
-        {{ok, Binding}, {ok, GroupRef}} ->
-            valid;
-        {{error, _}, _} when Sync =/= ready ->
-            wait;
+    case {dtx_owner_binding(S), quod_dtx:manifest_group_ref(Manifest, Digest)} of
+        {{ok, Binding}, {ok, GroupRef}} when Sync =:= ready -> valid;
+        {{ok, Binding}, {ok, GroupRef}} -> wait;
         _ ->
             invalid
     end;
@@ -4730,29 +4723,12 @@ activate_dtx_intent(
   S0 = #s{dtx_admission =
             #dtx_admission{engine = EnginePid, dormant = Dormant0} = Admission}) ->
     case take_dormant_dtx_intent(IntentId, Dormant0) of
-        {ok, #dtx_intent{material = Material, group_ref = GroupRef,
-                          trace_ctx = TraceCtx}, Dormant} ->
-            S = compact_dtx_admission(
-                  S0#s{dtx_admission =
-                           Admission#dtx_admission{dormant = Dormant}}),
-            case dtx_intent_binding_status(Material, GroupRef, S) of
-                valid ->
-                    case quod_trace:with_context(TraceCtx, fun() ->
-                             retain_dtx_submission(Material, none, [], sign, S)
-                         end) of
-                        {ok, S1} -> S1;
-                        {error, Reason} ->
-                            logger:error(
-                              "quod[~s]: accepted DTX Begin activation failed: ~p",
-                              [S#s.ns, Reason]),
-                            S
-                    end;
-                _ ->
-                    %% Retirement or a new admission generation won the ledger
-                    %% race.  Nothing was signed; resolve only this exact group.
-                    ok = quod_prolog:dtx_group_resolved(S#s.ns, GroupRef),
-                    S
-            end;
+        {ok, Intent, Dormant} ->
+            %% Activation joins the same FIFO in arrival order and uses its
+            %% readiness/deadline/signing transition. No second retry engine.
+            Waiting = queue:in(Intent, Admission#dtx_admission.waiting),
+            S0#s{dtx_admission = Admission#dtx_admission{dormant = Dormant,
+                                                       waiting = Waiting}};
         error ->
             S0
     end;
@@ -5623,7 +5599,7 @@ local_group_pending(
   GroupId, GroupRef,
   #s{dtx_admission = Admission, retained_dtx = Registry}) ->
     Submissions = quod_dtx_owner:rows(Registry),
-    dormant_group_matches(GroupId, GroupRef, Admission) orelse
+    admission_group_matches(GroupId, GroupRef, Admission) orelse
         maps:fold(
           fun(_Digest, #dtx_submission{group_id = PendingGroup}, Found) ->
                   Found orelse PendingGroup =:= GroupId
@@ -5633,10 +5609,12 @@ intent_matches_group(
   #dtx_intent{group_ref = GroupRef}, GroupRef) -> true;
 intent_matches_group(_Intent, _GroupRef) -> false.
 
-dormant_group_matches(
-  GroupId, GroupRef, #dtx_admission{dormant = Dormant}) ->
-    intent_matches_group(maps:get(GroupId, Dormant, none), GroupRef);
-dormant_group_matches(_GroupId, _GroupRef, none) ->
+admission_group_matches(
+  GroupId, GroupRef, #dtx_admission{dormant = Dormant, waiting = Waiting}) ->
+    intent_matches_group(maps:get(GroupId, Dormant, none), GroupRef) orelse
+        lists:any(fun(Intent) -> intent_matches_group(Intent, GroupRef) end,
+                  queue:to_list(Waiting));
+admission_group_matches(_GroupId, _GroupRef, none) ->
     false.
 
 %%%===================================================================
@@ -6910,9 +6888,8 @@ pending_or_absent_dtx_phase(GroupId, Kind, S) ->
 
 local_dtx_phase_pending(
   GroupId, 'begin',
-  #s{dtx_admission =
-       #dtx_admission{dormant = Dormant}} = S) ->
-    maps:is_key(GroupId, Dormant) orelse
+  #s{dtx_admission = #dtx_admission{} = Admission} = S) ->
+    dtx_group_intent_exists(GroupId, Admission) orelse
         retained_dtx_phase_pending(GroupId, 'begin', S);
 local_dtx_phase_pending(GroupId, Kind, S) ->
     retained_dtx_phase_pending(GroupId, Kind, S).
@@ -12139,27 +12116,26 @@ keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
                                    S0, maybe_mark_ready(S1, ReadyBoundary)) end),
     SRecovered = timed_step(SReady, reconcile,
                             fun() -> reconcile_block_requests(SReady) end),
+    SClassified = timed_step(
+                    SRecovered, dtx_reclassify,
+                    fun() -> finish_pending_begins_reconciliation(
+                               settle_retained_dtx(S0, SRecovered)) end),
+    {SAdmitted, ActionsRevAdmission} =
+        timed_step(SClassified, dtx_admission,
+                   fun() -> progress_dtx_admission(SClassified, ActionsRev0) end),
     SCoordinated = timed_step(
-                     SRecovered, dtx_coordinator,
-                     fun() -> reconcile_dtx_coordinator(SRecovered) end),
+                     SAdmitted, dtx_coordinator,
+                     fun() -> reconcile_dtx_coordinator(SAdmitted) end),
     SOperations = timed_step(
                     SCoordinated, operation_recovery,
                     fun() -> reconcile_operation_recoveries(
                                SCoordinated) end),
-    SClassified = timed_step(
-                    SOperations, dtx_reclassify,
-                    fun() -> finish_pending_begins_reconciliation(
-                               settle_retained_dtx(S0, SOperations)) end),
-    SDtx = timed_step(SClassified, dtx_drive,
-                      fun() -> drive_retained_dtx(SClassified) end),
-    {SAdmitted, ActionsRevAdmission} =
-        timed_step(
-          SDtx, dtx_admission,
-          fun() -> progress_dtx_admission(SDtx, ActionsRev0) end),
+    SDtx = timed_step(SOperations, dtx_drive,
+                      fun() -> drive_retained_dtx(SOperations) end),
     SCustodyReady =
         timed_step(
-          SAdmitted, custody_reconcile,
-          fun() -> reconcile_custody_lane(SAdmitted) end),
+          SDtx, custody_reconcile,
+          fun() -> reconcile_custody_lane(SDtx) end),
     SCustodyView = refresh_ingress_view(SCustodyReady),
     %% Durable exclusion becomes a new placement only here: the complete
     %% contiguous commit prefix, committee adoption, author floor, and recovery
@@ -14600,8 +14576,8 @@ behind(#s{eng = Eng, approved = Approved}) -> ahead_cert_ceiling(Eng) > Approved
 %% traffic so its gap detector can learn, but participation alone grants no signing capability.
 is_participant(#s{self = Self} = S) -> lists:member(Self, active_validators(S)).
 
-%% `ready` is the only recovery state with a corroborated tip. A live finalizer
-%% revokes the capability immediately and the same owner turn arms recovery.
+%% `ready` is the only recovery state with a corroborated tip. An ahead
+%% finalizer revokes voting immediately, even while its live verdict is owned.
 caught_up(#s{sync = ready} = S) -> not behind(S);
 caught_up(_S) -> false.
 
@@ -14632,10 +14608,23 @@ ingress_capability(S) ->
 may_vote(S) ->
     ingress_capability(S) =:= accept.
 
-%% An unconfirmed node always recovers. A ready member recovers when a verified finalizer is beyond its
-%% approved frontier, including a finalized next block whose content never reached this node.
+%% Prefer the exact, already-owned next-parent verdict to duplicate recovery.
+%% Its terminal verdict/DOWN re-enters reconciliation; no tick grants permission.
 should_sync(#s{sync = unconfirmed}) -> true;
-should_sync(#s{sync = ready} = S) -> behind(S).
+should_sync(#s{sync = ready, approved = Approved, history_head = Token, eng = Eng} = S) ->
+    case ahead_cert_ceiling(Eng) of
+        Ahead when Ahead =< Approved -> false;
+        Next when Next =:= Approved + 1 ->
+            Round = round_state(Next, S),
+            case {Round#round.candidate, Round#round.validating, dtx_validation_owner(Round)} of
+                {{Hash, #block{slot = Next}}, Hash, {Token = {Approved, _}, Owner}} ->
+                    not (is_process_alive(Owner) andalso
+                         persisted_cert(support, Next, Hash, Eng) =/= none andalso
+                         persisted_cert(commit, Next, Hash, Eng) =/= none);
+                _ -> true
+            end;
+        _ -> true
+    end.
 
 %% The feed follows only in the sole settled state, so its puller and recovery can never own ingestion at
 %% the same time.

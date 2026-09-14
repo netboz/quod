@@ -199,6 +199,89 @@ durable_lookup_is_one_bounded_read_not_history_replay_test_() ->
         ?assertEqual(1, Count(quod_simplex, history_validate_advance))
     end).
 
+finality_does_not_duplicate_owned_parent_validation_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Ns, _} = maps:get(origin, F),
+        true = quod_reg:reg({quod_catchup, Ns}),
+        true = quod_reg:reg({quod_simplex, Ns}),
+        try
+            {Block, Hash, Certified} = certified_first(F, S0, Keys),
+            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            {Hash, Token, Owner} = take_request(2),
+            Reconciled = quod_simplex:reconcile_block_requests(Proposed),
+            try
+                ?assertEqual(ready, quod_simplex:test_sync(Reconciled)),
+                ?assertNot(quod_simplex:caught_up(Reconciled)),
+                From = {self(), make_ref()},
+                ?assertMatch({keep_state, _, [{reply, From, {ok, _}}]},
+                             quod_simplex:running({call, From}, get_dtx_binding, Reconciled)),
+                Repeated = lists:foldl(fun(_, S) -> quod_simplex:reconcile_block_requests(S) end,
+                                       Reconciled, lists:seq(1, 20)),
+                ?assertEqual(ready, quod_simplex:test_sync(Repeated)),
+                assert_no_request(),
+                Done = quod_simplex:test_on_dtx_verdict(
+                         2, Hash, Token, Owner, 1, {valid, #{}}, Repeated),
+                ?assertEqual(2, element(1, quod_simplex:test_committed_store(Done))),
+                ?assertEqual(ready, quod_simplex:test_sync(
+                                     quod_simplex:reconcile_block_requests(Done)))
+            after stop_test_recovery(Reconciled) end
+        after
+            gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+            gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+        end
+    end) end).
+
+stop_test_recovery(S) ->
+    case quod_simplex:test_sync(S) of
+        {pulling, Worker} ->
+            Monitor = erlang:monitor(process, Worker),
+            exit(Worker, kill),
+            receive {'DOWN', Monitor, process, Worker, _} -> ok
+            after 1000 -> error(recovery_worker_survived) end;
+        _ -> ok
+    end.
+
+failed_or_stale_parent_work_immediately_releases_recovery_test_() ->
+    [{atom_to_list(Mode), isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Ns, Anchor} = maps:get(origin, F),
+        true = quod_reg:reg({quod_catchup, Ns}),
+        true = quod_reg:reg({quod_simplex, Ns}),
+        try
+            {Block, Hash, Certified} = certified_first(F, S0, Keys),
+            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            {Hash, Token, Owner} = take_request(2),
+            Changed = case Mode of
+                abstain -> quod_simplex:test_on_dtx_verdict(2, Hash, Token, Owner, 1, abstain, Proposed);
+                invalid -> quod_simplex:test_on_dtx_verdict(2, Hash, Token, Owner, 1, {invalid, refused}, Proposed);
+                stale_parent -> quod_simplex:test_state_set(history_head, {1, <<99:256>>}, Proposed);
+                wrong_hash ->
+                    {_, Altered} = quod_simplex:test_latch_dtx_validation(2, <<98:256>>, Token, Owner, Block, Proposed),
+                    Altered;
+                dead_owner ->
+                    Dead = spawn(fun() -> ok end), M = monitor(process, Dead),
+                    receive {'DOWN', M, process, Dead, _} -> ok after 1000 -> error(owner_did_not_exit) end,
+                    {_, Altered} = quod_simplex:test_latch_dtx_validation(2, Hash, Token, Dead, Block, Proposed),
+                    Altered;
+                higher_finalizer ->
+                    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+                    Committee = lists:sort(maps:keys(Keys)),
+                    Shares = [quod_simplex:make_share(Domain, commit, 3, <<97:256>>, maps:get(P, Keys))
+                              || P <- lists:sublist(Committee, 3)],
+                    {ok, Cert} = quod_simplex:form_cert(Domain, commit, 3, <<97:256>>, Shares, Committee),
+                    quod_simplex:dispatch(peer(Keys), {cert, Cert}, Proposed)
+            end,
+            Started = quod_simplex:reconcile_block_requests(Changed),
+            try
+                ?assertMatch({pulling, _}, quod_simplex:test_sync(Started)),
+                ?assertNot(quod_simplex:caught_up(Started)),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Started)))
+            after stop_test_recovery(Started) end
+        after
+            gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+            gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+        end
+    end) end)} || Mode <- [abstain, invalid, stale_parent, wrong_hash, dead_owner, higher_finalizer]].
+
 authenticated_finality_wakes_one_existing_recovery_worker_without_a_tick_test_() ->
     isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
         {Ns, _} = Identity = maps:get(origin, F),

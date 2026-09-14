@@ -970,9 +970,13 @@ certificate-bearing reply is removed rather than reverified or retained in a
 second inventory. This transport-only break requires a coordinated fleet swap;
 durable formats and retained data are unchanged.
 
-Authenticated finality beyond the approved frontier immediately wakes the
-existing history-recovery worker at the owner reconciliation boundary. It no
-longer waits for two tick samples to reconfirm a cryptographically proven gap.
+Authenticated finality beyond the approved frontier is reconciled in the owner
+turn, without two tick samples to reconfirm a cryptographically proven gap.
+An exact next-parent validation already owned by a live monitored worker is
+allowed to complete when the same hash has both support and commit certificates;
+its verdict or DOWN re-enters reconciliation. Missing/stale work or a higher
+finalizer starts the existing history-recovery worker immediately. This work
+selection never relaxes the independent `behind` voting check.
 Only failed acquisitions retain the existing tick-driven backoff; ordinary peer
 traffic cannot spend it. The same recovery enum enforces single flight, and the
 same history verifier, indexed delta/sink and tip corroboration own advancement.
@@ -982,6 +986,20 @@ proposal checks remain mandatory. Complete validators still never repeat the
 coordinator's target-application fan-out; committed Complete recovery uses its
 origin QC through the existing certified-history path. No new state owner,
 timer, polling loop, durable format or voting authority is introduced.
+
+Accepted Begin activation uses the existing admission FIFO, not a separate
+readiness/signing walk. The existing `from = none` distinguishes handed-off
+rows from calls still awaiting acceptance. Identity and exact manifest binding
+are checked before readiness; recovery parks the same authenticated material,
+group and deadline without signing. Activation joins the FIFO in arrival order.
+Pending-group and phase reads include these queued rows. Ready progress performs
+classification, admission and coordinator reconciliation in that dependency
+order in one owner turn, preserving paused ownership without authorizing
+endpoint execution. Expiry, cancellation or changed ownership cannot sign the
+intent later. A post-handoff resolution remains a hint to the existing exact
+outcome/barrier check: if concurrent progress prevents authoritative absence,
+the caller retains the existing deadline/uncertainty grammar, never a fabricated
+rejection. No new tracking or reply authority is added.
 
 ### Independent writes and authenticated data
 

@@ -4713,7 +4713,8 @@ submit_remote_claim(
     RequestAuth = quod_proof_context:request_auth(),
     RequestBinding = quod_proof_context:request_binding(),
     Participants = [{Target, quod_dtx:digest(maps:get(Target, Plans))} || Target <- Targets],
-    case {encode_proof_submission(Goal, Bindings), quod_simplex:dtx_binding(OriginNs)} of
+    %% Claims have no pre-custody wait: refuse lag before spending attestations.
+    case {encode_proof_submission(Goal, Bindings), quod_simplex:dtx_ready_binding(OriginNs)} of
         {{ok, GoalBlob, ResultBlob},
          {ok, {OriginNs, OriginAnchor, _Coordinator, _Admission} = Coordinator}} ->
             ManifestInput = #{proof_id => ProofId, coordinator => Coordinator,
@@ -4792,7 +4793,7 @@ submit_effect_foreign_claim(
   Handles, Claim = #transaction{role = {remote_claim, _, _, _}},
   Bindings) ->
     case {quod_transaction:request_claim(Claim),
-          quod_simplex:dtx_binding(OriginNs)} of
+          quod_simplex:dtx_ready_binding(OriginNs)} of
         {{ok, #{operation_ref := OperationRef}},
          {ok, {OriginNs, _OriginAnchor, Signer,
                <<_:256>> = Admission}}} ->

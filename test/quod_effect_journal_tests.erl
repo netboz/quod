@@ -1127,7 +1127,7 @@ fake_binding_simplex(Parent, Ns, Binding) ->
 
 fake_binding_simplex_loop(Parent, Binding) ->
     receive
-        {'$gen_call', From, get_dtx_binding} ->
+        {'$gen_call', From, get_dtx_ready_binding} ->
             gen:reply(From, {ok, Binding}),
             fake_binding_simplex_loop(Parent, Binding);
         {'$gen_call', From, {handoff_effect, _Admission, _Transaction}} ->

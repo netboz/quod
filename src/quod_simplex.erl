@@ -142,7 +142,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          start_transaction_custody_cancellation/2,
          activate_transaction_custody/2,
          cancel_transaction_custody/2,
-         dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
+         dtx_binding/1, dtx_ready_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
          cancel_dtx_begin/3, dtx_group_barrier/3,
          dtx_endpoint_request/7, dtx_endpoint_local/4,
          history_view/3, history_view_at/3, history_view_live/1, transaction_evidence/4,
@@ -2506,12 +2506,18 @@ finalize_applied(Ns, GroupId, Slot, Generation)
               {finalize_applied, GroupId, Slot, Generation})
     end.
 
--doc "Return the exact coordinator identity currently authorised to author DTX controls.".
+-doc "Return the anchored participant binding; Begin admission waits for readiness in its existing FIFO.".
 -spec dtx_binding(binary()) ->
           {ok, {binary(), <<_:256>>, <<_:256>>, <<_:256>>}} |
           {error, term()}.
 dtx_binding(Ns) when is_binary(Ns) ->
     call(Ns, get_dtx_binding, {error, {ontology_unavailable, Ns}}).
+
+-doc "Return the participant binding only while ready, for claims requiring immediate custody.".
+-spec dtx_ready_binding(binary()) ->
+          {ok, {binary(), <<_:256>>, <<_:256>>, <<_:256>>}} | {error, term()}.
+dtx_ready_binding(Ns) when is_binary(Ns) ->
+    call(Ns, get_dtx_ready_binding, {error, {ontology_unavailable, Ns}}).
 
 -doc "Park one proof-owned Begin until the existing signing admission opens.".
 -spec register_dtx_begin(binary(), pid(), reference(),
@@ -3954,11 +3960,9 @@ running_impl({call, From}, {history_view, Identity, Requirement, Deadline}, S) -
      [{reply, From,
        local_history_view(Identity, Requirement, Deadline, S)}]};
 running_impl({call, From}, get_dtx_binding, S) ->
-    Reply = case current_dtx_binding(S) of
-                {ok, Binding} -> {ok, Binding};
-                {error, _} = Error -> Error
-            end,
-    {keep_state, S, [{reply, From, Reply}]};
+    {keep_state, S, [{reply, From, dtx_owner_binding(S)}]};
+running_impl({call, From}, get_dtx_ready_binding, S) ->
+    {keep_state, S, [{reply, From, current_dtx_binding(S)}]};
 running_impl(
   {call, From},
   {register_dtx_begin, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
@@ -4532,8 +4536,8 @@ current_dtx_binding(#s{ns = Ns}) ->
     {error, {ontology_unavailable, Ns}}.
 
 %% Membership/admission owns recovery; readiness only grants execution.
-%% Keep the public admission check above strict while retaining durable work
-%% across a transient sync or Prolog-readiness dip.
+%% Public Begin admission uses this binding even during catch-up: its existing
+%% FIFO waits under the original deadline. Signing and immediate custody stay strict.
 dtx_owner_binding(
   #s{ns = Ns, genesis_hash = Anchor, self = Self,
      author_admissions = Admissions,
@@ -6466,7 +6470,7 @@ submit_claimed_application(_Ns, _TargetRef, _ClaimRef, _Application, _Deadline) 
 %% The journal already checks its persisted plan signer, executor, exact
 %% application and prepared material. Do not duplicate that custody decision.
 bind_claimed_effect(Ns, TargetRef, ClaimRef, Application0, Deadline) ->
-    case dtx_binding(Ns) of
+    case dtx_ready_binding(Ns) of
         {ok, {Ns, _, Self, _}} ->
             Application = Application0#transaction{author = Self, submitted_at = quod_time:now_ms()},
             case quod_effect_journal:bind_operation_transaction(ClaimRef, TargetRef, Application) of

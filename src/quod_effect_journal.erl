@@ -1604,7 +1604,7 @@ decode_transaction(_Bytes, _Ref, _Admission) -> error.
 effect_admission(Effect, {transaction, Ns, Anchor, _TxId}) ->
     effect_admission(Effect, {Ns, Anchor});
 effect_admission(Effect, {Ns, Anchor}) ->
-    case quod_simplex:dtx_binding(Ns) of
+    case quod_simplex:dtx_ready_binding(Ns) of
         {ok, {Ns, Anchor, Executor, <<_:256>> = Admission}} ->
             case Executor =:= quod_effect:executor(Effect) of
                 true -> {ok, Admission};

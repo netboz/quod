@@ -1318,6 +1318,9 @@ dtx_registration_during_recovery_binds_identity_before_wait_test_() ->
     {spawn, fun() -> with_dtx_admission_fixture(fun(F, Begin, GroupRef, S0) ->
         Pulling = quod_simplex:test_state_set(sync, {pulling, self()}, S0),
         Intent = make_ref(), From = {self(), make_ref()}, Deadline = quod_time:mono_ms() + 5000,
+        Binding = quod_dtx:manifest_coordinator(maps:get(manifest, F)),
+        ?assertEqual({keep_state, Pulling, [{reply, From, {ok, Binding}}]},
+                     quod_simplex:running({call, From}, get_dtx_binding, Pulling)),
         {ok, Queued} = quod_simplex:test_enqueue_dtx_intent(
                         From, self(), Intent, Begin, GroupRef, Deadline, Pulling),
         {Queued, []} = quod_simplex:test_progress_dtx_admission(Queued),
@@ -1330,6 +1333,64 @@ dtx_registration_during_recovery_binds_identity_before_wait_test_() ->
         Ready = quod_simplex:test_state_set(sync, ready, Queued),
         {Dormant, [{reply, From, {accepted, Intent}}]} = quod_simplex:test_progress_dtx_admission(Ready),
         _ = quod_simplex:test_cancel_dtx_intent(self(), Intent, Dormant)
+    end) end}.
+
+dtx_public_lag_wait_finishes_under_original_deadline_test_() ->
+    [{atom_to_list(Outcome), {spawn, fun() ->
+      with_dtx_admission_fixture(fun(F, Begin, GroupRef, S0) ->
+        {Ns, _} = maps:get(target, F), Dir = relay_store_dir("public_lag"),
+        {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+        try
+            Pulling = quod_simplex:test_state_set(sync, {pulling, self()},
+                        quod_simplex:test_state_set(signing_journal, Journal, S0)),
+            From = {self(), make_ref()}, Intent = make_ref(),
+            Binding = quod_dtx:manifest_coordinator(maps:get(manifest, F)),
+            ?assertEqual({keep_state, Pulling, [{reply, From, {ok, Binding}}]},
+                         quod_simplex:running({call, From}, get_dtx_binding, Pulling)),
+            {keep_state, Waiting, Actions} = quod_simplex:running({call, From},
+                {register_dtx_begin, self(), Intent, Begin, GroupRef,
+                 quod_time:mono_ms() + 5000, undefined}, Pulling),
+            ?assertEqual([], reply_actions(Actions)),
+            ?assertEqual([Intent], maps:get(waiting, quod_simplex:test_dtx_admission_state(Waiting))),
+            ?assertEqual(#{}, quod_signing_journal:pending_begins(Journal)),
+            case Outcome of
+                ready ->
+                    Ready = quod_simplex:test_state_set(sync, ready, Waiting),
+                    {Accepted, [{reply, From, {accepted, Intent}}]} =
+                        quod_simplex:test_progress_dtx_admission(Ready),
+                    {Signed, []} = quod_simplex:test_progress_dtx_admission(
+                        quod_simplex:test_activate_dtx_intent(self(), Intent, Accepted)),
+                    ?assertEqual([quod_dtx:group_id(Begin)], maps:keys(
+                        quod_signing_journal:pending_begins(quod_simplex:test_signing_journal(Signed)))),
+                    ?assertEqual({Signed, []}, quod_simplex:test_progress_dtx_admission(Signed));
+                expired ->
+                    Expired = quod_simplex:test_set_dtx_intent_deadline(
+                                Intent, quod_time:mono_ms() - 1, Waiting),
+                    {Done, [{reply, From, {error, {proof_limit_exceeded, Ns}}}]} =
+                        quod_simplex:test_progress_dtx_admission(Expired),
+                    ?assertEqual(#{}, quod_signing_journal:pending_begins(Journal)),
+                    ?assertEqual(0, maps:get(submissions, quod_simplex:test_dtx_endpoint_counts(Done))),
+                    ?assertEqual([], maps:get(waiting, quod_simplex:test_dtx_admission_state(Done)))
+            end
+        after quod_signing_journal:close(Journal), file:del_dir_r(Dir) end
+      end)
+    end}} || Outcome <- [ready, expired]].
+
+dtx_public_binding_keeps_membership_and_custody_boundaries_test_() ->
+    {spawn, fun() -> with_dtx_admission_fixture(fun(F, _Begin, _GroupRef, S0) ->
+        {Ns, _} = maps:get(target, F), From = {self(), make_ref()},
+        Binding = quod_dtx:manifest_coordinator(maps:get(manifest, F)),
+        Pulling = quod_simplex:test_state_set(sync, {pulling, self()}, S0),
+        ?assertEqual({keep_state, Pulling, [{reply, From, {error, {ontology_unavailable, Ns}}}]},
+                     quod_simplex:running({call, From}, get_dtx_ready_binding, Pulling)),
+        ?assertEqual({keep_state, S0, [{reply, From, {ok, Binding}}]},
+                     quod_simplex:running({call, From}, get_dtx_ready_binding, S0)),
+        lists:foreach(fun({State, Reason}) ->
+            ?assertEqual({keep_state, State, [{reply, From, {error, Reason}}]},
+                         quod_simplex:running({call, From}, get_dtx_binding, State))
+        end, [{quod_simplex:test_state_set(validators, [], Pulling), not_in_charge},
+              {quod_simplex:test_state_set(dtx_projection, undefined, Pulling), {ontology_unavailable, Ns}},
+              {quod_simplex:test_state_set(genesis_hash, undefined, Pulling), {ontology_unavailable, Ns}}])
     end) end}.
 
 dtx_resolution_overtaken_by_commit_stays_uncertain_test_() ->

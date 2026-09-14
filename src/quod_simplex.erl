@@ -10895,11 +10895,7 @@ ingest_certified_block(
                             S3 = retain_dtx_candidate(
                                    Block, ExpectedBH, [],
                                    watch_proposal(Slot, S2)),
-                            case may_vote(S3) of
-                                true -> support_or_validate(
-                                          Block, ExpectedBH, S3);
-                                false -> S3
-                            end;
+                            support_or_validate(Block, ExpectedBH, S3);
                         _ ->
                             engine_step(
                               [{block, ExpectedBH, Block}], S2)
@@ -10982,12 +10978,10 @@ preflight_proposal(
 %% A new leader proposal is valid only at the next approved slot, extending
 %% that approved parent, with one bounded tagged payload. A retained exact
 %% redrive bypasses the checks already paid before that block entered the
-%% engine. In both cases, recovery may retain evidence while only a ready voter
-%% starts local validation, timers, or signatures.
+%% engine. DTX validation uses its exact committed parent; voting permission
+%% is checked separately at the sole signing boundary.
 on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known, S) ->
     case Known orelse valid_proposal(Block, S) of
-        %% Recovery may ingest the block and certificates as evidence, but only a ready voter starts local
-        %% validation, timers, or signatures. The leader's redrive presents the proposal again after recovery.
         true  ->
             case quod_ledger:classify(Block#block.payload) of
                 {controls, _Controls} ->
@@ -10999,10 +10993,7 @@ on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known, S) ->
                     %% refactor from reopening a cert-before-verdict bypass.
                     S1 = retain_dtx_candidate(
                            Block, BH, ValidationSidecar, watch_proposal(Sl, S)),
-                    case may_vote(S1) of
-                        true -> support_or_validate(Block, BH, S1);
-                        false -> S1
-                    end;
+                    support_or_validate(Block, BH, S1);
                 _ ->
                     S1 = engine_step([{block, BH, Block}], S),
                     %% A Byzantine leader may equivocate indefinitely. The engine retains
@@ -11317,10 +11308,13 @@ verify_content_reference(Ref, Phase, LocalIdentity, LedgerRoot, Contacts, Deadli
 support_or_validate_dtx(Controls, Block, Sl, BH, S)
   when is_list(Controls), Controls =/= [] ->
     Round = round_state(Sl, S),
-    case Round#round.dtx_parent of
-        {BH, _ParentToken, _Histories, _Projection} ->
+    %% A finalizer ahead of the approved frontier revokes voting, not the
+    %% exact-parent validation required to install that very finalizer.
+    case {is_participant(S), Round#round.dtx_parent} of
+        {false, _} -> S;
+        {true, {BH, _ParentToken, _Histories, _Projection}} ->
             support_validated_dtx(Block, BH, S);
-        _ ->
+        {true, _} ->
             case Round#round.validating of
                 BH -> S;
                 none -> request_dtx_validation(Controls, Block, Sl, BH, S);
@@ -12265,9 +12259,10 @@ settle_retained_dtx(S0, S1) ->
     end.
 
 settle_readiness(S0, S1) ->
-    case {may_vote(S0), may_vote(S1)} of
-        {false, true} -> resume_ready_rounds(S1);
-        _             -> S1
+    %% The installed parent is a readiness edge even if voting never changed.
+    case {S0#s.history_head, may_vote(S0)} =:= {S1#s.history_head, may_vote(S1)} of
+        true -> S1;
+        false -> resume_ready_rounds(S1)
     end.
 
 progress_timer_actions(#s{head_progress = P}, #s{head_progress = P}) -> [];
@@ -12589,15 +12584,13 @@ ordered_unique(Candidates, Excluded) ->
                  end, {#{}, []}, Candidates),
     lists:reverse(Rev).
 
-%% A recovering member may have accepted and notarized a block while `may_vote=false`. Engine events are
-%% edge-triggered, so becoming ready does not naturally emit `{notarized,...}` again. Reconcile the complete
-%% tree into the approval/commit latches and emit any commit share that was intentionally withheld during
-%% recovery. Do NOT invent a support vote here: a committee-changing proposal requires this node's
-%% asynchronous KB verdict before support, and recovery deliberately skipped that validation. The existing
-%% notarization certificate is sufficient authority to cast the final vote. The operation is idempotent
-%% (`#round.final` is the latch) and runs on ready transitions/ticks.
+%% Reconcile a member's bounded live rounds on parent/capability progress.
+%% Certified tree entries restore final-vote latches through the existing
+%% signing gate. Pending DTX candidates request their exact-parent verdict;
+%% a later finalizer must not make that validation depend on voting readiness.
+%% Neither action invents a support vote or bypasses the Prolog verdict.
 resume_ready_rounds(S) ->
-    case may_vote(S) of
+    case is_participant(S) of
         false -> S;
         true ->
             %% Snapshot only slot numbers. A vote in an earlier iteration can finalize and prune later

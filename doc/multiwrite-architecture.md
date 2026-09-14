@@ -950,6 +950,15 @@ still refuse. Temporary catch-up preserves ownership; real admission loss
 retires it. Classification precedes renewal, and resolutions publish after
 commit/skip/catch-up application.
 
+An installed durable parent resumes held consensus validation through the
+existing owner reconciliation. Validation requests use the existing
+gproc-addressed Prolog owner and its exact applied-parent/outcome-floor checks;
+they do not require permission to cast a fresh vote. In particular, an ahead
+finalizer cannot block the validation needed to install that same finalizer.
+Only participants request the verdict, and the existing signing boundaries
+still require voting readiness. No certificate substitutes for a local verdict,
+and neither a tick nor leader redelivery is needed to notice parent progress.
+
 ### Independent writes and authenticated data
 
 One proof evaluator stages and seals once. Ordinary multiwrites stay atomic;

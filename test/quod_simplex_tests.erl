@@ -488,12 +488,12 @@ dtx_certificate_cannot_bypass_parent_validation_test() ->
           Author, {cert, CommitCert},
           quod_simplex:dispatch(Author, {cert, SupportCert}, S0)),
 
-    %% No Prolog owner exists for this unique namespace, so validation cannot
-    %% start. Even with both finality certificates already retained, the exact
-    %% candidate stays outside the engine and the durable height cannot move.
+    %% This structural fixture has neither a durable parent token nor a Prolog
+    %% owner. Certificates cannot promote its receipt to an admitted candidate;
+    %% the real-founded parent-progress suite covers the subsequent verdict.
     S1 = quod_simplex:dispatch(Author, {propose, Block, []}, WithCerts),
     ?assertEqual(
-       {none, none, {BH, Block}, none, undefined},
+       {none, none, {offered, BH, Block}, none, undefined},
        quod_simplex:test_dtx_round(2, S1)),
     ?assertEqual(1, maps:get(slot, quod_simplex:stats_map(S1))).
 
@@ -4882,9 +4882,9 @@ certified_block_from_non_leader_restores_finality_test() ->
     ?assertEqual({none, true, false}, quod_simplex:test_round(6, Restored)),
     ?assertEqual(0, map_size(quod_simplex:test_block_requests(Restored))).
 
-%% Certified recovery must classify a DTX batch as controls and retain it in
-%% the phase-aware validation round.  Sending it through the generic content
-%% engine would install the block without the DTX prerequisite checks.
+%% Certified recovery must retain DTX input without granting engine authority.
+%% This pre-genesis structural fixture has no durable parent token: receipt
+%% must stay unadmitted. Real-founded validation is covered in parent-progress.
 certified_dtx_block_uses_phase_aware_recovery_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     Control = maps:get(begin_control, Fixture),
@@ -4906,7 +4906,8 @@ certified_dtx_block_uses_phase_aware_recovery_test() ->
 
     Recovered = quod_simplex:dispatch(
                   Self, {certified_block, Block, BH}, S),
-    ?assertMatch({_, _, {_, #block{payload = {batch, [{dtx, _}]}}}, _, _},
+    ?assertMatch({none, none, {offered, _, #block{payload = {batch, [{dtx, _}]}}},
+                  none, undefined},
                  quod_simplex:test_dtx_round(1, Recovered)),
     ?assertEqual(0, map_size(quod_simplex:test_block_requests(Recovered))).
 
@@ -10157,7 +10158,29 @@ ordinary_block_equivocation_is_bounded_and_does_not_crash_test() ->
        quod_simplex:test_round(6, Supported)),
     Rejected =
         quod_simplex:dispatch(Leader, {propose, Second, []}, Supported),
-    ?assertEqual(Supported, Rejected).
+    ?assertEqual(Supported, Rejected),
+    %% After quorum, a redrive must still heal lost delivery of our existing
+    %% support and commit shares. This is not permission to mint fresh support
+    %% for a certified body we never supported (the recovery control above).
+    {ok, Cert} = quod_simplex:form_cert(
+                   ?DOMAIN, support, 6, FirstHash,
+                   supports(First, Committee, 3), Validators),
+    Approved = quod_simplex:dispatch(Leader, {cert, Cert}, Rejected),
+    ?assertEqual({FirstHash, true, false}, quod_simplex:test_round(6, Approved)),
+    Clean = quod_simplex:test_state_set(outbox, #{}, Approved),
+    Echoed = quod_simplex:dispatch(Leader, {propose, First, []}, Clean),
+    ?assertEqual(quod_simplex:test_dtx_round(6, Clean),
+                 quod_simplex:test_dtx_round(6, Echoed)),
+    ?assertEqual(quod_simplex:test_round(6, Clean), quod_simplex:test_round(6, Echoed)),
+    Expected = lists:sort([
+        {consensus, {share, quod_simplex:make_share(?DOMAIN, Kind, 6, FirstHash, LeaderId)}}
+        || Kind <- [support, commit]]),
+    Outbox = quod_simplex:test_outbox(Echoed),
+    ?assertEqual(3, map_size(Outbox)),
+    maps:foreach(fun(_Peer, Frames) ->
+        ?assertEqual(Expected, lists:sort([
+            quod_relay:decode_consensus_frame(Frame, <<"t">>) || Frame <- Frames]))
+    end, Outbox).
 
 %% Record field types are not runtime checks: an authenticated Byzantine
 %% leader can still put an arbitrary term in a wire-decoded block payload.

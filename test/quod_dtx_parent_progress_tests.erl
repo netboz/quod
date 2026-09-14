@@ -10,6 +10,406 @@ bounded recovery-preference tests use the existing tick. No sleep releases work.
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+%% Receipt is not admission. These controls enter through the same inbound
+%% dispatcher as a peer; the tagged offer must never inherit the authority of
+%% the existing admitted {Hash, Block} candidate. The original owner/deadline
+%% controls below continue to pin the subsequent monitored validation lifetime.
+early_child_receipt_survives_until_durable_parent_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Parent, ParentHash, Token, Owner, Child, ChildHash, Pending} =
+            receipt_pair(F, S0, Keys, [support, commit]),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+        %% Fail-before oracle: the old preflight drops this real early child.
+        assert_receipt_offer(3, ChildHash, Child, Offered),
+        assert_no_request(),
+        ?assertEqual(quod_simplex:test_dtx_round(2, Pending),
+                     quod_simplex:test_dtx_round(2, Offered)),
+        Committed = quod_simplex:test_on_dtx_verdict(
+                      2, ParentHash, Token, Owner, 1, {valid, #{}}, Offered),
+        ?assertEqual(2, element(1, quod_simplex:test_committed_store(Committed))),
+        Resumed = quod_simplex:settle_readiness(Offered, Committed),
+        ChildToken = {2, quod_simplex:block_hash(Parent)},
+        ?assertEqual({ChildHash, ChildToken, self()}, take_request(3)),
+        {ChildHash, {dtx, ChildToken, ChildOwner, _, Deadline},
+         {ChildHash, Child}, none, undefined} = quod_simplex:test_dtx_round(3, Resumed),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(3, Resumed)),
+        Finality = receipt_certificates(Child, [support, commit], F, Keys, Resumed),
+        Reconciled = quod_simplex:reconcile_block_requests(Finality),
+        try
+            ?assertEqual(ready, quod_simplex:test_sync(Reconciled)),
+            ?assertNot(quod_simplex:should_sync(Reconciled)),
+            ?assertNot(quod_simplex:may_vote(Reconciled)),
+            ?assertNot(quod_simplex:caught_up(Reconciled)),
+            Repeated = receipt_repeat(Child, Keys, Offered, Reconciled),
+            ?assertMatch({ChildHash, {dtx, ChildToken, ChildOwner, _, Deadline},
+                          {ChildHash, Child}, none, undefined},
+                         quod_simplex:test_dtx_round(3, Repeated)),
+            assert_no_request(),
+            Done = quod_simplex:test_on_dtx_verdict(
+                     3, ChildHash, ChildToken, ChildOwner, 2, {valid, #{}}, Repeated),
+            {3, Store} = quod_simplex:test_committed_store(Done),
+            {ok, Entry} = quod_ledger_store:read_at(Store, 3),
+            ?assertEqual({ok, Child}, quod_ledger:block_from_entry(Entry)),
+            ?assertEqual({none, none, none, none, undefined},
+                         quod_simplex:test_dtx_round(3, Done))
+        after stop_test_recovery(Reconciled) end
+    end) end).
+
+early_child_parent_progress_prevents_missing_body_recovery_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        with_receipt_recovery(F, fun() ->
+            {_, ParentHash, Token, Owner, Child, Hash, Pending} =
+                receipt_pair(F, S0, Keys, [support, commit]),
+            Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+            assert_no_request(),
+            Committed = quod_simplex:test_on_dtx_verdict(
+                          2, ParentHash, Token, Owner, 1, {valid, #{}}, Offered),
+            ?assertEqual(2, element(1, quod_simplex:test_committed_store(Committed))),
+            Resumed = quod_simplex:settle_readiness(Offered, Committed),
+            Finality = receipt_certificates(Child, [support, commit], F, Keys, Resumed),
+            Reconciled = quod_simplex:reconcile_block_requests(Finality),
+            try
+                %% Intentionally before inspecting a candidate or consuming
+                %% its request: old source reaches a real missing-body arm.
+                ?assertEqual(ready, quod_simplex:test_sync(Reconciled)),
+                ?assertNot(quod_simplex:should_sync(Reconciled)),
+                ?assertNot(quod_simplex:may_vote(Reconciled)),
+                ?assertNot(quod_simplex:caught_up(Reconciled)),
+                ChildToken = {2, ParentHash},
+                ?assertEqual({Hash, ChildToken, self()}, take_request(3)),
+                ?assertEqual({none, false, false}, quod_simplex:test_round(3, Reconciled)),
+                Done = quod_simplex:test_on_dtx_verdict(
+                         3, Hash, ChildToken, self(), 2, {valid, #{}}, Reconciled),
+                ?assertEqual(3, element(1, quod_simplex:test_committed_store(Done))),
+                assert_no_request()
+            after stop_test_recovery(Reconciled) end
+        end)
+    end) end).
+
+early_child_finality_keeps_higher_gap_recovery_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        with_receipt_recovery(F, fun() ->
+            {_, _, _, _, Child, Hash, Pending} = receipt_pair(F, S0, Keys, [support, commit]),
+            Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+            assert_receipt_offer(3, Hash, Child, Offered),
+            Finality = receipt_certificates(Child, [support, commit], F, Keys, Offered),
+            ?assert(quod_simplex:should_sync(Finality)),
+            Started = quod_simplex:reconcile_block_requests(Finality),
+            try
+                ?assertMatch({pulling, _}, quod_simplex:test_sync(Started)),
+                ?assertNot(quod_simplex:may_vote(Started)),
+                ?assertNot(quod_simplex:caught_up(Started)),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Started))),
+                assert_receipt_offer(3, Hash, Child, Started),
+                assert_no_request()
+            after stop_test_recovery(Started) end
+        end)
+    end) end).
+
+early_child_approval_without_durability_does_not_admit_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Parent, ParentHash, Token, Owner, Child, Hash, Pending} =
+            receipt_pair(F, S0, Keys, [support]),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+        Approved0 = quod_simplex:test_on_dtx_verdict(
+                      2, ParentHash, Token, Owner, 1, {valid, #{}}, Offered),
+        Approved = quod_simplex:settle_readiness(Offered, Approved0),
+        ?assertEqual(2, maps:get(approved, quod_simplex:stats_map(Approved))),
+        ?assertEqual(1, element(1, quod_simplex:test_committed_store(Approved))),
+        assert_receipt_offer(3, Hash, Child, Approved),
+        Repeated = receipt_repeat(Child, Keys, Offered, Approved),
+        assert_receipt_offer(3, Hash, Child, Repeated),
+        assert_no_request(),
+        Committed = receipt_certificates(Parent, [commit], F, Keys, Repeated),
+        Resumed = quod_simplex:settle_readiness(Repeated, Committed),
+        ChildToken = {2, ParentHash},
+        ?assertEqual({Hash, ChildToken, self()}, take_request(3)),
+        ?assertMatch({Hash, {dtx, ChildToken, _, _, _}, {Hash, Child}, none, undefined},
+                     quod_simplex:test_dtx_round(3, Resumed))
+    end) end).
+
+early_child_failed_or_changed_parent_grants_no_authority_test_() ->
+    [{atom_to_list(Mode), isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {_, ParentHash, Token, Owner, Child, Hash, Pending} = receipt_pair(F, S0, Keys, []),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+        {BeforeVerdict, Verdict} = case Mode of
+            abstain -> {Offered, abstain};
+            invalid -> {Offered, {invalid, refused}};
+            stale_parent ->
+                %% Structural parent-token change, as in the existing stale
+                %% lifetime control; the old verdict has no authority here.
+                {quod_simplex:test_state_set(history_head, {1, <<99:256>>}, Offered),
+                 {valid, #{}}}
+        end,
+        Released = quod_simplex:test_on_dtx_verdict(
+                     2, ParentHash, Token, Owner, 1, Verdict, BeforeVerdict),
+        Settled = quod_simplex:settle_readiness(Offered, Released),
+        assert_receipt_offer(3, Hash, Child, Settled),
+        ?assertEqual(1, element(1, quod_simplex:test_committed_store(Settled))),
+        assert_no_request()
+    end) end)} || Mode <- [abstain, invalid, stale_parent]].
+
+early_child_duplicates_do_not_repeat_full_admission_test_() ->
+    [{atom_to_list(Mode), isolated(fun() ->
+        {{ok, Caller}, {call_time, Counts}} = tprof:profile(fun() ->
+            with_fixture(fun(F, S0, Keys) ->
+                {_, ParentHash, Token, Owner, ValidChild, _, Pending} =
+                    receipt_pair(F, S0, Keys, [support, commit]),
+                Child = case Mode of valid -> ValidChild; invalid -> receipt_junk(ValidChild) end,
+                Hash = quod_simplex:block_hash(Child),
+                Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+                Repeated = receipt_repeat(Child, Keys, S0, Offered),
+                assert_receipt_offer(3, Hash, Child, Repeated),
+                assert_no_request(),
+                Committed = quod_simplex:test_on_dtx_verdict(
+                              2, ParentHash, Token, Owner, 1, {valid, #{}}, Repeated),
+                Resumed = quod_simplex:settle_readiness(Repeated, Committed),
+                case Mode of
+                    valid -> {Hash, _, _} = take_request(3);
+                    invalid ->
+                        assert_receipt_offer(3, Hash, Child, Resumed),
+                        assert_no_request()
+                end,
+                Latched = quod_simplex:test_dtx_round(3, Resumed),
+                Again = receipt_repeat(Child, Keys, Repeated, Resumed),
+                ?assertEqual(Latched, quod_simplex:test_dtx_round(3, Again)),
+                case Mode of
+                    valid -> ok;
+                    invalid ->
+                        OtherJunk = receipt_junk(ValidChild, <<1:512>>),
+                        ?assertNotEqual(Hash, quod_simplex:block_hash(OtherJunk)),
+                        Alternated = lists:foldl(fun(_, Acc) ->
+                            Other = quod_simplex:dispatch(
+                                      leader(3, Keys), {propose, OtherJunk, []}, Acc),
+                            Original = quod_simplex:dispatch(
+                                         leader(3, Keys), {propose, Child, []}, Other),
+                            quod_simplex:settle_readiness(Repeated, Original)
+                        end, Again, lists:seq(1, 20)),
+                        assert_receipt_offer(3, Hash, Child, Alternated)
+                end,
+                assert_no_request()
+            end),
+            {ok, self()}
+        end, #{type => call_time, report => return, set_on_spawn => false,
+               pattern => [{quod_simplex, dtx_control_acceptable, 4}]}),
+        %% One ordinary envelope-authentication boundary for the parent and
+        %% one for the child; neither receipt nor twenty redrives pays again.
+        ?assertEqual(2, lists:sum([N || {quod_simplex, dtx_control_acceptable, 4, Ps} <- Counts,
+                                      {Pid, N, _} <- Ps, Pid =:= Caller]))
+    end)} || Mode <- [valid, invalid]].
+
+early_child_bad_input_is_not_retained_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Child, _} = receipt_child(F, 3, 2),
+        {ok, Beyond} = quod_ledger:new_block(4, 3, Child#block.payload, Child#block.timestamp),
+        {ok, WrongParent} = quod_ledger:new_block(3, 1, Child#block.payload, Child#block.timestamp),
+        NonLeader = hd([P || P <- maps:keys(Keys), P =/= leader(3, Keys)]),
+        Huge = binary:copy(<<0>>, 256 * 1024 + 129),
+        Cases = [{NonLeader, Child}, {leader(3, Keys), WrongParent},
+                 {leader(4, Keys), Beyond},
+                 {leader(3, Keys), Child#block{timestamp = -1}},
+                 {leader(3, Keys), Child#block{block_bytes = <<>>}},
+                 {leader(3, Keys), Child#block{payload = {batch, [{dtx, Huge}]}, block_bytes = Huge}}],
+        lists:foreach(fun({Peer, Block}) ->
+            ?assertEqual(S0, quod_simplex:dispatch(Peer, {propose, Block, []}, S0))
+        end, Cases),
+        ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(3, S0)),
+        ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(4, S0)),
+        assert_no_request()
+    end) end).
+
+early_junk_offer_cannot_veto_certified_alternate_test_() ->
+    [isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {_, ParentHash, Token, Owner, Child, Hash, Pending} =
+            receipt_pair(F, S0, Keys, [support, commit]),
+        %% Canonical bounded bytes, deliberately not an authenticated control.
+        Junk = receipt_junk(Child),
+        JunkHash = quod_simplex:block_hash(Junk),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Junk, []}, Pending),
+        assert_receipt_offer(3, JunkHash, Junk, Offered),
+        %% Neither another ordinary body nor unauthenticated request bookkeeping
+        %% can replace the first input. Certified recovery owns that authority.
+        ?assertEqual(Offered, quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Offered)),
+        Committed = quod_simplex:test_on_dtx_verdict(
+                      2, ParentHash, Token, Owner, 1, {valid, #{}}, Offered),
+        ?assertEqual(2, element(1, quod_simplex:test_committed_store(Committed))),
+        Requested = quod_simplex:test_state_set(block_requests, #{{3, Hash} => {1, 0}}, Committed),
+        ?assertEqual(Requested, quod_simplex:dispatch(peer(Keys), {certified_block, Child, Hash}, Requested)),
+        Supported = receipt_certificates(Child, [support], F, Keys, Requested),
+        Alternate = quod_simplex:dispatch(peer(Keys), {certified_block, Child, Hash}, Supported),
+        ChildToken = {2, ParentHash},
+        ?assertEqual({Hash, ChildToken, self()}, take_request(3)),
+        ?assertMatch({Hash, {dtx, ChildToken, _, _, _}, {Hash, Child}, none, undefined},
+                     quod_simplex:test_dtx_round(3, Alternate)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(3, Alternate)),
+        Finality = receipt_certificates(Child, [commit], F, Keys, Alternate),
+        Done = quod_simplex:test_on_dtx_verdict(3, Hash, ChildToken, self(), 2, Verdict, Finality),
+        Expected = case Verdict of {valid, _} -> 3; abstain -> 2 end,
+        ?assertEqual(Expected, element(1, quod_simplex:test_committed_store(Done))),
+        ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(3, Done)),
+        assert_no_request()
+    end) end) || Verdict <- [{valid, #{}}, abstain]].
+
+certified_dtx_offer_waits_for_ordinary_parent_durability_test_() ->
+    isolated(fun() ->
+        {{ok, Caller}, {call_time, Counts}} = tprof:profile(fun() ->
+            with_fixture(fun(F, S0, Keys) ->
+                {Parent, ParentHash, ValidParent} = receipt_content_parent(F, S0, Keys),
+                {Child, Hash} = receipt_child(F, 3, 2),
+                Junk = receipt_junk(Child),
+                JunkHash = quod_simplex:block_hash(Junk),
+                Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Junk, []}, ValidParent),
+                Approved0 = receipt_certificates(Parent, [support], F, Keys, Offered),
+                Approved = quod_simplex:settle_readiness(Offered, Approved0),
+                %% Real content verdict and quorum approval, not a planted
+                %% approved field or synthetic engine-tree parent.
+                ?assertEqual(2, maps:get(approved, quod_simplex:stats_map(Approved))),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Approved))),
+                assert_receipt_offer(3, JunkHash, Junk, Approved),
+                Supported = receipt_certificates(Child, [support], F, Keys, Approved),
+                Requested = quod_simplex:test_state_set(
+                              block_requests, #{{3, Hash} => {1, 0}}, Supported),
+                Replaced = quod_simplex:dispatch(
+                             peer(Keys), {certified_block, Child, Hash}, Requested),
+                ?assertNot(maps:is_key({3, Hash}, quod_simplex:test_block_requests(Replaced))),
+                assert_receipt_offer(3, Hash, Child, Replaced),
+                Repeated = receipt_repeat(Child, Keys, Offered, Replaced),
+                assert_receipt_offer(3, Hash, Child, Repeated),
+                assert_no_request(),
+                Committed = receipt_certificates(Parent, [commit], F, Keys, Repeated),
+                ?assertEqual(2, element(1, quod_simplex:test_committed_store(Committed))),
+                Resumed = quod_simplex:settle_readiness(Repeated, Committed),
+                Token = {2, ParentHash},
+                ?assertEqual({Hash, Token, self()}, take_request(3)),
+                ?assertMatch({Hash, {dtx, Token, _, _, _}, {Hash, Child}, none, undefined},
+                             quod_simplex:test_dtx_round(3, Resumed)),
+                ?assertEqual({none, false, false}, quod_simplex:test_round(3, Resumed)),
+                Finality = receipt_certificates(Child, [commit], F, Keys, Resumed),
+                Done = quod_simplex:test_on_dtx_verdict(
+                         3, Hash, Token, self(), 2, {valid, #{}}, Finality),
+                ?assertEqual(3, element(1, quod_simplex:test_committed_store(Done))),
+                assert_no_request()
+            end),
+            {ok, self()}
+        end, #{type => call_time, report => return, set_on_spawn => false,
+               pattern => [{quod_simplex, dtx_control_acceptable, 4}]}),
+        %% Neither the early junk nor the certified waiting child is fully
+        %% authenticated before the durable edge; the admitted child pays once.
+        ?assertEqual(1, lists:sum([N || {quod_simplex, dtx_control_acceptable, 4, Ps} <- Counts,
+                                      {Pid, N, _} <- Ps, Pid =:= Caller]))
+    end).
+
+certified_ordinary_replacement_has_only_engine_residence_test_() ->
+    [{atom_to_list(Kind), isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Parent, _, ValidParent} = receipt_content_parent(F, S0, Keys),
+        {Child, Hash} = receipt_content(F, 3, 2),
+        Junk = case Kind of
+            dtx -> {Dtx, _} = receipt_child(F, 3, 2), receipt_junk(Dtx);
+            ordinary ->
+                %% Ordinary wire encoding already verifies its signature.
+                %% Use genuine signed bytes whose sequence becomes stale
+                %% when this parent's author sequence 1 commits.
+                {Stale, _} = receipt_content(F, 3, 1), Stale
+        end,
+        JunkHash = quod_simplex:block_hash(Junk),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Junk, []}, ValidParent),
+        assert_receipt_offer(3, JunkHash, Junk, Offered),
+        Committed = receipt_certificates(Parent, [support, commit], F, Keys, Offered),
+        ?assertEqual(2, element(1, quod_simplex:test_committed_store(Committed))),
+        Rejected = quod_simplex:settle_readiness(Offered, Committed),
+        assert_receipt_offer(3, JunkHash, Junk, Rejected),
+        Supported = receipt_certificates(Child, [support], F, Keys, Rejected),
+        Requested = quod_simplex:test_state_set(
+                      block_requests, #{{3, Hash} => {1, 0}}, Supported),
+        Admitted = quod_simplex:dispatch(peer(Keys), {certified_block, Child, Hash}, Requested),
+        ?assertNot(maps:is_key({3, Hash}, quod_simplex:test_block_requests(Admitted))),
+        %% Ordinary admission must remove the old offered body, regardless
+        %% of its content family, while retaining the certified engine bytes.
+        ?assertMatch({_, _, none, none, Child}, quod_simplex:test_dtx_round(3, Admitted)),
+        ?assertEqual([], quod_simplex:test_dtx_round_hints(3, Admitted)),
+        Again = quod_simplex:dispatch(leader(3, Keys), {propose, Junk, []}, Admitted),
+        ?assertEqual(Admitted, Again),
+        assert_no_request()
+    end) end)} || Kind <- [dtx, ordinary]].
+
+early_child_binds_actual_replacement_parent_not_old_offer_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {_, OldHash, Token, Owner, Child, Hash, Pending} = receipt_pair(F, S0, Keys, []),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Pending),
+        Released = quod_simplex:test_on_dtx_verdict(2, OldHash, Token, Owner, 1, abstain, Offered),
+        %% The wire carries parent SLOT only. An unadmitted child must pass
+        %% full admission against the parent actually committed afterwards.
+        {NewParent0, _} = receipt_child(F, 2, 1),
+        {ok, NewParent} = quod_ledger:new_block(2, 1, NewParent0#block.payload, Child#block.timestamp),
+        NewHash = quod_simplex:block_hash(NewParent),
+        ?assertNotEqual(OldHash, NewHash),
+        Certified = receipt_certificates(NewParent, [support, commit], F, Keys, Released),
+        NewPending = quod_simplex:dispatch(leader(2, Keys), {propose, NewParent, []}, Certified),
+        ?assertEqual({NewHash, Token, self()}, take_request(2)),
+        Committed = quod_simplex:test_on_dtx_verdict(2, NewHash, Token, self(), 1, {valid, #{}}, NewPending),
+        Resumed = quod_simplex:settle_readiness(NewPending, Committed),
+        NewToken = {2, NewHash},
+        ?assertEqual({Hash, NewToken, self()}, take_request(3)),
+        Latched = quod_simplex:test_dtx_round(3, Resumed),
+        ?assertMatch({Hash, {dtx, NewToken, _, _, _}, {Hash, Child}, none, undefined}, Latched),
+        Stale = quod_simplex:test_on_dtx_verdict(3, Hash, {2, OldHash}, self(), 2, {valid, #{}}, Resumed),
+        ?assertEqual(Latched, quod_simplex:test_dtx_round(3, Stale)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(3, Stale)),
+        assert_no_request()
+    end) end).
+
+early_child_receipt_does_not_cross_parent_committee_change_test_() ->
+    [{Name, isolated(fun() -> with_fixture(#{node_addr => NodeAddr}, fun(F, S0, Keys) ->
+        %% Removing the second sorted member changes slot 3's leader from
+        %% the old third member to the old fourth; the author remains first.
+        Removed = leader(2, Keys), OldLeader = leader(3, Keys),
+        NewKeys = maps:remove(Removed, Keys), NewLeader = leader(3, NewKeys),
+        ?assertNotEqual(OldLeader, NewLeader),
+        {Parent, ParentHash} = receipt_membership_parent(F, S0, Removed),
+        Proposed = quod_simplex:dispatch(Removed, {propose, Parent, []}, S0),
+        Owner = self(),
+        receive
+            {'$gen_cast', {content_verdict_req, [_], _, 2, Owner, {2, ParentHash}, _}} -> ok
+        after 0 -> error(membership_parent_validation_not_delivered)
+        end,
+        {Child, Hash} = receipt_child(F, 3, 2),
+        Offered = quod_simplex:dispatch(OldLeader, {propose, Child, []}, Proposed),
+        assert_receipt_offer(3, Hash, Child, Offered),
+        assert_no_request(),
+        %% As elsewhere in this suite, only the local policy receiver verdict
+        %% is explicit. Transaction/plan/request signatures, proposal admission,
+        %% old-committee certificates and durable history are the real paths.
+        ValidParent = callback_state(quod_simplex:running(
+                        info, {content_verdict, {2, ParentHash}, valid}, Offered)),
+        Committed = receipt_certificates(Parent, [support, commit], F, Keys, ValidParent),
+        {2, Store} = quod_simplex:test_committed_store(Committed),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+        ?assertEqual({ok, Parent}, quod_ledger:block_from_entry(Entry)),
+        ?assertEqual(lists:sort(maps:keys(NewKeys)),
+                     quod_simplex:history_committee(quod_simplex:test_state_projection(Committed))),
+        %% Fail-before: the checkpoint retains an offer authorized only by
+        %% the old leader here and later admits it on parent progress.
+        ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(3, Committed)),
+        ?assertEqual([], quod_simplex:test_dtx_round_hints(3, Committed)),
+        Settled = quod_simplex:settle_readiness(Offered, Committed),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(3, Settled)),
+        ?assertNot(maps:is_key(3, quod_signing_journal:rounds(quod_simplex:test_signing_journal(Settled)))),
+        assert_no_request(),
+        ?assertEqual(Settled, quod_simplex:dispatch(OldLeader, {propose, Child, []}, Settled)),
+        Admitted = quod_simplex:dispatch(NewLeader, {propose, Child, []}, Settled),
+        Token = {2, ParentHash},
+        ?assertEqual({Hash, Token, self()}, take_request(3)),
+        ?assertMatch({Hash, {dtx, Token, _, _, _}, {Hash, Child}, none, undefined},
+                     quod_simplex:test_dtx_round(3, Admitted)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(3, Admitted)),
+        Finality = receipt_certificates(Child, [support, commit], F, NewKeys, Admitted),
+        Done = quod_simplex:test_on_dtx_verdict(3, Hash, Token, self(), 2, {valid, #{}}, Finality),
+        ?assertEqual(3, element(1, quod_simplex:test_committed_store(Done))),
+        assert_no_request()
+    end) end)} || {Name, NodeAddr} <-
+        [{"no_self_address", undefined},
+         {"self_address", {<<"127.0.0.1">>, 19001}}]].
+
 parent_progress_wakes_waiting_child_test_() ->
     isolated(fun() -> with_fixture(fun(F, S0, _Keys) ->
         %% Approved content can precede its durable commit in the pipeline.
@@ -298,8 +698,11 @@ crashed_parent_owner_releases_only_on_matching_down_test_() ->
     isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
         with_pending_parent_owner(F, fun(Owner, ExitMonitor) ->
             {Block, Hash, Certified} = certified_first(F, S0, Keys),
-            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            Proposed0 = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
             {Hash, Token, _} = await_parent_request(2),
+            {Child, ChildHash} = receipt_child(F, 3, 2),
+            Proposed = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Proposed0),
+            assert_receipt_offer(3, ChildHash, Child, Proposed),
             Latched = {Hash, {dtx, Token, Owner, Monitor, Deadline}, _, _, _} =
                 quod_simplex:test_dtx_round(2, Proposed),
             Owner ! crash,
@@ -322,7 +725,9 @@ crashed_parent_owner_releases_only_on_matching_down_test_() ->
                     ?assertNot(quod_simplex:caught_up(Released)),
                     ?assertNot(quod_simplex:may_vote(Released)),
                     ?assertEqual(1, element(1, quod_simplex:test_committed_store(Released))),
-                    ?assertEqual(#{}, quod_signing_journal:rounds(quod_simplex:test_signing_journal(Released)))
+                    ?assertEqual(#{}, quod_signing_journal:rounds(quod_simplex:test_signing_journal(Released))),
+                    assert_receipt_offer(3, ChildHash, Child, Released),
+                    assert_no_request()
                 after stop_test_recovery(Released) end
             after stop_test_recovery(Stale) end
         end)
@@ -400,10 +805,13 @@ expired_validation_keeps_latch_until_recovery_reseats_test_() ->
             %% allowance; expiry is deterministic, never a timing assertion.
             S = quod_simplex:test_state_set(validation_ttl_ms, 0, S0),
             {Block, Hash, Certified} = certified_first(F, S, Keys),
-            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            Proposed0 = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
             {Hash, Token, Caller} = receive
                 {'$gen_cast', {dtx_verdict_req, [_], _, 2, Caller, {2, H, T}, _}} -> {H, T, Caller}
             after 1000 -> error(parent_progress_not_delivered) end,
+            {Child, ChildHash} = receipt_child(F, 3, 2),
+            Proposed = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Proposed0),
+            assert_receipt_offer(3, ChildHash, Child, Proposed),
             Latched = quod_simplex:test_dtx_round(2, Proposed),
             {Hash, {dtx, Token, Owner, Monitor, _}, _, _, _} = Latched,
             ?assert(quod_simplex:should_sync(Proposed)),
@@ -434,6 +842,7 @@ expired_validation_keeps_latch_until_recovery_reseats_test_() ->
                     {sink_catchup, {recovery, Worker}, Entries, Projection, Delta}, Started),
                 ?assertEqual(2, element(1, quod_simplex:test_committed_store(Recovered))),
                 ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(2, Recovered)),
+                ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(3, Recovered)),
                 ?assertNot(erlang:demonitor(Monitor, [flush, info])),
                 ?assertEqual(Recovered, quod_simplex:test_on_dtx_verdict(
                     2, Hash, Token, Owner, 1, {valid, #{}}, Recovered)),
@@ -636,6 +1045,153 @@ peer_progress_cannot_spend_failed_recovery_backoff_test_() ->
         after gproc:unreg(quod_reg:name({quod_catchup, Ns})) end
     end) end).
 
+receipt_pair(F, S0, Keys, ParentCertKinds) ->
+    {Parent, ParentHash, Certified} = certified_first(F, S0, Keys, ParentCertKinds),
+    Pending = quod_simplex:dispatch(leader(2, Keys), {propose, Parent, []}, Certified),
+    {ParentHash, Token, Owner} = take_request(2),
+    {Child, ChildHash} = receipt_child(F, 3, 2),
+    {Parent, ParentHash, Token, Owner, Child, ChildHash, Pending}.
+
+receipt_child(F, Slot, Sequence) ->
+    Target = maps:get(origin, F),
+    ChildFixture = receipt_fixture(F, Slot),
+    {ok, Control} = quod_dtx:sign_control(Target, maps:get('begin', ChildFixture),
+                       maps:get(admission, F), Sequence, 1, maps:get(node_identity, F)),
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Blob}]}, quod_time:now_ms()),
+    {Block, quod_simplex:block_hash(Block)}.
+
+receipt_fixture(F, Slot) ->
+    %% The parent Begin still owns its prepared writes. A different proof ID
+    %% alone leaves the default saved/1 write conflict unchanged; sign genuinely
+    %% disjoint request/plan material so this fixture can validly commit both.
+    Goal = iolist_to_binary(["assertz(receipt_slot_", integer_to_list(Slot), "(ok))."]),
+    quod_ct:signed_dtx_begin_fixture(
+                     #{target => maps:get(origin, F), network => maps:get(network, F),
+                       node_identity => maps:get(node_identity, F),
+                       admission => maps:get(admission, F), proof_id => <<Slot:256>>,
+                       operation_id => <<Slot:256>>, goal_text => Goal}).
+
+receipt_content(F, Slot, Sequence) ->
+    {Ns, Anchor} = maps:get(origin, F),
+    Transaction = maps:get(transaction, receipt_fixture(F, Slot)),
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, Anchor, maps:get(admission, F)},
+                     Transaction#transaction{author_seq = Sequence, sig = none, signed_bytes = none},
+                     maps:get(node_identity, F)),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [Signed]}, quod_time:now_ms()),
+    {Block, quod_simplex:block_hash(Block)}.
+
+receipt_content_parent(F, S0, Keys) ->
+    {ok, Parent} = quod_ledger:new_block(2, 1, {batch, [maps:get(transaction, F)]}, quod_time:now_ms()),
+    Hash = quod_simplex:block_hash(Parent),
+    Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Parent, []}, S0),
+    Owner = self(),
+    receive
+        {'$gen_cast', {content_verdict_req, [_], _, 2, Owner, {2, Hash}, _}} -> ok
+    after 0 -> error(ordinary_parent_validation_not_delivered)
+    end,
+    Valid = callback_state(quod_simplex:running(info, {content_verdict, {2, Hash}, valid}, Proposed)),
+    ?assertEqual({Hash, false, false}, quod_simplex:test_round(2, Valid)),
+    ?assertEqual(1, maps:get(approved, quod_simplex:stats_map(Valid))),
+    {Parent, Hash, Valid}.
+
+receipt_membership_parent(F, S, Removed) ->
+    {Ns, Anchor} = Target = maps:get(origin, F),
+    {1, Store} = quod_simplex:test_committed_store(S),
+    {ok, GenesisEntry} = quod_ledger_store:read_at(Store, 1),
+    #entry{data = {batch, [Genesis]}} = quod_ledger:entry_view(GenesisEntry),
+    %% Reconstruct the committed peer facts, not an empty signed-plan fixture.
+    %% The sealed proof itself computes the retraction and its actual read set.
+    Peers = [Head || {assert, {Head = {peer_admitted, _, _, _, _}, _}} <- Genesis#transaction.diff],
+    Request = quod_ct:signed_goal_fixture(
+                #{target => Target, network => maps:get(network, F),
+                  operation_id => <<88:256>>,
+                  goal_text => <<"findall(P,peer_admitted(P,_,_,P),Peers), "
+                                 "sort(Peers,[_,Removed|_]), "
+                                 "retract(peer_admitted(Removed,undefined,undefined,Removed)).">>}),
+    Evidence = maps:get(evidence, Request),
+    {ok, Goal} = quod_wire_term:materialize_symbols(maps:get(goal, Evidence)),
+    Signer = maps:get(node_identity, F),
+    Session = quod_proof_session:start(quod_ct:committed_kb(Peers),
+                #{read_set => true, proof_context => {origin, membership_receipt}, signer => Signer}),
+    try
+        Invocation = <<88:128>>,
+        Context = quod_predicates:proof_context(Ns, 1, undefined, [Target]),
+        ok = quod_proof_session:open(Session, Invocation, Goal, allowed, Context,
+                                    quod_transaction_scope:empty_selection()),
+        {solution, _} = quod_proof_session:next(Session, Invocation),
+        {ok, Bindings} = quod_proof_session:bindings(Session, Invocation),
+        {ok, Named} = quod_client_goal:durable_bindings(Evidence, Bindings),
+        %% The self member can carry an advertised endpoint. Identity selection
+        %% must include it before sorting, just as Simplex leader/2 does.
+        ?assertEqual(lists:sort([Pk || {peer_admitted, Pk, _, _, Pk} <- Peers]),
+                     lists:sort(maps:get(<<"Peers">>, Named))),
+        ?assertEqual(Removed, maps:get(<<"Removed">>, Named)),
+        {ok, ResultBlob} = quod_durable_term:encode_result(Named),
+        {ok, Plan} = quod_dtx:seal_session(Session,
+                      #{target => Target, origin => Target, base_height => 1,
+                        proof_id => <<88:256>>, principal => maps:get(principal, Request),
+                        request_binding => maps:get(binding, Request)}),
+        ?assert(quod_dtx:verify(Plan)),
+        {ok, Material} = quod_dtx:material(Plan),
+        ?assertMatch([{retract, {{peer_admitted, Removed, undefined, undefined, Removed}, _}}],
+                     maps:get(diff, Material)),
+        Unsigned = quod_transaction:from_plan(Plan, Material, maps:get(goal_blob, Request),
+                                              ResultBlob, maps:get(auth, Request)),
+        {ok, Transaction} = quod_transaction:sign(
+                              {Ns, Anchor, maps:get(admission, F)},
+                              Unsigned#transaction{author = maps:get(pubkey, Signer),
+                                                   author_seq = 1, submitted_at = 1}, Signer),
+        {ok, Block} = quod_ledger:new_block(2, 1, {batch, [Transaction]}, quod_time:now_ms()),
+        {Block, quod_simplex:block_hash(Block)}
+    after quod_proof_session:stop(Session) end.
+
+receipt_junk(Block) -> receipt_junk(Block, <<0:512>>).
+
+receipt_junk(Block = #block{slot = Slot, parent = Parent, payload = {batch, [{dtx, Blob}]}}, Sig) ->
+    {ok, Control} = quod_dtx:decode_control(Blob),
+    {ok, JunkBlob} = quod_dtx:encode_control(setelement(10, Control, Sig)),
+    {ok, Junk} = quod_ledger:new_block(Slot, Parent, {batch, [{dtx, JunkBlob}]}, Block#block.timestamp),
+    Junk.
+
+assert_receipt_offer(Slot, Hash, Block, S) ->
+    ?assertEqual({none, none, {offered, Hash, Block}, none, undefined},
+                 quod_simplex:test_dtx_round(Slot, S)),
+    ?assertEqual({none, false, false}, quod_simplex:test_round(Slot, S)),
+    ?assertEqual([], quod_simplex:test_dtx_round_hints(Slot, S)),
+    ?assertNot(maps:is_key(Slot, quod_signing_journal:rounds(quod_simplex:test_signing_journal(S)))).
+
+receipt_repeat(Block = #block{slot = Slot}, Keys, Before, S) ->
+    lists:foldl(fun(_, Acc) ->
+        Proposed = quod_simplex:dispatch(leader(Slot, Keys), {propose, Block, []}, Acc),
+        %% Repeated observation of the same durable/capability edge must not
+        %% create fresh authentication or a new request/deadline.
+        quod_simplex:settle_readiness(Before, Proposed)
+    end, S, lists:seq(1, 20)).
+
+with_receipt_recovery(F, Fun) ->
+    {Ns, _} = maps:get(origin, F),
+    true = quod_reg:reg({quod_simplex, Ns}),
+    true = quod_reg:reg({quod_catchup, Ns}),
+    try Fun()
+    after
+        gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+        gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+    end.
+
+receipt_certificates(Block = #block{slot = Slot}, Kinds, F, Keys, S) ->
+    {Ns, Anchor} = maps:get(origin, F),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Hash = quod_simplex:block_hash(Block),
+    Committee = lists:sort(maps:keys(Keys)),
+    lists:foldl(fun(Kind, Acc) ->
+        Shares = [quod_simplex:make_share(Domain, Kind, Slot, Hash, maps:get(P, Keys))
+                  || P <- lists:sublist(Committee, 3)],
+        {ok, Cert} = quod_simplex:form_cert(Domain, Kind, Slot, Hash, Shares, Committee),
+        quod_simplex:dispatch(hd(Committee), {cert, Cert}, Acc)
+    end, S, Kinds).
+
 committed_block(F, S0, Keys) ->
     {Block, Hash, WithCerts} = certified_first(F, S0, Keys),
     Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, WithCerts),
@@ -685,6 +1241,9 @@ assert_no_request() ->
     after 0 -> ok end.
 
 with_fixture(Fun) ->
+    with_fixture(#{}, Fun).
+
+with_fixture(GenesisOptions, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     Suffix = binary:encode_hex(crypto:strong_rand_bytes(8), lowercase),
     Ns = <<"quod:parent-progress-", Suffix/binary>>,
@@ -695,7 +1254,8 @@ with_fixture(Fun) ->
     end || _ <- lists:seq(1, 4)]),
     Committee = [Author | _] = lists:sort(maps:keys(Keys)),
     {ok, Genesis, Anchor} = quod_simplex:prepare_genesis(
-        #{mode => create, committee => Committee, genesis_diff => []}, Ns, Author),
+        maps:merge(#{mode => create, committee => Committee, genesis_diff => []}, GenesisOptions),
+        Ns, Author),
     Target = {Ns, Anchor}, Domain = quod_simplex:consensus_domain(Ns, Anchor),
     {ok, Projection} = quod_simplex:history_validate_advance(Target, Genesis, quod_simplex:history_projection(Target)),
     F = quod_ct:signed_dtx_begin_fixture(#{target => Target, node_identity => maps:get(Author, Keys),

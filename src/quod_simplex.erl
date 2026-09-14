@@ -1044,7 +1044,10 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                     {dtx, term(), pid(), reference(), integer()} |
                     {dtx_foreign, term(), pid(), reference(),
                      #{<<_:256>> => quod_dtx:group_history()}, integer()},
-                candidate = none :: none | {binary(), #block{}},
+                %% An offered body has no admission/validation authority. Only
+                %% the existing two-tuple arm is an admitted DTX candidate.
+                candidate = none :: none | {offered, binary(), #block{}} |
+                    {binary(), #block{}},
                 validation_sidecar = [] :: [quod_dtx_endpoint:validation_item()],
                 dtx_parent = none :: none |
                     {binary(), term(),
@@ -10002,8 +10005,15 @@ adopt_projection(Entry, Projection1,
                   end,
               S1 = prune_consensus_links(
                      SProjected),
-                                                            %% FACTS/view + transport scope advance
-              S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
+              %% Receipt authority belonged to the old committee. Discard
+              %% only unadmitted bodies; all vote/validation latches survive.
+              Rounds = maps:map(
+                         fun(_Slot, R = #round{candidate = {offered, _, _}}) ->
+                                 R#round{candidate = none, validation_sidecar = []};
+                            (_Slot, R) -> R
+                         end, S1#s.rounds),
+              S1#s{eng = eng_set_validators(active_validators(S1), Eng),
+                    rounds = Rounds}
     end.
 
 committed_projection(
@@ -10766,9 +10776,8 @@ drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
 %%% transport ({log, Ns} channel over quod_link)
 %%%===================================================================
 
-%% Route one inbound consensus message into the engine. A hostile peer can put any term on the wire.
-%% Cheap source/slot/hash gates may drop it first; anything that reaches consensus state is then either
-%% fully validated or an exact hash of a block already validated and retained locally.
+%% Route inbound consensus messages through the owner. Receipt may retain a
+%% bounded unadmitted offer; only full admission can give it engine authority.
 dispatch(Peer, {propose, #block{} = B, ValidationSidecar}, S) ->
     preflight_proposal(Peer, B, ValidationSidecar, S);
 dispatch(_Peer, {share, #share{} = Sh}, S) ->
@@ -10875,26 +10884,26 @@ ingest_certified_block(
         andalso lists:member(Peer, active_validators(S))
         andalso well_formed_block_header(Slot, Parent, Timestamp)
         andalso is_record(persisted_cert(support, Slot, ExpectedBH, Eng), cert),
-    case Preflight andalso block_hash(Block) =:= ExpectedBH
+    case Preflight andalso well_formed_block(Block)
+         andalso block_hash(Block) =:= ExpectedBH
          andalso certified_block_context(Block, ExpectedBH, S) of
         false ->
             S;
         true ->
-            %% Authority was authenticated when this request was created;
-            %% the reply supplies only the missing data, never a new verdict.
+            %% The certificate authorizes replacement input, not admission.
+            %% Both receipt paths advance through the same parent boundary.
             S1 = S#s{block_requests = maps:remove({Slot, ExpectedBH}, Requests)},
-            case quod_ledger:classify(Block#block.payload) of
-                {controls, _Controls} ->
-                    S2 = retain_dtx_candidate(Block, ExpectedBH, [], watch_proposal(Slot, S1)),
-                    support_or_validate(Block, ExpectedBH, S2);
-                _ -> engine_step([{block, ExpectedBH, Block}], S1)
+            case (round_state(Slot, S1))#round.candidate of
+                {OtherBH, _} when OtherBH =/= ExpectedBH -> S;
+                {_, _} -> on_propose(ExpectedBH, Block, [], false, S1);
+                _ -> offer_proposal(ExpectedBH, Block, [], S1)
             end
     end;
 ingest_certified_block(_Peer, _Block, _Hash, S) ->
     S.
 
 certified_block_context(
-  #block{slot = Slot, parent = Parent} = Block,
+  #block{slot = Slot, parent = Parent, timestamp = Timestamp},
   BH,
   S = #s{slot = Committed}) ->
     ContextValid = live_pipeline_slot(Slot, Committed)
@@ -10906,7 +10915,7 @@ certified_block_context(
         unavailable ->
             false;
         ParentTs ->
-            block_admissible(Block, ParentTs, S)
+            ts_acceptable(Timestamp, ParentTs, quod_time:now_ms())
     end.
 
 recoverable_parent_timestamp(Parent, #s{slot = Parent, last_ts = LastTs}) -> LastTs;
@@ -10924,21 +10933,18 @@ compatible_local_final_vote(Slot, BH, S) ->
         _ -> true
     end.
 
-%% Reject unauthorised and repeated-heavy proposal traffic at the cheapest
-%% available boundary. A non-leader is rejected before hashing or walking the
-%% payload. For the authenticated leader, the first block pays structural and
-%% transaction validation once; an exact retained redrive is already trusted,
-%% while a different hash for that slot is dropped before signature work.
-%% Certified recovery has its own support-certificate-authorized replacement
-%% path and does not enter here.
+%% Receipt is not admission. A canonical leader offer fits the existing durable
+%% two-slot window even while its parent is still being validated. Keeping its
+%% body here grants no signature, engine insertion or parent-verdict authority.
+%% Exact retained redrives reuse admission; certified replies retain their
+%% separate certificate authority for replacing an unadmitted first offer.
 preflight_proposal(
-  Peer, #block{slot = Sl} = Block, ValidationSidecar,
-  S = #s{slot = Committed, approved = Approved,
+  Peer, #block{slot = Sl, timestamp = Timestamp} = Block, ValidationSidecar,
+  S = #s{slot = Committed,
          eng = #eng{block_slots = BlockSlots}}) ->
     PotentiallyLive =
         maps:is_key(Sl, BlockSlots)
-        orelse (Sl =:= Approved + 1
-                andalso live_pipeline_slot(Sl, Committed)),
+        orelse live_pipeline_slot(Sl, Committed),
     FromLeader =
         PotentiallyLive
         andalso is_slot(Sl) andalso Sl >= 1
@@ -10946,7 +10952,9 @@ preflight_proposal(
     %% Network ingress already decodes only canonical block bytes. Keep this
     %% internal boundary total as well: test hooks and future in-VM callers
     %% must not reach block_hash/1 with a fabricated materialized view.
-    case FromLeader andalso quod_ledger:valid_block_view(Block) of
+    case FromLeader andalso well_formed_block(Block)
+         andalso Block#block.parent =:= Sl - 1
+         andalso ts_acceptable(Timestamp, S#s.last_ts, quod_time:now_ms()) of
         false ->
             S;
         true ->
@@ -10961,48 +10969,109 @@ preflight_proposal(
             end
     end.
 
-%% A new leader proposal is valid only at the next approved slot, extending
-%% that approved parent, with one bounded tagged payload. A retained exact
-%% redrive bypasses the checks already paid before that block entered the
-%% engine. DTX validation uses its exact committed parent; voting permission
-%% is checked separately at the sole signing boundary.
+%% Known means admission was already paid by the local proposer or live engine.
+%% A received body instead advances through the same round's offered state.
 on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known, S) ->
-    case Known orelse valid_proposal(Block, S) of
-        true  ->
-            case quod_ledger:classify(Block#block.payload) of
-                {controls, _Controls} ->
-                    %% Every DTX offer, including an exact redrive, stays on
-                    %% this path.  Its first insertion into the engine happens
-                    %% only in support_validated_dtx/3 after the exact parent
-                    %% history (and Prepare policy) has been retained.  Keeping
-                    %% the redrive here too prevents a future generic-offer
-                    %% refactor from reopening a cert-before-verdict bypass.
-                    S1 = retain_dtx_candidate(
-                           Block, BH, ValidationSidecar, watch_proposal(Sl, S)),
-                    support_or_validate(Block, BH, S1);
-                _ ->
-                    S1 = engine_step([{block, BH, Block}], S),
-                    %% A Byzantine leader may equivocate indefinitely. The engine retains
-                    %% only the first ordinary block for this slot, so validation and
-                    %% signing continue only if this exact hash was admitted.
-                    case block_for(BH, S1#s.eng) of
-                        #block{} ->
-                            case may_vote(S1) of
-                                true  -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
-                                false -> S1
-                            end;
-                        undefined ->
-                            S1
-                    end
+    Round = round_state(Sl, S),
+    case {Known, Round#round.candidate} of
+        {true, _} ->
+            admit_proposed_block(BH, Block, ValidationSidecar, S);
+        {false, {BH, Block}} ->
+            admit_proposed_block(BH, Block, ValidationSidecar, S);
+        {false, {offered, BH, Block}} ->
+            Merged = merge_validation_sidecars(Round#round.validation_sidecar,
+                                               ValidationSidecar),
+            offer_proposal(BH, Block, Merged, S);
+        {false, none} when Round#round.invalid =/= BH ->
+            offer_proposal(BH, Block, ValidationSidecar, S);
+        _ -> S
+    end.
+
+offer_proposal(BH, Block = #block{slot = Sl}, ValidationSidecar, S) ->
+    Round = round_state(Sl, S),
+    Offered = Round#round{
+                candidate = {offered, BH, Block},
+                validation_sidecar = dtx_block_validation_sidecar(Block, ValidationSidecar)},
+    advance_proposal(Sl, put_round(Sl, Offered, S)).
+
+%% Read the current row at every step: an earlier candidate may have committed
+%% and pruned this slot. DTX input waits for its actual durable parent, not an
+%% approval or another candidate's unverified parent assumptions.
+advance_proposal(Sl, S = #s{slot = Committed, approved = Approved,
+                           history_head = ParentToken}) ->
+    Round = round_state(Sl, S),
+    case Round#round.candidate of
+        {offered, BH, Block} ->
+            case {Sl =:= Approved + 1, live_pipeline_slot(Sl, Committed),
+                  quod_ledger:classify(Block#block.payload), ParentToken} of
+                {true, true, {controls, _}, {Approved, <<_:256>>}} ->
+                    admit_offered_proposal(BH, Block, Round, S);
+                {true, true, {controls, _}, _} -> S;
+                {true, true, _, _} ->
+                    admit_offered_proposal(BH, Block, Round, S);
+                {false, true, _, _} when Sl > Approved -> S;
+                %% At/below Approved the body is durable or already engine-
+                %% owned. Certificates alone never advance that frontier.
+                _ -> put_round(Sl, Round#round{candidate = none,
+                                               validation_sidecar = []}, S)
             end;
-        false -> S
+        {BH, Block} when Sl > Committed -> support_or_validate(Block, BH, S);
+        _ -> S
+    end.
+
+admit_offered_proposal(BH, Block = #block{slot = Sl}, Round, S) ->
+    case Round#round.invalid =/= BH
+         andalso payload_admission_open(Sl, Block#block.payload, S) of
+        false -> S;
+        true -> authenticate_offered_proposal(BH, Block, Round, S)
+    end.
+
+authenticate_offered_proposal(BH, Block = #block{slot = Sl, parent = Parent}, Round, S) ->
+    case block_material_admissible(Block, parent_timestamp(Parent, S), S) of
+        true ->
+            admit_proposed_block(BH, Block, Round#round.validation_sidecar, S);
+        false ->
+            %% Keep the bounded input latched: neither exact redrives nor
+            %% alternating invalid offers buy another authentication. Only
+            %% certificate-authorized replacement can change this receipt.
+            put_round(Sl, Round#round{validation_sidecar = [], invalid = BH,
+                                      invalid_reason = proposal_admission}, S)
+    end.
+
+admit_proposed_block(BH, #block{slot = Sl} = Block, ValidationSidecar, S) ->
+    case quod_ledger:classify(Block#block.payload) of
+        {controls, _Controls} ->
+            %% Every DTX redrive stays here. Only support_validated_dtx/3
+            %% inserts it into the engine after the exact parent verdict.
+            S1 = retain_dtx_candidate(
+                   Block, BH, ValidationSidecar, watch_proposal(Sl, S)),
+            support_or_validate(Block, BH, S1);
+        _ ->
+            %% Ordinary bodies have one home after admission: the engine.
+            Round = round_state(Sl, S),
+            Admitted = put_round(Sl, Round#round{candidate = none,
+                                                validation_sidecar = []}, S),
+            S1 = engine_step([{block, BH, Block}], Admitted),
+            %% Only the engine's exact retained hash can acquire a vote.
+            case block_for(BH, S1#s.eng) of
+                #block{} ->
+                    %% Quorum needs no fresh support, but an existing share
+                    %% still re-echoes to heal a leader's lost vote delivery.
+                    Supported = (round_state(Sl, S1))#round.supporting =:= BH,
+                    case may_vote(S1) andalso (Sl > S1#s.approved orelse Supported) of
+                        true -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
+                        false -> S1
+                    end;
+                undefined -> S1
+            end
     end.
 
 retain_dtx_candidate(Block = #block{slot = Sl}, BH, ValidationSidecar0, S) ->
     Round = round_state(Sl, S),
     ValidationSidecar = dtx_block_validation_sidecar(Block, ValidationSidecar0),
     case Round#round.candidate of
-        none -> put_round(
+        Candidate when Candidate =:= none;
+                       element(1, Candidate) =:= offered -> put_round(
                   Sl,
                   Round#round{candidate = {BH, Block},
                               validation_sidecar = ValidationSidecar}, S);
@@ -12588,17 +12657,11 @@ resume_ready_rounds(S) ->
             S1 = lists:foldl(
                    fun resume_ready_slot/2,
                    S, Slots),
-            resume_dtx_candidates(S1)
+            resume_proposals(S1)
     end.
 
-resume_dtx_candidates(S = #s{rounds = Rounds}) ->
-    lists:foldl(
-      fun({Sl, #round{candidate = {BH, #block{} = Block}}}, Acc)
-            when Sl > Acc#s.slot ->
-              support_or_validate(Block, BH, Acc);
-         (_, Acc) ->
-              Acc
-      end, S, lists:sort(maps:to_list(Rounds))).
+resume_proposals(S = #s{rounds = Rounds}) ->
+    lists:foldl(fun advance_proposal/2, S, lists:sort(maps:keys(Rounds))).
 
 resume_ready_slot(Sl, S = #s{slot = Committed}) when Sl =< Committed ->
     S;
@@ -12770,20 +12833,18 @@ vote_is_latched(commit, BH, #round{final = {commit, BH}}) -> true;
 vote_is_latched(complaint, none, #round{final = complaint}) -> true;
 vote_is_latched(_Kind, _BH, #round{}) -> false.
 
-valid_proposal(#block{slot = Sl, parent = P} = Block,
+valid_proposal(#block{slot = Sl, parent = P, payload = Payload} = Block,
                #s{slot = Committed, approved = Approved} = S) ->
     Sl =:= Approved + 1
         andalso P =:= Approved
         andalso live_pipeline_slot(Sl, Committed)
-        andalso block_admissible(Block, parent_timestamp(P, S), S).
+        andalso payload_admission_open(Sl, Payload, S)
+        andalso block_material_admissible(Block, parent_timestamp(P, S), S).
 
-%% Normal leader proposals and certificate-authorized block recovery have different position/hash gates,
-%% but must accept exactly the same timestamp and transaction content. Keep that consensus-sensitive tail
-%% in one predicate so a future admission rule cannot make live voting and recovery disagree.
-block_admissible(#block{slot = Slot, payload = Payload, timestamp = Ts},
-                 ParentTs, S) ->
+%% Both receipt authorities use this one material check after eligibility.
+%% The existing held-proposal timeout check shares its consensus-sensitive tail.
+block_material_admissible(#block{payload = Payload, timestamp = Ts}, ParentTs, S) ->
     ts_acceptable(Ts, ParentTs, quod_time:now_ms())
-        andalso payload_admission_open(Slot, Payload, S)
         andalso acceptable_payload(Payload, S).
 
 payload_admission_open(Slot, Payload, S) ->
@@ -12839,7 +12900,7 @@ ts_acceptable(Ts, Last, Now) ->
 %% additionally passes the membership gate (`membership_change_ok/2`): shape, never-empty floor, and
 %% the shared validator cap,
 %% enforced at BOTH proposal seams (the leader gates its own input in `handle_append`; every validator
-%% gates a peer's proposal in `valid_proposal` before support-signing) — so an unacceptable membership
+%% gates a peer's proposal in `block_material_admissible` before support-signing) — so an unacceptable membership
 %% change never reaches a support quorum and can never commit. This is the PURE shape+floor+cap gate; a peer
 %% that passes it then also defers its support to the shared KB content verdict
 %% (`support_or_validate/2` → `quod_prolog:request_content_verdict/6`).

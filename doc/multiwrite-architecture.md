@@ -1181,3 +1181,33 @@ Queue progress still checks the current binding, deadline and projection;
 carried authentication is not permission to sign after ownership changes.
 Peer-candidate material failure uses the existing rejection and exact-retirement
 transition, not a callback assertion or a second validation engine.
+
+### Proposal receipt and admission
+
+Simplex's existing bounded live-round map is the only owner of pending proposal
+input. A canonical, bounded leader body may arrive before its durable parent.
+The candidate field distinguishes that **unadmitted offer** from the existing
+admitted DTX candidate: receipt alone grants no engine insertion, validation
+verdict, support vote or recovery exemption. There is no second queue or owner.
+
+The ordinary receipt and durable-parent/capability transitions advance the same
+row. DTX input waits for its actual durable parent; approval is insufficient.
+Full admission runs once when eligible, followed by the existing exact-parent
+verifier. Exact duplicates preserve that request's token, owner and deadline.
+The wire parent is a slot, not a hash: an early offer cannot carry authority from
+the uncommitted parent seen at receipt. Validation binds the parent actually
+installed, and existing stale-verdict, owner-loss and deadline rules still apply.
+
+Only live-window leader input or an exact certificate-authorized replacement
+is retained. Rejected input stays bounded and latched: progress and alternating
+invalid offers cannot repeatedly buy authentication. Existing pruning/reseating
+owns cleanup. A requested, support-certified alternate may replace an unadmitted
+first body, but must pass the same full admission before gaining authority;
+a junk first offer has no veto over that evidence.
+The existing committee-change transition invalidates unadmitted receipts whose
+leader/certificate authority belonged to the old committee. It clears only
+those bodies and hints, preserving every voting and validation latch.
+An admitted ordinary block lives in the engine, not a duplicate candidate row.
+Progress walks slot numbers and re-reads each current row, so a nested commit
+cannot resurrect a stale snapshot. Recovery for a gap of at least two slots
+and all signing/finality rules remain unchanged.

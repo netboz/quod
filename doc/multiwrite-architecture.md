@@ -950,6 +950,14 @@ still refuse. Temporary catch-up preserves ownership; real admission loss
 retires it. Classification precedes renewal, and resolutions publish after
 commit/skip/catch-up application.
 
+Retained relay placement on the current reliable link is work eligibility,
+not just duplicate-send suppression. An already placed phase does not rebuild
+or preview candidates on unrelated owner turns. Link replacement or new
+unplaced work uses the existing driver; selection still checks the complete
+canonical phase, including placed rows, before sending only its unplaced
+subset. The same placement predicate governs selection and sending; there is
+no new owner, queue, timer, retry or consensus authority.
+
 An installed durable parent resumes held consensus validation through the
 existing owner reconciliation. Validation requests use the existing
 gproc-addressed Prolog owner and its exact applied-parent/outcome-floor checks;

@@ -274,6 +274,81 @@ unready_relay_owner_does_not_build_a_wave_test() ->
     assert_no_auth(Counts),
     ?assertEqual(0, count(quod_ledger, new_block, Counts)).
 
+%% A placed reliable relay is waiting for consensus, not another candidate
+%% construction. Count the real driver before and after actual link delivery;
+%% a send-trace notification is deliberately not used as a mailbox barrier.
+placed_relay_does_no_candidate_work_test_() ->
+    [fun() -> isolated(fun() -> relay_work_case(N) end) end || N <- [1, 3]].
+
+relay_work_case(N) ->
+    Fs = fixtures(), [F | _] = Fs, #{pubkey := Self} = maps:get(node_identity, F),
+    Peer = crypto:hash(sha256, <<"retained relay work peer">>),
+    Vs = lists:sort([Self, Peer]),
+    Slot = hd([H || H <- [2, 3], quod_simplex:leader(H, Vs) =:= Peer]),
+    Link = spawn(fun() -> relay_frames([]) end),
+    Replacement = spawn(fun() -> relay_frames([]) end),
+    try
+        S0 = lists:foldl(fun({K,V}, S) -> quod_simplex:test_state_set(K,V,S) end,
+            state(F), [{validators, Vs}, {slot, Slot - 1}, {approved, Slot - 1},
+              {eng, quod_simplex:eng_with_certs(Slot - 1, [])},
+              {conns, #{Peer => {Link, make_ref()}}},
+              {inbound_conns, #{Peer => {Link, make_ref()}}},
+              {peer_readiness, #{Peer => {Link, Slot - 1, true, quod_time:mono_ms()}}}]),
+        S = lists:foldl(fun(X, Acc) -> quod_simplex:test_seed_dtx_submission(
+            maps:get(begin_control, X), [], Acc) end, S0, lists:sublist(Fs,N)),
+        {{Placed, [Frame]}, FirstCounts} = counted(fun() ->
+            Next = quod_simplex:test_drive_retained_dtx(S),
+            {Next, read_relay_frames(Link)}
+        end),
+        ?assertEqual(N, count(quod_ledger, new_block, FirstCounts)),
+        {Placed, RepeatCounts} = counted(fun() ->
+            Placed = quod_simplex:test_drive_retained_dtx(Placed),
+            Placed = quod_simplex:test_drive_retained_dtx(Placed),
+            ?assertEqual([Frame], read_relay_frames(Link)),
+            Placed
+        end),
+        ?assertEqual(0, count(quod_dtx, begin_transition, RepeatCounts)),
+        ?assertEqual(0, count(quod_ledger, new_block, RepeatCounts)),
+        assert_no_auth(RepeatCounts),
+        Reconnected = quod_simplex:test_state_set(
+            conns, #{Peer => {Replacement, make_ref()}}, Placed),
+        {{Again, [Frame]}, ReconnectCounts} = counted(fun() ->
+            Next = quod_simplex:test_drive_retained_dtx(Reconnected),
+            {Next, read_relay_frames(Replacement)}
+        end),
+        ?assertEqual(N, count(quod_ledger, new_block, ReconnectCounts)),
+        {Again, FinalCounts} = counted(fun() -> quod_simplex:test_drive_retained_dtx(Again) end),
+        ?assertEqual(0, count(quod_ledger, new_block, FinalCounts)),
+        case N of
+            1 ->
+                New = tl(Fs),
+                Added = lists:foldl(fun(X, Acc) -> quod_simplex:test_seed_dtx_submission(
+                    maps:get(begin_control, X), [], Acc) end, Again, New),
+                {{_, [Frame, NewFrame]}, NewCounts} = counted(fun() ->
+                    Next = quod_simplex:test_drive_retained_dtx(Added),
+                    {Next, read_relay_frames(Replacement)}
+                end),
+                %% Work eligibility must not trim the canonical selection fold.
+                %% It still checks all three rows, but transmits only the two new ones.
+                ?assertEqual(3, count(quod_ledger, new_block, NewCounts)),
+                ?assertEqual(quod_simplex:encode(element(1,maps:get(origin,F)),
+                    {dtx_submit, [begin_blob(X) || X <- New], []}), NewFrame);
+            3 -> ok
+        end
+    after Link ! stop, Replacement ! stop end.
+
+relay_frames(Frames) ->
+    receive
+        {send_ordered, Frame} -> relay_frames([Frame | Frames]);
+        {read_frames, From, Ref} ->
+            From ! {Ref, lists:reverse(Frames)}, relay_frames(Frames);
+        stop -> ok
+    end.
+
+read_relay_frames(Link) ->
+    Ref = make_ref(), Link ! {read_frames, self(), Ref},
+    receive {Ref, Frames} -> Frames after 1000 -> error(relay_delivery_barrier_timeout) end.
+
 selected_block_is_not_reconstructed_for_local_proposal_test() ->
     isolated(fun() ->
         {ok, _} = application:ensure_all_started(gproc),

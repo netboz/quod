@@ -1782,7 +1782,7 @@ test_retained_placement(stale) -> error(stale_test_dtx_submission).
 test_dtx_waiter_set(Waiters) ->
     maps:from_list([{Pid, true} || {dtx_endpoint, Pid} <- Waiters]).
 test_eligible_dtx_wave(S) ->
-    case eligible_dtx_wave(S) of
+    case eligible_dtx_wave(local, S) of
         none -> [];
         {Wave, _Block} ->
             [{Digest, Record} || {Digest, #dtx_submission{material = {Record, _, _}}} <- Wave]
@@ -9372,14 +9372,14 @@ drive_retained_dtx_nonempty(S) ->
             case dtx_slot_route(Slot, S) of
                 blocked -> S;
                 Route ->
-                    case eligible_dtx_wave(S) of
+                    case eligible_dtx_wave(Route, S) of
                         none -> S;
                         {Wave, Block} -> drive_dtx_route(Route, Wave, Block, S)
                     end
             end
     end.
 
-eligible_dtx_wave(S = #s{retained_dtx = Registry}) ->
+eligible_dtx_wave(Route, S = #s{retained_dtx = Registry}) ->
     case quod_dtx_owner:ready_rows(Registry) of
         [] -> none;
         Ordered ->
@@ -9390,8 +9390,20 @@ eligible_dtx_wave(S = #s{retained_dtx = Registry}) ->
                 [Row || {_Digest, #dtx_submission{control = Control}} = Row
                             <- Ordered,
                         quod_dtx:control_kind(Control) =:= Phase],
-            select_dtx_wave(SamePhase, S, S#s.dtx_projection, #{}, {[], none})
+            %% Placement is work eligibility, not just duplicate-send filtering.
+            %% Keep the complete canonical phase for selection: a newly queued
+            %% row must not bypass conflicts/size checks against placed rows.
+            case unplaced_dtx_wave(Route, SamePhase, S) of
+                [] -> none;
+                _ -> select_dtx_wave(SamePhase, S, S#s.dtx_projection, #{}, {[], none})
+            end
     end.
+
+unplaced_dtx_wave(local, Wave, _S) -> Wave;
+unplaced_dtx_wave({relay, Peer}, Wave, #s{conns = Conns}) ->
+    Link = case maps:get(Peer, Conns, none) of {Pid, _} -> Pid; none -> none end,
+    [{Digest, Row} || {Digest, #dtx_submission{relay_placement = Placement} = Row} <- Wave,
+                      Placement =/= {Peer, Link}].
 
 select_dtx_wave([], _S, _Projection, _SelectedGroups, {[], none}) -> none;
 select_dtx_wave([], _S, _Projection, _SelectedGroups, {SelectedRev, Block}) ->
@@ -13455,12 +13467,7 @@ send_dtx_relay(
   S = #s{chan = Chan, conns = Conns, dialing = Dialing}) ->
     case maps:get(Peer, Conns, undefined) of
         {LinkPid, _Ref} ->
-            Pending =
-                [{Digest, Row}
-                 || {Digest,
-                     Row = #dtx_submission{relay_placement = Placement}}
-                        <- Wave,
-                    Placement =/= {Peer, LinkPid}],
+            Pending = unplaced_dtx_wave({relay, Peer}, Wave, S),
             send_pending_dtx_relay(Peer, LinkPid, Pending, S);
         undefined ->
             case maps:is_key(Peer, Dialing) of

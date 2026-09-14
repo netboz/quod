@@ -4187,9 +4187,9 @@ dtx_verdict_cleanup_discards_only_the_exact_stale_request_test() ->
         ?assert(quod_simplex:test_consensus_barrier(Latched)),
         Expected =
             {CurrentBH,
-             {dtx, CurrentToken, CurrentOwner, Monitor},
-             {CurrentBH, Candidate}, none, undefined},
-        ?assertEqual(Expected, quod_simplex:test_dtx_round(Slot, Latched)),
+             {dtx, CurrentToken, CurrentOwner, Monitor, DeadlineMs},
+             {CurrentBH, Candidate}, none, undefined} = quod_simplex:test_dtx_round(Slot, Latched),
+        ?assert(is_integer(DeadlineMs)),
 
         %% This belongs to an older request and is therefore an exact no-op.
         AfterStale =

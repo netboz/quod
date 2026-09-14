@@ -116,7 +116,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% is a short FIXED budget (default 2000 ms — on the order of the consensus Δ_timeout, `?DELTA_MS` ~1 s in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
 -define(DEFAULTS, #{node_id => undefined, transaction_ttl_ms => 30000,
-                    validation_ttl_ms => 2000, max_proof_workers => 64,
+                    validation_ttl_ms => ?QUOD_VALIDATION_TTL_MS, max_proof_workers => 64,
                     max_scope_workers => 64, proof_timeout_ms => 60000,
                     scope_timeout_ms => 60000,
                     scope_step_timeout_ms => 30000,

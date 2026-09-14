@@ -1041,9 +1041,9 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                 validating = none :: none | binary(),
                 validation = none :: none | content |
                     {content_foreign, pid(), reference()} |
-                    {dtx, term(), pid(), reference()} |
+                    {dtx, term(), pid(), reference(), integer()} |
                     {dtx_foreign, term(), pid(), reference(),
-                     #{<<_:256>> => quod_dtx:group_history()}},
+                     #{<<_:256>> => quod_dtx:group_history()}, integer()},
                 candidate = none :: none | {binary(), #block{}},
                 validation_sidecar = [] :: [quod_dtx_endpoint:validation_item()],
                 dtx_parent = none :: none |
@@ -1366,8 +1366,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
             progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
             quorum_pauses = 0 :: non_neg_integer(), %% timeouts that withheld a complaint while < quorum ready
-            weak_cert_waits = 0 :: non_neg_integer()}).  %% finalizations refused on a sub-quorum cert (Slice E,
-                                                         %% the stale-cert hazard) — climbing = a laggard waiting
+            weak_cert_waits = 0 :: non_neg_integer(), %% sub-quorum finalizations refused
+            validation_ttl_ms = ?QUOD_VALIDATION_TTL_MS :: non_neg_integer()}).
 
 -ifdef(TEST).
 %% Build a minimal #s{} for the Slice-4 gate-predicate eunit (the record is otherwise private). Only the
@@ -1526,6 +1526,7 @@ test_state_set(relay_dialing, V, S) -> S#s{relay_dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
+test_state_set(validation_ttl_ms, V, S) -> S#s{validation_ttl_ms = V};
 test_state_set(trace_owner_turns, V, S) -> S#s{trace_owner_turns = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
 test_state_set(dtx_chan, V, S) -> S#s{dtx_chan = V};
@@ -1601,7 +1602,8 @@ test_latch_dtx_validation(Slot, BH, ParentToken, EnginePid, Block, S) ->
      put_round(
        Slot,
        R#round{validating = BH,
-               validation = {dtx, ParentToken, EnginePid, Monitor},
+               validation = {dtx, ParentToken, EnginePid, Monitor,
+                             quod_time:mono_ms() + S#s.validation_ttl_ms},
                candidate = {BH, Block}}, S)}.
 test_on_dtx_verdict(Slot, BH, ParentToken, EnginePid, Floor, Verdict, S) ->
     on_dtx_verdict(
@@ -3216,6 +3218,7 @@ init_store(Ns, Cfg, Id) ->
             chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
             relay_timeout_ms = RelayTimeout,
             batch_window_ms = maps:get(batch_window_ms, Cfg),
+            validation_ttl_ms = maps:get(validation_ttl_ms, Cfg, ?QUOD_VALIDATION_TTL_MS),
             detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false),
             %% Node-local diagnostics must not ride a prepared lifecycle config
             %% into a journal or committed hosting fact. Read once at owner boot.
@@ -10459,8 +10462,8 @@ trace_validation_class(_) -> <<"unexpected">>.
 
 trace_validation_kind(#round{validation = {content_foreign, _, _}}) -> <<"content_foreign">>;
 trace_validation_kind(#round{validation = content}) -> <<"content_parent">>;
-trace_validation_kind(#round{validation = {dtx, _, _, _}}) -> <<"dtx_parent">>;
-trace_validation_kind(#round{validation = {dtx_foreign, _, _, _, _}}) -> <<"dtx_foreign">>;
+trace_validation_kind(#round{validation = {dtx, _, _, _, _}}) -> <<"dtx_parent">>;
+trace_validation_kind(#round{validation = {dtx_foreign, _, _, _, _, _}}) -> <<"dtx_foreign">>;
 trace_validation_kind(#round{}) -> <<"none">>.
 
 round_state(Slot, #s{rounds = Rounds}) ->
@@ -11312,6 +11315,7 @@ request_dtx_validation(Controls, #block{timestamp = BlockTimestamp}, Sl, BH,
           when Parent =:= Sl - 1, is_pid(Pid) ->
             Monitor = erlang:monitor(process, Pid),
             Tag = {Sl, BH, Token},
+            DeadlineMs = quod_time:mono_ms() + S#s.validation_ttl_ms,
             ok = with_block_context(Sl, BH, S, fun() ->
                 quod_prolog:request_dtx_verdict(
                   Ns, Controls, BlockTimestamp, Sl, self(), Tag) end),
@@ -11319,7 +11323,7 @@ request_dtx_validation(Controls, #block{timestamp = BlockTimestamp}, Sl, BH,
             put_round(
               Sl,
               Round#round{validating = BH,
-                          validation = {dtx, Token, Pid, Monitor}}, S);
+                          validation = {dtx, Token, Pid, Monitor, DeadlineMs}}, S);
         _ ->
             S
     end.
@@ -11338,7 +11342,7 @@ on_dtx_verdict(Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict,
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation,
           Round#round.candidate} of
-        {BH, {dtx, ParentToken, EnginePid, _Monitor},
+        {BH, {dtx, ParentToken, EnginePid, _Monitor, DeadlineMs},
          {BH, #block{payload = Payload} = Block}} ->
             trace_block_event(
               Sl, BH, <<"consensus.parent_verdict_received">>,
@@ -11347,7 +11351,7 @@ on_dtx_verdict(Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict,
             Round0 = release_dtx_validation_round(Round),
             S0 = put_round(Sl, Round0, S),
             continue_dtx_verdict(
-              Verdict, Payload, Block, Sl, BH, ParentToken, S0);
+              Verdict, Payload, Block, Sl, BH, ParentToken, DeadlineMs, S0);
         _ ->
             discard_stale_dtx_validation(
               Sl, BH, ParentToken, EnginePid, S)
@@ -11357,7 +11361,7 @@ on_dtx_verdict(Sl, BH, ParentToken, EnginePid, _Floor, _Verdict, S) ->
       Sl, BH, ParentToken, EnginePid, S).
 
 continue_dtx_verdict(
-  {valid, Histories}, Payload, Block, Sl, BH, ParentToken, S)
+  {valid, Histories}, Payload, Block, Sl, BH, ParentToken, DeadlineMs, S)
   when is_map(Histories) ->
     case quod_ledger:classify(Payload) of
         {controls, Classified} ->
@@ -11369,7 +11373,7 @@ continue_dtx_verdict(
                       ParentToken, S);
                 {ok, ReferencePlan} ->
                     start_dtx_foreign_validation(
-                      ReferencePlan, Histories, Sl, BH, ParentToken, S);
+                      ReferencePlan, Histories, Sl, BH, ParentToken, DeadlineMs, S);
                 {error, _} ->
                     reject_dtx_candidate(
                       Sl, BH, malformed_foreign_references, S)
@@ -11377,12 +11381,12 @@ continue_dtx_verdict(
         _ ->
             reject_dtx_candidate(Sl, BH, malformed_control, S)
     end;
-continue_dtx_verdict(Verdict, Payload, Block, Sl, BH, ParentToken, S) ->
+continue_dtx_verdict(Verdict, Payload, Block, Sl, BH, ParentToken, _DeadlineMs, S) ->
     apply_dtx_verdict(
       Verdict, Payload, Block, Sl, BH, ParentToken, S).
 
 start_dtx_foreign_validation(
-  ReferencePlan, Histories, Sl, BH, ParentToken,
+  ReferencePlan, Histories, Sl, BH, ParentToken, DeadlineMs,
   S = #s{dtx_workers = DtxWorkers}) ->
     Deadline = quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS,
     Owner = self(),
@@ -11409,7 +11413,7 @@ start_dtx_foreign_validation(
       Round#round{
         validating = BH,
         validation =
-          {dtx_foreign, ParentToken, Worker, Monitor, Histories}}, S).
+          {dtx_foreign, ParentToken, Worker, Monitor, Histories, DeadlineMs}}, S).
 
 on_dtx_foreign_verdict(
   Sl, BH, ParentToken, WorkerPid, Deadline, Verdict0,
@@ -11419,7 +11423,7 @@ on_dtx_foreign_verdict(
     case {Round#round.validating, Round#round.validation,
           Round#round.candidate} of
         {BH,
-         {dtx_foreign, ParentToken, WorkerPid, _Monitor, Histories},
+         {dtx_foreign, ParentToken, WorkerPid, _Monitor, Histories, _DeadlineMs},
          {BH, #block{payload = Payload} = Block}} ->
             Verdict = reference_deadline_result(Deadline, Verdict0),
             S0 = put_round(
@@ -11887,17 +11891,17 @@ release_validation_monitor(
   #round{validation = {content_foreign, _Pid, Monitor}}) ->
     erlang:demonitor(Monitor, [flush]);
 release_validation_monitor(
-  #round{validation = {dtx, _Token, _Pid, Monitor}}) ->
+  #round{validation = {dtx, _Token, _Pid, Monitor, _DeadlineMs}}) ->
     erlang:demonitor(Monitor, [flush]);
 release_validation_monitor(
-  #round{validation = {dtx_foreign, _Token, _Pid, Monitor, _History}}) ->
+  #round{validation = {dtx_foreign, _Token, _Pid, Monitor, _History, _DeadlineMs}}) ->
     erlang:demonitor(Monitor, [flush]);
 release_validation_monitor(#round{}) ->
     false.
 
-dtx_validation_active(#round{validation = {dtx, _, _, _}}) -> true;
+dtx_validation_active(#round{validation = {dtx, _, _, _, _}}) -> true;
 dtx_validation_active(
-  #round{validation = {dtx_foreign, _, _, _, _}}) -> true;
+  #round{validation = {dtx_foreign, _, _, _, _, _}}) -> true;
 dtx_validation_active(#round{}) -> false.
 
 %% A verdict whose exact request no longer matches the candidate/head/floor is
@@ -11907,19 +11911,19 @@ dtx_validation_active(#round{}) -> false.
 discard_stale_dtx_validation(Sl, BH, ParentToken, EnginePid, S) ->
     Round = round_state(Sl, S),
     case {Round#round.validating, dtx_validation_owner(Round)} of
-        {BH, {ParentToken, EnginePid}} ->
+        {BH, {ParentToken, EnginePid, _DeadlineMs}} ->
             clear_dtx_validation(Sl, S);
         _ ->
             S
     end.
 
 dtx_validation_owner(
-  #round{validation = {dtx, ParentToken, Pid, _Monitor}}) ->
-    {ParentToken, Pid};
+  #round{validation = {dtx, ParentToken, Pid, _Monitor, DeadlineMs}}) ->
+    {ParentToken, Pid, DeadlineMs};
 dtx_validation_owner(
   #round{validation =
-           {dtx_foreign, ParentToken, Pid, _Monitor, _History}}) ->
-    {ParentToken, Pid};
+           {dtx_foreign, ParentToken, Pid, _Monitor, _History, DeadlineMs}}) ->
+    {ParentToken, Pid, DeadlineMs};
 dtx_validation_owner(#round{}) ->
     none.
 
@@ -11937,13 +11941,13 @@ drop_dtx_validation_monitor(Ref, Pid, S = #s{rounds = Rounds}) ->
             false
     end.
 
-dtx_validation_monitor(#round{validation = {dtx, _Token, Pid, Ref}}) ->
+dtx_validation_monitor(#round{validation = {dtx, _Token, Pid, Ref, _DeadlineMs}}) ->
     {Pid, Ref};
 dtx_validation_monitor(
   #round{validation = {content_foreign, Pid, Ref}}) ->
     {Pid, Ref};
 dtx_validation_monitor(
-  #round{validation = {dtx_foreign, _Token, Pid, Ref, _History}}) ->
+  #round{validation = {dtx_foreign, _Token, Pid, Ref, _History, _DeadlineMs}}) ->
     {Pid, Ref};
 dtx_validation_monitor(#round{}) ->
     none.
@@ -14620,7 +14624,8 @@ may_vote(S) ->
     ingress_capability(S) =:= accept.
 
 %% Prefer the exact, already-owned next-parent verdict to duplicate recovery.
-%% Its terminal verdict/DOWN re-enters reconciliation; no tick grants permission.
+%% The original validation allowance bounds this preference, not execution.
+%% Expiry releases only the exception; the existing tick re-enters reconciliation.
 should_sync(#s{sync = unconfirmed}) -> true;
 should_sync(#s{sync = ready, approved = Approved, history_head = Token, eng = Eng} = S) ->
     case ahead_cert_ceiling(Eng) of
@@ -14628,8 +14633,8 @@ should_sync(#s{sync = ready, approved = Approved, history_head = Token, eng = En
         Next when Next =:= Approved + 1 ->
             Round = round_state(Next, S),
             case {Round#round.candidate, Round#round.validating, dtx_validation_owner(Round)} of
-                {{Hash, #block{slot = Next}}, Hash, {Token = {Approved, _}, Owner}} ->
-                    not (is_process_alive(Owner) andalso
+                {{Hash, #block{slot = Next}}, Hash, {Token = {Approved, _}, Owner, DeadlineMs}} ->
+                    not (quod_time:mono_ms() < DeadlineMs andalso is_process_alive(Owner) andalso
                          persisted_cert(support, Next, Hash, Eng) =/= none andalso
                          persisted_cert(commit, Next, Hash, Eng) =/= none);
                 _ -> true
@@ -15111,6 +15116,7 @@ reseat_engine(NewHead, S) ->
 
 reseat_engine(NewHead, S, Included) ->
     S1 = prune_consensus_links(nack_inflight(S, NewHead, Included)),
+    maps:foreach(fun(_, Round) -> release_validation_monitor(Round) end, S1#s.rounds),
     restore_signing_engine(
       S1#s{eng             = eng_new(S1#s.consensus_domain,
                                       active_validators(S1), NewHead),

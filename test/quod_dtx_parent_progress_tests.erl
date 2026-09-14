@@ -4,7 +4,8 @@ Consensus validation follows the exact durable parent, not signing permission.
 
 Real signed Begin controls and certified N=4 history. A registered Prolog
 receiver captures actual casts; the tests supply explicit verdicts at that
-boundary, not a second evaluator. No tick, sleep or recovery pull releases work.
+boundary, not a second evaluator. Parent progress releases validation; only the
+bounded recovery-preference tests use the existing tick. No sleep releases work.
 """.
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
@@ -27,7 +28,7 @@ parent_progress_wakes_waiting_child_test_() ->
         Resumed = quod_simplex:settle_readiness(Waiting, Installed),
         {Hash, Token, Owner} = take_request(3),
         ?assertEqual(self(), Owner),
-        ?assertMatch({Hash, {dtx, Token, Owner, _}, _, none, undefined},
+        ?assertMatch({Hash, {dtx, Token, Owner, _, _}, _, none, undefined},
                      quod_simplex:test_dtx_round(3, Resumed)),
         %% Neither duplicate progress nor ordinary mailbox turns re-issue it.
         ?assertEqual(Resumed, quod_simplex:settle_readiness(Resumed, Resumed)),
@@ -229,6 +230,114 @@ finality_does_not_duplicate_owned_parent_validation_test_() ->
             gproc:unreg(quod_reg:name({quod_simplex, Ns})),
             gproc:unreg(quod_reg:name({quod_catchup, Ns}))
         end
+    end) end).
+
+validation_allowance_is_captured_at_request_not_owner_lifetime_test_() ->
+    [isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        S = quod_simplex:test_state_set(validation_ttl_ms, Ttl, S0),
+        {Block, Hash, Certified} = certified_first(F, S, Keys),
+        Before = quod_time:mono_ms(),
+        Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+        After = quod_time:mono_ms(),
+        {Hash, Token, Owner} = take_request(2),
+        {Hash, {dtx, Token, Owner, Monitor, Deadline}, _, _, _} = quod_simplex:test_dtx_round(2, Proposed),
+        ?assert(Deadline >= Before + Ttl andalso Deadline =< After + Ttl),
+        ?assertNot(quod_simplex:caught_up(Proposed)),
+        erlang:demonitor(Monitor, [flush])
+    end) end) || Ttl <- [500, 2000]].
+
+expired_validation_keeps_latch_until_recovery_reseats_test_() ->
+    isolated(fun() -> without_signing(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Ns, Anchor} = Identity = maps:get(origin, F),
+        true = quod_reg:reg({quod_catchup, Ns}),
+        true = quod_reg:reg({quod_simplex, Ns}),
+        %% A distinct, live protocol owner is essential: monitoring self()
+        %% creates no monitor and cannot witness recovery's resource cleanup.
+        gproc:unreg(quod_reg:name({quod_prolog, Ns})),
+        Caller = self(),
+        {Owner, OwnerMonitor} = spawn_monitor(fun() ->
+            true = quod_reg:reg({quod_prolog, Ns}),
+            Caller ! {self(), ready},
+            receive Request -> Caller ! Request end,
+            receive stop -> ok end
+        end),
+        receive {Owner, ready} -> ok after 1000 -> error(validation_owner_missing) end,
+        try
+            %% Zero is an already-exhausted instance of the same namespace
+            %% allowance; expiry is deterministic, never a timing assertion.
+            S = quod_simplex:test_state_set(validation_ttl_ms, 0, S0),
+            {Block, Hash, Certified} = certified_first(F, S, Keys),
+            Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
+            {Hash, Token, Caller} = receive
+                {'$gen_cast', {dtx_verdict_req, [_], _, 2, Caller, {2, H, T}, _}} -> {H, T, Caller}
+            after 1000 -> error(parent_progress_not_delivered) end,
+            Latched = quod_simplex:test_dtx_round(2, Proposed),
+            {Hash, {dtx, Token, Owner, Monitor, _}, _, _, _} = Latched,
+            ?assert(quod_simplex:should_sync(Proposed)),
+            {keep_state, Started, _} = quod_simplex:running({timeout, tick}, tick, Proposed),
+            try
+                {pulling, Worker} = quod_simplex:test_sync(Started),
+                ?assertEqual(Latched, quod_simplex:test_dtx_round(2, Started)),
+                assert_no_request(),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Started))),
+                %% The actual recovery worker is held at its real capture call.
+                %% This fixture supplies a quorum-certified window through the
+                %% production verifier and sink, not a synthetic verdict.
+                receive {'$gen_call', _, {history_view, Identity, committed, _}} -> ok
+                after 1000 -> error(recovery_capture_missing) end,
+                From = {self(), make_ref()},
+                {keep_state, Started, [{reply, From, {ok, View}}]} = quod_simplex:running(
+                    {call, From}, {history_view, Identity, committed, quod_time:mono_ms() + 5000}, Started),
+                Projection0 = maps:get(projection, View),
+                Domain = quod_simplex:consensus_domain(Ns, Anchor), Committee = lists:sort(maps:keys(Keys)),
+                Shares = [quod_simplex:make_share(Domain, commit, 2, Hash, maps:get(P, Keys))
+                          || P <- lists:sublist(Committee, 3)],
+                {ok, Cert} = quod_simplex:form_cert(Domain, commit, 2, Hash, Shares, Committee),
+                Entry = quod_ledger:entry(Block, Cert),
+                {ok, Entries, Projection, Delta} = quod_ct:with_network_identity(maps:get(network, F), fun() ->
+                    quod_catchup:verify_forward(Ns, Anchor, Projection0, 2, [Entry], maps:get(history_index, Projection0))
+                end),
+                {keep_state, Recovered, _} = quod_simplex:running({call, From},
+                    {sink_catchup, {recovery, Worker}, Entries, Projection, Delta}, Started),
+                ?assertEqual(2, element(1, quod_simplex:test_committed_store(Recovered))),
+                ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(2, Recovered)),
+                ?assertNot(erlang:demonitor(Monitor, [flush, info])),
+                ?assertEqual(Recovered, quod_simplex:test_on_dtx_verdict(
+                    2, Hash, Token, Owner, 1, {valid, #{}}, Recovered)),
+                assert_no_request()
+            after stop_test_recovery(Started) end
+        after
+            Owner ! stop,
+            receive {'DOWN', OwnerMonitor, process, Owner, normal} -> ok
+            after 1000 -> error(validation_owner_survived) end,
+            gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+            gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+        end
+    end) end) end).
+
+foreign_validation_inherits_expired_parent_allowance_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, _Keys) ->
+        Target = maps:get(origin, F), Signer = maps:get(node_identity, F),
+        Foreign = {<<"quod:deadline-foreign">>, <<89:256>>},
+        RF = quod_ct:signed_dtx_begin_fixture(#{target => Foreign, participant_target => Target}),
+        Begin = maps:get('begin', RF),
+        {ok, Ref} = quod_dtx:certified_ref(element(1, Foreign), element(2, Foreign), 2,
+            <<90:256>>, quod_dtx:group_id(Begin), <<"structural-reference-not-consensus-admitted">>),
+        {ok, Prepare} = quod_dtx:new_prepare(Begin, Ref, Target),
+        {ok, Control} = quod_dtx:sign_control(Target, Prepare, maps:get(admission, F), 1, 1, Signer),
+        {ok, Blob} = quod_dtx:encode_control(Control),
+        S = quod_simplex:test_state_set(validation_ttl_ms, 0, S0),
+        Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S),
+        {Hash, Token, Owner} = take_request(2),
+        {_, {dtx, _, _, _, Deadline}, _, _, _} = quod_simplex:test_dtx_round(2, Proposed),
+        %% The supplied parent verdict is a callback fixture; this tests the
+        %% actual handoff, not acceptance of the structural foreign reference.
+        ForeignPending = quod_simplex:test_on_dtx_verdict(2, Hash, Token, Owner, 1, {valid, #{}}, Proposed),
+        {_, {dtx_foreign, Token, Worker, Monitor, #{}, Deadline}, _, _, _} =
+            quod_simplex:test_dtx_round(2, ForeignPending),
+        ?assert(Deadline =< quod_time:mono_ms()),
+        case is_process_alive(Worker) of true -> exit(Worker, kill); false -> ok end,
+        erlang:demonitor(Monitor, [flush])
     end) end).
 
 stop_test_recovery(S) ->

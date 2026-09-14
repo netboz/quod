@@ -4,6 +4,10 @@
 -include("quod_ingress_limits.hrl").
 -include("quod_directory_limits.hrl").
 
+%% Shared namespace validation allowance: Prolog's parked requests and
+%% Simplex's preference for an owned parent verdict use the same setting.
+-define(QUOD_VALIDATION_TTL_MS, 2000).
+
 %% One source of truth for the bounded distributed-proof worker state.
 -define(QUOD_MAX_ACTIVE_PROOF_DEPTH, 8).
 -define(QUOD_MAX_SCOPES_PER_PROOF, 8).

@@ -199,6 +199,71 @@ durable_lookup_is_one_bounded_read_not_history_replay_test_() ->
         ?assertEqual(1, Count(quod_simplex, history_validate_advance))
     end).
 
+authenticated_finality_wakes_one_existing_recovery_worker_without_a_tick_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Ns, _} = Identity = maps:get(origin, F),
+        true = quod_reg:reg({quod_catchup, Ns}),
+        true = quod_reg:reg({quod_simplex, Ns}),
+        try
+            {_Block, Hash, Certified} = certified_first(F, S0, Keys),
+            Waiting = quod_simplex:test_state_set(block_requests,
+                        #{{2, Hash} => {1, 0}}, Certified),
+            Started = quod_simplex:reconcile_block_requests(Waiting),
+            ?assertMatch({pulling, _}, quod_simplex:test_sync(Started)),
+            {pulling, Worker} = quod_simplex:test_sync(Started),
+            Monitor = erlang:monitor(process, Worker),
+            try
+                ?assertEqual(#{}, quod_simplex:test_block_requests(Started)),
+                %% A real worker asks the actual sole writer for its pinned
+                %% history view. No tick, direct start call or invented reply.
+                receive {'$gen_call', _, {history_view, Identity, committed, Deadline}} ->
+                    ?assert(Deadline > quod_time:mono_ms())
+                after 1000 -> error(recovery_capture_not_requested) end,
+                Repeated = lists:foldl(fun(_, S) -> quod_simplex:reconcile_block_requests(S) end,
+                                       Started, lists:seq(1, 20)),
+                ?assertEqual({pulling, Worker}, quod_simplex:test_sync(Repeated)),
+                ?assertEqual(#{}, quod_simplex:test_block_requests(Repeated)),
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Repeated))),
+                ?assertNot(quod_simplex:caught_up(Repeated))
+            after
+                exit(Worker, kill),
+                receive {'DOWN', Monitor, process, Worker, _} -> ok
+                after 1000 -> error(recovery_worker_survived) end
+            end
+        after
+            gproc:unreg(quod_reg:name({quod_simplex, Ns})),
+            gproc:unreg(quod_reg:name({quod_catchup, Ns}))
+        end
+    end) end).
+
+support_only_and_forged_finality_do_not_start_history_recovery_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Ns, _} = maps:get(origin, F),
+        true = quod_reg:reg({quod_catchup, Ns}),
+        try
+            {_Block, Hash, Supported} = certified_first(F, S0, Keys, [support]),
+            Forged = #cert{kind = commit, slot = 2, block_hash = Hash, sigs = []},
+            Ignored = quod_simplex:dispatch(peer(Keys), {cert, Forged}, Supported),
+            Reconciled = quod_simplex:reconcile_block_requests(Ignored),
+            ?assertEqual(ready, quod_simplex:test_sync(Reconciled)),
+            ?assertMatch(#{{2, Hash} := _}, quod_simplex:test_block_requests(Reconciled))
+        after gproc:unreg(quod_reg:name({quod_catchup, Ns})) end
+    end) end).
+
+peer_progress_cannot_spend_failed_recovery_backoff_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Ns, _} = maps:get(origin, F),
+        true = quod_reg:reg({quod_catchup, Ns}),
+        try
+            {_Block, _Hash, Certified} = certified_first(F, S0, Keys),
+            Cooling = quod_simplex:test_state_set(sync_arm, {3, 4}, Certified),
+            Reconciled = lists:foldl(fun(_, S) -> quod_simplex:reconcile_block_requests(S) end,
+                                     Cooling, lists:seq(1, 20)),
+            ?assertEqual(ready, quod_simplex:test_sync(Reconciled)),
+            ?assertEqual({3, 4}, quod_simplex:test_arm(Reconciled))
+        after gproc:unreg(quod_reg:name({quod_catchup, Ns})) end
+    end) end).
+
 committed_block(F, S0, Keys) ->
     {Block, Hash, WithCerts} = certified_first(F, S0, Keys),
     Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, WithCerts),

@@ -1013,8 +1013,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(RECOVERY_FETCHES, 2). %% bound source changes inside one recovery worker (retries resume durably)
 -define(RECOVERY_HINT_WARMS, 3). %% bounded endpoint discovery before an identity-bound tip quorum
 -define(RECOVERY_WARM_CONTACTS, 16). %% parallel, one-entry probes; cold recovery only
--define(SYNC_HYSTERESIS,  2).  %% ticks the `behind` gap must persist before a heavyweight pull arms (a transient
-                               %% 1-2 slot lag rides the cheap redrive); an `unconfirmed` node bypasses it
 -define(SYNC_BACKOFF_MIN, 3).  %% failure backoff floor (ticks) before re-arming a sync after no_contact/error
 -define(SYNC_BACKOFF_MAX, 20). %% failure backoff cap (ticks) — exp-doubled, ±20% jittered, single-flight-paced
 -define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
@@ -1333,8 +1331,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             %% represent the unsafe combinations the
             %% former `sync` latch + `confirmed` boolean allowed after a partial or failed pull.
             sync         = unconfirmed :: unconfirmed | {pulling, pid()} | ready,
-            sync_arm     = {0, 0, 0} :: {non_neg_integer(), non_neg_integer(), non_neg_integer()},
-                                        %% {behind-hysteresis ticks, backoff cooldown ticks, backoff interval ticks}
+            sync_arm     = {0, 0} :: {non_neg_integer(), non_neg_integer()},
+                                        %% {failure cooldown ticks, backoff interval ticks}
             genesis_hash = undefined :: binary() | undefined,  %% pinned slot-1 block hash for every mode
             last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
@@ -3242,9 +3240,9 @@ init_store(Ns, Cfg, Id) ->
                         genesis_hash = GenesisHash,
                         consensus_domain = Domain}),
             Eng = eng_new(Domain, active_validators(S2), Committed),
-            %% One periodic tick drives everything post-boot: peer redials AND the sync armer
-            %% (`maybe_arm_sync`) that kicks boot-sync/gap-fill. A fresh `mode=join` node
-            %% boots `unconfirmed`, so `should_sync` arms its catch-up at the first tick.
+            %% The common owner reconciliation arms boot/gap recovery once its
+            %% catch-up sibling is up. The tick handles redials and failed-pull
+            %% backoff, and notices sibling startup even without peer traffic.
             {ok, running,
              S2#s{last_applied = 0, approved = Committed, eng = Eng},
              [{next_event, internal, restore_signing_engine},
@@ -4383,10 +4381,10 @@ running_impl({timeout, progress}, {progress_timeout, V}, S0) ->
     keep_progress(S0, S1, [], rearm);
 %% Consensus recovery: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
 %% re-dial every peer whose link never came up (its frames are still buffered), expire final caller
-%% deadlines, AND arm sync — the one
-%% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
+%% deadlines, and spend failure backoff. The common owner reconciliation arms
+%% recovery from authenticated finality immediately, not after tick hysteresis.
 running_impl({timeout, tick}, tick, S0) ->
-    S1 = maybe_arm_sync(
+    S1 = pace_tick(
            reconcile_relays(redrive_inflight(redial_pending(
              sweep_stale_dials(expire_custody(expire_ingress(S0))))))),
     keep_progress(S0, S1, [tick_timeout()]);
@@ -12519,19 +12517,22 @@ certificate_evidence(Slot, #s{eng = #eng{certs = Certs}}) ->
     [{cert, Cert} || {{_Kind, CertSlot, _BH}, Cert} <- maps:to_list(Certs),
                      CertSlot =:= Slot].
 
-%% Recover one missing certified block at a time, in slot order. A request rotates through certificate
-%% signers and then the rest of the committee, one peer per retry. The support certificate is already in
-%% the local engine, so the response can be checked without trusting the selected holder.
+%% One recovery selection: finality belongs to the certified-history worker;
+%% only not-yet-finalized proposals need the support-certificate block walk.
+%% Finality is authenticated engine state, never a peer height or readiness hint.
 reconcile_block_requests(S = #s{eng = undefined}) -> S;
 reconcile_block_requests(S0 = #s{slot = Committed, eng = Eng, block_requests = Requests0}) ->
+    Recovering = maybe_arm_sync(S0),
+    FinalizedThrough = ahead_cert_ceiling(Eng),
     Missing = lists:sort(
                 [{Slot, BH, Cert}
                  || {{support, Slot, BH}, #cert{} = Cert} <- maps:to_list(Eng#eng.certs),
                     live_pipeline_slot(Slot, Committed),
+                    Slot > FinalizedThrough,
                     block_for(BH, Eng) =:= undefined]),
     LiveKeys = [{Slot, BH} || {Slot, BH, _Cert} <- Missing],
     Requests1 = maps:filter(fun(Key, _Value) -> lists:member(Key, LiveKeys) end, Requests0),
-    S1 = S0#s{block_requests = Requests1},
+    S1 = Recovering#s{block_requests = Requests1},
     case first_requestable_block(Missing, S1) of
         none -> S1;
         {Slot, BH, Cert} -> maybe_request_block(Slot, BH, Cert, S1)
@@ -14599,8 +14600,8 @@ behind(#s{eng = Eng, approved = Approved}) -> ahead_cert_ceiling(Eng) > Approved
 %% traffic so its gap detector can learn, but participation alone grants no signing capability.
 is_participant(#s{self = Self} = S) -> lists:member(Self, active_validators(S)).
 
-%% `ready` is the only recovery state with a corroborated tip. A live finalizer above the local window
-%% revokes the capability immediately, before the paced recovery worker starts.
+%% `ready` is the only recovery state with a corroborated tip. A live finalizer
+%% revokes the capability immediately and the same owner turn arms recovery.
 caught_up(#s{sync = ready} = S) -> not behind(S);
 caught_up(_S) -> false.
 
@@ -14869,11 +14870,11 @@ catch_up_from(Ns, GH, View = #{slot := Height, projection := Projection},
       Ns, GH, Fetch, Sink, Height + 1, Projection,
       #{history_view => View}).
 
-%% The single recovery armer, run each tick off the commit hot path. It owns gap hysteresis and failure
-%% backoff; the recovery enum enforces single flight.
+%% The single recovery armer runs at the owner reconciliation boundary. A
+%% verified finalizer already proves a gap; no timer needs to confirm it again.
+%% Failed acquisition retains its existing backoff; the enum owns single flight.
 maybe_arm_sync(S = #s{sync = {pulling, _}}) -> S;
-maybe_arm_sync(S0 = #s{sync = Sy}) when Sy =:= unconfirmed; Sy =:= ready ->
-    S = pace_tick(S0),
+maybe_arm_sync(S = #s{sync = Sy}) when Sy =:= unconfirmed; Sy =:= ready ->
     case should_sync(S) of
         false -> S#s{sync_arm = reset_pace()};   %% at the tip: clear pacing so a later gap starts fresh
         true  -> case arm_ready(S) andalso sibling_up(S) of
@@ -14882,27 +14883,22 @@ maybe_arm_sync(S0 = #s{sync = Sy}) when Sy =:= unconfirmed; Sy =:= ready ->
                  end
     end.
 
-%% Advance the pacing counters one tick (pure bookkeeping — the arm decision is arm_ready/1): grow the
-%% behind-hysteresis while `behind` (reset otherwise), and count down any active backoff cooldown.
-pace_tick(S = #s{sync_arm = {Hyst, Cool, Int}}) ->
-    Hyst1 = case behind(S) of true -> Hyst + 1; false -> 0 end,
-    S#s{sync_arm = {Hyst1, max(0, Cool - 1), Int}}.
+%% Only the existing tick spends failure backoff; peer traffic cannot do so.
+pace_tick(S = #s{sync_arm = {Cool, Int}}) ->
+    S#s{sync_arm = {max(0, Cool - 1), Int}}.
 
-%% Unconfirmed nodes arm immediately once backoff expires; an established node waits for persistent gap
-%% evidence so transient one-slot lag continues to use the cheap consensus redrive.
-arm_ready(#s{sync = Sy, sync_arm = {Hyst, Cool, _Int}}) ->
-    Cool =:= 0 andalso (Sy =:= unconfirmed orelse Hyst >= ?SYNC_HYSTERESIS).
+arm_ready(#s{sync_arm = {Cool, _Int}}) -> Cool =:= 0.
 
 recovery_failed(S) ->
     S#s{sync = unconfirmed, sync_arm = backoff(S#s.sync_arm)}.
 
 %% Grow the failure backoff: double the interval (floored at ?SYNC_BACKOFF_MIN, capped at ?SYNC_BACKOFF_MAX
-%% ticks), set the cooldown to a ±20%-jittered copy, and reset the hysteresis (a fresh attempt just failed).
-backoff({_Hyst, _Cool, Int}) ->
+%% ticks) and set the cooldown to a ±20%-jittered copy after a failed attempt.
+backoff({_Cool, Int}) ->
     Int1 = min(?SYNC_BACKOFF_MAX, max(?SYNC_BACKOFF_MIN, Int * 2)),
-    {0, jitter_ticks(Int1), Int1}.
+    {jitter_ticks(Int1), Int1}.
 
-reset_pace() -> {0, 0, 0}.
+reset_pace() -> {0, 0}.
 
 %% ±20% jitter (mirroring quod_feed's), floored at 1 tick — spreads a fleet's retry storms.
 jitter_ticks(N) -> max(1, N - (N div 5) + rand:uniform(2 * (N div 5) + 1) - 1).

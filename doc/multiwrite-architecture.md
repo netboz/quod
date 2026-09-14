@@ -970,6 +970,19 @@ certificate-bearing reply is removed rather than reverified or retained in a
 second inventory. This transport-only break requires a coordinated fleet swap;
 durable formats and retained data are unchanged.
 
+Authenticated finality beyond the approved frontier immediately wakes the
+existing history-recovery worker at the owner reconciliation boundary. It no
+longer waits for two tick samples to reconfirm a cryptographically proven gap.
+Only failed acquisitions retain the existing tick-driven backoff; ordinary peer
+traffic cannot spend it. The same recovery enum enforces single flight, and the
+same history verifier, indexed delta/sink and tip corroboration own advancement.
+Finalized slots leave the support-only block-request walk instead of repeatedly
+revalidating proposal bytes with a missing sidecar. Before finality, normal local
+proposal checks remain mandatory. Complete validators still never repeat the
+coordinator's target-application fan-out; committed Complete recovery uses its
+origin QC through the existing certified-history path. No new state owner,
+timer, polling loop, durable format or voting authority is introduced.
+
 ### Independent writes and authenticated data
 
 One proof evaluator stages and seals once. Ordinary multiwrites stay atomic;

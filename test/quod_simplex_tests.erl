@@ -4164,32 +4164,21 @@ catchup_window_publishes_one_wake_only_certified_head_test() ->
         file:del_dir_r(Dir)
     end.
 
-%% Arm pacing (#s.sync_arm): the behind-hysteresis counter, the backoff cooldown countdown, and the
-%% arm_ready gate / backoff growth.
+%% Finality needs no hysteresis. Only failed acquisitions retain pacing.
 sync_arm_pacing_test() ->
-    EngIdle = quod_simplex:eng_with_certs(0, []),
-    EngBehind = quod_simplex:eng_with_certs(0, [{commit, 20}]),
     Arm = fun(S) -> quod_simplex:test_arm(quod_simplex:pace_tick(S)) end,
-
-    %% pace_tick grows the hysteresis while behind, resets it when not behind, and counts the cooldown down
-    ?assertMatch({1, _, _}, Arm(st(#{slot => 2, eng => EngBehind, sync_arm => {0, 0, 0}}))),
-    ?assertMatch({0, _, _}, Arm(st(#{slot => 2, eng => EngIdle,   sync_arm => {5, 0, 0}}))),
-    ?assertMatch({_, 2, _}, Arm(st(#{slot => 2, eng => EngIdle,   sync_arm => {0, 3, 8}}))),
-
-    %% unconfirmed arms immediately (unless cooling down); ready requires persistent gap evidence
-    ?assert(quod_simplex:arm_ready(st(#{sync => unconfirmed, sync_arm => {0, 0, 0}}))),
-    ?assertNot(quod_simplex:arm_ready(st(#{sync => unconfirmed, sync_arm => {0, 1, 4}}))),
-    ?assertNot(quod_simplex:arm_ready(st(#{sync => ready, sync_arm => {1, 0, 0}}))),
-    ?assert(quod_simplex:arm_ready(st(#{sync => ready, sync_arm => {2, 0, 0}}))),
-
-    %% backoff floors then doubles the interval, resets the hysteresis, and sets a positive jittered cooldown
-    {BH, BC, BI} = quod_simplex:backoff({7, 0, 0}),
-    ?assertEqual(0, BH),
+    ?assertEqual({0, 0}, Arm(st(#{sync_arm => {0, 0}}))),
+    ?assertEqual({2, 8}, Arm(st(#{sync_arm => {3, 8}}))),
+    ?assert(quod_simplex:arm_ready(st(#{sync => unconfirmed, sync_arm => {0, 0}}))),
+    ?assertNot(quod_simplex:arm_ready(st(#{sync => unconfirmed, sync_arm => {1, 4}}))),
+    ?assert(quod_simplex:arm_ready(st(#{sync => ready, sync_arm => {0, 0}}))),
+    ?assertNot(quod_simplex:arm_ready(st(#{sync => ready, sync_arm => {1, 4}}))),
+    {BC, BI} = quod_simplex:backoff({0, 0}),
     ?assert(BI >= 3),                              %% floored at ?SYNC_BACKOFF_MIN
     ?assert(BC >= 1),                              %% a positive jittered cooldown
-    {_, _, BI2} = quod_simplex:backoff({0, 0, BI}),
+    {_, BI2} = quod_simplex:backoff({0, BI}),
     ?assert(BI2 >= BI andalso BI2 =< 20),          %% grows, capped at ?SYNC_BACKOFF_MAX
-    ?assertEqual({0, 0, 0}, quod_simplex:reset_pace()).
+    ?assertEqual({0, 0}, quod_simplex:reset_pace()).
 
 %% minimal-state builder for the pure gate predicates (the #s record is private to quod_simplex)
 st(Overrides) ->

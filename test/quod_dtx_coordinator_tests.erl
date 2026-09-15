@@ -957,8 +957,6 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
       fun(F) ->
           Begin = maps:get('begin', F),
           {ok, RecordBlob} = quod_dtx:encode_record(Begin),
-          Request = {submit, <<201:128>>, RecordBlob},
-          RequestId = element(2, Request),
           Digest = quod_dtx:record_digest(Begin),
           {_Target, _Control, Ref} = evidence(maps:get(origin, F), Begin, 1, F),
           Sources = [{remote, digest(211), [{"127.0.0.1", 3211}]},
@@ -966,8 +964,8 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
                      {remote, digest(213), [{"127.0.0.1", 3213}]}],
           Parent = self(),
           RequestFun =
-              fun(Source) ->
-                  Parent ! {fanout_started, Source, self()},
+              fun(Source, Request) ->
+                  Parent ! {fanout_started, Source, self(), Request},
                   receive {fanout_result, Result} -> Result end
               end,
           Caller = spawn(
@@ -976,21 +974,24 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
                            {fanout_reply, self(),
                             quod_dtx_coordinator:
                               test_submit_endpoint_requests(
-                                Sources, Request, 2000, RequestFun)}
+                                Sources, RecordBlob, 2000, RequestFun)}
                      end),
           Started = receive_fanout_started(length(Sources), #{}),
           ?assertEqual(lists:sort(Sources), lists:sort(maps:keys(Started))),
+          Ids = [Id || {_Pid, {submit, Id, B}} <- maps:values(Started), B =:= RecordBlob],
+          ?assertEqual(length(Sources), length(lists:usort(Ids))),
           %% Actual owner processing while EVERY endpoint is held. A send
           %% trace or mailbox snapshot alone cannot satisfy this barrier.
           ?assertMatch(#{execution_ready := true,
                          wave := #{running := true, stage := phase_command}},
                        quod_dtx_coordinator:test_state(Caller)),
           Monitors = maps:map(
-                       fun(_Source, Pid) ->
+                       fun(_Source, {Pid, _Request}) ->
                            erlang:monitor(process, Pid)
                        end, Started),
           Winner = hd(Sources),
-          maps:get(Winner, Started) !
+          {WinnerPid, {submit, RequestId, RecordBlob}} = maps:get(Winner, Started),
+          WinnerPid !
               {fanout_result,
                {ok, {accepted, RequestId, Digest, Ref}, Winner}},
           receive
@@ -1000,12 +1001,12 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
               error(missing_fanout_terminal_reply)
           end,
           lists:foreach(
-            fun({Source, Pid}) when Source =:= Winner ->
+            fun({Source, {Pid, _}}) when Source =:= Winner ->
                     MRef = maps:get(Source, Monitors),
                     receive {'DOWN', MRef, process, Pid, normal} -> ok
                     after 1000 -> error({fanout_winner_not_reaped, Pid})
                     end;
-               ({Source, Pid}) ->
+               ({Source, {Pid, _}}) ->
                     MRef = maps:get(Source, Monitors),
                     receive {'DOWN', MRef, process, Pid, killed} -> ok
                     after 1000 -> error({fanout_worker_not_cleaned, Pid})
@@ -1016,15 +1017,14 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
 prepared_endpoint_waits_for_readiness_without_renewing_deadline_test() ->
     with_fixture(fun(F) ->
         {ok, Blob} = quod_dtx:encode_record(maps:get('begin', F)),
-        Request = {submit, <<218:128>>, Blob},
         Source = {remote, digest(218), [{"127.0.0.1", 3218}]},
         Parent = self(), Deadline = quod_time:mono_ms() + 3000,
         Target = {<<"quod:test">>, <<0:256>>},
         {Caller, Monitor} = spawn_monitor(fun() ->
             Result = quod_dtx_coordinator:test_submit_endpoint_requests(
-                [Source], Request,
+                [Source], Blob,
                 #{deadline => Deadline, owner => Parent, ready => false},
-                fun(Source0) ->
+                fun(Source0, {submit, _, Blob0}) when Blob0 =:= Blob ->
                     Parent ! {prepared_dispatched, self(), Source0},
                     receive finish_prepared -> {error, econnrefused} end
                 end),
@@ -1046,12 +1046,16 @@ prepared_endpoint_waits_for_readiness_without_renewing_deadline_test() ->
               wave := #{workers := 1,
                         meta := #{request_deadline := Deadline}}},
                          quod_dtx_coordinator:test_state(Caller)),
+            WorkerMonitor = erlang:monitor(process, Worker),
             Worker ! finish_prepared,
             receive {prepared_result, Caller, Result} ->
                 ?assertEqual(not_submitted, Result)
             after 1000 -> error(missing_prepared_result) end,
             receive {'DOWN', Monitor, process, Caller, normal} -> ok
             after 1000 -> error(prepared_owner_not_finished) end,
+            %% Coordinator completion does not order the worker's exit.
+            receive {'DOWN', WorkerMonitor, process, Worker, _} -> ok
+            after 1000 -> error(prepared_worker_not_finished) end,
             ?assertNot(is_process_alive(Worker))
         after
             exit(Caller, kill), demonitor(Monitor, [flush])
@@ -1091,13 +1095,12 @@ operation_await_deferred(Worker, Limit) ->
 dispatched_endpoint_worker_death_preserves_uncertainty_test() ->
     with_fixture(fun(F) ->
         {ok, Blob} = quod_dtx:encode_record(maps:get('begin', F)),
-        Request = {submit, <<219:128>>, Blob},
         Source = {remote, digest(219), [{"127.0.0.1", 3219}]},
         Parent = self(),
         {Caller, Monitor} = spawn_monitor(fun() ->
             Result = quod_dtx_coordinator:test_submit_endpoint_requests(
-                [Source], Request, 1000,
-                fun(Source0) ->
+                [Source], Blob, 1000,
+                fun(Source0, {submit, _, Blob0}) when Blob0 =:= Blob ->
                     Parent ! {dispatched, Source0, self()},
                     exit(endpoint_disappeared_after_dispatch)
                 end),
@@ -1118,8 +1121,8 @@ receive_fanout_started(0, Acc) ->
     Acc;
 receive_fanout_started(N, Acc) ->
     receive
-        {fanout_started, Source, Pid} ->
-            receive_fanout_started(N - 1, Acc#{Source => Pid})
+        {fanout_started, Source, Pid, Request} ->
+            receive_fanout_started(N - 1, Acc#{Source => {Pid, Request}})
     after 1000 ->
         error({missing_fanout_workers, N})
     end.

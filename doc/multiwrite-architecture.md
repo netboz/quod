@@ -941,6 +941,13 @@ Exact durable claim redelivery preserves its deterministic application identity
 and relies on proven target deduplication. Uncertainty never creates a new
 submission instance.
 
+An atomic submission plan retains one canonical signed record; each concurrent
+endpoint delivery owns its own transport request ID. The winning delivery's
+actual request binds its response, while target retention and inclusion remain
+keyed by the unchanged semantic record. Sibling cancellation releases transport
+resources, not durable work. Phase queries walk peers sequentially and release
+each correlation before advancing; they do not need a second fan-out mechanism.
+
 `quod_dtx_owner` is a pure registry/transition library, not an actor. Simplex
 executes its signing and publication decisions. The signing journal is the
 single pending-Begin authority; the `dtx_pending` shadow inventory is deleted.

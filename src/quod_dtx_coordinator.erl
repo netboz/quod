@@ -38,6 +38,7 @@ does not cancel or resubmit the uncertain operation.
          test_operation_continuation_admission/6,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
+         test_phase_command_sources/6,
          test_endpoint_request_candidates/5,
          test_submit_phase_evidence/4, test_phase_reply_evidence/8,
          test_observe_phase_evidence/6,
@@ -1098,17 +1099,18 @@ record_wave_result(Index, {prepared_submit, Plan}, S) when is_integer(Index) ->
 record_wave_result({Index, Endpoint}, Result,
                    S = #state{wave = Wave = #wave{results = Results}}) ->
     {dispatching, Plan, Uncertain} = maps:get(Index, Results),
-    {_Target, _GroupId, _Kind, Request, _Sidecar, Sources} = Plan,
+    {_Target, _GroupId, _Kind, Blob, _Sidecar, Sources} = Plan,
     Source = lists:nth(Endpoint, Sources),
-    Classification = case Result of
-        {worker_down, _} -> uncertain;
-        _ -> classify_submit_endpoint_result(Source, Request, Result)
+    {Request, EndpointResult, Classification} = case Result of
+        {worker_down, _} -> {none, Result, uncertain};
+        {Delivered = {submit, _, Blob}, Reply} ->
+            {Delivered, Reply, classify_submit_endpoint_result(Source, Delivered, Reply)}
     end,
-    count_submit_endpoint_result(S#state.owner_ns, Classification, Result),
+    count_submit_endpoint_result(S#state.owner_ns, Classification, EndpointResult),
     case Classification of
         terminal ->
             Wave1 = stop_wave_item(Index, Wave),
-            put_wave_result(Index, submit_plan_result(Plan, submit_reply(Result)),
+            put_wave_result(Index, submit_plan_result(Plan, Request, submit_reply(EndpointResult)),
                             S#state{wave = Wave1});
         _ ->
             Pending = has_wave_item(Index, Wave#wave.workers),
@@ -1117,7 +1119,7 @@ record_wave_result({Index, Endpoint}, Result,
                 true -> put_wave_result(Index, {dispatching, Plan, Uncertain1}, S);
                 false ->
                     Outcome = case Uncertain1 of true -> outcome_unknown; false -> not_submitted end,
-                    put_wave_result(Index, submit_plan_result(Plan, Outcome), S)
+                    put_wave_result(Index, submit_plan_result(Plan, none, Outcome), S)
             end
     end;
 record_wave_result(Index, Result, S) ->
@@ -1148,7 +1150,7 @@ stop_wave_item(Index, Wave = #wave{workers = Workers}) ->
     end, Workers),
     Wave#wave{workers = Remaining}.
 
-submit_plan_result({Target, GroupId, Kind, Request, _Sidecar, _Sources}, Outcome) ->
+submit_plan_result({Target, GroupId, Kind, _Blob, _Sidecar, _Sources}, Request, Outcome) ->
     {ok, Target, GroupId, Kind, Request, Outcome}.
 
 advance_wave(S0) ->
@@ -1222,13 +1224,13 @@ resume_target_continuation(Index, Admitted, Pending, Running,
     end.
 
 dispatch_wave_submission(Index,
-  Plan = {Target, _GroupId, _Kind, Request, Sidecar, Sources},
+  Plan = {Target, _GroupId, _Kind, Blob, Sidecar, Sources},
   S = #state{wave = Wave = #wave{context = Context, workers = Workers}}) ->
     case Sources =/= [] andalso context_timeout(Context) > 0 of
-        false -> put_wave_result(Index, submit_plan_result(Plan, not_submitted), S);
+        false -> put_wave_result(Index, submit_plan_result(Plan, none, not_submitted), S);
         true ->
             quod_metrics:count_dtx_submit_fanout(S#state.owner_ns, attempted, length(Sources)),
-            Jobs = [{{Index, N}, {endpoint, Source, Target, Request, Sidecar}}
+            Jobs = [{{Index, N}, {endpoint, Source, Target, Blob, Sidecar}}
                     || {N, Source} <- lists:zip(lists:seq(1, length(Sources)), Sources)],
             More = spawn_wave_items(Jobs, Wave),
             put_wave_result(Index, {dispatching, Plan, false},
@@ -1619,7 +1621,7 @@ timeout_wave(Wave = #wave{workers = Workers}, S0) ->
     #wave{results = Results} = S1#state.wave,
     S2 = maps:fold(fun
         (Index, {prepared_submit, Plan}, Acc) ->
-            put_wave_result(Index, submit_plan_result(Plan, not_submitted), Acc);
+            put_wave_result(Index, submit_plan_result(Plan, none, not_submitted), Acc);
         (_Index, _Result, Acc) -> Acc
     end, S1, Results),
     finish_wave(S2).
@@ -1630,15 +1632,16 @@ submit_command_io({submit, Target, Record}, Context) ->
         {ok, RecordBlob} ->
             Kind = quod_dtx:record_kind(Record),
             GroupId = quod_dtx:group_id(Record),
-            Request = {submit, request_id(), RecordBlob},
             Sidecar = record_validation_sidecar(
                 Record, maps:get(phase_entries, Context), maps:get(applied, Context)),
-            {prepared_submit, {Target, GroupId, Kind, Request, Sidecar, endpoint_sources(Target)}};
+            {prepared_submit, {Target, GroupId, Kind, RecordBlob, Sidecar, endpoint_sources(Target)}};
         {error, Reason} -> {error, Reason}
     end.
 
-phase_command_io({endpoint, Source, Target, Request, Sidecar}, Context) ->
-    ?ENDPOINT_IO(Source, Target, Request, Sidecar, Context);
+phase_command_io({endpoint, Source, Target, Blob, Sidecar}, Context) ->
+    %% Correlation belongs to one delivery, not the shared semantic record.
+    Request = {submit, request_id(), Blob},
+    {Request, ?ENDPOINT_IO(Source, Target, Request, Sidecar, Context)};
 phase_command_io({submit, _Target, _Record} = Command, Context) ->
     submit_command_io(Command, Context);
 phase_command_io({phase, Target, GroupId, Kind}, Context) ->
@@ -2498,40 +2501,54 @@ spawn_owned_monitor(Owner, Fun)
       end).
 
 -ifdef(TEST).
-test_submit_endpoint_requests(Sources, Request, TimeoutMs, RequestFun)
+test_submit_endpoint_requests(Sources, Blob, TimeoutMs, RequestFun)
   when is_integer(TimeoutMs) ->
-    test_submit_endpoint_requests(Sources, Request,
+    test_submit_endpoint_requests(Sources, Blob,
       #{deadline => quod_time:mono_ms() + TimeoutMs,
         owner => self(), ready => true}, RequestFun);
-test_submit_endpoint_requests(Sources, Request,
-                             #{deadline := Deadline, owner := Owner, ready := Ready},
+test_submit_endpoint_requests(Sources, Blob,
+                             Options = #{deadline := Deadline, owner := Owner, ready := Ready},
                              RequestFun) ->
     %% This fixture enters at prepared routes, as the old transport-only
     %% control did. Actual endpoint children and the ordinary owner receive
     %% loop perform fanout, uncertainty handling and loser cleanup.
     Ref = make_ref(), ReplyRef = make_ref(),
-    Target = {<<"quod:test">>, <<0:256>>},
-    Plan = {Target, <<0:256>>, 'begin', Request, [], Sources},
+    Target = maps:get(target, Options, {<<"quod:test">>, <<0:256>>}),
+    OwnerNs = maps:get(owner_ns, Options, <<"quod:test">>),
+    Plan = {Target, <<0:256>>, 'begin', Blob, [], Sources},
+    Context = #{owner_ns => OwnerNs, request_deadline => Deadline},
+    IoContext = case RequestFun of
+        production -> Context;
+        _ when is_function(RequestFun, 2) -> Context#{test_request_fun => RequestFun}
+    end,
     Wave = #wave{ref = Ref, stage = phase_command, items = [transport_fixture],
         results = #{1 => {prepared_submit, Plan}},
-        context = #{owner_ns => <<"quod:test">>,
-                    request_deadline => Deadline, test_request_fun => RequestFun},
+        context = IoContext,
         meta = #{test_result_to => {self(), ReplyRef}, request_deadline => Deadline},
         trace_context = quod_trace:context(),
         timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
                                   self(), {dtx_wave_timeout, Ref})},
-    S = #state{owner = Owner, owner_ns = <<"quod:test">>, origin = Target,
+    S = #state{owner = Owner, owner_ns = OwnerNs, origin = Target,
                execution_ready = Ready,
                wave = Wave},
     continue(advance_wave(S)),
-    [{ok, _, _, _, _, Outcome}] = test_wave_results(ReplyRef),
+    [{ok, _, _, _, Delivered, Outcome}] = test_wave_results(ReplyRef),
+    case Outcome of
+        {reply, Response, _} -> true = quod_dtx_endpoint:correlates(Delivered, Response);
+        _ -> ok
+    end,
     Outcome.
 
 test_endpoint_io(Source, Target, Request, Sidecar, Context) ->
     case maps:find(test_request_fun, Context) of
-        {ok, Fun} -> Fun(Source);
+        {ok, Fun} -> Fun(Source, Request);
         error -> endpoint_request(Source, Target, Request, Sidecar, Context)
     end.
+
+test_phase_command_sources(Sources, Target, Kind, Request, OwnerNs, Deadline) ->
+    phase_command_sources(Sources, Target, Kind, Request,
+      #{owner_ns => OwnerNs, request_deadline => Deadline},
+      uncertain, false, false, none).
 
 test_finish_wave(_Stage, _Items, Results,
                  #{test_result_to := {Test, Ref}}, _S) ->

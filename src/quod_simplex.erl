@@ -299,7 +299,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_seed_running_dtx_coordinator/3,
          test_activate_dtx_coordinator/2,
          test_notify_dtx_coordinator_progress/2,
-         test_dtx_endpoint_counts/1, test_owner_stats/1,
+         test_dtx_endpoint_counts/1, test_dtx_correlation_timers/1, test_owner_stats/1,
          test_operation_target_result/2,
          test_operation_wait_before_projection/2,
          test_endpoint_terminal_result/1,
@@ -1897,6 +1897,8 @@ test_dtx_endpoint_counts(
     #{correlations => map_size(Correlations),
       channels => map_size(Channels), workers => map_size(Workers),
       submissions => quod_dtx_owner:count(Registry)}.
+test_dtx_correlation_timers(#s{dtx_correlations = Correlations}) ->
+    [Timer || #dtx_correlation{timer = Timer} <- maps:values(Correlations)].
 test_owner_stats(S) ->
     {Current, CurrentBytes} = simplex_owner_current(S),
     #{owner_current => Current,

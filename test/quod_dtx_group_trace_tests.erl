@@ -262,28 +262,28 @@ group_submit_fanout_preserves_context_and_result_test() ->
     quod_trace_tests:with_tracer(fun() ->
         {Ctx, Span} = quod_trace:start_span(
           otel_ctx:new(), <<"group.fanout">>, internal, #{}),
-        Request = {phase, <<19:128>>, <<20:256>>, prepare},
+        Blob = quod_ct:dtx_prepare_blob(),
         Parent = self(),
-        RequestFun = fun(Source) ->
-            Parent ! {fanout_context, Source, quod_trace:context()},
-            {ok, {phase, <<19:128>>, 0, not_found},
+        RequestFun = fun(Source, Request = {submit, Id, _}) ->
+            Parent ! {fanout_context, Source, Request, quod_trace:context()},
+            {ok, {error, Id, invalid_request},
              {reply_source, local, []}}
         end,
         {Caller, Monitor} = spawn_monitor(fun() ->
             Result0 = quod_trace:with_context(Ctx, fun() ->
                 quod_dtx_coordinator:test_submit_endpoint_requests(
-                  [local], Request, 1000, RequestFun)
+                  [local], Blob, 1000, RequestFun)
             end),
             Parent ! {fanout_result, self(), Result0}
         end),
-        receive {fanout_context, local, ChildCtx} ->
+        RequestId = receive {fanout_context, local, Request = {submit, Id, Blob}, ChildCtx} ->
             ?assertEqual(otel_span:trace_id(Span),
               otel_span:trace_id(otel_tracer:current_span_ctx(ChildCtx))),
-            assert_endpoint_carrier(<<"quod:trace-fanout">>, Request, ChildCtx)
+            assert_endpoint_carrier(<<"quod:trace-fanout">>, Request, ChildCtx), Id
         after 1000 -> error(no_fanout_context)
         end,
         receive {fanout_result, Caller, Result} ->
-            ?assertMatch({reply, {phase, <<19:128>>, 0, not_found}, _}, Result)
+            ?assertMatch({reply, {error, RequestId, invalid_request}, _}, Result)
         after 1000 -> error(no_fanout_result) end,
         receive {'DOWN', Monitor, process, Caller, normal} -> ok
         after 1000 -> error(fanout_owner_survived) end,

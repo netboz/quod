@@ -111,7 +111,7 @@ replay. Neither transition changes the global proof generation.
          content_readiness/2,
          initial_group_history/0, preview_batch/3,
          reduce/4, reduce_batch/3,
-         acknowledge_finalize/4]).
+         acknowledge_finalize/4, install_projection/3]).
 -export_type([plan/0, principal/0, transcript_entry/0,
               manifest/0, attestation/0, certified_ref/0,
               control_record/0, control/0, projection/0,
@@ -3574,6 +3574,26 @@ acknowledge_finalize(GroupId, Slot, Generation,
     end;
 acknowledge_finalize(_, _, _, _) ->
     {error, stale_finalize_ack}.
+
+-doc """
+Install verified history without replacing the live owner's apply acknowledgements.
+`Height` is the owner's previous committed head, not the incoming head. Fences
+at or below it belong to that owner: retain their exact current state (including
+absence after acknowledgement). Later fences come from the verified suffix.
+Only incoming markers survive, so a certified Complete never resurrects a row.
+The caller must already have checked that the suffix extends this same base.
+""".
+-spec install_projection(projection(), projection(), non_neg_integer()) -> projection().
+install_projection(#{target := Target, apply_fences := Incoming} = Projection,
+                   #{target := Target, apply_fences := Current}, Height) ->
+    Projection#{apply_fences := maps:filtermap(
+        fun(Group, #{slot := Slot, generation := Generation}) when Slot =< Height ->
+                case maps:find(Group, Current) of
+                    {ok, #{slot := Slot, generation := Generation} = Fence} -> {true, Fence};
+                    error -> false
+                end;
+           (_, Fence) -> {true, Fence}
+        end, Incoming)}.
 
 release_participant(#{origin := none}) -> #{origin => none, participant => none};
 release_participant(Active) -> Active#{participant := none}.

@@ -147,15 +147,162 @@ with_target(Fun) ->
     with_target(prepare, Fun).
 
 with_target(Kind, Fun) ->
+    isolated(fun() -> target(Kind, Fun) end).
+
+isolated(Fun) ->
     Parent = self(), Ref = make_ref(),
     {Pid, Mon} = spawn_monitor(fun() ->
-        Result = try target(Kind, Fun), ok catch C:R:St -> {raise, C, R, St} end,
+        Result = try Fun(), ok catch C:R:St -> {raise, C, R, St} end,
         Parent ! {Ref, Result}
     end),
     receive {Ref, Result} ->
         receive {'DOWN', Mon, process, Pid, normal} -> ok end,
         case Result of ok -> ok; {raise, C, R, St} -> erlang:raise(C, R, St) end
     end.
+
+recovery_preserves_owner_apply_progress_test_() ->
+    [{atom_to_list(Role) ++ "_" ++ atom_to_list(Ack), fun() -> isolated(fun() ->
+      with_recovery_target(Role, fun(F, Index, S3, View3) ->
+        Group = maps:get(group_id, F), Target = {maps:get(ns, F), maps:get(anchor, F)},
+        ?assertMatch(#{Group := #{blocking := true}}, apply_fences(S3)),
+        BeforeCapture = case Ack of before_capture -> acknowledge(F, S3); _ -> S3 end,
+        View = case Ack of
+            before_capture ->
+                {ok, Captured} = quod_simplex:test_local_history_view(Target, committed, BeforeCapture),
+                Captured;
+            _ -> View3
+        end,
+        #{projection := Capture} = View,
+        Noop = skipped_entry(4, F),
+        {ok, [Noop], P4, Delta} = quod_catchup:verify_forward(element(1, Target), element(2, Target),
+            Capture, 4, [Noop], maps:get(history_index, Capture)),
+        %% Real callback order: capture/verify, then exact local acknowledgement,
+        %% then the real sink. No fabricated cross-recipient message ordering.
+        BeforeSink = case Ack of during_verify -> acknowledge(F, BeforeCapture); _ -> BeforeCapture end,
+        {S4, {ok, _}} = recovery_sink([Noop], P4, Delta, BeforeSink),
+        Installed = case Ack of after_install -> acknowledge(F, S4); _ -> S4 end,
+        case {Role, Ack} of
+            {_, none} -> ?assertMatch(#{Group := #{blocking := true}}, apply_fences(Installed));
+            {source, _} -> ?assertMatch(#{Group := #{blocking := false}}, apply_fences(Installed));
+            {participant, _} -> ?assertEqual(#{}, apply_fences(Installed))
+        end,
+        ?assertEqual(4, element(1, quod_simplex:test_committed_store(Installed))),
+        case Role of
+            source -> assert_complete_verdict(F, Index, Installed, Ack);
+            participant -> ok
+        end
+      end)
+    end) end} || Role <- [source, participant], Ack <- [before_capture, during_verify, after_install, none]].
+
+recovery_new_finalize_is_not_acknowledged_by_an_earlier_notification_test() ->
+    isolated(fun() ->
+        with_recovery_target(participant, 2, fun(F, _Index, S2, #{projection := Capture}) ->
+            %% An ack for a not-yet-installed application is inert. Installing
+            %% that new application must still close its proof fence.
+            S2 = acknowledge(F, S2),
+            [_, _, Finalize] = maps:get(chain, F),
+            {ok, [Finalize], P3, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
+                Capture, 3, [Finalize], maps:get(history_index, Capture)),
+            {S3, {ok, _}} = recovery_sink([Finalize], P3, Delta, S2),
+            Group = maps:get(group_id, F),
+            ?assertMatch(#{Group := #{slot := 3, generation := 2, blocking := true}}, apply_fences(S3))
+        end)
+    end).
+
+recovery_complete_does_not_restore_an_acknowledged_source_marker_test() ->
+    isolated(fun() -> with_recovery_target(source, fun(F, _Index, S3, #{projection := Capture}) ->
+        SApplied = acknowledge(F, S3),
+        {Complete, _, _} = phase_entry({maps:get(ns, F), maps:get(anchor, F)},
+            quod_dtx:control_body(maps:get(complete_control, F)), 4, F),
+        {ok, [Complete], P4, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
+            Capture, 4, [Complete], maps:get(history_index, Capture)),
+        {S4, {ok, _}} = recovery_sink([Complete], P4, Delta, SApplied),
+        ?assertEqual(#{}, apply_fences(S4)),
+        ?assertEqual(#{}, maps:get(groups, maps:get(dtx, quod_simplex:test_state_projection(S4))))
+    end) end).
+
+assert_complete_verdict(F, Index, S, Ack) ->
+    Group = maps:get(group_id, F),
+    {ok, History} = quod_dtx_phase_index:history(Index, Group),
+    {ok, Block} = quod_ledger:block_from_entry(maps:get(complete_entry, F)),
+    Hash = quod_simplex:block_hash(Block),
+    Parent = maps:get(history_head, quod_simplex:test_state_projection(S)),
+    %% Exercise the actual final local check, with its two upstream valid
+    %% verdicts as inputs. This is not a full foreign-admission fixture.
+    Checked = quod_simplex:apply_dtx_verdict({valid, #{Group => History}},
+        Block#block.payload, Block, 5, Hash, Parent, S),
+    case Ack of
+        none -> ?assertEqual({Hash, {invalid_transition, apply}}, quod_simplex:test_proposal_rejection(5, Checked));
+        _ -> ?assertEqual({none, none}, quod_simplex:test_proposal_rejection(5, Checked))
+    end.
+
+with_recovery_target(Role, Fun) -> with_recovery_target(Role, 3, Fun).
+with_recovery_target(Role, Height, Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Base = quod_foreign_log_tests:prepared_then_committed_fixture(quod_foreign_log_tests:unique_ns()),
+    F = case Role of source -> source_commit_fixture(Base); participant -> Base end,
+    Ns = maps:get(ns, F), Anchor = maps:get(anchor, F),
+    Root = quod_foreign_log_tests:temp_dir("dtx-projection-install"),
+    {ok, Store} = quod_ledger_store:open(Ns, Root),
+    {ok, Index} = quod_dtx_phase_index:open(Root, Ns),
+    try quod_ct:with_network_identity(maps:get(network, F, <<202:256>>), fun() ->
+        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+            consensus_domain => quod_simplex:consensus_domain(Ns, Anchor),
+            store => Store, phase_index => Index, sync => {pulling, self()},
+            eng => quod_simplex:eng_with_certs(0, [])}),
+        Prefix = lists:sublist(maps:get(chain, F), Height),
+        {ok, Prefix, P, Delta} = quod_catchup:verify_forward(Ns, Anchor,
+            quod_simplex:history_projection({Ns, Anchor}), 1, Prefix, Index),
+        {S, {ok, View}} = recovery_sink(Prefix, P, Delta, S0),
+        Fun(F, Index, S, View)
+    end)
+    after
+        quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store),
+        ok = file:del_dir_r(Root)
+    end.
+
+source_commit_fixture(Base) ->
+    Target = {maps:get(ns, Base), maps:get(anchor, Base)},
+    Signed = quod_ct:signed_dtx_begin_fixture(#{target => Target,
+        node_identity => maps:get(signer, Base), admission => maps:get(admission, Base)}),
+    Begin = maps:get('begin', Signed), Group = quod_dtx:group_id(Begin),
+    {BeginEntry, _, BeginRef} = phase_entry(Target, Begin, 2, Base),
+    {ok, Target, Group, Plans} = quod_dtx:begin_recovery_rows(Begin),
+    [Remote] = [T || {T, _} <- Plans, T =/= Target],
+    {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Remote),
+    {_, _, PrepareRef} = phase_entry(Remote, Prepare, 2, Base),
+    {ok, Decision} = quod_dtx:new_decision(Group, BeginRef, commit,
+        lists:sort([{Target, BeginRef}, {Remote, PrepareRef}])),
+    {DecisionEntry, _, DecisionRef} = phase_entry(Target, Decision, 3, Base),
+    {ok, Finalize} = quod_dtx:new_finalize(Group, DecisionRef, commit, PrepareRef, 2),
+    {_, _, FinalizeRef} = phase_entry(Remote, Finalize, 3, Base),
+    {ok, Complete} = quod_dtx:new_complete(Group, DecisionRef,
+        lists:sort([{Target, DecisionRef, 2}, {Remote, FinalizeRef, 2}])),
+    {CompleteEntry, CompleteControl, _} = phase_entry(Target, Complete, 5, Base),
+    Base#{chain := [hd(maps:get(chain, Base)), BeginEntry, DecisionEntry],
+        group_id := Group, complete_control => CompleteControl, complete_entry => CompleteEntry,
+        network => maps:get(network, Signed)}.
+
+recovery_sink(Entries, Projection, Delta, S) ->
+    From = {self(), make_ref()},
+    {keep_state, Next, Actions} = quod_simplex:running({call, From},
+        {sink_catchup, {recovery, self()}, Entries, Projection, Delta}, S),
+    [Reply] = [R || {reply, Who, R} <- Actions, Who =:= From], {Next, Reply}.
+
+acknowledge(F, S) ->
+    case quod_simplex:running(cast, {finalize_applied, maps:get(group_id, F), 3, 2}, S) of
+        {keep_state, Next} -> Next;
+        {keep_state, Next, _} -> Next
+    end.
+
+apply_fences(S) -> maps:get(apply_fences, maps:get(dtx, quod_simplex:test_state_projection(S))).
+
+skipped_entry(Slot, F) ->
+    #share{sig = Sig} = quod_simplex:make_share(
+        quod_simplex:consensus_domain(maps:get(ns, F), maps:get(anchor, F)),
+        complaint, Slot, none, maps:get(signer, F)),
+    quod_ledger:noop_entry(Slot, #cert{kind = complaint, slot = Slot, block_hash = none,
+        sigs = [{maps:get(pub, F), Sig}]}).
 
 target(Kind, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),

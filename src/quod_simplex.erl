@@ -188,6 +188,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_round/2, test_dtx_round/2, test_dtx_round_hints/2,
          test_proposal_rejection/2, test_collected_payload/2,
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
+         apply_dtx_verdict/7,
          test_dtx_source_identity/2,
          test_local_history_view/3, test_local_history_view/4,
          test_consensus_barrier/1, test_dtx_consensus_barrier/1,
@@ -15395,6 +15396,13 @@ install_projection(
     history_head := HistoryHead},
   S = #s{self = Self, author_admissions = OldAdmissions,
          next_author_seq = Next}) ->
+    %% A worker captures ledger state, not ownership of local apply progress.
+    %% The previous history token remains pinned even when `slot` was already
+    %% advanced by the appender. Initial replay has no live acknowledgements.
+    InstalledDtx = case S#s.history_head of
+        none -> Dtx;
+        {Height, _} -> quod_dtx:install_projection(Dtx, S#s.dtx_projection, Height)
+    end,
     OldAdmission = maps:get(Self, OldAdmissions, undefined),
     NewAdmission = maps:get(Self, Admissions, undefined),
     Floor = maps:get(Self, Sequences, 0) + 1,
@@ -15408,7 +15416,7 @@ install_projection(
              committee_start = current_committee_start(
                                  CommitteeId, CommitteeViews),
              author_admissions = Admissions, author_seqs = Sequences,
-             last_ts = Timestamp, dtx_projection = Dtx,
+             last_ts = Timestamp, dtx_projection = InstalledDtx,
              dtx_lanes = DtxLanes,
              history_head = HistoryHead,
              next_author_seq = Next1},

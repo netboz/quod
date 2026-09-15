@@ -1221,3 +1221,20 @@ An admitted ordinary block lives in the engine, not a duplicate candidate row.
 Progress walks slot numbers and re-reads each current row, so a nested commit
 cannot resurrect a stale snapshot. Recovery for a gap of at least two slots
 and all signing/finality rules remain unchanged.
+
+### Recovery projection and local application progress
+
+The verified suffix advances ledger-derived state; it does not own the live
+Simplex process's apply acknowledgements. At the shared projection-install
+boundary, markers at or below the previous committed head retain their exact
+owner state, including removal after acknowledgement. Only markers introduced
+by the suffix acquire new apply waits. Certified Complete removes its marker;
+installation never restores one absent from the verified result. Startup has
+no live acknowledgement state and reconstructs normally. This uses the existing
+head token and group markers, not another progress counter, queue or owner.
+
+The contiguous-base check and post-append fail-loud index installation remain
+unchanged. Both proof access and prospective Complete retain their application
+gate; a worker's earlier snapshot cannot reopen an acknowledged wait or certify
+a new application as already consumed. Historical rejection without a recorded
+reason is not attributed to this mechanism solely because its symptom matches.

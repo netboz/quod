@@ -1191,7 +1191,10 @@ admitted DTX candidate: receipt alone grants no engine insertion, validation
 verdict, support vote or recovery exemption. There is no second queue or owner.
 
 The ordinary receipt and durable-parent/capability transitions advance the same
-row. DTX input waits for its actual durable parent; approval is insufficient.
+row. DTX and committee-changing input wait for their actual durable parent;
+approval is insufficient. Temporary parent eligibility never latches a body as
+invalid. Membership singleton shape remains a material check; the proposer
+retains its durable-parent gate before collecting a membership batch.
 Full admission runs once when eligible, followed by the existing exact-parent
 verifier. Exact duplicates preserve that request's token, owner and deadline.
 The wire parent is a slot, not a hash: an early offer cannot carry authority from

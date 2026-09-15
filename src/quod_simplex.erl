@@ -186,6 +186,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dispatch/3, reconcile_block_requests/1,
          test_progress/1, test_progress_rearms/1, test_support_grace/1,
          test_round/2, test_dtx_round/2, test_dtx_round_hints/2,
+         test_proposal_rejection/2, test_collected_payload/2,
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
          test_dtx_source_identity/2,
          test_local_history_view/3, test_local_history_view/4,
@@ -1598,6 +1599,10 @@ test_dtx_round(Slot, S) ->
      eng_retained_block(Slot, S#s.eng)}.
 test_dtx_round_hints(Slot, S) ->
     (round_state(Slot, S))#round.validation_sidecar.
+test_proposal_rejection(Slot, S) ->
+    R = round_state(Slot, S),
+    {R#round.invalid, R#round.invalid_reason}.
+test_collected_payload(Payload, S) -> acceptable_collected_payload(Payload, S).
 test_latch_dtx_validation(Slot, BH, ParentToken, EnginePid, Block, S) ->
     Monitor = erlang:monitor(process, EnginePid),
     R = round_state(Slot, S),
@@ -12851,6 +12856,7 @@ payload_admission_open(Slot, Payload, S) ->
     case quod_ledger:classify(Payload) of
         {content, Transactions} ->
             not consensus_barrier(S)
+                andalso membership_admission_open(Transactions, S)
                 andalso lists:all(
                           fun(Transaction) ->
                                   quod_dtx:content_readiness(
@@ -12955,7 +12961,8 @@ dtx_control_acceptable(Control, Admissions, Lanes, S) ->
 %% over opaque bytes before decode. Every other validator independently verifies
 %% the complete proposed batch in acceptable_payload/2 before voting.
 acceptable_collected_payload([#transaction{} | _] = Payload, S) ->
-    acceptable_payload_content(Payload, S, prevalidated);
+    membership_admission_open(Payload, S)
+        andalso acceptable_payload_content(Payload, S, prevalidated);
 acceptable_collected_payload(_Payload, _S) ->
     false.
 
@@ -12968,7 +12975,7 @@ acceptable_payload_content(Payload, S, Validation) ->
                   end, Payload)
         andalso unique_tx_ids(Payload)
         andalso sequence_payload_ok(Payload, S)
-        andalso membership_payload_ok(Payload, S).
+        andalso membership_batch_shape_ok(Payload).
 
 collected_change_acceptable(verify_id, Change, S) ->
     ingress_change_acceptable(Change, S);
@@ -13088,11 +13095,12 @@ advance_content_author_seqs(Transactions, Seqs) ->
               Acc
       end, Seqs, Transactions).
 
-membership_payload_ok(Payload, #s{approved = Approved, slot = Committed}) ->
+%% Durable-parent readiness is eligibility, not permanent material invalidity.
+%% Invalid batch shapes still reach the shared material gate, never wait here.
+membership_admission_open(Payload, #s{approved = Approved, slot = Committed}) ->
     case membership_payload_shape(Payload) of
-        none -> true;
         singleton -> Approved =:= Committed;
-        invalid -> false
+        _ -> true
     end.
 
 membership_batch_shape_ok(Payload) ->

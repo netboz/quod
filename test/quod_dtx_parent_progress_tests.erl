@@ -10,6 +10,164 @@ bounded recovery-preference tests use the existing tick. No sleep releases work.
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+membership_child_waits_for_durable_parent_test_() ->
+    [{atom_to_list(Delivery), isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Parent, _, ValidParent} = receipt_content_parent(F, S0, Keys),
+        Approved = receipt_certificates(Parent, [support], F, Keys, ValidParent),
+        Removed = leader(2, Keys),
+        {Membership, _} = receipt_membership_parent(F, S0, Removed),
+        #block{payload = {batch, [Transaction]}} = Membership,
+        Child = signed_receipt_child(F, Parent, Transaction, 2),
+        {batch, ChildPayload} = Child#block.payload,
+        ?assertNot(quod_simplex:test_collected_payload(ChildPayload, Approved)),
+        Hash = quod_simplex:block_hash(Child),
+        Before = case Delivery of
+            early ->
+                Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Approved),
+                assert_receipt_offer(3, Hash, Child, Offered),
+                ?assertEqual({none, none}, quod_simplex:test_proposal_rejection(3, Offered)),
+                assert_no_content_request(3),
+                Offered;
+            _ -> Approved
+        end,
+        Committed = receipt_certificates(Parent, [commit], F, Keys, Before),
+        ?assertEqual(2, element(1, quod_simplex:test_committed_store(Committed))),
+        Settled = quod_simplex:settle_readiness(Before, Committed),
+        ?assert(quod_simplex:test_collected_payload(ChildPayload, Settled)),
+        Admitted = case Delivery of
+            %% No resend: the ordinary parent progress edge releases this offer.
+            early -> Settled;
+            _ -> quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Settled)
+        end,
+        take_content_request(3, Hash),
+        Repeated = case Delivery of
+            repeated_late -> receipt_repeat(Child, Keys, Settled, Admitted);
+            _ -> Admitted
+        end,
+        assert_no_content_request(3),
+        Judged = callback_state(quod_simplex:running(
+                    info, {content_verdict, {3, Hash}, valid}, Repeated)),
+        Done = receipt_certificates(Child, [support, commit], F, Keys, Judged),
+        {3, Store} = quod_simplex:test_committed_store(Done),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 3),
+        ?assertEqual({ok, Child}, quod_ledger:block_from_entry(Entry)),
+        ?assertEqual(lists:sort(maps:keys(maps:remove(Removed, Keys))),
+                     quod_simplex:history_committee(quod_simplex:test_state_projection(Done)))
+    end) end)} || Delivery <- [early, late, repeated_late]].
+
+content_admission_parent_durability_siblings_test_() ->
+    [{atom_to_list(Mode) ++ "_" ++ atom_to_list(Delivery), isolated(fun() ->
+      with_fixture(fun(F, S0, Keys) ->
+        {Parent, _, ValidParent} = receipt_content_parent(F, S0, Keys),
+        Approved = receipt_certificates(Parent, [support], F, Keys, ValidParent),
+        Base = maps:get(transaction, receipt_fixture(F, 3)),
+        Sequence = case Mode of replay -> 1; _ -> 2 end,
+        ValidChild = signed_receipt_child(F, Parent, Base, Sequence),
+        Child = case Mode of
+            bad_id ->
+                #block{payload = {batch, [Signed]}} = ValidChild,
+                BadChild = signed_receipt_child(F, Parent, Signed#transaction{tx_id = <<91:256>>}, Sequence),
+                {batch, [BadSigned]} = BadChild#block.payload,
+                ?assertEqual(<<91:256>>, BadSigned#transaction.tx_id),
+                BadChild;
+            _ -> ValidChild
+        end,
+        Start = case Delivery of
+            early -> Approved;
+            late -> receipt_certificates(Parent, [commit], F, Keys, Approved)
+        end,
+        Hash = quod_simplex:block_hash(Child),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Start),
+        case Mode of
+            valid ->
+                take_content_request(3, Hash),
+                Again = receipt_repeat(Child, Keys, Start, Offered),
+                assert_no_content_request(3),
+                ?assertEqual({none, false, false}, quod_simplex:test_round(3, Again)),
+                ?assertEqual({none, none}, quod_simplex:test_proposal_rejection(3, Again)),
+                DurableParent = case Delivery of
+                    early -> receipt_certificates(Parent, [commit], F, Keys, Again);
+                    late -> Again
+                end,
+                Judged = callback_state(quod_simplex:running(
+                    info, {content_verdict, {3, Hash}, valid}, DurableParent)),
+                Done = receipt_certificates(Child, [support, commit], F, Keys, Judged),
+                {3, Store} = quod_simplex:test_committed_store(Done),
+                {ok, Entry} = quod_ledger_store:read_at(Store, 3),
+                ?assertEqual({ok, Child}, quod_ledger:block_from_entry(Entry)),
+                ?assertEqual(lists:sort(maps:keys(Keys)),
+                             quod_simplex:history_committee(quod_simplex:test_state_projection(Done)));
+            _ ->
+                ?assertEqual({Hash, proposal_admission},
+                             quod_simplex:test_proposal_rejection(3, Offered)),
+                Later = case Delivery of
+                    early -> receipt_certificates(Parent, [commit], F, Keys, Offered);
+                    late -> Offered
+                end,
+                Again = receipt_repeat(Child, Keys, Start, Later),
+                ?assertEqual(quod_simplex:test_dtx_round(3, Offered),
+                             quod_simplex:test_dtx_round(3, Again)),
+                ?assertEqual({Hash, proposal_admission},
+                             quod_simplex:test_proposal_rejection(3, Again)),
+                assert_no_content_request(3),
+                ?assertEqual(2, element(1, quod_simplex:test_committed_store(Again)))
+        end
+      end)
+    end)} || Mode <- [valid, replay, bad_id], Delivery <- [early, late]].
+
+mixed_membership_child_is_rejected_not_parked_test_() ->
+    [{atom_to_list(Delivery), isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        {Parent, _, ValidParent} = receipt_content_parent(F, S0, Keys),
+        Approved = receipt_certificates(Parent, [support], F, Keys, ValidParent),
+        {Membership, _} = receipt_membership_parent(F, S0, leader(2, Keys)),
+        {batch, [MembershipTx]} = Membership#block.payload,
+        M = signed_receipt_child(F, Parent, MembershipTx, 2),
+        C = signed_receipt_child(F, Parent, maps:get(transaction, receipt_fixture(F, 3)), 3),
+        {batch, [MT]} = M#block.payload,
+        {batch, [CT]} = C#block.payload,
+        ?assertNotEqual(MT#transaction.tx_id, CT#transaction.tx_id),
+        {ok, Child} = quod_ledger:new_block(3, 2, {batch, [MT, CT]}, Parent#block.timestamp),
+        Hash = quod_simplex:block_hash(Child),
+        Start = case Delivery of
+            early -> Approved;
+            late -> receipt_certificates(Parent, [commit], F, Keys, Approved)
+        end,
+        ?assertNot(quod_simplex:test_collected_payload([MT, CT], Start)),
+        Offered = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Start),
+        ?assertEqual({Hash, proposal_admission}, quod_simplex:test_proposal_rejection(3, Offered)),
+        Later = case Delivery of
+            early -> receipt_certificates(Parent, [commit], F, Keys, Offered);
+            late -> Offered
+        end,
+        Again = receipt_repeat(Child, Keys, Start, Later),
+        ?assertEqual({Hash, proposal_admission}, quod_simplex:test_proposal_rejection(3, Again)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(3, Again)),
+        assert_no_content_request(3),
+        {2, Store} = quod_simplex:test_committed_store(Again),
+        ?assertMatch({ok, _}, quod_ledger_store:read_at(Store, 2)),
+        ?assertEqual(lists:sort(maps:keys(Keys)),
+                     quod_simplex:history_committee(quod_simplex:test_state_projection(Again)))
+    end) end)} || Delivery <- [early, late]].
+
+signed_receipt_child(F, Parent, Transaction, Sequence) ->
+    {Ns, Anchor} = maps:get(origin, F),
+    {ok, Signed} = quod_transaction:sign(
+        {Ns, Anchor, maps:get(admission, F)},
+        Transaction#transaction{author_seq = Sequence, sig = none, signed_bytes = none},
+        maps:get(node_identity, F)),
+    {ok, Child} = quod_ledger:new_block(3, 2, {batch, [Signed]}, Parent#block.timestamp),
+    Child.
+
+take_content_request(Slot, Hash) ->
+    Owner = self(),
+    receive {'$gen_cast', {content_verdict_req, [_], _, Slot, Owner, {Slot, Hash}, _}} -> ok
+    after 0 -> error({content_request_missing, Slot}) end.
+
+assert_no_content_request(Slot) ->
+    receive {'$gen_cast', {content_verdict_req, _, _, Slot, _, _, _}} ->
+        error({unexpected_content_request, Slot})
+    after 0 -> ok end.
+
 %% Receipt is not admission. These controls enter through the same inbound
 %% dispatcher as a peer; the tagged offer must never inherit the authority of
 %% the existing admitted {Hash, Block} candidate. The original owner/deadline

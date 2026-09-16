@@ -2,6 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 -include("quod_dtx_owner.hrl").
+-include("quod_ingress_limits.hrl").
 
 %% These are pure installed-transition tests with real signed/sealed plans.
 %% Reference QCs are deliberately shape fixtures, not consensus admission.
@@ -902,6 +903,82 @@ vote_selection_uses_the_existing_parent_queue_and_timeout_test() ->
     after gen_server:stop(Engine)
     end.
 
+timed_out_selection_wakes_from_real_parent_apply_test_() ->
+    %% Receive tracing belongs to this fixture alone, including notifications
+    %% still in flight when tracing is disabled. Never leak them to another test.
+    {spawn, fun timed_out_selection_wakes_from_real_parent_apply/0}.
+
+timed_out_selection_wakes_from_real_parent_apply() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"atomic:wake:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    O = {Ns, <<0:256>>}, T = {<<"atomic:remote">>, <<1:256>>},
+    F = bind(quod_ct:signed_plan_fixture(#{target => O, atomic => true}, [O, T])),
+    #{control := C} = vote(F, O, own(F, O), prepared), M = quod_atomic:control_material(C),
+    {ok, Ref} = quod_atomic:source_group_ref(M),
+    Node = maps:get(node_identity, F), Member = maps:get(pubkey, Node),
+    Dir = filename:join("/tmp", "quod-admission-wake-" ++
+        binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    {ok, Engine} = quod_prolog:start_link(Ns, #{outcome_backend => memory}),
+    {ok, J} = quod_signing_journal:initialize(Ns, <<99:256>>, Dir),
+    true = quod_reg:subscribe({quod_prolog, Ns}),
+    try quod_ct:with_network_identity(maps:get(network, F), fun() ->
+        %% The fixture owner has dispatched parent 1; the real Prolog engine
+        %% has not consumed it. These are production callbacks, not consensus.
+        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
+            self => Member, id => Node, validators => [Member],
+            author_admissions => #{Member => maps:get(admission, F)},
+            signing_journal => J, slot => 1, history_head => {1, <<7:256>>},
+            sync => ready, prolog_ready => true}),
+        Token = make_ref(),
+        {ok, Reserved} = quod_simplex:test_enqueue_dtx_intent(
+            {self(), make_ref()}, Engine, Token, M, Ref, quod_time:mono_ms() + 1000, S0),
+        Active = quod_simplex:test_activate_dtx_intent(Engine, Token, Reserved),
+        1 = erlang:trace(Engine, true, ['receive']),
+        {Checking, []} = quod_simplex:test_progress_dtx_admission(Active),
+        WireTag = receive
+            {trace, Engine, 'receive', {'$gen_cast',
+              {dtx_verdict_req, {vote, M}, _, 2, _, Tag0, _}}} -> Tag0
+        after 1000 -> error(parent_selection_request_missing) end,
+        1 = erlang:trace(Engine, false, ['receive']),
+        ?assertEqual(0, quod_prolog:applied(Ns)),
+        Engine ! {validation_timeout, WireTag},
+        {dtx_admission, Tag, Key, Ts} = WireTag,
+        receive {dtx_verdict, WireTag, Engine, 0, abstain} -> ok
+        after 1000 -> error(parent_timeout_missing) end,
+        Parked = quod_simplex:on_admission_verdict(Tag, Key, Ts, Engine, 0, abstain, Checking),
+        lists:foreach(fun(_) ->
+            ?assertEqual({Parked, []}, quod_simplex:test_progress_dtx_admission(Parked))
+        end, lists:seq(1, 10)),
+        ?assertEqual(Parked, quod_simplex:on_admission_parent_applied(self(), 1, Parked)),
+        Facts = [{can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Namespace'}},
+                 {peer_admitted, Member, "validator", 14567, Member} | quod_ct:signed_agent_facts(F)],
+        Change = quod_ct:change(Ns, lists:append([quod_ct:diff_for(Fact) || Fact <- Facts]), #{}),
+        ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 1, quod_ct:batch(Change)), live),
+        receive {projection_advanced, Engine, 1} -> ok
+        after 1000 -> error(parent_application_signal_missing) end,
+        Woken = quod_simplex:on_admission_parent_applied(Engine, 1, Parked),
+        ?assertEqual(Woken, quod_simplex:on_admission_parent_applied(Engine, 1, Woken)),
+        {Rechecking, []} = quod_simplex:test_progress_dtx_admission(Woken),
+        ?assertEqual(Rechecking, quod_simplex:on_admission_parent_applied(Engine, 1, Rechecking)),
+        receive
+            {dtx_verdict, {dtx_admission, NewTag, Key, NewTs}, Engine, 1, {vote, M}} ->
+                ?assertNotEqual(Tag, NewTag),
+                %% A non-vote with the parent already published waits on
+                %% something else. A duplicate apply edge cannot restart it.
+                PolicyWait = quod_simplex:on_admission_verdict(
+                    NewTag, Key, NewTs, Engine, 1, abstain, Rechecking),
+                ?assertEqual(PolicyWait,
+                    quod_simplex:on_admission_parent_applied(Engine, 1, PolicyWait))
+        after 1000 -> error(applied_parent_did_not_wake_selection) end
+    end)
+    after
+        _ = erlang:trace(Engine, false, ['receive']),
+        true = quod_reg:unsubscribe({quod_prolog, Ns}),
+        gen_server:stop(Engine),
+        ok = quod_signing_journal:close(J),
+        ok = file:del_dir_r(Dir)
+    end.
+
 compact_presentation_authenticates_only_the_source_manifest_test() ->
     F = fixture(), G = maps:get(group, F), O = maps:get(origin, F), T = foreign(F),
     Id = quod_atomic:group_id(G), Blob = quod_atomic:encode_group(G),
@@ -940,6 +1017,57 @@ presentation_receipt_retains_work_without_an_rpc_worker_or_readiness_test() ->
     ?assertEqual({error, invalid_request}, quod_simplex:test_start_local_dtx_endpoint_request(
         setelement(3, Request, <<0:256>>), [], 1, From, S)),
     ?assertEqual(error, quod_atomic:decode_presentation(foreign(F), Id, quod_atomic:encode_group(G))).
+
+presentation_capacity_returns_busy_without_losing_existing_work_test_() ->
+    {timeout, 30, {spawn, fun() ->
+        {ok, _} = application:ensure_all_started(gproc),
+        F = fixture(), {Ns, Anchor} = maps:get(origin, F),
+        Node = maps:get(node_identity, F), Member = maps:get(pubkey, Node),
+        S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+            self => Member, id => Node, validators => [Member],
+            author_admissions => #{Member => maps:get(admission, F)},
+            sync => unconfirmed, prolog_ready => false}),
+        %% Authenticated endpoint callback, not consensus admission: each
+        %% manifest is real, but remains volatile while the owner is unready.
+        Request = fun(Fixture) ->
+            Group = maps:get(group, Fixture),
+            {present, <<7:128>>, quod_atomic:group_id(Group), quod_atomic:encode_group(Group)}
+        end,
+        From = {self(), make_ref()}, First = Request(F),
+        Enroll = fun(R, S) ->
+            {ok, Next, [{reply, From, {ok, {presented, _, _}, []}}]} =
+                quod_simplex:test_start_local_dtx_endpoint_request(R, [], 1, From, S), Next
+        end,
+        Full = lists:foldl(fun(_, S) ->
+            Enroll(Request(fixture(#{node_identity => Node})), S)
+        end, Enroll(First, S0), lists:seq(2, ?MAX_INGRESS_TXS)),
+        ?assertMatch(#{active := ?MAX_INGRESS_TXS, reserved := 0},
+                     quod_simplex:test_dtx_admission_state(Full)),
+        Extra = Request(fixture(#{node_identity => Node})),
+        ?assertEqual(Full, Enroll(First, Full)),
+        %% A newly registered engine must not leak a monitor through a rejected
+        %% callback's discarded tentative state. This stand-in performs no proof.
+        Caller = self(),
+        Engine = spawn(fun() ->
+            true = quod_reg:reg({quod_prolog, Ns}),
+            Caller ! {self(), registered},
+            receive stop -> ok end
+        end),
+        try
+            receive {Engine, registered} -> ok
+            after 1000 -> error(capacity_engine_missing) end,
+            Before = process_info(self(), monitors),
+            ?assertEqual({error, busy},
+                quod_simplex:test_start_local_dtx_endpoint_request(Extra, [], 1, From, Full)),
+            ?assertEqual(Before, process_info(self(), monitors))
+        after
+            Monitor = monitor(process, Engine), Engine ! stop,
+            receive {'DOWN', Monitor, process, Engine, normal} -> ok
+            after 1000 -> error(capacity_engine_survived) end
+        end,
+        ?assertMatch(#{workers := 0, correlations := 0, submissions := 0},
+                     quod_simplex:test_dtx_endpoint_counts(Full))
+    end}}.
 
 committed_vote_answers_its_exact_group_intent_without_resigning_test() ->
     F = fixture(), O = maps:get(origin, F), T = foreign(F),
@@ -1199,7 +1327,14 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
         ?assertMatch([_], quod_simplex:test_eligible_dtx_wave(Reused)),
         LateCandidate = quod_simplex:test_state_set(last_ts, Deadline + 1, Reused),
         ?assertEqual([], quod_simplex:test_eligible_dtx_wave(LateCandidate)),
-        Expired = quod_simplex:test_refresh_retained_readiness(LateCandidate),
+        %% The approved parent can also be ahead of the committed floor. Both
+        %% selection and consumption must use that same prospective time, not
+        %% disagree because one still reads the committed parent's timestamp.
+        {ok, AheadParent} = quod_ledger:new_block(3, 2, {batch, [{dtx, SignedControl}]}, Deadline + 1),
+        AheadOwner = quod_simplex:test_blocked_dtx_owner(AheadParent,
+            quod_simplex:test_state_set(eng, quod_simplex:eng_new(<<0:256>>, [Member], 2), Reused)),
+        ?assertEqual([], quod_simplex:test_eligible_dtx_wave(AheadOwner)),
+        Expired = quod_simplex:test_refresh_retained_readiness(AheadOwner),
         {ok, Negative} = quod_atomic:select_vote(M, {refused, [vote_deadline]}),
         Refused = select_owner_vote(Engine, 2, Negative, Expired),
         #{rows := RefusedRows} = quod_simplex:test_retained_dtx_state(Refused),

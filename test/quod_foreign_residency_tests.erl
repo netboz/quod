@@ -76,7 +76,7 @@ persistence_sources(Tag, Acc) ->
         persistence_sources(Tag, [{Endpoint, From, To} | Acc])
     after 0 -> lists:reverse(Acc) end.
 
-failed_tip_confirmation_retains_prefix_without_rebinding_freshness_test_() ->
+failed_probe_retains_prefix_for_later_feed_confirmation_test_() ->
     {timeout, 15, fun failed_tip_confirmation/0}.
 
 failed_tip_confirmation() ->
@@ -118,7 +118,6 @@ failed_tip_confirmation() ->
         H = state_history(Identity, sys:get_state(Owner)),
         ?assertEqual(2, record_field(history, height, H)),
         ?assertEqual(true, record_field(history, resident_verified, H)),
-        ?assertEqual(unconfirmed, record_field(history, current_view, H)),
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
         receive {CallRef, Result} -> ?assertEqual({error, retry}, Result)
         after 3000 -> error(failed_tip_caller_not_released) end,
@@ -133,15 +132,14 @@ failed_tip_confirmation() ->
         receive {residency_feed_ack, Link, Ack} ->
             ?assertEqual({ack, RegistrationId, Anchor, 2}, quod_feed:decode_recipient(Ack, Ns))
         after 1000 -> error(freshness_registration_not_acknowledged) end,
-        %% An H flag is not a K assertion. The failed K request cannot become
-        %% successful because a later registration happens to mention K.
-        ?assertEqual(unconfirmed, record_field(history, current_view,
-            state_history(Identity, sys:get_state(Owner)))),
+        %% The failed caller above stays failed. A new caller may now use the
+        %% live exact-height committee feed as its confirmation; the earlier
+        %% failed probe is neither rewritten nor required again.
         ok = atomics:put(Mode, 1, 2),
         _ = freshness_fetches([]),
         ?assertMatch({ok, #{identity := Identity, slot := 2}},
                      quod_foreign_log:current(Routes, Identity, 3000)),
-        ?assert(lists:member(3, freshness_fetches([]))),
+        ?assertEqual([], freshness_fetches([])),
         ok = atomics:put(Mode, 1, 3),
         ?assertMatch({ok, #{identity := Identity, slot := 2}},
                      quod_foreign_log:current(Routes, Identity, 3000)),
@@ -239,23 +237,9 @@ follow_borrow_refusal() ->
         _ = file:del_dir_r(Dir)
     end.
 
-confirmed_binding_survives_only_the_same_verified_head_test_() ->
-    [{atom_to_list(Mode), fun() -> confirmed_binding(Mode) end}
-     || Mode <- [same_head, advanced_head]].
-
-confirmed_binding(Mode) ->
-    {Height, Expected} = case Mode of
-        same_head -> {1, confirmed};
-        advanced_head -> {2, unconfirmed}
-    end,
-    with_installation_state(Height, fun(Identity, RequestRef, State0, Meta) ->
-    State1 = quod_foreign_log:test_install_worker_meta(RequestRef, Meta, State0),
-    H1 = state_history(Identity, State1),
-    ?assertEqual(Height, record_field(history, height, H1)),
-    ?assertEqual(maps:get(projection, Meta), record_field(history, projection, H1)),
-    ?assertEqual(Expected, record_field(history, current_view, H1))
-    end).
-
+%% The former two stored-confirmation-bit cases are retired: no such bit is
+%% authority now. Exact-height/committee and crossed-progress regressions live
+%% in feed_established_current_view_test_; residency is asserted above and below.
 resident_failure_only_wakes_waiters_on_real_advance_test_() ->
     [{atom_to_list(Mode), fun() -> resident_failure_wakes(Mode) end}
      || Mode <- [unchanged_prefix, advanced_prefix]].
@@ -329,7 +313,7 @@ with_installation_state(Height, Fun) ->
                                           snapshot => Snapshot1, index => Hold}),
         History = make_record(history,
             #{height => 1, projection => P1, resident_verified => false,
-              published => Published, current_view => confirmed, active => RequestRef}),
+              published => Published, active => RequestRef}),
         Request = make_record(request,
             #{identity => Identity, worker => self(), mref => make_ref(),
               work => make_record(routed_work,

@@ -217,9 +217,9 @@ independent_retry_continuation(Order) ->
                 quod_dtx_coordinator:test_state(Worker),
             case Order of
                 progress_before_result ->
-                    %% Multiple real owner turns coalesce; no second worker
+                    %% Multiple readiness transitions coalesce; no second worker
                     %% may run for A while its first endpoint is still held.
-                    [operation_ready(Worker, self(), Op) || _ <- lists:seq(1, 3)],
+                    [operation_resume(Worker, Op) || _ <- lists:seq(1, 3)],
                     ?assertMatch(#{wave := #{workers := 2}},
                                  quod_dtx_coordinator:test_state(Worker)),
                     assert_no_operation_stub_calls();
@@ -245,6 +245,13 @@ independent_retry_continuation(Order) ->
                     Follow = attach_operation_follow(FA, Worker),
                     _ = await_operation_target_result(Worker, ExpectedStored, quod_time:mono_ms() + 1000),
                     operation_status_notices(FA, Worker, Follow),
+                    %% Source progress and a completed-target wake cannot
+                    %% stand in for A's actual dependency changing.
+                    operation_ready(Worker, self(), Op),
+                    ?assertMatch(#{wave := #{workers := 1, progress_edges := Edges}}
+                                   when map_size(Edges) =:= 0,
+                                 quod_dtx_coordinator:test_state(Worker)),
+                    assert_no_operation_stub_calls(),
                     wake_operation_follow(FA, Worker, Follow),
                     Follow;
                 _ ->
@@ -255,7 +262,7 @@ independent_retry_continuation(Order) ->
                     %% cross-recipient send notifications or sleeps.
                     [quod_dtx_coordinator:test_state(Worker) || _ <- lists:seq(1, 3)],
                     assert_no_operation_stub_calls(),
-                    operation_ready(Worker, self(), Op),
+                    operation_resume(Worker, Op),
                     none
             end,
             case Order of
@@ -279,6 +286,15 @@ independent_retry_continuation(Order) ->
                         meta := #{request_deadline := Deadline}}} =
                 quod_dtx_coordinator:test_state(Worker),
             ?assertNot(maps:is_key(1, PendingResults)),
+            case Order of
+                foreign_progress ->
+                    %% A's followed progress must not authorize a retry of
+                    %% B after its held result arrives. The old broad wake
+                    %% left an unused allowance for B here.
+                    ?assertMatch(#{wave := #{progress_edges := Edges}} when map_size(Edges) =:= 0,
+                                 quod_dtx_coordinator:test_state(Worker));
+                _ -> ok
+            end,
             reply_operation_vote(FA, VoteFromA, VoteRequestA,
                                  #{status => committed, height => 2, ref => RefA}),
             receive {dtx_coordinator, Worker, Op, {target_result, committed, RefA}} -> ok
@@ -313,6 +329,45 @@ independent_retry_continuation(Order) ->
 with_continuation_follow(foreign_progress, Fun) ->
     with_operation_follow_owner(fun(_) -> Fun() end);
 with_continuation_follow(_, Fun) -> Fun().
+
+parked_targets_resume_only_on_their_own_progress_test() ->
+    with_operation_fixture(2, fun(F = #{operation_ref := Op, target_refs := Refs,
+                                      targets := [A, B], target_data := Data}) ->
+        FA = maps:merge(F, maps:get(A, Data)), FB = maps:merge(F, maps:get(B, Data)),
+        with_operation_follow_owner(fun(_) ->
+          with_operation_worker(F, fun(Worker, _Monitor) ->
+            reply_operation_source(F, unresolved_operation_row(F)),
+            receive {dtx_coordinator, Worker, Op, {claim_state, unresolved, 2, _, Refs}} -> ok
+            after 1000 -> error(missing_scoped_claim_binding) end,
+            reply_operation_claim(F),
+            {FromA, {apply_claim, IdA, A, Bytes}} = expect_operation_application(FA),
+            {FromB, {apply_claim, IdB, B, Bytes}} = expect_operation_application(FB),
+            gen_server:reply(FromA, {ok, {error, IdA, not_ready}, []}),
+            FollowA = attach_operation_follow(FA, Worker),
+            gen_server:reply(FromB, {ok, {error, IdB, not_ready}, []}),
+            FollowB = attach_operation_follow(FB, Worker),
+            dormant_await_idle(Worker),
+            wake_operation_follow(FA, Worker, FollowA),
+            %% No source re-read and no B call: actual I/O, not just an
+            %% internal scheduling flag, pins the dependency boundary.
+            {RetryA, {apply_claim, NewA, A, Bytes}} = expect_operation_application(FA),
+            ?assertMatch(#{wave := #{items := [{application, A}], workers := 1}},
+                         quod_dtx_coordinator:test_state(Worker)),
+            assert_no_operation_stub_calls(),
+            %% B changes while A's narrower wave is in flight. Its edge must
+            %% survive that wave, without minting another allowance for A.
+            wake_operation_follow(FB, Worker, FollowB),
+            ?assertMatch(#{progress_pending := #{B := true}},
+                         quod_dtx_coordinator:test_state(Worker)),
+            gen_server:reply(RetryA, {ok, {error, NewA, not_ready}, []}),
+            {_, {apply_claim, NewB, B, Bytes}} = expect_operation_application(FB),
+            ?assertNotEqual(IdB, NewB),
+            ?assertMatch(#{wave := #{items := [{application, B}], workers := 1}},
+                         quod_dtx_coordinator:test_state(Worker)),
+            assert_no_operation_stub_calls()
+          end)
+        end)
+    end).
 
 all_returned_targets_park_with_the_original_deadline_test() ->
     with_operation_fixture(2, fun(F = #{operation_ref := Op, target_refs := Refs,
@@ -370,7 +425,7 @@ one_progress_edge_cannot_be_reused_after_the_target_wave_test() ->
             {FromB, RequestB} = expect_operation_application(FB),
             gen_server:reply(FromA, {ok, {error, IdA, not_ready}, []}),
             _ = await_operation_target_result(Worker, {error, retry}, quod_time:mono_ms() + 1000),
-            operation_ready(Worker, self(), Op),
+            operation_resume(Worker, Op),
             {RetryFrom, {apply_claim, RetryId, A, Bytes}} = expect_operation_application(FA),
             gen_server:reply(RetryFrom, {ok, {error, RetryId, not_ready}, []}),
             _ = await_operation_target_result(Worker, {error, retry}, quod_time:mono_ms() + 1000),
@@ -695,8 +750,8 @@ included_application_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       send_operation_follow_notice(
                         Target, Worker, FollowRef,
                         {resnapshot, 3, digest(250), #{}}),
-                      reply_operation_source(F, unresolved_operation_row(F)),
-                      assert_operation_binding(F, Worker, unresolved),
+                      %% Only this target changed. A fresh source read is
+                      %% now an unexpected call, not a fixture requirement.
                       certify_operation_result(F, Worker, Pending),
                       %% Still unavailable after real progress: retain this
                       %% exact follow, without unfollow/follow/refresh churn.
@@ -705,8 +760,6 @@ included_application_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       %% wave's result (it arrives through another sender).
                       dormant_await_idle(Worker),
                       wake_operation_follow(F, Worker, FollowRef),
-                      reply_operation_source(F, unresolved_operation_row(F)),
-                      assert_operation_binding(F, Worker, unresolved),
                       certify_operation_result(F, Worker, committed),
                       finish_operation_receipt(F, committed),
                       _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}),
@@ -758,9 +811,6 @@ included_application_refuses_wrong_result_and_follows_owner_replacement_test() -
                             _ = quod_dtx_coordinator:test_state(Worker),
                             operation_status_notices(F, Worker, FollowRef),
                             wake_operation_follow(F, Worker, FollowRef),
-                            reply_operation_source(
-                              F, unresolved_operation_row(F)),
-                            assert_operation_binding(F, Worker, unresolved),
                             certify_operation_result(F, Worker, committed),
                             finish_operation_receipt(F, committed),
                             _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}),
@@ -1673,6 +1723,10 @@ with_operation_owner(#{source_ns := Ns, operation_ref := OperationRef}, Fun) ->
 
 operation_ready(Worker, Owner, {operation, Ns, Anchor, _, _}) ->
     Worker ! {local_dtx_progress, Owner, {Ns, Anchor}, 0, true}.
+
+operation_resume(Worker, Op = {operation, Ns, Anchor, _, _}) ->
+    Worker ! {local_dtx_progress, self(), {Ns, Anchor}, 0, false},
+    operation_ready(Worker, self(), Op).
 
 with_operation_follow_owner(Fun) ->
     ?assertEqual(undefined, quod_reg:where({foreign_log, node})),

@@ -47,7 +47,6 @@ can change.  A new source with identical canonical facts updates
 
 -export_type([state/0]).
 
--define(MAX_INGRESS_TXS, 512).
 -define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).
 -define(MAX_INGRESS_PER_AUTHOR, 64).
 

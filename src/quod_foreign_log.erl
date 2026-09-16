@@ -232,7 +232,6 @@ retained index; point I/O and exact verification run in the existing caller.
           last_probe_ms = 0 :: integer(),
           last_advance_ms = 0 :: integer(),
           hinted_height = unknown :: unknown | non_neg_integer(),
-          current_view = unconfirmed :: confirmed | unconfirmed,
           projection_state = building :: building | ready,
           projection_wait = none :: none | network_identity,
           reachability = unknown :: reachable | unknown | {unreachable, term()},
@@ -1155,6 +1154,13 @@ handle_call(
 handle_call({complete_page_decode, Key, Verdict}, {Caller, _}, S0) ->
     {Reply, S1} = complete_page_decode(Key, Verdict, Caller, S0),
     {reply, Reply, S1};
+handle_call({current_feed_tip, RequestRef, Height, Committee}, {Worker, _}, S) ->
+    case maps:get(RequestRef, S#s.pending, undefined) of
+        #request{worker = Worker, identity = Identity, custody = held,
+                 retiring = false} ->
+            {reply, current_feed_tip(Identity, Height, Committee, S), S};
+        _ -> {reply, unknown, S}
+    end;
 handle_call({borrow_local_view, RequestRef, View}, {Worker, _Tag}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
         #request{worker = Worker, identity = Identity, source = none,
@@ -1806,8 +1812,9 @@ resident_cache(Identity, #s{histories = Histories}) ->
 %% A current view already certified by this owner remains current while a
 %% quorum of the identity's committee keeps an ordered feed registration at
 %% that exact height. The registrations are only freshness witnesses: a
-%% missing row or any newer height falls through to the ordinary certified
-%% fetch and fold below.
+%% missing quorum falls through to the ordinary certified fetch and fold.
+%% Live exact-height feeds can establish confirmation after a verified suffix,
+%% not merely preserve a prior probe result. They never certify history bytes.
 resident_current_identity(
   {current_identity, Sources, Identity, _ProbeTimeout}, Identity,
   S) ->
@@ -1820,41 +1827,39 @@ resident_confirmed_current(Sources, Identity,
     case maps:get(Identity, Histories, undefined) of
         #history{height = Height, projection = Projection,
                  resident_verified = true, phase_session = PhaseSession,
-                 current_watch = remote, progress_signals_open = true,
-                 current_view = confirmed}
+                 current_watch = remote, progress_signals_open = true}
           when Height > 0, is_map(Projection), PhaseSession =/= none ->
             Committee = quod_simplex:history_committee(Projection),
-            case Committee of
-                [] ->
-                    miss;
-                [_ | _] ->
-                    Needed = quod_simplex:quorum(length(Committee)),
-                    Matching = matching_feed_heights(
-                                 Identity, Committee, Height,
-                                 S#s.feed_registrations),
-                    case Matching >= Needed of
-                        true ->
-                            {ok, current_view_evidence(
-                                   Identity, Height, Projection,
-                                   current_route_candidates(
-                                     Sources, Projection))};
-                        false ->
-                            miss
-                    end
+            case current_feed_tip(Identity, Height, Committee, S) of
+                Height -> {ok, current_view_evidence(Identity, Height, Projection,
+                                 current_route_candidates(Sources, Projection))};
+                _ -> miss
             end;
         _ ->
             miss
     end.
 
-matching_feed_heights(Identity, Committee, Height, Registrations) ->
-    length(
-      [ok
+current_feed_tip(Identity, Height, Committee0, S) ->
+    Committee = lists:usort(Committee0),
+    #history{hinted_height = Hint} = maps:get(Identity, S#s.histories),
+    Members = maps:from_list(
+      [{Peer, true}
        || Peer <- Committee,
           #feed_registration{registered = true, height = RegisteredHeight,
                              link = Link} <-
-              [maps:get({Identity, Peer}, Registrations, undefined)],
-          RegisteredHeight =:= Height,
-          is_pid(Link)]).
+              [maps:get({Identity, Peer}, S#s.feed_registrations, undefined)],
+          RegisteredHeight =:= Hint, is_pid(Link), is_process_alive(Link)]),
+    case is_integer(Hint) andalso Hint >= Height andalso Committee =/= []
+         andalso confirmation_sufficient(quod_simplex:quorum(length(Committee)), Members) of
+        true -> Hint;
+        false when is_integer(Hint), Hint > Height -> {behind, Hint};
+        false -> unknown
+    end.
+
+worker_feed_tip(Owner, RequestRef, Height, Projection, Timeout) ->
+    page_owner_call(Owner,
+      {current_feed_tip, RequestRef, Height, quod_simplex:history_committee(Projection)},
+      quod_time:mono_ms() + Timeout).
 
 touch_history(Identity, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
@@ -1869,32 +1874,20 @@ retain_current_watch(
   Identity,
   #routed_work{kind = {current_identity, Identity}},
   {ok, #{slot := Height}}, S0) ->
-    retain_current_view(Identity, Height, S0);
-retain_current_watch(_Identity, _Work, _Result, S0) ->
-    S0.
-
-retain_current_view(Identity, Height, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{height = Height, resident_verified = true} = H0 ->
-            View = retained_current_view(Height, H0),
             H1 = H0#history{
                    current_watch = remote,
-                   hinted_height = retained_hint(Height, H0),
-                   current_view = View},
+                   hinted_height = retained_hint(Height, H0)},
             open_progress_signals(Identity, put_history(Identity, H1, S0));
         _ ->
             S0
-    end.
+    end;
+retain_current_watch(_Identity, _Work, _Result, S0) -> S0.
 
 retained_hint(Height, #history{hinted_height = Hint})
   when is_integer(Hint) -> max(Height, Hint);
 retained_hint(Height, #history{}) -> Height.
-
-retained_current_view(Height, H0) ->
-    case retained_hint(Height, H0) > Height of
-        true -> unconfirmed;
-        false -> confirmed
-    end.
 
 %% The certified-history cache has one writer per identity. Concurrent scope
 %% opens commonly ask for the same current identity view; their route lists
@@ -2661,13 +2654,16 @@ install_worker_result(RequestRef, Result, Meta,
             S1 = schedule_history_reconstruction(RequestRef, Identity, Cause, S0),
             {noreply, finish_request(RequestRef, Result, foreign_trace_reason(Result), S1)}
     end;
-install_worker_result(RequestRef, Result, Meta,
+install_worker_result(RequestRef, Result0, Meta,
                       #request{identity = Identity, work = Work}, S0) ->
     S2 = measure_foreign_ok(
            result_install,
            fun() ->
                install_verified_progress(RequestRef, Meta, S0)
            end),
+    %% A feed can advance while the worker's reply is queued. Its verified
+    %% prefix stays installed, but a known newer tip is not a current result.
+    Result = current_reply(Work, Result0, maps:get(Identity, S2#s.histories)),
     S3 = retain_current_watch(Identity, Work, Result, S2),
     case {Result, maps:get(RequestRef, S3#s.pending, undefined)} of
         {{error, retry}, #request{work = #routed_work{}}} ->
@@ -2676,6 +2672,11 @@ install_worker_result(RequestRef, Result, Meta,
             {noreply, finish_request(RequestRef, Result,
                                     foreign_trace_reason(Result), S3)}
     end.
+
+current_reply(#routed_work{kind = {current_identity, _}}, {ok, #{slot := Height}},
+              #history{hinted_height = Hint}) when is_integer(Hint), Hint > Height ->
+    {error, retry};
+current_reply(_Work, Result, _History) -> Result.
 
 monitor_source_owner(Identity, RequestRef, Owner) ->
     {Owner, erlang:monitor(
@@ -3593,17 +3594,16 @@ finish_follow_refresh(Identity, _Token, Reply, S0) ->
                 S0));
         #history{} = H0 ->
             Now = quod_time:mono_ms(),
-            {View, Hint, Reason} =
+            {Hint, Reason} =
                 case Reply of
                     {ok, Evidence} when is_map(Evidence) ->
-                        {maps:get(current_view, Evidence, confirmed),
-                         maps:get(hinted_height, Evidence,
+                        {maps:get(hinted_height, Evidence,
                                   maps:get(slot, Evidence, unknown)),
                          none};
                     {error, {unreachable, Why}} ->
-                        {unconfirmed, H0#history.hinted_height, Why};
+                        {H0#history.hinted_height, Why};
                     {error, _} ->
-                        {unconfirmed, H0#history.hinted_height, unavailable}
+                        {H0#history.hinted_height, unavailable}
                 end,
             KnownHint = case {H0#history.hinted_height, Hint} of
                             {Old, New} when is_integer(Old), is_integer(New) -> max(Old, New);
@@ -3613,7 +3613,6 @@ finish_follow_refresh(Identity, _Token, Reply, S0) ->
             Advanced = Reason =:= none andalso
                        H0#history.height > H0#history.follow_start_height,
             H1 = H0#history{last_probe_ms = Now, hinted_height = KnownHint,
-                            current_view = View,
                             follow_inflight = false,
                             reachability =
                                 case Reason of
@@ -3823,8 +3822,7 @@ follow_freshness(H, Height) ->
           end,
     #{last_probe_ms => H#history.last_probe_ms,
       last_advance_ms => H#history.last_advance_ms,
-      hinted_height => Hint, lag => Lag,
-      current_view => H#history.current_view}.
+      hinted_height => Hint, lag => Lag}.
 
 follow_lag(#history{hinted_height = Hint}, Height)
   when is_integer(Hint), Hint >= Height -> Hint - Height;
@@ -3884,7 +3882,6 @@ stop_follow_target(Identity, S0) ->
                             follow_inflight = false,
                             follow_dirty = false,
                             hinted_height = unknown,
-                            current_view = unconfirmed,
                             projection_state = building,
                             projection_wait = none,
                             reachability = unknown},
@@ -3989,12 +3986,6 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                         Height, Projection, PhaseSession, CacheSession, H0#history.published, S0),
                     close_replaced_phase_session(
                       H0#history.phase_session, PhaseSession),
-                    CurrentView = case ResidentVerified andalso
-                                       Height =:= H0#history.height andalso
-                                       Projection =:= H0#history.projection of
-                                      true -> H0#history.current_view;
-                                      false -> unconfirmed
-                                  end,
                     H1 = H0#history{height = Height,
                                     bytes = ActualBytes,
                                     projection = Projection,
@@ -4002,7 +3993,6 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                                     phase_session = PhaseSession,
                                     cache_session = CacheSession,
                                     published = Published,
-                                    current_view = CurrentView,
                                     bootstrap_hints = Bootstrap},
                     Total1 = max(
                                0, S0#s.total_bytes - H0#history.bytes +
@@ -4415,18 +4405,12 @@ accept_feed_recipient_signal(_Peer, _Link, _Identity,
 
 note_feed_height(Identity, Height, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
-        #history{height = ResidentHeight, hinted_height = OldHint} = H0 ->
+        #history{hinted_height = OldHint} = H0 ->
             Hint = case OldHint of
                        Known when is_integer(Known) -> max(Known, Height);
                        unknown -> Height
                    end,
-            View = case Height > ResidentHeight of
-                       true -> unconfirmed;
-                       false -> H0#history.current_view
-                   end,
-            put_history(
-              Identity,
-              H0#history{hinted_height = Hint, current_view = View}, S0);
+            put_history(Identity, H0#history{hinted_height = Hint}, S0);
         undefined ->
             S0
     end.
@@ -4503,7 +4487,7 @@ handle_feed_signal(Peer, Link, Chan, Payload, S0) ->
             S0
     end.
 
-wake_namespace_progress(Ns, _Height, S0) ->
+wake_namespace_progress(Ns, Height, S0) ->
     Identities =
         [Identity
          || {Identity = {HistoryNs, _Anchor},
@@ -4516,7 +4500,7 @@ wake_namespace_progress(Ns, _Height, S0) ->
                 Identity,
                 release_route_waiters(
                   Identity, local_commit,
-                  invalidate_current_view(Identity, Acc)))
+                  note_feed_height(Identity, Height, Acc)))
       end, S0, Identities).
 
 %% A generic feed block/digest carries no anchor. Correlate its authenticated
@@ -4541,7 +4525,7 @@ wake_namespace_progress_from_peer(Peer, Ns, Progress, S0) ->
                   true ->
                       wake_follow(
                         Identity,
-                        invalidate_current_view(Identity, Acc1));
+                        note_feed_progress(Identity, Progress, Acc1));
                   false ->
                       Acc1
               end
@@ -4563,14 +4547,16 @@ progress_may_advance(_Identity, unknown, _S) ->
 progress_may_advance(_Identity, error, _S) ->
     false.
 
-invalidate_current_view(Identity, S0) ->
-    case maps:get(Identity, S0#s.histories, undefined) of
-        #history{current_watch = Watch} = H0 when Watch =/= none ->
-            put_history(
-              Identity, H0#history{current_view = unconfirmed}, S0);
-        _ ->
-            S0
-    end.
+%% Keep one freshness basis: known heights raise the same monotone hint;
+%% an opaque progress edge withdraws old feed heights without closing links
+%% or forgetting a known higher hint. The next ordered observation restores
+%% only its own member's height. Otherwise the existing probes corroborate it.
+note_feed_progress(Identity, {ok, Height}, S) -> note_feed_height(Identity, Height, S);
+note_feed_progress(Identity, unknown, S) ->
+    S#s{feed_registrations = maps:map(fun
+        ({I, _}, R) when I =:= Identity -> R#feed_registration{height = unknown};
+        (_, R) -> R
+    end, S#s.feed_registrations)}.
 
 admit_pull(RequestRef, Identity = {Ns, _}, Work, Peer, Endpoint,
            FromIndex, ToIndex, Deadline0, TraceCtx, From = {Caller, _}, S0) ->
@@ -5375,11 +5361,10 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
            [{LocalPeer, local}], Owner, RequestRef, Identity, Cursor,
            Root, Target, FetchFun, PageTimeout) of
         {ok, Final = #verified_cursor{height = FinalHeight, projection = Projection}} ->
-            View = case FinalHeight >= Tip of true -> confirmed; false -> unconfirmed end,
             Evidence = (current_view_evidence(
                           Identity, FinalHeight, Projection,
                           current_route_candidates(empty_route_sources(), Projection)))#{
-                         hinted_height => Tip, current_view => View},
+                         hinted_height => Tip},
             {{ok, Evidence}, Final};
         {error, _Reason, Final} -> {{error, retry}, Final}
     end.
@@ -5399,11 +5384,18 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
 certified_current_snapshot(
   Owner, RequestRef, Sources, Identity,
   Root, FetchFun, PageTimeout, RequestTimeout,
-  Cursor = #verified_cursor{projection = Projection}, AdvanceMode) ->
+  Cursor = #verified_cursor{height = Height, projection = Projection}, AdvanceMode) ->
     Hints = current_route_candidates(Sources, Projection),
-    case advance_current_snapshot(
+    Advanced = case worker_feed_tip(Owner, RequestRef, Height, Projection, PageTimeout) of
+        Tip when is_integer(Tip) ->
+            advance_snapshot_to_height(flatten_route_candidates(Hints), Owner,
+              RequestRef, Identity, Cursor, Root, snapshot_target(AdvanceMode, Height, Tip),
+              FetchFun, PageTimeout);
+        _ -> advance_current_snapshot(
            Owner, RequestRef, Hints, Identity, Cursor, Root,
-           FetchFun, PageTimeout, RequestTimeout, AdvanceMode) of
+           FetchFun, PageTimeout, RequestTimeout, AdvanceMode)
+    end,
+    case Advanced of
         {ok, Next} ->
             confirm_current_snapshot(Owner, RequestRef, Sources, Identity,
               Next, Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode, true);
@@ -6132,8 +6124,7 @@ collect_probes(Tag, Pending, Deadline, Collection) ->
 
 probe_collection_complete({all, _Results}, Remaining) -> Remaining =:= 0;
 probe_collection_complete({threshold, Needed, Confirmed}, Remaining) ->
-    Count = map_size(Confirmed),
-    Count >= Needed orelse Count + Remaining < Needed.
+    confirmation_sufficient(Needed, Confirmed) orelse map_size(Confirmed) + Remaining < Needed.
 
 collect_probe_result({all, Results}, Item, Result) ->
     {all, [{Item, Result} | Results]};
@@ -6144,7 +6135,11 @@ collect_probe_result({threshold, _, _} = Collection, _Item, _Result) ->
 
 probe_collection_result({all, Results}) -> lists:reverse(Results);
 probe_collection_result({threshold, Needed, Confirmed}) ->
-    map_size(Confirmed) >= Needed.
+    confirmation_sufficient(Needed, Confirmed).
+
+%% Both live feeds and authenticated probes count distinct admitted members.
+%% Their source-specific checks establish each observation before this quorum.
+confirmation_sufficient(Needed, Members) -> map_size(Members) >= Needed.
 
 stop_current_probes(Pending) ->
     trace_count(probes_cancelled, map_size(Pending)),
@@ -6230,10 +6225,12 @@ current_view_confirmed(
   PhaseIndex,
   FetchFun, PageTimeout) ->
     Committee = quod_simplex:history_committee(Projection),
-    case Committee of
-        [] ->
-            false;
-        [_ | _] ->
+    case {Committee, worker_feed_tip(Owner, RequestRef, Height, Projection, PageTimeout)} of
+        {[], _} -> false;
+        {_, Height} -> true;
+        {_, Tip} when is_integer(Tip), Tip > Height -> false;
+        {_, {behind, _}} -> false;
+        {[_ | _], _} ->
             current_committee_confirmed(
               Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity,
               Height, Projection, PhaseIndex, FetchFun, PageTimeout)

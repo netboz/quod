@@ -284,7 +284,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_retained_dtx_state/1, test_refresh_retained_readiness/1,
          test_refresh_retained_dtx_signatures/1,
          test_enqueue_dtx_intent/7, test_progress_dtx_admission/1,
-         on_admission_verdict/7,
+         on_admission_verdict/7, on_admission_parent_applied/3,
          test_activate_dtx_intent/3, test_cancel_dtx_intent/3,
          test_dtx_admission_state/1, test_drop_dtx_admission_owner/1,
          test_reconcile_signing_state/1,
@@ -1083,7 +1083,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(dtx_admission, {
     engine = none :: none | pid(),
     monitor = none :: none | reference(),
-    waiting = [] :: quod_atomic_admission:state()
+    waiting :: quod_atomic_admission:state()
 }).
 
 %% Volatile request ownership for the process-free DTX endpoint. The request is
@@ -1733,7 +1733,7 @@ test_seed_dtx_submission_at(
     Engine = case quod_reg:where({quod_prolog, S#s.ns}) of undefined -> none; Pid -> Pid end,
     Selection = case quod_atomic:control_kind(Control) of
         vote -> quod_atomic_admission:selection_key(
-                  {Engine, S#s.history_head}, max(quod_time:now_ms(), S#s.last_ts), Material);
+                  {Engine, S#s.history_head}, vote_timestamp(S), Material);
         _ -> none
     end,
     Placement = test_retained_placement(retained_disposition(Material, S)),
@@ -3148,6 +3148,7 @@ init_store(Ns, Cfg, Id) ->
     quod_reg:subscribe({channel, Chan}),                 %% receive peers' proposals/shares/certs
     quod_reg:subscribe({channel, RelayChan}),             %% receive bounded transaction-relay frames
     quod_reg:subscribe({channel, DtxChan}),               %% receive bounded DTX recovery requests/replies
+    quod_reg:subscribe({quod_prolog, Ns}),                 %% actual parent application, not a timer retry
     RelayTimeout = relay_timeout_ms(Cfg),
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
             chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
@@ -4214,6 +4215,11 @@ running_impl(info, {link_error, OpenRef, Peer, Channel}, S0) ->
 running_impl(info, {content_verdict, {Sl, BH}, Verdict}, S0) ->
     S1 = on_content_verdict(Sl, BH, Verdict, S0),
     keep_progress(S0, S1, []);
+running_impl(info, {projection_advanced, Engine, Floor}, S0) ->
+    case on_admission_parent_applied(Engine, Floor, S0) of
+        S0 -> {keep_state, S0};
+        S1 -> keep_progress(S0, S1, [])
+    end;
 running_impl(
   info,
   {dtx_verdict, {dtx_admission, Tag, Key, Timestamp}, EnginePid, AppliedFloor, Verdict},
@@ -4391,7 +4397,7 @@ running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 
 terminate(
   _Reason, _State,
-  #s{chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
+  #s{ns = Ns, chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
      store = Store, signing_journal = Journal, phase_index = PhaseIndex,
      dtx_correlations = DtxCorrelations,
      dtx_out_channels = DtxOutChannels,
@@ -4407,6 +4413,7 @@ terminate(
     %% to reconnect and replay their retained prefixes in author order.
     close_link_maps(
       Conns, Inbound, RelayConns, RelayInbound, RetiredInbound),
+    _ = catch quod_reg:unsubscribe({quod_prolog, Ns}),
     _ = case Chan of undefined -> ok; _ -> catch quod_reg:unsubscribe({channel, Chan}) end,
     _ = case RelayChan of
             undefined -> ok;
@@ -4502,6 +4509,7 @@ enqueue_dtx_intent(_From, EnginePid, IntentId, Material, GroupRef, DeadlineMs, S
                     Owned = admission_state(S),
                     project_pending_votes(S#s.ns, Journal),
                     {ok, S#s{dtx_admission = Owned#dtx_admission{waiting = Rows}}};
+                {false, {error, busy}} -> {error, busy};
                 _ -> {error, invalid_dtx_intent}
             end;
         {false, _, _, _} -> {error, stale_engine};
@@ -4557,16 +4565,25 @@ admit_owned_vote(Material = {Record, _, _}, Waiter, S0) ->
                     {ok, Registry} = quod_dtx_owner:attach_waiter(Digest, Waiter, S0#s.retained_dtx),
                     {ok, schedule_dtx_drive(S0#s{retained_dtx = Registry})};
                 [] ->
-                    S = refresh_dtx_admission_engine(S0), A = admission_state(S),
+                    Prior = admission_state(S0),
                     %% A duplicate cannot replace durable missing/bound
                     %% preparation permission with peer-supplied own material.
-                    Chosen = case maps:find(Id, pending_votes_snapshot(S#s.signing_journal)) of
+                    Pending = pending_votes_snapshot(S0#s.signing_journal),
+                    Chosen = case maps:find(Id, Pending) of
                         {ok, #{material := Saved}} -> Saved;
                         error -> Material
                     end,
-                    Rows = quod_atomic_admission:admit(
-                             Chosen, Waiter, quod_trace:context(), A#dtx_admission.waiting),
-                    {ok, schedule_dtx_drive(S#s{dtx_admission = A#dtx_admission{waiting = Rows}})}
+                    case maps:is_key(Id, Pending) orelse
+                         quod_atomic_admission:has_capacity(Id, Prior#dtx_admission.waiting) of
+                        false -> {error, busy};
+                        true ->
+                            %% Rejected admissions install no monitor or other
+                            %% side effect which their unchanged state would lose.
+                            S = refresh_dtx_admission_engine(S0), A = admission_state(S),
+                            Rows = quod_atomic_admission:admit(
+                                     Chosen, Waiter, quod_trace:context(), A#dtx_admission.waiting),
+                            {ok, schedule_dtx_drive(S#s{dtx_admission = A#dtx_admission{waiting = Rows}})}
+                    end
             end;
         error -> {error, invalid_dtx_submission}
     end.
@@ -4577,7 +4594,7 @@ progress_dtx_admission(S0, Actions) ->
     A = admission_state(S),
     case {endpoint_write_ready(S), A#dtx_admission.engine, S#s.history_head} of
         {true, Engine, {Slot, <<_:256>>} = Parent} when is_pid(Engine), Slot =:= S#s.slot ->
-            Timestamp = max(quod_time:now_ms(), parent_timestamp(Slot, S)),
+            Timestamp = vote_timestamp(S),
             Key = {Engine, Parent},
             {Requests, Rows} = quod_atomic_admission:next(Key, Timestamp, A#dtx_admission.waiting),
             S1 = lists:foldl(fun({Id, Tag, Material, Trace}, Acc) ->
@@ -4598,6 +4615,17 @@ progress_dtx_admission(S0, Actions) ->
         _ -> {compact_dtx_admission(S), Actions}
     end.
 
+on_admission_parent_applied(Engine, Floor,
+  S = #s{ns = Ns, slot = Floor, dtx_admission = A = #dtx_admission{engine = Engine}}) ->
+    case Engine =:= quod_reg:where({quod_prolog, Ns}) of
+        true ->
+            Rows = quod_atomic_admission:parent_applied(
+                     {Engine, S#s.history_head}, A#dtx_admission.waiting),
+            S#s{dtx_admission = A#dtx_admission{waiting = Rows}};
+        false -> S
+    end;
+on_admission_parent_applied(_, _, S) -> S.
+
 finish_indexed_vote(Id, Reply, S = #s{dtx_admission = A}) ->
     {#{waiters := Waiters}, Rows} = quod_atomic_admission:take(Id, A#dtx_admission.waiting),
     reply_waiters([{dtx_endpoint, P} || P <- Waiters], Reply,
@@ -4606,17 +4634,23 @@ finish_indexed_vote(Id, Reply, S = #s{dtx_admission = A}) ->
 on_admission_verdict(Tag, Key = {Engine, Parent}, Timestamp, Engine, Floor, Result,
                      S = #s{history_head = Parent, dtx_admission = A})
   when is_record(A, dtx_admission), A#dtx_admission.engine =:= Engine,
-       Floor =:= S#s.slot ->
+       (Floor =:= S#s.slot orelse (Result =:= abstain andalso Floor < S#s.slot)) ->
     Current = quod_reg:where({quod_prolog, S#s.ns}),
     SameRegion = case Result of
         {vote, {_, _, #{group := #{vote_deadline_ms := Deadline}}}} ->
-            (Timestamp > Deadline) =:= (max(quod_time:now_ms(), S#s.last_ts) > Deadline);
+            (Timestamp > Deadline) =:= (vote_timestamp(S) > Deadline);
         _ -> true
     end,
     case Current =:= Engine andalso SameRegion of
         false -> S;
         true ->
-            case quod_atomic_admission:verdict(Tag, Key, Result, A#dtx_admission.waiting) of
+            %% The existing verdict floor names the missing dependency. A
+            %% policy abstention at the published parent is not an apply wait.
+            Readiness = case Result =:= abstain andalso Floor < S#s.slot of
+                true -> await_parent;
+                false -> Result
+            end,
+            case quod_atomic_admission:verdict(Tag, Key, Readiness, A#dtx_admission.waiting) of
                 {selected, _Row, Rows} ->
                     %% A readiness pause does not discard verified work. The
                     %% normal admission drive consumes this cached verdict
@@ -5779,6 +5813,7 @@ start_dtx_endpoint_operation(_Peer, Destination,
                     {Delivered, Actions} = deliver_dtx_endpoint_response(
                         Destination, {presented, RequestId, GroupId}, [], Next),
                     {ok, Delivered, Actions};
+                {error, busy} = Busy -> Busy;
                 {error, _} -> {error, not_ready}
             end;
         error -> {error, invalid_request}
@@ -7324,15 +7359,14 @@ refresh_retained_readiness(SBefore) ->
 %% Remove a local signed row before transferring it to the same FIFO; retain
 %% its exact envelope there so an unchanged choice requires no new signature.
 reselect_owned_votes(S0) ->
-    Engine = case quod_reg:where({quod_prolog, S0#s.ns}) of undefined -> none; P -> P end,
-    Parent = {Engine, S0#s.history_head},
-    Timestamp = max(quod_time:now_ms(), S0#s.last_ts),
     lists:foldl(fun(Row = #dtx_submission{control = C, selection = Selected}, S) ->
         case local_owned_vote(Row, S) of
             false -> S;
             true ->
+                Engine = case quod_reg:where({quod_prolog, S0#s.ns}) of undefined -> none; P -> P end,
                 M = quod_atomic:control_material(C),
-                Current = quod_atomic_admission:selection_key(Parent, Timestamp, M),
+                Current = quod_atomic_admission:selection_key(
+                            {Engine, S0#s.history_head}, vote_timestamp(S0), M),
                 case Selected =:= Current of
                     true -> S;
                     false ->
@@ -9190,7 +9224,7 @@ select_dtx_wave(
 %% The installed owner state is never changed by this call-local preview.
 dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = Row,
                    Wave, Payload, S = #s{approved = Parent, ns = Ns}, Projection) ->
-    Timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S)),
+    Timestamp = vote_timestamp(S),
     Engine = case quod_reg:where({quod_prolog, Ns}) of undefined -> none; P -> P end,
     SelectionCurrent = not local_owned_vote(Row, S) orelse
         Selection =:= quod_atomic_admission:selection_key(
@@ -9384,6 +9418,12 @@ consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
     RetainedDtx = RetainedMode =:= include_retained_dtx
                   andalso quod_dtx_owner:ready_count(Registry) > 0,
     VolatileBlock orelse PendingDtx orelse RetainedDtx.
+
+%% Admission and proposal construction must classify the same prospective
+%% block time. An approved parent may lead normal commit; the committed
+%% frontier may lead the old engine during catch-up's journal reconciliation.
+vote_timestamp(S = #s{approved = Approved, slot = Committed}) ->
+    max(quod_time:now_ms(), parent_timestamp(max(Approved, Committed), S)).
 
 parent_timestamp(Parent, #s{slot = Parent, last_ts = Last}) -> Last;
 parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
@@ -15888,6 +15928,7 @@ validate_compiled_genesis_diff(Diff) ->
     end.
 
 status_map(S) ->
+    {DtxWaiting, DtxDormant} = dtx_admission_counts(S#s.dtx_admission),
     Role = case is_participant(S) of true -> validator; false -> observer end,
     {_ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
     ProposalSlot = S#s.approved + 1,
@@ -15899,6 +15940,7 @@ status_map(S) ->
       syncing => syncing(S), recovery => recovery_phase(S#s.sync),
       finality_slot => S#s.slot + 1,
       dtx_coordinators => dtx_coordinator_status(S#s.dtx_coordinators),
+      dtx_admission_waiting => DtxWaiting, dtx_admission_dormant => DtxDormant,
       progress_phase => ProgressPhase, progress_quorum_ready => ProgressQuorum,
       proposal_slot => ProposalSlot,
       proposal_open => case proposal_slot(S) of {ok, ProposalSlot} -> true; _ -> false end}.

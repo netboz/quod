@@ -127,10 +127,9 @@ does not cancel or resubmit the uncertain operation.
                        reference() | {pending, gen_server:request_id()}},
     route_subscriptions = #{} :: #{{binary(), <<_:256>>} => true},
     foreign_log_monitor = none :: none | reference(),
-    %% Ordered protocol work still re-plans at the wave boundary. Independent
-    %% target continuations consume their own coalesced edges inside the wave;
-    %% this bit is never a second target-retry allowance.
-    progress_pending = false :: boolean(),
+    %% Target continuations consume their own coalesced edges inside a wave.
+    %% Retain other identities across the boundary, not a global retry bit.
+    progress_pending = false :: false | all | map(),
     %% Once every participant Resolve is certified applied, the visible
     %% result is already safe.  Notify the namespace owner once, then keep this
     %% same recovery process alive to append mandatory Complete bookkeeping in
@@ -766,19 +765,15 @@ loop(S) ->
     end.
 
 handle_loop_message(
-  {drive, EnqueuedNative}, S = #state{wave = Wave = #wave{ref = Ref}})
+  {drive, EnqueuedNative}, S = #state{wave = #wave{ref = Ref}})
   when is_reference(Ref) ->
-    %% A queued re-plan belongs to the preceding ordered action. A target
-    %% vector already planned from that state; only directly consumed real
-    %% progress may authorize another target attempt inside it.
+    %% A queued self-message is not new progress. Real dependency edges are
+    %% already retained by identity; this wave has consumed its workflow turn.
     observe_stage(S, coordinator_mailbox, ok, EnqueuedNative),
-    case target_wave(Wave) of
-        true -> loop(S);
-        false -> loop(S#state{progress_pending = true})
-    end;
+    loop(S);
 handle_loop_message({drive, EnqueuedNative}, S) ->
     observe_stage(S, coordinator_mailbox, ok, EnqueuedNative),
-    continue(drive(S#state{progress_pending = false}));
+    continue(drive(S#state.progress_pending, S#state{progress_pending = false}));
 handle_loop_message(
   {dtx_wave_result, WaveRef, Worker, Index, Result},
   S = #state{wave = #wave{ref = WaveRef, workers = Workers} = Wave}) ->
@@ -802,7 +797,7 @@ handle_loop_message(
         FollowRef ->
             ok = quod_foreign_log:ack(FollowRef, NoticeRef),
             case foreign_progress_notice(Notice) of
-                true -> loop(request_progress_drive(observed_progress(Identity, S)));
+                true -> loop(request_progress_drive(Identity, observed_progress(Identity, S)));
                 false -> loop(S)
             end;
         _ ->
@@ -813,9 +808,16 @@ handle_loop_message(
   S = #state{owner = Owner, origin = Origin}) ->
     case local_progress_event(Message, Origin) of
         true ->
-            S1 = request_progress_drive(
+            Capability = execution_capability(S, Ready),
+            %% Readiness resumes all paused work; a new source block is
+            %% progress for that identity alone, not for every remote target.
+            Target = case Capability andalso not S#state.execution_ready of
+                true -> all;
+                false -> Origin
+            end,
+            S1 = request_progress_drive(Target,
                    observed_progress(Origin,
-                     S#state{execution_ready = execution_capability(S, Ready)})),
+                     S#state{execution_ready = Capability})),
             case S1#state.wave of
                 #wave{ref = Ref} when is_reference(Ref) ->
                     continue(advance_wave(S1));
@@ -829,7 +831,7 @@ handle_loop_message(
     case maps:is_key(Identity, Subscriptions) of
         true ->
             S1 = route_progress_follow(Identity, S),
-            loop(request_progress_drive(observed_progress(Identity, S1)));
+            loop(request_progress_drive(Identity, observed_progress(Identity, S1)));
         false ->
             loop(S)
     end;
@@ -927,21 +929,30 @@ continue({next, S}) -> loop(S);
 continue({delivered, Results}) -> {delivered, Results};
 continue(stop) -> ok.
 
-drive(S = #state{execution_ready = false}) ->
+drive(_Progress, S = #state{execution_ready = false}) ->
     {next, S};
-drive(S = #state{wave = #wave{ref = undefined, stage = Stage,
+drive(_Progress, S = #state{wave = #wave{ref = undefined, stage = Stage,
                               items = Items, meta = Meta}}) ->
     start_typed_wave(Stage, Items, Meta, S#state{wave = none});
-drive(S = #state{wave = #wave{}}) ->
+drive(_Progress, S = #state{wave = #wave{}}) ->
     {next, S};
-drive(S = #state{protocol = {operation, _}}) ->
+drive(Targets, S = #state{origin = Origin,
+                         protocol = {operation, #{model := Model, receipt := unresolved}}})
+  when is_map(Targets), not is_map_key(Origin, Targets) ->
+    %% A followed target changed, not the source's claim or receipt. Resume
+    %% only that target's existing model action; never recapture the claim.
+    case [Item || Item <- quod_operation:work(Model), is_map_key(element(2, Item), Targets)] of
+        [] -> {next, S};
+        Items -> start_typed_wave(operation, Items, #{}, S)
+    end;
+drive(_Progress, S = #state{protocol = {operation, _}}) ->
     operation_refresh(S);
-drive(S = #state{protocol = {dormant, _}}) ->
+drive(_Progress, S = #state{protocol = {dormant, _}}) ->
     dormant_operation_drive(S);
-drive(S = #state{pending_phases = Pending}) when map_size(Pending) > 0 ->
+drive(_Progress, S = #state{pending_phases = Pending}) when map_size(Pending) > 0 ->
     [{Key, Value} | _] = lists:sort(maps:to_list(Pending)),
     drive_pending(Key, Value, S);
-drive(S) ->
+drive(_Progress, S) ->
     drive_commands(S).
 
 drive_pending(_Key, {reference, Target, GroupId, Kind, Ref, Preferred}, S) ->
@@ -1175,10 +1186,10 @@ submit_plan_result({Target, GroupId, Kind, _Blob, _Sidecar, _Sources}, Request, 
 
 advance_wave(S0) ->
     S = resume_wave_work(S0),
-    #wave{workers = Workers, results = Results, progress_edges = Edges} = S#state.wave,
+    #wave{workers = Workers, results = Results} = Wave = S#state.wave,
     Prepared = lists:any(fun({prepared_submit, _}) -> true; (_) -> false end,
                          maps:values(Results)),
-    PausedContinuation = not S#state.execution_ready andalso map_size(Edges) > 0,
+    PausedContinuation = not S#state.execution_ready andalso target_wave(Wave),
     case map_size(Workers) =:= 0 andalso not Prepared andalso not PausedContinuation of
         true -> finish_wave(S);
         false -> {next, S}
@@ -1196,13 +1207,21 @@ resume_wave_work(S0 = #state{wave = #wave{results = Results}}) ->
 %% progress edge on one next action, with the same index and absolute deadline.
 %% An edge arriving during I/O survives until its result is consumed. No
 %% endpoint reply, follow admission or timer manufactures a retry edge.
-retain_wave_progress(S = #state{wave = W = #wave{stage = operation, items = Items},
+retain_wave_progress(Target, S = #state{wave = #wave{stage = operation, items = Items},
                                 protocol = {operation, #{model := _}}}) ->
     Pending = operation_work(S),
-    Edges = maps:from_list([{Index, true}
-      || {Index, Item} <- lists:zip(lists:seq(1, length(Items)), Items),
-         maps:is_key(element(2, Item), Pending)]),
-    S#state{wave = W#wave{progress_edges = Edges}}.
+    Indices = maps:from_list([{element(2, Item), Index}
+      || {Index, Item} <- lists:zip(lists:seq(1, length(Items)), Items)]),
+    maps:fold(fun(T, _Work, Acc = #state{wave = Wave}) ->
+        case Target =:= all orelse Target =:= T of
+            false -> Acc;
+            true -> case maps:find(T, Indices) of
+                {ok, Index} -> Acc#state{wave = Wave#wave{
+                                  progress_edges = (Wave#wave.progress_edges)#{Index => true}}};
+                error -> retain_progress(T, Acc)
+            end
+        end
+    end, S, Pending).
 
 resume_target_continuations(S = #state{wave = #wave{stage = operation,
     items = Items, workers = Workers, results = Results, progress_edges = Edges}})
@@ -1910,18 +1929,23 @@ observed_progress(Target, S = #state{protocol = group, snapshot = Snapshot}) ->
     S#state{snapshot = quod_dtx_recovery:progress(Target, Snapshot), commands = none};
 observed_progress(_Target, S) -> S.
 
-request_progress_drive(S = #state{wave = Wave = #wave{ref = Ref}}) when is_reference(Ref) ->
+request_progress_drive(Target, S = #state{wave = Wave = #wave{ref = Ref}}) when is_reference(Ref) ->
     case target_wave(Wave) of
-        true -> resume_wave_work(retain_wave_progress(S));
-        false -> S#state{progress_pending = true}
+        true -> resume_wave_work(retain_wave_progress(Target, S));
+        false -> retain_progress(Target, S)
     end;
-request_progress_drive(S = #state{progress_pending = true}) ->
-    S;
-request_progress_drive(S) ->
-    queue_drive(),
-    S#state{progress_pending = true}.
+request_progress_drive(Target, S = #state{progress_pending = Pending}) ->
+    case Pending of false -> queue_drive(); _ -> ok end,
+    retain_progress(Target, S).
 
-release_progress_drive(S = #state{progress_pending = true}) ->
+retain_progress(all, S) -> S#state{progress_pending = all};
+retain_progress(_Target, S = #state{progress_pending = all}) -> S;
+retain_progress(Target, S = #state{progress_pending = false}) ->
+    S#state{progress_pending = #{Target => true}};
+retain_progress(Target, S = #state{progress_pending = Targets}) ->
+    S#state{progress_pending = Targets#{Target => true}}.
+
+release_progress_drive(S = #state{progress_pending = Pending}) when Pending =/= false ->
     queue_drive(),
     S;
 release_progress_drive(S) ->
@@ -2080,7 +2104,7 @@ route_progress_follow(Identity, S) -> attach_follow(Identity, S).
 %% The foreign verifier's registration is not a new source projection or
 %% target verdict. Reattach operation follows and await their actual progress.
 registration_progress(S = #state{protocol = {operation, _}}) -> S;
-registration_progress(S) -> request_progress_drive(S).
+registration_progress(S) -> request_progress_drive(all, S).
 
 %% Releasing never-activated private custody is not proof execution. It must
 %% remain possible while that source's projection is rebuilding.
@@ -2536,17 +2560,17 @@ test_loop_message({test_state, From, Ref}, S) ->
     Wave = case S#state.wave of
         none -> none;
         #wave{ref = WaveRef, stage = Stage, items = Items, meta = Meta,
-              workers = Workers, results = Results} ->
+              workers = Workers, results = Results, progress_edges = WaveEdges} ->
             #{running => is_reference(WaveRef), correlation => WaveRef, stage => Stage,
               items => Items, meta => Meta, workers => map_size(Workers),
-              results => Results}
+              results => Results, progress_edges => WaveEdges}
     end,
     View = #{execution_ready => S#state.execution_ready,
                   trace_context => quod_trace:context(),
 snapshot => S#state.snapshot, resolve_evidence => S#state.resolve_evidence,
                   pending_phases => S#state.pending_phases, wave => Wave},
     %% Keep the existing group fixture's semantic snapshot unchanged. The
-    %% coalesced-drive bit is transient scheduling, not retained proof state.
+    %% coalesced dependency set is scheduling, not retained proof state.
     Extended = case S#state.protocol of
         group -> View;
         Protocol -> View#{protocol => Protocol, progress_pending => S#state.progress_pending}

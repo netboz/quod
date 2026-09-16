@@ -7048,6 +7048,11 @@ publish_dtx_outcome({group_applied, _, _, _, _}, _AppliedOps,
                     _Index, replay, S) ->
     S.
 
+publish_runtime(Ns, Msg = {projection_advanced, _, _}) ->
+    %% The same post-apply edge wakes admission without copying runtime diffs
+    %% into the consensus owner's mailbox or giving it a second wait queue.
+    _ = quod_reg:publish({quod_prolog, Ns}, Msg),
+    _ = quod_reg:publish({runtime, Ns}, Msg), ok;
 publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.
 
 %% Drop the runtime pin and its monitor (on re-attach or DOWN). The demonitor flush purges any

@@ -1684,6 +1684,131 @@ warm_exact_and_current_reuse_one_verified_phase_session_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+feed_established_current_view_test_() ->
+    [{atom_to_list(Case), fun() -> feed_established_current_view(Case) end}
+     || Case <- [resident, suffix, behind, duplicate, outsider, dead, replaced, higher,
+                 queued_higher, committee_cursor, digest_higher, local_higher,
+                 opaque_progress, queued_digest]].
+
+feed_established_current_view(Case) ->
+    %% Certified four-member ledger and real owner/worker/feed callbacks.
+    %% The feed installer stands in only for the authenticated link handshake.
+    Fixture = four_member_confirmation_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    [A, B, C, D] = Peers = maps:get(peers, Fixture),
+    Routes = maps:get(routes, Fixture), Parent = self(),
+    Initial = peer_chain_fetch(Ns, lists:sublist(maps:get(chain, Fixture), 2), Peers),
+    Full = peer_chain_fetch(Ns, maps:get(chain, Fixture), Peers),
+    Calls = ets:new(feed_current_calls, [public, ordered_set]),
+    Advance = lists:member(Case, [suffix, higher, queued_higher, queued_digest,
+                                 digest_higher, local_higher, opaque_progress]),
+    Mode = atomics:new(1, []),
+    Fetch = fun(P, E, N, From, To) ->
+        ets:insert(Calls, {erlang:unique_integer([monotonic]), {From, To}}),
+        case atomics:get(Mode, 1) =:= 1 andalso Advance of
+            true -> Full(P, E, N, From, To);
+            false -> Initial(P, E, N, From, To)
+        end
+    end,
+    Dir = temp_dir("feed-current-confirmation"), Owner = start_owner(Dir, Fetch),
+    Links = [spawn(fun() -> fake_feed_link(Parent) end) || _ <- lists:seq(1, 5)],
+    [L1, L2, L3, L4, L5] = Links,
+    try
+        ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:current(Routes, Identity, 5000)),
+        ets:delete_all_objects(Calls), atomics:put(Mode, 1, 1),
+        H = case Case of suffix -> 4; queued_higher -> 4; queued_digest -> 4; _ -> 2 end,
+        install_current_feed(Owner, Identity, A, L1, H),
+        install_current_feed(Owner, Identity, B, L2, H),
+        case Case of
+            resident -> install_current_feed(Owner, Identity, C, L3, H);
+            suffix -> install_current_feed(Owner, Identity, C, L3, H);
+            queued_higher -> install_current_feed(Owner, Identity, C, L3, H);
+            queued_digest -> install_current_feed(Owner, Identity, C, L3, H);
+            digest_higher ->
+                install_current_feed(Owner, Identity, C, L3, H),
+                Owner ! {quod_message, {A, L1}, quod_feed:channel(Ns),
+                           quod_feed:encode(Ns, {digest, 4})};
+            local_higher ->
+                install_current_feed(Owner, Identity, C, L3, H),
+                Owner ! {certified_head, Ns, 4};
+            opaque_progress ->
+                install_current_feed(Owner, Identity, C, L3, H),
+                Frame = quod_feed:encode(Ns, {block, lists:nth(4, maps:get(chain, Fixture))}),
+                ?assertEqual(unknown, quod_feed:progress_height(Frame, Ns)),
+                Owner ! {quod_message, {A, L1}, quod_feed:channel(Ns), Frame};
+            committee_cursor -> ok;
+            behind -> install_current_feed(Owner, Identity, C, L3, 1);
+            duplicate -> install_current_feed(Owner, Identity, A, L3, H);
+            outsider -> install_current_feed(Owner, Identity, key(outsider), L3, H);
+            dead ->
+                install_current_feed(Owner, Identity, C, L3, H),
+                M = monitor(process, L3), L3 ! close,
+                receive {'DOWN', M, process, L3, _} -> ok after 1000 -> error(feed_not_dead) end;
+            replaced ->
+                Old = install_current_feed(Owner, Identity, C, L3, H),
+                ok = quod_foreign_log:test_install_feed_registration(
+                       Owner, Identity, C, L4, crypto:strong_rand_bytes(16)),
+                Owner ! {quod_message, {C, L3}, quod_feed:channel(Ns),
+                           quod_feed:encode(Ns, {recipient_wake, 1, Old, element(2, Identity), H})};
+            higher ->
+                install_current_feed(Owner, Identity, C, L3, H),
+                install_current_feed(Owner, Identity, D, L5, 4)
+        end,
+        Expected = case Advance of true -> 4; false -> 2 end,
+        case Case of
+            Held when Held =:= queued_higher; Held =:= queued_digest; Held =:= committee_cursor ->
+                Token = make_ref(),
+                ok = gen_server:call(Owner, {test_hold_next_worker_result, self(), Token}),
+                Call = gen_server:send_request(Owner, current_request(Routes, Identity, none, 500)),
+                {Ref, Worker} = receive {worker_result_held, Token, R, Pid} -> {R, Pid}
+                                after 2000 -> error(current_result_not_held) end,
+                case Case of
+                    queued_higher -> install_current_feed(Owner, Identity, D, L5, 5);
+                    queued_digest ->
+                        Owner ! {quod_message, {A, L1}, quod_feed:channel(Ns),
+                                   quod_feed:encode(Ns, {digest, 5})},
+                        _ = sys:get_state(Owner);
+                    committee_cursor ->
+                        install_current_feed(Owner, Identity, C, L3, H),
+                        %% Callback-seam control, not a committee-change ledger:
+                        %% the held worker supplies its newly verified committee.
+                        %% Old resident registrations are not its authority.
+                        State = sys:get_state(Owner),
+                        Query = {current_feed_tip, Ref, H, [A, B, D, key(other_member)]},
+                        ?assertEqual({reply, unknown, State},
+                          quod_foreign_log:handle_call(Query, {Worker, make_ref()}, State)),
+                        ?assertEqual({reply, unknown, State},
+                          quod_foreign_log:handle_call(Query, {self(), make_ref()}, State))
+                end,
+                Worker ! {release_worker_result, Token},
+                Reply = gen_server:wait_response(Call, 1500),
+                case Case of
+                    committee_cursor -> ?assertMatch({reply, {ok, #{slot := 2}}}, Reply);
+                    _ -> ?assertEqual({reply, {error, retry}}, Reply)
+                end;
+            _ ->
+                ?assertMatch({ok, #{slot := Expected}}, quod_foreign_log:current(Routes, Identity, 5000))
+        end,
+        Ranges = [Range || {_, Range} <- ets:tab2list(Calls)],
+        case Case of
+            resident -> ?assertEqual([], Ranges);
+            suffix -> ?assertEqual([{3, 4}], Ranges);
+            _ -> ?assert(length(Ranges) > 0)
+        end
+    after
+        stop_owner(Owner), [L ! close || L <- Links],
+        ets:delete(Calls), file:del_dir_r(Dir)
+    end.
+
+install_current_feed(Owner, Identity = {Ns, Anchor}, Peer, Link, Height) ->
+    Registration = crypto:strong_rand_bytes(16),
+    ok = quod_foreign_log:test_install_feed_registration(Owner, Identity, Peer, Link, Registration),
+    Owner ! {quod_message, {Peer, Link}, quod_feed:channel(Ns),
+             quod_feed:encode(Ns, {recipient_registered, 1, Registration, Anchor, Height})},
+    ?assertMatch({ack, Registration, _, Height},
+                 quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
+    Registration.
+
 resident_current_view_uses_height_wake_and_verifies_real_delta_test() ->
     Fixture = prepared_then_committed_fixture(unique_ns()),
     quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
@@ -1791,8 +1916,7 @@ resident_current_view_uses_height_wake_and_verifies_real_delta_test() ->
                {ok, #{identity := Identity, slot := 3}},
                quod_foreign_log:current(Routes, Identity, 5000)),
             Fetches = collect_resident_current_fetches([]),
-            ?assert(lists:member(3, Fetches)),
-            ?assertNot(lists:member(1, Fetches)),
+            ?assertEqual([3], Fetches),
             ?assertEqual([SessionFile], phase_session_files(Dir, Identity))
         after
             Link ! close,

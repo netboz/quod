@@ -4,6 +4,9 @@
 %% Shared protocol bounds for founding, ingress, consensus, and history validation.
 -define(MAX_VALIDATORS, 64).
 -define(MAX_BLOCK_BYTES, (256 * 1024)).
+%% New volatile admissions share the ingress population bound. It never
+%% limits recovery of obligations already accepted into durable custody.
+-define(MAX_INGRESS_TXS, 512).
 %% The canonical block envelope adds only fixed slot/parent/time/tag framing
 %% around a payload already bounded by MAX_BLOCK_BYTES.
 -define(QUOD_MAX_CANONICAL_BLOCK_BYTES, (?MAX_BLOCK_BYTES + 128)).

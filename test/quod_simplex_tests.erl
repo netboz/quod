@@ -1507,7 +1507,9 @@ receive_ordered_relay(Parent, Tag) ->
 dtx_relay_received_while_leader_busy_is_retained_test() ->
     Fixture = quod_ct:atomic_role_fixture(),
     {Ns, Anchor} = maps:get(target, Fixture),
-    #{pubkey := Self} = Signer = maps:get(signer, Fixture),
+    #{pubkey := Author} = maps:get(signer, Fixture),
+    {Self, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Self, key => quod_identity:key_term({Self, Seed})},
     Admission = maps:get(admission, Fixture),
     Control = maps:get(vote_control, Fixture),
     {ok, Envelope} = quod_atomic:encode_control(Control),
@@ -1518,12 +1520,12 @@ dtx_relay_received_while_leader_busy_is_retained_test() ->
                  collecting, {1, []},
                  st(#{ns => Ns, genesis_hash => Anchor,
                       self => Self, id => Signer,
-                      validators => [Self],
-                      author_admissions => #{Self => Admission},
+                      validators => lists:sort([Self, Author]),
+                      author_admissions => #{Self => Admission, Author => Admission},
                       signing_journal => Journal,
                       sync => ready, prolog_ready => true})),
         Retained = quod_simplex:dispatch(
-                     Self, {dtx_submit, [Envelope], []}, Busy),
+                     Author, {dtx_submit, [Envelope], []}, Busy),
         ?assertMatch(
            #{retained := 1, ready := 1, waiters := 0},
            quod_simplex:test_retained_dtx_state(Retained)),

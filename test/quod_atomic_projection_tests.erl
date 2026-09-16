@@ -1337,6 +1337,15 @@ source_enrollment_edge(Edge) ->
     end.
 
 source_owner_caches_parent_selection_until_journal_handoff_test() ->
+    source_owner_parent_selection(no_relay).
+
+peer_vote_relay_during_cached_parent_selection_test() ->
+    source_owner_parent_selection(peer_relay).
+
+own_vote_echo_during_cached_parent_selection_test() ->
+    source_owner_parent_selection(own_echo).
+
+source_owner_parent_selection(Scenario) ->
     %% Real Prolog callbacks and a real signing-journal reopen, with Simplex's
     %% production admission functions called directly. The installed height-1
     %% policy is a fixture, not a full founding/consensus-node test.
@@ -1351,16 +1360,21 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
           binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     {ok, Engine} = quod_prolog:start_link(Ns, #{outcome_backend => memory}),
     {ok, J} = quod_signing_journal:initialize(Ns, <<99:256>>, Dir),
-    try quod_ct:with_network_identity(maps:get(network, F), fun() ->
+    ExpectedEnvelope = try quod_ct:with_network_identity(maps:get(network, F), fun() ->
         Node = maps:get(node_identity, F), Member = maps:get(pubkey, Node),
+        Peer = signer(), PeerKey = maps:get(pubkey, Peer),
+        Validators = case Scenario of no_relay -> [Member]; _ -> lists:sort([Member, PeerKey]) end,
+        Admissions = maps:from_list([{K, maps:get(admission, F)} || K <- Validators]),
         Facts = [{can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Namespace'}},
-                 {peer_admitted, Member, "validator", 14567, Member} | quod_ct:signed_agent_facts(F)],
+                 {peer_admitted, Member, "validator", 14567, Member}] ++
+                [{peer_admitted, K, "validator", 14568, K} || K <- Validators -- [Member]] ++
+                quod_ct:signed_agent_facts(F),
         Change = quod_ct:change(Ns, lists:append([quod_ct:diff_for(Fact) || Fact <- Facts]), #{}),
         ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 1, quod_ct:batch(Change)), live),
         ?assertEqual(1, quod_prolog:applied(Ns)),
         S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
-              self => Member, id => Node, validators => [Member],
-              author_admissions => #{Member => maps:get(admission, F)},
+              self => Member, id => Node, validators => Validators,
+              author_admissions => Admissions,
               signing_journal => J, slot => 1, history_head => {1, <<7:256>>},
               sync => ready, prolog_ready => true}),
         Token = make_ref(),
@@ -1380,8 +1394,15 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
         ?assertMatch(#{rows := Rows} when map_size(Rows) =:= 0, quod_simplex:test_retained_dtx_state(Selected)),
         ?assertEqual(Selected, quod_simplex:on_admission_verdict(
                                  Tag, Key, Timestamp, Engine, 1, Reply, Selected)),
-        {Signed, []} = quod_simplex:test_progress_dtx_admission(
+        {Signed0, []} = quod_simplex:test_progress_dtx_admission(
                         quod_simplex:test_state_set(prolog_ready, true, Selected)),
+        Signed = case Scenario of
+            no_relay -> Signed0;
+            _ ->
+                {ok, WithWaiter} = quod_simplex:test_retain_dtx_record(
+                    quod_atomic:control_body(C), {dtx_endpoint, self()}, Signed0),
+                WithWaiter
+        end,
         ?assertMatch(#{active := 0, reserved := 0}, quod_simplex:test_dtx_admission_state(Signed)),
         #{rows := SignedRows} = quod_simplex:test_retained_dtx_state(Signed),
         [#{envelope := Envelope}] = maps:values(SignedRows),
@@ -1405,6 +1426,8 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
         ?assertMatch(#{retained := 0}, quod_simplex:test_retained_dtx_state(AwaitingApply)),
         ?assertMatch(#{active := 1}, quod_simplex:test_dtx_admission_state(AwaitingApply)),
         ?assertEqual([], quod_simplex:test_eligible_dtx_wave(AwaitingApply)),
+        case Scenario of
+        no_relay ->
         Applied = quod_simplex:on_admission_parent_applied(Engine, {{2, <<8:256>>}, #{}}, AwaitingApply),
         {{Reused, []}, {call_time, Signing}} = tprof:profile(fun() ->
             quod_simplex:test_progress_dtx_admission(Applied)
@@ -1442,7 +1465,12 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
         ?assertEqual(Negative, quod_atomic:control_material(NegativeControl)),
         ?assertEqual(quod_atomic:intent_id(M), quod_atomic:intent_id(Negative)),
         ?assert(maps:get(sequence, quod_atomic:control_metadata(NegativeControl)) >
-                maps:get(sequence, quod_atomic:control_metadata(SignedControl)))
+                maps:get(sequence, quod_atomic:control_metadata(SignedControl))),
+        NegativeEnvelope;
+        _ ->
+            source_owner_relay_selection(Scenario, F, Peer, Engine, SignedControl,
+                                        Signed, AwaitingApply)
+        end
     end)
     after
         ok = quod_signing_journal:close(J),
@@ -1451,8 +1479,7 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
     try
         {ok, Reopened} = quod_signing_journal:recover(Ns, <<99:256>>, Dir),
         #{Id := #{envelope := Saved}} = quod_signing_journal:pending_dtx(Reopened),
-        {ok, SavedControl} = quod_atomic:decode_control(Saved),
-        ?assertMatch({quod_dtx_vote, 4, _, O, _, {refused, _}}, quod_atomic:control_body(SavedControl)),
+        ?assertEqual(ExpectedEnvelope, Saved),
         Rebuilt = quod_simplex:test_restore_pending_dtx(
                     quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
                                              signing_journal => Reopened}), Reopened),
@@ -1461,6 +1488,88 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
                      quod_simplex:test_retained_dtx_state(Rebuilt)),
         ok = quod_signing_journal:close(Reopened)
     after ok = file:del_dir_r(Dir)
+    end.
+
+source_owner_relay_selection(Scenario, F, Peer, Engine, OwnControl, Signed, AwaitingApply) ->
+    {Ns, _} = Target = maps:get(origin, F),
+    Material = quod_atomic:control_material(OwnControl),
+    Digest = quod_atomic:record_digest(OwnControl), Id = quod_atomic:group_id(OwnControl),
+    Admission = maps:get(admission, F), Node = maps:get(node_identity, F),
+    Member = maps:get(pubkey, Node), PeerKey = maps:get(pubkey, Peer),
+    {ok, OwnEnvelope} = quod_atomic:encode_control(OwnControl),
+    RelayControl = case Scenario of
+        peer_relay ->
+            {ok, C} = quod_atomic:sign_control(Target, Material, Admission, 1, 0, Peer), C;
+        own_echo -> OwnControl
+    end,
+    {ok, RelayEnvelope} = quod_atomic:encode_control(RelayControl),
+    ?assertEqual(Digest, quod_atomic:record_digest(RelayControl)),
+    %% Keep transport/coordinator effects in this fixture process; the real
+    %% running callback still performs its entire post-ingress reconciliation.
+    Linked = quod_simplex:test_state_set(conns, #{PeerKey => {self(), make_ref()}},
+        quod_simplex:test_state_set(inbound_conns, #{PeerKey => {self(), make_ref()}},
+        quod_simplex:test_state_set(eng, quod_simplex:eng_new(
+            quod_simplex:consensus_domain(Ns, element(2, Target)),
+            lists:sort([Member, PeerKey]), 2),
+        quod_simplex:test_seed_running_dtx_coordinator(Id, self(), AwaitingApply)))),
+    Journal = quod_simplex:test_signing_journal(Signed),
+    OwnFloor = quod_signing_journal:dtx_floor(Journal, {Admission, Member}),
+    PeerFloor = quod_signing_journal:dtx_floor(Journal, {Admission, PeerKey}),
+    Caller = self(),
+    Profile = #{type => call_time, report => return, set_on_spawn => false,
+                pattern => [{quod_atomic, sign_control, 6}, {quod_signing_journal, record_dtx, 2},
+                            {quod_prolog, request_dtx_verdict, 6}]},
+    {{keep_state, Relayed, _}, {call_time, RelayCalls}} = tprof:profile(fun() ->
+        %% test_state's consensus channel is fixed even with a unique Ns.
+        quod_simplex:running(info,
+            {quod_message, {{PeerKey, ignored}, Caller},
+             term_to_binary({log, <<"t">>}, [deterministic]),
+             quod_simplex:encode(Ns, {dtx_submit, [RelayEnvelope], []})}, Linked)
+    end, Profile),
+    ?assertEqual([], RelayCalls),
+    ?assertMatch(#{active := 1}, quod_simplex:test_dtx_admission_state(Relayed)),
+    %% An ordinary duplicate submit adds another real endpoint waiter to the
+    %% accepted group while the cached local selection is still detached.
+    {Record, _, _} = Material,
+    {ok, RecordBlob} = quod_atomic:encode_record(Record),
+    {ok, Waiting, []} = quod_simplex:test_start_local_dtx_endpoint_request(
+        {submit, <<11:128>>, RecordBlob}, [], 10000, {Caller, make_ref()}, Relayed),
+    try
+        {{Reused, []}, {call_time, Calls}} = tprof:profile(fun() ->
+            Reconciled = quod_simplex:test_refresh_retained_readiness(Waiting),
+            Applied = quod_simplex:on_admission_parent_applied(
+                Engine, {{2, <<8:256>>}, #{}}, Reconciled),
+            quod_simplex:test_progress_dtx_admission(Applied)
+        end, Profile),
+        ?assertEqual([], Calls),
+        AfterJournal = quod_simplex:test_signing_journal(Reused),
+        ?assertEqual(Journal, AfterJournal),
+        ?assertEqual(OwnFloor, quod_signing_journal:dtx_floor(AfterJournal, {Admission, Member})),
+        ?assertEqual(PeerFloor, quod_signing_journal:dtx_floor(AfterJournal, {Admission, PeerKey})),
+        ?assertMatch(#{active := 0, reserved := 0}, quod_simplex:test_dtx_admission_state(Reused)),
+        #{retained := 1, bytes := Bytes, waiters := 2, waiter_index := Waiters,
+          rows := Rows} = quod_simplex:test_retained_dtx_state(Reused),
+        [Waiter] = maps:keys(Waiters) -- [Caller],
+        ?assertEqual(#{Caller => Digest, Waiter => Digest}, Waiters),
+        ?assertEqual(byte_size(RelayEnvelope), Bytes),
+        [#{envelope := RelayEnvelope, bytes := Bytes, inserted_at := At,
+           observation_started_at := Started}] = maps:values(Rows),
+        [#{inserted_at := At, observation_started_at := Started}] =
+            maps:values(maps:get(rows, quod_simplex:test_retained_dtx_state(Signed))),
+        ?assertEqual(quod_simplex:test_retained_dtx_state(Reused),
+            quod_simplex:test_retained_dtx_state(quod_simplex:test_refresh_retained_readiness(Reused))),
+        #{entry := Entry, ref := Ref} = certified_control(
+            #{control => RelayControl, ref => none}, [Node, Peer], 3),
+        #entry{data = Payload} = quod_ledger:entry_view(Entry),
+        Done = quod_simplex:test_resolve_committed_dtx(Entry, Payload, Reused),
+        Reply = {ok, Ref, [{Ref, Entry}]},
+        receive {dtx_submit_result, Reply} -> ok after 1000 -> error(lost_original_waiter) end,
+        receive {dtx_endpoint_worker_result, Waiter, {submit_result, Digest, Reply}} -> ok
+        after 1000 -> error(lost_relay_waiter) end,
+        ?assertMatch(#{retained := 0, bytes := 0, waiters := 0},
+                     quod_simplex:test_retained_dtx_state(Done)),
+        OwnEnvelope
+    after quod_simplex:test_close_dtx_endpoint(Waiting)
     end.
 
 select_owner_vote(Engine, Floor, Expected, S) ->

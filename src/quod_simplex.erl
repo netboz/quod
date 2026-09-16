@@ -4716,9 +4716,10 @@ retain_selected_envelope(Material, #dtx_submission{control = Control} = Previous
          maps:get(Author, S#s.author_admissions, none) =:= Admission andalso
          Seq > maps:get({Admission, Author}, S#s.dtx_lanes, 0) of
         true ->
-            Row = Previous#dtx_submission{waiters = #{}, relay_placement = none,
-                    placement = retained_installation_placement(Material, Control, Seq, S)},
-            {ok, schedule_dtx_drive(S#s{retained_dtx = quod_dtx_owner:put_new(Row, S#s.retained_dtx)})};
+            %% Another author may have relayed this semantic vote while local
+            %% selection waited. Rejoin the shared retention boundary.
+            retain_dtx_submission(Material, none, Previous#dtx_submission.validation_sidecar,
+                {signed, Control, Previous#dtx_submission.envelope}, S);
         false -> retain_dtx_submission(Material, none, [], sign, S)
     end;
 retain_selected_envelope(Material, none, S) ->
@@ -7146,19 +7147,16 @@ validation_sidecar_bytes(Hints) ->
     {ok, WireHints} = quod_dtx_endpoint:encode_validation_sidecar(Hints),
     byte_size(term_to_binary(WireHints, [deterministic])).
 
-%% A consensus relay already carries the original author's authenticated,
-%% canonical control.  Keep those exact bytes in the shared retained owner;
-%% signing them again as the current leader would change their authorship.
-retain_relayed_dtx_control(Control, Envelope, ValidationSidecar, S)
-  when is_binary(Envelope) ->
-    case quod_atomic:encode_control(Control) of
-        {ok, Envelope} ->
-            retain_dtx_submission(
-              quod_atomic:control_material(Control), none, ValidationSidecar,
-              {signed, Control, Envelope}, S);
-        _ ->
-            {error, invalid_dtx_submission}
-    end.
+%% decode_dtx_wave checked canonical bytes; acceptable_payload authenticated
+%% their author and admission. Own vote echoes join existing selection/journal
+%% custody; other authors keep their exact signed envelope in shared retention.
+retain_relayed_dtx_control(Control, Envelope, ValidationSidecar, S) ->
+    Mode = case local_owned_vote(Control, S) of
+        true -> select;
+        false -> {signed, Control, Envelope}
+    end,
+    retain_dtx_submission(quod_atomic:control_material(Control), none,
+                          ValidationSidecar, Mode, S).
 
 retain_dtx_submission(Material = {Record, Digest, _}, Waiter, ValidationSidecar,
                       NewSubmission,
@@ -7394,7 +7392,8 @@ requeue_owned_vote(Row = #dtx_submission{digest = Digest}, S) ->
     {Row, Registry} = quod_dtx_owner:take(Digest, S#s.retained_dtx),
     queue_detached_vote(Row, S#s{retained_dtx = Registry}).
 
-local_owned_vote(#dtx_submission{control = C}, #s{self = Self}) ->
+local_owned_vote(#dtx_submission{control = C}, S) -> local_owned_vote(C, S);
+local_owned_vote(C, #s{self = Self}) ->
     quod_atomic:control_kind(C) =:= vote andalso
       maps:get(author, quod_atomic:control_metadata(C)) =:= Self.
 

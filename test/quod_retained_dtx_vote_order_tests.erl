@@ -3,8 +3,8 @@
 Pending Vote publication preserves the existing apply-before-notify boundary.
 
 Real signed own plans, N=4 finality, on-disk journal and phase index. A source
-Vote commits while another group remains in source custody. Parent changes
-return that other Vote to selection; they never erase its completion duty.
+Vote commits while another group remains in source custody. Applied changes
+return the conflicting Vote to selection; they never erase its completion duty.
 The registered Prolog receiver observes actual production casts in FIFO order.
 """.
 
@@ -82,14 +82,22 @@ scenario(Mode) ->
         {ok, AfterProjection, _} = quod_ct:with_network_identity(maps:get(network, First),
           fun() -> quod_simplex:history_advance(Identity, Entry, Before, Index) end),
         _ = receiver_messages(Receiver),
-        After = apply_scenario(Mode, Block, Entry, Before, AfterProjection,
+        Dispatched = apply_scenario(Mode, Block, Entry, Before, AfterProjection,
                                OtherPeers, Identities, Domain, Both),
         Messages = receiver_messages(Receiver),
         assert_order(Mode, Entry, Ref1, G1, Messages),
         ?assertEqual([Ref1], [R || {dtx_group_resolved, R} <- Messages]),
         ?assertNot(lists:member({dtx_group_resolved, Ref2}, Messages)),
-        ?assertNot(maps:is_key(dtx_pending, quod_simplex:test_state_projection(After))),
-        %% The new parent invalidates only the cached selection. The exact
+        ?assertNot(maps:is_key(dtx_pending, quod_simplex:test_state_projection(Dispatched))),
+        ?assertEqual([], quod_simplex:test_eligible_dtx_wave(Dispatched)),
+        %% This receiver records casts; it does not run a Prolog engine. After
+        %% its delivery barrier, inject the installed change at the production
+        %% owner callback. Real reducer/publication is covered separately.
+        Changes = maps:from_keys(quod_selection_basis:reservation_keys(M1), true),
+        Applied = quod_simplex:on_admission_parent_applied(Receiver,
+                    {{2, quod_simplex:entry_history_hash(Entry)}, Changes}, Dispatched),
+        After = quod_simplex:test_refresh_retained_readiness(Applied),
+        %% The installed conflicting parent invalidates only the selection. The exact
         %% pending Vote and its waiter transfer to the same admission FIFO;
         %% no new signature or fabricated conflict refusal can escape here.
         ?assertMatch(#{retained := 0}, quod_simplex:test_retained_dtx_state(After)),

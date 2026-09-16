@@ -52,7 +52,7 @@ caller_loss_never_drops_or_restarts_accepted_work_test() ->
     Detached = quod_atomic_admission:detach_waiter(self(), Checking),
     ?assertEqual({[], Detached}, quod_atomic_admission:next(parent1, 1, Detached)),
     {selected, #{material := M, waiters := []}, Ready} =
-        quod_atomic_admission:verdict(Tag, parent1, {vote, M}, Detached),
+        verdict(Tag, parent1, {vote, M}, Detached),
     {#{material := M, waiters := []}, Empty} = quod_atomic_admission:take(Id, Ready),
     ok.
 
@@ -62,15 +62,16 @@ parent_incarnation_and_deadline_edges_are_the_only_redrives_test() ->
     Q = quod_atomic_admission:admit(M, none, #{}, Empty),
     {[{Id, T1, M, _}], Q1} = quod_atomic_admission:next(parent1, Deadline - 1, Q),
     ?assertEqual({[], Q1}, quod_atomic_admission:next(parent1, Deadline, Q1)),
-    {waiting, Q2} = quod_atomic_admission:verdict(T1, parent1, abstain, Q1),
+    {waiting, Q2} = verdict(T1, parent1, abstain, Q1),
     ?assertEqual({[], Q2}, quod_atomic_admission:next(parent1, Deadline, Q2)),
     {[{Id, T2, M, _}], Q3} = quod_atomic_admission:next(parent1, Deadline + 1, Q2),
     ?assertNotEqual(T1, T2),
-    ?assertEqual(stale, quod_atomic_admission:verdict(T1, parent1, {vote, M}, Q3)),
+    ?assertEqual(stale, verdict(T1, parent1, {vote, M}, Q3)),
     ?assertEqual({[], Q3}, quod_atomic_admission:next(parent1, Deadline + 2, Q3)),
-    {[{Id, T3, M, _}], Q4} = quod_atomic_admission:next(parent2, Deadline + 2, Q3),
-    ?assertEqual(stale, quod_atomic_admission:verdict(T2, parent1, {vote, M}, Q4)),
-    ?assertEqual(stale, quod_atomic_admission:verdict(T3, parent1, {vote, M}, Q4)),
+    {[{Id, T3, M, _}], Q4} = quod_atomic_admission:next(parent2, Deadline + 2,
+        quod_atomic_admission:parent_applied(parent2, #{}, Q3)),
+    ?assertEqual(stale, verdict(T2, parent1, {vote, M}, Q4)),
+    ?assertEqual(stale, verdict(T3, parent1, {vote, M}, Q4)),
     Lost = quod_atomic_admission:engine_lost(self(), Q4),
     {[{Id, T4, M, _}], _} = quod_atomic_admission:next(parent2, Deadline + 2, Lost),
     ?assertNotEqual(T3, T4).
@@ -83,9 +84,9 @@ missing_material_does_not_block_later_groups_or_replace_owned_material_test() ->
     Q1 = quod_atomic_admission:admit(Other, none, #{}, Q0),
     {[{Id, T1, Missing, _}, {OtherId, T2, Other, _}], Q2} =
         quod_atomic_admission:next(parent1, 1, Q1),
-    {waiting, Q3} = quod_atomic_admission:verdict(T1, parent1, abstain, Q2),
+    {waiting, Q3} = verdict(T1, parent1, abstain, Q2),
     {selected, #{material := Other}, Selected} =
-        quod_atomic_admission:verdict(T2, parent1, {vote, Other}, Q3),
+        verdict(T2, parent1, {vote, Other}, Q3),
     {#{material := Other}, Q4} = quod_atomic_admission:take(OtherId, Selected),
     ?assertEqual({[], Q4}, quod_atomic_admission:next(parent1, 1, Q4)),
     Q5 = quod_atomic_admission:admit(M, {dtx_endpoint, self()}, #{}, Q4),
@@ -93,9 +94,9 @@ missing_material_does_not_block_later_groups_or_replace_owned_material_test() ->
     Q7 = quod_atomic_admission:admit(Missing, none, #{}, Q6),
     ?assertEqual(Q6, Q7),
     ?assertEqual({[], Q7}, quod_atomic_admission:next(parent1, 1, Q7)),
-    ?assertEqual(stale, quod_atomic_admission:verdict(T1, parent1, {vote, Missing}, Q7)),
+    ?assertEqual(stale, verdict(T1, parent1, {vote, Missing}, Q7)),
     {selected, #{material := M, waiters := [Me]}, Ready} =
-        quod_atomic_admission:verdict(T3, parent1, {vote, M}, Q7),
+        verdict(T3, parent1, {vote, M}, Q7),
     {#{material := M}, Empty} = quod_atomic_admission:take(Id, Ready),
     ?assertEqual(self(), Me).
 
@@ -104,7 +105,7 @@ repeated_manifest_does_not_restart_a_waiting_selection_test() ->
     M = material(), Missing = missing(M), Id = group(M),
     Q = quod_atomic_admission:admit(Missing, none, #{}, Empty),
     {[{Id, Tag, _, _}], Q1} = quod_atomic_admission:next(parent1, 1, Q),
-    {waiting, Q2} = quod_atomic_admission:verdict(Tag, parent1, abstain, Q1),
+    {waiting, Q2} = verdict(Tag, parent1, abstain, Q1),
     {ok, OtherProposal} = quod_atomic:select_vote(Missing, {refused, [conflict]}),
     ?assertEqual(Q2, quod_atomic_admission:admit(OtherProposal, none, #{}, Q2)),
     ?assertEqual({[], Q2}, quod_atomic_admission:next(parent1, 2, Q2)).
@@ -116,10 +117,10 @@ indexed_completion_and_selected_refusal_consume_one_row_test() ->
     {#{material := M, waiters := [Me]}, Empty} = quod_atomic_admission:take(Id, Q),
     ?assertEqual(self(), Me),
     {[{Id, Tag, _, _}], Q1} = quod_atomic_admission:next(parent1, deadline(M) + 1, Q),
-    ?assertEqual(stale, quod_atomic_admission:verdict(Tag, parent1, {vote, material()}, Q1)),
+    ?assertEqual(stale, verdict(Tag, parent1, {vote, material()}, Q1)),
     {ok, N} = quod_atomic:select_vote(M, {refused, [vote_deadline]}),
     {selected, #{material := N, waiters := [Me]}, Ready} =
-        quod_atomic_admission:verdict(Tag, parent1, {vote, N}, Q1),
+        verdict(Tag, parent1, {vote, N}, Q1),
     {#{material := N}, Empty} = quod_atomic_admission:take(Id, Ready),
     ?assertEqual(error, quod_atomic_admission:take(Id, Empty)),
     ?assertNot(quod_atomic_admission:contains(Id, Empty)).
@@ -129,7 +130,7 @@ selected_material_waits_for_writer_readiness_without_revalidation_test() ->
     M = material(), Id = group(M), D = deadline(M),
     Q = quod_atomic_admission:admit(M, none, #{}, Empty),
     {[{Id, Tag, M, _}], Q1} = quod_atomic_admission:next(parent1, D - 1, Q),
-    {selected, _, Ready} = quod_atomic_admission:verdict(Tag, parent1, {vote, M}, Q1),
+    {selected, _, Ready} = verdict(Tag, parent1, {vote, M}, Q1),
     ?assertEqual({1, 0}, quod_atomic_admission:counts(Ready)),
     %% A paused writer simply does not take this command. Reopening admission
     %% under the same parent gets the same material, never another policy walk.
@@ -147,11 +148,11 @@ journaled_selection_keeps_original_custody_until_replacement_test() ->
     {[{Id, Tag, M, _}], Checking} = quod_atomic_admission:next(parent2, deadline(M) + 1, Q),
     {ok, Negative} = quod_atomic:select_vote(M, {refused, [vote_deadline]}),
     {selected, #{material := Negative, retained := Row}, Ready} =
-        quod_atomic_admission:verdict(Tag, parent2, {vote, Negative}, Checking),
+        verdict(Tag, parent2, {vote, Negative}, Checking),
     %% The chosen negative is not durable until the owner's journal effect:
     %% the original exact retained envelope remains in the selected row.
     {#{material := Negative, retained := Row, waiters := [Me],
-       selection := {parent2, true}}, Empty} = quod_atomic_admission:take(Id, Ready),
+       selection := {{parent2, true}, #{parent := true}}}, Empty} = quod_atomic_admission:take(Id, Ready),
     ?assertEqual(self(), Me).
 
 signed_missing_material_cannot_be_upgraded_to_another_intent_test() ->
@@ -174,34 +175,36 @@ waiting_selection_never_retries_without_a_changed_binding_test() ->
     M = material(), Id = group(M), Empty = quod_atomic_admission:new(),
     Q = quod_atomic_admission:admit(M, none, #{}, Empty),
     {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(parent1, 1, Q),
-    {waiting, Parked} = quod_atomic_admission:verdict(Tag, parent1, abstain, Checking),
+    {waiting, Parked} = verdict(Tag, parent1, abstain, Checking),
     lists:foreach(fun(_) ->
         ?assertEqual({[], Parked}, quod_atomic_admission:next(parent1, 1, Parked))
     end, lists:seq(1, 20)),
-    {[{Id, Tag3, _, _}], Changed} = quod_atomic_admission:next(parent2, 1, Parked),
-    {selected, _, _} = quod_atomic_admission:verdict(Tag3, parent2, {vote, M}, Changed).
+    {[{Id, Tag3, _, _}], Changed} = quod_atomic_admission:next(parent2, 1,
+        quod_atomic_admission:parent_applied(parent2, #{}, Parked)),
+    {selected, _, _} = verdict(Tag3, parent2, {vote, M}, Changed).
 
 policy_wait_does_not_restart_selection_test() ->
     M = material(), Id = group(M),
     Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
     {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(parent1, 1, Q),
-    {waiting, Parked} = quod_atomic_admission:verdict(Tag, parent1, abstain, Checking),
-    ?assertEqual(Parked, quod_atomic_admission:parent_applied(parent1, Parked)),
+    {waiting, Parked} = verdict(Tag, parent1, abstain, Checking),
+    ?assertEqual(Parked, quod_atomic_admission:parent_applied(parent1, #{}, Parked)),
     ?assertEqual({[], Parked}, quod_atomic_admission:next(parent1, 1, Parked)).
 
 only_the_applied_parent_wakes_an_abstained_validation_test() ->
     M = material(), Id = group(M),
+    Parent = {self(), {2, <<2:256>>}}, Earlier = {self(), {1, <<1:256>>}},
     Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
-    {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(parent1, 1, Q),
-    ?assertEqual(Checking, quod_atomic_admission:parent_applied(parent1, Checking)),
-    {waiting, Parked} = quod_atomic_admission:verdict(Tag, parent1, await_parent, Checking),
-    ?assertEqual(Parked, quod_atomic_admission:parent_applied(other_parent, Parked)),
+    {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(Parent, 1, Q),
+    ?assertEqual(Checking, quod_atomic_admission:parent_applied(Parent, #{}, Checking)),
+    {waiting, Parked} = verdict(Tag, Parent, await_parent, Checking),
+    ?assertEqual(Parked, quod_atomic_admission:parent_applied(Earlier, #{}, Parked)),
     {[{Id, Tag2, _, _}], Checking2} = quod_atomic_admission:next(
-        parent1, 1, quod_atomic_admission:parent_applied(parent1, Parked)),
+        Parent, 1, quod_atomic_admission:parent_applied(Parent, #{}, Parked)),
     ?assertNotEqual(Tag, Tag2),
-    ?assertEqual(stale, quod_atomic_admission:verdict(Tag, parent1, {vote, M}, Checking2)),
-    {selected, _, Ready} = quod_atomic_admission:verdict(Tag2, parent1, {vote, M}, Checking2),
-    ?assertEqual(Ready, quod_atomic_admission:parent_applied(parent1, Ready)).
+    ?assertEqual(stale, verdict(Tag, Parent, {vote, M}, Checking2)),
+    {selected, _, Ready} = verdict(Tag2, Parent, {vote, M}, Checking2),
+    ?assertEqual(Ready, quod_atomic_admission:parent_applied(Parent, #{}, Ready)).
 
 out_of_order_removal_keeps_fifo_and_rejects_cross_group_tags_test() ->
     Materials = [material() || _ <- lists:seq(1, 4)],
@@ -215,7 +218,7 @@ out_of_order_removal_keeps_fifo_and_rejects_cross_group_tags_test() ->
     ?assertEqual([group(M) || M <- [First, Third, Fourth, Fifth]],
                  [Id || {Id, _, _, _} <- Commands]),
     [{_, {_, Ref}, _, _} | _] = Commands,
-    ?assertEqual(stale, quod_atomic_admission:verdict({group(Third), Ref}, parent1, {vote, Third}, Checking)),
+    ?assertEqual(stale, verdict({group(Third), Ref}, parent1, {vote, Third}, Checking)),
     Finished = lists:foldl(fun(M, Acc) -> {_, Next} = quod_atomic_admission:take(group(M), Acc), Next end,
                            Checking, [Fifth, Fourth, First, Third]),
     ?assertEqual(Empty, Finished).
@@ -265,3 +268,57 @@ missing({{quod_dtx_vote, _, G, T, _, _}, _, _}) ->
     {ok, M} = quod_atomic:admission_material(Vote), M.
 group({Record, _, _}) -> quod_atomic:group_id(Record).
 deadline({_, _, #{group := #{vote_deadline_ms := D}}}) -> D.
+
+installed_dependency_edges_rebase_without_another_validation_test() ->
+    M = material(), Id = group(M), P1 = {self(), {1, <<1:256>>}}, P2 = {self(), {2, <<2:256>>}},
+    Basis = #{{fact, {policy, 1}} => true, {request, request1} => true,
+              {reservation, {<<"saved">>, 1}} => true},
+    Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
+    {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(P1, 1, Q),
+    {selected, _, Ready} = quod_atomic_admission:verdict(Tag, P1, {{vote, M}, Basis}, Checking),
+    %% Consensus advancement is not proof that the engine applied its delta.
+    ?assertEqual({[], Ready}, quod_atomic_admission:next(P2, 1, Ready)),
+    Advanced = quod_atomic_admission:parent_applied(P2, #{{fact, {unrelated, 1}} => true}, Ready),
+    ?assertEqual({[{Id, selected, M, #{}}], Advanced}, quod_atomic_admission:next(P2, 1, Advanced)),
+    ?assertEqual(Advanced, quod_atomic_admission:parent_applied(P1, #{}, Advanced)),
+    ?assertEqual(Advanced, quod_atomic_admission:parent_applied(P2, #{}, Advanced)),
+    %% Every dependency class shares the same invalidation predicate.
+    lists:foreach(fun(Key) ->
+        Changed = quod_atomic_admission:parent_applied(P2, #{Key => true}, Ready),
+        {[{Id, NewTag, _, _}], Rechecking} = quod_atomic_admission:next(P2, 1, Changed),
+        ?assertMatch({Id, Ref} when is_reference(Ref), NewTag),
+        ?assertNotEqual(Tag, NewTag),
+        ?assertEqual(stale, verdict(Tag, P1, {vote, M}, Rechecking))
+    end, maps:keys(Basis)).
+
+missing_delta_engine_change_and_deadline_never_reuse_a_selection_test() ->
+    M = material(), Id = group(M), P1 = {self(), {1, <<1:256>>}},
+    Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
+    {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(P1, 1, Q),
+    {selected, _, Ready} = quod_atomic_admission:verdict(Tag, P1, {{vote, M}, #{}}, Checking),
+    lists:foreach(fun(Parent) ->
+        Changed = quod_atomic_admission:parent_applied(Parent, #{}, Ready),
+        ?assertMatch({[{Id, {Id, _}, M, _}], _}, quod_atomic_admission:next(Parent, 1, Changed))
+    end, [{self(), {3, <<3:256>>}}, {self(), {1, <<99:256>>}}, {other_engine, {2, <<2:256>>}}]),
+    ?assertMatch({[{Id, {Id, _}, M, _}], _},
+        quod_atomic_admission:next(P1, deadline(M) + 1, Ready)).
+
+application_overtaking_a_queued_verdict_requires_fresh_selection_test() ->
+    M = material(), Id = group(M), P1 = {self(), {1, <<1:256>>}}, P2 = {self(), {2, <<2:256>>}},
+    Q = quod_atomic_admission:admit(M, none, #{}, quod_atomic_admission:new()),
+    {[{Id, Tag, _, _}], Checking} = quod_atomic_admission:next(P1, 1, Q),
+    Applied = quod_atomic_admission:parent_applied(P2, #{}, Checking),
+    ?assertEqual(stale, quod_atomic_admission:verdict(Tag, P1, {{vote, M}, #{}}, Applied)),
+    ?assertMatch({[{Id, {Id, _}, M, _}], _}, quod_atomic_admission:next(P2, 1, Applied)),
+    %% Also overtake a recheck whose row carries an older, reusable basis.
+    %% That basis does not describe the evaluation still in flight.
+    {selected, _, Ready} = quod_atomic_admission:verdict(Tag, P1, {{vote, M}, #{}}, Checking),
+    Late = deadline(M) + 1,
+    {[{Id, LateTag, _, _}], Rechecking} = quod_atomic_admission:next(P1, Late, Ready),
+    Overtaken = quod_atomic_admission:parent_applied(P2, #{}, Rechecking),
+    ?assertEqual(stale, quod_atomic_admission:verdict(LateTag, P1, {{vote, M}, #{}}, Overtaken)),
+    ?assertMatch({[{Id, {Id, _}, M, _}], _}, quod_atomic_admission:next(P2, Late, Overtaken)).
+
+%% These lifetime controls deliberately use an unclassified, parent-bound basis.
+verdict(Tag, Parent, Result, Rows) ->
+    quod_atomic_admission:verdict(Tag, Parent, {Result, #{parent => true}}, Rows).

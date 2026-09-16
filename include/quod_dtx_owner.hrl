@@ -13,7 +13,7 @@
     %% Observation follows this existing volatile control row, never its
     %% signed envelope or journal. Recovered controls have no caller parent.
     trace_ctx = #{} :: quod_trace:context(),
-    %% The local vote's cached parent/deadline selection. It is volatile,
+    %% The local vote's parent/deadline selection and observed dependencies. It is volatile,
     %% never a signature or a journal field; restart selects again. Relayed
     %% controls have no local selection and retain their author's envelope.
     selection = none :: none | term(),

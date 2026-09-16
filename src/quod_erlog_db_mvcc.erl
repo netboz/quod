@@ -18,14 +18,15 @@ at older heights continue resolving the previous versions.
          get_procedure/2, get_procedure_type/2, get_interpreted_functors/1]).
 -export([commit/3, publish_base/1, delete/1, memory_words/1,
          history_predicates/1]).
--export([version_token/2, published/1]).
+-export([version_token/2, published/1, observe/2, changed_functors/1]).
 -ifdef(TEST).
 -export([table/1]).
 -endif.
 
 -record(ref, {table    :: ets:tid(),
               snapshot = 0 :: non_neg_integer(),
-              pending  = #{} :: map()}).
+              pending  = #{} :: map(),
+              observer = none :: none | fun((term()) -> ok)}).
 
 -type ref() :: #ref{}.
 -export_type([ref/0]).
@@ -96,6 +97,7 @@ get_procedure_type(Ref, Functor) ->
     end.
 
 get_interpreted_functors(#ref{table = Table} = Ref) ->
+    observed(predicate_registry, Ref),
     Functors = ets:select(Table, [{{{functor, '$1'}, '_'}, [], ['$1']}]),
     [Functor || Functor <- Functors,
                 get_procedure_type(Ref, Functor) =:= interpreted].
@@ -182,10 +184,14 @@ Pruning keeps the newest version at or below the oldest live snapshot, so the
 token of any pinned live snapshot is stable for that snapshot's lifetime.
 """.
 -spec version_token(ref(), term()) -> read_token() | staged.
-version_token(#ref{pending = Pending}, Functor)
+version_token(Ref, Functor) ->
+    observed({fact, Functor}, Ref),
+    token(Ref, Functor).
+
+token(#ref{pending = Pending}, Functor)
   when is_map_key(Functor, Pending) ->
     staged;
-version_token(#ref{table = Table, snapshot = Snapshot}, Functor) ->
+token(#ref{table = Table, snapshot = Snapshot}, Functor) ->
     case previous_version(Table, Functor, Snapshot) of
         {Version, deleted} -> {absent, Version};
         {Version, {clauses, _Next, [], []}} -> {absent, Version};
@@ -214,6 +220,17 @@ history_predicates(#ref{table = Table}) ->
 
 %% internals --------------------------------------------------------------
 
+-doc "Attach a call-local read observer to this immutable handle, never the shared table.".
+-spec observe(fun((term()) -> ok), ref()) -> ref().
+observe(Sink, Ref) when is_function(Sink, 1) -> Ref#ref{observer = Sink}.
+
+-doc "Names changed by the pending publication; no prefix or clause scan.".
+-spec changed_functors(ref()) -> [term()].
+changed_functors(#ref{pending = Pending}) -> maps:keys(Pending).
+
+observed(_, #ref{observer = none}) -> ok;
+observed(Event, #ref{observer = Sink}) -> ok = Sink(Event).
+
 update_clauses(Ref, Functor, Update) ->
     case raw_procedure(Ref, Functor) of
         built_in -> error;
@@ -230,6 +247,7 @@ put_pending(#ref{pending = Pending} = Ref, Functor, Procedure) ->
     Ref#ref{pending = Pending#{Functor => Procedure}}.
 
 raw_procedure(#ref{pending = Pending} = Ref, Functor) ->
+    observed({fact, Functor}, Ref),
     case maps:find(Functor, Pending) of
         {ok, deleted} -> undefined;
         {ok, Procedure} -> Procedure;

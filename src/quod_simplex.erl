@@ -1,4 +1,5 @@
 -module(quod_simplex).
+-export([entry_history_hash/1]).
 -include("quod_dtx_owner.hrl").
 -moduledoc """
 Per-namespace **DispersedSimplex** Byzantine consensus — quod's ordering layer,
@@ -1732,8 +1733,8 @@ test_seed_dtx_submission_at(
     %% have no policy-selection token, just as in the production registry.
     Engine = case quod_reg:where({quod_prolog, S#s.ns}) of undefined -> none; Pid -> Pid end,
     Selection = case quod_atomic:control_kind(Control) of
-        vote -> quod_atomic_admission:selection_key(
-                  {Engine, S#s.history_head}, vote_timestamp(S), Material);
+        vote -> {quod_atomic_admission:selection_key(
+                  {Engine, S#s.history_head}, vote_timestamp(S), Material), #{parent => true}};
         _ -> none
     end,
     Placement = test_retained_placement(retained_disposition(Material, S)),
@@ -1745,7 +1746,11 @@ test_seed_dtx_submission_at(
           observation_started_at = InsertedAt, selection = Selection,
           placement = Placement, bytes = byte_size(Envelope),
           waiters = test_dtx_waiter_set(Waiters)},
-    S#s{retained_dtx = quod_dtx_owner:put_new(Submission, Registry)}.
+    Seeded = S#s{retained_dtx = quod_dtx_owner:put_new(Submission, Registry)},
+    case is_pid(Engine) andalso local_owned_vote(Submission, S) of
+        true -> set_dtx_admission_engine(Engine, Seeded);
+        false -> Seeded
+    end.
 test_retained_placement(ready) -> ready;
 test_retained_placement({blocked, _}) -> blocked;
 test_retained_placement(stale) -> error(stale_test_dtx_submission).
@@ -4215,8 +4220,8 @@ running_impl(info, {link_error, OpenRef, Peer, Channel}, S0) ->
 running_impl(info, {content_verdict, {Sl, BH}, Verdict}, S0) ->
     S1 = on_content_verdict(Sl, BH, Verdict, S0),
     keep_progress(S0, S1, []);
-running_impl(info, {projection_advanced, Engine, Floor}, S0) ->
-    case on_admission_parent_applied(Engine, Floor, S0) of
+running_impl(info, {projection_advanced, Engine, Parent, Changes}, S0) ->
+    case on_admission_parent_applied(Engine, {Parent, Changes}, S0) of
         S0 -> {keep_state, S0};
         S1 -> keep_progress(S0, S1, [])
     end;
@@ -4615,12 +4620,12 @@ progress_dtx_admission(S0, Actions) ->
         _ -> {compact_dtx_admission(S), Actions}
     end.
 
-on_admission_parent_applied(Engine, Floor,
-  S = #s{ns = Ns, slot = Floor, dtx_admission = A = #dtx_admission{engine = Engine}}) ->
+on_admission_parent_applied(Engine, {Parent, Changes},
+  S = #s{ns = Ns, dtx_admission = A = #dtx_admission{engine = Engine}}) ->
     case Engine =:= quod_reg:where({quod_prolog, Ns}) of
         true ->
             Rows = quod_atomic_admission:parent_applied(
-                     {Engine, S#s.history_head}, A#dtx_admission.waiting),
+                     {Engine, Parent}, Changes, A#dtx_admission.waiting),
             S#s{dtx_admission = A#dtx_admission{waiting = Rows}};
         false -> S
     end;
@@ -4631,10 +4636,14 @@ finish_indexed_vote(Id, Reply, S = #s{dtx_admission = A}) ->
     reply_waiters([{dtx_endpoint, P} || P <- Waiters], Reply,
                   S#s{dtx_admission = A#dtx_admission{waiting = Rows}}).
 
-on_admission_verdict(Tag, Key = {Engine, Parent}, Timestamp, Engine, Floor, Result,
+on_admission_verdict(Tag, Key = {Engine, Parent}, Timestamp, Engine, Floor, Reply,
                      S = #s{history_head = Parent, dtx_admission = A})
   when is_record(A, dtx_admission), A#dtx_admission.engine =:= Engine,
-       (Floor =:= S#s.slot orelse (Result =:= abstain andalso Floor < S#s.slot)) ->
+       (Floor =:= S#s.slot orelse (Reply =:= abstain andalso Floor < S#s.slot)) ->
+    {Result, Basis} = case Reply of
+        {selection, Verdict, Observations} -> {Verdict, Observations};
+        _ -> {Reply, #{parent => true}}
+    end,
     Current = quod_reg:where({quod_prolog, S#s.ns}),
     SameRegion = case Result of
         {vote, {_, _, #{group := #{vote_deadline_ms := Deadline}}}} ->
@@ -4650,7 +4659,7 @@ on_admission_verdict(Tag, Key = {Engine, Parent}, Timestamp, Engine, Floor, Resu
                 true -> await_parent;
                 false -> Result
             end,
-            case quod_atomic_admission:verdict(Tag, Key, Readiness, A#dtx_admission.waiting) of
+            case quod_atomic_admission:verdict(Tag, Key, {Readiness, Basis}, A#dtx_admission.waiting) of
                 {selected, _Row, Rows} ->
                     %% A readiness pause does not discard verified work. The
                     %% normal admission drive consumes this cached verdict
@@ -4739,7 +4748,9 @@ cancel_dtx_intent(Engine, Token, S = #s{dtx_admission = A}) when is_record(A, dt
 cancel_dtx_intent(_, _, S) -> S.
 
 compact_dtx_admission(S = #s{dtx_admission = #dtx_admission{waiting = Waiting, monitor = Monitor}}) ->
-    case Waiting =:= quod_atomic_admission:new() of
+    case Waiting =:= quod_atomic_admission:new() andalso
+         not lists:any(fun(Row) -> local_owned_vote(Row, S) end,
+                       maps:values(quod_dtx_owner:rows(S#s.retained_dtx))) of
         true -> demonitor_if_set(Monitor), S#s{dtx_admission = none};
         false -> S
     end;
@@ -7365,11 +7376,11 @@ reselect_owned_votes(S0) ->
             true ->
                 Engine = case quod_reg:where({quod_prolog, S0#s.ns}) of undefined -> none; P -> P end,
                 M = quod_atomic:control_material(C),
-                Current = quod_atomic_admission:selection_key(
+                Key = quod_atomic_admission:selection_key(
                             {Engine, S0#s.history_head}, vote_timestamp(S0), M),
-                case Selected =:= Current of
-                    true -> S;
-                    false ->
+                case Selected of
+                    {Key, _} -> S;
+                    _ ->
                         case retention_disposition(M, S) of
                             {included, _} -> S;
                             stale -> S;
@@ -9227,8 +9238,11 @@ dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = R
     Timestamp = vote_timestamp(S),
     Engine = case quod_reg:where({quod_prolog, Ns}) of undefined -> none; P -> P end,
     SelectionCurrent = not local_owned_vote(Row, S) orelse
-        Selection =:= quod_atomic_admission:selection_key(
-                        {Engine, S#s.history_head}, Timestamp, quod_atomic:control_material(Control)),
+        case Selection of
+            {Key, _Basis} -> Key =:= quod_atomic_admission:selection_key(
+                        {Engine, S#s.history_head}, Timestamp, quod_atomic:control_material(Control));
+            none -> false
+        end,
     %% The clock may cross the deadline between classification and this wave.
     %% A local cached choice must still match this exact prospective time;
     %% the existing tick reselects it, never backdates a proposal or signs here.
@@ -15183,6 +15197,7 @@ history_advance_payload(
             error(invalid_committed_history)
     end.
 
+-doc "Return the canonical identity of an installed parent, including certified skips.".
 entry_history_hash(Entry) ->
     entry_history_hash_view(Entry, quod_ledger:entry_view(Entry)).
 

@@ -1453,7 +1453,7 @@ handle_cast({apply_entry, _Entry, _Origin},
     %% applied floor. Do not grow a second in-memory entry queue here.
     {noreply, S};
 handle_cast({apply_entry, Entry, Origin}, S0) ->
-    S1 = apply_committed(Entry, Origin, S0),
+    {S1, Changes} = apply_committed(Entry, Origin, S0),
     %% Drive the replay lifecycle from whether the apply ACTUALLY advanced the committed height, not
     %% from the raw origin: an already-applied no-op (`Index =< applied`) or a forward gap
     %% (`Index > applied+1`, which bails to rebuild) must never emit a false boundary.
@@ -1464,7 +1464,9 @@ handle_cast({apply_entry, Entry, Origin}, S0) ->
     %% floor too. Waiting readers re-query that floor; this signal is not a
     %% reaction event and supplies no evidence or authority of its own.
     case Advanced of
-        true -> publish_runtime(S2#s.ns, {projection_advanced, self(), S2#s.applied});
+        true -> publish_runtime(S2#s.ns,
+                  {projection_advanced, self(),
+                   {S2#s.applied, quod_simplex:entry_history_hash(Entry)}, Changes});
         false -> ok
     end,
     {noreply, S2};
@@ -6477,21 +6479,23 @@ mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
 %% all release the same bounded validation lifecycle.
 apply_committed(Entry, Origin, S) ->
     #entry{index = Index} = quod_ledger:entry_view(Entry),
-    resolve_validations(apply_step(Index, Entry, Origin, S)).
+    {Applied, Changes} = apply_step(Index, Entry, Origin, S),
+    {resolve_validations(Applied), Changes}.
 
-%% Each clause returns the new #s{}. Index is the committed entry's log index; entries
+%% Each clause returns the new #s{} and its installed dependency changes.
+%% Index is the committed entry's log index; entries
 %% arrive in order on the (FIFO) cast channel from quod_simplex. `Origin` (live|replay) reaches
 %% apply_transaction, which yields the caller completion and any live outcome
 %% event. Both are delivered only after the block snapshot is durable and visible.
 %%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
 apply_step(Index, _Entry, _Origin, S = #s{applied = A}) when Index =< A ->
-    S;
+    {S, #{}};
 %% Forward gap: quod_simplex is ahead of us (we restarted, or missed a cast). Don't apply out
 %% of order — ask quod_simplex to re-drive from the snapshot so we receive a contiguous run.
 apply_step(Index, _Entry, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     _ = try quod_simplex:rebuild(Ns) catch _:_ -> ok end,
-    S;
+    {S, #{}};
 %% Index == applied+1. Every committed entry kind is enumerated here. A recognized
 %% kind without a deterministic apply implementation fails loudly; it is never
 %% confused with `noop`, the one kind that legitimately applies no data change.
@@ -6512,16 +6516,17 @@ apply_step(Index, Entry, Origin, S0) ->
                 end),
     case Reduced of
         {ok, Projection1, Result} ->
-            finish_projection_result(
+            {finish_projection_result(
               Result, Index, Origin,
-              install_committed_projection(Projection1, S0));
+              install_committed_projection(Projection1, S0)),
+             maps:get(selection_changes, Result, #{})};
         {wait, network_identity, Reason, Projection1} ->
-            wait_for_apply_dependency(
-              Reason, install_committed_projection(Projection1, S0));
+            {wait_for_apply_dependency(
+              Reason, install_committed_projection(Projection1, S0)), #{}};
         {error, {outcome_index, Reason}} ->
             outcome_index_failure(Reason);
         {error, {predicate_modules_unavailable, Reason}} ->
-            predicate_modules_unavailable(Reason, S0);
+            {predicate_modules_unavailable(Reason, S0), #{}};
         {error, Reason} ->
             error(Reason)
     end.
@@ -7048,11 +7053,11 @@ publish_dtx_outcome({group_applied, _, _, _, _}, _AppliedOps,
                     _Index, replay, S) ->
     S.
 
-publish_runtime(Ns, Msg = {projection_advanced, _, _}) ->
-    %% The same post-apply edge wakes admission without copying runtime diffs
-    %% into the consensus owner's mailbox or giving it a second wait queue.
+publish_runtime(Ns, Msg = {projection_advanced, Engine, {Height, _}, _Changes}) ->
+    %% One installed-state edge, scoped payload for each existing audience.
+    %% Consensus receives dependency keys, never facts or a KB snapshot.
     _ = quod_reg:publish({quod_prolog, Ns}, Msg),
-    _ = quod_reg:publish({runtime, Ns}, Msg), ok;
+    _ = quod_reg:publish({runtime, Ns}, {projection_advanced, Engine, Height}), ok;
 publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.
 
 %% Drop the runtime pin and its monitor (on re-attach or DOWN). The demonitor flush purges any
@@ -7293,6 +7298,7 @@ traced_validation_verdict(Request = {Kind, _, _}, Slot, Tag, TraceCtx,
 validation_trace_verdict(valid) -> <<"valid">>;
 validation_trace_verdict({valid, _}) -> <<"valid">>;
 validation_trace_verdict({vote, _}) -> <<"vote_selected">>;
+validation_trace_verdict({selection, Verdict, _}) -> validation_trace_verdict(Verdict);
 validation_trace_verdict({invalid, _}) -> <<"invalid">>;
 validation_trace_verdict(abstain) -> <<"abstain">>.
 

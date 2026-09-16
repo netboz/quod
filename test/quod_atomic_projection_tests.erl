@@ -1,5 +1,6 @@
 -module(quod_atomic_projection_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 -include("quod_dtx_owner.hrl").
 -include("quod_ingress_limits.hrl").
@@ -623,9 +624,9 @@ planner_absence_or_endpoint_refusal_never_decides_abort_test() ->
     I = memory_outcome(T), Context = admission_context(F, T, I, 1),
     Deadline = maps:get(deadline, F),
     try quod_ct:with_network_identity(maps:get(network, F), fun() ->
-        ?assertMatch({ok, abstain, _},
+        ?assertMatch({ok, {selection, abstain, _}, _},
                      quod_commit_validation:prepare_vote(Material, Deadline, Context)),
-        ?assertMatch({ok, {vote, Material}, _},
+        ?assertMatch({ok, {selection, {vote, Material}, _}, _},
                      quod_commit_validation:prepare_vote(Material, Deadline + 1, Context))
     end)
     after ok = quod_outcome:close(I) end,
@@ -811,11 +812,13 @@ committed_materializer_keeps_vote_hidden_and_publishes_resolve_before_ack_test()
                 quod_committed_projection:apply_entry(maps:get(entry, Vote), 1, P0),
             ?assertNot(projection_proves({saved, ok}, P1)),
             Resolve = certified_control(resolve(F, Target, commit, Votes, 2), Signers, 3),
-            {ok, P2, #{kind := dtx_batch, applied_ops := [_],
+            {ok, P2, #{kind := dtx_batch, applied_ops := [_], selection_changes := Released,
                         publications := [{group_applied, Id, _, _, []}],
                         deferred_acks := [{resolve_applied, Id, 3, 2}]}} =
                 quod_committed_projection:apply_entry(maps:get(entry, Resolve), 1, P1),
             ?assert(projection_proves({saved, ok}, P2)),
+            ?assert(lists:all(fun(K) -> maps:is_key(K, Released) end,
+                quod_selection_basis:reservation_keys(quod_atomic:control_material(maps:get(control, Vote))))),
             I2 = quod_committed_projection:outcomes(P2),
             ?assertEqual(3, quod_outcome:applied_floor(I2)),
             ?assert(lists:all(fun(R) -> not maps:get(blocking, R) end,
@@ -847,23 +850,113 @@ own_vote_selection_matches_validator_policy_without_claiming_or_reauthenticating
                    pattern => [{quod_identity, verify, 3}]}),
             ?assertEqual(0, lists:sum([N || {quod_identity, verify, 3, Ps} <- Counts,
                                            {Pid, N, _} <- Ps, Pid =:= Owner])),
-            [{ok, {vote, M}, _}, {ok, {vote, Negative}, _}] = Results,
+            [{ok, {selection, {vote, M}, Basis}, _}, {ok, {selection, {vote, Negative}, _}, _}] = Results,
+            ?assertNot(maps:is_key(parent, Basis)),
+            ?assertNot(maps:is_key({context, height}, Basis)),
             ?assertEqual({ok, Negative}, quod_atomic:select_vote(M, {refused, [vote_deadline]})),
-            lists:foreach(fun({Time, {ok, {vote, Selected}, Ctx}}) ->
+            lists:foreach(fun({Time, {ok, {selection, {vote, Selected}, _}, Ctx}}) ->
                 {ok, Control} = quod_atomic:sign_control(T, Selected, maps:get(admission, F),
                                                         1, Time, maps:get(node_identity, F)),
                 ?assertMatch({ok, {valid, _}, _}, quod_commit_validation:dtx(Control, Time, check, Ctx))
             end, lists:zip([Deadline, Deadline + 1], Results)),
             #{control := Missing} = vote(F, T, none, {refused, [vote_deadline]}),
             MissingMaterial = quod_atomic:control_material(Missing),
-            ?assertMatch({ok, abstain, _},
+            ?assertMatch({ok, {selection, abstain, _}, _},
                          quod_commit_validation:prepare_vote(MissingMaterial, Deadline, Context)),
-            ?assertMatch({ok, {vote, MissingMaterial}, _},
+            ?assertMatch({ok, {selection, {vote, MissingMaterial}, _}, _},
                          quod_commit_validation:prepare_vote(MissingMaterial, Deadline + 1, Context)),
             ?assertEqual(not_found, element(1, quod_outcome:lookup_ref(I, maps:get(operation_ref, F)))),
             ok = quod_outcome:close(I)
         end, maps:get(participant_targets, F))
     end).
+
+four_disjoint_groups_select_once_across_real_vote_publications_test() ->
+    {ok, {call_time, Counts}} = tprof:profile(fun disjoint_selection_probe/0,
+        #{type => call_time, report => return, set_on_spawn => false,
+          pattern => [{quod_commit_validation, prepare_vote, 3}]}),
+    ?assertEqual(4, lists:sum([N || {quod_commit_validation, prepare_vote, 3, Ps} <- Counts,
+                                  {_Pid, N, _} <- Ps])).
+
+disjoint_selection_probe() ->
+    F0 = fixture(), Node = maps:get(node_identity, F0), KeyPair = maps:get(key_pair, F0),
+    Fs = [fixture(#{node_identity => Node, key_pair => KeyPair, operation_id => <<N:256>>,
+                    proof_id => <<N:256>>, goal_text => Goal}) ||
+          {N, Goal} <- lists:zip(lists:seq(1, 4),
+              [<<"assertz(first(ok)).">>, <<"assertz(second(ok)).">>,
+               <<"assertz(third(ok)).">>, <<"assertz(fourth(ok)).">>])],
+    [F | _] = Fs, T = maps:get(origin, F), {Ns, _} = T,
+    Member = maps:get(pubkey, Node),
+    Est = quod_ct:committed_kb(quod_ct:signed_agent_facts(F) ++
+        [{peer_admitted, Member, "validator", 14567, Member},
+         {':-', {can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, Ns}, unadvertised_policy},
+         unadvertised_policy]),
+    I = publish_outcome(memory_outcome(T), 1),
+    P = quod_committed_projection:new(T, 1, Est, I, none),
+    Materials = [quod_atomic:control_material(maps:get(control, vote(X, T, own(X, T), prepared))) || X <- Fs],
+    Q = lists:foldl(fun(M, Acc) -> quod_atomic_admission:admit(M, none, #{}, Acc) end,
+                    quod_atomic_admission:new(), Materials),
+    Parent = {self(), {1, <<1:256>>}},
+    Signers = [Node | [signer() || _ <- lists:seq(1, 3)]],
+    try quod_ct:with_network_identity(maps:get(network, F), fun() ->
+        {Done, _} = (fun() ->
+            {Commands, Checking} = quod_atomic_admission:next(Parent, 1, Q),
+            ?assertEqual(4, length(Commands)),
+            Context = quod_commit_validation:new(T, 1, Est, I, none),
+            Ready = lists:foldl(fun({_Id, Tag, M, _}, Rows) ->
+                {ok, {selection, {vote, M}, Basis}, _} = quod_commit_validation:prepare_vote(M, 1, Context),
+                ?assert(maps:is_key({fact, {unadvertised_policy, 0}}, Basis)),
+                ?assert(maps:is_key({fact, {agent_key, 3}}, Basis)),
+                ?assert(maps:is_key({fact, {peer_admitted, 4}}, Basis)),
+                ?assertNot(maps:is_key(parent, Basis)),
+                {selected, _, Next} = quod_atomic_admission:verdict(Tag, Parent, {{vote, M}, Basis}, Rows),
+                Next
+            end, Checking, Commands),
+            lists:foldl(fun({X, Slot}, {Rows, Projection}) ->
+                M = quod_atomic:control_material(maps:get(control, vote(X, T, own(X, T), prepared))),
+                {#{material := M}, Remaining} = quod_atomic_admission:take(quod_atomic:group_id(maps:get(group, X)), Rows),
+                Certified = certified_control(vote(X, T, own(X, T), prepared), Signers, Slot),
+                Entry = maps:get(entry, Certified),
+                {ok, NextProjection, #{selection_changes := Changes}} =
+                    quod_committed_projection:apply_entry(Entry, 1, Projection),
+                ?assert(lists:all(fun(K) -> maps:is_key(K, Changes) end,
+                                 quod_selection_basis:reservation_keys(M))),
+                ?assert(maps:is_key({request, maps:get(key, maps:get(claim, request(X)))}, Changes)),
+                NextParent = {self(), {Slot, quod_simplex:entry_history_hash(Entry)}},
+                Rebased = quod_atomic_admission:parent_applied(NextParent, Changes, Remaining),
+                {NextCommands, Rebased} = quod_atomic_admission:next(NextParent, 1, Rebased),
+                ?assertEqual(5 - Slot, length(NextCommands)),
+                ?assert(lists:all(fun({_, Tag, _, _}) -> Tag =:= selected end, NextCommands)),
+                {Rebased, NextProjection}
+            end, {Ready, P}, lists:zip(Fs, lists:seq(2, 5)))
+        end)(),
+        ?assertEqual({0, 0}, quod_atomic_admission:counts(Done)),
+        ok
+    end)
+    after ok = quod_outcome:close(I),
+          #est{db = #db{ref = Kb}} = Est, quod_erlog_db_mvcc:delete(Kb)
+    end.
+
+key_revocation_and_signer_admission_invalidate_real_selections_test_() ->
+    [{atom_to_list(Name), fun() ->
+        F = fixture(), T = maps:get(origin, F), I = memory_outcome(T),
+        Est = #est{db = #db{ref = Ref}} = admission_est(F, T),
+        #{control := Control} = vote(F, T, own(F, T), prepared),
+        Material = quod_atomic:control_material(Control),
+        try quod_ct:with_network_identity(maps:get(network, F), fun() ->
+            {ok, {selection, {vote, Material}, Basis}, _} = quod_commit_validation:prepare_vote(
+                Material, 1, quod_commit_validation:new(T, 1, Est, I, none)),
+            {ok, Dropped} = quod_erlog_db_mvcc:abolish_clauses(Ref, {Name, Arity}),
+            Changes = maps:from_keys([{fact, K} || K <- quod_erlog_db_mvcc:changed_functors(Dropped)], true),
+            ?assert(quod_selection_basis:affected(Basis, Changes)),
+            ?assertEqual(none, quod_atomic_admission:advance_selection(
+                {{{self(), {1, <<1:256>>}}, false}, Basis}, {self(), {2, <<2:256>>}}, Changes)),
+            NewEst = quod_ct:commit_kb(quod_ct:set_ref(Est, Dropped), 2, 1),
+            {ok, {selection, {vote, Negative}, _}, _} = quod_commit_validation:prepare_vote(
+                Material, 1, quod_commit_validation:new(T, 2, NewEst, I, none)),
+            ?assertEqual({ok, Negative}, quod_atomic:select_vote(Material, {refused, [Reason]}))
+        end)
+        after ok = quod_outcome:close(I), quod_erlog_db_mvcc:delete(Ref) end
+    end} || {Name, Arity, Reason} <- [{agent_key, 3, invalid_agent_key}, {peer_admitted, 4, signer_not_admitted}]].
 
 vote_selection_uses_the_existing_parent_queue_and_timeout_test() ->
     %% A real bare Prolog owner and production apply/validation callbacks.
@@ -885,7 +978,7 @@ vote_selection_uses_the_existing_parent_queue_and_timeout_test() ->
         Change = quod_ct:change(Ns, lists:append([quod_ct:diff_for(Fact) || Fact <- Facts]), #{}),
         ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 1, quod_ct:batch(Change)), live),
         receive
-            {dtx_verdict, Tag, Engine, 1, {vote, M}} -> ok
+            {dtx_verdict, Tag, Engine, 1, {selection, {vote, M}, _}} -> ok
         after 1000 -> error(vote_selection_not_released_at_parent) end,
         WaveTag = make_ref(),
         ok = quod_prolog:request_dtx_verdict(Ns, {wave, [C]}, 1, 2, self(), WaveTag),
@@ -921,13 +1014,18 @@ timed_out_selection_wakes_from_real_parent_apply() ->
     {ok, Engine} = quod_prolog:start_link(Ns, #{outcome_backend => memory}),
     {ok, J} = quod_signing_journal:initialize(Ns, <<99:256>>, Dir),
     true = quod_reg:subscribe({quod_prolog, Ns}),
+    Facts = [{can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Namespace'}},
+             {peer_admitted, Member, "validator", 14567, Member} | quod_ct:signed_agent_facts(F)],
+    Change = quod_ct:change(Ns, lists:append([quod_ct:diff_for(Fact) || Fact <- Facts]), #{}),
+    Entry = quod_ct:committed_entry(Ns, 1, quod_ct:batch(Change)),
+    Parent = {1, quod_simplex:entry_history_hash(Entry)},
     try quod_ct:with_network_identity(maps:get(network, F), fun() ->
         %% The fixture owner has dispatched parent 1; the real Prolog engine
         %% has not consumed it. These are production callbacks, not consensus.
         S0 = quod_simplex:test_state(#{ns => Ns, genesis_hash => element(2, O),
             self => Member, id => Node, validators => [Member],
             author_admissions => #{Member => maps:get(admission, F)},
-            signing_journal => J, slot => 1, history_head => {1, <<7:256>>},
+            signing_journal => J, slot => 1, history_head => Parent,
             sync => ready, prolog_ready => true}),
         Token = make_ref(),
         {ok, Reserved} = quod_simplex:test_enqueue_dtx_intent(
@@ -949,26 +1047,23 @@ timed_out_selection_wakes_from_real_parent_apply() ->
         lists:foreach(fun(_) ->
             ?assertEqual({Parked, []}, quod_simplex:test_progress_dtx_admission(Parked))
         end, lists:seq(1, 10)),
-        ?assertEqual(Parked, quod_simplex:on_admission_parent_applied(self(), 1, Parked)),
-        Facts = [{can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Namespace'}},
-                 {peer_admitted, Member, "validator", 14567, Member} | quod_ct:signed_agent_facts(F)],
-        Change = quod_ct:change(Ns, lists:append([quod_ct:diff_for(Fact) || Fact <- Facts]), #{}),
-        ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 1, quod_ct:batch(Change)), live),
-        receive {projection_advanced, Engine, 1} -> ok
+        ?assertEqual(Parked, quod_simplex:on_admission_parent_applied(self(), {Parent, #{}}, Parked)),
+        ok = quod_prolog:apply_entry(Ns, Entry, live),
+        Changes = receive {projection_advanced, Engine, Parent, ChangedKeys} -> ChangedKeys
         after 1000 -> error(parent_application_signal_missing) end,
-        Woken = quod_simplex:on_admission_parent_applied(Engine, 1, Parked),
-        ?assertEqual(Woken, quod_simplex:on_admission_parent_applied(Engine, 1, Woken)),
+        Woken = quod_simplex:on_admission_parent_applied(Engine, {Parent, Changes}, Parked),
+        ?assertEqual(Woken, quod_simplex:on_admission_parent_applied(Engine, {Parent, Changes}, Woken)),
         {Rechecking, []} = quod_simplex:test_progress_dtx_admission(Woken),
-        ?assertEqual(Rechecking, quod_simplex:on_admission_parent_applied(Engine, 1, Rechecking)),
+        ?assertEqual(Rechecking, quod_simplex:on_admission_parent_applied(Engine, {Parent, Changes}, Rechecking)),
         receive
-            {dtx_verdict, {dtx_admission, NewTag, Key, NewTs}, Engine, 1, {vote, M}} ->
+            {dtx_verdict, {dtx_admission, NewTag, Key, NewTs}, Engine, 1, {selection, {vote, M}, _}} ->
                 ?assertNotEqual(Tag, NewTag),
                 %% A non-vote with the parent already published waits on
                 %% something else. A duplicate apply edge cannot restart it.
                 PolicyWait = quod_simplex:on_admission_verdict(
                     NewTag, Key, NewTs, Engine, 1, abstain, Rechecking),
                 ?assertEqual(PolicyWait,
-                    quod_simplex:on_admission_parent_applied(Engine, 1, PolicyWait))
+                    quod_simplex:on_admission_parent_applied(Engine, {Parent, Changes}, PolicyWait))
         after 1000 -> error(applied_parent_did_not_wake_selection) end
     end)
     after
@@ -1275,16 +1370,16 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
         ?assertMatch(#{reserved := 1, active := 0}, quod_simplex:test_dtx_admission_state(Reserved)),
         Active = quod_simplex:test_activate_dtx_intent(Engine, Token, Reserved),
         {Checking, []} = quod_simplex:test_progress_dtx_admission(Active),
-        {Tag, Key, Timestamp} = receive
-            {dtx_verdict, {dtx_admission, Tag0, Key0, Ts0}, Engine, 1, {vote, M}} ->
-                {Tag0, Key0, Ts0}
+        {Tag, Key, Timestamp, Reply} = receive
+            {dtx_verdict, {dtx_admission, Tag0, Key0, Ts0}, Engine, 1,
+              {selection, {vote, M}, _} = R} -> {Tag0, Key0, Ts0, R}
         after 1000 -> error(owner_selection_missing) end,
         Paused = quod_simplex:test_state_set(prolog_ready, false, Checking),
-        Selected = quod_simplex:on_admission_verdict(Tag, Key, Timestamp, Engine, 1, {vote, M}, Paused),
+        Selected = quod_simplex:on_admission_verdict(Tag, Key, Timestamp, Engine, 1, Reply, Paused),
         {Selected, []} = quod_simplex:test_progress_dtx_admission(Selected),
         ?assertMatch(#{rows := Rows} when map_size(Rows) =:= 0, quod_simplex:test_retained_dtx_state(Selected)),
         ?assertEqual(Selected, quod_simplex:on_admission_verdict(
-                                 Tag, Key, Timestamp, Engine, 1, {vote, M}, Selected)),
+                                 Tag, Key, Timestamp, Engine, 1, Reply, Selected)),
         {Signed, []} = quod_simplex:test_progress_dtx_admission(
                         quod_simplex:test_state_set(prolog_ready, true, Selected)),
         ?assertMatch(#{active := 0, reserved := 0}, quod_simplex:test_dtx_admission_state(Signed)),
@@ -1300,20 +1395,22 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
         ?assertEqual(Signed, StillSigned),
         receive {dtx_verdict, {dtx_admission, _, _, _}, _, _, _} -> error(revalidated_selected_material)
         after 0 -> ok end,
-        %% A new committed parent uses the same selection seam. Unchanged
-        %% material reuses the exact durable envelope (zero signing/fsync).
+        %% A new committed parent with no relevant changes reuses both the
+        %% selection and exact durable envelope (zero re-proof/signing/fsync).
         ok = quod_prolog:apply_entry(Ns, quod_ct:committed_entry(Ns, 2, noop), live),
         ?assertEqual(2, quod_prolog:applied(Ns)),
         Advanced = quod_simplex:test_state_set(history_head, {2, <<8:256>>},
                      quod_simplex:test_state_set(slot, 2, Signed)),
-        Requeued = quod_simplex:test_refresh_retained_readiness(Advanced),
-        ?assertMatch(#{rows := Empty} when map_size(Empty) =:= 0,
-                     quod_simplex:test_retained_dtx_state(Requeued)),
-        ?assertMatch(#{active := 1}, quod_simplex:test_dtx_admission_state(Requeued)),
-        {Reused, {call_time, Signing}} = tprof:profile(fun() ->
-            select_owner_vote(Engine, 2, M, Requeued)
+        AwaitingApply = quod_simplex:test_refresh_retained_readiness(Advanced),
+        ?assertMatch(#{retained := 0}, quod_simplex:test_retained_dtx_state(AwaitingApply)),
+        ?assertMatch(#{active := 1}, quod_simplex:test_dtx_admission_state(AwaitingApply)),
+        ?assertEqual([], quod_simplex:test_eligible_dtx_wave(AwaitingApply)),
+        Applied = quod_simplex:on_admission_parent_applied(Engine, {{2, <<8:256>>}, #{}}, AwaitingApply),
+        {{Reused, []}, {call_time, Signing}} = tprof:profile(fun() ->
+            quod_simplex:test_progress_dtx_admission(Applied)
         end, #{type => call_time, report => return, set_on_spawn => false,
-               pattern => [{quod_atomic, sign_control, 6}, {quod_signing_journal, record_dtx, 2}]}),
+               pattern => [{quod_atomic, sign_control, 6}, {quod_signing_journal, record_dtx, 2},
+                           {quod_prolog, request_dtx_verdict, 6}]}),
         ?assertEqual([], Signing),
         ?assertEqual(quod_simplex:test_signing_journal(Signed),
                      quod_simplex:test_signing_journal(Reused)),
@@ -1368,12 +1465,13 @@ source_owner_caches_parent_selection_until_journal_handoff_test() ->
 
 select_owner_vote(Engine, Floor, Expected, S) ->
     {Checking, []} = quod_simplex:test_progress_dtx_admission(S),
-    {Tag, Key, Timestamp} = receive
-        {dtx_verdict, {dtx_admission, T, K, Ts}, Engine, Floor, {vote, Expected}} -> {T, K, Ts};
+    {Tag, Key, Timestamp, Reply} = receive
+        {dtx_verdict, {dtx_admission, T, K, Ts}, Engine, Floor,
+          {selection, {vote, Expected}, _} = R} -> {T, K, Ts, R};
         {dtx_verdict, _, Engine, Floor, Other} -> error({wrong_owner_choice, Other})
     after 1000 -> error(owner_reselection_missing) end,
     Selected = quod_simplex:on_admission_verdict(Tag, Key, Timestamp, Engine, Floor,
-                                                {vote, Expected}, Checking),
+                                                Reply, Checking),
     {Retained, []} = quod_simplex:test_progress_dtx_admission(Selected),
     Retained.
 

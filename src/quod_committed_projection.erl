@@ -450,7 +450,9 @@ apply_reduced_dtx_batch(
                     apply_reduced_dtx_batch(
                       Rest, Index, Floor,
                       Projection1#projection{outcomes = Outcomes1},
-                      [Control | Controls0], [ResultItem | ResultItems0],
+                      [Control | Controls0],
+                      [ResultItem#{selection_changes => quod_selection_basis:role_changes(Control, Effects)}
+                         | ResultItems0],
                       Publications1,
                       [AppliedOps | AppliedOps0],
                       DeferredAcks1, add_stats(Stats0, Delta));
@@ -529,6 +531,11 @@ publish(Index, Floor,
                         outcomes = Outcomes0}, Result) ->
     case quod_outcome:advance_applied(Outcomes0, Index) of
         {ok, OutcomesStaged} ->
+            Changes = maps:from_list([{Key, true} || Key <-
+                [{fact, F} || F <- quod_erlog_db_mvcc:changed_functors(Ref0)] ++
+                quod_outcome:changed_requests(OutcomesStaged) ++
+                lists:append([maps:get(selection_changes, Item, []) ||
+                              Item <- maps:get(items, Result, [])])]),
             Flushed = trace_publication(
                         <<"quod.outcome.flush">>,
                         fun() -> quod_outcome:flush(OutcomesStaged) end),
@@ -542,7 +549,7 @@ publish(Index, Floor,
                     Projection1 = Projection0#projection{
                                     est = Est#est{db = Db#db{ref = Ref1}},
                                     outcomes = Outcomes1, applied = Index},
-                    {ok, Projection1, Result};
+                    {ok, Projection1, Result#{selection_changes => Changes}};
                 {error, Reason} ->
                     {error, {outcome_index, Reason}}
             end;

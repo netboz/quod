@@ -1046,8 +1046,26 @@ bound deadline. Clock skew can delay progress, never grant outcome authority.
 
 The same admission FIFO owns reservations, activation and vote re-selection;
 no second queue or polling loop is introduced. Exact duplicates reuse owned
-work and signatures. A changed parent or deadline region enables re-selection,
-never a fresh client operation. Owner/reconnect progress drives retries under
+work and signatures. A parent change transfers a local retained vote, its
+unchanged journal envelope and its selection basis into that same FIFO.
+The applying Prolog owner publishes the exact installed parent and changed
+fact/request/reservation keys on its existing notification channel. Only an
+adjacent installed parent with no intersecting dependencies reuses a selection;
+a gap, engine replacement, deadline crossing or relevant change selects again.
+No selection in flight borrows an earlier evaluation's basis. Until application
+is observed, no reuse, signature renewal or proposal is eligible.
+
+Selection observes actual MVCC reads and interpreter context/flag/native reads,
+including failed alternatives, negation and cuts; it does not trust the submitted
+read-set as the complete footprint. The collector is private to one synchronous
+evaluation and is discarded on return or exception; the existing row retains
+only dependency keys, never KB state. Merely carrying context observes nothing.
+Raw context access conservatively observes every component; absent flag names,
+enumeration and unclassified native execution retain the safe per-parent fence.
+No trusted predicate-name list is introduced. Full consensus validation is
+unchanged: a reusable local selection is not voting authority.
+
+Reselection never creates a fresh client operation. Owner/reconnect progress drives retries under
 the existing lifecycle. Original caller context survives on existing FIFO/
 retained/owner rows; truly history-only recovery remains parentless.
 

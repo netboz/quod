@@ -11,9 +11,10 @@ Journaled votes return here when their selection binding changes. Their exact
 envelope stays in that row until the sole writer reuses or supersedes it.
 
 The owner passes a committed-parent key to the existing Prolog validator.
-Unrelated callbacks cannot repeat that validation. A changed parent, engine
-incarnation or deadline region enables another check; time is supplied by the
-existing owner tick. An exact parent-application event releases a validation
+Unrelated callbacks cannot repeat that validation. Installed changes invalidate
+only selections which observed them; unknown observations stay parent-bound.
+An engine incarnation or deadline change also enables another check, with time
+supplied by the existing owner tick. An exact parent-application event releases a validation
 which timed out behind that parent; the timer itself never retries it.
 Missing material never blocks later ready rows.
 """.
@@ -21,13 +22,16 @@ Missing material never blocks later ready rows.
 -include("quod_dtx_owner.hrl").
 -include("quod_ingress_limits.hrl").
 -export([new/0, reserve/5, activate/3, cancel/3, admit/4, recheck/2,
-         selection_key/3, engine_lost/2, parent_applied/2,
+         selection_key/3, engine_lost/2, parent_applied/3,
          next/3, verdict/4, take/2, take_all/1, detach_waiter/2, contains/2,
          trace_context/2, counts/1, has_capacity/2]).
 -export_type([state/0]).
+-ifdef(TEST).
+-export([advance_selection/3]).
+-endif.
 
 -record(intent, {material, proof = none, waiters = #{}, trace = #{},
-                 check = none, retained = none, order}).
+                 check = none, basis = #{parent => true}, retained = none, order}).
 %% The ordered tree contains group IDs only. Material and custody have one
 %% location; arbitrary completion removes both indexes without queue tombstones.
 -opaque state() :: {#{binary() => #intent{}}, gb_trees:tree(integer(), binary())}.
@@ -90,10 +94,14 @@ admit(Material, Waiter, Trace, Rows = {ById, _}) ->
 
 -doc "Move a journaled local vote back into the same selection FIFO; retain its envelope for unchanged reuse.".
 -spec recheck(#dtx_submission{}, state()) -> state().
-recheck(Row = #dtx_submission{control = C, waiters = Waiters, trace_ctx = Trace}, Rows) ->
+recheck(Row = #dtx_submission{control = C, waiters = Waiters, trace_ctx = Trace, selection = Selection}, Rows) ->
     false = contains(quod_atomic:group_id(C), Rows),
+    {Check, Basis} = case Selection of
+        {Key, Captured} -> {{selected, Key, none}, Captured};
+        none -> {none, #{parent => true}}
+    end,
     insert(#intent{material = quod_atomic:control_material(C), waiters = Waiters,
-                     trace = Trace, retained = Row}, Rows).
+                     trace = Trace, retained = Row, check = Check, basis = Basis}, Rows).
 
 prefer_own_material({{quod_dtx_vote, _, _, _, none, _}, _, _},
                     {{quod_dtx_vote, _, _, _, Own, _}, _, _} = New)
@@ -122,6 +130,12 @@ next(ParentKey, Now, {ById, Order}) ->
             case Check of
                 {selected, Key, _} -> {Rows, [{Id, selected, M, Trace} | Acc]};
                 {_, Key, _} -> {Rows, Acc};
+                {_, {{Engine, _}, Region}, _}
+                  when element(2, Key) =:= Region, is_tuple(ParentKey),
+                       element(1, ParentKey) =:= Engine ->
+                    %% Do not race the apply notification with another policy
+                    %% check. It will rebase or invalidate this exact row.
+                    {Rows, Acc};
                 _ ->
                     Tag = {Id, make_ref()},
                     {Rows#{Id := R#intent{check = {checking, Key, Tag}}},
@@ -139,32 +153,56 @@ selection_key(ParentKey, Now, {_, _, #{group := #{vote_deadline_ms := Deadline}}
 -doc "Cache a verdict for its exact parent; keep custody until the sole journal writer takes it.".
 -spec verdict({binary(), reference()}, term(), term(), state()) ->
           {selected, map(), state()} | {waiting, state()} | stale.
-verdict(Tag = {Id, _}, ParentKey, Result, Rows = {ById, _}) ->
+verdict(Tag = {Id, _}, ParentKey, {Result, Basis}, Rows = {ById, _}) when is_map(Basis) ->
     case maps:get(Id, ById, none) of
         #intent{material = Old, check = {checking, {ParentKey, _} = Key, Tag}} = Row ->
             case Result of
                 {vote, Selected} ->
                     case quod_atomic:intent_id(Selected) =:= quod_atomic:intent_id(Old) of
                         true ->
-                            Ready = Row#intent{material = Selected, check = {selected, Key, Tag}},
+                            Ready = Row#intent{material = Selected, basis = Basis,
+                                               check = {selected, Key, Tag}},
                             {selected, public(Ready), put(Id, Ready, Rows)};
                         false -> stale
                     end;
                 _ ->
                     Status = case Result of await_parent -> await_parent; _ -> waiting end,
-                    {waiting, put(Id, Row#intent{check = {Status, Key, Tag}}, Rows)}
+                    {waiting, put(Id, Row#intent{basis = Basis, check = {Status, Key, Tag}}, Rows)}
             end;
         _ -> stale
     end.
 
--doc "Wake only requests waiting for this exact parent's application; a signal grants no vote.".
--spec parent_applied(term(), state()) -> state().
-parent_applied(ParentKey, Rows = {ById, _}) ->
+-doc "Rebase unchanged selections on one contiguous installed change; signals grant no vote.".
+-spec parent_applied(term(), quod_selection_basis:basis(), state()) -> state().
+parent_applied(ParentKey, Changes, Rows = {ById, _}) ->
     maps:fold(fun
         (Id, R = #intent{check = {await_parent, {ParentKey0, _}, _}}, Acc)
           when ParentKey0 =:= ParentKey -> put(Id, R#intent{check = none}, Acc);
+        (Id, R = #intent{check = {Status, Key, Tag}, basis = Basis}, Acc) ->
+            Check = case advance_selection({Key, Basis}, ParentKey, Changes) of
+                {Key, Basis} -> R#intent.check;
+                {NextKey, Basis} when Status =/= checking -> {Status, NextKey, Tag};
+                _ -> none
+            end,
+            put(Id, R#intent{check = Check}, Acc);
         (_, _, Acc) -> Acc
     end, Rows, ById).
+
+-doc "Advance a cached basis only across an installed adjacent parent, never unknown history.".
+-spec advance_selection(term(), term(), quod_selection_basis:basis()) -> term().
+advance_selection({{Key, _}, _} = Selection, Key, _Changes) -> Selection;
+advance_selection({{{Engine, {Old, _}}, Region}, Basis} = Selection,
+                  {Engine, {Height, _}} = Key, Changes) ->
+    case Height of
+        _ when Height < Old -> Selection;
+        _ when Height =:= Old + 1 ->
+            case quod_selection_basis:affected(Basis, Changes) of
+                true -> none;
+                false -> {{Key, Region}, Basis}
+            end;
+        _ -> none
+    end;
+advance_selection(_, _, _) -> none.
 
 -doc "Remove one group when its committed vote or terminal tombstone already exists.".
 -spec take(binary(), state()) -> {map(), state()} | error.
@@ -174,8 +212,9 @@ take(Id, {ById, Order}) ->
         error -> error
     end.
 
-public(#intent{material = M, waiters = Ws, trace = Trace, retained = Retained, check = Check}) ->
-    Selection = case Check of {selected, Key, _} -> Key; _ -> none end,
+public(#intent{material = M, waiters = Ws, trace = Trace, retained = Retained,
+               check = Check, basis = Basis}) ->
+    Selection = case Check of {selected, Key, _} -> {Key, Basis}; _ -> none end,
     #{material => M, waiters => maps:keys(Ws), trace_ctx => Trace,
       retained => Retained, selection => Selection}.
 

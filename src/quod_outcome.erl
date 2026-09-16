@@ -44,7 +44,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
          project_pending_votes/2, dtx_state/1,
          lookup_group/2, group_history/2,
-         apply_dtx/2, advance_applied/2, applied_floor/1]).
+         apply_dtx/2, advance_applied/2, applied_floor/1, changed_requests/1]).
 
 -export_type([index/0, outcome/0]).
 
@@ -68,6 +68,13 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          }).
 
 -opaque index() :: #index{}.
+
+-doc "Request identities changed by the pending flush; reads no durable rows.".
+-spec changed_requests(index()) -> [term()].
+changed_requests(#index{staged = Staged}) ->
+    [{request, {Agent, Id}} ||
+      #{type := operation, ref := {operation, _, _, Agent, Id}} <- maps:values(Staged)].
+
 -type outcome() ::
         #{ref := {transaction, binary(), binary(), binary()},
           tx_id := binary(), plan_digest := binary(),

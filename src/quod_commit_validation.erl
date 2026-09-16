@@ -515,7 +515,9 @@ vote_request(Material, Timestamp, Mode, Context = #context{target = Target}) ->
                 {ok, _} -> ok;
                 {error, Reason} -> {ok, {invalid, Reason}, Context}
             end;
-        {error, Reason} -> dependency_verdict(Mode, Reason, Context)
+        {error, Reason} ->
+            ok = quod_selection_basis:note(parent, Context#context.est),
+            dependency_verdict(Mode, Reason, Context)
     end.
 
 validate_vote_choice(Control, Timestamp, Mode, History, Context0) ->
@@ -539,9 +541,20 @@ validate_vote_choice(Control, Timestamp, Mode, History, Context0) ->
 
 -doc "Choose and bind an own vote before signing, using the same parent policy as block verification.".
 -spec prepare_vote(quod_atomic:admission_material(), non_neg_integer(), context()) ->
-          result({vote, quod_atomic:admission_material()} | {invalid, term()} | abstain).
+          result({selection, {vote, quod_atomic:admission_material()} | {invalid, term()} | abstain,
+                  quod_selection_basis:basis()} | {invalid, invalid_vote_target}).
 prepare_vote({{quod_dtx_vote, 4, _, Target, _, _}, _, _} = Material,
-             Timestamp, Context = #context{target = Target}) ->
+             Timestamp, Context = #context{target = Target, est = Est}) ->
+    {Result, Basis} = quod_selection_basis:capture(Est, fun(Observed) ->
+        prepare_observed_vote(Material, Timestamp, Context#context{est = Observed})
+    end),
+    case Result of
+        {ok, Verdict, Next} -> {ok, {selection, Verdict, Basis}, Next#context{est = Est}};
+        {outcome_error, _} = Error -> Error
+    end;
+prepare_vote(_, _, Context) -> {ok, {invalid, invalid_vote_target}, Context}.
+
+prepare_observed_vote(Material, Timestamp, Context) ->
     case vote_choice(Material, Timestamp, Context) of
         {ok, wait, Next} -> {ok, abstain, Next};
         {ok, Choice, Next} ->
@@ -554,8 +567,7 @@ prepare_vote({{quod_dtx_vote, 4, _, Target, _, _}, _, _} = Material,
                 error -> {ok, {invalid, malformed_control}, Next}
             end;
         {outcome_error, _} = Error -> Error
-    end;
-prepare_vote(_, _, Context) -> {ok, {invalid, invalid_vote_target}, Context}.
+    end.
 
 -doc """
 Choose the role's vote from authenticated own material and a committed parent.
@@ -592,12 +604,14 @@ vote_choice({{quod_dtx_vote, 4, _, Target, _, _}, _,
     end.
 
 source_claim_status(#{origin := Target, request := #{claim := Claim}} = Binding,
-                    Context = #context{target = Target, applied = Parent, outcomes = Outcomes}) ->
+                    Context = #context{target = Target, applied = Parent, outcomes = Outcomes, est = Est}) ->
+    ok = quod_selection_basis:note({request, maps:get(key, Claim)}, Est),
     Ref = atomic_group_ref(Binding),
     #{digest := Digest} = Claim,
     case quod_outcome:check_operation(Outcomes, Claim, Ref) of
         {new, Next} -> {ok, clear, Context#context{outcomes = Next}};
         {{claimed, #{first_slot := Slot}}, Next} when Slot > Parent ->
+            ok = quod_selection_basis:note(parent, Est),
             %% Reopen preserves permanent request claims while the KB and
             %% atomic projection replay from zero. A later positive claim
             %% cannot change an earlier certified negative vote's reason.
@@ -623,7 +637,7 @@ source_key_status(#{origin := Target,
 source_key_status(_Binding, _Context) -> ok.
 
 own_vote_choice(Plan, #{origin := Origin}, Material,
-                 Context = #context{target = Target, outcomes = Outcomes}) ->
+                 Context = #context{target = Target, outcomes = Outcomes, est = Est}) ->
     EligibleRole = Target =:= Origin orelse quod_dtx:participates(Plan),
     case validate_prepared_plan_header(Plan, EligibleRole, Context) of
         ok ->
@@ -631,6 +645,7 @@ own_vote_choice(Plan, #{origin := Origin}, Material,
                 {ok, Decoded} ->
                     case validate_prepared_plan_material(Plan, Decoded, Context) of
                         {ok, _} ->
+                            ok = quod_selection_basis:note({reservations, Material}, Est),
                             Projection = maps:get(projection, quod_outcome:dtx_state(Outcomes)),
                             Choice = case quod_atomic:reservation_readiness(Material, Projection) of
                                 ready -> prepared;
@@ -642,7 +657,9 @@ own_vote_choice(Plan, #{origin := Origin}, Material,
                     end;
                 {error, Reason} -> {ok, {refused, [Reason]}, Context}
             end;
-        {error, future_base_height} -> {ok, wait, Context};
+        {error, future_base_height} ->
+            ok = quod_selection_basis:note(parent, Est),
+            {ok, wait, Context};
         {error, Reason} -> {ok, {refused, [Reason]}, Context}
     end.
 

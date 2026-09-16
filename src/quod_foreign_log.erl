@@ -752,13 +752,14 @@ verify_resident_snapshot(
 
 verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
     Lookup = trace_foreign_stage(exact_lookup,
-               fun() -> quod_ledger_store:read_at(Store, Slot) end),
+               fun() -> quod_ledger_store:read_at(
+                          Store, Slot, {digest, Slot, ref_record_digest(Ref)}) end),
     verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection).
 
 verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection) ->
     case {Lookup, reference_projection(Slot, Slot, Projection)} of
         {{ok, Entry}, {ok, EvidenceProjection}} ->
-            #entry{index = Slot} = quod_ledger:entry_view(Entry),
+            Slot = quod_ledger:entry_index(Entry),
             verify_exact_reference_entry(
               Ref, ExpectedPhase, Entry, EvidenceProjection);
         {not_found, _} ->
@@ -6530,96 +6531,35 @@ verify_exact_reference_entry(
       end).
 
 verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection) ->
-    #entry{data = Data} = quod_ledger:entry_view(Entry),
-    case quod_ledger:classify(Data) of
-        {content, Transactions}
+    {ok, Selected} = quod_ledger:select_entry(
+      Entry, {digest, ref_slot(Ref), ref_record_digest(Ref)}, wrapped),
+    case quod_ledger:selected_record(Selected) of
+        #transaction{} = Transaction
           when ExpectedPhase =:= transaction; ExpectedPhase =:= entry ->
-            verify_exact_transaction_reference(
-              Ref, Entry, Transactions, Projection);
-        {controls, Controls} ->
-            verify_exact_control_reference(
-              Ref, ExpectedPhase, Entry, Controls, Projection);
-        _ ->
-            {error, invalid_foreign_reference}
+            verify_exact_record(Ref, Selected, Transaction, transaction, transaction, Projection);
+        none -> {error, invalid_foreign_reference};
+        #transaction{} -> {error, invalid_foreign_reference};
+        Control ->
+            case quod_atomic:control_kind(Control) of
+                Phase when ExpectedPhase =:= Phase; ExpectedPhase =:= entry ->
+                    verify_exact_record(Ref, Selected, Control, Phase, control, Projection);
+                _ -> {error, phase_mismatch}
+            end
     end.
 
-verify_exact_control_reference(
-  Ref, ExpectedPhase, Entry, Controls, Projection) ->
-    Digest = ref_record_digest(Ref),
-    case [{Kind, Control}
-          || {Kind, Control} <- Controls,
-             quod_atomic:record_digest(Control) =:= Digest] of
-        [{ActualPhase, Control}]
-          when ExpectedPhase =:= ActualPhase; ExpectedPhase =:= entry ->
-            Identity = ref_identity(Ref),
-            Committee = quod_simplex:history_committee(Projection),
-            case quod_dtx:certified_entry_ref_matches(
-                   Identity, Entry, Control, Ref, Committee) of
-                true ->
-                    DtxProjection = maps:get(dtx, Projection),
-                    Generation = maps:get(generation, DtxProjection),
-                    Routes = quod_simplex:history_validator_routes(Projection),
-                    {ok,
-                     #{identity => Identity,
-                       slot => ref_slot(Ref),
-                       block_hash => ref_block_hash(Ref),
-                       record_digest => Digest,
-                       phase => ActualPhase,
-                       generation => Generation,
-                       control => Control,
-                       entry => Entry,
-                       committee => Committee,
-                       committee_id => maps:get(committee_id, Projection),
-                       routes => Routes}};
-                false ->
-                    {error, invalid_foreign_reference}
-            end;
-        [{_OtherPhase, _Control}] ->
-            {error, phase_mismatch};
-        _ ->
-            {error, invalid_foreign_reference}
-    end.
-
-verify_exact_transaction_reference(Ref, Entry, Transactions, Projection) ->
+verify_exact_record(Ref, Entry, Record, Phase, Field, Projection) ->
     Identity = ref_identity(Ref),
-    Digest = ref_record_digest(Ref),
-    case [T || #transaction{tx_id = TxId} = T <- Transactions,
-               transaction_reference_digest(ref_slot(Ref), TxId) =:= Digest] of
-        [Transaction] ->
-            Committee = quod_simplex:history_committee(Projection),
-            case quod_dtx:certified_entry_ref_matches(
-                   Identity, Entry, Transaction, Ref, Committee) of
-                true ->
-                    DtxProjection = maps:get(dtx, Projection),
-                    #{generation := Generation} = DtxProjection,
-                    {ok, #{identity => Identity,
-                           slot => ref_slot(Ref),
-                           block_hash => ref_block_hash(Ref),
-                           record_digest => Digest,
-                           phase => transaction,
-                           generation => Generation,
-                           transaction => Transaction,
-                           entry => Entry,
-                           committee => quod_simplex:history_committee(
-                                          Projection),
-                           committee_id => maps:get(committee_id, Projection),
-                           routes => quod_simplex:history_validator_routes(
-                                       Projection)}};
-                false -> {error, invalid_foreign_reference}
-            end;
-        _ ->
-            {error, invalid_foreign_reference}
+    Committee = quod_simplex:history_committee(Projection),
+    case quod_dtx:certified_entry_ref_matches(Identity, Entry, Record, Ref, Committee) of
+        true ->
+            #{generation := Generation} = maps:get(dtx, Projection),
+            {ok, #{identity => Identity, slot => ref_slot(Ref),
+                   block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
+                   phase => Phase, generation => Generation, Field => Record, entry => Entry,
+                   committee => Committee, committee_id => maps:get(committee_id, Projection),
+                   routes => quod_simplex:history_validator_routes(Projection)}};
+        false -> {error, invalid_foreign_reference}
     end.
-
-
-%% The genesis transaction id is a tagged, namespace-bearing value rather
-%% than a 32-byte ordinary transaction id.  Its exact certified reference
-%% uses the digest of that value; slot 1 is independently fixed by the pinned
-%% genesis block hash before this selector is reached.
-transaction_reference_digest(1, TxId) when is_binary(TxId) ->
-    crypto:hash(sha256, TxId);
-transaction_reference_digest(_Slot, TxId) ->
-    TxId.
 
 %%%===================================================================
 %%% Durable cache

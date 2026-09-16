@@ -972,104 +972,55 @@ certified_ref(_, _, _, _, _, _) ->
 Build the certified reference for one exact committed DTX control or content
 transaction.
 
-The entry must carry a commit certificate for its own slot and reconstructed
-block hash. The reference embeds the canonical certificate bytes as finality
+The full entry or point selection binds its own slot and complete block hash
+to a commit certificate. The reference embeds the certificate bytes as finality
 evidence and binds the semantic control digest. This is the single pure seam
 used by consensus history and ordered Prolog apply; neither consumer rebuilds
 or encodes the certificate independently.
 """.
--spec certified_entry_ref({binary(), <<_:256>>}, quod_ledger:entry_artifact(),
+-spec certified_entry_ref({binary(), <<_:256>>}, quod_ledger:entry_artifact() | quod_ledger:selected_entry(),
                           quod_atomic:control() | #transaction{}) ->
           {ok, certified_ref()} | {error, invalid_certified_entry}.
 certified_entry_ref(Identity, Entry, Record) ->
-    View = try quod_ledger:entry_view(Entry)
-           catch error:_ -> invalid
-           end,
-    certified_entry_ref_view(Identity, Entry, View, Record).
+    Commitment = quod_ledger:record_commitment(Entry, Record),
+    certified_entry_ref_view(Identity, Commitment, Record).
 
 certified_entry_ref_view(
   {Ns, <<_:256>> = Anchor},
-  Entry, #entry{index = 1, data = {batch, [Transaction]}, cert = none},
+  {ok, 1, Anchor, none, 1},
   #transaction{tx_id = TxId, sig = none,
                origin = {Ns, <<0:256>>}, proof_id = none,
-               plan_digest = none} = Transaction)
+               plan_digest = none})
   when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(TxId), byte_size(TxId) > 0 ->
-    case quod_simplex:block_from_entry(Entry) of
-        {ok, Block} ->
-            case quod_simplex:block_hash(Block) =:= Anchor of
-                true ->
-                    case certified_ref(
-                           Ns, Anchor, 1, Anchor,
-                           crypto:hash(sha256, TxId),
-                           ?GENESIS_FINALITY_PROOF) of
-                        {ok, Ref} -> {ok, Ref};
-                        {error, _} -> {error, invalid_certified_entry}
-                    end;
-                false ->
-                    {error, invalid_certified_entry}
-            end;
-        error ->
-            {error, invalid_certified_entry}
-    end;
+    certified_ref(Ns, Anchor, 1, Anchor, crypto:hash(sha256, TxId),
+                  ?GENESIS_FINALITY_PROOF);
 certified_entry_ref_view(
   {Ns, <<_:256>> = Anchor},
-  Entry, #entry{index = Slot, data = {batch, Transactions},
-         cert = #cert{kind = commit, slot = Slot,
-                      block_hash = BlockHash} = Cert},
-  #transaction{tx_id = <<_:256>> = TxId} = Transaction)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       is_binary(BlockHash), byte_size(BlockHash) =:= 32,
-       is_list(Transactions) ->
-    case {quod_simplex:block_from_entry(Entry),
-          [T || #transaction{tx_id = CandidateId} = T <- Transactions,
-                CandidateId =:= TxId]} of
-        {{ok, Block}, [Transaction]} ->
-            case quod_simplex:block_hash(Block) =:= BlockHash of
-                true ->
-                    case certified_ref(
-                           Ns, Anchor, Slot, BlockHash, TxId,
-                           term_to_binary(Cert, [deterministic])) of
-                        {ok, Ref} -> {ok, Ref};
-                        {error, _} -> {error, invalid_certified_entry}
-                    end;
-                false ->
-                    {error, invalid_certified_entry}
-            end;
-        _ ->
-            {error, invalid_certified_entry}
-    end;
-certified_entry_ref_view(
-  {Ns, <<_:256>> = Anchor},
-  Entry, #entry{index = Slot, data = {batch, Items},
-         cert = #cert{kind = commit, slot = Slot,
-                      block_hash = BlockHash} = Cert},
-  Control)
+  {ok, Slot, BlockHash, #cert{kind = commit, slot = Slot,
+                             block_hash = BlockHash} = Cert, _Count},
+  Record)
   when is_binary(Ns), byte_size(Ns) > 0,
        is_binary(BlockHash), byte_size(BlockHash) =:= 32 ->
-    case quod_simplex:block_from_entry(Entry) of
-        {ok, Block} ->
-            %% The artifact already authenticated/classified the batch. Select
-            %% its exact member without re-running the whole wave's checks.
-            case quod_simplex:block_hash(Block) =:= BlockHash andalso
-                 [C || {dtx, C} <- Items, C =:= Control,
-                       quod_atomic:control_target(C) =:= {Ns, Anchor}] of
-                [Owned] ->
-                    case certified_ref(
-                           Ns, Anchor, Slot, BlockHash,
-                           quod_atomic:record_digest(Owned),
-                           term_to_binary(Cert, [deterministic])) of
-                        {ok, Ref} -> {ok, Ref};
-                        {error, _} -> {error, invalid_certified_entry}
-                    end;
-                _ ->
-                    {error, invalid_certified_entry}
+    case certified_record_digest({Ns, Anchor}, Record) of
+        <<_:256>> = Digest ->
+            case certified_ref(Ns, Anchor, Slot, BlockHash, Digest,
+                               term_to_binary(Cert, [deterministic])) of
+                {ok, Ref} -> {ok, Ref};
+                {error, _} -> {error, invalid_certified_entry}
             end;
-        _ ->
-            {error, invalid_certified_entry}
+        error -> {error, invalid_certified_entry}
     end;
-certified_entry_ref_view(_, _, _, _) ->
+certified_entry_ref_view(_, _, _) ->
     {error, invalid_certified_entry}.
+
+certified_record_digest(_, #transaction{tx_id = <<_:256>> = Id}) -> Id;
+certified_record_digest(_, #transaction{}) -> error;
+certified_record_digest(Target, Control) ->
+    case quod_atomic:control_target(Control) of
+        Target -> quod_atomic:record_digest(Control);
+        _ -> error
+    end.
 
 -doc """
 Verify that one certified reference names this exact committed record.
@@ -1081,7 +1032,8 @@ verifies its own supplied finality proof against the committee for that slot;
 it never requires that proof to equal the certificate bytes retained locally.
 """.
 -spec certified_entry_ref_matches(
-        identity(), quod_ledger:entry_artifact(), quod_atomic:control() | #transaction{},
+        identity(), quod_ledger:entry_artifact() | quod_ledger:selected_entry(),
+        quod_atomic:control() | #transaction{},
         certified_ref(), [<<_:256>>]) -> boolean().
 certified_entry_ref_matches(
   Identity = {Ns, <<_:256>> = Anchor}, Entry, Record, Ref, Committee)

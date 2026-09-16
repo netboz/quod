@@ -26,7 +26,7 @@ current_era_hit_has_one_committed_capture_and_zero_foreign_work_test() ->
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
         ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
-        ?assertEqual(1, calls(T, quod_ledger_store, read_at, 2)),
+        ?assertEqual(1, calls(T, quod_ledger_store, read_at, 3)),
         assert_no_foreign_work(T),
         assert_no_fetch()
     end).
@@ -203,7 +203,7 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
             %% neither reacquires mutable custody nor starts a history job.
             ?assertEqual(0, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
             ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
-            ?assertEqual(1, calls(T, quod_ledger_store, read_at, 2)),
+            ?assertEqual(1, calls(T, quod_ledger_store, read_at, 3)),
             assert_no_fetch()
         after
             stop_trace(Launcher),
@@ -478,7 +478,7 @@ local_serving_uses_any_capture_and_unchanged_absolute_deadline_test() ->
         ?assertEqual(identity(F), maps:get(identity, View)),
         ?assertEqual(source_pid(C), maps:get(owner, View)),
         ?assertEqual(1, calls(T, quod_simplex, history_view, 3)),
-        ?assertEqual(1, calls(T, quod_ledger_store, read_at, 2)),
+        ?assertEqual(1, calls(T, quod_ledger_store, read_at, 3)),
         assert_no_foreign_work(T),
         assert_no_fetch()
     end).
@@ -789,7 +789,7 @@ trace_patterns() ->
      {quod_ledger_store, open, 3},
      {quod_ledger_store, open_ro, 3},
      {quod_ledger_store, open_ro_snapshot, 1},
-     {quod_ledger_store, read_at, 2}].
+     {quod_ledger_store, read_at, 3}].
 
 start_trace(Owner) ->
     lists:foreach(fun({M, _, _} = MFA) ->

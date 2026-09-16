@@ -82,6 +82,9 @@ native_implicit_certificate_is_not_a_wire_child_binding_test() ->
     %% child's byte decoder just because its outer envelope is canonical.
     ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(
                    canonical({quod_entry, 1, Index, BlockBytes, NativeCert}), wrapped)),
+    ?assertEqual({error, bad_entry}, quod_ledger:select_entry(
+                   canonical({quod_entry, 1, Index, BlockBytes, NativeCert}),
+                   {application, (maps:get(transaction, F))#transaction.tx_id}, wrapped)),
     lists:foreach(fun(NotBytes) ->
         BadCert = {implicit, NativeCert#implicit_cert.support,
                     NotBytes, NativeCert#implicit_cert.commit},
@@ -121,6 +124,8 @@ wrapped_construction_import_and_decode_allocate_no_vocabulary_test() ->
     Entry = quod_ledger:entry(Block, Cert),
     Envelope = entry_bytes(quod_ledger, Entry),
     {ok, Decoded} = quod_ledger:decode_entry(Envelope, wrapped),
+    {ok, Selected} = quod_ledger:select_entry(Envelope, {application, Tx#transaction.tx_id}, wrapped),
+    ?assertEqual(Tx, quod_ledger:selected_record(Selected)),
     {ok, Imported} = quod_ledger:from_entry_view(quod_ledger:entry_view(Decoded)),
     ?assertEqual(Envelope, entry_bytes(quod_ledger, Imported)),
     ?assertEqual(Before, erlang:system_info(atom_count)),
@@ -149,6 +154,8 @@ actual_byte_ingress_rejects_bad_signature_and_non_envelopes_test() ->
     lists:foreach(
       fun(Bad) ->
           ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(Bad, wrapped)),
+          ?assertEqual({error, bad_entry}, quod_ledger:select_entry(
+                         Bad, {application, (maps:get(transaction, F))#transaction.tx_id}, wrapped)),
           ?assertEqual({error, bad_frame}, quod_catchup:decode_entries([Bad], wrapped)),
           assert_disk_ingress_refuses(Bad, F)
       end, Invalid).
@@ -168,6 +175,9 @@ assert_disk_ingress_refuses(Bad, F) ->
         ok = file:write_file(Log, Corrupt),
         ?assertException(error, {corrupt_entry, 2, bad_entry},
                           quod_ledger_store:read_range(Store, 2, 2)),
+        ?assertException(error, {corrupt_entry, 2, bad_entry},
+                          quod_ledger_store:read_at(Store, 2,
+                            {application, (maps:get(transaction, F))#transaction.tx_id})),
         ?assertEqual({ok, Corrupt}, file:read_file(Log))
     after
         ok = quod_ledger_store:close(Store0),
@@ -269,6 +279,10 @@ raw_entry_views_are_not_a_second_store_append_path_test() ->
     {ok, Store} = quod_ledger_store:open(?NS, Dir),
     try
         ?assertException(error, function_clause, quod_ledger_store:append(Store, [View])),
+        {batch, [Tx]} = View#entry.data,
+        {ok, Selected} = quod_ledger:select_entry(Genesis, {application, Tx#transaction.tx_id}, wrapped),
+        ?assertException(error, function_clause, quod_ledger_store:append(Store, [Selected])),
+        ?assertException(error, function_clause, quod_prolog:apply_entry(?NS, Selected, live)),
         %% Reject synchronously, before addressing an engine or emitting a
         %% cast; a representation error must not kill the receiving owner.
         ?assertException(error, function_clause, quod_prolog:apply_entry(?NS, View, live)),

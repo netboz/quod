@@ -60,7 +60,7 @@ index to the next worker through an immutable session.
          snapshot/1, resume/1,
          open_ro_snapshot/1, close/1,
          namespace/1,
-         append/2, read_at/2, read_range/3, fold/5, last/1]).
+         append/2, read_at/2, read_at/3, read_range/3, fold/5, last/1]).
 -export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
 -export_type([handle/0, session/0]).
@@ -331,13 +331,19 @@ checkpoint(_I, _Off, Cps)                             -> Cps.
 
 -doc "Read the entry at `Index`, verifying its CRC and its identity (`#entry.index =:= Index`).".
 -spec read_at(handle(), pos_integer()) -> {ok, quod_ledger:entry_artifact()} | not_found.
-read_at(#store{last_index = LI}, Index) when Index < 1; Index > LI -> not_found;
-read_at(S = #store{ns = Ns}, Index) ->
+read_at(S, Index) -> read_at(S, Index, all).
+
+-doc "Read one full entry or exact point selection through the same CRC/index-checked frame cursor.".
+-spec read_at(handle(), pos_integer(), term()) ->
+          {ok, quod_ledger:entry_artifact() | quod_ledger:selected_entry()} | not_found.
+read_at(#store{last_index = LI}, Index, _) when Index < 1; Index > LI -> not_found;
+read_at(S = #store{ns = Ns, log_fd = Fd, symbol_mode = Mode}, Index, Selection) ->
     quod_trace:with_optional_span(
       quod_trace:context(), <<"quod.ledger.read_at">>, internal,
       #{'quod.namespace' => Ns, 'quod.ledger.slot' => Index},
       fun() ->
-          {ok, [E]} = read_range(S, Index, Index),
+          [E] = fold_run(Fd, {locate(S, Index), <<>>}, Index, Index,
+                         fun(Entry, Acc) -> [Entry | Acc] end, [], {Mode, Selection}),
           {ok, E}
       end).
 
@@ -367,19 +373,19 @@ fold(_S, From, To, _Fun, Acc) when From > To -> Acc;
 fold(#store{last_index = LI}, _From, To, _Fun, _Acc) when To > LI ->
     error({fold_beyond_tail, To, LI});
 fold(S = #store{log_fd = Fd, symbol_mode = SymbolMode}, From, To, Fun, Acc) ->
-    fold_run(Fd, {locate(S, From), <<>>}, From, To, Fun, Acc, SymbolMode).
+    fold_run(Fd, {locate(S, From), <<>>}, From, To, Fun, Acc, {SymbolMode, all}).
 
 fold_run(_Fd, _Cur, I, To, _Fun, Acc, _SymbolMode) when I > To -> Acc;
 fold_run(Fd, Cur, I, To, Fun, Acc, SymbolMode) ->
     case next_frame(Fd, Cur) of
         {frame, Payload, Cur1} ->
-            case quod_ledger:decode_entry(Payload, SymbolMode) of
+            case materialize_entry(Payload, SymbolMode) of
                 {ok, E} ->
-                    case quod_ledger:entry_view(E) of
-                        #entry{index = I} ->
+                    case quod_ledger:entry_index(E) of
+                        I ->
                             fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc),
                                      SymbolMode);
-                        #entry{index = J} ->
+                        J ->
                             error({corrupt_entry, I, {wrong_index, J}})
                     end;
                 {error, Why} ->
@@ -387,6 +393,9 @@ fold_run(Fd, Cur, I, To, Fun, Acc, SymbolMode) ->
             end;
         {stop, Why, At} -> error({corrupt_entry, I, {Why, At}})
     end.
+
+materialize_entry(Bytes, {Mode, all}) -> quod_ledger:decode_entry(Bytes, Mode);
+materialize_entry(Bytes, {Mode, Selection}) -> quod_ledger:select_entry(Bytes, Selection, Mode).
 
 -doc "The `LastIndex` of the live tail (0 if empty).".
 -spec last(handle()) -> log_index().

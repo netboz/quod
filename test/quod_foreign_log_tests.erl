@@ -2557,7 +2557,7 @@ downloaded_exact_entry_is_not_reread(Mode) ->
             BaseFetch(P, E, N, From, End)
         end,
         Dir = temp_dir("downloaded-exact-entry"), Owner = start_owner(Dir, Fetch),
-        MFA = {quod_ledger_store, read_at, 2},
+        MFA = {quod_ledger_store, read_at, 3},
         Ref = maps:get(resolve_ref, F),
         try
             1 = erlang:trace_pattern(MFA, true, [local, call_count]),
@@ -2576,7 +2576,10 @@ downloaded_exact_entry_is_not_reread(Mode) ->
                 _ ->
                     ?assertMatch({ok, #{identity := Identity, slot := 3, phase := resolve}}, Result),
                     {ok, Evidence} = Result,
-                    ?assertEqual(quod_ledger:encode_entry(lists:last(maps:get(chain, F))),
+                    Record = maps:get(control, Evidence),
+                    ?assertEqual(quod_ledger:record_commitment(lists:last(maps:get(chain, F)), Record),
+                                 quod_ledger:record_commitment(maps:get(entry, Evidence), Record)),
+                    ?assertEqual({error, bad_entry},
                                  quod_ledger:encode_entry(maps:get(entry, Evidence)))
             end,
             ?assertEqual({call_count, 0}, erlang:trace_info(MFA, call_count)),

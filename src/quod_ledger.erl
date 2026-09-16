@@ -38,9 +38,10 @@ import; artifacts themselves never cross a wire or persistence boundary.
          block_bytes/1, valid_block_view/1,
          new_entry/4, entry/2, noop_entry/2, block_from_entry/1,
          entry_view/1, from_entry_view/1,
-         encode_entry/1, decode_entry/1, decode_entry/2]).
+         encode_entry/1, decode_entry/1, decode_entry/2,
+         select_entry/3, selected_record/1, entry_index/1, record_commitment/2]).
 
--export_type([kind/0, entry_artifact/0]).
+-export_type([kind/0, entry_artifact/0, selected_entry/0]).
 
 %% One canonical envelope and the interpretations established at its checked
 %% construction/decoding boundary. This is process-local data, never a wire or
@@ -48,6 +49,12 @@ import; artifacts themselves never cross a wire or persistence boundary.
 -record(canonical_entry, {bytes :: binary(), view :: #entry{},
                           block :: #block{} | none}).
 -opaque entry_artifact() :: #canonical_entry{}.
+
+%% A point reader authenticates only its selected item. This value cannot be
+%% encoded, appended, replayed or mistaken for a fully materialized artifact.
+%% Finality still binds the hash of ALL the original block bytes.
+-record(selected_entry, {index, hash, cert, count, record = none}).
+-opaque selected_entry() :: #selected_entry{}.
 
 -type control_kind() :: vote | resolve | complete.
 -type kind() :: {content, [#transaction{}]}
@@ -156,30 +163,35 @@ decode_block(Bytes) ->
 -spec decode_block(binary(), materialized | wrapped) ->
           {ok, #block{}} | {error, bad_block}.
 decode_block(Bytes, SymbolMode)
-  when is_binary(Bytes),
-       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES,
-       (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
-    case {quod_safe_term:validate_canonical(
-            Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
-          quod_safe_term:decode(
-            Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
-        {ok, {ok, {quod_block, 1, Slot, Parent, PayloadWire, Timestamp}}}
-          when is_integer(Slot), Slot >= 0,
-               is_integer(Parent), Parent >= 0,
-               is_integer(Timestamp), Timestamp >= 0 ->
+  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
+    case block_envelope(Bytes) of
+        {ok, {quod_block, 1, Slot, Parent, PayloadWire, Timestamp}} ->
             case decode_payload(PayloadWire, SymbolMode) of
                 {ok, Payload} ->
                     {ok, #block{slot = Slot, parent = Parent,
                                 payload = Payload, timestamp = Timestamp,
                                 block_bytes = Bytes}};
-                error ->
-                    {error, bad_block}
+                error -> {error, bad_block}
             end;
-        _ ->
-            {error, bad_block}
+        error -> {error, bad_block}
     end;
-decode_block(_Bytes, _SymbolMode) ->
-    {error, bad_block}.
+decode_block(_Bytes, _SymbolMode) -> {error, bad_block}.
+
+block_envelope(Bytes)
+  when is_binary(Bytes),
+       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
+    case {quod_safe_term:validate_canonical(
+            Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
+          quod_safe_term:decode(
+            Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
+        {ok, {ok, {quod_block, 1, Slot, Parent, _PayloadWire, Timestamp} = Wire}}
+          when is_integer(Slot), Slot >= 0,
+               is_integer(Parent), Parent >= 0,
+               is_integer(Timestamp), Timestamp >= 0 ->
+            {ok, Wire};
+        _ -> error
+    end;
+block_envelope(_) -> error.
 
 -spec block_bytes(#block{}) -> binary() | error.
 block_bytes(#block{block_bytes = Bytes}) when is_binary(Bytes) -> Bytes;
@@ -385,26 +397,13 @@ decode_entry(Bytes) ->
 -spec decode_entry(binary(), materialized | wrapped) ->
           {ok, entry_artifact()} | {error, bad_entry}.
 decode_entry(Bytes, SymbolMode)
-  when is_binary(Bytes),
-       byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES,
-       (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
-    case {quod_safe_term:validate_canonical(
-            Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-          quod_safe_term:decode(
-            Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
-        {ok, {ok, {quod_entry, 1, Index, none, CertWire}}}
-          when is_integer(Index), Index >= 1 ->
-            case decode_cert_wire(CertWire, SymbolMode) of
-                {ok, Cert} ->
-                    {ok, mint_artifact(Bytes, #entry{index = Index, data = noop,
-                                                    cert = Cert}, none)};
-                error -> {error, bad_entry}
-            end;
-        {ok, {ok, {quod_entry, 1, Index, BlockBytes, CertWire}}}
-          when is_integer(Index), Index >= 1, is_binary(BlockBytes) ->
-            case {decode_block(BlockBytes, SymbolMode),
-                  decode_cert_wire(CertWire, SymbolMode)} of
-                {{ok, #block{slot = Index} = Block}, {ok, Cert}} ->
+  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
+    case entry_envelope(Bytes, SymbolMode) of
+        {ok, Index, none, Cert} ->
+            {ok, mint_artifact(Bytes, #entry{index = Index, data = noop, cert = Cert}, none)};
+        {ok, Index, BlockBytes, Cert} ->
+            case decode_block(BlockBytes, SymbolMode) of
+                {ok, #block{slot = Index} = Block} ->
                     %% Both parent and implicit child have been decoded at
                     %% this boundary. Retain the exact envelope, not a new
                     %% serialization of their selected symbol interpretation.
@@ -417,6 +416,113 @@ decode_entry(Bytes, SymbolMode)
     end;
 decode_entry(_, _SymbolMode) ->
     {error, bad_entry}.
+
+entry_envelope(Bytes, Mode) when is_binary(Bytes),
+                                byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+          quod_safe_term:decode(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
+        {ok, {ok, {quod_entry, 1, I, BlockBytes, CertWire}}}
+          when is_integer(I), I >= 1, (is_binary(BlockBytes) orelse BlockBytes =:= none) ->
+            case decode_cert_wire(CertWire, Mode) of
+                {ok, Cert} -> {ok, I, BlockBytes, Cert};
+                error -> error
+            end;
+        _ -> error
+    end;
+entry_envelope(_, _) -> error.
+
+-doc "Select one exact item from checked history or canonical bytes; never mint a partial full-entry artifact.".
+-spec select_entry(binary() | entry_artifact() | selected_entry(), term(), materialized | wrapped) ->
+          {ok, selected_entry()} | {error, bad_entry}.
+select_entry(#selected_entry{record = Record} = Entry, Selection, _Mode) ->
+    case Record =/= none andalso selected_match(Selection, Record) of
+        true -> {ok, Entry};
+        false -> {ok, Entry#selected_entry{record = none}}
+    end;
+select_entry(#canonical_entry{view = #entry{index = I, data = Data, cert = Cert},
+                              block = Block}, Selection, _Mode) ->
+    {ok, selected(I, entry_hash(Block), Cert, Data, Selection)};
+select_entry(Bytes, Selection, Mode) when Mode =:= materialized; Mode =:= wrapped ->
+    case entry_envelope(Bytes, Mode) of
+        {ok, I, none, Cert} -> {ok, selected(I, none, Cert, noop, Selection)};
+        {ok, I, BlockBytes, Cert} ->
+            case block_envelope(BlockBytes) of
+                {ok, {quod_block, 1, I, _, Wire, _}} ->
+                    case selected_payload(Wire, Selection, Mode) of
+                        {ok, Count, Record} ->
+                            {ok, #selected_entry{index = I,
+                              hash = crypto:hash(sha256, BlockBytes), cert = Cert,
+                              count = Count, record = Record}};
+                        error -> {error, bad_entry}
+                    end;
+                _ -> {error, bad_entry}
+            end;
+        _ -> {error, bad_entry}
+    end;
+select_entry(_, _, _) -> {error, bad_entry}.
+
+selected_payload({batch, [{transaction, _} | _] = Items}, Selection, Mode) ->
+    try
+        Blobs = [B || {transaction, B} <- Items, is_binary(B)],
+        true = length(Blobs) =:= length(Items),
+        Matches = [B || B <- Blobs, quod_transaction:matches_selection(Selection, B)],
+        Record = case Matches of
+            [Blob] -> {ok, Tx} = quod_transaction:decode_ledger_transaction(Blob, Mode), Tx;
+            _ -> none
+        end,
+        {ok, length(Items), Record}
+    catch _:_ -> error end;
+selected_payload(Wire, Selection, Mode) ->
+    %% Controls have a whole-wave ordering invariant. Keep its one validator;
+    %% selective transaction decoding does not weaken that separate grammar.
+    case decode_payload(Wire, Mode) of
+        {ok, {batch, Items}} -> {ok, length(Items), select_record(Items, Selection)};
+        error -> error
+    end.
+
+selected(I, Hash, Cert, {batch, Items}, Selection) ->
+    #selected_entry{index = I, hash = Hash, cert = Cert, count = length(Items),
+                    record = select_record(Items, Selection)};
+selected(I, Hash, Cert, noop, _) ->
+    #selected_entry{index = I, hash = Hash, cert = Cert, count = 0}.
+
+select_record(Items, Selection) ->
+    case [R || Item <- Items, R <- [item_record(Item)], selected_match(Selection, R)] of
+        [Record] -> Record;
+        _ -> none
+    end.
+item_record({dtx, Control}) -> Control;
+item_record(Tx = #transaction{}) -> Tx.
+
+selected_match({record, #transaction{tx_id = Id}}, #transaction{tx_id = Id}) -> true;
+selected_match({record, R}, R) -> true;
+selected_match({record, _}, _) -> false;
+selected_match(Selection, Tx = #transaction{}) -> quod_transaction:matches_selection(Selection, Tx);
+selected_match({digest, _, Digest}, Control) -> quod_atomic:record_digest(Control) =:= Digest;
+selected_match(_, _) -> false.
+
+entry_hash(#block{block_bytes = Bytes}) -> crypto:hash(sha256, Bytes);
+entry_hash(none) -> none.
+
+-doc "Read the single selected authenticated record; missing or ambiguous matches return none.".
+-spec selected_record(selected_entry()) -> term().
+selected_record(#selected_entry{record = Record}) -> Record.
+
+-doc "Read the checked index of a full artifact or point selection.".
+-spec entry_index(entry_artifact() | selected_entry()) -> pos_integer().
+entry_index(#canonical_entry{view = #entry{index = I}}) -> I;
+entry_index(#selected_entry{index = I}) -> I.
+
+-doc "Bind an exact unique record to its full block hash, certificate and item count, without asserting finality.".
+-spec record_commitment(entry_artifact() | selected_entry(), term()) ->
+          {ok, pos_integer(), binary() | none, term(), non_neg_integer()} | error.
+record_commitment(#canonical_entry{} = Entry, Record) ->
+    {ok, Selected} = select_entry(Entry, {record, Record}, wrapped),
+    record_commitment(Selected, Record);
+record_commitment(#selected_entry{record = Record, index = I, hash = Hash,
+                                  cert = Cert, count = Count}, Record)
+  when Record =/= none -> {ok, I, Hash, Cert, Count};
+record_commitment(_, _) -> error.
 
 cert_wire(#implicit_cert{support = Support,
                          child = Child, commit = Commit}) ->

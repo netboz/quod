@@ -12,7 +12,8 @@ production_artifact_inventory_test() ->
     ?assert(Files =/= []),
     Forms = [production_forms(File, Root) || File <- Files],
     Declarations = lists:append([declarations(F) || F <- Forms]),
-    ?assertEqual([{quod_ledger, [bytes, view, block]}], Declarations),
+    ?assertEqual([{quod_ledger, [bytes, view, block]},
+                  {quod_ledger, [index, hash, cert, count, record]}], Declarations),
     Inventory = lists:append([inventory(F) || F <- Forms]),
     ?assertEqual(lists:sort(reviewed_sites()), lists:sort(Inventory)),
     %% The only mint is private even though all production call sites are also
@@ -28,7 +29,7 @@ reviewed_sites() ->
      {{quod_catchup, decode_entry_blobs, 3}, {call, quod_ledger, decode_entry, 2}},
      {{quod_dtx_endpoint, decode_sidecar, 2}, {call, quod_ledger, decode_entry, 2}},
      {{quod_feed, decode_inner, 1}, {call, quod_ledger, decode_entry, 1}},
-     {{quod_ledger_store, fold_run, 7}, {call, quod_ledger, decode_entry, 2}},
+     {{quod_ledger_store, materialize_entry, 2}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger_store, scan, 9}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger, decode_entry, 1}, {call, quod_ledger, decode_entry, 2}},
      %% The decoder's two arms and checked native constructor share one mint.
@@ -42,10 +43,24 @@ reviewed_sites() ->
      {{quod_ledger, from_entry_view, 1}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, from_entry_view, 1}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, mint_artifact, 3}, artifact_record},
-     %% These are the three read-only destructuring sites, not constructors.
+     %% These are read-only destructuring sites, not constructors.
      {{quod_ledger, block_from_entry, 1}, artifact_record},
      {{quod_ledger, encode_entry, 1}, artifact_record},
      {{quod_ledger, entry_view, 1}, artifact_record},
+     {{quod_ledger, entry_index, 1}, artifact_record},
+     {{quod_ledger, select_entry, 3}, artifact_record},
+     {{quod_ledger, record_commitment, 2}, artifact_record},
+     %% Separate read-only selections cannot reach the full-artifact mint or
+     %% any encode/append/apply boundary. Their record/byte bindings are tested
+     %% through the public reader and real certificates in the selection suite.
+     {{quod_ledger, select_entry, 3}, selection_record},
+     {{quod_ledger, select_entry, 3}, selection_record},
+     {{quod_ledger, select_entry, 3}, selection_update},
+     {{quod_ledger, selected, 5}, selection_record},
+     {{quod_ledger, selected, 5}, selection_record},
+     {{quod_ledger, selected_record, 1}, selection_record},
+     {{quod_ledger, entry_index, 1}, selection_record},
+     {{quod_ledger, record_commitment, 2}, selection_record},
      %% Local consensus and prepared-genesis import remain the only native
      %% production construction origins; no raw record append is allowed.
      {{quod_simplex, commit_block, 3}, {call, quod_ledger, entry, 2}},
@@ -76,7 +91,8 @@ module(Forms) ->
 
 declarations(Forms) ->
     [{module(Forms), [field_name(Field) || Field <- Fields]}
-     || {attribute, _, record, {canonical_entry, Fields}} <- Forms].
+     || {attribute, _, record, {Name, Fields}} <- Forms,
+        Name =:= canonical_entry orelse Name =:= selected_entry].
 
 field_name({typed_record_field, Field, _}) -> field_name(Field);
 field_name({record_field, _, {atom, _, Name}}) -> Name;
@@ -89,6 +105,15 @@ inventory(Forms) ->
     lists:append([[{{Module, Name, Arity}, S} || S <- walk(Clauses, Module, Imports)]
                   || {function, _, Name, Arity, Clauses} <- Forms]).
 
+walk({record, _, selected_entry, Fields}, Module, Imports) ->
+    [selection_record | walk(Fields, Module, Imports)];
+walk({record, _, Base, selected_entry, Fields}, Module, Imports) ->
+    [selection_update | walk([Base, Fields], Module, Imports)];
+walk({record_field, _, Base, selected_entry, Field}, Module, Imports) ->
+    [selection_field | walk([Base, Field], Module, Imports)];
+walk({record_index, _, selected_entry, Field}, Module, Imports) ->
+    [selection_index | walk(Field, Module, Imports)];
+walk({atom, _, selected_entry}, _M, _I) -> [escaped_selection_tag];
 walk({record, _, canonical_entry, Fields}, Module, Imports) ->
     [artifact_record | walk(Fields, Module, Imports)];
 walk({record, _, Base, canonical_entry, Fields}, Module, Imports) ->

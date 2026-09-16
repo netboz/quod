@@ -681,7 +681,7 @@ traced_work(Fun, Existing) ->
             {quod_dtx_phase_index, resume, 1},
             {quod_ledger_store, open_ro_snapshot, 1},
             {quod_ledger_store, resume, 1},
-            {quod_ledger_store, read_at, 2}],
+            {quod_ledger_store, read_at, 3}],
     [code:ensure_loaded(M) || {M, _, _} <- MFAs],
     [true = erlang:trace_pattern(MFA, [{'_', [], [{return_trace}]}], [local]) > 0 || MFA <- MFAs],
     Parent = self(), Tag = make_ref(),

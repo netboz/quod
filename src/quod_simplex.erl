@@ -2850,13 +2850,15 @@ evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
                 case quod_trace:with_optional_span(
                        quod_trace:context(), <<"quod.evidence.read_at">>, internal,
                        Attributes,
-                       fun() -> quod_ledger_store:read_at(Store, Slot) end) of
+                       fun() -> quod_ledger_store:read_at(Store, Slot, Selection) end) of
                     {ok, Entry} ->
-                        case quod_ledger:entry_view(Entry) of
-                            #entry{data = {batch, Transactions}} ->
-                                evidence_in_entry(
-                                  Identity, Entry, Transactions, Selection);
-                            _ -> {error, not_found}
+                        case quod_ledger:selected_record(Entry) of
+                            #transaction{} = Transaction ->
+                                case quod_dtx:certified_entry_ref(Identity, Entry, Transaction) of
+                                    {ok, Ref} -> {ok, Ref, Transaction};
+                                    _ -> {error, invalid_request}
+                                end;
+                            none -> {error, not_found}
                         end;
                     _ ->
                         {error, not_found}
@@ -2865,38 +2867,6 @@ evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
             end;
         _ ->
             {error, not_ready}
-    end.
-
-evidence_in_entry(Identity, Entry, Transactions, {claim, OperationRef}) ->
-    Matches =
-        [Claim || #transaction{role = {remote_claim, _, _, _}} = Claim
-                      <- Transactions,
-                  operation_ref_matches(Claim, OperationRef)],
-    certify_evidence_match(Identity, Entry, Matches);
-evidence_in_entry(Identity, Entry, Transactions, {completion, OperationRef}) ->
-    certify_evidence_match(Identity, Entry,
-      [T || #transaction{role = {remote_complete, Ref, _, _}} = T <- Transactions,
-            Ref =:= OperationRef]);
-evidence_in_entry(Identity, Entry, Transactions, {application, TxId}) ->
-    certify_evidence_match(
-      Identity, Entry,
-      [T || #transaction{tx_id = Id} = T <- Transactions, Id =:= TxId]).
-
-certify_evidence_match(Identity, Entry, Matches) ->
-    case Matches of
-        [Transaction] ->
-            case quod_dtx:certified_entry_ref(Identity, Entry, Transaction) of
-                {ok, Ref} -> {ok, Ref, Transaction};
-                _ -> {error, invalid_request}
-            end;
-        _ ->
-            {error, not_found}
-    end.
-
-operation_ref_matches(Claim, OperationRef) ->
-    case quod_transaction:request_claim(Claim) of
-        {ok, #{operation_ref := OperationRef}} -> true;
-        _ -> false
     end.
 
 dtx_outcome_result(_OutcomeRef, {ok, Status}) when is_map(Status) ->
@@ -11051,8 +11021,8 @@ verify_content_requirements(_Malformed, _LocalIdentity, _LedgerRoot,
 reference_evidence_satisfies(transaction,
                              #{transaction := #transaction{}}) -> true;
 reference_evidence_satisfies(entry, #{entry := Entry}) ->
-    try quod_ledger:entry_view(Entry) of
-        #entry{} -> true
+    try quod_ledger:entry_index(Entry) of
+        I when is_integer(I), I > 0 -> true
     catch error:_ -> false
     end;
 reference_evidence_satisfies(_Phase, _Evidence) -> false.

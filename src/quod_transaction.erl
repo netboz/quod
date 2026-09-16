@@ -33,7 +33,7 @@ accepted.
          encoded_ledger_transaction_size/1,
          decode_canonical_transaction/2,
          relay_attempt_id/5, decode_verified_submission/2,
-         decode_submission_metadata/1,
+         decode_submission_metadata/1, matches_selection/2,
          encode_operation_submission/1, decode_operation_submission/2,
          operation_submission_context/1,
          validate_request/4, request_claim/1, remote_claim_route/2,
@@ -128,6 +128,8 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
     Bundles = lists:sort(Bundles0),
     {ok, Plans} = claim_plans(Origin, Manifest, Bundles),
     [{Plan, #{goal := GoalBlob, result := ResultBlob}} | _] = Plans,
+    {ok, #{claim := RequestClaim}} =
+        quod_client_goal:verify_durable_request(RequestAuth, GoalBlob),
     Claim0 =
         #transaction{tx_id = <<>>,
                      role = {remote_claim, Manifest, Bundles, []},
@@ -142,7 +144,8 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
                      request_auth = RequestAuth,
                      auth_transcript = none,
                      author = none, sig = none,
-                     claim_view = {Origin, Manifest, Bundles, Plans}},
+                     claim_view = {Origin, Manifest, Bundles, Plans,
+                                   RequestAuth, GoalBlob, RequestClaim}},
     Identity = #operation_identity{
                   claim_ref = {transaction, OriginNs, OriginAnchor, ClaimId}} =
         operation_identity(Claim0),
@@ -206,8 +209,7 @@ operation_identity(
     ClaimId = semantic_id_or_error({Ns, Anchor}, Claim),
     true = Claim#transaction.tx_id =:= <<>> orelse Claim#transaction.tx_id =:= ClaimId,
     {agent_goal_v1, _Digest} = Binding = quod_client_goal:request_binding(RequestAuth),
-    {ok, #{claim := #{operation_ref := OperationRef}}} =
-        quod_client_goal:verify_durable_request(RequestAuth, Goal),
+    {ok, #{operation_ref := OperationRef}} = request_claim(Claim),
     #operation_identity{claim_ref = {transaction, Ns, Anchor, ClaimId},
                         binding = Binding, operation_ref = OperationRef,
                         goal = Goal, result = Result}.
@@ -562,11 +564,10 @@ request_claim(#transaction{role = application, origin = Target,
         {error, _} -> error
     end;
 request_claim(#transaction{role = {remote_claim, _, _, _},
-                           goal = GoalBlob, request_auth = Auth,
-                           auth_transcript = none}) ->
-    case quod_client_goal:verify_durable_request(Auth, GoalBlob) of
-        {ok, #{claim := Claim}} -> {ok, Claim};
-        {error, _} -> error
+                           auth_transcript = none} = Transaction) ->
+    case claim_view(Transaction) of
+        {ok, _Plans, Claim} -> {ok, Claim};
+        error -> error
     end;
 request_claim(#transaction{role = {remote_application, _, _, _},
                            request_auth = none, auth_transcript = none}) -> none;
@@ -630,18 +631,30 @@ valid_bundle_set(_, _) -> false.
 
 %% The view is built only by construction/canonical decode, never read from
 %% the wire. Its exact input binding prevents record edits from reusing a
-%% different bundle's authentication. It owns no materialized vocabulary.
-claim_plans(#transaction{origin = Origin,
-                        role = {remote_claim, Manifest, Bundles, _},
-                        claim_view = {Origin, Manifest, Bundles, Plans}}) ->
-    {ok, Plans};
-claim_plans(_) -> error.
-
-authenticate_claim(Tx = #transaction{origin = Origin,
-                                    role = {remote_claim, Manifest, Bundles, _}}) ->
-    case claim_plans(Origin, Manifest, Bundles) of
-        {ok, Plans} -> {ok, Tx#transaction{claim_view = {Origin, Manifest, Bundles, Plans}}};
+%% different bundle's authentication. The request claim is bound to its exact
+%% auth and goal too; role checks reuse it without owning any vocabulary.
+claim_plans(Transaction) ->
+    case claim_view(Transaction) of
+        {ok, Plans, _Request} -> {ok, Plans};
         error -> error
+    end.
+
+claim_view(#transaction{origin = Origin,
+                       role = {remote_claim, Manifest, Bundles, _},
+                       request_auth = Auth, goal = Goal,
+                       claim_view = {Origin, Manifest, Bundles, Plans,
+                                     Auth, Goal, Request}}) ->
+    {ok, Plans, Request};
+claim_view(_) -> error.
+
+authenticate_claim(Tx = #transaction{origin = Origin, request_auth = Auth, goal = Goal,
+                                    role = {remote_claim, Manifest, Bundles, _}}) ->
+    case {claim_plans(Origin, Manifest, Bundles),
+          quod_client_goal:verify_durable_request(Auth, Goal)} of
+        {{ok, Plans}, {ok, #{claim := Request}}} ->
+            {ok, Tx#transaction{claim_view = {Origin, Manifest, Bundles, Plans,
+                                             Auth, Goal, Request}}};
+        _ -> error
     end;
 authenticate_claim(Tx) -> {ok, Tx}.
 
@@ -830,9 +843,15 @@ semantic_role(Role) -> Role.
 -doc "Canonical bytes signed by a transaction author, bound to the target identity.".
 -spec bytes(target_binding(), #transaction{}) ->
           {ok, binary()} | {error, bad_term}.
-bytes({TargetNs, TargetAnchor, AuthorAdmission},
+bytes(Binding, #transaction{evidence = Evidence} = Transaction) ->
+    transaction_bytes(Binding, Transaction, encode_signed_evidence(Evidence));
+bytes(_Binding, _Transaction) -> {error, bad_term}.
+
+%% EvidenceBytes is either produced by the checked encoder above or retained
+%% by this module's decoder immediately after authenticating that exact wire.
+%% Native callers cannot substitute carried signed_bytes for view validation.
+transaction_bytes({TargetNs, TargetAnchor, AuthorAdmission},
       Transaction = #transaction{tx_id = TxId, role = Role,
-                   evidence = Evidence,
                    foreign_reads = ForeignReads,
                    origin = Origin, proof_id = ProofId,
                    plan_digest = PlanDigest, goal = Goal,
@@ -841,12 +860,12 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
                    request_auth = RequestAuth,
                    auth_transcript = AuthTranscript,
                    author = Author, author_seq = AuthorSeq,
-                   submitted_at = SubmittedAt})
+                   submitted_at = SubmittedAt}, EvidenceBytes)
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission), byte_size(TargetAnchor) =:= 32,
        byte_size(AuthorAdmission) =:= 32 ->
     case {encode_material(Diff, ReadCheck, Effects),
-          encode_signed_evidence(Evidence),
+          EvidenceBytes,
           canonical_foreign_reads(ForeignReads),
           valid_role_fields({TargetNs, TargetAnchor}, Transaction)} of
         {{ok, MaterialWire, EffectsWire}, {ok, EvidenceWire},
@@ -870,7 +889,7 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
         {{error, bad_term} = Error, _Evidence, _ForeignReads, _} ->
             Error
     end;
-bytes(_Binding, _Transaction) ->
+transaction_bytes(_Binding, _Transaction, _EvidenceBytes) ->
     {error, bad_term}.
 
 canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
@@ -1250,7 +1269,7 @@ decode_self_bound_submission(
     end.
 
 -doc """
-Decode a submission after `verify_submission/1` succeeded. The re-encode check
+Decode a submission after `verify_submission/1` succeeded. Canonical reconstruction
 rejects non-canonical ETF and binds the opaque bytes to the target identity
 and `Author`.
 """.
@@ -1294,8 +1313,9 @@ decode_verified_submission(_Binding, _Submission, _SymbolMode) ->
 Decode the one current canonical transaction body into its unsigned in-memory
 view. This is the shared parser used by signed submissions and by the direct
 effect journal while Simplex still owns the pending transaction's only signing
-step. Successful decoding re-encodes through `bytes/2`, so a term view can
-never replace or reinterpret the carried bytes.
+step. Reconstruction shares the native encoder, retaining evidence bytes only
+within the call that just authenticated them. A term view never replaces or
+reinterprets the carried bytes; public encoders still validate native views.
 """.
 -spec decode_canonical_transaction(target_binding(), binary()) ->
           {ok, #transaction{}} | {error, term()}.
@@ -1342,7 +1362,8 @@ decode_canonical_transaction(
                                      sig = none, signed_bytes = none},
                     case authenticate_claim(Transaction0) of
                         {ok, Transaction} ->
-                            case bytes(Binding, Transaction) of
+                            case transaction_bytes(Binding, Transaction,
+                                                   {ok, EvidenceWire}) of
                                 {ok, Canonical} -> {ok, Transaction};
                                 {ok, _OtherCanonical} -> {error, noncanonical};
                                 {error, _} -> {error, malformed_material}
@@ -1370,7 +1391,8 @@ decode_canonical_transaction(_Binding, _Canonical, _SymbolMode) ->
           {ok, #{target := {binary(), binary()},
                  admission := binary(), tx_id := binary(),
                  effects := [quod_effect:effect()], author := binary(),
-                 sequence := non_neg_integer()}} |
+                 sequence := non_neg_integer(),
+                 role := term(), request_auth := term()}} |
           {error, malformed_submission}.
 decode_submission_metadata(Canonical)
   when is_binary(Canonical),
@@ -1383,9 +1405,9 @@ decode_submission_metadata(Canonical)
          {?DOMAIN, ?VERSION, Ns, <<_:256>> = Anchor,
           <<_:256>> = Admission, <<_:256>> = TxId,
           _Origin, _ProofId, _PlanDigest, _Goal, _Result,
-          _MaterialWire, EffectsWire, _Role, _Evidence,
+          _MaterialWire, EffectsWire, Role, _Evidence,
           _ForeignReads,
-          _RequestAuth, _AuthTranscript,
+          RequestAuth, _AuthTranscript,
           <<_:256>> = Author, Sequence, _SubmittedAt} = Decoded}}
           when is_binary(Ns), is_integer(Sequence), Sequence >= 0 ->
             case {term_to_binary(Decoded, [deterministic]) =:= Canonical,
@@ -1394,7 +1416,8 @@ decode_submission_metadata(Canonical)
                 {true, {ok, Effects}} when is_list(Effects) ->
                     {ok, #{target => {Ns, Anchor}, admission => Admission,
                            tx_id => TxId, effects => Effects,
-                           author => Author, sequence => Sequence}};
+                           author => Author, sequence => Sequence,
+                           role => Role, request_auth => RequestAuth}};
                 _ ->
                     {error, malformed_submission}
             end;
@@ -1403,6 +1426,47 @@ decode_submission_metadata(Canonical)
     end;
 decode_submission_metadata(_Canonical) ->
     {error, malformed_submission}.
+
+-doc """
+Select a ledger item by bounded, atom-safe metadata. This is NOT authentication:
+the selected bytes must still pass decode_ledger_transaction/2 and finality.
+Native values have already crossed that decoder. No material or goal is decoded
+just to decide whether an unrelated item is wanted.
+""".
+-spec matches_selection(term(), binary() | #transaction{}) -> boolean().
+matches_selection(Selection, Blob) when is_binary(Blob) ->
+    case decode_canonical_term(Blob, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES, wrapped) of
+        {ok, {submit, _, _, Canonical}} ->
+            case decode_submission_metadata(Canonical) of
+                {ok, #{tx_id := Id, role := Role, request_auth := Auth}} ->
+                    selection_matches(Selection, Id, Role, Auth);
+                _ -> false
+            end;
+        {ok, {quod_genesis_transaction, 1, Id, _, _, _}} ->
+            selection_matches(Selection, Id, application, none);
+        _ -> false
+    end;
+matches_selection(Selection, #transaction{tx_id = Id, role = Role, request_auth = Auth}) ->
+    selection_matches(Selection, Id, Role, Auth).
+
+selection_matches({application, Id}, Id, _, _) -> true;
+selection_matches({digest, 1, Digest}, Id, _, _) when is_binary(Id) ->
+    crypto:hash(sha256, Id) =:= Digest;
+selection_matches({digest, _, Id}, Id, _, _) -> true;
+selection_matches({completion, Ref}, _, {remote_complete, Ref, _, _}, _) -> true;
+selection_matches({claim, {operation, Ns, Anchor, Agent, OpId}}, _,
+                  {remote_claim, _, _, _}, {agent_goal_v1, _, Bytes, _}) ->
+    case quod_client_goal:decode(Bytes) of
+        {ok, #{agent_namespace := Ns, agent_genesis_anchor := Anchor,
+               operation_id := OpId, agent_instance_text := Text,
+               parser_version := Version}} ->
+            case quod_agent_ref:from_text(Ns, Anchor, Text, Version) of
+                {ok, #{blob := Agent}} -> true;
+                _ -> false
+            end;
+        _ -> false
+    end;
+selection_matches(_, _, _, _) -> false.
 
 -doc "Encode one exact signed source claim for target operation custody.".
 -spec encode_operation_submission(term()) ->
@@ -1709,9 +1773,8 @@ canonical_foreign_reads(_ForeignReads) ->
     error.
 
 predicted_remote_refs(Claim, Plans, Predicted) ->
-    %% One client-signature check and source semantic-ID derivation feed the
-    %% complete vector, including N=1. Invalid request evidence still refuses
-    %% the envelope here, before any caller can admit or dispatch it.
+    %% The bound request claim and one source semantic-ID derivation feed the
+    %% whole vector, including N=1. No target repeats the request authentication.
     try predicted_applications(operation_identity(Claim), Plans) of
         Predicted -> true;
         _ -> false
@@ -1719,12 +1782,10 @@ predicted_remote_refs(Claim, Plans, Predicted) ->
     end.
 
 remote_claim_binding(
-  #transaction{role = {remote_claim, _Manifest, _Bundle, _Predicted},
-               request_auth = Auth, goal = Goal},
+  #transaction{role = {remote_claim, _Manifest, _Bundle, _Predicted}} = Claim,
   OperationRef, RequestDigest) ->
-    case quod_client_goal:verify_durable_request(Auth, Goal) of
-        {ok, #{claim := #{operation_ref := OperationRef,
-                         digest := RequestDigest}}} -> true;
+    case request_claim(Claim) of
+        {ok, #{operation_ref := OperationRef, digest := RequestDigest}} -> true;
         _ -> false
     end;
 remote_claim_binding(_, _, _) -> false.

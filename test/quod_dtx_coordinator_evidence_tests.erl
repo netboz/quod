@@ -694,7 +694,7 @@ traced(Owners, Fun, Drive) ->
             {quod_ledger_store, open, 2}, {quod_ledger_store, open, 3},
             {quod_ledger_store, open_ro, 2}, {quod_ledger_store, open_ro, 3},
             {quod_ledger_store, open_ro_snapshot, 1},
-            {quod_ledger_store, read_at, 2}],
+            {quod_ledger_store, read_at, 3}],
     [code:ensure_loaded(M) || {M, _, _} <- MFAs],
     Tracer = spawn(fun() -> trace_loop([]) end),
     Parent = self(),

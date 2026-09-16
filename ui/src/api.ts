@@ -20,7 +20,6 @@ export type TxRole = 'application' | 'remote_claim' | 'remote_application' | 're
 
 export type OperationTarget = { target: NonNullable<Origin>; plan_digest: string }
 export type ReceiptTarget =
-  | { target: NonNullable<Origin>; kind: 'included'; application_ref: TransactionRef }
   | { target: NonNullable<Origin>; kind: 'certified'; application_ref: TransactionRef;
       result: 'applied' | 'rejected'; reason: string | null; height: number; committee_id: string }
 
@@ -172,7 +171,7 @@ export type Block = {
 }
 
 export type Control = {
-  kind: 'begin' | 'prepare' | 'decision' | 'finalize' | 'complete'
+  kind: 'vote' | 'resolve' | 'complete'
   group_id: string
   record_digest: string
   target: Origin
@@ -181,17 +180,16 @@ export type Control = {
   sequence: number
   submitted_at: number
   participant_count?: number
-  participants?: ParticipantPlan[]
+  vote?: 'prepared' | 'refused'
+  vote_deadline_ms?: number
   plan?: ParticipantPlan
   request?: SignedRequest | null
-  plan_digest?: string
   verdict?: 'commit' | 'abort'
-  prepare_count?: number
   reasons?: string[] | null
-  prepared?: boolean
+  voted?: boolean
+  vote_ref?: { target: Origin; height: number; block_hash: string; record_digest: string } | null
   applied_generation?: number
-  applied_plan?: ParticipantPlan
-  finalize_count?: number
+  resolve_count?: number
 }
 
 export type ParticipantPlan = {

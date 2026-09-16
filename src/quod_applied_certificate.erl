@@ -3,7 +3,7 @@
 Portable attestations of exact, durably published application outcomes.
 
 Two domain-separated certificate families, with no collector or process.
-Finalize statements bind atomic publication; operation statements bind the exact target application
+Resolve statements bind atomic publication; operation statements bind the exact target application
 occurrence and canonical outcome under a different signature domain. The
 caller supplies already-verified historical entry/committee evidence; routes,
 current views and inclusion without an outcome are never verdict authority.
@@ -15,7 +15,7 @@ The owning Simplex must establish local durable publication before signing.
 
 -export([sign_applied_vote/8, verify_applied_certificate/3,
          applied_certificate_binding/1,
-         applied_certificate/2, applied_vote_valid/9, exact_finalize_binding/2,
+         applied_certificate/2, applied_vote_valid/9, exact_resolve_binding/2,
          operation_statement/3, sign_operation_vote/2,
          verify_operation_vote/3, operation_certificate/2,
          operation_certificate_binding/1, verify_operation_certificate/3,
@@ -23,30 +23,30 @@ The owning Simplex must establish local durable publication before signing.
 -export_type([applied_certificate/0, operation_certificate/0]).
 
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
--define(APPLIED_CERTIFICATE_VERSION, 1).
--define(APPLIED_VOTE_VERSION, 1).
+-define(APPLIED_CERTIFICATE_VERSION, 2).
+-define(APPLIED_VOTE_VERSION, 2).
 -define(OPERATION_CERTIFICATE_VERSION, 1).
 -define(OPERATION_VOTE_VERSION, 1).
 
 -type identity() :: {binary(), <<_:256>>}.
 -type applied_certificate() ::
-        {quod_dtx_applied_certificate, 1, <<_:256>>, identity(), <<_:256>>,
+        {quod_dtx_applied_certificate, 2, <<_:256>>, identity(), <<_:256>>,
          <<_:256>>, quod_dtx:certified_ref(), non_neg_integer(),
          commit | abort, [{<<_:256>>, <<_:512>>}]}.
 -type operation_certificate() ::
         {quod_operation_applied_certificate, 1, tuple(),
          [{<<_:256>>, <<_:512>>}]}.
 
--doc "Sign one exact Finalize-applied vote with a validator's node identity.".
+-doc "Sign one exact Resolve-applied vote with a validator's node identity.".
 -spec sign_applied_vote(<<_:256>>, identity(), <<_:256>>, <<_:256>>,
                         quod_dtx:certified_ref(), non_neg_integer(),
                         commit | abort, quod_identity:signer()) ->
           {ok, {<<_:256>>, <<_:512>>}} | error.
-sign_applied_vote(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+sign_applied_vote(NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
                   Generation, Verdict,
                   #{pubkey := <<_:256>> = Signer, key := _} = Identity) ->
     case applied_statement(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
            Generation, Verdict) of
         {ok, Statement} ->
             Signature = quod_identity:sign(
@@ -59,7 +59,7 @@ sign_applied_vote(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
             error
     end;
 sign_applied_vote(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
-                  _FinalizeRef, _Generation, _Verdict, _Identity) ->
+                  _ResolveRef, _Generation, _Verdict, _Identity) ->
     error.
 
 -doc "Return the exact statement carried by a bounded applied certificate.".
@@ -67,10 +67,10 @@ sign_applied_vote(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
 applied_certificate_binding(
   {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
    <<_:256>> = NetworkIdentity, Target, <<_:256>> = CommitteeId,
-   <<_:256>> = GroupId, FinalizeRef, Generation, Verdict, Signatures}
+   <<_:256>> = GroupId, ResolveRef, Generation, Verdict, Signatures}
   = Certificate) ->
     case applied_statement(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
            Generation, Verdict) of
         {ok, Statement} ->
             case quod_quorum:canonical_signatures(Signatures) andalso
@@ -79,7 +79,7 @@ applied_certificate_binding(
                 true ->
                     {ok, #{network_identity => NetworkIdentity,
                            target => Target, committee_id => CommitteeId,
-                           group_id => GroupId, finalize_ref => FinalizeRef,
+                           group_id => GroupId, resolve_ref => ResolveRef,
                            generation => Generation, verdict => Verdict,
                            statement => Statement,
                            signatures => Signatures}};
@@ -90,7 +90,7 @@ applied_certificate_binding(
 applied_certificate_binding(_Certificate) ->
     error.
 
--doc "Verify one certificate against the exact certified Finalize evidence.".
+-doc "Verify one certificate against the exact certified Resolve evidence.".
 -spec verify_applied_certificate(applied_certificate(), <<_:256>>, map()) ->
           boolean().
 verify_applied_certificate(Certificate, NetworkIdentity,
@@ -100,11 +100,11 @@ verify_applied_certificate(Certificate, NetworkIdentity,
     case applied_certificate_binding(Certificate) of
         {ok, #{network_identity := NetworkIdentity,
                target := Target, committee_id := CommitteeId,
-               group_id := GroupId, finalize_ref := FinalizeRef,
+               group_id := GroupId, resolve_ref := ResolveRef,
                generation := Generation, verdict := Verdict,
                statement := Statement, signatures := Signatures}} ->
-            case exact_finalize_binding(Evidence, FinalizeRef) of
-                {ok, GroupId, FinalizeRef, Generation, Verdict} ->
+            case exact_resolve_binding(Evidence, ResolveRef) of
+                {ok, GroupId, ResolveRef, Generation, Verdict} ->
                     verify_signatures(Statement, Signatures, Committee);
                 _ ->
                     false
@@ -115,79 +115,79 @@ verify_applied_certificate(Certificate, NetworkIdentity,
 verify_applied_certificate(_Certificate, _NetworkIdentity, _Evidence) ->
     false.
 
--doc "Bind a Finalize statement to an already-verified exact history entry.".
--spec exact_finalize_binding(map(), quod_dtx:certified_ref()) ->
+-doc "Bind a Resolve statement to an already-verified exact history entry.".
+-spec exact_resolve_binding(map(), quod_dtx:certified_ref()) ->
           {ok, binary(), quod_dtx:certified_ref(), non_neg_integer(), commit | abort} | error.
-exact_finalize_binding(
-  #{identity := Target, phase := finalize, control := Control,
-    entry := Entry}, FinalizeRef) ->
+exact_resolve_binding(
+  #{identity := Target, phase := resolve, control := Control,
+    entry := Entry}, ResolveRef) ->
     %% Certified-history verification owns proof authority.  The applied
     %% certificate and this replica's entry may carry different valid quorum
-    %% subsets, but both must name one immutable Finalize claim.
-    case {quod_dtx:control_kind(Control),
-          quod_dtx:recovery_phase(quod_dtx:control_body(Control)),
+    %% subsets, but both must name one immutable Resolve claim.
+    case {quod_atomic:control_kind(Control),
+          quod_atomic:control_body(Control),
           quod_dtx:certified_entry_ref(Target, Entry, Control)} of
-        {finalize,
-         {ok, #{kind := finalize, group_id := <<_:256>> = GroupId,
-                generation := Generation, verdict := Verdict}},
+        {resolve,
+         {quod_dtx_resolve, 4, <<_:256>> = GroupId, Target, _, Verdict,
+          _, _, _, Generation, _},
          {ok, EntryRef}}
           when is_integer(Generation), Generation >= 0,
                Generation =< ?MAX_UINT64,
                (Verdict =:= commit orelse Verdict =:= abort) ->
-            case quod_dtx:same_certified_ref(EntryRef, FinalizeRef) of
+            case quod_dtx:same_certified_ref(EntryRef, ResolveRef) of
                 true ->
-                    {ok, GroupId, FinalizeRef, Generation, Verdict};
+                    {ok, GroupId, ResolveRef, Generation, Verdict};
                 false ->
                     error
             end;
         _ -> error
     end;
-exact_finalize_binding(_Evidence, _FinalizeRef) ->
+exact_resolve_binding(_Evidence, _ResolveRef) ->
     error.
 
--doc "Assemble bounded Finalize evidence from already-authenticated collector rows.".
+-doc "Assemble bounded Resolve evidence from already-authenticated collector rows.".
 -spec applied_certificate(tuple(), list()) -> {ok, applied_certificate()} | retry.
 applied_certificate(
-  {NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+  {NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
    Generation, Verdict}, Signatures) ->
     Certificate =
         {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
-         NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+         NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
          Generation, Verdict, Signatures},
     case applied_certificate_binding(Certificate) of
         {ok, _} -> {ok, Certificate};
         error -> retry
     end.
 
-applied_statement(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+applied_statement(NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
                   Generation, Verdict)
   when is_binary(NetworkIdentity), byte_size(NetworkIdentity) =:= 32,
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64,
        (Verdict =:= commit orelse Verdict =:= abort) ->
-    case {valid_identity(Target), quod_dtx:certified_ref_binding(FinalizeRef)} of
+    case {valid_identity(Target), quod_dtx:certified_ref_binding(ResolveRef)} of
         {true, {ok, Target, _Slot, _Digest}}
           when is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
                is_binary(GroupId), byte_size(GroupId) =:= 32 ->
             {ok, {quod_dtx_applied_vote, ?APPLIED_VOTE_VERSION,
                   NetworkIdentity, Target, CommitteeId, GroupId,
-                  FinalizeRef, Generation, Verdict}};
+                  ResolveRef, Generation, Verdict}};
         _ -> error
     end;
 applied_statement(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
-                  _FinalizeRef, _Generation, _Verdict) ->
+                  _ResolveRef, _Generation, _Verdict) ->
     error.
 
 applied_vote_bytes(Statement) ->
     term_to_binary(Statement, [deterministic]).
 
--doc "Verify one signer over the exact domain-separated Finalize statement.".
+-doc "Verify one signer over the exact domain-separated Resolve statement.".
 -spec applied_vote_valid(binary(), identity(), binary(), binary(), quod_dtx:certified_ref(),
                          non_neg_integer(), commit | abort, binary(), binary()) -> boolean().
-applied_vote_valid(NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+applied_vote_valid(NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
                    Generation, Verdict, Signer, Signature) ->
     case applied_statement(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
            Generation, Verdict) of
         {ok, Statement} ->
             quod_identity:verify(

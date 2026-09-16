@@ -224,8 +224,8 @@ follow_borrow_refusal() ->
         ?assertNotEqual(none, record_field(history, phase_session, H)),
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
         ok = atomics:put(Allowed, 1, 1),
-        ?assertMatch({ok, #{phase := finalize}}, quod_foreign_log:verify_reference(
-            maps:get(ref, Fixture), finalize, {Peer, Endpoint}, 3000)),
+        ?assertMatch({ok, #{phase := resolve}}, quod_foreign_log:verify_reference(
+            maps:get(ref, Fixture), resolve, {Peer, Endpoint}, 3000)),
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
         assert_retained_entries(Owner, Identity, Prefix),
         ok = quod_foreign_log:unfollow(FollowRef)
@@ -267,10 +267,10 @@ resident_failure_wakes(Mode) ->
     end,
     with_installation_state(Height, fun(Identity, RequestRef, State0, Meta) ->
     Request = maps:get(RequestRef, record_field(s, pending, State0)),
-    {exact_reference, Ref, prepare, none} = record_field(
+    {exact_reference, Ref, vote, none} = record_field(
         routed_work, kind, record_field(request, work, Request)),
-    WorkA = make_record(routed_work, #{kind => {exact_reference, Ref, prepare, none}}),
-    WorkB = make_record(routed_work, #{kind => {exact_reference, Ref, finalize, none}}),
+    WorkA = make_record(routed_work, #{kind => {exact_reference, Ref, vote, none}}),
+    WorkB = make_record(routed_work, #{kind => {exact_reference, Ref, resolve, none}}),
     Caller = make_record(caller, #{deadline => infinity,
                                   enqueued_native => erlang:monotonic_time()}),
     Rows = [make_record(request,
@@ -296,9 +296,10 @@ resident_failure_wakes(Mode) ->
 with_installation_state(Height, Fun) ->
     Fixture = quod_foreign_log_tests:prepared_then_committed_fixture(
                 quod_foreign_log_tests:unique_ns()),
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
     Ns = maps:get(ns, Fixture), Anchor = maps:get(anchor, Fixture),
     Identity = {Ns, Anchor},
-    [Genesis, Prepare, _] = maps:get(chain, Fixture),
+    [Genesis, Vote, _] = maps:get(chain, Fixture),
     PhaseDir = quod_foreign_log_tests:temp_dir("installation-projection"),
     CacheNs = quod_foreign_log:cache_namespace(Identity),
     {ok, PhaseIndex} = quod_dtx_phase_index:open(PhaseDir, CacheNs),
@@ -314,11 +315,11 @@ with_installation_state(Height, Fun) ->
         {ok, Store1} = quod_ledger_store:append(Store0, [Genesis]),
         Snapshot1 = quod_ledger_store:snapshot(Store1),
         {ok, [_], P2, D2} = quod_catchup:verify_forward(
-            Ns, Anchor, P1, 2, [Prepare], PhaseIndex),
+            Ns, Anchor, P1, 2, [Vote], PhaseIndex),
         {Projection, Store} = case Height of
             1 -> {P1, Store1};
             2 ->
-                {ok, Store2} = quod_ledger_store:append(Store1, [Prepare]),
+                {ok, Store2} = quod_ledger_store:append(Store1, [Vote]),
                 ok = quod_dtx_phase_index:commit_delta(PhaseIndex, D2),
                 {P2, Store2}
         end,
@@ -332,7 +333,7 @@ with_installation_state(Height, Fun) ->
         Request = make_record(request,
             #{identity => Identity, worker => self(), mref => make_ref(),
               work => make_record(routed_work,
-                  #{kind => {exact_reference, maps:get(prepare_ref, Fixture), prepare, none}})}),
+                  #{kind => {exact_reference, maps:get(vote_ref, Fixture), vote, none}})}),
         State = make_record(s,
             #{histories => #{Identity => History}, pending => #{RequestRef => Request}}),
         Meta = #{height => Height, projection => Projection, resident_verified => true,
@@ -346,7 +347,8 @@ with_installation_state(Height, Fun) ->
         _ = quod_dtx_phase_index:close(PhaseIndex),
         _ = quod_ledger_store:close(Store0),
         _ = file:del_dir_r(PhaseDir)
-    end.
+    end
+    end).
 
 state_history(Identity, State) -> maps:get(Identity, record_field(s, histories, State)).
 
@@ -372,6 +374,7 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
                   1 -> quod_foreign_log_tests:foreign_fixture(Ns);
                   2 -> quod_foreign_log_tests:prepared_then_committed_fixture(Ns)
               end,
+    quod_ct:with_network_identity(maps:get(network, Fixture, <<202:256>>), fun() ->
     Identity = {Ns, maps:get(anchor, Fixture)},
     Peer = maps:get(pub, Fixture),
     Chain = maps:get(chain, Fixture),
@@ -379,7 +382,7 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
     RequestedSlot = length(Chain),
     Ref = case FixtureHeight of
               1 -> maps:get(ref, Fixture);
-              2 -> maps:get(finalize_ref, Fixture)
+              2 -> maps:get(resolve_ref, Fixture)
           end,
     Good = {"127.0.0.1", 19000},
     ContactEndpoint = {"127.0.0.1", 29999},
@@ -420,8 +423,8 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
         ok = atomics:put(Phase, 1, 1),
         Contact = case Mode of healthy -> {Peer, Good};
                                _ -> {Peer, ContactEndpoint} end,
-        ExpectedPhase = case Mode of definitive_fallback -> prepare;
-                                     _ -> finalize end,
+        ExpectedPhase = case Mode of definitive_fallback -> vote;
+                                     _ -> resolve end,
         RootName = <<"test.residency.exact">>,
         Result = quod_trace:with_span(quod_trace:context(), RootName, internal, #{},
             fun(_Span) -> quod_foreign_log:verify_reference(
@@ -430,7 +433,7 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
             definitive_fallback ->
                 ?assertEqual({error, invalid_foreign_reference}, Result);
             _ ->
-                ?assertMatch({ok, #{identity := Identity, phase := finalize}}, Result)
+                ?assertMatch({ok, #{identity := Identity, phase := resolve}}, Result)
         end,
         Calls = drain_calls(),
         Fetches = drain_fetches(),
@@ -464,7 +467,8 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
         [erlang:trace_pattern(MFA, false, [local]) || MFA <- MFAs],
         quod_foreign_log_tests:stop_owner(Owner),
         _ = file:del_dir_r(Dir)
-    end.
+    end
+    end).
 
 assert_retained_entries(Owner, Identity, Entries) ->
     Histories = record_field(s, histories, sys:get_state(Owner)),

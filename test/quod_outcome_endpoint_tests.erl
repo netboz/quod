@@ -72,20 +72,6 @@ runtime_edge_queued_before_owner_decision_is_not_lost_test() ->
         assert_worker_gone(F, Worker)
     end).
 
-outcome_barrier_uses_the_same_readiness_wait_test() ->
-    with_endpoint(false, fun(F) ->
-        start_request(F, outcome_barrier, 3000),
-        {Worker, From} = snapshot_call(F),
-        gen_server:reply(From, snapshot(3)),
-        await_result(F, {outcome_state, element(2, snapshot(3))}),
-        ?assertEqual(1, worker_count(F)),
-        update_owner(F, #{prolog_ready => true}),
-        {Worker, From2} = snapshot_call(F),
-        gen_server:reply(From2, snapshot(3)),
-        assert_outcome(F, outcome_barrier, 3),
-        assert_worker_gone(F, Worker)
-    end).
-
 wrong_anchor_or_era_is_refused_without_a_worker_test() ->
     with_endpoint(false, fun(F) ->
         Request = request(F, outcome),
@@ -424,7 +410,7 @@ owner_loop(Parent, S) ->
             Parent ! {append_call, Change}, owner_loop(Parent, S);
         {'$gen_call', From, {dtx_endpoint_local, Request, [], Timeout, _TraceCtx}} ->
             case quod_simplex:test_start_local_dtx_endpoint_request(Request, [], Timeout, From, S) of
-                {ok, S1} -> owner_loop(Parent, S1);
+                {ok, S1, Actions} -> reply_actions(Actions), owner_loop(Parent, S1);
                 Error -> gen_statem:reply(From, Error), owner_loop(Parent, S)
             end;
         {'$gen_call', From, {history_view, Identity, Requirement, Deadline}} ->
@@ -435,7 +421,8 @@ owner_loop(Parent, S) ->
         {call, Ref, {start, Request, Timeout, From}} ->
             case quod_simplex:test_start_local_dtx_endpoint_request(
                    Request, [], Timeout, From, S) of
-                {ok, S1} -> Parent ! {Ref, ok}, owner_loop(Parent, S1);
+                {ok, S1, Actions} ->
+                    reply_actions(Actions), Parent ! {Ref, ok}, owner_loop(Parent, S1);
                 Error -> Parent ! {Ref, Error}, owner_loop(Parent, S)
             end;
         {call, Ref, {update, Overrides}} ->
@@ -448,23 +435,19 @@ owner_loop(Parent, S) ->
         {dtx_endpoint_worker_result, Worker, Result} ->
             {S1, Actions} = quod_simplex:test_finish_dtx_worker(Worker, Result, S),
             Parent ! {endpoint_result, self(), Result},
-            lists:foreach(fun({reply, From, Reply}) -> gen_statem:reply(From, Reply) end,
-                          Actions),
+            reply_actions(Actions),
             owner_loop(Parent, S1);
         {'DOWN', _, process, _, _} -> owner_loop(Parent, S)
     end.
 
+reply_actions(Actions) ->
+    lists:foreach(fun({reply, From, Reply}) -> gen_statem:reply(From, Reply) end, Actions).
+
 request(#{request_id := Id, certified_target_ref := Ref}, operation_applied) ->
     {operation_applied, Id, Ref};
-request(F, Kind) ->
+request(F, outcome) ->
     #{ns := Ns, anchor := Anchor, committee := Cid, request_id := Id} = F,
-    Ref = case Kind of
-        outcome -> {transaction, Ns, Anchor, <<14:256>>};
-        outcome_barrier ->
-            {group, Ns, Anchor, <<13:256>>,
-             quod_simplex:test_author_admission(<<13:256>>), <<16:256>>}
-    end,
-    {Kind, Id, Ref, Cid, 3}.
+    {outcome, Id, {transaction, Ns, Anchor, <<14:256>>}, Cid, 3}.
 
 snapshot(Height) -> {ok, #{applied_floor => Height, outcome => not_found}}.
 

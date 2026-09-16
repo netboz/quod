@@ -20,12 +20,24 @@ remote_first_cohosted(Mode) ->
         ?assertEqual(element(2, Target), quod_simplex:genesis_hash(element(1, Target))),
         {ok, Routes} = quod_foreign_log:route_hints(Target, []),
         ?assertEqual(3, length(Routes)),
+        %% The group wave subscribes before delivery. Hold that independent
+        %% follow at its existing custody barrier so the zero-work oracle
+        %% measures evidence resolution, not follower initialization. This
+        %% test makes no zero-cost claim about establishing the subscription.
+        FollowGate = make_ref(),
+        ok = gen_server:call(Foreign, {test_hold_next_follow_worker, self(), FollowGate}),
         {Result, Calls} = traced([Foreign, Local], fun() ->
             quod_dtx_coordinator:test_submit_phase_evidence(
-              Mode, {submit, Target, Record}, OwnerNs, 2000)
+              Mode, {submit, Target, Record}, {OwnerNs, maps:get(own, F)}, 2000)
+        end, fun(_Runner) ->
+            receive {follow_worker_held, FollowGate, _, _} -> ok
+            after 1000 -> error(progress_follow_not_admitted) end
         end),
-        %% This assertion is the fail-before work oracle, not a resolver mock.
-        ?assertEqual([], calls(quod_foreign_log, spawn_verification_worker, Calls)),
+        %% The wave attaches its progress follow before sending. Distinguish
+        %% that owner subscription from a routed proof-verification job: it
+        %% cannot become a second evidence lookup or prefix replay.
+        Jobs = calls(quod_foreign_log, spawn_verification_worker, Calls),
+        ?assertMatch([[_, {follow, Target, _, _}, _]], Jobs),
         ?assertEqual([], calls(quod_catchup, verify_forward, Calls)),
         ?assertEqual([], full_opens(Calls)),
         ?assertEqual(1, length(calls(quod_ledger_store, open_ro_snapshot, Calls))),
@@ -33,7 +45,8 @@ remote_first_cohosted(Mode) ->
         assert_resolver_admission(F, Hint, Calls),
         ?assertMatch({{reply_source, remote, Winner, [{Ref, Hint}]}, {ok, _}}, Result),
         {_, {ok, Snapshot}} = Result,
-        ?assertEqual([{Target, maps:get(control, F), Ref}], maps:get(evidence, Snapshot)),
+        ?assertMatch(#{{resolve, Target} := #{ref := Ref, outcome := commit}},
+                     maps:get(evidence, Snapshot)),
         receive {local_submit_held, Local} -> ok
         after 1000 -> error(local_endpoint_was_not_in_fanout)
         end,
@@ -94,10 +107,10 @@ uncertain_submission_becomes_pinned_reference_before_verification_test() ->
         %% Actual owner transitions with a signed reference from this fixture.
         %% The deliberately unavailable verification result is not a proof or
         %% consensus admission; it must preserve the reference, never submission.
-        ?assertEqual(#{{Target, finalize} =>
-                         {reference, Target, Group, finalize, Ref, Source}},
+        ?assertEqual(#{{Target, resolve} =>
+                         {reference, Target, Group, resolve, Ref, Source}},
                      quod_dtx_coordinator:test_pending_phase_reference(
-                         Target, Group, finalize, Ref, Source))
+                         Target, Group, resolve, Ref, Source))
     end).
 
 phase_verification_keeps_command_deadline_while_paused_test_() ->
@@ -106,10 +119,10 @@ phase_verification_keeps_command_deadline_while_paused_test_() ->
             #{target := Target, group_id := Group, ref := Ref} = F,
             Deadline = quod_time:mono_ms() + case Form of live -> 1000; expired -> -1 end,
             {Meta, Pending} = quod_dtx_coordinator:test_phase_verification_deadline(
-                                Target, Group, finalize, Ref, Deadline),
+                                Target, Group, resolve, Ref, Deadline),
             ?assertMatch(#{request_deadline := Deadline}, Meta),
-            ?assertEqual(#{{Target, finalize} =>
-                           {reference, Target, Group, finalize, Ref, local}}, Pending)
+            ?assertEqual(#{{Target, resolve} =>
+                           {reference, Target, Group, resolve, Ref, local}}, Pending)
         end)
     end} || Form <- [live, expired]].
 
@@ -119,12 +132,12 @@ authenticated_contact_positive_control_test() ->
           endpoint := Endpoint, foreign := Foreign} = F,
         Contact = {Peer, Endpoint}, Deadline = quod_time:mono_ms() + 2000,
         {Result, Calls} = traced([Foreign], fun() ->
-            quod_foreign_log:resolve_reference(Target, Ref, finalize, Contact, Hint, Deadline)
+            quod_foreign_log:resolve_reference(Target, Ref, resolve, Contact, Hint, Deadline)
         end),
         ?assertMatch({ok, _}, Result),
-        ?assertEqual([[Target, Ref, finalize, Contact, Hint, Deadline]],
+        ?assertEqual([[Target, Ref, resolve, Contact, Hint, Deadline]],
                      calls(quod_foreign_log, resolve_reference, Calls)),
-        ?assertEqual([[Ref, finalize, Contact, Hint, Deadline]],
+        ?assertEqual([[Ref, resolve, Contact, Hint, Deadline]],
                      calls(quod_foreign_log, verify_reference_deadline, Calls))
     end).
 
@@ -132,7 +145,7 @@ submission_result_observes_once_before_waiting_test_() ->
     [{atom_to_list(Form), fun() ->
         with_fixture(true, fun(F) ->
             Target = maps:get(target, F), Record = maps:get(record, F),
-            Group = quod_dtx:group_id(Record), Kind = quod_dtx:record_kind(Record),
+            Group = quod_atomic:group_id(Record), Kind = quod_atomic:record_kind(Record),
             ?assertEqual({observe, parked,
                            #{{Target, Kind} => {submission, Target, Group, Kind}}},
                          quod_dtx_coordinator:test_submission_observation_transition(
@@ -140,48 +153,54 @@ submission_result_observes_once_before_waiting_test_() ->
         end)
     end} || Form <- [refused, unknown, worker_down]].
 
-absent_finalize_rediscovers_certified_prepare_test() ->
-    with_prepare_race_fixture(not_found, committed, fun(F) ->
+absent_resolve_rediscovers_certified_vote_test() ->
+    with_vote_race_fixture(not_found, committed, fun(F) ->
         #{target := Target, owner_ns := OwnerNs, group_id := Group,
           ref := Ref, control := Control, foreign := Foreign} = F,
         Deadline = quod_time:mono_ms() + 2000,
         {Result, Calls} = traced([Foreign], fun() ->
-            quod_dtx_coordinator:test_finalize_rediscovery(
-                OwnerNs, Target, Group, Deadline)
+            quod_dtx_coordinator:test_resolve_rediscovery(
+                OwnerNs, maps:get(own, F), Target, Group, Deadline)
         end),
-        ?assertMatch({verified, {Target, Group, prepare, Ref, _}, _, #{}, _,
-                      [{prepared, Target}], true, false, none}, Result),
+        ?assertMatch({verified, {Target, Group, vote, Ref, _}, _, #{}, _,
+                      [{voted, Target}], true, false, none}, Result),
         {verified, {_, _, _, _, Source}, Pending, #{}, Snapshot, _, _, _, _} = Result,
-        ?assertEqual(#{{Target, prepare} =>
-                         {reference, Target, Group, prepare, Ref, Source}}, Pending),
-        ?assertEqual([{Target, Control, Ref}], maps:get(evidence, Snapshot)),
-        %% A certified Prepare replaces the stale unsigned hint, not vice versa.
-        ?assertNotEqual([{Target, 999}], maps:get(generations, Snapshot)),
+        ?assertEqual(#{{Target, vote} =>
+                         {reference, Target, Group, vote, Ref, Source}}, Pending),
+        ?assertMatch(#{{vote, Target} := #{ref := Ref, choice := prepared}},
+                     maps:get(evidence, Snapshot)),
+        ?assertEqual(vote, quod_atomic:control_kind(Control)),
+        %% A certified Vote replaces the stale unsigned hint, not vice versa.
+        ?assertNot(maps:is_key(generations, Snapshot)),
         ?assertEqual([Deadline], lists:usort(
-            [maps:get(request_deadline, Context) || [_, _, _, _, Context, _, _, _, _]
+            [maps:get(request_deadline, Context) || [_, _, _, Context, _, _]
               <- calls(quod_dtx_coordinator, phase_command_sources, Calls)])),
-        ?assertEqual([[Target, Ref, prepare, none, maps:get(hint, F), Deadline]],
+        ?assertEqual([[Target, Ref, vote, none, maps:get(hint, F), Deadline]],
                      calls(quod_foreign_log, resolve_reference, Calls)),
-        ?assertEqual([finalize, finalize, finalize, prepare],
+        ?assertEqual([resolve, resolve, resolve, vote],
                      phase_queries(maps:get(router, F)))
     end).
 
-unresolved_finalize_never_becomes_prepare_permission_test() ->
-    with_prepare_race_fixture(pending, committed, fun(F) ->
+unresolved_resolve_never_becomes_vote_permission_test() ->
+    with_vote_race_fixture(pending, committed, fun(F) ->
         #{target := Target, owner_ns := OwnerNs, group_id := Group} = F,
-        ?assertEqual({waiting, #{{Target, finalize} =>
-                                   {submission, Target, Group, finalize}}},
-                     quod_dtx_coordinator:test_finalize_rediscovery(
-                         OwnerNs, Target, Group, quod_time:mono_ms() + 2000)),
-        ?assertEqual([finalize, finalize, finalize], phase_queries(maps:get(router, F)))
+        ?assertEqual({waiting, #{{Target, resolve} =>
+                                   {submission, Target, Group, resolve}}},
+                     quod_dtx_coordinator:test_resolve_rediscovery(
+                         OwnerNs, maps:get(own, F), Target, Group, quod_time:mono_ms() + 2000)),
+        ?assertEqual([resolve, resolve, resolve], phase_queries(maps:get(router, F)))
     end).
 
-absent_finalize_unavailable_prepare_parks_test() ->
-    with_prepare_race_fixture(not_found, unavailable, fun(F) ->
+absent_resolve_unavailable_vote_parks_test() ->
+    with_vote_race_fixture(not_found, unavailable, fun(F) ->
         #{target := Target, owner_ns := OwnerNs, group_id := Group} = F,
-        ?assertEqual({waiting, #{}}, quod_dtx_coordinator:test_finalize_rediscovery(
-                         OwnerNs, Target, Group, quod_time:mono_ms() + 2000)),
-        ?assertEqual([finalize, finalize, finalize, prepare, prepare, prepare],
+        %% An unavailable Vote lookup cannot clear uncertainty or authorize
+        %% a tombstone. Keep the pending Resolve for the next progress edge.
+        ?assertEqual({waiting, #{{Target, resolve} =>
+                                   {submission, Target, Group, resolve}}},
+                     quod_dtx_coordinator:test_resolve_rediscovery(
+                         OwnerNs, maps:get(own, F), Target, Group, quod_time:mono_ms() + 2000)),
+        ?assertEqual([resolve, resolve, resolve, vote, vote, vote],
                      phase_queries(maps:get(router, F)))
     end).
 
@@ -196,17 +215,17 @@ drain_phase_queries(Router, Acc) ->
     after 0 -> lists:reverse(Acc)
     end.
 
-with_prepare_race_fixture(FinalizeStatus, PrepareStatus, Fun) ->
+with_vote_race_fixture(ResolveStatus, VoteStatus, Fun) ->
     F0 = quod_foreign_log_tests:prepared_then_committed_fixture(
              quod_foreign_log_tests:unique_ns()),
-    %% Keep the real founded, signed Prepare prefix only. Endpoint replies
+    %% Keep the real founded, signed Vote prefix only. Endpoint replies
     %% are protocol fixtures, not a claim that consensus admitted this race.
     F1 = F0#{chain := lists:sublist(maps:get(chain, F0), 2)},
     with_fixture(false, F1, fun(F) ->
         Router = maps:get(router, F),
-        Router ! {prepare_race, FinalizeStatus, PrepareStatus, self()},
-        receive {prepare_race_ready, Router} -> ok
-        after 1000 -> error(prepare_race_not_ready)
+        Router ! {vote_race, ResolveStatus, VoteStatus, self()},
+        receive {vote_race_ready, Router} -> ok
+        after 1000 -> error(vote_race_not_ready)
         end,
         Fun(F)
     end).
@@ -288,8 +307,8 @@ outer_phase_walk_stops_after_committed_reference_test_() ->
             {Result, Calls} = traced([Foreign, Local],
               fun() ->
                   quod_dtx_coordinator:test_observe_phase_evidence(
-                    Mode, maps:get(owner_ns, F), Target, maps:get(group_id, F),
-                    finalize, 100)
+                    Mode, owner(F), Target, maps:get(group_id, F),
+                    resolve, 100)
               end,
               fun(_Runner) ->
                   receive {capture_held, Local, Deadline} ->
@@ -366,8 +385,8 @@ outer_phase_walk_proof_and_delivery_control_test_() ->
             F = F0#{ref := Ref},
             {Result, Calls} = traced([Foreign, Local], fun() ->
                 quod_dtx_coordinator:test_observe_phase_evidence(
-                  Mode, maps:get(owner_ns, F), Target, maps:get(group_id, F),
-                  finalize, 2000)
+                  Mode, owner(F), Target, maps:get(group_id, F),
+                  resolve, 2000)
             end),
             Admissions = calls(quod_foreign_log, resolve_reference, Calls),
             io:format("outer_proof_probe ~p/~p: ~p~n", [Mode, Proof,
@@ -466,7 +485,7 @@ wait_past(Deadline) -> receive after max(0, Deadline - quod_time:mono_ms()) + 1 
 
 assert_resolver_admission(#{target := Target, ref := Ref}, Hint, Calls) ->
     Admissions = calls(quod_foreign_log, resolve_reference, Calls),
-    ?assertMatch([[Target, Ref, finalize, none, Hint, _]], Admissions),
+    ?assertMatch([[Target, Ref, resolve, none, Hint, _]], Admissions),
     [[_, _, _, _, _, Deadline]] = Admissions,
     ?assert(is_integer(Deadline)),
     ?assert(Deadline =< quod_time:mono_ms() + 2000),
@@ -480,19 +499,31 @@ remote_source(#{ref := Ref, hint := Hint, winner := Peer}) ->
 
 resolve_reply(Mode, F, Source, Timeout) ->
     quod_dtx_coordinator:test_phase_reply_evidence(
-      Mode, maps:get(owner_ns, F), maps:get(target, F), maps:get(group_id, F),
-      finalize, maps:get(ref, F), Source, Timeout).
+      Mode, owner(F), maps:get(target, F), maps:get(group_id, F),
+      resolve, maps:get(ref, F), Source, quod_time:mono_ms() + Timeout).
+
+owner(#{owner_ns := Ns, own := Own}) -> {Ns, Own}.
 
 with_fixture(Cohosted, Fun) ->
-    F0 = quod_foreign_log_tests:foreign_fixture(quod_foreign_log_tests:unique_ns()),
-    with_fixture(Cohosted, F0, Fun).
+    F0 = quod_foreign_log_tests:prepared_then_committed_fixture(
+             quod_foreign_log_tests:unique_ns()),
+    with_fixture(Cohosted, F0#{control := maps:get(resolve_control, F0),
+                             ref := maps:get(resolve_ref, F0)}, Fun).
 
 with_fixture(Cohosted, F0, Fun) ->
+    quod_ct:with_network_identity(maps:get(network, F0), fun() ->
     {ok, _} = application:ensure_all_started(gproc),
     #{ns := Ns, anchor := Anchor, pub := Pub, chain := Chain, control := Control,
       ref := Ref} = F0,
     Target = {Ns, Anchor}, OwnerNs = <<"coordinator-source:", Ns/binary>>,
-    Record = quod_dtx:control_body(Control), Hint = lists:last(Chain),
+    {Record, _, _} = quod_atomic:control_material(Control), Hint = lists:last(Chain),
+    %% Only the source's own row enters the planner. Foreign records below
+    %% still pass through the real certified-history verifier. This is an
+    %% authenticated proposal fixture, not a consensus-admitted source vote.
+    {ok, OriginVote} = quod_atomic:new_vote(maps:get(group, F0), maps:get(origin, F0),
+                                           none, {refused, [vote_deadline]}),
+    {ok, Material} = quod_atomic:admission_material(OriginVote),
+    Own = #{material => Material, ref => none, resolution => none},
     Endpoint = {"127.0.0.1", 19000},
     Root = quod_foreign_log_tests:temp_dir("coordinator-evidence"),
     Foreign = quod_foreign_log_tests:start_owner(
@@ -516,9 +547,9 @@ with_fixture(Cohosted, F0, Fun) ->
         {ok, Routes} = quod_foreign_log:route_hints(Target, []),
         ?assertEqual(3, length(Routes)),
         Fun(F0#{target => Target, owner_ns => OwnerNs, record => Record,
-                group_id => quod_dtx:group_id(Record), hint => Hint,
+                group_id => quod_atomic:group_id(Record), hint => Hint,
                 winner => Pub, endpoint => Endpoint, local => Local,
-                router => Router, foreign => Foreign})
+                router => Router, foreign => Foreign, own => Own})
     after
         stop_process(Router), stop_process(Local),
         quod_foreign_log_tests:stop_owner(Foreign),
@@ -527,7 +558,8 @@ with_fixture(Cohosted, F0, Fun) ->
             {ok, Key} -> application:set_env(quod, node_pubkey, Key)
         end,
         _ = file:del_dir_r(Root)
-    end.
+    end
+    end).
 
 start_local_owner(F, Dir) ->
     Parent = self(),
@@ -585,9 +617,9 @@ router_loop(Parent, Ns, Winner, Ref, Record, Hint) ->
     router_loop(Parent, Ns, Winner, Ref, Record, Hint, none).
 router_loop(Parent, Ns, Winner, Ref, Record, Hint, FailedPhasePeer) ->
     receive
-        {prepare_race, FinalizeStatus, PrepareStatus, Test} ->
-            Test ! {prepare_race_ready, self()},
-            prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus);
+        {vote_race, ResolveStatus, VoteStatus, Test} ->
+            Test ! {vote_race_ready, self()},
+            vote_race_router(Parent, Ns, Ref, Hint, ResolveStatus, VoteStatus);
         {phase_reference, NewRef, Test} ->
             Test ! {phase_reference_ready, self()},
             router_loop(Parent, Ns, Winner, NewRef, Record, Hint, FailedPhasePeer);
@@ -609,7 +641,7 @@ router_loop(Parent, Ns, Winner, Ref, Record, Hint, FailedPhasePeer) ->
             router_loop(Parent, Ns, Winner, Ref, Record, Hint, FailedPhasePeer);
         {'$gen_call', From, {dtx_endpoint_request, Ns, Winner, _Endpoint,
                             {submit, RequestId, _}, _, _, _}} ->
-            Response = {accepted, RequestId, quod_dtx:record_digest(Record), Ref},
+            Response = {accepted, RequestId, quod_atomic:record_digest(Record), Ref},
             {ok, Bytes} = quod_dtx_endpoint:encode_response(Ns, Response, [{Ref, Hint}]),
             Reply = quod_dtx_endpoint:decode_response(Ns, Bytes),
             gen:reply(From, Reply), Parent ! {remote_submit_replied, Winner},
@@ -619,24 +651,24 @@ router_loop(Parent, Ns, Winner, Ref, Record, Hint, FailedPhasePeer) ->
         stop -> ok
     end.
 
-prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus) ->
+vote_race_router(Parent, Ns, Ref, Hint, ResolveStatus, VoteStatus) ->
     receive
         {'$gen_call', From, {dtx_endpoint_request, Ns, _Peer, _Endpoint,
                             {phase, Id, _Group, Kind}, _, _, _}} ->
-            {Response, Hints} = case {Kind, PrepareStatus} of
-                {finalize, _} -> {{phase, Id, 999, FinalizeStatus}, []};
-                {prepare, committed} -> {{phase, Id, 999, {committed, Ref}}, [{Ref, Hint}]};
-                {prepare, unavailable} -> {{error, Id, not_ready}, []}
+            {Response, Hints} = case {Kind, VoteStatus} of
+                {resolve, _} -> {{phase, Id, 999, ResolveStatus}, []};
+                {vote, committed} -> {{phase, Id, 999, {committed, Ref}}, [{Ref, Hint}]};
+                {vote, unavailable} -> {{error, Id, not_ready}, []}
             end,
             {ok, Bytes} = quod_dtx_endpoint:encode_response(Ns, Response, Hints),
             %% The explicit same-sender barrier proves delivery to the test;
             %% an endpoint reply delivered to a different process cannot.
             Parent ! {race_phase_query, self(), Kind},
             gen:reply(From, quod_dtx_endpoint:decode_response(Ns, Bytes)),
-            prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus);
+            vote_race_router(Parent, Ns, Ref, Hint, ResolveStatus, VoteStatus);
         {query_barrier, Test, Barrier} ->
             Test ! {query_barrier, self(), Barrier},
-            prepare_race_router(Parent, Ns, Ref, Hint, FinalizeStatus, PrepareStatus);
+            vote_race_router(Parent, Ns, Ref, Hint, ResolveStatus, VoteStatus);
         stop -> ok
     end.
 
@@ -654,7 +686,7 @@ stop_process(Pid) ->
 traced(Owners, Fun) -> traced(Owners, Fun, fun(_Runner) -> ok end).
 traced(Owners, Fun, Drive) ->
     MFAs = [{quod_foreign_log, resolve_reference, 6},
-            {quod_dtx_coordinator, phase_command_sources, 9},
+            {quod_dtx_coordinator, phase_command_sources, 6},
             {quod_foreign_log, verify_reference_deadline, 5},
             {quod_foreign_log, spawn_verification_worker, 3},
             {quod_simplex, history_view_at, 3},

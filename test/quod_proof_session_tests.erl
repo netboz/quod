@@ -589,6 +589,7 @@ manifest(Plan, Nonce, Coordinator) ->
                          goal => GoalBlob,
                          result => ResultBlob,
                          request_binding => none,
+                         vote_deadline_ms => 10000,
                          participants =>
                              [{Target, quod_dtx:digest(Plan)},
                               {OtherTarget, key(222)}]}),

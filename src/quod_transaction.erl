@@ -44,8 +44,8 @@ accepted.
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
 -define(ID_VERSION, 7).
-%% V14 generalizes claims and included/certified receipts to canonical target
-%% vectors. V13 is deliberately not decoded. Material and referenced
+%% V15 admits only certified receipt vectors and atomic Vote/Resolve/Complete.
+%% Earlier versions are deliberately not decoded. Material and referenced
 %% transactions remain canonical byte blobs, preserving the binding of an
 %% author's continuous admission generation, transaction role,
 %% role evidence, certified foreign reads, signed-agent request, authorization
@@ -58,7 +58,7 @@ accepted.
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
 %% each committed control's certified reference binds the exact committee that
 %% finalized its ledger position.
--define(VERSION, 14).
+-define(VERSION, 15). %% one atomic Vote/Resolve/Complete format break
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -236,7 +236,7 @@ declared_application_matches(Claim, Target, Id) ->
         error -> false
     end.
 
--doc "Build a canonical complete receipt; only certified arms assert exact outcomes.".
+-doc "Build a canonical complete receipt of certified application outcomes.".
 -spec remote_complete({binary(), <<_:256>>}, term(), binary(), term()) ->
           #transaction{}.
 remote_complete({Ns, <<_:256>> = Anchor} = Origin, OperationRef,
@@ -647,6 +647,8 @@ authenticate_claim(Tx) -> {ok, Tx}.
 
 claim_plans(Origin, Manifest, Bundles) ->
     try
+        %% Independent claims have caller deadlines, not atomic vote expiry.
+        none = quod_dtx:manifest_deadline(Manifest),
         true = valid_bundle_set(Manifest, Bundles),
         {ok, [begin
                   {ok, BoundPlan} = authenticated_claim_plan(
@@ -1363,7 +1365,7 @@ decode_canonical_transaction(
 decode_canonical_transaction(_Binding, _Canonical, _SymbolMode) ->
     {error, malformed_submission}.
 
--doc "Decode bounded metadata from the one current V14 transaction envelope.".
+-doc "Decode bounded metadata from the one current V15 transaction envelope.".
 -spec decode_submission_metadata(term()) ->
           {ok, #{target := {binary(), binary()},
                  admission := binary(), tx_id := binary(),

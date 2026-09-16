@@ -35,59 +35,72 @@ canonical_control_batch_classification_and_old_format_break_test() ->
                            Target, key(11), key(12), 1, Signer),
     {Second, _SecondRef} = direct_abort(
                              Target, key(13), key(14), 2, Signer),
-    {ok, FirstBlob} = quod_dtx:encode_control(First),
-    {ok, SecondBlob} = quod_dtx:encode_control(Second),
-    Data = {batch, [{dtx, FirstBlob}, {dtx, SecondBlob}]},
+    Data = {batch, [{dtx, First}, {dtx, Second}]},
     ?assertEqual(
-       {controls, [{finalize, First}, {finalize, Second}]},
+       {controls, [{resolve, First}, {resolve, Second}]},
        quod_ledger:classify(Data)),
     ?assertEqual(error, quod_ledger:payload(Data)),
-    ?assertEqual(invalid, quod_ledger:classify({dtx, FirstBlob})).
+    ?assertEqual(invalid, quod_ledger:classify({dtx, First})).
 
 control_batch_order_is_the_shared_signed_lane_order_test() ->
     Signer = signer(),
-    %% Sequence 1 deliberately has the lexically later target and group. The
-    %% valid order is the signing-journal lane order, not a second target/group
-    %% order invented by the ledger.
-    LaterTarget = {<<"quod:z-target">>, key(90)},
-    EarlierTarget = {<<"quod:a-target">>, key(10)},
+    %% The signing-journal sequence fixes ordering within one target/phase.
+    %% Another target is never allowed in the same ontology's block.
+    Target = {<<"quod:ledger-target">>, key(90)},
     {First, _} = direct_abort(
-                   LaterTarget, key(91), key(92), 1, Signer),
+                   Target, key(91), key(92), 1, Signer),
     {Second, _} = direct_abort(
-                    EarlierTarget, key(11), key(12), 2, Signer),
-    {ok, FirstBlob} = quod_dtx:encode_control(First),
-    {ok, SecondBlob} = quod_dtx:encode_control(Second),
+                    Target, key(11), key(12), 2, Signer),
     ?assertEqual(
-       {controls, [{finalize, First}, {finalize, Second}]},
+       {controls, [{resolve, First}, {resolve, Second}]},
        quod_ledger:classify(
-         {batch, [{dtx, FirstBlob}, {dtx, SecondBlob}]})).
+         {batch, [{dtx, First}, {dtx, Second}]})).
 
-%% DTX input is untrusted at catch-up/replay. Non-binary, malformed and
-%% non-canonical blobs are invalid rather than exceptions or inert skips.
+%% Wire/disk input enters the block decoder, never native classification.
+%% Malformed, noncanonical and native-tuple injections fail at that boundary.
 malformed_dtx_is_invalid_test() ->
     Signer = signer(),
     Target = {<<"quod:ledger-malformed">>, key(20)},
     {Control, _Ref} = direct_abort(Target, key(21), key(22), 1, Signer),
-    {ok, Blob} = quod_dtx:encode_control(Control),
+    {ok, Blob} = quod_atomic:encode_control(Control),
     Malformed = [{batch, [{dtx, not_a_binary}]},
                  {batch, [{dtx, <<>>}]},
                  {batch, [{dtx, <<"not etf">>}]},
-                 {batch, [{dtx, <<Blob/binary, 0>>}]}],
+                 {batch, [{dtx, <<Blob/binary, 0>>}]},
+                 {batch, [{dtx, Control}]}],
     lists:foreach(
       fun(Data) ->
-          ?assertEqual(invalid, quod_ledger:classify(Data)),
-          ?assertEqual(error, quod_ledger:payload(Data))
+          ?assertEqual({error, bad_block}, quod_ledger:decode_block(wire_block(Data)))
       end, Malformed).
+
+native_control_roundtrip_preserves_wire_bytes_and_checks_ingress_test() ->
+    F = quod_ct:signed_atomic_fixture(#{}), C = maps:get(vote_control, F),
+    {ok, Blob} = quod_atomic:encode_control(C),
+    Bytes = wire_block({batch, [{dtx, Blob}]}),
+    {ok, Block} = quod_ledger:new_block(2, 1, {batch, [{dtx, C}]}, 2),
+    ?assertEqual(Bytes, quod_ledger:block_bytes(Block)),
+    ?assertEqual({ok, Block}, quod_ledger:decode_block(Bytes)),
+    ?assertEqual(invalid, quod_ledger:classify({batch, [{dtx, Blob}]})),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block(2, 1, {batch, [{dtx, Blob}]}, 2)),
+    %% An attacker can supply perfectly canonical bytes but cannot inject
+    %% trusted native metadata or skip the own-plan signature check.
+    Wire = binary_to_term(Blob, [safe]),
+    Vote = binary_to_term(element(5, Wire), [safe]),
+    Bundle = element(5, Vote),
+    {ok, Plan} = quod_dtx:decode(element(3, Bundle)),
+    {ok, BadPlan} = quod_dtx:encode(setelement(4, Plan, <<0:512>>)),
+    BadVote = setelement(5, Vote, setelement(3, Bundle, BadPlan)),
+    BadBlob = term_to_binary(setelement(5, Wire, term_to_binary(BadVote, [deterministic])), [deterministic]),
+    ?assertEqual({error, bad_block}, quod_ledger:decode_block(wire_block({batch, [{dtx, BadBlob}]}))),
+    ?assertEqual({error, bad_block}, quod_ledger:decode_block(wire_block({batch, [{dtx, C}]}))).
 
 control_batches_reject_mixed_duplicate_unsorted_and_mixed_phase_test() ->
     Signer = signer(),
     Target = {<<"quod:ledger-order">>, key(30)},
     {First, _} = direct_abort(Target, key(31), key(32), 1, Signer),
     {Second, _} = direct_abort(Target, key(33), key(34), 2, Signer),
-    Decision = direct_decision(Target, key(35), 3, Signer),
-    {ok, FirstBlob} = quod_dtx:encode_control(First),
-    {ok, SecondBlob} = quod_dtx:encode_control(Second),
-    {ok, DecisionBlob} = quod_dtx:encode_control(Decision),
+    Vote = direct_vote(Target, key(35), 3, Signer),
+    {OtherTarget, _} = direct_abort({<<"quod:other-target">>, key(39)}, key(36), key(37), 3, Signer),
     {SameSequenceA, _} =
         direct_abort(Target, key(36), key(37), 7, Signer),
     {SameSequenceB, _} =
@@ -95,21 +108,17 @@ control_batches_reject_mixed_duplicate_unsorted_and_mixed_phase_test() ->
     SameSequence =
         lists:sort(
           fun(Left, Right) ->
-              quod_dtx:control_order_key(Left) <
-                  quod_dtx:control_order_key(Right)
+              quod_atomic:control_order_key(Left) <
+                  quod_atomic:control_order_key(Right)
           end, [SameSequenceA, SameSequenceB]),
     [SameSequenceFirst, SameSequenceSecond] = SameSequence,
-    {ok, SameSequenceFirstBlob} =
-        quod_dtx:encode_control(SameSequenceFirst),
-    {ok, SameSequenceSecondBlob} =
-        quod_dtx:encode_control(SameSequenceSecond),
     Invalid =
-        [{batch, [{dtx, FirstBlob}, {dtx, FirstBlob}]},
-         {batch, [{dtx, SecondBlob}, {dtx, FirstBlob}]},
-         {batch, [{dtx, FirstBlob}, {dtx, DecisionBlob}]},
-         {batch, [{dtx, SameSequenceFirstBlob},
-                  {dtx, SameSequenceSecondBlob}]},
-         {batch, [{dtx, FirstBlob}, tx(1)]}],
+        [{batch, [{dtx, First}, {dtx, First}]},
+         {batch, [{dtx, Second}, {dtx, First}]},
+         {batch, [{dtx, First}, {dtx, Vote}]},
+         {batch, [{dtx, First}, {dtx, OtherTarget}]},
+         {batch, [{dtx, SameSequenceFirst}, {dtx, SameSequenceSecond}]},
+         {batch, [{dtx, First}, tx(1)]}],
     lists:foreach(
       fun(Data) ->
           ?assertEqual(invalid, quod_ledger:classify(Data)),
@@ -150,33 +159,35 @@ unknown_variant_is_invalid_test() ->
           ?assertNotEqual(noop, Kind)
       end, Unknown).
 
-direct_abort(Target, GroupId, DecisionDigest, Sequence, Signer) ->
-    {ok, DecisionRef} =
+%% Structural references, not a consensus-admission witness.
+direct_abort(Target, ManifestDigest, VoteDigest, Sequence, Signer) ->
+    {ok, VoteRef} =
         quod_dtx:certified_ref(
-          <<"quod:ledger-origin">>, key(40), 7, key(41), DecisionDigest,
-          <<"decision-qc">>),
-    {ok, Record} =
-        quod_dtx:new_finalize(GroupId, DecisionRef, abort, none, 0),
+          <<"quod:ledger-origin">>, key(40), 7, key(41), VoteDigest,
+          <<"vote-qc">>),
+    Record = quod_ct:atomic_abort_record(Target, ManifestDigest, VoteRef),
+    {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} =
-        quod_dtx:sign_control(
-          Target, Record, key(42), Sequence, Sequence, Signer),
+        quod_atomic:sign_control(
+          Target, Material, key(42), Sequence, Sequence, Signer),
     {TargetNs, TargetAnchor} = Target,
     {ok, Ref} =
         quod_dtx:certified_ref(
           TargetNs, TargetAnchor, 10 + Sequence, key(50 + Sequence),
-          quod_dtx:record_digest(Control), <<"finalize-qc">>),
+          quod_atomic:record_digest(Control), <<"resolve-qc">>),
     {Control, Ref}.
 
-direct_decision({TargetNs, TargetAnchor} = Target, GroupId, Sequence, Signer) ->
-    {ok, BeginRef} =
-        quod_dtx:certified_ref(
-          TargetNs, TargetAnchor, 7, key(60), GroupId, <<"begin-qc">>),
-    {ok, Record} =
-        quod_dtx:new_decision(GroupId, BeginRef, {abort, [ledger_test]}, []),
+direct_vote(Target, ProofId, Sequence, Signer) ->
+    F = quod_ct:signed_atomic_fixture(#{target => Target, proof_id => ProofId,
+                                      node_identity => Signer}),
+    Material = quod_atomic:control_material(maps:get(vote_control, F)),
     {ok, Control} =
-        quod_dtx:sign_control(
-          Target, Record, key(61), Sequence, Sequence, Signer),
+        quod_atomic:sign_control(
+          Target, Material, key(61), Sequence, Sequence, Signer),
     Control.
+
+wire_block(Payload) ->
+    term_to_binary({quod_block, 1, 2, 1, Payload, 2}, [deterministic]).
 
 signer() ->
     {Pubkey, Seed} = quod_identity:generate(),

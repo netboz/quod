@@ -3,15 +3,15 @@
 Volatile recovery driver for one already-durable distributed transaction.
 
 The owning namespace Simplex starts one monitored worker from the exact
-journaled/committed Begin.  This process owns only bounded observations and
+journaled source vote or committed own-role vote. This process owns bounded observations and
 message-driven progress subscriptions: `quod_dtx_recovery:next/2` remains the
 sole phase planner, target
 Simplex ledgers remain authoritative, and a worker restart reconstructs every
 decision from certified evidence.
 
 There is deliberately no durable file, registry name, compatibility protocol,
-or wall-clock abort.  Once Begin may be durable, temporary unavailability can
-only delay recovery. Exact owner notifications wake parked work; request
+or wall-clock outcome. A deadline enables a manifest presentation; only a
+certified refusal decides abort. Exact owner notifications wake parked work; request
 deadlines only bound a silent peer or dead worker. Owner death terminates the
 coordinator. A persistently temporary target reply therefore remains parked
 under that durable owner until progress or owner shutdown; the client deadline
@@ -21,17 +21,17 @@ does not cancel or resubmit the uncertain operation.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_monitor/5, start_operation_monitor/4,
+-export([deliver_votes/5, start_monitor/4, start_operation_monitor/4,
          start_dormant_operation_monitor/3]).
 
 -ifdef(TEST).
--export([test_options/1, test_put_evidence/2,
-         test_put_generation/3,
+-export([test_options/1, test_put_evidence/3,
+         foreign_progress_notice/1,
          test_valid_validator_routes/2,
          test_valid_phase_evidence/5,
-         test_initial_commands/4, test_initial_snapshot/4,
-         test_install_phase_snapshot/9,
-         test_install_applied_results/3,
+         test_initial_commands/2, test_initial_snapshot/2,
+         test_install_phase_snapshot/7,
+         test_install_applied_results/4, test_observation_updates/3,
          test_dormant_cancel_disposition/2,
          test_dormant_cancel_request/3,
          test_operation_application_evidence/2,
@@ -46,8 +46,8 @@ does not cancel or resubmit the uncertain operation.
          test_worker_down_disposition/2,
          test_progress_source/2, test_local_progress_event/2, test_state/1,
          test_pending_phase_reference/5, test_submission_observation_transition/3,
-         test_finalize_rediscovery/4, test_phase_verification_deadline/5,
-         test_consume_applied_wave/3]).
+         test_resolve_rediscovery/5, test_phase_verification_deadline/5,
+         test_consume_applied_wave/5]).
 -endif.
 
 -define(DEFAULT_REQUEST_TIMEOUT_MS, 5000).
@@ -104,23 +104,19 @@ does not cancel or resubmit the uncertain operation.
     owner_monitor = undefined :: undefined | reference(),
     %% Protocol state shares one owner loop and one I/O wave. It is not
     %% another executor or durable projection.
-    protocol = group :: group | {operation, map()} | {dormant, map()},
+    protocol = group :: group | delivery | {operation, map()} | {dormant, map()},
     %% Capability arrives on the existing exact-owner progress stream.
     %% Pausing changes neither the owner nor the verified recovery snapshot.
     execution_ready = false :: boolean(),
     owner_ns :: binary(),
     origin :: {binary(), <<_:256>>},
     group_id :: undefined | <<_:256>>,
-    begin_record :: undefined | quod_dtx:control_record(),
+    own_row :: undefined | map(),
     snapshot :: undefined | quod_dtx_recovery:snapshot(),
-    %% Exact entries retained only after the shared local/foreign evidence
-    %% verifier accepted their certified references.  They are acceleration
-    %% material for the next semantic phase, never a second source of truth.
-    phase_entries = #{} :: #{quod_dtx:certified_ref() => quod_ledger:entry_artifact()},
-    %% Exact certified Finalize evidence is retained for the one applied-vote
-    %% collector. Its historical committee fixes who may sign; routes remain
-    %% reachability hints only. At most one row per participant.
-    finalize_evidence = #{} :: map(),
+    %% Only exact Resolve evidence survives verification for the existing AM3
+    %% collector. Votes become compact planner facts; no foreign plans or
+    %% full Vote entries are retained by this worker.
+    resolve_evidence = #{} :: map(),
     %% A submit acknowledgement carries an exact certified reference.  If the
     %% local/foreign history verifier is momentarily behind that commit, retain
     %% the reference and await the exact history-advance notification; never
@@ -135,7 +131,7 @@ does not cancel or resubmit the uncertain operation.
     %% target continuations consume their own coalesced edges inside the wave;
     %% this bit is never a second target-retry allowance.
     progress_pending = false :: boolean(),
-    %% Once every participant Finalize is certified applied, the visible
+    %% Once every participant Resolve is certified applied, the visible
     %% result is already safe.  Notify the namespace owner once, then keep this
     %% same recovery process alive to append mandatory Complete bookkeeping in
     %% the background.  A restart may emit the same terminal value again; the
@@ -150,6 +146,37 @@ does not cancel or resubmit the uncertain operation.
 }).
 
 -doc """
+Run the gateway's single initial delivery wave in its existing proof worker.
+
+The same wave scheduler, per-peer correlation, deadline and loser cleanup as
+recovery are reused. Each command carries only its target's own Vote. This is
+not a recovery owner: no subscriptions, retries, outcome verification or
+foreign material retention survive the call. Source responsibility must already
+be durable; any delivery uncertainty leaves that exact group pending.
+""".
+-spec deliver_votes(pid(), binary(), quod_atomic:group(),
+                    [quod_atomic:record()], integer()) -> ok | {error, outcome_unknown}.
+deliver_votes(Engine, Ns, {quod_atomic_group, 4, Manifest, _, _} = Group, Votes, Deadline) ->
+    {Ns, Anchor, _, _} = quod_dtx:manifest_coordinator(Manifest),
+    Id = quod_atomic:group_id(Group),
+    Commands = [{submit, quod_atomic:record_target(Vote), Vote} || Vote <- Votes],
+    true = lists:all(fun(V) -> quod_atomic:record_kind(V) =:= vote andalso
+                              quod_atomic:group_id(V) =:= Id end, Votes),
+    Monitor = erlang:monitor(process, Engine),
+    State = #state{owner = Engine, owner_monitor = Monitor, owner_ns = Ns, origin = {Ns, Anchor},
+                   group_id = Id, protocol = delivery, execution_ready = true,
+                   config = #config{}},
+    try
+        {next, Started} = launch_wave(phase_command, Commands,
+                                     #{request_deadline => Deadline}, State),
+        case loop(Started) of
+            {delivered, _Observations} -> ok;
+            ok -> {error, outcome_unknown}
+        end
+    after erlang:demonitor(Monitor, [flush])
+    end.
+
+-doc """
 Start one unlinked worker and install an exact owner-side monitor.
 
 The caller must be `Owner`; this makes the returned monitor useful by
@@ -158,13 +185,12 @@ worker.  The worker separately monitors Owner and exits when the namespace
 owner disappears.
 """.
 -spec start_monitor(
-        pid(), binary(), quod_dtx:control_record(),
-        none | {quod_dtx:certified_ref(), map()}, map()) ->
+        pid(), binary(), map(), map()) ->
           {ok, pid(), reference()} | {error, term()}.
-start_monitor(Owner, OwnerNs, Begin, BeginEvidence, Options)
+start_monitor(Owner, OwnerNs, OwnRow, Options)
   when is_pid(Owner), Owner =:= self(), is_binary(OwnerNs),
        byte_size(OwnerNs) > 0, is_map(Options) ->
-    case initial_state(Owner, OwnerNs, Begin, BeginEvidence, Options) of
+    case initial_state(Owner, OwnerNs, OwnRow, Options) of
         {ok, Initial} ->
             TraceCtx = quod_trace:context(),
             {Pid, Monitor} = spawn_monitor(fun() ->
@@ -176,7 +202,7 @@ start_monitor(Owner, OwnerNs, Begin, BeginEvidence, Options)
         {error, _} = Error ->
             Error
     end;
-start_monitor(_Owner, _OwnerNs, _Begin, _BeginEvidence, _Options) ->
+start_monitor(_Owner, _OwnerNs, _OwnRow, _Options) ->
     {error, invalid_coordinator_start}.
 
 -doc """
@@ -685,38 +711,25 @@ operation_work_disposition({error, Reason})
        Reason =:= independent_scope_required -> {fatal, Reason};
 operation_work_disposition(_) -> wait.
 
-initial_state(Owner, OwnerNs, Begin, BeginEvidence, Options) ->
-    case {options(Options), quod_dtx:begin_recovery_rows(Begin),
-          quod_dtx:begin_group_ref(Begin)} of
-        {{ok, Config},
-         {ok, {OwnerNs, <<_:256>>} = Origin, <<_:256>> = GroupId, Rows},
-         {ok, {group, OwnerNs, _Anchor, _Coordinator, _Admission, GroupId}}}
-          when length(Rows) >= 2,
-               length(Rows) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
-            seed_begin_evidence(
-              BeginEvidence,
-              #state{owner = Owner, owner_ns = OwnerNs, origin = Origin,
-                     group_id = GroupId, begin_record = Begin,
-                     snapshot = quod_dtx_recovery:empty(),
-                     config = Config});
-        {{error, _} = Error, _, _} ->
-            Error;
-        _ ->
-            {error, invalid_begin}
-    end.
-
-seed_begin_evidence(none, S) ->
-    {ok, S};
-seed_begin_evidence(
-  {BeginRef, Evidence},
-  S = #state{origin = Origin, group_id = GroupId}) ->
-    case install_phase_evidence(
-           Origin, GroupId, 'begin', BeginRef, Evidence, S) of
-        {progress, Seeded, begun} -> {ok, Seeded};
-        _ -> {error, invalid_begin_evidence}
+initial_state(Owner, OwnerNs,
+              Own = #{material := {{quod_dtx_vote, 4, _, {OwnerNs, _} = Identity, _, _}, _,
+                                    #{group := #{group_id := GroupId, origin := Origin}}},
+                      ref := Ref, resolution := _}, Options) ->
+    %% Simplex supplies its own authenticated row, not a copied foreign plan
+    %% inventory or a prefix replay. Only O may start before its vote commits.
+    case options(Options) of
+        {ok, Config} ->
+            case (Ref =:= none andalso Identity =:= Origin) orelse
+                 (Ref =/= none andalso quod_dtx:validate_certified_ref(Ref)) of
+                true -> {ok, #state{owner = Owner, owner_ns = OwnerNs, origin = Identity,
+                           group_id = GroupId, own_row = Own,
+                           snapshot = quod_dtx_recovery:empty(), config = Config}};
+                false -> {error, invalid_own_vote}
+            end;
+        {error, _} = Error -> Error
     end;
-seed_begin_evidence(_Malformed, _S) ->
-    {error, invalid_begin_evidence}.
+initial_state(_, _, _, _) -> {error, invalid_own_vote}.
+
 
 options(Options) when map_size(Options) =< 1 ->
     Allowed = [request_timeout_ms],
@@ -789,7 +802,7 @@ handle_loop_message(
         FollowRef ->
             ok = quod_foreign_log:ack(FollowRef, NoticeRef),
             case foreign_progress_notice(Notice) of
-                true -> loop(request_progress_drive(S));
+                true -> loop(request_progress_drive(observed_progress(Identity, S)));
                 false -> loop(S)
             end;
         _ ->
@@ -801,7 +814,8 @@ handle_loop_message(
     case local_progress_event(Message, Origin) of
         true ->
             S1 = request_progress_drive(
-                   S#state{execution_ready = execution_capability(S, Ready)}),
+                   observed_progress(Origin,
+                     S#state{execution_ready = execution_capability(S, Ready)})),
             case S1#state.wave of
                 #wave{ref = Ref} when is_reference(Ref) ->
                     continue(advance_wave(S1));
@@ -815,7 +829,7 @@ handle_loop_message(
     case maps:is_key(Identity, Subscriptions) of
         true ->
             S1 = route_progress_follow(Identity, S),
-            loop(request_progress_drive(S1));
+            loop(request_progress_drive(observed_progress(Identity, S1)));
         false ->
             loop(S)
     end;
@@ -832,7 +846,7 @@ handle_loop_message(
   S = #state{foreign_log_monitor = Monitor,
              route_subscriptions = Subscriptions}) ->
     S1 = lists:foldl(
-           fun(Identity, Acc) -> attach_follow(Identity, Acc) end,
+           fun(Identity, Acc) -> attach_follow(Identity, observed_progress(Identity, Acc)) end,
            S, maps:keys(Subscriptions)),
     loop(registration_progress(S1));
 handle_loop_message(
@@ -910,6 +924,7 @@ close_follow(FollowRef) ->
     end.
 
 continue({next, S}) -> loop(S);
+continue({delivered, Results}) -> {delivered, Results};
 continue(stop) -> ok.
 
 drive(S = #state{execution_ready = false}) ->
@@ -933,7 +948,7 @@ drive_pending(_Key, {reference, Target, GroupId, Kind, Ref, Preferred}, S) ->
     start_typed_wave(phase_verify, [{Target, GroupId, Kind, Ref, Preferred}],
                      empty_wave_outcome(), S);
 drive_pending(_Key, {submission, Target, GroupId, Kind}, S) ->
-    start_typed_wave(phase_command, [{phase, Target, GroupId, Kind, uncertain}],
+    start_typed_wave(phase_command, [{phase, Target, GroupId, Kind}],
                      #{}, S).
 
 empty_wave_outcome() ->
@@ -941,7 +956,7 @@ empty_wave_outcome() ->
 
 drive_commands(S = #state{commands = none, terminal_notified = false}) ->
     case quod_dtx_recovery:terminal(
-           S#state.begin_record, S#state.snapshot) of
+           S#state.own_row, S#state.snapshot) of
         {ok, Terminal} ->
             notify(S, {terminal, Terminal}),
             queue_drive(),
@@ -960,7 +975,8 @@ drive_commands(S = #state{commands = {Mode, Stage, Commands}})
     start_wave(Stage, Commands, S).
 
 drive_commands_next(S) ->
-    case quod_dtx_recovery:next(S#state.begin_record, S#state.snapshot) of
+    case quod_dtx_recovery:next(S#state.own_row, S#state.snapshot) of
+        wait -> {next, S};
         {done, CompleteRef} ->
             %% Finish child root-event writes before the existing notification
             %% lets the owner append done_observed to that same SDK event list.
@@ -999,11 +1015,13 @@ put_pending(Value, S = #state{pending_phases = Pending}) ->
 pin_pending_reference(Target, GroupId, Kind, Ref, Preferred,
                        S = #state{pending_phases = Pending}) ->
     Key = {Target, Kind},
-    S1 = case maps:get(Key, Pending, none) of
-        {submission, Target, GroupId, Kind} -> drop_pending(Key, S);
-        _ -> S
-    end,
-    put_pending({reference, Target, GroupId, Kind, Ref, Preferred}, S1).
+    case maps:get(Key, Pending, none) of
+        {reference, Target, GroupId, Kind, OldRef, _OldHint} ->
+            true = quod_dtx:same_certified_ref(OldRef, Ref),
+            S;
+        _ -> put_pending({reference, Target, GroupId, Kind, Ref, Preferred},
+                         drop_pending(Key, S))
+    end.
 
 pending_key({reference, Target, _GroupId, Kind, _Ref, _Preferred}) ->
     {Target, Kind};
@@ -1027,7 +1045,8 @@ start_typed_wave(Stage, Items, Meta, S) ->
 launch_wave(Stage, Items, Meta0, S) ->
     Ref = make_ref(),
     Timeout = (S#state.config)#config.request_timeout_ms,
-    Deadline = maps:get(request_deadline, Meta0, quod_time:mono_ms() + Timeout),
+    Limit = quod_time:mono_ms() + Timeout,
+    Deadline = min(Limit, maps:get(request_deadline, Meta0, Limit)),
     Meta = case Stage of
         phase_verify -> Meta0#{request_deadline => Deadline,
             evidence_deadline => maps:get(evidence_deadline, Meta0, Deadline)};
@@ -1099,11 +1118,12 @@ record_wave_result(Index, {prepared_submit, Plan}, S) when is_integer(Index) ->
 record_wave_result({Index, Endpoint}, Result,
                    S = #state{wave = Wave = #wave{results = Results}}) ->
     {dispatching, Plan, Uncertain} = maps:get(Index, Results),
-    {_Target, _GroupId, _Kind, Blob, _Sidecar, Sources} = Plan,
+    {_Target, _GroupId, _Kind, Template, _Sidecar, Sources} = Plan,
     Source = lists:nth(Endpoint, Sources),
     {Request, EndpointResult, Classification} = case Result of
         {worker_down, _} -> {none, Result, uncertain};
-        {Delivered = {submit, _, Blob}, Reply} ->
+        {Delivered, Reply} when is_tuple(Delivered) ->
+            Template = setelement(2, Delivered, undefined),
             {Delivered, Reply, classify_submit_endpoint_result(Source, Delivered, Reply)}
     end,
     count_submit_endpoint_result(S#state.owner_ns, Classification, EndpointResult),
@@ -1224,30 +1244,33 @@ resume_target_continuation(Index, Admitted, Pending, Running,
     end.
 
 dispatch_wave_submission(Index,
-  Plan = {Target, _GroupId, _Kind, Blob, Sidecar, Sources},
+  Plan = {Target, _GroupId, Kind, Blob, Sidecar, Sources},
   S = #state{wave = Wave = #wave{context = Context, workers = Workers}}) ->
     case Sources =/= [] andalso context_timeout(Context) > 0 of
         false -> put_wave_result(Index, submit_plan_result(Plan, none, not_submitted), S);
         true ->
+            %% Consume the same planner allowance before any send, and attach
+            %% the normal progress source before waiting for its response.
+            S1 = submission_attempted(Target, Kind, S),
             quod_metrics:count_dtx_submit_fanout(S#state.owner_ns, attempted, length(Sources)),
             Jobs = [{{Index, N}, {endpoint, Source, Target, Blob, Sidecar}}
                     || {N, Source} <- lists:zip(lists:seq(1, length(Sources)), Sources)],
             More = spawn_wave_items(Jobs, Wave),
             put_wave_result(Index, {dispatching, Plan, false},
-                            S#state{wave = Wave#wave{workers = maps:merge(Workers, More)}})
+                            S1#state{wave = Wave#wave{workers = maps:merge(Workers, More)}})
     end.
+
+submission_attempted(_Target, _Kind, S = #state{protocol = delivery}) -> S;
+submission_attempted(Target, Kind, S) ->
+    Snapshot = quod_dtx_recovery:attempted(Target, Kind, S#state.snapshot),
+    wait_for_progress(Target, S#state{snapshot = Snapshot}).
 
 wave_context(#state{protocol = {operation, Context}, owner_ns = OwnerNs}) ->
     #{owner_ns => OwnerNs, operation => Context};
 wave_context(#state{protocol = Protocol, owner_ns = OwnerNs}) when Protocol =/= group ->
     #{owner_ns => OwnerNs};
-wave_context(#state{owner_ns = OwnerNs, snapshot = Snapshot,
-                    finalize_evidence = FinalizeEvidence,
-                    phase_entries = PhaseEntries}) ->
-    #{owner_ns => OwnerNs,
-      applied => maps:get(applied, Snapshot),
-      finalize_evidence => FinalizeEvidence,
-      phase_entries => PhaseEntries}.
+wave_context(#state{owner_ns = OwnerNs, resolve_evidence = ResolveEvidence}) ->
+    #{owner_ns => OwnerNs, resolve_evidence => ResolveEvidence}.
 
 run_wave_work(operation, Item, Context) ->
     operation_wave_io(Item, Context);
@@ -1268,7 +1291,7 @@ finish_wave(S0 = #state{wave = #wave{stage = Stage,
                                       started_native = StartedNative} = Wave}) ->
     _ = erlang:cancel_timer(Timer),
     finish_wave_trace(Wave, ok),
-    %% The public prepare/finalize/applied stage spans all of its submit,
+    %% The public vote/resolve/applied stage spans all of its submit,
     %% evidence, and wait turns.  It is closed by `enter_stage/2` at the next
     %% protocol stage (or by coordinator termination), not at a sub-wave.
     _ = StartedNative,
@@ -1278,6 +1301,8 @@ finish_wave(S0 = #state{wave = #wave{stage = Stage,
                || Index <- lists:seq(1, map_size(Results))],
     ?FINISH_WAVE(Stage, Items, Ordered, Meta, S).
 
+finish_typed_wave(phase_command, _Items, Results, _Meta, #state{protocol = delivery}) ->
+    {delivered, Results};
 finish_typed_wave(operation, Items, Results, Meta, S) ->
     finish_operation_wave(Items, Results, Meta, S);
 finish_typed_wave(dormant, Items, Results, Meta, S) ->
@@ -1356,10 +1381,6 @@ classify_phase_command_wave(
             classify_phase_command_wave(
               Commands, Results, S1, [Spec | Verify], Phases,
               Progress, Waiting, Fatal0);
-        {progress, Phase, S1} ->
-            classify_phase_command_wave(
-              Commands, Results, S1, Verify, [Phase | Phases],
-              true, Waiting, Fatal0);
         {absent, S1} ->
             %% Exact absence discharges uncertainty, not a certified phase.
             %% Re-plan without manufacturing a phase-progress notification.
@@ -1379,10 +1400,6 @@ classify_phase_command_wave(
             classify_phase_command_wave(
               Commands, Results, S1, Verify, Phases,
               Progress, true, Fatal0);
-        {retry, S1} ->
-            classify_phase_command_wave(
-              Commands, Results, S1, Verify, Phases,
-              Progress, Waiting, Fatal0);
         {fatal, Reason, S1} ->
             Fatal = first_fatal(Fatal0, Reason),
             classify_phase_command_wave(
@@ -1406,25 +1423,20 @@ classify_phase_command_result(
             {fatal, invalid_endpoint_response, S}
     end;
 classify_phase_command_result(
-  {submit, Target, _Record},
-  {ok, Target, _GroupId, prepare, Request,
-   {reply, {refused, _RequestId, Target, Digest, Generation,
-            ReasonsBlob} = Response, _Source}}, S) ->
-    case quod_dtx_endpoint:correlates(Request, Response) of
-        true ->
-            case put_refusal(Target, Digest, Generation, ReasonsBlob, S) of
-                {progress, S1, Phase} -> {progress, Phase, S1};
-                {retry, S1} -> {retry, S1};
-                {fatal, Reason, S1} -> {fatal, Reason, S1}
-            end;
-        false ->
-            {fatal, invalid_endpoint_response, S}
+  {present, Target, Group},
+  {ok, Target, GroupId, vote, Request,
+   {reply, {presented, _, GroupId} = Response, _Source}}, S) ->
+    case quod_atomic:group_id(Group) =:= GroupId andalso
+         quod_dtx_endpoint:correlates(Request, Response) of
+        true -> {observe, put_pending({submission, Target, GroupId, vote}, S)};
+        false -> {fatal, invalid_endpoint_response, S}
     end;
 classify_phase_command_result(
-  {submit, Target, _Record},
+  {Action, Target, _Payload},
   {ok, Target, GroupId, Kind, Request,
    {reply, {error, _RequestId, Reason} = Response, _Source}}, S)
-  when Reason =:= busy; Reason =:= not_ready; Reason =:= not_found ->
+  when (Action =:= submit orelse Action =:= present),
+       (Reason =:= busy orelse Reason =:= not_ready orelse Reason =:= not_found) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true ->
             {observe, put_pending(
@@ -1433,42 +1445,39 @@ classify_phase_command_result(
             {fatal, invalid_endpoint_response, S}
     end;
 classify_phase_command_result(
-  {submit, Target, _Record},
+  {Action, Target, _Payload},
   {ok, Target, _GroupId, _Kind, Request,
-   {reply, {error, _RequestId, invalid_request} = Response, _Source}}, S) ->
+   {reply, {error, _RequestId, invalid_request} = Response, _Source}}, S)
+  when Action =:= submit; Action =:= present ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true -> {fatal, endpoint_rejected_recovery_record, S};
         false -> {fatal, invalid_endpoint_response, S}
     end;
 classify_phase_command_result(
-  {submit, Target, Record},
-  {ok, Target, GroupId, Kind, _Request, outcome_unknown}, S) ->
-    true = quod_dtx:group_id(Record) =:= GroupId,
+  {Action, Target, Record},
+  {ok, Target, GroupId, Kind, _Request, outcome_unknown}, S)
+  when Action =:= submit; Action =:= present ->
+    true = quod_atomic:group_id(Record) =:= GroupId,
     {observe, put_pending({submission, Target, GroupId, Kind}, S)};
 classify_phase_command_result(
-  {submit, _Target, _Record},
-  {ok, _Target2, _GroupId, _Kind, _Request, not_submitted}, S) ->
+  {Action, _Target, _Payload},
+  {ok, _Target2, _GroupId, _Kind, _Request, not_submitted}, S)
+  when Action =:= submit; Action =:= present ->
     {waiting, wait_for_progress(_Target, S)};
 classify_phase_command_result(
-  {submit, Target, Record}, {worker_down, Reason}, S) ->
+  {Action, Target, Record}, {worker_down, Reason}, S)
+  when Action =:= submit; Action =:= present ->
     %% The worker can die after the peer accepted the request but before its
     %% reply reached this owner.  Preserve uncertainty; never resubmit merely
     %% because a volatile worker disappeared.
     uncertain = worker_down_disposition(submit, Reason),
-    GroupId = quod_dtx:group_id(Record),
-    Kind = quod_dtx:record_kind(Record),
+    GroupId = quod_atomic:group_id(Record),
+    Kind = case Action of present -> vote; submit -> quod_atomic:record_kind(Record) end,
     {observe, put_pending({submission, Target, GroupId, Kind}, S)};
 classify_phase_command_result(
   {phase, Target, GroupId, Kind},
   {ok, Target, GroupId, Kind, _Request, Observation}, S) ->
     classify_phase_observation(Target, GroupId, Kind, Observation, S);
-classify_phase_command_result(
-  {phase, Target, GroupId, Kind, uncertain},
-  {ok, Target, GroupId, Kind, _Request, Observation}, S) ->
-    classify_phase_observation(Target, GroupId, Kind, Observation, S);
-classify_phase_command_result(
-  {phase, Target, _GroupId, _Kind, uncertain}, {worker_down, Reason}, S) ->
-    phase_worker_failed(Target, Reason, S);
 classify_phase_command_result(
   {phase, Target, _GroupId, _Kind}, {worker_down, Reason}, S) ->
     phase_worker_failed(Target, Reason, S);
@@ -1487,18 +1496,24 @@ phase_worker_failed(Target, Reason, S) ->
             {fatal, Failure, S}
     end.
 
-classify_phase_observation(Target, GroupId, finalize,
-                           {finalize_absent, PrepareObservation}, S) ->
-    %% Only the normal complete absence walk discharges this submission.
-    %% Any discovered Prepare then takes the same pinned verification path.
-    classify_phase_observation(Target, GroupId, prepare, PrepareObservation,
-                               drop_pending({Target, finalize}, S));
+classify_phase_observation(Target, GroupId, resolve, {resolve_absent, VoteObservation}, S) ->
+    %% No generation guess: a checked Vote or authoritative absence is needed
+    %% before another Resolve can bind this target's own vote.
+    case VoteObservation of
+        {committed, _, _} ->
+            {absent, S1} = install_phase_observation(Target, resolve, absent, S),
+            classify_phase_observation(Target, GroupId, vote, VoteObservation,
+                                       drop_pending({Target, resolve}, S1));
+        absent ->
+            {absent, S1} = install_phase_observation(Target, vote, absent, S),
+            classify_phase_observation(Target, GroupId, resolve, absent, S1);
+        _ -> {waiting, wait_for_progress(Target, S)}
+    end;
 classify_phase_observation(Target, GroupId, Kind, Observation, S) ->
-    case install_phase_observation(Target, Observation, S) of
+    case install_phase_observation(Target, Kind, Observation, S) of
         {verify, Ref, Preferred, S1} ->
             {verify, {Target, GroupId, Kind, Ref, Preferred},
              pin_pending_reference(Target, GroupId, Kind, Ref, Preferred, S1)};
-        {progress, S1, Phase} -> {progress, Phase, S1};
         {absent, S1} -> {absent, drop_pending({Target, Kind}, S1)};
         {retry, S1} -> {waiting, wait_for_progress(Target, S1)};
         {fatal, Reason, S1} -> {fatal, Reason, S1}
@@ -1626,125 +1641,87 @@ timeout_wave(Wave = #wave{workers = Workers}, S0) ->
     end, S1, Results),
     finish_wave(S2).
 
-submit_command_io({submit, Target, Record}, Context) ->
+submit_command_io({submit, Target, Record}) ->
     %% No write here: the owner receives routes and expands endpoint work.
-    case quod_dtx:encode_record(Record) of
+    case quod_atomic:encode_record(Record) of
         {ok, RecordBlob} ->
-            Kind = quod_dtx:record_kind(Record),
-            GroupId = quod_dtx:group_id(Record),
-            Sidecar = record_validation_sidecar(
-                Record, maps:get(phase_entries, Context), maps:get(applied, Context)),
-            {prepared_submit, {Target, GroupId, Kind, RecordBlob, Sidecar, endpoint_sources(Target)}};
+            Kind = quod_atomic:record_kind(Record),
+            GroupId = quod_atomic:group_id(Record),
+            {prepared_submit, {Target, GroupId, Kind, {submit, undefined, RecordBlob},
+                               [], endpoint_sources(Target)}};
         {error, Reason} -> {error, Reason}
-    end.
+    end;
+submit_command_io({present, Target, Group}) ->
+    GroupId = quod_atomic:group_id(Group),
+    Request = {present, undefined, GroupId, quod_atomic:encode_group(Group)},
+    {prepared_submit, {Target, GroupId, vote, Request, [], endpoint_sources(Target)}}.
 
-phase_command_io({endpoint, Source, Target, Blob, Sidecar}, Context) ->
+phase_command_io({endpoint, Source, Target, Template, Sidecar}, Context) ->
     %% Correlation belongs to one delivery, not the shared semantic record.
-    Request = {submit, request_id(), Blob},
+    Request = setelement(2, Template, request_id()),
     {Request, ?ENDPOINT_IO(Source, Target, Request, Sidecar, Context)};
-phase_command_io({submit, _Target, _Record} = Command, Context) ->
-    submit_command_io(Command, Context);
+phase_command_io({Action, _Target, _Payload} = Command, _Context)
+  when Action =:= submit; Action =:= present ->
+    submit_command_io(Command);
 phase_command_io({phase, Target, GroupId, Kind}, Context) ->
-    phase_query_io(ordinary, Target, GroupId, Kind, Context);
-phase_command_io({phase, Target, GroupId, Kind, uncertain}, Context) ->
-    phase_query_io(uncertain, Target, GroupId, Kind, Context);
+    phase_query_io(Target, GroupId, Kind, Context);
 phase_command_io(_Command, _Context) ->
     {error, invalid_recovery_record}.
 
-phase_query_io(Mode, Target, GroupId, Kind, Context) ->
+phase_query_io(Target, GroupId, Kind, Context) ->
     Request = {phase, request_id(), GroupId, Kind},
-    Observation = phase_command_sources(
-      endpoint_sources(Target), Target, Kind, Request, Context,
-      Mode, false, false, none),
-    case {Mode, Kind, Observation} of
-        {uncertain, finalize, {absent, _}} ->
-            %% A direct abort can lose to an already committed Prepare. Read
-            %% that phase before replanning with an unsigned generation hint.
-            %% Same worker/walk/deadline; no write or extra retry allowance.
-            {ok, Target, GroupId, prepare, _, PrepareObservation} =
-                phase_query_io(ordinary, Target, GroupId, prepare, Context),
-            {ok, Target, GroupId, Kind, Request,
-             {finalize_absent, PrepareObservation}};
+    Observation = phase_command_sources(endpoint_sources(Target), Target, Request,
+                                         Context, false, false),
+    case {Kind, Observation} of
+        {resolve, absent} ->
+            %% A Vote may have overtaken our earlier absence. Refresh it
+            %% under this SAME allowance before constructing a tombstone.
+            {ok, Target, GroupId, vote, _, VoteObservation} =
+                phase_query_io(Target, GroupId, vote, Context),
+            {ok, Target, GroupId, Kind, Request, {resolve_absent, VoteObservation}};
         _ -> {ok, Target, GroupId, Kind, Request, Observation}
     end.
 
-%% One read-only delivery walk. Ordinary discovery may use an unsigned
-%% generation hint; clearing uncertain submission requires absence from every
-%% reachable exact source, with no pending/unavailable source. Both modes stop
-%% at the FIRST correlated reference. Evidence then has one separate pinned
-%% verification wave, never another peer walk or renewed per-peer allowance.
-phase_command_sources([], _Target, _Kind, _Request, _Context,
-                      uncertain, true, false, Generation) ->
-    {absent, Generation};
-phase_command_sources([], _Target, _Kind, _Request, _Context,
-                      _Mode, _Absent, _Blocked, Generation) ->
-    {unresolved, Generation};
-phase_command_sources([Source | Rest], Target, Kind, Request, Context,
-                      Mode, Absent, Blocked, Generation) ->
+%% One discovery walk for initial discovery and uncertain delivery. Unsigned
+%% generations and refusals are not planning authority. Absence requires all
+%% contacted sources to answer absent, with no pending/unavailable source.
+%% The first correlated reference pins the sole evidence verification.
+phase_command_sources([], _Target, _Request, _Context, true, false) -> absent;
+phase_command_sources([], _Target, _Request, _Context, _Absent, _Blocked) -> unresolved;
+phase_command_sources([Source | Rest], Target, Request, Context, Absent, Blocked) ->
     Result = phase_response(
       Request, endpoint_request(Source, Target, Request, [], Context)),
     case Result of
         {committed, _, _} -> Result;
-        {uncommitted, Hint, Status} when Kind =:= prepare, Mode =:= ordinary,
-                                       (Status =:= pending orelse Status =:= not_found) ->
-            {generation, Hint};
-        {uncommitted, Hint, not_found} ->
-            NextGeneration = case Kind of
-                prepare -> max_generation(Generation, Hint);
-                _ -> Generation
-            end,
-            phase_command_sources(Rest, Target, Kind, Request, Context,
-                                  Mode, true, Blocked, NextGeneration);
+        not_found ->
+            phase_command_sources(Rest, Target, Request, Context, true, Blocked);
         {error, _} when Source =:= local -> Result;
         _RetryOrInvalidRemote ->
-            phase_command_sources(Rest, Target, Kind, Request, Context,
-                                  Mode, Absent, true, Generation)
+            phase_command_sources(Rest, Target, Request, Context, Absent, true)
     end.
-
-max_generation(none, Generation) -> Generation;
-max_generation(Previous, Generation) -> max(Previous, Generation).
 
 phase_response(Request, {ok, Response, Source}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         false -> {error, invalid_endpoint_response};
         true ->
             case Response of
-                {phase, _, _, {committed, Ref}} -> {committed, Ref, Source};
-                {phase, _, Generation, Status}
-                  when Status =:= pending; Status =:= not_found ->
-                    case valid_generation(Generation) of
-                        true -> {uncommitted, Generation, Status};
-                        false -> {error, invalid_target_generation}
-                    end;
+                {phase, _, _Generation, {committed, Ref}} -> {committed, Ref, Source};
+                {phase, _, _Generation, not_found} -> not_found;
+                {phase, _, _Generation, pending} -> retry;
                 {error, _, Reason}
-                  when Reason =:= busy; Reason =:= not_ready; Reason =:= not_found ->
-                    retry;
+                  when Reason =:= busy; Reason =:= not_ready; Reason =:= not_found -> retry;
                 {error, _, invalid_request} -> {error, endpoint_rejected_phase_query};
                 _ -> {error, invalid_endpoint_response}
             end
     end;
 phase_response(_Request, {error, _}) -> retry.
 
-install_phase_observation(_Target, {committed, Ref, Source}, S) ->
+install_phase_observation(_Target, _Kind, {committed, Ref, Source}, S) ->
     {verify, Ref, Source, S};
-install_phase_observation(Target, {generation, Generation}, S) ->
-    put_generation(Target, Generation, S);
-install_phase_observation(Target, {Status, Generation}, S)
-  when Status =:= absent; Status =:= unresolved ->
-    case install_observed_generation(Target, Generation, S) of
-        {ok, S1} when Status =:= absent -> {absent, S1};
-        {ok, S1} -> {retry, S1};
-        {fatal, _, _} = Fatal -> Fatal
-    end;
-install_phase_observation(_Target, {error, Reason}, S) -> {fatal, Reason, S}.
-
-install_observed_generation(_Target, none, S) -> {ok, S};
-install_observed_generation(Target, Generation, S) ->
-    case put_generation(Target, Generation, S) of
-        {progress, S1, _} -> {ok, S1};
-        {retry, S1} -> {ok, S1};
-        {fatal, _, _} = Fatal -> Fatal
-    end.
+install_phase_observation(Target, Kind, absent, S = #state{snapshot = Snapshot}) ->
+    {absent, S#state{snapshot = quod_dtx_recovery:absent(Target, Kind, Snapshot)}};
+install_phase_observation(_Target, _Kind, unresolved, S) -> {retry, S};
+install_phase_observation(_Target, _Kind, {error, Reason}, S) -> {fatal, Reason, S}.
 
 phase_evidence_io(
   {Target, _GroupId, Kind, Ref, Preferred},
@@ -1814,50 +1791,20 @@ expand_applied_results([{ready, _Request} | Rest], [Result | Results], Acc) ->
 expand_applied_results(_Prepared, _Results, _Acc) ->
     {error, invalid_request}.
 
-record_validation_sidecar(Record, PhaseEntries, Applied) ->
-    case quod_foreign_log:required_references(Record) of
-        {ok, References} ->
-            Certificates =
-                [{{applied, Target, Ref}, Certificate}
-                 || {Target, Ref, _Generation} <- complete_rows(Record),
-                    {ok, Certificate} <-
-                        [applied_certificate(Target, Ref, Applied)]],
-            Entries =
-                [{Ref, Entry}
-                 || {_Phase, Ref} <- References,
-                    {ok, Entry} <- [maps:find(Ref, PhaseEntries)]],
-            quod_dtx_endpoint:normalize_sidecar(Certificates ++ Entries);
-        {error, _} ->
-            []
-    end.
 
-complete_rows({quod_dtx_complete, 3, _GroupId, _DecisionRef, Rows}) -> Rows;
-complete_rows(_Record) -> [].
-
-applied_certificate(Target, Ref, Applied) ->
-    case lists:keyfind(Target, 1, Applied) of
-        {Target, Certificate} ->
-            case quod_applied_certificate:applied_certificate_binding(
-                   Certificate) of
-                {ok, #{target := Target, finalize_ref := Ref}} ->
-                    {ok, Certificate};
-                _ -> error
-            end;
-        false -> error
-    end.
 
 applied_wave_requests([], _S, Acc) ->
     {ok, lists:reverse(Acc)};
 applied_wave_requests(
-  [{applied, Target, GroupId, FinalizeRef, Generation, Verdict} | Rest],
-  #{finalize_evidence := FinalizeEvidence} = Context, Acc) ->
-    case maps:get(Target, FinalizeEvidence, undefined) of
-        {FinalizeRef, Evidence} ->
+  [{applied, Target, GroupId, ResolveRef, Generation, Verdict} | Rest],
+  #{resolve_evidence := ResolveEvidence} = Context, Acc) ->
+    case maps:get(Target, ResolveEvidence, undefined) of
+        {ResolveRef, Evidence} ->
             HistoricalRoutes = maps:get(routes, Evidence, #{}),
-            case applied_source(Target, FinalizeRef, HistoricalRoutes) of
+            case applied_source(Target, ResolveRef, HistoricalRoutes) of
                 {ok, Source} ->
                     Claim = #{target => Target, group_id => GroupId,
-                              finalize_ref => FinalizeRef,
+                              resolve_ref => ResolveRef,
                               generation => Generation, verdict => Verdict},
                     applied_wave_requests(
                       Rest, Context,
@@ -1866,9 +1813,9 @@ applied_wave_requests(
                     applied_wave_requests(Rest, Context, [retry | Acc])
             end;
         undefined ->
-            {error, missing_finalize_evidence};
+            {error, missing_resolve_evidence};
         _Conflicting ->
-            {error, conflicting_finalize_evidence}
+            {error, conflicting_resolve_evidence}
     end.
 
 install_applied_wave(Commands, Views, S) when length(Commands) =:= length(Views) ->
@@ -1879,12 +1826,12 @@ install_applied_wave(_Commands, _Views, S) ->
 install_applied_wave([], [], S, Targets, Waiting, Progress) ->
     {ok, S, lists:reverse(Targets), lists:reverse(Waiting), Progress};
 install_applied_wave(
-  [{applied, Target, GroupId, FinalizeRef, Generation, Verdict} | Commands],
+  [{applied, Target, GroupId, ResolveRef, Generation, Verdict} | Commands],
   [{verified, Certificate} | Views],
   S0, Targets, Waiting, Progress0) ->
     case quod_applied_certificate:applied_certificate_binding(Certificate) of
         {ok, #{target := Target, group_id := GroupId,
-               finalize_ref := FinalizeRef, generation := Generation,
+               resolve_ref := ResolveRef, generation := Generation,
                verdict := Verdict}} ->
             case put_applied({Target, Certificate}, S0) of
                 {progress, S1, _} ->
@@ -1927,7 +1874,7 @@ notify(#state{owner = Owner, group_id = GroupId}, Event) ->
 %% existing peer RPC channel, rather than relying on a one-way message from a
 %% peer into the CT controller.  Monitoring Owner plus a hard bound prevents a
 %% failed test from stranding recovery.  This remains generic over every
-%% progress phase instead of encoding a Decision-specific protocol branch.
+%% progress phase instead of encoding a protocol-specific branch.
 test_phase_barrier(Owner, GroupId, {done, _CompleteRef}) ->
     test_phase_barrier(Owner, GroupId, {progress, done});
 test_phase_barrier(Owner, GroupId, {terminal, _Terminal}) ->
@@ -1958,6 +1905,10 @@ test_phase_barrier(_Owner, _GroupId, _Event) ->
 queue_drive() ->
     self() ! {drive, erlang:monotonic_time()},
     ok.
+
+observed_progress(Target, S = #state{protocol = group, snapshot = Snapshot}) ->
+    S#state{snapshot = quod_dtx_recovery:progress(Target, Snapshot), commands = none};
+observed_progress(_Target, S) -> S.
 
 request_progress_drive(S = #state{wave = Wave = #wave{ref = Ref}}) when is_reference(Ref) ->
     case target_wave(Wave) of
@@ -2054,10 +2005,8 @@ context_timeout(#{request_deadline := Deadline}) ->
 %% ------------------------------------------------------------------
 
 
-record_stage('begin') -> 'begin';
-record_stage(prepare) -> prepare_wave;
-record_stage(decision) -> decision;
-record_stage(finalize) -> finalize_wave;
+record_stage(vote) -> vote_wave;
+record_stage(resolve) -> resolve_wave;
 record_stage(complete) -> complete.
 
 
@@ -2144,6 +2093,8 @@ drop_route_subscription(Identity, S = #state{route_subscriptions = Subscriptions
 
 wait_for_command_progress({submit, Target, _Record}, S) ->
     wait_for_progress(Target, S);
+wait_for_command_progress({present, Target, _Group}, S) ->
+    wait_for_progress(Target, S);
 wait_for_command_progress({phase, Target, _GroupId, _Kind}, S) ->
     wait_for_progress(Target, S);
 wait_for_command_progress(
@@ -2158,23 +2109,26 @@ wait_for_commands_progress(Commands, S) ->
 
 install_phase_evidence(Target, GroupId, Kind, Ref, Evidence, S) ->
     case valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence) of
-        {ok, Control, Generation, VerifiedEvidence, Entry} ->
-            S0 = put_phase_entry(Ref, Entry, S),
-            case put_evidence({Target, Control, Ref}, S0) of
-                {progress, S1} ->
-                    install_phase_metadata(
-                      Target, Kind, Control, Generation, Ref,
-                      VerifiedEvidence, new, S1);
-                {same, S1} ->
-                    install_phase_metadata(
-                      Target, Kind, Control, Generation, Ref,
-                      VerifiedEvidence, known, S1);
-                {error, Reason} ->
-                    {fatal, Reason, S0}
+        {ok, Control, _Generation, VerifiedEvidence, _Entry} ->
+            case put_evidence({Target, Control, Ref}, S) of
+                {Freshness, S1} when Freshness =:= progress; Freshness =:= same ->
+                    %% Another valid quorum subset preserves the first exact
+                    %% claim. Only Resolve artifacts feed the AM3 collector.
+                    S2 = retain_resolve_evidence(Target, Kind, Ref, VerifiedEvidence, S1),
+                    {progress, S2, phase_progress(Kind, Target)};
+                {error, Reason} -> {fatal, Reason, S}
             end;
-        error ->
-            {fatal, invalid_verified_phase_evidence, S}
+        error -> {fatal, invalid_verified_phase_evidence, S}
     end.
+
+retain_resolve_evidence(Target, resolve, Ref, Evidence,
+                        S = #state{origin = Local, resolve_evidence = Entries})
+  when Target =/= Local ->
+    case maps:is_key(Target, Entries) of
+        true -> S;
+        false -> S#state{resolve_evidence = Entries#{Target => {Ref, Evidence}}}
+    end;
+retain_resolve_evidence(_Target, _Kind, _Ref, _Evidence, S) -> S.
 
 valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence)
   when is_map(Evidence) ->
@@ -2195,7 +2149,7 @@ valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence)
     true = valid_committee(Committee),
     true = valid_validator_routes(Routes, Committee),
     true = is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32,
-    case signed_phase_binding(Target, GroupId, Kind, Ref, Control) of
+case checked_phase_binding(Target, GroupId, Kind, Ref, Control) of
         ok ->
             %% The evidence owner already verified Ref's finality proof.  This
             %% replica may retain another valid quorum subset for the same
@@ -2223,121 +2177,27 @@ valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence)
 valid_phase_evidence(_Target, _GroupId, _Kind, _Ref, _Evidence) ->
     error.
 
-put_phase_entry(Ref, Entry,
-                S = #state{phase_entries = Entries}) ->
-    #entry{} = quod_ledger:entry_view(Entry),
-    case maps:get(Ref, Entries, undefined) of
-        undefined -> S#state{phase_entries = Entries#{Ref => Entry}};
-        Entry -> S;
-        _Conflicting -> error(conflicting_phase_entry)
+checked_phase_binding(Target, GroupId, Kind, Ref, Control) ->
+    %% The history owner already authenticated this owned control. Bind its
+    %% cached material; never re-run signatures or re-decode a foreign plan.
+    case {quod_atomic:control_target(Control), quod_atomic:control_kind(Control),
+          quod_atomic:group_id(Control), quod_dtx:certified_ref_binding(Ref)} of
+        {Target, Kind, GroupId, {ok, Target, _Slot, Digest}} ->
+            case Digest =:= quod_atomic:record_digest(Control) of
+                true -> ok;
+                false -> error
+            end;
+        _ -> error
     end.
 
-signed_phase_binding(Target, GroupId, Kind, Ref, Control) ->
-    try
-        true = quod_dtx:verify_control(Target, Control),
-        true = quod_dtx:control_kind(Control) =:= Kind,
-        true = quod_dtx:group_id(Control) =:= GroupId,
-        {ok, Target, _Slot, Digest} = quod_dtx:certified_ref_binding(Ref),
-        true = Digest =:= quod_dtx:record_digest(Control),
-        ok
-    catch
-        _:_ -> error
-    end.
-
-install_phase_metadata(Target, 'begin', _Control, _CurrentGeneration,
-                       _Ref, _VerifiedEvidence, Freshness,
-                       S = #state{begin_record = Begin}) ->
-    %% A reference verifier reports the target's current projection
-    %% generation. After Decision that is newer than the generation at which
-    %% Begin prepared the source plan, so it is not recovery evidence. The
-    %% immutable signed plan carried by Begin owns that exact base generation,
-    %% just as it does in the consensus reducer's install_prepared/8 path.
-    case phase_prepared_generation('begin', Begin, Target) of
-        {ok, PreparedGeneration} ->
-            install_phase_generation(
-              Target, PreparedGeneration, Freshness, begun, S);
-        not_found ->
-            {progress, S, begun};
-        error ->
-            {fatal, invalid_begin, S}
-    end;
-install_phase_metadata(Target, prepare, Control, _CurrentGeneration,
-                       _Ref, _VerifiedEvidence, Freshness, S0) ->
-    S = clear_refusal(Target, S0),
-    case phase_prepared_generation(prepare, Control, Target) of
-        {ok, PreparedGeneration} ->
-            install_phase_generation(
-              Target, PreparedGeneration, Freshness, {prepared, Target}, S);
-        error ->
-            {fatal, invalid_prepare, S}
-    end;
-install_phase_metadata(Target, finalize, _Control, _Generation,
-                       Ref, VerifiedEvidence, _Freshness,
-                       S = #state{finalize_evidence = FinalizeEvidence}) ->
-    case maps:get(Target, FinalizeEvidence, undefined) of
-        undefined ->
-            {progress, S#state{finalize_evidence =
-                                  FinalizeEvidence#{
-                                    Target => {Ref, VerifiedEvidence}}},
-             {finalized, Target}};
-        {Ref, VerifiedEvidence} ->
-            {progress, S, {finalized, Target}};
-        _Conflicting ->
-            {fatal, conflicting_finalize_evidence, S}
-    end;
-install_phase_metadata(_Target, decision, _Control, _Generation, _Ref,
-                       _VerifiedEvidence,
-                       _Freshness, S) ->
-    %% A certified Decision already carries the exact abort reason stack.
-    %% The pre-Decision refusal was only volatile construction input; retaining
-    %% it would wrongly pin the target's unsigned generation hint forever.
-    {progress, clear_refusal(S), decided};
-install_phase_metadata(Target, Kind, _Control, _Generation,
-                       _Ref, _VerifiedEvidence, _Freshness, S) ->
-    {progress, S, phase_progress(Kind, Target)}.
-
-install_phase_generation(Target, Generation, Freshness, Phase, S) ->
-    Result = case Freshness of
-                 new -> put_verified_generation(Target, Generation, S);
-                 known -> put_generation(Target, Generation, S)
-             end,
-    case Result of
-        {progress, S1, _} -> {progress, S1, Phase};
-        {retry, S1} -> {progress, S1, Phase};
-        {fatal, Reason, S1} -> {fatal, Reason, S1}
-    end.
-
-phase_prepared_generation('begin', Begin, Target) ->
-    case quod_dtx:begin_participant_payload(Begin, Target) of
-        {ok, _Manifest, _PlanDigest, PlanBlob} ->
-            decode_plan_generation(PlanBlob);
-        not_found ->
-            not_found;
-        error ->
-            error
-    end;
-phase_prepared_generation(prepare, Control, Target) ->
-    case {quod_dtx:control_target(Control) =:= Target,
-          quod_dtx:prepare_payload(Control)} of
-        {true, {ok, _Manifest, _PlanDigest, PlanBlob}} ->
-            decode_plan_generation(PlanBlob);
-        _ ->
-            error
-    end.
-
-decode_plan_generation(PlanBlob) ->
-    case quod_dtx:decode(PlanBlob) of
-        {ok, Plan} -> {ok, quod_dtx:overlay_generation(Plan)};
-        {error, _} -> error
-    end.
-
-phase_progress('begin', _Target) -> begun;
+phase_progress(vote, Target) -> {voted, Target};
+phase_progress(resolve, Target) -> {resolved, Target};
 phase_progress(complete, _Target) -> completed.
 
-applied_source({Ns, _Anchor} = Target, FinalizeRef, HistoricalRoutes) ->
+applied_source({Ns, _Anchor} = Target, ResolveRef, HistoricalRoutes) ->
     case cohosted(Target) of
         true ->
-            case quod_simplex:dtx_applied_source(Ns, FinalizeRef) of
+            case quod_simplex:dtx_applied_source(Ns, ResolveRef) of
                 {ok, {local, _View} = Source} -> {ok, Source};
                 {error, _} -> {error, retry}
             end;
@@ -2515,7 +2375,7 @@ test_submit_endpoint_requests(Sources, Blob,
     Ref = make_ref(), ReplyRef = make_ref(),
     Target = maps:get(target, Options, {<<"quod:test">>, <<0:256>>}),
     OwnerNs = maps:get(owner_ns, Options, <<"quod:test">>),
-    Plan = {Target, <<0:256>>, 'begin', Blob, [], Sources},
+    Plan = {Target, <<0:256>>, vote, {submit, undefined, Blob}, [], Sources},
     Context = #{owner_ns => OwnerNs, request_deadline => Deadline},
     IoContext = case RequestFun of
         production -> Context;
@@ -2529,7 +2389,7 @@ test_submit_endpoint_requests(Sources, Blob,
         timer = erlang:send_after(max(0, Deadline - quod_time:mono_ms()),
                                   self(), {dtx_wave_timeout, Ref})},
     S = #state{owner = Owner, owner_ns = OwnerNs, origin = Target,
-               execution_ready = Ready,
+               execution_ready = Ready, snapshot = quod_dtx_recovery:empty(),
                wave = Wave},
     continue(advance_wave(S)),
     [{ok, _, _, _, Delivered, Outcome}] = test_wave_results(ReplyRef),
@@ -2545,10 +2405,9 @@ test_endpoint_io(Source, Target, Request, Sidecar, Context) ->
         error -> endpoint_request(Source, Target, Request, Sidecar, Context)
     end.
 
-test_phase_command_sources(Sources, Target, Kind, Request, OwnerNs, Deadline) ->
-    phase_command_sources(Sources, Target, Kind, Request,
-      #{owner_ns => OwnerNs, request_deadline => Deadline},
-      uncertain, false, false, none).
+test_phase_command_sources(Sources, Target, _Kind, Request, OwnerNs, Deadline) ->
+    phase_command_sources(Sources, Target, Request,
+      #{owner_ns => OwnerNs, request_deadline => Deadline}, false, false).
 
 test_finish_wave(_Stage, _Items, Results,
                  #{test_result_to := {Test, Ref}}, _S) ->
@@ -2561,10 +2420,10 @@ test_wave_results(Ref) ->
     after 1000 -> error(missing_wave_results)
     end.
 
-test_run_wave(Stage, Items, S) ->
+test_run_wave(Stage, Items, Meta, S) ->
     Ref = make_ref(),
     {next, Started} = start_typed_wave(
-        Stage, Items, #{test_result_to => {self(), Ref}},
+        Stage, Items, Meta#{test_result_to => {self(), Ref}},
         S#state{owner = self(), execution_ready = true}),
     loop(Started),
     test_wave_results(Ref).
@@ -2606,8 +2465,8 @@ test_local_progress_event(Message, OwnerNs) ->
     local_progress_event(Message, OwnerNs).
 
 test_submission_observation_transition(Target, Record, Form) ->
-    Group = quod_dtx:group_id(Record), Kind = quod_dtx:record_kind(Record),
-    {ok, Blob} = quod_dtx:encode_record(Record),
+    Group = quod_atomic:group_id(Record), Kind = quod_atomic:record_kind(Record),
+    {ok, Blob} = quod_atomic:encode_record(Record),
     Id = request_id(), Request = {submit, Id, Blob},
     Result = case Form of
         refused -> {ok, Target, Group, Kind, Request,
@@ -2623,23 +2482,18 @@ test_submission_observation_transition(Target, Record, Form) ->
     %% observation or a write without the normal external progress edge.
     Query = {phase, request_id(), Group, Kind},
     {next, S2} = finish_phase_command_wave(
-        [{phase, Target, Group, Kind, uncertain}],
-        [{ok, Target, Group, Kind, Query, {unresolved, none}}], Meta, S1),
+        [{phase, Target, Group, Kind}],
+        [{ok, Target, Group, Kind, Query, unresolved}], Meta, S1),
     Second = receive {drive, _} -> observe after 0 -> parked end,
     {First, Second, S2#state.pending_phases}.
 
-test_finalize_rediscovery(OwnerNs, Target, Group, Deadline) ->
-    %% Callback-state fixture, not consensus admission. The endpoint codec and
-    %% historical evidence verifier remain real; origin=Target avoids an
-    %% unrelated follow lease when the read-only observation must park.
-    Snapshot = (quod_dtx_recovery:empty())#{generations := [{Target, 999}]},
-    S = put_pending({submission, Target, Group, finalize},
-                   #state{owner_ns = OwnerNs, origin = Target, snapshot = Snapshot}),
-    Command = {phase, Target, Group, finalize, uncertain},
-    Context = (wave_context(S))#{request_deadline => Deadline,
-                                evidence_deadline => Deadline},
-    Result = phase_command_io(Command, Context),
-    case classify_phase_command_result(Command, Result, S) of
+test_resolve_rediscovery(OwnerNs, Own, Target, Group, Deadline) ->
+    S = put_pending({submission, Target, Group, resolve},
+                   #state{owner_ns = OwnerNs, own_row = Own, origin = Target,
+                          snapshot = quod_dtx_recovery:empty()}),
+    Command = {phase, Target, Group, resolve},
+    Context = (wave_context(S))#{request_deadline => Deadline, evidence_deadline => Deadline},
+    case classify_phase_command_result(Command, phase_command_io(Command, Context), S) of
         {verify, Spec, S1} ->
             Evidence = phase_evidence_io(Spec, Context),
             {S2, Phases, Progress, Waiting, Fatal} = classify_verify_wave(
@@ -2651,7 +2505,7 @@ test_finalize_rediscovery(OwnerNs, Target, Group, Deadline) ->
     end.
 
 test_phase_verification_deadline(Target, Group, Kind, Ref, Deadline) ->
-    Command = {phase, Target, Group, Kind, uncertain},
+    Command = {phase, Target, Group, Kind},
     Query = {phase, request_id(), Group, Kind},
     S = put_pending({submission, Target, Group, Kind},
         #state{origin = Target, snapshot = quod_dtx_recovery:empty(),
@@ -2662,10 +2516,10 @@ test_phase_verification_deadline(Target, Group, Kind, Ref, Deadline) ->
                          #{request_deadline => Deadline}, S),
     {Wave#wave.meta, Pending}.
 
-test_consume_applied_wave(Command, Certificate, Deadline) ->
+test_consume_applied_wave(Own, Snapshot, Command, Certificate, Deadline) ->
     {applied, Target, Group, _, _, _} = Command,
     S = #state{owner = self(), origin = Target, group_id = Group,
-               snapshot = quod_dtx_recovery:empty()},
+               own_row = Own, snapshot = Snapshot},
     {next, S1} = finish_typed_wave(applied, [[Command]],
                                  [{ok, [{verified, Certificate}]}],
                                  #{request_deadline => Deadline}, S),
@@ -2689,7 +2543,7 @@ test_loop_message({test_state, From, Ref}, S) ->
     end,
     View = #{execution_ready => S#state.execution_ready,
                   trace_context => quod_trace:context(),
-                  snapshot => S#state.snapshot, phase_entries => S#state.phase_entries,
+snapshot => S#state.snapshot, resolve_evidence => S#state.resolve_evidence,
                   pending_phases => S#state.pending_phases, wave => Wave},
     %% Keep the existing group fixture's semantic snapshot unchanged. The
     %% coalesced-drive bit is transient scheduling, not retained proof state.
@@ -2738,8 +2592,7 @@ remote_submit_result(
         false -> next
     end;
 remote_submit_result(
-  Request, {refused, _RequestId, _Target, _Digest,
-            _Generation, _ReasonsBlob} = Response) ->
+  Request, {presented, _RequestId, _GroupId} = Response) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true -> terminal;
         false -> next
@@ -2778,152 +2631,18 @@ routes(Identity) ->
 %% Bounded canonical snapshot updates
 %% ------------------------------------------------------------------
 
-put_evidence(Row = {Target, Control, _Ref},
-             S = #state{snapshot = Snapshot}) ->
-    Kind = quod_dtx:control_kind(Control),
-    Key = {phase_rank(Kind), Target},
-    Rows = maps:get(evidence, Snapshot),
-    case evidence_by_key(Key, Rows) of
-        none ->
-            Rows1 = sort_evidence([Row | Rows]),
-            {progress, S#state{snapshot = Snapshot#{evidence := Rows1}}};
-        Row ->
-            {same, S};
-        _Different ->
-            {error, conflicting_phase_evidence}
+put_evidence(Row, S = #state{own_row = Own, snapshot = Snapshot}) ->
+    case quod_dtx_recovery:observe(Own, Row, Snapshot) of
+        {ok, Snapshot} -> {same, S};
+        {ok, Next} -> {progress, S#state{snapshot = Next}};
+        {error, _} = Error -> Error
     end.
 
-evidence_by_key(_Key, []) -> none;
-evidence_by_key(Key, [Row = {Target, Control, _Ref} | Rest]) ->
-    case {phase_rank(quod_dtx:control_kind(Control)), Target} of
-        Key -> Row;
-        _ -> evidence_by_key(Key, Rest)
-    end.
-
-sort_evidence(Rows) ->
-    [Row || {_Key, Row} <-
-                lists:keysort(
-                  1,
-                  [{{phase_rank(quod_dtx:control_kind(Control)), Target}, Row}
-                   || Row = {Target, Control, _Ref} <- Rows])].
-
-phase_rank('begin') -> 1;
-phase_rank(prepare) -> 2;
-phase_rank(decision) -> 3;
-phase_rank(finalize) -> 4;
-phase_rank(complete) -> 5.
-
-put_generation(Target, Generation,
-               S = #state{snapshot = Snapshot}) ->
-    case valid_generation(Generation) of
-        false -> {fatal, invalid_target_generation, S};
-        true ->
-            Rows = maps:get(generations, Snapshot),
-            case lists:keyfind(Target, 1, Rows) of
-                false ->
-                    Rows1 = lists:keysort(1, [{Target, Generation} | Rows]),
-                    {progress,
-                     S#state{snapshot = Snapshot#{generations := Rows1}},
-                     {generation, Target}};
-                {Target, Generation} ->
-                    {retry, S};
-                {Target, Previous} ->
-                    update_generation_hint(
-                      Target, Previous, Generation, Rows, Snapshot, S)
-            end
-    end.
-
-update_generation_hint(Target, Previous, Generation, Rows, Snapshot, S)
-  when Generation > Previous ->
-    case has_prepare_evidence(Target, Snapshot) of
-        false ->
-            Rows1 = lists:keyreplace(
-                      Target, 1, Rows, {Target, Generation}),
-            {progress,
-             S#state{snapshot = Snapshot#{generations := Rows1}},
-             {generation, Target}};
-        true ->
-            {fatal, conflicting_target_generation, S}
-    end;
-update_generation_hint(_Target, _Previous, _Generation, _Rows, _Snapshot, S) ->
-    %% A lower unsigned value came from a stale replica.  It is not evidence
-    %% that the monotonic target generation moved backwards.
-    {retry, S}.
-
-has_prepare_evidence(Target, Snapshot) ->
-    lists:any(
-      fun({RowTarget, Control, _Ref}) ->
-              RowTarget =:= Target andalso
-                  quod_dtx:control_kind(Control) =:= prepare
-      end, maps:get(evidence, Snapshot)).
-
-%% A certified Prepare projection is authoritative; an earlier not-found or
-%% refusal generation was only an availability hint.  Replacing that hint is
-%% what lets an abort recover cleanly when Prepare won the target-ledger race.
-put_verified_generation(Target, Generation,
-                        S = #state{snapshot = Snapshot}) ->
-    case valid_generation(Generation) of
-        false -> {fatal, invalid_target_generation, S};
-        true ->
-            Rows0 = maps:get(generations, Snapshot),
-            Rows1 = lists:keysort(
-                      1, lists:keystore(
-                           Target, 1, Rows0, {Target, Generation})),
-            {progress,
-             S#state{snapshot = Snapshot#{generations := Rows1}},
-             {generation, Target}}
-    end.
-
-clear_refusal(S = #state{snapshot = Snapshot}) ->
-    S#state{snapshot = Snapshot#{refusal := none}}.
-
-clear_refusal(Target, S = #state{snapshot = Snapshot}) ->
-    case maps:get(refusal, Snapshot) of
-        {Target, _Digest, _Generation, _ReasonsBlob} ->
-            S#state{snapshot = Snapshot#{refusal := none}};
-        _ ->
-            S
-    end.
-
-put_refusal(Target, SemanticDigest, Generation, ReasonsBlob,
-            S = #state{snapshot = Snapshot}) ->
-    Refusal = {Target, SemanticDigest, Generation, ReasonsBlob},
-    case maps:get(refusal, Snapshot) of
-        none ->
-            case valid_generation(Generation) of
-                true ->
-                    S1 = S#state{snapshot = Snapshot#{refusal := Refusal}},
-                    case put_generation(Target, Generation, S1) of
-                        {progress, S2, _} ->
-                            {progress, S2, {refused, Target}};
-                        {retry, S2} ->
-                            {progress, S2, {refused, Target}};
-                        {fatal, Reason, S2} ->
-                            {fatal, Reason, S2}
-                    end;
-                false ->
-                    {fatal, invalid_target_generation, S}
-            end;
-        Refusal ->
-            {retry, S};
-        _Other ->
-            %% The first canonical target refusal is sufficient to make abort
-            %% safe. Later refusals cannot replace its exact reason stack.
-            {retry, S}
-    end.
-
-put_applied(Row = {Target, _Certificate},
-            S = #state{snapshot = Snapshot}) ->
-    Rows = maps:get(applied, Snapshot),
-    case lists:keyfind(Target, 1, Rows) of
-        false ->
-            Rows1 = lists:keysort(1, [Row | Rows]),
-            {progress, S#state{snapshot = Snapshot#{applied := Rows1}},
-             {applied, Target}};
-        Row ->
-            {retry, S};
-        _Different ->
-            {fatal, conflicting_applied_evidence, S}
+put_applied({Target, Certificate}, S = #state{own_row = Own, snapshot = Snapshot}) ->
+    case quod_dtx_recovery:applied(Own, Target, Certificate, Snapshot) of
+        {ok, Snapshot} -> {retry, S};
+        {ok, Next} -> {progress, S#state{snapshot = Next}, {applied, Target}};
+        {error, Reason} -> {fatal, Reason, S}
     end.
 
 valid_generation(G) ->
@@ -2955,25 +2674,26 @@ request_id() ->
 
 -ifdef(TEST).
 test_options(Options) -> options(Options).
-test_put_evidence(Row, Snapshot) ->
-    S = #state{snapshot = Snapshot},
+%% Callback-state inventory, not a bypass of the history verifier. All phase
+%% rows supplied here have independently constructed certified entry artifacts.
+test_observation_updates(Own, Rows, Snapshot) ->
+    #{material := {_, _, #{group := #{origin := Origin, group_id := Id}}}} = Own,
+    S0 = #state{origin = Origin, own_row = Own, snapshot = Snapshot},
+    S1 = lists:foldl(fun({Target, Kind, Ref, Evidence}, S) ->
+        {progress, Next, _} = install_phase_evidence(Target, Id, Kind, Ref, Evidence, S),
+        Next
+    end, S0, Rows),
+    #{snapshot => S1#state.snapshot, resolve_evidence => S1#state.resolve_evidence}.
+test_put_evidence(Own, Row, Snapshot) ->
+    S = #state{own_row = Own, snapshot = Snapshot},
     case put_evidence(Row, S) of
         {progress, #state{snapshot = Snapshot1}} -> {progress, Snapshot1};
         {same, #state{snapshot = Snapshot1}} -> {same, Snapshot1};
         {error, Reason} -> {error, Reason}
     end.
-test_put_generation(Target, Generation, Snapshot) ->
-    S = #state{snapshot = Snapshot},
-    case put_generation(Target, Generation, S) of
-        {progress, #state{snapshot = Snapshot1}, _} ->
-            {progress, Snapshot1};
-        {retry, #state{snapshot = Snapshot1}} ->
-            {same, Snapshot1};
-        {fatal, Reason, _} -> {error, Reason}
-    end.
-test_install_applied_results(Commands, Results, Snapshot) ->
+test_install_applied_results(Own, Commands, Results, Snapshot) ->
     case install_applied_wave(
-           Commands, Results, #state{snapshot = Snapshot}) of
+           Commands, Results, #state{own_row = Own, snapshot = Snapshot}) of
         {ok, #state{snapshot = Snapshot1}, Targets, Waiting, Progress} ->
             {ok, Snapshot1, Targets, Waiting, Progress};
         {fatal, Reason, _} ->
@@ -2985,19 +2705,20 @@ test_valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence) ->
     valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence).
 %% Exercise actual endpoint fanout/selection and the consuming evidence paths.
 %% The fixture supplies encoded replies and certified history, never a verifier answer.
-test_submit_phase_evidence(Mode, {submit, Target, _} = Command, OwnerNs, Timeout) ->
-    S = #state{owner_ns = OwnerNs, snapshot = quod_dtx_recovery:empty(),
+test_submit_phase_evidence(Mode, {submit, Target, _} = Command,
+                          {OwnerNs, Own} = Owner, Timeout) ->
+    Deadline = quod_time:mono_ms() + Timeout,
+    S = #state{owner_ns = OwnerNs, own_row = Own, snapshot = quod_dtx_recovery:empty(),
                config = #config{request_timeout_ms = Timeout}},
     [{ok, Target, GroupId, Kind, _Request,
       {reply, {accepted, _, _, Ref}, Source}}] =
-        test_run_wave(phase_command, [Command], S),
+        test_run_wave(phase_command, [Command], #{request_deadline => Deadline}, S),
     {Source, test_phase_reply_evidence(
-               Mode, OwnerNs, Target, GroupId, Kind, Ref, Source, Timeout)}.
+               Mode, Owner, Target, GroupId, Kind, Ref, Source, Deadline)}.
 
-test_phase_reply_evidence(Mode, OwnerNs, Target, GroupId, Kind, Ref, Source, Timeout) ->
-    S = #state{owner_ns = OwnerNs, execution_ready = true,
-               snapshot = quod_dtx_recovery:empty(),
-               config = #config{request_timeout_ms = Timeout}},
+test_phase_reply_evidence(Mode, {OwnerNs, Own}, Target, GroupId, Kind, Ref, Source, Deadline) ->
+    S = #state{owner_ns = OwnerNs, own_row = Own, execution_ready = true,
+               snapshot = quod_dtx_recovery:empty(), config = #config{}},
     %% These labels name the historical ingress fixtures. All three now use
     %% the same production evidence stage; there is no synchronous executor.
     WaveMode = case Mode of
@@ -3013,7 +2734,7 @@ test_phase_reply_evidence(Mode, OwnerNs, Target, GroupId, Kind, Ref, Source, Tim
     begin
             Spec = {Target, GroupId, Kind, Ref, Source},
             {next, #state{wave = #wave{ref = WaveRef, meta = Meta} = Wave}} =
-                start_typed_wave(phase_verify, [Spec], #{}, S),
+                start_typed_wave(phase_verify, [Spec], #{request_deadline => Deadline}, S),
             Deadline = maps:get(evidence_deadline, Meta),
             try
                 receive
@@ -3037,16 +2758,17 @@ test_phase_reply_evidence(Mode, OwnerNs, Target, GroupId, Kind, Ref, Source, Tim
             end
     end.
 
-test_observe_phase_evidence(Mode, OwnerNs, Target, GroupId, Kind, Timeout) ->
-    S = #state{owner_ns = OwnerNs, snapshot = quod_dtx_recovery:empty(),
+test_observe_phase_evidence(_Mode, {OwnerNs, Own} = Owner, Target, GroupId, Kind, Timeout) ->
+    Deadline = quod_time:mono_ms() + Timeout,
+    S = #state{owner_ns = OwnerNs, own_row = Own, snapshot = quod_dtx_recovery:empty(),
                config = #config{request_timeout_ms = Timeout}},
     {ok, Target, GroupId, Kind, _Request, Observation} =
-        phase_query_io(Mode, Target, GroupId, Kind,
-            (wave_context(S))#{request_deadline => quod_time:mono_ms() + Timeout}),
-    case install_phase_observation(Target, Observation, S) of
+        phase_query_io(Target, GroupId, Kind,
+            (wave_context(S))#{request_deadline => Deadline}),
+    case install_phase_observation(Target, Kind, Observation, S) of
         {verify, Ref, Source, _} ->
-            test_phase_reply_evidence(wave, OwnerNs, Target, GroupId, Kind,
-                                      Ref, Source, Timeout);
+            test_phase_reply_evidence(wave, Owner, Target, GroupId, Kind,
+                                      Ref, Source, Deadline);
         Result -> test_phase_evidence_result(Result)
     end.
 
@@ -3056,31 +2778,27 @@ test_phase_evidence_result({retry, _S}) -> retry;
 test_phase_evidence_result({absent, _S}) -> absent;
 test_phase_evidence_result({fatal, Reason, _S}) -> {error, Reason}.
 
-test_initial_commands(Ns, Begin, BeginRef, Evidence) ->
-    case initial_state(self(), Ns, Begin, {BeginRef, Evidence}, #{}) of
-        {ok, #state{snapshot = Snapshot}} ->
-            quod_dtx_recovery:next(Begin, Snapshot);
-        {error, _} = Error ->
-            Error
+test_initial_commands(Ns, Own) ->
+    case initial_state(self(), Ns, Own, #{}) of
+        {ok, #state{snapshot = Snapshot}} -> quod_dtx_recovery:next(Own, Snapshot);
+        {error, _} = Error -> Error
     end.
-test_initial_snapshot(Ns, Begin, BeginRef, Evidence) ->
-    case initial_state(self(), Ns, Begin, {BeginRef, Evidence}, #{}) of
+test_initial_snapshot(Ns, Own) ->
+    case initial_state(self(), Ns, Own, #{}) of
         {ok, #state{snapshot = Snapshot}} -> {ok, Snapshot};
         {error, _} = Error -> Error
     end.
-test_install_phase_snapshot(
-  Ns, Begin, BeginRef, BeginEvidence,
-  Target, GroupId, Kind, Ref, Evidence) ->
-    case initial_state(self(), Ns, Begin, {BeginRef, BeginEvidence}, #{}) of
+test_install_phase_snapshot(Ns, Own, Target, GroupId, Kind, Ref, Evidence) ->
+    case initial_state(self(), Ns, Own, #{}) of
         {ok, S0} ->
-            case install_phase_evidence(
-                   Target, GroupId, Kind, Ref, Evidence, S0) of
+            case install_phase_evidence(Target, GroupId, Kind, Ref, Evidence, S0) of
                 {progress, #state{snapshot = Snapshot}, _} -> {ok, Snapshot};
                 {retry, #state{snapshot = Snapshot}} -> {ok, Snapshot};
                 {fatal, Reason, _} -> {error, Reason}
             end;
         {error, _} = Error -> Error
     end.
+
 test_dormant_cancel_disposition(Request, Response) ->
     dormant_cancel_disposition(Request, Response).
 test_dormant_cancel_request(RequestId, Target, SubmissionBlob) ->

@@ -4,8 +4,9 @@
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 
-%% Shared only by the observation-owner regressions. These are signed Begin
-%% admission fixtures, not an assertion of full consensus-node readiness.
+%% Shared only by the observation-owner regressions. These are signed own-Vote
+%% fixtures, not an assertion of full consensus-node readiness. The live
+%% reservation path passes authenticated material, never the pre-signed control.
 -export([with_fixture/1, with_live_admission/1]).
 
 %% Real Prolog and Simplex callbacks own reserve -> admission -> activation;
@@ -22,10 +23,11 @@ group_admission_trace(Sampling) ->
       {Ambient, AmbientSpan} = quod_trace:start_span(
         otel_ctx:new(), <<"unrelated.group.caller">>, internal, #{}),
       try quod_trace:with_context(Ambient, fun() ->
-            Begin = maps:get('begin', F),
-            {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
-            {ok, BeginBytes} = quod_dtx:encode_record(Begin),
-            GroupId = quod_dtx:group_id(Begin),
+            Vote = maps:get(vote, F),
+            Material = quod_atomic:control_material(maps:get(vote_control, F)),
+            {ok, GroupRef} = quod_atomic:source_group_ref(Material),
+            {ok, VoteBytes} = quod_atomic:encode_record(Vote),
+            GroupId = quod_atomic:group_id(Vote),
             ParentCtx = case Sampling of
                 recording -> otel_ctx:new();
                 unsampled -> unsampled_context()
@@ -34,10 +36,22 @@ group_admission_trace(Sampling) ->
               ParentCtx, <<"group.request">>, internal, #{}),
             true = erlang:trace(Owner, true, ['receive', {tracer, self()}]) =:= 1,
             ?assertEqual(ok, gen_server:call(Engine,
-              {reserve_dtx_begin, Ref, Begin, GroupRef, RootCtx})),
+              {reserve_dtx_vote, Ref, Material, GroupRef, RootCtx})),
             ?assertEqual(ok, gen_server:call(Engine,
-              {activate_dtx_begin, Ref, GroupRef})),
+              {activate_dtx_vote, Ref, GroupRef})),
+            %% Activation is an Engine -> Owner cast. Observe its receipt
+            %% before the different caller asks for the installed state.
+            receive
+                {trace, Owner, 'receive', {'$gen_cast',
+                  {activate_dtx_vote, Engine, _IntentId}}} -> ok
+            after 1000 -> error(vote_activation_not_received)
+            end,
             {running, S1} = sys:get_state(Owner),
+            %% The unsigned admission row must carry ancestry before a
+            %% paused owner can select/sign a Vote into retained custody.
+            ?assertMatch(#{active := 1, reserved := 0},
+                         quod_simplex:test_dtx_admission_state(S1)),
+            ?assertMatch(#{retained := 0}, quod_simplex:test_retained_dtx_state(S1)),
             Owners1 = quod_simplex:test_dtx_coordinator_state(S1),
             #{GroupId := #{pid := Worker}} = Owners1,
             #{execution_ready := false, wave := none,
@@ -48,20 +62,22 @@ group_admission_trace(Sampling) ->
             ?assertNotEqual(otel_span:span_id(RootSpan),
                             otel_span:span_id(WorkerSpan)),
             assert_no_endpoint_request(Owner),
-            %% Signed semantic bytes are unchanged by admission or pausing.
-            ?assertEqual({ok, BeginBytes}, quod_dtx:encode_record(Begin)),
+            %% Authenticated semantic bytes are unchanged by admission or
+            %% pausing; reservation itself grants no Vote signature.
+            ?assertEqual({ok, VoteBytes}, quod_atomic:encode_record(Vote)),
             Monitor = monitor(process, Worker),
             %% A later/different caller does not alter identity, restart the
             %% coordinator, or replace its already-established parent.
             {LateCtx, LateSpan} = quod_trace:start_span(
               otel_ctx:new(), <<"group.late">>, internal, #{}),
             ?assertEqual({error, cancelled}, gen_server:call(Engine,
-              {reserve_dtx_begin, Ref, Begin, GroupRef, LateCtx})),
+              {reserve_dtx_vote, Ref, Material, GroupRef, LateCtx})),
             ?assertEqual({error, cancelled}, gen_server:call(Engine,
-              {activate_dtx_begin, Ref, GroupRef})),
+              {activate_dtx_vote, Ref, GroupRef})),
             {running, S2} = sys:get_state(Owner),
             ?assertEqual(Owners1, quod_simplex:test_dtx_coordinator_state(S2)),
-            ?assertEqual({ok, BeginBytes}, quod_dtx:encode_record(Begin)),
+            ?assertEqual({ok, VoteBytes}, quod_atomic:encode_record(Vote)),
+            assert_no_endpoint_request(Owner),
             quod_trace:finish_span(LateSpan, ok),
             %% A graceful owner stop runs the real Simplex terminate callback.
             %% Untrappable owner death cannot promise export of a volatile
@@ -115,33 +131,35 @@ mixed_local_group_wave_links_recording_request_without_reparenting(Lifetime) ->
             {Ctx, Parent} = quod_trace:start_span(
               otel_ctx:new(), <<"mixed.group.request">>, internal, #{}),
             Unsampled = unsampled_context(),
-            F2 = quod_ct:signed_dtx_begin_fixture(#{target => Origin,
+            F2 = quod_ct:signed_atomic_fixture(#{target => Origin,
               node_identity => maps:get(node_identity, F),
               key_pair => maps:get(key_pair, F), admission => maps:get(admission, F),
               proof_id => <<41:256>>, operation_id => <<42:256>>,
               goal_text => <<"assertz(other_group(ok)).">>}),
-            Begin1 = maps:get('begin', F),
-            Begin2 = maps:get('begin', F2),
+            Vote1 = maps:get(vote, F),
+            Vote2 = maps:get(vote, F2),
             try
+                %% Direct retention is the existing TEST seam after Vote
+                %% selection, not a substitute for the live reservation test.
                 {ok, S1} = quod_trace:with_context(Unsampled, fun() ->
-                    quod_simplex:test_retain_dtx_record(Begin1, none, S0)
+                    quod_simplex:test_retain_dtx_record(Vote1, none, S0)
                 end),
                 {ok, S2} = quod_trace:with_context(Ctx, fun() ->
-                    quod_simplex:test_retain_dtx_record(Begin2, none, S1)
+                    quod_simplex:test_retain_dtx_record(Vote2, none, S1)
                 end),
                 %% Duplicate or late contexts cannot change row lifetime,
                 %% signed bytes, ordering, or the selected group's parent.
                 PlainDuplicate = quod_trace:with_context(otel_ctx:new(), fun() ->
-                    quod_simplex:test_retain_dtx_record(Begin1, none, S2)
+                    quod_simplex:test_retain_dtx_record(Vote1, none, S2)
                 end),
                 LateDuplicate = quod_trace:with_context(Ctx, fun() ->
-                    quod_simplex:test_retain_dtx_record(Begin1, none, S2)
+                    quod_simplex:test_retain_dtx_record(Vote1, none, S2)
                 end),
                 ?assertEqual(PlainDuplicate, LateDuplicate),
                 {ok, Retained} = LateDuplicate,
                 Rows = maps:get(rows, quod_simplex:test_retained_dtx_state(Retained)),
-                Envelopes = [maps:get(envelope, maps:get(quod_dtx:record_digest(B), Rows))
-                             || B <- [Begin1, Begin2]],
+                Envelopes = [maps:get(envelope, maps:get(quod_atomic:record_digest(V), Rows))
+                             || V <- [Vote1, Vote2]],
                 case Lifetime of
                     live -> ok;
                     ended -> quod_trace:finish_span(Parent, ok)
@@ -164,7 +182,7 @@ mixed_local_group_wave_links_recording_request_without_reparenting(Lifetime) ->
                 ?assertEqual(2, maps:get('quod.batch.transactions', ProposedAttrs)),
                 ?assertEqual(<<"boundary">>, maps:get('quod.consensus.observation', ProposedAttrs)),
                 {Hash, Engine} = receive
-                    {'$gen_cast', {dtx_verdict_req, _Controls, _Timestamp, 2,
+                    {'$gen_cast', {dtx_verdict_req, {wave, [_, _]}, _Timestamp, 2,
                                    ReplyTo, {2, CandidateHash, ParentToken}, _Context}} ->
                         ?assertEqual(self(), ReplyTo),
                         {CandidateHash, self()}
@@ -223,16 +241,31 @@ unsampled_context() ->
 history_only_group_recovery_has_no_ambient_parent_test() ->
     quod_trace_tests:with_tracer(fun() ->
         with_fixture(fun(F, S0, _Journal) ->
-            Begin = maps:get('begin', F),
-            {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
-            GroupId = quod_dtx:group_id(Begin),
+            Origin = {Ns, Anchor} = maps:get(target, F),
+            Control = maps:get(vote_control, F),
+            GroupId = quod_atomic:group_id(Control),
+            %% Reconstruct a committed own row through the current reducer.
+            %% This real signed/QC entry is a local protocol fixture, not an
+            %% admitted node, foreign-history verifier or replay integration.
+            {ok, Block} = quod_ledger:new_block(2, 1, {batch, [{dtx, Control}]}, 1),
+            Hash = quod_simplex:block_hash(Block),
+            Signer = maps:get(node_identity, F),
+            #share{sig = Sig} = quod_simplex:make_share(
+              quod_simplex:consensus_domain(Ns, Anchor), commit, 2, Hash, Signer),
+            Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = 2,
+              block_hash = Hash, sigs = [{maps:get(pubkey, Signer), Sig}]}),
+            {ok, VoteRef} = quod_dtx:certified_entry_ref(Origin, Entry, Control),
+            {ok, _History, Projection, []} = quod_atomic:reduce(
+              Control, VoteRef, quod_atomic:initial_group_history(),
+              quod_atomic:initial_projection(Origin, 0)),
+            Desired = quod_atomic:recovery_rows(Projection, quod_time:now_ms()),
             Self = self(),
             {Ambient, Span} = quod_trace:start_span(
               otel_ctx:new(), <<"unrelated.owner.turn">>, internal, #{}),
             Owner = spawn(fun() ->
                 S = quod_trace:with_context(Ambient, fun() ->
                     quod_simplex:test_reconcile_dtx_coordinators(
-                      #{GroupId => {record, GroupId, Begin, GroupRef}}, S0)
+                      Desired, S0)
                 end),
                 Self ! {started, self(), quod_simplex:test_dtx_coordinator_state(S)},
                 receive stop ->
@@ -262,7 +295,7 @@ group_submit_fanout_preserves_context_and_result_test() ->
     quod_trace_tests:with_tracer(fun() ->
         {Ctx, Span} = quod_trace:start_span(
           otel_ctx:new(), <<"group.fanout">>, internal, #{}),
-        Blob = quod_ct:dtx_prepare_blob(),
+        Blob = maps:get(vote_blob, quod_ct:atomic_role_fixture()),
         Parent = self(),
         RequestFun = fun(Source, Request = {submit, Id, _}) ->
             Parent ! {fanout_context, Source, Request, quod_trace:context()},
@@ -295,11 +328,15 @@ assert_endpoint_carrier(Ns, Request, Context) ->
     ?assertMatch([_ | _], Carrier),
     {ok, Traced} = quod_dtx_endpoint:encode_request(Ns, Request, [], Carrier),
     {ok, Plain} = quod_dtx_endpoint:encode_request(Ns, Request, []),
-    {quod_dtx_endpoint, 12, Ns, Semantic, Carrier} = binary_to_term(Traced, [safe]),
-    ?assertEqual({quod_dtx_endpoint, 12, Ns, Semantic, []}, binary_to_term(Plain, [safe])),
+    {quod_dtx_endpoint, 13, Ns, Semantic, Carrier} = binary_to_term(Traced, [safe]),
+    ?assertEqual({quod_dtx_endpoint, 13, Ns, Semantic, []}, binary_to_term(Plain, [safe])),
     ?assertEqual({ok, Request, [], Carrier}, quod_dtx_endpoint:decode_request(Ns, Traced)).
 
 assert_no_endpoint_request(Owner) ->
+    Delivered = erlang:trace_delivered(Owner),
+    receive {trace_delivered, Owner, Delivered} -> ok
+    after 1000 -> error(endpoint_trace_not_delivered)
+    end,
     receive
         {trace, Owner, 'receive', {'$gen_call', _,
           {dtx_endpoint_local, _, _, _, _}}} -> error(endpoint_dispatched_while_unready)
@@ -347,7 +384,7 @@ with_fixture(Fun) ->
     Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
     Ns = <<"quod:group-trace-", Suffix/binary>>,
     Anchor = crypto:hash(sha256, Ns),
-    F = quod_ct:signed_dtx_begin_fixture(#{target => {Ns, Anchor}}),
+    F = quod_ct:signed_atomic_fixture(#{target => {Ns, Anchor}}),
     #{pubkey := Author} = Identity = maps:get(node_identity, F),
     Admission = maps:get(admission, F),
     Dir = filename:join("/tmp", "quod_group_trace_" ++ binary_to_list(Suffix)),

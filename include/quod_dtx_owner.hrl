@@ -1,11 +1,10 @@
 %% Keep each retained semantic control and its exact signed envelope once and
 %% re-drive it; never copy it into the ordinary transaction custody queues.
 %% Logical readiness, not a compiled population cap, controls scheduling.
-%% Material replaces the duplicate raw record; its plans stay vocabulary-opaque
-%% and are never serialized. The journal retains only the original bytes.
+%% The control already carries its authenticated material. Never retain a
+%% second plan/material field; the journal retains only the canonical bytes.
 -record(dtx_submission, {
-    material :: quod_dtx:admission_material(),
-    control :: quod_dtx:control(),
+    control :: quod_atomic:control(),
     envelope :: binary(),
     group_id :: <<_:256>>,
     digest :: <<_:256>>,
@@ -14,6 +13,10 @@
     %% Observation follows this existing volatile control row, never its
     %% signed envelope or journal. Recovered controls have no caller parent.
     trace_ctx = #{} :: quod_trace:context(),
+    %% The local vote's cached parent/deadline selection. It is volatile,
+    %% never a signature or a journal field; restart selects again. Relayed
+    %% controls have no local selection and retain their author's envelope.
+    selection = none :: none | term(),
     validation_sidecar = [] :: [quod_dtx_endpoint:validation_item()],
     placement :: ready | blocked,
     %% Volatile placement on the existing consensus link.  The retained row

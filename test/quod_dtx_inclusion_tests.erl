@@ -8,15 +8,15 @@
 late_phase_returns_exact_reference_without_new_custody_test_() ->
     [{atom_to_list(Kind) ++ "_" ++ atom_to_list(Path), fun() -> with_target(Kind, fun(F, S) ->
         Ref = maps:get(ref, F), Control = maps:get(control, F),
-        Record = quod_dtx:control_body(Control),
-        {ok, Blob} = quod_dtx:encode_record(Record),
+        Record = quod_atomic:control_body(Control),
+        {ok, Blob} = quod_atomic:encode_record(Record),
         Request = {submit, <<55:128>>, Blob},
         Ns = maps:get(ns, F), Pub = maps:get(pub, F),
         Journal = quod_simplex:test_signing_journal(S),
         Lane = {maps:get(admission, F), Pub},
         Floor = quod_signing_journal:dtx_floor(Journal, Lane),
         {Next, Response} = deliver(Path, F, Request, S),
-        ?assertEqual({accepted, <<55:128>>, quod_dtx:record_digest(Record), Ref}, Response),
+        ?assertEqual({accepted, <<55:128>>, quod_atomic:record_digest(Record), Ref}, Response),
         ?assert(quod_dtx_endpoint:correlates(Request, Response)),
         ?assertEqual(0, maps:get(retained, quod_simplex:test_retained_dtx_state(Next))),
         ?assertNot(quod_simplex:test_dtx_drive_scheduled(Next)),
@@ -27,33 +27,34 @@ late_phase_returns_exact_reference_without_new_custody_test_() ->
         %% without a second row, signature floor advance or scheduled proposal.
         Request2 = {submit, <<56:128>>, Blob},
         {Again, Response2} = deliver(Path, F, Request2, Next),
-        ?assertEqual({accepted, <<56:128>>, quod_dtx:record_digest(Record), Ref}, Response2),
+        ?assertEqual({accepted, <<56:128>>, quod_atomic:record_digest(Record), Ref}, Response2),
         ?assert(quod_dtx_endpoint:correlates(Request2, Response2)),
         ?assertEqual(0, maps:get(retained, quod_simplex:test_retained_dtx_state(Again))),
         ?assertNot(quod_simplex:test_dtx_drive_scheduled(Again)),
         ?assertEqual(Floor, quod_signing_journal:dtx_floor(
                             quod_simplex:test_signing_journal(Again), Lane))
-    end) end} || Kind <- [prepare, decision, finalize, complete], Path <- [local, remote] ].
+    end) end} || Kind <- [vote, resolve, complete], Path <- [local, remote] ].
 
-late_relayed_prepare_does_not_reenter_consensus_test() ->
+late_relayed_vote_does_not_reenter_consensus_test() ->
     with_target(fun(F, S) ->
-        Record = quod_dtx:control_body(maps:get(control, F)),
+        Record = quod_atomic:control_body(maps:get(control, F)),
         Target = {maps:get(ns, F), maps:get(anchor, F)},
         %% A current, newly signed outer envelope for the same semantic phase
         %% passes the ordinary signature/sequence gate. Inclusion must still
         %% suppress it; this is not merely rejection of a consumed sequence.
-        {ok, Control} = quod_dtx:sign_control(
-                         Target, Record, maps:get(admission, F), 3, 3, maps:get(signer, F)),
-        {ok, Envelope} = quod_dtx:encode_control(Control),
+        {ok, Material} = quod_atomic:admission_material(Record),
+        {ok, Control} = quod_atomic:sign_control(
+                         Target, Material, maps:get(admission, F), 3, 3, maps:get(signer, F)),
+        {ok, Envelope} = quod_atomic:encode_control(Control),
         Next = quod_simplex:dispatch(maps:get(pub, F), {dtx_submit, [Envelope], []}, S),
         ?assertEqual(0, maps:get(retained, quod_simplex:test_retained_dtx_state(Next))),
         ?assertNot(quod_simplex:test_dtx_drive_scheduled(Next))
     end).
 
-pending_prepare_duplicates_share_one_signature_and_exact_resolution_test() ->
-    with_target(pending_prepare, fun(F, S0) ->
-        Parent = self(), Record = quod_dtx:control_body(maps:get(control, F)),
-        Digest = quod_dtx:record_digest(Record),
+pending_vote_duplicates_share_one_signature_and_exact_resolution_test() ->
+    with_target(pending_vote, fun(F, S0) ->
+        Parent = self(), Record = quod_atomic:control_body(maps:get(control, F)),
+        Digest = quod_atomic:record_digest(Record),
         {First, M1} = spawn_monitor(fun() -> waiter(Parent) end),
         {Second, M2} = spawn_monitor(fun() -> waiter(Parent) end),
         Lane = {maps:get(admission, F), maps:get(pub, F)},
@@ -74,9 +75,9 @@ pending_prepare_duplicates_share_one_signature_and_exact_resolution_test() ->
             ?assertEqual(2, quod_simplex:test_dtx_submission_waiters(S3)),
             ?assertEqual(Floor1, quod_signing_journal:dtx_floor(
                                   quod_simplex:test_signing_journal(S3), Lane)),
-            Entry = maps:get(prepare_entry, F), #entry{data = Payload} = quod_ledger:entry_view(Entry),
+            Entry = maps:get(vote_entry, F), #entry{data = Payload} = quod_ledger:entry_view(Entry),
             Done = quod_simplex:test_resolve_committed_dtx(Entry, Payload, S3),
-            Ref = maps:get(prepare_ref, F),
+            Ref = maps:get(vote_ref, F),
             lists:foreach(fun(Pid) ->
                 receive {resolved, Pid, Reply} -> ?assertMatch({ok, Ref, [{Ref, Entry}]}, Reply)
                 after 1000 -> error(missing_exact_pending_resolution) end
@@ -104,20 +105,20 @@ waiter(Parent) ->
     end.
 
 same_phase_different_digest_is_not_accepted_test() ->
-    with_target(fun(F, S) ->
-        Record = quod_dtx:control_body(maps:get(control, F)),
-        %% A changed manifest nonce is still a well-shaped request, but is
-        %% not the record certified by this target's existing Prepare.
-        Changed = setelement(5, Record, setelement(5, element(5, Record), <<127:256>>)),
-        ?assertMatch({ok, _}, quod_dtx:encode_record(Changed)),
-        ?assertNotEqual(quod_dtx:record_digest(Record), quod_dtx:record_digest(Changed)),
+    with_target(resolve, fun(F, S) ->
+        Record = quod_atomic:control_body(maps:get(control, F)),
+        %% Another generation is structurally valid but is not this group's
+        %% certified Resolve. Inclusion never authenticates a different claim.
+        Changed = setelement(10, Record, element(10, Record) + 1),
+        ?assertMatch({ok, _}, quod_atomic:encode_record(Changed)),
+        ?assertNotEqual(quod_atomic:record_digest(Record), quod_atomic:record_digest(Changed)),
         ?assertEqual({error, stale_dtx_submission},
                      quod_simplex:test_retain_dtx_record(Changed, none, S))
     end).
 
 deliver(local, _F, Request, S) ->
     From = {self(), make_ref()},
-    {ok, Started} = quod_simplex:test_start_local_dtx_endpoint_request(
+    {ok, Started, []} = quod_simplex:test_start_local_dtx_endpoint_request(
                       Request, [], 1000, From, S),
     {Pid, Result} = worker_result(),
     {Done, [{reply, From, {ok, Response, []}}]} =
@@ -144,7 +145,7 @@ worker_result() ->
     end.
 
 with_target(Fun) ->
-    with_target(prepare, Fun).
+    with_target(vote, Fun).
 
 with_target(Kind, Fun) ->
     isolated(fun() -> target(Kind, Fun) end).
@@ -194,16 +195,16 @@ recovery_preserves_owner_apply_progress_test_() ->
       end)
     end) end} || Role <- [source, participant], Ack <- [before_capture, during_verify, after_install, none]].
 
-recovery_new_finalize_is_not_acknowledged_by_an_earlier_notification_test() ->
+recovery_new_resolve_is_not_acknowledged_by_an_earlier_notification_test() ->
     isolated(fun() ->
         with_recovery_target(participant, 2, fun(F, _Index, S2, #{projection := Capture}) ->
             %% An ack for a not-yet-installed application is inert. Installing
             %% that new application must still close its proof fence.
             S2 = acknowledge(F, S2),
-            [_, _, Finalize] = maps:get(chain, F),
-            {ok, [Finalize], P3, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
-                Capture, 3, [Finalize], maps:get(history_index, Capture)),
-            {S3, {ok, _}} = recovery_sink([Finalize], P3, Delta, S2),
+            [_, _, Resolve] = maps:get(chain, F),
+            {ok, [Resolve], P3, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
+                Capture, 3, [Resolve], maps:get(history_index, Capture)),
+            {S3, {ok, _}} = recovery_sink([Resolve], P3, Delta, S2),
             Group = maps:get(group_id, F),
             ?assertMatch(#{Group := #{slot := 3, generation := 2, blocking := true}}, apply_fences(S3))
         end)
@@ -213,7 +214,7 @@ recovery_complete_does_not_restore_an_acknowledged_source_marker_test() ->
     isolated(fun() -> with_recovery_target(source, fun(F, _Index, S3, #{projection := Capture}) ->
         SApplied = acknowledge(F, S3),
         {Complete, _, _} = phase_entry({maps:get(ns, F), maps:get(anchor, F)},
-            quod_dtx:control_body(maps:get(complete_control, F)), 4, F),
+            quod_atomic:control_body(maps:get(complete_control, F)), 4, F),
         {ok, [Complete], P4, Delta} = quod_catchup:verify_forward(maps:get(ns, F), maps:get(anchor, F),
             Capture, 4, [Complete], maps:get(history_index, Capture)),
         {S4, {ok, _}} = recovery_sink([Complete], P4, Delta, SApplied),
@@ -263,25 +264,31 @@ with_recovery_target(Role, Height, Fun) ->
 
 source_commit_fixture(Base) ->
     Target = {maps:get(ns, Base), maps:get(anchor, Base)},
-    Signed = quod_ct:signed_dtx_begin_fixture(#{target => Target,
+    Signed = quod_ct:signed_atomic_fixture(#{target => Target,
         node_identity => maps:get(signer, Base), admission => maps:get(admission, Base)}),
-    Begin = maps:get('begin', Signed), Group = quod_dtx:group_id(Begin),
-    {BeginEntry, _, BeginRef} = phase_entry(Target, Begin, 2, Base),
-    {ok, Target, Group, Plans} = quod_dtx:begin_recovery_rows(Begin),
-    [Remote] = [T || {T, _} <- Plans, T =/= Target],
-    {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Remote),
-    {_, _, PrepareRef} = phase_entry(Remote, Prepare, 2, Base),
-    {ok, Decision} = quod_dtx:new_decision(Group, BeginRef, commit,
-        lists:sort([{Target, BeginRef}, {Remote, PrepareRef}])),
-    {DecisionEntry, _, DecisionRef} = phase_entry(Target, Decision, 3, Base),
-    {ok, Finalize} = quod_dtx:new_finalize(Group, DecisionRef, commit, PrepareRef, 2),
-    {_, _, FinalizeRef} = phase_entry(Remote, Finalize, 3, Base),
-    {ok, Complete} = quod_dtx:new_complete(Group, DecisionRef,
-        lists:sort([{Target, DecisionRef, 2}, {Remote, FinalizeRef, 2}])),
-    {CompleteEntry, CompleteControl, _} = phase_entry(Target, Complete, 5, Base),
-    Base#{chain := [hd(maps:get(chain, Base)), BeginEntry, DecisionEntry],
-        group_id := Group, complete_control => CompleteControl, complete_entry => CompleteEntry,
-        network => maps:get(network, Signed)}.
+    Group = maps:get(group, Signed), Id = quod_atomic:group_id(Group),
+    Bundles = maps:get(bundles, Signed),
+    [Remote] = [T || {T, _, _, _} <- Bundles, T =/= Target],
+    {ok, Vote} = quod_atomic:new_vote(Group, Target, lists:keyfind(Target, 1, Bundles), prepared),
+    {VoteEntry, _, VoteRef} = phase_entry(Target, Vote, 2, Base),
+    {ok, RemoteVote} = quod_atomic:new_vote(Group, Remote, lists:keyfind(Remote, 1, Bundles), prepared),
+    {_, _, RemoteRef} = phase_entry(Remote, RemoteVote, 2, Base),
+    Evidence = {all_prepared, lists:sort([{Target, VoteRef}, {Remote, RemoteRef}])},
+    {ok, Resolve} = quod_atomic:new_resolve(Group, VoteRef, Target, commit, Evidence, VoteRef, 2),
+    {ResolveEntry, _, ResolveRef} = phase_entry(Target, Resolve, 3, Base),
+    {ok, RemoteResolve} = quod_atomic:new_resolve(Group, VoteRef, Remote, commit, Evidence, RemoteRef, 2),
+    {_, _, RemoteResolveRef} = phase_entry(Remote, RemoteResolve, 3, Base),
+    Network = maps:get(network, Signed), Committee = <<71:256>>,
+    {ok, AppliedVote} = quod_applied_certificate:sign_applied_vote(
+        Network, Remote, Committee, Id, RemoteResolveRef, 2, commit, maps:get(signer, Base)),
+    {ok, Certificate} = quod_applied_certificate:applied_certificate(
+        {Network, Remote, Committee, Id, RemoteResolveRef, 2, commit}, [AppliedVote]),
+    {ok, Complete} = quod_atomic:new_complete(Group, commit,
+        lists:sort([{Target, ResolveRef, 2}, {Remote, RemoteResolveRef, 2}]), [{Remote, Certificate}]),
+    {CompleteEntry, CompleteControl, CompleteRef} = phase_entry(Target, Complete, 5, Base),
+    Base#{chain := [hd(maps:get(chain, Base)), VoteEntry, ResolveEntry],
+        group_id := Id, complete_control => CompleteControl, complete_entry => CompleteEntry,
+        complete_ref => CompleteRef, network => Network}.
 
 recovery_sink(Entries, Projection, Delta, S) ->
     From = {self(), make_ref()},
@@ -290,7 +297,7 @@ recovery_sink(Entries, Projection, Delta, S) ->
     [Reply] = [R || {reply, Who, R} <- Actions, Who =:= From], {Next, Reply}.
 
 acknowledge(F, S) ->
-    case quod_simplex:running(cast, {finalize_applied, maps:get(group_id, F), 3, 2}, S) of
+    case quod_simplex:running(cast, {resolve_applied, maps:get(group_id, F), 3, 2}, S) of
         {keep_state, Next} -> Next;
         {keep_state, Next, _} -> Next
     end.
@@ -330,7 +337,7 @@ target(Kind, Fun) ->
                 slot => Height, last_applied => Height, sync => ready, prolog_ready => true,
                 phase_index => Index, signing_journal => Reconciled, store => Written,
                 consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [Pub], Height)})),
-        Fun(F, S)
+        quod_ct:with_network_identity(maps:get(network, F), fun() -> Fun(F, S) end)
     after
         _ = catch quod_signing_journal:close(Journal),
         ok = quod_ledger_store:close(Store),
@@ -338,50 +345,29 @@ target(Kind, Fun) ->
         ok = file:del_dir_r(Root)
     end.
 
-phase_fixture(prepare, Ns) ->
+phase_fixture(vote, Ns) ->
     quod_foreign_log_tests:prepared_then_committed_fixture(Ns);
-phase_fixture(pending_prepare, Ns) ->
+phase_fixture(pending_vote, Ns) ->
     F = quod_foreign_log_tests:prepared_then_committed_fixture(Ns),
-    [Genesis, PrepareEntry, _] = maps:get(chain, F),
-    F#{chain := [Genesis], prepare_entry => PrepareEntry};
-phase_fixture(finalize, Ns) ->
+    [Genesis, VoteEntry, _] = maps:get(chain, F),
+    F#{chain := [Genesis], vote_entry => VoteEntry};
+phase_fixture(resolve, Ns) ->
     F = quod_foreign_log_tests:prepared_then_committed_fixture(Ns),
-    #entry{data = {batch, [{dtx, Envelope}]}} = quod_ledger:entry_view(lists:last(maps:get(chain, F))),
-    {ok, Control} = quod_dtx:decode_control(Envelope),
-    F#{control := Control, ref := maps:get(finalize_ref, F)};
-phase_fixture(Kind, Ns) when Kind =:= decision; Kind =:= complete ->
-    %% Reuse the signed genesis/committee fixture. The local Begin -> Decision
-    %% -> Complete chain goes through the actual history reducer and index;
-    %% foreign references retain the same explicit fixture-only scope above.
-    Base = quod_foreign_log_tests:prepared_then_committed_fixture(Ns),
-    Target = {Ns, maps:get(anchor, Base)},
-    Signed = quod_ct:signed_dtx_begin_fixture(#{target => Target,
-        node_identity => maps:get(signer, Base), admission => maps:get(admission, Base)}),
-    Begin = maps:get('begin', Signed), Group = quod_dtx:group_id(Begin),
-    {BeginEntry, _, BeginRef} = phase_entry(Target, Begin, 2, Base),
-    {ok, Target, Group, Plans} = quod_dtx:begin_recovery_rows(Begin),
-    [Remote] = [T || {T, _} <- Plans, T =/= Target],
-    Reasons = [{prepare_refused, {ontology, element(1, Remote), element(2, Remote)}}],
-    {ok, Decision} = quod_dtx:new_decision(Group, BeginRef, {abort, Reasons}, [{Target, BeginRef}]),
-    {DecisionEntry, DecisionControl, DecisionRef} = phase_entry(Target, Decision, 3, Base),
-    {ok, Finalize} = quod_dtx:new_finalize(Group, DecisionRef, abort, none, 1),
-    {_, _, FinalizeRef} = phase_entry(Remote, Finalize, 2, Base),
-    {ok, Complete} = quod_dtx:new_complete(Group, DecisionRef,
-        lists:sort([{Target, DecisionRef, 1}, {Remote, FinalizeRef, 1}])),
-    {CompleteEntry, CompleteControl, CompleteRef} = phase_entry(Target, Complete, 4, Base),
-    {Control, Ref} = case Kind of
-        decision -> {DecisionControl, DecisionRef};
-        complete -> {CompleteControl, CompleteRef}
-    end,
-    Base#{chain := [hd(maps:get(chain, Base)), BeginEntry, DecisionEntry, CompleteEntry],
-          control := Control, ref := Ref, network => maps:get(network, Signed)}.
+    #entry{data = {batch, [{dtx, Control}]}} = quod_ledger:entry_view(lists:last(maps:get(chain, F))),
+    F#{control := Control, ref := maps:get(resolve_ref, F)};
+phase_fixture(complete, Ns) ->
+    %% Same source reducer as recovery; the foreign certificate is signed but
+    %% its committee is a fixture, not a full foreign-admission witness.
+    F = source_commit_fixture(quod_foreign_log_tests:prepared_then_committed_fixture(Ns)),
+    F#{chain := maps:get(chain, F) ++ [skipped_entry(4, F), maps:get(complete_entry, F)],
+       control := maps:get(complete_control, F), ref := maps:get(complete_ref, F)}.
 
 phase_entry({Ns, Anchor} = Target, Record, Slot, F) ->
     Signer = maps:get(signer, F),
-    {ok, Control} = quod_dtx:sign_control(Target, Record, maps:get(admission, F),
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F),
                                          Slot - 1, Slot - 1, Signer),
-    {ok, Blob} = quod_dtx:encode_control(Control),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Blob}]}, 0),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, 0),
     Hash = quod_simplex:block_hash(Block),
     #share{sig = Sig} = quod_simplex:make_share(
         quod_simplex:consensus_domain(Ns, Anchor), commit, Slot, Hash, Signer),

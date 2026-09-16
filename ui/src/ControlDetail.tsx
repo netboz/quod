@@ -32,40 +32,23 @@ export function ControlDetail({ row, onClose }: { row: LiveControl; onClose: () 
       </dl>
       {control.reasons && control.reasons.length > 0 && (
         <section className="border-t border-rose/20 bg-rose/5 px-4 py-3">
-          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-rose uppercase">Abort reasons</h3>
+          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-rose uppercase">Refusal / abort reasons</h3>
           <ol className="space-y-1 font-mono text-[13px] text-teal">
             {control.reasons.map((reason, i) => <li key={`${i}:${reason}`} className="break-all">{reason}</li>)}
           </ol>
         </section>
       )}
-      {control.participants && control.participants.length > 0 && (
-        <section className="border-t border-gray/20 px-4 py-3">
-          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-gray uppercase">Participant plans</h3>
-          <div className="space-y-2">
-            {control.participants.map((plan, i) => <ParticipantPlan key={`${plan.plan_digest}:${i}`} plan={plan} />)}
-          </div>
-        </section>
-      )}
       {control.plan && (
         <section className="border-t border-gray/20 px-4 py-3">
-          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-gray uppercase">Prepared plan</h3>
+          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-gray uppercase">Own staged plan</h3>
           <ParticipantPlan plan={control.plan} />
         </section>
       )}
-      {control.kind === 'finalize' && control.verdict === 'commit' && control.applied_plan && (
-        <section className="border-t border-gray/20 px-4 py-3">
-          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-gray uppercase">Finalized changes</h3>
-          <ParticipantPlan plan={control.applied_plan} />
-        </section>
-      )}
-      {control.kind === 'finalize' && control.verdict === 'commit' && !control.applied_plan && (
+      {control.kind === 'resolve' && (
         <section className="border-t border-gray/20 px-4 py-3 text-sm text-gray">
-          The referenced prepared record is not available on this node.
-        </section>
-      )}
-      {control.kind === 'finalize' && control.verdict === 'abort' && (
-        <section className="border-t border-gray/20 px-4 py-3 text-sm text-gray">
-          No prepared changes were applied.
+          {control.verdict === 'commit'
+            ? `Applies this ontology’s staged plan from Vote #${control.vote_ref?.height}.`
+            : 'No staged changes were applied.'}
         </section>
       )}
     </aside>
@@ -83,7 +66,7 @@ function ParticipantPlan({ plan }: { plan: NonNullable<Control['plan']> }) {
       <div className="mt-1 text-gray">fact changes: {plan.diff_ops ?? 'invalid'} · effects: {plan.effect_count ?? 'invalid'}</div>
       {plan.diff && plan.diff.length > 0 && (
         <div className="mt-2 rounded border border-teal/15 bg-cream p-2">
-          <div className="text-[10px] font-semibold tracking-wider text-gray uppercase">Prepared changes</div>
+          <div className="text-[10px] font-semibold tracking-wider text-gray uppercase">Staged changes (not applied by Vote)</div>
           <ol className="mt-1 space-y-1 font-mono text-[11px] break-all text-teal">
             {plan.diff.map((op, index) => (
               <li key={`${index}:${op.op}:${op.op === 'event' ? op.term : op.clause}`}>
@@ -119,12 +102,12 @@ function ControlFields({ control }: { control: Control }) {
   return (
     <>
       {control.verdict && <><Dt>Verdict</Dt><dd className={control.verdict === 'abort' ? 'text-rose' : 'text-olive'}>{control.verdict}</dd></>}
+      {control.vote && <><Dt>Vote</Dt><dd>{control.vote}</dd></>}
+      {control.vote_deadline_ms != null && <><Dt>Vote deadline</Dt><dd>{timestamp(control.vote_deadline_ms)}</dd></>}
       {control.participant_count != null && <><Dt>Participants</Dt><dd>{control.participant_count}</dd></>}
-      {control.prepare_count != null && <><Dt>Prepared targets</Dt><dd>{control.prepare_count}</dd></>}
-      {control.finalize_count != null && <><Dt>Finalized targets</Dt><dd>{control.finalize_count}</dd></>}
-      {control.prepared != null && <><Dt>Prepared</Dt><dd>{control.prepared ? 'yes' : 'no'}</dd></>}
+      {control.resolve_count != null && <><Dt>Resolved targets</Dt><dd>{control.resolve_count}</dd></>}
+      {control.voted != null && <><Dt>Own vote recorded</Dt><dd>{control.voted ? 'yes' : 'no'}</dd></>}
       {control.applied_generation != null && <><Dt>Applied generation</Dt><dd>{control.applied_generation}</dd></>}
-      {control.plan_digest && <><Dt>Plan digest</Dt><dd className="font-mono text-xs break-all text-gray">{control.plan_digest}</dd></>}
       {control.request && <>
         <Dt>Agent request</Dt><dd>{control.request.status}</dd>
         <Dt>Agent</Dt><dd className="font-mono text-xs break-all">{control.request.agent?.reference ?? 'invalid'}</dd>

@@ -3,16 +3,16 @@
 %% No hot-boundary counter, descendant tracing, owner pause or shutdown change.
 -module(quod_c4_phase1_capture).
 -export([start/2, status/1, stop/1, release/1, match_spec/0]).
--define(MFA, {quod_simplex,start_dtx_coordinator_worker,7}).
+-define(MFA, {quod_simplex,start_dtx_coordinator_worker,3}).
 -define(RPC_MS, 5000).
 -define(RECORD, {quod_c4_attempt,record,1}).
 -define(FLAGS, [call,arity,monotonic_timestamp]).
 
 match_spec() ->
-    [{['$1','_','_','_','_','_','_'],
+    [{[#{material => {'_','_',#{group => #{group_id => '$1'}}}},'_','_'],
       [{is_binary,'$1'},{'=:=',{byte_size,'$1'},32}],
       [{message,{{producer_start,'$1'}}}]},
-     {['_','_','_','_','_','_','_'],[],[{message,invalid_group}]}].
+     {['_','_','_'],[],[{message,invalid_group}]}].
 
 start(Namespaces, Options) ->
     case whereis(?MODULE) of
@@ -296,7 +296,7 @@ record_match_spec() ->
       [{message,{{attempt_metadata,'$1'}}}]}].
 
 collect(Manager,Pins,O,Counts,Seen,Issues,Records)->
-    %% Arity tracing prevents SDK/Begin/state/keys from entering the stream.
+    %% Arity tracing prevents SDK/plan/state/keys from entering the stream.
     receive
       {trace_ts,P,call,?MFA,{producer_start,G},Time}
         when is_binary(G),byte_size(G)=:=32 ->

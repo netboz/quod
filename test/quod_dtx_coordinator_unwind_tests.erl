@@ -5,9 +5,11 @@
 -include_lib("opentelemetry/src/otel_tracer.hrl").
 -include_lib("opentelemetry/src/otel_span_ets.hrl").
 
-%% Also used by the isolated compiled-start fault control, which stops SDK
-%% storage between the real span creation and the unchanged real start body.
--export([start_failure/2, callback_unwind_inventory/0, with_sdk/1]).
+%% Compiled-start fault controls run only in fresh stdio peers. Their prefix
+%% injects an exception or stops SDK storage after real span creation, without
+%% adding a production hook or changing the remainder of the real start body.
+-export([start_failure/2, callback_unwind_inventory/0, with_sdk/1,
+         run_compiled_start_control/3, compiled_start_fault/2]).
 
 %% B's callback-unwind amendment deliberately does not add a second owner or
 %% rollback registry. These fixtures exercise production callbacks and real
@@ -32,19 +34,31 @@ sdk_end_after_take_is_a_noop_not_a_second_export_test() ->
 replacement_start_failure_dying_callback_reends_old_handle_without_reexport_test() ->
     with_sdk(fun(_Storage) ->
         with_fixture(fun(F, S0, _Journal, _Store) ->
+            {OriginNs, _} = Origin = maps:get(target, F),
+            GroupId = group_id(F),
+            Other = quod_ct:signed_atomic_fixture(#{target => Origin,
+              node_identity => maps:get(node_identity, F),
+              admission => maps:get(admission, F),
+              proof_id => <<241:256>>, operation_id => <<242:256>>}),
+            OtherGroupId = group_id(Other),
+            ?assertNotEqual(GroupId, OtherGroupId),
             with_calls([self()], fun(Calls) ->
                 S1 = start(F, S0),
                 #{pid := Worker, coordinate_span := {_, OldSpan}} = row(F, S1),
                 Monitor = monitor(process, Worker),
                 OldId = otel_span:span_id(OldSpan),
-                {Ns, _} = maps:get(target, F),
-                GroupId = group_id(F),
-                Expected = {dtx_coordinator_start_failed, Ns, GroupId, invalid_begin},
+                %% Match the existing owner by its map key, then supply a
+                %% genuinely different valid group to exercise replacement.
+                %% Same-group changes now preserve the owner. Bad OwnerNs
+                %% makes the replacement's real start return invalid_own_vote.
+                Ns = <<OriginNs/binary, ".different-origin">>,
+                StartState = quod_simplex:test_state_set(ns, Ns, S1),
+                Expected = {dtx_coordinator_start_failed, Ns, OtherGroupId, invalid_own_vote},
                 ?assertError(Expected, quod_simplex:test_reconcile_dtx_coordinators(
-                  #{GroupId => {record, GroupId, invalid_begin, different_group_ref}}, S1)),
+                  #{GroupId => own_row(Other)}, StartState)),
                 %% An exception prevents OTP from installing the tentative
                 %% replacement state. Termination sees the original row.
-                ?assertEqual(ok, quod_simplex:terminate(Expected, running, S1)),
+                ?assertEqual(ok, quod_simplex:terminate(Expected, running, StartState)),
                 down(Monitor, Worker, shutdown),
                 #{starts := 2, ends := Ends} = calls(Calls),
                 Spans = coordinate_exports(),
@@ -155,7 +169,9 @@ disappearance_release(Edge) ->
     with_sdk(fun(Storage) ->
         with_fixture(fun(F, S0, Journal, Store) ->
             S1 = start(F, S0),
-            #{pid := Worker, monitor := OwnedMonitor} = row(F, S1),
+            #{pid := Worker, monitor := OwnedMonitor,
+              coordinate_span := {_, Handle}} = row(F, S1),
+            Id = otel_span:span_id(Handle),
             Monitor = monitor(process, Worker),
             try
                 stop_storage(Storage),
@@ -182,7 +198,8 @@ disappearance_release(Edge) ->
                             ok = quod_simplex:terminate(Expected, running, S1)
                     end,
                     down(Monitor, Worker, shutdown),
-                    #{stores := Stores, journals := Journals, fds := Fds} = calls(Calls),
+                    #{ends := Ends, stores := Stores, journals := Journals, fds := Fds} = calls(Calls),
+                    ?assertEqual([Id], Ends),
                     ?assertEqual([Store], Stores),
                     ?assertEqual([Journal], Journals),
                     ?assertEqual(2, length(Fds)),
@@ -202,28 +219,40 @@ disappearance_release(Edge) ->
     end).
 
 start_failure_preserves_returned_error_and_exception_with_or_without_sdk_test_() ->
-    [{atom_to_list(Kind) ++ "/" ++ atom_to_list(StorageState),
-      fun() -> start_failure(Kind, StorageState) end}
-     || Kind <- [returned, exception], StorageState <- [present, disappeared]].
+    [{Label ++ "/" ++ atom_to_list(StorageState),
+      {timeout, 60, fun() -> start_failure(Kind, StorageState) end}}
+     || {Kind, Label} <- [{returned, "returned"}, {exception, "compiled_exception"}],
+        StorageState <- [present, disappeared]].
 
-start_failure(Kind, StorageState) ->
+sdk_disappears_during_compiled_start_control_test_() ->
+    %% Exercise both cleanup branches with an owned real SDK handle whose
+    %% storage disappears inside start, rather than a pre-start noop handle.
+    {timeout, 60, fun() ->
+        lists:foreach(fun(Kind) -> start_failure(Kind, during_start) end,
+                      [returned, exception])
+    end}.
+
+%% initial_state/4 now shape-checks an authenticated own row and returns
+%% invalid_own_vote. The deleted recovered-evidence verifier supplied the old
+%% deterministic throw; there is no current input-driven producer throw at
+%% this same synchronous seam. Keep that exception/stack guard explicitly
+%% synthetic, isolated from the runner and from all production source.
+start_failure(exception, StorageState) ->
+    compiled_start_control(exception, StorageState);
+start_failure(returned, during_start) ->
+    compiled_start_control(returned, during_start);
+start_failure(returned, StorageState) ->
+    start_failure_case(returned, StorageState).
+
+start_failure_case(Kind, StorageState) ->
     with_sdk(fun(Storage) ->
         with_fixture(fun(F, S0, Journal, Store) ->
             GroupId = group_id(F),
             {OriginNs, _} = maps:get(target, F),
-            Begin = maps:get('begin', F),
-            {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
-            Secret = <<"unwind-secret-start-evidence">>,
-            Desired = case Kind of
-                returned -> {record, GroupId, Begin, GroupRef};
-                %% The real initial-state verifier insists identity matches
-                %% before reading any further evidence fields. This is an
-                %% actual throwing start, not a configurable fake starter.
-                exception -> {recovered, GroupId, Begin, GroupRef, none,
-                              {ok, #{identity => Secret}}}
-            end,
-            %% A valid Begin reaches start_monitor, where the mismatched
-            %% owner namespace produces its real returned invalid_begin.
+            Desired = own_row(F),
+            Secret = start_fault_secret(),
+            %% A valid Vote reaches start_monitor/4, where the mismatched
+            %% owner namespace produces its real returned invalid_own_vote.
             Ns = case Kind of
                 returned -> <<OriginNs/binary, ".different-origin">>;
                 exception -> OriginNs
@@ -243,24 +272,43 @@ start_failure(Kind, StorageState) ->
                 case Kind of
                     returned ->
                         ?assertMatch({error,
-                          {dtx_coordinator_start_failed, Ns, GroupId, invalid_begin}, _}, Result);
+                          {dtx_coordinator_start_failed, Ns, GroupId, invalid_own_vote}, _}, Result);
                     exception ->
-                        ?assertMatch({error, {badmatch, Secret},
-                          [{quod_dtx_coordinator, valid_phase_evidence, _, _} | _]}, Result)
+                        ?assertMatch({error, {compiled_start_fault, Secret},
+                          [{?MODULE, compiled_start_fault, _, _} | _]}, Result),
+                        %% The prefix captures the original class/reason/full
+                        %% stack before Simplex's real cleanup/rethrow boundary.
+                        receive {unwind_start_fault, Original} -> ?assertEqual(Original, Result)
+                        after 1000 -> error(missing_compiled_start_fault)
+                        end
                 end,
-                ?assertEqual(1, maps:get(starts, calls(Calls))),
+                #{starts := Starts, ends := Ends} = calls(Calls),
+                ?assertEqual(1, Starts),
                 ?assertEqual(#{}, quod_simplex:test_dtx_coordinator_state(S0)),
+                [Id] = coordinate_starts(),
                 Spans = coordinate_exports(),
                 case StorageState of
                     present ->
+                        ?assertEqual([Id], Ends),
                         ?assertEqual(1, length(Spans)),
                         [Span] = Spans,
+                        ?assertEqual(Id, Span#span.span_id),
+                        ?assertEqual([], ets:lookup(?SPAN_TAB, Id)),
                         ?assertEqual(<<"start_failed">>, closure(Span)),
                         ?assertEqual(nomatch, binary:match(term_to_binary(Span), Secret));
-                    _ -> ?assertEqual([], Spans)
+                    disappeared ->
+                        %% Failed SDK insertion returns a noop handle: there
+                        %% is no owned span for cleanup to end.
+                        ?assertEqual([], Ends),
+                        ?assertEqual([], Spans);
+                    during_start ->
+                        ?assertEqual([Id], Ends),
+                        ?assertEqual(undefined, ets:info(?SPAN_TAB)),
+                        ?assertEqual([], Spans)
                 end,
                 ok = quod_simplex:terminate(element(2, Result), running, S0),
-                #{stores := Stores, journals := Journals, fds := Fds} = calls(Calls),
+                #{ends := FinalEnds, stores := Stores, journals := Journals, fds := Fds} = calls(Calls),
+                ?assertEqual(Ends, FinalEnds),
                 ?assertEqual([Store], Stores),
                 ?assertEqual([Journal], Journals),
                 ?assertEqual(2, length(Fds)),
@@ -269,14 +317,89 @@ start_failure(Kind, StorageState) ->
         end)
     end).
 
-start(F, S) ->
-    Begin = maps:get('begin', F),
-    GroupId = group_id(F),
-    {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
-    quod_simplex:test_reconcile_dtx_coordinators(
-      #{GroupId => {record, GroupId, Begin, GroupRef}}, S).
+%% Permanent fault runner, not a production injection path. Only the peer's
+%% in-memory coordinator is instrumented; the parent VM and all files retain
+%% their original code. Pin selected beams before starting the peer so this
+%% control also works with the parent's private sequential-build snapshots.
+compiled_start_control(Kind, StorageState) ->
+    Modules = [?MODULE, quod_simplex, quod_dtx_coordinator,
+               quod_dtx_group_trace_tests, quod_ct, quod_trace, quod_attempt_span],
+    Beams = [begin
+        Path = filename:absname(code:which(Module)),
+        {ok, Beam} = file:read_file(Path),
+        {Module, Path, Beam}
+    end || Module <- Modules],
+    {quod_dtx_coordinator, _, CoordinatorBeam} = lists:keyfind(quod_dtx_coordinator, 1, Beams),
+    {ok, Peer, _} = peer:start(#{connection => standard_io,
+      env => [{"ERL_CRASH_DUMP", "/dev/null"}],
+      args => ["+S", "2:2", "+SDcpu", "1", "+SDio", "1", "-pa" | code:get_path()]}),
+    try
+        lists:foreach(fun({Module, Path, Beam}) ->
+            ?assertEqual({module, Module}, peer:call(Peer, code, load_binary,
+                                                   [Module, Path, Beam]))
+        end, Beams),
+        ?assertEqual(ok, peer:call(Peer, ?MODULE, run_compiled_start_control,
+                                   [Kind, StorageState, CoordinatorBeam], 45000))
+    after peer:stop(Peer)
+    end.
 
-group_id(F) -> quod_dtx:group_id(maps:get('begin', F)).
+run_compiled_start_control(Kind, StorageState, CoordinatorBeam) ->
+    Module = quod_dtx_coordinator,
+    {ok, {Module, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
+        beam_lib:chunks(CoordinatorBeam, [abstract_code]),
+    [Original = {function, L, start_monitor, 4,
+                 [{clause, CL, Args, Guards, Body} | Fallback]}] =
+        [F || F = {function, _, start_monitor, 4, _} <- Forms],
+    Prefix = {call, CL,
+                {remote, CL, {atom, CL, ?MODULE}, {atom, CL, compiled_start_fault}},
+                [erl_parse:abstract(Kind), erl_parse:abstract(StorageState)]},
+    Instrumented = {function, L, start_monitor, 4,
+                    [{clause, CL, Args, Guards, [Prefix | Body]} | Fallback]},
+    %% Preserve the start guards, returned-error arms and every other form;
+    %% the returned/during_start arm runs the original body after SDK loss.
+    Updated = [case F =:= Original of true -> Instrumented; false -> F end || F <- Forms],
+    Compiled = compile:forms(Updated, [binary, debug_info, return_errors, return_warnings]),
+    Beam = case Compiled of
+        {ok, Module, Binary} -> Binary;
+        {ok, Module, Binary, _Warnings} -> Binary;
+        _ -> error({compiled_start_control_failed, Compiled})
+    end,
+    {module, Module} = code:load_binary(Module, "quod_dtx_coordinator.unwind-start-control", Beam),
+    start_failure_case(Kind, StorageState).
+
+compiled_start_fault(Kind, StorageState) ->
+    case StorageState of
+        disappeared -> ?assertEqual(undefined, ets:info(?SPAN_TAB));
+        _ ->
+            Span = otel_tracer:current_span_ctx(quod_trace:context()),
+            ?assertMatch([#span{name = <<"quod.dtx.coordinate">>}],
+                         ets:lookup(?SPAN_TAB, otel_span:span_id(Span))),
+            case StorageState of
+                during_start -> stop_storage(ets:info(?SPAN_TAB, owner));
+                present -> ok
+            end
+    end,
+    case Kind of
+        returned -> ok;
+        exception ->
+            try error({compiled_start_fault, start_fault_secret()})
+            catch Class:Reason:Stack ->
+                self() ! {unwind_start_fault, {Class, Reason, Stack}},
+                erlang:raise(Class, Reason, Stack)
+            end
+    end.
+
+start_fault_secret() -> <<"unwind-secret-compiled-start-fault">>.
+
+start(F, S) ->
+    GroupId = group_id(F),
+    quod_simplex:test_reconcile_dtx_coordinators(
+      #{GroupId => own_row(F)}, S).
+
+own_row(F) ->
+    #{material => quod_atomic:control_material(maps:get(vote_control, F)),
+      ref => none, resolution => none}.
+group_id(F) -> quod_atomic:group_id(maps:get(group, F)).
 row(F, S) -> maps:get(group_id(F), quod_simplex:test_dtx_coordinator_state(S)).
 closure(Span) -> maps:get('quod.dtx.closure', otel_attributes:map(Span#span.attributes)).
 count(Item, Items) -> length([I || I <- Items, I =:= Item]).
@@ -387,7 +510,7 @@ restore(Key, Value) -> persistent_term:put(Key, Value).
 with_calls(Pids, Fun) ->
     Collector = spawn_link(fun() -> collect_calls(
       #{starts => 0, ends => [], stores => [], journals => [], fds => []}) end),
-    Patterns = [{quod_dtx_coordinator, start_monitor, 5}, {otel_span, end_span, 1},
+    Patterns = [{quod_dtx_coordinator, start_monitor, 4}, {otel_span, end_span, 1},
                 {quod_ledger_store, close, 1}, {quod_signing_journal, close, 1},
                 {file, close, 1}],
     lists:foreach(fun({Module, _, _}) -> {module, Module} = code:ensure_loaded(Module) end,

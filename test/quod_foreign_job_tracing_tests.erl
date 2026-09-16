@@ -137,7 +137,7 @@ exact_startup_replay_and_warm_requests_are_separate_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
-          ?assertMatch({ok, #{phase := finalize}}, explicit(Fixture)),
+          ?assertMatch({ok, #{phase := resolve}}, explicit(Fixture)),
           quod_foreign_log_tests:stop_owner(Owner),
           {Restarted, Startup} = traced_work(fun() ->
               Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
@@ -154,7 +154,7 @@ exact_startup_replay_and_warm_requests_are_separate_test() ->
               lists:foreach(fun(Name) ->
                   {Result, Read, Spans, Counts} = traced_ready_request(
                       Name, Restarted, fun() -> explicit(Fixture) end),
-                  ?assertMatch({ok, #{phase := finalize}}, Result),
+                  ?assertMatch({ok, #{phase := resolve}}, Result),
                   Attributes = attrs(Read),
                   ?assertEqual(<<"published_prefix">>, maps:get('quod.foreign.read_source', Attributes)),
                   ?assertEqual(2, maps:get('quod.foreign.captured_height', Attributes)),
@@ -194,9 +194,9 @@ routed_exact_has_the_same_worker_children_test() ->
           {Result, Worker, Spans} = traced_request(
             <<"test.foreign.routed">>,
             fun() -> quod_foreign_log:verify_reference(
-                       maps:get(ref, Fixture), finalize, contact(Fixture), none, 5000)
+                       maps:get(ref, Fixture), resolve, contact(Fixture), none, 5000)
             end),
-          ?assertMatch({ok, #{phase := finalize}}, Result),
+          ?assertMatch({ok, #{phase := resolve}}, Result),
           ?assertEqual(2, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
           assert_stages(Worker, Spans,
             [exact_route, cache_open, page_fetch, page_verify,
@@ -207,7 +207,7 @@ changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
-          ?assertMatch({ok, #{phase := finalize}}, explicit(Fixture)),
+          ?assertMatch({ok, #{phase := resolve}}, explicit(Fixture)),
           quod_foreign_log_tests:stop_owner(Owner),
           Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
           CacheNs = quod_foreign_log:cache_namespace(Identity),
@@ -235,7 +235,7 @@ changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->
               ?assertEqual(1, maps:get(empty_opens, Startup, 0)),
               {Result, Worker, Spans} = traced_request(
                 <<"test.foreign.checkpoint.after-rejection">>, fun() -> explicit(Fixture) end),
-              ?assertMatch({ok, #{phase := finalize}}, Result),
+              ?assertMatch({ok, #{phase := resolve}}, Result),
               ?assertEqual(0, maps:get('quod.foreign.resident_start_height', attrs(Worker))),
               ?assertEqual(1, maps:get('quod.foreign.cold_opens', attrs(Worker))),
               ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', attrs(Worker))),
@@ -283,7 +283,7 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
           {SecondCtx, SecondSpan} = quod_trace:start_span(
                                      otel_ctx:new(), <<"test.foreign.shared.second">>, internal, #{}),
           Sentinel = <<"foreign-private-shared-context-sentinel">>,
-          Request = {verify_reference, maps:get(ref, Fixture), finalize,
+          Request = {verify_reference, maps:get(ref, Fixture), resolve,
                       contact(Fixture), none, 5000},
           First = owner_request(Owner,
                     otel_ctx:set_value(FirstCtx, private_foreign_trace_sentinel, Sentinel), Request),
@@ -296,8 +296,8 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
           quod_trace:finish_span(SecondSpan, ok),
           Held ! {release_shared_blocker, Token},
           ?assertMatch({reply, {ok, #{slot := 1}}}, gen_server:wait_response(Blocker, 5000)),
-          ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(First, 5000)),
-          ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(Second, 5000)),
+          ?assertMatch({reply, {ok, #{phase := resolve}}}, gen_server:wait_response(First, 5000)),
+          ?assertMatch({reply, {ok, #{phase := resolve}}}, gen_server:wait_response(Second, 5000)),
           quod_trace:finish_span(FirstSpan, ok),
           Worker = quod_trace_tests:take_span(
                      <<"quod.foreign.verification_worker">>, otel_span:trace_id(FirstSpan)),
@@ -317,7 +317,7 @@ current_after_startup_does_not_replay_prefix_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
-          ?assertMatch({ok, #{phase := finalize}}, explicit(Fixture)),
+          ?assertMatch({ok, #{phase := resolve}}, explicit(Fixture)),
           quod_foreign_log_tests:stop_owner(Owner),
           {Restarted, Startup} = traced_work(fun() ->
               Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
@@ -375,10 +375,10 @@ historical_local_trace_keeps_local_reads_distinct_test() ->
             {Result, Work} = traced_work(fun() ->
                 quod_trace:with_context(Context, fun() ->
                     quod_foreign_log:verify_local(
-                        Source, maps:get(ref, Fixture), finalize, 5000)
+                        Source, maps:get(ref, Fixture), resolve, 5000)
                 end)
             end),
-            ?assertMatch({ok, #{phase := finalize}}, Result),
+            ?assertMatch({ok, #{phase := resolve}}, Result),
             ?assertEqual(1, maps:get(exact_reads, Work, 0)),
             ?assertEqual(0, maps:get(verified_entries, Work, 0)),
             ?assertEqual(0, maps:get(replays, Work, 0)),
@@ -408,7 +408,7 @@ unsampled_context_does_not_manufacture_worker_root_test() ->
           Context = quod_trace:extract([
             {<<"traceparent">>,
              <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00">>}]),
-          ?assertMatch({ok, #{phase := finalize}},
+          ?assertMatch({ok, #{phase := resolve}},
                        quod_trace:with_context(Context, fun() -> explicit(Fixture) end)),
           Ns = maps:get(ns, Fixture),
           Worker = receive {unsampled_worker, Ns, Pid} -> Pid
@@ -487,7 +487,7 @@ page_success_has_one_owner_terminal_despite_stale_messages_test() ->
             %% Owner mailbox barrier: both stale terminal messages were consumed.
             ?assertEqual(#{}, gen_server:call(Owner, test_page_rows)),
             Worker ! {continue_foreign_page_decode, Token},
-            ?assertMatch({reply, {ok, #{phase := finalize}}}, gen_server:wait_response(Call, 3000)),
+            ?assertMatch({reply, {ok, #{phase := resolve}}}, gen_server:wait_response(Call, 3000)),
             WorkerSpan = quod_trace_tests:take_span(<<"quod.foreign.verification_worker">>, TraceId),
             Spans = exported_spans(TraceId),
             {Page, Terminal} = assert_page_terminal(ReqId, completed, decoding, false, Spans),
@@ -594,7 +594,7 @@ with_page_trace(Options, Fun) ->
 begin_traced_page(#{owner := Owner, first := Fixture, peer := Peer,
                     endpoint := Endpoint, ns := Ns, link1 := Link}, Context) ->
     Call = owner_request(Owner, Context,
-             {verify, Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000}),
+             {verify, Peer, Endpoint, maps:get(ref, Fixture), resolve, 5000}),
     {Lease, Owner} = quod_foreign_log_tests:receive_page_open(Peer, Endpoint, Ns),
     Binding = quod_foreign_log_tests:install_page_test_link(Owner, Lease, Peer, Ns, Link),
     Grant = crypto:strong_rand_bytes(16),
@@ -651,7 +651,7 @@ contact(Fixture) -> {maps:get(pub, Fixture), {"127.0.0.1", 31988}}.
 
 explicit(Fixture) ->
     {Peer, Endpoint} = contact(Fixture),
-    quod_foreign_log:verify(Peer, Endpoint, maps:get(ref, Fixture), finalize, 5000).
+    quod_foreign_log:verify(Peer, Endpoint, maps:get(ref, Fixture), resolve, 5000).
 
 owner_request(Owner, Context, Request) ->
     gen_server:send_request(Owner,

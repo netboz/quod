@@ -5,7 +5,7 @@
 -include("quod_proof_limits.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
 
-operation_and_quorum_workers_keep_the_request_trace_test() ->
+receipt_recovery_workers_keep_the_request_trace_test() ->
     with_operation_fixture(fun(F) ->
         quod_trace_tests:with_tracer(fun() ->
             quod_trace:with_span(otel_ctx:new(), <<"operation.test.parent">>, internal, #{},
@@ -13,7 +13,7 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
                   with_operation_worker(F, fun(Worker, Monitor) ->
                       with_operation_close_order(Worker, maps:get(operation_ref, F), fun() ->
                           reply_operation_source(F, terminal_operation_row(F)),
-                          certify_operation_result(F, Worker, committed),
+                          restore_operation_receipt(F, Worker),
                           assert_operation_result(F, Worker, Monitor, committed)
                       end)
                   end)
@@ -23,7 +23,6 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
             Local = quod_trace_tests:take_span(<<"quod.operation.local_outcome">>),
             Resolve = quod_trace_tests:take_span(<<"quod.operation.completion_evidence">>),
             Notify = quod_trace_tests:take_span(<<"quod.operation.result_notify">>),
-            Probe = quod_trace_tests:take_span(<<"quod.dtx.quorum.probe">>),
             ?assertEqual(Parent#span.trace_id, Worker#span.trace_id),
             ?assertEqual(Parent#span.span_id, Worker#span.parent_span_id),
             ?assertEqual(Worker#span.trace_id, Local#span.trace_id),
@@ -33,13 +32,6 @@ operation_and_quorum_workers_keep_the_request_trace_test() ->
                #{'quod.namespace' => maps:get(source_ns, F)},
                otel_attributes:map(Local#span.attributes)),
             assert_operation_wave_ancestry(Resolve, Worker),
-            ?assertEqual(Resolve#span.trace_id, Probe#span.trace_id),
-            Collector = take_operation_span(Probe#span.parent_span_id),
-            ?assertEqual(<<"quod.dtx.quorum.collect">>, Collector#span.name),
-            ?assertEqual(Collector#span.trace_id, Probe#span.trace_id),
-            ?assert(Collector#span.start_time =< Probe#span.start_time),
-            ?assert(Probe#span.end_time =< Collector#span.end_time),
-            assert_operation_wave_ancestry(Collector, Worker),
             Events = lists:reverse(otel_events:list(Worker#span.events)),
             ?assertEqual([<<"operation.worker_started">>, <<"operation.close_observed">>],
                          [E#event.name || E <- Events]),
@@ -468,6 +460,14 @@ fresh_operation_result_trace(Class) ->
                             after 1000 -> error(fresh_operation_worker_did_not_finish) end,
                             {true, _Released} = quod_simplex:settle_operation_recovery(Worker, Op, OwnerState),
                             Root = quod_trace_tests:take_span(<<"quod.operation.recover">>),
+                            Probe = quod_trace_tests:take_span(<<"quod.dtx.quorum.probe">>),
+                            Collector = take_operation_span(Probe#span.parent_span_id),
+                            ?assertEqual(<<"quod.dtx.quorum.collect">>, Collector#span.name),
+                            ?assertEqual(Root#span.trace_id, Probe#span.trace_id),
+                            ?assertEqual(Collector#span.trace_id, Probe#span.trace_id),
+                            ?assert(Collector#span.start_time =< Probe#span.start_time),
+                            ?assert(Probe#span.end_time =< Collector#span.end_time),
+                            assert_operation_wave_ancestry(Collector, Root),
                             Decode = quod_trace_tests:take_span(<<"quod.operation.result_evidence_decode">>),
                             Receipt = quod_trace_tests:take_span(<<"quod.operation.receipt">>),
                             ?assertEqual(Root#span.trace_id, Notify#span.trace_id),
@@ -580,28 +580,27 @@ remote_operation_temporary_reply_parks_on_progress_test() ->
        quod_dtx_coordinator:test_operation_application_evidence(
          Request, {ok, malformed})).
 
-%% These run the actual operation worker and the exact-result certificate
-%% collector. Only the existing owner process interfaces are stubs: every
-%% call is exposed to the test, so a terminal recovery that loads/re-applies
-%% the claim or submits another receipt fails rather than silently passing.
+%% Completed receipts restore their certified vector without fresh votes or
+%% target application. Only owner interfaces are stubs; unexpected transport
+%% or receipt submission fails. In-progress certification is tested separately.
 terminal_operation_recovers_committed_result_without_resubmission_test() ->
     with_operation_fixture(
       fun(F) ->
           with_operation_worker(F,
             fun(Worker, Monitor) ->
                 reply_operation_source(F, terminal_operation_row(F)),
-                certify_operation_result(F, Worker, committed),
+                restore_operation_receipt(F, Worker),
                 assert_operation_result(F, Worker, Monitor, committed)
             end)
       end).
 
 terminal_operation_recovers_rejected_result_without_resubmission_test() ->
-    with_operation_fixture(
+    with_operation_fixture(1, {rejected, conflict_retry},
       fun(F) ->
           with_operation_worker(F,
             fun(Worker, Monitor) ->
                 reply_operation_source(F, terminal_operation_row(F)),
-                certify_operation_result(F, Worker, {rejected, conflict_retry}),
+                restore_operation_receipt(F, Worker),
                 assert_operation_result(
                   F, Worker, Monitor, {rejected, conflict_retry})
             end)
@@ -617,7 +616,7 @@ unknown_operation_waits_for_its_source_projection_edge_test() ->
                 %% in the worker mailbox even if it arrives before parking.
                 operation_ready(Worker, self(), OperationRef),
                 reply_operation_source(F, terminal_operation_row(F)),
-                certify_operation_result(F, Worker, committed),
+                restore_operation_receipt(F, Worker),
                 assert_operation_result(F, Worker, Monitor, committed)
             end)
       end).
@@ -657,7 +656,7 @@ operation_source_worker_fault_is_reported_not_parked_test() ->
         end)
     end).
 
-terminal_operation_uses_remote_committee_when_local_cannot_vote_test_() ->
+included_application_uses_remote_committee_when_local_cannot_vote_test_() ->
     [{atom_to_list(Reason),
       fun() ->
           with_operation_fixture(
@@ -666,15 +665,16 @@ terminal_operation_uses_remote_committee_when_local_cannot_vote_test_() ->
                   fun(_ForeignOwner) ->
                       with_operation_worker(F,
                         fun(Worker, Monitor) ->
-                            reply_operation_source(F, terminal_operation_row(F)),
+                            start_included_application(F, Worker),
                             certify_operation_remote_result(F, Worker, Reason),
+                            finish_operation_receipt(F, committed),
                             assert_operation_result(F, Worker, Monitor, committed)
                         end)
                   end)
             end)
       end} || Reason <- [observer, no_local_identity]].
 
-terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
+included_application_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
     with_operation_fixture(
       fun(F = #{target := Target, target_ref := TargetRef}) ->
           with_operation_follow_owner(
@@ -682,7 +682,7 @@ terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                 with_operation_worker(F,
                   fun(Worker, Monitor) ->
                       Pending = #{status => pending, ref => TargetRef},
-                      reply_operation_source(F, terminal_operation_row(F)),
+                      start_included_application(F, Worker),
                       certify_operation_result(F, Worker, Pending),
                       FollowRef = attach_operation_follow(F, Worker),
                       %% add_follow emits building immediately. A second
@@ -695,7 +695,8 @@ terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       send_operation_follow_notice(
                         Target, Worker, FollowRef,
                         {resnapshot, 3, digest(250), #{}}),
-                      reply_operation_source(F, terminal_operation_row(F)),
+                      reply_operation_source(F, unresolved_operation_row(F)),
+                      assert_operation_binding(F, Worker, unresolved),
                       certify_operation_result(F, Worker, Pending),
                       %% Still unavailable after real progress: retain this
                       %% exact follow, without unfollow/follow/refresh churn.
@@ -704,22 +705,24 @@ terminal_operation_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       %% wave's result (it arrives through another sender).
                       dormant_await_idle(Worker),
                       wake_operation_follow(F, Worker, FollowRef),
-                      reply_operation_source(F, terminal_operation_row(F)),
+                      reply_operation_source(F, unresolved_operation_row(F)),
+                      assert_operation_binding(F, Worker, unresolved),
                       certify_operation_result(F, Worker, committed),
+                      finish_operation_receipt(F, committed),
                       _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}),
                       assert_operation_result(F, Worker, Monitor, committed)
                   end)
             end)
       end).
 
-terminal_operation_refuses_wrong_result_and_follows_owner_replacement_test() ->
+included_application_refuses_wrong_result_and_follows_owner_replacement_test() ->
     with_operation_fixture(
       fun(F = #{target := Target, target_ref := TargetRef}) ->
           with_operation_follow_owner(
             fun(ForeignOwner) ->
                 with_operation_worker(F,
                   fun(Worker, Monitor) ->
-                      reply_operation_source(F, terminal_operation_row(F)),
+                      start_included_application(F, Worker),
                       WrongRef = setelement(4, TargetRef, digest(254)),
                       certify_operation_result(
                         F, Worker, #{status => committed, height => 3,
@@ -756,8 +759,10 @@ terminal_operation_refuses_wrong_result_and_follows_owner_replacement_test() ->
                             operation_status_notices(F, Worker, FollowRef),
                             wake_operation_follow(F, Worker, FollowRef),
                             reply_operation_source(
-                              F, terminal_operation_row(F)),
+                              F, unresolved_operation_row(F)),
+                            assert_operation_binding(F, Worker, unresolved),
                             certify_operation_result(F, Worker, committed),
+                            finish_operation_receipt(F, committed),
                             _ = expect_operation_stub_call(foreign, {unfollow, FollowRef}),
                             assert_operation_result(
                               F, Worker, Monitor, committed)
@@ -768,7 +773,7 @@ terminal_operation_refuses_wrong_result_and_follows_owner_replacement_test() ->
 
 operation_worker_exits_during_held_source_read_test() ->
     with_operation_fixture(
-      fun(F = #{source_ns := Ns, operation_ref := OperationRef}) ->
+      fun(#{source_ns := Ns, operation_ref := OperationRef}) ->
           Test = self(),
           Owner = spawn(
                     fun() ->
@@ -803,12 +808,12 @@ operation_worker_exits_during_held_source_read_test() ->
 cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
     with_fixture(
       fun(F) ->
-          Begin = maps:get('begin', F),
-          {ok, RecordBlob} = quod_dtx:encode_record(Begin),
+          Vote = maps:get(vote, F),
+          {ok, RecordBlob} = quod_atomic:encode_record(Vote),
           Request = {submit, <<200:128>>, RecordBlob},
           RequestId = element(2, Request),
-          Digest = quod_dtx:record_digest(Begin),
-          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Begin, 1, F),
+          Digest = quod_atomic:record_digest(Vote),
+          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Vote, 1, F),
           ?assertEqual(
              uncertain,
              quod_dtx_coordinator:test_local_submit_result(
@@ -862,13 +867,13 @@ cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
 remote_endpoint_fallback_preserves_uncertainty_and_correlation_test() ->
     with_fixture(
       fun(F) ->
-          Begin = maps:get('begin', F),
-          {ok, RecordBlob} = quod_dtx:encode_record(Begin),
+          Vote = maps:get(vote, F),
+          {ok, RecordBlob} = quod_atomic:encode_record(Vote),
           Request = {submit, <<205:128>>, RecordBlob},
           RequestId = element(2, Request),
-          Digest = quod_dtx:record_digest(Begin),
+          Digest = quod_atomic:record_digest(Vote),
           {_Target, _Control, Ref} = evidence(
-                                      maps:get(origin, F), Begin, 1, F),
+                                      maps:get(origin, F), Vote, 1, F),
           Peer = digest(214),
           Live = {"127.0.0.1", 3214},
           Historical = {"127.0.0.1", 3215},
@@ -955,10 +960,10 @@ assert_fallback_attempts(First, Second, Request) ->
 submit_fanout_starts_every_source_and_cleans_losers_test() ->
     with_fixture(
       fun(F) ->
-          Begin = maps:get('begin', F),
-          {ok, RecordBlob} = quod_dtx:encode_record(Begin),
-          Digest = quod_dtx:record_digest(Begin),
-          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Begin, 1, F),
+          Vote = maps:get(vote, F),
+          {ok, RecordBlob} = quod_atomic:encode_record(Vote),
+          Digest = quod_atomic:record_digest(Vote),
+          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Vote, 1, F),
           Sources = [{remote, digest(211), [{"127.0.0.1", 3211}]},
                      {remote, digest(212), [{"127.0.0.1", 3212}]},
                      {remote, digest(213), [{"127.0.0.1", 3213}]}],
@@ -1016,7 +1021,7 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
 
 prepared_endpoint_waits_for_readiness_without_renewing_deadline_test() ->
     with_fixture(fun(F) ->
-        {ok, Blob} = quod_dtx:encode_record(maps:get('begin', F)),
+        {ok, Blob} = quod_atomic:encode_record(maps:get(vote, F)),
         Source = {remote, digest(218), [{"127.0.0.1", 3218}]},
         Parent = self(), Deadline = quod_time:mono_ms() + 3000,
         Target = {<<"quod:test">>, <<0:256>>},
@@ -1079,7 +1084,7 @@ operation_source_wave_parks_continuation_with_original_deadline_test() ->
                                     meta := #{request_deadline := Deadline}}}, Deferred),
             assert_no_operation_stub_calls(),
             operation_ready(Worker, self(), Ref),
-            certify_operation_result(F, Worker, committed),
+            restore_operation_receipt(F, Worker),
             assert_operation_result(F, Worker, Monitor, committed)
         end)
     end).
@@ -1094,7 +1099,7 @@ operation_await_deferred(Worker, Limit) ->
 
 dispatched_endpoint_worker_death_preserves_uncertainty_test() ->
     with_fixture(fun(F) ->
-        {ok, Blob} = quod_dtx:encode_record(maps:get('begin', F)),
+        {ok, Blob} = quod_atomic:encode_record(maps:get(vote, F)),
         Source = {remote, digest(219), [{"127.0.0.1", 3219}]},
         Parent = self(),
         {Caller, Monitor} = spawn_monitor(fun() ->
@@ -1149,38 +1154,38 @@ historical_routes_may_be_a_valid_committee_subset_test() ->
 phase_evidence_structure_fails_loudly_test() ->
     with_fixture(
       fun(F) ->
-          Begin = maps:get('begin', F),
+          Vote = maps:get(vote, F),
           Target = maps:get(origin, F),
-          {Control, Entry, Ref} = certified_control(Target, Begin, 1, F),
+          {Control, Entry, Ref} = certified_control(Target, Vote, 1, F),
           Pub = maps:get(pubkey, maps:get(signer, F)),
           Evidence =
-              #{identity => Target, phase => 'begin', generation => 0,
+              #{identity => Target, phase => vote, generation => 0,
                 control => Control, ref => Ref,
                 entry => Entry,
                 committee => [Pub], committee_id => digest(211),
                 routes => #{}},
           ?assertMatch(
              {ok, Control, 0,
-              #{identity := Target, phase := 'begin', control := Control,
+              #{identity := Target, phase := vote, control := Control,
                 ref := Ref, generation := 0, entry := Entry,
                 committee := [Pub], committee_id := _, routes := #{}},
               Entry},
              quod_dtx_coordinator:test_valid_phase_evidence(
-               Target, quod_dtx:group_id(Begin), 'begin', Ref, Evidence)),
+               Target, quod_atomic:group_id(Vote), vote, Ref, Evidence)),
           ?assertError(
              {badkey, routes},
              quod_dtx_coordinator:test_valid_phase_evidence(
-               Target, quod_dtx:group_id(Begin), 'begin', Ref,
+               Target, quod_atomic:group_id(Vote), vote, Ref,
                maps:remove(routes, Evidence)))
       end).
 
 phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
     with_fixture(
       fun(F) ->
-          Begin = maps:get('begin', F),
+          Vote = maps:get(vote, F),
           Target = maps:get(origin, F),
           {Control, Entry0, _LocalRef} =
-              certified_control(Target, Begin, 2, F),
+              certified_control(Target, Vote, 2, F),
           {Ns, Anchor} = Target,
           #entry{cert = #cert{block_hash = BlockHash}} =
               quod_ledger:entry_view(Entry0),
@@ -1213,7 +1218,7 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
           {ok, Ref} = quod_dtx:certified_entry_ref(
                         Target, SuppliedEntry, Control),
           Evidence =
-              #{identity => Target, phase => 'begin', generation => 0,
+              #{identity => Target, phase => vote, generation => 0,
                 control => Control, ref => Ref, entry => Entry,
                 committee => Committee, committee_id => digest(212),
                 routes => #{}},
@@ -1221,252 +1226,65 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
           ?assertMatch(
              {ok, Control, 0, #{ref := Ref, entry := Entry}, Entry},
              quod_dtx_coordinator:test_valid_phase_evidence(
-               Target, quod_dtx:group_id(Begin), 'begin', Ref, Evidence))
-      end).
-
-snapshot_rows_are_canonical_idempotent_and_conflict_closed_test() ->
-    with_fixture(
-      fun(F) ->
-          Begin = maps:get('begin', F),
-          Origin = maps:get(origin, F),
-          [Origin, Target] = maps:get(targets, F),
-          BeginEvidence = evidence(Origin, Begin, 1, F),
-          {ok, {independent, prepare,
-                [{submit, Target, Prepare}]}} =
-              quod_dtx_recovery:next(
-                Begin,
-                (quod_dtx_recovery:empty())#{evidence := [BeginEvidence]}),
-          PrepareEvidence = evidence(Target, Prepare, 2, F),
-          S0 = quod_dtx_recovery:empty(),
-          {progress, S1} = quod_dtx_coordinator:test_put_evidence(
-                             PrepareEvidence, S0),
-          {progress, S2} = quod_dtx_coordinator:test_put_evidence(
-                             BeginEvidence, S1),
-          ?assertEqual(
-             [BeginEvidence, PrepareEvidence],
-             maps:get(evidence, S2)),
-          ?assertEqual(
-             {same, S2},
-             quod_dtx_coordinator:test_put_evidence(
-               PrepareEvidence, S2)),
-          {Target, Control, Ref} = PrepareEvidence,
-          Conflicting = {Target, setelement(8, Control, 99), Ref},
-          ?assertEqual(
-             {error, conflicting_phase_evidence},
-             quod_dtx_coordinator:test_put_evidence(Conflicting, S2))
-      end).
-
-committed_begin_bootstrap_starts_with_prepare_not_begin_test() ->
-    with_fixture(
-      fun(F) ->
-          Begin = maps:get('begin', F),
-          Origin = {Ns, _Anchor} = maps:get(origin, F),
-          {Control, Entry, Ref} = certified_control(Origin, Begin, 1, F),
-          Pub = maps:get(pubkey, maps:get(signer, F)),
-          Evidence =
-              #{identity => Origin, slot => 1,
-                record_digest => quod_dtx:record_digest(Control),
-                phase => 'begin', generation => 0,
-                control => Control, ref => Ref,
-                entry => Entry,
-                committee => [Pub], committee_id => digest(210),
-                routes => #{}},
-          {ok, {independent, prepare, Commands}} =
-              quod_dtx_coordinator:test_initial_commands(
-                             Ns, Begin, Ref, Evidence),
-          ?assertMatch([{submit, _, {quod_dtx_prepare, 3, _, _, _, _, _}}],
-                       Commands),
-          ?assertNot(
-             lists:any(
-               fun({submit, _, {quod_dtx_begin, 3, _, _, _}}) -> true;
-                  (_) -> false
-               end, Commands))
-      end).
-
-material_source_begin_seeds_the_plan_generation_not_the_current_view_test() ->
-    with_fixture(
-      fun(F) ->
-          Begin = maps:get('begin', F),
-          Origin = {Ns, _Anchor} = maps:get(origin, F),
-          {Control, Entry, Ref} = certified_control(Origin, Begin, 1, F),
-          Pub = maps:get(pubkey, maps:get(signer, F)),
-          CurrentGeneration = 37,
-          {ok, _Manifest, _PlanDigest, PlanBlob} =
-              quod_dtx:begin_participant_payload(Begin, Origin),
-          {ok, Plan} = quod_dtx:decode(PlanBlob),
-          PreparedGeneration = quod_dtx:overlay_generation(Plan),
-          ?assertNotEqual(CurrentGeneration, PreparedGeneration),
-          Evidence =
-              #{identity => Origin, slot => 1,
-                record_digest => quod_dtx:record_digest(Control),
-                phase => 'begin', generation => CurrentGeneration,
-                control => Control, ref => Ref, entry => Entry,
-                committee => [Pub], committee_id => digest(215),
-                routes => #{}},
-          {ok, Snapshot} =
-              quod_dtx_coordinator:test_initial_snapshot(
-                Ns, Begin, Ref, Evidence),
-          ?assertEqual([{Origin, PreparedGeneration}],
-                       maps:get(generations, Snapshot))
-      end).
-
-certified_prepare_after_finalize_keeps_its_signed_plan_generation_test() ->
-    with_fixture(
-      fun(F) ->
-          Begin = maps:get('begin', F),
-          Origin = {Ns, _Anchor} = maps:get(origin, F),
-          [_Origin, Target] = maps:get(targets, F),
-          {BeginControl, BeginEntry, BeginRef} =
-              certified_control(Origin, Begin, 1, F),
-          Pub = maps:get(pubkey, maps:get(signer, F)),
-          BeginEvidence =
-              #{identity => Origin, slot => 1,
-                record_digest => quod_dtx:record_digest(BeginControl),
-                phase => 'begin', generation => 0,
-                control => BeginControl, ref => BeginRef,
-                entry => BeginEntry,
-                committee => [Pub], committee_id => digest(216),
-                routes => #{}},
-          {ok, {independent, prepare,
-                [{submit, Target, Prepare}]}} =
-              quod_dtx_coordinator:test_initial_commands(
-                Ns, Begin, BeginRef, BeginEvidence),
-          {PrepareControl, PrepareEntry, PrepareRef} =
-              certified_control(Target, Prepare, 2, F),
-          {ok, _Manifest, _PlanDigest, PlanBlob} =
-              quod_dtx:prepare_payload(PrepareControl),
-          {ok, Plan} = quod_dtx:decode(PlanBlob),
-          PreparedGeneration = quod_dtx:overlay_generation(Plan),
-          %% A verifier recovering after Finalize observes the current view at
-          %% base+1.  The certified Prepare still owns the immutable base used
-          %% to reconstruct the exact Decision/Finalize chain.
-          CurrentGeneration = PreparedGeneration + 1,
-          PrepareEvidence =
-              #{identity => Target, slot => 2,
-                record_digest => quod_dtx:record_digest(PrepareControl),
-                phase => prepare, generation => CurrentGeneration,
-                control => PrepareControl, ref => PrepareRef,
-                entry => PrepareEntry,
-                committee => [Pub], committee_id => digest(217),
-                routes => #{}},
-          {ok, Snapshot} =
-              quod_dtx_coordinator:test_install_phase_snapshot(
-                Ns, Begin, BeginRef, BeginEvidence,
-                Target, quod_dtx:group_id(Begin), prepare,
-                PrepareRef, PrepareEvidence),
-          {ok, _OriginManifest, _OriginPlanDigest, OriginPlanBlob} =
-              quod_dtx:begin_participant_payload(Begin, Origin),
-          {ok, OriginPlan} = quod_dtx:decode(OriginPlanBlob),
-          ?assertEqual(
-             lists:keysort(1,
-                           [{Origin,
-                             quod_dtx:overlay_generation(OriginPlan)},
-                            {Target, PreparedGeneration}]),
-             maps:get(generations, Snapshot)),
-          ?assertMatch(
-             {ok, {ordered, decision,
-                   [{submit, Origin,
-                     {quod_dtx_decision, 3, _, _, _, _, _}}]}},
-             quod_dtx_recovery:next(Begin, Snapshot))
-      end).
-
-unsigned_generation_hints_advance_but_certified_prepares_are_exact_test() ->
-    A = {<<"quod:a">>, digest(1)},
-    B = {<<"quod:b">>, digest(2)},
-    S0 = quod_dtx_recovery:empty(),
-    {progress, S1} = quod_dtx_coordinator:test_put_generation(B, 4, S0),
-    {progress, S2} = quod_dtx_coordinator:test_put_generation(A, 2, S1),
-    ?assertEqual([{A, 2}, {B, 4}], maps:get(generations, S2)),
-    ?assertEqual(
-       {same, S2},
-       quod_dtx_coordinator:test_put_generation(B, 4, S2)),
-    {progress, S3} = quod_dtx_coordinator:test_put_generation(B, 5, S2),
-    ?assertEqual([{A, 2}, {B, 5}], maps:get(generations, S3)),
-    ?assertEqual(
-       {same, S3},
-       quod_dtx_coordinator:test_put_generation(B, 4, S3)),
-    with_fixture(
-      fun(F) ->
-          Begin = maps:get('begin', F),
-          Origin = maps:get(origin, F),
-          [_Origin, Target] = maps:get(targets, F),
-          BeginEvidence = evidence(Origin, Begin, 1, F),
-          {ok, {independent, prepare, [{submit, Target, Prepare} | _]}} =
-              quod_dtx_recovery:next(
-                Begin,
-                (quod_dtx_recovery:empty())#{evidence := [BeginEvidence]}),
-          PrepareEvidence = evidence(Target, Prepare, 2, F),
-          Prepared = (quod_dtx_recovery:empty())#{
-                       evidence := [BeginEvidence, PrepareEvidence],
-                       generations := [{Target, 2}]},
-          ?assertEqual(
-             {error, conflicting_target_generation},
-             quod_dtx_coordinator:test_put_generation(
-               Target, 3, Prepared))
+               Target, quod_atomic:group_id(Vote), vote, Ref, Evidence))
       end).
 
 applied_wave_retains_verified_siblings_when_one_target_retries_test() ->
-    A = {<<"quod:applied-a">>, digest(218)},
-    B = {<<"quod:applied-b">>, digest(219)},
-    GroupId = digest(220),
-    ARef = dtx_test_ref(A, 7, digest(221)),
-    BRef = dtx_test_ref(B, 8, digest(222)),
-    ACommand = {applied, A, GroupId, ARef, 2, commit},
-    BCommand = {applied, B, GroupId, BRef, 3, commit},
-    ACertificate = applied_certificate(ACommand, digest(223)),
-    BCertificate = applied_certificate(BCommand, digest(224)),
-    {ok, Snapshot, [A], [BCommand], true} =
-        quod_dtx_coordinator:test_install_applied_results(
-          [ACommand, BCommand],
-          [{verified, ACertificate}, retry],
-          quod_dtx_recovery:empty()),
-    ?assertEqual(
-       [{A, ACertificate}],
-       maps:get(applied, Snapshot)),
-    %% A later observation wave need only carry B. The already-certified A
-    %% row survives and cannot be erased by B's temporary unavailability.
-    {ok, Snapshot2, [B], [], true} =
-        quod_dtx_coordinator:test_install_applied_results(
-          [BCommand],
-          [{verified, BCertificate}], Snapshot),
-    ?assertEqual(
-       [{A, ACertificate}, {B, BCertificate}],
-       maps:get(applied, Snapshot2)).
+    with_fixture(fun(F) ->
+        {Own, Snapshot, [ACommand, BCommand], [ACertificate, BCertificate]} = applied_fixture(F),
+        {applied, A, _, _, _, _} = ACommand, {applied, B, _, _, _, _} = BCommand,
+        {ok, S1, [A], [BCommand], true} =
+            quod_dtx_coordinator:test_install_applied_results(
+              Own, [ACommand,BCommand], [{verified,ACertificate},retry], Snapshot),
+        ?assertEqual(#{A => ACertificate},maps:get(applied,S1)),
+        {ok, S2, [B], [], true} =
+            quod_dtx_coordinator:test_install_applied_results(Own, [BCommand], [{verified,BCertificate}], S1),
+        ?assertEqual(#{A => ACertificate,B => BCertificate},maps:get(applied,S2))
+    end).
 
 applied_wave_rechecks_deadline_at_owner_consumption_test() ->
-    Target = {<<"quod:applied-queued">>, digest(218)},
-    Group = digest(220), Ref = dtx_test_ref(Target, 7, digest(221)),
-    Command = {applied, Target, Group, Ref, 2, commit},
-    Certificate = applied_certificate(Command, digest(223)),
-    %% The certificate is pre-verified callback input, as in the sibling
-    %% result test; this does not claim cryptographic or consensus admission.
-    %% Each owner callback is isolated so its real drive/notification messages
-    %% cannot contaminate unrelated EUnit consumers.
-    Parent = self(),
-    lists:foreach(fun({Form, Offset, Expected}) ->
-        {Pid, Monitor} = spawn_monitor(fun() ->
-            Rows = quod_dtx_coordinator:test_consume_applied_wave(
-                     Command, Certificate, quod_time:mono_ms() + Offset),
-            Parent ! {applied_consumed, self(), Rows}
-        end),
-        receive {applied_consumed, Pid, Rows} -> ?assertEqual({Form, Expected}, {Form, Rows})
-        after 2000 -> error(applied_consumer_missing)
-        end,
-        receive {'DOWN', Monitor, process, Pid, normal} -> ok
-        after 2000 -> error(applied_consumer_failed)
-        end
-    end, [{live, 1000, [{Target, Certificate}]}, {expired, -1, []}]).
+    with_fixture(fun(F) ->
+        {Own, Snapshot, [Command | _], [Certificate | _]} = applied_fixture(F),
+        {applied, Target, _, _, _, _} = Command,
+        %% Callback input has already crossed the verifier; this proves the
+        %% queued-verdict deadline, not cryptographic or consensus admission.
+        Parent = self(),
+        lists:foreach(fun({Form,Offset,Expected}) ->
+            {Pid,Monitor} = spawn_monitor(fun() ->
+                Rows = quod_dtx_coordinator:test_consume_applied_wave(
+                    Own, Snapshot, Command, Certificate, quod_time:mono_ms() + Offset),
+                Parent ! {applied_consumed,self(),Rows}
+            end),
+            receive {applied_consumed,Pid,Rows} -> ?assertEqual({Form,Expected},{Form,Rows})
+            after 2000 -> error(applied_consumer_missing) end,
+            receive {'DOWN',Monitor,process,Pid,normal} -> ok
+            after 2000 -> error(applied_consumer_failed) end
+        end,[{live,1000,#{Target => Certificate}},{expired,-1,#{}}])
+    end).
+
+applied_fixture(F) ->
+    [Origin,A,B] = maps:get(targets,F), Own = maps:get(own,F),
+    Id = quod_atomic:group_id(maps:get(group,F)),
+    Commands = [{applied,T,Id,dtx_test_ref(T,7 + N,digest(220 + N)),N + 1,commit}
+                 || {T,N} <- [{A,1},{B,2}]],
+    %% Compact observations stand for completed verifier callbacks. No whole
+    %% foreign plan enters the coordinator's snapshot.
+    Evidence = maps:from_list([{{resolve,T},
+        #{ref => Ref,generation => Gen,outcome => commit,own_vote => dtx_test_ref(T,1,digest(230))}}
+        || {applied,T,_,Ref,Gen,_} <- Commands]),
+    ?assertNot(lists:member(Origin,[A,B])),
+    Snapshot = (quod_dtx_recovery:empty())#{evidence := Evidence},
+    {Own,Snapshot,Commands,[applied_certificate(C,digest(223)) || C <- Commands]}.
 
 worker_is_owned_by_an_exact_monitor_not_a_link_test() ->
     with_fixture(
       fun(F) ->
           Parent = self(),
-          Begin = maps:get('begin', F),
           {Ns, _Anchor} = maps:get(origin, F),
           Owner = spawn(
                     fun() ->
                         Result = quod_dtx_coordinator:start_monitor(
-                                   self(), Ns, Begin, none,
+                                   self(), Ns, maps:get(own, F),
                                    #{request_timeout_ms => 1}),
                         Parent ! {coordinator_started, self(), Result},
                         receive stop -> ok end
@@ -1595,11 +1413,11 @@ source_progress_accepts_only_its_existing_commit_stream_test() ->
        quod_dtx_coordinator:test_local_progress_event(
          malformed, Identity)).
 
-invalid_begin_allocates_no_worker_test() ->
+invalid_own_role_allocates_no_worker_test() ->
     ?assertEqual(
-       {error, invalid_begin},
+       {error, invalid_own_vote},
        quod_dtx_coordinator:start_monitor(
-         self(), <<"quod:a">>, malformed, none, #{})).
+         self(), <<"quod:a">>, malformed, #{})).
 
 dormant_cancel_retires_custody_only_on_explicit_terminal_reply_test() ->
     RequestId = <<230:128>>,
@@ -1771,8 +1589,10 @@ dormant_await_idle(Worker, Deadline) ->
 
 with_operation_fixture(Fun) -> with_operation_fixture(1, Fun).
 
-with_operation_fixture(N, Fun) ->
-    quod_operation_fixture:with(N, fun(F0 = #{source_ns := Ns, targets := Targets}) ->
+with_operation_fixture(N, Fun) -> with_operation_fixture(N, applied, Fun).
+
+with_operation_fixture(N, Result, Fun) ->
+    quod_operation_fixture:with(N, [], Result, fun(F0 = #{source_ns := Ns, targets := Targets}) ->
         Tables = [begin
             Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
                             [named_table, protected, set]),
@@ -1900,14 +1720,35 @@ assert_no_target_result(Worker) ->
     end.
 
 terminal_operation_row(#{operation_ref := OperationRef,
-                         request_digest := Digest,
-                         target_refs := Refs}) ->
-    {ok, Included} = quod_ct:included_receipt(Refs),
+                         request_digest := Digest, target_refs := Refs,
+                         completion := #transaction{role = {remote_complete, _, _, Included}}}) ->
     {ok, #{status => claimed, operation_state => terminal,
            ref => OperationRef, request_digest => Digest,
            outcome_ref => {applications, Refs},
            included => Included,
            height => 2, receipt_height => 3}}.
+
+restore_operation_receipt(F, Worker) ->
+    assert_terminal_operation_binding(F, Worker),
+    reply_operation_claim(F),
+    %% Claim and receipt each read the source's immutable history view. No
+    %% target call is necessary: AM3 is already in the committed receipt.
+    reply_operation_claim(F).
+
+unresolved_operation_row(F) ->
+    {ok, Row} = terminal_operation_row(F),
+    {ok, Row#{operation_state := unresolved, receipt_height := none, included := []}}.
+
+start_included_application(F, Worker) ->
+    reply_operation_source(F, unresolved_operation_row(F)),
+    assert_operation_binding(F, Worker, unresolved),
+    reply_operation_claim(F),
+    {From, Request} = expect_operation_application(F),
+    reply_operation_application(F, From, Request).
+
+finish_operation_receipt(F, Result) ->
+    From = expect_operation_receipt(F, Result),
+    gen_server:reply(From, {ok, [], 4, digest(252)}).
 
 reply_operation_source(#{operation_ref := OperationRef}, Reply) ->
     From = expect_operation_stub_call(source, {outcome, OperationRef}),
@@ -1932,8 +1773,7 @@ certify_operation_result(F = #{target_ref := TargetRef}, Worker,
     certify_operation_result(
       F, Worker, #{status => rejected, reason => Reason,
                    height => 2, ref => TargetRef});
-certify_operation_result(F, Worker, Outcome) ->
-    assert_terminal_operation_binding(F, Worker),
+certify_operation_result(F, _Worker, Outcome) ->
     {From, Request, Timeout} = operation_vote_request(F, local),
     ?assert(Timeout > 0),
     reply_operation_vote(F, From, Request, Outcome).
@@ -1980,26 +1820,28 @@ reply_operation_vote(F, From, {operation_applied, Id, Ref}, Outcome) ->
         _ -> gen_server:reply(From, {ok, {error, Id, not_ready}, []})
     end.
 
-certify_operation_remote_result(F, Worker, LocalRole) ->
+certify_operation_remote_result(F, _Worker, LocalRole) ->
     %% Historical membership, not current local voting readiness, selects
     %% result signers. The local owner still supplies exact immutable bytes.
     case LocalRole of
         observer -> application:set_env(quod, node_pubkey, digest(249));
         no_local_identity -> application:unset_env(quod, node_pubkey)
     end,
-    assert_terminal_operation_binding(F, Worker),
     {From, Request, Timeout} = operation_vote_request(F, remote),
     ?assert(Timeout > 0),
     reply_operation_vote(F, From, Request,
       #{status => committed, height => 2, ref => maps:get(target_ref, F)}).
 
-assert_terminal_operation_binding(
+assert_terminal_operation_binding(F, Worker) ->
+    assert_operation_binding(F, Worker, terminal).
+
+assert_operation_binding(
   #{operation_ref := OperationRef, request_digest := Digest,
-    target_ref := TargetRef}, Worker) ->
+    target_ref := TargetRef}, Worker, State) ->
     receive
         {dtx_coordinator, Worker, OperationRef,
-         {claim_state, terminal, 2, Digest, [TargetRef]}} -> ok
-    after 1000 -> error(missing_terminal_operation_binding)
+         {claim_state, State, 2, Digest, [TargetRef]}} -> ok
+    after 1000 -> error({missing_operation_binding, State})
     end.
 
 assert_operation_result(#{operation_ref := OperationRef,
@@ -2041,68 +1883,24 @@ assert_no_operation_stub_calls() ->
     end.
 
 %% ------------------------------------------------------------------
-%% Exact two-participant Begin fixture
+%% Current own-role source fixture; reference evidence below is callback input,
+%% not a founded consensus-node witness.
 %% ------------------------------------------------------------------
 
 with_fixture(Fun) ->
-    {Pub, Seed} = quod_identity:generate(),
-    Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
-    Fun(fixture(Signer)).
-
-fixture(#{pubkey := Pub} = Signer) ->
+    {ok, _} = application:ensure_all_started(gproc),
     Origin = {<<"quod:coordinator-a">>, digest(11)},
-    Other = {<<"quod:coordinator-b">>, digest(12)},
-    Targets = [Origin, Other],
-    ProofId = digest(13),
-    {PlanA, PlanABlob} = plan(Origin, ProofId, Origin, Signer, a),
-    {PlanB, PlanBBlob} = plan(Other, ProofId, Origin, Signer, b),
-    {ok, GoalBlob} = quod_durable_term:encode_goal({recover, group}),
-    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
-    Admission = digest(14),
-    {ok, Manifest} =
-        quod_dtx:new_manifest(
-          #{proof_id => ProofId,
-            coordinator =>
-                {element(1, Origin), element(2, Origin), Pub, Admission},
-            nonce => digest(15), principal => anonymous,
-            goal => GoalBlob, result => ResultBlob,
-            request_binding => none,
-            participants =>
-                [{Origin, quod_dtx:digest(PlanA)},
-                 {Other, quod_dtx:digest(PlanB)}]}),
-    {ok, AttA} = quod_dtx:attest_plan(1, Origin, PlanA, Manifest, Signer),
-    {ok, AttB} = quod_dtx:attest_plan(1, Other, PlanB, Manifest, Signer),
-    {ok, Begin} =
-        quod_dtx:new_begin(
-          Manifest, none,
-          [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
-           {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
-    #{signer => Signer, admission => Admission,
-      origin => Origin, targets => Targets, 'begin' => Begin}.
-
-plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
-    Session = quod_proof_session:start(
-                quod_ct:committed_kb([]),
-                #{read_set => true, proof_context => {origin, test},
-                  signer => Signer}),
-    try
-        InvocationId = crypto:strong_rand_bytes(16),
-        Context = quod_predicates:proof_context(
-                    Ns, 1, undefined, [Origin]),
-        ok = quod_proof_session:open(
-               Session, InvocationId, {assertz, {recovery_fact, Value}},
-               allowed, Context, quod_transaction_scope:empty_selection()),
-        {solution, _} = quod_proof_session:next(Session, InvocationId),
-        {ok, Plan} = quod_dtx:seal_session(
-                       Session,
-                       #{target => Target, base_height => 1,
-                         proof_id => ProofId, origin => Origin,
-                         principal => anonymous, request_binding => none}),
-        {ok, Blob} = quod_dtx:encode(Plan),
-        {Plan, Blob}
-    after
-        quod_proof_session:stop(Session)
-    end.
+    Targets = [Origin, {<<"quod:coordinator-b">>, digest(12)},
+                        {<<"quod:coordinator-c">>, digest(13)}],
+    F = quod_ct:signed_plan_fixture(#{target => Origin, atomic => true}, Targets),
+    {ok, Group} = quod_atomic:new_group(maps:get(manifest, F), maps:get(auth, F),
+                                        maps:get(Origin, maps:get(attestations, F))),
+    {ok, Vote} = quod_atomic:new_vote(Group, Origin,
+                                     lists:keyfind(Origin, 1, maps:get(bundles, F)), prepared),
+    {ok, Material} = quod_atomic:admission_material(Vote),
+    Own = #{material => Material, ref => none, resolution => none},
+    Fun(F#{targets => Targets, group => Group, vote => Vote, own => Own,
+           signer => maps:get(node_identity, F)}).
 
 evidence(Target, Record, Slot,
          Fixture) ->
@@ -2112,10 +1910,9 @@ evidence(Target, Record, Slot,
 
 certified_control(Target, Record, Slot,
                   #{signer := Signer, admission := Admission}) ->
-    {ok, Control} = quod_dtx:sign_control(
-                      Target, Record, Admission, Slot, Slot, Signer),
-    {ok, Blob} = quod_dtx:encode_control(Control),
-    Payload = {batch, [{dtx, Blob}]},
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, Slot, Slot, Signer),
+    Payload = {batch, [{dtx, Control}]},
     {ok, Block} = quod_ledger:new_block(
                     Slot, Slot - 1, Payload, 0),
     BlockHash = quod_simplex:block_hash(Block),
@@ -2132,10 +1929,10 @@ dtx_test_ref({Ns, Anchor}, Slot, RecordDigest) ->
     Ref.
 
 applied_certificate(
-  {applied, Target, GroupId, FinalizeRef, Generation, Verdict}, CommitteeId) ->
+  {applied, Target, GroupId, ResolveRef, Generation, Verdict}, CommitteeId) ->
     Certificate =
-        {quod_dtx_applied_certificate, 1,
-         digest(226), Target, CommitteeId, GroupId, FinalizeRef,
+        {quod_dtx_applied_certificate, 2,
+         digest(226), Target, CommitteeId, GroupId, ResolveRef,
          Generation, Verdict, [{digest(227), <<228:512>>}]},
     ?assert(quod_ct:valid_applied_certificate_shape(
               Certificate)),

@@ -2,8 +2,8 @@
 -moduledoc """
 Canonical target-keyed application references and complete receipt vectors.
 
-Inclusion is not an execution verdict. The included arm remains valid history;
-new receipts carry exact application-result certificates. Shape checking here
+Inclusion is not an execution verdict. Receipts carry exact application-result
+certificates; inclusion-only receipts are not part of this format. Shape checking here
 does not grant signature authority: admission verifies every certificate against
 its exact historical application. This module owns no state or dispatch.
 """.
@@ -16,8 +16,7 @@ its exact historical application. This module owns no state or dispatch.
 
 -type target() :: {binary(), <<_:256>>}.
 -type application_ref() :: {transaction, binary(), <<_:256>>, <<_:256>>}.
--type receipt_row() :: {target(), {included, application_ref()}} |
-        {target(), {certified, application_ref(),
+-type receipt_row() :: {target(), {certified, application_ref(),
                     quod_applied_certificate:operation_certificate()}}.
 -export_type([target/0, application_ref/0, receipt_row/0]).
 
@@ -36,7 +35,7 @@ references(Refs) when is_list(Refs), length(Refs) > 0,
     end;
 references(_) -> error.
 
--doc "Canonicalize included/certified receipt rows without granting certificate authority.".
+-doc "Canonicalize certified receipt rows without granting certificate authority.".
 -spec receipt(term()) -> {ok, [receipt_row()]} | error.
 receipt(Rows) when is_list(Rows), length(Rows) > 0,
                    length(Rows) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
@@ -64,7 +63,7 @@ receipt_references(Rows) ->
 
 %% Certificate proof subsets may differ between honest source replicas. The
 %% receipt's semantic identity binds the outcome statement, not which valid
-%% f+1 subset arrived first. Included rows keep their unchanged identity.
+%% f+1 subset arrived first.
 -doc "Return statement identity, independent of an honest certificate's signature subset.".
 -spec receipt_identity(term()) -> {ok, list()} | error.
 receipt_identity(Rows) ->
@@ -81,7 +80,6 @@ same_receipt(A, B) ->
         error -> false
     end.
 
-row_identity({_Target, {included, _Ref}} = Row) -> Row;
 row_identity({Target, {certified, Ref, Certificate}}) ->
     {ok, #{statement := Statement}} =
         quod_applied_certificate:operation_certificate_binding(Certificate),
@@ -90,12 +88,7 @@ row_identity({Target, {certified, Ref, Certificate}}) ->
 -doc "Whether every row of a canonical receipt carries a result certificate.".
 -spec certified(term()) -> boolean().
 certified(Rows) ->
-    case receipt_references(Rows) of
-        {ok, _} -> lists:all(fun({_, {certified, _, _}}) -> true;
-                               (_) -> false
-                            end, Rows);
-        error -> false
-    end.
+    receipt_references(Rows) =/= error.
 
 -doc "Extract the exact anchored target identity from an application reference.".
 -spec target(application_ref()) -> target().
@@ -170,11 +163,6 @@ unique_targets([Ref | Rest], Previous) ->
     Target =/= Previous andalso unique_targets(Rest, Target).
 
 receipt_refs([], Refs) -> {ok, Refs};
-receipt_refs([{Target, {included, Ref}} | Rest], Refs) ->
-    case valid_ref(Ref) andalso target(Ref) =:= Target of
-        true -> receipt_refs(Rest, [Ref | Refs]);
-        false -> error
-    end;
 receipt_refs([{Target, {certified, Ref, Certificate}} | Rest], Refs) ->
     case quod_applied_certificate:operation_certificate_binding(Certificate) of
         {ok, #{target := Target, application_ref := Ref}} ->

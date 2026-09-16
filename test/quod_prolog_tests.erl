@@ -337,7 +337,7 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
               ProofId, false, {Ns, Anchor}, Deadline, {node, Pubkey}),
         try
             {ok, Plan, 1} = quod_scope_session:seal(
-                           Handle, {Ns, Anchor}, {node, Pubkey}, none),
+                           Handle, {Ns, Anchor}, {node, Pubkey}, none, false),
             ?assertEqual(Pubkey, quod_dtx:signer(Plan)),
             ?assert(quod_dtx:verify(Plan))
         after
@@ -386,60 +386,25 @@ remote_submission_preserves_retryable_classification_test() ->
        quod_prolog:test_submit_outcome(
          {error, policy_self_seal_forbidden})).
 
-retired_pending_group_releases_exact_waiter_test() ->
-    {ok, _} = application:ensure_all_started(gproc),
-    Ns = <<"quod:retired-group-waiter">>,
+absent_pending_group_keeps_exact_waiter_test() ->
+    Ns = <<"quod:absent-group-waiter">>,
     Anchor = <<81:256>>,
-    Coordinator = <<82:256>>,
-    Admission = <<83:256>>,
-    GroupId = <<84:256>>,
-    GroupRef = {group, Ns, Anchor, Coordinator, Admission, GroupId},
-    Pending = #{lane => {Admission, Coordinator},
-                sequence => 1, group_id => GroupId},
-    {ok, Outcomes0} = quod_outcome:open(
-                        Ns, Anchor, #{outcome_backend => memory}),
-    {ok, Outcomes1} = quod_outcome:project_pending_begins(
-                        Outcomes0, [Pending]),
-    {ok, Outcomes2} = quod_outcome:project_pending_begins(Outcomes1, []),
-    {ok, Outcomes3} = quod_outcome:advance_applied(Outcomes2, 1),
-    {ok, Outcomes4} = quod_outcome:flush(Outcomes3),
-    Owner = self(),
-    BarrierPid =
-        spawn(
-          fun() ->
-                  true = quod_reg:reg({quod_simplex, Ns}),
-                  Owner ! {barrier_ready, self()},
-                  receive
-                      {'$gen_call', From,
-                       {dtx_group_barrier, GroupRef, 1}} ->
-                          gen_statem:reply(
-                            From, {ok, {rejected, coordinator_retired}})
-                  after 1000 ->
-                      exit(barrier_not_called)
-                  end
-          end),
-    receive
-        {barrier_ready, BarrierPid} -> ok
-    after 1000 ->
-        error(barrier_not_ready)
-    end,
+    GroupRef = {group, Ns, Anchor, <<82:256>>, <<83:256>>, <<84:256>>},
+    {ok, I0} = quod_outcome:open(Ns, Anchor, #{outcome_backend => memory}),
+    {ok, I1} = quod_outcome:project_pending_votes(I0, [GroupRef]),
+    {ok, I2} = quod_outcome:project_pending_votes(I1, []),
+    {ok, I3} = quod_outcome:advance_applied(I2, 1),
+    {ok, I4} = quod_outcome:flush(I3),
     try
         {CallRef, Remaining} =
-            quod_prolog:test_release_absent_group_waiter(
-              Ns, GroupRef, Outcomes4),
-        ?assertEqual(0, Remaining),
+            quod_prolog:test_release_absent_group_waiter(Ns, GroupRef, I4),
+        ?assertEqual(1, Remaining),
         receive
-            {quod_proof_reply, _Engine, CallRef,
-             {error, coordinator_retired}} -> ok
-        after 1000 ->
-            error(retired_group_waiter_was_not_released)
+            {quod_proof_reply, _Engine, CallRef, Reply} ->
+                error({absence_fabricated_outcome, Reply})
+        after 0 -> ok
         end
-    after
-        case is_process_alive(BarrierPid) of
-            true -> exit(BarrierPid, kill);
-            false -> ok
-        end,
-        ok = quod_outcome:close(Outcomes4)
+    after ok = quod_outcome:close(I4)
     end.
 
 prolog_test_() ->
@@ -453,10 +418,10 @@ prolog_test_() ->
       fun t_duplicate_plan_applies_once/1,
       fun t_same_block_read_after_write/1,
       fun t_submit_plan_validation/1,
-      fun t_pending_begins_projection_is_atomic_and_clearable/1,
+      fun t_pending_votes_projection_is_atomic_and_clearable/1,
       fun t_worker_limit/1]}.
 
-t_pending_begins_projection_is_atomic_and_clearable({Ns, _Pid}) ->
+t_pending_votes_projection_is_atomic_and_clearable({Ns, _Pid}) ->
     fun() ->
         Coordinator = <<71:256>>,
         Admission = <<72:256>>,
@@ -465,35 +430,30 @@ t_pending_begins_projection_is_atomic_and_clearable({Ns, _Pid}) ->
         GroupRef = {group, Ns, <<0:256>>, Coordinator, Admission, GroupId},
         OtherGroupRef =
             {group, Ns, <<0:256>>, Coordinator, Admission, OtherGroupId},
-        Pending = #{lane => {Admission, Coordinator},
-                    sequence => 1, group_id => GroupId},
-        OtherPending = #{lane => {Admission, Coordinator},
-                         sequence => 2, group_id => OtherGroupId},
-        ok = quod_prolog:project_pending_begins(
-               Ns, [Pending, OtherPending]),
+        ok = quod_prolog:project_pending_votes(Ns, [GroupRef, OtherGroupRef]),
         ?assertEqual(
            {ok, #{applied_floor => 0,
-                  outcome => #{status => pending, phase => pending_begin,
+                  outcome => #{status => pending, phase => pending_vote,
                                ref => GroupRef}}},
            quod_prolog:outcome_snapshot(Ns, GroupRef, 1000)),
         ?assertMatch(
            {ok, #{outcome := #{status := pending,
-                               phase := pending_begin,
+                               phase := pending_vote,
                                ref := OtherGroupRef}}},
            quod_prolog:outcome_snapshot(Ns, OtherGroupRef, 1000)),
         ?assertEqual(
            {ok, #{history => none, applied => none,
                   applied_floor => 0, generation => 0}},
            quod_prolog:dtx_group_state(Ns, GroupId)),
-        ok = quod_prolog:project_pending_begins(Ns, [OtherPending]),
+        ok = quod_prolog:project_pending_votes(Ns, [OtherGroupRef]),
         ?assertEqual(
            {ok, #{applied_floor => 0, outcome => not_found}},
            quod_prolog:outcome_snapshot(Ns, GroupRef, 1000)),
         ?assertMatch(
            {ok, #{outcome := #{status := pending,
-                               phase := pending_begin}}},
+                               phase := pending_vote}}},
            quod_prolog:outcome_snapshot(Ns, OtherGroupRef, 1000)),
-        ok = quod_prolog:project_pending_begins(Ns, []),
+        ok = quod_prolog:project_pending_votes(Ns, []),
         ?assertEqual(
            {ok, #{applied_floor => 0, outcome => not_found}},
            quod_prolog:outcome_snapshot(Ns, OtherGroupRef, 1000))
@@ -840,8 +800,8 @@ crossed_dtx_handoff_replies_keep_their_exact_worker_test() ->
         IntentB = make_ref(),
         ReplyA = make_ref(),
         ReplyB = make_ref(),
-        GroupA = {transaction, Ns, <<1:256>>, <<2:256>>},
-        GroupB = {transaction, Ns, <<3:256>>, <<4:256>>},
+        GroupA = {group, Ns, <<1:256>>, <<2:256>>, <<3:256>>, <<4:256>>},
+        GroupB = {group, Ns, <<1:256>>, <<2:256>>, <<3:256>>, <<5:256>>},
         S0 = quod_prolog:test_dtx_handoff_state(
                Ns,
                [{RefA, self(), IntentA, {self(), ReplyA}, GroupA,
@@ -907,7 +867,7 @@ cancelled_dtx_handoff_abandons_its_exact_request_test() ->
         Ref = make_ref(),
         Intent = make_ref(),
         ReplyTag = make_ref(),
-        GroupRef = {transaction, Ns, <<5:256>>, <<6:256>>},
+        GroupRef = {group, Ns, <<1:256>>, <<2:256>>, <<3:256>>, <<6:256>>},
         S0 = quod_prolog:test_dtx_handoff_state(
                Ns,
                [{Ref, self(), Intent, {self(), ReplyTag}, GroupRef,
@@ -940,7 +900,7 @@ cancelled_dtx_handoff_abandons_its_exact_request_test() ->
         gen_statem:stop(Simplex)
     end.
 
-dtx_handoff_activation_capacity_cancels_before_durable_handoff_test() ->
+dtx_handoff_activation_capacity_cancels_preparation_not_source_responsibility_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"handoff-capacity:",
            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
@@ -951,7 +911,7 @@ dtx_handoff_activation_capacity_cancels_before_durable_handoff_test() ->
     try
         Ref = make_ref(),
         Intent = make_ref(),
-        GroupRef = {transaction, Ns, <<7:256>>, <<8:256>>},
+        GroupRef = {group, Ns, <<1:256>>, <<2:256>>, <<3:256>>, <<8:256>>},
         S0 = quod_prolog:test_dtx_handoff_state(
                Ns,
                [{Ref, self(), Intent, none, GroupRef, dormant}], []),
@@ -991,7 +951,7 @@ membership_test_() ->
       fun t_signed_operation_uses_the_same_content_verdict_path/1,
       fun t_signed_operation_rechecks_the_parent_policy/1,
       fun t_committed_signed_operation_waits_for_network_identity/1,
-      fun t_signed_begin_checks_identity_and_source_material_acl/1,
+      fun t_signed_vote_checks_identity_and_source_material_acl/1,
       fun t_lockstep/1]}.
 
 %% Slice 1 increment 2: the post-apply event layer (doc/agent-fipa-plan.md §7) — apply origin drives
@@ -1075,7 +1035,7 @@ handle_event(
             {keep_state, Data}
     end;
 handle_event(
-  cast, {cancel_dtx_begin, _Engine, IntentId}, running,
+  cast, {cancel_dtx_vote, _Engine, IntentId}, running,
   Data = #{owner := Owner}) ->
     Owner ! {fake_handoff_cancelled, self(), IntentId},
     {keep_state, Data};
@@ -1332,7 +1292,7 @@ content_verdict(Ns, Transactions, Timestamp, Slot, Tag) ->
 
 dtx_verdict(Ns, Control, Timestamp, Slot, Tag) ->
     ok = quod_prolog:request_dtx_verdict(
-           Ns, [Control], Timestamp, Slot, self(), Tag),
+           Ns, {wave, [Control]}, Timestamp, Slot, self(), Tag),
     receive
         {dtx_verdict, Tag, Engine, Floor, Verdict}
           when is_pid(Engine), is_integer(Floor) ->
@@ -1507,7 +1467,7 @@ trace_verdict_request(content, Ns, Slot, Tag) ->
 trace_verdict_request(dtx, Ns, Slot, Tag) ->
     %% Deliberately malformed control exercises the real DTX verdict computation
     %% without needing another consensus fixture or a second validation seam.
-    quod_prolog:request_dtx_verdict(Ns, [malformed], 0, Slot, self(), Tag).
+    quod_prolog:request_dtx_verdict(Ns, {wave, [malformed]}, 0, Slot, self(), Tag).
 
 trace_ready_verdict(content) -> valid;
 trace_ready_verdict(dtx) -> {invalid, malformed_control}.
@@ -1549,10 +1509,10 @@ t_signed_operation_uses_the_same_content_verdict_path({Ns, _}) ->
           Network,
           fun() ->
             Target = {Ns, <<0:256>>},
-            First = quod_ct:signed_dtx_begin_fixture(
+            First = quod_ct:signed_atomic_fixture(
                       #{network => Network, target => Target}),
             FirstTx = maps:get(transaction, First),
-            Other = quod_ct:signed_dtx_begin_fixture(
+            Other = quod_ct:signed_atomic_fixture(
                       #{network => Network, target => Target,
                         key_pair => maps:get(key_pair, First),
                         operation_id => maps:get(operation_id, First),
@@ -1598,7 +1558,7 @@ t_signed_operation_rechecks_the_parent_policy({Ns, _}) ->
           Network,
           fun() ->
               Target = {Ns, <<0:256>>},
-              Fixture = quod_ct:signed_dtx_begin_fixture(
+              Fixture = quod_ct:signed_atomic_fixture(
                           #{network => Network, target => Target}),
               Transaction = maps:get(transaction, Fixture),
               Policy = {can_invoke, {'Goal'}, {'Principal'},
@@ -1634,7 +1594,7 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
     fun() ->
         Network = <<84:256>>,
         Target = {Ns, <<0:256>>},
-        Fixture = quod_ct:signed_dtx_begin_fixture(
+        Fixture = quod_ct:signed_atomic_fixture(
                     #{network => Network, target => Target}),
         Transaction = maps:get(transaction, Fixture),
         Policy = change(
@@ -1704,16 +1664,16 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
         end
     end.
 
-t_signed_begin_checks_identity_and_source_material_acl({Ns, _}) ->
+t_signed_vote_checks_identity_and_source_material_acl({Ns, _}) ->
     fun() ->
         Network = <<82:256>>,
         quod_ct:with_network_identity(
           Network,
           fun() ->
               Target = {Ns, <<0:256>>},
-              Fixture = quod_ct:signed_dtx_begin_fixture(
+              Fixture = quod_ct:signed_atomic_fixture(
                           #{network => Network, target => Target}),
-              Control = maps:get(begin_control, Fixture),
+              Control = maps:get(vote_control, Fixture),
               Policy = {can_invoke, {'Goal'}, {'Principal'},
                         {'Chain'}, {'Namespace'}},
               RestrictivePolicy =
@@ -1738,33 +1698,32 @@ t_signed_begin_checks_identity_and_source_material_acl({Ns, _}) ->
                  {1, {valid, _}},
                  dtx_verdict(
                    Ns, Control, maps:get(deadline, Fixture), 2,
-                   signed_begin)),
+                   signed_vote)),
               ok = ab(
                      Ns, 2,
                      batch(change(
                              Ns,
                              [RestrictiveAssert,
                               {retract, PolicyClause}], #{}))),
-              %% Source fusion moved this material source plan's former
-              %% Prepare check into Begin. This is the source ontology's own
-              %% write ACL, not an outbound authorization of another target.
+              %% The claimed prepared vote must match this source's current
+              %% own-plan policy, not authorize another target's writes.
               ?assertMatch(
-                 {2, {invalid, [invalid_authorization_transcript]}},
+                 {2, {invalid, {atomic_vote_choice, {refused, [invalid_authorization_transcript]}}}},
                  dtx_verdict(
                    Ns, Control, maps:get(deadline, Fixture), 3,
                    changed_origin_policy)),
               ok = ab(Ns, 3, batch(change(
                                       Ns, [{retract, KeyClause}], #{}))),
               ?assertMatch(
-                 {3, {invalid, invalid_agent_key}},
+                 {3, {invalid, {atomic_vote_choice, {refused, [invalid_agent_key]}}}},
                  dtx_verdict(
                    Ns, Control, maps:get(deadline, Fixture), 4,
                    revoked_signing_key)),
               ?assertMatch(
-                 {3, {invalid, invalid_request_auth}},
+                 {3, {invalid, vote_deadline}},
                  dtx_verdict(
                    Ns, Control, maps:get(deadline, Fixture) + 1, 4,
-                   expired_signed_begin))
+                   expired_signed_vote))
           end)
     end.
 
@@ -1778,10 +1737,10 @@ dtx_validation_waits_for_published_outcome_floor_test() ->
     %% staged.  The DTX request must remain parked; the old applied-only scan
     %% would consume this deliberately malformed request immediately.
     ?assert(quod_prolog:test_resolve_validation(
-              {dtx, malformed, 0}, 2, 1, OutcomesStaged)),
+              {dtx, {wave, malformed}, 0}, 2, 1, OutcomesStaged)),
     {ok, OutcomesPublished} = quod_outcome:flush(OutcomesStaged),
     ?assertNot(quod_prolog:test_resolve_validation(
-                 {dtx, malformed, 0}, 2, 1, OutcomesPublished)),
+                 {dtx, {wave, malformed}, 0}, 2, 1, OutcomesPublished)),
     ok = quod_outcome:close(OutcomesPublished).
 
 %% a committed membership tx applies UNCONDITIONALLY (skip OCC) — its projections stay in lockstep —

@@ -15,7 +15,7 @@ the scope wire as Erlang references.
          request_evidence/0, request_auth/0, request_binding/0,
          ensure_scope_authentication/0,
          durable_bindings/1,
-         read_only/0, deadline_ms/0, remaining_ms/0,
+         read_only/0, deadline_ms/0, remaining_ms/0, vote_deadline_ms/0,
          finalize/1, seal_plans/0, scope_handle/1, select_independent/1, independent/0,
          bind_router/3,
          get_or_open_scope/2,
@@ -277,6 +277,24 @@ remaining_ms() ->
     erlang:max(0, (context())#ctx.deadline_ms - quod_time:mono_ms()).
 
 -doc """
+Convert the admitted proof budget once when constructing its manifest.
+
+Epoch is sampled before monotonic time so conversion does not add sampling
+time to the remaining allowance. An expired budget stays expired; neither
+recovery nor transport retries may recalculate the stored manifest deadline.
+Signed request expiry can shorten, but never extend, that allowance.
+""".
+-spec vote_deadline_ms() -> integer().
+vote_deadline_ms() ->
+    #ctx{deadline_ms = Deadline, request_evidence = Evidence} = context(),
+    EpochNow = quod_time:now_ms(),
+    Bound = EpochNow + Deadline - quod_time:mono_ms(),
+    case Evidence of
+        none -> Bound;
+        #{request := #{not_after_ms := Expiry}} -> erlang:min(Bound, Expiry)
+    end.
+
+-doc """
 Fence and detach every selected local or remote scope.
 
 `commit` seals first (`m:quod_dtx`): while every scope is still live, each one
@@ -365,9 +383,15 @@ seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
                           request_binding = RequestBinding}) ->
     case proof_material(Scopes, Dirty, RequestBinding) of
         {ok, false} -> {ok, #{}};
-        {ok, true} -> seal_scopes(lists:sort(maps:to_list(Scopes)),
-                                  OriginIdentity, Principal,
-                                  RequestBinding, #{}, 0);
+        {ok, true} ->
+            %% The origin is sealed once, last. Foreign writer counts then
+            %% tell us whether an empty unsigned origin needs an atomic role.
+            %% Read-only proofs, L2 and single-writer proofs pay no extra seal.
+            Rows = lists:sort(maps:to_list(Scopes)),
+            {OriginRows, ForeignRows} = lists:partition(
+              fun({Identity, _}) -> Identity =:= OriginIdentity end, Rows),
+            seal_scopes(ForeignRows ++ OriginRows, OriginIdentity, Principal,
+                        RequestBinding, #{}, 0);
         {error, _} = Error -> {Error, #{}}
     end.
 
@@ -410,8 +434,10 @@ seal_scopes([], _OriginIdentity, _Principal, _RequestBinding, Plans, Mask) ->
     end;
 seal_scopes([{Identity, #scope{handle = Handle}} | Rest],
             OriginIdentity, Principal, RequestBinding, Plans, Mask) ->
+    OriginRole = Identity =:= OriginIdentity andalso quod_atomic:requires_source_role(
+        length([ok || Plan <- maps:values(Plans), quod_dtx:writes(Plan)]), independent()),
     case quod_scope_session:seal(
-           Handle, OriginIdentity, Principal, RequestBinding) of
+           Handle, OriginIdentity, Principal, RequestBinding, OriginRole) of
         {ok, Plan, Provenance} ->
             seal_scopes(
               Rest, OriginIdentity, Principal, RequestBinding,

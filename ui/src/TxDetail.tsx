@@ -143,12 +143,8 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
                 ) : (
                   <>
                     <div className="font-mono break-all text-gray">{transactionRefText(row.application_ref)}</div>
-                    {row.kind === 'certified' ? (
-                      <>
-                        <div>Certified result: {row.result}{row.reason ? ` (${row.reason})` : ''} · height {row.height}</div>
-                        <div className="font-mono break-all text-gray">Committee: {row.committee_id}</div>
-                      </>
-                    ) : <div>Historical inclusion only — no certified result</div>}
+                    <div>Certified result: {row.result}{row.reason ? ` (${row.reason})` : ''} · height {row.height}</div>
+                    <div className="font-mono break-all text-gray">Committee: {row.committee_id}</div>
                   </>
                 )}
               </div>

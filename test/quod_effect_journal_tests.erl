@@ -5,7 +5,7 @@
 -include("quod_ledger.hrl").
 
 -define(ROOT_NS, <<"quod:root">>).
--define(MAGIC, 16#51454A32).
+-define(MAGIC, 16#51454A33).
 
 capacity_is_projected_and_restart_durable_test() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -743,12 +743,19 @@ group_binding_survives_owner_death_and_restart_test() ->
     after 1000 -> error(fake_prolog_timeout)
     end,
     try
-        {Plan, GroupRef, Target, PlanDigest, PreparedEffect, Effect} =
+        {Plan, GroupRef, Target, PlanDigest, PreparedEffect, Effect,
+         SourceMaterial, ManifestDigest} =
             group_fixture(Pub, Seed, RootAnchor),
+        SourceNs = element(2, GroupRef),
+        %% One real, authenticated manifest binds both disk journals. This
+        %% fixture exercises custody and owner death, not consensus completion.
+        {ok, Source0} = quod_signing_journal:initialize(SourceNs, hash(8230), Dir),
+        Missing = quod_atomic:source_presentation(SourceMaterial),
+        {ok, Source1} = quod_signing_journal:record_dtx_intent(Source0, Missing),
+        ok = quod_signing_journal:close(Source1),
         {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
         unlink(Journal),
         ok = quod_effect_journal:configure_capacity(64),
-        ManifestDigest = hash(8204),
         Coordinator = group_coordinator(GroupRef),
         {WrongAction, WrongDesired, Effect, WrongPrepared} = PreparedEffect,
         {ok, WrongReservation} = quod_effect_journal:reserve(self()),
@@ -796,6 +803,20 @@ group_binding_survives_owner_death_and_restart_test() ->
         ?assertMatch(
            {ok, #{state := group_pending, ref := ExactRef}},
            quod_effect_journal:status(EffectId)),
+        {ok, Source2} = quod_signing_journal:recover(SourceNs, hash(8230), Dir),
+        try
+            GroupId = element(6, GroupRef),
+            ?assertMatch(#{GroupId := #{sequence := 0, envelope := none,
+                                        group_ref := GroupRef, material := Missing}},
+                         quod_signing_journal:pending_dtx(Source2)),
+            ?assertEqual(error, quod_atomic:select_vote(Missing, prepared)),
+            OwnRow = #{material => Missing, ref => none, resolution => none},
+            SourceTarget = quod_dtx:origin(Plan),
+            {MissingVote, _, _} = Missing,
+            ?assertEqual({ok, {ordered, vote, [{submit, SourceTarget, MissingVote}]}},
+                quod_dtx_recovery:next(OwnRow, quod_dtx_recovery:absent(
+                    SourceTarget, vote, quod_dtx_recovery:empty())))
+        after ok = quod_signing_journal:close(Source2) end,
         ?assertMatch(
            #{active := 1, group_active := 1},
            quod_effect_journal:stats()),
@@ -1037,10 +1058,32 @@ group_fixture(Pub, Seed, RootAnchor) ->
     {ok, Material} = quod_dtx:material(Plan),
     true = quod_effect:validate_plan(Plan, Material),
     PlanDigest = quod_dtx:digest(Plan),
-    GroupRef = {group, element(1, Origin), element(2, Origin),
-                Pub, hash(8212), hash(8213)},
+    %% The source writes a fact; the other role owns an empty-diff effect.
+    %% These signed plans are protocol fixtures, not a cross-node proof run.
+    Diff = quod_ct:diff_for({group_source_fact, true}),
+    SourceCore = Core#{target := Origin, effects_count := 0,
+                      effects := journal_wire_blob([]), diff_ops := length(Diff),
+                      diff := journal_wire_blob(Diff),
+                      conflict_descriptor := quod_dtx:conflict_descriptor(Diff, #{}, [])},
+    SourceBytes = term_to_binary({<<"quod.dtx.plan">>, 8, SourceCore}, [deterministic]),
+    SourcePlan = {quod_plan, SourceCore, Pub, quod_identity:sign(SourceBytes, Signer)},
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    {ok, Manifest} = quod_dtx:new_manifest(
+      #{proof_id => maps:get(proof_id, Core),
+        coordinator => {element(1, Origin), element(2, Origin), Pub, hash(8212)},
+        nonce => hash(8213), vote_deadline_ms => quod_time:now_ms() + 60000,
+        principal => {node, Pub}, request_binding => none,
+        goal => journal_wire_blob({assertz, {group_source_fact, true}}), result => Result,
+        participants => lists:sort([{Origin, quod_dtx:digest(SourcePlan)}, {Target, PlanDigest}])}),
+    {ok, Attestation} = quod_dtx:attest_plan(1, Origin, SourcePlan, Manifest, Signer),
+    {ok, Group} = quod_atomic:new_group(Manifest, none, Attestation),
+    {ok, SourceBlob} = quod_dtx:encode(SourcePlan),
+    Bundle = {Origin, quod_dtx:digest(SourcePlan), SourceBlob, Attestation},
+    {ok, Vote} = quod_atomic:new_vote(Group, Origin, Bundle, prepared),
+    {ok, SourceMaterial} = quod_atomic:admission_material(Vote),
+    {ok, GroupRef} = quod_atomic:source_group_ref(SourceMaterial),
     {Plan, GroupRef, Target, PlanDigest,
-     {Action, Desired, Effect, Prepared}, Effect}.
+     {Action, Desired, Effect, Prepared}, Effect, SourceMaterial, quod_dtx:manifest_digest(Manifest)}.
 
 group_coordinator(
   {group, Ns, Anchor, Coordinator, Admission, _GroupId}) ->

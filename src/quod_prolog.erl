@@ -18,10 +18,11 @@ order. One `gen_server` per namespace.
   not re-run a goal to manufacture another answer.
 - **Writes** seal the complete participating scope set before submission. One
   participant uses that target ontology's ordinary `#transaction{}` consensus
-  path. Two or more participants use the atomic
-  Begin/Prepare/Decision/Finalize/Complete protocol; no participant publishes its
-  hidden diff before the certified decision and ordered apply. A participating
-  source applies through Begin/Decision; remote participants use Prepare/Finalize.
+  path. Multiple ordinary writers use Vote/Resolve/Complete, with the source
+  always a role. Each role retains only its own plan; certified Votes determine
+  the outcome and Resolve publishes or discards that role's hidden material.
+  Explicit independent intent uses the same sealed plans through the operation
+  lane, with a complete per-target result rather than atomic outcome authority.
   The caller is parked until the ordinary apply or the group reaches its certified
   pre-Complete terminal boundary. Complete remains mandatory recovery bookkeeping
   and may finish asynchronously. If the local wait expires first, the caller receives
@@ -34,8 +35,8 @@ order. One `gen_server` per namespace.
   after ordered apply.
 - **`apply_entry/3`** is the deterministic ordered state machine driven by
   `quod_simplex`. Content transactions re-check their read set (OCC) before apply;
-  source Begin retains its hidden plan and source Decision publishes it once;
-  remote Prepare retains a hidden plan and Finalize(commit) publishes it once.
+  a prepared Vote retains its role's hidden plan and Resolve(commit) publishes
+  it once. Source and remote roles use the same reducer and application path.
   Complete records the durable terminal group result. A **committee-changing** content
   transaction (its diff asserts/retracts `peer_admitted`) applies unconditionally
   because it was re-validated against the exact parent before voting (see
@@ -59,7 +60,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          local_outcome/2, outcome_snapshot/3, dtx_group_state/2,
          validate_read_plan/3,
          effect_resolution/4,
-         project_pending_begins/2,
+         project_pending_votes/2,
          dtx_group_resolved/2, dtx_group_terminal/3,
          applied/1, apply_entry/3, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
@@ -96,6 +97,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_signed_origin_policy_goal/2,
          test_dtx_handoff_state/3,
          test_dtx_reservation_state/4,
+         test_prepare_group_delivery/3,
          test_handle_response_info/2,
          test_cancel_dtx_handoff/2,
          test_activate_dtx_handoff/4,
@@ -123,7 +125,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                     outcome_backend => disk}).
 -define(ROOT_NS, <<"quod:root">>).
 
-%% One proof-owned, pre-signing Begin transfer. The original client caller
+%% One proof-owned, pre-signing source Vote transfer. The original client caller
 %% remains in #proof_worker.from; registration_from is the proof worker parked
 %% while Simplex serializes this exact immutable intent.
 -record(dtx_handoff, {
@@ -439,7 +441,8 @@ result names where — the applied log index for a write into `TargetNs`
 itself, or `{transaction, Ns, Anchor, TxId}` when the proof's sole material
 scope was a foreign ontology and its sealed plan committed there.  A
 multi-ontology commit returns a map containing its anchored group reference,
-Complete height, and exact per-ontology Finalize slots.
+source Resolve height, and exact per-ontology Resolve slots. Complete persists
+the same result asynchronously; its own slot never replaces the apply height.
 """.
 -spec prove(binary(), term()) ->
         {ok, [map()],
@@ -674,38 +677,20 @@ local_outcome(Ns, Ref) when is_binary(Ns), byte_size(Ns) > 0 ->
         undefined ->
             {error, {ontology_unreachable, Ns}};
         Pid ->
-            Reply =
-                try gen_server:call(Pid, {outcome, Ref}, 5000)
-                catch exit:_ -> {error, {outcome_unknown, Ref}}
-                end,
-            resolve_public_group_absence(Ns, Ref, Reply)
+            try gen_server:call(Pid, {outcome, Ref}, 5000)
+            catch exit:_ -> {error, {outcome_unknown, Ref}}
+            end
     end;
 local_outcome(_Ns, _Ref) ->
     {error, bad_outcome_ref}.
 
-resolve_public_group_absence(
-  Ns,
-  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = Ref,
-  {error, {group_not_found, AppliedFloor}})
-  when is_integer(AppliedFloor), AppliedFloor >= 0 ->
-    case quod_simplex:dtx_group_barrier(Ns, Ref, AppliedFloor) of
-        {ok, pending} ->
-            {ok, #{status => pending, phase => pending_begin, ref => Ref}};
-        {ok, not_found} ->
-            {error, not_found};
-        {ok, {rejected, coordinator_retired}} ->
-            {ok, #{status => rejected, reason => coordinator_retired,
-                   ref => Ref}};
-        {error, _} = Error ->
-            Error
-    end;
-resolve_public_group_absence(_Ns, _Ref, Reply) ->
-    Reply.
-
 outcome_not_found(
-  {group, _Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
-  AppliedFloor) ->
-    {error, {group_not_found, AppliedFloor}};
+  {group, _Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = Ref,
+  _AppliedFloor) ->
+    %% Another source validator may already hold the vote or a participant
+    %% may still present it. Neither local absence nor gateway retirement is
+    %% a certified refusal, including for private-effect retirement.
+    {error, {outcome_unknown, Ref}};
 outcome_not_found(
   {transaction, _Ns, <<_:256>>, <<_:256>>} = Ref,
   _AppliedFloor) ->
@@ -793,22 +778,28 @@ effect_resolution(
 effect_resolution(_Target, _GroupRef, _PlanDigest, _ManifestDigest) ->
     {error, invalid_group_effect_ref}.
 
+%% The anchored target lookup already binds GroupId. Its canonical manifest
+%% binds the source and each role's plan; retain/check those exact digests,
+%% without reconstructing a foreign plan or a duplicate public group handle.
 effect_resolution_state(
-  TargetNs, GroupRef, PlanDigest, ManifestDigest,
+  TargetNs, _GroupRef, PlanDigest, ManifestDigest,
   {ok, #{applied :=
            #{verdict := commit, slot := Slot,
-             group_ref := GroupRef, plan_digest := PlanDigest,
+             plan_digest := PlanDigest,
              manifest_digest := ManifestDigest}}}) ->
     case quod_runtime:effect_frontier(TargetNs) of
         {ok, Frontier} when Frontier >= Slot -> {ok, {released, Slot}};
         _ -> {ok, pending}
     end;
 effect_resolution_state(
-  _TargetNs, GroupRef, PlanDigest, ManifestDigest,
+  _TargetNs, _GroupRef, PlanDigest, ManifestDigest,
   {ok, #{applied :=
            #{verdict := abort,
-             group_ref := GroupRef, plan_digest := PlanDigest,
-             manifest_digest := ManifestDigest}}}) ->
+             plan_digest := OwnDigest,
+             manifest_digest := ManifestDigest}}})
+  when OwnDigest =:= PlanDigest; OwnDigest =:= none ->
+    %% An unvoted abort closes the same manifest's own role too. It has no
+    %% applied plan, but cannot later admit the effect's pending Vote.
     {ok, {retired, aborted}};
 effect_resolution_state(
   _TargetNs, _GroupRef, _PlanDigest, _ManifestDigest,
@@ -836,19 +827,17 @@ effect_origin_resolution(GroupRef) ->
         {ok, #{status := pending}} -> {ok, pending};
         {ok, #{status := committed}} -> {ok, pending};
         {ok, #{status := aborted}} -> {ok, {retired, aborted}};
-        {ok, #{status := rejected, reason := Reason}} ->
-            {ok, {retired, Reason}};
-        {error, not_found} -> {ok, {retired, not_found}};
         {error, Reason} -> {error, Reason}
     end.
 
--doc "Atomically project every pending Begin from the signing journal before the engine becomes ready.".
--spec project_pending_begins(binary(), [map()]) -> ok.
-project_pending_begins(Ns, PendingBegins)
-  when is_binary(Ns), is_list(PendingBegins) ->
+-doc "Project the journal's immutable source group references before the engine becomes ready.".
+-spec project_pending_votes(binary(),
+          [{group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}]) -> ok.
+project_pending_votes(Ns, PendingVotes)
+  when is_binary(Ns), is_list(PendingVotes) ->
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}),
-      {project_pending_begins, PendingBegins}).
+      {project_pending_votes, PendingVotes}).
 
 -doc "Recheck a local group waiter after an authoritative Simplex resolution edge.".
 -spec dtx_group_resolved(binary(), term()) -> ok.
@@ -978,22 +967,24 @@ request_content_verdict(Ns, Transactions, BlockTimestamp, Slot, ReplyTo, Tag) ->
        Slot, ReplyTo, Tag, TraceCtx}).
 
 -doc """
-Look up every control's exact group history for one canonical phase wave at
-the proposal parent and, for Prepare, also validate every plan against that
-same parent KB. The reply is `{dtx_verdict, Tag, EnginePid, AppliedFloor,
-{valid, Histories} | {invalid, Reason} | abstain}` where `Histories` is keyed
-by GroupId.
+Use the one parent-state validation queue for own vote selection or a canonical
+control wave. Both use the same policy/OCC classification at the published
+parent. `{vote, Material}` selects an unsigned own vote; `{wave, Controls}`
+checks proposed controls and returns group-keyed histories. Neither invents a
+claim before commitment. Replies carry the engine incarnation and applied floor:
+`{dtx_verdict, Tag, EnginePid, AppliedFloor, Verdict}`. A stale parent abstains.
 """.
--spec request_dtx_verdict(binary(), [quod_dtx:control()], non_neg_integer(),
+-spec request_dtx_verdict(binary(), {vote, quod_atomic:admission_material()} |
+                          {wave, [quod_atomic:control()]}, non_neg_integer(),
                           pos_integer(), pid(), term()) -> ok.
-request_dtx_verdict(Ns, Controls, BlockTimestamp, Slot, ReplyTo, Tag)
-  when is_binary(Ns), is_list(Controls), Controls =/= [],
+request_dtx_verdict(Ns, Request = {Kind, _}, BlockTimestamp, Slot, ReplyTo, Tag)
+  when is_binary(Ns), (Kind =:= vote orelse Kind =:= wave),
        is_integer(Slot), Slot > 0, is_pid(ReplyTo) ->
     TraceCtx = quod_trace:context(),
     trace_validation_queued(TraceCtx, dtx, Ns, Slot, Tag),
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}),
-      {dtx_verdict_req, Controls, BlockTimestamp, Slot, ReplyTo, Tag, TraceCtx}).
+      {dtx_verdict_req, Request, BlockTimestamp, Slot, ReplyTo, Tag, TraceCtx}).
 
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
@@ -1258,17 +1249,17 @@ handle_call({validate_read_plan, Plan}, _From,
                 {error, not_ready}
         end,
     {reply, Reply, S};
-%% The worker has already sealed every participant and built one immutable
-%% semantic Begin. Registration is asynchronous to Simplex and correlated by
+%% The worker has sealed every participant; only the source's own vote enters
+%% this handoff. Registration is asynchronous to Simplex and correlated by
 %% this exact proof worker, so other proofs and the engine mailbox keep moving.
-handle_call({reserve_dtx_begin, Ref, Begin, GroupRef, TraceCtx}, From = {Pid, _Tag},
+handle_call({reserve_dtx_vote, Ref, Material, GroupRef, TraceCtx}, From = {Pid, _Tag},
             S) ->
     quod_trace:with_context(TraceCtx, fun() ->
-        register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S)
+        register_dtx_handoff(Ref, Pid, From, Material, GroupRef, S)
     end);
-handle_call({activate_dtx_begin, Ref, GroupRef}, From = {Pid, _Tag}, S) ->
+handle_call({activate_dtx_vote, Ref, GroupRef}, From = {Pid, _Tag}, S) ->
     activate_dtx_handoff(Ref, Pid, From, GroupRef, S);
-handle_call({cancel_dtx_begin, Ref, GroupRef}, _From = {Pid, _Tag}, S) ->
+handle_call({cancel_dtx_vote, Ref, GroupRef}, _From = {Pid, _Tag}, S) ->
     cancel_registered_dtx_handoff(Ref, Pid, GroupRef, S);
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
@@ -1440,9 +1431,9 @@ handle_cast({public_proof, Caller, CallRef, Kind, Goal,
             reply_client({async, Caller, CallRef}, {error, invalid_agent_principal}),
             {noreply, S}
     end;
-handle_cast({project_pending_begins, PendingBegins},
+handle_cast({project_pending_votes, PendingVotes},
             S = #s{outcomes = Outcomes0}) ->
-    case quod_outcome:project_pending_begins(Outcomes0, PendingBegins) of
+    case quod_outcome:project_pending_votes(Outcomes0, PendingVotes) of
         {ok, Outcomes1} ->
             case quod_outcome:flush(Outcomes1) of
                 {ok, Outcomes2} -> {noreply, S#s{outcomes = Outcomes2}};
@@ -3827,18 +3818,18 @@ handle_response_info(Info, S = #s{requests = Requests}) ->
     end.
 
 register_dtx_handoff(
-  Ref, Pid, From, Begin, GroupRef,
+  Ref, Pid, From, Material, GroupRef,
   S = #s{ns = Ns, workers = Workers, requests = Requests}) ->
     Checks =
         {maps:get(Ref, Workers, undefined),
-         quod_dtx:begin_group_ref(Begin)},
+         quod_atomic:source_group_ref(Material)},
     case Checks of
         {#proof_worker{pid = Pid, handoff = none,
                        deadline_ms = DeadlineMs} = Worker,
          {ok, GroupRef}} ->
             IntentId = make_ref(),
-            case quod_simplex:register_dtx_begin(
-                   Ns, self(), IntentId, Begin, GroupRef, DeadlineMs) of
+            case quod_simplex:register_dtx_vote(
+                   Ns, self(), IntentId, Material, GroupRef, DeadlineMs) of
                 {ok, RequestId} ->
                     Handoff = #dtx_handoff{
                                  intent_id = IntentId,
@@ -3854,7 +3845,7 @@ register_dtx_handoff(
                     {reply, Error, S}
             end;
         {#proof_worker{pid = Pid, handoff = none}, error} ->
-            {reply, {error, invalid_begin}, S};
+            {reply, {error, invalid_dtx_intent}, S};
         _ ->
             {reply, {error, cancelled}, S}
     end.
@@ -3877,7 +3868,7 @@ handle_dtx_handoff_reply(Ref, {accepted, IntentId},
             reject_dtx_handoff(
               Ref, {error, {protocol_error, dtx_handoff}}, true, S);
         _ ->
-            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            ok = quod_simplex:cancel_dtx_vote(Ns, self(), IntentId),
             {noreply, S}
     end;
 handle_dtx_handoff_reply(Ref, {error, Reason}, S) ->
@@ -3894,7 +3885,7 @@ reject_dtx_handoff(Ref, Error, CancelSimplex,
                         intent_id = IntentId,
                         registration_from = RegistrationFrom}} = Worker ->
             _ = case CancelSimplex of
-                    true -> quod_simplex:cancel_dtx_begin(
+                    true -> quod_simplex:cancel_dtx_vote(
                               Ns, self(), IntentId);
                     false -> ok
                 end,
@@ -3925,7 +3916,7 @@ activate_dtx_handoff(
             Worker1 = Worker#proof_worker{
                         checkpoint = GroupRef, handoff = none},
             checkpoint_client(Worker#proof_worker.from, GroupRef),
-            ok = quod_simplex:activate_dtx_begin(Ns, self(), IntentId),
+            ok = quod_simplex:activate_dtx_vote(Ns, self(), IntentId),
             {reply, ok,
              S#s{workers = maps:remove(Ref, Workers),
                  waiting_workers = Waiting#{Ref => Worker1}}};
@@ -3934,7 +3925,7 @@ activate_dtx_handoff(
            handoff = #dtx_handoff{
                         state = dormant, group_ref = GroupRef,
                         intent_id = IntentId}} = Worker ->
-            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            ok = quod_simplex:cancel_dtx_vote(Ns, self(), IntentId),
             {reply, {error, cancelled},
              S#s{workers = Workers#{
                    Ref => Worker#proof_worker{handoff = none}}}};
@@ -3951,7 +3942,7 @@ cancel_registered_dtx_handoff(
            handoff = #dtx_handoff{
                         state = dormant, group_ref = GroupRef,
                         intent_id = IntentId}} = Worker ->
-            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            ok = quod_simplex:cancel_dtx_vote(Ns, self(), IntentId),
             {reply, ok,
              S#s{workers = Workers#{
                    Ref => Worker#proof_worker{handoff = none}}}};
@@ -3969,7 +3960,7 @@ cancel_dtx_handoff(Ref,
                         registration_from = RegistrationFrom}} = Worker ->
             Requests1 = abandon_request_label(
                           {dtx_handoff, Ref}, Requests),
-            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            ok = quod_simplex:cancel_dtx_vote(Ns, self(), IntentId),
             _ = case RegistrationFrom of
                     none -> ok;
                     _ -> gen_server:reply(
@@ -4555,21 +4546,18 @@ route_plans(Plans, OriginIdentity, SignedRequest, Independent) ->
                                     quod_dtx:writes(Plan)],
     Readers = [{Identity, Plan} || {Identity, Plan} <- Rows,
                                     quod_dtx:reads_only(Plan)],
-    case Writers of
-        [] ->
+    case {quod_atomic:requires_source_role(length(Writers), Independent), Writers} of
+        {true, _} ->
+            %% Sealing uses the same rule to retain an otherwise empty O plan.
+            {group, lists:usort([OriginIdentity | [T || {T, _} <- Writers ++ Readers]])};
+        {false, []} ->
             read;
-        [{Target, _Plan}] when SignedRequest, Target =/= OriginIdentity ->
+        {false, [{Target, _Plan}]} when SignedRequest, Target =/= OriginIdentity ->
             {remote_claim, [Target], Readers};
-        [{Target, _Plan}] ->
+        {false, [{Target, _Plan}]} ->
             {single, Target, Readers};
-        [_ | _] when Independent ->
-            {remote_claim, [Target || {Target, _} <- Writers], Readers};
-        [_ | _] ->
-            %% L3 is unchanged: only writers and their OCC readers consume
-            %% Prepare/Finalize slots. A pure signed-origin claim is already
-            %% represented by Begin and is not a participant of its own.
-            {group, lists:sort(
-                      [Identity || {Identity, _Plan} <- Writers ++ Readers])}
+        {false, [_ | _]} ->
+            {remote_claim, [Target || {Target, _} <- Writers], Readers}
     end.
 
 with_certified_read_dependencies(ReadRows, Fun) ->
@@ -4721,7 +4709,8 @@ submit_remote_claim(
                   nonce => crypto:strong_rand_bytes(32),
                   principal => quod_dtx:principal(maps:get(hd(Targets), Plans)),
                   goal => GoalBlob, result => ResultBlob,
-                  request_binding => RequestBinding, participants => Participants},
+                  request_binding => RequestBinding, participants => Participants,
+                  vote_deadline_ms => none},
             case quod_dtx:new_manifest(ManifestInput) of
                 {ok, Manifest} ->
                     Attestations = quod_trace:with_span(
@@ -5159,7 +5148,8 @@ submit_group(
                           goal => GoalBlob,
                           result => ResultBlob,
                           request_binding => RequestBinding,
-                          participants => ParticipantRows},
+                          participants => ParticipantRows,
+                          vote_deadline_ms => quod_proof_context:vote_deadline_ms()},
                     build_and_register_group(
                       Engine, WorkerRef, ManifestInput,
                       Plans, ParticipantRows, Bindings,
@@ -5187,42 +5177,70 @@ build_and_register_group(
   RequestAuth, Ns, StartedNative) ->
     case quod_dtx:new_manifest(ManifestInput) of
         {ok, Manifest} ->
-            case attest_plans(
-                   ParticipantRows, Plans, Manifest, []) of
+            case attest_plans(ParticipantRows, Plans, Manifest, []) of
                 {ok, Bundles} ->
-                    case quod_dtx:new_begin(Manifest, RequestAuth, Bundles) of
-                        {ok, Begin} ->
-                            case quod_dtx:begin_group_ref(Begin) of
-                                {ok, GroupRef} ->
-                                    trace_dtx_group(GroupRef),
-                                    %% Everything through the immutable Begin
-                                    %% is now sealed. Admission starts inside
-                                    %% the following call, so these two timing
-                                    %% owners neither leave a gap nor overlap.
-                                    quod_metrics:observe_dtx_group_stage(
-                                      Ns, proof_seal, ok,
-                                      erlang:monotonic_time() -
-                                        StartedNative),
-                                    admit_group(
-                                      Engine, WorkerRef, Begin, GroupRef,
-                                      Plans, Bindings, Ns);
-                                error ->
-                                    {error, invalid_begin}
+                    case prepare_group_delivery(Manifest, RequestAuth, Bundles) of
+                        {ok, Group, SourceMaterial, OtherVotes} ->
+                            {ok, GroupRef} = quod_atomic:source_group_ref(SourceMaterial),
+                            trace_dtx_group(GroupRef),
+                            quod_metrics:observe_dtx_group_stage(
+                              Ns, proof_seal, ok,
+                              erlang:monotonic_time() - StartedNative),
+                            Result = admit_group(Engine, WorkerRef, SourceMaterial,
+                                                 GroupRef, Plans, Bindings, Ns),
+                            case Result of
+                                {group_pending, _, _} ->
+                                    %% All effects are bound and source responsibility
+                                    %% is already durable. Its activation cast may
+                                    %% still be in flight: losing it recovers the
+                                    %% missing-material refusal, never an early prepare.
+                                    %% This proof worker alone owns the foreign
+                                    %% bundles, only for one initial delivery.
+                                    _ = quod_dtx_coordinator:deliver_votes(
+                                          Engine, Ns, Group, OtherVotes,
+                                          quod_proof_context:deadline_ms()),
+                                    Result;
+                                {error, _} -> Result
                             end;
                         {error, _} = Error -> Error
                     end;
                 {error, _} = Error -> Error
             end;
-        {error, _} = Error ->
-            Error
+        {error, _} = Error -> Error
     end.
 
-admit_group(Engine, WorkerRef, Begin, GroupRef, Plans, Bindings, Ns) ->
+prepare_group_delivery(Manifest, Auth, Bundles) ->
+    {ok, #{origin := Origin}} = quod_dtx:manifest_binding(Manifest),
+    {Origin, _, _, SourceAttestation} = lists:keyfind(Origin, 1, Bundles),
+    case quod_atomic:new_group(Manifest, Auth, SourceAttestation) of
+        {ok, Group} ->
+            case group_delivery_votes(Group, Bundles, []) of
+                {ok, Votes} ->
+                    [SourceVote] = [V || V <- Votes, quod_atomic:record_target(V) =:= Origin],
+                    {ok, SourceMaterial} = quod_atomic:admission_material(SourceVote),
+                    {ok, Group, SourceMaterial, Votes -- [SourceVote]};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+-ifdef(TEST).
+test_prepare_group_delivery(Manifest, Auth, Bundles) ->
+    prepare_group_delivery(Manifest, Auth, Bundles).
+-endif.
+
+group_delivery_votes(_Group, [], Reverse) -> {ok, lists:reverse(Reverse)};
+group_delivery_votes(Group, [{Target, _, _, _} = Own | Rest], Reverse) ->
+    case quod_atomic:new_vote(Group, Target, Own, prepared) of
+        {ok, Vote} -> group_delivery_votes(Group, Rest, [Vote | Reverse]);
+        {error, _} = Error -> Error
+    end.
+admit_group(Engine, WorkerRef, SourceMaterial, GroupRef, Plans, Bindings, Ns) ->
     StartedNative = erlang:monotonic_time(),
     Result =
         case gen_server:call(
                Engine,
-               {reserve_dtx_begin, WorkerRef, Begin, GroupRef,
+               {reserve_dtx_vote, WorkerRef, SourceMaterial, GroupRef,
                 quod_trace:context()}, infinity) of
             ok ->
                 finish_reserved_group(
@@ -5249,14 +5267,14 @@ finish_reserved_group(Engine, WorkerRef, GroupRef, Plans, Bindings) ->
         ok ->
             case gen_server:call(
                    Engine,
-                   {activate_dtx_begin, WorkerRef, GroupRef}, infinity) of
+                   {activate_dtx_vote, WorkerRef, GroupRef}, infinity) of
                 ok -> {group_pending, Bindings, GroupRef};
                 {error, _} = Error -> Error
             end;
         {error, _} = Error ->
             _ = gen_server:call(
                   Engine,
-                  {cancel_dtx_begin, WorkerRef, GroupRef}, infinity),
+                  {cancel_dtx_vote, WorkerRef, GroupRef}, infinity),
             Error
     end.
 
@@ -6454,7 +6472,7 @@ mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
 %%%===================================================================
 
 %% Apply one committed entry, then — in a shared tail across every
-%% applied-advancing path — resolve membership or Prepare verdicts parked for
+%% applied-advancing path — resolve membership or Vote verdicts parked for
 %% the parent height just reached.  A content commit, DTX phase, or noop must
 %% all release the same bounded validation lifecycle.
 apply_committed(Entry, Origin, S) ->
@@ -6677,7 +6695,7 @@ local_dtx_group_state(GroupId, Outcomes0) ->
 %% the origin caller directly in this ordered apply turn; the external
 %% notification seam is reserved for resolution edges Prolog cannot observe.
 maybe_release_completed_group(Control, GroupId, S) ->
-    case quod_dtx:control_kind(Control) of
+    case quod_atomic:control_kind(Control) of
         complete -> release_group_waiter_by_id(GroupId, S);
         _ -> S
     end.
@@ -6691,7 +6709,7 @@ release_group_waiter_by_id(GroupId, S = #s{group_waiters = Waiters}) ->
     end.
 
 %% The coordinator reaches this boundary only after every participant's
-%% Finalize is certified applied.  Complete is still appended by that same
+%% Resolve is certified applied. Complete is still appended by that same
 %% coordinator, but it is recovery bookkeeping rather than a reason to keep a
 %% live caller parked.  The exact GroupRef and waiter map make duplicate
 %% notices (including one after a coordinator restart) harmless.
@@ -6699,12 +6717,12 @@ release_group_waiter_terminal(
   {group, _Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}
     = GroupRef,
   #{verdict := Verdict, reasons := Reasons,
-    decision_slot := DecisionSlot, participant_slots := ParticipantSlots}
+    source_slot := SourceSlot, participant_slots := ParticipantSlots}
     = Terminal,
   S = #s{group_waiters = Waiters})
   when map_size(Terminal) =:= 4,
        (Verdict =:= commit orelse Verdict =:= abort),
-       is_integer(DecisionSlot), DecisionSlot > 0 ->
+       is_integer(SourceSlot), SourceSlot > 0 ->
     case {maps:get(GroupId, Waiters, undefined),
           valid_terminal_participant_slots(ParticipantSlots),
           valid_terminal_reasons(Verdict, Reasons)} of
@@ -6715,7 +6733,7 @@ release_group_waiter_terminal(
                 case Verdict of
                     commit ->
                         {ok, [LiveBindings],
-                         #{ref => GroupRef, height => DecisionSlot,
+                         #{ref => GroupRef, height => SourceSlot,
                            participant_slots => ParticipantSlots}};
                     abort ->
                         {fail, Reasons}
@@ -6786,10 +6804,11 @@ release_group_waiter(
                             error({outcome_index_unavailable, Reason})
                     end;
                 {not_found, Outcomes1} ->
-                    resolve_absent_group_waiter(
-                      GroupId, GroupRef, Waiter,
-                      HandoffStarted,
-                      S#s{outcomes = Outcomes1});
+                    %% No snapshot can exclude later participant recovery.
+                    %% Keep the existing caller wait until publication or
+                    %% its original uncertainty deadline; never synthesize
+                    %% an abort from a retired gateway or an empty journal.
+                    S#s{outcomes = Outcomes1};
                 {wrong_anchor, _Outcomes1} ->
                     error({outcome_index_unavailable, wrong_anchor});
                 {{error, Reason}, _Outcomes1} ->
@@ -6800,23 +6819,6 @@ release_group_waiter(
     end;
 release_group_waiter(_BadRef, _HandoffStarted, S) ->
     S.
-
-resolve_absent_group_waiter(
-  GroupId, GroupRef, Waiter, HandoffStarted,
-  S = #s{ns = Ns, applied = AppliedFloor}) ->
-    case quod_simplex:dtx_group_barrier(Ns, GroupRef, AppliedFloor) of
-        {ok, pending} ->
-            S;
-        {ok, not_found} ->
-            finish_group_waiter(
-              GroupId, Waiter, {error, not_found}, HandoffStarted, S);
-        {ok, {rejected, coordinator_retired}} ->
-            finish_group_waiter(
-              GroupId, Waiter, {error, coordinator_retired},
-              HandoffStarted, S);
-        {error, _UnavailableOrUnknown} ->
-            S
-    end.
 
 finish_group_waiter(
   GroupId,
@@ -6836,7 +6838,6 @@ finish_group_waiter(
     S#s{group_waiters = maps:remove(GroupId, Waiters)}.
 
 dtx_waiter_result({ok, _Solutions, _Handle}) -> ok;
-dtx_waiter_result({error, _}) -> failed;
 dtx_waiter_result({fail, _}) -> rejected.
 
 -ifdef(TEST).
@@ -6858,15 +6859,17 @@ test_release_absent_group_waiter(
             applied = quod_outcome:applied_floor(Outcomes),
             group_waiters = #{GroupId => Waiter}},
     S1 = release_group_waiter(GroupRef, S0),
+    _ = erlang:cancel_timer(Timer),
+    erlang:demonitor(CallerMRef, [flush]),
     {CallRef, map_size(S1#s.group_waiters)}.
 -endif.
 
 finish_dtx_apply(none, _Control, _Origin, S) ->
     S;
 finish_dtx_apply(
-  {finalize_applied, GroupId, Slot, Generation}, _Control, _Origin,
+  {resolve_applied, GroupId, Slot, Generation}, _Control, _Origin,
   S = #s{ns = Ns}) ->
-    ok = quod_simplex:finalize_applied(Ns, GroupId, Slot, Generation),
+    ok = quod_simplex:resolve_applied(Ns, GroupId, Slot, Generation),
     S.
 
 oldest_snapshot(Current, #s{workers = Workers,
@@ -7284,12 +7287,16 @@ traced_validation_verdict(Request = {Kind, _, _}, Slot, Tag, TraceCtx,
 
 validation_trace_verdict(valid) -> <<"valid">>;
 validation_trace_verdict({valid, _}) -> <<"valid">>;
+validation_trace_verdict({vote, _}) -> <<"vote_selected">>;
 validation_trace_verdict({invalid, _}) -> <<"invalid">>;
 validation_trace_verdict(abstain) -> <<"abstain">>.
 
 validation_verdict({content, Transactions, BlockTimestamp}, S) ->
     content_validation_verdict(Transactions, BlockTimestamp, S);
-validation_verdict({dtx, Controls, BlockTimestamp}, S) ->
+validation_verdict({dtx, {vote, Material}, BlockTimestamp}, S) ->
+    commit_validation_result(quod_commit_validation:prepare_vote(
+                               Material, BlockTimestamp, commit_validation_context(S)), S);
+validation_verdict({dtx, {wave, Controls}, BlockTimestamp}, S) ->
     dtx_validation_verdict(Controls, BlockTimestamp, check, S).
 
 content_validation_verdict(Transactions, BlockTimestamp, S) ->
@@ -7300,7 +7307,7 @@ content_validation_verdict(Transactions, BlockTimestamp, S) ->
 
 dtx_validation_verdict(Controls, BlockTimestamp, OperationMode, S)
   when is_list(Controls), Controls =/= [] ->
-    case quod_dtx:canonical_control_wave(Controls) of
+    case quod_atomic:canonical_control_wave(Controls) of
         true ->
             commit_validation_result(
               dtx_validation_wave(
@@ -7319,7 +7326,7 @@ dtx_validation_wave([Control | Rest], BlockTimestamp, OperationMode,
     case quod_commit_validation:dtx(
            Control, BlockTimestamp, OperationMode, Context0) of
         {ok, {valid, History}, Context1} ->
-            GroupId = quod_dtx:group_id(Control),
+            GroupId = quod_atomic:group_id(Control),
             dtx_validation_wave(
               Rest, BlockTimestamp, OperationMode, Context1,
               Histories0#{GroupId => History});

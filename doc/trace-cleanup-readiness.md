@@ -30,7 +30,7 @@ do not substitute the later signature timestamp or mix clocks across hosts.
 ## Measurement method
 
 Record effective sampling and sampled/recording flags; retain the independent
-attempt-start denominator. Correlate atomic Begin proposal, parent validation,
+attempt-start denominator. Correlate atomic Vote/Resolve proposals, parent validation,
 support/notarization, finality and durable boundaries by allocation, namespace,
 slot and block hash. Use shared-block links instead of counting a batched block
 as several rounds. Leave time before the first available boundary unassigned.

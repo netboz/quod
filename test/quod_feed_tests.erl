@@ -443,7 +443,7 @@ fold_snapshot_test() ->
     %% A real, signed DTX control must not enter the content-only projection
     %% fold (which deliberately fails closed without its phase-history index).
     {ok, Dtx} = quod_ledger:new_entry(
-                  6, quod_ct:dtx_decision_payload(), 0, none),
+                  6, quod_ct:atomic_resolve_payload(), 0, none),
     ?assertEqual(none, quod_feed:fold_snapshot(
                          <<"n">>, Dtx, {5, Projection, done})),
     %% folding onto an unprimed snapshot stays none (primed later by a status call)

@@ -49,7 +49,7 @@ import; artifacts themselves never cross a wire or persistence boundary.
                           block :: #block{} | none}).
 -opaque entry_artifact() :: #canonical_entry{}.
 
--type control_kind() :: 'begin' | prepare | decision | finalize | complete.
+-type control_kind() :: vote | resolve | complete.
 -type kind() :: {content, [#transaction{}]}
               | {controls, [{control_kind(), term()}]}
               | noop
@@ -62,8 +62,11 @@ Classify one committed slot's `data`:
 - `{controls, Controls}` — decoded canonical DTX controls from one phase in
   strict signed-journal order;
 - `noop` — a complaint-certified skip, carrying nothing to fold;
-- `invalid` — not a recognized variant, a malformed batch, or an invalid DTX
-  blob (untrusted input reaches here, so this is tolerated).
+- `invalid` — not a recognized native variant or a malformed batch.
+
+Control payloads carry codec-created material, not wire blobs. Byte ingress
+authenticates each control in decode_payload/2; classification and serialization
+do not discard that result and repeat its signature/plan walk.
 """.
 -spec classify(term()) -> kind().
 classify({batch, [#transaction{} | _] = Transactions}) ->
@@ -71,7 +74,7 @@ classify({batch, [#transaction{} | _] = Transactions}) ->
         true  -> {content, Transactions};
         false -> invalid
     end;
-classify({batch, [{dtx, Blob} | _] = Items}) when is_binary(Blob) ->
+classify({batch, [{dtx, _Control} | _] = Items}) ->
     classify_controls(Items);
 classify(noop) ->
     noop;
@@ -88,24 +91,19 @@ payload(Data) ->
         invalid                 -> error
     end.
 
-%% The total DTX decoder owns untrusted bytes.  Decoding also proves each
-%% envelope canonical; the batch check below owns phase equality, uniqueness,
-%% and ordering once for every consumer.
+%% These opaque controls have crossed their codec boundary, like the native
+%% transactions above. The batch check owns phase, target and signed-lane order.
 classify_controls(Items) ->
     try
-        Controls = [decode_control_item(Item) || Item <- Items],
-        Wave = [Control || {_Kind, Control} <- Controls],
-        case quod_dtx:canonical_control_wave(Wave) of
-            true -> {controls, Controls};
+        Controls = [Control || {dtx, Control} <- Items],
+        case length(Controls) =:= length(Items) andalso
+             quod_atomic:canonical_control_wave(Controls) of
+            true -> {controls, [{quod_atomic:control_kind(C), C} || C <- Controls]};
             false -> invalid
         end
     catch
         _:_ -> invalid
     end.
-
-decode_control_item({dtx, Blob}) when is_binary(Blob) ->
-    {ok, Control} = quod_dtx:decode_control(Blob),
-    {quod_dtx:control_kind(Control), Control}.
 
 transaction_list([#transaction{} | Rest]) -> transaction_list(Rest);
 transaction_list([]) -> true;
@@ -127,13 +125,9 @@ new_block(Slot, Parent, Payload, Timestamp)
                     {quod_block, 1, Slot, Parent, PayloadWire, Timestamp},
                     ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
                 {{ok, _PayloadBytes}, {ok, Bytes}} ->
-                    Block = #block{slot = Slot, parent = Parent,
+                    {ok, #block{slot = Slot, parent = Parent,
                                    payload = Payload, timestamp = Timestamp,
-                                   block_bytes = Bytes},
-                    case decode_block(Bytes) of
-                        {ok, Block} -> {ok, Block};
-                        _ -> {error, bad_block}
-                    end;
+                                   block_bytes = Bytes}};
                 _ ->
                     {error, bad_block}
             end;
@@ -228,8 +222,12 @@ encode_payload(Payload) ->
             catch
                 _:_ -> error
             end;
-        {controls, _Controls} ->
-            {ok, Payload};
+        {controls, Controls} ->
+            try
+                {ok, {batch, [begin
+                    {ok, Blob} = quod_atomic:encode_control(Control), {dtx, Blob}
+                end || {_, Control} <- Controls]}}
+            catch _:_ -> error end;
         noop ->
             error;
         invalid ->
@@ -253,12 +251,19 @@ decode_payload({batch, [{transaction, Blob} | _] = Items}, SymbolMode)
     catch
         _:_ -> error
     end;
-decode_payload(Payload = {batch, [{dtx, Blob} | _]}, _SymbolMode)
+decode_payload({batch, [{dtx, Blob} | _] = Items}, _SymbolMode)
   when is_binary(Blob) ->
-    case classify(Payload) of
-        {controls, _} -> {ok, Payload};
-        _ -> error
-    end;
+    try
+        Controls = [begin
+            {dtx, Bytes} = Item,
+            {ok, Control} = quod_atomic:decode_control(Bytes), {dtx, Control}
+        end || Item <- Items],
+        Payload = {batch, Controls},
+        case classify(Payload) of
+            {controls, _} -> {ok, Payload};
+            _ -> error
+        end
+    catch _:_ -> error end;
 decode_payload(_, _SymbolMode) ->
     error.
 

@@ -25,9 +25,8 @@ receipt_application_envelope_equality_ignores_symbol_representation_test() ->
           quod_commit_validation:validate_evidence(Complete, #{Ref => Exact#{transaction := App#transaction{sig = <<0:512>>}}}))
     end).
 
-included_receipts_replay_but_new_admission_requires_certified_results_test() ->
-    lists:foreach(fun(Kind) ->
-        F = quod_ct:remote_operation_fixture(#{receipt_kind => Kind}),
+inclusion_only_receipts_are_refused_in_admission_and_replay_test() ->
+        F = quod_ct:remote_operation_fixture(#{}),
         Origin = {Ns, Anchor} = maps:get(origin, F),
         Completion = maps:get(completion, F),
         {ok, ClaimData} = quod_transaction:request_claim(maps:get(claim, F)),
@@ -37,23 +36,26 @@ included_receipts_replay_but_new_admission_requires_certified_results_test() ->
             {new, I1} = quod_outcome:claim_operation(
                          I0, 2, ClaimData, {applications, [maps:get(target_ref, F)]}),
             C0 = quod_commit_validation:new(Origin, 1, quod_ct:committed_kb([]), I1, none),
-            Expected = case Kind of
-                included -> {invalid, operation_result_certificate_required};
-                certified -> valid
-            end,
-            %% Admission is stricter than certified-history projection, not
-            %% a second decoder. Neither an included row nor replay invents
-            %% a result certificate; the historical bytes remain unchanged.
-            {ok, Expected, Checked} = quod_commit_validation:content([Completion], 1, check, C0),
+            #transaction{role = {remote_complete, Op, Digest, _}} = Completion,
+            TargetRef = maps:get(target_ref, F),
+            Old = Completion#transaction{role = {remote_complete, Op, Digest,
+                      [{maps:get(participant_target, F), {included, TargetRef}}]}},
+            %% Current admission and projection share one format. Neither
+            %% accepts old inclusion-only receipts during the clean break.
+            [?assertEqual({outcome_error, outcome_index_bad_operation},
+                quod_commit_validation:content([Old], 1, Mode, C0))
+             || Mode <- [check, {claim, 4}]],
+            ?assertEqual({error, invalid_operation_receipt},
+                         quod_commit_validation:validate_evidence(Old, #{})),
+            {ok, valid, Checked} = quod_commit_validation:content([Completion], 1, check, C0),
             {{ok, #{state := unresolved}}, _} = quod_outcome:lookup_ref(
                                                 quod_commit_validation:outcomes(Checked), Op),
             {ok, valid, Replayed} = quod_commit_validation:content(
                                       [Completion], 1, {claim, 4}, C0),
             {{ok, #{state := {terminal, 4}}}, _} = quod_outcome:lookup_ref(
                                                   quod_commit_validation:outcomes(Replayed), Op),
-            {ok, Expected, _} = quod_commit_validation:content([Completion], 1, check, Replayed)
-        after ok = quod_outcome:close(I0) end
-    end, [included, certified]).
+            {ok, valid, _} = quod_commit_validation:content([Completion], 1, check, Replayed)
+        after ok = quod_outcome:close(I0) end.
 
 read_certificate(ProofId, N) ->
     Target = {<<"quod:certified-read-", (integer_to_binary(N))/binary>>,
@@ -180,19 +182,21 @@ non_identical_remote_completion_remains_invalid_in_proposal_check_test() ->
         {transaction, TargetNs, TargetAnchor, _TargetTxId} = TargetRef,
         DifferentTarget = {transaction, TargetNs, TargetAnchor,
                            key(different_target)},
+        {ok, DifferentReceipt} = quod_ct:certified_receipt([DifferentTarget]),
+        #transaction{role = {remote_complete, _, _, Receipt}} = Completion,
         DifferentTargetCompletion = Completion#transaction{
           role = {remote_complete, OperationRef,
-                  RequestDigest, [{{TargetNs, TargetAnchor}, {included, DifferentTarget}}]}},
+                  RequestDigest, DifferentReceipt}},
         DifferentDigestCompletion = Completion#transaction{
           role = {remote_complete, OperationRef,
-                  key(different_digest), [{{TargetNs, TargetAnchor}, {included, TargetRef}}]}},
+                  key(different_digest), Receipt}},
         {operation, OperationNs, OperationAnchor,
          AgentRef, _OperationId} = OperationRef,
         DifferentOperation = {operation, OperationNs, OperationAnchor,
                               AgentRef, key(different_operation)},
         DifferentOperationCompletion = Completion#transaction{
           role = {remote_complete, DifferentOperation,
-                  RequestDigest, [{{TargetNs, TargetAnchor}, {included, TargetRef}}]}},
+                  RequestDigest, Receipt}},
         ?assertEqual(
            {outcome_error, outcome_index_conflict},
            quod_commit_validation:content(
@@ -271,18 +275,21 @@ content_check_and_committed_claim_share_one_validator_test() ->
                [Transaction], 1, {claim, 2}, Claimed))
       end).
 
-dtx_begin_check_and_committed_claim_share_one_validator_test() ->
+source_vote_check_and_committed_claim_share_one_validator_test() ->
     with_signed_fixture(
       fun(Fixture, Context0) ->
-          Control = maps:get(begin_control, Fixture),
+          Control = maps:get(vote_control, Fixture),
           {ok, {valid, CheckHistory}, _Checked} =
               quod_commit_validation:dtx(Control, 1, check, Context0),
           {ok, {valid, ClaimHistory}, Claimed} =
               quod_commit_validation:dtx(
                 Control, 1, {claim, 2}, Context0),
           ?assertEqual(CheckHistory, ClaimHistory),
+          %% The same source vote claims this request for the same group.
+          %% Exact redelivery stays valid; a different group's claim is
+          %% covered by the source-claim conflict projection controls.
           ?assertMatch(
-             {ok, {invalid, duplicate_operation}, _},
+             {ok, {valid, _}, _},
              quod_commit_validation:dtx(Control, 1, check, Claimed)),
           ?assertMatch(
              {ok, {valid, _}, _},
@@ -297,7 +304,7 @@ missing_network_identity_splits_check_from_committed_claim_test() ->
         without_network_identity(
           fun() ->
               Transaction = maps:get(transaction, Fixture),
-              Control = maps:get(begin_control, Fixture),
+              Control = maps:get(vote_control, Fixture),
               ?assertMatch(
                  {ok, abstain, _},
                  quod_commit_validation:content(
@@ -373,14 +380,14 @@ membership_validation_contract_is_owned_here_test() ->
              validate_membership(Ns, Retract, Context))
       end).
 
-prepare_validation_and_materialization_are_owned_here_test() ->
-    Fixture = valid_prepare_fixture(),
+vote_validation_and_materialization_are_owned_here_test() ->
+    Fixture = valid_vote_fixture(),
     {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
-    Control = maps:get(prepare_control, Fixture),
-    {ok, Manifest, PlanDigest, PlanBlob} =
-        quod_dtx:prepare_payload(Control),
-    {ok, Plan} = quod_dtx:decode(PlanBlob),
+    Control = maps:get(vote_control, Fixture),
+    Material = {Vote, _, _} = quod_atomic:control_material(Control),
+    {quod_dtx_vote, 4, _, _, Bundle, prepared} = Vote,
+    Plan = maps:get(plan, Fixture),
     [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
       _Digest, _Tag}] = quod_ct:plan_material(transcript, Plan),
     {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
@@ -390,7 +397,7 @@ prepare_validation_and_materialization_are_owned_here_test() ->
     Policy = {can_invoke, Goal, PolicyPrincipal,
               CallerNamespaces, TargetNs},
     Member = {peer_admitted, Signer, "validator", 14567, Signer},
-    with_context(
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() -> with_context(
       TargetNs, TargetAnchor,
       quod_ct:signed_agent_facts(Fixture) ++ [Policy, Member],
       fun(Context) ->
@@ -399,34 +406,31 @@ prepare_validation_and_materialization_are_owned_here_test() ->
              quod_commit_validation:dtx(Control, 1, check, Context)),
           ?assertMatch(
              {ok, _EventContext, #{diff := _}},
-             quod_commit_validation:prepared_material(
-               Manifest, PlanDigest, PlanBlob, Context)),
-          %% The successful event-context path owns signature and digest
-          %% authentication once. Rejections retain their established public
-          %% distinction even though they no longer share the hot path.
+             quod_commit_validation:prepared_material(Material)),
+          %% Authentication belongs to the single ingress decoder, not the
+          %% reducer's materializer. Neither a signature nor digest mismatch
+          %% may produce the trusted material consumed above.
           {quod_plan, Core, PlanSigner, _Signature} = Plan,
           {ok, BadSignatureBlob} = quod_dtx:encode(
                                      {quod_plan, Core, PlanSigner,
                                       <<0:512>>}),
           ?assertEqual(
-             {error, bad_plan_binding},
-             quod_commit_validation:prepared_material(
-               Manifest, PlanDigest, BadSignatureBlob, Context)),
+             error, quod_atomic:admission_material(
+               setelement(5, Vote, setelement(3, Bundle, BadSignatureBlob)))),
           ?assertEqual(
-             {error, bad_manifest_binding},
-             quod_commit_validation:prepared_material(
-               Manifest, <<0:256>>, PlanBlob, Context))
+             error, quod_atomic:admission_material(
+               setelement(5, Vote, setelement(2, Bundle, <<0:256>>))))
       end),
     with_context(
       TargetNs, TargetAnchor, [Policy],
       fun(Context) ->
           ?assertMatch(
-             {ok, {invalid, [signer_not_admitted]}, _},
+             {ok, {invalid, {atomic_vote_choice, {refused, [signer_not_admitted]}}}, _},
              quod_commit_validation:dtx(Control, 1, check, Context))
-      end).
+      end) end).
 
 read_certificate_refuses_a_stale_read_token_test() ->
-    Fixture = valid_prepare_fixture(
+    Fixture = valid_vote_fixture(
                 #{goal_text => <<"\\+(missing(ok)).">>}),
     {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
@@ -442,7 +446,7 @@ read_certificate_refuses_a_stale_read_token_test() ->
     BaseFacts = quod_ct:signed_agent_facts(Fixture) ++ [Policy, Member],
     %% The sealed read observed missing/1 as absent.  The unchanged snapshot
     %% certifies, while the same plan against a snapshot where missing/1 was
-    %% asserted is refused by the ordinary Prepare OCC validator.
+    %% asserted is refused by the shared plan OCC validator.
     with_context(
       TargetNs, TargetAnchor, BaseFacts,
       fun(Context) ->
@@ -469,28 +473,28 @@ external_predicate_manifest_is_immutable_after_genesis_test() ->
                [quod_ct:change(Ns, Diff, #{})], 1, check, Context))
       end).
 
-dtx_prepare_cannot_change_external_predicate_manifest_test() ->
-    Fixture = valid_prepare_fixture(
+atomic_vote_cannot_change_external_predicate_manifest_test() ->
+    Fixture = valid_vote_fixture(
                 #{goal_text =>
                       <<"assertz(external_predicate_modules([])).">>}),
     {TargetNs, TargetAnchor} = maps:get(participant_target, Fixture),
     Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
-    Control = maps:get(prepare_control, Fixture),
+    Control = maps:get(vote_control, Fixture),
     #{goal := FrozenGoal} = maps:get(evidence, Fixture),
     {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
     {ok, Principal} = quod_agent_ref:materialize_principal(
                         maps:get(principal, Fixture)),
     Policy = {can_invoke, Goal, Principal, [], TargetNs},
     Member = {peer_admitted, Signer, "validator", 14567, Signer},
-    with_context(
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() -> with_context(
       TargetNs, TargetAnchor,
       quod_ct:signed_agent_facts(Fixture) ++ [Policy, Member],
       fun(Context) ->
           ?assertMatch(
-             {ok, {invalid,
-                   [immutable_external_predicate_manifest]}, _},
+             {ok, {invalid, {atomic_vote_choice,
+                   {refused, [immutable_external_predicate_manifest]}}}, _},
              quod_commit_validation:dtx(Control, 1, check, Context))
-      end).
+      end) end).
 
 with_signed_fixture(Fun) ->
     {Fixture, Context, Outcomes} = signed_fixture(),
@@ -506,7 +510,7 @@ signed_fixture() ->
     Ns = <<"quod:commit-validation">>,
     Anchor = <<221:256>>,
     Network = <<222:256>>,
-    Fixture = quod_ct:signed_dtx_begin_fixture(
+    Fixture = quod_ct:signed_atomic_fixture(
                 #{target => {Ns, Anchor}, network => Network,
                   submitted_at => 1}),
     #{goal := FrozenGoal} = maps:get(evidence, Fixture),
@@ -546,27 +550,25 @@ without_network_identity(Fun) ->
         end
     end.
 
-valid_prepare_fixture() ->
-    valid_prepare_fixture(#{}).
+valid_vote_fixture() ->
+    valid_vote_fixture(#{}).
 
-valid_prepare_fixture(Overrides) ->
-    Target = {<<"quod:commit-prepare">>, <<226:256>>},
+valid_vote_fixture(Overrides) ->
+    Target = {<<"quod:commit-vote">>, <<226:256>>},
     Origin = {<<"quod:commit-origin">>, <<225:256>>},
-    Fixture0 = quod_ct:signed_dtx_begin_fixture(
+    Fixture0 = quod_ct:signed_atomic_fixture(
                  maps:merge(
                    #{target => Origin, participant_target => Target,
+                     second_participant_target => Target,
                      network => <<227:256>>,
                      submitted_at => 1},
                    Overrides)),
-    Begin = maps:get('begin', Fixture0),
-    {ok, BeginRef} = quod_dtx:certified_ref(
-                       element(1, Origin), element(2, Origin), 1, <<228:256>>,
-                       quod_dtx:group_id(Begin), <<"qc">>),
-    {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Target),
-    {ok, PrepareControl} = quod_dtx:sign_control(
-                             Target, Prepare, maps:get(admission, Fixture0),
-                             1, 1, maps:get(node_identity, Fixture0)),
-    Fixture0#{prepare => Prepare, prepare_control => PrepareControl}.
+    {ok, Vote} = quod_atomic:new_vote(maps:get(group, Fixture0), Target,
+                   lists:keyfind(Target, 1, maps:get(bundles, Fixture0)), prepared),
+    {ok, Material} = quod_atomic:admission_material(Vote),
+    {ok, Control} = quod_atomic:sign_control(Target, Material,
+                      maps:get(admission, Fixture0), 1, 1, maps:get(node_identity, Fixture0)),
+    Fixture0#{vote => Vote, vote_control => Control}.
 
 with_context(Ns, Anchor, Facts, Fun) ->
     ParentEst = quod_ct:committed_kb(Facts),

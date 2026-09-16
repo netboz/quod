@@ -19,7 +19,7 @@ two commit-side seams:
 Frames: `hello` (summary, on connect) · `block` (content or DTX batch) ·
 `applied` · `rejected` · `sync`.
 
-A block event's optional Finalize/Prepare enrichment borrows the live Simplex
+A block event's optional Vote/Resolve enrichment borrows the live Simplex
 snapshot under one `explorer.read_budget_ms` deadline. An unavailable owner
 leaves that optional display field absent; it never opens a stopped ledger or
 retries on a timer. The committed event itself remains available for display.

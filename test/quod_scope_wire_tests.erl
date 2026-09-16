@@ -858,6 +858,7 @@ manifest() ->
                          goal => GoalBlob,
                          result => ResultBlob,
                          request_binding => none,
+                         vote_deadline_ms => 10000,
                          participants =>
                              [{{<<"quod:b">>, key(6)}, key(124)},
                               {{<<"quod:c">>, key(7)}, key(125)}]}),

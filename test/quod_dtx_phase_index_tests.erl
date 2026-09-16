@@ -5,43 +5,48 @@
 same_group_append_is_invisible_to_an_older_capture_test() ->
     with_index(fun(Index, _Dir) ->
         F = quod_foreign_log_tests:prepared_then_committed_fixture(<<"index:as-of:signed">>),
+        quod_ct:with_network_identity(maps:get(network, F), fun() ->
         Identity = {maps:get(ns, F), maps:get(anchor, F)},
-        [Genesis, Prepare, Finalize] = maps:get(chain, F),
+        [Genesis, Vote, Resolve] = maps:get(chain, F),
         {ok, P1, _} = quod_simplex:history_advance(
             Identity, Genesis, quod_simplex:history_projection(Identity), Index),
-        {ok, P2, _} = quod_simplex:history_advance(Identity, Prepare, P1, Index),
+        {ok, P2, _} = quod_simplex:history_advance(Identity, Vote, P1, Index),
         {ok, Before} = quod_dtx_phase_index:capture(Index, 2),
-        {ok, _P3, _} = quod_simplex:history_advance(Identity, Finalize, P2, Index),
+        {ok, _P3, _} = quod_simplex:history_advance(Identity, Resolve, P2, Index),
         Group = maps:get(group_id, F),
         {ok, Old} = quod_dtx_phase_index:history(Before, Group),
         {ok, New} = quod_dtx_phase_index:history(Index, Group),
-        ?assertEqual({ok, maps:get(prepare_ref, F)}, quod_dtx:history_phase(prepare, Old)),
-        ?assertEqual(not_found, quod_dtx:history_phase(finalize, Old)),
-        ?assertEqual({ok, maps:get(finalize_ref, F)}, quod_dtx:history_phase(finalize, New)),
-        %% Real production suffix verification still sees Prepare, not the
-        %% subsequently installed Finalize. The sink must separately reject
+        ?assertEqual({ok, maps:get(vote_ref, F)}, quod_atomic:history_phase(vote, Old)),
+        ?assertEqual(not_found, quod_atomic:history_phase(resolve, Old)),
+        ?assertEqual({ok, maps:get(resolve_ref, F)}, quod_atomic:history_phase(resolve, New)),
+        %% Real production suffix verification still sees Vote, not the
+        %% subsequently installed Resolve. The sink must separately reject
         %% the overtaken base; readers never mutate the live index.
-        ?assertMatch({ok, [Finalize], _, _},
+        ?assertMatch({ok, [Resolve], _, _},
             quod_catchup:verify_forward(element(1, Identity), element(2, Identity),
-                                       P2, 3, [Finalize], Before)),
+                                       P2, 3, [Resolve], Before)),
         ?assertEqual({error, bad_phase_index_delta},
             quod_dtx_phase_index:commit_delta(Before, quod_dtx_phase_index:new_delta())),
         ?assertEqual({error, bad_phase_index_argument}, quod_dtx_phase_index:close(Before))
+        end)
     end).
 
 different_group_append_is_absent_from_an_older_capture_test() ->
     with_index(fun(Index, _Dir) ->
         Target = {<<"index:as-of:groups">>, key(700)},
-        P = quod_dtx:initial_projection(Target, 0),
+        P = quod_atomic:initial_projection(Target, 0),
         Signer = signer(),
         {A, ARef} = direct_abort(Target, key(701), key(702), 1, Signer),
         {B, BRef} = direct_abort(Target, key(703), key(704), 2, Signer),
         {ok, P, [_]} = phase_apply(Index, A, ARef, P),
         {ok, View} = quod_dtx_phase_index:capture(Index, 11),
         {ok, P, [_]} = phase_apply(Index, B, BRef, P),
-        ?assertMatch({ok, #{records := #{finalize := _}}}, quod_dtx_phase_index:history(View, key(701))),
-        ?assertEqual({ok, quod_dtx:initial_group_history()}, quod_dtx_phase_index:history(View, key(703))),
-        ?assertMatch({ok, #{records := #{finalize := _}}}, quod_dtx_phase_index:history(Index, key(703)))
+        ?assertMatch({ok, #{records := #{resolve := _}}},
+                     quod_dtx_phase_index:history(View, quod_atomic:group_id(A))),
+        ?assertEqual({ok, quod_atomic:initial_group_history()},
+                     quod_dtx_phase_index:history(View, quod_atomic:group_id(B))),
+        ?assertMatch({ok, #{records := #{resolve := _}}},
+                     quod_dtx_phase_index:history(Index, quod_atomic:group_id(B)))
     end).
 
 committee_capture_keeps_old_eras_and_route_values_test() ->
@@ -205,7 +210,7 @@ constant_work_extent_stats_follow_committed_rows_test() ->
               quod_dtx_phase_index:stats(Index),
           Signer = signer(),
           Target = {<<"quod:phase-stats">>, key(800)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {Control, Ref} = direct_abort(
                              Target, key(801), key(802), 1, Signer),
           {ok, Projection, [_]} = phase_apply(
@@ -220,7 +225,7 @@ exact_history_survives_interleaved_windows_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(1)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {ControlA, RefA} = direct_abort(Target, key(10), key(11), 1, Signer),
           {ControlB, RefB} = direct_abort(Target, key(20), key(21), 2, Signer),
 
@@ -250,7 +255,7 @@ failed_transition_never_replaces_exact_history_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(30)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {Original, OriginalRef} =
               direct_abort(Target, key(31), key(32), 1, Signer),
           {Conflict, ConflictRef} =
@@ -272,7 +277,7 @@ preview_isolated_until_one_explicit_commit_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(34)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           GroupId = key(35),
           {Original, OriginalRef} =
               direct_abort(Target, GroupId, key(36), 1, Signer),
@@ -315,7 +320,7 @@ one_delta_commits_all_interleaved_groups_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(38)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {ControlA, RefA} = direct_abort(
                                Target, key(39), key(40), 1, Signer),
           {ControlB, RefB} = direct_abort(
@@ -339,7 +344,7 @@ same_phase_batch_commits_every_exact_history_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-batch">>, key(46)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {ControlA, RefA} = direct_abort(
                                Target, key(500), key(501), 1, Signer),
           {ControlB, RefB} = direct_abort(
@@ -361,7 +366,7 @@ window_delta_has_no_arbitrary_group_count_cap_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(47)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           Delta =
               lists:foldl(
                 fun(N, Delta0) ->
@@ -391,7 +396,7 @@ phase_batch_failure_commits_no_partial_history_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-batch-atomic">>, key(48)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {ControlA, RefA} =
               direct_abort(Target, key(200), key(201), 1, Signer),
           {OriginalB, OriginalRefB} =
@@ -422,7 +427,7 @@ singleton_batch_reapply_is_idempotent_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-singleton">>, key(49)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {Control, Ref} = direct_abort(
                              Target, key(400), key(401), 1, Signer),
           {ok, Projection, [_]} = phase_apply(
@@ -437,11 +442,12 @@ noncanonical_or_trailing_history_fails_closed_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(40)},
-          GroupId = key(41),
-          Projection = quod_dtx:initial_projection(Target, 0),
-          {Control, Ref} = direct_abort(Target, GroupId, key(42), 1, Signer),
-          Canonical = term_to_binary({quod_dtx_phase_history, 1,
-                                      quod_dtx:initial_group_history()},
+          ManifestDigest = key(41),
+          Projection = quod_atomic:initial_projection(Target, 0),
+          {Control, Ref} = direct_abort(Target, ManifestDigest, key(42), 1, Signer),
+          GroupId = quod_atomic:group_id(Control),
+          Canonical = term_to_binary({quod_dtx_phase_history, 2,
+                                      quod_atomic:initial_group_history()},
                                     [deterministic]),
           ok = quod_dtx_phase_index:test_insert_raw(
                  Index, GroupId, <<Canonical/binary, 0>>),
@@ -456,20 +462,22 @@ canonical_history_under_the_wrong_group_key_fails_closed_test() ->
       fun(Index, _DataDir) ->
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(43)},
-          GroupId = key(44),
+          ManifestDigest = key(44),
           WrongGroupId = key(45),
-          Projection = quod_dtx:initial_projection(Target, 0),
-          {Control, Ref} = direct_abort(Target, GroupId, key(46), 1, Signer),
-          Entry = #{group_id => WrongGroupId,
-                    digest => quod_dtx:record_digest(Control), ref => Ref},
+          Projection = quod_atomic:initial_projection(Target, 0),
+          {Control, Ref} = direct_abort(Target, ManifestDigest, key(46), 1, Signer),
+          GroupId = quod_atomic:group_id(Control),
+          Entry = #{digest => quod_atomic:record_digest(Control), ref => Ref},
           WrongHistory =
               #{group_id => WrongGroupId,
-                records => #{finalize => Entry}},
+                records => #{resolve => Entry}},
+          ?assert(quod_atomic:valid_group_history(WrongHistory)),
           ok = quod_dtx_phase_index:test_insert_raw(
                  Index, GroupId,
-                 term_to_binary({quod_dtx_phase_history, 1, WrongHistory}, [deterministic])),
+                 term_to_binary({quod_dtx_phase_history, 2, WrongHistory}, [deterministic])),
           ?assertEqual(
-             {error, {invalid_transition, bad_binding}},
+             %% Storage binds the row key before the reducer ever sees it.
+             {error, phase_index_corrupt},
              phase_apply(
                Index, Control, Ref, Projection))
       end).
@@ -497,7 +505,7 @@ suspended_session_reopens_with_exact_history_test() ->
           {ok, Index0} = quod_dtx_phase_index:open(DataDir, Ns),
           Signer = signer(),
           Target = {<<"quod:phase-target">>, key(80)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           {Control, Ref} = direct_abort(
                              Target, key(81), key(82), 1, Signer),
           {ok, Projection, [_]} = phase_apply(
@@ -566,7 +574,7 @@ malformed_control_is_rejected_before_index_access_test() ->
     with_index(
       fun(Index, _DataDir) ->
           Target = {<<"quod:phase-target">>, key(50)},
-          Projection = quod_dtx:initial_projection(Target, 0),
+          Projection = quod_atomic:initial_projection(Target, 0),
           ?assertEqual(
              {error, bad_phase_index_control},
              phase_apply(
@@ -609,22 +617,21 @@ with_tmp(Fun) ->
         _ = file:del_dir_r(DataDir)
     end.
 
-direct_abort(Target, GroupId, DecisionDigest, Sequence, Signer) ->
+direct_abort(Target, ManifestDigest, VoteDigest, Sequence, Signer) ->
     {OriginNs, OriginAnchor} = {<<"quod:phase-origin">>, key(60)},
-    {ok, DecisionRef} =
+    {ok, VoteRef} =
         quod_dtx:certified_ref(
-          OriginNs, OriginAnchor, 7, key(61), DecisionDigest,
-          <<"decision-qc">>),
-    {ok, Record} =
-        quod_dtx:new_finalize(GroupId, DecisionRef, abort, none, 0),
+          OriginNs, OriginAnchor, 7, key(61), VoteDigest, <<"vote-qc">>),
+    Record = quod_ct:atomic_abort_record(Target, ManifestDigest, VoteRef),
+    {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} =
-        quod_dtx:sign_control(
-          Target, Record, key(62), Sequence, Sequence, Signer),
+        quod_atomic:sign_control(
+          Target, Material, key(62), Sequence, Sequence, Signer),
     {TargetNs, TargetAnchor} = Target,
     {ok, Ref} =
         quod_dtx:certified_ref(
           TargetNs, TargetAnchor, 10 + Sequence, key(70 + Sequence),
-          quod_dtx:record_digest(Control), <<"finalize-qc">>),
+          quod_atomic:record_digest(Control), <<"resolve-qc">>),
     {Control, Ref}.
 
 signer() ->

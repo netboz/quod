@@ -137,22 +137,20 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
                node_addr => {"127.0.0.1", 14567},
                genesis_diff => HostDiff},
              Ns, Pubkey, <<90:256>>),
-    GroupId = <<92:256>>,
-    {ok, DecisionRef} = quod_dtx:certified_ref(
+    {ok, OriginVoteRef} = quod_dtx:certified_ref(
                           <<"projection-origin">>, <<93:256>>, 1,
-                          <<94:256>>, <<95:256>>, <<"decision-qc">>),
-    {ok, Finalize} = quod_dtx:new_finalize(
-                       GroupId, DecisionRef, abort, none, 0),
-    {ok, Control} = quod_dtx:sign_control(
-                      Target, Finalize, Admission, 1, 1, Signer),
-    GroupId2 = <<96:256>>,
-    {ok, DecisionRef2} = quod_dtx:certified_ref(
+                          <<94:256>>, <<95:256>>, <<"vote-qc">>),
+    Resolve = quod_ct:atomic_abort_record(Target, <<92:256>>, OriginVoteRef),
+    GroupId = quod_atomic:group_id(Resolve),
+    {ok, Material} = quod_atomic:admission_material(Resolve),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 1, 1, Signer),
+    {ok, OriginVoteRef2} = quod_dtx:certified_ref(
                            <<"projection-origin-2">>, <<97:256>>, 1,
-                           <<98:256>>, <<99:256>>, <<"decision-qc-2">>),
-    {ok, Finalize2} = quod_dtx:new_finalize(
-                        GroupId2, DecisionRef2, abort, none, 0),
-    {ok, Control2} = quod_dtx:sign_control(
-                       Target, Finalize2, Admission, 2, 2, Signer),
+                           <<98:256>>, <<99:256>>, <<"vote-qc-2">>),
+    Resolve2 = quod_ct:atomic_abort_record(Target, <<96:256>>, OriginVoteRef2),
+    GroupId2 = quod_atomic:group_id(Resolve2),
+    {ok, Material2} = quod_atomic:admission_material(Resolve2),
+    {ok, Control2} = quod_atomic:sign_control(Target, Material2, Admission, 2, 2, Signer),
     Ops1 = [{assert, {{group_one_fact, one}, {[], false}}}],
     Ops2 = [{event, {group_two_event, two}}],
     Item1 = quod_committed_projection:test_publication_item(
@@ -160,7 +158,7 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
               #{applies => 1, rejects => 0, conflicts => 0}),
     Item2 = quod_committed_projection:test_publication_item(
               Control2, {group_applied, GroupId2, two}, Ops2,
-              {finalize_applied, GroupId2, 2, 0},
+              {resolve_applied, GroupId2, 2, 0},
               #{applies => 1, rejects => 0, conflicts => 0}),
     ?assertEqual(Ops1, maps:get(applied_ops, Item1)),
     ?assertEqual([{group_one_fact, one}], maps:get(changed_heads, Item1)),
@@ -185,8 +183,8 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
          #{kind := dtx_batch, controls := [Control, Control2], publications := [],
            items := BatchItems, applied_ops := [],
            deferred_acks :=
-             [{finalize_applied, GroupId, 2, 0},
-              {finalize_applied, GroupId2, 2, 0}]}} =
+             [{resolve_applied, GroupId, 2, 0},
+              {resolve_applied, GroupId2, 2, 0}]}} =
             quod_committed_projection:apply_entry(Entry, 2, Projection1),
         ?assertEqual([GroupId, GroupId2],
                      [maps:get(group_id, Item) || Item <- BatchItems]),
@@ -309,8 +307,7 @@ signed_change({Ns, Anchor} = Target, Transaction0, Signer) ->
     Signed.
 
 dtx_entry(Index, Controls) ->
-    Items = [{dtx, begin {ok, Blob} = quod_dtx:encode_control(Control), Blob end}
-             || Control <- Controls],
+    Items = [{dtx, Control} || Control <- Controls],
     EmptyCert = #cert{kind = commit, slot = Index,
                       block_hash = <<0:256>>, sigs = []},
     {ok, Block} = quod_ledger:new_block(

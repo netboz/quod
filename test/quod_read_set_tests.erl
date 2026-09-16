@@ -71,7 +71,9 @@ signed_bad_order_is_refused_before_vocabulary_materializes_test() ->
     assert_unknown(Names),
     ?assertEqual({error, {protocol_error, bad_payload}}, quod_dtx:material(BadPlan)),
     assert_unknown(Names),
-    {ok, Canonical} = quod_safe_term:decode_wrapped(maps:get(signed_bytes, F), 100000),
+    %% The plan/read-set goldens are unchanged; transaction V14 is retired.
+    %% Inject bad order into a current signed envelope, not a legacy decoder.
+    {ok, Canonical} = quod_safe_term:decode_wrapped(maps:get(signed_bytes, produce([])), 100000),
     {ok, Material} = quod_wire_term:encode_canonical({[], BadPairs}),
     {ok, BadBody} = quod_safe_term:encode_canonical(setelement(12, Canonical, Material), 100000),
     {ok, BadEnvelope} = quod_safe_term:encode_canonical(
@@ -110,7 +112,8 @@ golden_producer(FixtureBytes) ->
     {ok, Plan} = quod_dtx:decode(maps:get(plan_bytes, F)),
     {ok, Material} = quod_dtx:material(Plan),
     ?assertEqual({ok, maps:get(read_bytes, F)}, quod_read_set:encode(maps:get(read_check, Material))),
-    {ok, Tx} = quod_transaction:decode_ledger_transaction(maps:get(transaction_bytes, F), materialized),
+    ?assertEqual({error, malformed_ledger_transaction},
+      quod_transaction:decode_ledger_transaction(maps:get(transaction_bytes, F), materialized)),
     {ok, PubSeed} = test_signer(),
     Session = quod_proof_session:start(quod_ct:committed_kb([]),
       #{read_set => true, signer => PubSeed, proof_context => {origin, golden174}}),
@@ -121,9 +124,6 @@ golden_producer(FixtureBytes) ->
           maps:with([target, base_height, proof_id, origin, principal, request_binding], Core)))
     after quod_proof_session:stop(Session)
     end,
-    ?assertEqual({ok, Tx}, quod_transaction:sign(maps:get(binding, F),
-      Tx#transaction{sig = none, signed_bytes = none}, PubSeed)),
-    check_transaction(F, Tx),
     ?assertEqual(maps:get(plan_digest, F), quod_dtx:digest(Plan)),
     ?assertEqual({ok, maps:get(plan_bytes, F)}, quod_dtx:encode(Plan)),
     ok.
@@ -143,8 +143,8 @@ golden_consumer(FixtureBytes) ->
     ok.
 
 golden_consume(F) ->
-    {ok, Tx} = quod_transaction:decode_ledger_transaction(maps:get(transaction_bytes, F), wrapped),
-    check_transaction(F, Tx),
+    ?assertEqual({error, malformed_ledger_transaction},
+      quod_transaction:decode_ledger_transaction(maps:get(transaction_bytes, F), wrapped)),
     {ok, Plan} = quod_dtx:decode(maps:get(plan_bytes, F)),
     ?assertEqual({ok, maps:get(plan_bytes, F)}, quod_dtx:encode(Plan)),
     {ok, Pairs} = quod_wire_term:decode_canonical(quod_dtx:read_check_bytes(Plan), 100000),

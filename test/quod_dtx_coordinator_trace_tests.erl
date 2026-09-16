@@ -29,15 +29,15 @@ complete_projection_retires_held_child_once_test() ->
                 assert_no_root(),
                 Adopted = adopt(F, Running),
                 Before = projection_state(F, pre_complete, Adopted),
-                ?assertMatch([{G, _}], quod_dtx:origin_recoveries(
-                  maps:get(pre_complete_projection, F))),
+                ?assertMatch(#{G := _}, quod_atomic:recovery_rows(
+                  maps:get(pre_complete_projection, F), quod_time:now_ms())),
                 ?assertEqual(owner_row(F, Before), owner_row(F,
                   quod_simplex:test_reconcile_dtx_coordinator(Before))),
                 %% The real Complete reducer removed this desired row. No
                 %% timer or hand-written empty desired map causes retirement.
                 Completed = projection_state(F, complete, Before),
-                ?assertEqual([], quod_dtx:origin_recoveries(
-                  maps:get(complete_projection, F))),
+                ?assertEqual(#{}, quod_atomic:recovery_rows(
+                  maps:get(complete_projection, F), quod_time:now_ms())),
                 {keep_state, Released, _} = quod_simplex:running(
                   info, {dtx_coordinator, Pid, G, {done, Complete}}, Completed),
                 ?assertEqual(#{}, quod_simplex:test_dtx_coordinator_state(Released)),
@@ -123,7 +123,8 @@ public_terminal_keeps_root_open_test() ->
         try with_env(dtx_test_observation_state,
                      {G, maps:get(terminal_snapshot, F), #{}}, fun() ->
           with_env(dtx_test_phase_barrier, {hold, terminal}, fun() ->
-            Running = start(F, Parent, S0),
+            Running = projection_state(F, pre_complete,
+                        adopt(F, start(F, Parent, S0))),
             #{pid := Pid} = owner_row(F, Running),
             Terminal = receive {dtx_coordinator, Pid, G, {terminal, T}} -> T
                        after 2000 -> error(no_real_terminal) end,
@@ -172,6 +173,10 @@ abnormal_down_and_stale_messages_test_() ->
 
 adoption_and_row_preserving_replacement_keep_original_parent_test() ->
     with_case(fun(F, S0, Parent) ->
+      Other = phase_fixture(quod_ct:signed_atomic_fixture(#{
+        target => maps:get(target, F), node_identity => maps:get(node_identity, F),
+        key_pair => maps:get(key_pair, F), admission => maps:get(admission, F),
+        proof_id => <<51:256>>, operation_id => <<52:256>>})),
       with_attempt_trace(fun(Trace) ->
         Running = start(F, Parent, S0),
         Old = owner_row(F, Running),
@@ -184,11 +189,13 @@ adoption_and_row_preserving_replacement_keep_original_parent_test() ->
         assert_no_root(),
         ?assertEqual(1, length(attempts(Trace))),
         G = maps:get(group_id, F),
-        %% An explicit incompatible desired representation exercises the real
-        %% replacement seam. It is not the ordinary adoption transition.
+        %% Same-group pending/committed own rows now always adopt. Inject a
+        %% crossed-group desired index to exercise defensive replacement with
+        %% real immutable material, not a retired phase representation. This
+        %% deliberately inconsistent index is not a normal owner transition.
         Replaced = quod_simplex:test_reconcile_dtx_coordinators(
-          #{G => {record, G, maps:get('begin', F), maps:get(group_ref, F)}}, Adopted),
-        New = owner_row(F, Replaced),
+          #{G => maps:get(own_row, Other)}, Adopted),
+        New = owner_row(Other, Replaced),
         ?assertNotEqual(maps:get(pid, Old), maps:get(pid, New)),
         ?assertEqual(Parent, maps:get(trace_ctx, New)),
         First = root(),
@@ -198,7 +205,7 @@ adoption_and_row_preserving_replacement_keep_original_parent_test() ->
         ?assertEqual({keep_state, Replaced}, quod_simplex:running(info,
           {dtx_coordinator, maps:get(pid, Old), G, {done, maps:get(complete_ref, F)}}, Replaced)),
         assert_no_root(),
-        _ = stop(F, Replaced),
+        _ = stop(Other, Replaced),
         Second = root(),
         ExpectedParent = otel_span:span_id(otel_tracer:current_span_ctx(Parent)),
         ?assertEqual(ExpectedParent, First#span.parent_span_id),
@@ -214,59 +221,39 @@ post_adoption_down_rebuild_is_honestly_parentless_test_() ->
     [{atom_to_list(Exit), fun() ->
       with_case(fun(F, S0, Parent) ->
         G = maps:get(group_id, F),
-        Origin = {Ns, _} = maps:get(origin, F),
+        Origin = maps:get(origin, F),
         Snapshot = case Exit of normal -> maps:get(complete_snapshot, F);
                                 killed -> quod_dtx_recovery:empty() end,
         with_env(dtx_test_observation_state, {G, Snapshot, #{}}, fun() ->
           with_attempt_trace(fun(Trace) ->
-            {ok, Store0} = quod_ledger_store:open(Ns, maps:get(store_dir, F)),
-            {ok, Store} = quod_ledger_store:append(Store0,
-              [quod_ledger:noop_entry(1, none), maps:get(begin_entry, F)]),
-            true = quod_reg:reg({quod_simplex, Ns}),
-            try
                 Running = start(F, Parent, S0),
                 Adopted = adopt(F, Running),
                 ?assertEqual(Parent, maps:get(trace_ctx, owner_row(F, Adopted))),
-                Signer = maps:get(node_identity, F),
-                Pk = maps:get(pubkey, Signer),
-                Admission = maps:get(admission, F),
-                Committee = crypto:hash(sha256, <<"B-test-committee">>),
-                Ref = maps:get(begin_ref, F),
-                Projection = (quod_simplex:history_projection(
-                  [Pk], Committee, #{Pk => Admission}, #{Pk => 1}, 1))#{
-                    committee_views => [{1, [Pk], Committee, #{}}],
-                    dtx => maps:get(begin_projection, F),
-                    dtx_lanes => #{{Admission, Pk} => 1}, history_head => {2, element(6, Ref)}},
-                Ready = quod_simplex:test_install_projection(Projection,
-                  quod_simplex:test_state_set(store, Store,
-                    quod_simplex:test_state_set(slot, 2,
-                      projection_state(F, 'begin', Adopted)))),
+                %% The installed Vote projection already owns authenticated
+                %% material. Restart is direct: no loader, ledger read or
+                %% bootstrap result is needed to create the new attempt.
+                Ready = projection_state(F, vote, Adopted),
                 #{pid := Pid, monitor := MRef} = owner_row(F, Ready),
                 case Exit of killed -> exit(Pid, kill); normal -> ok end,
                 ?assertEqual(Exit, wait_down(Pid, MRef)),
-                {true, Loading} = quod_simplex:test_drop_dtx_coordinator(MRef, Pid, Exit, Ready),
+                {true, Rebuilt} = quod_simplex:test_drop_dtx_coordinator(MRef, Pid, Exit, Ready),
                 First = root(),
                 ?assertEqual(<<"worker_exit">>, closure(First)),
-                #{status := recovering, pid := Loader, coordinate_span := none,
-                  trace_ctx := Empty} = owner_row(F, Loading),
+                #{pid := NewPid, trace_ctx := Empty,
+                  coordinate_span := {_, NewSpan}} = owner_row(F, Rebuilt),
+                ?assertNotEqual(Pid, NewPid),
                 ?assertEqual(otel_ctx:new(), Empty),
-                ?assertEqual(1, length(attempts(Trace))),
-                Result = receive {dtx_coordinator_bootstrap, Loader, G, Ref, R} -> R
-                         after 3000 -> error(no_real_history_bootstrap) end,
-                ?assertMatch({ok, #{phase := 'begin'}}, Result),
-                Rebuilt = quod_simplex:test_finish_dtx_coordinator_bootstrap(Loader, G, Ref, Result, Loading),
-                #{trace_ctx := Empty, coordinate_span := {_, NewSpan}} = owner_row(F, Rebuilt),
                 ?assertEqual(2, length(attempts(Trace))),
                 ?assertNotEqual(First#span.trace_id, otel_span:trace_id(NewSpan)),
+                %% The fixture supplies no readable ledger capability. A new
+                %% owner row exists even while its child remains parked.
+                ?assertMatch(#{execution_ready := false, wave := none},
+                             quod_dtx_coordinator:test_state(NewPid)),
                 _ = stop(F, Rebuilt),
                 Second = quod_trace_tests:take_span(<<"quod.dtx.coordinate">>, otel_span:trace_id(NewSpan)),
                 ?assertEqual(undefined, Second#span.parent_span_id),
                 ?assertEqual(<<"no_retained_parent">>, attr('quod.dtx.ancestry', Second)),
                 ?assertEqual(Origin, maps:get(target, F))
-            after
-                gproc:unreg(quod_reg:name({quod_simplex, Ns})),
-                quod_ledger_store:close(Store)
-            end
           end)
         end)
       end) end} || Exit <- [normal, killed]].
@@ -314,13 +301,22 @@ failed_child_cleanup_never_means_semantic_complete_test_() ->
       with_case(fun(F, S0, Parent) ->
         G = maps:get(group_id, F),
         {Ns, _} = maps:get(origin, F),
-        Invalid = (quod_dtx_recovery:empty())#{generations := [invalid_fixture_generation]},
+        %% Corrupt one pre-verified Resolve fact: its commit claim conflicts
+        %% with the certified negative source Vote. The real planner must
+        %% return an error, not interpret obsolete snapshot fields.
+        Snapshot = maps:get(terminal_snapshot, F),
+        Evidence = maps:get(evidence, Snapshot),
+        Remote = maps:get(remote, F),
+        Resolve = maps:get({resolve, Remote}, Evidence),
+        Invalid = Snapshot#{evidence := Evidence#{
+          {resolve, Remote} := Resolve#{outcome := commit}}},
         with_env(dtx_test_observation_state, {G, Invalid, #{}}, fun() ->
           with_attempt_trace(fun(Trace) ->
             Running = start(F, Parent, S0),
             #{pid := Pid, monitor := M} = owner_row(F, Running),
             Reason = receive {dtx_coordinator, Pid, G, {error, R}} -> R
                      after 2000 -> error(no_real_child_error) end,
+            ?assertEqual({invalid_recovery_state, conflicting_resolve_outcome}, Reason),
             ?assertEqual(normal, wait_down(Pid, M)),
             assert_no_root(),
             ExpectedClosure = case Edge of
@@ -413,8 +409,8 @@ isolated(Fun) ->
 
 with_case_local(Fun) ->
     quod_trace_tests:with_tracer(fun() ->
-      quod_dtx_group_trace_tests:with_fixture(fun(Base, S0, {_Journal, Dir}) ->
-        F = (phase_fixture(Base))#{store_dir => filename:join(Dir, "store")},
+      quod_dtx_group_trace_tests:with_fixture(fun(Base, S0, _Storage) ->
+        F = phase_fixture(Base),
         {Parent, ParentSpan} = quod_trace:start_span(
           otel_ctx:new(), <<"B.request">>, internal, #{}),
         try quod_trace:with_context(Parent, fun() -> Fun(F, S0, Parent) end)
@@ -424,48 +420,81 @@ with_case_local(Fun) ->
 
 phase_fixture(F) ->
     Origin = maps:get(target, F),
-    Begin = maps:get('begin', F),
-    G = quod_dtx:group_id(Begin),
-    {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
-    {ok, Origin, G, Plans} = quod_dtx:begin_recovery_rows(Begin),
-    [Remote] = [T || {T, _} <- Plans, T =/= Origin],
-    {BeginEntry, BeginPayload, BeginRef} = entry(Origin, maps:get(begin_control, F), 2, F),
-    Reasons = [{prepare_refused, {ontology, element(1, Remote), element(2, Remote)}}],
-    {ok, Decision} = quod_dtx:new_decision(G, BeginRef, {abort, Reasons}, [{Origin, BeginRef}]),
-    DecisionControl = sign(Origin, Decision, 2, F),
-    {_, _, DecisionRef} = entry(Origin, DecisionControl, 3, F),
-    {ok, Finalize} = quod_dtx:new_finalize(G, DecisionRef, abort, none, 1),
-    FinalizeControl = sign(Remote, Finalize, 1, F),
-    {_, _, FinalizeRef} = entry(Remote, FinalizeControl, 2, F),
-    {ok, Complete} = quod_dtx:new_complete(G, DecisionRef,
-      lists:sort([{Origin, DecisionRef, 1}, {Remote, FinalizeRef, 1}])),
+    Group = maps:get(group, F),
+    G = quod_atomic:group_id(Group),
+    Bundles = maps:get(bundles, F),
+    [Remote] = [T || {T, _, _, _} <- Bundles, T =/= Origin],
+    Reasons = [conflict],
+    {ok, Vote} = quod_atomic:new_vote(Group, Origin,
+      lists:keyfind(Origin, 1, Bundles), {refused, Reasons}),
+    VoteControl = sign(Origin, Vote, 1, F),
+    Material = quod_atomic:control_material(VoteControl),
+    Own = #{material => Material, ref => none, resolution => none},
+    {ok, GroupRef} = quod_atomic:source_group_ref(Material),
+    {VoteEntry, VotePayload, VoteRef} = entry(Origin, VoteControl, 2, F),
+    {ok, RemoteVote} = quod_atomic:new_vote(Group, Remote,
+      lists:keyfind(Remote, 1, Bundles), prepared),
+    RemoteControl = sign(Remote, RemoteVote, 1, F),
+    {_, _, RemoteRef} = entry(Remote, RemoteControl, 2, F),
+    Plans = maps:get(plans, F),
+    SourceGeneration = quod_dtx:overlay_generation(maps:get(Origin, Plans)),
+    TargetGeneration = quod_dtx:overlay_generation(maps:get(Remote, Plans)),
+    Proof = {refused, VoteRef},
+    {ok, Resolve} = quod_atomic:new_resolve(Group, VoteRef, Origin,
+      {abort, Reasons}, Proof, VoteRef, SourceGeneration),
+    ResolveControl = sign(Origin, Resolve, 2, F),
+    {_, _, ResolveRef} = entry(Origin, ResolveControl, 3, F),
+    {ok, RemoteResolve} = quod_atomic:new_resolve(Group, VoteRef, Remote,
+      {abort, Reasons}, Proof, RemoteRef, TargetGeneration),
+    RemoteResolveControl = sign(Remote, RemoteResolve, 2, F),
+    {_, _, RemoteResolveRef} = entry(Remote, RemoteResolveControl, 3, F),
+    %% Real AM3 signature under a supplied one-member committee identity.
+    %% The TEST hook treats history/application as pre-verified: this does
+    %% not prove admitted membership, foreign verification or durable apply.
+    Network = maps:get(network, F),
+    Committee = crypto:hash(sha256, <<"B-test-committee">>),
+    {ok, AppliedVote} = quod_applied_certificate:sign_applied_vote(
+      Network, Remote, Committee, G, RemoteResolveRef, TargetGeneration,
+      abort, maps:get(node_identity, F)),
+    {ok, Certificate} = quod_applied_certificate:applied_certificate(
+      {Network, Remote, Committee, G, RemoteResolveRef, TargetGeneration, abort},
+      [AppliedVote]),
+    {ok, Complete} = quod_atomic:new_complete(Group, abort,
+      lists:sort([{Origin, ResolveRef, SourceGeneration},
+                  {Remote, RemoteResolveRef, TargetGeneration}]), [{Remote, Certificate}]),
     CompleteControl = sign(Origin, Complete, 3, F),
     {_, _, CompleteRef} = entry(Origin, CompleteControl, 4, F),
-    Evidence = [{Origin, maps:get(begin_control, F), BeginRef},
-                {Origin, DecisionControl, DecisionRef}, {Remote, FinalizeControl, FinalizeRef}],
-    TerminalSnapshot = #{evidence => Evidence, generations => lists:sort([{Origin,1},{Remote,1}]),
-                         applied => [], refusal => none},
-    CompleteSnapshot = TerminalSnapshot#{evidence := Evidence ++ [{Origin, CompleteControl, CompleteRef}]},
-    ?assertMatch({ok, _}, quod_dtx_recovery:terminal(Begin, TerminalSnapshot)),
-    ?assertEqual({done, CompleteRef}, quod_dtx_recovery:next(Begin, CompleteSnapshot)),
-    {ok, H1, P1, _} = quod_dtx:reduce(maps:get(begin_control, F), BeginRef,
-      quod_dtx:initial_group_history(), quod_dtx:initial_projection(Origin, 1)),
-    {ok, H2, P2, _} = quod_dtx:reduce(DecisionControl, DecisionRef, H1, P1),
-    {ok, _, P3, _} = quod_dtx:reduce(CompleteControl, CompleteRef, H2, P2),
-    F#{origin => Origin, group_id => G, group_ref => GroupRef, begin_entry => BeginEntry,
-       begin_payload => BeginPayload, begin_ref => BeginRef, begin_projection => P1,
+    Evidence = [{Origin, VoteControl, VoteRef}, {Remote, RemoteControl, RemoteRef},
+                {Origin, ResolveControl, ResolveRef}, {Remote, RemoteResolveControl, RemoteResolveRef}],
+    Observed = lists:foldl(fun(Row, Snapshot) ->
+        {ok, Next} = quod_dtx_recovery:observe(Own, Row, Snapshot), Next
+    end, quod_dtx_recovery:empty(), Evidence),
+    {ok, TerminalSnapshot} = quod_dtx_recovery:applied(Own, Remote, Certificate, Observed),
+    {ok, CompleteSnapshot} = quod_dtx_recovery:observe(
+      Own, {Origin, CompleteControl, CompleteRef}, TerminalSnapshot),
+    ?assertEqual({ok, {ordered, complete, [{submit, Origin, Complete}]}},
+                 quod_dtx_recovery:next(Own, TerminalSnapshot)),
+    ?assertMatch({ok, _}, quod_dtx_recovery:terminal(Own, TerminalSnapshot)),
+    ?assertEqual({done, CompleteRef}, quod_dtx_recovery:next(Own, CompleteSnapshot)),
+    {ok, H1, P1, _} = quod_atomic:reduce(VoteControl, VoteRef,
+      quod_atomic:initial_group_history(), quod_atomic:initial_projection(Origin, 1)),
+    {ok, H2, P2, _} = quod_atomic:reduce(ResolveControl, ResolveRef, H1, P1),
+    {ok, _, P3, _} = quod_atomic:reduce(CompleteControl, CompleteRef, H2, P2),
+    F#{origin => Origin, remote => Remote, group_id => G, group_ref => GroupRef,
+       own_row => Own, vote => Vote, vote_control => VoteControl, vote_entry => VoteEntry,
+       vote_payload => VotePayload, vote_ref => VoteRef, vote_projection => P1,
        pre_complete_projection => P2, complete_projection => P3,
        complete_ref => CompleteRef, terminal_snapshot => TerminalSnapshot,
        complete_snapshot => CompleteSnapshot}.
 
 sign(Target, Record, Seq, F) ->
-    {ok, Control} = quod_dtx:sign_control(Target, Record, maps:get(admission, F),
-                                         Seq, Seq, maps:get(node_identity, F)),
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F),
+                                            Seq, Seq, maps:get(node_identity, F)),
     Control.
 
 entry({Ns, Anchor} = Target, Control, Slot, F) ->
-    {ok, Envelope} = quod_dtx:encode_control(Control),
-    Payload = {batch, [{dtx, Envelope}]},
+    Payload = {batch, [{dtx, Control}]},
     {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, Payload, 0),
     Hash = quod_simplex:block_hash(Block),
     Signer = maps:get(node_identity, F),
@@ -480,15 +509,21 @@ start(F, Parent, S0) ->
     %% These span tests supply pre-verified snapshots and exercise active
     %% coordination. Readiness-specific tests start parked explicitly.
     Ready = quod_simplex:test_state_set(prolog_ready, true, S0),
-    Seed = quod_simplex:test_seed_dtx_submission(maps:get(begin_control, F), [], Ready),
-    quod_simplex:test_start_dtx_coordinator_worker(
-      maps:get('begin', F), maps:get(group_ref, F), none, Parent, Seed).
+    Seed = quod_simplex:test_seed_dtx_submission(maps:get(vote_control, F), [], Ready),
+    Running = quod_simplex:test_start_dtx_coordinator_worker(maps:get(own_row, F), Parent, Seed),
+    #{pid := Pid} = owner_row(F, Running),
+    %% Pre-verified snapshots need no ledger reader. Grant execution through
+    %% the existing TEST capability seam, not a fabricated endpoint/store.
+    ok = quod_simplex:test_activate_dtx_coordinator(Pid, Running),
+    Running.
 
 adopt(F, S) ->
-    quod_simplex:test_resolve_committed_dtx(maps:get(begin_entry, F), maps:get(begin_payload, F), S).
+    Installed = projection_state(F, vote,
+      quod_simplex:test_resolve_committed_dtx(maps:get(vote_entry, F), maps:get(vote_payload, F), S)),
+    quod_simplex:test_reconcile_dtx_coordinator(Installed).
 
 projection_state(F, Stage, S) ->
-    Key = case Stage of 'begin' -> begin_projection;
+    Key = case Stage of vote -> vote_projection;
                         pre_complete -> pre_complete_projection;
                         complete -> complete_projection end,
     quod_simplex:test_state_set(prolog_ready, true,

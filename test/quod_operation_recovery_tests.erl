@@ -230,17 +230,17 @@ receipt_binding_cannot_replace_the_claim_test() ->
         {Tag, S1} = wait_for_result(Ref, S0),
         WrongDigest = crypto:hash(sha256, Digest),
         ?assertNotEqual(Digest, WrongDigest),
+        {ok, Receipt} = quod_ct:certified_receipt([Target]),
         WrongDigestReceipt = quod_transaction:remote_complete(
-                               Origin, Ref, WrongDigest,
-                               [{quod_operation_vector:target(Target), {included, Target}}]),
+                               Origin, Ref, WrongDigest, Receipt),
         ?assertError({operation_recovery_binding_conflict, Ref},
                      quod_simplex:apply_operation_projection(
                        8, WrongDigestReceipt, S1)),
         {transaction, Ns, Anchor, TxId} = Target,
         WrongTarget = {transaction, Ns, Anchor, crypto:hash(sha256, TxId)},
+        {ok, WrongReceipt} = quod_ct:certified_receipt([WrongTarget]),
         WrongTargetReceipt = quod_transaction:remote_complete(
-                               Origin, Ref, Digest,
-                               [{quod_operation_vector:target(WrongTarget), {included, WrongTarget}}]),
+                               Origin, Ref, Digest, WrongReceipt),
         ?assertError({operation_recovery_binding_conflict, Ref},
                      quod_simplex:apply_operation_projection(
                        8, WrongTargetReceipt, S1)),
@@ -248,8 +248,7 @@ receipt_binding_cannot_replace_the_claim_test() ->
         OtherRef = {operation, OriginNs, OriginAnchor, Agent,
                     crypto:hash(sha256, OpId)},
         OtherReceipt = quod_transaction:remote_complete(
-                         Origin, OtherRef, Digest,
-                         [{quod_operation_vector:target(Target), {included, Target}}]),
+                         Origin, OtherRef, Digest, Receipt),
         ?assertEqual(S1, quod_simplex:apply_operation_projection(
                            8, OtherReceipt, S1)),
         ?assertEqual([], worker_wakes(Worker)),

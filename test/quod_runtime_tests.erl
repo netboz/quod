@@ -495,7 +495,7 @@ non_content_founding_payload_is_rejected_test() ->
        quod_ledger:new_entry(1, {batch, []}, 0, none)),
     lists:foreach(
       fun assert_bad_founding/1,
-      [noop, quod_ct:dtx_decision_payload()]).
+      [noop, quod_ct:atomic_resolve_payload()]).
 
 assert_bad_founding(Data) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -1372,11 +1372,11 @@ subscription_retraction_precedes_later_queued_remote_reaction_test() ->
                    EstAfterRetraction))
       end).
 
-%% A participant's event-only plan becomes visible only through DTX Finalize.
-%% Prepare and the other control phases are silent; the certified follower
+%% A participant's event-only plan becomes visible only through atomic Resolve.
+%% Vote and Complete are silent; the certified follower
 %% exposes the explicit occurrence once, through the normal reaction path,
 %% without creating a fact or adding DTX-specific dispatch.
-subscribed_reaction_observes_event_only_dtx_finalize_once_test_() ->
+subscribed_reaction_observes_event_only_atomic_resolve_once_test_() ->
     {timeout, 90, fun() ->
     %% Applied votes are bound to the root anchor. These standalone namespace
     %% fixtures deliberately do not start quod:root, so install that one piece

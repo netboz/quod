@@ -40,7 +40,7 @@ old_foreign_cache_is_refused_by_name_without_mutation_test() ->
                  binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
         Ns = <<"quod:owner-old-cache">>, Anchor = <<41:256>>, Identity = {Ns, Anchor},
         %% Exact .172 cache identity/manifest/checkpoint encoding, with a real
-        %% V6 store. This is a format-admission control, not a history proof.
+        %% current store. This is a format-admission control, not a history proof.
         CacheNs = crypto:hash(sha256, term_to_binary({quod_foreign_log, 3, Ns, Anchor}, [deterministic])),
         {ok, Store} = quod_ledger_store:open(CacheNs, Root, wrapped),
         ok = quod_ledger_store:close(Store),
@@ -80,73 +80,124 @@ walk(Pred, Term) ->
         _ -> false
     end.
 
-%% Actual signed controls and durable journals. These fixtures exercise owner
-%% transitions, not consensus admission; the certified-window tests cover it.
-fresh_begin_survives_reconciliation_test_() ->
+%% Actual signed Vote controls and durable journals, after parent selection.
+%% These fixtures exercise owner transitions, not consensus admission. The
+%% selection/handoff boundary is covered by quod_atomic_projection_tests:
+%% source_owner_caches_parent_selection_until_journal_handoff_test/0.
+fresh_vote_survives_reconciliation_test_() ->
     [{atom_to_list(Mode), fun() -> isolated(fun() -> survives(Mode) end) end}
      || Mode <- [ready, unconfirmed, pulling, prolog_unready]].
 
 survives(Mode) ->
     with_owner(fun(F, S0, Dir, Domain, Lane) ->
-        Begin = maps:get('begin', F),
         %% Capture before this request exists, as a real recovery worker does.
         Captured = quod_simplex:test_state_projection(S0),
-        {ok, Retained} = quod_simplex:test_retain_dtx_record(Begin, {dtx_endpoint, self()}, S0),
-        Journal0 = quod_simplex:test_signing_journal(Retained),
-        Pending = quod_signing_journal:pending_begins(Journal0),
-        ?assertEqual(1, map_size(Pending)),
-        Floor = quod_signing_journal:dtx_floor(Journal0, Lane),
+        Retained = journal_selected_vote(maps:get(source_control, F),
+                                        [{dtx_endpoint, self()}], S0),
         Installed = quod_simplex:test_install_projection(Captured, Retained),
-        Paused = case Mode of
-            ready -> Installed;
-            prolog_unready -> quod_simplex:test_state_set(prolog_ready, false, Installed);
-            pulling -> quod_simplex:test_state_set(sync, {pulling, self()}, Installed);
-            unconfirmed -> quod_simplex:test_state_set(sync, unconfirmed, Installed)
-        end,
-        {After, none} = quod_simplex:test_reconcile_signing_state(Paused),
-        {Again, none} = quod_simplex:test_reconcile_signing_state(After),
-        ?assertEqual(quod_simplex:test_retained_dtx_state(Retained),
-                     (quod_simplex:test_retained_dtx_state(Again))#{fingerprint := undefined}),
-        Journal = quod_simplex:test_signing_journal(Again),
-        ?assertEqual(Pending, quod_signing_journal:pending_begins(Journal)),
-        ?assertEqual(Floor, quod_signing_journal:dtx_floor(Journal, Lane)),
-        receive {dtx_submit_result, Reply} -> error({live_begin_retired, Reply}) after 0 -> ok end,
-        ok = quod_signing_journal:close(Journal),
-        {Ns, _} = maps:get(origin, F),
-        {ok, Reopened} = quod_signing_journal:recover(Ns, Domain, Dir),
-        try
-            ?assertEqual(Pending, quod_signing_journal:pending_begins(Reopened)),
-            ?assertEqual(Floor, quod_signing_journal:dtx_floor(Reopened, Lane))
-        after ok = quod_signing_journal:close(Reopened)
-        end
+        Again = reconcile_preserving_vote(pause_owner(Mode, Installed), Lane),
+        assert_vote_preserved(Retained, Again, Lane),
+        assert_reopened_vote(F, Again, Dir, Domain, Lane)
     end).
 
 paused_consumed_sequence_preserves_exact_envelope_test_() ->
     [ {atom_to_list(Mode), fun() -> isolated(fun() ->
-        with_owner(fun(F, S0, _Dir, _Domain, Lane) ->
-            {ok, S1} = quod_simplex:test_retain_dtx_record(maps:get('begin', F), none, S0),
+        with_owner(fun(F, S0, Dir, Domain, Lane) ->
+            S1 = journal_selected_vote(maps:get(source_control, F),
+                                       [{dtx_endpoint, self()}], S0),
             Journal = quod_simplex:test_signing_journal(S1),
-            Pending = quod_signing_journal:pending_begins(Journal),
             Floor = quod_signing_journal:dtx_floor(Journal, Lane),
             Consumed = quod_simplex:test_state_set(dtx_lanes, #{Lane => Floor}, S1),
-            Paused = case Mode of
-                prolog_unready -> quod_simplex:test_state_set(prolog_ready, false, Consumed);
-                unconfirmed -> quod_simplex:test_state_set(sync, unconfirmed, Consumed)
-            end,
-            {After, none} = quod_simplex:test_reconcile_signing_state(Paused),
-            ?assertEqual(Pending, quod_signing_journal:pending_begins(
-                                  quod_simplex:test_signing_journal(After))),
-            ?assertEqual(Floor, quod_signing_journal:dtx_floor(
-                                  quod_simplex:test_signing_journal(After), Lane)),
-            ?assertEqual(1, maps:get(retained, quod_simplex:test_retained_dtx_state(After)))
+            Again = reconcile_preserving_vote(pause_owner(Mode, Consumed), Lane),
+            assert_vote_preserved(S1, Again, Lane),
+            assert_reopened_vote(F, Again, Dir, Domain, Lane)
         end)
-    end) end} || Mode <- [unconfirmed, prolog_unready] ].
+    end) end} || Mode <- [unconfirmed, pulling, prolog_unready] ].
+
+journal_selected_vote(Control, Waiters, S0) ->
+    %% Direct Vote admission queues parent selection. Seed only its already-
+    %% selected retained row, and give it real durable custody first.
+    {ok, Journal, Envelope} = quod_signing_journal:record_dtx(
+                               quod_simplex:test_signing_journal(S0), Control),
+    {Record, Digest, _} = Material = quod_atomic:control_material(Control),
+    {ok, GroupRef} = quod_atomic:source_group_ref(Material),
+    GroupId = quod_atomic:group_id(Control),
+    #{author := Author, author_admission := Admission, sequence := Sequence} =
+        quod_atomic:control_metadata(Control),
+    ?assertEqual(#{GroupId => #{lane => {Admission, Author}, sequence => Sequence,
+                               intent => quod_atomic:intent_id(Material), group_ref => GroupRef,
+                               body => term_to_binary(Record, [deterministic]),
+                               material => Material, envelope => Envelope}},
+                 quod_signing_journal:pending_dtx(Journal)),
+    ?assertEqual(Sequence, quod_signing_journal:dtx_floor(Journal, {Admission, Author})),
+    S = quod_simplex:test_seed_dtx_submission(Control, Waiters,
+          quod_simplex:test_state_set(signing_journal, Journal, S0)),
+    ?assertMatch(#{retained := 1, ready := 1, blocked := 0,
+                   rows := #{Digest := #{envelope := Envelope}}},
+                 quod_simplex:test_retained_dtx_state(S)),
+    ?assertEqual(length(Waiters), quod_simplex:test_dtx_submission_waiters(S)),
+    ?assertMatch(#{active := 0, reserved := 0}, quod_simplex:test_dtx_admission_state(S)),
+    S.
+
+pause_owner(ready, S) -> S;
+pause_owner(prolog_unready, S) -> quod_simplex:test_state_set(prolog_ready, false, S);
+pause_owner(pulling, S) -> quod_simplex:test_state_set(sync, {pulling, self()}, S);
+pause_owner(unconfirmed, S) -> quod_simplex:test_state_set(sync, unconfirmed, S).
+
+reconcile_preserving_vote(S, Lane) ->
+    {After, none} = quod_simplex:test_reconcile_signing_state(S),
+    assert_vote_preserved(S, After, Lane),
+    {Again, none} = quod_simplex:test_reconcile_signing_state(After),
+    assert_vote_preserved(After, Again, Lane),
+    ?assertEqual(quod_simplex:test_retained_dtx_state(After),
+                 quod_simplex:test_retained_dtx_state(Again)),
+    Again.
+
+assert_vote_preserved(Before, After, Lane) ->
+    %% Only the classification memo may change: exact envelopes, ages,
+    %% placement, byte accounting and waiter ownership must all survive.
+    ?assertEqual(maps:remove(fingerprint, quod_simplex:test_retained_dtx_state(Before)),
+                 maps:remove(fingerprint, quod_simplex:test_retained_dtx_state(After))),
+    ?assertEqual(quod_simplex:test_dtx_admission_state(Before),
+                 quod_simplex:test_dtx_admission_state(After)),
+    BeforeJournal = quod_simplex:test_signing_journal(Before),
+    AfterJournal = quod_simplex:test_signing_journal(After),
+    ?assertEqual(quod_signing_journal:pending_dtx(BeforeJournal),
+                 quod_signing_journal:pending_dtx(AfterJournal)),
+    ?assertEqual(quod_signing_journal:dtx_floor(BeforeJournal, Lane),
+                 quod_signing_journal:dtx_floor(AfterJournal, Lane)),
+    receive {dtx_submit_result, Reply} -> error({live_vote_retired, Reply}) after 0 -> ok end.
+
+assert_reopened_vote(F, S, Dir, Domain, Lane) ->
+    Journal = quod_simplex:test_signing_journal(S),
+    Pending = quod_signing_journal:pending_dtx(Journal),
+    Floor = quod_signing_journal:dtx_floor(Journal, Lane),
+    ok = quod_signing_journal:close(Journal),
+    {Ns, _} = maps:get(origin, F),
+    {ok, Reopened} = quod_signing_journal:recover(Ns, Domain, Dir),
+    try
+        ?assertEqual(Pending, quod_signing_journal:pending_dtx(Reopened)),
+        ?assertEqual(Floor, quod_signing_journal:dtx_floor(Reopened, Lane)),
+        %% Restart loses the volatile selection token and callers, not the
+        %% signed envelope. Rebuild into the sole selection FIFO, not a
+        %% second retained registry or an already-selected signed row.
+        Empty = quod_simplex:test_state_set(retained_dtx, empty,
+                  quod_simplex:test_state_set(signing_journal, Reopened, S)),
+        Rebuilt = quod_simplex:test_restore_pending_dtx(Empty, Reopened),
+        ?assertMatch(#{active := 1, reserved := 0}, quod_simplex:test_dtx_admission_state(Rebuilt)),
+        ?assertMatch(#{retained := 0, waiters := 0, rows := Rows} when map_size(Rows) =:= 0,
+                     quod_simplex:test_retained_dtx_state(Rebuilt)),
+        _ = reconcile_preserving_vote(Rebuilt, Lane),
+        ok
+    after ok = quod_signing_journal:close(Reopened)
+    end.
 
 with_owner(Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
-    F = quod_ct:dtx_prepare_fixture(),
+    F = quod_ct:atomic_role_fixture(),
     {Ns, Anchor} = maps:get(origin, F),
-    {ok, {group, Ns, Anchor, Pub, Admission, _}} = quod_dtx:begin_group_ref(maps:get('begin', F)),
+    {ok, {group, Ns, Anchor, Pub, Admission, _}} = quod_atomic:source_group_ref(
+        quod_atomic:control_material(maps:get(source_control, F))),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Dir = filename:join("/tmp", "quod-owner-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
@@ -156,7 +207,8 @@ with_owner(Fun) ->
         S = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, self => Pub,
               id => maps:get(signer, F), validators => [Pub],
               author_admissions => #{Pub => Admission}, sync => ready, prolog_ready => true,
-              consensus_domain => Domain, slot => 1, phase_index => Index, signing_journal => Journal}),
+              consensus_domain => Domain, slot => 1, history_head => {1, <<42:256>>},
+              phase_index => Index, signing_journal => Journal}),
         Fun(F, S, Dir, Domain, {Admission, Pub})
     after
         _ = catch quod_signing_journal:close(Journal),

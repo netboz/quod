@@ -43,8 +43,8 @@ cleanup removes only abandoned files of this exact session-file family.
 -define(TOKEN_HEX_BYTES, (?TOKEN_BYTES * 2)).
 -define(OPEN_ATTEMPTS, 4).
 -define(HISTORY_DOMAIN, quod_dtx_phase_history).
--define(HISTORY_VERSION, 1). %% C2: implicit certificates can carry tx14 child blocks
--define(MAX_GROUP_RECORDS, 5).
+-define(HISTORY_VERSION, 2). %% Atomic Vote/Resolve/Complete, immutable v4 references
+-define(MAX_GROUP_RECORDS, 3).
 %% A history stores at most one certified reference for each fixed phase.  A
 %% reference combines a body-bounded finality proof with an identity whose
 %% namespace is itself bounded by the signed control envelope.  The fixed
@@ -63,7 +63,7 @@ cleanup removes only abandoned files of this exact session-file family.
          }).
 
 -record(delta, {
-          rows = #{} :: #{binary() => {quod_dtx:group_history(),
+          rows = #{} :: #{binary() => {quod_atomic:group_history(),
                                        non_neg_integer()}},
           bytes = 0 :: non_neg_integer(),
           eras = #{} :: #{pos_integer() => tuple()}
@@ -76,6 +76,7 @@ cleanup removes only abandoned files of this exact session-file family.
         bad_phase_index_control |
         bad_phase_index_delta |
         phase_index_corrupt |
+        {unsupported_dtx_phase_history, pos_integer()} |
         {phase_index_io, term()}.
 
 -doc "Open one new session-unique scratch index for a namespace.".
@@ -217,7 +218,7 @@ capture(Index = #index{table = Table, owner = Owner, state = State}, Height)
 capture(_Index, _Height) -> {error, bad_phase_index_argument}.
 
 -doc "Read one bounded exact group history, excluding records after a captured H.".
--spec history(index(), <<_:256>>) -> {ok, quod_dtx:group_history()} | {error, index_error()}.
+-spec history(index(), <<_:256>>) -> {ok, quod_atomic:group_history()} | {error, index_error()}.
 history(Index = #index{owner = Owner, state = State}, GroupId)
   when State =/= suspended, is_binary(GroupId), byte_size(GroupId) =:= 32 ->
     case is_process_alive(Owner) of
@@ -234,12 +235,12 @@ bounded_history(History, State) when State =:= open; State =:= retained -> {ok, 
 bounded_history(#{group_id := GroupId, records := Records}, {view, Height, _})
   when is_map(Records), map_size(Records) =< ?MAX_GROUP_RECORDS ->
     %% The reducer never overwrites a phase's first exact reference. Filtering
-    %% these at-most-five immutable records is MVCC without copying a prefix.
+    %% these at-most-three immutable records is MVCC without copying a prefix.
     try maps:filter(fun(_Kind, #{ref := Ref}) ->
             {ok, _Identity, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
             Slot =< Height
         end, Records) of
-        Kept when map_size(Kept) =:= 0 -> {ok, quod_dtx:initial_group_history()};
+        Kept when map_size(Kept) =:= 0 -> {ok, quod_atomic:initial_group_history()};
         Kept -> {ok, #{group_id => GroupId, records => Kept}}
     catch error:_ -> {error, phase_index_corrupt}
     end;
@@ -259,7 +260,7 @@ preview_committee(Delta = #delta{eras = Eras}, {Start, Committee, <<_:256>>, Rou
     Delta#delta{eras = Eras#{Start => Era}}.
 
 -doc "Stage the exact histories returned by the shared live-finality reducer.".
--spec preview_histories(delta(), #{binary() => quod_dtx:group_history()}) ->
+-spec preview_histories(delta(), #{binary() => quod_atomic:group_history()}) ->
     {ok, delta()} | {error, index_error()}.
 preview_histories(Delta, Histories) when is_map(Histories) ->
     maps:fold(fun(Group, History, {ok, D}) -> stage_history(D, Group, undefined, History);
@@ -382,9 +383,9 @@ new_delta() -> #delta{}.
 
 -doc "Preview one canonical same-phase control batch without mutating DETS.".
 -spec preview_batch(index(), delta(),
-                    [{quod_dtx:control(), quod_dtx:certified_ref()}],
-                    quod_dtx:projection()) ->
-          {ok, delta(), quod_dtx:projection(), list()} |
+                    [{quod_atomic:control(), quod_dtx:certified_ref()}],
+                    quod_atomic:projection()) ->
+          {ok, delta(), quod_atomic:projection(), list()} |
           {error, term()}.
 preview_batch(Index = #index{}, Delta = #delta{}, Controls, Projection)
   when is_list(Controls) ->
@@ -392,7 +393,7 @@ preview_batch(Index = #index{}, Delta = #delta{}, Controls, Projection)
         {ok, GroupIds} ->
             case load_batch_histories(Index, Delta, GroupIds, #{}) of
                 {ok, Histories0} ->
-                    case quod_dtx:reduce_batch(
+                    case quod_atomic:reduce_batch(
                            Controls, Histories0, Projection) of
                         {ok, Histories1, Projection1, Items} ->
                             case stage_batch_histories(
@@ -535,9 +536,9 @@ encode_delta_rows(_Malformed, _Bytes, _ExpectedBytes, _Acc) ->
 
 -doc "Apply one canonical same-phase control batch with one DETS commit.".
 -spec apply_batch(index(),
-                  [{quod_dtx:control(), quod_dtx:certified_ref()}],
-                  quod_dtx:projection()) ->
-          {ok, quod_dtx:projection(), list()} |
+                  [{quod_atomic:control(), quod_dtx:certified_ref()}],
+                  quod_atomic:projection()) ->
+          {ok, quod_atomic:projection(), list()} |
           {error, term()}.
 apply_batch(Index, Controls, Projection) ->
     case preview_batch(Index, new_delta(), Controls, Projection) of
@@ -552,8 +553,8 @@ apply_batch(Index, Controls, Projection) ->
 
 control_group_id(Control) ->
     try
-        _ = quod_dtx:control_kind(Control),
-        case quod_dtx:group_id(Control) of
+        _ = quod_atomic:control_kind(Control),
+        case quod_atomic:group_id(Control) of
             <<_:256>> = GroupId -> {ok, GroupId};
             _ -> error
         end
@@ -564,8 +565,8 @@ control_group_id(Control) ->
 
 load_history(#index{table = Table}, GroupId) ->
     case dets_lookup(Table, {group, GroupId}) of
-        {ok, []} -> {ok, quod_dtx:initial_group_history()};
-        {ok, [{{group, GroupId}, Blob}]} -> decode_history(Blob);
+        {ok, []} -> {ok, quod_atomic:initial_group_history()};
+        {ok, [{{group, GroupId}, Blob}]} -> decode_history(Blob, GroupId);
         {ok, _Malformed} -> {error, phase_index_corrupt};
         {error, Reason} -> {error, {phase_index_io, Reason}}
     end.
@@ -580,17 +581,18 @@ dets_lookup(Table, Key) ->
 encode_history(History) ->
     term_to_binary({?HISTORY_DOMAIN, ?HISTORY_VERSION, History}, [deterministic]).
 
-decode_history(Blob) when is_binary(Blob),
+decode_history(Blob, GroupId) when is_binary(Blob),
                           byte_size(Blob) =< ?MAX_HISTORY_BYTES ->
-    case quod_safe_term:decode(Blob, ?MAX_HISTORY_BYTES) of
-        {ok, {?HISTORY_DOMAIN, ?HISTORY_VERSION, History}} when is_map(History) ->
-            case encode_history(History) =:= Blob of
+    case quod_safe_term:decode_wrapped(Blob, ?MAX_HISTORY_BYTES) of
+        {ok, {?HISTORY_DOMAIN, ?HISTORY_VERSION, #{group_id := GroupId} = History}} ->
+            case quod_atomic:valid_group_history(History) of
                 true -> {ok, History};
                 false -> {error, phase_index_corrupt}
             end;
+        {ok, {?HISTORY_DOMAIN, 1, _}} -> {error, {unsupported_dtx_phase_history, 1}};
         _ -> {error, phase_index_corrupt}
     end;
-decode_history(_) ->
+decode_history(_, _) ->
     {error, phase_index_corrupt}.
 
 dets_insert(Table, Row) ->

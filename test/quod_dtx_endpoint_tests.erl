@@ -28,7 +28,7 @@ channel_and_wire_bounds_are_fixed_test() ->
 
 trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
     Ns = <<"quod:endpoint">>,
-    Request = {phase, id(1), digest(2), prepare},
+    Request = {phase, id(1), digest(2), vote},
     Response = {phase, id(1), 9, pending},
     Carrier = [{<<"traceparent">>,
                 <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>}],
@@ -36,8 +36,8 @@ trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
     {ok, Plain} = quod_dtx_endpoint:encode_request(Ns, Request, []),
     ?assertNotEqual(Traced, Plain),
     ?assertEqual({ok, Request, [], Carrier}, quod_dtx_endpoint:decode_request(Ns, Traced)),
-    {quod_dtx_endpoint, 12, Ns, Inner, Carrier} = binary_to_term(Traced, [safe]),
-    {quod_dtx_endpoint, 12, Ns, Inner, []} = binary_to_term(Plain, [safe]),
+    {quod_dtx_endpoint, 13, Ns, Inner, Carrier} = binary_to_term(Traced, [safe]),
+    {quod_dtx_endpoint, 13, Ns, Inner, []} = binary_to_term(Plain, [safe]),
     ?assert(quod_dtx_endpoint:correlates(Request, Response)),
     ?assertNot(quod_dtx_endpoint:correlates(Request, setelement(2, Response, id(2)))),
     BadCarrier = [{<<"baggage">>, <<"not-authority">>}],
@@ -45,7 +45,7 @@ trace_carrier_is_transport_only_and_never_changes_correlation_test() ->
                  quod_dtx_endpoint:encode_request(Ns, Request, [], BadCarrier)),
     ?assertEqual({error, {protocol_error, bad_trace_context}},
       quod_dtx_endpoint:decode_request(Ns, term_to_binary(
-        {quod_dtx_endpoint, 12, Ns, Inner, BadCarrier}, [deterministic]))),
+        {quod_dtx_endpoint, 13, Ns, Inner, BadCarrier}, [deterministic]))),
     ?assertMatch({error, _}, quod_dtx_endpoint:decode_request(Ns, term_to_binary(
         {quod_dtx_endpoint, 9, Ns, Inner}, [deterministic]))).
 
@@ -54,13 +54,11 @@ all_request_shapes_roundtrip_deterministically_test() ->
     Requests =
         [{submit, id(1), record_blob()},
          {read_attest, id(14), read_plan_blob()},
-         {phase, id(2), digest(2), 'begin'},
-         {phase, id(3), digest(2), prepare},
-         {phase, id(4), digest(2), decision},
-         {phase, id(5), digest(2), finalize},
+         {phase, id(2), digest(2), vote},
+         {phase, id(3), digest(2), resolve},
+         {present, id(4), digest(2), <<"manifest authenticated by owner">>},
          {phase, id(6), digest(2), complete},
          {outcome, id(7), group_ref(), digest(7), 11},
-         {outcome_barrier, id(11), group_ref(), digest(7), 11},
          {applied, id(8), digest(2), certified_ref(), 9, commit},
          {applied, id(9), digest(2), certified_ref(), 0, abort},
          {outcome, id(10), transaction_ref(), digest(7), 11},
@@ -79,18 +77,17 @@ all_response_shapes_roundtrip_and_correlate_test() ->
     Ns = <<"quod:endpoint">>,
     Ref = certified_ref(),
     GroupRef = group_ref(),
-    PrepareBlob = quod_ct:dtx_prepare_blob(),
-    PrepareDigest = record_blob_digest(PrepareBlob),
     TxRef = transaction_ref(),
+    {ok, Receipt} = quod_ct:certified_receipt([target_transaction_ref()]),
     Statuses =
         [#{status => pending, ref => TxRef},
          #{status => committed, height => 11, ref => TxRef},
          #{status => rejected, reason => conflict, height => 11,
            ref => TxRef},
-         #{status => pending, phase => pending_begin, ref => GroupRef},
-         #{status => pending, phase => begun, ref => GroupRef},
-         #{status => pending, phase => finalizing_commit, ref => GroupRef},
-         #{status => pending, phase => finalizing_abort, ref => GroupRef},
+         #{status => pending, phase => pending_vote, ref => GroupRef},
+         #{status => pending, phase => voted, ref => GroupRef},
+         #{status => pending, phase => resolving_commit, ref => GroupRef},
+         #{status => pending, phase => resolving_abort, ref => GroupRef},
          #{status => pending, phase => publication, ref => GroupRef},
          #{status => committed, height => 12, ref => GroupRef,
            bindings => [{<<"X">>, linked}],
@@ -98,27 +95,23 @@ all_response_shapes_roundtrip_and_correlate_test() ->
          #{status => aborted, height => 13, ref => GroupRef,
            reasons => [{cannot_link, bob}],
            participant_slots => participant_slots()},
-         #{status => rejected, reason => coordinator_retired,
-           ref => GroupRef},
          #{status => claimed, operation_state => unresolved, height => 14, receipt_height => none,
            ref => operation_ref(), request_digest => digest(13),
            outcome_ref => {applications, [TxRef]}, included => []},
          #{status => claimed, operation_state => terminal, height => 14, receipt_height => 15,
            ref => operation_ref(), request_digest => digest(13),
            outcome_ref => {applications, [target_transaction_ref()]},
-           included => [{quod_operation_vector:target(target_transaction_ref()),
-                         {included, target_transaction_ref()}}]}],
+           included => Receipt}],
     Pairs =
         [{{submit, id(1), record_blob()},
           {accepted, id(1), record_blob_digest(), accepted_ref()}},
-         {{submit, id(10), PrepareBlob},
-          {refused, id(10), target(), PrepareDigest, 4,
-           reasons_blob()}},
-         {{phase, id(2), digest(2), finalize},
+         {{present, id(10), digest(2), <<"manifest authenticated by owner">>},
+          {presented, id(10), digest(2)}},
+         {{phase, id(2), digest(2), resolve},
           {phase, id(2), 0, not_found}},
-         {{phase, id(3), digest(2), finalize},
+         {{phase, id(3), digest(2), resolve},
           {phase, id(3), 7, pending}},
-         {{phase, id(4), digest(2), finalize},
+         {{phase, id(4), digest(2), resolve},
           {phase, id(4), 8, {committed, Ref}}},
          {{applied, id(5), digest(2), Ref, 9, commit},
           {applied, id(5), target(), digest(7), digest(2), Ref, 9, commit,
@@ -135,16 +128,7 @@ all_response_shapes_roundtrip_and_correlate_test() ->
     OutcomePairs =
         Pairs ++
         [{{outcome, id(50), GroupRef, digest(7), 11},
-          {outcome, id(50), outcome_target(), digest(7), 12, not_found}},
-         {{outcome_barrier, id(51), GroupRef, digest(7), 11},
-          {outcome_barrier, id(51), outcome_target(), digest(7), 12,
-           pending_begin}},
-         {{outcome_barrier, id(52), GroupRef, digest(7), 11},
-          {outcome_barrier, id(52), outcome_target(), digest(7), 12,
-           coordinator_retired}},
-         {{outcome_barrier, id(53), GroupRef, digest(7), 11},
-          {outcome_barrier, id(53), outcome_target(), digest(7), 12,
-           not_found}}],
+          {outcome, id(50), outcome_target(), digest(7), 12, not_found}}],
     lists:foreach(
       fun({Request, Response}) ->
           {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, []),
@@ -220,7 +204,7 @@ read_attest_correlation_binds_the_exact_plan_test() ->
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(5, Response, digest(16)))).
 
-applied_v9_response_carries_signer_and_signature_test() ->
+applied_response_carries_signer_and_signature_test() ->
     Ns = <<"quod:endpoint">>,
     Ref = certified_ref(),
     Request = {applied, id(1), digest(2), Ref, 9, commit},
@@ -235,7 +219,7 @@ applied_v9_response_carries_signer_and_signature_test() ->
        {error, {protocol_error, wrong_version}},
        quod_dtx_endpoint:decode_response(Ns, outer(Ns, 6, Inner))).
 
-cancel_operation_effect_v11_rejects_the_old_tuple_test() ->
+cancel_operation_effect_rejects_the_old_tuple_test() ->
     Ns = <<"quod:endpoint">>,
     RequestId = id(62),
     OldRequest =
@@ -262,12 +246,12 @@ cancel_operation_effect_v11_rejects_the_old_tuple_test() ->
 
 entry_hint_roundtrips_as_untrusted_sidecar_test() ->
     Ns = <<"quod:endpoint">>,
-    Request = {phase, id(1), digest(2), prepare},
+    Request = {phase, id(1), digest(2), vote},
     Ref = certified_ref(),
     Entry = quod_ledger:noop_entry(7, none),
     Hints = [{Ref, Entry}],
     {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request, Hints),
-    {quod_dtx_endpoint, 12, Ns, InnerBinary, []} =
+    {quod_dtx_endpoint, 13, Ns, InnerBinary, []} =
         binary_to_term(Frame, [safe]),
     {Request, [{entry_bytes, Ref, EntryBytes}]} =
         binary_to_term(InnerBinary, [safe]),
@@ -282,13 +266,13 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
 
 malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     Ns = <<"quod:endpoint">>,
-    Request = {phase, id(1), digest(2), prepare},
+    Request = {phase, id(1), digest(2), vote},
     Ref = certified_ref(),
     WrongSlot = #entry{index = 8, data = noop},
     %% The wire never accepts a decoded entry record. A malformed or
     %% old-shaped hint disappears without changing the semantic request.
     Inner = term_to_binary({Request, [{Ref, WrongSlot}]}, [deterministic]),
-    Frame = outer(Ns, 12, Inner),
+    Frame = outer(Ns, 13, Inner),
     ?assertEqual({ok, Request, [], []},
                  quod_dtx_endpoint:decode_request(Ns, Frame)),
     MalformedInner =
@@ -298,7 +282,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     ?assertEqual(
        {ok, Request, [], []},
        quod_dtx_endpoint:decode_request(
-         Ns, outer(Ns, 12, MalformedInner))),
+         Ns, outer(Ns, 13, MalformedInner))),
     ?assertEqual(
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
@@ -309,7 +293,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     ArtifactInner = term_to_binary({Request, [{Ref, Entry}]}, [deterministic]),
     ?assertEqual({ok, Request, [], []},
                  quod_dtx_endpoint:decode_request(
-                   Ns, outer(Ns, 12, ArtifactInner))),
+                   Ns, outer(Ns, 13, ArtifactInner))),
     ?assertEqual(
        {error, {protocol_error, bad_hints}},
        quod_dtx_endpoint:encode_request(
@@ -338,6 +322,25 @@ entry_sidecar_keeps_foreign_symbols_wrapped_test() ->
     ?assertEqual(Transaction#transaction.diff, Decoded#transaction.diff),
     ?assertError(badarg, binary_to_existing_atom(Name, utf8)).
 
+published_group_pending_status_uses_current_wire_vocabulary_test() ->
+    Ns = <<"quod:endpoint">>,
+    GroupRef = group_ref(),
+    lists:foreach(fun(Phase) ->
+        {ok, Status} = quod_outcome:public(
+                         #{type => group, ref => GroupRef,
+                           status => {pending, Phase}}),
+        Response = {outcome, id(40), outcome_target(), digest(7), 12, Status},
+        {ok, Bytes} = quod_dtx_endpoint:encode_response(Ns, Response, []),
+        ?assertEqual({ok, Response, []},
+                     quod_dtx_endpoint:decode_response(Ns, Bytes))
+    end, [pending_vote, voted, resolving_commit, resolving_abort, publication]),
+    lists:foreach(fun(Phase) ->
+        Status = #{status => pending, phase => Phase, ref => GroupRef},
+        Response = {outcome, id(40), outcome_target(), digest(7), 12, Status},
+        ?assertEqual({error, {protocol_error, bad_shape}},
+                     quod_dtx_endpoint:encode_response(Ns, Response, []))
+    end, [begun, finalizing_commit, finalizing_abort]).
+
 outcome_view_and_floor_correlation_are_exact_test() ->
     GroupRef = group_ref(),
     CommitteeId = digest(7),
@@ -352,19 +355,32 @@ outcome_view_and_floor_correlation_are_exact_test() ->
                  Request, setelement(4, Response, digest(8)))),
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request, setelement(5, Response, 10))),
-    Status = #{status => pending, phase => begun, ref => GroupRef},
+    Status = #{status => pending, phase => voted, ref => GroupRef},
     ?assert(quod_dtx_endpoint:correlates(
               Request, setelement(6, Response, Status))),
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request,
                  setelement(6, Response,
-                            Status#{ref => transaction_ref()}))),
+                            Status#{ref => transaction_ref()}))).
+
+old_phase_refusal_and_absence_barrier_vocabulary_is_rejected_test() ->
+    Ns = <<"quod:endpoint">>,
+    [?assertMatch({error, {protocol_error, bad_shape}},
+                  quod_dtx_endpoint:encode_request(Ns, {phase, id(1), digest(2), Phase}, []))
+     || Phase <- ['begin', prepare, decision, finalize]],
+    GroupRef = group_ref(), CommitteeId = digest(7),
     Barrier = {outcome_barrier, id(41), GroupRef, CommitteeId, 11},
     BarrierReply = {outcome_barrier, id(41), outcome_target(), CommitteeId,
                     11, not_found},
-    ?assert(quod_dtx_endpoint:correlates(Barrier, BarrierReply)),
-    ?assertNot(quod_dtx_endpoint:correlates(
-                 Barrier, setelement(5, BarrierReply, 10))).
+    ?assertMatch({error, _}, quod_dtx_endpoint:encode_request(Ns, Barrier, [])),
+    ?assertMatch({error, _}, quod_dtx_endpoint:encode_response(Ns, BarrierReply, [])),
+    ?assertNot(quod_dtx_endpoint:correlates(Barrier, BarrierReply)),
+    ?assertMatch({error, _}, quod_dtx_endpoint:encode_response(Ns,
+                  {refused, id(1), target(), digest(1), 0, reasons_blob()}, [])),
+    {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, {phase, id(1), digest(2), vote}, []),
+    {quod_dtx_endpoint, 13, Ns, Inner, []} = binary_to_term(Frame, [safe]),
+    ?assertEqual({error, {protocol_error, wrong_version}},
+                 quod_dtx_endpoint:decode_request(Ns, outer(Ns, 12, Inner))).
 
 submit_digest_correlation_is_exact_test() ->
     Request = {submit, id(1), record_blob()},
@@ -374,31 +390,37 @@ submit_digest_correlation_is_exact_test() ->
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request,
                  {accepted, id(1), digest(250), accepted_ref()})),
-    ?assertNot(quod_dtx_endpoint:correlates(
-                 Request,
-                 {accepted, id(1), record_blob_digest(), certified_ref()})),
-    %% A deterministic refusal exists only for Prepare.  Other submit kinds
-    %% can be accepted or transiently unavailable, but cannot be converted to
-    %% a logical target-policy refusal.
+    %% A correlated transport answer is not evidence. The resolver authenticates
+    %% the certified reference against the role/group, including when the owner
+    %% selected a negative vote instead of the submitted positive proposal.
+    ?assert(quod_dtx_endpoint:correlates(
+              Request, {accepted, id(1), record_blob_digest(), certified_ref()})),
     ?assertNot(quod_dtx_endpoint:correlates(
                  Request,
                  {refused, id(1), target(), record_blob_digest(), 0,
-                  reasons_blob()})),
-    PrepareBlob = quod_ct:dtx_prepare_blob(),
-    PrepareDigest = record_blob_digest(PrepareBlob),
-    PrepareRequest = {submit, id(2), PrepareBlob},
-    ?assert(quod_dtx_endpoint:correlates(
-              PrepareRequest,
-              {refused, id(2), target(), PrepareDigest, 0,
-               reasons_blob()})),
-    ?assertNot(quod_dtx_endpoint:correlates(
-                 PrepareRequest,
-                 {refused, id(2), target(), digest(250), 0,
                   reasons_blob()})).
+
+selected_negative_vote_correlates_without_becoming_an_uncommitted_refusal_test() ->
+    F = quod_ct:signed_atomic_fixture(#{}),
+    G = maps:get(group, F), T = maps:get(origin, F),
+    Bundle = lists:keyfind(T, 1, maps:get(bundles, F)),
+    {ok, Positive} = quod_atomic:new_vote(G, T, Bundle, prepared),
+    {ok, Negative} = quod_atomic:new_vote(G, T, Bundle, {refused, [vote_deadline]}),
+    {ok, Blob} = quod_atomic:encode_record(Positive),
+    {Ns, Anchor} = T,
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 7, digest(2),
+                                      quod_atomic:record_digest(Negative), <<"qc">>),
+    Request = {submit, id(2), Blob},
+    Response = {accepted, id(2), quod_atomic:record_digest(Positive), Ref},
+    ?assertNotEqual(quod_atomic:record_digest(Positive), quod_atomic:record_digest(Negative)),
+    ?assert(quod_dtx_endpoint:correlates(Request, Response)),
+    ?assertNot(quod_dtx_endpoint:correlates(Request, setelement(3, Response, digest(250)))),
+    ?assertNot(quod_dtx_endpoint:correlates(Request,
+                {refused, id(2), T, quod_atomic:record_digest(Positive), 0, reasons_blob()})).
 
 malformed_and_noncanonical_frames_fail_closed_test() ->
     Ns = <<"quod:endpoint">>,
-    Good = {phase, id(1), digest(2), 'begin'},
+    Good = {phase, id(1), digest(2), vote},
     GoodInner = term_to_binary({Good, []}, [deterministic]),
     WrongVersion = outer(Ns, 6, GoodInner),
     WrongDomain = term_to_binary(
@@ -419,20 +441,18 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
          Ns,
          <<0:(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES + 1)/unit:8>>)),
 
-    CompressedRecord = term_to_binary(
-                         {quod_dtx_begin, 2,
-                          binary:copy(<<0>>, 8 * 1024), none, none, []},
-                         [compressed]),
+    CompressedRecord = term_to_binary(binary_to_term(record_blob(), [safe]), [compressed]),
     ?assertMatch(<<131, 80, _/binary>>, CompressedRecord),
-    ?assertEqual(
-       {error, {protocol_error, bad_record}},
-       quod_dtx_endpoint:encode_request(
-         Ns, {submit, id(1), CompressedRecord}, [])),
     TrailingRecord = <<(record_blob())/binary, 0>>,
-    ?assertEqual(
-       {error, {protocol_error, bad_record}},
-       quod_dtx_endpoint:encode_request(
-         Ns, {submit, id(1), TrailingRecord}, [])),
+    %% Framing keeps bytes opaque. Canonicality belongs to the one atomic
+    %% decoder; transport correlation cannot authenticate malformed bytes.
+    lists:foreach(fun(BadBlob) ->
+        Request = {submit, id(1), BadBlob},
+        ?assertMatch({ok, _}, quod_dtx_endpoint:encode_request(Ns, Request, [])),
+        ?assertEqual(error, quod_atomic:decode_material(BadBlob)),
+        ?assertNot(quod_dtx_endpoint:correlates(Request,
+                     {accepted, id(1), record_blob_digest(), accepted_ref()}))
+    end, [CompressedRecord, TrailingRecord]),
     ?assertEqual(
        {error, {too_large, record}},
        quod_dtx_endpoint:encode_request(
@@ -455,7 +475,7 @@ unknown_atoms_are_not_created_test() ->
               118, (byte_size(AtomName)):16, AtomName/binary>>,
     InnerTerm = binary:part(Inner, 1, byte_size(Inner) - 1),
     Wrapped = <<131, 104, 2, InnerTerm/binary, 106>>,
-    Frame = outer(Ns, 12, Wrapped),
+    Frame = outer(Ns, 13, Wrapped),
     Before = erlang:system_info(atom_count),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -470,12 +490,9 @@ invalid_fixed_shapes_are_rejected_test() ->
     GroupRef = group_ref(),
     BadRequests =
         [{submit, <<1:120>>, record_blob()},
-         {submit, id(1),
-          term_to_binary(
-            {quod_dtx_begin, 2, {opaque_manifest, digest(4)},
-             none, none, []},
-            [deterministic])},
-         {phase, id(1), <<2:248>>, 'begin'},
+         {submit, id(1), <<>>},
+         {present, id(1), <<2:248>>, <<"group">>},
+         {phase, id(1), <<2:248>>, vote},
          {phase, id(1), digest(2), unknown_phase},
          {outcome, id(1), setelement(3, GroupRef, <<1:248>>),
           digest(7), 1},
@@ -493,19 +510,9 @@ invalid_fixed_shapes_are_rejected_test() ->
     BadResponses =
         [{accepted, id(1), <<1:248>>, accepted_ref()},
          {accepted, id(1), record_blob_digest(), invalid_ref},
-         {accepted, id(1), record_blob_digest(), certified_ref()},
          {refused, id(1), target(), digest(1), 0,
-          term_to_binary([], [deterministic])},
-         {refused, id(1), target(), digest(1), 0,
-          refusal_blob([{prepare_refused, reason_identity(target())}])},
-         {refused, id(1), target(), digest(1), 0,
-          refusal_blob(
-            [{prepare_refused,
-              reason_identity({<<"quod:other">>, digest(6)})},
-             conflict_retry])},
-         {refused, id(1), target(), digest(1), -1, reasons_blob()},
-         {refused, id(1), {<<>>, digest(1)}, digest(1), 0,
           reasons_blob()},
+         {presented, id(1), <<1:248>>},
          {phase, id(1), -1, not_found},
          {phase, id(1), 16#10000000000000000, pending},
          {phase, id(1), 0, unknown},
@@ -545,17 +552,17 @@ outer(Ns, Version, Inner) ->
       {quod_dtx_endpoint, Version, Ns, Inner, []}, [deterministic]).
 
 record_blob() ->
-    {ok, Record} =
-        quod_dtx:new_finalize(
-          digest(4), certified_ref(), abort, none, 0),
-    {ok, Blob} = quod_dtx:encode_record(Record),
+    %% Shape-only references, not a consensus certificate. Stable bytes keep
+    %% the independent framing and correlation assertions reproducible.
+    Record = quod_ct:atomic_abort_record(target(), digest(6), certified_ref()),
+    {ok, Blob} = quod_atomic:encode_record(Record),
     Blob.
 
 record_blob_digest() -> record_blob_digest(record_blob()).
 
 record_blob_digest(Blob) ->
-    {ok, Record} = quod_dtx:decode_record(Blob),
-    quod_dtx:record_digest(Record).
+    {ok, Digest} = quod_atomic:encoded_record_digest(Blob),
+    Digest.
 
 certified_ref() ->
     {ok, Ref} = quod_dtx:certified_ref(
@@ -621,15 +628,8 @@ participant_slots() ->
      {{<<"quod:b">>, digest(11)}, 8, 2}].
 
 reasons_blob() ->
-    refusal_blob(
-      [{prepare_refused, reason_identity(target())},
-       {goal, {cannot_link, alice, bob}}]).
-
-refusal_blob(Reasons) ->
-    {ok, Blob} = quod_wire_term:encode_failure_reasons(Reasons),
+    {ok, Blob} = quod_wire_term:encode_failure_reasons([vote_deadline]),
     Blob.
-
-reason_identity({Ns, Anchor}) -> {ontology, Ns, Anchor}.
 
 id(N) -> <<N:128>>.
 digest(N) -> <<N:256>>.

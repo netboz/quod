@@ -162,13 +162,13 @@ block_json_distinguishes_non_transaction_slots_test() ->
     ?assertEqual([], maps:get(txs, Noop)),
     ?assertEqual({error, bad_entry},
                  quod_ledger:new_entry(4, {batch, []}, 0, none)),
-    {ok, DtxEntry} = quod_ledger:new_entry(5, quod_ct:dtx_decision_payload(), 0, none),
+    {ok, DtxEntry} = quod_ledger:new_entry(5, explorer_vote_payload(), 0, none),
     Dtx = quod_explorer_http:block_json(<<"ont:test">>, DtxEntry),
     ?assertEqual(dtx_batch, maps:get(kind, Dtx)),
     ?assertEqual([], maps:get(txs, Dtx)),
     [Control] = maps:get(controls, Dtx),
-    ?assertEqual(decision, maps:get(kind, Control)),
-    ?assertEqual(abort, maps:get(verdict, Control)),
+    ?assertEqual(vote, maps:get(kind, Control)),
+    ?assertEqual(refused, maps:get(vote, Control)),
     ?assertEqual([<<"test_abort(dtx_fixture)">>], maps:get(reasons, Control)),
     ?assert(is_binary(quod_explorer_http:encode(Dtx))),
     ?assertEqual([], quod_explorer_http:entry_txs(DtxEntry)).
@@ -176,7 +176,7 @@ block_json_distinguishes_non_transaction_slots_test() ->
 dtx_control_is_visible_in_paged_history_test() ->
     with_temp_store(fun(Store0) ->
         {ok, DtxEntry} = quod_ledger:new_entry(
-                           2, quod_ct:dtx_decision_payload(), 2002, none),
+                           2, explorer_vote_payload(), 2002, none),
         {ok, Store} = quod_ledger_store:append(
                         Store0,
                         [stored_entry(
@@ -185,24 +185,28 @@ dtx_control_is_visible_in_paged_history_test() ->
         #{txs := [Row, _Content], height := 2, next_before := null} =
             quod_explorer_http:txs_page(Store, undefined, 10),
         ?assertMatch(#{row_type := control, row_id := <<"dtx:", _/binary>>,
-                       height := 2, phase := decision,
-                       control := #{kind := decision}}, Row),
+                       height := 2, phase := vote,
+                       control := #{kind := vote}}, Row),
         ok
     end).
 
 websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
     Ns = <<"ont:test">>,
-    {ok, DtxEntry} = quod_ledger:new_entry(5, quod_ct:dtx_decision_payload(), 0, none),
+    {ok, DtxEntry} = quod_ledger:new_entry(5, explorer_vote_payload(), 0, none),
     {reply, {text, Frame}, state} =
         quod_explorer_ws:websocket_info(
           {committed, Ns, 5, DtxEntry}, state),
-    ?assertNotEqual(nomatch, binary:match(Frame, <<"decision">>)),
+    ?assertNotEqual(nomatch, binary:match(Frame, <<"vote">>)),
     ?assertEqual(
        {ok, state},
        quod_explorer_ws:websocket_info(
          {committed, Ns, 6, quod_ledger:noop_entry(6, none)}, state)),
     ?assertEqual({error, bad_entry},
                  quod_ledger:new_entry(7, {batch, []}, 0, none)).
+
+explorer_vote_payload() ->
+    F = quod_ct:signed_atomic_fixture(#{vote => {refused, [{test_abort, dtx_fixture}]}}),
+    {batch, [{dtx, maps:get(vote_control, F)}]}.
 
 websocket_refreshes_namespace_subscriptions_without_reconnect_test() ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -600,52 +604,43 @@ stop_history_source(Owner) ->
                  receive {'DOWN', MRef, process, Owner, _} -> ok end
     end.
 
-finalize_row_reuses_its_certified_prepare_plan_test() ->
-    Fixture = quod_ct:dtx_prepare_fixture(),
-    {Ns, Anchor} = Target = maps:get(target, Fixture),
-    PrepareControl = maps:get(prepare_control, Fixture),
-    {ok, PrepareRef} = quod_dtx:certified_ref(
-                         Ns, Anchor, 1, <<120:256>>,
-                         quod_dtx:record_digest(PrepareControl), <<"qc">>),
-    {ok, DecisionRef} = quod_dtx:certified_ref(
-                          <<"ont:decision">>, <<121:256>>, 1, <<122:256>>,
-                          <<123:256>>, <<"qc">>),
-    {ok, Finalize} = quod_dtx:new_finalize(
-                         quod_dtx:group_id(maps:get('begin', Fixture)),
-                         DecisionRef, commit, PrepareRef, 2),
-    {ok, FinalizeControl} = quod_dtx:sign_control(
-                              Target, Finalize, maps:get(admission, Fixture),
-                              2, 2, maps:get(signer, Fixture)),
-    {ok, PrepareBlob} = quod_dtx:encode_control(PrepareControl),
-    {ok, FinalizeBlob} = quod_dtx:encode_control(FinalizeControl),
-    {ok, PrepareEntry} = quod_ledger:new_entry(1, {batch, [{dtx, PrepareBlob}]}, 1, none),
-    {ok, FinalizeEntry} = quod_ledger:new_entry(2, {batch, [{dtx, FinalizeBlob}]}, 2, none),
-    with_history_source(Target, [PrepareEntry, FinalizeEntry],
-      fun(Ns0, Owner) ->
-          #{txs := [FinalizeRow, _PrepareRow]} =
-              history_page(Ns0, live, quod_time:mono_ms() + 1000),
-          FinalControl = maps:get(control, FinalizeRow),
-          ?assertEqual(commit, maps:get(verdict, FinalControl)),
-          AppliedPlan = maps:get(applied_plan, FinalControl),
-          ?assertEqual(
-             [#{op => assert, clause => <<"dtx_fixture(target)">>}],
-             maps:get(diff, AppliedPlan)),
-          {{reply, {text, Frame}, state}, Names} = trace_history_reads(fun() ->
-              quod_explorer_ws:websocket_info({committed, Ns0, 2, FinalizeEntry}, state)
-          end),
-          #{<<"controls">> := [WsControl]} = json:decode(Frame),
-          ?assertMatch(#{<<"applied_plan">> := #{<<"diff">> := [_]}}, WsControl),
-          ?assertEqual(1, length([ok || <<"quod.ledger.file_open">> <- Names])),
-          ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names)),
-          stop_history_source(Owner),
-          {{reply, {text, UnavailableFrame}, state}, MissingNames} = trace_history_reads(fun() ->
-              quod_explorer_ws:websocket_info({committed, Ns0, 2, FinalizeEntry}, state)
-          end),
-          #{<<"controls">> := [MissingControl]} = json:decode(UnavailableFrame),
-          ?assertNot(maps:is_key(<<"applied_plan">>, MissingControl)),
-          ?assertNot(lists:member(<<"quod.ledger.file_open">>, MissingNames)),
-          ok
-      end).
+resolve_rendering_uses_its_vote_reference_without_rereading_history_test() ->
+    F = quod_ct:signed_atomic_fixture(#{}),
+    {Ns, Anchor} = Target = maps:get(origin, F),
+    Control = maps:get(vote_control, F),
+    {ok, VoteEntry} = quod_ledger:new_entry(1, {batch, [{dtx, Control}]}, 1, none),
+    %% Reference shape only: display does not claim consensus certification.
+    {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 1, <<120:256>>,
+                                      quod_atomic:record_digest(Control), <<"shape-only">>),
+    Other = hd([T || T <- maps:get(participant_targets, F), T =/= Target]),
+    {ok, OtherRef} = quod_dtx:certified_ref(element(1, Other), element(2, Other),
+                                           1, <<121:256>>, <<122:256>>, <<"shape-only">>),
+    {ok, Resolve} = quod_atomic:new_resolve(maps:get(group, F), Ref, Target, commit,
+                        {all_prepared, lists:sort([{Target, Ref}, {Other, OtherRef}])}, Ref, 2),
+    {ok, Material} = quod_atomic:admission_material(Resolve),
+    {ok, RC} = quod_atomic:sign_control(Target, Material, maps:get(admission, F), 2, 2,
+                                        maps:get(node_identity, F)),
+    {ok, ResolveEntry} = quod_ledger:new_entry(2, {batch, [{dtx, RC}]}, 2, none),
+    with_history_source(Target, [VoteEntry, ResolveEntry], fun(Ns0, Owner) ->
+        #{txs := [ResolveRow, VoteRow]} = history_page(Ns0, live, quod_time:mono_ms() + 1000),
+        #{verdict := commit, vote_ref := #{height := 1}, voted := true} = maps:get(control, ResolveRow),
+        ?assertNot(maps:is_key(applied_plan, maps:get(control, ResolveRow))),
+        ?assertMatch(#{plan := #{diff := [#{op := assert, clause := <<"saved(ok)">>}] }},
+                     maps:get(control, VoteRow)),
+        {{reply, {text, Frame}, state}, Names} = trace_history_reads(fun() ->
+            quod_explorer_ws:websocket_info({committed, Ns0, 2, ResolveEntry}, state)
+        end),
+        ?assertNot(lists:member(<<"quod.ledger.file_open">>, Names)),
+        ?assertNot(lists:member(<<"quod.ledger.index_scan">>, Names)),
+        #{<<"controls">> := [WsControl]} = json:decode(Frame),
+        ?assertMatch(#{<<"vote_ref">> := #{<<"height">> := 1}}, WsControl),
+        stop_history_source(Owner),
+        {{reply, {text, SameFrame}, state}, MissingNames} = trace_history_reads(fun() ->
+            quod_explorer_ws:websocket_info({committed, Ns0, 2, ResolveEntry}, state)
+        end),
+        ?assertEqual(Frame, SameFrame),
+        ?assertNot(lists:member(<<"quod.ledger.file_open">>, MissingNames))
+    end).
 
 pending_outcome_requires_same_anchored_owner_without_opening_reader_test() ->
     Ns = <<"ont:indexed-pending">>,
@@ -819,7 +814,7 @@ signed_tx_json_test() ->
                             <<"ont:test">>, tx(1), entry(1, [tx(1)])))).
 
 signed_agent_intent_is_rendered_from_the_transaction_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
     {Ns, Anchor} = maps:get(target, Fixture),
     Transaction = maps:get(transaction, Fixture),
     Json = quod_explorer_http:tx_json_full(
@@ -849,22 +844,27 @@ signed_agent_intent_is_rendered_from_the_transaction_test() ->
     ?assertEqual(128, byte_size(maps:get(signature, Request))),
     ?assert(is_binary(quod_explorer_http:encode(Json))).
 
-signed_agent_intent_is_rendered_once_from_the_origin_begin_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
-    Control = maps:get(begin_control, Fixture),
-    {ok, Blob} = quod_dtx:encode_control(Control),
-    {ok, Entry} = quod_ledger:new_entry(2, {batch, [{dtx, Blob}]}, 2, none),
-    Json = quod_explorer_http:block_json(
-             element(1, maps:get(target, Fixture)), Entry),
+signed_agent_intent_and_only_own_plan_are_rendered_from_the_vote_test() ->
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
+    Control = maps:get(vote_control, Fixture),
+    {ok, Entry} = quod_ledger:new_entry(2, {batch, [{dtx, Control}]}, 2, none),
+    {ok, Bytes} = quod_ledger:encode_entry(Entry),
+    {{ok, Received}, IngressChecks} = material_work_calls(fun() -> quod_ledger:decode_entry(Bytes) end),
+    ?assert(maps:get({quod_identity, verify, 3}, IngressChecks) > 0),
+    #entry{data = Payload} = quod_ledger:entry_view(Entry),
+    {_, DecodeChecks} = material_work_calls(fun() -> quod_ledger:classify(Payload) end),
+    {Json, RenderChecks} = material_work_calls(fun() ->
+        quod_explorer_http:block_json(element(1, maps:get(target, Fixture)), Received)
+    end),
+    ?assert(lists:all(fun(N) -> N =:= 0 end, maps:values(DecodeChecks))),
+    ?assertEqual(DecodeChecks, RenderChecks),
     [RenderedControl] = maps:get(controls, Json),
     Request = maps:get(request, RenderedControl),
-    ?assertEqual('begin', maps:get(kind, RenderedControl)),
+    ?assertEqual(vote, maps:get(kind, RenderedControl)),
     ?assertEqual(2, maps:get(participant_count, RenderedControl)),
-    Participants = maps:get(participants, RenderedControl),
-    [Participant] =
-        [Row || Row <- Participants,
-                maps:get(ns, maps:get(target, Row)) =:=
-                    element(1, maps:get(target, Fixture))],
+    Participant = maps:get(plan, RenderedControl),
+    ?assertNot(maps:is_key(participants, RenderedControl)),
+    ?assertEqual(element(1, maps:get(target, Fixture)), maps:get(ns, maps:get(target, Participant))),
     ?assertMatch(
        #{status := bound, diff_ops := 1, effect_count := 0,
          signer := #{pubkey := _}}, Participant),
@@ -881,6 +881,21 @@ signed_agent_intent_is_rendered_once_from_the_origin_begin_test() ->
     ?assertMatch(#{kind := group, group_id := _},
                  maps:get(first_outcome, Request)),
     ?assert(is_binary(quod_explorer_http:encode(Json))).
+
+material_work_calls(Fun) ->
+    {Result, {call_time, Rows}} = tprof:profile(Fun,
+        #{type => call_time, report => return, set_on_spawn => false,
+          pattern => [{quod_identity, verify, 3}, {quod_dtx, decode, 1}]}),
+    {Result, maps:from_list([{{M, F, A}, lists:sum([Count || {_Pid, Count, _} <- Calls])}
+                            || {M, F, A, Calls} <- Rows])}.
+
+refused_source_vote_does_not_display_a_permanent_request_claim_test() ->
+    F = quod_ct:signed_atomic_fixture(#{vote => {refused, [vote_deadline]}}),
+    {ok, Entry} = quod_ledger:new_entry(2, {batch, [{dtx, maps:get(vote_control, F)}]}, 2, none),
+    #{controls := [#{vote := refused, request := Request}]} =
+        quod_explorer_http:block_json(element(1, maps:get(origin, F)), Entry),
+    ?assertEqual(verified, maps:get(status, Request)),
+    ?assertEqual(null, maps:get(first_outcome, Request)).
 
 effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
     {Pub, Seed} = quod_identity:generate(),
@@ -920,7 +935,6 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
     OtherPlan = {quod_plan, OtherCore, Pub,
                  quod_identity:sign(OtherPlanBytes, Signer)},
     OtherPlanDigest = quod_dtx:digest(OtherPlan),
-    {ok, OtherPlanBlob} = quod_dtx:encode(OtherPlan),
     {ok, GoalBlob} = quod_durable_term:encode_goal({create, visible}),
     {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
     {ok, Manifest} = quod_dtx:new_manifest(
@@ -930,28 +944,22 @@ effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
                               Pub, <<116:256>>},
                          nonce => <<117:256>>, principal => Principal,
                          goal => GoalBlob, result => ResultBlob,
+                         vote_deadline_ms => 9999999999999,
                          request_binding => none,
                          participants =>
                              [{Target, PlanDigest},
                               {OtherTarget, OtherPlanDigest}]}),
     {ok, Attestation} = quod_dtx:attest_plan(1,
                           Target, Plan, Manifest, Signer),
-    {ok, OtherAttestation} = quod_dtx:attest_plan(1,
-                               OtherTarget, OtherPlan, Manifest, Signer),
-    {ok, Begin} = quod_dtx:new_begin(
-                    Manifest, none,
-                    [{Target, PlanDigest, PlanBlob, Attestation},
-                     {OtherTarget, OtherPlanDigest, OtherPlanBlob,
-                      OtherAttestation}]),
-    {ok, Control} = quod_dtx:sign_control(
-                      Target, Begin, <<116:256>>, 1, 1, Signer),
-    {ok, ControlBlob} = quod_dtx:encode_control(Control),
-    {ok, Entry} = quod_ledger:new_entry(1, {batch, [{dtx, ControlBlob}]}, 1, none),
+    {ok, Group} = quod_atomic:new_group(Manifest, none, Attestation),
+    {ok, Vote} = quod_atomic:new_vote(Group, Target,
+                      {Target, PlanDigest, PlanBlob, Attestation}, prepared),
+    {ok, Material} = quod_atomic:admission_material(Vote),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, <<116:256>>, 1, 1, Signer),
+    {ok, Entry} = quod_ledger:new_entry(1, {batch, [{dtx, Control}]}, 1, none),
     Json = quod_explorer_http:block_json(element(1, Target), Entry),
     [RenderedControl] = maps:get(controls, Json),
-    [Participant] =
-        [Row || Row <- maps:get(participants, RenderedControl),
-                maps:get(ns, maps:get(target, Row)) =:= element(1, Target)],
+    Participant = maps:get(plan, RenderedControl),
     ?assertMatch(
        #{status := bound, diff_ops := 0, effect_count := 1,
          target := #{ns := <<"ont:effect-participant">>}},

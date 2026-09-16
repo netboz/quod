@@ -270,7 +270,7 @@ implicit_dtx_child_is_rejected_test() ->
          || M <- lists:sublist(C, 3)],
     {ok, Support} = quod_simplex:form_cert(
                       Domain, support, 2, ParentBH, SupportShares, P),
-    DtxData = quod_ct:dtx_decision_payload(),
+    DtxData = quod_ct:atomic_resolve_payload(),
     {ok, Child} = quod_ledger:new_block(3, 2, DtxData, 0),
     ChildBH = quod_simplex:block_hash(Child),
     CommitShares =
@@ -600,8 +600,8 @@ sink_view(Store, Identity, Projection, Index) ->
 phase_window_uses_retained_owner_index_test() ->
     C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
     Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
-    Finalize = direct_abort_entry(258, C),
-    Chain = Prefix ++ [Finalize],
+    Resolve = direct_abort_entry(258, C),
+    Chain = Prefix ++ [Resolve],
     %% The first DTX control arrives after successful content-only sink turns;
     %% it uses the read-only index returned with the preceding sink.
     ?assertEqual({ok, 258}, run_catch_up(GH, mock_fetch(Chain, 128), sink())),
@@ -610,13 +610,13 @@ phase_window_uses_retained_owner_index_test() ->
 resumed_phase_window_uses_initial_owner_capture_test() ->
     C = committee(4), G = genesis(pubs(C)), GH = gen_hash(G),
     Prefix = [G | [skipped(I, C, 3) || I <- lists:seq(2, 257)]],
-    Finalize = direct_abort_entry(258, C),
+    Resolve = direct_abort_entry(258, C),
     with_disk_sink(GH, Prefix, sink(),
       fun(Sink, View = #{projection := Projection}, Options) ->
           ?assertEqual({ok, 258}, quod_catchup:catch_up(
-              ?NS, GH, mock_fetch(Prefix ++ [Finalize], 128), Sink,
+              ?NS, GH, mock_fetch(Prefix ++ [Resolve], 128), Sink,
               258, Projection, Options#{history_view => View})),
-          ?assertEqual([Finalize], sunk()),
+          ?assertEqual([Resolve], sunk()),
           ?assertEqual({error, bad_catchup_options}, quod_catchup:catch_up(
               ?NS, GH, fun(_) -> error(mismatched_view_fetched) end, Sink,
               258, Projection, Options#{history_view => View#{slot => 256}}))
@@ -729,13 +729,13 @@ direct_abort_entry(Slot, C) ->
     {Pub, _} = author(),
     {ok, {?NS, _, Admission}} = quod_simplex:history_binding(
                                   Target, Pub, projection_after_genesis(C)),
-    {ok, DecisionRef} = quod_dtx:certified_ref(
+    {ok, VoteRef} = quod_dtx:certified_ref(
         <<"foreign-origin">>, <<60:256>>, 7, <<61:256>>, <<62:256>>, <<"qc">>),
-    {ok, Record} = quod_dtx:new_finalize(<<63:256>>, DecisionRef, abort, none, 0),
-    {ok, Control} = quod_dtx:sign_control(Target, Record, Admission, 1, 1,
+    Record = quod_ct:atomic_abort_record(Target, <<63:256>>, VoteRef),
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 1, 1,
                                          signer(author())),
-    {ok, Blob} = quod_dtx:encode_control(Control),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Blob}]}, 0),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, 0),
     Hash = quod_simplex:block_hash(Block),
     Shares = [quod_simplex:make_share(domain(C), commit, Slot, Hash, signer(M))
               || M <- lists:sublist(C, 3)],
@@ -870,21 +870,21 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
 catch_up_overtaken_same_group_window_cannot_reinstall_old_state_test() ->
     with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
         Ns = maps:get(ns, F), Anchor = maps:get(anchor, F),
-        [_, _, Finalize] = maps:get(chain, F),
+        [_, _, Resolve] = maps:get(chain, F),
         #{projection := #{history_index := Capture} = Projection} = View,
-        {ok, [Finalize], NextProjection, Delta} = quod_catchup:verify_forward(
-            Ns, Anchor, Projection, 3, [Finalize], Capture),
+        {ok, [Resolve], NextProjection, Delta} = quod_catchup:verify_forward(
+            Ns, Anchor, Projection, 3, [Resolve], Capture),
         %% Another owner-applied window overtakes the verified borrow. The
         %% actual sink advances; the earlier view still hides this same-group
-        %% Finalize. This is the production applier seam, not consensus admission.
-        {ok, _} = Sink([Finalize], NextProjection, Delta),
+        %% Resolve. This is the production applier seam, not consensus admission.
+        {ok, _} = Sink([Resolve], NextProjection, Delta),
         {ok, OldHistory} = quod_dtx_phase_index:history(Capture, maps:get(group_id, F)),
-        ?assertEqual(not_found, quod_dtx:history_phase(finalize, OldHistory)),
+        ?assertEqual(not_found, quod_atomic:history_phase(resolve, OldHistory)),
         {ok, NewHistory} = quod_dtx_phase_index:history(Index, maps:get(group_id, F)),
-        ?assertEqual({ok, maps:get(finalize_ref, F)}, quod_dtx:history_phase(finalize, NewHistory)),
+        ?assertEqual({ok, maps:get(resolve_ref, F)}, quod_atomic:history_phase(resolve, NewHistory)),
         Installed = get(StateKey),
         IndexStats = quod_dtx_phase_index:stats(Index),
-        ?assertEqual({error, stale_window}, Sink([Finalize], NextProjection, Delta)),
+        ?assertEqual({error, stale_window}, Sink([Resolve], NextProjection, Delta)),
         ?assertEqual(Installed, get(StateKey)),
         ?assertEqual(IndexStats, quod_dtx_phase_index:stats(Index)),
         {3, Store} = quod_simplex:test_committed_store(Installed),
@@ -893,28 +893,28 @@ catch_up_overtaken_same_group_window_cannot_reinstall_old_state_test() ->
 
 catch_up_failed_append_leaves_retained_index_unchanged_test() ->
     with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
-        [_, _, Finalize] = maps:get(chain, F),
+        [_, _, Resolve] = maps:get(chain, F),
         #{projection := #{history_index := Capture} = Projection} = View,
         {ok, _, NextProjection, Delta} = quod_catchup:verify_forward(
-            maps:get(ns, F), maps:get(anchor, F), Projection, 3, [Finalize], Capture),
+            maps:get(ns, F), maps:get(anchor, F), Projection, 3, [Resolve], Capture),
         Installed = get(StateKey),
         Before = quod_dtx_phase_index:stats(Index),
         {2, Store} = quod_simplex:test_committed_store(Installed),
         ok = quod_ledger_store:close(Store),
-        ?assertMatch({error, _}, Sink([Finalize], NextProjection, Delta)),
+        ?assertMatch({error, _}, Sink([Resolve], NextProjection, Delta)),
         ?assertEqual(Installed, get(StateKey)),
         ?assertEqual(Before, quod_dtx_phase_index:stats(Index)),
         {ok, History} = quod_dtx_phase_index:history(Index, maps:get(group_id, F)),
-        ?assertEqual(not_found, quod_dtx:history_phase(finalize, History))
+        ?assertEqual(not_found, quod_atomic:history_phase(resolve, History))
     end).
 
 catch_up_index_install_failure_is_loud_before_any_publication_test() ->
     with_phase_writer(fun(F, Index, Sink, View, StateKey) ->
         Ns = maps:get(ns, F),
-        [_, _, Finalize] = maps:get(chain, F),
+        [_, _, Resolve] = maps:get(chain, F),
         #{projection := #{history_index := Capture} = Projection} = View,
         {ok, _, NextProjection, Delta} = quod_catchup:verify_forward(
-            Ns, maps:get(anchor, F), Projection, 3, [Finalize], Capture),
+            Ns, maps:get(anchor, F), Projection, 3, [Resolve], Capture),
         true = quod_reg:reg({quod_prolog, Ns}),
         true = quod_reg:subscribe({committed, Ns}),
         try
@@ -923,14 +923,14 @@ catch_up_index_install_failure_is_loud_before_any_publication_test() ->
             %% or converting the failure to a recoverable sink reply may not.
             ok = quod_dtx_phase_index:close(Index),
             ?assertException(error, {badmatch, {error, {phase_index_io, _}}},
-                             Sink([Finalize], NextProjection, Delta)),
+                             Sink([Resolve], NextProjection, Delta)),
             ?assertEqual([], writer_publications([])),
             {2, OldStore} = quod_simplex:test_committed_store(get(StateKey)),
             ok = quod_ledger_store:close(OldStore),
             {ok, Reopened} = quod_ledger_store:open(Ns, maps:get(root, F)),
             try
                 ?assertEqual(3, quod_ledger_store:last(Reopened)),
-                ?assertEqual({ok, Finalize}, quod_ledger_store:read_at(Reopened, 3))
+                ?assertEqual({ok, Resolve}, quod_ledger_store:read_at(Reopened, 3))
             after quod_ledger_store:close(Reopened)
             end
         after
@@ -985,6 +985,7 @@ with_phase_writer_owned(Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     F = quod_foreign_log_tests:prepared_then_committed_fixture(
           quod_foreign_log_tests:unique_ns()),
+    quod_ct:with_network_identity(maps:get(network, F), fun() ->
     Ns = maps:get(ns, F), Anchor = maps:get(anchor, F),
     Root = quod_foreign_log_tests:temp_dir("catchup-owner-phase"),
     {ok, Store} = quod_ledger_store:open(Ns, Root),
@@ -1012,7 +1013,8 @@ with_phase_writer_owned(Fun) ->
         erase(StateKey),
         quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store),
         _ = file:del_dir_r(Root)
-    end.
+    end
+    end).
 
 catch_up_owner_death_during_empty_fetch_is_not_completion_test() ->
     C = committee(4), G = genesis(pubs(C)),

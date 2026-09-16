@@ -53,7 +53,7 @@ frame_dispatch_test() ->
 
 canonical_block_and_sidecar_wire_test() ->
     Ns = <<"relay:canonical">>,
-    Payload = quod_ct:dtx_decision_payload(),
+    Payload = quod_ct:atomic_resolve_payload(),
     {ok, Block} = quod_ledger:new_block(2, 1, Payload, 7),
     {ok, Ref} = quod_dtx:certified_ref(
                   <<"quod:hint">>, <<1:256>>, 7,
@@ -83,7 +83,7 @@ canonical_block_and_sidecar_wire_test() ->
 
 decoded_block_wire_shapes_are_hard_rejected_test() ->
     Ns = <<"relay:old-record-wire">>,
-    Payload = quod_ct:dtx_decision_payload(),
+    Payload = quod_ct:atomic_resolve_payload(),
     {ok, Block} = quod_ledger:new_block(2, 1, Payload, 7),
     OldMessages =
         [{propose, Block, []},
@@ -99,7 +99,7 @@ decoded_block_wire_shapes_are_hard_rejected_test() ->
 
 certified_reply_carries_hash_not_a_second_certificate_test() ->
     Ns = <<"relay:certified-by-requester">>,
-    {ok, Block} = quod_ledger:new_block(2, 1, quod_ct:dtx_decision_payload(), 7),
+    {ok, Block} = quod_ledger:new_block(2, 1, quod_ct:atomic_resolve_payload(), 7),
     Hash = quod_simplex:block_hash(Block),
     Frame = quod_relay:encode_consensus_frame(Ns, {certified_block, Block, Hash}),
     ?assertEqual({consensus, {certified_block, Block, Hash}},

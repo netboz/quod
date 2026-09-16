@@ -3,13 +3,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([init/1, callback_mode/0, handle_event/4]).
 
-%% Prepared-route entry only. The real coordinator owns its workers/results;
+%% Preselected-route entry only. The real coordinator owns its workers/results;
 %% the real Simplex running callback owns admission, links, replies and cleanup.
 %% Only the transport/remote endpoint is fake. Its reference is a codec fixture,
 %% not proof that history or target consensus was verified.
 different_peers_deliver_concurrently_and_fast_reply_cancels_sibling_test_() ->
     [{atom_to_list(Reply), fun() -> with_source(fun(F) -> fanout(Reply, F) end) end}
-     || Reply <- [accepted, refused]].
+     || Reply <- [prepared, refused]].
 
 fanout(ReplyKind, F = #{source := Owner, owner_ns := OwnerNs, target := Target,
                        blob := Blob, sources := Sources, digest := Digest, ref := Ref}) ->
@@ -41,12 +41,10 @@ fanout(ReplyKind, F = #{source := Owner, owner_ns := OwnerNs, target := Target,
         Owner ! {quod_message, {PeerA, StreamA}, quod_dtx_endpoint:channel(element(1, Target)), WrongFrame},
         ?assertMatch(#{correlations := 2}, counts(Owner)),
         Response = case ReplyKind of
-            accepted -> {accepted, IdB, Digest, Ref};
-            refused ->
-                {ok, Reasons} = quod_wire_term:encode_failure_reasons(
-                    [{prepare_refused, {ontology, element(1, Target), element(2, Target)}},
-                     {goal, {cannot_link, alice, bob}}]),
-                {refused, IdB, Target, Digest, 0, Reasons}
+            prepared -> {accepted, IdB, Digest, Ref};
+            %% Refusal is a committed Vote, never an endpoint verdict. The
+            %% correlation binds the original proposal, not the chosen vote.
+            refused -> {accepted, IdB, Digest, maps:get(refused_ref, F)}
         end,
         StreamB ! {respond, Response},
         receive {wave_result, Coordinator, Result} ->
@@ -106,11 +104,11 @@ phase_query_reuses_id_only_after_previous_source_is_removed_test() ->
                      sources := Sources0, ref := Ref, record := Record}) ->
         %% Third source must never be reached after the second returns a ref.
         Sources = Sources0 ++ [{remote, <<203:256>>, [{"127.0.0.1", 34203}]}],
-        Request = {phase, <<201:128>>, quod_dtx:group_id(Record), prepare},
+        Request = {phase, <<201:128>>, quod_atomic:group_id(Record), vote},
         Parent = self(),
         {Walker, M} = spawn_monitor(fun() ->
             Result = quod_dtx_coordinator:test_phase_command_sources(
-                Sources, Target, prepare, Request, OwnerNs, quod_time:mono_ms() + 4000),
+                Sources, Target, vote, Request, OwnerNs, quod_time:mono_ms() + 4000),
             Parent ! {walk_result, self(), Result}
         end),
         try
@@ -136,11 +134,16 @@ phase_query_reuses_id_only_after_previous_source_is_removed_test() ->
 
 with_source(Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
-    Parent = self(), Base = quod_ct:dtx_prepare_fixture(),
+    Parent = self(), Base = quod_ct:signed_atomic_fixture(#{}),
     Target = {Ns, Anchor} = maps:get(target, Base),
-    Record = maps:get(prepare, Base), Blob = maps:get(prepare_blob, Base),
-    Digest = quod_dtx:record_digest(Record),
+    Record = maps:get(vote, Base),
+    {ok, Blob} = quod_atomic:encode_record(Record),
+    Digest = quod_atomic:record_digest(Record),
     {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 7, <<77:256>>, Digest, <<"qc">>),
+    {ok, Refused} = quod_atomic:new_vote(maps:get(group, Base), Target,
+        lists:keyfind(Target, 1, maps:get(bundles, Base)), {refused, [vote_deadline]}),
+    {ok, RefusedRef} = quod_dtx:certified_ref(Ns, Anchor, 7, <<78:256>>,
+        quod_atomic:record_digest(Refused), <<"qc">>),
     OwnerNs = <<"quod:fanout-owner-", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>,
     {Transport, TM} = spawn_monitor(fun() ->
         true = quod_reg:reg({transport, node}),
@@ -152,7 +155,8 @@ with_source(Fun) ->
     try Fun(#{source => Owner, owner_ns => OwnerNs, target => Target,
               sources => [{remote, <<201:256>>, [{"127.0.0.1", 34201}]},
                           {remote, <<202:256>>, [{"127.0.0.1", 34202}]}],
-              record => Record, blob => Blob, digest => Digest, ref => Ref})
+              record => Record, blob => Blob, digest => Digest, ref => Ref,
+              refused_ref => RefusedRef})
     after
         gen_statem:stop(Owner), Transport ! stop, down(TM, Transport),
         flush_admissions(Owner)

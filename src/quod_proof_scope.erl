@@ -123,8 +123,8 @@ drive(_Other, _Goal, Scope) ->
     {error, {protocol_error, proof_engine}, Scope, keep_current}.
 
 %% No solution, exhaustion report, or interpreter error crosses the scope
-%% boundary without one final generation check. This catches a Prepare or
-%% Finalize transition that raced the interpreter step, including a goal made
+%% boundary without one final generation check. This catches a Vote or
+%% Resolve transition that raced the interpreter step, including a goal made
 %% only of built-ins and therefore containing no database callback.
 guard_exposure({solution, _Solution, #scope{state = St}} = Result) ->
     checked_exposure(St, Result);

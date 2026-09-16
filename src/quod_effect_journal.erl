@@ -41,7 +41,8 @@ recovery and compaction to one format and one authority path.
 -endif.
 
 -define(QEJ1_MAGIC, 16#51454A31). %% snapshots carrying transaction V13
--define(MAGIC, 16#51454A32). %% "QEJ2": transaction V14, no old-row decoder
+-define(QEJ2_MAGIC, 16#51454A32). %% transaction V14 and five-phase group identity
+-define(MAGIC, 16#51454A33). %% "QEJ3": transaction V15 and two-phase group identity
 -define(HEADER_BYTES, 40).
 -define(DEFAULT_AWAIT_MS, 60000).
 
@@ -170,7 +171,7 @@ bind_reservation(_Token, _PlanDigest, _ManifestDigest, _Coordinator,
 bind_transaction(Effect, Transaction, Ref) ->
     call({bind_transaction, Effect, Transaction, Ref}).
 
--doc "Persist one prepared effect under an already-registered dormant group intent.".
+-doc "Persist one prepared effect after the source journal has synced completion responsibility.".
 -spec bind_group(quod_dtx:plan(), term(), {binary(), <<_:256>>}, <<_:256>>,
                  reference()) ->
           ok | {error, term()}.
@@ -1450,6 +1451,8 @@ load(Path) ->
         {error, enoent} -> {unconfigured, #{}};
         {ok, <<?QEJ1_MAGIC:32, _/binary>>} ->
             error({unsupported_effect_journal_format, 1});
+        {ok, <<?QEJ2_MAGIC:32, _/binary>>} ->
+            error({unsupported_effect_journal_format, 2});
         {ok, <<?MAGIC:32/unsigned-big, Size:32/unsigned-big,
                Digest:32/binary, Payload:Size/binary>>} ->
             Digest = crypto:hash(sha256, Payload),

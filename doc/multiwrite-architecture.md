@@ -950,11 +950,16 @@ each correlation before advancing; they do not need a second fan-out mechanism.
 
 `quod_dtx_owner` is a pure registry/transition library, not an actor. Simplex
 executes its signing and publication decisions. The signing journal is the
-single pending-Begin authority; the `dtx_pending` shadow inventory is deleted.
-Indexed inclusion precedes readiness: late exact Prepares return certified
+single pending-Vote authority; the `dtx_pending` shadow inventory is deleted.
+Indexed inclusion precedes readiness: late exact controls return certified
 references without signing, retention or proposals. Conflicting phase digests
-still refuse. Temporary catch-up preserves ownership; real admission loss
-retires it. Classification precedes renewal, and resolutions publish after
+still refuse. Temporary catch-up preserves ownership. Membership loss retires
+committee-owned recovery, but not pre-vote source journal responsibility.
+Classification and installation share the owner's bounded indexed admission
+predicate, including terminal tombstones absent from the active projection.
+The classification memo binds both installed history head and projection;
+an unchanged active map cannot hide a newly committed terminal record.
+Classification precedes renewal, and pending-vote resolutions publish after
 commit/skip/catch-up application.
 
 Retained relay placement on the current reliable link is work eligibility,
@@ -1003,19 +1008,48 @@ coordinator's target-application fan-out; committed Complete recovery uses its
 origin QC through the existing certified-history path. No new state owner,
 timer, polling loop, durable format or voting authority is introduced.
 
-Accepted Begin activation uses the existing admission FIFO, not a separate
-readiness/signing walk. The existing `from = none` distinguishes handed-off
-rows from calls still awaiting acceptance. Identity and exact manifest binding
-are checked before readiness; recovery parks the same authenticated material,
-group and deadline without signing. Activation joins the FIFO in arrival order.
-Pending-group and phase reads include these queued rows. Ready progress performs
-classification, admission and coordinator reconciliation in that dependency
-order in one owner turn, preserving paused ownership without authorizing
-endpoint execution. Expiry, cancellation or changed ownership cannot sign the
-intent later. A post-handoff resolution remains a hint to the existing exact
-outcome/barrier check: if concurrent progress prevents authoritative absence,
-the caller retains the existing deadline/uncertainty grammar, never a fabricated
-rejection. No new tracking or reply authority is added.
+### Atomic groups: Vote, Resolve, Complete (I1, unreleased)
+
+One shared predicate selects whether an ordinary multiwrite needs the source
+role. Sealing includes O even if its own staged material is empty; independent
+writes retain their own target set. Each role receives only its own sealed
+plan plus the small authenticated manifest. No Prolog KB or another role's
+private material is transferred to it. The gateway delivers the initial own
+plans concurrently through the existing coordinator worker lifecycle.
+
+Every role records exactly one immutable Vote, prepared or refused. The same
+parent-bound admission checks authenticate the signed request and recorded
+policy, check committed read dependencies, and select the local vote. Only
+O's prepared vote permanently claims the request ID. A same-request contender
+waits for that claim instead of causing both plans to abort; changed request
+content is refused. Transport refusals and local absence never select outcomes.
+
+All prepared references authorize commit; one certified refused reference
+authorizes abort. O's existing coordinator obtains that evidence, drives one
+Resolve wave, collects exact remote applied certificates and writes Complete.
+Resolve installs/discards each role's own material through one reducer. An
+unvoted role records an abort tombstone that forbids a later positive vote.
+The caller still waits for the certified applied result, not merely a vote
+decision. Public height is O's Resolve slot, with every role's slot/generation
+in the vector; asynchronous Complete preserves that result.
+
+The atomic manifest binds its vote deadline once from the caller's monotonic
+remaining allowance, capped by signed expiry. It never extends the budget and
+is absent from independent-write manifests. Prepared selection checks the
+certified block timestamp; a prepared vote never expires or unlocks. Once its
+deadline passes, a role without material may refuse through normal consensus.
+Any committed local vote, positive or negative, without observed O vote or
+local Resolve gives that participant one duty: check exact source absence and
+present the compact group to O. It cannot decide, contact other roles or rebuild
+their plans. O retains presentation beyond a short network timeout until its
+bound deadline. Clock skew can delay progress, never grant outcome authority.
+
+The same admission FIFO owns reservations, activation and vote re-selection;
+no second queue or polling loop is introduced. Exact duplicates reuse owned
+work and signatures. A changed parent or deadline region enables re-selection,
+never a fresh client operation. Owner/reconnect progress drives retries under
+the existing lifecycle. Original caller context survives on existing FIFO/
+retained/owner rows; truly history-only recovery remains parentless.
 
 ### Independent writes and authenticated data
 
@@ -1053,7 +1087,7 @@ on receipt. Receipt evidence has one binding/verification owner. Exact decoded
 values need no re-encoding; different symbol representations require complete
 canonical-envelope equality, never unchecked IDs or signed-byte fields.
 
-`quod_applied_certificate` owns domain-separated L3-Finalize and L2-application
+`quod_applied_certificate` owns domain-separated L3-Resolve and L2-application
 statements. The latter bind network, historical committee, anchored target,
 source claim/operation, exact application occurrence and terminal result.
 `quod_quorum` owns the shared exact-f+1 verifier used by read and applied
@@ -1065,8 +1099,8 @@ source selection and quorum admission, with distinct terminal policies. Stored
 participant descriptors are checked against their authenticated plans and
 reused for apply fencing; they are not an independent source of authority.
 
-New source receipts contain the complete certified result vector. Historical
-included-only rows remain valid discovery, not verdict authority. The durable
+Source receipts contain only the complete certified result vector. The retired
+included-only receipt arm has no decoder in I1's clean break. The durable
 outcome row retains the format key `included` for its installed receipt,
 regardless of arm. Receipt identity compares complete statements, not an
 interchangeable honest signature subset. Pairing is canonical and shared;
@@ -1135,11 +1169,17 @@ provide the start denominator. Normal builds erase allocation observation.
 Analysis retains O-A1/O-A2: dropped/tied/unknown evidence stays counted and listed,
 and coverage is a lower bound. Sampler reconciliation is explicit.
 
-Durable transaction V14, ledger V6, signing QSJ4 and effect QEJ2 remain the current
-single formats. Derived foreign-cache v4 supersedes v3 by name. Scope wire v13
-and endpoint v12 require a coordinated full-fleet upgrade. This cleanup adds no
-format break, ledger wipe or cache retirement. Existing frozen evidence and
-STOP/BENCH_STOP markers remain untouched.
+I1 changes the single formats together: transaction V15, ledger V7, signing
+QSJ5, effect QEJ3, outcome V8, phase-history V2, foreign cache/checkpoint V5 and
+the current atomic endpoint vocabulary. Superseded bytes are refused by name,
+never decoded through a legacy path. Real frozen old-format fixtures pin that
+refusal. Release therefore requires one coordinated fleet re-found on fresh
+storage with fresh identities. Each old identity and its signing history stay
+together offline in the old volume; never copy an old signing key alone into
+reset voting state. External observability and all frozen evidence stay intact.
+Full I1 gates and release assembly must pass before the coordinated swap.
+STOP/BENCH_STOP markers remain untouched; post-found measurements get fresh
+labels and cannot claim preserved-state comparability.
 
 The .182 small retained-fleet witness completed 20/20 writes across atomic and
 independent c1/c4, with 90/90 attempt roots captured. That establishes neither
@@ -1148,7 +1188,7 @@ concurrent four separately from the striped fifth request. Per-run details and
 failed launches/analysis checks remain in the retained evidence, not erased by
 a successful later witness.
 
-Still open: Begin consensus/finality latency; broad c4/L2 acceptance and trace
+Still open: atomic consensus/finality latency; broad c4/L2 acceptance and trace
 attribution gaps; F6 fast-restart checkpoints; dependency-taxonomy enforcement;
 R-RESTART-RACE-01; all three EUnit ledger items (B-EUNIT-UNIDENTIFIED-01,
 EUNIT-SEND-TRACE-MAILBOX-01, EUNIT-OPERATION-FOLLOW-RACE-01); and the historical +8.7%
@@ -1238,3 +1278,40 @@ unchanged. Both proof access and prospective Complete retain their application
 gate; a worker's earlier snapshot cannot reopen an acknowledged wait or certify
 a new application as already consumed. Historical rejection without a recorded
 reason is not attributed to this mechanism solely because its symptom matches.
+
+### I1 source custody before private-effect binding (unreleased)
+
+The two-phase implementation saves source completion responsibility in the
+existing signing journal **before** any private effect is durably bound. This
+is not a certified vote, request-ID claim, lock or permission to execute. The
+one pending row progresses from unsigned missing source material, to unsigned
+bound own material, to the parent-validated signed Vote. Unsigned rows allocate
+no signing sequence. The journal stores only the compact group and, after
+binding, the source's own plan; no other role's private material is copied.
+
+Cancellation or proof-engine death before activation removes preparation
+permission, not completion responsibility. Restart of that missing-material row
+uses ordinary deadline-refusal selection and certified Resolve/Complete; source
+absence never authorizes an abort or effect release. Activation syncs bound
+material before making it selectable. Its existing asynchronous message may be
+lost after other roles receive their plans: recovery then follows the missing-
+material case, safely aborting rather than assuming preparation succeeded.
+Duplicates cannot activate a reservation or promote a recovered missing row.
+
+The journal is the sole pending-work authority. Installed source Vote/Resolve
+history transfers that duty to certified recovery. Until then, loss of local
+committee membership cannot discard it: the existing coordinator may deliver
+to current members while this owner has a readable committed view, but local
+signing still requires current admission and the ordinary parent validation.
+No second queue, owner, polling loop, effect-journal driver or legacy decoder
+is introduced. QSJ5 is part of the unreleased clean break, not compatibility
+with deployed QSJ4. Full I1 integration and release gates remain outstanding.
+
+Resolve's compact outcome row retains the exact manifest digest and its own
+plan digest from the already-authenticated reducer material, not another plan
+copy. An unvoted abort has no plan digest. Effect reconciliation matches that
+binding and the ordered application frontier; a matching unvoted abort retires
+private preparation, while absence remains uncertain. The permanent real-node
+crash control stops source Prolog/Simplex after a remote effect is saved but
+before activation: recovery certifies abort, completes and retires the effect
+without applying either the ordinary fact or the private action.

@@ -144,9 +144,9 @@ merge_observation(#{reference := OldRef} = Old, #{reference := NewRef} = New) ->
 
 %% Input is an exact receipt from the source owner's already-verified ledger,
 %% not an endpoint projection. Its application pairs are certified history.
-%% Old included rows provide discovery only; work/1 still requires an AM3
-%% certificate. No legacy decoder, receipt rewriting, or completed redelivery.
--doc "Restore canonical receipt discovery from verified source history; this performs no signature verification.".
+%% Every row carries its result certificate. There is no historical receipt
+%% adapter, receipt rewriting, or completed redelivery.
+-doc "Restore certified results from verified source history; this performs no signature verification.".
 -spec restore_receipt(#transaction{}, operation()) -> {ok, operation()} | {error, atom()}.
 restore_receipt(
   #transaction{role = {remote_complete, OperationRef, Digest, Rows},
@@ -156,14 +156,10 @@ restore_receipt(
         {ok, Refs} when length(Pairs) =:= length(Refs) ->
             lists:foldl(fun
                 (_, {error, _} = Error) -> Error;
-                ({{Target, Arm}, {Ref, #transaction{} = Tx}}, {ok, Acc}) ->
-                    StableRef = element(2, Arm),
+                ({{Target, {certified, StableRef, Certificate}},
+                  {Ref, #transaction{} = Tx}}, {ok, Acc}) ->
                     case quod_transaction:stable_ref(Ref) =:= StableRef of
                         true ->
-                            Certificate = case Arm of
-                                {included, _} -> none;
-                                {certified, _, Cert} -> Cert
-                            end,
                             accept(Target, Ref, #{transaction => Tx}, Certificate, Acc);
                         false -> {error, invalid_completion}
                     end;
@@ -173,7 +169,7 @@ restore_receipt(
     end;
 restore_receipt(_, _) -> {error, invalid_completion}.
 
--doc "Return target-ordered observations; restored discovery still requires external certification.".
+-doc "Return target-ordered observations, retaining any checked result certificates.".
 -spec observations(operation()) -> [{quod_operation_vector:target(), map()}].
 observations(#{refs := Refs, observations := Observations}) ->
     [{Target, Row} || Ref <- Refs, Target <- [quod_operation_vector:target(Ref)],

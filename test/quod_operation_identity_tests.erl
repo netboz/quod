@@ -4,7 +4,7 @@
 
 %% Real signed request/plan envelopes; no claim of consensus admission. Counts
 %% are structural, from OTP's isolated profiling session, never wall-clock limits.
-old_signed_bytes_and_target_ids_are_preserved_test() ->
+retired_signed_claims_have_no_legacy_decode_path_test() ->
     %% Cold standalone VMs need the application's protocol vocabulary loaded;
     %% never allocate symbols by decoding captured signed bytes unsafely.
     case application:load(quod) of
@@ -16,17 +16,8 @@ old_signed_bytes_and_target_ids_are_preserved_test() ->
     lists:foreach(fun(N) ->
         {ok, Bytes} = file:read_file(filename:join(
           ["test", "fixtures", "operation-identity179", "claim-" ++ integer_to_list(N) ++ ".etf"])),
-        {ok, Claim} = quod_transaction:decode_ledger_transaction(Bytes, wrapped),
-        ?assertEqual({ok, Bytes}, quod_transaction:encode_ledger_transaction(Claim)),
-        {ok, Refs} = quod_transaction:remote_claim_references(Claim),
-        ?assertEqual(N, length(Refs)),
-        {Ns, Anchor} = Claim#transaction.origin,
-        lists:foreach(fun(Ref) ->
-            App = quod_transaction:remote_application(
-                {transaction, Ns, Anchor, Claim#transaction.tx_id}, Claim,
-                quod_operation_vector:target(Ref)),
-            ?assertEqual(element(4, Ref), App#transaction.tx_id)
-        end, Refs)
+        ?assertEqual({error, malformed_ledger_transaction},
+                     quod_transaction:decode_ledger_transaction(Bytes, wrapped))
     end, [1,2,4,8]).
 
 one_source_derivation_per_constructor_vector_test() ->

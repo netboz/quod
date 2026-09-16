@@ -32,13 +32,13 @@ public_exact_deadline_includes_owner_mailbox_test() ->
         Ref = maps:get(ref, Fixture),
         Contact = contact(Fixture),
         ?assertMatch({ok, #{slot := 2}},
-                     quod_foreign_log:verify_reference(Ref, finalize, Contact, 2000)),
+                     quod_foreign_log:verify_reference(Ref, resolve, Contact, 2000)),
         %% Positive control: the same public call has valid evidence and fits
         %% this budget when its owner is not held before admission.
         1 = erlang:trace_pattern({quod_dtx_phase_index, capture, 2}, true, []),
         1 = erlang:trace(Owner, true, [call, procs, {tracer, self()}]),
         ?assertMatch({ok, #{slot := 2}},
-                     quod_foreign_log:verify_reference(Ref, finalize, Contact, 100)),
+                     quod_foreign_log:verify_reference(Ref, resolve, Contact, 100)),
         ?assertEqual([], owner_spawns(Owner)),
         ?assertEqual(1, owner_capture_calls(Owner)),
         Fetches = atomics:get(Count, 1),
@@ -46,7 +46,7 @@ public_exact_deadline_includes_owner_mailbox_test() ->
         Caller = spawn(fun() ->
             receive go -> ok end,
             Parent ! {public_result, self(),
-                      quod_foreign_log:verify_reference(Ref, finalize, Contact, 100)}
+                      quod_foreign_log:verify_reference(Ref, resolve, Contact, 100)}
         end),
         try
             1 = erlang:trace(Caller, true, [send, {tracer, self()}]),
@@ -54,7 +54,7 @@ public_exact_deadline_includes_owner_mailbox_test() ->
             Deadline = receive
                 {trace, Caller, send, {'$gen_call', _,
                  {verification, D, _, _,
-                  {verify_reference, Ref, finalize, Contact, none, 100}}}, Owner} -> D
+                  {verify_reference, Ref, resolve, Contact, none, 100}}}, Owner} -> D
             after 1000 -> error(public_request_not_sent)
             end,
             wait_until(Deadline + 20),
@@ -78,7 +78,7 @@ queued_success_checks_each_caller_deadline_test() ->
         with_owner(fixture_fetch(Fixture), fun(Owner) ->
             Identity = identity(Fixture),
             %% Warm certified genesis, then acquire the genuinely missing
-            %% Finalize. Ready reads no longer have a worker result to hold.
+            %% Resolve. Ready reads no longer have a worker result to hold.
             Genesis = hd(maps:get(chain, Fixture)),
             {batch, [GenesisTx]} = element(3, quod_ledger:entry_view(Genesis)),
             {ok, GenesisRef} = quod_dtx:certified_entry_ref(Identity, Genesis, GenesisTx),
@@ -111,7 +111,7 @@ queued_success_checks_each_caller_deadline_test() ->
                 ?assertEqual([done, timeout], request_messages(After, RequestRef)),
                 ok = sys:resume(Owner),
                 ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Short, 2000)),
-                ?assertMatch({reply, {ok, #{slot := 2, phase := finalize}}},
+                ?assertMatch({reply, {ok, #{slot := 2, phase := resolve}}},
                              gen_server:wait_response(Long, 2000)),
                 ?assertMatch(#{pending := 0, queued := 0}, quod_foreign_log:stats())
             after
@@ -220,7 +220,7 @@ expired_caller_does_not_cancel_shared_exact_job_test() ->
             #{active := #{ref := Ref, callers := [_]}} = lifecycle(Owner, identity(Fixture)),
             ?assertEqual(1, atomics:get(Attempts, 1)),
             Worker ! {release_exact_fetch, Token},
-            ?assertMatch({reply, {ok, #{slot := 2, phase := finalize}}},
+            ?assertMatch({reply, {ok, #{slot := 2, phase := resolve}}},
                          gen_server:wait_response(Second, 2000)),
             ?assertEqual(1, atomics:get(Attempts, 1))
         after
@@ -292,7 +292,7 @@ callerless_route_park_is_retired_test() ->
     Fixture = fixture(exact),
     with_owner(no_network(), fun(Owner) ->
         Call = send_request(Owner,
-            {verify_reference, maps:get(ref, Fixture), finalize, none, none, 50}, undefined),
+            {verify_reference, maps:get(ref, Fixture), resolve, none, none, 50}, undefined),
         ?assertMatch(#{pending := 0, queued := 1}, quod_foreign_log:stats()),
         ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 2000)),
         ?assertMatch(#{pending := 0, queued := 0, histories := 0}, quod_foreign_log:stats())
@@ -328,9 +328,9 @@ local_read_does_not_acquire_foreign_custody_test() ->
                 %% Local evidence uses the immutable owned index, even while
                 %% foreign writer registration is unavailable. There is no
                 %% custody-denial queue for this read to become stranded in.
-                ?assertMatch({ok, #{phase := finalize}},
+                ?assertMatch({ok, #{phase := resolve}},
                     quod_foreign_log:verify_local(
-                        Source, maps:get(ref, Fixture), finalize, infinity)),
+                        Source, maps:get(ref, Fixture), resolve, infinity)),
                 {Caller, Token} = quod_foreign_log_tests:hold_direct_local(
                     Source, maps:get(ref, Fixture), infinity, after_read),
                 try
@@ -401,7 +401,7 @@ late_sampled_caller_links_surviving_job_after_original_expiry_test() ->
                 #{active := #{ref := Ref, worker := Worker, callers := [_]}, waiting := []} =
                     lifecycle(Owner, identity(Fixture)),
                 Worker ! {release_sdk_worker, Gate},
-                ?assertMatch({ok, #{phase := finalize, slot := 2}}, receive_public_result(Late)),
+                ?assertMatch({ok, #{phase := resolve, slot := 2}}, receive_public_result(Late)),
                 LateApi = sdk_span(<<"quod.foreign.owner_request">>, LateSpan),
                 LateResidence = sdk_span(<<"quod.foreign.caller_residence">>, LateSpan),
                 LateStages = sdk_owner_stages(LateResidence, <<"ok">>),
@@ -522,7 +522,7 @@ no_route_diagnostic_distinguishes_selection_from_parked_wait_test() ->
             {Context, Span} = sdk_parent(<<"test.lifecycle.no-route">>),
             try
                 Call = send_request(Owner,
-                    {verify_reference, maps:get(ref, Fixture), finalize, none, none, 60}, Context),
+                    {verify_reference, maps:get(ref, Fixture), resolve, none, none, 60}, Context),
                 #{waiting := [#{ref := Ref}]} = lifecycle(Owner, identity(Fixture)),
                 assert_route_parked(Owner, identity(Fixture), Ref),
                 ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Call, 1000)),
@@ -546,7 +546,7 @@ unadmitted_malformed_public_reference_closes_diagnostic_residence_test() ->
             Sentinel = <<"untrusted-reference-is-not-a-trace-attribute">>,
             try
                 Result = quod_trace:with_context(Context, fun() ->
-                    quod_foreign_log:verify_reference({malformed, Sentinel}, finalize, 1000)
+                    quod_foreign_log:verify_reference({malformed, Sentinel}, resolve, 1000)
                 end),
                 ?assertEqual({error, bad_foreign_reference}, Result),
                 Residence = sdk_span(<<"quod.foreign.caller_residence">>, Span),
@@ -572,7 +572,7 @@ direct_source_death_does_not_fabricate_a_foreign_residence_test() ->
                     put({quod_foreign_log, local_read_gate}, {after_read, Parent, Token}),
                     Result = quod_trace:with_context(Context, fun() ->
                         quod_foreign_log:verify_local(
-                            Source, maps:get(ref, Fixture), finalize, infinity)
+                            Source, maps:get(ref, Fixture), resolve, infinity)
                     end),
                     Parent ! {direct_read_result, Token, Result}
                 end),
@@ -672,8 +672,8 @@ exact_phase_entry_hint_and_contact_remain_nonshareable_test() ->
             EntryHint = lists:last(maps:get(chain, Fixture)),
             Requests = [
                 {verify_reference, Ref, entry, Contact, none, 5000},
-                {verify_reference, Ref, finalize, Contact, EntryHint, 5000},
-                {verify_reference, Ref, finalize,
+                {verify_reference, Ref, resolve, Contact, EntryHint, 5000},
+                {verify_reference, Ref, resolve,
                  {maps:get(pub, Fixture), {"127.0.0.1", 19092}}, none, 5000}],
             Calls = [send_request(Owner, Request, trace_context(unsampled)) || Request <- Requests],
             #{active := #{callers := [_]}, waiting := Rows} = lifecycle(Owner, identity(Fixture)),
@@ -755,7 +755,7 @@ wake_schedule(Mode) ->
         LastWorker = receive_attempt(Token, Next),
         #{active := #{ref := Ref, edge := false}} = lifecycle(Owner, Identity),
         LastWorker ! {finish_wake_attempt, Token, valid},
-        ?assertMatch({reply, {ok, #{phase := finalize, slot := 2}}},
+        ?assertMatch({reply, {ok, #{phase := resolve, slot := 2}}},
                      gen_server:wait_response(Call, 2000)),
         ?assertEqual(Next, atomics:get(Attempts, 1)),
         ?assertMatch(#{pending := 0, queued := 0}, quod_foreign_log:stats())
@@ -779,7 +779,7 @@ fixture_fetch(Fixture) ->
         maps:get(ns, Fixture), maps:get(chain, Fixture), [maps:get(pub, Fixture)]).
 
 exact_request(Fixture, Timeout) ->
-    {verify_reference, maps:get(ref, Fixture), finalize, contact(Fixture), none, Timeout}.
+    {verify_reference, maps:get(ref, Fixture), resolve, contact(Fixture), none, Timeout}.
 current_request(Fixture, Timeout) ->
     {current, routes(Fixture), identity(Fixture), none, Timeout}.
 
@@ -926,7 +926,7 @@ sdk_public_caller(Fixture, Timeout, Context) ->
     spawn(fun() ->
         Result = quod_trace:with_context(Context, fun() ->
             quod_foreign_log:verify_reference(
-                maps:get(ref, Fixture), finalize, contact(Fixture), Timeout)
+                maps:get(ref, Fixture), resolve, contact(Fixture), Timeout)
         end),
         Parent ! {public_result, self(), Result}
     end).

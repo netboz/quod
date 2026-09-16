@@ -143,7 +143,7 @@ worker_heap_cap_and_public_local_errors_test() ->
              anonymous),
     try
         {ok, RefusedPlan, 0} =
-            quod_scope_session:seal(Handle, Origin, anonymous, none),
+            quod_scope_session:seal(Handle, Origin, anonymous, none, false),
         ?assertEqual([], quod_ct:plan_material(diff, RefusedPlan)),
         ?assertMatch(
            [{InvocationId, [{Ns, Anchor}, Origin], _, denied,
@@ -329,7 +329,7 @@ local_scope_uses_shared_seal_and_attestation_lifecycle_test() ->
         ?assertMatch(
            {solution, _}, quod_proof_session:next(Session, Invocation)),
         {ok, Plan, 1} = quod_scope_session:seal(
-                       Handle, Origin, anonymous, none),
+                       Handle, Origin, anonymous, none, false),
         Manifest = manifest_for_plan(Plan, key(155), TargetKey),
         {ok, Attestation} =
             quod_scope_session:attest_plan(Handle, Plan, Manifest),
@@ -438,7 +438,7 @@ cohosted_read_certificate_facade_uses_its_live_session(Ctx) ->
         with_proof_context(
           fun() ->
               {ok, SealedPlan, 0} = quod_scope_session:seal(
-                                   Handle, Origin, anonymous, none),
+                                   Handle, Origin, anonymous, none, false),
               ?assertMatch(
                  {ok, {quod_read_certificate, 3, _, _, _, _, _, _}},
                  quod_scope_session:certify_reads(Handle, SealedPlan)),
@@ -832,7 +832,7 @@ remote_seal_and_control_stop_at_the_running_budget_test() ->
                  {error, {proof_limit_exceeded, <<"quod:origin">>}},
                  quod_scope_session:seal(
                    SealHandle, {<<"quod:origin">>, key(61)}, anonymous,
-                   none))
+                   none, false))
           end)
     after
         stop_remote_fixture(SealRouter, SealHandle)
@@ -862,7 +862,7 @@ remote_scope_seal_and_attestation_are_verified_end_to_end_test() ->
               ?assertEqual(
                  {ok, Plan, 1},
                  quod_scope_session:seal(Handle, Origin,
-                                          {node, key(163)}, none)),
+                                          {node, key(163)}, none, false)),
               Manifest1 = manifest_for_plan(Plan, key(164), TargetKey),
               Manifest2 = manifest_for_plan(Plan, key(165), TargetKey),
               {ok, Attestation} =
@@ -1043,7 +1043,7 @@ worker_seals_its_session_on_request_test() ->
              anonymous),
     try
         {ok, Plan, 1} = quod_scope_session:seal(
-                       Handle, Origin, anonymous, none),
+                       Handle, Origin, anonymous, none, false),
         ?assertEqual({Ns, Anchor}, quod_dtx:target(Plan)),
         ?assertEqual(7, quod_dtx:base_height(Plan)),
         ?assertEqual(ProofId, quod_dtx:proof_id(Plan)),
@@ -1554,6 +1554,7 @@ manifest_for_plan(Plan, Nonce, Coordinator) ->
                          goal => GoalBlob,
                          result => ResultBlob,
                          request_binding => none,
+                         vote_deadline_ms => 10000,
                          participants =>
                              [{Target, quod_dtx:digest(Plan)},
                               {{<<"quod:other">>, key(241)}, key(242)}]}),

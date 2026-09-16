@@ -2,7 +2,7 @@
 -moduledoc """
 Consensus validation follows the exact durable parent, not signing permission.
 
-Real signed Begin controls and certified N=4 history. A registered Prolog
+Real signed Vote controls and certified N=4 history. A registered Prolog
 receiver captures actual casts; the tests supply explicit verdicts at that
 boundary, not a second evaluator. Parent progress releases validation; only the
 bounded recovery-preference tests use the existing tick. No sleep releases work.
@@ -575,7 +575,7 @@ parent_progress_wakes_waiting_child_test_() ->
         {ok, Parent} = quod_ledger:new_block(2, 1,
                          {batch, [maps:get(transaction, F)]}, quod_time:now_ms()),
         Approved = quod_simplex:test_blocked_dtx_owner(Parent, S0),
-        {ok, Blob} = quod_dtx:encode_control(maps:get(begin_control, F)),
+        {ok, Blob} = quod_atomic:encode_control(maps:get(vote_control, F)),
         Waiting = quod_simplex:test_propose_dtx_wave(3, [Blob], [], Approved),
         ?assertMatch({none, none, {_, _}, none, undefined},
                      quod_simplex:test_dtx_round(3, Waiting)),
@@ -900,7 +900,7 @@ with_pending_parent_owner(F, Fun) ->
     {Owner, ExitMonitor} = spawn_monitor(fun() ->
         true = quod_reg:reg({quod_prolog, Ns}),
         Caller ! {self(), ready},
-        receive {'$gen_cast', {dtx_verdict_req, [_], _, 2, ReplyTo, Tag, _}} = Request ->
+        receive {'$gen_cast', {dtx_verdict_req, {wave, [_]}, _, 2, ReplyTo, Tag, _}} = Request ->
             Caller ! Request,
             receive
                 {finish, Verdict, Reason} ->
@@ -921,7 +921,7 @@ with_pending_parent_owner(F, Fun) ->
     end.
 
 await_parent_request(Slot) ->
-    receive {'$gen_cast', {dtx_verdict_req, [_], _, Slot, Caller, {Slot, Hash, Token}, _}} ->
+    receive {'$gen_cast', {dtx_verdict_req, {wave, [_]}, _, Slot, Caller, {Slot, Hash, Token}, _}} ->
         {Hash, Token, Caller}
     after 1000 -> error(parent_progress_not_delivered) end.
 
@@ -965,7 +965,7 @@ expired_validation_keeps_latch_until_recovery_reseats_test_() ->
             {Block, Hash, Certified} = certified_first(F, S, Keys),
             Proposed0 = quod_simplex:dispatch(leader(2, Keys), {propose, Block, []}, Certified),
             {Hash, Token, Caller} = receive
-                {'$gen_cast', {dtx_verdict_req, [_], _, 2, Caller, {2, H, T}, _}} -> {H, T, Caller}
+                {'$gen_cast', {dtx_verdict_req, {wave, [_]}, _, 2, Caller, {2, H, T}, _}} -> {H, T, Caller}
             after 1000 -> error(parent_progress_not_delivered) end,
             {Child, ChildHash} = receipt_child(F, 3, 2),
             Proposed = quod_simplex:dispatch(leader(3, Keys), {propose, Child, []}, Proposed0),
@@ -1019,13 +1019,16 @@ foreign_validation_inherits_expired_parent_allowance_test_() ->
     isolated(fun() -> with_fixture(fun(F, S0, _Keys) ->
         Target = maps:get(origin, F), Signer = maps:get(node_identity, F),
         Foreign = {<<"quod:deadline-foreign">>, <<89:256>>},
-        RF = quod_ct:signed_dtx_begin_fixture(#{target => Foreign, participant_target => Target}),
-        Begin = maps:get('begin', RF),
+        RF = quod_ct:signed_atomic_fixture(#{target => Foreign, second_participant_target => Target,
+                                             vote => {refused, [expired]}}),
         {ok, Ref} = quod_dtx:certified_ref(element(1, Foreign), element(2, Foreign), 2,
-            <<90:256>>, quod_dtx:group_id(Begin), <<"structural-reference-not-consensus-admitted">>),
-        {ok, Prepare} = quod_dtx:new_prepare(Begin, Ref, Target),
-        {ok, Control} = quod_dtx:sign_control(Target, Prepare, maps:get(admission, F), 1, 1, Signer),
-        {ok, Blob} = quod_dtx:encode_control(Control),
+            <<90:256>>, quod_atomic:record_digest(maps:get(vote, RF)),
+            <<"structural-reference-not-consensus-admitted">>),
+        {ok, Resolve} = quod_atomic:new_resolve(maps:get(group, RF), Ref, Target,
+                                                {abort, [expired]}, {refused, Ref}, none, 0),
+        {ok, Material} = quod_atomic:admission_material(Resolve),
+        {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F), 1, 1, Signer),
+        {ok, Blob} = quod_atomic:encode_control(Control),
         S = quod_simplex:test_state_set(validation_ttl_ms, 0, S0),
         Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S),
         {Hash, Token, Owner} = take_request(2),
@@ -1045,17 +1048,19 @@ foreign_validation_worker_is_atomically_monitored_test_() ->
         {{ok, Caller}, {call_time, Counts}} = tprof:profile(fun() ->
             with_fixture(fun(F, S0, _Keys) ->
                 Target = {Ns, Anchor} = maps:get(origin, F),
-                Begin = maps:get('begin', F),
+                Group = maps:get(group, F),
+                {ok, Vote} = quod_atomic:new_vote(Group, Target, none, {refused, [expired]}),
                 %% A local reference beyond this snapshot is unavailable.
                 %% Exercise the real foreign-stage worker without any remote
                 %% resolver, and do not pretend this reference was admitted.
                 {ok, Ref} = quod_dtx:certified_ref(Ns, Anchor, 2, <<90:256>>,
-                    quod_dtx:group_id(Begin), <<"structural-unavailable-reference">>),
-                {ok, Decision} = quod_dtx:new_decision(
-                    quod_dtx:group_id(Begin), Ref, {abort, [expired]}, []),
-                {ok, Control} = quod_dtx:sign_control(Target, Decision,
+                    quod_atomic:record_digest(Vote), <<"structural-unavailable-reference">>),
+                {ok, Resolve} = quod_atomic:new_resolve(
+                    Group, Ref, Target, {abort, [expired]}, {refused, Ref}, Ref, 0),
+                {ok, Material} = quod_atomic:admission_material(Resolve),
+                {ok, Control} = quod_atomic:sign_control(Target, Material,
                     maps:get(admission, F), 1, 1, maps:get(node_identity, F)),
-                {ok, Blob} = quod_dtx:encode_control(Control),
+                {ok, Blob} = quod_atomic:encode_control(Control),
                 Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S0),
                 {Hash, Token, Owner} = take_request(2),
                 {_, {dtx, _, _, _, Deadline}, _, _, _} = quod_simplex:test_dtx_round(2, Proposed),
@@ -1213,18 +1218,18 @@ receipt_pair(F, S0, Keys, ParentCertKinds) ->
 receipt_child(F, Slot, Sequence) ->
     Target = maps:get(origin, F),
     ChildFixture = receipt_fixture(F, Slot),
-    {ok, Control} = quod_dtx:sign_control(Target, maps:get('begin', ChildFixture),
+    Material = quod_atomic:control_material(maps:get(vote_control, ChildFixture)),
+    {ok, Control} = quod_atomic:sign_control(Target, Material,
                        maps:get(admission, F), Sequence, 1, maps:get(node_identity, F)),
-    {ok, Blob} = quod_dtx:encode_control(Control),
-    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Blob}]}, quod_time:now_ms()),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [{dtx, Control}]}, quod_time:now_ms()),
     {Block, quod_simplex:block_hash(Block)}.
 
 receipt_fixture(F, Slot) ->
-    %% The parent Begin still owns its prepared writes. A different proof ID
+    %% The parent Vote still owns its prepared writes. A different proof ID
     %% alone leaves the default saved/1 write conflict unchanged; sign genuinely
     %% disjoint request/plan material so this fixture can validly commit both.
     Goal = iolist_to_binary(["assertz(receipt_slot_", integer_to_list(Slot), "(ok))."]),
-    quod_ct:signed_dtx_begin_fixture(
+    quod_ct:signed_atomic_fixture(
                      #{target => maps:get(origin, F), network => maps:get(network, F),
                        node_identity => maps:get(node_identity, F),
                        admission => maps:get(admission, F), proof_id => <<Slot:256>>,
@@ -1307,10 +1312,10 @@ receipt_membership_parent(F, S, Removed) ->
 
 receipt_junk(Block) -> receipt_junk(Block, <<0:512>>).
 
-receipt_junk(Block = #block{slot = Slot, parent = Parent, payload = {batch, [{dtx, Blob}]}}, Sig) ->
-    {ok, Control} = quod_dtx:decode_control(Blob),
-    {ok, JunkBlob} = quod_dtx:encode_control(setelement(10, Control, Sig)),
-    {ok, Junk} = quod_ledger:new_block(Slot, Parent, {batch, [{dtx, JunkBlob}]}, Block#block.timestamp),
+receipt_junk(Block = #block{slot = Slot, parent = Parent, payload = {batch, [{dtx, Control}]}}, Sig) ->
+    {ok, JunkBlob} = quod_atomic:encode_control(setelement(10, Control, Sig)),
+    {ok, JunkControl} = quod_atomic:decode_control(JunkBlob),
+    {ok, Junk} = quod_ledger:new_block(Slot, Parent, {batch, [{dtx, JunkControl}]}, Block#block.timestamp),
     Junk.
 
 assert_receipt_offer(Slot, Hash, Block, S) ->
@@ -1376,8 +1381,8 @@ certified_first(F, S, Keys) ->
 certified_first(F, S, Keys, Kinds) ->
     {Ns, Anchor} = maps:get(origin, F),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
-    {ok, Blob} = quod_dtx:encode_control(maps:get(begin_control, F)),
-    {ok, Block} = quod_ledger:new_block(2, 1, {batch, [{dtx, Blob}]}, quod_time:now_ms()),
+    Control = maps:get(vote_control, F),
+    {ok, Block} = quod_ledger:new_block(2, 1, {batch, [{dtx, Control}]}, quod_time:now_ms()),
     Hash = quod_simplex:block_hash(Block),
     Committee = lists:sort(maps:keys(Keys)),
     Certs = [begin
@@ -1391,7 +1396,7 @@ certified_first(F, S, Keys, Kinds) ->
 leader(Slot, Keys) -> quod_simplex:leader(Slot, lists:sort(maps:keys(Keys))).
 
 take_request(Slot) ->
-    receive {'$gen_cast', {dtx_verdict_req, [_], _, Slot, Owner,
+    receive {'$gen_cast', {dtx_verdict_req, {wave, [_]}, _, Slot, Owner,
                           {Slot, Hash, Token}, _}} -> {Hash, Token, Owner}
     after 0 -> error({parent_progress_not_delivered, Slot}) end.
 assert_no_request() ->
@@ -1416,7 +1421,7 @@ with_fixture(GenesisOptions, Fun) ->
         Ns, Author),
     Target = {Ns, Anchor}, Domain = quod_simplex:consensus_domain(Ns, Anchor),
     {ok, Projection} = quod_simplex:history_validate_advance(Target, Genesis, quod_simplex:history_projection(Target)),
-    F = quod_ct:signed_dtx_begin_fixture(#{target => Target, node_identity => maps:get(Author, Keys),
+    F = quod_ct:signed_atomic_fixture(#{target => Target, node_identity => maps:get(Author, Keys),
             admission => maps:get(Author, maps:get(admissions, Projection))}),
     {ok, Journal} = quod_signing_journal:initialize(Ns, Domain, Dir),
     {ok, Store0} = quod_ledger_store:open(Ns, Dir),

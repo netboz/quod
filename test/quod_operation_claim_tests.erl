@@ -61,7 +61,7 @@ complete_receipt_is_monotone_and_target_complete_across_reopen_test() ->
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
     Op = maps:get(operation_ref, ClaimData), Digest = maps:get(digest, ClaimData),
     {ok, Refs} = quod_transaction:remote_claim_references(Claim),
-    {ok, Receipt} = quod_ct:included_receipt(Refs),
+    {ok, Receipt} = quod_ct:certified_receipt(Refs),
     Dir = filename:join("/tmp", "quod_s7_projection_" ++
         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
     Config = #{data_dir => Dir, outcome_backend => disk},
@@ -189,7 +189,7 @@ receipt_complete_set_and_evidence_independence_test() ->
     F = fixture(4, true), Claim = claim(F, maps:get(bundles, F)),
     Origin = maps:get(origin, F), ClaimRef = ref(Origin, Claim#transaction.tx_id),
     {ok, Refs} = quod_transaction:remote_claim_references(Claim),
-    {ok, Receipt} = quod_ct:included_receipt(Refs),
+    {ok, Receipt} = quod_ct:certified_receipt(Refs),
     {ok, #{operation_ref := Op, digest := Digest}} = quod_transaction:request_claim(Claim),
     Complete = quod_transaction:remote_complete(Origin, Op, Digest, Receipt),
     ?assertEqual(Complete, quod_transaction:remote_complete(

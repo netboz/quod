@@ -40,7 +40,7 @@ prepared material all pass through the existing canonical validators.
                    conflicts := non_neg_integer()}.
 -type result() ::
         #{kind := content, transactions := [map()], stats := stats()} |
-        #{kind := dtx_batch, controls := [quod_dtx:control()],
+        #{kind := dtx_batch, controls := [quod_atomic:control()],
           items := [map()],
           publications := [tuple()], applied_ops := [op()],
           changed_heads := [term()], deferred_acks := [tuple()],
@@ -370,7 +370,7 @@ apply_dtx_batch_entry(Controls, Entry, Floor, Projection0) ->
                                  projection,
                                  quod_outcome:dtx_state(
                                    Projection1#projection.outcomes)),
-            case quod_dtx:reduce_batch(
+            case quod_atomic:reduce_batch(
                    ControlRefs, Histories, ProjectionState0) of
                 {ok, _Histories1, _ProjectionState1, Items} ->
                     apply_reduced_dtx_batch(
@@ -391,7 +391,7 @@ validate_dtx_batch([], _Entry, _Timestamp, _Index, Projection,
 validate_dtx_batch([Control | Rest], Entry, Timestamp, Index,
                    Projection0 = #projection{target = Binding},
                    ControlRefs, Histories0) ->
-    case quod_dtx:verify_control(Binding, Control) of
+    case quod_atomic:verify_control(Binding, Control) of
         false -> {error, bad_control_signature};
         true ->
             case quod_dtx:certified_entry_ref(Binding, Entry, Control) of
@@ -400,7 +400,7 @@ validate_dtx_batch([Control | Rest], Entry, Timestamp, Index,
                            Control, Timestamp, {claim, Index},
                            validation_context(Projection0)) of
                         {ok, {valid, History}, Context} ->
-                            GroupId = quod_dtx:group_id(Control),
+                            GroupId = quod_atomic:group_id(Control),
                             validate_dtx_batch(
                               Rest, Entry, Timestamp, Index,
                               set_validation_context(Context, Projection0),
@@ -428,15 +428,13 @@ apply_reduced_dtx_batch([], Index, Floor, Projection,
         applied_ops => AppliedOps, changed_heads => changed_heads(AppliedOps),
         deferred_acks => lists:reverse(DeferredAcks), stats => Stats});
 apply_reduced_dtx_batch(
-  [#{control := Control, history := History,
-     projection := ProjectionState, effects := Effects} | Rest],
+  [#{control := Control, effects := Effects} = Item | Rest],
   Index, Floor, Projection0 = #projection{outcomes = Outcomes0},
   Controls0, ResultItems0, Publications0, AppliedOps0,
   DeferredAcks0, Stats0) ->
     case apply_dtx_effects(Effects, Index, Projection0) of
         {ok, Projection1, Publication, AppliedOps, Delta} ->
-            case quod_outcome:apply_dtx(
-                   Outcomes0, Index, Control, History, ProjectionState, Effects) of
+            case quod_outcome:apply_dtx(Outcomes0, Item) of
                 {ok, Outcomes1, DeferredAck} ->
                     Publications1 = case Publication of
                                         none -> Publications0;
@@ -462,7 +460,7 @@ apply_reduced_dtx_batch(
     end.
 
 publication_item(Control, Publication, AppliedOps, DeferredAck, Delta) ->
-    #{control => Control, group_id => quod_dtx:group_id(Control),
+    #{control => Control, group_id => quod_atomic:group_id(Control),
       publication => Publication, applied_ops => AppliedOps,
       changed_heads => changed_heads(AppliedOps),
       deferred_ack => DeferredAck, stats => Delta}.
@@ -500,15 +498,9 @@ merge_publication(Publication, none) -> {ok, Publication};
 merge_publication(_, _) -> error.
 
 apply_dtx_effect(
-  {prepared, _GroupId, _Ref, _Manifest, _PlanDigest, _PlanBlob,
-   _Generation}, _Index, Projection) ->
-    {ok, Projection, none, [], stats()};
-apply_dtx_effect(
-  {apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
-   _Ref, _Generation}, Index,
+  {resolved, GroupId, commit, OwnMaterial, _Ref, _Generation}, Index,
   Projection = #projection{est = Est}) ->
-    case quod_commit_validation:prepared_material(
-           Manifest, PlanDigest, PlanBlob, validation_context(Projection)) of
+    case quod_commit_validation:prepared_material(OwnMaterial) of
         {ok, EventContext, #{diff := Diff, effects := DirectEffects}} ->
             {ok, Est1, AppliedOps} = quod_diff:apply_ops_report(Est, Diff),
             {ok, Projection#projection{est = Est1},
@@ -516,18 +508,10 @@ apply_dtx_effect(
              AppliedOps,
              #{applies => 1, rejects => 0, conflicts => 0}};
         {error, Reason} ->
-            {error, {invalid_committed_dtx_finalize, Index, Reason}}
+            {error, {invalid_committed_dtx_resolve, Index, Reason}}
     end;
 apply_dtx_effect(
-  {discard_prepared, _GroupId, _Manifest, _PlanDigest, _PlanBlob,
-   _Ref, _Generation}, _Index, Projection) ->
-    {ok, Projection, none, [], stats()};
-apply_dtx_effect({origin_started, _GroupId, _Ref}, _Index, Projection) ->
-    {ok, Projection, none, [], stats()};
-apply_dtx_effect({decided, _GroupId, _Verdict, _Ref}, _Index, Projection) ->
-    {ok, Projection, none, [], stats()};
-apply_dtx_effect(
-  {direct_applied_abort, _GroupId, _Ref, _Generation}, _Index, Projection) ->
+  {resolved, _GroupId, abort, _OwnMaterial, _Ref, _Generation}, _Index, Projection) ->
     {ok, Projection, none, [], stats()};
 apply_dtx_effect(
   {completed, _GroupId, commit, _Ref}, _Index, Projection) ->

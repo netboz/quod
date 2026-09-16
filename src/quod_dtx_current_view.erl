@@ -2,7 +2,7 @@
 -moduledoc """
 Committee corroboration for DTX recovery, independent operations and sealed reads.
 
-Applied verification freezes the committee certified by the exact Finalize and
+Applied verification freezes the committee certified by the exact Resolve and
 asks distinct members of that committee for signed replies. `f + 1` replies
 form one portable certificate that source validators can verify locally. Public
 outcome lookup retains its separate certified-current-view rule. In both cases,
@@ -19,8 +19,8 @@ still authenticates the expected key; no endpoint creates another vote or
 request id.
 
 Read certification uses the same frozen-view routing and quorum collector. A
-target validator checks the sealed read-only plan through the ordinary Prepare
-validator at its current committed head, then signs the plan digest and the
+target validator checks the sealed read-only plan through shared plan admission
+at its current committed head, then signs the plan digest and the
 immutable claim of its certified ledger anchor. Different valid finality-proof
 subsets for that same claim remain interchangeable evidence. The collector
 keeps the plan vocabulary opaque.
@@ -61,12 +61,12 @@ different endpoint. Observation votes do not authorize a new submission.
 -type claim() ::
         #{target := identity(),
           group_id := <<_:256>>,
-          finalize_ref := quod_dtx:certified_ref(),
+          resolve_ref := quod_dtx:certified_ref(),
           generation := non_neg_integer(),
           verdict := commit | abort}.
 -type many_result() :: {verified, quod_applied_certificate:applied_certificate()} | retry.
 -type outcome_result() ::
-        {ok, map()} | {error, retry | not_found | invalid_request}.
+        {ok, map()} | {error, retry | invalid_request}.
 
 %% The co-hosted and remote cases share one correlated submission walk.
 %% Routes remain hints; the target independently verifies foreign evidence.
@@ -265,7 +265,7 @@ remaining_positive(Deadline) ->
 -doc """
 Build participant-applied certificates under the original absolute deadline.
 
-Each request carries the exact Finalize evidence already verified by the
+Each request carries the exact Resolve evidence already verified by the
 coordinator. For valid input the returned list is aligned with `Requests`. An
 exact certificate is retained as `{verified, Certificate}` even when another
 participant is temporarily unavailable; only that participant's row is
@@ -498,12 +498,9 @@ certify_reads(OwnerNs, Request, Deadline) ->
 Resolve one anchored public outcome through a frozen certified current view.
 
 Terminal and ledger-derived pending statuses require `f + 1` identical
-current-validator replies. After a group is absent from that quorum snapshot,
-the certified view may prove its coordinator retired; if that key is still
-current, only its exact admission-bound coordinator barrier may decide local
-pre-Begin state. Ordinary absence is never made definitive by this API and
-remains `retry`. The absolute monotonic deadline includes any initial local
-history capture performed by the caller.
+current-validator replies. Absence remains `retry` for every lane: a snapshot
+cannot exclude a later vote or a participant's recovery presentation. The
+absolute monotonic deadline includes the caller's initial history capture.
 """.
 -spec lookup_outcome(binary(), source(), term(), integer()) ->
           outcome_result().
@@ -619,12 +616,12 @@ read_anchor_source(_Source, _Identity, _Claim, _Deadline) ->
 
 prepare_applied(OwnerNs, {Source, Claim, Evidence}, TimeoutMs) ->
     case valid_request(OwnerNs, Source, Claim, TimeoutMs) of
-        {ok, Target, GroupId, FinalizeRef, Generation, Verdict} ->
-            case valid_finalize_evidence(
-                   Target, GroupId, FinalizeRef, Generation, Verdict, Evidence) of
+        {ok, Target, GroupId, ResolveRef, Generation, Verdict} ->
+            case valid_resolve_evidence(
+                   Target, GroupId, ResolveRef, Generation, Verdict, Evidence) of
                 {ok, Committee, CommitteeId, Routes} ->
                     {ok, {Source, Committee, Routes,
-                          {Target, CommitteeId, GroupId, FinalizeRef, Generation, Verdict}}};
+                          {Target, CommitteeId, GroupId, ResolveRef, Generation, Verdict}}};
                 error -> {error, retry}
             end;
         error -> {error, invalid_request}
@@ -863,7 +860,7 @@ aligned_many_results(Results) ->
 valid_request(OwnerNs, Source,
               #{target := {TargetNs, <<_:256>> = Anchor} = Target,
                 group_id := <<_:256>> = GroupId,
-                finalize_ref := FinalizeRef,
+                resolve_ref := ResolveRef,
                 generation := Generation,
                 verdict := Verdict} = Claim,
               TimeoutMs)
@@ -875,9 +872,9 @@ valid_request(OwnerNs, Source,
        is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
     case {valid_source(Source),
-          quod_dtx:certified_ref_binding(FinalizeRef)} of
+          quod_dtx:certified_ref_binding(ResolveRef)} of
         {true, {ok, {TargetNs, Anchor}, _Slot, <<_:256>>}} ->
-            {ok, Target, GroupId, FinalizeRef, Generation, Verdict};
+            {ok, Target, GroupId, ResolveRef, Generation, Verdict};
         _ ->
             error
     end;
@@ -906,9 +903,9 @@ lookup_outcome_view(OwnerNs, Source, OutcomeRef, Target, View,
                            OwnerNs, Sources, Claim, Needed, Deadline,
                            Dependencies) of
                         {ok, not_found} ->
-                            resolve_quorum_absence(
-                              OwnerNs, Sources, Committee, Claim,
-                              Deadline, Dependencies);
+                            %% Applied-snapshot absence never excludes a
+                            %% later vote, submission or participant recovery.
+                            {error, retry};
                         {ok, Status} ->
                             {ok, Status};
                         retry ->
@@ -918,40 +915,6 @@ lookup_outcome_view(OwnerNs, Source, OutcomeRef, Target, View,
         error ->
             {error, retry}
     end.
-
-resolve_quorum_absence(
-  _OwnerNs, _Sources, _Committee,
-  {_Target, _CommitteeId, _MinimumSlot,
-   {transaction, _, _, _}}, _Deadline, _Dependencies) ->
-    %% A quorum can corroborate that an ordinary transaction is absent from
-    %% its applied snapshots, but no durable exclusion barrier proves that it
-    %% was never handed off. Preserve uncertainty.
-    {error, retry};
-resolve_quorum_absence(
-  OwnerNs, Sources, Committee,
-  {Target, CommitteeId, MinimumSlot,
-   {group, _, _, Coordinator, _, _} = GroupRef},
-  Deadline, Dependencies) ->
-    case lists:member(Coordinator, Committee) of
-        false ->
-            %% The certified current view itself proves that the admission
-            %% generation named by GroupRef can no longer author Begin.
-            {ok, #{status => rejected, reason => coordinator_retired,
-                   ref => GroupRef}};
-        true ->
-            case lists:keyfind(Coordinator, 1, Sources) of
-                {Coordinator, CoordinatorSource} ->
-                    probe_outcome_barrier(
-                      OwnerNs, Coordinator, CoordinatorSource,
-                      {Target, CommitteeId, MinimumSlot, GroupRef},
-                      Deadline, Dependencies);
-                false ->
-                    {error, retry}
-            end
-    end;
-resolve_quorum_absence(
-  _OwnerNs, _Sources, _Committee, _Claim, _Deadline, _Dependencies) ->
-    {error, retry}.
 
 valid_source(
   {local, #{owner := Owner, identity := {Ns, <<_:256>>},
@@ -983,7 +946,7 @@ call_current_view(Source, Basis, Deadline, Dependencies) ->
     end.
 
 certify_applied_prepared(OwnerNs,
-  {Source, Committee, Routes, {Target, CommitteeId, GroupId, FinalizeRef, Generation, Verdict}},
+  {Source, Committee, Routes, {Target, CommitteeId, GroupId, ResolveRef, Generation, Verdict}},
   Deadline, Dependencies) ->
     case remaining(Deadline) of
         0 -> {error, retry};
@@ -991,7 +954,7 @@ certify_applied_prepared(OwnerNs,
             case dependency_network_identity(Dependencies) of
                 {ok, NetworkIdentity} ->
                     Claim = {NetworkIdentity, Target, CommitteeId, GroupId,
-                             FinalizeRef, Generation, Verdict},
+                             ResolveRef, Generation, Verdict},
                     with_probe_sources(Source, Committee, Routes, Deadline, Dependencies,
                       fun(Sources, Needed) ->
                           case collect_applied(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) of
@@ -1003,11 +966,11 @@ certify_applied_prepared(OwnerNs,
             end
     end.
 
-valid_finalize_evidence(Target, GroupId, FinalizeRef, Generation, Verdict,
+valid_resolve_evidence(Target, GroupId, ResolveRef, Generation, Verdict,
                         Evidence) ->
-    case {quod_applied_certificate:exact_finalize_binding(Evidence, FinalizeRef),
+    case {quod_applied_certificate:exact_resolve_binding(Evidence, ResolveRef),
           historical_committee_view(Target, Evidence)} of
-        {{ok, GroupId, FinalizeRef, Generation, Verdict},
+        {{ok, GroupId, ResolveRef, Generation, Verdict},
          {ok, Committee, CommitteeId, Routes}} ->
             {ok, Committee, CommitteeId, Routes};
         _ -> error
@@ -1035,7 +998,7 @@ historical_committee_view(_Target, _Evidence) ->
 
 %% A co-hosted validator needs no transport route to attest. Historical
 %% routes are therefore an optional, authenticated reachability aid rather
-%% than a precondition for a valid Finalize-era committee.
+%% than a precondition for a valid Resolve-era committee.
 valid_historical_routes(Routes, Committee) ->
     lists:all(
       fun({Key, [Endpoint]}) ->
@@ -1415,46 +1378,13 @@ outcome_response(
 outcome_response(_Request, _Target, _CommitteeId, _Result) ->
     ignore.
 
-%% `pending_begin` is journal/handoff state owned only by the exact
-%% coordinator. It is deliberately excluded from current-view voting and is
-%% obtained only through the barrier below after quorum-certified absence.
+%% `pending_vote` is local journal/handoff state, not committed snapshot
+%% evidence. Do not turn independent local observations into an outcome.
 quorum_outcome_allowed(
-  #{status := pending, phase := pending_begin}) -> false;
+  #{status := pending, phase := pending_vote}) -> false;
 quorum_outcome_allowed(not_found) -> true;
 quorum_outcome_allowed(#{status := _}) -> true;
 quorum_outcome_allowed(_) -> false.
-
-probe_outcome_barrier(
-  OwnerNs, Coordinator, Source,
-  {{TargetNs, _Anchor} = Target, CommitteeId, MinimumSlot, GroupRef},
-  Deadline, Dependencies) ->
-    Request = {outcome_barrier, request_id(), GroupRef,
-               CommitteeId, MinimumSlot},
-    probe_source(
-      Source, OwnerNs, TargetNs, Coordinator, Request, Deadline, Dependencies,
-      fun(Result) -> barrier_response(Request, Target, CommitteeId, GroupRef, Result) end,
-      {error, retry}).
-
-barrier_response(
-  Request, Target, CommitteeId, GroupRef,
-  {ok, {outcome_barrier, _RequestId, Target, CommitteeId,
-        _AppliedFloor, Status} = Response}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) of
-        true -> barrier_result(Status, GroupRef);
-        false -> {error, retry}
-    end;
-barrier_response(_Request, _Target, _CommitteeId, _GroupRef, _Result) ->
-    {error, retry}.
-
-barrier_result(pending_begin, GroupRef) ->
-    {ok, #{status => pending, phase => pending_begin, ref => GroupRef}};
-barrier_result(coordinator_retired, GroupRef) ->
-    {ok, #{status => rejected, reason => coordinator_retired,
-           ref => GroupRef}};
-barrier_result(not_found, _GroupRef) ->
-    {error, not_found};
-barrier_result(_Status, _GroupRef) ->
-    {error, retry}.
 
 call_endpoint(OwnerNs, TargetNs, PeerKey, Source, Request,
               Deadline, Dependencies) ->
@@ -1526,9 +1456,9 @@ read_attest_response_vote(
 
 probe_applied(OwnerNs, PeerKey, Source,
               {NetworkIdentity, {TargetNs, _Anchor} = Target, CommitteeId,
-               GroupId, FinalizeRef, Generation, Verdict},
+               GroupId, ResolveRef, Generation, Verdict},
               Deadline, Dependencies) ->
-    Request = {applied, request_id(), GroupId, FinalizeRef,
+    Request = {applied, request_id(), GroupId, ResolveRef,
                Generation, Verdict},
     probe_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
@@ -1538,7 +1468,7 @@ probe_applied(OwnerNs, PeerKey, Source,
 
 %% One endpoint walk for every observation family. The verifier alone decides
 %% what is terminal; Exhausted is its existing non-evidence result. In
-%% particular a read conflict or a barrier's not_found must stop this walk.
+%% particular a verified read conflict must stop this walk.
 probe_source(
   {remote, []}, _OwnerNs, _TargetNs, _PeerKey, _Request,
   _Deadline, _Dependencies, _Verify, Exhausted) -> Exhausted;
@@ -1569,11 +1499,11 @@ probe_source(
 applied_response_vote(
   Request, NetworkIdentity, Target, CommitteeId, ExpectedSigner,
   {ok, {applied, _RequestId, Target, CommitteeId, GroupId,
-         FinalizeRef, Generation, Verdict, ExpectedSigner, Signature}
+         ResolveRef, Generation, Verdict, ExpectedSigner, Signature}
        = Response}) ->
     case quod_dtx_endpoint:correlates(Request, Response) andalso
          quod_applied_certificate:applied_vote_valid(
-           NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+           NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
            Generation, Verdict, ExpectedSigner, Signature) of
         true -> {ok, {ExpectedSigner, Signature}};
         false -> ignore

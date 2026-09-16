@@ -217,7 +217,7 @@ queue_case(Root) ->
     %% A route-unavailable park has the opposite last-caller rule.
     Missing = fixture(),
     NoRoute = send_request(Owner,
-      {verify_reference, maps:get(ref, Missing), finalize, none, none, 50}, 50),
+      {verify_reference, maps:get(ref, Missing), resolve, none, none, 50}, 50),
     ?assertMatch(#{waiting := [#{wait_reason := route}]},
                  lifecycle(Owner, identity(Missing))),
     ?assertEqual({reply, {error, retry}}, gen_server:wait_response(NoRoute, 2000)),
@@ -228,7 +228,7 @@ session_case(Root) ->
     Fixture = fixture(), Identity = identity(Fixture),
     Owner = start_owner(Root, fetch(Fixture)),
     %% Ready reads deliberately do not claim mutation custody anymore. Seed
-    %% a genuine certified prefix at 1, then request the missing Finalize at 2
+    %% a genuine certified prefix at 1, then request the missing Resolve at 2
     %% so this still tests the actual writer handoff and exact-path sweep.
     seed_genesis(Owner, Fixture),
     await_name_free(Identity),
@@ -442,8 +442,8 @@ cancel_denied_case(Root, source_down) ->
     CacheRoot = filename:join(Root, "cache"),
     Owner = start_owner(CacheRoot, fun(_, _, _, _, _) -> error(local_read_used_network) end),
     try
-        ?assertMatch({ok, #{phase := finalize}},
-            quod_foreign_log:verify_local(View, maps:get(ref, Fixture), finalize, infinity)),
+        ?assertMatch({ok, #{phase := resolve}},
+            quod_foreign_log:verify_local(View, maps:get(ref, Fixture), resolve, infinity)),
         {Reader, Token} = quod_foreign_log_tests:hold_direct_local(
             View, maps:get(ref, Fixture), infinity, after_read),
         try
@@ -587,12 +587,12 @@ stop_owner(Owner) -> gen_server:stop(Owner).
 
 request(Owner, F, Timeout) ->
     send_request(Owner, {verify, maps:get(pub, F), {"127.0.0.1", 31997},
-                         maps:get(ref, F), finalize, Timeout}, Timeout).
+                         maps:get(ref, F), resolve, Timeout}, Timeout).
 send_request(Owner, Request, Timeout) ->
     gen_server:send_request(Owner, {verification, quod_time:mono_ms() + Timeout,
                                     undefined, erlang:monotonic_time(), Request}).
 assert_verified(Request) ->
-    ?assertMatch({reply, {ok, #{slot := 2, phase := finalize}}},
+    ?assertMatch({reply, {ok, #{slot := 2, phase := resolve}}},
                  gen_server:wait_response(Request, 10000)).
 seed_genesis(Owner, F) ->
     Entry = hd(maps:get(chain, F)),

@@ -21,7 +21,7 @@ insert by `flush/1`; pending admission remains immediately durable. Only the
 other lookups go to the disk index.
 
 Distributed state uses the same file and owner.  One fixed state row holds the
-journal-derived local pending-Begin identities, the ledger-active dual-role
+journal-derived local pending-Vote identities, the ledger-active own-role
 projection, and the ordered applied floor.  Exact per-GroupId rows remain on
 disk after their small in-memory cache entries are evicted, so an old direct
 abort tombstone can never become absence.  A committed block's transaction,
@@ -42,13 +42,13 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
          check_operation/3, claim_operation/4,
          check_completion/4, complete_operation/5, unresolved_operations/1,
          ref_identity/1, lookup_ref/2, lookup_live/3, public/1,
-         project_pending_begins/2, dtx_state/1,
+         project_pending_votes/2, dtx_state/1,
          lookup_group/2, group_history/2,
-         apply_dtx/6, advance_applied/2, applied_floor/1]).
+         apply_dtx/2, advance_applied/2, applied_floor/1]).
 
 -export_type([index/0, outcome/0]).
 
--define(FORMAT, 7). %% generalized target-keyed operation projection
+-define(FORMAT, 8). %% own-role Vote/Resolve/Complete projection
 -define(CACHE_LIMIT, 4096).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
@@ -81,17 +81,16 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
           request_digest := <<_:256>>,
           outcome_ref := term(), first_slot := pos_integer(),
           state := unresolved | {terminal, pos_integer()}}.
--type pending_begin() ::
-        #{lane := {<<_:256>>, <<_:256>>}, sequence := pos_integer(),
-          group_id := <<_:256>>}.
+-type pending_vote() ::
+        {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}.
 -type index_error() :: outcome_index_bad_transaction |
                        outcome_index_bad_group |
                        outcome_index_bad_operation |
                        outcome_index_gap |
                        outcome_index_conflict |
                        {outcome_index_io, term()}.
--type deferred_finalize_ack() ::
-        {finalize_applied, <<_:256>>, pos_integer(), non_neg_integer()}.
+-type deferred_resolve_ack() ::
+        {resolve_applied, <<_:256>>, pos_integer(), non_neg_integer()}.
 
 -doc "Return the immutable ontology identity carried by any public outcome reference.".
 -spec ref_identity(term()) -> {ok, {binary(), <<_:256>>}} | error.
@@ -169,9 +168,12 @@ inspect_open_table(Ns, Anchor, Name, Path, MayReset) ->
             end;
         [{meta, ?FORMAT, Anchor}] ->
             open_existing_state(Ns, Anchor, Name, Path, MayReset);
+        [{meta, Version, _OldAnchor}] when is_integer(Version), Version < ?FORMAT ->
+            _ = dets:close(Name),
+            {error, {unsupported_format, Version}};
         Other ->
-            %% This is a derived hard-break index. Old or malformed formats
-            %% are discarded and reconstructed by authoritative ledger replay.
+            %% Corrupt derived state may be reconstructed; a recognized old
+            %% format above is refused by name without deleting its bytes.
             reset_open_table(Ns, Anchor, Name, Path, MayReset,
                              {format, Other})
     catch
@@ -199,7 +201,7 @@ open_existing_state(Ns, Anchor, Name, Path, MayReset) ->
 %% The ontology database is rebuilt from slot 1 whenever its owner restarts.
 %% Its DTX fold must therefore restart from the same empty prefix: retaining a
 %% terminal group history would classify replayed controls as duplicates and
-%% suppress the prepared Finalize effect that reconstructs D.  Ordinary
+%% suppress the prepared Resolve effect that reconstructs D.  Ordinary
 %% transaction rows are different: their terminal slot lets the existing
 %% replay path re-apply exactly that occurrence, so preserve them.
 reset_existing_dtx(Ns, Anchor, Name) ->
@@ -230,8 +232,8 @@ disk_index(Ns, Anchor, Name, Dtx, Floor) ->
            dtx = Dtx, applied_floor = Floor}.
 
 initial_dtx_state(Ns, Anchor) ->
-    #{pending_begins => #{},
-      projection => quod_dtx:initial_projection({Ns, Anchor}, 0),
+    #{pending_votes => #{},
+      projection => quod_atomic:initial_projection({Ns, Anchor}, 0),
       applied_floor => 0}.
 
 reset_open_table(Ns, Anchor, Name, Path, true, _Reason) ->
@@ -265,42 +267,33 @@ report_close_error(Name, Operation, {error, Reason}) ->
 %% Distributed-group projection
 %% ===================================================================
 
--doc "Replace all rebuildable local pending-Begin identities from the journal.".
--spec project_pending_begins(index(), [pending_begin()]) ->
+-doc "Replace all rebuildable local pending-Vote identities from the journal.".
+-spec project_pending_votes(index(), [pending_vote()]) ->
           {ok, index()} | {error, index_error()}.
-project_pending_begins(Index = #index{dtx = Dtx}, PendingRows)
+project_pending_votes(Index = #index{ns = Ns, anchor = Anchor, dtx = Dtx}, PendingRows)
   when is_list(PendingRows) ->
-    case normalize_pending_begins(PendingRows, #{}) of
+    case normalize_pending_votes(PendingRows, {Ns, Anchor}, #{}) of
         {ok, Pending} ->
-            case maps:get(pending_begins, Dtx) of
+            case maps:get(pending_votes, Dtx) of
                 Pending -> {ok, Index};
-                _ -> {ok, stage_dtx_state(Index, Dtx#{pending_begins := Pending})}
+                _ -> {ok, stage_dtx_state(Index, Dtx#{pending_votes := Pending})}
             end;
         error -> {error, outcome_index_bad_group}
     end.
 
-normalize_pending_begins([], Acc) -> {ok, Acc};
-normalize_pending_begins([Row | Rest], Acc) ->
-    case normalize_pending_begin(Row) of
-        {ok, Pending = #{group_id := GroupId}} ->
-            case maps:is_key(GroupId, Acc) of
-                false -> normalize_pending_begins(Rest, Acc#{GroupId => Pending});
-                true -> error
-            end;
-        error -> error
+normalize_pending_votes([], _Target, Acc) -> {ok, Acc};
+normalize_pending_votes([{group, _, _, _, _, <<_:256>> = Id} = Ref | Rest], Target, Acc) ->
+    case ref_identity(Ref) of
+        {ok, Target} when not is_map_key(Id, Acc) ->
+            normalize_pending_votes(Rest, Target, Acc#{Id => Ref});
+        {ok, Other} when Other =/= Target ->
+            %% A participant journal has no local public source waiter.
+            normalize_pending_votes(Rest, Target, Acc);
+        _ -> error
     end;
-normalize_pending_begins(_, _) -> error.
+normalize_pending_votes(_, _, _) -> error.
 
-normalize_pending_begin(
-  #{lane := {<<_:256>> = Admission, <<_:256>> = Author},
-    sequence := Sequence, group_id := <<_:256>> = GroupId})
-  when is_integer(Sequence), Sequence > 0, Sequence =< ?MAX_UINT64 ->
-    {ok, #{lane => {Admission, Author}, sequence => Sequence,
-           group_id => GroupId}};
-normalize_pending_begin(_) ->
-    error.
-
--doc "Current fixed-size DTX projection, including staged owner-local updates.".
+-doc "Current owner-held DTX projection, including staged owner-local updates.".
 -spec dtx_state(index()) -> map().
 dtx_state(#index{dtx = Dtx}) -> Dtx.
 
@@ -318,8 +311,18 @@ advance_applied(Index = #index{dtx = Dtx}, Slot)
         _ when Slot =< Floor ->
             {ok, Index};
         _ when Slot =:= Floor + 1 ->
+            %% Every fact in this block has been applied before this boundary.
+            %% A whole reducer wave may carry several fences: acknowledge them
+            %% together here, so a later item cannot resurrect an earlier one.
+            Projection = maps:get(projection, Dtx),
+            Applied = maps:fold(
+              fun(Id, #{slot := H, generation := Gen}, Acc) when H =< Slot ->
+                      {ok, Next} = quod_atomic:acknowledge_resolve(Id, H, Gen, Acc),
+                      Next;
+                 (_, _, Acc) -> Acc
+              end, Projection, maps:get(apply_fences, Projection)),
             {ok, stage_dtx_state(
-                   Index, Dtx#{applied_floor := Slot})};
+                   Index, Dtx#{applied_floor := Slot, projection := Applied})};
         _ ->
             {error, outcome_index_gap}
     end;
@@ -350,447 +353,107 @@ lookup_group(Index, _GroupId) ->
 
 -doc "Return exact reducer history, with an empty history for an unseen group.".
 -spec group_history(index(), <<_:256>>) ->
-          {quod_dtx:group_history(), index()} | {error, index_error()}.
+          {quod_atomic:group_history(), index()} | {error, index_error()}.
 group_history(Index, <<_:256>> = GroupId) ->
     case lookup_group(Index, GroupId) of
         {{ok, #{history := History}}, Index1} -> {History, Index1};
-        {not_found, Index1} -> {quod_dtx:initial_group_history(), Index1};
+        {not_found, Index1} -> {quod_atomic:initial_group_history(), Index1};
         {{error, Reason}, _Index1} -> {error, Reason}
     end;
 group_history(_Index, _GroupId) ->
     {error, outcome_index_bad_group}.
 
 -doc """
-Stage one already-reduced committed DTX control.
+Stage one item returned by the canonical atomic reducer.
 
-`History`, `Projection`, and `Effects` must be the exact output of
-`quod_dtx:reduce/4`.  For a prepared Finalize the caller applies or discards
-the hidden plan before calling this function.  Whenever a Finalize records
-its applied state, the returned `finalize_applied` value is a deferred
-notification token: buffer it with the block's other post-apply work and do
-not send it to Simplex until the common
-`advance_applied/2` -> `flush/1` -> MVCC publication sequence has succeeded.
-No row becomes publicly terminal before that same boundary.
+This is an owner-local adapter, not a second validator or a wire admission
+boundary. The committed materializer authenticates the whole wave and reduces
+it once before applying any effects. This adapter stores that exact result;
+it never re-decodes plans, rechecks signatures or mirrors the transition graph.
+Contradictions in this internal contract remain loud.
+
+The caller applies the item's facts before staging it. The returned
+`resolve_applied` token must remain deferred until the block's common
+`advance_applied/2` -> `flush/1` -> MVCC publication boundary succeeds.
 """.
--spec apply_dtx(index(), pos_integer(), quod_dtx:control(),
-                quod_dtx:group_history(), quod_dtx:projection(), list()) ->
-          {ok, index(), none | deferred_finalize_ack()} |
-          {error, index_error()}.
-apply_dtx(Index, Slot, Control, History, Projection, Effects)
-  when is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64, is_list(Effects) ->
-    try dtx_update(Index, Slot, Control, History, Projection, Effects)
-    catch
-        error:_ -> {error, outcome_index_bad_group}
-    end;
-apply_dtx(_Index, _Slot, _Control, _History, _Projection, _Effects) ->
-    {error, outcome_index_bad_group}.
-
-dtx_update(Index = #index{ns = Ns, anchor = Anchor}, Slot,
-           Control, History, Projection, Effects) ->
-    Target = quod_dtx:control_target(Control),
-    Kind = quod_dtx:control_kind(Control),
-    GroupId = quod_dtx:group_id(Control),
-    Digest = quod_dtx:record_digest(Control),
-    Checks = {Target =:= {Ns, Anchor},
-              valid_history(History, GroupId),
-              valid_projection(Projection, {Ns, Anchor})},
-    case Checks of
-        {true, true, true} ->
-            dtx_update_known(
-              Index, Slot, Control, Kind, GroupId, Digest,
-              History, Projection, Effects);
-        _ ->
-            {error, outcome_index_bad_group}
-    end.
-
-dtx_update_known(Index, Slot, Control, Kind, GroupId, Digest,
-                 History, Projection, Effects) ->
-    case lookup_group(Index, GroupId) of
-        {{ok, OldRow}, Index1} ->
-            update_group_row(
-              Index1, Slot, Control, Kind, GroupId, Digest,
-              History, Projection, Effects, OldRow);
-        {not_found, Index1} ->
-            update_group_row(
-              Index1, Slot, Control, Kind, GroupId, Digest,
-              History, Projection, Effects, empty_group_row(GroupId));
-        {{error, Reason}, _Index1} ->
-            {error, Reason}
-    end.
-
-update_group_row(Index, Slot, Control, Kind, GroupId, Digest,
-                 History, Projection, Effects, OldRow) ->
-    OldHistory = maps:get(history, OldRow),
-    Records = maps:get(records, History),
-    ExistingRecords = maps:get(records, OldHistory),
-    case history_extends(ExistingRecords, Records) andalso
-         current_record_matches(Kind, Digest, Slot, Records,
-                                ExistingRecords) of
-        false ->
-            {error, outcome_index_conflict};
-        true ->
-            Row0 = OldRow#{history := History},
-            case capture_control(Control, Kind, GroupId, History, Row0) of
-                {ok, Row1} ->
-                    OldProjection = maps:get(
-                                      projection,
-                                      (Index#index.dtx)),
-                    case apply_group_effects(
-                           Effects, Kind, GroupId, History, Row1,
-                           Projection, OldProjection,
-                           maps:is_key(Kind, ExistingRecords)) of
-                        {ok, Row2, DeferredAck, Projection1} ->
-                            finish_group_update(
-                              Index, GroupId, Row2, Projection,
-                              Projection1, DeferredAck);
-                        error ->
-                            {error, outcome_index_conflict}
-                    end;
-                error ->
-                    {error, outcome_index_conflict}
+-spec apply_dtx(index(), map()) ->
+          {ok, index(), none | deferred_resolve_ack()} | {error, index_error()}.
+apply_dtx(Index0 = #index{ns = Ns, anchor = Anchor},
+          #{control := Control, ref := Ref, history := History,
+            projection := Projection, effects := Effects}) ->
+    {Ns, Anchor} = quod_atomic:control_target(Control),
+    Id = quod_atomic:group_id(Control),
+    Kind = quod_atomic:control_kind(Control),
+    case lookup_group(Index0, Id) of
+        {{error, Reason}, _} -> {error, Reason};
+        {Found, Index = #index{dtx = Dtx}} ->
+            OldRow = case Found of
+                         {ok, Existing} -> Existing;
+                         not_found -> empty_group_row()
+                     end,
+            case maps:is_key(Kind, maps:get(records, maps:get(history, OldRow))) of
+                true ->
+                    %% The reducer made duplicates effect-free and retained
+                    %% the first reference, even with another valid QC subset.
+                    [] = Effects,
+                    History = maps:get(history, OldRow),
+                    {ok, Index, none};
+                false ->
+                    Row = capture_control(Control, Ref, Effects, OldRow#{history := History}),
+                    Ack = case Effects of
+                        [{resolved, Id, _, _, Ref, Generation}] ->
+                            {resolve_applied, Id, ref_slot(Ref), Generation};
+                        _ -> none
+                    end,
+                    Dtx1 = Dtx#{pending_votes := maps:remove(Id, maps:get(pending_votes, Dtx)),
+                                projection := Projection},
+                    Key = group_key(Index, Id),
+                    Index1 = stage_row(Key, Row, stage_dtx_state(Index, Dtx1)),
+                    {ok, cache_put(Key, Row, Index1), Ack}
             end
     end.
-
-finish_group_update(Index = #index{dtx = Dtx}, GroupId, Row,
-                    Projection, ProjectionOverride, DeferredAck) ->
-    StoredProjection = case ProjectionOverride of
-                           none -> Projection;
-                           _ -> ProjectionOverride
-                       end,
-    Pending = maps:remove(GroupId, maps:get(pending_begins, Dtx)),
-    Dtx1 = Dtx#{pending_begins := Pending,
-                projection := StoredProjection},
-    Key = group_key(Index, GroupId),
-    Index1 = stage_row(Key, Row, stage_dtx_state(Index, Dtx1)),
-    {ok, cache_put(Key, Row, Index1), DeferredAck}.
 
 stage_row(Key, Row, Index = #index{staged = Staged}) ->
     Index#index{staged = Staged#{Key => Row}}.
 
-empty_group_row(GroupId) ->
-    #{history => #{group_id => GroupId, records => #{}},
-      ref => none, result => none,
-      applied => none, terminal => none}.
+empty_group_row() ->
+    #{history => quod_atomic:initial_group_history(), ref => none,
+      result => none, applied => none, terminal => none}.
 
-history_extends(Old, New) ->
-    maps:fold(
-      fun(Kind, Entry, Acc) ->
-              Acc andalso maps:get(Kind, New, different) =:= Entry
-      end, true, Old).
-
-current_record_matches(Kind, Digest, Slot, Records, Existing) ->
-    case maps:find(Kind, Records) of
-        {ok, #{digest := Digest, ref := Ref}} ->
-            case maps:is_key(Kind, Existing) of
-                true -> true;
-                false -> ref_slot(Ref) =:= Slot
-            end;
-        _ -> false
+capture_control(Control, Ref, Effects, Row) ->
+    Material = quod_atomic:control_material(Control),
+    case Material of
+        {{quod_dtx_vote, 4, _, Target, _, _}, _,
+         #{group := #{origin := Target} = Binding}} ->
+            Row#{ref := group_ref(Binding), result := maps:get(result, Binding)};
+        {{quod_dtx_vote, 4, _, _, _, _}, _, _} ->
+            Row;
+        {{quod_dtx_resolve, 4, Id, Target, ManifestDigest, Outcome, _, _, _, Generation, _}, _,
+         #{reasons := Reasons}} ->
+            [{resolved, Id, Outcome, OwnMaterial, Ref, Generation}] = Effects,
+            Applied = #{verdict => Outcome, resolve_ref => Ref, slot => ref_slot(Ref),
+                        generation => Generation, reasons => Reasons,
+                        manifest_digest => ManifestDigest,
+                        plan_digest => resolved_plan_digest(Target, OwnMaterial)},
+            %% Keep only the exact binding needed by private-effect recovery,
+            %% not its plan or another role's material. Unvoted tombstones
+            %% carry the manifest binding but cannot invent an own-plan digest.
+            Row#{applied := Applied};
+        {{quod_dtx_complete, 4, _, _, _, _, Resolves, _}, _, _} ->
+            Row#{terminal := #{complete_ref => Ref,
+                participant_slots => [{T, ref_slot(R), G} || {T, R, G} <- Resolves]}}
     end.
 
-capture_control(Control, 'begin', GroupId, _History, Row) ->
-    case quod_dtx:control_body(Control) of
-        {quod_dtx_begin, 3,
-         {quod_dtx_manifest, 3, _ProofId,
-          {OriginNs, OriginAnchor, <<_:256>> = Coordinator,
-           <<_:256>> = Admission},
-          _Nonce, _Principal, _Goal, _GoalDigest,
-          Result, _ResultDigest, _RequestBinding, _Participants},
-         _RequestAuth, _Bundles}
-          when is_binary(OriginNs), OriginNs =/= <<>>,
-               is_binary(OriginAnchor), byte_size(OriginAnchor) =:= 32,
-               is_binary(Result) ->
-            Ref = {group, OriginNs, OriginAnchor, Coordinator,
-                   Admission, GroupId},
-            set_once(ref, Ref,
-              set_once_result(Result, Row));
-        _ ->
-            error
-    end;
-capture_control(Control, decision, _GroupId, History, Row) ->
-    case history_record(decision, History) =:= quod_dtx:control_body(Control) of
-        true -> {ok, Row};
-        false -> error
-    end;
-capture_control(Control, complete, _GroupId, History, Row) ->
-    CompleteRef = history_ref(complete, History),
-    case quod_dtx:control_body(Control) of
-        {quod_dtx_complete, 3, _, DecisionRef, FinalizeRows} ->
-            capture_terminal(
-              CompleteRef, DecisionRef, FinalizeRows, History, Row);
-        _ ->
-            error
-    end;
-capture_control(_Control, _Kind, _GroupId, _History, Row) ->
-    {ok, Row}.
-
-set_once_result(Result, #{result := none} = Row) ->
-    case quod_durable_term:decode_result(Result) of
-        {ok, _} -> {ok, Row#{result := Result}};
-        {error, _} -> error
-    end;
-set_once_result(Result, #{result := Result} = Row) ->
-    {ok, Row};
-set_once_result(_Result, _Row) ->
-    error.
-
-set_once(_Key, _Value, error) -> error;
-set_once(Key, Value, {ok, Row}) -> set_once(Key, Value, Row);
-set_once(Key, Value, Row) ->
-    case maps:get(Key, Row) of
-        none -> {ok, Row#{Key := Value}};
-        Value -> {ok, Row};
-        _ -> error
+resolved_plan_digest(_Target, none) -> none;
+resolved_plan_digest(Target, {_, _, #{plans := Plans}}) ->
+    case maps:get(Target, Plans, none) of
+        none -> none;
+        Plan -> quod_dtx:digest(Plan)
     end.
 
-capture_terminal(CompleteRef, DecisionRef, FinalizeRows, History, Row) ->
-    case {history_record(decision, History),
-          exact_history_ref(decision, DecisionRef, History),
-          participant_slots(FinalizeRows), maps:get(result, Row)} of
-        {{quod_dtx_decision, 3, _, _, commit, _, none}, true,
-         {ok, Slots}, Result} when is_binary(Result) ->
-            Terminal = #{verdict => commit, complete_ref => CompleteRef,
-                         slot => ref_slot(CompleteRef),
-                         participant_slots => Slots},
-            set_once(terminal, Terminal, Row);
-        {{quod_dtx_decision, 3, _, _, abort, _, _} = Decision, true,
-         {ok, Slots}, _Result} ->
-            case quod_dtx:decision_failure_reasons(Decision) of
-                {ok, [_ | _]} ->
-                    Terminal =
-                        #{verdict => abort, complete_ref => CompleteRef,
-                          slot => ref_slot(CompleteRef),
-                          participant_slots => Slots},
-                    set_once(terminal, Terminal, Row);
-                _ -> error
-            end;
-        _ ->
-            error
-    end.
-
-participant_slots(Rows) ->
-    participant_slots(Rows, none, 0, []).
-
-participant_slots([], _Previous, Count, Acc) when Count >= 2 ->
-    {ok, lists:reverse(Acc)};
-participant_slots([{Identity, Ref, Generation} | Rest], Previous, Count, Acc)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Identity),
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64 ->
-    case valid_identity(Identity) andalso quod_dtx:validate_certified_ref(Ref) andalso
-         certified_ref_identity(Ref) =:= Identity of
-        true ->
-            participant_slots(
-              Rest, Identity, Count + 1,
-              [{Identity, ref_slot(Ref), Generation} | Acc]);
-        false -> error
-    end;
-participant_slots(_, _, _, _) ->
-    error.
-
-apply_group_effects([], _Kind, _GroupId, _History, Row,
-                    _Projection, _OldProjection, true) ->
-    {ok, Row, none, none};
-apply_group_effects(Effects, Kind, GroupId, History, Row,
-                    Projection, OldProjection, false) ->
-    apply_group_effects_new(
-      Effects, Kind, GroupId, History, Row, Projection, OldProjection,
-      none, none);
-apply_group_effects(_, _, _, _, _, _, _, _) ->
-    error.
-
-apply_group_effects_new([], _Kind, _GroupId, _History, Row,
-                        _Projection, _OldProjection,
-                        DeferredAck, ProjectionOverride) ->
-    {ok, Row, DeferredAck, ProjectionOverride};
-apply_group_effects_new([Effect | Rest], Kind, GroupId, History, Row0,
-                        Projection, OldProjection,
-                        DeferredAck0, ProjectionOverride0) ->
-    case apply_group_effect(
-           Effect, Kind, GroupId, History, Row0,
-           Projection, OldProjection) of
-        {ok, Row1, DeferredAck1, ProjectionOverride1} ->
-            case {merge_once(DeferredAck0, DeferredAck1),
-                  merge_once(ProjectionOverride0, ProjectionOverride1)} of
-                {{ok, DeferredAck}, {ok, ProjectionOverride}} ->
-                    apply_group_effects_new(
-                      Rest, Kind, GroupId, History, Row1,
-                      Projection, OldProjection,
-                      DeferredAck, ProjectionOverride);
-                _ -> error
-            end;
-        error -> error
-    end;
-apply_group_effects_new(_, _, _, _, _, _, _, _, _) -> error.
-
-merge_once(none, Value) -> {ok, Value};
-merge_once(Value, none) -> {ok, Value};
-merge_once(_, _) -> error.
-
-apply_group_effect({origin_started, GroupId, Ref}, 'begin', GroupId,
-                   History, Row, _Projection, _OldProjection) ->
-    exact_effect_ref('begin', Ref, History, Row);
-apply_group_effect(
-  {prepared, GroupId, Ref, Manifest, PlanDigest, PlanBlob, Generation},
-                   Kind, GroupId, History, Row, Projection,
-                   _OldProjection) ->
-    PrepareKind = prepare_kind_for_control(Kind),
-    case PrepareKind =/= invalid andalso
-         exact_history_ref(Kind, Ref, History) andalso
-         is_binary(PlanBlob) andalso
-         byte_size(PlanBlob) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
-         is_integer(Generation) andalso Generation >= 0 andalso
-         Generation =< ?MAX_UINT64 andalso
-         projection_holds_plan(
-           Projection, GroupId, PrepareKind, Ref, Manifest, PlanDigest,
-           PlanBlob, Generation) of
-        true ->
-            {ok, Row, none, none};
-        false -> error
-    end;
-apply_group_effect({decided, GroupId, Verdict, Ref}, decision, GroupId,
-                   History, Row, _Projection, _OldProjection)
-  when Verdict =:= commit; Verdict =:= abort ->
-    case exact_history_ref(decision, Ref, History) andalso
-         decision_matches_effect(
-           Verdict, Ref, history_record(decision, History)) of
-        true -> {ok, Row, none, none};
-        false -> error
-    end;
-apply_group_effect(
-  {apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob, Ref, Generation},
-                   Kind, GroupId, History, Row, Projection,
-                   OldProjection) ->
-    applied_prepared(
-      Kind, commit, Manifest, PlanDigest, PlanBlob, Ref, Generation,
-      GroupId, History, Row, Projection, OldProjection);
-apply_group_effect(
-  {discard_prepared, GroupId, Manifest, PlanDigest, PlanBlob, Ref, Generation},
-                   Kind, GroupId, History, Row, Projection,
-                   OldProjection) ->
-    applied_prepared(
-      Kind, abort, Manifest, PlanDigest, PlanBlob, Ref, Generation,
-      GroupId, History, Row, Projection, OldProjection);
-apply_group_effect({direct_applied_abort, GroupId, Ref, Generation},
-                   finalize, GroupId, History, Row,
-                   _Projection, _OldProjection) ->
-    case exact_history_ref(finalize, Ref, History) of
-        true ->
-            set_applied(abort, Ref, Generation, #{}, Row, none, GroupId);
-        false -> error
-    end;
-apply_group_effect({completed, GroupId, commit, Ref}, complete, GroupId,
-                   History, #{terminal := #{verdict := commit}} = Row,
-                   _Projection, _OldProjection) ->
-    exact_effect_ref(complete, Ref, History, Row);
-apply_group_effect({completed, GroupId, abort, Ref, Reasons}, complete,
-                   GroupId, History,
-                   #{terminal := #{verdict := abort}} = Row,
-                   _Projection, _OldProjection) ->
-    case exact_history_ref(complete, Ref, History) andalso
-         quod_dtx:decision_failure_reasons(
-           history_record(decision, History)) =:= {ok, Reasons} of
-        true -> {ok, Row, none, none};
-        false -> error
-    end;
-apply_group_effect(_, _, _, _, _, _, _) ->
-    error.
-
-exact_effect_ref(Kind, Ref, History, Row) ->
-    case exact_history_ref(Kind, Ref, History) of
-        true -> {ok, Row, none, none};
-        false -> error
-    end.
-
-decision_matches_effect(
-  commit, _Ref, {quod_dtx_decision, 3, _, _, commit, _, none}) -> true;
-decision_matches_effect(
-  abort, _Ref, {quod_dtx_decision, 3, _, _, abort, _, _}) -> true;
-decision_matches_effect(_, _, _) -> false.
-
-applied_prepared(Kind, Verdict, Manifest, PlanDigest, PlanBlob, Ref, Generation,
-                 GroupId, History, Row, Projection, OldProjection) ->
-    PrepareKind = prepare_kind_for_apply(Kind),
-    case PrepareKind =/= invalid andalso exact_history_ref(Kind, Ref, History)
-         andalso
-         old_projection_holds_plan(
-           OldProjection, GroupId, PrepareKind,
-           Manifest, PlanDigest, PlanBlob) of
-        true ->
-            Slot = ref_slot(Ref),
-            case quod_dtx:manifest_group_ref(Manifest, GroupId) of
-                {ok, GroupRef} ->
-                    Binding = #{group_ref => GroupRef,
-                                plan_digest => PlanDigest,
-                                manifest_digest =>
-                                    quod_dtx:manifest_digest(Manifest)},
-                    case maps:is_key(
-                           GroupId, maps:get(apply_fences, Projection)) of
-                        false ->
-                            set_applied(
-                              Verdict, Ref, Generation, Binding,
-                              Row, none, GroupId);
-                        true ->
-                            case quod_dtx:acknowledge_finalize(
-                                   GroupId, Slot, Generation, Projection) of
-                                {ok, Projection1} ->
-                                    set_applied(
-                                      Verdict, Ref, Generation, Binding,
-                                      Row, Projection1, GroupId);
-                                {error, _} -> error
-                            end
-                    end;
-                error -> error
-            end;
-        false -> error
-    end.
-projection_holds_plan(
-  #{groups := Groups},
-  GroupId, PrepareKind, Ref, Manifest, PlanDigest, PlanBlob, Generation) ->
-    case maps:get(GroupId, Groups, none) of
-      #{participant :=
-          #{prepare_kind := PrepareKind, prepare_ref := StoredRef,
-            manifest := Manifest,
-            plan_digest := PlanDigest, plan := PlanBlob,
-            prepared_generation := Generation}} ->
-          quod_dtx:same_certified_ref(Ref, StoredRef);
-      _ -> false
-    end;
-projection_holds_plan(_, _, _, _, _, _, _, _) -> false.
-
-old_projection_holds_plan(
-  #{groups := Groups},
-  GroupId, PrepareKind, Manifest, PlanDigest, PlanBlob) ->
-    case maps:get(GroupId, Groups, none) of
-      #{participant :=
-                  #{prepare_kind := PrepareKind,
-                    manifest := Manifest, plan_digest := PlanDigest,
-                    plan := PlanBlob}} -> true;
-      _ -> false
-    end;
-old_projection_holds_plan(_, _, _, _, _, _) -> false.
-
-prepare_kind_for_control('begin') -> 'begin';
-prepare_kind_for_control(prepare) -> prepare;
-prepare_kind_for_control(_) -> invalid.
-
-prepare_kind_for_apply(decision) -> 'begin';
-prepare_kind_for_apply(finalize) -> prepare;
-prepare_kind_for_apply(_) -> invalid.
-
-set_applied(Verdict, Ref, Generation, Binding, Row, Projection, GroupId) ->
-    Applied = maps:merge(
-                #{verdict => Verdict, finalize_ref => Ref,
-                  slot => ref_slot(Ref), generation => Generation},
-                Binding),
-    case set_once(applied, Applied, Row) of
-        {ok, Row1} ->
-            DeferredAck = {finalize_applied, GroupId,
-                           ref_slot(Ref), Generation},
-            {ok, Row1, DeferredAck, Projection};
-        error -> error
-    end.
+group_ref(#{origin := {Ns, Anchor}, coordinator := Coordinator,
+            admission := Admission, group_id := Id}) ->
+    {group, Ns, Anchor, Coordinator, Admission, Id}.
 
 -doc "Admit one semantic submission, persisting a new pending row exactly once.".
 -spec admit(index(), #transaction{}) ->
@@ -1003,8 +666,7 @@ operation_candidate(
              #{type => operation, ref => OperationRef,
                request_digest => Digest, outcome_ref => OutcomeRef,
                %% `included` is the durable row's receipt field, not a verdict.
-               %% It retains this format's key for both included and certified
-               %% arms. [] means no source receipt; the whole vector installs once.
+               %% [] means no source receipt; the certified vector installs once.
                included => [], first_slot => Slot, state => State}};
         false ->
             error
@@ -1132,9 +794,9 @@ lookup_ref(Index = #index{ns = Ns, anchor = Anchor},
            {transaction, Ns, Anchor, <<_:256>> = TxId}) ->
     lookup_tx(Index, TxId);
 lookup_ref(Index = #index{ns = Ns, anchor = Anchor},
-           {group, Ns, Anchor, <<_:256>> = Coordinator,
-            <<_:256>> = Admission, <<_:256>> = GroupId} = Ref) ->
-    lookup_group_ref(Index, Ref, Coordinator, Admission, GroupId);
+           {group, Ns, Anchor, <<_:256>>,
+            <<_:256>>, <<_:256>> = GroupId} = Ref) ->
+    lookup_group_ref(Index, Ref, GroupId);
 lookup_ref(Index = #index{ns = Ns, anchor = Anchor},
            {operation, Ns, Anchor, AgentRef,
             <<_:256>> = OperationId}) ->
@@ -1155,56 +817,46 @@ lookup_ref(Index = #index{ns = Ns},
 lookup_ref(Index, _Ref) ->
     {not_found, Index}.
 
-lookup_group_ref(Index, Ref, Coordinator, Admission, GroupId) ->
+lookup_group_ref(Index, Ref, GroupId) ->
     case lookup_group(Index, GroupId) of
         {{ok, #{ref := Ref} = Row}, Index1} ->
             {{ok, group_outcome(Ref, Row, applied_floor(Index1))}, Index1};
         {{ok, _ParticipantOnlyOrOtherOrigin}, Index1} ->
-            pending_group_ref(
-              Index1, Ref, Coordinator, Admission, GroupId);
+            pending_group_ref(Index1, Ref, GroupId);
         {not_found, Index1} ->
-            pending_group_ref(
-              Index1, Ref, Coordinator, Admission, GroupId);
+            pending_group_ref(Index1, Ref, GroupId);
         {{error, Reason}, Index1} ->
             {{error, Reason}, Index1}
     end.
 
-pending_group_ref(Index = #index{dtx = Dtx}, Ref,
-                  Coordinator, Admission, GroupId) ->
-    case maps:get(GroupId, maps:get(pending_begins, Dtx), none) of
-        #{lane := {Admission, Coordinator}} ->
+pending_group_ref(Index = #index{dtx = Dtx}, Ref, GroupId) ->
+    case maps:get(GroupId, maps:get(pending_votes, Dtx), none) of
+        Ref ->
             {{ok, #{type => group, ref => Ref,
-                    status => {pending, pending_begin}}}, Index};
+                    status => {pending, pending_vote}}}, Index};
         _ ->
             {not_found, Index}
     end.
 
-group_outcome(Ref, #{terminal := #{slot := Slot}}, Floor)
-  when Slot > Floor ->
-    #{type => group, ref => Ref, status => {pending, publication}};
-group_outcome(
-  Ref, #{terminal := Terminal, history := History, result := Result}, _Floor)
-  when Terminal =/= none ->
-    #{type => group, ref => Ref,
-      status => terminal_group_status(Terminal, Result, History)};
-group_outcome(Ref, #{history := History}, _Floor) ->
-    Phase = case maps:find(decision, maps:get(records, History)) of
-                {ok, #{record := {quod_dtx_decision, 3, _, _, commit, _, none}}} ->
-                    finalizing_commit;
-                {ok, #{record := {quod_dtx_decision, 3, _, _, abort, _, _}}} ->
-                    finalizing_abort;
-                error -> begun
+group_outcome(Ref, #{terminal := #{complete_ref := CompleteRef}} = Row, Floor) ->
+    case ref_slot(CompleteRef) > Floor of
+        true -> #{type => group, ref => Ref, status => {pending, publication}};
+        false ->
+            #{applied := #{verdict := Verdict, slot := Slot, reasons := Reasons},
+              terminal := #{participant_slots := Slots}, result := Result} = Row,
+            Status = case Verdict of
+                         commit -> {committed, Slot, Result, Slots};
+                         abort -> {aborted, Slot, Reasons, Slots}
+                     end,
+            #{type => group, ref => Ref, status => Status}
+    end;
+group_outcome(Ref, #{applied := Applied}, _Floor) ->
+    Phase = case Applied of
+                none -> voted;
+                #{verdict := commit} -> resolving_commit;
+                #{verdict := abort} -> resolving_abort
             end,
     #{type => group, ref => Ref, status => {pending, Phase}}.
-
-terminal_group_status(
-  #{verdict := commit, slot := Slot, participant_slots := Slots},
-  Result, _History) ->
-    {committed, Slot, Result, Slots};
-terminal_group_status(
-  #{verdict := abort, slot := Slot, participant_slots := Slots},
-  _Result, History) ->
-    {aborted, Slot, history_record(decision, History), Slots}.
 
 -doc "Read one indexed transaction while its ontology is running or stopped.".
 -spec lookup_live(binary(), file:filename_all(), binary()) ->
@@ -1314,8 +966,8 @@ public_status({rejected, Reason, Slot})
 public_status(_Other) -> error.
 
 public_group_status({pending, Phase}, Ref)
-  when Phase =:= pending_begin; Phase =:= begun;
-       Phase =:= finalizing_commit; Phase =:= finalizing_abort;
+  when Phase =:= pending_vote; Phase =:= voted;
+       Phase =:= resolving_commit; Phase =:= resolving_abort;
        Phase =:= publication ->
     {ok, #{status => pending, phase => Phase, ref => Ref}};
 public_group_status({committed, Slot, Result, Slots}, Ref)
@@ -1329,12 +981,10 @@ public_group_status({committed, Slot, Result, Slots}, Ref)
             {error, outcome_index_corrupt}
     end;
 public_group_status(
-  {aborted, Slot,
-   {quod_dtx_decision, 3, _, _, abort, _, _} = Decision, Slots}, Ref)
+  {aborted, Slot, Reasons, Slots}, Ref)
   when is_integer(Slot), Slot > 0 ->
-    case {quod_dtx:decision_failure_reasons(Decision),
-          valid_participant_slots(Slots)} of
-        {{ok, Reasons}, true} ->
+    case {valid_reasons(abort, Reasons), valid_participant_slots(Slots)} of
+        {true, true} ->
             {ok, #{status => aborted, height => Slot, ref => Ref,
                    reasons => Reasons, participant_slots => Slots}};
         _ ->
@@ -1426,22 +1076,21 @@ valid_operation_state({terminal, Slot}) ->
 valid_operation_state(_) -> false.
 
 valid_dtx_state(
-  #{pending_begins := Pending, projection := Projection,
+  #{pending_votes := Pending, projection := Projection,
     applied_floor := Floor} = Dtx, Target)
   when map_size(Dtx) =:= 3,
        is_integer(Floor), Floor >= 0, Floor =< ?MAX_UINT64 ->
-    valid_pending_begins(Pending) andalso
+    valid_pending_votes(Pending) andalso
         valid_projection(Projection, Target);
 valid_dtx_state(_, _) -> false.
 
-valid_pending_begins(Pending) when is_map(Pending) ->
+valid_pending_votes(Pending) when is_map(Pending) ->
     maps:fold(
-      fun(GroupId, Row, true) ->
-              maps:get(group_id, Row, none) =:= GroupId andalso
-                  normalize_pending_begin(Row) =:= {ok, Row};
+      fun(GroupId, {group, _, _, _, _, GroupId} = Ref, true) ->
+              ref_identity(Ref) =/= error;
          (_, _, false) -> false
       end, true, Pending);
-valid_pending_begins(_) -> false.
+valid_pending_votes(_) -> false.
 
 valid_group_row(
   #{history := History, ref := Ref, result := Result,
@@ -1450,8 +1099,8 @@ valid_group_row(
   when map_size(Row) =:= 5 ->
     valid_history(History, GroupId) andalso
         valid_group_ref(Ref, GroupId, Anchor) andalso
-        valid_result_blob(Result) andalso valid_applied(Applied) andalso
-        valid_terminal(Terminal, History, Result) andalso
+        valid_result_blob(Result) andalso valid_applied(Applied, History) andalso
+        valid_terminal(Terminal, History, Applied) andalso
         row_relations(Row);
 valid_group_row(_, _, _) -> false.
 
@@ -1469,62 +1118,41 @@ valid_result_blob(Blob) when is_binary(Blob) ->
     end;
 valid_result_blob(_) -> false.
 
-valid_applied(none) -> true;
-valid_applied(#{verdict := Verdict, finalize_ref := Ref,
-                slot := Slot, generation := Generation} = Applied)
-  when map_size(Applied) =:= 4,
-       (Verdict =:= commit orelse Verdict =:= abort),
-       is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64 ->
-    quod_dtx:validate_certified_ref(Ref) andalso ref_slot(Ref) =:= Slot;
-valid_applied(
-  #{verdict := Verdict, finalize_ref := Ref,
-    slot := Slot, generation := Generation,
-    group_ref := {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
-    plan_digest := <<_:256>>, manifest_digest := <<_:256>>} = Applied)
+valid_applied(none, #{records := Records}) ->
+    not maps:is_key(resolve, Records);
+valid_applied(#{verdict := Verdict, resolve_ref := Ref, reasons := Reasons,
+                manifest_digest := <<_:256>>, plan_digest := PlanDigest,
+                slot := Slot, generation := Generation} = Applied, History)
   when map_size(Applied) =:= 7,
-       (Verdict =:= commit orelse Verdict =:= abort),
-       is_binary(Ns), byte_size(Ns) > 0,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64 ->
-    quod_dtx:validate_certified_ref(Ref) andalso ref_slot(Ref) =:= Slot;
-valid_applied(_) -> false.
+       is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64 ->
+    quod_atomic:history_phase(resolve, History) =:= {ok, Ref} andalso
+        ref_slot(Ref) =:= Slot andalso valid_reasons(Verdict, Reasons) andalso
+        (is_binary(PlanDigest) andalso byte_size(PlanDigest) =:= 32 orelse
+         Verdict =:= abort andalso PlanDigest =:= none);
+valid_applied(_, _) -> false.
 
-valid_terminal(none, _History, _Result) -> true;
-valid_terminal(
-  #{verdict := Verdict, complete_ref := Ref, slot := Slot,
-    participant_slots := Slots} = Terminal,
-  History, Result)
-  when map_size(Terminal) =:= 4,
-       (Verdict =:= commit orelse Verdict =:= abort),
-       is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
-    case terminal_decision(History, Ref) of
-        {ok, Decision} ->
-            quod_dtx:validate_certified_ref(Ref) andalso
-                ref_slot(Ref) =:= Slot andalso
-                valid_participant_slots(Slots) andalso
-                valid_terminal_payload(Verdict, Result, Decision);
-        error -> false
-    end;
-valid_terminal(_, _, _) -> false.
-
-terminal_decision(
-  #{records :=
-      #{decision := #{record := Decision}, complete := #{ref := Ref}}}, Ref) ->
-    {ok, Decision};
-terminal_decision(_, _) -> error.
-
-valid_terminal_payload(commit, Result, Decision) ->
-    valid_result_blob(Result) andalso
-        quod_dtx:decision_failure_reasons(Decision) =:= none;
-valid_terminal_payload(abort, Result, Decision) ->
-    valid_result_blob(Result) andalso
-    case quod_dtx:decision_failure_reasons(Decision) of
-        {ok, [_ | _]} -> true;
+valid_reasons(commit, none) -> true;
+valid_reasons(abort, [_ | _] = Reasons) ->
+    case quod_wire_term:encode_failure_reasons(Reasons) of
+        {ok, _} -> true;
         _ -> false
-    end.
+    end;
+valid_reasons(_, _) -> false.
+
+valid_terminal(none, #{records := Records}, _Applied) ->
+    not maps:is_key(complete, Records);
+valid_terminal(#{complete_ref := Ref, participant_slots := Slots} = Terminal,
+               History, #{resolve_ref := ResolveRef, generation := Generation})
+  when map_size(Terminal) =:= 2 ->
+    quod_atomic:history_phase(complete, History) =:= {ok, Ref} andalso
+        valid_participant_slots(Slots) andalso
+        case quod_dtx:certified_ref_binding(ResolveRef) of
+            {ok, Target, Slot, _} ->
+                lists:keyfind(Target, 1, Slots) =:= {Target, Slot, Generation};
+            error -> false
+        end;
+valid_terminal(_, _, _) -> false.
 
 row_relations(#{ref := none, result := none, terminal := none}) -> true;
 row_relations(#{ref := {group, _, _, _, _, _}, result := Result})
@@ -1545,79 +1173,20 @@ valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
         valid_participant_slots(Rest, Identity, Count + 1);
 valid_participant_slots(_, _, _) -> false.
 
-valid_history(#{group_id := GroupId, records := Records} = History, GroupId)
-  when map_size(History) =:= 2, is_map(Records),
-       map_size(Records) >= 1, map_size(Records) =< 5 ->
-    valid_history_records(GroupId, maps:to_list(Records));
+valid_history(#{group_id := GroupId} = History, GroupId) ->
+    quod_atomic:valid_group_history(History);
 valid_history(_, _) -> false.
-
-valid_history_records(_GroupId, []) -> true;
-valid_history_records(
-  GroupId,
-  [{decision,
-    #{group_id := GroupId, digest := <<_:256>> = Digest,
-      ref := Ref,
-      record := {quod_dtx_decision, 3, GroupId, _, _, _, _} = Record} = Entry}
-   | Rest])
-  when map_size(Entry) =:= 4 ->
-    quod_dtx:validate_certified_ref(Ref) andalso
-        ref_record_digest(Ref) =:= Digest andalso
-        quod_dtx:record_digest(Record) =:= Digest andalso
-        valid_decision_record(Record) andalso
-        valid_history_records(GroupId, Rest);
-valid_history_records(
-  GroupId,
-  [{Kind, #{group_id := GroupId, digest := <<_:256>> = Digest,
-            ref := Ref} = Entry} | Rest])
-  when map_size(Entry) =:= 3 ->
-    valid_dtx_kind(Kind) andalso quod_dtx:validate_certified_ref(Ref) andalso
-        ref_record_digest(Ref) =:= Digest andalso
-        valid_history_records(GroupId, Rest);
-valid_history_records(_, _) -> false.
-
-valid_decision_record({quod_dtx_decision, 3, _, _, commit, _Rows, none}) ->
-    true;
-valid_decision_record(
-  {quod_dtx_decision, 3, _, _, abort, _Rows, _} = Decision) ->
-    case quod_dtx:decision_failure_reasons(Decision) of
-        {ok, [_ | _]} -> true;
-        _ -> false
-    end;
-valid_decision_record(_) -> false.
-
-valid_dtx_kind('begin') -> true;
-valid_dtx_kind(prepare) -> true;
-valid_dtx_kind(decision) -> true;
-valid_dtx_kind(finalize) -> true;
-valid_dtx_kind(complete) -> true;
-valid_dtx_kind(_) -> false.
 
 valid_projection(
   #{target := Target} = Projection, Target) ->
-    quod_dtx:valid_projection(Projection);
+    quod_atomic:valid_projection(Projection);
 valid_projection(_, _) -> false.
 
 valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.
 
 
-history_ref(Kind, #{records := Records}) ->
-    maps:get(ref, maps:get(Kind, Records)).
-
-history_record(Kind, #{records := Records}) ->
-    maps:get(record, maps:get(Kind, Records)).
-
-exact_history_ref(Kind, Ref, History) ->
-    %% References have already passed finality verification. Independently
-    %% assembled quorum subsets identify the same committed occurrence;
-    %% history_extends still pins the reducer's retained rows exactly.
-    quod_dtx:same_certified_ref(history_ref(Kind, History), Ref).
-
-certified_ref_identity(
-  {quod_dtx_ref, 2, Ns, Anchor, _, _, _, _}) -> {Ns, Anchor}.
 ref_slot({quod_dtx_ref, 2, _, _, Slot, _, _, _}) -> Slot.
-ref_record_digest({quod_dtx_ref, 2, _, _, _, _, Digest, _}) -> Digest.
-
 backend_put(Index = #index{backend = {dets, Name}}, Key, Value) ->
     case dets_write(Name, {Key, Value}) of
         ok -> {ok, Index};

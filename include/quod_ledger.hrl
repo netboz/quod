@@ -92,7 +92,7 @@
 %% from one protocol phase.  The ledger classifier rejects empty, mixed,
 %% malformed, duplicate, and non-canonical batches.
 -type block_payload() :: {batch, nonempty_list(#transaction{})}
-                       | {batch, nonempty_list({dtx, binary()})}.
+                       | {batch, nonempty_list({dtx, quod_atomic:control()})}.
 
 %% A proposed block for a slot. `payload` is one tagged `block_payload()` (a
 %% membership change remains an ordinary #transaction asserting/retracting

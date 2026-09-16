@@ -127,7 +127,7 @@ route_park_names_itself_without_inventing_a_predecessor_test() ->
         with_owner(fun(_, _, _, _, _) -> error(route_park_fetched) end, fun(Owner) ->
             {Context, Span} = parent(<<"test.queue.route-park">>),
             try
-                Request = {verify_reference, maps:get(ref, Fixture), finalize,
+                Request = {verify_reference, maps:get(ref, Fixture), resolve,
                            none, none, 60},
                 Call = send_request(Owner, Request, Context),
                 Blocker = span(<<"quod.foreign.queue_blocker">>, Span),
@@ -155,7 +155,7 @@ infinite_local_read_does_not_queue_foreign_work_test() ->
                     put({quod_foreign_log, local_read_gate}, {after_read, Parent, Gate}),
                     Result = quod_trace:with_context(FirstContext, fun() ->
                         quod_foreign_log:verify_local(
-                            Source, maps:get(ref, Fixture), finalize, infinity)
+                            Source, maps:get(ref, Fixture), resolve, infinity)
                     end),
                     Parent ! {local_read_result, Gate, Result}
                 end),
@@ -211,7 +211,7 @@ contact(F) -> {maps:get(pub, F), {"127.0.0.1", 19091}}.
 fetch(F) -> quod_foreign_log_tests:peer_chain_fetch(
               maps:get(ns, F), maps:get(chain, F), [maps:get(pub, F)]).
 exact_request(F, Budget) ->
-    {verify_reference, maps:get(ref, F), finalize, contact(F), none, Budget}.
+    {verify_reference, maps:get(ref, F), resolve, contact(F), none, Budget}.
 current_request(F, Budget) ->
     {Peer, Endpoint} = contact(F),
     {current, [{Peer, [Endpoint]}], identity(F), none, Budget}.

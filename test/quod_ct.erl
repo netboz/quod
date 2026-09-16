@@ -21,10 +21,12 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
          committed_entry/3,
-         dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
-         signed_goal_fixture/1, signed_dtx_begin_fixture/1,
+         atomic_resolve_payload/0, atomic_role_fixture/0,
+         signed_goal_fixture/1, signed_atomic_fixture/1,
+         atomic_abort_record/3,
          remote_operation_fixture/1,
-         signed_plan_fixture/2, plan_material/2, included_receipt/1, valid_applied_certificate_shape/1,
+         signed_plan_fixture/2, plan_material/2, certified_receipt/1,
+         operation_certificate/4, valid_applied_certificate_shape/1,
          signed_effect_operation_submission/0,
          signed_effect_operation_submission/1,
          signed_agent_facts/1,
@@ -39,6 +41,17 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 plan_material(Key, Plan) ->
     {ok, Material} = quod_dtx:material(Plan),
     maps:get(Key, Material).
+
+%% Codec/reducer fixture only: the supplied reference is shape-valid, not
+%% independently verified foreign evidence. No full manifest is fabricated.
+atomic_abort_record(Target, ManifestDigest, Ref) ->
+    GroupId = crypto:hash(sha256, term_to_binary(
+                {<<"quod.dtx.group">>, 4, ManifestDigest}, [deterministic])),
+    {ok, Reasons} = quod_wire_term:encode_failure_reasons([vote_deadline]),
+    Record = {quod_dtx_resolve, 4, GroupId, Target, ManifestDigest, abort,
+              Ref, {refused, Ref}, none, 0, Reasons},
+    {ok, _} = quod_atomic:admission_material(Record),
+    Record.
 
 %% Test-only constructor for the protected Simplex proof-gate row. Production
 %% deliberately accepts only the current layout; fixtures must not become a
@@ -63,31 +76,23 @@ install_directory_generation(NodeKey, Endpoint, Hosted, Epoch, Generation) ->
 %% Smallest self-contained valid DTX fixture for consumers that only need to
 %% distinguish a control barrier from content. Foreign-reference semantics are
 %% not under test at those sites; the signed envelope and canonical codec are.
-dtx_decision_payload() ->
-    Target = {TargetNs, TargetAnchor} =
-        {<<"quod:dtx-origin">>, <<2:256>>},
+atomic_resolve_payload() ->
+    Target = {<<"quod:dtx-target">>, <<2:256>>},
     {Pubkey, Seed} = quod_identity:generate(),
     Signer = #{pubkey => Pubkey,
                key => quod_identity:key_term({Pubkey, Seed})},
-    GroupId = <<4:256>>,
-    {ok, BeginRef} = quod_dtx:certified_ref(
-                       TargetNs, TargetAnchor, 1,
-                       <<3:256>>, GroupId, <<"qc">>),
-    {ok, Record} = quod_dtx:new_decision(
-                     GroupId, BeginRef,
-                     {abort, [{test_abort, dtx_fixture}]}, []),
-    {ok, Control} = quod_dtx:sign_control(
-                      Target, Record, <<6:256>>, 1, 0, Signer),
-    {ok, Blob} = quod_dtx:encode_control(Control),
-    {batch, [{dtx, Blob}]}.
+    {ok, VoteRef} = quod_dtx:certified_ref(
+                      <<"quod:dtx-origin">>, <<3:256>>, 1,
+                      <<4:256>>, <<5:256>>, <<"qc">>),
+    Record = atomic_abort_record(Target, <<6:256>>, VoteRef),
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(
+                      Target, Material, <<7:256>>, 1, 0, Signer),
+    {batch, [{dtx, Control}]}.
 
-%% One real self-contained Prepare record for endpoint tests.  Building it
-%% through the public plan/manifest/Begin APIs keeps refusal correlation pinned
-%% to the protocol shape instead of a forged tuple fixture.
-dtx_prepare_blob() ->
-    maps:get(prepare_blob, dtx_prepare_fixture()).
-
-dtx_prepare_fixture() ->
+%% Own-role atomic codec fixture with two real sealed plans/signatures.
+%% References are shape-only until a caller supplies its certified-entry seam.
+atomic_role_fixture() ->
     {Pubkey, Seed} = quod_identity:generate(),
     Signer = #{pubkey => Pubkey,
                key => quod_identity:key_term({Pubkey, Seed})},
@@ -107,6 +112,7 @@ dtx_prepare_fixture() ->
             coordinator =>
                 {element(1, Origin), element(2, Origin), Pubkey, Admission},
             nonce => <<105:256>>, principal => anonymous,
+            vote_deadline_ms => 1_800_000_000_000,
             goal => GoalBlob, result => ResultBlob,
             request_binding => none,
             participants =>
@@ -116,28 +122,22 @@ dtx_prepare_fixture() ->
         quod_dtx:attest_plan(1, Origin, OriginPlan, Manifest, Signer),
     {ok, TargetAttestation} =
         quod_dtx:attest_plan(1, Target, TargetPlan, Manifest, Signer),
-    {ok, Begin} =
-        quod_dtx:new_begin(
-          Manifest, none,
-          [{Origin, quod_dtx:digest(OriginPlan), OriginBlob,
-            OriginAttestation},
-           {Target, quod_dtx:digest(TargetPlan), TargetBlob,
-            TargetAttestation}]),
-    {ok, BeginRef} =
-        quod_dtx:certified_ref(
-          element(1, Origin), element(2, Origin), 1, <<106:256>>,
-          quod_dtx:group_id(Begin), <<"qc">>),
-    {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Target),
-    {ok, Blob} = quod_dtx:encode_record(Prepare),
-    {ok, BeginControl} = quod_dtx:sign_control(
-                           Origin, Begin, Admission, 1, 1, Signer),
-    {ok, PrepareControl} = quod_dtx:sign_control(
-                             Target, Prepare, Admission, 1, 1, Signer),
-    #{origin => Origin, target => Target,
+    {ok, Group} = quod_atomic:new_group(Manifest, none, OriginAttestation),
+    {ok, SourceVote} = quod_atomic:new_vote(Group, Origin,
+        {Origin, quod_dtx:digest(OriginPlan), OriginBlob, OriginAttestation}, prepared),
+    {ok, Vote} = quod_atomic:new_vote(Group, Target,
+        {Target, quod_dtx:digest(TargetPlan), TargetBlob, TargetAttestation}, prepared),
+    {ok, SourceMaterial} = quod_atomic:admission_material(SourceVote),
+    {ok, Material} = quod_atomic:admission_material(Vote),
+    {ok, SourceControl} = quod_atomic:sign_control(Origin, SourceMaterial, Admission, 1, 1, Signer),
+    {ok, Control} = quod_atomic:sign_control(Target, Material, Admission, 1, 1, Signer),
+    {ok, SourceRef} = quod_dtx:certified_ref(element(1, Origin), element(2, Origin),
+                          1, <<106:256>>, quod_atomic:record_digest(SourceVote), <<"qc">>),
+    {ok, Blob} = quod_atomic:encode_record(Vote),
+    #{origin => Origin, target => Target, group => Group,
       signer => Signer, admission => Admission,
-      'begin' => Begin, begin_ref => BeginRef, begin_control => BeginControl,
-      prepare => Prepare, prepare_blob => Blob,
-      prepare_control => PrepareControl}.
+      source_vote => SourceVote, source_ref => SourceRef, source_control => SourceControl,
+      vote => Vote, vote_blob => Blob, vote_control => Control}.
 
 %% One browser-equivalent signed request for protocol consumers.  Keeping the
 %% fixture here prevents transaction, DTX, outcome, and Explorer tests from
@@ -212,29 +212,6 @@ with_network_identity(<<_:256>> = Network, Fun) when is_function(Fun, 0) ->
         end
     end.
 
-%% A signed Begin built through the real proof/plan/manifest constructors.
-%% Real multi-participant DTX tests reuse it; remote-operation tests derive the
-%% one sealed target plan before the planner selects the ordinary claim path.
-signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
-    Origin = maps:get(target, Overrides,
-                      {<<"quod:signed-fixture">>, <<201:256>>}),
-    Primary = maps:get(participant_target, Overrides, Origin),
-    Secondary =
-        case Primary =:= Origin of
-            true -> fixture_secondary_target(Primary, Overrides);
-            false -> Origin
-        end,
-    false = Primary =:= Secondary,
-    Base = signed_plan_fixture(Overrides, [Primary, Secondary]),
-    Begin = begin_from_signed_fixture(Base),
-    {ok, Control} =
-        quod_dtx:sign_control(
-          maps:get(origin, Base), Begin, maps:get(admission, Base), 1,
-          maps:get(submitted_at, Overrides, 1),
-          maps:get(node_identity, Base)),
-    maybe_add_fixture_transaction(
-      Base#{'begin' => Begin, begin_control => Control}, Overrides).
-
 signed_remote_plan_fixture(Overrides) when is_map(Overrides) ->
     Origin = maps:get(target, Overrides,
                       {<<"quod:remote-origin">>, <<211:256>>}),
@@ -243,6 +220,22 @@ signed_remote_plan_fixture(Overrides) when is_map(Overrides) ->
     false = Target =:= Origin,
     signed_plan_fixture(
       Overrides#{target => Origin, participant_target => Target}, [Target]).
+
+%% Current atomic fixture: real sealed own plans and signatures, no dispatch
+%% or certification implied. Consumers choose their own committed-entry seam.
+signed_atomic_fixture(Overrides) ->
+    Origin = maps:get(target, Overrides, {<<"quod:signed-fixture">>, <<201:256>>}),
+    Base = signed_plan_fixture(Overrides#{target => Origin, atomic => true},
+                              [Origin, fixture_secondary_target(Origin, Overrides)]),
+    {ok, Group} = quod_atomic:new_group(maps:get(manifest, Base), maps:get(auth, Base),
+                                       maps:get(Origin, maps:get(attestations, Base))),
+    {ok, Vote} = quod_atomic:new_vote(Group, Origin,
+                   lists:keyfind(Origin, 1, maps:get(bundles, Base)),
+                   maps:get(vote, Overrides, prepared)),
+    {ok, Material} = quod_atomic:admission_material(Vote),
+    {ok, Control} = quod_atomic:sign_control(Origin, Material, maps:get(admission, Base), 1,
+                          maps:get(submitted_at, Overrides, 1), maps:get(node_identity, Base)),
+    maybe_add_fixture_transaction(Base#{group => Group, vote => Vote, vote_control => Control}, Overrides).
 
 %% Signed multi-target protocol fixtures: construction alone performs no dispatch.
 signed_plan_fixture(Overrides, ParticipantTargets0) ->
@@ -277,6 +270,10 @@ signed_plan_fixture(Overrides, ParticipantTargets0) ->
           #{proof_id => ProofId,
             coordinator => {Ns, Anchor, NodeKey, Admission},
             nonce => <<207:256>>,
+            vote_deadline_ms => case maps:get(atomic, Overrides, false) of
+                                    true -> maps:get(deadline, Request);
+                                    false -> none
+                                end,
             principal => maps:get(principal, Request),
             goal => maps:get(goal_blob, Request),
             result => ResultBlob,
@@ -347,12 +344,6 @@ signed_fixture_plan(Target, Origin, Goal, ProofId, Request, NodeIdentity) ->
     after
         quod_proof_session:stop(Session)
     end.
-
-begin_from_signed_fixture(Fixture) ->
-    {ok, Begin} = quod_dtx:new_begin(
-                    maps:get(manifest, Fixture), maps:get(auth, Fixture),
-                    maps:get(bundles, Fixture)),
-    Begin.
 
 maybe_add_fixture_transaction(
   Fixture = #{origin := {Ns, Anchor} = Origin,
@@ -433,20 +424,13 @@ remote_operation_fixture(Overrides) when is_map(Overrides) ->
                                  TargetNs, TargetAnchor, 3, <<214:256>>,
                                  Application#transaction.tx_id, <<"target-qc">>),
     {ok, ClaimData} = quod_transaction:request_claim(Claim),
-    Receipt = case maps:get(receipt_kind, Overrides, included) of
-        included -> [{Target, {included, TargetRef}}];
-        certified ->
-            %% Already-verified-history input for pure admission tests; real
-            %% SDK/owner and admitted-node controls live in their own suites.
-            E = #{identity => Target, phase => transaction, slot => 3,
-                  block_hash => <<214:256>>, committee_id => <<215:256>>,
-                  transaction => Application, committee => [NodeKey]},
-            {ok, Statement} = quod_applied_certificate:operation_statement(
-                                maps:get(network, Fixture), E, applied),
-            {ok, Vote} = quod_applied_certificate:sign_operation_vote(Statement, NodeIdentity),
-            {ok, Certificate} = quod_applied_certificate:operation_certificate(Statement, [Vote]),
-            [{Target, {certified, TargetRef, Certificate}}]
-    end,
+    %% Already-verified-history input for pure admission tests; actual owner
+    %% and admitted-node controls live in their own suites.
+    E = #{identity => Target, phase => transaction, slot => 3,
+          block_hash => <<214:256>>, committee_id => <<215:256>>,
+          transaction => Application, committee => [NodeKey]},
+    Certificate = operation_certificate(maps:get(network, Fixture), E, applied, NodeIdentity),
+    Receipt = [{Target, {certified, TargetRef, Certificate}}],
     Completion0 = quod_transaction:remote_complete(
                     Origin, maps:get(operation_ref, ClaimData),
                     maps:get(digest, ClaimData), Receipt),
@@ -538,6 +522,7 @@ signed_effect_operation_submission(Options) ->
                              {OriginNs, OriginAnchor,
                               CoordinatorKey, Admission},
                          nonce => <<228:256>>,
+                         vote_deadline_ms => none,
                          principal => maps:get(principal, Request),
                          goal => maps:get(goal_blob, Request),
                          result => durable_empty_result(),
@@ -976,13 +961,31 @@ wait_until(F, N) ->
         _    -> timer:sleep(50), wait_until(F, N - 1)
     end.
 
-%% Historical inclusion-only receipts are constructed in fixtures, never production.
-included_receipt(Refs) ->
+%% Schema-only receipt fixtures. These zero-signature certificates are NOT
+%% verified outcomes; authority tests use operation_certificate/4 with exact
+%% application evidence and real signers instead.
+certified_receipt(Refs) ->
     case quod_operation_vector:references(Refs) of
         {ok, Sorted} ->
-            {ok, [{quod_operation_vector:target(R), {included, R}} || R <- Sorted]};
+            Rows = [begin
+                T = quod_operation_vector:target(R),
+                Statement = {quod_operation_applied_vote, 1, <<1:256>>, T, <<2:256>>,
+                    {operation, <<"fixture:source">>, <<3:256>>, <<"fixture:agent">>, <<4:256>>},
+                    {transaction, <<"fixture:source">>, <<3:256>>, <<5:256>>},
+                    {element(4, R), 3, <<6:256>>}, applied},
+                {ok, Certificate} = quod_applied_certificate:operation_certificate(
+                                      Statement, [{<<7:256>>, <<0:512>>}]),
+                {T, {certified, R, Certificate}}
+            end || R <- Sorted],
+            quod_operation_vector:receipt(Rows);
         error -> error
     end.
+
+operation_certificate(Network, Evidence, Result, Signer) ->
+    {ok, Statement} = quod_applied_certificate:operation_statement(Network, Evidence, Result),
+    {ok, Vote} = quod_applied_certificate:sign_operation_vote(Statement, Signer),
+    {ok, Certificate} = quod_applied_certificate:operation_certificate(Statement, [Vote]),
+    Certificate.
 
 valid_applied_certificate_shape(Certificate) ->
     case quod_applied_certificate:applied_certificate_binding(Certificate) of

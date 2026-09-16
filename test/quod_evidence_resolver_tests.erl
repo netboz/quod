@@ -20,7 +20,7 @@ current_era_hit_has_one_committed_capture_and_zero_foreign_work_test() ->
     F = fixture(),
     with_case(F, current, fun(C) ->
         D = deadline(3000),
-        ?assertMatch({ok, #{phase := finalize}}, resolve(C, maps:get(ref, F), finalize, D)),
+        ?assertMatch({ok, #{phase := resolve}}, resolve(C, maps:get(ref, F), resolve, D)),
         ?assertEqual([capture_request(F, D)], captures(C)),
         T = traces(),
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
@@ -36,18 +36,18 @@ malformed_requests_are_refused_before_owner_work_test() ->
     Ref = maps:get(ref, F),
     with_case(F, current, fun(C) ->
         WrongTarget = {maps:get(ns, F), digest(wrong_expected_anchor)},
-        Cases = [{identity(F), malformed, finalize},
-                 {WrongTarget, Ref, finalize},
-                 {identity(F), setelement(3, Ref, <<"wrong:namespace">>), finalize},
-                 {identity(F), setelement(4, Ref, digest(wrong_ref_anchor)), finalize},
+        Cases = [{identity(F), malformed, resolve},
+                 {WrongTarget, Ref, resolve},
+                 {identity(F), setelement(3, Ref, <<"wrong:namespace">>), resolve},
+                 {identity(F), setelement(4, Ref, digest(wrong_ref_anchor)), resolve},
                  {identity(F), Ref, unknown_phase},
-                 {malformed, Ref, finalize}],
+                 {malformed, Ref, resolve}],
         lists:foreach(fun({Target, R, Phase}) ->
             ?assertEqual({error, bad_foreign_reference},
                          resolve(C#{target := Target}, R, Phase, deadline(3000)))
         end, Cases),
         ?assertEqual({error, bad_foreign_reference},
-                     resolve(C#{contact := maps:get(pub, F)}, Ref, finalize, deadline(3000))),
+                     resolve(C#{contact := maps:get(pub, F)}, Ref, resolve, deadline(3000))),
         ?assertEqual([], captures(C)),
         T = traces(),
         ?assertEqual(0, calls(T, quod_simplex, history_view, 3)),
@@ -67,7 +67,7 @@ wrong_target_refusal_has_a_real_routed_primitive_control_test() ->
         %% really authenticates these bytes. Rejection below cannot pass just
         %% because the reference is forged or its source is unreachable.
         {ok, Evidence} = result(traced_async(fun() ->
-            quod_foreign_log:verify_reference(Ref, finalize, maps:get(contact, C), none, 3000)
+            quod_foreign_log:verify_reference(Ref, resolve, maps:get(contact, C), none, 3000)
         end)),
         ?assertEqual(identity(F), maps:get(identity, Evidence)),
         Positive = traces(),
@@ -75,7 +75,7 @@ wrong_target_refusal_has_a_real_routed_primitive_control_test() ->
         ?assertEqual(1, calls(Positive, quod_foreign_log, spawn_verification_worker, 3)),
         flush_fetches(),
         ?assertEqual({error, bad_foreign_reference},
-                     resolve(C#{target := identity(Other)}, Ref, finalize, deadline(3000))),
+                     resolve(C#{target := identity(Other)}, Ref, resolve, deadline(3000))),
         ?assertEqual([], captures(C)),
         Negative = traces(),
         ?assertEqual(0, calls(Negative, quod_simplex, history_view, 3)),
@@ -95,12 +95,12 @@ nonhosted_identity_routes_once(Mode) ->
         D = deadline(3000),
         Ref = maps:get(ref, F),
         Hint = lists:last(maps:get(chain, F)),
-        ?assertMatch({ok, #{phase := finalize}},
-                     resolve(C#{hint := Hint}, Ref, finalize, D)),
+        ?assertMatch({ok, #{phase := resolve}},
+                     resolve(C#{hint := Hint}, Ref, resolve, D)),
         T = traces(),
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
-        assert_one_routed(T, C, Ref, finalize, Hint, D),
+        assert_one_routed(T, C, Ref, resolve, Hint, D),
         %% Cold routed work positively controls full-open and forward-fold
         %% tracing. Persisted-cache replay has its own restart control below.
         ?assert(calls(T, quod_foreign_log, open_cache, 5) > 0),
@@ -119,7 +119,7 @@ lagging_hosted_prefix_waits_for_verified_suffix_without_foreign_work_test() ->
     F = fixture(),
     with_case(F, lagging, fun(C) ->
         D = deadline(3000),
-        Caller = resolve_async(C, maps:get(ref, F), finalize, D),
+        Caller = resolve_async(C, maps:get(ref, F), resolve, D),
         Source = source_pid(C),
         try
             wait_pending(Source, D),
@@ -127,7 +127,7 @@ lagging_hosted_prefix_waits_for_verified_suffix_without_foreign_work_test() ->
             %% The owner verifies and appends the actual signed suffix before
             %% publishing its existing progress edge. No fabricated evidence.
             ok = gen_server:call(Source, {append, tl(maps:get(chain, F))}),
-            ?assertMatch({ok, #{phase := finalize}}, result(Caller)),
+            ?assertMatch({ok, #{phase := resolve}}, result(Caller)),
             ?assertEqual(lists:duplicate(2, capture_request(F, D)), captures(C)),
             T = traces(),
             ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
@@ -143,7 +143,7 @@ lagging_hosted_prefix_expires_without_routed_repair_test() ->
     F = fixture(),
     with_case(F, lagging, fun(C) ->
         D = deadline(400),
-        Caller = resolve_async(C, maps:get(ref, F), finalize, D),
+        Caller = resolve_async(C, maps:get(ref, F), resolve, D),
         try
             wait_pending(source_pid(C), D),
             ?assertEqual({error, retry}, result(Caller)),
@@ -160,7 +160,7 @@ unavailable_hosted_capture_does_not_route_test() ->
     F = fixture(),
     with_case(F, capture_unavailable, fun(C) ->
         D = deadline(3000),
-        ?assertEqual({error, not_ready}, resolve(C, maps:get(ref, F), finalize, D)),
+        ?assertEqual({error, not_ready}, resolve(C, maps:get(ref, F), resolve, D)),
         ?assertEqual([capture_request(F, D)], captures(C)),
         assert_no_foreign_work(traces()),
         assert_no_fetch()
@@ -170,7 +170,7 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
     F = fixture(),
     with_case(F, none, fun(C) ->
         Ref = maps:get(ref, F),
-        ?assertMatch({ok, _}, resolve(C, Ref, finalize, deadline(3000))),
+        ?assertMatch({ok, _}, resolve(C, Ref, resolve, deadline(3000))),
         _ = traces(),
         flush_fetches(),
         quod_foreign_log_tests:stop_owner(maps:get(foreign, C)),
@@ -195,7 +195,7 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
             ?assert(calls(Startup, quod_ledger_store, open, 3) > 0),
             ?assertEqual(1, calls(Startup, quod_foreign_log, spawn_verification_worker, 3)),
             assert_no_fetch(),
-            ?assertMatch({ok, _}, resolve(C#{foreign := New}, Ref, finalize, deadline(3000))),
+            ?assertMatch({ok, _}, resolve(C#{foreign := New}, Ref, resolve, deadline(3000))),
             T = traces(),
             ?assertEqual(0, calls(T, quod_foreign_log, replay_cache, 6)),
             ?assertEqual(0, calls(T, quod_ledger_store, open, 3)),
@@ -218,7 +218,7 @@ capture_owner_death_before_a_usable_view_stays_unavailable_test() ->
     with_case(F, hold_capture, fun(C) ->
         D = deadline(3000),
         Ref = maps:get(ref, F),
-        Caller = resolve_async(C, Ref, finalize, D),
+        Caller = resolve_async(C, Ref, resolve, D),
         Source = source_pid(C),
         receive {resolver_capture_held, Source, D} -> ok
         after 1000 -> error(capture_not_held)
@@ -241,11 +241,11 @@ sufficient_invalid_local_evidence_never_falls_back_test() ->
     Cert = binary_to_term(element(8, Ref), [safe]),
     [{Pub, _}] = Cert#cert.sigs,
     BadSig = setelement(8, Ref, term_to_binary(Cert#cert{sigs = [{Pub, <<0:512>>}]})),
-    Cases = [{setelement(6, Ref, digest(changed_hash)), finalize, invalid_foreign_reference},
-             {setelement(7, Ref, digest(changed_record)), finalize, invalid_foreign_reference},
-             {setelement(8, Ref, <<"malformed-finality">>), finalize, invalid_foreign_reference},
-             {BadSig, finalize, invalid_foreign_reference},
-             {Ref, decision, phase_mismatch}],
+    Cases = [{setelement(6, Ref, digest(changed_hash)), resolve, invalid_foreign_reference},
+             {setelement(7, Ref, digest(changed_record)), resolve, invalid_foreign_reference},
+             {setelement(8, Ref, <<"malformed-finality">>), resolve, invalid_foreign_reference},
+             {BadSig, resolve, invalid_foreign_reference},
+             {Ref, vote, phase_mismatch}],
     with_case(F, current, fun(C) ->
         lists:foreach(fun({R, Phase, Error}) ->
             ?assertEqual({error, Error}, resolve(C, R, Phase, deadline(3000)))
@@ -341,9 +341,9 @@ pinned_owner_loss(Stage) ->
 expired_or_invalid_deadline_never_starts_capture_test() ->
     F = fixture(),
     with_case(F, current, fun(C) ->
-        ?assertEqual({error, retry}, resolve(C, maps:get(ref, F), finalize, deadline(-1))),
+        ?assertEqual({error, retry}, resolve(C, maps:get(ref, F), resolve, deadline(-1))),
         lists:foreach(fun(D) ->
-            ?assertEqual({error, bad_foreign_reference}, resolve(C, maps:get(ref, F), finalize, D))
+            ?assertEqual({error, bad_foreign_reference}, resolve(C, maps:get(ref, F), resolve, D))
         end, [infinity, 1.5, invalid]),
         ?assertEqual([], captures(C)),
         T = traces(),
@@ -356,7 +356,7 @@ queued_capture_cannot_launch_after_expiry_test() ->
     F = fixture(),
     with_case(F, hold_capture, fun(C) ->
         D = deadline(400),
-        Caller = resolve_async(C, maps:get(ref, F), finalize, D),
+        Caller = resolve_async(C, maps:get(ref, F), resolve, D),
         Source = source_pid(C),
         receive {resolver_capture_held, Source, D} -> ok
         after 1000 -> error(capture_not_held)
@@ -383,7 +383,7 @@ queued_routed_admission_preserves_capture_deadline_test() ->
         Owner = maps:get(foreign, C),
         Source = source_pid(C),
         D = deadline(600),
-        Caller = resolve_async(C, maps:get(ref, F), finalize, D),
+        Caller = resolve_async(C, maps:get(ref, F), resolve, D),
         receive {resolver_capture_held, Source, D} -> ok
         after 1000 -> error(capture_not_held)
         end,
@@ -418,8 +418,8 @@ historical_local_read_never_queues_at_foreign_owner_test() ->
         Owner = maps:get(foreign, C),
         ok = sys:suspend(Owner),
         try
-            ?assertMatch({ok, #{phase := finalize}},
-                         resolve(C, maps:get(ref, F), finalize, deadline(1000))),
+            ?assertMatch({ok, #{phase := resolve}},
+                         resolve(C, maps:get(ref, F), resolve, deadline(1000))),
             T = traces(),
             ?assertEqual(0, calls(T, quod_foreign_log, verification_call, 2)),
             assert_no_foreign_work(T),
@@ -450,8 +450,8 @@ append_after_capture_preserves_the_borrowed_prefix_test() ->
     Chain = maps:get(chain, Full),
     F = Full#{chain := lists:sublist(Chain, 2)},
     with_case(F, {append_before_reply, [lists:last(Chain)]}, fun(C) ->
-        ?assertMatch({ok, #{phase := finalize, slot := 2}},
-                     resolve(C, maps:get(ref, F), finalize, deadline(3000))),
+        ?assertMatch({ok, #{phase := resolve, slot := 2}},
+                     resolve(C, maps:get(ref, F), resolve, deadline(3000))),
         ?assertEqual(3, gen_server:call(source_pid(C), height)),
         T = traces(),
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
@@ -468,12 +468,12 @@ local_serving_uses_any_capture_and_unchanged_absolute_deadline_test() ->
     Ref = maps:get(ref, F),
     with_case(F, current, fun(C) ->
         D = deadline(3000),
-        ?assertMatch({ok, #{phase := finalize}},
-                     local_evidence(C, maps:get(ns, F), Ref, finalize, D)),
+        ?assertMatch({ok, #{phase := resolve}},
+                     local_evidence(C, maps:get(ns, F), Ref, resolve, D)),
         ?assertEqual([{identity(F), any, D}], captures(C)),
         T = traces(),
         LocalCalls = [Args || {trace, _, call, {quod_foreign_log, verify_local_deadline, Args}} <- T],
-        ?assertMatch([[#{owner := _, identity := _, snapshot := _}, Ref, finalize, D]], LocalCalls),
+        ?assertMatch([[#{owner := _, identity := _, snapshot := _}, Ref, resolve, D]], LocalCalls),
         [[View, _, _, _]] = LocalCalls,
         ?assertEqual(identity(F), maps:get(identity, View)),
         ?assertEqual(source_pid(C), maps:get(owner, View)),
@@ -492,7 +492,7 @@ local_serving_expiry(Stage) ->
     with_case(F, hold_capture, fun(C) ->
         D = case Stage of already_expired -> deadline(-1); queued_capture -> deadline(400) end,
         Source = source_pid(C),
-        Caller = local_evidence_async(maps:get(ns, F), maps:get(ref, F), finalize, D),
+        Caller = local_evidence_async(maps:get(ns, F), maps:get(ref, F), resolve, D),
         try
             case Stage of
                 already_expired -> ok;
@@ -529,7 +529,7 @@ local_serving_unavailable_copy(Mode, Error) ->
     with_case(F, Mode, fun(C) ->
         D = deadline(3000),
         ?assertEqual({error, Error},
-                     local_evidence(C, maps:get(ns, F), maps:get(ref, F), finalize, D)),
+                     local_evidence(C, maps:get(ns, F), maps:get(ref, F), resolve, D)),
         case Mode of
             none -> ok;
             _ -> ?assertEqual([{identity(F), any, D}], captures(C))
@@ -544,7 +544,7 @@ local_serving_wrong_expected_namespace_is_invalid_before_capture_test() ->
     F = fixture(),
     with_case(F, current, fun(C) ->
         ?assertEqual({error, invalid_request},
-                     local_evidence(C, <<"wrong:serving:namespace">>, maps:get(ref, F), finalize, deadline(3000))),
+                     local_evidence(C, <<"wrong:serving:namespace">>, maps:get(ref, F), resolve, deadline(3000))),
         ?assertEqual([], captures(C)),
         T = traces(),
         ?assertEqual(0, calls(T, quod_simplex, history_view, 3)),
@@ -754,7 +754,7 @@ held_historical_call(C, D, Stage) ->
     Caller = traced_async(fun() ->
         put({quod_foreign_log, local_read_gate}, {Stage, Parent, Token}),
         quod_foreign_log:resolve_reference(
-            maps:get(target, C), maps:get(ref, maps:get(fixture, C)), finalize,
+            maps:get(target, C), maps:get(ref, maps:get(fixture, C)), resolve,
             maps:get(contact, C), maps:get(hint, C), D)
     end),
     receive {local_read_held, Token, Caller} -> {Caller, Token}

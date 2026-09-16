@@ -31,10 +31,12 @@
          remote_signed_concurrent_gateway_groups/1,
          remote_signed_queued_occ_abort/1,
          remote_signed_gateway_group_with_root_effect/1,
+         remote_bound_effect_recovers_without_activation/1,
          remote_signed_group_uses_exact_agent_request/1,
          remote_group_recovers_after_origin_crash/1,
          remote_four_scope_chain_recovers_empty_routes/1]).
 -export([run_scope_proofs/3]).
+-export([hold_group_activation/3]).
 -export([remote_signed_transaction_savepoints/1]).
 -export([cut_findall_local_and_cohosted/1,
          cut_findall_remote_boundaries/1,
@@ -91,11 +93,13 @@ all() -> [remote_signed_transaction_savepoints,
           remote_signed_concurrent_gateway_groups,
           remote_signed_queued_occ_abort,
           remote_signed_gateway_group_with_root_effect,
+          remote_bound_effect_recovers_without_activation,
           remote_signed_group_uses_exact_agent_request,
           remote_group_recovers_after_origin_crash,
           remote_four_scope_chain_recovers_empty_routes].
 
 remote_signed_transaction_savepoints(Config) ->
+    ok = require_third_route_at_target(Config),
     %% Fresh callable names cannot be made accidentally executable by a
     %% previously loaded test beam or another proof's atom allocation.
     Suffix = integer_to_binary(erlang:unique_integer([positive])),
@@ -145,6 +149,7 @@ cut_findall_remote_boundaries(Config) ->
     end, Cases).
 
 cut_findall_signed_multiscope_savepoints(Config) ->
+    ok = require_third_route_at_target(Config),
     %% Genuine signed requests and target commits, not an intent or overlay
     %% shortcut. Ordinary collection retains staged writes; transaction
     %% checkpoints remove failed-candidate writes on both remote scopes.
@@ -316,10 +321,9 @@ init_per_suite(Config) ->
                  [{?NS, TargetAnchor, validator},
                   {?FOURTH_NS, FourthAnchor, validator},
                   {?ROOT_NS, RootAnchor, validator}], 1, 1]),
-    %% DTX phase references are verified independently at every participant.
-    %% A therefore needs exact routes to B and C, while B/C each need the
-    %% origin route for Begin/Decision evidence.  B deliberately still has no
-    %% C route: nested scope selection remains owned and relayed by A.
+    %% Start with the controller-relay topology. Atomic commit cases establish
+    %% B's C route explicitly: Resolve verifies every role's certified Vote,
+    %% not just the origin's. Scope selection itself remains owned by A.
     {ok, _} = peer:call(
                 Asker, quod_ct, install_directory_generation,
                 [ThirdPub, ThirdAddr,
@@ -857,7 +861,7 @@ remote_signed_gateway_read_execute_cursor(Config) ->
 
 %% B contributes only a certified read. C remains the sole writer, so this is
 %% one ordinary remote operation claim and target transaction, never a DTX
-%% group with empty Prepare/Finalize slots for B.
+%% group with an empty source Vote/Resolve role for B.
 remote_signed_read_certified_write(Config) ->
     Asker = ?config(asker, Config),
     Third = ?config(third, Config),
@@ -1409,7 +1413,7 @@ assert_operation_redelivery(Config, Op, Rows, Owners) ->
         end, [first, second])
     end, Rows).
 
-%% Positive reconnect cases establish their own route precondition. A prior
+%% Positive atomic/reconnect cases establish their own route precondition. A prior
 %% case may already have installed this exact fixture route; verify it then,
 %% never erase it or rely on a particular suite order. Negative/recovery
 %% route cases use the separately isolated read-set suite.
@@ -1429,6 +1433,7 @@ require_third_route_at_target(Config) ->
     ok.
 
 remote_independent_branch_provenance(Config) ->
+    ok = require_third_route_at_target(Config),
     Target = ?config(target, Config),
     Third = ?config(third, Config),
     %% The original signed request and real sealed retained writes choose L3.
@@ -1549,7 +1554,8 @@ remote_signed_gateway_group(Config) ->
           Asker, quod_client_goal_ingress, submit,
           [execute, maps:get(session_id, Session), GroupBytes,
            GroupSignature, Peer], 60000),
-    ?assertEqual(2, length(Slots)),
+    %% O participates even when both writable scopes are remote.
+    ?assertEqual(3, length(Slots)),
     assert_fact_once(Target, ?NS, dtx_animals_mark, Tag),
     assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag),
     ?assertMatch(
@@ -1564,6 +1570,7 @@ remote_signed_gateway_group(Config) ->
 %% the conflict-safe batch path rather than the separate wait-die abort test
 %% below. The old single handoff slot rejected this shape as busy.
 remote_signed_concurrent_gateway_groups(Config) ->
+    ok = require_third_route_at_target(Config),
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),
     Third = ?config(third, Config),
@@ -1626,7 +1633,7 @@ remote_signed_concurrent_gateway_groups(Config) ->
               wait_operation_claim(Asker, OperationRef, 600),
           ?assertMatch(
              {group, ?ASKER_NS, AgentAnchor, _, _, _}, GroupRef),
-          ?assertEqual(2, length(Slots)),
+          ?assertEqual(3, length(Slots)),
           assert_fact_once(Target, ?NS, LocalPredicate, Tag),
           assert_fact_once(Third, ?THIRD_NS, RemotePredicate, Tag)
       end, Requests),
@@ -1636,7 +1643,7 @@ remote_signed_concurrent_gateway_groups(Config) ->
     ok.
 
 %% Both proofs read conflict_version/1 while it is zero, then wait at the
-%% pre-Begin FIFO seam. One group changes that fact; the other must retain its
+%% pre-Vote FIFO seam. One group changes that fact; the other must retain its
 %% claimed operation id and terminate with the ordinary stale-read abort.
 remote_signed_queued_occ_abort(Config) ->
     Asker = ?config(asker, Config),
@@ -1708,7 +1715,7 @@ remote_signed_queued_occ_abort(Config) ->
 
 %% One signed proof writes its agent ontology and stages Root's existing
 %% create-ontology effect.  Root is hosted on another peer, so this exercises
-%% the real V5 scope custody command, not only the co-hosted session path.
+%% the real scope custody command, not only the co-hosted session path.
 remote_signed_gateway_group_with_root_effect(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),
@@ -1721,13 +1728,7 @@ remote_signed_gateway_group_with_root_effect(Config) ->
     Tag = erlang:unique_integer([positive]),
     CreatedNs = iolist_to_binary(
                   ["ct:remote-effect-", integer_to_binary(Tag)]),
-    GoalText = iolist_to_binary(
-                 io_lib:format(
-                   "assertz(signed_pets_mark(~B)), "
-                   "\"quod:root\"::create_ontology(\"~s\", "
-                   "[source(\"can_invoke(_, _, _, _).\\n"
-                   "remote_effect_created(ok).\\n\")], _Anchor).",
-                   [Tag, CreatedNs])),
+    GoalText = root_effect_goal(Tag, CreatedNs),
     {RequestBytes, Signature} = signed_goal_request(
                                   NetworkId, AgentPub, AgentKey,
                                   ?ASKER_NS, AgentAnchor,
@@ -1748,6 +1749,87 @@ remote_signed_gateway_group_with_root_effect(Config) ->
     wait_ready(Target, CreatedNs, {remote_effect_created, ok}),
     wait_remote_effect_state(Target, CreatedNs, GroupRef, applied, 300),
     ok.
+
+root_effect_goal(Tag, CreatedNs) ->
+    iolist_to_binary(io_lib:format(
+      "assertz(signed_pets_mark(~B)), "
+      "\"quod:root\"::create_ontology(\"~s\", "
+      "[source(\"can_invoke(_, _, _, _).\\n"
+      "remote_effect_created(ok).\\n\")], _Anchor).", [Tag, CreatedNs])).
+
+%% A real remote effect is durably bound, but the source never activates.
+%% OTP's installed debug callback holds the existing activation call before
+%% handle_call, without a production hook or a send/receipt ordering guess.
+remote_bound_effect_recovers_without_activation(Config) ->
+    Asker = ?config(asker, Config), Target = ?config(target, Config),
+    OldEngine = peer:call(Asker, quod_reg, where, [{quod_prolog, ?ASKER_NS}]),
+    OldSimplex = peer:call(Asker, quod_reg, where, [{quod_simplex, ?ASKER_NS}]),
+    Gate = {?MODULE, before_activation},
+    ok = peer:call(Asker, sys, install,
+                   [OldEngine, {Gate, fun ?MODULE:hold_group_activation/3, armed}]),
+    Tag = erlang:unique_integer([positive]),
+    CreatedNs = iolist_to_binary(["ct:aborted-effect-", integer_to_binary(Tag)]),
+    Session = ?config(client_session, Config),
+    %% Choose the request's original bound once; never extend it after failure.
+    Expires = min(maps:get(expires_ms, Session), quod_time:now_ms() + 10000),
+    {Bytes, Signature} = signed_goal_request(
+      ?config(network_id, Config), ?config(agent_pub, Config), ?config(agent_key, Config),
+      ?ASKER_NS, ?config(asker_anchor, Config), Expires, execute,
+      root_effect_goal(Tag, CreatedNs)),
+    Parent = self(), CallRef = make_ref(), ClientPeer = ?config(client_peer, Config),
+    spawn(fun() -> Parent ! {CallRef, peer:call(Asker, quod_client_goal_ingress,
+      submit, [execute, maps:get(session_id, Session), Bytes, Signature, ClientPeer], 60000)} end),
+    try
+        {GroupRef, _Token} = wait_activation_gate(Asker, CallRef, 300),
+        wait_remote_effect_state(Target, CreatedNs, GroupRef, group_pending, 50),
+        {running, OwnerState} = peer:call(Asker, sys, get_state, [OldSimplex]),
+        ?assertMatch(#{active := 0, reserved := 1}, peer:call(
+          Asker, quod_simplex, test_dtx_admission_state, [OwnerState])),
+        Journal = peer:call(Asker, quod_simplex, test_signing_journal, [OwnerState]),
+        {group, _, _, _, _, Id} = GroupRef,
+        #{Id := #{sequence := 0, envelope := none,
+                  material := {{quod_dtx_vote, 4, _, _, none, _}, _, _}}} =
+            peer:call(Asker, quod_signing_journal, pending_dtx, [Journal]),
+        true = peer:call(Asker, erlang, exit, [OldEngine, kill]),
+        true = peer:call(Asker, erlang, exit, [OldSimplex, kill]),
+        receive {CallRef, Result} ->
+            ?assertNotMatch({ok, _, {normalized, {committed, _, _}}}, Result)
+        after 10000 -> ct:fail(bound_effect_caller_did_not_observe_crash)
+        end,
+        wait_restarted(Asker, ?ASKER_NS, OldSimplex, 400),
+        ?assertMatch(#{status := aborted, ref := GroupRef},
+                     wait_group_outcome(Asker, GroupRef, 600)),
+        wait_remote_effect_state(Target, CreatedNs, GroupRef, retired, 300),
+        assert_fact_absent(Asker, ?ASKER_NS, signed_pets_mark, Tag),
+        ?assertEqual(undefined, peer:call(Target, quod_reg, where, [{quod_simplex, CreatedNs}])),
+        assert_dtx_released(Asker, ?ASKER_NS),
+        assert_dtx_released(Target, ?ROOT_NS)
+    after
+        %% Release only this test gate if setup failed before the injected kill.
+        case peer:call(Asker, application, get_env, [quod, ct_activation_gate]) of
+            {ok, {_Ref, Release}} -> peer:call(Asker, erlang, send, [OldEngine, {release, Release}]);
+            _ -> ok
+        end,
+        _ = catch peer:call(Asker, sys, remove, [OldEngine, Gate]),
+        _ = peer:call(Asker, application, unset_env, [quod, ct_activation_gate])
+    end.
+
+hold_group_activation(armed, {in, {'$gen_call', _, {activate_dtx_vote, _, GroupRef}}}, _) ->
+    Token = make_ref(),
+    ok = application:set_env(quod, ct_activation_gate, {GroupRef, Token}),
+    receive {release, Token} -> ok after 15000 -> ok end,
+    done;
+hold_group_activation(State, _Event, _Name) -> State.
+
+wait_activation_gate(_Peer, _CallRef, 0) -> ct:fail(activation_gate_timeout);
+wait_activation_gate(Peer, CallRef, Retries) ->
+    case peer:call(Peer, application, get_env, [quod, ct_activation_gate]) of
+        {ok, {_, _} = Held} -> Held;
+        _ ->
+            receive {CallRef, Result} -> ct:fail({proof_ended_before_activation, Result})
+            after 20 -> wait_activation_gate(Peer, CallRef, Retries - 1)
+            end
+    end.
 
 %% One browser-equivalent request crosses two remote scope hops and commits
 %% through the ordinary group protocol.
@@ -1802,22 +1884,23 @@ remote_signed_group_uses_exact_agent_request(Config) ->
        {ok, #{status := claimed, outcome_ref := GroupRef}},
        peer:call(Asker, quod_prolog, outcome, [OperationRef])).
 
-%% The origin is stopped at the coordinator's certified Decision boundary,
-%% before it can plan a Finalize.  Recovery must resume from the durable phase
-%% chain, not re-prove or replay any plan, and the exact caller checkpoint must
-%% remain sufficient to find the one terminal outcome after restart.
+%% The origin is stopped after the remote Vote wave, before any Resolve.
+%% Recovery uses certified own-role material, never a re-proof or another
+%% role's plan. The exact caller reference still finds the one terminal result.
 remote_group_recovers_after_origin_crash(Config) ->
+    ok = require_third_route_at_target(Config),
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Third = ?config(third, Config),
     Tag = erlang:unique_integer([positive]),
     Goal = {',', {assertz, {dtx_pets_mark, Tag}},
                  {'::', ?NS, {dtx_write_chain, Tag}}},
+    VotePhase = {voted, {?NS, ?config(target_anchor, Config)}},
     ok = peer:call(
            Asker, application, set_env,
-           [quod, dtx_test_phase_barrier, {hold, decided}]),
+           [quod, dtx_test_phase_barrier, {hold, VotePhase}]),
     ?assertEqual(
-       {ok, {hold, decided}},
+       {ok, {hold, VotePhase}},
        peer:call(Asker, application, get_env,
                  [quod, dtx_test_phase_barrier])),
     Parent = self(),
@@ -1830,11 +1913,13 @@ remote_group_recovers_after_origin_crash(Config) ->
                          Parent ! {ProofRef, Result}
                      end),
     try
-        GroupId = wait_decision_barrier(ProofRef, Config),
-        %% The coordinator is held before it can plan Finalize.  Neither
-        %% remote participant may have a certified Finalize at this point.
-        assert_finalize_absent(Target, ?NS, GroupId),
-        assert_finalize_absent(Third, ?THIRD_NS, GroupId),
+        GroupId = wait_vote_barrier(ProofRef, VotePhase, Config),
+        %% No role has applied; each one's exact positive Vote must already
+        %% be certified, making commit the only possible recovered outcome.
+        lists:foreach(fun({Peer, Ns}) ->
+            assert_prepared_vote(Peer, Ns, GroupId),
+            assert_resolve_absent(Peer, Ns, GroupId)
+        end, [{Asker, ?ASKER_NS}, {Target, ?NS}, {Third, ?THIRD_NS}]),
         {ok, {?ASKER_NS, Anchor, Coordinator, Admission}} =
             peer:call(Asker, quod_simplex, dtx_binding, [?ASKER_NS]),
         GroupRef = {group, ?ASKER_NS, Anchor,
@@ -1844,14 +1929,14 @@ remote_group_recovers_after_origin_crash(Config) ->
                        [{quod_simplex, ?ASKER_NS}]),
         true = is_pid(OldSimplex),
         %% The bounded test valve must still be holding the coordinator at
-        %% Decision.  Otherwise a slow test could silently crash after a
+        %% the Vote wave. Otherwise a slow test could silently crash after a
         %% self-released gate and prove only a weaker recovery path.
         ?assertMatch(
-           {ok, {held, GroupId, decided, _}},
+           {ok, {held, GroupId, VotePhase, _}},
            peer:call(Asker, application, get_env,
                      [quod, dtx_test_phase_barrier])),
         %% Disable the one-shot barrier before restart: the replacement
-        %% coordinator must be free to rediscover Decision and continue.
+        %% coordinator must be free to rediscover the Votes and continue.
         ok = peer:call(
                Asker, application, unset_env,
                [quod, dtx_test_phase_barrier]),
@@ -1970,32 +2055,42 @@ install_chain_third_generation(Config, Epoch) ->
         Other -> Other
     end.
 
-wait_decision_barrier(ProofRef, Config) ->
-    wait_decision_barrier(ProofRef, Config, 300).
+wait_vote_barrier(ProofRef, Phase, Config) ->
+    wait_vote_barrier(ProofRef, Phase, Config, 300).
 
-wait_decision_barrier(_ProofRef, Config, 0) ->
-    ct:fail({dtx_decision_barrier_timeout, dtx_diagnostics(Config)});
-wait_decision_barrier(ProofRef, Config, Retries) ->
+wait_vote_barrier(_ProofRef, _Phase, Config, 0) ->
+    ct:fail({dtx_vote_barrier_timeout, dtx_diagnostics(Config)});
+wait_vote_barrier(ProofRef, Phase, Config, Retries) ->
     Asker = ?config(asker, Config),
     case peer:call(
            Asker, application, get_env,
            [quod, dtx_test_phase_barrier]) of
-        {ok, {held, <<_:256>> = GroupId, decided, _BarrierRef}} ->
-            %% This confirms that a live coordinator advanced to Decision;
-            %% the gate itself is before its next planner drive.
+        {ok, {held, <<_:256>> = GroupId, Phase, _BarrierRef}} ->
+            %% The gate is before the next planner drive, not a timed guess.
             GroupId;
         _ ->
             receive
                 {ProofRef, ProofResult} ->
-                    ct:fail({group_proof_ended_before_decision, ProofResult})
+                    ct:fail({group_proof_ended_before_vote, ProofResult})
             after 0 ->
                 timer:sleep(50),
-                wait_decision_barrier(ProofRef, Config, Retries - 1)
+                wait_vote_barrier(ProofRef, Phase, Config, Retries - 1)
             end
     end.
 
-assert_finalize_absent(Peer, Ns, GroupId) ->
-    Request = {phase, crypto:strong_rand_bytes(16), GroupId, finalize},
+assert_prepared_vote(Peer, Ns, GroupId) ->
+    Request = {phase, crypto:strong_rand_bytes(16), GroupId, vote},
+    {ok, {phase, _, _, {committed, Ref}}, _} = peer:call(
+        Peer, quod_simplex, dtx_endpoint_local, [Ns, Request, [], 1000]),
+    {ok, Identity, _, _} = quod_dtx:certified_ref_binding(Ref),
+    Deadline = peer:call(Peer, quod_time, mono_ms, []) + 5000,
+    {ok, #{control := Control}} = peer:call(Peer, quod_foreign_log,
+        resolve_reference, [Identity, Ref, vote, none, none, Deadline]),
+    ?assertMatch({quod_dtx_vote, 4, _, _, _, prepared},
+                 quod_atomic:control_body(Control)).
+
+assert_resolve_absent(Peer, Ns, GroupId) ->
+    Request = {phase, crypto:strong_rand_bytes(16), GroupId, resolve},
     ?assertMatch(
        {ok, {phase, _, _, not_found}, []},
        peer:call(Peer, quod_simplex, dtx_endpoint_local,
@@ -2040,26 +2135,25 @@ dtx_diagnostics(Config) ->
                     peer:call(
                       Peer, quod_simplex, dtx_endpoint_local,
                       [Ns, {phase, crypto:strong_rand_bytes(16),
-                            GroupId, Kind}, 1000])}
-                   || Kind <- ['begin', prepare, decision,
-                               finalize, complete]]}
+                            GroupId, Kind}, [], 1000])}
+                   || Kind <- [vote, resolve, complete]]}
                  || {Peer, Ns} <- [{Asker, ?ASKER_NS}, {Target, ?NS},
                                    {Third, ?THIRD_NS}]];
             _ ->
                 []
         end,
-    BPrepare = phase_result(?NS, Phases, prepare),
-    CPrepare = phase_result(?THIRD_NS, Phases, prepare),
-    RawBVerify = raw_prepare_verify(
+    BVote = phase_result(?NS, Phases, vote),
+    CVote = phase_result(?THIRD_NS, Phases, vote),
+    RawBVerify = raw_vote_verify(
                    Asker, ?config(target_pub, Config),
-                   ?config(target_addr, Config), BPrepare),
-    RawCVerify = raw_prepare_verify(
+                   ?config(target_addr, Config), BVote),
+    RawCVerify = raw_vote_verify(
                    Asker, ?config(third_pub, Config),
-                   ?config(third_addr, Config), CPrepare),
+                   ?config(third_addr, Config), CVote),
     #{statuses => Statuses, phases => Phases,
       asker_internal => AskerInternal,
-      raw_b_prepare_verify => RawBVerify,
-      raw_c_prepare_verify => RawCVerify,
+      raw_b_vote_verify => RawBVerify,
+      raw_c_vote_verify => RawCVerify,
       foreign_log_stats =>
           [{Ns, peer:call(Peer, quod_foreign_log, stats, [])}
            || {Peer, Ns} <- [{Asker, ?ASKER_NS}, {Target, ?NS},
@@ -2073,12 +2167,12 @@ dtx_diagnostics(Config) ->
                      peer:call(Asker, quod_simplex, genesis_hash,
                                [?ASKER_NS])])}.
 
-raw_prepare_verify(
+raw_vote_verify(
   Peer, Validator, Endpoint,
-  {ok, {phase, _RequestId, _Generation, {committed, Ref}}}) ->
+  {ok, {phase, _RequestId, _Generation, {committed, Ref}}, _}) ->
     peer:call(Peer, quod_foreign_log, verify,
-              [Validator, Endpoint, Ref, prepare, 5000]);
-raw_prepare_verify(_Peer, _Validator, _Endpoint, _PhaseResult) ->
+              [Validator, Endpoint, Ref, vote, 5000]);
+raw_vote_verify(_Peer, _Validator, _Endpoint, _PhaseResult) ->
     not_committed.
 
 phase_result(Ns, Phases, Kind) ->
@@ -2130,7 +2224,8 @@ wait_group_outcome(_Peer, GroupRef, 0) ->
     ct:fail({group_outcome_never_became_terminal, GroupRef});
 wait_group_outcome(Peer, {group, Ns, _, _, _, _} = GroupRef, Retries) ->
     case peer:call(Peer, quod_prolog, outcome, [GroupRef]) of
-        {ok, #{status := committed} = Outcome} -> Outcome;
+        {ok, #{status := Status} = Outcome}
+          when Status =:= committed; Status =:= aborted -> Outcome;
         {ok, #{status := pending}} ->
             timer:sleep(50),
             wait_group_outcome(Peer, GroupRef, Retries - 1);
@@ -2251,7 +2346,7 @@ concurrent_submit_evidence(Index, Other) ->
     ct:fail({concurrent_signed_dtx_submit_failed, Index, Other}).
 
 %% The losing group can be reported either while still pending or directly as
-%% its definitive Prepare refusal. In both cases the signed evidence carries
+%% its certified abort. In both cases the signed evidence carries
 %% the same operation reference whose final durable outcome is asserted below.
 concurrent_conflict_evidence(
   _Index,
@@ -2364,7 +2459,6 @@ assert_dtx_released(Peer, Ns) ->
     Projection = maps:get(history_projection, Status),
     Dtx = maps:get(dtx, Projection),
     ?assertEqual(#{}, maps:get(groups, Dtx)),
-    ?assertEqual(#{}, maps:get(conflicts, Dtx)),
     ?assertEqual(#{}, maps:get(apply_fences, Dtx)).
 
 run_scope_wave(Asker, Goal, Wave) ->

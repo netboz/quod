@@ -6,7 +6,7 @@
 -export([golden_vectors/1]).
 
 -define(NS, <<"quod:artifact-golden">>).
--define(FRAME_MAGIC, 16#915106AF).
+-define(FRAME_MAGIC, 16#915106B0).
 
 golden_vectors(Codec) ->
     F = fixture(Codec),
@@ -16,10 +16,9 @@ golden_vectors(Codec) ->
       frames => digest(iolist_to_binary(
                          [frame(entry_bytes(Codec, Entry))
                           || {_, Entry} <- maps:get(entries, F)])),
-      signed_transaction => digest((maps:get(transaction, F))#transaction.signed_bytes),
-      implicit_runtime_view => digest(term_to_binary(maps:get(implicit, F), [deterministic]))}.
+      signed_transaction => digest((maps:get(transaction, F))#transaction.signed_bytes)}.
 
-artifact_matches_v14_v6_golden_bytes_test() ->
+artifact_matches_v15_v7_golden_bytes_test() ->
     ?assertEqual(expected_golden_vectors(), golden_vectors(quod_ledger)).
 
 checked_constructors_reject_changed_views_test() ->
@@ -44,6 +43,17 @@ checked_constructors_reject_changed_views_test() ->
           {ok, Imported} = quod_ledger:from_entry_view(quod_ledger:entry_view(A)),
           ?assertEqual(entry_bytes(quod_ledger, A), entry_bytes(quod_ledger, Imported))
       end, maps:get(entries, F)).
+
+block_constructor_rejects_unsigned_or_changed_transaction_views_test() ->
+    F = fixture(quod_ledger),
+    Tx = maps:get(transaction, F),
+    <<First, Rest/binary>> = Tx#transaction.sig,
+    Bad = [Tx#transaction{sig = <<(First bxor 1), Rest/binary>>},
+           Tx#transaction{diff = []}, Tx#transaction{signed_bytes = <<>>}],
+    lists:foreach(fun(Changed) ->
+        ?assertEqual({error, bad_block},
+                     quod_ledger:new_block(2, 1, {batch, [Changed]}, 101))
+    end, Bad).
 
 checked_implicit_child_binding_is_not_discarded_test() ->
     F = fixture(quod_ledger),
@@ -278,7 +288,7 @@ sidecar_fixture(F) ->
                   digest(View#entry.block_bytes),
                   digest((maps:get(transaction, F))#transaction.signed_bytes),
                   canonical(View#entry.cert)),
-    {{phase, <<1:128>>, digest(<<"artifact-group">>), prepare}, {Ref, Entry}}.
+    {{phase, <<1:128>>, digest(<<"artifact-group">>), vote}, {Ref, Entry}}.
 
 traced_calls(Hooks, Fun) ->
     Parent = self(),
@@ -387,12 +397,13 @@ base64url(Bytes) -> binary_to_list(binary:replace(binary:replace(binary:replace(
 tmp_dir() -> filename:join("/tmp", "quod-artifact-" ++ binary_to_list(
                                 binary:encode_hex(crypto:strong_rand_bytes(8)))).
 
-%% Independently captured from 1d8da2e with ONLY transaction VERSION 13->14
-%% and this fixture's frame magic V5->V6 changed. No slice-7 vector or role
-%% implementation generated these values. Genesis/skip/anchor are unchanged;
-%% the signed transaction and its containing/certifying bytes intentionally
-%% break. The real old-ledger fixtures remain pinned and refused separately.
-%% All signatures use the fixed test-only seed.
+%% Captured with the frozen I1 ledger before native-control refactoring
+%% (e4f767f, source SHA-256
+%% 2fe4e9a9f32e9247906ee4cdd6df77dd4dd29a49b9930bfa35c90634e154c4e1)
+%% and the current V15 transaction codec / V7 framing. The independent
+%% constructor produces the same bytes as this tree. This pins the current
+%% format, NOT compatibility with V14/V6; real old files are refused in the
+%% carrier tests. All signatures use the fixed test-only seed.
 expected_golden_vectors() ->
     #{anchor =>
           <<210,124,44,168,165,183,21,105,207,28,86,153,47,36,27,47,200,9,162,117,
@@ -400,26 +411,17 @@ expected_golden_vectors() ->
       envelopes =>
           [{genesis,<<27,6,141,136,104,17,136,253,74,239,255,221,231,82,5,136,1,
                       27,222,88,63,193,154,102,56,178,114,177,30,178,213,123>>},
-           {content,<<36,239,199,104,77,23,124,57,105,106,131,127,204,116,109,
-                      127,104,60,213,21,60,79,70,46,228,28,179,177,58,135,55,229>>},
+           {content,<<177,84,222,35,39,168,156,6,152,44,103,8,105,11,200,64,
+                      243,130,78,106,111,199,193,137,45,123,239,149,67,1,76,19>>},
            {skip,<<219,158,161,111,183,71,100,244,0,156,23,3,66,204,131,78,230,75,
                    245,43,79,185,7,85,180,83,97,243,180,110,54,220>>},
-           {implicit,<<3,134,230,91,50,100,203,58,151,61,102,213,165,164,161,
-                       141,8,46,98,105,145,57,146,211,27,252,197,137,212,233,73,68>>},
-           {child,<<32,144,49,92,163,162,185,136,136,199,207,48,33,177,125,60,
-                    223,197,37,104,7,217,209,190,254,165,224,69,148,44,252,193>>}],
+           {implicit,<<222,160,146,71,61,197,213,161,125,134,56,145,26,202,
+                       170,165,98,76,49,102,191,231,90,114,45,158,214,41,38,230,75,9>>},
+           {child,<<79,115,147,208,21,10,28,28,216,31,163,241,92,248,219,81,
+                    42,21,209,227,202,210,178,233,188,209,83,146,96,30,228,19>>}],
       frames =>
-          <<92,189,146,167,81,248,208,37,220,39,5,226,21,235,99,247,102,50,
-            150,68,109,110,215,107,46,203,218,40,233,114,201,134>>,
+          <<178,202,129,193,5,246,11,68,194,231,55,83,178,145,204,161,191,9,
+            193,78,0,193,146,96,118,189,166,173,222,83,255,129>>,
       signed_transaction =>
-          <<239,200,57,157,72,191,95,54,78,159,204,35,96,7,228,17,243,133,
-            247,242,157,134,103,125,132,166,69,39,238,11,47,111>>,
-      %% This is a native runtime tuple, NOT a certificate wire encoding. Its
-      %% layout now includes the decode-owned claim view. The unchanged
-      %% `implicit` envelope and frame goldens above pin the actual stored
-      %% certificate and child bytes; native records are refused on the wire.
-      implicit_runtime_view =>
-          <<16#26,16#ff,16#65,16#9a,16#f1,16#ed,16#8f,16#95,
-            16#3d,16#a5,16#33,16#ec,16#2a,16#12,16#bc,16#97,
-            16#1e,16#da,16#c1,16#30,16#5a,16#43,16#a1,16#ce,
-            16#eb,16#e5,16#80,16#67,16#6e,16#81,16#46,16#80>>}.
+          <<48,115,211,113,178,38,115,64,169,1,151,252,110,99,117,13,25,15,
+            112,202,6,193,111,150,59,174,49,236,226,32,161,223>>}.

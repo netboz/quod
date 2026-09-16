@@ -1,29 +1,32 @@
 -module(quod_operation_fixture).
 -include("quod_ledger.hrl").
--export([with/2, with/3, view/3, entry/4]).
+-export([with/2, with/3, with/4, view/3, entry/4]).
 
 %% One real signed/certified history constructor for owner-interface controls.
 %% These genesis-derived projections are trusted owner inputs, not a witness
 %% that the generated claims/applications were consensus-admitted or applied.
 %% Callers own their process stubs and decide which production callbacks run.
 with(N, Fun) -> with(N, [], Fun).
-with(N, GenesisDiff, Fun) ->
+with(N, GenesisDiff, Fun) -> with(N, GenesisDiff, applied, Fun).
+with(N, GenesisDiff, Result, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     Suffix = binary:encode_hex(crypto:strong_rand_bytes(8)),
     Ns = <<"quod:operation-result-source-", Suffix/binary>>,
     {NodeKey, Seed} = quod_identity:generate(),
     Signer = #{pubkey => NodeKey, key => quod_identity:key_term({NodeKey, Seed})},
     {Origin, Genesis, SourceProjection} = operation_genesis(Ns, Signer, GenesisDiff),
+    {ok, SourceBinding = {_, _, Admission}} =
+        quod_simplex:history_binding(Origin, NodeKey, SourceProjection),
     TargetGenesis = [operation_genesis(
       <<"quod:operation-result-target-", Suffix/binary, "-", (integer_to_binary(I))/binary>>, Signer, GenesisDiff)
       || I <- lists:seq(1, N)],
     Targets = [Target || {Target, _, _} <- TargetGenesis],
     F0 = quod_ct:signed_plan_fixture(#{target => Origin, participant_target => hd(Targets),
-      node_identity => Signer, provenance => case N of 1 -> 1; _ -> 2 end}, Targets),
-    Admission = maps:get(admission, F0),
+      node_identity => Signer, admission => Admission,
+      provenance => case N of 1 -> 1; _ -> 2 end}, Targets),
     Claim0 = quod_transaction:remote_claim(Origin, maps:get(manifest, F0),
                                           maps:get(bundles, F0), maps:get(auth, F0), []),
-    {ok, Claim} = quod_transaction:sign({Ns, element(2, Origin), Admission},
+    {ok, Claim} = quod_transaction:sign(SourceBinding,
       Claim0#transaction{author = NodeKey, author_seq = 1, submitted_at = 1}, Signer),
     ClaimEntry = entry(Origin, Signer, 2, Claim),
     {ok, ClaimRef} = quod_dtx:certified_entry_ref(Origin, ClaimEntry, Claim),
@@ -31,11 +34,12 @@ with(N, GenesisDiff, Fun) ->
     Dir = filename:join("/tmp", "quod-s8-operation-fixture-" ++ binary_to_list(Suffix)),
     ok = file:make_dir(Dir),
     Applications = maps:from_list([begin
-        {TargetNs, TargetAnchor} = Target,
+        {TargetNs, _TargetAnchor} = Target,
+        {ok, TargetBinding} = quod_simplex:history_binding(Target, NodeKey, Projection),
         App0 = quod_transaction:attach_evidence(
           quod_transaction:remote_application(quod_transaction:stable_ref(ClaimRef), Claim, Target),
           ClaimRef, Claim),
-        {ok, App} = quod_transaction:sign({TargetNs, TargetAnchor, Admission},
+        {ok, App} = quod_transaction:sign(TargetBinding,
           App0#transaction{author = NodeKey, author_seq = 1, submitted_at = 1}, Signer),
         Entry = entry(Target, Signer, 2, App),
         {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, App),
@@ -51,10 +55,13 @@ with(N, GenesisDiff, Fun) ->
     Pairs = [{maps:get(certified_target_ref, maps:get(T, Applications)),
               maps:get(application, maps:get(T, Applications))} || T <- Targets],
     Refs = [maps:get(target_ref, maps:get(T, Applications)) || T <- Targets],
-    {ok, Included} = quod_ct:included_receipt(Refs),
+    Receipt = [{T, {certified, maps:get(target_ref, D),
+                     quod_ct:operation_certificate(maps:get(network, F0),
+                       maps:get(evidence, D), Result, Signer)}}
+               || T <- Targets, D <- [maps:get(T, Applications)]],
     Completion0 = quod_transaction:attach_receipt_evidence(
-      quod_transaction:remote_complete(Origin, OperationRef, Digest, Included), Pairs),
-    {ok, Completion} = quod_transaction:sign({Ns, element(2, Origin), Admission},
+      quod_transaction:remote_complete(Origin, OperationRef, Digest, Receipt), Pairs),
+    {ok, Completion} = quod_transaction:sign(SourceBinding,
       Completion0#transaction{author = NodeKey, author_seq = 2, submitted_at = 3}, Signer),
     CompletionEntry = entry(Origin, Signer, 3, Completion),
     {ok, Source0} = quod_ledger_store:open(Ns, Dir),

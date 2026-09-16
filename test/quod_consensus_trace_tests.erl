@@ -223,15 +223,15 @@ consensus_boundary_keeps_all_participating_links_test() ->
 
 foreign_validation_worker_inherits_trace_and_records_terminal_verdict_test_() ->
     [{atom_to_list(Case), fun() ->
-        with_certified_history(fun(State0, Transaction, Ref) ->
+        with_certified_history(fun(State0, Transaction, Ref, Receipt) ->
             with_request_spans(fun(Unsampled, Sampled, Parent) ->
                 exercise_foreign_validation(
-                  Case, State0, Transaction, Ref, Unsampled, Sampled, Parent)
+                  Case, State0, Transaction, Ref, Receipt, Unsampled, Sampled, Parent)
             end)
         end)
       end} || Case <- [valid, invalid, owner]].
 
-exercise_foreign_validation(Case, State0, Transaction, Ref0,
+exercise_foreign_validation(Case, State0, Transaction, Ref0, Receipt0,
                             Unsampled, Sampled, Parent) ->
     %% Co-hosted history still goes through the real spawned foreign-reference
     %% worker and certified-history verifier. Only transport is unnecessary;
@@ -241,11 +241,7 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
               invalid -> setelement(6, Ref0, crypto:hash(sha256, <<"wrong-block">>))
           end,
     {ok, {Ns, _}, _, _} = quod_dtx:certified_ref_binding(Ref),
-    TargetRef = quod_transaction:stable_ref(Ref),
-    {ok, Included} = quod_ct:included_receipt([TargetRef]),
-    Receipt = #transaction{
-                 role = {remote_complete, unused_operation, unused_request, Included},
-                 evidence = {applications, [{Ref, Transaction}]}, foreign_reads = []},
+    Receipt = Receipt0#transaction{evidence = {applications, [{Ref, Transaction}]}},
     ?assertEqual([{transaction, Ref}], quod_transaction:required_references(Receipt)),
     Slot = 3,
     Hash = crypto:hash(sha256, <<"receipt-validation-proposal">>),
@@ -277,7 +273,8 @@ exercise_foreign_validation(Case, State0, Transaction, Ref0,
         receive {'DOWN', Monitor, process, Worker, Reason} -> ?assertEqual(normal, Reason)
         after 3000 -> error(foreign_validation_worker_not_retired)
         end,
-        Span = quod_trace_tests:take_span(<<"quod.consensus.foreign_validation">>),
+        Span = quod_trace_tests:take_span(<<"quod.consensus.foreign_validation">>,
+                                        otel_span:trace_id(ExpectedParent)),
         assert_parent_and_block(Span, ExpectedParent, Ns, Slot, Hash),
         [Finished] = [Event || Event = #event{name = Name} <- otel_events:list(Span#span.events),
                                Name =:= <<"consensus.foreign_validation_finished">>],
@@ -311,17 +308,11 @@ assert_parent_and_block(Span, Parent, Ns, Slot, Hash) ->
 %% success or a newly granted short test allowance.
 foreign_validation_queued_success_respects_original_deadline_test_() ->
     [{atom_to_list(When), {timeout, 12, fun() ->
-        with_certified_history(fun(State0, Transaction, Ref) ->
+        with_certified_history(fun(State0, _Transaction, Ref, Receipt) ->
             {ok, {Ns, Anchor}, _, _} = quod_dtx:certified_ref_binding(Ref),
-            {ok, Included} = quod_ct:included_receipt(
-                               [quod_transaction:stable_ref(Ref)]),
-            Receipt = #transaction{
-              role = {remote_complete, unused_operation, unused_request,
-                      Included},
-              evidence = {applications, [{Ref, Transaction}]}, foreign_reads = []},
             %% This is a callback-state fixture, not candidate wire admission:
-            %% only the receipt's reference binding is under test. The worker
-            %% still authenticates the actual signed entry in the real store.
+            %% the worker authenticates the actual signed entry and its AM3
+            %% result in the real store. No verifier answer is supplied.
             Block = #block{slot = 3, parent = 2, payload = {batch, [Receipt]},
                            timestamp = 0, block_bytes = <<"queue-deadline-fixture">>},
             Hash = quod_simplex:block_hash(Block),
@@ -390,43 +381,15 @@ with_request_spans(Fun) ->
     end).
 
 with_certified_history(Fun) ->
-    {ok, _} = application:ensure_all_started(gproc),
-    Suffix = binary:encode_hex(crypto:strong_rand_bytes(8), lowercase),
-    Ns = <<"trace:certified:", Suffix/binary>>,
-    Dir = filename:join("/tmp", "quod-consensus-trace-" ++ binary_to_list(Suffix)),
-    {Pub, Seed} = quod_identity:generate(),
-    Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
-    GenesisTx = quod_simplex:test_genesis_tx(
-                  #{node_id => Pub, mode => create, committee => [],
-                    node_addr => {"127.0.0.1", 19000}, genesis_diff => []},
-                  Ns, Pub, crypto:strong_rand_bytes(32)),
-    {ok, Genesis} = quod_ledger:new_entry(1, {batch, [GenesisTx]}, 0, none),
-    {ok, GenesisBlock} = quod_ledger:block_from_entry(Genesis),
-    Anchor = quod_simplex:block_hash(GenesisBlock),
-    Identity = {Ns, Anchor},
-    {ok, [_], Projection1} = quod_catchup:verify_forward(
-                               Ns, Anchor, quod_simplex:history_projection(Identity),
-                               1, [Genesis]),
-    {ok, AuthorBinding} = quod_simplex:history_binding(Identity, Pub, Projection1),
-    {ok, Goal} = quod_durable_term:encode_goal(trace_fact),
-    {ok, Result} = quod_durable_term:encode_result(#{}),
-    Unsigned = quod_transaction:bind_id(Identity, #transaction{
-                 origin = Identity, proof_id = <<1:256>>, plan_digest = <<2:256>>,
-                 goal = Goal, result = Result,
-                 diff = [{assert, {{trace_fact, committed}, true}}], read_check = #{},
-                 author = Pub, author_seq = 1, submitted_at = 1, sig = none}),
-    {ok, Transaction} = quod_transaction:sign(AuthorBinding, Unsigned, Signer),
-    {ok, Block} = quod_ledger:new_block(2, 1, {batch, [Transaction]}, 0),
-    BlockHash = quod_simplex:block_hash(Block),
-    Domain = quod_simplex:consensus_domain(Ns, Anchor),
-    #share{sig = Signature} = quod_simplex:make_share(Domain, commit, 2, BlockHash, Signer),
-    Entry = quod_ledger:entry(Block, #cert{kind = commit, slot = 2,
-                 block_hash = BlockHash, sigs = [{Pub, Signature}]}),
-    {ok, [_], Projection} = quod_catchup:verify_forward(Ns, Anchor, Projection1, 2, [Entry]),
-    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Transaction),
-    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
-    try
-        {ok, Store} = quod_ledger_store:append(Store0, [Genesis, Entry]),
+    %% Reuse real claim/application/AM3 bytes. As in the shared fixture, the
+    %% committee view is an owner input, not consensus-admission evidence.
+    quod_operation_fixture:with(1, fun(F) ->
+        #{target := {Ns, Anchor}, store := Store, projection := Projection0,
+          application := Transaction, certified_target_ref := Ref,
+          node_identity := Signer = #{pubkey := Pub}} = F,
+        {ok, [_], Projection} = quod_catchup:verify_forward(
+            Ns, Anchor, Projection0, 2, [maps:get(entry, F)]),
+        Domain = quod_simplex:consensus_domain(Ns, Anchor),
         true = quod_reg:reg({quod_simplex, Ns}),
         try
             Base = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
@@ -435,11 +398,8 @@ with_certified_history(Fun) ->
                      validators => [Pub], consensus_domain => Domain,
                      eng => quod_simplex:eng_new(Domain, [Pub], 2)}),
             State = quod_simplex:test_install_projection(Projection, Base),
-            Fun(State, Transaction, Ref)
+            Fun(State, Transaction, Ref, maps:get(completion, F))
         after
             true = gproc:unreg(quod_reg:name({quod_simplex, Ns}))
         end
-    after
-        quod_ledger_store:close(Store0),
-        _ = file:del_dir_r(Dir)
-    end.
+    end).

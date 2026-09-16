@@ -146,7 +146,7 @@ foreign_reads_are_signed_but_do_not_change_semantic_id_test() ->
                  ?BINDING, Signed#transaction{foreign_reads = []})).
 
 from_plan_carries_canonical_foreign_reads_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
     Plan = maps:get(plan, Fixture),
     {ok, Material0} = quod_dtx:material(Plan),
     {Certificate, _Target, _AnchorRef, _Committee} =
@@ -215,7 +215,7 @@ noncanonical_foreign_reads_are_rejected_test() ->
        quod_transaction:required_references(
          Tx#transaction{foreign_reads = [Certificate, Certificate]})).
 
-malformed_v13_foreign_reads_fail_during_full_decode_test() ->
+malformed_current_foreign_reads_fail_during_full_decode_test() ->
     {Tx, Identity} = signed(),
     {ok, Canonical} = quod_transaction:bytes(?BINDING, Tx),
     Decoded = binary_to_term(Canonical),
@@ -366,7 +366,7 @@ genesis_id(Ns, Nonce) ->
       (byte_size(Ns)):32, Ns/binary, Nonce/binary>>.
 
 signed_user_request_is_bound_and_revalidated_at_admission_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
     Transaction = maps:get(transaction, Fixture),
     Network = maps:get(network, Fixture),
     Target = maps:get(target, Fixture),
@@ -385,7 +385,7 @@ signed_user_request_is_bound_and_revalidated_at_admission_test() ->
                  quod_transaction:request_claim(Transaction)).
 
 signed_user_request_and_authorization_transcript_are_not_interchangeable_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
     Transaction = maps:get(transaction, Fixture),
     Network = maps:get(network, Fixture),
     Target = maps:get(target, Fixture),
@@ -413,7 +413,7 @@ signed_user_request_and_authorization_transcript_are_not_interchangeable_test() 
 
 signed_request_replay_uses_the_certified_block_time_test() ->
     Network = <<82:256>>,
-    Fixture = quod_ct:signed_dtx_begin_fixture(
+    Fixture = quod_ct:signed_atomic_fixture(
                 #{network => Network, target => {?NS, ?ANCHOR}}),
     Transaction = maps:get(transaction, Fixture),
     #{pubkey := Author} = maps:get(node_identity, Fixture),
@@ -433,7 +433,7 @@ signed_request_replay_uses_the_certified_block_time_test() ->
       end).
 
 same_agent_request_has_one_semantic_transaction_across_validator_authors_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
     First = maps:get(transaction, Fixture),
     {OtherAuthor, OtherIdentity} = identity(),
     Admission = maps:get(admission, Fixture),
@@ -587,7 +587,7 @@ operation_submission_rejects_before_inner_decode_test() ->
        quod_transaction:encode_operation_submission(NoEffectSubmission)).
 
 network_identity_requirement_is_total_and_fail_closed_test() ->
-    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Fixture = quod_ct:signed_atomic_fixture(#{}),
     Signed = maps:get(transaction, Fixture),
     Unsigned = Signed#transaction{request_auth = none,
                                   auth_transcript = none},
@@ -619,13 +619,13 @@ relay_submission_roundtrip_test() ->
 
 superseded_v12_transaction_is_explicitly_rejected_test() ->
     {Tx, Identity} = signed(),
-    {ok, V13Bytes} = quod_transaction:bytes(?BINDING, Tx),
-    {quod_transaction, 14, Ns, Anchor, Admission,
+    {ok, CurrentBytes} = quod_transaction:bytes(?BINDING, Tx),
+    {quod_transaction, 15, Ns, Anchor, Admission,
      TxId, Origin, ProofId, PlanDigest, Goal, Result,
      MaterialWire, EffectsWire, _Role, _Evidence,
      _ForeignReads,
      RequestAuth, AuthorizationTranscript,
-     Author, AuthorSeq, SubmittedAt} = binary_to_term(V13Bytes),
+     Author, AuthorSeq, SubmittedAt} = binary_to_term(CurrentBytes),
     V12Bytes = term_to_binary(
                 {quod_transaction, 12, Ns, Anchor, Admission,
                  TxId, Origin, ProofId, PlanDigest, Goal, Result,
@@ -723,17 +723,17 @@ relay_verifies_before_decode_test() ->
         quod_transaction:submission(?BINDING, Tx),
     Tampered = {submit, Author, flip_first(Signature), Canonical},
     ?assertNot(quod_transaction:verify_submission(Tampered)),
-    %% A valid signature over a non-canonical term is authenticated but still not
-    %% a transaction in the versioned canonical format.
+    %% A valid signature over an unrelated canonical term authenticates its
+    %% bytes but does not make it a transaction in the versioned format.
     {_OtherPub, OtherIdentity} = identity(),
     Opaque = term_to_binary({'not', a, transaction}, [deterministic]),
     OtherAuthor = maps:get(pubkey, OtherIdentity),
     OtherSig = quod_identity:sign(Opaque, OtherIdentity),
     AuthenticatedGarbage = {submit, OtherAuthor, OtherSig, Opaque},
     ?assert(quod_transaction:verify_submission(AuthenticatedGarbage)),
-    ?assertMatch({error, malformed_submission},
+    ?assertMatch({error, namespace_or_author_mismatch},
                  quod_transaction:decode_verified_submission(
-                   ?NS, AuthenticatedGarbage)).
+                   ?BINDING, AuthenticatedGarbage)).
 
 authenticated_relay_etf_cannot_allocate_atoms_test() ->
     Prefix = integer_to_binary(erlang:unique_integer([positive])),
@@ -753,7 +753,7 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 14, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 15, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
            <<>>, <<>>, term_to_binary(MaterialWire, [deterministic]),
            CanonicalEffects,

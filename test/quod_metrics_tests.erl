@@ -249,8 +249,9 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
     try
         ok = quod_metrics:declare(<<"kp_testnode">>),
         OneSecond = erlang:convert_time_unit(1, second, native),
-        ok = quod_metrics:observe_dtx_group_stage(
-               Ns, prepare_wave, ok, OneSecond),
+        lists:foreach(fun(Stage) ->
+            ok = quod_metrics:observe_dtx_group_stage(Ns, Stage, ok, OneSecond)
+        end, [vote_wave, resolve_wave, 'begin', prepare_wave, decision, finalize_wave]),
         ok = quod_metrics:observe_foreign_history_stage(
                cache_replay, uncertain, OneSecond),
         ForeignStages =
@@ -282,11 +283,17 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
                page_fetch, attacker_result, OneSecond),
         {_, DtxSum} = prometheus_histogram:value(
                         quod_dtx_group_stage_seconds,
-                        [Ns, <<"prepare_wave">>, <<"ok">>]),
+                        [Ns, <<"vote_wave">>, <<"ok">>]),
         {_, ForeignSum} = prometheus_histogram:value(
                             quod_foreign_history_stage_seconds,
                             [<<"cache_replay">>, <<"uncertain">>]),
         ?assertEqual(1.0, DtxSum),
+        ?assertEqual(1.0, histogram_sum_or_zero(
+                           quod_dtx_group_stage_seconds, [Ns, <<"resolve_wave">>, <<"ok">>])),
+        lists:foreach(fun(Stage) ->
+            ?assertEqual(undefined, prometheus_histogram:value(
+                quod_dtx_group_stage_seconds, [Ns, atom_to_binary(Stage, utf8), <<"ok">>]))
+        end, ['begin', prepare_wave, decision, finalize_wave]),
         ?assertEqual(1.0, ForeignSum),
         lists:foreach(
           fun(Stage) ->
@@ -393,7 +400,7 @@ owner_lifetimes_use_only_fixed_component_phase_and_result_labels_test() ->
            (integer_to_binary(
               erlang:unique_integer([positive])))/binary>>,
     ok = quod_metrics:observe_ontology_owner_terminal(
-           Ns, dtx_control, prepare, completed, 7),
+           Ns, dtx_control, vote, completed, 7),
     ok = quod_metrics:observe_node_owner_terminal(
            scope_router, scope, timeout, 7),
     Placeholder = spawn(fun() -> receive stop -> ok end end),
@@ -401,19 +408,19 @@ owner_lifetimes_use_only_fixed_component_phase_and_result_labels_test() ->
     try
         ok = quod_metrics:declare(<<"kp_testnode">>),
         ok = quod_metrics:observe_ontology_owner_terminal(
-               Ns, dtx_control, prepare, completed, 125),
+               Ns, dtx_control, vote, completed, 125),
         ok = quod_metrics:observe_node_owner_terminal(
                scope_router, scope, timeout, 250),
         %% None of these request-controlled values may create a label series.
         ok = quod_metrics:observe_ontology_owner_terminal(
-               Ns, attacker_component, prepare, completed, 1000),
+               Ns, attacker_component, vote, completed, 1000),
         ok = quod_metrics:observe_node_owner_terminal(
                scope_router, attacker_phase, timeout, 1000),
         ok = quod_metrics:observe_node_owner_terminal(
                scope_router, scope, attacker_result, 1000),
         {_, OntologySum} = prometheus_histogram:value(
                              quod_ontology_owner_duration_seconds,
-                             [Ns, <<"dtx_control">>, <<"prepare">>,
+                             [Ns, <<"dtx_control">>, <<"vote">>,
                               <<"completed">>]),
         {_, NodeSum} = prometheus_histogram:value(
                          quod_node_owner_duration_seconds,
@@ -423,7 +430,7 @@ owner_lifetimes_use_only_fixed_component_phase_and_result_labels_test() ->
         ?assertEqual(
            1, prometheus_counter:value(
                 quod_ontology_owner_terminal_total,
-                [Ns, <<"dtx_control">>, <<"prepare">>, <<"completed">>])),
+                [Ns, <<"dtx_control">>, <<"vote">>, <<"completed">>])),
         ?assertEqual(
            1, prometheus_counter:value(
                 quod_node_owner_terminal_total,
@@ -480,13 +487,13 @@ dtx_commits_are_counted_by_phase_test() ->
     ?assertEqual(
        undefined,
        prometheus_counter:value(
-         quod_dtx_committed_total, [Ns, <<"decision">>])),
-    {ok, Entry} = quod_ledger:new_entry(3, quod_ct:dtx_decision_payload(), 0, none),
+         quod_dtx_committed_total, [Ns, <<"resolve">>])),
+    {ok, Entry} = quod_ledger:new_entry(3, quod_ct:atomic_resolve_payload(), 0, none),
     ok = quod_metrics:test_observe_commit(Ns, Entry),
     ?assertEqual(
        1,
        prometheus_counter:value(
-         quod_dtx_committed_total, [Ns, <<"decision">>])).
+         quod_dtx_committed_total, [Ns, <<"resolve">>])).
 
 dtx_route_continuity_metrics_use_only_fixed_event_labels_test() ->
     {ok, _} = application:ensure_all_started(prometheus),

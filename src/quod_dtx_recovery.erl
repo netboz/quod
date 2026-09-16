@@ -1,902 +1,313 @@
 -module(quod_dtx_recovery).
 -moduledoc """
-Pure coordinator recovery planner for one durable distributed transaction.
+Pure Vote/Resolve/Complete planner, executed by the existing coordinator.
 
-The planner owns no process, timer, transport, signature lane, or durable
-state. Every call reconstructs its answer from the canonical Begin and a
-bounded snapshot of already-verified phase evidence. The embedding coordinator
-executes the returned commands, verifies resulting certified phase references
-through `quod_foreign_log`, corroborates prepared-Finalize application through
-`quod_dtx_current_view`, and calls `next/2` again.
+The local role supplies its already-authenticated own row. Foreign evidence
+enters only after the shared history verifier has checked finality and
+authorship. The snapshot keeps compact certified facts, not foreign plans,
+signatures to recheck, mutable custody, or a second outcome authority.
 
-`evidence` rows are exact `{TargetIdentity, Control, CertifiedRef}` triples.
-They are ordered by Begin, one independent Prepare wave, Decision, one
-independent Finalize wave, and Complete. This module rechecks each control signature, target,
-group and semantic digest against its certified reference; foreign committee
-and finality verification remains the caller's responsibility.
+An absence is a volatile observation permitting an exact presentation or
+submission. It never decides an outcome. The executor consumes it once,
+parks uncertainty, and invalidates it on a real progress/reconnect edge.
+There is no clock, timer, polling loop or process in this module.
 
-`generations` are target-ordered post-Prepare generations obtained from
-verified Prepare evidence.  For a direct abort they are the target's current
-generation hint from the DTX endpoint. `applied` rows are target-ordered
-portable certificates produced by the one Finalize-applied corroborator; this
-module checks their exact target, Finalize, generation, and verdict binding. A
-certified direct abort needs no such row because its Finalize reference is
-itself the applied no-op proof.
+Only O constructs Resolve and Complete. A non-origin role, started by the
+existing owner's any-vote/deadline predicate, may query and present to O only.
+Seeing O's vote parks that same worker until the owner's own Resolve retires
+it. Restart reconstructs the duty from the own committed row.
 
-`refusal` is either `none` or the exact target, Prepare semantic digest,
-generation, and canonical atom-safe failure-stack blob returned by a
-deterministic endpoint refusal.  The planner rechecks every binding and copies
-the decoded stack unchanged into Decision(abort); transport and readiness
-errors are not refusals.
-
-Commands are returned in canonical target order.  The embedding owner drives
-progress from completion notifications.  An uncertain submission is parked
-and is never resubmitted; a command may be driven again only after an
-authoritative lookup proves that its semantic record is absent.
+Client success still waits for participant application. O's exact Resolve
+evidence must come from its owned committed view; Simplex sends the terminal
+notification on the same ordered Prolog apply channel. This preserves the
+existing source apply-before-result boundary without a second local collector.
 """.
 
--include("quod_proof_limits.hrl").
-
--export([empty/0, next/2, terminal/2]).
--export_type([snapshot/0, phase_evidence/0, applied_evidence/0,
-              command/0, command_batch/0]).
-
--define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
--define(MAX_PHASE_EVIDENCE, (2 * ?QUOD_MAX_DTX_PARTICIPANTS + 3)).
+-export([empty/0, observe/3, absent/3, attempted/3, progress/2, applied/4, next/2, terminal/2]).
+-export_type([snapshot/0, phase_evidence/0, applied_evidence/0, command/0, command_batch/0]).
 
 -type identity() :: {binary(), <<_:256>>}.
--type verdict() :: commit | abort.
--type phase_evidence() ::
-        {identity(), quod_dtx:control(), quod_dtx:certified_ref()}.
--type applied_evidence() ::
-        {identity(), quod_applied_certificate:applied_certificate()}.
--type snapshot() ::
-        #{evidence := [phase_evidence()],
-          generations := [{identity(), non_neg_integer()}],
-          applied := [applied_evidence()],
-          refusal := none |
-              {identity(), <<_:256>>, non_neg_integer(), binary()}}.
+-type ref() :: quod_dtx:certified_ref().
+-type own_row() :: #{material := quod_atomic:admission_material(),
+                     ref := none | ref(), resolution := none | map()}.
+-type phase_evidence() :: {identity(), quod_atomic:control(), ref()}.
+-type applied_evidence() :: {identity(), quod_applied_certificate:applied_certificate()}.
+-opaque snapshot() :: #{evidence := map(), absent := map(), applied := map()}.
 -type command() ::
-        {submit, identity(), quod_dtx:control_record()} |
-        {phase, identity(), <<_:256>>, prepare} |
-        {applied, identity(), <<_:256>>, quod_dtx:certified_ref(),
-         non_neg_integer(), verdict()}.
+    {submit, identity(), quod_atomic:record()} |
+    {present, identity(), quod_atomic:group()} |
+    {phase, identity(), <<_:256>>, vote | resolve} |
+    {applied, identity(), <<_:256>>, ref(), non_neg_integer(), commit | abort}.
 -type command_batch() ::
-        {ordered, 'begin' | decision | complete, [command()]} |
-        {independent, prepare | finalize | applied, [command()]}.
--doc "An empty volatile observation snapshot for a newly journaled Begin.".
+    {ordered | independent, vote | resolve | applied | complete, [command()]}.
+
+-doc "An empty, bounded observation snapshot; it owns no durable obligation.".
 -spec empty() -> snapshot().
-empty() ->
-    #{evidence => [], generations => [], applied => [], refusal => none}.
+empty() -> #{evidence => #{}, absent => #{}, applied => #{}}.
 
 -doc """
-Return the next non-empty bounded command batch, or the certified Complete.
-
-The Begin is the canonical semantic record retained by the signing journal;
-no signed outer envelope is retained or manufactured here.
+Install one already-verified phase, retaining only its exact reference and
+planning facts. Foreign plans and entry artifacts do not enter this snapshot.
+Different quorum subsets for the same claim preserve the first observation.
 """.
--spec next(quod_dtx:control_record(), snapshot()) ->
-          {ok, command_batch()} |
-          {done, quod_dtx:certified_ref()} |
-          {error, term()}.
-next(Begin, Snapshot) ->
-    case recovery_context(Begin) of
-        {ok, Context} -> next_snapshot(Begin, Snapshot, Context);
-        error -> {error, invalid_begin}
+-spec observe(own_row(), phase_evidence(), snapshot()) ->
+          {ok, snapshot()} | {error, invalid_phase_evidence | conflicting_phase_evidence}.
+observe(Own, {Target, Control, Ref}, Snapshot) ->
+    Binding = binding(Own),
+    Kind = quod_atomic:control_kind(Control),
+    case quod_atomic:control_target(Control) =:= Target
+         andalso quod_atomic:group_id(Control) =:= maps:get(group_id, Binding)
+         andalso allowed(Kind, Target, Binding)
+         andalso exact_ref(Target, quod_atomic:record_digest(Control), Ref) of
+        true -> put_fact({Kind, Target}, fact(quod_atomic:control_material(Control), Ref), Snapshot);
+        false -> {error, invalid_phase_evidence}
     end.
 
--doc "Return the client-visible terminal result exactly before Complete.".
--spec terminal(quod_dtx:control_record(), snapshot()) ->
-          pending |
-          {ok, #{verdict := verdict(), reasons := none | list(),
-                 decision_slot := pos_integer(),
-                 participant_slots :=
-                     [{identity(), pos_integer(), non_neg_integer()}]}} |
-          {error, term()}.
-terminal(Begin, Snapshot) ->
-    case recovery_context(Begin) of
-        {ok, Context} ->
-            case validate_snapshot(Begin, Snapshot, Context) of
-                {ok, Validated} -> terminal_validated(Begin, Validated, Context);
-                {error, _} = Error -> Error
-            end;
-        error -> {error, invalid_begin}
-    end.
+allowed(complete, Target, #{origin := Origin}) -> Target =:= Origin;
+allowed(Kind, Target, #{participants := Roles}) when Kind =:= vote; Kind =:= resolve ->
+    lists:keymember(Target, 1, Roles);
+allowed(_, _, _) -> false.
 
-recovery_context(Begin) ->
-    case quod_dtx:begin_recovery_rows(Begin) of
-        {ok, Origin, GroupId, Rows} ->
-            Targets = [Target || {Target, _PlanBlob} <- Rows],
-            SourceMaterial = lists:keymember(Origin, 1, Rows),
-            {ok, #{origin => Origin, group_id => GroupId,
-                   rows => Rows, targets => Targets,
-                   plans => maps:from_list(Rows),
-                   source_material => SourceMaterial}};
-        error ->
-            error
-    end.
-
-next_snapshot(Begin, Snapshot, Context)
-  when map_size(Snapshot) =:= 4 ->
-    case validate_snapshot(Begin, Snapshot, Context) of
-        {ok, #{index := Index, generations := GenerationMap,
-               applied := AppliedMap, refusal := ValidRefusal}} ->
-            drive(Begin, Index, GenerationMap, AppliedMap, ValidRefusal,
-                  Context);
-        {error, _} = Error -> Error
-    end;
-next_snapshot(_Begin, _Snapshot, _Context) ->
-    {error, invalid_snapshot}.
-
-validate_snapshot(Begin,
-                  #{evidence := Evidence, generations := Generations,
-                    applied := Applied, refusal := Refusal} = Snapshot,
-                  Context)
-  when map_size(Snapshot) =:= 4 ->
-    case index_generations(Generations, Context) of
-        {ok, GenerationMap} ->
-            case index_evidence(Evidence, Context) of
-                {ok, Index} ->
-                    case validate_chain(Begin, Index, GenerationMap, Context) of
-                        ok ->
-                            case index_applied(Applied, Index, Context) of
-                                {ok, AppliedMap} ->
-                                    case validate_refusal(
-                                           Refusal, Index, GenerationMap,
-                                           Context) of
-                                        {ok, ValidRefusal} ->
-                                            {ok, #{index => Index,
-                                                   generations => GenerationMap,
-                                                   applied => AppliedMap,
-                                                   refusal => ValidRefusal}};
-                                        error -> {error, invalid_refusal}
-                                    end;
-                                error -> {error, invalid_applied_evidence}
-                            end;
-                        {error, _} = Error -> Error
-                    end;
-                error -> {error, invalid_phase_evidence}
-            end;
-        error -> {error, invalid_generations}
-    end;
-validate_snapshot(_Begin, _Snapshot, _Context) ->
-    {error, invalid_snapshot}.
-
-terminal_validated(Begin,
-                   #{index := Index, generations := Generations,
-                     applied := Applied, refusal := Refusal}, Context) ->
-    case drive(Begin, Index, Generations, Applied, Refusal, Context) of
-        {ok, {ordered, complete, [{submit, Origin, Complete}]}} ->
-            terminal_result(Origin, Complete, Index);
-        {error, _} = Error -> Error;
-        _ -> pending
-    end.
-
-terminal_result(
-  Origin,
-  {quod_dtx_complete, 3, _GroupId, DecisionRef, FinalizeRows},
-  #{decision := #{control := DecisionControl}}) ->
-    case {quod_dtx:certified_ref_binding(DecisionRef),
-          quod_dtx:recovery_phase(quod_dtx:control_body(DecisionControl)),
-          terminal_participant_slots(FinalizeRows, [])} of
-        {{ok, Origin, DecisionSlot, _},
-         {ok, #{kind := decision, verdict := Verdict, reasons := Reasons}},
-         {ok, ParticipantSlots}} ->
-            {ok, #{verdict => Verdict, reasons => Reasons,
-                   decision_slot => DecisionSlot,
-                   participant_slots => ParticipantSlots}};
-        _ -> {error, invalid_phase_chain}
-    end.
-
-terminal_participant_slots([], Acc) -> {ok, lists:reverse(Acc)};
-terminal_participant_slots([{Identity, Ref, Generation} | Rest], Acc) ->
+exact_ref(Target, Digest, Ref) ->
     case quod_dtx:certified_ref_binding(Ref) of
-        {ok, Identity, Slot, _} ->
-            terminal_participant_slots(
-              Rest, [{Identity, Slot, Generation} | Acc]);
-        _ -> error
-    end.
-
-%% ===================================================================
-%% Canonical bounded input indexing
-%% ===================================================================
-
-empty_index() ->
-    #{'begin' => none, prepares => #{}, decision => none,
-      finalizes => #{}, complete => none}.
-
-index_evidence(Evidence, Context) ->
-    index_evidence(Evidence, none, 0, Context, empty_index()).
-
-index_evidence([], _Previous, _Count, _Context, Index) ->
-    {ok, Index};
-index_evidence([Row | Rest], Previous, Count, Context, Index)
-  when Count < ?MAX_PHASE_EVIDENCE ->
-    case evidence_row(Row, Context) of
-        {ok, Key, Kind, Target, Entry}
-          when Previous =:= none; Previous < Key ->
-            case put_evidence(Kind, Target, Entry, Index) of
-                {ok, Index1} ->
-                    index_evidence(
-                      Rest, Key, Count + 1, Context, Index1);
-                error -> error
-            end;
-        _ -> error
-    end;
-index_evidence(_, _Previous, _Count, _Context, _Index) ->
-    error.
-
-evidence_row({Target, Control, Ref}, Context) ->
-    try
-        Kind = quod_dtx:control_kind(Control),
-        GroupId = maps:get(group_id, Context),
-        Digest = quod_dtx:record_digest(Control),
-        Checks =
-            quod_dtx:control_target(Control) =:= Target andalso
-            quod_dtx:verify_control(Target, Control) andalso
-            quod_dtx:group_id(Control) =:= GroupId andalso
-            phase_target_allowed(Kind, Target, Context),
-        case {Checks, quod_dtx:certified_ref_binding(Ref)} of
-            {true, {ok, Target, Slot, Digest}} ->
-                {ok, {phase_rank(Kind), Target}, Kind, Target,
-                 #{control => Control, ref => Ref, slot => Slot}};
-            _ ->
-                error
-        end
-    catch
-        _:_ -> error
-    end;
-evidence_row(_, _Context) ->
-    error.
-
-phase_rank('begin') -> 1;
-phase_rank(prepare) -> 2;
-phase_rank(decision) -> 3;
-phase_rank(finalize) -> 4;
-phase_rank(complete) -> 5.
-
-phase_target_allowed('begin', Target, #{origin := Target}) -> true;
-phase_target_allowed(decision, Target, #{origin := Target}) -> true;
-phase_target_allowed(complete, Target, #{origin := Target}) -> true;
-phase_target_allowed(prepare, Target, Context) ->
-    remote_participant(Target, Context);
-phase_target_allowed(finalize, Target, Context) ->
-    remote_participant(Target, Context);
-phase_target_allowed(_, _, _) -> false.
-
-participant(Target, #{plans := Plans}) -> maps:is_key(Target, Plans).
-
-remote_participant(Target, #{origin := Origin} = Context) ->
-    Target =/= Origin andalso participant(Target, Context).
-
-put_evidence('begin', _Target, Entry, #{'begin' := none} = Index) ->
-    {ok, Index#{'begin' := Entry}};
-put_evidence(decision, _Target, Entry, #{decision := none} = Index) ->
-    {ok, Index#{decision := Entry}};
-put_evidence(complete, _Target, Entry, #{complete := none} = Index) ->
-    {ok, Index#{complete := Entry}};
-put_evidence(prepare, Target, Entry, #{prepares := Rows} = Index)
-  when not is_map_key(Target, Rows) ->
-    {ok, Index#{prepares := Rows#{Target => Entry}}};
-put_evidence(finalize, Target, Entry, #{finalizes := Rows} = Index)
-  when not is_map_key(Target, Rows) ->
-    {ok, Index#{finalizes := Rows#{Target => Entry}}};
-put_evidence(_, _, _, _) ->
-    error.
-
-index_generations(Rows, Context) ->
-    index_generations(Rows, none, 0, Context, #{}).
-
-index_generations([], _Previous, _Count, _Context, Acc) ->
-    {ok, Acc};
-index_generations([{Target, Generation} | Rest], Previous, Count,
-                  Context, Acc)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Target),
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64 ->
-    case participant(Target, Context) of
-        true ->
-            index_generations(
-              Rest, Target, Count + 1, Context,
-              Acc#{Target => Generation});
-        false -> error
-    end;
-index_generations(_, _Previous, _Count, _Context, _Acc) ->
-    error.
-
-index_applied(Rows, Index, Context) ->
-    index_applied(Rows, none, 0, Index, Context, #{}).
-
-index_applied([], _Previous, _Count, _Index, _Context, Acc) ->
-    {ok, Acc};
-index_applied(
-  [{Target, Certificate} = Row | Rest], Previous, Count, Index, Context, Acc)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Target) ->
-    case quod_applied_certificate:applied_certificate_binding(Certificate) of
-        {ok, #{target := Target, group_id := GroupId,
-               finalize_ref := FinalizeRef, generation := Generation,
-               verdict := Verdict}} ->
-            case applied_matches_finalize(
-                   Target, GroupId, FinalizeRef, Generation, Verdict,
-                   Index, Context) of
-                true ->
-                    index_applied(
-                      Rest, Target, Count + 1, Index, Context,
-                      Acc#{Target => Row});
-                false -> error
-            end;
-        _ -> error
-    end;
-index_applied(_, _Previous, _Count, _Index, _Context, _Acc) ->
-    error.
-
-applied_matches_finalize(Target, GroupId, FinalizeRef, Generation, Verdict,
-                         #{finalizes := Finalizes},
-                         #{group_id := GroupId}) ->
-    case maps:get(Target, Finalizes, none) of
-        #{control := Control, ref := StoredFinalizeRef} ->
-            case quod_dtx:same_certified_ref(
-                   StoredFinalizeRef, FinalizeRef) of
-                true ->
-                    case quod_dtx:recovery_phase(
-                           quod_dtx:control_body(Control)) of
-                        {ok, #{kind := finalize, verdict := Verdict,
-                               prepare_ref := PrepareRef,
-                               generation := Generation}} ->
-                            PrepareRef =/= none;
-                        _ -> false
-                    end;
-                false ->
-                    false
-            end;
-        none -> false
-    end;
-applied_matches_finalize(_, _, _, _, _, _, _) ->
-    false.
-
-validate_refusal(none, _Index, _Generations, _Context) ->
-    {ok, none};
-validate_refusal(
-  {Target, SemanticDigest, Generation, ReasonsBlob},
-  #{'begin' := BeginEntry, prepares := Prepares}, Generations,
-  #{plans := Plans} = Context)
-  when BeginEntry =/= none, is_binary(SemanticDigest),
-       is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64,
-       is_binary(ReasonsBlob) ->
-    case {remote_participant(Target, Context), maps:is_key(Target, Prepares),
-          maps:find(Target, Generations), maps:find(Target, Plans),
-          decode_refusal_reasons(Target, ReasonsBlob)} of
-        {true, false, {ok, Generation}, {ok, PlanBlob},
-         {ok, [_ | _] = Reasons}} ->
-            BeginRef = maps:get(ref, BeginEntry),
-            Begin = quod_dtx:control_body(maps:get(control, BeginEntry)),
-            Expected = prepare_record(Begin, BeginRef, Target),
-            {ok, _Manifest, _PlanDigest, PlanBlob} =
-                quod_dtx:prepare_payload(Expected),
-            case quod_dtx:record_digest(Expected) of
-                SemanticDigest -> {ok, {Target, Reasons}};
-                _ -> error
-            end;
-        _ ->
-            error
-    end;
-validate_refusal(_, _, _, _) ->
-    error.
-
-decode_refusal_reasons({Ns, Anchor}, ReasonsBlob) ->
-    case quod_wire_term:decode_failure_reasons(ReasonsBlob) of
-        {ok, [{prepare_refused, {ontology, Ns, Anchor}}, _Actual | _] = Reasons} ->
-            {ok, Reasons};
-        _ ->
-            error
-    end;
-decode_refusal_reasons(_, _) ->
-    error.
-
-%% ===================================================================
-%% Exact semantic phase-chain validation
-%% ===================================================================
-
-validate_chain(Begin, #{'begin' := none, prepares := Prepares,
-                        decision := Decision, finalizes := Finalizes,
-                        complete := Complete}, Generations, _Context) ->
-    case {map_size(Prepares), Decision, map_size(Finalizes), Complete,
-          map_size(Generations)} of
-        {0, none, 0, none, 0} ->
-            %% No durable group exists yet; the journaled Begin is enough to
-            %% redrive its first submission.
-            case quod_dtx:begin_recovery_rows(Begin) of
-                {ok, _, _, _} -> ok;
-                error -> {error, invalid_begin}
-            end;
-        _ -> {error, invalid_phase_chain}
-    end;
-validate_chain(Begin, Index, Generations, Context) ->
-    #{'begin' := BeginEntry} = Index,
-    BeginControl = maps:get(control, BeginEntry),
-    BeginRef = maps:get(ref, BeginEntry),
-    case quod_dtx:control_body(BeginControl) =:= Begin of
-        false -> {error, invalid_phase_chain};
-        true ->
-            case validate_prepares(Begin, BeginRef, Index, Context) of
-                ok ->
-                    case validate_decision(Begin, BeginRef, Index, Context) of
-                        ok ->
-                            case validate_finalizes(
-                                   Index, Generations, Context) of
-                                ok -> validate_complete(
-                                        Index, Generations, Context);
-                                {error, _} = Error -> Error
-                            end;
-                        {error, _} = Error -> Error
-                    end;
-                {error, _} = Error -> Error
-            end
-    end.
-
-validate_prepares(Begin, BeginRef, #{prepares := Prepares},
-                  #{rows := Rows, origin := Origin}) ->
-    lists:foldl(
-      fun(_Row, {error, _} = Error) -> Error;
-         ({Target, _PlanBlob}, ok) ->
-              case {Target =:= Origin, maps:get(Target, Prepares, none)} of
-                  {true, none} -> ok;
-                  {true, _} -> {error, invalid_phase_chain};
-                  {false, none} -> ok;
-                  {false, #{control := Control}} ->
-                      case quod_dtx:prepare_matches_certified_begin(
-                             Control, Begin, BeginRef) of
-                          true -> ok;
-                          false -> {error, invalid_phase_chain}
-                      end
-              end
-      end, ok, Rows).
-
-validate_decision(_Begin, _BeginRef,
-                  #{decision := none, finalizes := Finalizes,
-                    complete := Complete}, _Context) ->
-    case {map_size(Finalizes), Complete} of
-        {0, none} -> ok;
-        _ -> {error, invalid_phase_chain}
-    end;
-validate_decision(Begin, BeginRef,
-                  #{decision := Decision, prepares := Prepares},
-                  #{targets := Targets, group_id := GroupId,
-                    origin := Origin, source_material := SourceMaterial}) ->
-    Control = maps:get(control, Decision),
-    Body = quod_dtx:control_body(Control),
-    case quod_dtx:recovery_phase(Body) of
-        {ok, #{kind := decision, group_id := GroupId,
-               begin_ref := DecisionBeginRef, verdict := Verdict,
-               prepare_rows := Rows, reasons := Reasons}} ->
-            SameBegin = quod_dtx:same_certified_ref(
-                          DecisionBeginRef, BeginRef),
-            %% A recovering coordinator may learn a certified Decision before
-            %% it has locally re-read every referenced Prepare.  The Decision
-            %% names each exact Prepare, but a certified Begin reference can
-            %% have several equivalent finality proofs, so the Prepare body
-            %% cannot be reconstructed byte-for-byte from our local Begin ref.
-            %% Bind any Prepare already present through its certified evidence;
-            %% `drive/6` fetches every missing referenced Prepare before a
-            %% Finalize can be constructed.
-            ValidRows = valid_decision_prepare_rows(
-                          Begin, DecisionBeginRef, Verdict, Rows, Targets,
-                          Origin, SourceMaterial, Prepares),
-            DecisionInput =
-                case {Verdict, Reasons} of
-                    {commit, none} -> commit;
-                    {abort, [_ | _]} -> {abort, Reasons};
-                    _ -> invalid
-                end,
-            case SameBegin andalso ValidRows andalso
-                 DecisionInput =/= invalid of
-                true ->
-                    case quod_dtx:new_decision(
-                           GroupId, DecisionBeginRef, DecisionInput, Rows) of
-                        {ok, Body} -> ok;
-                        _ -> {error, invalid_phase_chain}
-                    end;
-                false -> {error, invalid_phase_chain}
-            end;
-        _ -> {error, invalid_phase_chain}
-    end.
-
-valid_decision_prepare_rows(Begin, BeginRef, Verdict, Rows, Targets,
-                            Origin, SourceMaterial, Prepares) ->
-    RowTargets = [Target || {Target, _Ref} <- Rows],
-    TargetSetValid =
-        case Verdict of
-            commit -> RowTargets =:= Targets;
-            abort -> ordered_subset(RowTargets, Targets)
-        end,
-    TargetSetValid andalso
-        lists:all(
-          fun({Target, Ref}) ->
-                  valid_decision_prepare_ref(
-                    Begin, BeginRef, Target, Ref, Origin, SourceMaterial,
-                    Prepares)
-          end, Rows).
-
-valid_decision_prepare_ref(_Begin, BeginRef, Origin, Ref,
-                           Origin, true, _Prepares) ->
-    quod_dtx:same_certified_ref(BeginRef, Ref);
-valid_decision_prepare_ref(Begin, BeginRef, Target, Ref,
-                           _Origin, _SourceMaterial, Prepares) ->
-    case {quod_dtx:certified_ref_binding(Ref),
-          maps:get(Target, Prepares, none)} of
-        {{ok, Target, _Slot, _Digest}, none} ->
-            %% Safe only as incomplete planner input.  The decision branch in
-            %% `drive/6` requests this exact Prepare before any later write.
-            true;
-        {{ok, Target, _Slot, _Digest},
-         #{control := Control, ref := StoredRef}} ->
-            quod_dtx:same_certified_ref(StoredRef, Ref) andalso
-                quod_dtx:prepare_matches_certified_begin(
-                  Control, Begin, BeginRef);
+        {ok, Target, _, Digest} -> true;
         _ -> false
     end.
 
-validate_finalizes(#{decision := none, finalizes := Finalizes},
-                    _Generations, _Context) ->
-    case map_size(Finalizes) of
-        0 -> ok;
-        _ -> {error, invalid_phase_chain}
-    end;
-validate_finalizes(#{decision := Decision, prepares := Prepares,
-                     finalizes := Finalizes}, Generations,
-                   #{targets := Targets, group_id := GroupId,
-                     origin := Origin}) ->
-    DecisionRef = maps:get(ref, Decision),
-    {ok, #{verdict := DecisionVerdict}} =
-        quod_dtx:recovery_phase(
-          quod_dtx:control_body(maps:get(control, Decision))),
-    lists:foldl(
-      fun(_Target, {error, _} = Error) -> Error;
-         (Target, ok) ->
-              case {Target =:= Origin, maps:get(Target, Finalizes, none)} of
-                  {true, none} -> ok;
-                  {true, _} -> {error, invalid_phase_chain};
-                  {false, none} -> ok;
-                  {false, #{control := Control}} ->
-                      validate_finalize(
-                        Target, quod_dtx:control_body(Control), DecisionRef,
-                        DecisionVerdict, Prepares, Generations, GroupId)
-              end
-      end, ok, Targets).
+fact({{quod_dtx_vote, 4, _, Target, _, Choice}, _, #{plans := Plans}}, Ref) ->
+    Generation = case maps:find(Target, Plans) of
+        {ok, Plan} -> quod_dtx:overlay_generation(Plan);
+        error -> 0
+    end,
+    #{ref => Ref, choice => Choice, generation => Generation};
+fact({{quod_dtx_resolve, 4, _, _, _, Outcome, _, _, OwnVote, Generation, _}, _, _}, Ref) ->
+    #{ref => Ref, outcome => Outcome, own_vote => OwnVote, generation => Generation};
+fact({{quod_dtx_complete, 4, _, _, _, _, _, _}, _, _}, Ref) -> #{ref => Ref}.
 
-validate_finalize(Target, Body, DecisionRef, DecisionVerdict,
-                  Prepares, Generations, GroupId) ->
-    case {quod_dtx:recovery_phase(Body), maps:find(Target, Generations)} of
-        {{ok, #{kind := finalize, group_id := GroupId,
-                decision_ref := FinalizeDecisionRef,
-                verdict := DecisionVerdict,
-                prepare_ref := PrepareRef, generation := AppliedGeneration}},
-         {ok, BaseGeneration}} ->
-            case quod_dtx:same_certified_ref(
-                   FinalizeDecisionRef, DecisionRef) andalso
-                 valid_finalize_prepare(
-                   Target, DecisionVerdict, PrepareRef, Prepares) of
-                true ->
-                    case applied_generation(
-                           DecisionVerdict, PrepareRef, BaseGeneration) of
-                        {ok, AppliedGeneration} ->
-                            case quod_dtx:new_finalize(
-                                   GroupId, FinalizeDecisionRef,
-                                   DecisionVerdict,
-                                   PrepareRef, AppliedGeneration) of
-                                {ok, Body} -> ok;
-                                _ -> {error, invalid_phase_chain}
-                            end;
-                        _ -> {error, invalid_generations}
-                    end;
-                false -> {error, invalid_phase_chain}
-            end;
-        {{ok, _}, error} -> {error, invalid_generations};
-        _ -> {error, invalid_phase_chain}
-    end.
-
-valid_finalize_prepare(Target, commit, PrepareRef, Prepares) ->
-    PrepareRef =/= none andalso quod_dtx:same_certified_ref(
-                                  evidence_ref(Target, Prepares), PrepareRef);
-valid_finalize_prepare(Target, abort, none, Prepares) ->
-    not maps:is_key(Target, Prepares);
-valid_finalize_prepare(Target, abort, PrepareRef, Prepares) ->
-    PrepareRef =/= none andalso quod_dtx:same_certified_ref(
-                                  evidence_ref(Target, Prepares), PrepareRef).
-
-validate_complete(#{complete := none}, _Generations, _Context) ->
-    ok;
-validate_complete(#{decision := Decision, finalizes := Finalizes,
-                    complete := Complete},
-                  Generations,
-                  #{targets := Targets, group_id := GroupId,
-                    origin := Origin, source_material := SourceMaterial}) ->
-    ExpectedFinalizes = length(Targets) - bool_count(SourceMaterial),
-    case {Decision, map_size(Finalizes) =:= ExpectedFinalizes} of
-        {none, _} -> {error, invalid_phase_chain};
-        {_, false} -> {error, invalid_phase_chain};
-        {_, true} ->
-            DecisionRef = maps:get(ref, Decision),
-            {ok, #{verdict := Verdict}} =
-                quod_dtx:recovery_phase(
-                  quod_dtx:control_body(maps:get(control, Decision))),
-            Body = quod_dtx:control_body(maps:get(control, Complete)),
-            case quod_dtx:recovery_phase(Body) of
-                {ok, #{kind := complete, group_id := GroupId,
-                       decision_ref := CompleteDecisionRef,
-                       finalize_rows := Rows}} ->
-                    case quod_dtx:same_certified_ref(
-                           CompleteDecisionRef, DecisionRef) andalso
-                         valid_complete_rows(
-                           Rows, Targets, Finalizes, Origin, DecisionRef,
-                           Verdict, SourceMaterial, Generations) of
-                        true -> ok;
-                        false -> {error, invalid_phase_chain}
-                    end;
-                _ -> {error, invalid_phase_chain}
+put_fact(Key, Fact, Snapshot = #{evidence := Evidence, absent := Absent}) ->
+    case maps:find(Key, Evidence) of
+        error ->
+            {ok, Snapshot#{evidence := Evidence#{Key => Fact}, absent := maps:remove(Key, Absent)}};
+        {ok, Old} ->
+            case maps:remove(ref, Fact) =:= maps:remove(ref, Old) andalso
+                 quod_dtx:same_certified_ref(maps:get(ref, Fact), maps:get(ref, Old)) of
+                true -> {ok, Snapshot};
+                false -> {error, conflicting_phase_evidence}
             end
     end.
 
-valid_complete_rows(Rows, Targets, Finalizes, Origin, DecisionRef,
-                    Verdict, SourceMaterial, Generations) ->
-    case finalize_rows(
-           Targets, Finalizes, Origin, DecisionRef,
-           Verdict, SourceMaterial, Generations) of
-        {ok, ExpectedRows} -> same_complete_rows(Rows, ExpectedRows);
-        error -> false
+-doc "Record authoritative absence, without replacing any certified observation.".
+-spec absent(identity(), vote | resolve | complete, snapshot()) -> snapshot().
+absent(Target, Kind, Snapshot = #{evidence := Evidence, absent := Absent}) ->
+    Key = {Kind, Target},
+    case maps:is_key(Key, Evidence) of
+        true -> Snapshot;
+        false -> Snapshot#{absent := Absent#{Key => maps:get(Key, Absent, true)}}
     end.
 
-same_complete_rows([], []) -> true;
-same_complete_rows(
-  [{Target, Ref, Generation} | Rest],
-  [{Target, ExpectedRef, Generation} | ExpectedRest]) ->
-    quod_dtx:same_certified_ref(Ref, ExpectedRef) andalso
-        same_complete_rows(Rest, ExpectedRest);
-same_complete_rows(_, _) -> false.
+-doc "Consume a delivery allowance; absence alone cannot authorize another attempt.".
+-spec attempted(identity(), vote | resolve | complete, snapshot()) -> snapshot().
+attempted(Target, Kind, Snapshot = #{absent := Absent}) ->
+    Snapshot#{absent := Absent#{{Kind, Target} => consumed}}.
 
-%% ===================================================================
-%% Recovery command planning
-%% ===================================================================
+-doc "Forget only a target's volatile absences after an actual progress or reconnect edge.".
+-spec progress(identity(), snapshot()) -> snapshot().
+progress(Target, Snapshot = #{absent := Absent}) ->
+    Snapshot#{absent := maps:filter(fun({_, T}, _) -> T =/= Target end, Absent)}.
 
-drive(_Begin, #{complete := #{ref := Ref}}, _Generations,
-      _Applied, _Refusal, _Context) ->
-    {done, Ref};
-drive(Begin, #{'begin' := none}, _Generations, _Applied, none,
-      #{origin := Origin}) ->
-    {ok, {ordered, 'begin', [{submit, Origin, Begin}]}};
-drive(Begin, #{'begin' := BeginEntry, decision := none,
-                prepares := Prepares} = _Index,
-      _Generations, _Applied, Refusal,
-      #{origin := Origin, group_id := GroupId, targets := Targets,
-        rows := Rows, source_material := SourceMaterial}) ->
-    BeginRef = maps:get(ref, BeginEntry),
-    case Refusal of
-        none ->
-            Missing =
-                [{submit, Target, prepare_record(Begin, BeginRef, Target)}
-                 || {Target, _PlanBlob} <- Rows,
-                    Target =/= Origin,
-                    not maps:is_key(Target, Prepares)],
-            case Missing of
-                [_ | _] -> {ok, {independent, prepare, Missing}};
-                [] ->
-                    PrepareRows = prepare_rows(
-                                    Targets, Prepares, Origin, BeginRef,
-                                    SourceMaterial),
-                    decision_command(
-                      Origin, GroupId, BeginRef, commit, PrepareRows)
+-doc "Bind an already-verified AM3 result to its exact target Resolve; no second signature walk.".
+-spec applied(own_row(), identity(), quod_applied_certificate:applied_certificate(), snapshot()) ->
+          {ok, snapshot()} | {error, invalid_applied_evidence}.
+applied(Own, Target, Certificate, Snapshot = #{evidence := Evidence, applied := Applied}) ->
+    #{group_id := GroupId, origin := Origin} = binding(Own),
+    case {Target =/= Origin, maps:find({resolve, Target}, Evidence),
+          quod_applied_certificate:applied_certificate_binding(Certificate)} of
+        {true, {ok, #{ref := Ref, generation := Generation, outcome := Outcome, own_vote := OwnVote}},
+         {ok, #{target := Target, group_id := GroupId, generation := Generation,
+                verdict := Outcome, resolve_ref := CertifiedRef}}} when OwnVote =/= none ->
+            case quod_dtx:same_certified_ref(Ref, CertifiedRef) of
+                true -> {ok, Snapshot#{applied := Applied#{Target => Certificate}}};
+                false -> {error, invalid_applied_evidence}
             end;
-        {_RefusedTarget, Reasons} ->
-            decision_command(
-              Origin, GroupId, BeginRef, {abort, Reasons},
-              prepare_rows(Targets, Prepares, Origin, BeginRef,
-                           SourceMaterial))
-    end;
-drive(_Begin, #{decision := Decision, prepares := Prepares,
-                finalizes := Finalizes} = Index,
-      Generations, Applied, _Refusal,
-      #{group_id := GroupId, origin := Origin, targets := Targets,
-        source_material := SourceMaterial}) ->
-    DecisionRef = maps:get(ref, Decision),
-    {ok, #{verdict := Verdict, begin_ref := BeginRef,
-           prepare_rows := PrepareRows}} =
-        quod_dtx:recovery_phase(
-          quod_dtx:control_body(maps:get(control, Decision))),
-    case missing_decision_prepare_commands(
-           PrepareRows, Prepares, Origin, BeginRef, GroupId) of
-        [_ | _] = MissingPrepares ->
-            {ok, {independent, prepare, MissingPrepares}};
+        _ -> {error, invalid_applied_evidence}
+    end.
+
+-doc "Plan the next message-driven wave, wait, or return the certified Complete.".
+-spec next(own_row(), snapshot()) -> wait | {ok, command_batch()} | {done, ref()} | {error, term()}.
+next(Own, Snapshot) ->
+    case plan(Own, Snapshot) of
+        {ok, {Mode, Stage, Commands}} ->
+            %% One allowance per exact target/phase. Both ordinary delivery
+            %% and takeover presentation use it; neither absence nor a local
+            %% re-plan manufactures a second send without actual progress.
+            batch(Mode, Stage, [C || C <- Commands, delivery_allowed(C, Snapshot)]);
+        Result -> Result
+    end.
+
+delivery_allowed({submit, T, Record}, #{absent := Absent}) ->
+    maps:get({quod_atomic:record_kind(Record), T}, Absent, false) =/= consumed;
+delivery_allowed({present, T, _Group}, #{absent := Absent}) ->
+    maps:get({vote, T}, Absent, false) =/= consumed;
+delivery_allowed(_, _) -> true.
+
+plan(Own, Snapshot) ->
+    #{origin := Origin, group_id := Id} = Binding = binding(Own),
+    Target = own_target(Own),
+    case seed_own(Own, Snapshot) of
+        {ok, Seeded} when Target =/= Origin -> participant(Binding, Seeded);
+        {ok, Seeded = #{evidence := Evidence}} ->
+            case maps:find({complete, Origin}, Evidence) of
+                {ok, #{ref := Ref}} -> {done, Ref};
+                error -> source(Own, Binding, Seeded)
+            end;
+        {error, Reason} -> {error, {invalid_own_vote, Id, Reason}}
+    end.
+
+binding(#{material := {_, _, #{group := Binding}}}) -> Binding.
+own_target(#{material := {{quod_dtx_vote, 4, _, Target, _, _}, _, _}}) -> Target.
+
+seed_own(#{ref := none}, Snapshot) -> {ok, Snapshot};
+seed_own(#{material := Material, ref := Ref} = Own, Snapshot) ->
+    put_fact({vote, own_target(Own)}, fact(Material, Ref), Snapshot).
+
+participant(#{origin := Origin, group_id := Id, group := Group}, Snapshot) ->
+    case observation(vote, Origin, Snapshot) of
+        unknown -> batch(ordered, vote, [{phase, Origin, Id, vote}]);
+        absent -> batch(ordered, vote, [{present, Origin, Group}]);
+        #{ref := _} -> wait
+    end.
+
+source(Own, #{origin := Origin, group_id := Id} = Binding, Snapshot) ->
+    case observation(vote, Origin, Snapshot) of
+        unknown -> batch(ordered, vote, [{phase, Origin, Id, vote}]);
+        absent ->
+            #{material := {Vote, _, _}} = Own,
+            batch(ordered, vote, [{submit, Origin, Vote}]);
+        #{ref := OriginRef} -> source_votes(Binding, OriginRef, Snapshot)
+    end.
+
+source_votes(#{participants := Roles, group_id := Id, group := Group} = Binding,
+             OriginRef, Snapshot) ->
+    Votes = [{T, observation(vote, T, Snapshot)} || {T, _} <- Roles],
+    Unknown = [{phase, T, Id, vote} || {T, unknown} <- Votes],
+    case Unknown of
+        [_ | _] -> batch(independent, vote, Unknown);
         [] ->
-            FinalizeCommands =
-                missing_finalize_commands(
-                  Targets, Finalizes, Prepares, Generations,
-                  GroupId, DecisionRef, Verdict, Origin),
-            case FinalizeCommands of
-                [_ | _] -> {ok, {independent, finalize, FinalizeCommands}};
-                [] ->
-                    AppliedCommands =
-                        missing_applied_commands(
-                          Targets, Finalizes, Applied, GroupId),
-                    case AppliedCommands of
-                        [_ | _] ->
-                            {ok, {independent, applied, AppliedCommands}};
-                        [] -> complete_command(
-                                Origin, GroupId, DecisionRef, Targets, Index,
-                                Generations, SourceMaterial)
-                    end
+            case outcome(Votes) of
+                pending ->
+                    %% Presentation is O-only. Missing targets use ordinary
+                    %% Vote admission: no bundle, no positive vote, and no
+                    %% refusal until that target validates the bound deadline.
+                    Commands = [begin
+                        {ok, Vote} = quod_atomic:new_vote(Group, T, none, {refused, [vote_deadline]}),
+                        {submit, T, Vote}
+                    end || {T, absent} <- Votes],
+                    batch(independent, vote, Commands);
+                {Outcome, Proof, Reasons} ->
+                    source_resolves(Binding, OriginRef, Votes, Outcome, Proof, Reasons, Snapshot)
             end
     end.
 
-missing_decision_prepare_commands(Rows, Prepares, Origin, BeginRef, GroupId) ->
-    [{phase, Target, GroupId, prepare}
-     || {Target, Ref} <- Rows,
-        not (Target =:= Origin andalso
-             quod_dtx:same_certified_ref(Ref, BeginRef)),
-        not maps:is_key(Target, Prepares)].
+%% Only certified votes choose an outcome. A refused endpoint response, a
+%% deadline notification or an authoritative absence cannot enter this fold.
+outcome(Votes) ->
+    case [{Ref, Blob} || {_, #{ref := Ref, choice := {refused, Blob}}} <- Votes] of
+        [{Ref, Blob} | _] ->
+            {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+            {abort, {refused, Ref}, Reasons};
+        [] ->
+            case lists:all(fun({_, V}) -> is_map(V) end, Votes) of
+                true -> {commit, {all_prepared, [{T, maps:get(ref, V)} || {T, V} <- Votes]}, none};
+                false -> pending
+            end
+    end.
 
-prepare_record(Begin, BeginRef, Target) ->
-    {ok, Record} = quod_dtx:new_prepare(Begin, BeginRef, Target),
-    Record.
+source_resolves(#{participants := Roles, group_id := Id, group := Group} = Binding,
+                OriginRef, Votes, Outcome, Proof, Reasons, Snapshot) ->
+    Resolves = [{T, observation(resolve, T, Snapshot)} || {T, _} <- Roles],
+    case [{phase, T, Id, resolve} || {T, unknown} <- Resolves] of
+        [_ | _] = Unknown -> batch(independent, resolve, Unknown);
+        [] ->
+            case resolve_commands(Resolves, maps:from_list(Votes), Group, OriginRef,
+                                  {Outcome, Proof, Reasons}, []) of
+                {ok, []} -> source_applied(Binding, Resolves, Outcome, Snapshot);
+                {ok, Commands} -> batch(independent, resolve, Commands);
+                {error, _} = Error -> Error
+            end
+    end.
 
-decision_command(Origin, GroupId, BeginRef, Decision, PrepareRows) ->
-    case quod_dtx:new_decision(GroupId, BeginRef, Decision, PrepareRows) of
+resolve_commands([], _, _, _, _, Acc) -> {ok, lists:reverse(Acc)};
+resolve_commands([{T, absent} | Rest], Votes, Group, OriginRef,
+                  {Outcome, Proof, Reasons} = Result, Acc) ->
+    {OwnVote, Generation} = resolve_generation(maps:get(T, Votes), Outcome),
+    OutcomeClaim = case Outcome of commit -> commit; abort -> {abort, Reasons} end,
+    case quod_atomic:new_resolve(Group, OriginRef, T, OutcomeClaim, Proof, OwnVote, Generation) of
         {ok, Record} ->
-            {ok, {ordered, decision, [{submit, Origin, Record}]}};
-        {error, Reason} -> {error, {decision_construction, Reason}}
-    end.
-
-missing_finalize_commands(Targets, Finalizes, Prepares, Generations,
-                          GroupId, DecisionRef, Verdict, Origin) ->
-    lists:flatmap(
-      fun(Target) ->
-          case Target =:= Origin orelse maps:is_key(Target, Finalizes) of
-              true -> [];
-              false ->
-                  case maps:find(Target, Generations) of
-                      error -> [{phase, Target, GroupId, prepare}];
-                      {ok, BaseGeneration} ->
-                          PrepareRef = finalize_prepare_ref(
-                                         Target, Verdict, Prepares),
-                          case applied_generation(
-                                 Verdict, PrepareRef, BaseGeneration) of
-                              {ok, AppliedGeneration} ->
-                                  case quod_dtx:new_finalize(
-                                         GroupId, DecisionRef, Verdict,
-                                         PrepareRef, AppliedGeneration) of
-                                      {ok, Record} ->
-                                          [{submit, Target, Record}];
-                                      {error, _} ->
-                                          [{phase, Target, GroupId, prepare}]
-                                  end;
-                              error ->
-                                  [{phase, Target, GroupId, prepare}]
-                          end
-                  end
-          end
-      end, Targets).
-
-finalize_prepare_ref(Target, commit, Prepares) ->
-    evidence_ref(Target, Prepares);
-finalize_prepare_ref(Target, abort, Prepares) ->
-    evidence_ref(Target, Prepares).
-
-applied_generation(commit, PrepareRef, Generation)
-  when PrepareRef =/= none, Generation < ?MAX_UINT64 ->
-    {ok, Generation + 1};
-applied_generation(abort, _PrepareRef, Generation)
-  when Generation =< ?MAX_UINT64 ->
-    {ok, Generation};
-applied_generation(_, _, _) ->
-    error.
-
-missing_applied_commands(Targets, Finalizes, Applied, GroupId) ->
-    lists:flatmap(
-      fun(Target) ->
-          case maps:get(Target, Finalizes, none) of
-              none -> [];
-              #{control := Control, ref := FinalizeRef} ->
-                  {ok, #{verdict := Verdict, prepare_ref := PrepareRef,
-                         generation := Generation}} =
-                      quod_dtx:recovery_phase(
-                        quod_dtx:control_body(Control)),
-                  case {PrepareRef, maps:is_key(Target, Applied)} of
-                      {none, _} -> [];
-                      {_, true} -> [];
-                      {_, false} ->
-                          [{applied, Target, GroupId, FinalizeRef,
-                            Generation, Verdict}]
-                  end
-          end
-      end, Targets).
-
-complete_command(Origin, GroupId, DecisionRef, Targets,
-                 #{decision := Decision, finalizes := Finalizes},
-                 Generations, SourceMaterial) ->
-    {ok, #{verdict := Verdict}} =
-        quod_dtx:recovery_phase(
-          quod_dtx:control_body(maps:get(control, Decision))),
-    case finalize_rows(
-           Targets, Finalizes, Origin, DecisionRef,
-           Verdict, SourceMaterial, Generations) of
-        {ok, Rows} ->
-            case quod_dtx:new_complete(GroupId, DecisionRef, Rows) of
-                {ok, Record} ->
-                    {ok, {ordered, complete, [{submit, Origin, Record}]}};
-                {error, Reason} -> {error, {complete_construction, Reason}}
-            end;
-        error -> {error, invalid_phase_chain}
-    end.
-
-%% ===================================================================
-%% Small canonical row helpers
-%% ===================================================================
-
-prepare_rows(Targets, Prepares, Origin, BeginRef, SourceMaterial) ->
-    [{Target, prepare_row_ref(
-                Target, Prepares, Origin, BeginRef, SourceMaterial)}
-     || Target <- Targets,
-        (Target =:= Origin andalso SourceMaterial) orelse
-            maps:is_key(Target, Prepares)].
-
-prepare_row_ref(Origin, _Prepares, Origin, BeginRef, true) -> BeginRef;
-prepare_row_ref(Target, Prepares, _Origin, _BeginRef, _SourceMaterial) ->
-    maps:get(ref, maps:get(Target, Prepares)).
-
-finalize_rows(Targets, Finalizes, Origin, DecisionRef,
-              Verdict, SourceMaterial, Generations) ->
-    finalize_rows(Targets, Finalizes, Origin, DecisionRef,
-                  Verdict, SourceMaterial, Generations, []).
-
-finalize_rows([], _Finalizes, _Origin, _DecisionRef, _Verdict,
-              _SourceMaterial, _Generations, Acc) ->
-    {ok, lists:reverse(Acc)};
-finalize_rows([Origin | Rest], Finalizes, Origin, DecisionRef, Verdict,
-              true, Generations, Acc) ->
-    case maps:find(Origin, Generations) of
-        {ok, BaseGeneration} ->
-            case applied_generation(Verdict, source, BaseGeneration) of
-                {ok, AppliedGeneration} ->
-                    finalize_rows(
-                      Rest, Finalizes, Origin, DecisionRef, Verdict, true,
-                      Generations,
-                      [{Origin, DecisionRef, AppliedGeneration} | Acc]);
-                error -> error
-            end;
-        error -> error
+            resolve_commands(Rest, Votes, Group, OriginRef, Result, [{submit, T, Record} | Acc]);
+        {error, Reason} -> {error, {resolve_construction, Reason}}
     end;
-finalize_rows([Target | Rest], Finalizes, Origin, DecisionRef, Verdict,
-              SourceMaterial, Generations, Acc) ->
-    case maps:get(Target, Finalizes, none) of
-        #{control := Control, ref := Ref} ->
-            case quod_dtx:recovery_phase(quod_dtx:control_body(Control)) of
-                {ok, #{kind := finalize, generation := Generation}} ->
-                    finalize_rows(
-                      Rest, Finalizes, Origin, DecisionRef, Verdict,
-                      SourceMaterial, Generations,
-                      [{Target, Ref, Generation} | Acc]);
-                _ -> error
-            end;
-        none -> error
+resolve_commands([{_, #{outcome := Outcome}} | Rest], Votes, Group, OriginRef,
+                  {Outcome, _, _} = Result, Acc) ->
+    resolve_commands(Rest, Votes, Group, OriginRef, Result, Acc);
+resolve_commands(_, _, _, _, _, _) -> {error, conflicting_resolve_outcome}.
+
+resolve_generation(absent, abort) -> {none, 0};
+resolve_generation(#{ref := Ref, generation := Generation}, commit) -> {Ref, Generation + 1};
+resolve_generation(#{ref := Ref, generation := Generation}, abort) -> {Ref, Generation}.
+
+source_applied(#{origin := Origin, group_id := Id, group := Group}, Resolves,
+               Outcome, #{applied := Applied}) ->
+    Missing = [{applied, T, Id, Ref, Generation, Outcome}
+               || {T, #{ref := Ref, generation := Generation, own_vote := OwnVote}} <- Resolves,
+                  T =/= Origin, OwnVote =/= none, not maps:is_key(T, Applied)],
+    case Missing of
+        [_ | _] -> batch(independent, applied, Missing);
+        [] ->
+            Rows = [{T, maps:get(ref, R), maps:get(generation, R)} || {T, R} <- Resolves],
+            case quod_atomic:new_complete(Group, Outcome, Rows, lists:sort(maps:to_list(Applied))) of
+                {ok, Complete} -> batch(ordered, complete, [{submit, Origin, Complete}]);
+                {error, Reason} -> {error, {complete_construction, Reason}}
+            end
     end.
 
-bool_count(true) -> 1;
-bool_count(false) -> 0.
-
-evidence_ref(Target, Rows) ->
-    case maps:get(Target, Rows, none) of
-        #{ref := Ref} -> Ref;
-        none -> none
+observation(Kind, Target, #{evidence := Evidence, absent := Absent}) ->
+    Key = {Kind, Target},
+    case maps:find(Key, Evidence) of
+        {ok, Fact} -> Fact;
+        error -> case maps:get(Key, Absent, false) of
+            true -> absent;
+            consumed -> absent;
+            false -> unknown
+        end
     end.
 
-ordered_subset([], _All) -> true;
-ordered_subset(_, []) -> false;
-ordered_subset([Row = {Identity, _} | Rest],
-               [Row = {Identity, _} | AllRest]) ->
-    ordered_subset(Rest, AllRest);
-ordered_subset([{Identity, _} | _] = Wanted,
-               [{Candidate, _} | AllRest])
-  when Candidate < Identity ->
-    ordered_subset(Wanted, AllRest);
-ordered_subset(_, _) -> false.
+batch(_, _, []) -> wait;
+batch(Mode, Stage, Commands) -> {ok, {Mode, Stage, Commands}}.
+
+-doc """
+Return the complete applied vector before asynchronous Complete bookkeeping.
+Source height is its Resolve slot, identical to stored outcomes. The executor
+must verify source evidence through the owned view and publish on Simplex's
+ordered apply channel, never directly from this child to Prolog.
+""".
+-spec terminal(own_row(), snapshot()) -> pending | {ok, map()} | {error, term()}.
+terminal(Own, Snapshot = #{absent := Absent}) ->
+    #{origin := Source} = binding(Own),
+    %% Complete delivery is asynchronous cleanup, not part of client finality.
+    ReadyView = Snapshot#{absent := maps:remove({complete, Source}, Absent)},
+    case next(Own, ReadyView) of
+        {ok, {ordered, complete, [{submit, Origin,
+          {quod_dtx_complete, 4, _, Origin, _, Outcome, Rows, _}}]}} ->
+            {ok, Seeded} = seed_own(Own, Snapshot),
+            #{participants := Roles} = binding(Own),
+            {Outcome, _, Reasons} = outcome([{T, observation(vote, T, Seeded)} || {T, _} <- Roles]),
+            Slots = [begin
+                {ok, T, Slot, _} = quod_dtx:certified_ref_binding(Ref),
+                {T, Slot, Generation}
+            end || {T, Ref, Generation} <- Rows],
+            {Origin, SourceSlot, _} = lists:keyfind(Origin, 1, Slots),
+            {ok, #{verdict => Outcome, reasons => Reasons, source_slot => SourceSlot,
+                   participant_slots => Slots}};
+        {error, _} = Error -> Error;
+        _ -> pending
+    end.

@@ -114,13 +114,14 @@ retained index; point I/O and exact verification run in the existing caller.
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, refresh/1, ack/2, projection_clauses/3, unfollow/1,
          follow_request/1, unfollow_request/1,
-         required_references/1, stats/0]).
+         stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
 -define(LOCAL_READ_GATE(Stage), test_local_read_gate(Stage)).
 -define(WORKER_RESULT_GATE(Ref), test_worker_result_gate(Ref)).
 -export([cache_namespace/1, valid_projection/2, test_coalesce_notice/2,
+         open_verified_cache/6,
          test_install_worker_meta/3, test_install_verified_progress/3,
          test_fail_persist_after/1,
          test_install_feed_registration/5,
@@ -140,7 +141,7 @@ retained index; point I/O and exact verification run in the existing caller.
 -define(MANIFEST, "identity.term").
 -define(CHECKPOINT, "checkpoint.term").
 -define(LOG, "log.0001").
--define(CACHE_VERSION, 4). %% Committed-only projection; no local pending custody
+-define(CACHE_VERSION, 5). %% own-role Vote/Resolve/Complete projection; no local pending custody
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
@@ -381,7 +382,7 @@ this owner. Routed forms share the cache, history fold, certificate checks,
 and resource accounting.
 """.
 -spec verify(<<_:256>>, term(), quod_dtx:certified_ref(),
-             transaction | 'begin' | prepare | decision | finalize | complete,
+             transaction | vote | resolve | complete,
              pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify(PeerKey, Endpoint, Ref, ExpectedPhase, TimeoutMs)
@@ -402,8 +403,7 @@ still proves the exact anchor, phase, certificate chain, and committee at the
 referenced slot. The node which supplied the bytes contributes no authority.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       entry | transaction | 'begin' | prepare | decision |
-                       finalize | complete,
+                       entry | transaction | vote | resolve | complete,
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, TimeoutMs) ->
     verify_reference(Ref, ExpectedPhase, none, TimeoutMs).
@@ -416,8 +416,7 @@ into bootstrap state; a caller may retain it separately only after this
 verification succeeds.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       entry | transaction | 'begin' | prepare | decision |
-                       finalize | complete,
+                       entry | transaction | vote | resolve | complete,
                        none | {<<_:256>>, term()}, pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, Contact, TimeoutMs) ->
@@ -432,8 +431,7 @@ unrelated material is ignored and ordinary certified fetching remains the
 correctness path.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
-                       entry | transaction | 'begin' | prepare | decision |
-                       finalize | complete,
+                       entry | transaction | vote | resolve | complete,
                        none | {<<_:256>>, term()}, none | quod_ledger:entry_artifact(),
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, Contact, EntryHint0, TimeoutMs)
@@ -471,8 +469,7 @@ contacts nor entry hints confer authority, and the expected target is checked
 before any owner capture or routed admission.
 """.
 -spec resolve_reference({binary(), <<_:256>>}, quod_dtx:certified_ref(),
-                        entry | transaction | 'begin' | prepare | decision |
-                        finalize | complete,
+                        entry | transaction | vote | resolve | complete,
                         none | {<<_:256>>, term()},
                         none | quod_ledger:entry_artifact(), integer()) ->
           {ok, map()} | {error, term()}.
@@ -568,8 +565,7 @@ authority.
 """.
 -spec verify_local(quod_simplex:history_view(),
                    quod_dtx:certified_ref(),
-                   entry | transaction | 'begin' | prepare | decision |
-                   finalize | complete,
+                   entry | transaction | vote | resolve | complete,
                    pos_integer() | infinity) ->
           {ok, map()} | {error, term()}.
 verify_local(
@@ -583,8 +579,7 @@ verify_local(_View, _Ref, _ExpectedPhase, _TimeoutMs) ->
 -doc "Verify an already captured local view under the original absolute deadline.".
 -spec verify_local_deadline(quod_simplex:history_view(),
                             quod_dtx:certified_ref(),
-                            entry | transaction | 'begin' | prepare | decision |
-                            finalize | complete, integer() | infinity) ->
+                            entry | transaction | vote | resolve | complete, integer() | infinity) ->
           {ok, map()} | {error, term()}.
 verify_local_deadline(
   #{owner := Owner, identity := Identity, slot := Height, applied := Applied,
@@ -950,110 +945,6 @@ test_corrupt_resident_height(Pid, Identity, Height)
     gen_server:call(Pid, {test_corrupt_resident_height, Identity, Height}).
 -endif.
 
--doc """
-Return every foreign reference carried by one decoded DTX control or record.
-
-This is the exhaustive pure seam used before a validator calls
-`quod_dtx:preview_batch/3`/`reduce_batch/3`; a future control kind cannot silently inherit
-an empty foreign-check set.  Row order is the control's canonical target order.
-""".
--spec required_references(quod_dtx:control() | quod_dtx:control_record()) ->
-          {ok, [{'begin' | prepare | decision | finalize,
-                 quod_dtx:certified_ref()}]} |
-          {error, invalid_control}.
-required_references(ControlOrRecord) ->
-    try
-        case quod_dtx:record_kind(ControlOrRecord) of
-            invalid ->
-                required_references(
-                  quod_dtx:control_kind(ControlOrRecord),
-                  quod_dtx:control_body(ControlOrRecord));
-            Kind ->
-                required_references(Kind, ControlOrRecord)
-        end
-    catch
-        error:function_clause -> {error, invalid_control};
-        error:{badmatch, _} -> {error, invalid_control}
-    end.
-
-required_references('begin', _Begin) ->
-    {ok, []};
-required_references(
-  prepare,
-  {quod_dtx_prepare, 3, _GroupId, BeginRef, _Manifest,
-   _PlanDigest, _PlanBlob}) ->
-    checked_references([{'begin', BeginRef}]);
-required_references(
-  decision,
-  {quod_dtx_decision, 3, _GroupId, BeginRef, _Verdict, Rows, _Reasons}) ->
-    %% A source-fused Begin is also the source participant's Prepare.  The
-    %% Decision row names that same BeginRef, but it is one certified entry and
-    %% the semantic chain consumes it from the leading Begin evidence.  Keep
-    %% the exact foreign-reference set canonical by omitting that duplicate
-    %% row here; every other participant still contributes its Prepare ref.
-    case reference_rows(Rows, prepare, BeginRef, 0, []) of
-        {ok, References} ->
-            checked_references([{'begin', BeginRef} | References]);
-        error ->
-            {error, invalid_control}
-    end;
-required_references(
-  finalize,
-  {quod_dtx_finalize, 3, _GroupId, DecisionRef, _Verdict,
-   PrepareRef, _Generation}) ->
-    Tail = case PrepareRef of none -> []; _ -> [{prepare, PrepareRef}] end,
-    checked_references([{decision, DecisionRef} | Tail]);
-required_references(
-  complete,
-  {quod_dtx_complete, 3, _GroupId, DecisionRef, Rows}) ->
-    %% Source fusion has the same shape at completion: the source Decision
-    %% applies the source plan, so that DecisionRef is also the source's
-    %% Finalize ref.  Keep it once as the leading Decision evidence.
-    case finalize_rows(Rows, DecisionRef, 0, []) of
-        {ok, References} ->
-            checked_references([{decision, DecisionRef} | References]);
-        error ->
-            {error, invalid_control}
-    end;
-required_references(_Kind, _Record) ->
-    {error, invalid_control}.
-
-reference_rows([], _Phase, _SkipRef, _Count, Acc) ->
-    {ok, lists:reverse(Acc)};
-reference_rows([{Identity, Ref} | Rest], Phase, SkipRef, Count, Acc)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS ->
-    case ref_identity(Ref) of
-        Identity when Ref =:= SkipRef ->
-            reference_rows(Rest, Phase, SkipRef, Count + 1, Acc);
-        Identity ->
-            reference_rows(
-              Rest, Phase, SkipRef, Count + 1, [{Phase, Ref} | Acc]);
-        _ -> error
-    end;
-reference_rows(_, _Phase, _SkipRef, _Count, _Acc) -> error.
-
-finalize_rows([], _SkipRef, _Count, Acc) -> {ok, lists:reverse(Acc)};
-finalize_rows([{Identity, Ref, Generation} | Rest], SkipRef, Count, Acc)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       is_integer(Generation), Generation >= 0,
-       Generation =< ?MAX_UINT64 ->
-    case ref_identity(Ref) of
-        Identity when Ref =:= SkipRef ->
-            finalize_rows(Rest, SkipRef, Count + 1, Acc);
-        Identity ->
-            finalize_rows(
-              Rest, SkipRef, Count + 1, [{finalize, Ref} | Acc]);
-        _ -> error
-    end;
-finalize_rows(_, _SkipRef, _Count, _Acc) -> error.
-
-checked_references(References) ->
-    case lists:all(
-           fun({_Phase, Ref}) -> quod_dtx:validate_certified_ref(Ref) end,
-           References) of
-        true -> {ok, References};
-        false -> {error, invalid_control}
-    end.
 
 -spec stats() -> map().
 stats() ->
@@ -2659,12 +2550,10 @@ drop_first(Predicate, [Item | Rest]) ->
 %% `entry` asks this same exact-reference verifier to accept either content or
 %% a DTX control. Read certificates bind the last material ledger entry, whose
 %% class is intentionally opaque to the certificate collector.
-valid_phase('begin') -> true;
 valid_phase(entry) -> true;
 valid_phase(transaction) -> true;
-valid_phase(prepare) -> true;
-valid_phase(decision) -> true;
-valid_phase(finalize) -> true;
+valid_phase(vote) -> true;
+valid_phase(resolve) -> true;
 valid_phase(complete) -> true;
 valid_phase(_) -> false.
 
@@ -5373,6 +5262,9 @@ with_verified_cache(Owner, RequestRef, Identity, Root, Resident, Work) ->
             {{error, retry}, #{reconstruction_required => cache_corrupt}};
         {error, network_identity} ->
             {{error, network_identity}, #{}};
+        {error, {unsupported_foreign_cache_format, _}} = Error -> {Error, #{}};
+        {error, {unsupported_foreign_checkpoint_format, _}} = Error -> {Error, #{}};
+        {error, {unsupported_ledger_format, _, _}} = Error -> {Error, #{}};
         {error, _} ->
             {{error, retry}, #{}}
     end.
@@ -5627,6 +5519,9 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, Mode)
                                          Root, Identity, CacheNs, Height)
                                    end),
                     case Checkpoint of
+                        {error, {unsupported_foreign_checkpoint_format, _}} = Error ->
+                            _ = quod_ledger_store:close(Store),
+                            Error;
                         {ok, CheckpointProjection} when Mode =/= none ->
                             open_replayed_cache(
                               Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store,
@@ -5647,9 +5542,12 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, Mode)
                             _ = quod_ledger_store:close(Store),
                             {error, cache_corrupt}
                     end
-            catch _:_ ->
+            catch error:{unsupported_ledger_format, _, _} = Reason ->
+                {error, Reason};
+            _:_ ->
                 {error, cache_corrupt}
             end;
+        {error, {unsupported_foreign_cache_format, _}} = Error -> Error;
         {error, _} ->
             {error, cache_corrupt}
     end.
@@ -6654,7 +6552,7 @@ verify_exact_control_reference(
     Digest = ref_record_digest(Ref),
     case [{Kind, Control}
           || {Kind, Control} <- Controls,
-             quod_dtx:record_digest(Control) =:= Digest] of
+             quod_atomic:record_digest(Control) =:= Digest] of
         [{ActualPhase, Control}]
           when ExpectedPhase =:= ActualPhase; ExpectedPhase =:= entry ->
             Identity = ref_identity(Ref),
@@ -6780,6 +6678,9 @@ ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
                 {error, _} ->
                     {error, cache_unavailable}
             end;
+        {ok, {quod_foreign_log_cache, Version, _, _, _}}
+          when is_integer(Version), Version > 0, Version < ?CACHE_VERSION ->
+            {error, {unsupported_foreign_cache_format, Version}};
         _ ->
             {error, corrupt_manifest}
     end.
@@ -6805,6 +6706,9 @@ load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Height) ->
                 true -> {ok, Projection};
                 false -> {error, corrupt_checkpoint}
             end;
+        {ok, {quod_foreign_log_checkpoint, Version, _, _, _, _, _}}
+          when is_integer(Version), Version > 0, Version < ?CACHE_VERSION ->
+            {error, {unsupported_foreign_checkpoint_format, Version}};
         {error, enoent} -> new;
         _ -> {error, corrupt_checkpoint}
     end.
@@ -6814,13 +6718,12 @@ read_small_term(Path) ->
         {ok, Info} when element(2, Info) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
             case file:read_file(Path) of
                 {ok, Bin} ->
-                    case quod_safe_term:decode(
+                    %% Read the version even when a superseded projection
+                    %% names symbols no longer loaded by this code. Wrapped
+                    %% decoding proves canonical bytes without atom creation.
+                    case quod_safe_term:decode_wrapped(
                            Bin, ?QUOD_MAX_FOREIGN_PAGE_BYTES) of
-                        {ok, Term} ->
-                            case term_to_binary(Term, [deterministic]) =:= Bin of
-                                true -> {ok, Term};
-                                false -> {error, noncanonical}
-                            end;
+                        {ok, Term} -> {ok, Term};
                         {error, _} -> {error, bad_term}
                     end;
                 {error, Reason} -> {error, Reason}
@@ -7027,7 +6930,7 @@ valid_committee_views(#{committee_views := Views} = Projection,
 valid_committee_views(Projection, _ExpectedIdentity) ->
     %% Compact persisted checkpoints deliberately omit the resident-only era
     %% index and retain the exact nine-field committed-only shape. Local
-    %% pending Begin custody belongs to the signing journal, never history.
+    %% pending Vote custody belongs to the signing journal, never history.
     map_size(Projection) =:= 9.
 
 valid_committee_view_rows([]) -> true;

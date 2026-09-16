@@ -21,7 +21,7 @@ liveness observations while preserving the one existing authorization path
 -include("quod_ledger.hrl").
 
 -export([new/5, outcomes/1, content/4, dtx/4, read_only_plan/2,
-         prepared_material/4,
+         prepared_material/1, vote_choice/3, prepare_vote/3,
          remote_application/2, validate_evidence/2]).
 -export_type([context/0, mode/0]).
 
@@ -76,15 +76,6 @@ validate_evidence(#transaction{}, _Evidence) ->
     {error, malformed_foreign_reads}.
 
 validate_receipt_evidence([], [], _Evidence) -> ok;
-validate_receipt_evidence([{_Target, {included, Ref}} | Rest],
-                          [{CertifiedRef, Transaction} | Pairs], Evidence) ->
-    %% Historical S7 rows assert inclusion only. New admission separately
-    %% requires the certified arm; old rows never manufacture outcome labels.
-    case {quod_transaction:stable_ref(CertifiedRef),
-          matching_evidence(CertifiedRef, Transaction, Evidence)} of
-        {Ref, {ok, _}} -> validate_receipt_evidence(Rest, Pairs, Evidence);
-        _ -> {error, operation_receipt_reference_binding}
-    end;
 validate_receipt_evidence([{Target, {certified, Ref, Certificate}} | Rest],
                           [{CertifiedRef, Transaction} | Pairs], Evidence) ->
     case {quod_transaction:stable_ref(CertifiedRef),
@@ -157,37 +148,26 @@ content(Transactions, BlockTimestamp, Mode,
 content(_Transactions, _BlockTimestamp, _Mode, Context) ->
     {ok, {invalid, malformed_content}, Context}.
 
+-doc "Validate one authenticated atomic control against this exact committed parent.".
 -spec dtx(term(), term(), mode(), context()) -> result(term()).
-dtx(Control, BlockTimestamp, Mode,
-    Context0 = #context{outcomes = Outcomes0}) ->
+dtx(Control, BlockTimestamp, Mode, Context0 = #context{target = Target, outcomes = Outcomes0}) ->
     case safe_dtx_group_id(Control) of
         {ok, GroupId} ->
-            case quod_outcome:group_history(Outcomes0, GroupId) of
+            case quod_atomic:control_target(Control) =:= Target andalso
+                 quod_outcome:group_history(Outcomes0, GroupId) of
                 {History, Outcomes1} when is_map(History) ->
-                    Context1 = Context0#context{outcomes = Outcomes1},
-                    case dtx_request_verdict(
-                           Control, BlockTimestamp, Mode, Context1) of
-                        {ok, valid, Context2} ->
-                            {ok, dtx_policy_verdict(
-                                   Control, History, Context2), Context2};
-                        Other ->
-                            Other
+                    Context = Context0#context{outcomes = Outcomes1},
+                    case quod_atomic:control_kind(Control) of
+                        vote -> validate_vote(Control, BlockTimestamp, Mode, History, Context);
+                        _ -> {ok, {valid, History}, Context}
                     end;
-                {error, Reason} ->
-                    {outcome_error, Reason}
+                {error, Reason} -> {outcome_error, Reason};
+                false -> {ok, {invalid, wrong_atomic_target}, Context0}
             end;
-        error ->
-            {ok, {invalid, malformed_control}, Context0}
+        error -> {ok, {invalid, malformed_control}, Context0}
     end.
 
-prepared_plan(Manifest, PlanDigest, PlanBlob,
-              Context) ->
-    case prepared_application(Manifest, PlanDigest, PlanBlob, Context) of
-        {ok, _EventContext, _Material} -> ok;
-        {error, _} = Error -> Error
-    end.
-
--doc "Validate one sealed read-only plan through the ordinary Prepare checks.".
+-doc "Validate one sealed read-only plan through the shared own-plan checks.".
 -spec read_only_plan(quod_dtx:plan(), context()) -> ok | {error, term()}.
 read_only_plan(Plan, Context = #context{target = Target}) ->
     case quod_dtx:verify(Plan) andalso quod_dtx:target(Plan) =:= Target andalso
@@ -203,17 +183,14 @@ read_only_plan(Plan, Context = #context{target = Target}) ->
             {error, invalid_read_plan}
     end.
 
--spec prepared_material(quod_dtx:manifest(), <<_:256>>, binary(), context()) ->
+-doc "Materialize a reducer-owned positive vote without another plan decode or signature walk.".
+-spec prepared_material(quod_atomic:admission_material()) ->
           {ok, map(), map()} | {error, term()}.
-prepared_material(Manifest, PlanDigest, PlanBlob, Context) ->
-    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
-        {ok, Plan, EventContext} ->
-            case materialize_prepared_plan(Plan) of
-                {ok, Material} -> {ok, EventContext, Material};
-                {error, _} = Error -> Error
-            end;
-        {error, _} = Error ->
-            Error
+prepared_material({{quod_dtx_vote, 4, _, Target, _, prepared}, _,
+                   #{plans := Plans, context := EventContext}}) ->
+    case materialize_prepared_plan(maps:get(Target, Plans)) of
+        {ok, Material} -> {ok, EventContext, Material};
+        {error, _} = Error -> Error
     end.
 
 dependency_verdict(check, _Reason, Context) ->
@@ -259,12 +236,9 @@ validate_content_transactions(
     case Transition of
         {TransitionKind, Outcomes1}
           when TransitionKind =:= new; TransitionKind =:= replay ->
-            case Mode =:= check andalso not quod_operation_vector:certified(TargetRef) of
-                true -> {ok, {invalid, operation_result_certificate_required}, Context0};
-                false -> validate_content_transactions(
-                  Rest, Network, BlockTimestamp, Mode, Seen,
-                  Context0#context{outcomes = Outcomes1})
-            end;
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen,
+              Context0#context{outcomes = Outcomes1});
         {error, Reason} ->
             {outcome_error, Reason}
     end;
@@ -279,7 +253,7 @@ validate_content_transactions(
         {ok, RequestEvidence} ->
             Validator = case Change#transaction.role of
                             {remote_claim, _, _, _} ->
-                                fun validate_signed_begin_request/5;
+                                fun validate_signed_origin_request/5;
                             application ->
                                 fun validate_signed_request/5
                         end,
@@ -378,7 +352,7 @@ validate_signed_request(
             {invalid, invalid_agent_key, Context0}
     end.
 
-validate_signed_begin_request(
+validate_signed_origin_request(
   #{evidence := #{request := #{signing_public_key := SigningKey}},
     principal := Principal, claim := Claim},
   OutcomeRef, Mode, Seen,
@@ -483,22 +457,8 @@ remote_application_checked(Change, CertifiedRef, ClaimRef, Claim,
             {invalid, remote_application_binding}
     end.
 
-prepared_application(Manifest, PlanDigest, PlanBlob, Context) ->
-    %% Authenticate and bind the opaque plan before materializing its
-    %% target-owned symbols.  Return that exact material to the caller so the
-    %% validation and application classification cannot decode it twice.
-    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
-        {ok, Plan, EventContext} ->
-            case validate_prepared_plan(Plan, Context) of
-                {ok, Material} -> {ok, EventContext, Material};
-                {error, _} = Error -> Error
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
 prepared_application_material(Plan, EventContext, Material, Context) ->
-    case validate_prepared_plan_header(Plan, Context) of
+    case validate_prepared_plan_header(Plan, quod_dtx:participates(Plan), Context) of
         ok ->
             case quod_effect:validate_plan(Plan, Material) of
                 true ->
@@ -531,126 +491,191 @@ remote_rejection_reason(invalid_authorization_transcript) ->
     {true, not_authorized};
 remote_rejection_reason(_) -> false.
 
-dtx_request_verdict(Control, BlockTimestamp, Mode, Context) ->
-    case quod_dtx:control_kind(Control) of
-        'begin' -> validate_dtx_begin_request(
-                     Control, BlockTimestamp, Mode, Context);
-        _ -> {ok, valid, Context}
+validate_vote(Control, Timestamp, Mode, History, Context) ->
+    Material = quod_atomic:control_material(Control),
+    case vote_request(Material, Timestamp, Mode, Context) of
+        ok ->
+            case quod_atomic:history_phase(vote, History) of
+                {ok, Ref} ->
+                    %% An exact committed vote keeps its first policy verdict.
+                    {ok, _, _, Digest} = quod_dtx:certified_ref_binding(Ref),
+                    case Digest =:= quod_atomic:record_digest(Control) of
+                        true -> {ok, {valid, History}, Context};
+                        false -> {ok, {invalid, atomic_vote_conflict}, Context}
+                    end;
+                not_found -> validate_vote_choice(Control, Timestamp, Mode, History, Context)
+            end;
+        Other -> Other
     end.
 
-validate_dtx_begin_request(Control, BlockTimestamp, Mode,
-                           Context0 = #context{target = Target}) ->
-    case quod_ontology:network_identity(
-           quod_dtx:requires_network_identity(Control), Target) of
+vote_request(Material, Timestamp, Mode, Context = #context{target = Target}) ->
+    case quod_ontology:network_identity(quod_atomic:requires_network_identity(Material), Target) of
         {ok, Network} ->
-            case quod_dtx:validate_request(
-                   Network, Target, BlockTimestamp, Control) of
-                {ok, none} ->
-                    {ok, valid, Context0};
-                {ok, RequestEvidence} ->
-                    case quod_dtx:begin_group_ref(
-                           quod_dtx:control_body(Control)) of
-                        {ok, GroupRef} ->
-                            case validate_signed_begin_request(
-                                   RequestEvidence, GroupRef,
-                                   Mode, #{}, Context0) of
-                                {ok, _Seen, Context1} ->
-                                    {ok, valid, Context1};
-                                {invalid, Reason, Context1} ->
-                                    {ok, {invalid, Reason}, Context1};
-                                {outcome_error, _} = Error ->
-                                    Error
-                            end;
-                        error ->
-                            {ok, {invalid, malformed_control}, Context0}
-                    end;
-                {error, _} ->
-                    {ok, {invalid, invalid_request_auth}, Context0}
+            case quod_atomic:validate_request(Network, Target, Timestamp, Material) of
+                {ok, _} -> ok;
+                {error, Reason} -> {ok, {invalid, Reason}, Context}
             end;
-        {error, Reason} ->
-            dependency_verdict(Mode, Reason, Context0)
+        {error, Reason} -> dependency_verdict(Mode, Reason, Context)
     end.
+
+validate_vote_choice(Control, Timestamp, Mode, History, Context0) ->
+    Material = {{quod_dtx_vote, 4, _, _, _, Supplied}, _, _} =
+        quod_atomic:control_material(Control),
+    case vote_choice(Material, Timestamp, Context0) of
+        {ok, wait, Context} -> {ok, abstain, Context};
+        {ok, Expected, Context} ->
+            Choice = case Supplied of
+                prepared -> prepared;
+                {refused, Blob} ->
+                    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+                    {refused, Reasons}
+            end,
+            case Choice =:= Expected of
+                true -> claim_atomic_vote(Material, Choice, Mode, History, Context);
+                false -> {ok, {invalid, {atomic_vote_choice, Expected}}, Context}
+            end;
+        {outcome_error, _} = Error -> Error
+    end.
+
+-doc "Choose and bind an own vote before signing, using the same parent policy as block verification.".
+-spec prepare_vote(quod_atomic:admission_material(), non_neg_integer(), context()) ->
+          result({vote, quod_atomic:admission_material()} | {invalid, term()} | abstain).
+prepare_vote({{quod_dtx_vote, 4, _, Target, _, _}, _, _} = Material,
+             Timestamp, Context = #context{target = Target}) ->
+    case vote_choice(Material, Timestamp, Context) of
+        {ok, wait, Next} -> {ok, abstain, Next};
+        {ok, Choice, Next} ->
+            case quod_atomic:select_vote(Material, Choice) of
+                {ok, Selected} ->
+                    case vote_request(Selected, Timestamp, check, Next) of
+                        ok -> {ok, {vote, Selected}, Next};
+                        Other -> Other
+                    end;
+                error -> {ok, {invalid, malformed_control}, Next}
+            end;
+        {outcome_error, _} = Error -> Error
+    end;
+prepare_vote(_, _, Context) -> {ok, {invalid, invalid_vote_target}, Context}.
+
+-doc """
+Choose the role's vote from authenticated own material and a committed parent.
+
+Both local admission and consensus verification use this classification.
+A refused vote must have a deterministic cause; network observations cannot
+authorize it. Missing material and same-request reservation conflicts wait.
+After the manifest deadline, refusal is possible without any own plan.
+Only the source checks/claims the permanent request key. This read-only
+classification stages no claim; dtx/4 does so only for a valid certified
+positive source vote. The timestamp is the candidate/certified block time.
+""".
+-spec vote_choice(quod_atomic:admission_material(), non_neg_integer(), context()) ->
+          result(prepared | {refused, nonempty_list()} | wait).
+vote_choice({{quod_dtx_vote, 4, _, Target, _, _}, _,
+              #{group := Binding, plans := Plans}} = Material,
+             Timestamp, Context = #context{target = Target})
+  when is_integer(Timestamp), Timestamp >= 0 ->
+    case source_claim_status(Binding, Context) of
+        {ok, clear, Context1} ->
+            case Timestamp > maps:get(vote_deadline_ms, Binding) of
+                true -> {ok, {refused, [vote_deadline]}, Context1};
+                false ->
+                    case source_key_status(Binding, Context1) of
+                        ok ->
+                            case maps:find(Target, Plans) of
+                                error -> {ok, wait, Context1};
+                                {ok, Plan} -> own_vote_choice(Plan, Binding, Material, Context1)
+                            end;
+                        {error, Reason} -> {ok, {refused, [Reason]}, Context1}
+                    end
+            end;
+        Other -> Other
+    end.
+
+source_claim_status(#{origin := Target, request := #{claim := Claim}} = Binding,
+                    Context = #context{target = Target, applied = Parent, outcomes = Outcomes}) ->
+    Ref = atomic_group_ref(Binding),
+    #{digest := Digest} = Claim,
+    case quod_outcome:check_operation(Outcomes, Claim, Ref) of
+        {new, Next} -> {ok, clear, Context#context{outcomes = Next}};
+        {{claimed, #{first_slot := Slot}}, Next} when Slot > Parent ->
+            %% Reopen preserves permanent request claims while the KB and
+            %% atomic projection replay from zero. A later positive claim
+            %% cannot change an earlier certified negative vote's reason.
+            {ok, clear, Context#context{outcomes = Next}};
+        {{claimed, #{request_digest := Digest, outcome_ref := Ref}}, Next} ->
+            {ok, clear, Context#context{outcomes = Next}};
+        {{claimed, #{request_digest := Digest}}, Next} ->
+            {ok, {refused, [duplicate_operation]}, Context#context{outcomes = Next}};
+        {{claimed, _}, Next} ->
+            {ok, {refused, [operation_conflict]}, Context#context{outcomes = Next}};
+        {error, Reason} -> {outcome_error, Reason}
+    end;
+source_claim_status(_Binding, Context) -> {ok, clear, Context}.
+
+source_key_status(#{origin := Target,
+                    request := #{principal := Principal,
+                      evidence := #{request := #{signing_public_key := SigningKey}}}},
+                  #context{target = Target, applied = Parent, est = Est}) ->
+    case quod_ask:validate_agent_key(Target, Principal, SigningKey, Parent, Est) of
+        ok -> ok;
+        {error, _} -> {error, invalid_agent_key}
+    end;
+source_key_status(_Binding, _Context) -> ok.
+
+own_vote_choice(Plan, #{origin := Origin}, Material,
+                 Context = #context{target = Target, outcomes = Outcomes}) ->
+    EligibleRole = Target =:= Origin orelse quod_dtx:participates(Plan),
+    case validate_prepared_plan_header(Plan, EligibleRole, Context) of
+        ok ->
+            case materialize_prepared_plan(Plan) of
+                {ok, Decoded} ->
+                    case validate_prepared_plan_material(Plan, Decoded, Context) of
+                        {ok, _} ->
+                            Projection = maps:get(projection, quod_outcome:dtx_state(Outcomes)),
+                            Choice = case quod_atomic:reservation_readiness(Material, Projection) of
+                                ready -> prepared;
+                                {blocked, active_group} -> wait;
+                                {refused, Reason} -> {refused, [Reason]}
+                            end,
+                            {ok, Choice, Context};
+                        {error, Reason} -> {ok, {refused, [Reason]}, Context}
+                    end;
+                {error, Reason} -> {ok, {refused, [Reason]}, Context}
+            end;
+        {error, future_base_height} -> {ok, wait, Context};
+        {error, Reason} -> {ok, {refused, [Reason]}, Context}
+    end.
+
+claim_atomic_vote({_, _, #{group := #{origin := Target,
+                              request := #{claim := Claim}} = Binding}},
+                  prepared, {claim, Slot}, History,
+                  Context = #context{target = Target, outcomes = Outcomes}) ->
+    case quod_outcome:claim_operation(Outcomes, Slot, Claim, atomic_group_ref(Binding)) of
+        {Kind, Next} when Kind =:= new; Kind =:= replay ->
+            {ok, {valid, History}, Context#context{outcomes = Next}};
+        {error, Reason} -> {outcome_error, Reason}
+    end;
+claim_atomic_vote(_Material, _Choice, _Mode, History, Context) ->
+    {ok, {valid, History}, Context}.
+
+atomic_group_ref(#{manifest := Manifest, group_id := Id}) ->
+    {ok, Ref} = quod_dtx:manifest_group_ref(Manifest, Id), Ref.
 
 safe_dtx_group_id(Control) ->
-    try quod_dtx:group_id(Control) of
-        <<_:256>> = GroupId -> {ok, GroupId};
-        _ -> error
+    try quod_atomic:group_id(Control) of
+        <<_:256>> = GroupId -> {ok, GroupId}
     catch
         error:function_clause -> error;
         error:{badmatch, _} -> error
     end.
 
-dtx_policy_verdict(Control, History, Context) ->
-    case quod_dtx:control_kind(Control) of
-        prepare ->
-            case quod_dtx:prepare_payload(Control) of
-                {ok, Manifest, PlanDigest, PlanBlob} ->
-                    case prepared_plan(
-                           Manifest, PlanDigest, PlanBlob, Context) of
-                        ok -> {valid, History};
-                        %% Preserve deterministic Prepare failures as a real
-                        %% reason stack. Simplex adds the target marker before
-                        %% the bounded wire encoding.
-                        {error, Reason} -> {invalid, [Reason]}
-                    end;
-                error ->
-                    {invalid, malformed_control}
-            end;
-        'begin' ->
-            case quod_dtx:begin_participant_payload(
-                   Control, Context#context.target) of
-                not_found ->
-                    {valid, History};
-                {ok, Manifest, PlanDigest, PlanBlob} ->
-                    case prepared_plan(
-                           Manifest, PlanDigest, PlanBlob, Context) of
-                        ok -> {valid, History};
-                        {error, Reason} -> {invalid, [Reason]}
-                    end;
-                error ->
-                    {invalid, malformed_control}
-            end;
-        decision -> {valid, History};
-        finalize -> {valid, History};
-        complete -> {valid, History}
-    end.
-
-decode_prepared_plan(
-  Manifest, PlanDigest, PlanBlob, #context{target = Target}) ->
-    case quod_dtx:decode(PlanBlob) of
-        {ok, Plan} ->
-            case quod_dtx:target(Plan) =:= Target of
-                false ->
-                    {error, bad_plan_binding};
-                true ->
-                    %% Standalone atomic plans authenticate here; claim plans
-                    %% arrive with their decode-owned attested context. The fallback
-                    %% verify is reached only on rejection, solely to preserve
-                    %% the existing bad-plan versus bad-manifest reason.
-                    case quod_dtx:event_context(Manifest, Plan) of
-                        {ok, #{plan_digest := PlanDigest} = EventContext} ->
-                            {ok, Plan, EventContext};
-                        {ok, _OtherDigest} ->
-                            {error, bad_manifest_binding};
-                        error ->
-                            case quod_dtx:verify(Plan) of
-                                true -> {error, bad_manifest_binding};
-                                false -> {error, bad_plan_binding}
-                            end
-                    end
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
 validate_prepared_plan_header(
-  Plan, Context = #context{applied = Parent}) ->
+  Plan, EligibleRole, Context = #context{applied = Parent}) ->
     case prepared_signer_admitted(quod_dtx:signer(Plan), Context) of
         false ->
             {error, signer_not_admitted};
         true ->
-            case {quod_dtx:participates(Plan),
-                  quod_dtx:base_height(Plan) =< Parent} of
+            case {EligibleRole, quod_dtx:base_height(Plan) =< Parent} of
                 {false, _} -> {error, not_material};
                 {_, false} -> {error, future_base_height};
                 {true, true} -> ok
@@ -658,7 +683,7 @@ validate_prepared_plan_header(
     end.
 
 validate_prepared_plan(Plan, Context) ->
-    case validate_prepared_plan_header(Plan, Context) of
+    case validate_prepared_plan_header(Plan, quod_dtx:participates(Plan), Context) of
         ok ->
             case materialize_prepared_plan(Plan) of
                 {ok, Material} -> validate_prepared_plan_material(Plan, Material, Context);

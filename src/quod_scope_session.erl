@@ -18,7 +18,7 @@ a synchronous call to itself.
 -include("quod_ledger.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/4, attest_plan/3, certify_reads/2, certify_reads_many/1,
+         seal/5, attest_plan/3, certify_reads/2, certify_reads_many/1,
          bind_group_effects/3,
          bind_operation_effect/3, submit_plan/5,
          materialize/4, restore_many/2, release_many/2,
@@ -149,22 +149,26 @@ One function serves every scope location: the origin's own session seals in
 place, a co-hosted worker seals over the session message protocol, and a
 remote scope seals over the wire — where the returned plan must decode, carry
 the exact bound identities, and verify under the authenticated target key.
+Only the local proof origin may require its otherwise empty plan to carry
+the atomic source role; this is not a remote request or a second sealing pass.
 """.
 -spec seal(handle() | term(), quod_proof_context:identity(),
-           quod_dtx:principal(), quod_client_goal:request_binding()) ->
+           quod_dtx:principal(), quod_client_goal:request_binding(), boolean()) ->
           {ok, quod_dtx:plan(), 0..3} | not_material | {error, term()}.
 seal({local_scope, _ScopeId, Ns, Anchor, Height, Session},
-     OriginIdentity, Principal, RequestBinding) ->
+     OriginIdentity, Principal, RequestBinding, OriginRole)
+  when is_boolean(OriginRole),
+       not OriginRole orelse OriginIdentity =:= {Ns, Anchor} ->
     seal_session_with_provenance(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => quod_proof_context:proof_id(),
         origin => OriginIdentity,
         principal => Principal,
-        request_binding => RequestBinding});
+        request_binding => RequestBinding, origin_role => OriginRole});
 seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
       _Ns, _Anchor} = Handle,
-     OriginIdentity, _Principal, _RequestBinding) ->
+     OriginIdentity, _Principal, _RequestBinding, false) ->
     case command_remaining_ms() of
         0 ->
             {error, current_execution_limit()};
@@ -188,9 +192,9 @@ seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
             end
     end;
 seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, Principal,
-     RequestBinding) ->
+     RequestBinding, false) ->
     remote_seal(Handle, Principal, RequestBinding);
-seal(_Handle, _OriginIdentity, _Principal, _RequestBinding) ->
+seal(_Handle, _OriginIdentity, _Principal, _RequestBinding, _OriginRole) ->
     {error, {protocol_error, session_binding}}.
 
 remote_seal(Handle, Principal, RequestBinding) ->

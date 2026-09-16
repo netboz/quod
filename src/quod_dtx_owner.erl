@@ -10,8 +10,8 @@ Simplex retains signing/ledger custody and executes the returned transitions.
 -export([new/0, rows/1, count/1, bytes/1, waiter_count/1, ready_count/1, blocked_count/1,
          put_new/2, take/2, replace/2, attach_waiter/3,
          detach_waiter/2, waiter_tags/1, ready_rows/1,
-         classify/2, admission/3, placement/2, binding/6, desired/3, signature_actions/5,
-         reconcile_journal/4, retire_begin/5]).
+         classify/3, admission/3, binding/6, desired/4, signature_actions/5,
+         reconcile_journal/4]).
 -export_type([state/0]).
 -ifdef(TEST).
 -export([stats/1]).
@@ -60,16 +60,15 @@ blocked_count(#retained_dtx{blocked = Blocked}) ->
     gb_sets:size(Blocked).
 
 order_key(#dtx_submission{control = Control, digest = Digest}) ->
-    {quod_dtx:control_order_key(Control), Digest}.
+    {quod_atomic:control_order_key(Control), Digest}.
 
 -spec put_new(#dtx_submission{}, state()) -> state().
 put_new(Row = #dtx_submission{digest = Digest, bytes = Bytes, control = Control,
-                              material = {Record, Digest, _Plans},
                               waiters = Waiters, placement = Placement},
         Registry = #retained_dtx{rows = Rows, waiter_index = WaiterIndex,
                                   bytes = Total}) ->
     false = maps:is_key(Digest, Rows),
-    Record = quod_dtx:control_body(Control),
+    Digest = quod_atomic:record_digest(Control),
     true = is_integer(Bytes) andalso Bytes >= 0,
     true = maps:fold(
              fun(Pid, true, Unique) ->
@@ -180,7 +179,7 @@ stats(R = #retained_dtx{}) ->
 %% Ownership is anchored membership, not execution readiness. No caller may
 %% turn a temporary sync/KB pause into an admission loss.
 -spec binding(binary(), undefined | digest(), digest(),
-              #{digest() => digest()}, boolean(), undefined | quod_dtx:projection()) ->
+              #{digest() => digest()}, boolean(), undefined | quod_atomic:projection()) ->
           binding_result().
 binding(Ns, <<_:256>> = Anchor, Self, Admissions, true, Projection)
   when is_map(Projection) ->
@@ -195,57 +194,76 @@ binding(Ns, _Anchor, _Self, _Admissions, _Participant, _Projection) ->
 
 %% The certified projection and the retained pre-commit body are successive
 %% sources of one obligation, never two independently maintained inventories.
--spec desired(binding_result(), undefined | quod_dtx:projection(), state()) -> map().
-desired({ok, {Ns, Anchor, Author, Admission} = Binding}, Projection, Registry) ->
-    Committed = maps:from_list(
-      [{Group, {reference, Group, Ref}}
-       || {Group, Ref} <- quod_dtx:origin_recoveries(Projection)]),
+-doc "Derive the one worker's own custody from committed state or a pending source vote.".
+-spec desired(binding_result(), undefined | quod_atomic:projection(),
+              [quod_atomic:admission_material()], integer()) -> map().
+desired(Binding, #{target := Target} = Projection, PendingMaterials, Now) ->
     Pending = maps:from_list(
-      [{Group, {record, Group, Begin, {group, Ns, Anchor, Author, Admission, Group}}}
-       || #dtx_submission{material = {{quod_dtx_begin, 3, Manifest, _, _} = Begin, Group, _},
-                           group_id = Group} <- maps:values(rows(Registry)),
-          quod_dtx:manifest_coordinator(Manifest) =:= Binding]),
-    maps:merge(Committed, Pending);
-desired({error, _}, _Projection, _Registry) -> #{}.
+      [{Id, #{material => Material, ref => none, resolution => none}}
+       || Material = {{quod_dtx_vote, _, _, _, Own, _}, _,
+                      #{group := #{origin := Origin, group_id := Id, vote_deadline_ms := Deadline}}}
+              <- PendingMaterials,
+          Origin =:= Target,
+          Own =/= none orelse Now > Deadline,
+          not maps:is_key(Id, maps:get(groups, Projection))]),
+    %% Installed truth wins over an uncommitted envelope. A participant's
+    %% pending signature alone does not create the certified takeover duty.
+    %% Pre-vote source responsibility survives membership loss: the existing
+    %% worker delivers to current signers, but gains no local voting capability.
+    Committed = case Binding of
+        {ok, _} -> quod_atomic:recovery_rows(Projection, Now);
+        {error, _} -> #{}
+    end,
+    maps:merge(Pending, Committed);
+desired(_Binding, undefined, _PendingMaterials, _Now) -> #{}.
 
 %% Certified inclusion dominates the active projection, including after the
-%% active group has retired. Return only the exact requested semantic digest;
-%% another record for the same phase is not an acceptance of this request.
+%% active group has retired. A Vote answers the group's proposed intent with
+%% this role's one committed choice; Resolve/Complete bind the exact record.
 %% A reference is evidence to verify, not permission to re-run its old plan.
--spec admission(quod_dtx:admission_material(), quod_dtx:group_history(),
-                undefined | quod_dtx:projection()) ->
+-spec admission(quod_atomic:admission_material(), quod_atomic:group_history(),
+                undefined | quod_atomic:projection()) ->
           {included, quod_dtx:certified_ref()} | disposition().
-admission({Record, Digest, _Plans} = Material, History, #{target := Target} = Projection) ->
-    case quod_dtx:history_phase(quod_dtx:record_kind(Record), History) of
-        {ok, Ref} ->
-            case quod_dtx:certified_ref_binding(Ref) of
-                {ok, Target, _Slot, Digest} -> {included, Ref};
-                {ok, Target, _Slot, _OtherDigest} -> stale;
-                _ -> error(phase_index_corrupt)
-            end;
-        not_found -> placement(Material, Projection)
+admission({Record, _, _} = Material, #{group_id := HistoryGroup} = History,
+          #{target := Target} = Projection) ->
+    case quod_atomic:record_target(Record) =:= Target andalso
+         (HistoryGroup =:= none orelse HistoryGroup =:= quod_atomic:group_id(Record)) of
+        true -> admission_history(Material, History, Projection);
+        false -> stale
     end;
 admission(_Record, _History, _Projection) -> stale.
 
-%% Admission, retained reclassification and the same-turn installation
-%% assertion all use this one active-projection rule. Installation does not
-%% repeat the history lookup already performed at admission.
--spec placement(quod_dtx:admission_material(), undefined | quod_dtx:projection()) ->
-          disposition().
-placement(Record, Projection) when is_map(Projection) ->
-    quod_dtx:proposal_readiness(Record, Projection);
-placement(_Record, _Projection) -> stale.
+admission_history({Record, Digest, _} = Material, History, #{target := Target} = Projection) ->
+    Kind = quod_atomic:record_kind(Record),
+    case quod_atomic:history_phase(Kind, History) of
+        {ok, Ref} ->
+            case quod_dtx:certified_ref_binding(Ref) of
+                {ok, Target, _Slot, Digest} -> {included, Ref};
+                {ok, Target, _Slot, _OtherDigest} when Kind =:= vote -> {included, Ref};
+                {ok, Target, _Slot, _OtherDigest} -> stale;
+                _ -> error(phase_index_corrupt)
+            end;
+        not_found when Kind =:= vote ->
+            %% A no-vote abort tombstone is terminal too. Active-row absence
+            %% after Resolve/Complete is not permission to enroll again.
+            case quod_atomic:history_phase(resolve, History) of
+                {ok, _} -> stale;
+                not_found -> quod_atomic:proposal_readiness(Material, Projection)
+            end;
+        not_found -> quod_atomic:proposal_readiness(Material, Projection)
+    end.
 
-%% Classify the entire current registry before any signature effect. Returned
-%% retirements carry the removed rows so effects cannot reread an old map.
--spec classify(undefined | quod_dtx:projection(), state()) ->
+%% Classify before any signature effect, using the owner's same indexed
+%% admission rule. The installed head belongs in the memo key: a tombstone
+%% can change durable phase history without changing the active projection.
+-spec classify(term(), fun((quod_atomic:admission_material()) -> disposition()), state()) ->
           {state(), [{#dtx_submission{}, stale | {refused, conflict}}]}.
-classify(Projection, Registry = #retained_dtx{fingerprint = Projection}) ->
+classify(Key, _Classify, Registry = #retained_dtx{fingerprint = Key}) ->
     {Registry, []};
-classify(Projection, Registry = #retained_dtx{rows = Rows}) ->
+classify(Key, Classify, Registry = #retained_dtx{rows = Rows}) ->
     {Next, Retired} = maps:fold(
-      fun(Digest, Row = #dtx_submission{material = Material, placement = Old}, {Acc, Out}) ->
-          case placement(Material, Projection) of
+      fun(Digest, Row = #dtx_submission{control = Control, placement = Old}, {Acc, Out}) ->
+          case Classify(quod_atomic:control_material(Control)) of
               Reason when Reason =:= stale; Reason =:= {refused, conflict} ->
                   {Row, Rest} = take(Digest, Acc),
                   {Rest, [{Row, Reason} | Out]};
@@ -257,7 +275,7 @@ classify(Projection, Registry = #retained_dtx{rows = Rows}) ->
                   end
           end
       end, {Registry, []}, Rows),
-    {Next#retained_dtx{fingerprint = Projection}, lists:reverse(Retired)}.
+    {Next#retained_dtx{fingerprint = Key}, lists:reverse(Retired)}.
 
 %% Execution is a capability, not a lifetime. In particular a consumed local
 %% sequence waits for readiness before renewal; its exact body/waiters remain.
@@ -273,7 +291,7 @@ signature_action(_Row, {error, _}, _Ready, _Admissions, _Floors) -> retire;
 signature_action(#dtx_submission{control = Control},
                  {ok, {Ns, Anchor, Self, Admission}}, Ready, Admissions, Floors) ->
     #{author := Author, author_admission := SignedAdmission, sequence := Sequence} =
-        quod_dtx:control_metadata(Control),
+        quod_atomic:control_metadata(Control),
     Lane = {SignedAdmission, Author},
     Floor = maps:get(Lane, Floors, 0),
     case Lane =:= {Admission, Self} of
@@ -282,44 +300,39 @@ signature_action(#dtx_submission{control = Control},
         false ->
             case maps:get(Author, Admissions, undefined) =:= SignedAdmission
                  andalso Sequence > Floor
-                 andalso quod_dtx:verify_control({Ns, Anchor}, Control) of
+                 andalso quod_atomic:verify_control({Ns, Anchor}, Control) of
                 true -> keep;
                 false -> retire
             end
     end.
 
-%% Pending Begin custody belongs only to the signing journal. A committed
+%% Pending own-vote custody belongs only to the signing journal. A committed
 %% history capture contains no local pending list and cannot overwrite newer
 %% admissions. The retained phase index proves inclusion even after Complete
 %% has evicted the active group. Reads are bounded by pending groups, not the
 %% ledger prefix. Index errors stay loud at this owner boundary.
--spec reconcile_journal(non_neg_integer(), quod_dtx:projection(),
+-spec reconcile_journal(non_neg_integer(), map(),
                         quod_dtx_phase_index:index(), quod_signing_journal:handle()) ->
           {ok, quod_signing_journal:handle()}.
 reconcile_journal(Slot, Projection, Index, Journal) ->
     reconcile_pending(Slot, Projection, Index,
-                      quod_signing_journal:pending_begins(Journal), Journal).
-
-%% Deterministic rejection removes exactly this journal obligation. Other
-%% rows are retired only by the same indexed inclusion/admission rules.
--spec retire_begin(digest(), non_neg_integer(), quod_dtx:projection(),
-                   quod_dtx_phase_index:index(), quod_signing_journal:handle()) ->
-          {ok, quod_signing_journal:handle()}.
-retire_begin(Group, Slot, Projection, Index, Journal) ->
-    reconcile_pending(Slot, Projection, Index,
-                      maps:remove(Group, quod_signing_journal:pending_begins(Journal)), Journal).
+                      quod_signing_journal:pending_dtx(Journal), Journal).
 
 reconcile_pending(Slot, Projection, Index, Rows, Journal) ->
     Admissions = maps:get(admissions, Projection),
+    Target = maps:get(target, maps:get(dtx, Projection)),
     Pending = maps:fold(
-      fun(Group, #{lane := {Admission, Author} = Lane}, Acc) ->
-          case maps:get(Author, Admissions, undefined) =:= Admission of
+      fun(Group, #{lane := {Admission, Author} = Lane,
+                   group_ref := {group, Ns, Anchor, _, _, _}}, Acc) ->
+          case {Ns, Anchor} =:= Target orelse
+               maps:get(Author, Admissions, undefined) =:= Admission of
               false -> Acc;
               true ->
                   {ok, History} = quod_dtx_phase_index:history(Index, Group),
-                  case quod_dtx:history_phase('begin', History) of
-                      not_found -> Acc#{Group => Lane};
-                      {ok, _Ref} -> Acc
+                  case {quod_atomic:history_phase(vote, History),
+                        quod_atomic:history_phase(resolve, History)} of
+                      {not_found, not_found} -> Acc#{Group => Lane};
+                      _ -> Acc
                   end
           end
       end, #{}, Rows),
@@ -330,4 +343,4 @@ reconcile(Slot, Projection, Pending, Journal) ->
       #{committed_slot => Slot,
         live_dtx_lanes => maps:get(dtx_lanes, Projection),
         current_admissions => maps:get(admissions, Projection),
-        pending_begins => Pending}).
+        pending_dtx => Pending}).

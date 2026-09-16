@@ -1529,7 +1529,7 @@ authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
     end.
 
 -doc """
-Re-prove one target plan's recorded authorization decisions at Prepare.
+Re-prove one target plan's recorded authorization decisions at admission.
 
 The caller supplies the target's already-authenticated, owner-materialized
 transcript.  Every row is checked against the exact parent state in a strict

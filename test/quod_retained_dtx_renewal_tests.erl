@@ -1,25 +1,31 @@
 -module(quod_retained_dtx_renewal_tests).
 -moduledoc """
-Classify retained Prepare alternatives before renewing their signatures.
+Classify retained Resolve alternatives before renewing their signatures.
 
 Permanent version of the constructive stale-retained probe: real N=4
-genesis admissions, signed Begin histories, two valid finality-proof subsets,
-two owners' actual selectors, checked committed projections and real journals.
+genesis admissions, signed source-negative Vote histories, two valid
+finality-proof subsets, two owners' actual selectors, checked committed
+projections, retained phase histories and real journals.
 Only exported TEST delegations and the production relay dispatcher are used.
-These tests compose the commit transition seams; the separate Begin ordering
+These tests compose the commit transition seams; the separate Vote ordering
 tests own the integrated live-commit/catch-up publication-order regression.
+
+Unvoted target aborts leave no active group row. Their retained phase history
+must still make an alternative stale before renewal, and the signature-only
+bypass must retain the loud stale_retained_dtx invariant. No active tombstone
+is fabricated here to make projection-only classification appear sufficient.
 """.
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
-stale_alternative_prepare_retires_without_signing_test_() ->
+stale_alternative_resolve_retires_without_signing_test_() ->
     {timeout, 30, fun() -> isolated_scenario(alternate) end}.
 
-unrelated_prepare_commit_renews_live_retained_prepare_test_() ->
+unrelated_resolve_commit_renews_live_retained_resolve_test_() ->
     {timeout, 30, fun() -> isolated_scenario(unrelated_only) end}.
 
-exact_prepare_digests_drain_without_renewal_test_() ->
+exact_resolve_digests_drain_without_renewal_test_() ->
     {timeout, 30, fun() -> isolated_scenario(exact) end}.
 
 stale_signature_only_invariant_has_bounded_diagnostic_test_() ->
@@ -56,11 +62,11 @@ scenario(Mode) ->
     %% Exclusive creation makes cleanup belong only to this test invocation.
     ok = file:make_dir(Dir),
     try
-        Fixture = prepare_fixture(Dir, Suffix, Mode),
+        Fixture = resolve_fixture(Dir, Suffix, Mode),
         Schedule = case Mode of {diagnostic, _} -> diagnostic; _ -> Mode end,
-        with_journals(Fixture, fun(Journal, RemoteJournal, Store) ->
+        with_journals(Fixture, fun(Journal, RemoteJournal, Store, Index) ->
             with_recorders(fun(P1Waiter, QWaiter) ->
-                exercise(Schedule, Fixture, Journal, RemoteJournal, Store,
+                exercise(Schedule, Fixture, Journal, RemoteJournal, Store, Index,
                          P1Waiter, QWaiter)
             end)
         end)
@@ -68,7 +74,7 @@ scenario(Mode) ->
         ok = file:del_dir_r(Dir)
     end.
 
-prepare_fixture(Dir, Suffix, Mode) ->
+resolve_fixture(Dir, Suffix, Mode) ->
     Identities = identities(),
     Committee = lists:sort(maps:keys(Identities)),
     OriginNs = <<"quod:renewal-origin-", Suffix/binary>>,
@@ -93,60 +99,71 @@ prepare_fixture(Dir, Suffix, Mode) ->
     Local = maps:get(LocalKey, Identities),
     Remote = maps:get(RemoteKey, Identities),
     OriginAdmission = maps:get(LocalKey, maps:get(admissions, OriginProjection)),
+    Reasons = [conflict],
     Common = #{target => Origin, participant_target => Target,
+               second_participant_target => Target, vote => {refused, Reasons},
                node_identity => Local, admission => OriginAdmission},
-    F1 = quod_ct:signed_dtx_begin_fixture(
+    F1 = quod_ct:signed_atomic_fixture(
            Common#{goal_text => <<"assertz(group_one(ok)).">>,
                    proof_id => <<1:256>>, operation_id => <<1:256>>}),
-    F2 = quod_ct:signed_dtx_begin_fixture(
+    F2 = quod_ct:signed_atomic_fixture(
            Common#{goal_text => <<"assertz(group_two(ok)).">>,
                    proof_id => <<2:256>>, operation_id => <<2:256>>}),
-    Begin1 = maps:get('begin', F1),
-    BeginControl1 = maps:get(begin_control, F1),
-    Begin2 = maps:get('begin', F2),
-    {ok, BeginControl2} = quod_dtx:sign_control(
-                           Origin, Begin2, OriginAdmission, 2, 3, Local),
-    {BeginEntry1, BeginEntry1Alt} = certified_entries(
-                                    Origin, 2, 1, [BeginControl1], Identities, Committee),
-    {BeginEntry2, _} = certified_entries(
-                       Origin, 3, 2, [BeginControl2], Identities, Committee),
-    {ok, BeginRef1} = quod_dtx:certified_entry_ref(Origin, BeginEntry1, BeginControl1),
-    {ok, BeginRef1Alt} = quod_dtx:certified_entry_ref(
-                         Origin, BeginEntry1Alt, BeginControl1),
-    {ok, BeginRef2} = quod_dtx:certified_entry_ref(Origin, BeginEntry2, BeginControl2),
-    ?assertNotEqual(BeginRef1, BeginRef1Alt),
-    ?assert(quod_dtx:same_certified_ref(BeginRef1, BeginRef1Alt)),
+    Group1 = maps:get(group, F1),
+    Group2 = maps:get(group, F2),
+    VoteControl1 = maps:get(vote_control, F1),
+    VoteMaterial1 = quod_atomic:control_material(VoteControl1),
+    VoteMaterial2 = quod_atomic:control_material(maps:get(vote_control, F2)),
+    {ok, VoteControl2} = quod_atomic:sign_control(
+                          Origin, VoteMaterial2, OriginAdmission, 2, 3, Local),
+    {VoteEntry1, VoteEntry1Alt} = certified_entries(
+                                  Origin, 2, 1, [VoteControl1], Identities, Committee),
+    {VoteEntry2, _} = certified_entries(
+                      Origin, 3, 2, [VoteControl2], Identities, Committee),
+    {ok, VoteRef1} = quod_dtx:certified_entry_ref(Origin, VoteEntry1, VoteControl1),
+    {ok, VoteRef1Alt} = quod_dtx:certified_entry_ref(
+                        Origin, VoteEntry1Alt, VoteControl1),
+    {ok, VoteRef2} = quod_dtx:certified_entry_ref(Origin, VoteEntry2, VoteControl2),
+    ?assertNotEqual(VoteRef1, VoteRef1Alt),
+    ?assert(quod_dtx:same_certified_ref(VoteRef1, VoteRef1Alt)),
     lists:foreach(
       fun(Ref) ->
           ?assert(quod_dtx:certified_entry_ref_matches(
-                    Origin, BeginEntry1, BeginControl1, Ref, Committee))
-      end, [BeginRef1, BeginRef1Alt]),
-    %% Advance both actual Begin histories with their finality and references;
+                    Origin, VoteEntry1, VoteControl1, Ref, Committee))
+      end, [VoteRef1, VoteRef1Alt]),
+    %% Advance both actual negative Vote histories with their finality;
     %% neither the target DTX projection nor readiness is manufactured.
     {ok, OriginIndex} = quod_dtx_phase_index:open(
                          filename:join(Dir, "origin-phase"), OriginNs),
     try
         quod_ct:with_network_identity(maps:get(network, F1), fun() ->
             {ok, OP1, _} = quod_simplex:history_advance(
-                             Origin, BeginEntry1, OriginProjection, OriginIndex),
+                             Origin, VoteEntry1, OriginProjection, OriginIndex),
             {ok, _OP2, _} = quod_simplex:history_advance(
-                              Origin, BeginEntry2, OP1, OriginIndex)
+                              Origin, VoteEntry2, OP1, OriginIndex)
         end)
     after
         ok = quod_dtx_phase_index:close(OriginIndex)
     end,
-    {ok, P1} = quod_dtx:new_prepare(Begin1, BeginRef1, Target),
-    {ok, P2} = quod_dtx:new_prepare(Begin1, BeginRef1Alt, Target),
-    {ok, Q} = quod_dtx:new_prepare(Begin2, BeginRef2, Target),
-    ?assertNotEqual(quod_dtx:record_digest(P1), quod_dtx:record_digest(P2)),
-    ?assertEqual(quod_dtx:group_id(P1), quod_dtx:group_id(P2)),
-    ?assertNotEqual(quod_dtx:group_id(P1), quod_dtx:group_id(Q)),
+    %% The target has not voted: a certified source refusal authorizes only
+    %% an abort tombstone, with no own-vote reference or local generation.
+    %% Equivalent QC subsets preserve distinct Resolve bytes for one phase.
+    {ok, P1} = quod_atomic:new_resolve(
+                 Group1, VoteRef1, Target, {abort, Reasons}, {refused, VoteRef1}, none, 0),
+    {ok, P2} = quod_atomic:new_resolve(
+                 Group1, VoteRef1Alt, Target, {abort, Reasons}, {refused, VoteRef1Alt}, none, 0),
+    {ok, Q} = quod_atomic:new_resolve(
+                Group2, VoteRef2, Target, {abort, Reasons}, {refused, VoteRef2}, none, 0),
+    ?assertNotEqual(quod_atomic:record_digest(P1), quod_atomic:record_digest(P2)),
+    ?assertEqual(quod_atomic:group_id(P1), quod_atomic:group_id(P2)),
+    ?assertNotEqual(quod_atomic:group_id(P1), quod_atomic:group_id(Q)),
     #{dir => Dir, target => Target, storage_ns => StorageNs, projection => Projection,
       genesis => TargetGenesis, identities => Identities, committee => Committee,
       local => Local, remote => Remote, local_lane => LocalLane,
       remote_lane => {RemoteAdmission, RemoteKey}, p1 => P1, p2 => P2, q => Q,
-      evidence => [{BeginRef1, BeginControl1}, {BeginRef1Alt, BeginControl1},
-                   {BeginRef2, BeginControl2}]}.
+      plan_blob => maps:get(plan_blob, F1),
+      evidence => [{VoteRef1, VoteMaterial1}, {VoteRef1Alt, VoteMaterial1},
+                   {VoteRef2, VoteMaterial2}]}.
 
 target_namespace({diagnostic, namespace_255}, _Suffix) ->
     <<"quod:", (binary:copy(<<"x">>, 250))/binary>>;
@@ -169,7 +186,13 @@ with_journals(F = #{dir := Dir, target := {Ns, Anchor}, storage_ns := StorageNs}
             {ok, Store0} = quod_ledger_store:open(StorageNs, LocalDir),
             try
                 {ok, Store} = quod_ledger_store:append(Store0, [maps:get(genesis, F)]),
-                Fun(Journal, RemoteJournal, Store)
+                {ok, Index} = quod_dtx_phase_index:open(
+                                filename:join(Dir, "target-phase"), StorageNs),
+                try
+                    Fun(Journal, RemoteJournal, Store, Index)
+                after
+                    ok = quod_dtx_phase_index:close(Index)
+                end
             after
                 ok = quod_ledger_store:close(Store0)
             end
@@ -182,13 +205,17 @@ with_journals(F = #{dir := Dir, target := {Ns, Anchor}, storage_ns := StorageNs}
 
 exercise(Mode, F = #{target := Target, projection := Before,
                      p1 := P1, p2 := P2, q := Q, local_lane := Lane},
-         Journal, RemoteJournal, Store0, P1Waiter, QWaiter) ->
-    D1 = quod_dtx:record_digest(P1),
-    D2 = quod_dtx:record_digest(P2),
-    DQ = quod_dtx:record_digest(Q),
-    A0 = state(Target, Before, maps:get(local, F), Journal),
+         Journal, RemoteJournal, Store0, Index, P1Waiter, QWaiter) ->
+    D1 = quod_atomic:record_digest(P1),
+    D2 = quod_atomic:record_digest(P2),
+    DQ = quod_atomic:record_digest(Q),
+    A0 = state(Target, Before, maps:get(local, F), Journal, Index),
     {ok, A1} = quod_simplex:test_retain_dtx_record(P1, {dtx_endpoint, P1Waiter}, A0),
-    {ok, A2} = quod_simplex:test_retain_dtx_record(Q, {dtx_endpoint, QWaiter}, A1),
+    {ok, PendingA2} = quod_simplex:test_retain_dtx_record(Q, {dtx_endpoint, QWaiter}, A1),
+    %% Prime classification before either tombstone exists. After the abort,
+    %% the active projection is still empty; only the installed history head
+    %% invalidates this memo. Absence must not conceal an index-only change.
+    {A2, none} = quod_simplex:test_reconcile_signing_state(PendingA2),
     CP1 = retained_control(D1, A2),
     CQ = retained_control(DQ, A2),
     ?assertEqual([1, 2], [sequence(CP1), sequence(CQ)]),
@@ -196,7 +223,7 @@ exercise(Mode, F = #{target := Target, projection := Before,
     ?assertEqual(2, quod_simplex:test_dtx_submission_waiters(A2)),
     ?assertEqual(2, quod_signing_journal:dtx_floor(
                      quod_simplex:test_signing_journal(A2), Lane)),
-    R0 = state(Target, Before, maps:get(remote, F), RemoteJournal),
+    R0 = state(Target, Before, maps:get(remote, F), RemoteJournal, Index),
     %% Authenticated production relay admission preserves A's exact envelopes.
     R1 = quod_simplex:dispatch(element(2, Lane),
                               {dtx_submit, envelopes([CP1, CQ]), []}, R0),
@@ -211,10 +238,11 @@ exercise(Mode, F = #{target := Target, projection := Before,
     ?assertEqual(1, quod_signing_journal:dtx_floor(
                      quod_simplex:test_signing_journal(R2), maps:get(remote_lane, F))),
     lists:foreach(
-      fun({Control, {Ref, BeginControl}}) ->
-          ?assert(quod_dtx:verify_control(Target, Control)),
-          ?assertEqual(ok, quod_dtx:validate_references(
-                             Control, [{'begin', Ref, BeginControl}]))
+      fun({Control, {Ref, VoteMaterial}}) ->
+          ?assert(quod_atomic:verify_control(Target, Control)),
+          ?assertEqual([{vote, Ref}], quod_atomic:reference_requirements(Control)),
+          ?assertEqual(ok, quod_atomic:validate_references(
+                             Control, [{vote, Ref, VoteMaterial}]))
       end, lists:zip([CP1, CP2, CQ], maps:get(evidence, F))),
     Controls = case Mode of
                    alternate -> [CP2, CQ];
@@ -226,11 +254,21 @@ exercise(Mode, F = #{target := Target, projection := Before,
                                    maps:get(identities, F), maps:get(committee, F)),
     ?assertEqual(ok, quod_catchup:verify_entry(Target, Entry, Before)),
     {ok, Store} = quod_ledger_store:append(Store0, [Entry]),
-    After = advance_target(F, Entry),
+    {ok, After, _Effects} = quod_simplex:history_advance(Target, Entry, Before, Index),
     ?assertEqual(2, maps:get(Lane, maps:get(dtx_lanes, After))),
-    ?assertEqual(case Mode of unrelated_only -> ready; _ -> stale end,
-                 readiness(P1, maps:get(dtx, After))),
-    ?assertEqual(stale, readiness(Q, maps:get(dtx, After))),
+    %% Unvoted aborts retire their active rows. Exact inclusion and stale
+    %% alternatives must therefore be checked against the real phase index,
+    %% not inferred from the absence of a row in the active projection.
+    {ok, QRef} = quod_dtx:certified_entry_ref(Target, Entry, CQ),
+    P1Disposition = case Mode of
+                        unrelated_only -> ready;
+                        exact ->
+                            {ok, P1Ref} = quod_dtx:certified_entry_ref(Target, Entry, CP1),
+                            {included, P1Ref};
+                        _ -> stale
+                    end,
+    ?assertEqual(P1Disposition, admission(P1, maps:get(dtx, After), Index)),
+    ?assertEqual({included, QRef}, admission(Q, maps:get(dtx, After), Index)),
     Resolved = quod_simplex:test_resolve_committed_dtx(Entry, payload(Controls), A2),
     ?assertEqual(case Mode of exact -> []; _ -> [D1] end,
                  maps:keys(rows(Resolved))),
@@ -252,7 +290,7 @@ assert_reconciliation(Mode,
                             entry := Entry, controls := Controls, store := Store,
                             'after' := After, original := CP1},
                       Adopted, P1Waiter, QWaiter) ->
-    D1 = quod_dtx:record_digest(P1),
+    D1 = quod_atomic:record_digest(P1),
     {{Outcome, SigningCalls}, Reports} = capture_invariant_reports(Target, fun() ->
         trace_signing(fun() -> quod_simplex:test_reconcile_signing_state(Adopted) end)
     end),
@@ -277,7 +315,7 @@ assert_reconciliation(Mode,
         ?assertEqual([], Reports),
         ?assertEqual(case Mode of unrelated_only -> 1; _ -> 0 end, SigningCalls),
         ?assertEqual(ExpectedFloor, Floor),
-        ?assertEqual(#{}, quod_signing_journal:pending_begins(Reopened)),
+        ?assertEqual(#{}, quod_signing_journal:pending_dtx(Reopened)),
         {returned, {Reconciled0, none}} = Outcome,
         Reconciled = quod_simplex:test_state_set(signing_journal, Reopened, Reconciled0),
         assert_retained_result(Mode, D1, CP1, Reconciled, Target, P1Waiter),
@@ -295,7 +333,7 @@ assert_reconciliation(Mode,
         ?assertEqual(0, RepeatCalls),
         ?assertEqual(quod_simplex:test_retained_dtx_state(Reconciled),
                      quod_simplex:test_retained_dtx_state(Again)),
-        ?assertEqual(maps:get(dtx, After), maps:get(fingerprint,
+        ?assertEqual({maps:get(history_head, After), maps:get(dtx, After)}, maps:get(fingerprint,
                      quod_simplex:test_retained_dtx_state(Again))),
         ?assertEqual(ExpectedFloor, quod_signing_journal:dtx_floor(
                                      quod_simplex:test_signing_journal(Again), Lane)),
@@ -308,7 +346,7 @@ assert_reconciliation(Mode,
     end.
 
 assert_diagnostic(#{target := Target = {Ns, Anchor}, storage_ns := StorageNs,
-                    p1 := P1, local := Local,
+                    p1 := P1, local := Local, plan_blob := PlanBlob,
                     local_lane := Lane, dir := Dir, original := CP1,
                     entry := Entry, store := Store},
                   Adopted, P1Waiter, QWaiter) ->
@@ -331,9 +369,9 @@ assert_diagnostic(#{target := Target = {Ns, Anchor}, storage_ns := StorageNs,
                             Size -> {truncated, binary:part(Ns, 0, 255), Size}
                         end,
     Expected = #{event => stale_retained_dtx, namespace => ExpectedNamespace,
-                 group_digest => binary:encode_hex(quod_dtx:group_id(P1)),
-                 record_digest => binary:encode_hex(quod_dtx:record_digest(P1)),
-                 phase => prepare, committed_height => 2, old_sequence => 1,
+                 group_digest => binary:encode_hex(quod_atomic:group_id(P1)),
+                 record_digest => binary:encode_hex(quod_atomic:record_digest(P1)),
+                 phase => resolve, committed_height => 2, old_sequence => 1,
                  proposed_sequence => 3, committed_floor => 2, readiness => stale},
     ?assertEqual(Expected, Report),
     Encoded = iolist_to_binary(quod_log_formatter:format(Event, #{})),
@@ -347,12 +385,14 @@ assert_diagnostic(#{target := Target = {Ns, Anchor}, storage_ns := StorageNs,
                    end,
     ?assert(byte_size(Message) < MessageLimit),
     [Envelope] = envelopes([CP1]),
-    {quod_dtx_control, _, prepare, _, _, _, _, _, _, Signature} = CP1,
-    {quod_dtx_prepare, _, _, _, _, _, PlanBlob} = P1,
+    {quod_dtx_control, _, resolve, _, _, _, _, _, _, Signature} = CP1,
+    %% Resolve has no plan payload; keep the signed source fixture's target
+    %% PlanBlob in F so the diagnostic secret-leakage checks remain intact.
     #'ECPrivateKey'{privateKey = Seed} = maps:get(key, Local),
     Forbidden = [<<"group_one">>, <<"group_two">>, <<"plan">>, <<"manifest">>,
                  <<"goal">>, <<"signer">>, <<"forbidden_namespace_tail">>,
-                 <<"quod_dtx_prepare">>, <<"quod_dtx_control">>,
+                 <<"quod_dtx_resolve">>, <<"quod_dtx_control">>,
+                 <<"quod_dtx_vote">>, <<"quod_atomic_group">>,
                  <<"signature">>, <<"envelope">>, <<"private_key">>,
                  <<"ECPrivateKey">>, <<"ed_pri">>,
                  iolist_to_binary(io_lib:format("~p", [CP1])),
@@ -373,7 +413,7 @@ assert_diagnostic(#{target := Target = {Ns, Anchor}, storage_ns := StorageNs,
                        filename:join(Dir, "local")),
     try
         ?assertEqual(3, quod_signing_journal:dtx_floor(Reopened, Lane)),
-        ?assertEqual(#{}, quod_signing_journal:pending_begins(Reopened))
+        ?assertEqual(#{}, quod_signing_journal:pending_dtx(Reopened))
     after
         ok = quod_signing_journal:close(Reopened)
     end,
@@ -413,27 +453,19 @@ assert_retained_result(unrelated_only, Digest, Original, S, Target, Waiter) ->
     ?assertEqual([Digest], wave_digests(S)),
     Renewed = retained_control(Digest, S),
     ?assertEqual(3, sequence(Renewed)),
-    ?assertEqual(quod_dtx:control_body(Original), quod_dtx:control_body(Renewed)),
-    ?assertEqual(maps:with([author, author_admission], quod_dtx:control_metadata(Original)),
-                 maps:with([author, author_admission], quod_dtx:control_metadata(Renewed))),
-    ?assert(quod_dtx:verify_control(Target, Renewed)),
+    ?assertEqual(quod_atomic:control_body(Original), quod_atomic:control_body(Renewed)),
+    ?assertEqual(maps:with([author, author_admission], quod_atomic:control_metadata(Original)),
+                 maps:with([author, author_admission], quod_atomic:control_metadata(Renewed))),
+    ?assert(quod_atomic:verify_control(Target, Renewed)),
     ?assertEqual([], take_messages(Waiter));
 assert_retained_result(Mode, _Digest, _Original, S, _Target, Waiter) ->
     ?assertMatch(#{retained := 0, ready := 0, blocked := 0, waiters := 0,
                    bytes := 0, rows := #{}, ready_order := [], blocked_order := [],
                    waiter_index := #{}}, quod_simplex:test_retained_dtx_state(S)),
-    ?assertEqual(case Mode of alternate -> [{error, stale_dtx_submission}];
+    %% I1's exact retirement response is retry, never a committed reference
+    %% for the alternative bytes that were not included.
+    ?assertEqual(case Mode of alternate -> [{error, retry}];
                              exact -> [] end, take_messages(Waiter)).
-
-advance_target(#{dir := Dir, target := Target, storage_ns := StorageNs,
-                 projection := Before}, Entry) ->
-    {ok, Index} = quod_dtx_phase_index:open(filename:join(Dir, "target-phase"), StorageNs),
-    try
-        {ok, After, _Effects} = quod_simplex:history_advance(Target, Entry, Before, Index),
-        After
-    after
-        ok = quod_dtx_phase_index:close(Index)
-    end.
 
 committed_reply(Target, Entry, Control) ->
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),
@@ -442,12 +474,12 @@ committed_reply(Target, Entry, Control) ->
 rows(S) -> maps:get(rows, quod_simplex:test_retained_dtx_state(S)).
 wave_digests(S) -> [D || {D, _} <- quod_simplex:test_eligible_dtx_wave(S)].
 retained_control(Digest, S) ->
-    {ok, Control} = quod_dtx:decode_control(maps:get(envelope, maps:get(Digest, rows(S)))),
+    {ok, Control} = quod_atomic:decode_control(maps:get(envelope, maps:get(Digest, rows(S)))),
     Control.
-sequence(Control) -> maps:get(sequence, quod_dtx:control_metadata(Control)).
+sequence(Control) -> maps:get(sequence, quod_atomic:control_metadata(Control)).
 envelopes(Controls) ->
-    lists:map(fun(C) -> {ok, Envelope} = quod_dtx:encode_control(C), Envelope end, Controls).
-payload(Controls) -> {batch, [{dtx, Envelope} || Envelope <- envelopes(Controls)]}.
+    lists:map(fun(C) -> {ok, Envelope} = quod_atomic:encode_control(C), Envelope end, Controls).
+payload(Controls) -> {batch, [{dtx, Control} || Control <- Controls]}.
 
 identities() ->
     maps:from_list(
@@ -464,11 +496,11 @@ genesis(Ns, Committee) ->
       Identity, Entry, quod_simplex:history_projection(Identity)),
     {Entry, Identity, Projection}.
 
-state({Ns, Anchor}, Projection, Signer = #{pubkey := Pub}, Journal) ->
+state({Ns, Anchor}, Projection, Signer = #{pubkey := Pub}, Journal, Index) ->
     quod_simplex:test_install_projection(Projection, quod_simplex:test_state(
       #{ns => Ns, genesis_hash => Anchor, slot => 1,
         self => Pub, id => Signer, sync => ready, prolog_ready => true,
-        signing_journal => Journal,
+        signing_journal => Journal, phase_index => Index,
         consensus_domain => quod_simplex:consensus_domain(Ns, Anchor)})).
 
 certified_entries({Ns, Anchor}, Slot, Parent, Controls, Identities, Committee) ->
@@ -497,7 +529,7 @@ with_recorders(Fun) ->
 recorder(Reverse) ->
     receive
         {dtx_submit_result, Reply} -> recorder([Reply | Reverse]);
-        {trace, _Pid, call, {quod_dtx, sign_control, 6}} ->
+        {trace, _Pid, call, {quod_atomic, sign_control, 6}} ->
             recorder([sign_control | Reverse]);
         {take_messages, From, Ref} ->
             From ! {Ref, lists:reverse(Reverse)}, recorder([]);
@@ -520,7 +552,7 @@ stop_recorder(Pid, Monitor) ->
 trace_signing(Fun) ->
     {Tracer, Monitor} = spawn_opt(fun() -> recorder([]) end, [link, monitor]),
     try
-        1 = erlang:trace_pattern({quod_dtx, sign_control, 6}, true, []),
+        1 = erlang:trace_pattern({quod_atomic, sign_control, 6}, true, []),
         %% Arity-only tracing must never copy the signer's key or envelope.
         1 = erlang:trace(self(), true, [call, arity, {tracer, Tracer}]),
         try
@@ -535,12 +567,13 @@ trace_signing(Fun) ->
             {Outcome, length(take_messages(Tracer))}
         after
             erlang:trace(self(), false, [call]),
-            erlang:trace_pattern({quod_dtx, sign_control, 6}, false, [])
+            erlang:trace_pattern({quod_atomic, sign_control, 6}, false, [])
         end
     after
         stop_recorder(Tracer, Monitor)
     end.
 
-readiness(Record, Projection) ->
-    {ok, Material} = quod_dtx:admission_material(Record),
-    quod_dtx:proposal_readiness(Material, Projection).
+admission(Record, Projection, Index) ->
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, History} = quod_dtx_phase_index:history(Index, quod_atomic:group_id(Record)),
+    quod_dtx_owner:admission(Material, History, Projection).

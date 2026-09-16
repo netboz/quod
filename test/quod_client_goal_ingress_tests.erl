@@ -279,7 +279,7 @@ operation_resolution_follows_the_existing_claim(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
     Deadline = min(maps:get(expires_ms, Session),
                    quod_time:now_ms() + 30000),
-    Fixture = quod_ct:signed_dtx_begin_fixture(
+    Fixture = quod_ct:signed_atomic_fixture(
                 #{network => ?NETWORK, target => {Ns, ?ANCHOR},
                   key_pair => KeyPair,
                   deadline => Deadline,

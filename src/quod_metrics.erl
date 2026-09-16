@@ -69,8 +69,8 @@ Two collection paths:
 | `quod_dtx_committed_total{namespace}` | counter | `phase` | committed distributed-control barriers, by protocol phase |
 | `quod_dtx_validation_events_total{namespace}` | counter | `event` | DTX validation attempts that reached their final abstention safeguard |
 | `quod_dtx_submit_fanout_total{namespace}` | counter | `result` | bounded target-validator DTX delivery attempts and outcomes |
-| `quod_dtx_admission_waiting/dormant{namespace}` | gauge | | sealed distributed writes queued before Begin, and distinct groups retained as inactive Begin intents |
-| `quod_dtx_admission_wait_ms{namespace}` | histogram | | time a sealed distributed write waited before its group became an inactive Begin intent |
+| `quod_dtx_admission_waiting/dormant{namespace}` | gauge | | active Vote selections and proof-reserved source groups in the single admission FIFO |
+| `quod_dtx_admission_wait_ms{namespace}` | histogram | | time a sealed distributed write waited for durable source reservation |
 | `quod_ontology_owner_current/peak{namespace,component,state}` | gauge | | current and owner-lifetime peak rows in the existing ontology-local DTX and catch-up owners |
 | `quod_ontology_owner_bytes_current/peak{namespace,component}` | gauge | | current and owner-lifetime peak encoded bytes retained by ontology-local owners that retain encoded data |
 | `quod_node_owner_current/peak{component,state}` | gauge | | current and owner-lifetime peak rows in the existing node-wide foreign-history, signed-goal, and scope routers |
@@ -297,8 +297,8 @@ declare(NodeId) ->
     _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
-    _ = G(quod_dtx_admission_waiting, "Sealed distributed writes waiting before the existing Begin signing admission opens."),
-    _ = G(quod_dtx_admission_dormant, "Distinct distributed-write groups currently retained as inactive Begin intents."),
+    _ = G(quod_dtx_admission_waiting, "Atomic roles awaiting Vote selection in the existing owner admission FIFO."),
+    _ = G(quod_dtx_admission_dormant, "Source groups durably reserved before the proof activates their own material."),
     _ = OG(quod_ontology_owner_current,
            "Current rows in internal work owners attached to one locally hosted ontology. Component and state are fixed labels; no remote identity or payload is exposed."),
     _ = OG(quod_ontology_owner_peak,
@@ -429,7 +429,7 @@ declare(NodeId) ->
           "How many internal retargets each completed origin-owned submission needed. Zero means its first placement resolved; values above zero expose slot-boundary churn without turning it into a client retry.",
           ?RETARGET_HOPS_BUCKETS),
     _ = H(quod_dtx_admission_wait_ms,
-          "How long a sealed distributed write waited, in milliseconds, before its group became an inactive Begin intent.",
+          "How long a sealed distributed write waited, in milliseconds, for durable source reservation.",
           ?DTX_ADMISSION_WAIT_BUCKETS),
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
@@ -1200,10 +1200,8 @@ observe_dtx_group_stage(_Ns, _Stage, _Result, _DurationNative) ->
 dtx_group_stage(proof_seal) -> {ok, <<"proof_seal">>};
 dtx_group_stage(admission) -> {ok, <<"admission">>};
 dtx_group_stage(coordinator_total) -> {ok, <<"coordinator_total">>};
-dtx_group_stage('begin') -> {ok, <<"begin">>};
-dtx_group_stage(prepare_wave) -> {ok, <<"prepare_wave">>};
-dtx_group_stage(decision) -> {ok, <<"decision">>};
-dtx_group_stage(finalize_wave) -> {ok, <<"finalize_wave">>};
+dtx_group_stage(vote_wave) -> {ok, <<"vote_wave">>};
+dtx_group_stage(resolve_wave) -> {ok, <<"resolve_wave">>};
 dtx_group_stage(applied_wave) -> {ok, <<"applied_wave">>};
 dtx_group_stage(complete) -> {ok, <<"complete">>};
 dtx_group_stage(endpoint_wait) -> {ok, <<"endpoint_wait">>};
@@ -1618,7 +1616,7 @@ count_dtx_submit_fanout(Ns, Result, Count)
 count_dtx_submit_fanout(_Ns, _Result, _Count) ->
     ok.
 
--doc "Record one sealed distributed write's volatile wait before Begin admission.".
+-doc "Record one sealed distributed write's wait for durable source reservation.".
 -spec observe_dtx_admission_wait(binary(), non_neg_integer()) -> ok.
 observe_dtx_admission_wait(Ns, WaitMs)
   when is_binary(Ns), is_integer(WaitMs), WaitMs >= 0 ->
@@ -1773,10 +1771,8 @@ client_outcome_unknown_producer(gateway_cursor_transport) ->
     {ok, <<"gateway_cursor_transport">>};
 client_outcome_unknown_producer(_) -> error.
 
-owner_phase('begin') -> {ok, <<"begin">>};
-owner_phase(prepare) -> {ok, <<"prepare">>};
-owner_phase(decision) -> {ok, <<"decision">>};
-owner_phase(finalize) -> {ok, <<"finalize">>};
+owner_phase(vote) -> {ok, <<"vote">>};
+owner_phase(resolve) -> {ok, <<"resolve">>};
 owner_phase(complete) -> {ok, <<"complete">>};
 owner_phase(outbound) -> {ok, <<"outbound">>};
 owner_phase(inbound) -> {ok, <<"inbound">>};

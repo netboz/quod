@@ -105,7 +105,7 @@ handle_history(block, Req, _Qs, Mode, Deadline) ->
         Slot ->
             R = with_history_store(Ns, Mode, Deadline, fun(Store) ->
                     case quod_ledger_store:read_at(Store, Slot) of
-                        {ok, E}   -> block_json(Store, Ns, E);
+                        {ok, E}   -> block_json(Ns, E);
                         not_found -> not_found
                     end
                 end, not_found),
@@ -297,7 +297,7 @@ collect_txs(Store, Slot, Need, Scan, Acc) ->
     case quod_ledger_store:read_at(Store, Slot) of
         {ok, E} ->
             Ns = quod_ledger_store:namespace(Store),
-            Rows = entry_rows(Store, Ns, E),
+            Rows = entry_rows(Ns, E),
             collect_txs(
               Store, Slot - 1, Need - length(Rows), Scan - 1,
               lists:reverse(Rows, Acc));
@@ -417,12 +417,12 @@ entry_txs(Entry) ->
 %% same-phase DTX-control batch. Keeping this projection beside block_json/2
 %% makes paged history and the live WebSocket describe the same committed
 %% ledger; every control gets its own row while sharing the committed slot.
-entry_rows(Store, Ns, E) ->
+entry_rows(Ns, E) ->
     #entry{data = Data} = quod_ledger:entry_view(E),
     case quod_ledger:classify(Data) of
         {content, Txs} -> [tx_json(Ns, T, E) || T <- Txs];
         {controls, Controls} ->
-            [control_row(Store, Ns, Phase, Control, E)
+            [control_row(Ns, Phase, Control, E)
              || {Phase, Control} <- Controls];
         noop -> [];
         invalid -> []
@@ -516,9 +516,6 @@ role_details(
       request_digest => digest_json(RequestDigest),
       targets => [operation_receipt_row_json(Row) || Row <- Receipt]}.
 
-operation_receipt_row_json({Target, {included, Ref}}) ->
-    #{target => origin_json(Target), kind => included,
-      application_ref => anchored_outcome_ref_json(Ref)};
 operation_receipt_row_json({Target, {certified, Ref, Certificate}}) ->
     {ok, #{result := Result, slot := Slot, committee_id := Committee}} =
         quod_applied_certificate:operation_certificate_binding(Certificate),
@@ -641,216 +638,112 @@ signature_status(#transaction{sig = Sig}, _Entry)
 signature_status(_Transaction, _Entry) ->
     invalid.
 
+%% Live and history render only this canonical artifact. A Resolve links to
+%% its own Vote; rendering never acquires another owner or rereads its plan.
 block_json(Ns, E) ->
-    %% The live stream has no store handle.  Open the same read-only ledger
-    %% view used by history so a just-committed Finalize can show the exact
-    %% referenced Prepare plan too. The event has one read deadline; an
-    %% unavailable owner leaves only that optional display field absent, never
-    %% reopens a path or postpones the event for a timed retry.
-    Deadline = read_deadline(),
-    case with_history_store(Ns, live, Deadline,
-           fun(Store) -> block_json(Store, Ns, E) end, unavailable) of
-        {error, ontology_unreachable} -> block_json(none, Ns, E);
-        Block -> Block
-    end.
-
-block_json(Store, Ns, E) ->
     #entry{data = Data} = quod_ledger:entry_view(E),
     case quod_ledger:classify(Data) of
         {content, Txs} ->
             (block_meta(content, E))#{
               txs => [tx_json_full(Ns, T, E) || T <- Txs]};
-        {controls, Controls} -> dtx_block_meta(Store, Controls, E);
+        {controls, Controls} ->
+            (block_meta(dtx_batch, E))#{
+              txs => [], controls => [control_json(C) || {_, C} <- Controls]};
         noop -> (block_meta(noop, E))#{txs => []};
         invalid -> (block_meta(invalid, E))#{txs => []}
     end.
 
-dtx_block_meta(Store, Controls, E) ->
-    (block_meta(dtx_batch, E))#{
-      txs => [],
-      controls => [control_json(Store, Control)
-                   || {_Phase, Control} <- Controls]}.
-
-control_row(Store, Ns, Phase, Control, Entry) ->
+control_row(Ns, Phase, Control, Entry) ->
     #entry{index = Slot, timestamp = Timestamp} = quod_ledger:entry_view(Entry),
-    ControlJson = control_json(Store, Control),
+    ControlJson = control_json(Control),
     Digest = maps:get(record_digest, ControlJson),
-    #{row_type => control,
-      row_id => <<"dtx:", Digest/binary>>,
-      ns => Ns,
-      height => Slot,
-      time => Timestamp,
-      phase => Phase,
+    #{row_type => control, row_id => <<"dtx:", Digest/binary>>,
+      ns => Ns, height => Slot, time => Timestamp, phase => Phase,
       control => ControlJson}.
 
-%% The explorer exposes stable, already-validated control metadata and the
-%% prepared facts/events from each decoded participant plan.  It deliberately
-%% omits the raw plan bytes, certificates embedded in references, and
-%% signing-journal bytes: those remain ledger implementation details, not a
-%% second API or an alternate source of truth.
-control_json(Store, Control) ->
+%% The boundary decoder already authenticated the own plan and request. There
+%% are no foreign plans here, raw bundle bytes, certificate bytes or journal
+%% material, and display does not reauthenticate that cached material.
+control_json(Control) ->
     #{kind := Kind, target := Target, author := Author,
       author_admission := Admission, sequence := Sequence,
-      submitted_at := SubmittedAt} = quod_dtx:control_metadata(Control),
+      submitted_at := SubmittedAt} = quod_atomic:control_metadata(Control),
     maps:merge(
       #{kind => Kind,
-        group_id => digest_json(quod_dtx:group_id(Control)),
-        record_digest => digest_json(quod_dtx:record_digest(Control)),
-        target => origin_json(Target),
-        author => id_json(Author),
+        group_id => digest_json(quod_atomic:group_id(Control)),
+        record_digest => digest_json(quod_atomic:record_digest(Control)),
+        target => origin_json(Target), author => id_json(Author),
         author_admission => digest_json(Admission),
-        sequence => Sequence,
-        submitted_at => SubmittedAt},
-      control_body_json(Kind, quod_dtx:control_body(Control), Target, Store)).
+        sequence => Sequence, submitted_at => SubmittedAt},
+      control_body_json(quod_atomic:control_material(Control))).
 
-control_body_json(
-  'begin',
-  {quod_dtx_begin, _, Manifest, _RequestAuth, Bundles} = Begin,
-  _Target, _Store) ->
-    OutcomeRef = case quod_dtx:begin_group_ref(Begin) of
-                     {ok, Ref} -> Ref;
-                     error -> none
-                 end,
-    #{participant_count => length(Bundles),
-      participants => [participant_plan_json(Manifest, Bundle)
-                       || Bundle <- Bundles],
-      request => request_json(
-                   quod_dtx:request_auth(Begin),
-                   quod_dtx:request_claim(Begin), OutcomeRef)};
-control_body_json(
-  prepare,
-  {quod_dtx_prepare, _, _, _BeginRef, Manifest, PlanDigest, PlanBlob},
-  Target, _Store) ->
-    Plan = participant_plan_json(
-             Manifest, {Target, PlanDigest, PlanBlob, none}),
-    #{plan_digest => digest_json(PlanDigest), plan => Plan};
-control_body_json(
-  decision,
-  {quod_dtx_decision, _, _, _BeginRef, Verdict, PrepareRefs, _} = Record,
-  _Target, _Store) ->
-    #{verdict => Verdict,
-      prepare_count => length(PrepareRefs),
-      reasons => decision_reasons_json(Record)};
-control_body_json(finalize,
-                  {quod_dtx_finalize, _, _, _DecisionRef, Verdict, PrepareRef,
-                   AppliedGeneration}, Target, Store) ->
-    Base = #{verdict => Verdict, prepared => PrepareRef =/= none,
-             applied_generation => AppliedGeneration},
-    case {Verdict, finalized_prepare_plan(Store, Target, PrepareRef)} of
-        {commit, {ok, Plan}} -> Base#{applied_plan => Plan};
-        _ -> Base
+control_body_json({{quod_dtx_vote, 4, {quod_atomic_group, 4, _, Auth, _},
+                    Target, _Bundle, Choice}, _, #{group := Binding, plans := Plans}} = Material) ->
+    #{participants := Roles, vote_deadline_ms := Deadline, request := Request} = Binding,
+    {Vote, Reasons} = case Choice of
+        prepared -> {prepared, null};
+        {refused, Blob} -> {refused, failure_reasons_json(Blob)}
+    end,
+    OutcomeRef = case Vote =:= prepared andalso quod_atomic:source_group_ref(Material) of
+        {ok, Ref} -> Ref;
+        _ -> none
+    end,
+    Base = #{participant_count => length(Roles), vote => Vote,
+             vote_deadline_ms => Deadline, reasons => Reasons,
+             request => request_json(Auth, Request, OutcomeRef)},
+    case maps:find(Target, Plans) of
+        {ok, Plan} -> Base#{plan => participant_plan_json(Target, Plan)};
+        error -> Base
     end;
-control_body_json(complete,
-                  {quod_dtx_complete, _, _, _DecisionRef, FinalizeRows},
-                  _Target, _Store) ->
-    #{finalize_count => length(FinalizeRows)}.
+control_body_json({{quod_dtx_resolve, 4, _, _, _, Outcome, _OriginVote,
+                    _Evidence, OwnVote, Generation, Reasons}, _, _}) ->
+    #{verdict => Outcome, voted => OwnVote =/= none,
+      vote_ref => atomic_reference_json(OwnVote),
+      applied_generation => Generation, reasons => failure_reasons_json(Reasons)};
+control_body_json({{quod_dtx_complete, 4, _, _, _, Outcome, Rows, _Applied}, _, _}) ->
+    #{verdict => Outcome, resolve_count => length(Rows)}.
 
-%% A Finalize deliberately stores only a certified reference to its Prepare;
-%% the referenced plan remains the one ledger record that owns the exact diff.
-%% Explorer follows that reference in the current read-only ledger view and
-%% verifies target, slot, phase, and record digest before rendering it.
-finalized_prepare_plan(none, _Target, _PrepareRef) ->
-    error;
-finalized_prepare_plan(_Store, _Target, none) ->
-    error;
-finalized_prepare_plan(Store, Target, PrepareRef) ->
-    case quod_dtx:certified_ref_binding(PrepareRef) of
-        {ok, Target, Slot, Digest} ->
-            case quod_ledger_store:read_at(Store, Slot) of
-                {ok, Entry} ->
-                    #entry{data = Data} = quod_ledger:entry_view(Entry),
-                    case quod_ledger:classify(Data) of
-                        {controls, Controls} ->
-                            case [PrepareControl
-                                  || {prepare, PrepareControl} <- Controls,
-                                     quod_dtx:record_digest(PrepareControl) =:=
-                                         Digest] of
-                                [PrepareControl] ->
-                                    prepare_plan_json(PrepareControl, Target);
-                                _ -> error
-                            end;
-                        _ -> error
-                    end;
-                not_found -> error
-            end;
-        _ ->
-            error
-    end.
+participant_plan_json(Target, Plan) ->
+    {ok, #{effects := Effects, diff := Diff}} = quod_dtx:material(Plan),
+    #{target => origin_json(Target), plan_digest => digest_json(quod_dtx:digest(Plan)),
+      status => bound, signer => id_json(quod_dtx:signer(Plan)),
+      diff_ops => quod_dtx:diff_ops(Plan), diff => [op_json(Op) || Op <- Diff],
+      effect_count => quod_dtx:effects_count(Plan),
+      effects => [effect_json(Effect) || Effect <- Effects]}.
 
-prepare_plan_json(PrepareControl, Target) ->
-    case quod_dtx:control_body(PrepareControl) of
-        {quod_dtx_prepare, _, _, _BeginRef, Manifest, PlanDigest, PlanBlob} ->
-            {ok, participant_plan_json(
-                   Manifest, {Target, PlanDigest, PlanBlob, none})};
-        _ ->
-            error
-    end.
+atomic_reference_json(none) -> null;
+atomic_reference_json(Ref) ->
+    {ok, {Target, Slot, BlockHash, RecordDigest}} = quod_dtx:certified_ref_claim(Ref),
+    #{target => origin_json(Target), height => Slot,
+      block_hash => digest_json(BlockHash), record_digest => digest_json(RecordDigest)}.
 
-participant_plan_json(
-  Manifest, {Target, PlanDigest, PlanBlob, Attestation}) ->
-    Base = #{target => origin_json(Target),
-             plan_digest => digest_json(PlanDigest)},
-    case quod_dtx:decode(PlanBlob) of
-        {ok, Plan} ->
-            BindingValid =
-                quod_dtx:target(Plan) =:= Target andalso
-                quod_dtx:digest(Plan) =:= PlanDigest andalso
-                (Attestation =:= none orelse
-                 quod_dtx:verify_plan_attestation(
-                   Target, Plan, Manifest, Attestation)),
-            case BindingValid of
-                true ->
-                    {ok, #{effects := Effects, diff := Diff}} = quod_dtx:material(Plan),
-                    Base#{status => bound,
-                          signer => id_json(quod_dtx:signer(Plan)),
-                          diff_ops => quod_dtx:diff_ops(Plan),
-                          diff => [op_json(Op) || Op <- Diff],
-                          effect_count => quod_dtx:effects_count(Plan),
-                          effects => [effect_json(Effect)
-                                      || Effect <- Effects]};
-                false -> invalid_participant_plan_json(Base)
-            end;
-        {error, _} ->
-            invalid_participant_plan_json(Base)
+failure_reasons_json(none) -> null;
+failure_reasons_json(Blob) ->
+    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+    [prolog_text(Reason) || Reason <- Reasons].
+
+request_json(none, none, _OutcomeRef) -> null;
+request_json(Auth, #{claim := Claim, evidence := Evidence}, OutcomeRef) ->
+    verified_request_json(Auth, Claim, Evidence, OutcomeRef);
+request_json({agent_goal_v1, _, Bytes, Signature} = Auth, {ok, Claim}, OutcomeRef) ->
+    case quod_client_goal:verify(Bytes, Signature) of
+        {ok, Evidence} -> verified_request_json(Auth, Claim, Evidence, OutcomeRef);
+        {error, _} -> invalid_request_json()
     end;
-participant_plan_json(_Manifest, _Malformed) ->
-    invalid_participant_plan_json(
-      #{target => null, plan_digest => <<"invalid">>}).
+request_json(_RequestAuth, _Claim, _OutcomeRef) -> invalid_request_json().
 
-invalid_participant_plan_json(Base) ->
-    Base#{status => invalid, signer => null,
-          diff_ops => null, diff => null,
-          effect_count => null, effects => []}.
-
-request_json(none, none, _OutcomeRef) ->
-    null;
-request_json(
-  {agent_goal_v1, <<_:256>> = Digest, RequestBytes,
-   <<_:512>> = AgentSignature},
-  {ok, #{key := {AgentRef, OperationId}, digest := Digest,
-         target := {TargetNs, <<_:256>> = TargetAnchor},
-         deadline := Deadline, principal := {agent, AgentRef},
-         operation_ref := OperationRef}},
-  OutcomeRef)
-  when is_binary(RequestBytes), is_binary(TargetNs) ->
-    case quod_client_goal:verify(RequestBytes, AgentSignature) of
-        {ok, #{request := #{mode := Mode, parser_version := ParserVersion}}} ->
-            #{status => verified,
-              request_digest => digest_json(Digest),
-              agent => actor_json({agent, AgentRef}),
-              operation_id => digest_json(OperationId),
-              operation_ref => operation_ref_json(OperationRef),
-              target => origin_json({TargetNs, TargetAnchor}),
-              mode => Mode,
-              parser_version => ParserVersion,
-              not_after_ms => Deadline,
-              signature => signature_json(AgentSignature),
-              first_outcome => anchored_outcome_ref_json(OutcomeRef)};
-        {error, _} ->
-            invalid_request_json()
-    end;
-request_json(_RequestAuth, _Claim, _OutcomeRef) ->
-    invalid_request_json().
+verified_request_json(
+  {agent_goal_v1, Digest, _Bytes, Signature},
+  #{key := {AgentRef, OperationId}, digest := Digest, target := Target,
+    deadline := Deadline, principal := {agent, AgentRef}, operation_ref := OperationRef},
+  #{request := #{mode := Mode, parser_version := ParserVersion}}, OutcomeRef) ->
+    #{status => verified, request_digest => digest_json(Digest),
+      agent => actor_json({agent, AgentRef}), operation_id => digest_json(OperationId),
+      operation_ref => operation_ref_json(OperationRef), target => origin_json(Target),
+      mode => Mode, parser_version => ParserVersion, not_after_ms => Deadline,
+      signature => signature_json(Signature),
+      first_outcome => anchored_outcome_ref_json(OutcomeRef)};
+verified_request_json(_, _, _, _) -> invalid_request_json().
 
 invalid_request_json() ->
     #{status => invalid, request_digest => null, agent => null,
@@ -885,12 +778,6 @@ anchored_outcome_ref_json(
       group_id => digest_json(GroupId)};
 anchored_outcome_ref_json(_) ->
     null.
-
-decision_reasons_json(Record) ->
-    case quod_dtx:decision_failure_reasons(Record) of
-        none -> null;
-        {ok, Reasons} -> [prolog_text(Reason) || Reason <- Reasons]
-    end.
 
 block_meta(E) ->
     block_meta(entry_kind(E), E).

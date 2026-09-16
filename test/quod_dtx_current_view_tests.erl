@@ -338,14 +338,14 @@ endpoint_failure_never_immediately_resubmits_uncertain_work_test() ->
        {{error, timeout}, 1},
        quod_dtx_current_view:test_submit_operation_candidates(
          Write, [{error, timeout}, {error, not_ready}])),
-    Phase = {phase, <<3:128>>, <<4:256>>, prepare},
+    Phase = {phase, <<3:128>>, <<4:256>>, vote},
     PhaseReply = {phase, <<3:128>>, 1, pending},
     ?assertEqual(
        {{ok, PhaseReply}, 2},
        quod_dtx_current_view:test_submit_operation_candidates(
          Phase, [{error, not_ready}, {ok, PhaseReply, []}])).
 
-exact_f_plus_one_finalize_committee_certificate_succeeds_test() ->
+exact_f_plus_one_resolve_committee_certificate_succeeds_test() ->
     F = fixture(4),
     [A, B | _] = maps:get(committee, F),
     Certificate = certificate(F, [A, B], #{}),
@@ -354,7 +354,7 @@ exact_f_plus_one_finalize_committee_certificate_succeeds_test() ->
               Certificate, maps:get(network_identity, F),
               maps:get(evidence, F))).
 
-applied_certificate_accepts_an_equivalent_finalize_quorum_subset_test() ->
+applied_certificate_accepts_an_equivalent_resolve_quorum_subset_test() ->
     F0 = fixture(4),
     Target = {Ns, Anchor} = maps:get(target, F0),
     Committee = maps:get(committee, F0),
@@ -382,9 +382,9 @@ applied_certificate_accepts_an_equivalent_finalize_quorum_subset_test() ->
     RetainedCert = Form([A, B, C]),
     SuppliedCert = Form([B, C, D]),
     Evidence = Evidence0#{entry => quod_ledger:entry(Block, RetainedCert)},
-    {ok, FinalizeRef} = quod_dtx:certified_entry_ref(
+    {ok, ResolveRef} = quod_dtx:certified_entry_ref(
                           Target, quod_ledger:entry(Block, SuppliedCert), Control),
-    Claim = (maps:get(claim, F0))#{finalize_ref => FinalizeRef},
+    Claim = (maps:get(claim, F0))#{resolve_ref => ResolveRef},
     F = F0#{claim => Claim, evidence => Evidence},
     Certificate = certificate(F, [A, B], #{}),
     ?assertNotEqual(RetainedCert, SuppliedCert),
@@ -395,16 +395,16 @@ insufficient_duplicate_nonmember_and_bad_signatures_fail_test() ->
     F = fixture(4),
     [A, B | _] = maps:get(committee, F),
     One = certificate(F, [A], #{}),
-    {quod_dtx_applied_certificate, 1, Network, Target, CommitteeId,
-     GroupId, FinalizeRef, Generation, Verdict, [{A, Signature}]} = One,
-    Duplicate = {quod_dtx_applied_certificate, 1, Network, Target, CommitteeId,
-                 GroupId, FinalizeRef, Generation, Verdict,
+    {quod_dtx_applied_certificate, 2, Network, Target, CommitteeId,
+     GroupId, ResolveRef, Generation, Verdict, [{A, Signature}]} = One,
+    Duplicate = {quod_dtx_applied_certificate, 2, Network, Target, CommitteeId,
+                 GroupId, ResolveRef, Generation, Verdict,
                  [{A, Signature}, {A, Signature}]},
     Outsider = signer(),
     NonMember = certificate_with_signers(
                   F, [Outsider, maps:get(B, maps:get(signers, F))], #{}),
-    BadSignature = {quod_dtx_applied_certificate, 1, Network, Target,
-                    CommitteeId, GroupId, FinalizeRef, Generation, Verdict,
+    BadSignature = {quod_dtx_applied_certificate, 2, Network, Target,
+                    CommitteeId, GroupId, ResolveRef, Generation, Verdict,
                     lists:keysort(1, [{A, <<0:512>>},
                                       signed_row(F, B, #{})])},
     lists:foreach(
@@ -425,10 +425,10 @@ every_signed_statement_field_is_bound_test() ->
     WrongTargetRef = certified_ref(WrongTarget, 18, digest(203)),
     Cases =
         [{#{network_identity => digest(204)}, Network},
-         {#{target => WrongTarget, finalize_ref => WrongTargetRef}, Network},
+         {#{target => WrongTarget, resolve_ref => WrongTargetRef}, Network},
          {#{committee_id => digest(205)}, Network},
          {#{group_id => digest(206)}, Network},
-         {#{finalize_ref => WrongRef}, Network},
+         {#{resolve_ref => WrongRef}, Network},
          {#{generation => maps:get(generation, Claim) + 1}, Network},
          {#{verdict => abort}, Network}],
     lists:foreach(
@@ -440,7 +440,7 @@ every_signed_statement_field_is_bound_test() ->
                        Certificate, ExpectedNetwork, maps:get(evidence, F)))
       end, Cases).
 
-certification_uses_exact_finalize_committee_without_current_view_lookup_test() ->
+certification_uses_exact_resolve_committee_without_current_view_lookup_test() ->
     F = fixture(4),
     [A, B | _] = maps:get(committee, F),
     Successes = maps:from_keys([A, B], true),
@@ -453,7 +453,7 @@ certification_uses_exact_finalize_committee_without_current_view_lookup_test() -
                   end
               end),
     %% A later current committee is irrelevant: this function must never ask
-    %% for one, because the exact certified Finalize freezes its signer set.
+    %% for one, because the exact certified Resolve freezes its signer set.
     Deps = Deps0#{view => fun(_, _, _) -> error(stale_current_view_path) end},
     {ok, Certificate} = certify(F, Deps),
     ?assert(quod_applied_certificate:verify_applied_certificate(
@@ -477,7 +477,7 @@ cohosted_certification_uses_the_local_member_without_a_route_test() ->
       remote =>
           fun(_, _, _, _, _, _) -> error(unexpected_remote_probe) end},
     ?assertMatch(
-       {ok, {quod_dtx_applied_certificate, 1, _, _, _, _, _, _, _, _}},
+       {ok, {quod_dtx_applied_certificate, 2, _, _, _, _, _, _, _, _}},
        quod_dtx_current_view:test_certify_applied(
          maps:get(owner_ns, F), {local, local_source(F)},
          maps:get(claim, F), Evidence, 1000, Deps)),
@@ -589,40 +589,22 @@ read_certificate_f_plus_one_stale_refusals_remain_typed_test() ->
        quod_dtx_current_view:test_certify_reads(
          maps:get(owner_ns, F), {source(F), PlanBlob}, deadline(1000), Deps)).
 
-observation_walk_preserves_family_terminal_results_test_() ->
-    [{atom_to_list(Family), fun() ->
-        F0 = fixture(1), [Key] = maps:get(committee, F0),
-        First = {"127.0.0.1", 21201}, Second = {"127.0.0.1", 21202},
-        Routes = [{Key, [First, Second]}],
-        View = (maps:get(view, F0))#{route_candidates := Routes},
-        F = F0#{source_routes := Routes, view := View},
-        Calls = atomics:new(1, []),
-        Deps0 = dependencies(F, fun(_, _) -> error(unused_transport) end),
-        Ref = outcome_group_ref(F, Key),
-        Deps = Deps0#{remote := fun(_, _, Pinned, _Endpoint, Request, _) ->
-            ?assertEqual(Key, Pinned),
-            case element(1, Request) of
-                outcome -> outcome_reply(Request, maps:get(target, F),
-                                         maps:get(committee_id, F), 8, not_found);
-                _ ->
-                    atomics:add(Calls, 1, 1),
-                    case Family of
-                        read -> read_attest_conflict(Request);
-                        barrier -> barrier_reply(Request, maps:get(target, F),
-                                                 maps:get(committee_id, F), 8, not_found)
-                    end
-            end
-        end},
-        Result = case Family of
-            read -> quod_dtx_current_view:test_certify_reads(
-                      maps:get(owner_ns, F), {source(F), read_plan_blob(F, <<"terminal_read">>)},
-                      deadline(1000), Deps);
-            barrier -> lookup(F, Ref, Deps)
-        end,
-        Expected = case Family of read -> conflict_retry; barrier -> not_found end,
-        ?assertEqual({error, Expected}, Result),
-        ?assertEqual(1, atomics:get(Calls, 1))
-    end} || Family <- [read, barrier]].
+read_conflict_stops_the_shared_endpoint_walk_test() ->
+    F0 = fixture(1), [Key] = maps:get(committee, F0),
+    Routes = [{Key, [{"127.0.0.1", 21201}, {"127.0.0.1", 21202}]}],
+    F = F0#{source_routes := Routes,
+             view := (maps:get(view, F0))#{route_candidates := Routes}},
+    Calls = atomics:new(1, []),
+    Deps0 = dependencies(F, fun(_, _) -> error(unused_transport) end),
+    Deps = Deps0#{remote := fun(_, _, Pinned, _Endpoint, Request, _) ->
+        ?assertEqual(Key, Pinned),
+        atomics:add(Calls, 1, 1),
+        read_attest_conflict(Request)
+    end},
+    ?assertEqual({error, conflict_retry}, quod_dtx_current_view:test_certify_reads(
+        maps:get(owner_ns, F), {source(F), read_plan_blob(F, <<"terminal_read">>)},
+        deadline(1000), Deps)),
+    ?assertEqual(1, atomics:get(Calls, 1)).
 
 read_certificate_one_stale_refusal_does_not_override_quorum_test() ->
     F = fixture(4),
@@ -770,7 +752,7 @@ read_certification_never_allocates_foreign_plan_symbols_test() ->
     ?assertException(error, badarg,
                      binary_to_existing_atom(Symbol, utf8)).
 
-retired_finalize_member_uses_shared_resolver_after_endpoint_move_test() ->
+retired_resolve_member_uses_shared_resolver_after_endpoint_move_test() ->
     F0 = fixture(1),
     [OldKey] = maps:get(committee, F0),
     CurrentSigner = signer(),
@@ -840,13 +822,13 @@ live_route_for_a_nonmember_is_never_probed_or_counted_test() ->
               end
           end},
     %% The outsider could produce a well-formed signed response, but exact
-    %% Finalize membership—not route presence—decides who may attest.
+    %% Resolve membership—not route presence—decides who may attest.
     ?assertEqual({error, retry}, certify(F, Deps)),
     receive outsider_was_probed -> error(nonmember_route_was_used)
     after 0 -> ok
     end.
 
-malformed_finalize_evidence_and_reply_are_retryable_test() ->
+malformed_resolve_evidence_and_reply_are_retryable_test() ->
     F = fixture(1),
     BadEvidence = maps:remove(committee_id, maps:get(evidence, F)),
     ?assertEqual(
@@ -958,7 +940,7 @@ many_certification_preserves_aligned_successes_and_retries_test() ->
     Requests = [{GoodSource, maps:get(claim, Good), maps:get(evidence, Good)},
                 {RetrySource, maps:get(claim, Retry), maps:get(evidence, Retry)}],
     ?assertMatch(
-       {ok, [{verified, {quod_dtx_applied_certificate, 1, _, _, _, _, _, _, _, _}},
+       {ok, [{verified, {quod_dtx_applied_certificate, 2, _, _, _, _, _, _, _, _}},
              retry]},
        quod_dtx_current_view:test_certify_applied_many(
          maps:get(owner_ns, Good), Requests, deadline(1000), Deps)).
@@ -992,11 +974,11 @@ many_certification_validates_each_input_once_before_workers_test() ->
         ok
     end, #{type => call_count, report => return,
            pattern => [{quod_dtx_current_view, valid_request, 4},
-                       {quod_dtx_current_view, valid_finalize_evidence, 6}]}),
+                       {quod_dtx_current_view, valid_resolve_evidence, 6}]}),
     lists:foreach(fun({Name, Arity}) ->
         ?assertEqual(2, lists:sum([N || {quod_dtx_current_view, FName, A, Ps} <- Counts,
                                       FName =:= Name, A =:= Arity, {_, N, _} <- Ps]))
-    end, [{valid_request, 4}, {valid_finalize_evidence, 6}]).
+    end, [{valid_request, 4}, {valid_resolve_evidence, 6}]).
 
 malformed_late_batch_row_starts_no_worker_test() ->
     F = fixture(1),
@@ -1149,65 +1131,11 @@ ordinary_quorum_absence_stays_unknown_without_a_barrier_test() ->
     after 0 -> ok
     end.
 
-group_quorum_absence_uses_only_the_exact_coordinator_barrier_test() ->
+pending_vote_is_not_a_validator_quorum_status_test() ->
     F = fixture(4),
     [Coordinator | _] = maps:get(committee, F),
     Ref = outcome_group_ref(F, Coordinator),
-    TestPid = self(),
-    Deps = outcome_dependencies(
-             maps:get(view, F),
-             fun(Key, Request, Target, CommitteeId, Slot) ->
-                     case Request of
-                         {outcome, _, _, _, _} ->
-                             outcome_reply(
-                               Request, Target, CommitteeId, Slot, not_found);
-                         {outcome_barrier, _, _, _, _} ->
-                             TestPid ! {barrier_peer, Key},
-                             barrier_reply(
-                               Request, Target, CommitteeId, Slot,
-                               pending_begin)
-                     end
-             end),
-    ?assertEqual(
-       {ok, #{status => pending, phase => pending_begin, ref => Ref}},
-       lookup(F, Ref, Deps)),
-    receive {barrier_peer, Coordinator} -> ok
-    after 0 -> error(missing_exact_coordinator_barrier)
-    end,
-    receive {barrier_peer, Other} -> error({wrong_barrier_peer, Other})
-    after 0 -> ok
-    end.
-
-coordinator_barrier_can_prove_pre_handoff_absence_or_retirement_test() ->
-    F = fixture(4),
-    [Coordinator | _] = maps:get(committee, F),
-    Ref = outcome_group_ref(F, Coordinator),
-    lists:foreach(
-      fun({BarrierStatus, Expected}) ->
-          Deps = outcome_dependencies(
-                   maps:get(view, F),
-                   fun(_Key, Request, Target, CommitteeId, Slot) ->
-                           case element(1, Request) of
-                               outcome -> outcome_reply(
-                                            Request, Target, CommitteeId,
-                                            Slot, not_found);
-                               outcome_barrier -> barrier_reply(
-                                                    Request, Target,
-                                                    CommitteeId, Slot,
-                                                    BarrierStatus)
-                           end
-                   end),
-          ?assertEqual(Expected, lookup(F, Ref, Deps))
-      end,
-      [{not_found, {error, not_found}},
-       {coordinator_retired,
-        {ok, #{status => rejected, reason => coordinator_retired,
-               ref => Ref}}}]).
-
-certified_view_without_coordinator_proves_retirement_without_contact_test() ->
-    F = fixture(4),
-    Coordinator = digest(245),
-    Ref = outcome_group_ref(F, Coordinator),
+    PendingVote = #{status => pending, phase => pending_vote, ref => Ref},
     TestPid = self(),
     Deps = outcome_dependencies(
              maps:get(view, F),
@@ -1215,33 +1143,7 @@ certified_view_without_coordinator_proves_retirement_without_contact_test() ->
                      case element(1, Request) of
                          outcome -> outcome_reply(
                                       Request, Target, CommitteeId, Slot,
-                                      not_found);
-                         outcome_barrier ->
-                             TestPid ! unexpected_retired_barrier,
-                             {error, not_ready}
-                     end
-             end),
-    ?assertEqual(
-       {ok, #{status => rejected, reason => coordinator_retired,
-              ref => Ref}},
-       lookup(F, Ref, Deps)),
-    receive unexpected_retired_barrier -> error(barrier_was_used)
-    after 0 -> ok
-    end.
-
-pending_begin_is_not_a_validator_quorum_status_test() ->
-    F = fixture(4),
-    [Coordinator | _] = maps:get(committee, F),
-    Ref = outcome_group_ref(F, Coordinator),
-    PendingBegin = #{status => pending, phase => pending_begin, ref => Ref},
-    TestPid = self(),
-    Deps = outcome_dependencies(
-             maps:get(view, F),
-             fun(_Key, Request, Target, CommitteeId, Slot) ->
-                     case element(1, Request) of
-                         outcome -> outcome_reply(
-                                      Request, Target, CommitteeId, Slot,
-                                      PendingBegin);
+                                      PendingVote);
                          outcome_barrier ->
                              TestPid ! unexpected_pending_barrier,
                              {error, not_ready}
@@ -1326,12 +1228,6 @@ outcome_reply(
   Target, CommitteeId, AppliedFloor, Outcome) ->
     {ok, {outcome, RequestId, Target, CommitteeId, AppliedFloor, Outcome}, []}.
 
-barrier_reply(
-  {outcome_barrier, RequestId, _GroupRef, _CommitteeId, _MinimumSlot},
-  Target, CommitteeId, AppliedFloor, Status) ->
-    {ok, {outcome_barrier, RequestId, Target, CommitteeId,
-          AppliedFloor, Status}, []}.
-
 outcome_transaction_ref(F) ->
     {TargetNs, Anchor} = maps:get(identity, maps:get(view, F)),
     {transaction, TargetNs, Anchor, digest(220)}.
@@ -1356,14 +1252,14 @@ applied_reply(F, Key, Request) when is_binary(Key) ->
     applied_reply(F, maps:get(Key, maps:get(signers, F)), Request);
 applied_reply(
   F, #{pubkey := Signer} = Identity,
-  {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict}) ->
+  {applied, RequestId, GroupId, ResolveRef, Generation, Verdict}) ->
     Target = maps:get(target, F),
     CommitteeId = maps:get(committee_id, F),
     {ok, {Signer, Signature}} = quod_applied_certificate:sign_applied_vote(
                                  maps:get(network_identity, F), Target,
-                                 CommitteeId, GroupId, FinalizeRef,
+                                 CommitteeId, GroupId, ResolveRef,
                                  Generation, Verdict, Identity),
-    {ok, {applied, RequestId, Target, CommitteeId, GroupId, FinalizeRef,
+    {ok, {applied, RequestId, Target, CommitteeId, GroupId, ResolveRef,
           Generation, Verdict, Signer, Signature}, []}.
 
 read_attest_reply(F, Key, Request) when is_binary(Key) ->
@@ -1448,15 +1344,16 @@ fixture(N) ->
                 || {Key, I} <- lists:zip(Committee, lists:seq(1, N))]),
     Routes = [{Key, [Endpoint]}
               || {Key, Endpoint} <- maps:to_list(RouteMap)],
-    GroupId = digest(5),
+    GroupId = crypto:hash(sha256, term_to_binary(
+        {<<"quod.dtx.group">>, 4, digest(10)}, [deterministic])),
     Generation = 9,
     Verdict = commit,
-    {Evidence, FinalizeRef} = finalize_evidence(
+    {Evidence, ResolveRef} = resolve_evidence(
                                 Target, GroupId, Generation, Verdict,
                                 Committee, CommitteeId, RouteMap,
                                 hd(SignerRows)),
     Claim = #{target => Target, group_id => GroupId,
-              finalize_ref => FinalizeRef, generation => Generation,
+              resolve_ref => ResolveRef, generation => Generation,
               verdict => commit},
     View = #{identity => Target, slot => 8, generation => 9,
              committee => Committee, committee_id => CommitteeId,
@@ -1466,28 +1363,32 @@ fixture(N) ->
       committee_id => CommitteeId, source_routes => Routes,
       signers => Signers, network_identity => NetworkIdentity}.
 
-finalize_evidence(Target, GroupId, Generation, Verdict,
+resolve_evidence(Target, GroupId, Generation, Verdict,
                   Committee, CommitteeId, Routes, ControlSigner) ->
-    DecisionRef = certified_ref({<<"quod:origin">>, digest(6)}, 2, digest(7)),
-    PrepareRef = certified_ref(Target, 3, digest(8)),
-    {ok, Finalize} = quod_dtx:new_finalize(
-                       GroupId, DecisionRef, Verdict, PrepareRef, Generation),
-    {ok, Control} = quod_dtx:sign_control(
-                      Target, Finalize, digest(9), 1, 1, ControlSigner),
-    {ok, Blob} = quod_dtx:encode_control(Control),
+    Origin = {<<"quod:origin">>, digest(6)},
+    OriginVote = certified_ref(Origin, 2, digest(7)),
+    OwnVote = certified_ref(Target, 3, digest(8)),
+    %% Collector boundary: exact-reference verification is supplied by the
+    %% dependency fixture, not an invented foreign consensus chain.
+    Resolve = {quod_dtx_resolve, 4, GroupId, Target, digest(10), Verdict,
+               OriginVote, {all_prepared, lists:sort([{Origin, OriginVote}, {Target, OwnVote}])},
+               OwnVote, Generation, none},
+    {ok, Material} = quod_atomic:admission_material(Resolve),
+    {ok, Control} = quod_atomic:sign_control(
+                      Target, Material, digest(9), 1, 1, ControlSigner),
     Slot = 7,
-    Payload = {batch, [{dtx, Blob}]},
+    Payload = {batch, [{dtx, Control}]},
     {ok, Block} = quod_ledger:new_block(
                     Slot, Slot - 1, Payload, 0),
     BlockHash = quod_simplex:block_hash(Block),
     Entry = quod_ledger:entry(
               Block, #cert{kind = commit, slot = Slot,
                            block_hash = BlockHash, sigs = []}),
-    {ok, FinalizeRef} = quod_dtx:certified_entry_ref(Target, Entry, Control),
-    {#{identity => Target, phase => finalize, control => Control,
+    {ok, ResolveRef} = quod_dtx:certified_entry_ref(Target, Entry, Control),
+    {#{identity => Target, phase => resolve, control => Control,
        entry => Entry, committee => Committee, committee_id => CommitteeId,
        routes => Routes},
-     FinalizeRef}.
+     ResolveRef}.
 
 certificate(F, Keys, Overrides) ->
     Signers = maps:get(signers, F),
@@ -1501,10 +1402,10 @@ certificate_with_signers(F, Signers, Overrides) ->
                  || Signer <- Signers]),
     #{network_identity := NetworkIdentity, target := Target,
       committee_id := CommitteeId, group_id := GroupId,
-      finalize_ref := FinalizeRef, generation := Generation,
+      resolve_ref := ResolveRef, generation := Generation,
       verdict := Verdict} = Binding,
-    {quod_dtx_applied_certificate, 1, NetworkIdentity, Target, CommitteeId,
-     GroupId, FinalizeRef, Generation, Verdict, Rows}.
+    {quod_dtx_applied_certificate, 2, NetworkIdentity, Target, CommitteeId,
+     GroupId, ResolveRef, Generation, Verdict, Rows}.
 
 certificate_binding(F, Overrides) ->
     Claim = maps:get(claim, F),
@@ -1513,7 +1414,7 @@ certificate_binding(F, Overrides) ->
         target => maps:get(target, F),
         committee_id => maps:get(committee_id, F),
         group_id => maps:get(group_id, Claim),
-        finalize_ref => maps:get(finalize_ref, Claim),
+        resolve_ref => maps:get(resolve_ref, Claim),
         generation => maps:get(generation, Claim),
         verdict => maps:get(verdict, Claim)},
       Overrides).
@@ -1526,11 +1427,11 @@ signed_row(F, Key, Overrides) ->
 signed_row_with_signer(
   #{network_identity := NetworkIdentity, target := Target,
     committee_id := CommitteeId, group_id := GroupId,
-    finalize_ref := FinalizeRef, generation := Generation,
+    resolve_ref := ResolveRef, generation := Generation,
     verdict := Verdict},
   Signer) ->
     {ok, Row} = quod_applied_certificate:sign_applied_vote(
-                  NetworkIdentity, Target, CommitteeId, GroupId, FinalizeRef,
+                  NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
                   Generation, Verdict, Signer),
     Row.
 

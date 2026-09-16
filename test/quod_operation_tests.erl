@@ -48,21 +48,18 @@ inclusion_is_not_a_verdict_or_a_redelivery_command_test() ->
     M2 = observe(F, A, applied, M1),
     ?assertEqual({ok, M2}, quod_operation:accept(A, Ref, E, none, M2)).
 
-restoring_included_receipt_requires_certification_not_claim_delivery_test() ->
+inclusion_only_receipt_is_refused_without_restoring_legacy_work_test() ->
     F = fixture(2), M0 = maps:get(model, F),
     Final = lists:foldl(fun(T, M) -> observe(F, T, applied, M) end,
                        M0, maps:get(targets, F)),
     {ok, Complete} = quod_operation:completion(Final),
-    #transaction{role = {remote_complete, Op, Digest, _}, evidence = {applications, Pairs}} = Complete,
-    {ok, Included} = quod_ct:included_receipt(quod_operation:references(M0)),
-    Old = quod_transaction:attach_receipt_evidence(
-            quod_transaction:remote_complete(maps:get(origin, F), Op, Digest, Included), Pairs),
-    {ok, Restored} = quod_operation:restore_receipt(Old, M0),
-    ?assertEqual(pending, quod_operation:results(Restored)),
-    ?assert(lists:all(fun({certify, _, _, #{transaction := _}}) -> true;
-                        (_) -> false end, quod_operation:work(Restored))),
-    ?assertEqual({error, invalid_completion}, quod_operation:restore_receipt(
-                   Old#transaction{evidence = {applications, tl(Pairs)}}, M0)).
+    #transaction{role = {remote_complete, Op, Digest, _}} = Complete,
+    Included = [{quod_operation_vector:target(R), {included, R}}
+                || R <- quod_operation:references(M0)],
+    Old = Complete#transaction{role = {remote_complete, Op, Digest, Included}},
+    ?assertEqual(error, quod_operation_vector:receipt_references(Included)),
+    ?assertEqual({error, invalid_completion}, quod_operation:restore_receipt(Old, M0)),
+    ?assertEqual([{application, T} || T <- maps:get(targets, F)], quod_operation:work(M0)).
 
 target_binding_cannot_be_substituted_test() ->
     F = fixture(2), [A, B] = maps:get(targets, F), M = maps:get(model, F),

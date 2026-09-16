@@ -2540,6 +2540,59 @@ assert_history_integrity_counts(Custody, Corrupt, Index) ->
     ?assertEqual(Corrupt, prometheus_gauge:value(quod_foreign_history_corruptions)),
     ?assertEqual(Index, prometheus_gauge:value(quod_foreign_history_index_losses)).
 
+downloaded_exact_entry_is_not_reread_test_() ->
+    [{atom_to_list(Mode), fun() -> downloaded_exact_entry_is_not_reread(Mode) end}
+     || Mode <- [direct, routed, single_entry_pages, hint_parent, wrong_phase, wrong_digest]].
+
+downloaded_exact_entry_is_not_reread(Mode) ->
+    F = prepared_then_committed_fixture(unique_ns()),
+    quod_ct:with_network_identity(maps:get(network, F), fun() ->
+        Ns = maps:get(ns, F), Identity = {Ns, maps:get(anchor, F)},
+        Peer = maps:get(pub, F), Endpoint = {"127.0.0.1", 31983},
+        BaseFetch = peer_chain_fetch(Ns, maps:get(chain, F), [Peer]),
+        Pages = atomics:new(1, []),
+        Fetch = fun(P, E, N, From, To) ->
+            _ = atomics:add_get(Pages, 1, 1),
+            End = case Mode of single_entry_pages -> From; _ -> To end,
+            BaseFetch(P, E, N, From, End)
+        end,
+        Dir = temp_dir("downloaded-exact-entry"), Owner = start_owner(Dir, Fetch),
+        MFA = {quod_ledger_store, read_at, 2},
+        Ref = maps:get(resolve_ref, F),
+        try
+            1 = erlang:trace_pattern(MFA, true, [local, call_count]),
+            Result = case Mode of
+                routed -> quod_foreign_log:verify_reference(Ref, resolve, {Peer, Endpoint}, 5000);
+                hint_parent -> quod_foreign_log:verify_reference(Ref, resolve, {Peer, Endpoint},
+                                  lists:last(maps:get(chain, F)), 5000);
+                wrong_phase -> quod_foreign_log:verify(Peer, Endpoint, Ref, vote, 5000);
+                wrong_digest -> quod_foreign_log:verify(Peer, Endpoint,
+                                  setelement(7, Ref, key(98)), resolve, 5000);
+                _ -> quod_foreign_log:verify(Peer, Endpoint, Ref, resolve, 5000)
+            end,
+            case Mode of
+                wrong_phase -> ?assertEqual({error, phase_mismatch}, Result);
+                wrong_digest -> ?assertEqual({error, invalid_foreign_reference}, Result);
+                _ ->
+                    ?assertMatch({ok, #{identity := Identity, slot := 3, phase := resolve}}, Result),
+                    {ok, Evidence} = Result,
+                    ?assertEqual(quod_ledger:encode_entry(lists:last(maps:get(chain, F))),
+                                 quod_ledger:encode_entry(maps:get(entry, Evidence)))
+            end,
+            ?assertEqual({call_count, 0}, erlang:trace_info(MFA, call_count)),
+            ?assertMatch({3, _}, cache_checkpoint(Dir, Identity)),
+            case Mode of single_entry_pages -> ?assertEqual(3, atomics:get(Pages, 1)); _ -> ok end,
+            %% Published historical reads still use the bounded durable store,
+            %% including after an invalid requested phase/digest. No shadow cache.
+            ?assertMatch({ok, #{phase := vote}}, quod_foreign_log:verify(
+                Peer, Endpoint, maps:get(vote_ref, F), vote, 5000)),
+            ?assertEqual({call_count, 1}, erlang:trace_info(MFA, call_count))
+        after
+            _ = erlang:trace_pattern(MFA, false, [local, call_count]),
+            stop_owner(Owner), _ = file:del_dir_r(Dir)
+        end
+    end).
+
 accepted_entry_hint_advances_through_the_one_verified_cache_path_test() ->
     Fixture = prepared_then_committed_fixture(unique_ns()),
     quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->

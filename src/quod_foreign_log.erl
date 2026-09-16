@@ -751,10 +751,12 @@ verify_resident_snapshot(
     end.
 
 verify_resident_store(Store, Slot, Ref, ExpectedPhase, Projection) ->
-    Lookup = trace_foreign_stage(exact_lookup, fun() ->
-        {quod_ledger_store:read_at(Store, Slot), reference_projection(Slot, Slot, Projection)}
-    end),
-    case Lookup of
+    Lookup = trace_foreign_stage(exact_lookup,
+               fun() -> quod_ledger_store:read_at(Store, Slot) end),
+    verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection).
+
+verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection) ->
+    case {Lookup, reference_projection(Slot, Slot, Projection)} of
         {{ok, Entry}, {ok, EvidenceProjection}} ->
             #entry{index = Slot} = quod_ledger:entry_view(Entry),
             verify_exact_reference_entry(
@@ -5379,10 +5381,8 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
               Root, FetchFun, PageTimeout, Cursor, EntryHint) ->
     case fetch_exact_reference(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                                Identity, Cursor, Root, FetchFun, PageTimeout, EntryHint) of
-        {ok, Next = #verified_cursor{store = Store}, {projection, EvidenceProjection}} ->
-            {verify_resident_store(Store, ref_slot(Ref), Ref, Phase, EvidenceProjection), Next};
-        {ok, Next, {evidence, Evidence}} ->
-            {{ok, Evidence}, Next};
+        {ok, Next, Result} ->
+            {Result, Next};
         {error, _Reason, Next} ->
             {{error, retry}, Next}
     end.
@@ -5678,32 +5678,23 @@ fetch_exact_reference(
                 {ok, Parent} ->
                     case import_exact_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
                                                  Parent, Root, EntryHint) of
-                        {ok, _, {evidence, _}} = Ok -> Ok;
+                        {ok, _, {ok, _}} = Ok -> Ok;
                         fallback ->
-                            fetch_exact_from_cache(Owner, RequestRef, Peer, Endpoint, Slot,
+                            fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                                                    Identity, Parent, Root, FetchFun, PageTimeout);
                         {error, _, _} = Error -> Error
                     end;
                 {error, _, _} = Error -> Error
             end;
         _ ->
-            fetch_exact_from_cache(Owner, RequestRef, Peer, Endpoint, Slot,
+            fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
                                    Identity, Cursor, Root, FetchFun, PageTimeout)
     end.
 
-fetch_hint_parent(_Owner, _RequestRef, _Peer, _Endpoint, Slot, _Identity,
-                  Cursor = #verified_cursor{height = Height}, _Root, _FetchFun, _PageTimeout)
-  when Height =:= Slot - 1 ->
-    {ok, Cursor};
 fetch_hint_parent(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
                   Cursor, Root, FetchFun, PageTimeout) ->
-    case fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot - 1, Identity,
-                         Cursor, Root, FetchFun, PageTimeout) of
-        {ok, Next = #verified_cursor{height = Height}, _} when Height =:= Slot - 1 ->
-            {ok, Next};
-        {ok, Next, _} -> {error, retry, Next};
-        {error, _, _} = Error -> Error
-    end.
+    advance_snapshot_to_height([{Peer, Endpoint}], Owner, RequestRef, Identity,
+      Cursor, Root, Slot - 1, FetchFun, PageTimeout).
 
 import_exact_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
                         Cursor = #verified_cursor{height = Height}, Root, Entry) ->
@@ -5724,7 +5715,7 @@ import_next_entry_hint(Owner, RequestRef, Ref, Phase, Identity = {Ns, Anchor},
                 {ok, Evidence} ->
                     trace_count(hint_entries, 1),
                     case persist_verified_page(Owner, RequestRef, Identity, Cursor, Root, Prepared) of
-                        {ok, Next} -> {ok, Next, {evidence, Evidence}};
+                        {ok, Next} -> {ok, Next, {ok, Evidence}};
                         {error, _, _} = Error -> Error
                     end;
                 {error, _} -> fallback
@@ -5732,24 +5723,19 @@ import_next_entry_hint(Owner, RequestRef, Ref, Phase, Identity = {Ns, Anchor},
         {error, _} -> fallback
     end.
 
-fetch_exact_from_cache(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
-                      Cursor, Root, FetchFun, PageTimeout) ->
-    case fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
-                         Cursor, Root, FetchFun, PageTimeout) of
-        {ok, Next, EvidenceProjection} -> {ok, Next, {projection, EvidenceProjection}};
-        {error, _, _} = Error -> Error
-    end.
-
-fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot, Identity = {Ns, Anchor},
-                Cursor = #verified_cursor{height = Height, projection = Projection,
+fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity = {Ns, Anchor},
+                Cursor = #verified_cursor{store = Store, height = Height, projection = Projection,
                                           phase_index = PhaseIndex},
                 Root, FetchFun, PageTimeout) ->
+    Slot = ref_slot(Ref),
     case Height >= Slot of
         true ->
             %% Only the exact read borrows this ephemeral view. It is never
             %% retained across writer custody or written into a checkpoint.
             case quod_dtx_phase_index:capture(PhaseIndex, Height) of
-                {ok, IndexView} -> {ok, Cursor, Projection#{history_index => IndexView}};
+                {ok, IndexView} ->
+                    {ok, Cursor, verify_resident_store(Store, Slot, Ref, Phase,
+                                   Projection#{history_index => IndexView})};
                 {error, _} -> {error, cache_corrupt, Cursor#verified_cursor{state = invalid}}
             end;
         false ->
@@ -5759,12 +5745,19 @@ fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot, Identity = {Ns, Anchor}
                 {ok, Entries, RemoteHeight} when is_integer(RemoteHeight), RemoteHeight >= 0 ->
                     case prepare_verified_page(Ns, Anchor, Identity, Projection, PhaseIndex,
                                                From, To, Entries, RemoteHeight) of
-                        {ok, Prepared} ->
+                        {ok, #{verified := Verified, projection := EntryProjection} = Prepared} ->
                             trace_verified_page(Peer, maps:get(count, Prepared)),
                             case persist_verified_page(Owner, RequestRef, Identity, Cursor, Root, Prepared) of
+                                {ok, Next = #verified_cursor{height = Slot}} ->
+                                    %% The final bounded page already owns this exact artifact
+                                    %% and its historical committee. Use it only after append,
+                                    %% index installation and checkpoint all succeed; never
+                                    %% re-read/decode it or retain a second history cache.
+                                    {ok, Next, verify_projected_entry({ok, lists:last(Verified)},
+                                                 Slot, Ref, Phase, EntryProjection)};
                                 {ok, Next = #verified_cursor{height = NextHeight}}
                                   when NextHeight > Height ->
-                                    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
+                                    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
                                       Next, Root, FetchFun, PageTimeout);
                                 {ok, Next} -> {error, invalid_history, Next};
                                 {error, _, _} = Error -> Error

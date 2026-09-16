@@ -187,7 +187,7 @@ exact_startup_replay_and_warm_requests_are_separate_test() ->
           end
       end).
 
-routed_exact_has_the_same_worker_children_test() ->
+routed_exact_reuses_the_verified_page_without_disk_lookup_test() ->
     with_fixture(
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, _Dir, _Owner, _Fetch) ->
@@ -200,7 +200,8 @@ routed_exact_has_the_same_worker_children_test() ->
           ?assertEqual(2, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
           assert_stages(Worker, Spans,
             [exact_route, cache_open, page_fetch, page_verify,
-             exact_lookup, exact_validate, phase_suspend, ledger_suspend, worker_handoff])
+             exact_validate, phase_suspend, ledger_suspend, worker_handoff]),
+          assert_no_stage(exact_lookup, Spans)
       end).
 
 changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->

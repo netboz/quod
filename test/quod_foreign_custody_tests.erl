@@ -510,18 +510,27 @@ cancel_message_tag({'DOWN', _, process, Worker, _}, _, _, Worker) -> worker_down
 cancel_message_tag(_, _, _, _) -> other.
 
 custody_fifo_case(Root, Mode) ->
-    Fixture = fixture(), Identity = identity(Fixture),
+    Fixture = quod_foreign_log_tests:prepared_then_committed_fixture(
+                quod_foreign_log_tests:unique_ns()),
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
+        custody_fifo_case(Root, Mode, Fixture)
+    end).
+
+custody_fifo_case(Root, Mode, Fixture) ->
+    Identity = identity(Fixture),
     Holder = holder(Identity),
     Owner = start_owner(Root, fetch(Fixture)),
     trace_owner(Owner),
-    Head = request(Owner, Fixture, 10000),
+    Head = send_request(Owner,
+        {verify, maps:get(pub, Fixture), {"127.0.0.1", 31997},
+         maps:get(vote_ref, Fixture), vote, 10000}, 10000),
     {HeadJob, Denied} = await_park(Owner, Identity),
     await_dead(Denied),
     {custody, HeadMonitor} = queued_field(Owner, Identity, parked),
     install_registration_barrier(),
     persistent_term:put({?MODULE, registration_gate}, writer_key(Identity)),
     1 = erlang:trace(Owner, true, [procs]),
-    Ref = maps:get(ref, Fixture),
+    Ref = maps:get(resolve_ref, Fixture),
     Contact = {maps:get(pub, Fixture), {"127.0.0.1", 31997}},
     Work = case Mode of
         direct -> {verify, element(1, Contact), element(2, Contact), Ref, entry, 10000};
@@ -547,7 +556,7 @@ custody_fifo_case(Root, Mode) ->
     ?assertMatch(#{active := #{ref := HeadJob, worker := FirstWorker},
                    waiting := [#{ref := SecondJob}]}, lifecycle(Owner, Identity)),
     FirstWorker ! {release_registration, self()},
-    assert_verified(Head),
+    ?assertMatch({reply, {ok, #{slot := 2, phase := vote}}}, gen_server:wait_response(Head, 10000)),
     await_name_free(Identity),
     SecondWorker = receive {registration_held, W2} -> W2
                    after 5000 -> error(custody_sibling_not_dispatched) end,
@@ -556,7 +565,9 @@ custody_fifo_case(Root, Mode) ->
                  lifecycle(Owner, Identity)),
     persistent_term:erase({?MODULE, registration_gate}),
     SecondWorker ! {release_registration, self()},
-    ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Second, 10000)),
+    %% This sibling still lacks slot 3: FIFO protects actual writer work,
+    %% not a redundant writer for the prefix already published by the head.
+    ?assertMatch({reply, {ok, #{slot := 3}}}, gen_server:wait_response(Second, 10000)),
     stop_owner(Owner), ok.
 
 fixture() -> quod_foreign_log_tests:foreign_fixture(
@@ -593,7 +604,9 @@ send_request(Owner, Request, Timeout) ->
                                     undefined, erlang:monotonic_time(), Request}).
 assert_verified(Request) ->
     ?assertMatch({reply, {ok, #{slot := 2, phase := resolve}}},
-                 gen_server:wait_response(Request, 10000)).
+                 quod_foreign_log_tests:consume_verification_reply(
+                   quod_reg:where({foreign_log, node}),
+                   gen_server:wait_response(Request, 10000))).
 seed_genesis(Owner, F) ->
     Entry = hd(maps:get(chain, F)),
     {batch, [Genesis]} = element(3, quod_ledger:entry_view(Entry)),

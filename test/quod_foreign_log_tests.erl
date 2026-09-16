@@ -16,6 +16,7 @@
          start_local_borrow_source/2, stop_local_borrow_source/2,
          hold_direct_local/4, receive_local_borrow_result/1,
          start_owner/2, stop_owner/1, unique_ns/0, temp_dir/1,
+         consume_verification_reply/2,
          with_page_decode_fixture/2, receive_page_open/3,
          install_page_test_link/5, receive_page_request/3,
          hold_next_page_decode/3, receive_page_decode_gate/2,
@@ -25,6 +26,13 @@
 
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
+
+%% Owner-seam fixtures receive capabilities rather than public API results.
+%% Execute them through the production caller, not a second verifier. These
+%% fixtures do not test caller expiry; the public-API lifetime controls do.
+consume_verification_reply(Owner, {reply, {ready_reference, _, _, _, _} = Capability}) ->
+    {reply, quod_foreign_log:consume_reference_reply(Owner, Capability, infinity)};
+consume_verification_reply(_Owner, Response) -> Response.
 
 page_credit_shares_pinned_binding_fifo_across_anchors_test() ->
     Ns = unique_ns(),
@@ -2240,6 +2248,112 @@ pending_prepare_to_finalize_resumes_phase_history_and_fetches_only_delta_test() 
             _ = file:del_dir_r(Dir)
         end
     end).
+
+queued_readers_use_published_prefix_test_() ->
+    [{atom_to_list(Case), fun() -> queued_readers_use_published_prefix(Case) end}
+     || Case <- [ready, owner_down, deadline, wrong_phase]].
+
+queued_readers_use_published_prefix(Case) ->
+    F = prepared_then_committed_fixture(unique_ns()),
+    quod_ct:with_network_identity(maps:get(network, F), fun() ->
+        Ns = maps:get(ns, F), Identity = {Ns, maps:get(anchor, F)},
+        Peer = maps:get(pub, F), Endpoint = {"127.0.0.1", 31980},
+        Dir = temp_dir("queued-prefix"),
+        Owner = start_owner(Dir, peer_chain_fetch(Ns, maps:get(chain, F), [Peer])),
+        Parent = self(), Token = make_ref(), MFA = {quod_foreign_log, launch_request_owned, 4},
+        try
+            ?assertMatch({ok, _}, quod_foreign_log:verify(
+                Peer, Endpoint, maps:get(vote_ref, F), vote, 5000)),
+            await_history_ready(Identity, 2),
+            ok = gen_server:call(Owner, {test_hold_next_worker_result, self(), Token}),
+            Current = gen_server:send_request(Owner,
+                current_request([{Peer, [Endpoint]}], Identity, none, 5000)),
+            Worker = receive {worker_result_held, Token, _, Pid} -> Pid
+                     after 2000 -> error(current_not_held) end,
+            1 = erlang:trace_pattern(MFA, true, [local, call_count]),
+            1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]),
+            Deadline = quod_time:mono_ms() + 1500,
+            Phase = case Case of wrong_phase -> vote; _ -> resolve end,
+            Readers = [spawn_monitor(fun() ->
+                put({quod_foreign_log, local_read_gate}, {before_read, Parent, Token}),
+                Ref = maps:get(resolve_ref, F),
+                Result = case Kind of
+                    direct -> quod_foreign_log:verify(Peer, Endpoint, Ref, Phase, 1000);
+                    routed -> quod_foreign_log:resolve_reference(
+                                Identity, Ref, Phase, none, none, Deadline)
+                end,
+                Parent ! {queued_read_result, self(), Result}
+            end) || Kind <- [direct, routed]],
+            try
+                %% Actual receive events, followed by an owner call, prove both
+                %% admissions. A send-trace notification is not a delivery barrier.
+                lists:foreach(fun({Reader, _}) ->
+                    receive {trace, Owner, 'receive', {'$gen_call', {Reader, _},
+                              {verification, _, _, _, _}}} -> ok
+                    after 1000 -> error(reader_not_received) end
+                end, Readers),
+                ?assertMatch(#{queued := 2}, quod_foreign_log:stats()),
+                _ = erlang:trace(Owner, false, ['receive']),
+                Worker ! {release_worker_result, Token},
+                ?assertMatch({reply, {ok, #{slot := 3}}}, gen_server:wait_response(Current, 2000)),
+                _ = quod_foreign_log:stats(),
+                ?assertEqual({call_count, 0}, erlang:trace_info(MFA, call_count)),
+                lists:foreach(fun({Reader, _}) ->
+                    receive {local_read_held, Token, Reader} -> ok
+                    after 1000 -> error(queued_reader_not_released) end
+                end, Readers),
+                ?assertMatch(#{queued := 0, pending := 0}, quod_foreign_log:stats()),
+                case Case of
+                    owner_down -> stop_owner(Owner);
+                    deadline ->
+                        Timer = erlang:start_timer(max(0, Deadline - quod_time:mono_ms()), self(), Token),
+                        receive {timeout, Timer, Token} -> ok
+                        after 2000 -> error(deadline_not_expired) end;
+                    _ -> ok
+                end,
+                lists:foreach(fun({Reader, Mon}) ->
+                    Reader ! {release_local_read, Token},
+                    receive {queued_read_result, Reader, Result} ->
+                        case Case of
+                            ready -> ?assertMatch({ok, #{identity := Identity, slot := 3, phase := resolve}}, Result);
+                            _ -> ?assertMatch({error, _}, Result)
+                        end
+                    after 1000 -> error(reader_not_finished) end,
+                    receive {'DOWN', Mon, process, Reader, normal} -> ok
+                    after 1000 -> error(reader_not_down) end
+                end, Readers)
+            after
+                Worker ! {release_worker_result, Token},
+                [begin exit(P, kill), demonitor(M, [flush]) end || {P, M} <- Readers]
+            end
+        after
+            _ = catch erlang:trace(Owner, false, ['receive']),
+            Delivered = erlang:trace_delivered(all),
+            receive {trace_delivered, all, Delivered} -> ok end,
+            flush_owner_receive_traces(Owner),
+            _ = erlang:trace_pattern(MFA, false, [local, call_count]),
+            case is_process_alive(Owner) of true -> stop_owner(Owner); false -> ok end,
+            file:del_dir_r(Dir)
+        end
+    end).
+
+flush_owner_receive_traces(Owner) ->
+    receive {trace, Owner, 'receive', _} -> flush_owner_receive_traces(Owner)
+    after 0 -> ok end.
+
+exact_reads_do_not_count_as_current_view_misses_test() ->
+    F = foreign_fixture(unique_ns()), Dir = temp_dir("exact-metrics"),
+    Owner = start_owner(Dir, chain_fetch(maps:get(ns, F), maps:get(chain, F))),
+    try
+        with_foreign_history_metrics(fun() ->
+            Before = foreign_stage_sample(resident_current_miss),
+            ?assertMatch({ok, _}, quod_foreign_log:verify(maps:get(pub, F),
+                {"127.0.0.1", 31980}, maps:get(ref, F), resolve, 5000)),
+            ?assertEqual(Before, foreign_stage_sample(resident_current_miss))
+        end)
+    after
+        stop_owner(Owner), file:del_dir_r(Dir)
+    end.
 
 ready_prefix_read_does_not_wait_for_a_higher_window_test() ->
     F = prepared_then_committed_fixture(unique_ns()),

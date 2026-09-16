@@ -95,7 +95,9 @@ projection; any missing or newer height returns to the ordinary verifier.
 At owner startup, existing per-identity writers initialize the retained disk
 caches before proof requests can use them. Requests never reconstruct a
 prefix. Ready exact reads borrow the published prefix without joining a newer
-range's acquisition queue. Capture selects one historical era from the same
+range's acquisition queue. Publication also releases already-queued readers
+through that same capture, without taking writer custody or selecting a route.
+Capture selects one historical era from the same
 retained index; point I/O and exact verification run in the existing caller.
 """.
 
@@ -121,6 +123,7 @@ retained index; point I/O and exact verification run in the existing caller.
 -define(LOCAL_READ_GATE(Stage), test_local_read_gate(Stage)).
 -define(WORKER_RESULT_GATE(Ref), test_worker_result_gate(Ref)).
 -export([cache_namespace/1, valid_projection/2, test_coalesce_notice/2,
+         consume_reference_reply/3,
          open_verified_cache/6,
          test_install_worker_meta/3, test_install_verified_progress/3,
          test_fail_persist_after/1,
@@ -1361,11 +1364,8 @@ handle_verification(
   {verify, Peer, Endpoint, Ref, Phase, TimeoutMs}, Caller, From, S0) ->
     case validate_route_request(Peer, Endpoint, Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            begin_exact_verification(Identity, Ref, Phase, Caller, S0, fun() ->
-              begin_verification(
-              Peer, Endpoint, Ref, Phase, Caller,
-              S0#s.fetch_fun, Identity, From, S0)
-            end);
+            begin_worker(Peer, Identity, Caller,
+              {exact, Peer, Endpoint, Ref, Phase}, S0#s.fetch_fun, From, S0);
         {error, Reason} ->
             observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
             {reply, {error, Reason}, S0}
@@ -1374,12 +1374,10 @@ handle_verification(
   {verify_reference, Ref, Phase, Contact, EntryHint, TimeoutMs}, Caller, From, S0) ->
     case validate_reference_request(Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            begin_exact_verification(Identity, Ref, Phase, Caller, S0, fun() ->
-              begin_current_worker(
+            begin_current_worker(
               Identity, [], Contact, Caller,
               {exact_reference, Ref, Phase, EntryHint},
-              From, S0)
-            end);
+              From, S0);
         {error, Reason} ->
             observe_unadmitted_caller(Caller, foreign_trace_reason({error, Reason})),
             {reply, {error, Reason}, S0}
@@ -1401,7 +1399,15 @@ handle_verification(
 
 valid_caller_deadline(_Request, Deadline) -> is_integer(Deadline).
 
-begin_exact_verification(Identity, Ref, Phase, Caller, S, MissingRange) ->
+%% Arrival and publication use the same bounded read capture. Readiness is a
+%% property of the published prefix, independent of routes or writer custody.
+ready_reference({exact, _Peer, _Endpoint, Ref, Phase}, Identity, S) ->
+    ready_reference(Ref, Phase, Identity, S);
+ready_reference(#routed_work{kind = {exact_reference, Ref, Phase, _Hint}}, Identity, S) ->
+    ready_reference(Ref, Phase, Identity, S);
+ready_reference(_Work, _Identity, _S) -> miss.
+
+ready_reference(Ref, Phase, Identity, S) ->
     {ok, Identity, Slot, _Digest} = quod_dtx:certified_ref_binding(Ref),
     case maps:get(Identity, S#s.histories, undefined) of
         #history{published = #prefix{height = Height, index = Hold,
@@ -1418,16 +1424,9 @@ begin_exact_verification(Identity, Ref, Phase, Caller, S, MissingRange) ->
                     end;
                 {error, _} -> {error, retry}
             end,
-            observe_unadmitted_caller(Caller, ready_prefix_capture),
-            {reply, Reply, S};
-        _ -> MissingRange()
+            {ready, Reply};
+        _ -> miss
     end.
-
-begin_verification(Peer, Endpoint, Ref, Phase, TimeoutMs, FetchFun,
-                   Identity, From, S0) ->
-    begin_worker(
-      Peer, Identity, TimeoutMs,
-      {exact, Peer, Endpoint, Ref, Phase}, FetchFun, From, S0).
 
 begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
     case start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) of
@@ -1437,41 +1436,21 @@ begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
 begin_current_worker(
   Identity, Supplied, Contact, TimeoutMs, Kind, From, S0) ->
     Work = #routed_work{supplied = Supplied, contact = Contact, kind = Kind},
-    case start_routed_worker(Identity, TimeoutMs, Work, From, S0) of
-        {ok, S1} -> {noreply, S1}
-    end.
+    begin_worker(none, Identity, TimeoutMs, Work, S0#s.fetch_fun, From, S0).
 
 start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
-    case join_identical_request(Identity, Work, From, TimeoutMs, S0) of
-        {joined, S1} ->
-            {ok, S1};
-        no ->
-            start_distinct_worker(
-              Peer, Identity, TimeoutMs, Work, FetchFun, From, S0)
+    case ready_reference(Work, Identity, S0) of
+        {ready, Reply} ->
+            observe_unadmitted_caller(TimeoutMs, ready_prefix_capture),
+            gen_server:reply(From, Reply),
+            {ok, S0};
+        miss ->
+            case join_identical_request(Identity, Work, From, TimeoutMs, S0) of
+                {joined, S1} -> {ok, S1};
+                no -> start_distinct_worker(
+                        Peer, Identity, TimeoutMs, Work, FetchFun, From, S0)
+            end
     end.
-
-start_routed_worker(Identity, TimeoutMs, Work, From, S0) ->
-    case join_identical_request(Identity, Work, From, TimeoutMs, S0) of
-        {joined, S1} ->
-            {ok, S1};
-        no ->
-            start_distinct_routed_worker(
-              Identity, TimeoutMs, Work, From, S0)
-    end.
-
-start_distinct_routed_worker(Identity, TimeoutMs, Work, From, S0) ->
-    %% Subscribe before route selection/dispatch. An accepted edge during
-    %% the attempt belongs to that attempt even if it later parks.
-    S1 = open_progress_signals(Identity, ensure_history(Identity, S0)),
-    RequestRef = make_ref(),
-    {InternalFrom, Callers} = request_owners(RequestRef, From, TimeoutMs),
-    Queued = #request{
-                ref = RequestRef, from = InternalFrom,
-                callers = stage_callers(Callers, queued),
-                peer = none, identity = Identity, work = Work,
-                fetch_fun = S1#s.fetch_fun,
-                enqueued_native = erlang:monotonic_time()},
-    {ok, enqueue_request(Queued, S1)}.
 
 resolve_routed_work(Identity, #routed_work{supplied = Supplied,
                                             contact = Contact,
@@ -1505,7 +1484,11 @@ routed_source_candidates(_CurrentWork, Sources) ->
 
 start_distinct_worker(
   Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
-    S1 = ensure_history(Identity, S0),
+    %% Subscribe before route selection/dispatch, including attempts that park.
+    S1 = case Work of
+        #routed_work{} -> open_progress_signals(Identity, ensure_history(Identity, S0));
+        _ -> ensure_history(Identity, S0)
+    end,
     RequestRef = make_ref(),
     {InternalFrom, Callers} = request_owners(
                                 RequestRef, From, TimeoutMs),
@@ -1517,8 +1500,7 @@ start_distinct_worker(
     {ok, enqueue_request(Queued, S1)}.
 
 enqueue_request(#request{identity = Identity} = Queued, S0) ->
-    %% Every arrival uses the same selector: distinct routes may bypass a
-    %% route park, but no new arrival may bypass this cache's custody wait.
+    %% Readers use published prefixes; only missing ranges need writer custody.
     H0 = maps:get(Identity, S0#s.histories),
     {_, JobId, _} = launch_identity(queued_launch_identity(Queued)),
     H1 = H0#history{waiting = queue:in(
@@ -1537,15 +1519,11 @@ launch_request_owned(
     case ResidentResult of
         {ok, Evidence} ->
             observe_foreign_stage(
-              resident_current_hit, ok, ResidentStarted),
-            observe_foreign_stage(
               request_current, ok, ResidentStarted),
             cancel_caller_timers(Callers),
             reply_request_callers(Callers, {ok, Evidence}),
             start_next_request(Identity, touch_history(Identity, S0));
         miss ->
-            observe_foreign_stage(
-              resident_current_miss, ok, ResidentStarted),
             Owner = self(),
             Root = S0#s.root,
             PageTimeout = S0#s.page_timeout_ms,
@@ -1818,7 +1796,14 @@ resident_cache(Identity, #s{histories = Histories}) ->
 resident_current_identity(
   {current_identity, Sources, Identity, _ProbeTimeout}, Identity,
   S) ->
-    resident_confirmed_current(Sources, Identity, S);
+    Started = erlang:monotonic_time(),
+    Result = resident_confirmed_current(Sources, Identity, S),
+    Stage = case Result of
+        {ok, _} -> resident_current_hit;
+        miss -> resident_current_miss
+    end,
+    observe_foreign_stage(Stage, ok, Started),
+    Result;
 resident_current_identity(_Work, _Identity, _S) ->
     miss.
 
@@ -2944,7 +2929,27 @@ cancel_caller_timers(Callers) ->
       end, Callers).
 
 start_next_request(Identity, S0) ->
-    observe_queue_blockers(Identity, select_next_request(Identity, S0)).
+    observe_queue_blockers(Identity,
+      select_next_request(Identity, release_ready_readers(Identity, S0))).
+
+release_ready_readers(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{waiting = Waiting} = H ->
+            Pending = lists:filter(fun(Q) ->
+                case ready_reference(Q#request.work, Identity, S0) of
+                    {ready, Reply} ->
+                        release_custody_monitor(Identity, Q),
+                        release_source_monitor(Q#request.source),
+                        cancel_caller_timers(Q#request.callers),
+                        observe_foreign_stage(queue_wait, ok, Q#request.enqueued_native),
+                        reply_request_callers(Q#request.callers, Reply, ready_prefix_capture),
+                        false;
+                    miss -> true
+                end
+            end, queue:to_list(Waiting)),
+            put_history(Identity, H#history{waiting = queue:from_list(Pending)}, S0);
+        undefined -> S0
+    end.
 
 select_next_request(Identity, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
@@ -2975,8 +2980,9 @@ select_next_request(Identity, S0) ->
     end.
 
 %% Observe only this identity's existing selector/lifetime transitions. There is
-%% no scheduling index: route parks are bypassable, a custody head is not, and
-%% an active worker remains the predecessor through retirement until its DOWN.
+%% no scheduling index: among missing-range jobs, route parks are bypassable,
+%% a custody head is not, and an active worker remains the predecessor through
+%% retirement until its DOWN. Covered readers have already left this queue.
 %% The long owner_stage already measures queue residence; these short linked
 %% children identify changes within it without replacing its duration or parent.
 observe_queue_blockers(Identity, S0) ->

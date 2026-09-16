@@ -247,7 +247,7 @@ resident_failure_only_wakes_waiters_on_real_advance_test_() ->
 resident_failure_wakes(Mode) ->
     {Height, Expected} = case Mode of
         unchanged_prefix -> {1, [true, true]};
-        advanced_prefix -> {2, [false, false]}
+        advanced_prefix -> {2, []}
     end,
     with_installation_state(Height, fun(Identity, RequestRef, State0, Meta) ->
     Request = maps:get(RequestRef, record_field(s, pending, State0)),
@@ -265,15 +265,32 @@ resident_failure_wakes(Mode) ->
     H0 = state_history(Identity, State0),
     State = put_record(s, histories,
         #{Identity => put_record(history, waiting, queue:from_list(Rows), H0)}, State0),
-    %% A real active-row guard holds dispatch while we inspect both distinct
-    %% live callers' park permissions. Repeated unchanged installations model
-    %% each unsuccessful job finishing: neither may grant the other's retry.
+    %% An active writer does not block covered readers. Unchanged prefixes
+    %% still cannot grant either unavailable job another route attempt.
     State1 = quod_foreign_log:test_install_verified_progress(RequestRef, Meta, State),
     ?assertEqual(Expected, parked_flags(Identity, State1)),
+    case Mode of
+        advanced_prefix ->
+            lists:foreach(fun(Row) ->
+                [{_, Tag}] = maps:keys(record_field(request, callers, Row)),
+                receive {Tag, Capability} ->
+                    ?assertMatch({ready_reference, _, Ref, _, _}, Capability),
+                    Verified = quod_foreign_log_tests:consume_verification_reply(
+                                 self(), {reply, Capability}),
+                    case record_field(routed_work, kind, record_field(request, work, Row)) of
+                        {exact_reference, Ref, vote, none} ->
+                            ?assertMatch({reply, {ok, #{phase := vote}}}, Verified);
+                        {exact_reference, Ref, resolve, none} ->
+                            ?assertMatch({reply, {error, _}}, Verified)
+                    end
+                after 1000 -> error(published_reader_not_released) end
+            end, Rows);
+        unchanged_prefix -> ok
+    end,
     State2 = quod_foreign_log:test_install_verified_progress(RequestRef, Meta, State1),
     ?assertEqual(Expected, parked_flags(Identity, State2)),
     ?assertEqual(RequestRef, record_field(history, active, state_history(Identity, State2))),
-    ?assertEqual(2, length(queue:to_list(
+    ?assertEqual(length(Expected), length(queue:to_list(
         record_field(history, waiting, state_history(Identity, State2)))))
     end).
 

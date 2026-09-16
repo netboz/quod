@@ -71,7 +71,7 @@ wrong_target_refusal_has_a_real_routed_primitive_control_test() ->
         end)),
         ?assertEqual(identity(F), maps:get(identity, Evidence)),
         Positive = traces(),
-        ?assertEqual(1, calls(Positive, quod_foreign_log, start_distinct_routed_worker, 5)),
+        ?assertEqual(1, calls(Positive, quod_foreign_log, start_distinct_worker, 7)),
         ?assertEqual(1, calls(Positive, quod_foreign_log, spawn_verification_worker, 3)),
         flush_fetches(),
         ?assertEqual({error, bad_foreign_reference},
@@ -304,7 +304,7 @@ historical_era_keeps_its_committee_and_checks_supplied_proofs_test() ->
         T = traces(),
         ?assertEqual(5, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
-        ?assertEqual(0, calls(T, quod_foreign_log, start_distinct_routed_worker, 5)),
+        ?assertEqual(0, calls(T, quod_foreign_log, start_distinct_worker, 7)),
         assert_no_fetch()
     end).
 
@@ -781,7 +781,7 @@ trace_patterns() ->
      {quod_foreign_log, verification_call, 2},
      {quod_foreign_log, verify_local_deadline, 4},
      {quod_foreign_log, verify_resident_local_reference, 4},
-     {quod_foreign_log, start_distinct_routed_worker, 5},
+     {quod_foreign_log, start_distinct_worker, 7},
      {quod_foreign_log, spawn_verification_worker, 3},
      {quod_foreign_log, open_cache, 5},
      {quod_foreign_log, replay_cache, 6},
@@ -819,7 +819,7 @@ calls(T, M, F, A) -> length([ok || {trace, _, call, {TM, TF, Args}} <- T,
 
 assert_no_foreign_work(T) ->
     lists:foreach(fun({M, F, A}) -> ?assertEqual(0, calls(T, M, F, A)) end,
-                  [{quod_foreign_log, start_distinct_routed_worker, 5},
+                  [{quod_foreign_log, start_distinct_worker, 7},
                    {quod_foreign_log, spawn_verification_worker, 3},
                    {quod_foreign_log, open_cache, 5},
                    {quod_foreign_log, replay_cache, 6},
@@ -828,7 +828,7 @@ assert_no_foreign_work(T) ->
                    {quod_ledger_store, open_ro, 3}]).
 
 assert_one_routed(T, C, Ref, Phase, Hint, D) ->
-    ?assertEqual(1, calls(T, quod_foreign_log, start_distinct_routed_worker, 5)),
+    ?assertEqual(1, calls(T, quod_foreign_log, start_distinct_worker, 7)),
     ?assertEqual(1, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
     Requests = [{R, Deadline} || {trace, _, call, {quod_foreign_log, verification_call, [R, Deadline]}} <- T],
     ?assertMatch([{{verify_reference, Ref, Phase, _, Hint, _}, D}], Requests),

@@ -228,7 +228,7 @@ expired_caller_does_not_cancel_shared_exact_job_test() ->
         end
     end).
 
-callerless_queued_job_preserves_fifo_and_accepts_late_join_test() ->
+callerless_acquisition_keeps_fifo_while_covered_readers_proceed_test() ->
     Fixture = fixture(exact),
     Parent = self(),
     Token = make_ref(),
@@ -271,14 +271,17 @@ callerless_queued_job_preserves_fifo_and_accepts_late_join_test() ->
                          after 2000 -> error(callerless_fifo_job_not_started) end,
             try
                 #{active := #{ref := QueuedRef, callers := []},
-                  waiting := [#{ref := LaterRef}]} = lifecycle(Owner, Identity),
-                ?assertEqual(timeout, gen_server:wait_response(Later, 0)),
+                  waiting := []} = lifecycle(Owner, Identity),
+                %% The existing prefix satisfies Later even while the
+                %% callerless acquisition waits for a newer range.
+                ?assertMatch({reply, {ok, #{slot := 2}}},
+                    quod_foreign_log_tests:consume_verification_reply(
+                        Owner, gen_server:wait_response(Later, 2000))),
                 Late = send_request(Owner, current_request(Fixture, 2000), trace_context(sampled)),
                 #{active := #{ref := QueuedRef, callers := [_]},
-                  waiting := [#{ref := LaterRef}]} = lifecycle(Owner, Identity),
+                  waiting := []} = lifecycle(Owner, Identity),
                 NextWorker ! {release_fifo_callerless, Token},
                 ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Late, 2000)),
-                ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(Later, 2000)),
                 ?assertEqual(2, atomics:get(Gate, 1))
             after
                 NextWorker ! {release_fifo_callerless, Token}
@@ -682,7 +685,9 @@ exact_phase_entry_hint_and_contact_remain_nonshareable_test() ->
             ?assert(lists:all(fun(#{callers := Callers}) -> length(Callers) =:= 1 end, Rows)),
             Worker ! {release_binding_fetch, Token},
             ?assertMatch({reply, {ok, _}}, gen_server:wait_response(Active, 2000)),
-            [?assertMatch({reply, {ok, _}}, gen_server:wait_response(Call, 2000)) || Call <- Calls]
+            [?assertMatch({reply, {ok, _}},
+                quod_foreign_log_tests:consume_verification_reply(
+                    Owner, gen_server:wait_response(Call, 2000))) || Call <- Calls]
         after
             Worker ! {release_binding_fetch, Token}
         end

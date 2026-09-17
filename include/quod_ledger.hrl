@@ -78,7 +78,8 @@
                  submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).
                  sig = none   :: binary() | none,     %% 64-byte Ed25519 signature; none only for genesis
                  signed_bytes = none :: binary() | none, %% exact canonical bytes covered by `sig`; a derived view never replaces them
-                 claim_view = none :: none | tuple()}). %% decode-owned authenticated plans; never serialized
+                 claim_view = none :: none | tuple(), %% decode-owned authenticated plans/request; never serialized
+                 authentication = none :: none | {binary(), binary(), binary()}}). %% checked author/signature/bytes; never serialized
 
 %% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
 %% A slot is a consensus height: the leader for slot v proposes one block; validators support

@@ -8181,7 +8181,8 @@ find_effect_custody(TxId, Expected, Custody) ->
     end.
 
 unsigned_envelope(Change = #transaction{}) ->
-    Change#transaction{author_seq = 0, sig = none, signed_bytes = none}.
+    Change#transaction{author_seq = 0, sig = none, signed_bytes = none,
+                       authentication = none}.
 
 sign_and_retain_effect(Change, S0) ->
     case sign_local_change(Change, S0) of

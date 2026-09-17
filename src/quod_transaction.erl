@@ -128,7 +128,7 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
     Bundles = lists:sort(Bundles0),
     {ok, Plans} = claim_plans(Origin, Manifest, Bundles),
     [{Plan, #{goal := GoalBlob, result := ResultBlob}} | _] = Plans,
-    {ok, #{claim := RequestClaim}} =
+    {ok, RequestEvidence} =
         quod_client_goal:verify_durable_request(RequestAuth, GoalBlob),
     Claim0 =
         #transaction{tx_id = <<>>,
@@ -145,7 +145,7 @@ remote_claim({OriginNs, <<_:256>> = OriginAnchor} = Origin, Manifest,
                      auth_transcript = none,
                      author = none, sig = none,
                      claim_view = {Origin, Manifest, Bundles, Plans,
-                                   RequestAuth, GoalBlob, RequestClaim}},
+                                   RequestAuth, GoalBlob, RequestEvidence}},
     Identity = #operation_identity{
                   claim_ref = {transaction, OriginNs, OriginAnchor, ClaimId}} =
         operation_identity(Claim0),
@@ -537,14 +537,14 @@ validate_request(
 validate_request(
   <<_:256>> = Network, {Ns, <<_:256>>} = Target, AdmissionMs,
   #transaction{role = {remote_claim, _, _, _}, origin = Target,
-               goal = GoalBlob, request_auth = Auth,
-               auth_transcript = none})
+               goal = GoalBlob,
+               auth_transcript = none} = Transaction)
   when is_binary(Ns), is_integer(AdmissionMs), AdmissionMs >= 0,
        is_binary(GoalBlob) ->
-    case quod_client_goal:validate_durable_request(
-           Auth, Network, Target, AdmissionMs, GoalBlob) of
-        {ok, Evidence} -> {ok, Evidence};
-        {error, _} = Error -> Error
+    case claim_view(Transaction) of
+        {ok, _Plans, Evidence} ->
+            quod_client_goal:validate_evidence(Evidence, Network, Target, AdmissionMs);
+        error -> {error, invalid_request_binding}
     end;
 validate_request(_Network, _Target, _AdmissionMs, #transaction{}) ->
     {error, invalid_request_binding}.
@@ -566,7 +566,7 @@ request_claim(#transaction{role = application, origin = Target,
 request_claim(#transaction{role = {remote_claim, _, _, _},
                            auth_transcript = none} = Transaction) ->
     case claim_view(Transaction) of
-        {ok, _Plans, Claim} -> {ok, Claim};
+        {ok, _Plans, #{claim := Claim}} -> {ok, Claim};
         error -> error
     end;
 request_claim(#transaction{role = {remote_application, _, _, _},
@@ -651,7 +651,7 @@ authenticate_claim(Tx = #transaction{origin = Origin, request_auth = Auth, goal 
                                     role = {remote_claim, Manifest, Bundles, _}}) ->
     case {claim_plans(Origin, Manifest, Bundles),
           quod_client_goal:verify_durable_request(Auth, Goal)} of
-        {{ok, Plans}, {ok, #{claim := Request}}} ->
+        {{ok, Plans}, {ok, Request}} ->
             {ok, Tx#transaction{claim_view = {Origin, Manifest, Bundles, Plans,
                                              Auth, Goal, Request}}};
         _ -> error
@@ -1007,7 +1007,8 @@ signing_material(
                     Signature = quod_identity:sign(Canonical, Identity),
                     {ok,
                      Transaction#transaction{sig = Signature,
-                                             signed_bytes = Canonical},
+                                             signed_bytes = Canonical,
+                                             authentication = {Author, Signature, Canonical}},
                      Author, Signature, Canonical};
                 {error, _} ->
                     {error, bad_term}
@@ -1034,13 +1035,24 @@ verify({TargetNs, TargetAnchor, AuthorAdmission} = Binding,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES ->
     is_binary(SignedBytes)
         andalso byte_size(SignedBytes) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES
-        andalso quod_identity:verify(Signature, SignedBytes, Author)
+        andalso authenticated_signature(Transaction)
         andalso case bytes(Binding, Transaction) of
                     {ok, SignedBytes} -> true;
                     _ -> false
                 end;
 verify(_Binding, _Transaction) ->
     false.
+
+%% The codec/signing boundary owns this receipt, not the wire. It attests only
+%% the exact author/signature/bytes triple: view reconstruction and the caller's
+%% historical target/admission binding still run at every verification seam.
+authenticated_signature(#transaction{author = Author, sig = Signature,
+                                     signed_bytes = Canonical,
+                                     authentication = {Author, Signature, Canonical}}) ->
+    true;
+authenticated_signature(#transaction{author = Author, sig = Signature,
+                                     signed_bytes = Canonical}) ->
+    verify_submission({submit, Author, Signature, Canonical}).
 
 -doc """
 Build the relay payload whose canonical transaction bytes remain opaque until
@@ -1137,7 +1149,7 @@ encode_ledger_transaction(
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES,
        is_binary(Canonical) ->
     Submission = {submit, Author, Signature, Canonical},
-    case {verify_submission(Submission),
+    case {authenticated_signature(Transaction),
           decode_submission_metadata(Canonical)} of
         {true, {ok, #{target := {Ns, Anchor}, admission := Admission,
                       author := Author}}} ->
@@ -1300,7 +1312,8 @@ decode_verified_submission(
     case decode_canonical_transaction(Binding, Canonical, SymbolMode) of
         {ok, Transaction = #transaction{author = Author}} ->
             {ok, Transaction#transaction{sig = Signature,
-                                         signed_bytes = Canonical}};
+                                         signed_bytes = Canonical,
+                                         authentication = {Author, Signature, Canonical}}};
         {ok, #transaction{}} ->
             {error, namespace_or_author_mismatch};
         {error, _} = Error ->

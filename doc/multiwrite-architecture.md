@@ -1100,6 +1100,16 @@ The private prepared-genesis journal explicitly encodes its existing native
 transaction schema instead of serializing the evolving runtime record. Its
 original byte-count/hash oracle is unchanged; runtime-sized native tuples are
 not accepted as a second journal format.
+Signing and canonical decode retain a runtime-only receipt for the exact
+author/signature/bytes triple. Encoding and history verification reuse that
+signature check, never its admission authority: the reconstructed view must
+still equal the signed bytes under the caller's historical target/admission.
+Changing any receipt input requires authentication again. Claim admission
+checks the retained authenticated request against the network, target and
+block timestamp; neither expiry nor live identity/revocation freshness is
+cached. Block finality and history advancement remain independently checked.
+Unsigned custody comparisons clear the signing receipt with the signature;
+derived authentication never changes the identity of an exact repeated handoff.
 Canonical read sets use UTF-8 name plus arity; opaque symbols do not become atoms
 on receipt. Receipt evidence has one binding/verification owner. Exact decoded
 values need no re-encoding; different symbol representations require complete

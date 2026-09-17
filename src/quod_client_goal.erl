@@ -20,7 +20,7 @@ when they need the complete validator check.
          request_auth/1, request_binding/1,
          named_bindings/2, durable_bindings/2,
          valid_request_binding/1, authorization_transcript/3,
-         verify_durable_request/2, validate_durable_request/5,
+         verify_durable_request/2, validate_evidence/4,
          verify_durable_authorization/3,
          validate_durable_authorization/6]).
 -export_type([request/0, evidence/0, mode/0,
@@ -209,32 +209,6 @@ verify_authorization_entry(
 verify_authorization_entry(_Entry, _Target, _GoalBlob) ->
     error.
 
--doc """
-Validate durable agent intent against the exact ledger admission context.
-
-This is the sole transaction/DTX validation seam: it re-verifies the original
-signature and parser result, checks the stored digest, target and block time,
-and binds the resulting goal and principal.  Callers do not reinterpret any of
-those fields themselves.
-""".
--spec validate_durable_auth(term(), term(), term(), term(), term()) ->
-          {ok, evidence()} | {error, error_reason() | invalid_binding}.
-validate_durable_auth(
-  Auth, ExpectedNetwork, {Ns, <<_:256>>} = ExpectedTarget, AdmissionMs,
-  ExpectedGoalBlob)
-  when is_binary(Ns), is_binary(ExpectedGoalBlob) ->
-    case verify_durable_auth(Auth, ExpectedGoalBlob) of
-        {ok, #{request := Request} = Evidence} ->
-            validate_context(
-              Request, ExpectedNetwork, ExpectedTarget, AdmissionMs,
-              Evidence);
-        {error, _} = Error ->
-            Error
-    end;
-validate_durable_auth(_Auth, _Network, _Target, _AdmissionMs,
-                      _GoalBlob) ->
-    {error, invalid_binding}.
-
 -doc "Verify durable request evidence and its exact parsed goal without runtime context.".
 -spec verify_durable_auth(term(), term()) ->
           {ok, evidence()} | {error, error_reason() | invalid_binding}.
@@ -265,15 +239,16 @@ verify_durable_request(Auth, GoalBlob) ->
         {error, _} = Error -> Error
     end.
 
--doc "Validate one signed durable request at its exact ledger admission context.".
--spec validate_durable_request(term(), term(), term(), term(), term()) ->
+-doc """
+Check this module's authenticated request evidence against the exact network,
+target and block time. This only validates context; the caller must retain the
+exact input binding established by `verify_durable_request/2`.
+""".
+-spec validate_evidence(map(), term(), term(), term()) ->
           {ok, map()} | {error, error_reason() | invalid_binding}.
-validate_durable_request(Auth, Network, Target, AdmissionMs, GoalBlob) ->
-    case validate_durable_auth(
-           Auth, Network, Target, AdmissionMs, GoalBlob) of
-        {ok, Evidence} -> {ok, durable_request_evidence(Evidence)};
-        {error, _} = Error -> Error
-    end.
+validate_evidence(#{evidence := #{request := Request}} = Evidence,
+                  Network, Target, AdmissionMs) ->
+    validate_context(Request, Network, Target, AdmissionMs, Evidence).
 
 -doc "Verify the one signed request and its recorded authorization without runtime context.".
 -spec verify_durable_authorization(term(), term(), term()) ->
@@ -291,14 +266,19 @@ verify_durable_authorization(Auth, Authorization, GoalBlob) ->
         term(), term(), term(), term(), term(), term()) ->
           {ok, map()} | {error, error_reason() | invalid_binding}.
 validate_durable_authorization(
-  Auth, Authorization, Network, Target, AdmissionMs, GoalBlob) ->
-    case validate_durable_auth(
-           Auth, Network, Target, AdmissionMs, GoalBlob) of
-        {ok, Evidence} ->
-            authorized_evidence(Evidence, Authorization);
+  Auth, Authorization, Network, {Ns, <<_:256>>} = Target, AdmissionMs, GoalBlob)
+  when is_binary(Ns), is_binary(GoalBlob) ->
+    case verify_durable_request(Auth, GoalBlob) of
+        {ok, Request} ->
+            case validate_evidence(Request, Network, Target, AdmissionMs) of
+                {ok, #{evidence := Evidence}} -> authorized_evidence(Evidence, Authorization);
+                {error, _} = Error -> Error
+            end;
         {error, _} = Error ->
             Error
-    end.
+    end;
+validate_durable_authorization(_Auth, _Authorization, _Network, _Target, _AdmissionMs, _GoalBlob) ->
+    {error, invalid_binding}.
 
 authorized_evidence(Evidence, Authorization) ->
     case verify_authorization(Evidence, Authorization) of

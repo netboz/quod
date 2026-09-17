@@ -428,7 +428,8 @@ with_proof_gate(Fun) ->
     Table = 'quod_simplex_genesis_quod:overlay-guard-test',
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
-    try Fun(Tab, {quod_proof_access, Namespace, 7})
+    Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},
+    try Fun(Tab, Access)
     after
         ets:delete(Tab)
     end.

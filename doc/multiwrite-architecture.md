@@ -1282,6 +1282,12 @@ and all signing/finality rules remain unchanged.
 
 ### Recovery projection and local application progress
 
+Installed membership and routes remain visible across apply fences. Issuing
+an identity certificate waits for exact fence clearance in the existing
+attester worker; snapshot capture and signing share one owner/committee/generation
+binding. [Agent attestation readiness](agent-attestation-readiness.md) specifies
+this separation without changing quorum or key-revocation guarantees.
+
 The verified suffix advances ledger-derived state; it does not own the live
 Simplex process's apply acknowledgements. At the shared projection-install
 boundary, markers at or below the previous committed head retain their exact

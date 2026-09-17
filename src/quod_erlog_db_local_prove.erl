@@ -48,7 +48,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 
 -type access_guard() ::
         unguarded |
-        {quod_proof_access, binary(), non_neg_integer()}.
+        {quod_proof_access, binary(), pid(), non_neg_integer(), <<_:256>>}.
 
 -record(fstate, {abolished = false :: boolean(),
                  abolish_intent = ordinary :: ordinary | atomic | independent,
@@ -197,7 +197,7 @@ check_access(#est{db = #db{mod = ?MODULE, ref = Ov}}) ->
 check_access(#lp{access_guard = unguarded}) ->
     ok;
 check_access(
-  #lp{access_guard = {quod_proof_access, _Ns, _Generation} = AccessGuard}) ->
+  #lp{access_guard = {quod_proof_access, _Ns, _Owner, _Generation, _Committee} = AccessGuard}) ->
     quod_simplex:check_proof_access(AccessGuard);
 check_access(_State) ->
     {error, invalid_proof_access}.
@@ -896,12 +896,11 @@ boolean_option(Key, Opts) ->
 access_guard_option(Opts) ->
     case maps:get(access_guard, Opts, unguarded) of
         unguarded ->
-            %% Only isolated/internal callers that cannot select a live
-            %% namespace use this sentinel. Production proof entry points
-            %% acquire a generation-bound token before starting the session.
+            %% Ordinary proofs use published MVCC snapshots and validate their
+            %% sealed dependencies. Attestation additionally pins this gate.
             unguarded;
-        {quod_proof_access, Ns, Generation} = AccessGuard
-          when is_binary(Ns), is_integer(Generation), Generation >= 0 ->
+        {quod_proof_access, Ns, Owner, Generation, <<_:256>>} = AccessGuard
+          when is_binary(Ns), is_pid(Owner), is_integer(Generation), Generation >= 0 ->
             AccessGuard;
         _ ->
             erlang:error(invalid_proof_access)

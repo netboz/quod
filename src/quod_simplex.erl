@@ -152,7 +152,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_local_evidence/4, dtx_applied_source/2,
          dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
-         acquire_proof_access/1, check_proof_access/1,
+         await_proof_access/3, check_proof_access/1,
          identity_view/1,
          stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, running/3, terminate/3]).
@@ -2941,58 +2941,104 @@ genesis_hash(Ns) ->
         error:badarg -> undefined
     end.
 
--doc "Acquire one generation-bound proof-access token without calling Simplex.".
--spec acquire_proof_access(binary()) ->
-          {ok, {quod_proof_access, binary(), non_neg_integer()}} |
-          {error, term()}.
-acquire_proof_access(Ns) when is_binary(Ns) ->
-    case proof_gate_row(Ns) of
-        {ok, false, _Generation, _BlockingFences} ->
-            {error, {ontology_rebuilding, Ns}};
-        {ok, true, _Generation,
-         [{GroupId, _Slot, _GroupGeneration} | _]} ->
-            {error, {transaction_pending, GroupId}};
-        {ok, true, Generation, []} ->
-            {ok, {quod_proof_access, Ns, Generation}};
-        unavailable ->
-            {error, {ontology_rebuilding, Ns}}
-    end;
-acquire_proof_access(Ns) ->
-    {error, {ontology_rebuilding, Ns}}.
-
 -doc "Revalidate a previously acquired proof-access generation.".
 -spec check_proof_access(term()) -> ok | {error, term()}.
-check_proof_access({quod_proof_access, Ns, ExpectedGeneration})
-  when is_binary(Ns), is_integer(ExpectedGeneration), ExpectedGeneration >= 0 ->
+check_proof_access({quod_proof_access, Ns, Owner, ExpectedGeneration, CommitteeId})
+  when is_binary(Ns), is_pid(Owner), is_integer(ExpectedGeneration), ExpectedGeneration >= 0 ->
     case proof_gate_row(Ns) of
-        {ok, _Ready, _Generation,
+        {ok, Owner, _Ready, _Generation, CommitteeId,
          [{GroupId, _Slot, _GroupGeneration} | _]} ->
             {error, {transaction_pending, GroupId}};
-        {ok, false, _Generation, []} ->
+        {ok, Owner, false, _Generation, CommitteeId, []} ->
             {error, {ontology_rebuilding, Ns}};
-        {ok, true, ExpectedGeneration, []} ->
+        {ok, Owner, true, ExpectedGeneration, CommitteeId, []} ->
             ok;
-        {ok, true, _ChangedGeneration, []} ->
+        {ok, Owner, _Ready, _ChangedGeneration, _CommitteeId, _Fences} ->
             {error, {ontology_busy, Ns}};
-        unavailable ->
+        _ ->
             {error, {ontology_rebuilding, Ns}}
     end;
 check_proof_access(_Token) ->
     {error, invalid_proof_access}.
 
 proof_gate_row(Ns) ->
-    try ets:lookup(
-          binary_to_existing_atom(genesis_table_name(Ns), utf8), proof_gate) of
+    try
+        Table = ets:whereis(binary_to_existing_atom(genesis_table_name(Ns), utf8)),
+        Owner = ets:info(Table, owner),
         [{proof_gate, Ready, Generation, BlockingFences,
-          _Self, _Committee, _CommitteeId, _Routes}]
-          when is_boolean(Ready), is_integer(Generation), Generation >= 0 ->
-            case valid_blocking_fences(BlockingFences) of
-                true -> {ok, Ready, Generation, BlockingFences};
-                false -> unavailable
+          _Self, _Committee, CommitteeId, _Routes}] = ets:lookup(Table, proof_gate),
+        true = is_pid(Owner) andalso is_boolean(Ready) andalso
+            is_integer(Generation) andalso Generation >= 0 andalso
+            is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32 andalso
+            valid_blocking_fences(BlockingFences),
+        {ok, Owner, Ready, Generation, CommitteeId, BlockingFences}
+    catch error:_ -> unavailable
+    end.
+
+-doc """
+Wait for attestation access in an existing worker under its absolute deadline.
+Subscribe before checking; only the exact cleared fence wakes this acquisition.
+Owner death and the caller-owned cancellation monitors terminate the wait.
+There is no owner queue, polling, snapshot or signature while waiting.
+""".
+-spec await_proof_access(binary(), integer(), #{reference() => true}) ->
+          {ok, quod_erlog_db_local_prove:access_guard()} | {error, term()}.
+await_proof_access(Ns, Deadline, CancelMonitors) ->
+    case {identity_view(Ns), proof_gate_row(Ns)} of
+        {{ok, #{committee_id := CommitteeId}}, {ok, Owner, _, _, CommitteeId, _}} ->
+            Key = {proof_gate, {Ns, Owner}},
+            true = quod_reg:subscribe(Key),
+            Monitor = monitor(process, Owner),
+            try acquire_attestation_access(Ns, {Owner, CommitteeId}, Deadline,
+                                           CancelMonitors#{Monitor => true})
+            after
+                demonitor(Monitor, [flush]),
+                quod_reg:unsubscribe(Key)
             end;
-        _ -> unavailable
-    catch
-        error:badarg -> unavailable
+        {{error, Reason}, _} -> {error, Reason};
+        _ -> {error, unavailable}
+    end.
+
+acquire_attestation_access(Ns, Binding, Deadline, Monitors) ->
+    receive
+        {'DOWN', Ref, process, _, _} when is_map_key(Ref, Monitors) -> {error, unavailable}
+    after 0 -> acquire_attestation_gate(Ns, Binding, Deadline, Monitors)
+    end.
+
+acquire_attestation_gate(Ns, {Owner, CommitteeId} = Binding, Deadline, Monitors) ->
+    case Deadline > quod_time:mono_ms() of
+        false -> {error, timeout};
+        true ->
+            case proof_gate_row(Ns) of
+                {ok, Owner, false, _, CommitteeId, _} ->
+                    {error, {ontology_rebuilding, Ns}};
+                {ok, Owner, true, Generation, CommitteeId, []} ->
+                    {ok, {quod_proof_access, Ns, Owner, Generation, CommitteeId}};
+                {ok, Owner, true, _, CommitteeId, [Fence | _]} ->
+                    receive
+                        {proof_fence_cleared, Owner, Fence} ->
+                            acquire_attestation_access(Ns, Binding, Deadline, Monitors);
+                        {proof_gate_invalidated, Owner} -> {error, unavailable};
+                        {'DOWN', Ref, process, _, _} when is_map_key(Ref, Monitors) ->
+                            {error, unavailable}
+                    after max(0, Deadline - quod_time:mono_ms()) -> {error, timeout}
+                    end;
+                _ -> {error, unavailable}
+            end
+    end.
+
+publish_proof_gate_changes(Before, {proof_gate, Ready, _, Fences, _, _, CommitteeId, _}, Ns) ->
+    case proof_gate_row_for_state(Before) of
+        {proof_gate, WasReady, _, Previous, _, _, OldCommitteeId, _} ->
+            case (WasReady andalso not Ready) orelse CommitteeId =/= OldCommitteeId of
+                true -> quod_reg:publish({proof_gate, {Ns, self()}}, {proof_gate_invalidated, self()});
+                false -> ok
+            end,
+            lists:foreach(fun(Fence) ->
+                quod_reg:publish({proof_gate, {Ns, self()}},
+                                 {proof_fence_cleared, self(), Fence})
+            end, Previous -- Fences);
+        undefined -> ok
     end.
 
 valid_blocking_fences(Fences) when is_list(Fences) ->
@@ -3046,7 +3092,8 @@ refresh_proof_gate(
             try
                 true = ets:insert(
                          binary_to_existing_atom(genesis_table_name(Ns), utf8),
-                         CurrentRow)
+                         CurrentRow),
+                publish_proof_gate_changes(Before, CurrentRow, Ns)
             catch
                 error:badarg -> ok
             end
@@ -3062,18 +3109,21 @@ proof_gate_row_for_state(
 proof_gate_row_for_state(#s{}) ->
     undefined.
 
--doc "Read the current local validator view without entering the consensus mailbox.".
+-doc "Read consensus-installed membership and routes, independently of local KB apply readiness.".
 -spec identity_view(binary()) ->
           {ok, map()} | {error, unavailable | not_validator}.
 identity_view(Ns) when is_binary(Ns) ->
-    try ets:lookup(
-          binary_to_existing_atom(genesis_table_name(Ns), utf8), proof_gate) of
-        [{proof_gate, true, _Generation, [],
+    try
+        Table = ets:whereis(binary_to_existing_atom(genesis_table_name(Ns), utf8)),
+        [{anchor, <<_:256>> = Anchor}] = ets:lookup(Table, anchor),
+        ets:lookup(Table, proof_gate)
+    of
+        [{proof_gate, _Ready, _Generation, _Fences,
           <<_:256>> = Self, Committee, <<_:256>> = CommitteeId, Routes}]
           when is_list(Committee), is_map(Routes) ->
             case lists:member(Self, Committee) of
                 true ->
-                    {ok, #{identity => {Ns, genesis_hash(Ns)}, self => Self,
+                    {ok, #{identity => {Ns, Anchor}, self => Self,
                            committee => Committee,
                            committee_id => CommitteeId,
                            route_candidates =>
@@ -3084,7 +3134,7 @@ identity_view(Ns) when is_binary(Ns) ->
             end;
         _ -> {error, unavailable}
     catch
-        error:badarg -> {error, unavailable}
+        error:_ -> {error, unavailable}
     end;
 identity_view(_Ns) ->
     {error, unavailable}.

@@ -328,8 +328,9 @@ proof_gate_requires_exact_ready_ack_test() ->
       Ns, quod_ct:proof_gate_row(false, 7, []),
       fun(_Tab) ->
           Owner = registered_prolog_owner(Ns),
+          Access = {quod_proof_access, Ns, self(), 7, <<251:256>>},
           try
-              S0 = st(#{ns => Ns,
+              S0 = st(#{ns => Ns, committee_id => <<251:256>>,
                         consensus_domain =>
                             quod_simplex:consensus_domain(Ns, Anchor),
                         dtx_projection => Projection,
@@ -338,7 +339,7 @@ proof_gate_requires_exact_ready_ack_test() ->
                         eng => quod_simplex:eng_with_certs(0, [])}),
               ?assertMatch(
                  {error, {ontology_rebuilding, Ns}},
-                 quod_simplex:acquire_proof_access(Ns)),
+                 quod_simplex:check_proof_access(Access)),
 
               %% A forged owner PID and a stale height are both inert.
               WrongOwner = result_state(
@@ -361,8 +362,7 @@ proof_gate_requires_exact_ready_ack_test() ->
                            maps:get(prolog_ready,
                                     quod_simplex:stats_map(Ready))),
               ?assertEqual(
-                 {ok, {quod_proof_access, Ns, 7}},
-                 quod_simplex:acquire_proof_access(Ns)),
+                 ok, quod_simplex:check_proof_access(Access)),
 
               %% Rebuild closes the row synchronously; a queued mark_ready
               %% cannot reopen it without the later owner acknowledgement.
@@ -373,7 +373,7 @@ proof_gate_requires_exact_ready_ack_test() ->
                                     quod_simplex:stats_map(Rebuilding))),
               ?assertMatch(
                  {error, {ontology_rebuilding, Ns}},
-                 quod_simplex:acquire_proof_access(Ns))
+                 quod_simplex:check_proof_access(Access))
           after
               stop_registered_owner(Owner)
           end
@@ -396,7 +396,8 @@ resolve_applied_opens_only_the_exact_pending_fence_test() ->
       quod_ct:proof_gate_row(
         true, Generation, [{GroupId, Slot, Generation}]),
       fun(_Tab) ->
-          S0 = st(#{ns => Ns,
+          Access = {quod_proof_access, Ns, self(), Generation, <<251:256>>},
+          S0 = st(#{ns => Ns, committee_id => <<251:256>>,
                     consensus_domain =>
                         quod_simplex:consensus_domain(Ns, Anchor),
                     dtx_projection => Pending,
@@ -404,7 +405,7 @@ resolve_applied_opens_only_the_exact_pending_fence_test() ->
                     eng => quod_simplex:eng_with_certs(0, [])}),
           ?assertEqual(
              {error, {transaction_pending, GroupId}},
-             quod_simplex:acquire_proof_access(Ns)),
+             quod_simplex:check_proof_access(Access)),
 
           Stale = result_state(
                     quod_simplex:running(
@@ -413,15 +414,14 @@ resolve_applied_opens_only_the_exact_pending_fence_test() ->
                       S0)),
           ?assertEqual(
              {error, {transaction_pending, GroupId}},
-             quod_simplex:acquire_proof_access(Ns)),
+             quod_simplex:check_proof_access(Access)),
           Applied = result_state(
                       quod_simplex:running(
                         cast,
                         {resolve_applied, GroupId, Slot, Generation},
                         Stale)),
           ?assertEqual(
-             {ok, {quod_proof_access, Ns, Generation}},
-             quod_simplex:acquire_proof_access(Ns)),
+             ok, quod_simplex:check_proof_access(Access)),
 
           %% A duplicate is a no-op, while installing a committed closed
           %% projection republishes the protected row from the same seam used
@@ -432,13 +432,13 @@ resolve_applied_opens_only_the_exact_pending_fence_test() ->
                           {resolve_applied, GroupId, Slot, Generation},
                           Applied)),
           ClosedHistory =
-              (quod_simplex:history_projection({Ns, Anchor}))#{
+              (quod_simplex:test_state_projection(Duplicate))#{
                 dtx := Pending},
           _Closed = quod_simplex:test_install_projection(
                       ClosedHistory, Duplicate),
           ?assertEqual(
              {error, {transaction_pending, GroupId}},
-             quod_simplex:acquire_proof_access(Ns))
+             quod_simplex:check_proof_access(Access))
       end).
 
 %% DTX payloads remain outside the consensus engine until the exact parent

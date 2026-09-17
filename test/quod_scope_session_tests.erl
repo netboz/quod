@@ -180,7 +180,7 @@ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
     ScopeId = id(96),
     ProofId = key(97),
     Anchor = key(98),
-    AccessGuard = {quod_proof_access, Ns, 7},
+    AccessGuard = {quod_proof_access, Ns, self(), 7, <<251:256>>},
     Est = committed([{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]),
     {Handle, WorkerMRef} =
         quod_scope_session:start(

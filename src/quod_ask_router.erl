@@ -249,11 +249,12 @@ finalize(_Router, _ProofId) ->
           {pending, pid(), binary(), reference()} | {error, term()}.
 identity(Evidence, <<_:256>> = ProofId, RemainingMs)
   when is_map(Evidence), is_integer(RemainingMs), RemainingMs >= 0 ->
+    Deadline = quod_time:mono_ms() + RemainingMs,
     with_router(
       fun(Router) ->
           guarded_call(
             Router,
-            {identity, self(), Evidence, ProofId, RemainingMs,
+            {identity, self(), Evidence, ProofId, Deadline,
              quod_trace:context()})
       end);
 identity(_Evidence, _ProofId, _RemainingMs) ->
@@ -360,10 +361,10 @@ handle_call(
             {reply, Error, S0}
     end;
 handle_call(
-  {identity, Owner, Evidence, ProofId, RemainingMs, TraceCtx}, _From, S0)
+  {identity, Owner, Evidence, ProofId, Deadline, TraceCtx}, _From, S0)
   when is_pid(Owner) ->
     case ensure_identity(
-           Owner, Evidence, ProofId, RemainingMs, TraceCtx, S0) of
+           Owner, Evidence, ProofId, Deadline, TraceCtx, S0) of
         {{ok, Certificate}, S1} ->
             {reply, {ok, Certificate}, S1};
         {{pending, Ref}, S1} ->
@@ -552,7 +553,13 @@ probe_owner_admission(#owner{poison = {poisoned, Reason}}) ->
     {error, {proof_poisoned, Reason}};
 probe_owner_admission(#owner{}) -> ok.
 
-ensure_identity(Owner, Evidence, ProofId, RemainingMs, TraceCtx,
+ensure_identity(Owner, Evidence, ProofId, Deadline, TraceCtx, S) ->
+    case Deadline > quod_time:mono_ms() of
+        true -> identity_for_owner(Owner, Evidence, ProofId, Deadline, TraceCtx, S);
+        false -> {{error, timeout}, S}
+    end.
+
+identity_for_owner(Owner, Evidence, ProofId, Deadline, TraceCtx,
                      S = #s{owners = Owners}) ->
     case maps:get(Owner, Owners, undefined) of
         #owner{proof_id = ProofId,
@@ -564,19 +571,18 @@ ensure_identity(Owner, Evidence, ProofId, RemainingMs, TraceCtx,
         #owner{} = Existing ->
             case owner_admission(Existing, ProofId) of
                 ok -> start_identity_collection(
-                        Owner, Evidence, ProofId, RemainingMs, TraceCtx, S);
+                        Owner, Evidence, ProofId, Deadline, TraceCtx, S);
                 {error, _} = Error -> {Error, S}
             end;
         undefined ->
             start_identity_collection(
-              Owner, Evidence, ProofId, RemainingMs, TraceCtx, S)
+              Owner, Evidence, ProofId, Deadline, TraceCtx, S)
     end.
 
 start_identity_collection(
-  Owner, Evidence, ProofId, RemainingMs, TraceCtx,
-  S = #s{owners = Owners, owner_refs = OwnerRefs})
-  when RemainingMs > 0 ->
-    case agent_identity_collection_input(Evidence, ProofId, RemainingMs) of
+  Owner, Evidence, ProofId, Deadline, TraceCtx,
+  S = #s{owners = Owners, owner_refs = OwnerRefs}) ->
+    case agent_identity_collection_input(Evidence, ProofId, Deadline) of
         {ok, Input} ->
             Router = self(),
             Ref = make_ref(),
@@ -620,34 +626,31 @@ start_identity_collection(
                     {{pending, Ref}, track_owner_peaks(S1)}
             end;
         {error, _} = Error -> {Error, S}
-    end;
-start_identity_collection(
-  _Owner, _Evidence, _ProofId, _RemainingMs, _TraceCtx, S) ->
-    {{error, timeout}, S}.
+    end.
 
 agent_identity_collection_input(
   Evidence = #{request := #{agent_namespace := Ns,
                             agent_genesis_anchor := Anchor,
                             not_after_ms := RequestNotAfter}},
-  ProofId, RemainingMs) ->
+  ProofId, Deadline) ->
     case quod_simplex:identity_view(Ns) of
         {ok, View = #{identity := {Ns, Anchor},
                       committee := [_ | _], committee_id := CommitteeId}} ->
             Now = quod_time:now_ms(),
-            NotAfter = min(RequestNotAfter, Now + RemainingMs),
+            NotAfter = min(RequestNotAfter, Now + max(0, Deadline - quod_time:mono_ms())),
             case NotAfter > Now andalso
                  quod_agent_identity:statement(
                    Evidence, ProofId, CommitteeId, NotAfter) =/=
                      {error, invalid_request} of
                 true ->
                     {ok, #{evidence => Evidence, proof_id => ProofId,
-                           remaining_ms => RemainingMs,
+                           deadline => Deadline,
                            not_after => NotAfter, view => View}};
                 false -> {error, invalid_request}
             end;
         _ -> {error, unavailable}
     end;
-agent_identity_collection_input(_Evidence, _ProofId, _RemainingMs) ->
+agent_identity_collection_input(_Evidence, _ProofId, _Deadline) ->
     {error, invalid_request}.
 
 finish_identity(Owner, ProofId, Ref, Result,
@@ -787,7 +790,7 @@ collect_agent_identity(
   _Router, Ref,
   #{evidence := Evidence,
     proof_id := ProofId,
-    remaining_ms := RemainingMs,
+    deadline := Deadline,
     not_after := NotAfter,
     view := #{identity := Identity,
                      self := Self,
@@ -838,7 +841,6 @@ collect_agent_identity(
         %% replies that can still satisfy quorum, then remove it on either
         %% success or refusal just like a remote committee member.
         Waiting = RemoteWaiting#{Self => true},
-        Deadline = quod_time:mono_ms() + RemainingMs,
         quod_trace:with_span(
           quod_trace:context(), <<"quod.identity.collect_votes">>, internal,
           #{'quod.identity.committee_size' => length(Committee)},

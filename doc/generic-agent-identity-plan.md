@@ -176,9 +176,16 @@ request reaches a validator again over a replacement route while its one
 attestation is still running, the terminal reply moves to that new link; the
 attestation is not duplicated.
 
+Local apply lag does not hide the installed identity or committee. Before
+reading keys, the existing attester subscribes to the exact Simplex fence-clear
+event and waits within the caller's original deadline. Snapshot capture and
+signing validate one incarnation/committee/generation token; a newly committed
+revocation cannot be signed around. See [agent attestation readiness](agent-attestation-readiness.md)
+for the ownership, cancellation and freshness boundary.
+
 For remote reads, a certificate issued just before a key rotation may remain
 usable only until its short proof-bounded expiry. For writes, A's current
-parent validation of the active key occurs before durable Begin/transaction
+parent validation of the active key occurs before durable Vote/transaction
 acceptance.
 
 ## 5. Durable writes and recovery

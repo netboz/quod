@@ -293,8 +293,8 @@ origin_scope_admitted(Target) ->
     end.
 
 open_cohosted_scope(Target, Anchor, ScopeId) ->
-    %% Location is not write eligibility. The existing committed proof gate
-    %% distinguishes an observer from a temporarily unavailable validator.
+    %% Location is not write eligibility. Consensus-installed membership
+    %% distinguishes an observer from a validator, independently of apply lag.
     %% Selection happens only inside get_or_open_scope's opener: an existing
     %% invocation keeps its exact pinned scope across redo/backtracking.
     Route = case quod_proof_context:read_only() of

@@ -262,7 +262,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           pid :: pid(),
           timer :: reference(),
           reply_to :: pid(),
-          tag :: term()
+          tag :: term(),
+          height = none :: none | non_neg_integer()
          }).
 
 %% Authentication may need a certified view of the origin ontology.  That is
@@ -1340,6 +1341,22 @@ handle_call({attach_runtime, Pid}, _From,
 handle_call({attach_runtime, _Pid}, _From, S) ->
     {reply, {error, not_ready}, S};
 handle_call(
+  {agent_attester_snapshot, MRef,
+   Access = {quod_proof_access, Ns, _, _, CommitteeId}, Deadline}, {Worker, _},
+  S = #s{ready = true, ns = Ns, signer = #{pubkey := Self},
+         est = Est, applied = Applied, agent_attesters = Attesters}) ->
+    case {maps:get(MRef, Attesters, none),
+          Deadline > quod_time:mono_ms(), quod_simplex:check_proof_access(Access),
+          quod_simplex:identity_view(Ns)} of
+        {Row = #agent_attester{pid = Worker}, true, ok,
+         {ok, #{self := Self, committee_id := CommitteeId}}} ->
+            {reply, {ok, Est, Applied},
+             S#s{agent_attesters = Attesters#{MRef => Row#agent_attester{height = Applied}}}};
+        _ -> {reply, {error, retry}, S}
+    end;
+handle_call({agent_attester_snapshot, _, _, _}, _From, S) ->
+    {reply, {error, retry}, S};
+handle_call(
   {agent_attester_complete, MRef, Result}, {Worker, _Tag},
   S = #s{agent_attesters = Attesters})
   when is_reference(MRef), is_pid(Worker) ->
@@ -1362,15 +1379,16 @@ handle_call(
             {reply, {error, stale}, S}
     end;
 handle_call(
-  {sign_agent_identity, ReadCheck, Evidence, ProofId,
-   CommitteeId, NotAfter},
+  {sign_agent_identity, Access = {quod_proof_access, Ns, _, _, CommitteeId},
+   ReadCheck, Evidence, ProofId, NotAfter, Deadline},
   {Worker, _Tag},
   S = #s{est = Est,
          signer = Signer = #{pubkey := <<_:256>> = Self}, ns = Ns})
   when is_pid(Worker) ->
-    Reply = case {quod_simplex:identity_view(Ns),
-                  agent_identity_reads_current(ReadCheck, Est)} of
-                {{ok, #{committee_id := CommitteeId, self := Self}}, true} ->
+    Reply = case {quod_simplex:check_proof_access(Access),
+                  agent_identity_reads_current(ReadCheck, Est),
+                  Deadline > quod_time:mono_ms() andalso NotAfter > quod_time:now_ms()} of
+                {ok, true, true} ->
                     case quod_agent_identity:statement(
                            Evidence, ProofId, CommitteeId, NotAfter) of
                         {ok, Statement} ->
@@ -1385,8 +1403,8 @@ handle_call(
             end,
     {reply, Reply, S};
 handle_call(
-  {sign_agent_identity, _ReadCheck, _Evidence, _ProofId,
-   _CommitteeId, _NotAfter}, _From, S) ->
+  {sign_agent_identity, _Access, _ReadCheck, _Evidence, _ProofId,
+   _NotAfter, _Deadline}, _From, S) ->
     {reply, {error, retry}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
@@ -1744,45 +1762,39 @@ open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
               Principal, RequestContext, S)
     end.
 
-spawn_agent_attester(Request, ReplyTo, Tag,
-                     S = #s{ns = Ns, est = Est, applied = Applied,
+spawn_agent_attester(Request = {agent_identity_request, _, _, _, _, NotAfter}, ReplyTo, Tag,
+                     S = #s{ns = Ns,
                             proof_timeout_ms = Timeout,
-                            agent_attesters = Attesters}) ->
-    case quod_simplex:acquire_proof_access(Ns) of
-        {ok, Access} ->
-            Engine = self(),
-            Deadline = quod_time:mono_ms() + Timeout,
-            {Pid, MRef} = spawn_monitor(
-                            fun() ->
-                                receive
-                                    {agent_attester_start, WorkerRef} ->
-                                        Result = run_agent_attester(
-                                                   Engine, Ns, Est, Applied,
-                                                   Access, Request, Timeout),
-                                        _ = gen_server:call(
-                                              Engine,
-                                              {agent_attester_complete,
-                                               WorkerRef, Result},
-                                              infinity)
-                                end
-                            end),
-            Timer = erlang:send_after(
-                      max(1, Deadline - quod_time:mono_ms()), self(),
-                      {agent_attester_timeout, MRef}),
-            Pid ! {agent_attester_start, MRef},
-            S#s{agent_attesters = Attesters#{
-                  MRef => #agent_attester{pid = Pid, timer = Timer,
-                                          reply_to = ReplyTo, tag = Tag}}};
-        {error, _} ->
-            ReplyTo ! {quod_agent_attestation, Tag, {error, retry}},
-            S
-    end.
+                            agent_attesters = Attesters}) when is_integer(NotAfter) ->
+    Engine = self(),
+    Deadline = quod_time:mono_ms() + max(0, min(Timeout, NotAfter - quod_time:now_ms())),
+    {Pid, MRef} = spawn_monitor(fun() ->
+        EngineMonitor = monitor(process, Engine),
+        CallerMonitor = monitor(process, ReplyTo),
+        try
+            receive
+                {agent_attester_start, WorkerRef} ->
+                    Result = run_agent_attester(Engine, Ns, Request, Timeout,
+                        Deadline, WorkerRef, #{EngineMonitor => true, CallerMonitor => true}),
+                    _ = gen_server:call(Engine, {agent_attester_complete, WorkerRef, Result}, infinity)
+            end
+        after
+            demonitor(EngineMonitor, [flush]), demonitor(CallerMonitor, [flush])
+        end
+    end),
+    Timer = erlang:send_after(max(1, Deadline - quod_time:mono_ms()), self(),
+                             {agent_attester_timeout, MRef}),
+    Pid ! {agent_attester_start, MRef},
+    S#s{agent_attesters = Attesters#{MRef => #agent_attester{
+        pid = Pid, timer = Timer, reply_to = ReplyTo, tag = Tag}}};
+spawn_agent_attester(_Request, ReplyTo, Tag, S) ->
+    ReplyTo ! {quod_agent_attestation, Tag, {error, invalid_request}}, S.
 
 run_agent_attester(
-  Engine, Ns, Est, Applied, Access,
+  Engine, Ns,
   {agent_identity_request, _RequestId, <<_:256>> = ProofId,
    RequestBytes, <<_:512>> = Signature, ProposedNotAfter},
-  ProofTimeout)
+  ProofTimeout, Deadline, WorkerRef, CancelMonitors)
   when is_binary(RequestBytes), is_integer(ProposedNotAfter),
        ProposedNotAfter >= 0 ->
     Now = quod_time:now_ms(),
@@ -1796,22 +1808,29 @@ run_agent_attester(
                   when ProposedNotAfter > Now,
                        ProposedNotAfter =< RequestNotAfter,
                        ProposedNotAfter =< Now + ProofTimeout ->
-                    attest_authenticated_agent(
-                      Engine, Ns, Est, Applied, Access,
-                      Evidence, ProofId, ProposedNotAfter,
-                      AgentRef, SigningKey);
+                    case quod_simplex:await_proof_access(Ns, Deadline, CancelMonitors) of
+                        {ok, Access} ->
+                            case gen_server:call(Engine,
+                                   {agent_attester_snapshot, WorkerRef, Access, Deadline},
+                                   max(0, Deadline - quod_time:mono_ms())) of
+                                {ok, Est, Applied} ->
+                                    attest_authenticated_agent(Engine, Ns, Est, Applied, Access,
+                                      Evidence, ProofId, ProposedNotAfter, AgentRef, SigningKey, Deadline);
+                                Error -> Error
+                            end;
+                        Error -> Error
+                    end;
                 {error, expired} -> {error, retry};
                 _ -> {error, invalid_request}
             end;
         _ -> {error, retry}
     end;
-run_agent_attester(_Engine, _Ns, _Est, _Applied, _Access,
-                   _Request, _ProofTimeout) ->
+run_agent_attester(_Engine, _Ns, _Request, _ProofTimeout, _Deadline, _Ref, _Monitors) ->
     {error, invalid_request}.
 
 attest_authenticated_agent(
   Engine, Ns, Est, Applied, Access,
-  Evidence, ProofId, NotAfter, AgentRef, SigningKey) ->
+  Evidence, ProofId, NotAfter, AgentRef, SigningKey, Deadline) ->
     Session = quod_proof_session:start(
                 Est, #{read_set => false, read_only => true,
                        access_guard => Access,
@@ -1821,15 +1840,10 @@ attest_authenticated_agent(
                    Principal, SigningKey,
                    {Ns, quod_simplex:genesis_hash(Ns)}, Applied, Session) of
                  {true, ReadCheck} ->
-                     case quod_simplex:identity_view(Ns) of
-                         {ok, #{committee_id := CommitteeId}} ->
-                             try gen_server:call(
-                                   Engine,
-                                   {sign_agent_identity, ReadCheck,
-                                    Evidence, ProofId, CommitteeId, NotAfter})
-                             catch exit:_ -> {error, retry}
-                             end;
-                         _ -> {error, retry}
+                     try gen_server:call(Engine,
+                           {sign_agent_identity, Access, ReadCheck, Evidence,
+                            ProofId, NotAfter, Deadline}, max(0, Deadline - quod_time:mono_ms()))
+                     catch exit:_ -> {error, retry}
                      end;
                  false -> {error, denied}
              after
@@ -1837,11 +1851,10 @@ attest_authenticated_agent(
              end,
     Result.
 
-%% Agent attestation is invalidated only by a fact it actually consulted.
-%% Source claims and other unrelated commits may advance the ontology while
-%% the read-only proof runs; rejecting those commits by height made identity
-%% collection fail spuriously under concurrent signed work. The ordinary MVCC
-%% read tokens already express the required freshness boundary.
+%% Within the acquired access generation, ordinary commits invalidate the
+%% key proof only through facts it consulted, not by height. A new atomic
+%% apply fence or owner/committee change independently invalidates the access
+%% token: MVCC alone cannot see a committed but not-yet-applied revocation.
 agent_identity_reads_current(
   ReadCheck,
   #est{db = #db{mod = quod_erlog_db_mvcc, ref = Ref}}) ->
@@ -6877,17 +6890,21 @@ finish_dtx_apply(
     ok = quod_simplex:resolve_applied(Ns, GroupId, Slot, Generation),
     S.
 
-oldest_snapshot(Current, #s{workers = Workers,
+oldest_snapshot(Current, #s{workers = Workers, agent_attesters = Attesters,
                             scope_workers = ScopeWorkers,
                             runtime_pin = Pin}) ->
     ProofFloor = maps:fold(
                    fun(_Ref, #proof_worker{height = Height}, Floor) ->
                        min(Height, Floor)
                    end, Current, Workers),
+    AttesterFloor = maps:fold(
+                     fun(_Ref, #agent_attester{height = none}, Floor) -> Floor;
+                        (_Ref, #agent_attester{height = H}, Floor) -> min(H, Floor)
+                     end, ProofFloor, Attesters),
     ScopeFloor = maps:fold(
                    fun(_Ref, #scope_worker{height = Height}, Floor) ->
                        min(Height, Floor)
-                   end, ProofFloor, ScopeWorkers),
+                   end, AttesterFloor, ScopeWorkers),
     case Pin of
         {_Pid, _MRef, PinFloor} -> min(PinFloor, ScopeFloor);
         none -> ScopeFloor

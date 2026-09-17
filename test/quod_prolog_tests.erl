@@ -212,12 +212,13 @@ agent_identity_signing_accepts_unrelated_height_advance_test() ->
                 batch(change(Ns, diff_for({unrelated_claim, 1}), #{}))),
         _ = quod_prolog:applied(Ns),
         ProofId = <<55:256>>,
+        {ok, Access} = quod_simplex:await_proof_access(Ns, quod_time:mono_ms() + 1000, #{}),
         ?assertMatch(
            {ok, ValidatorKey, _, _},
            gen_server:call(
              Engine,
-             {sign_agent_identity, ReadCheck, Evidence, ProofId,
-              CommitteeId, maps:get(deadline, Fixture)}))
+             {sign_agent_identity, Access, ReadCheck, Evidence, ProofId,
+              maps:get(deadline, Fixture), quod_time:mono_ms() + 1000}))
     after
         case is_process_alive(Engine) of
             true -> gen_server:stop(Engine);

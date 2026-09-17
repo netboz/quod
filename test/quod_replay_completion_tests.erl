@@ -343,7 +343,8 @@ namespace(#{ns := N}) -> N.
 prolog_pid(F) -> quod_reg:where({quod_prolog, namespace(F)}).
 runtime_pid(F) -> quod_reg:where({quod_runtime, namespace(F)}).
 stats(F) -> quod_runtime:stats(namespace(F)).
-proof_access(F) -> quod_simplex:acquire_proof_access(namespace(F)).
+proof_access(F) ->
+    quod_simplex:await_proof_access(namespace(F), quod_time:mono_ms() + 1000, #{}).
 fixture(#{owner := P}, Fun) -> gen_statem:call(P, {fixture, Fun}, 5000).
 owner_barrier(F) -> fixture(F, fun(S) -> {ok, S} end).
 barrier(F) -> owner_barrier(F), ok = quod_prolog:sync(namespace(F)).

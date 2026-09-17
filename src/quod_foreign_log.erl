@@ -128,6 +128,7 @@ retained index; point I/O and exact verification run in the existing caller.
          test_install_worker_meta/3, test_install_verified_progress/3,
          test_fail_persist_after/1,
          test_install_feed_registration/5,
+         test_set_feed_height/4,
          test_install_feed_opening/5,
          test_install_feed_projection/3,
          test_corrupt_resident_height/3,
@@ -917,6 +918,10 @@ test_install_feed_registration(Pid, Identity, Peer, Link, RegistrationId)
       {test_install_feed_registration,
        Identity, Peer, Link, RegistrationId}).
 
+test_set_feed_height(Pid, Identity, Peers, Height)
+  when is_pid(Pid), is_list(Peers), is_integer(Height), Height >= 0 ->
+    gen_server:call(Pid, {test_set_feed_height, Identity, Peers, Height}).
+
 test_install_feed_opening(Pid, Identity, Peer, RegistrationId, OpenRef)
   when is_pid(Pid), is_binary(RegistrationId),
        byte_size(RegistrationId) =:= 16, is_reference(OpenRef) ->
@@ -1304,6 +1309,18 @@ handle_private_call(
            (S1#s.feed_registrations)#{Key => Registration},
        feed_registration_monitors =
            (S1#s.feed_registration_monitors)#{MRef => Key}}};
+handle_private_call(
+  {test_set_feed_height, Identity, Peers, Height}, _From, S0) ->
+    Registrations = lists:foldl(
+      fun(Peer, Acc) ->
+          Key = {Identity, Peer},
+          Row = maps:get(Key, Acc),
+          Acc#{Key := Row#feed_registration{registered = true, height = Height}}
+      end, S0#s.feed_registrations, Peers),
+    H0 = maps:get(Identity, S0#s.histories),
+    H1 = H0#history{hinted_height = max(Height, H0#history.hinted_height)},
+    {reply, ok, put_history(Identity, H1,
+       S0#s{feed_registrations = Registrations})};
 handle_private_call(
   {test_install_feed_opening,
    Identity, <<_:256>> = Peer, <<_:128>> = RegistrationId, OpenRef},
@@ -5376,53 +5393,89 @@ verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
 certified_current_snapshot(
   Owner, RequestRef, Sources, Identity,
   Root, FetchFun, PageTimeout, RequestTimeout,
+  Cursor, AdvanceMode) ->
+    Deadline = quod_time:mono_ms() + RequestTimeout,
+    converge_current_snapshot(
+      Owner, RequestRef, Sources, Identity, Root, FetchFun,
+      PageTimeout, Deadline, Cursor, AdvanceMode).
+
+%% A current view is a moving certified prefix. Keep the one open cursor while
+%% a concrete feed/history observation advances its target; closing and
+%% re-queueing the same job would only repeat custody, decode and verification.
+%% The original dependency deadline bounds convergence, and lack of verified
+%% progress returns retry immediately. This is neither polling nor permission
+%% to answer from a superseded height.
+converge_current_snapshot(
+  Owner, RequestRef, Sources, Identity,
+  Root, FetchFun, PageTimeout, Deadline,
   Cursor = #verified_cursor{height = Height, projection = Projection}, AdvanceMode) ->
+    Remaining = Deadline - quod_time:mono_ms(),
+    AttemptTimeout = min(PageTimeout, max(0, Remaining)),
     Hints = current_route_candidates(Sources, Projection),
-    Advanced = case worker_feed_tip(Owner, RequestRef, Height, Projection, PageTimeout) of
-        Tip when is_integer(Tip) ->
-            advance_snapshot_to_height(flatten_route_candidates(Hints), Owner,
-              RequestRef, Identity, Cursor, Root, snapshot_target(AdvanceMode, Height, Tip),
-              FetchFun, PageTimeout);
-        _ -> advance_current_snapshot(
-           Owner, RequestRef, Hints, Identity, Cursor, Root,
-           FetchFun, PageTimeout, RequestTimeout, AdvanceMode)
-    end,
-    case Advanced of
-        {ok, Next} ->
-            confirm_current_snapshot(Owner, RequestRef, Sources, Identity,
-              Next, Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode, true);
-        {error, _Reason, Next} -> {{error, retry}, Next}
+    case Remaining > 0 of
+        false ->
+            {{error, retry}, Cursor};
+        true ->
+            Advanced = case worker_feed_tip(
+                              Owner, RequestRef, Height, Projection, AttemptTimeout) of
+                Tip when is_integer(Tip) ->
+                    advance_snapshot_to_height(flatten_route_candidates(Hints), Owner,
+                      RequestRef, Identity, Cursor, Root,
+                      snapshot_target(AdvanceMode, Height, Tip),
+                      FetchFun, AttemptTimeout);
+                _ -> advance_current_snapshot(
+                       Owner, RequestRef, Hints, Identity, Cursor, Root,
+                       FetchFun, AttemptTimeout, Remaining, AdvanceMode)
+            end,
+            case Advanced of
+                {ok, Next} ->
+                    confirm_current_snapshot(
+                      Owner, RequestRef, Sources, Identity, Next, Root,
+                      FetchFun, PageTimeout, Deadline, AdvanceMode);
+                {error, _Reason, Next} ->
+                    {{error, retry}, Next}
+            end
     end.
 
 confirm_current_snapshot(
   Owner, RequestRef, Sources, Identity = {Ns, Anchor},
   Cursor = #verified_cursor{height = Height, projection = Projection, phase_index = PhaseIndex},
-  Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode, AllowFallback) ->
+  Root, FetchFun, PageTimeout, Deadline, AdvanceMode) ->
+    Remaining = Deadline - quod_time:mono_ms(),
+    AttemptTimeout = min(PageTimeout, max(0, Remaining)),
     ConfirmHints = current_route_candidates(Sources, Projection),
-    Confirmed = measure_foreign_stage(tip_confirm,
-      fun() -> current_view_confirmed(Owner, RequestRef, ConfirmHints, Ns, Anchor,
-                 Identity, Height, Projection, PhaseIndex, FetchFun, PageTimeout) end),
-    case {Confirmed, AllowFallback} of
-        {true, _} ->
+    Status = measure_foreign_stage(tip_confirm,
+      fun() -> current_view_status(Owner, RequestRef, ConfirmHints, Ns, Anchor,
+                 Identity, Height, Projection, PhaseIndex, FetchFun,
+                 AttemptTimeout) end),
+    case Status of
+        confirmed ->
             {{ok, current_view_evidence(Identity, Height, Projection, ConfirmHints)}, Cursor};
-        {false, true} ->
-            recover_current_snapshot_from_history_source(
+        {behind, _NewHeight} when Remaining > 0 ->
+            converge_current_snapshot(
+              Owner, RequestRef, Sources, Identity, Root, FetchFun,
+              PageTimeout, Deadline, Cursor, AdvanceMode);
+        unconfirmed when Remaining > 0 ->
+            advance_unconfirmed_current_snapshot(
               Owner, RequestRef, Sources, ConfirmHints, Identity, Cursor, Root,
-              FetchFun, PageTimeout, RequestTimeout, AdvanceMode);
-        {false, false} ->
+              FetchFun, PageTimeout, Deadline, AdvanceMode);
+        _ ->
             {{error, retry}, Cursor}
     end.
 
-recover_current_snapshot_from_history_source(
+advance_unconfirmed_current_snapshot(
   Owner, RequestRef, Sources, ConfirmHints, Identity, Cursor = #verified_cursor{height = Height},
-  Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode) ->
+  Root, FetchFun, PageTimeout, Deadline, AdvanceMode) ->
     Fallback = history_fallback_sources(Sources, ConfirmHints),
-    RouteTimeout = bootstrap_route_timeout(PageTimeout, RequestTimeout, length(Fallback)),
+    Remaining = max(0, Deadline - quod_time:mono_ms()),
+    AttemptTimeout = min(PageTimeout, Remaining),
+    RouteTimeout = bootstrap_route_timeout(AttemptTimeout, Remaining, length(Fallback)),
     case sequential_snapshot_sources(Fallback, Owner, RequestRef, Identity, Cursor,
-                                     Root, FetchFun, RouteTimeout, PageTimeout, AdvanceMode) of
+                                     Root, FetchFun, RouteTimeout, AttemptTimeout, AdvanceMode) of
         {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
-            confirm_current_snapshot(Owner, RequestRef, Sources, Identity, Next,
-              Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode, false);
+            converge_current_snapshot(
+              Owner, RequestRef, Sources, Identity, Root, FetchFun,
+              PageTimeout, Deadline, Next, AdvanceMode);
         {ok, Next} -> {{error, retry}, Next};
         {error, _Reason, Next} -> {{error, retry}, Next}
     end.
@@ -6205,20 +6258,23 @@ advance_snapshot_sources([{Peer, Endpoint} | Rest], Owner, RequestRef,
                                      Root, Target, FetchFun, PageTimeout)
     end.
 
-current_view_confirmed(
+current_view_status(
   Owner, RequestRef, Hints, Ns, Anchor, Identity, Height, Projection,
   PhaseIndex,
   FetchFun, PageTimeout) ->
     Committee = quod_simplex:history_committee(Projection),
     case {Committee, worker_feed_tip(Owner, RequestRef, Height, Projection, PageTimeout)} of
-        {[], _} -> false;
-        {_, Height} -> true;
-        {_, Tip} when is_integer(Tip), Tip > Height -> false;
-        {_, {behind, _}} -> false;
+        {[], _} -> unconfirmed;
+        {_, Height} -> confirmed;
+        {_, Tip} when is_integer(Tip), Tip > Height -> {behind, Tip};
+        {_, {behind, Tip}} -> {behind, Tip};
         {[_ | _], _} ->
-            current_committee_confirmed(
-              Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity,
-              Height, Projection, PhaseIndex, FetchFun, PageTimeout)
+            case current_committee_confirmed(
+                   Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity,
+                   Height, Projection, PhaseIndex, FetchFun, PageTimeout) of
+                true -> confirmed;
+                false -> unconfirmed
+            end
     end.
 
 current_committee_confirmed(

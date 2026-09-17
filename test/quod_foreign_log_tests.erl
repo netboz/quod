@@ -1524,6 +1524,9 @@ assert_confirmation_pull_reaped(#{owner := Owner}, Call, Worker,
     ?assertMatch(#{pending := 1}, quod_foreign_log:stats()).
 
 four_member_confirmation_fixture(Ns) ->
+    four_member_confirmation_fixture(Ns, 4).
+
+four_member_confirmation_fixture(Ns, Height) when Height > 1 ->
     Members = lists:sort(
                 [begin
                      {Pub, Seed} = quod_identity:generate(),
@@ -1553,7 +1556,7 @@ four_member_confirmation_fixture(Ns) ->
                             submitted_at = Slot - 1, sig = none},
                    {ok, Tx} = quod_transaction:sign(Binding, quod_transaction:bind_id(Identity, Tx0), Signer),
                    {committee_content_entry(Ns, Anchor, Members, Slot, [Tx]), Tx}
-               end || Slot <- lists:seq(2, 4)],
+               end || Slot <- lists:seq(2, Height)],
     [{ReferencedEntry, Referenced} | _] = Entries,
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, ReferencedEntry, Referenced),
     #{ns => Ns, anchor => Anchor, ref => Ref, peers => Peers, routes => Routes,
@@ -1816,6 +1819,79 @@ install_current_feed(Owner, Identity = {Ns, Anchor}, Peer, Link, Height) ->
     ?assertMatch({ack, Registration, _, Height},
                  quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
     Registration.
+
+moving_current_view_keeps_one_writer_until_the_tip_is_current_test() ->
+    Fixture = four_member_confirmation_fixture(unique_ns(), 8),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peers = maps:get(peers, Fixture),
+    Routes = maps:get(routes, Fixture),
+    Chain = maps:get(chain, Fixture),
+    Available = atomics:new(1, []),
+    ok = atomics:put(Available, 1, 2),
+    Parent = self(),
+    Fetch = fun(P, E, RequestedNs, From, To) ->
+        Height = atomics:get(Available, 1),
+        Snapshot = peer_chain_fetch(
+                     Ns, lists:sublist(Chain, Height), Peers),
+        case {From, To} of
+            {3, 4} ->
+                Parent ! {moving_current_fetch, From, self()},
+                receive {release_moving_current_fetch, From} -> ok end;
+            {5, 6} ->
+                Parent ! {moving_current_fetch, From, self()},
+                receive {release_moving_current_fetch, From} -> ok end;
+            {7, 8} -> Parent ! {moving_current_fetch, From, self()};
+            _ -> ok
+        end,
+        Snapshot(P, E, RequestedNs, From, To)
+    end,
+    Dir = temp_dir("moving-current-one-writer"),
+    Owner = start_owner(Dir, Fetch),
+    Links = [spawn(fun() -> fake_feed_link(Parent) end) || _ <- lists:seq(1, 3)],
+    FeedPeers = lists:sublist(Peers, 3),
+    try
+        ?assertMatch(
+           {ok, #{slot := 2}},
+           quod_foreign_log:current(Routes, Identity, 5000)),
+        [ok = quod_foreign_log:test_install_feed_registration(
+                Owner, Identity, Peer, Link, crypto:strong_rand_bytes(16))
+         || {Peer, Link} <- lists:zip(FeedPeers, Links)],
+        ok = quod_foreign_log:test_set_feed_height(Owner, Identity, FeedPeers, 4),
+        ok = atomics:put(Available, 1, 4),
+        Call = gen_server:send_request(
+                 Owner, current_request(Routes, Identity, none, 5000)),
+        Worker = receive
+            {moving_current_fetch, 3, Pid3} -> Pid3
+        after 2000 ->
+            error(first_suffix_not_started)
+        end,
+        ok = quod_foreign_log:test_set_feed_height(Owner, Identity, FeedPeers, 6),
+        ok = atomics:put(Available, 1, 6),
+        Worker ! {release_moving_current_fetch, 3},
+        Worker = receive
+            {moving_current_fetch, 5, Pid5} -> Pid5
+        after 2000 ->
+            error(second_suffix_not_started)
+        end,
+        %% The next confirmation observes height eight. Old code closes this
+        %% verified cursor after height six instead of advancing it again.
+        ok = quod_foreign_log:test_set_feed_height(Owner, Identity, FeedPeers, 8),
+        ok = atomics:put(Available, 1, 8),
+        Worker ! {release_moving_current_fetch, 5},
+        Worker = receive
+            {moving_current_fetch, 7, Pid7} -> Pid7
+        after 2000 ->
+            error(third_suffix_not_started)
+        end,
+        ?assertMatch(
+           {reply, {ok, #{slot := 8}}},
+           gen_server:wait_response(Call, 5000)),
+        ?assertEqual(0, maps:get(pending, quod_foreign_log:stats()))
+    after
+        stop_owner(Owner), [Link ! close || Link <- Links],
+        _ = file:del_dir_r(Dir)
+    end.
 
 resident_current_view_uses_height_wake_and_verifies_real_delta_test() ->
     Fixture = prepared_then_committed_fixture(unique_ns()),

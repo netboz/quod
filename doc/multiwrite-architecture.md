@@ -1313,6 +1313,13 @@ gate; a worker's earlier snapshot cannot reopen an acknowledged wait or certify
 a new application as already consumed. Historical rejection without a recorded
 reason is not attributed to this mechanism solely because its symptom matches.
 
+A shared current-view acquisition keeps its one verified cursor while a
+concrete authenticated feed or history observation raises the required tip.
+It advances and confirms that cursor until the exact tip is current or the
+original dependency deadline expires; it does not close and reopen custody
+after an intermediate moving-tip result. No readiness poll or retry timer is
+involved, and the owner still refuses a result superseded before installation.
+
 ### I1 source custody before private-effect binding (unreleased)
 
 The two-phase implementation saves source completion responsibility in the

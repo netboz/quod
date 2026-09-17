@@ -227,16 +227,16 @@ paired_symbol_budgets_commit_only_when_both_admit_test() ->
       fun() ->
          ?assertMatch(
             {ok, _},
-            quod_client_auth:materialize_goal(
+            materialize_goal(
               SigningKeyA, ?PEER, {{'$quod_symbol', First}, ok})),
          ?assertEqual(
             {error, client_goal_rate_limited},
-            quod_client_auth:materialize_goal(
+            materialize_goal(
               SigningKeyB, ?PEER, {{'$quod_symbol', Second}, ok})),
          ?assertError(badarg, binary_to_existing_atom(Second, utf8)),
          ?assertMatch(
             {ok, _},
-            quod_client_auth:materialize_goal(
+            materialize_goal(
               SigningKeyB, {127, 0, 0, 2},
               {{'$quod_symbol', Second}, ok}))
       end).
@@ -258,7 +258,7 @@ signed_goal_materialization_leaves_data_opaque_test() ->
          ?assertError(badarg, binary_to_existing_atom(Functor, utf8)),
          ?assertError(badarg, binary_to_existing_atom(Data, utf8)),
          {ok, Materialized} =
-             quod_client_auth:materialize_goal(PublicKey, ?PEER, Goal),
+             materialize_goal(PublicKey, ?PEER, Goal),
          ?assertEqual({binary_to_existing_atom(Functor, utf8),
                        {'$quod_symbol', Data}}, Materialized),
          %% Ordinary data is not allocated merely because it appeared in a
@@ -325,7 +325,7 @@ materialized_atom_ceiling_survives_auth_owner_restart_test() ->
     try
         ?assertMatch(
            {ok, _},
-           quod_client_auth:materialize_goal(
+           materialize_goal(
              PublicKey, ?PEER, {{'$quod_symbol', First}, ok}))
     after
         stop_auth(Pid1)
@@ -338,7 +338,7 @@ materialized_atom_ceiling_survives_auth_owner_restart_test() ->
     try
         ?assertEqual(
            {error, client_symbol_budget_exhausted},
-           quod_client_auth:materialize_goal(
+           materialize_goal(
              PublicKey, ?PEER, {{'$quod_symbol', Second}, ok}))
     after
         stop_auth(Pid2)
@@ -357,6 +357,17 @@ malformed_requests_are_not_authentication_failures_test() ->
 %% ======================================================================
 %% harness
 %% ======================================================================
+
+%% Exercise the live full-request boundary. The fixed agent uses only atoms
+%% already in this test module, so all old vocabulary-budget assertions still
+%% measure the goal's contribution. No second allocator or budget checker.
+materialize_goal(PublicKey, Peer, Goal) ->
+    Agent = {agent_instance_ref, <<"auth:test">>, <<71:256>>, {agent, ok}},
+    {ok, Blob} = quod_wire_term:encode_canonical(Agent),
+    case quod_client_auth:materialize_request(PublicKey, Peer, Blob, Goal) of
+        {ok, Agent, Materialized} -> {ok, Materialized};
+        {error, _} = Error -> Error
+    end.
 
 signed_challenge(KeyPair, ClientNonce) ->
     {PublicKey, _} = KeyPair,

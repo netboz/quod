@@ -957,7 +957,7 @@ bind_session_operation_effect(
 -doc """
 Submit a sealed plan to a REMOTE target validator through its open scope.
 
-Local and co-hosted targets submit engine-direct (`quod_prolog:submit_plan/4`)
+Local and co-hosted targets use Prolog's existing engine-direct submission
 — only a genuinely remote target needs the wire, and only the bounded outcome
 comes back: the transaction is authored, signed, and parked entirely on the
 target node.

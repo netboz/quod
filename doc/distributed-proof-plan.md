@@ -921,8 +921,8 @@ more writing ontologies use the protocol below, retaining their readers as
 participants for now. There is no separate Prolog API or behavioral mode.
 
 This reuses the one-ledger mechanics, not today's private function unchanged.
-Extract one target-owned `quod_prolog:submit_plan/4` primitive from
-`submit_write/8`. It validates the sealed local plan, builds the unsigned
+The target-owned `accept_plan_submission` transition in `quod_prolog`
+validates the sealed local plan and builds the unsigned
 ordinary envelope, submits it from the target engine, and owns the parked/result
 state until apply. Both an ordinary local proof and a sole-foreign writer
 scope call that primitive. Delete the old caller-engine `submit_write/8` shape
@@ -952,8 +952,8 @@ As built:
   decoded result is a strict, sorted `[{VarNameBinary, Term}]` list, so duplicate
   variable names and topology-dependent atom allocation are impossible.
 - The public API is `prove(Ns, Goal)`; the caller-namespace argument is
-  gone. `submit_plan/4` (plan, bounded goal, bindings) is the one
-  submission primitive; the engine accepts only a plan its OWN node
+  gone. The engine-direct submitter and authenticated remote scope enter the
+  same `accept_plan_submission` transition; the engine accepts only a plan its OWN node
   witnessed for its OWN `{Ns, Anchor}` at a base at-or-below its applied
   head. A read-only proof with no writes returns directly and seals no plan.
   An admitted signed execute/Accept seals its origin plan even when the
@@ -1693,8 +1693,8 @@ Keep the change factored rather than adding phase exceptions throughout
 - `quod_ask_router`: become the sole bounded scope-frame correlation/proxy and
   cleanup registry, with a monotonic `ProofId` touched-scope ownership set;
 - `quod_prolog`: admit the shared workers, retain bounded scope sessions and
-  MVCC pins, own the per-namespace `quod_outcome` state, expose the one
-  target-owned `submit_plan/4` plus the public anchored `outcome/1`, and hand
+  MVCC pins, own the per-namespace `quod_outcome` state, retain one target-owned
+  plan-admission transition plus the public anchored `outcome/1`, and hand
   sealed plans to commit coordination; its public `prove/2` receive loop and
   engine forward exactly one correlated recovery checkpoint so a namespace-
   subtree restart cannot erase the caller's handle: an ordinary `OutcomeRef`

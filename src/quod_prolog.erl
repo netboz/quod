@@ -56,7 +56,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([start_link/2, prove/2, prove_ro/2,
          execute/2, execute_signed/3,
          open_cursor/5, cancel_cursor/3,
-         submit_plan/4, submit_role/4, outcome/1,
+         submit_role/4, outcome/1,
          local_outcome/2, outcome_snapshot/3, dtx_group_state/2,
          validate_read_plan/3,
          effect_resolution/4,
@@ -581,38 +581,6 @@ await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint) ->
 test_await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint) ->
     await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint).
 -endif.
-
--doc """
-Submit one sealed local plan (`m:quod_dtx`) to its target validator engine.
-
-The plan must have been sealed by THIS node — sealing is target-side, so
-whichever engine legitimately receives a plan received one its own node
-witnessed. The engine validates that invariant plus the plan's target
-identity, builds the signed ordinary transaction envelope from the plan's
-exact diff, read tokens, origin, proof id, and digest, and parks the caller
-through the existing consensus/apply path. Both an ordinary local write and a
-sole-foreign material scope go through this one primitive.
-""".
--spec submit_plan(binary(), quod_dtx:plan(), term(), map()) ->
-        {ok, [map()], log_index(), binary()} | {error, term()}.
-submit_plan(TargetNs, Plan, Goal, Bindings) when is_map(Bindings) ->
-    case quod_transaction:encode_durable_submission(Goal, Bindings) of
-        {ok, GoalBlob, ResultBlob} ->
-            case quod_reg:where({quod_prolog, TargetNs}) of
-                undefined -> {error, {ontology_unreachable, TargetNs}};
-                Pid -> try gen_server:call(
-                             Pid,
-                             {submit_plan, Plan, GoalBlob, ResultBlob, none, [],
-                              [Bindings], quod_trace:context()}, infinity)
-                       catch exit:_ ->
-                           {error, {outcome_unknown,
-                                    quod_transaction:plan_outcome_ref(
-                                      Plan, GoalBlob, ResultBlob, none)}}
-                       end
-            end;
-        {error, _} = Error ->
-            Error
-    end.
 
 -doc "Submit one canonical non-application role through ordinary target custody.".
 -spec submit_role(binary(), #transaction{}, [map()], pos_integer()) ->
@@ -5478,9 +5446,9 @@ close_origin_scope(
   {local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session}) -> ok;
 close_origin_scope(Scope) -> quod_scope_session:close(Scope).
 
-%% Every worker result is terminal now: a write proof commits (or fails)
-%% inside the worker through submit_plan/4 before it reports, so the engine's
-%% one reply path only shapes results — it never re-enters submission.
+%% The worker dispatches the selected lane once. The engine either keeps the
+%% atomic group's existing waiter or shapes the terminal worker result; it
+%% never re-enters submission while delivering that result.
 finish_proof(Ref, {group_pending, Bindings, GroupRef}, S)
   when is_map(Bindings) ->
     retain_group_waiter(Ref, GroupRef, Bindings, S);

@@ -593,13 +593,13 @@ verify_local_deadline(
     Remaining = caller_remaining(Deadline),
     Result = case Remaining =/= 0 andalso
                   validate_local_request(View, Ref, ExpectedPhase, Remaining) of
-        {ok, Identity} ->
+        {ok, Identity = {Ns, _Anchor}} ->
             ?LOCAL_READ_GATE(before_read),
             with_local_view_owner(
               View,
               fun() ->
-                  Read = verify_resident_local_reference(
-                           Snapshot, Ref, ExpectedPhase, Projection),
+                  Read = verify_resident_snapshot(
+                           Snapshot, ref_slot(Ref), Ns, Ref, ExpectedPhase, Projection),
                   ?LOCAL_READ_GATE(after_read),
                   Read
               end);
@@ -713,24 +713,9 @@ local_view_fetch(#{identity := {Ns, _Anchor}, snapshot := Snapshot} = View,
 local_view_fetch(_View, _Ns, _From, _To) ->
     {error, wrong_namespace}.
 
-%% A local consensus owner has already verified the complete durable prefix.
-%% The capture resolves the exact historical era by indexed read. Missing
-%% bookkeeping is unavailable, never permission to reconstruct it here.
-verify_resident_local_reference(Snapshot, Ref, ExpectedPhase, Projection) ->
-    case quod_dtx:certified_ref_binding(Ref) of
-        {ok, Identity = {Ns, _Anchor}, Slot, _Digest} ->
-            case valid_projection(Projection, Identity) of
-                true ->
-                    verify_resident_snapshot(
-                      Snapshot, Slot, Ns, Ref, ExpectedPhase,
-                      Projection);
-                false ->
-                    {error, bad_foreign_reference}
-            end;
-        error ->
-            {error, bad_foreign_reference}
-    end.
-
+%% validate_local_request already checked the identity/reference/projection
+%% binding. Read the captured era directly; certificate verification remains
+%% per caller, and this read acquires no writer or registry-server custody.
 verify_resident_snapshot(
   Snapshot, Slot, Ns, Ref, ExpectedPhase, Projection) ->
     case quod_ledger_store:open_ro_snapshot(Snapshot) of

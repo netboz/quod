@@ -33,7 +33,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 
 -export([start_link/0, issue_challenge/3, complete_challenge/2,
          admit_goal/2, admit_forwarded_goal/2,
-         materialize_goal/3, materialize_request/4,
+         materialize_request/4,
          challenge_bytes/7, verify_challenge/7]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
@@ -126,12 +126,6 @@ admit_forwarded_goal(<<_:256>> = PublicKey, <<_:256>> = ForwarderKey) ->
 admit_forwarded_goal(_PublicKey, _ForwarderKey) ->
     {error, invalid_signing_key}.
 
--doc "Materialize one already-verified goal under exact signing-key, peer and VM budgets.".
--spec materialize_goal(<<_:256>>, term(), term()) ->
-          {ok, term()} | {error, term()}.
-materialize_goal(PublicKey, Peer, Goal) ->
-    call({materialize_goal, PublicKey, Peer, Goal}).
-
 -doc "Materialize one verified agent reference and goal under the shared atom budget.".
 -spec materialize_request(<<_:256>>, term(), binary(), term()) ->
           {ok, term(), term()} | {error, term()}.
@@ -206,8 +200,6 @@ handle_call({admit_goal, SessionId, Peer}, _From, S) ->
     reply(admit_goal_request(SessionId, Peer, S));
 handle_call({admit_forwarded_goal, PublicKey, ForwarderKey}, _From, S) ->
     reply(admit_forwarded_goal_request(PublicKey, ForwarderKey, S));
-handle_call({materialize_goal, PublicKey, Peer, Goal}, _From, S) ->
-    reply(materialize_verified_goal(PublicKey, Peer, Goal, S));
 handle_call({materialize_request, PublicKey, Peer, AgentRef, Goal}, _From, S) ->
     reply(materialize_verified_request(PublicKey, Peer, AgentRef, Goal, S));
 handle_call(_Request, _From, S) ->
@@ -408,19 +400,6 @@ admit_forwarded_goal_request(
         {{error, _} = Error, S1} -> {Error, S1}
     end;
 admit_forwarded_goal_request(_PublicKey, _ForwarderKey, S) ->
-    {{error, invalid_signing_key}, S}.
-
-materialize_verified_goal(<<_:256>> = PublicKey, Peer, Goal, S0) ->
-    case quod_wire_term:goal_symbol_names(Goal) of
-        {ok, Names} ->
-            NewNames = [Name || Name <- Names, not existing_atom(Name)],
-            materialize_new_symbols(
-              PublicKey, Peer, length(NewNames),
-              fun() -> quod_wire_term:materialize_goal_symbols(Goal) end, S0);
-        {error, _} ->
-            {{error, invalid_goal}, S0}
-    end;
-materialize_verified_goal(_PublicKey, _Peer, _Goal, S) ->
     {{error, invalid_signing_key}, S}.
 
 materialize_verified_request(

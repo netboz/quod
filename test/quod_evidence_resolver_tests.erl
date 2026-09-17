@@ -24,7 +24,7 @@ current_era_hit_has_one_committed_capture_and_zero_foreign_work_test() ->
         ?assertEqual([capture_request(F, D)], captures(C)),
         T = traces(),
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
-        ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
+        ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_snapshot, 6)),
         ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
         ?assertEqual(1, calls(T, quod_ledger_store, read_at, 3)),
         assert_no_foreign_work(T),
@@ -99,7 +99,7 @@ nonhosted_identity_routes_once(Mode) ->
                      resolve(C#{hint := Hint}, Ref, resolve, D)),
         T = traces(),
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
-        ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
+        ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_snapshot, 6)),
         assert_one_routed(T, C, Ref, resolve, Hint, D),
         %% Cold routed work positively controls full-open and forward-fold
         %% tracing. Persisted-cache replay has its own restart control below.
@@ -131,7 +131,7 @@ lagging_hosted_prefix_waits_for_verified_suffix_without_foreign_work_test() ->
             ?assertEqual(lists:duplicate(2, capture_request(F, D)), captures(C)),
             T = traces(),
             ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
-            ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
+            ?assertEqual(1, calls(T, quod_foreign_log, verify_resident_snapshot, 6)),
             ?assertEqual(1, calls(T, quod_ledger_store, open_ro_snapshot, 1)),
             assert_no_foreign_work(T),
             assert_no_fetch()
@@ -368,7 +368,7 @@ queued_capture_cannot_launch_after_expiry_test() ->
             ?assertEqual([capture_request(F, D)], captures(C)),
             T = traces(),
             ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
-            ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_local_reference, 4)),
+            ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_snapshot, 6)),
             assert_no_foreign_work(T),
             assert_no_fetch()
         after
@@ -780,7 +780,7 @@ trace_patterns() ->
      {quod_simplex, history_view_at, 3},
      {quod_foreign_log, verification_call, 2},
      {quod_foreign_log, verify_local_deadline, 4},
-     {quod_foreign_log, verify_resident_local_reference, 4},
+     {quod_foreign_log, verify_resident_snapshot, 6},
      {quod_foreign_log, start_distinct_worker, 7},
      {quod_foreign_log, spawn_verification_worker, 3},
      {quod_foreign_log, open_cache, 5},

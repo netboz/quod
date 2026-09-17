@@ -488,16 +488,20 @@ t_submit_plan_validation({Ns, _}) ->
                    end,
             %% (The accepted path commits through consensus and is covered by
             %% the integration tests; here only the immediate refusals.)
+            {ok, GoalBlob, ResultBlob} = quod_transaction:encode_durable_submission(
+                                         {assertz, {planned, x}}, #{}),
+            Submit = fun(Target, Plan) ->
+                %% The same message used by the live engine-direct submitter.
+                gen_server:call(quod_reg:via({quod_prolog, Target}),
+                    {submit_plan, Plan, GoalBlob, ResultBlob, none, [],
+                     [#{}], quod_trace:context()}, 1000)
+            end,
             ?assertEqual(
                {error, bad_plan},
-               quod_prolog:submit_plan(
-                 Ns, Seal(#{target => {<<"elsewhere">>, <<0:256>>}}),
-                 {assertz, {planned, x}}, #{})),
+               Submit(Ns, Seal(#{target => {<<"elsewhere">>, <<0:256>>}}))),
             ?assertEqual(
                {error, bad_plan},
-               quod_prolog:submit_plan(
-                 Ns, Seal(#{base_height => 999}),
-                 {assertz, {planned, x}}, #{})),
+               Submit(Ns, Seal(#{base_height => 999}))),
             %% Witness ownership follows the target engine's actual node id,
             %% never mutable application environment observed later.
             {Pub, Seed} = quod_identity:generate(),
@@ -521,9 +525,7 @@ t_submit_plan_validation({Ns, _}) ->
                               #{target => {KeyedNs, KeyedAnchor}}),
                 ?assertEqual(
                    {error, bad_plan},
-                   quod_prolog:submit_plan(
-                     KeyedNs, KeyedPlan,
-                     {assertz, {planned, x}}, #{}))
+                   Submit(KeyedNs, KeyedPlan))
             after
                 gen_server:stop(KeyedPid),
                 ets:delete(GenesisTable)

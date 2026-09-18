@@ -8,6 +8,8 @@
 | `consensus.proposed` event | A content proposal's per-waiter notification | Request-level event, not another proposal or consensus round |
 | `quod.consensus.parent_request_queued` event | Parent-verdict request sent by the consensus owner | Send-to-verdict includes dispatch, work and scheduling; the event can be absent under an ended or unsampled ambient parent |
 | `consensus.parent_verdict_received` span | Correlated content/DTX parent verdict accepted for processing | Verdict receipt, not commitment; stale/unmatched callbacks do not mark this boundary |
+| `quod.consensus.foreign_validation` span | The existing content/atomic worker authenticating referenced foreign history after local validation | Includes history acquisition, verification and scheduling; a fast local verdict does not bound this work |
+| `consensus.foreign_validation_received` span | The owner consumes that worker's exact correlated verdict | Distinct from worker completion; neither boundary implies finality |
 | `consensus.control_admission_decoded` owner event | Exact semantic control digest available in submit admission, before retention/signing | Admission begins between this callback's entry and the event; not network arrival or a proposal |
 | `quod.operation.exact_evidence` span | Sufficient-capture reuse or exact-reference resolution | Capture reuse can be nearly instantaneous; this adds no recapture |
 | `quod.operation.certificate_verify` span | Verification of a supplied operation certificate | Not verification of a newly collected certificate |

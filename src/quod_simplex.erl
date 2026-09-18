@@ -10968,35 +10968,16 @@ start_content_validation(Transactions, BlockTimestamp, Sl, BH,
               Transactions, BlockTimestamp, Sl, BH, S);
         {ok, ReferencePlan} ->
             Deadline = quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS,
-            Owner = self(),
             LocalIdentity = target_identity(S),
             LocalSource = local_history_view(S),
-            Trace = trace_for_block(Sl, BH, S),
-            TraceLocation = {S#s.ns, Sl, BH},
-            TraceAttributes = #{'quod.validation.transactions' => length(ReferencePlan)},
-            trace_block_event(Sl, BH, <<"consensus.foreign_validation_queued">>, #{}, S),
-            Worker = spawn(
-                       fun() ->
-                           Contacts = content_reference_contacts(
-                                        ReferencePlan, DtxWorkers, LocalIdentity),
-                           Verdict = quod_consensus_trace:work(
-                             Trace, TraceLocation, <<"quod.consensus.foreign_validation">>, TraceAttributes,
-                             fun() ->
-                                 Result = verify_content_foreign_references(
-                                            ReferencePlan, LocalIdentity, LocalSource,
-                                            Contacts, Deadline),
-                                 _ = quod_trace:add_event(
-                                       quod_trace:context(), <<"consensus.foreign_validation_finished">>,
-                                       #{'quod.validation.verdict' => trace_validation_class(Result)}),
-                                 Result
-                             end),
-                           ok = observe_verified_reference_contacts(
-                                  Verdict, Contacts),
-                           Owner ! {content_foreign_verdict,
-                                    {Sl, BH}, self(), Deadline,
-                                    reference_deadline_result(Deadline, Verdict)}
-                       end),
-            Monitor = erlang:monitor(process, Worker),
+            {Worker, Monitor} = spawn_foreign_validation(
+                {Sl, BH}, {content_foreign_verdict, {Sl, BH}}, Deadline,
+                #{'quod.validation.transactions' => length(ReferencePlan)}, S,
+                fun() ->
+                    Contacts = content_reference_contacts(ReferencePlan, DtxWorkers, LocalIdentity),
+                    {verify_content_foreign_references(
+                        ReferencePlan, LocalIdentity, LocalSource, Contacts, Deadline), Contacts}
+                end),
             Round = round_state(Sl, S),
             put_round(
               Sl, Round#round{validating = BH,
@@ -11252,23 +11233,16 @@ start_dtx_foreign_validation(
   ReferencePlan, Histories, Sl, BH, ParentToken, DeadlineMs,
   S = #s{dtx_workers = DtxWorkers}) ->
     Deadline = quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS,
-    Owner = self(),
     LocalIdentity = target_identity(S),
     LocalSource = local_history_view(S),
     ValidationSidecar = (round_state(Sl, S))#round.validation_sidecar,
     Contacts = dtx_reference_contacts(
                  ReferencePlan, DtxWorkers, LocalIdentity),
-    {Worker, Monitor} = spawn_monitor(
-               fun() ->
-                   Verdict = verify_dtx_foreign_references(
-                               ReferencePlan, LocalIdentity, LocalSource, Contacts,
-                               ValidationSidecar, Deadline),
-                   ok = observe_verified_reference_contacts(
-                          Verdict, Contacts),
-                   Owner ! {dtx_foreign_verdict,
-                            {Sl, BH, ParentToken}, self(), Deadline,
-                            reference_deadline_result(Deadline, Verdict)}
-               end),
+    {Worker, Monitor} = spawn_foreign_validation(
+        {Sl, BH}, {dtx_foreign_verdict, {Sl, BH, ParentToken}}, Deadline,
+        #{'quod.validation.controls' => length(ReferencePlan)}, S,
+        fun() -> {verify_dtx_foreign_references(
+            ReferencePlan, LocalIdentity, LocalSource, Contacts, ValidationSidecar, Deadline), Contacts} end),
     Round = round_state(Sl, S),
     put_round(
       Sl,
@@ -11276,6 +11250,29 @@ start_dtx_foreign_validation(
         validating = BH,
         validation =
           {dtx_foreign, ParentToken, Worker, Monitor, Histories, DeadlineMs}}, S).
+
+%% Content and atomic controls have the same finite foreign-verification
+%% lifetime. Carry its observation context across the process boundary too:
+%% a local parent verdict is not yet permission to vote on foreign evidence.
+spawn_foreign_validation({Sl, BH}, {Event, Tag}, Deadline, Attributes, S, Verify) ->
+    Owner = self(),
+    Trace = trace_for_block(Sl, BH, S),
+    Location = {S#s.ns, Sl, BH},
+    trace_block_event(Sl, BH, <<"consensus.foreign_validation_queued">>, #{}, S),
+    spawn_monitor(fun() ->
+        {Verdict, Contacts} = quod_consensus_trace:work(
+            Trace, Location, <<"quod.consensus.foreign_validation">>, Attributes,
+            fun() ->
+                {Result, _Contacts} = Verified = Verify(),
+                _ = try quod_trace:add_event(quod_trace:context(),
+                        <<"consensus.foreign_validation_finished">>,
+                        #{'quod.validation.verdict' => trace_validation_class(Result)})
+                    catch _:_ -> false end,
+                Verified
+            end),
+        ok = observe_verified_reference_contacts(Verdict, Contacts),
+        Owner ! {Event, Tag, self(), Deadline, reference_deadline_result(Deadline, Verdict)}
+    end).
 
 on_dtx_foreign_verdict(
   Sl, BH, ParentToken, WorkerPid, Deadline, Verdict0,
@@ -11288,6 +11285,9 @@ on_dtx_foreign_verdict(
          {dtx_foreign, ParentToken, WorkerPid, _Monitor, Histories, _DeadlineMs},
          {BH, #block{payload = Payload} = Block}} ->
             Verdict = reference_deadline_result(Deadline, Verdict0),
+            trace_block_event(
+              Sl, BH, <<"consensus.foreign_validation_received">>,
+              #{'quod.validation.verdict' => trace_validation_class(Verdict)}, S),
             S0 = put_round(
                    Sl,
                    release_dtx_validation_round(Round), S),

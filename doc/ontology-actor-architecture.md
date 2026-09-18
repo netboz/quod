@@ -279,6 +279,13 @@ release. Otherwise validators could derive different verdicts from identical
 ledger state, which is a consensus-safety failure rather than a boot-time
 convenience issue.
 
+A genesis is decoded by nodes that never saw its source — joiners, and the
+founder itself after a restart — and each of them admits at most 64 new
+symbols per envelope (`quod_vm_limits`). Root's creation action therefore
+refuses a founding whose genesis would introduce more, measured against the
+release's own module vocabulary; an ontology keeps its data (names, tables,
+labels) as binaries and spends symbols only on structure.
+
 This is an explicit genesis-format break: a slot-1 transaction without the
 canonical manifest is invalid. A module digest is immutable for that ontology
 identity. Upgrades therefore keep the old versioned BEAM available for existing

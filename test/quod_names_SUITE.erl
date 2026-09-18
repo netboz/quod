@@ -15,7 +15,9 @@
          remote_draw_from_non_hosting_node/1,
          public_queries_open_mutation_refused/1,
          backtracking_cut_and_savepoint/1,
-         restart_recovery/1]).
+         restart_recovery/1,
+         cold_peer_joins_quod_names/1,
+         founder_restarts_and_replays/1]).
 
 -define(TARGET_PORT, 15990).
 -define(ASKER_PORT, 15991).
@@ -30,7 +32,9 @@ all() -> [remote_completion_of_deep_proof,
           remote_draw_from_non_hosting_node,
           public_queries_open_mutation_refused,
           backtracking_cut_and_savepoint,
-          restart_recovery].
+          restart_recovery,
+          cold_peer_joins_quod_names,
+          founder_restarts_and_replays].
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
@@ -51,9 +55,9 @@ init_per_suite(Config) ->
             "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
             "remote_label(Salt, Name) :- quod:names::draw(Salt, Name).\n"]),
     Target = start_node(names_target, ?TARGET_PORT, TargetKey, Config),
-    start_root_namespace(Target, TargetPub, Config),
-    start_namespace(Target, TargetPub, ?NAMES_NS, Names, Config),
-    start_namespace(Target, TargetPub, ?AGENT_NS, AgentGenesis, Config),
+    start_root_namespace(Target, TargetPub, Config, names_target),
+    start_namespace(Target, TargetPub, ?NAMES_NS, Names, Config, names_target),
+    start_namespace(Target, TargetPub, ?AGENT_NS, AgentGenesis, Config, names_target),
     Asker = start_node(names_asker, ?ASKER_PORT, AskerKey, Config),
     start_namespace(Asker, AskerPub, ?ASKER_NS, AskerGenesis, Config),
     RootAnchor = peer:call(Target, quod_simplex, genesis_hash, [?ROOT_NS]),
@@ -70,10 +74,13 @@ init_per_suite(Config) ->
                  [{?NAMES_NS, NamesAnchor, validator},
                   {?ROOT_NS, RootAnchor, validator}], 1, 1]),
     [{target, Target}, {asker, Asker}, {target_pub, TargetPub},
-     {asker_addr, AskerAddr}, {names_anchor, NamesAnchor} | Config].
+     {target_key, TargetKey}, {asker_pub, AskerPub}, {target_addr, TargetAddr},
+     {asker_addr, AskerAddr}, {names_anchor, NamesAnchor},
+     {names_source, Names}, {agent_genesis, AgentGenesis} | Config].
 
 end_per_suite(Config) ->
-    quod_ct:stop_all([?config(target, Config), ?config(asker, Config)]).
+    quod_ct:stop_all([?config(target, Config), ?config(asker, Config)]),
+    quod_ct:stop_all(persistent_term:get({?MODULE, restarted}, [])).
 
 %% Exhausting a remote draw sends the target's bounded failure stack back
 %% with the completion. The asker knows none of quod:names' predicate names,
@@ -141,17 +148,18 @@ remote_draw_from_non_hosting_node(Config) ->
     {ok, [#{'N' := Elf}], _} =
         quod_ct:peer_prove(Asker, ?ASKER_NS,
                            {'::', ?NAMES, {draw, elf, personal, female, s3, {'N'}}}),
-    ?assert(lists:member(elf_female, classes(Target, ?NAMES_NS, Elf))),
+    ?assert(lists:member({elf, personal, female}, classes(Target, ?NAMES_NS, Elf))),
     ?assertMatch({ok, [#{'C' := 384}], _},
                  quod_ct:peer_prove(
                    Asker, ?ASKER_NS,
                    {'::', ?NAMES, {count, halfling, personal, male, {'C'}}})),
-    %% The asker never loaded quod:names, so its pool names arrive as opaque
+    %% The asker never loaded quod:names, so its cultures arrive as opaque
     %% symbols rather than freshly allocated atoms.
-    ?assertMatch({ok, [#{'L' := [{'$quod_symbol', <<"orc_male">>}]}], _},
+    ?assertMatch({ok, [#{'L' := [{'$quod_symbol', <<"orc">>}]}], _},
                  quod_ct:peer_prove(
                    Asker, ?ASKER_NS,
-                   {findall, {'K'}, {'::', ?NAMES, {name, {'K'}, <<"Ugbash">>}},
+                   {findall, {'C'},
+                    {'::', ?NAMES, {name, <<"Ugbash">>, {'C'}, {'_'}, {'_'}}},
                     {'L'}})),
     Timings = [begin
                    T0 = erlang:monotonic_time(millisecond),
@@ -173,14 +181,14 @@ public_queries_open_mutation_refused(Config) ->
                       ?assertNotMatch({ok, _, _}, Result),
                       Result
               end,
-    Refused({assertz, {vile_medium, zzz}}),
+    Refused({assertz, {elements, <<"zz">>, [<<"zzz">>]}}),
     Refused({',', {name, {'N'}, orc, personal, male},
-             {assertz, {vile_medium, zzz}}}),
-    Refused({retract, {name_class, orc_male, orc, personal, male}}),
+             {assertz, {elements, <<"zz">>, [<<"zzz">>]}}}),
+    Refused({retract, {pool, orc, personal, male, {'_'}}}),
     Refused({assertz, {naming_query, {assertz, {'_'}}}}),
     ?assertEqual(Before, count(Target, ?NAMES_NS)),
     ?assertMatch({fail, _},
-                 quod_ct:peer_prove(Target, ?NAMES_NS, {vile_medium, zzz})),
+                 quod_ct:peer_prove(Target, ?NAMES_NS, {elements, <<"zz">>, {'_'}})),
     ?assertMatch({ok, [#{'N' := _}], _},
                  quod_ct:peer_prove(
                    Asker, ?ASKER_NS,
@@ -239,6 +247,69 @@ restart_recovery(Config) ->
                       end
               end, 30000)).
 
+%% The asker never loaded the naming source: joining quod:names makes it
+%% decode the genesis over the wire as a cold receiver, within the symbol
+%% budget of one envelope, and then answer draws itself.
+cold_peer_joins_quod_names(Config) ->
+    Asker = ?config(asker, Config),
+    AskerPub = ?config(asker_pub, Config),
+    TargetAddr = ?config(target_addr, Config),
+    Anchor = ?config(names_anchor, Config),
+    ?assertEqual(undefined,
+                 peer:call(Asker, quod_reg, where, [{quod_prolog, ?NAMES_NS}])),
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                unicode:characters_to_list(
+                  [atom_to_list(peer:call(Asker, erlang, node, [])), "_join_", ?NAMES_NS])),
+    Cfg = #{node_id => AskerPub, mode => join, genesis_hash => Anchor,
+            data_dir => DataDir, seed_peers => [TargetAddr]},
+    {ok, _} = peer:call(Asker, quod_ns_sup, start_namespace, [?NAMES_NS, Cfg]),
+    ok = wait_ready(Asker, ?NAMES_NS, {count, halfling, personal, male, {'_'}}),
+    ?assertEqual(Anchor, peer:call(Asker, quod_simplex, genesis_hash, [?NAMES_NS])),
+    ?assertMatch(#{role := observer, syncing := false},
+                 peer:call(Asker, quod_simplex, status, [?NAMES_NS])),
+    ?assertEqual(1449227, count(Asker, ?NAMES_NS)),
+    {ok, [#{'N' := Name}], _} =
+        execute(Asker, ?ASKER_NS, {remote_label, cold_join, {'N'}}),
+    ?assert(is_binary(Name)),
+    ?assertNotEqual([], classes(Asker, ?NAMES_NS, Name)).
+
+%% The founder's VM restarts with its data directories kept: quod:names
+%% replays its own genesis from the ledger — the same cold decode a joiner
+%% does — and answers again, locally and for the asker.
+founder_restarts_and_replays(Config) ->
+    Old = ?config(target, Config),
+    Asker = ?config(asker, Config),
+    TargetPub = ?config(target_pub, Config),
+    Anchor = ?config(names_anchor, Config),
+    ok = peer:stop(Old),
+    Target = start_node(names_target_restarted, ?TARGET_PORT,
+                        ?config(target_key, Config), Config),
+    persistent_term:put({?MODULE, restarted}, [Target]),
+    %% Same data directories as the first VM: every namespace resumes.
+    start_root_namespace(Target, TargetPub, Config, names_target),
+    start_namespace(Target, TargetPub, ?NAMES_NS, ?config(names_source, Config),
+                    Config, names_target),
+    start_namespace(Target, TargetPub, ?AGENT_NS, ?config(agent_genesis, Config),
+                    Config, names_target),
+    RootAnchor = peer:call(Target, quod_simplex, genesis_hash, [?ROOT_NS]),
+    set_network_identity(Target, RootAnchor),
+    ok = wait_ready(Target, ?NAMES_NS, {count, halfling, personal, male, {'_'}}),
+    ok = wait_ready(Target, ?AGENT_NS, true),
+    ?assertEqual(Anchor, peer:call(Target, quod_simplex, genesis_hash, [?NAMES_NS])),
+    ?assertEqual(1449227, count(Target, ?NAMES_NS)),
+    {ok, [#{'N' := Local}], _} =
+        execute(Target, ?AGENT_NS, {label_me, after_vm_restart, {'N'}}),
+    ?assertNotEqual([], classes(Target, ?NAMES_NS, Local)),
+    ?assert(quod_ct:eventually(
+              fun() ->
+                      case quod_ct:peer_prove(Asker, ?ASKER_NS,
+                                              {remote_label, after_vm_restart, {'N'}}) of
+                          {ok, [#{'N' := Remote}], _} -> is_binary(Remote);
+                          _ -> false
+                      end
+              end, 30000)).
+
 %% --- helpers ---------------------------------------------------------------
 
 execute(Peer, Ns, Goal) ->
@@ -249,10 +320,12 @@ count(Peer, Ns) ->
         quod_ct:peer_prove(Peer, Ns, {count, {'_'}, {'_'}, {'_'}, {'C'}}),
     C.
 
+%% Every (culture, kind, gender) selection a name belongs to, one per pool.
 classes(Peer, Ns, Name) ->
     {ok, [#{'L' := L}], _} =
-        quod_ct:peer_prove(Peer, Ns, {findall, {'K'}, {name, {'K'}, Name}, {'L'}}),
-    L.
+        quod_ct:peer_prove(Peer, Ns, {findall, {s, {'C'}, {'K'}, {'G'}},
+                                      {name, Name, {'C'}, {'K'}, {'G'}}, {'L'}}),
+    [{C, K, G} || {s, C, K, G} <- L].
 
 start_node(Name, Port, {Pub, Seed}, Config) ->
     %% Peer nodes must load the beam being tested (see quod_ask_SUITE).
@@ -283,20 +356,25 @@ start_node(Name, Port, {Pub, Seed}, Config) ->
     Peer.
 
 start_namespace(Peer, Pub, Ns, Genesis, Config) ->
+    start_namespace(Peer, Pub, Ns, Genesis, Config,
+                    peer:call(Peer, erlang, node, [])).
+
+start_namespace(Peer, Pub, Ns, Genesis, Config, DirKey) ->
     DataDir = filename:join(
                 ?config(priv_dir, Config),
-                unicode:characters_to_list(
-                  [atom_to_list(peer:call(Peer, erlang, node, [])), "_", Ns])),
+                unicode:characters_to_list([atom_to_list(DirKey), "_", Ns])),
     Cfg = #{node_id => Pub, mode => create, role => member,
             data_dir => DataDir, seed_peers => [], genesis_file => Genesis},
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
     ok.
 
 start_root_namespace(Peer, Pub, Config) ->
+    start_root_namespace(Peer, Pub, Config, peer:call(Peer, erlang, node, [])).
+
+start_root_namespace(Peer, Pub, Config, DirKey) ->
     DataDir = filename:join(
                 ?config(priv_dir, Config),
-                unicode:characters_to_list(
-                  [atom_to_list(peer:call(Peer, erlang, node, [])), "_", ?ROOT_NS])),
+                unicode:characters_to_list([atom_to_list(DirKey), "_", ?ROOT_NS])),
     Content = #{namespace => ?ROOT_NS, mode => create,
                 genesis_file => <<"ontologies/quod_root.pl">>,
                 data_dir => list_to_binary(DataDir), seeds => []},

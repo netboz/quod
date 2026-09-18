@@ -25,6 +25,7 @@ conveniences around that preparation and execution code.
 
 -include("quod_ingress_limits.hrl").
 -include("quod_proof_limits.hrl").
+-include("quod_vm_limits.hrl").
 -include("quod_ledger.hrl").
 
 -export([validate_action/1, prepare_action/2, canonical_name/1,
@@ -190,7 +191,7 @@ prepare_action(
                                 {error, _} = Error ->
                                     Error;
                                 {ok, InitialDiff} ->
-                                    case initial_diff_size(InitialDiff) of
+                                    case initial_diff_admissible(InitialDiff) of
                                         ok ->
                                             prepare_create(
                                               Ns, InitialDiff, Modules);
@@ -851,6 +852,23 @@ compile_initial_terms(Terms) ->
             invalid_initial_term(Term);
         _Class:_Reason ->
             {error, invalid_initial_terms}
+    end.
+
+%% A genesis is decoded by nodes that never saw its source: joiners, and the
+%% founder itself after a restart. They admit at most
+%% ?QUOD_MAX_NEW_MATERIAL_ATOMS unknown symbols per envelope
+%% (m:quod_wire_term), so a founding whose diff would exceed that on a cold
+%% node of this release is refused here, where it can still be corrected.
+initial_diff_admissible(Diff) ->
+    case initial_diff_size(Diff) of
+        ok ->
+            case quod_wire_term:cold_new_symbols(Diff) of
+                New when length(New) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS -> ok;
+                New ->
+                    {error, {genesis_vocabulary, length(New),
+                             ?QUOD_MAX_NEW_MATERIAL_ATOMS}}
+            end;
+        {error, _} = Error -> Error
     end.
 
 initial_diff_size(Diff) ->

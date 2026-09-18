@@ -33,6 +33,7 @@ payload; one aggregate payload gets one bounded allocation budget.
          goal_symbol_names/1, symbol_names/1,
          is_symbol/1, callable_functor/1,
          is_ground/1,
+         release_vocabulary/0, cold_new_symbols/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
 
@@ -136,6 +137,52 @@ decode_canonical(Blob, MaxBytes)
     end;
 decode_canonical(_Blob, _MaxBytes) ->
     {error, bad_term}.
+
+-doc """
+The symbols every node of this release already knows: the atom tables of
+every module on the code path, identical on every node running the release.
+A node that never saw an ontology's source knows nothing beyond this, so a
+founder measures a genesis against it rather than against its own atom table,
+which the source it just loaded has already filled.
+""".
+-spec release_vocabulary() -> #{atom() => true}.
+release_vocabulary() ->
+    case persistent_term:get(?MODULE, undefined) of
+        #{} = Known -> Known;
+        undefined ->
+            Beams = [Beam || Dir <- code:get_path(),
+                             Beam <- filelib:wildcard(filename:join(Dir, "*.beam"))],
+            Known = lists:foldl(
+                      fun(Beam, Acc) ->
+                          case beam_lib:chunks(Beam, [atoms]) of
+                              {ok, {_, [{atoms, Atoms}]}} ->
+                                  lists:foldl(fun({_, A}, M) -> M#{A => true} end,
+                                              Acc, Atoms);
+                              _ -> Acc
+                          end
+                      end, #{}, Beams),
+            persistent_term:put(?MODULE, Known),
+            Known
+    end.
+
+-doc """
+The distinct symbols of a term a cold node of this release would have to
+allocate to materialize it: its atoms outside the release vocabulary. Erlog
+variables (one-tuples) are not symbols.
+""".
+-spec cold_new_symbols(term()) -> [atom()].
+cold_new_symbols(Term) ->
+    Known = release_vocabulary(),
+    lists:usort([A || A <- term_atoms(Term, []), not maps:is_key(A, Known)]).
+
+term_atoms(A, Acc) when is_atom(A) -> [A | Acc];
+term_atoms(T, Acc) when is_tuple(T), tuple_size(T) =:= 1 -> Acc;
+term_atoms(T, Acc) when is_tuple(T) ->
+    lists:foldl(fun term_atoms/2, Acc, tuple_to_list(T));
+term_atoms([H | T], Acc) -> term_atoms(T, term_atoms(H, Acc));
+term_atoms(M, Acc) when is_map(M) ->
+    lists:foldl(fun term_atoms/2, Acc, maps:to_list(M));
+term_atoms(_, Acc) -> Acc.
 
 -doc "Materialize all unknown symbols in one authenticated payload under one budget.".
 -spec materialize_symbols(term()) ->

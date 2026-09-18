@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include("quod_vm_limits.hrl").
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(NODE_NS, <<"quod:node">>).
@@ -38,6 +39,7 @@ lifecycle_single_path_test_() ->
           ?_test(node_does_not_own_generic_creation_policy(Fixture)),
           ?_test(invalid_create_never_reaches_hosting(Fixture)),
           ?_test(reserved_initial_terms_never_reach_hosting(Fixture)),
+          ?_test(oversized_vocabulary_never_reaches_hosting(Fixture)),
           ?_test(collisions_preserve_existing_state(Fixture)),
           ?_test(failed_admission_rolls_back(Fixture)),
           ?_test(failed_root_policy_does_not_read_or_stage(Fixture)),
@@ -1820,3 +1822,26 @@ wait_system_content(Ns, Anchor, N) ->
         #{genesis_hash := Anchor, system_ontology := true} -> ok;
         _ -> receive after 10 -> wait_system_content(Ns, Anchor, N - 1) end
     end.
+
+
+%% A genesis carrying more new symbols than a cold node admits per envelope
+%% would found here and never join or replay anywhere else: refused at the
+%% founding seam. A source inside the budget founds as before.
+oversized_vocabulary_never_reaches_hosting(#{dir := Dir}) ->
+    Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
+    Novel = fun(N) ->
+                    [{list_to_atom("cold_vocabulary_" ++ integer_to_list(I)), I}
+                     || I <- lists:seq(1, N)]
+            end,
+    TooMany = unique_ns(<<"oversized-vocabulary">>),
+    Over = Novel(Budget + 1),
+    ?assertEqual({error, {genesis_vocabulary, Budget + 1, Budget}},
+                 quod_ontology:create(TooMany, [{terms, Over}])),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(TooMany)),
+    ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, TooMany))),
+    AtBudget = unique_ns(<<"budget-vocabulary">>),
+    ?assertMatch({ok, created, AtBudget, _},
+                 quod_ontology:create(AtBudget, [{terms, Novel(Budget)}])),
+    ok = wait_ready(AtBudget, 300),
+    ?assertMatch({ok, [#{}], _},
+                 quod_prolog:prove(AtBudget, {cold_vocabulary_1, 1})).

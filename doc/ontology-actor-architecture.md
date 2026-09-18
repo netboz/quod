@@ -127,6 +127,7 @@ The system family includes:
 | `quod:node` | node class, hosting policy, node actions, and node reality bridges |
 | `quod:agent` | generic acting class, key vocabulary, and common agent rules |
 | `quod:human_user` | `human_user` subclass and human profile/ownership vocabulary |
+| `quod:names` | display names for agents: name pools, generation and recognition from one set of tables, and the proof-bound `draw` every node answers locally once it has joined |
 
 These are vocabulary and policy ontologies, not containers for every instance.
 Each physical node has a node ontology containing an instance of the `node`
@@ -244,7 +245,10 @@ runtime. Each ontology-specific external predicate belongs to the ontology
 whose immutable genesis names and hashes its shipped Erlang module. For the
 first implementation, only system ontologies are founded with such modules.
 Ordinary ontologies use Prolog plus the explicit common execution primitives;
-this restriction can be reconsidered only through a reviewed extension.
+this restriction can be reconsidered only through a reviewed extension. The
+common primitives are pure and read no node state: the action mechanics, the
+proof-bound draw `'$quod_draw'/3` (`proof_draw/3`, a function of the proof's
+identity and a caller salt) and `binary_codes/2`; none is a governed bridge.
 
 When a node starts or follows an ontology, the canonical committed projection
 reads the module manifest from certified slot 1 and installs those exact

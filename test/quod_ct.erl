@@ -34,6 +34,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          wait_until/1, wait_until/2,
          install_directory_generation/5]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
+-export([session_prove/4]).
 -export([proof_gate_row/3]).
 
 %% Assertions inspect one decoded owner-side material object; production has
@@ -991,4 +992,29 @@ valid_applied_certificate_shape(Certificate) ->
     case quod_applied_certificate:applied_certificate_binding(Certificate) of
         {ok, _} -> true;
         error -> false
+    end.
+
+%% Prove Goal once inside a real proof session over Committed: Metadata is
+%% the overlay's proof metadata as the engine sets it (`{origin, _}` in the
+%% origin worker, `{scope, ProofId, Origin, Ref, ScopeId}` in a scope worker,
+%% `undefined` outside a proof) and Ctx the engine context. Returns the
+%% retained bindings of the first solution, `fail`, or the error.
+session_prove(Committed, Metadata, Ctx, Goal) ->
+    Session = quod_proof_session:start(
+                Committed, #{read_set => true, proof_context => Metadata}),
+    Invocation = crypto:strong_rand_bytes(16),
+    try
+        ok = quod_proof_session:open(
+               Session, Invocation, Goal, allowed, Ctx,
+               quod_transaction_scope:empty_selection()),
+        case quod_proof_session:next(Session, Invocation) of
+            {solution, _} ->
+                {ok, Bindings} = quod_proof_session:bindings(
+                                   Session, Invocation),
+                {ok, Bindings};
+            {complete, _} -> fail;
+            {error, _} = Error -> Error
+        end
+    after
+        quod_proof_session:stop(Session)
     end.

@@ -29,6 +29,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
          validate_authorization_transcript/6, validate_agent_key/5,
          close_stream/1]).
 -ifdef(TEST).
+-export([checked_completion/1]).
 -export([test_serve_nested/1, test_await_scope_reply/2,
          test_await_remote_scope_open/4,
          test_remote_open_error/2,
@@ -1359,8 +1360,14 @@ refresh_session(St) ->
         _ -> quod_proof_session:refresh(St)
     end.
 
+%% A completion's failure stack was bounded by the target under the wire
+%% contract; check it here under that same contract. Erlog's native default
+%% would measure the decoded terms' external size, which wrapped foreign
+%% symbols inflate past the cap for a stack the target legitimately filled.
 checked_completion(Reasons) ->
-    case erlog_int:merge_failure_reasons(Reasons, #est{}) of
+    Wire = erlog_int:set_failure_reason_policy(
+             {quod_wire_term, valid_failure_reason_stack}, #est{}),
+    case erlog_int:merge_failure_reasons(Reasons, Wire) of
         {ok, _} -> {complete, Reasons};
         error -> error
     end.

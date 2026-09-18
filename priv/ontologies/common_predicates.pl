@@ -84,3 +84,11 @@ member_eq(X, [Y | _]) :-
     !.
 member_eq(X, [_ | Rest]) :-
     member_eq(X, Rest).
+
+%% proof_draw(+Salt, +N, -I).
+%%
+%% The proof-bound draw (quod_common_primitives): 0 =< I < N, fixed by the
+%% running proof's identity and Salt. Same proof and salt, same I, wherever in
+%% the proof it is asked; a retried request is a new proof and draws afresh.
+%% Fails plainly outside a proof. Deterministic selection, not randomness.
+proof_draw(Salt, N, I) :- '$quod_draw'(Salt, N, I).

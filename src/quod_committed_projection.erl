@@ -62,8 +62,9 @@ new_est() ->
     Est3 = quod_ask:load(Est2),
     Est4 = quod_transaction_predicates:load(Est3),
     Est5 = quod_action_predicates:load(Est4),
-    #est{db = #db{ref = Ref0} = Db} = Est6 = load_common_predicates(Est5),
-    Est6#est{db = Db#db{
+    Est6 = quod_common_primitives:load(Est5),
+    #est{db = #db{ref = Ref0} = Db} = Est7 = load_common_predicates(Est6),
+    Est7#est{db = Db#db{
                        ref = quod_erlog_db_mvcc:publish_base(Ref0)}}.
 
 -doc "Parse one Prolog source file with the canonical genesis error contract.".

@@ -54,7 +54,9 @@ lifecycle_single_path_test_() ->
            ?_test(wrong_anchor_child_stops_then_exact_material_restarts(Fixture))},
           ?_test(obsolete_desired_file_has_no_authority(Fixture)),
           ?_test(parked_hosting_is_exact_event_driven_and_unsubscribes(Fixture)),
-          ?_test(catalogue_worker_failures_are_terminal_owner_failures(Fixture))]
+          ?_test(catalogue_worker_failures_are_terminal_owner_failures(Fixture)),
+          {timeout, 60,
+           ?_test(system_names_is_created_hosted_and_registered(Fixture))}]
      end}.
 
 effect_capacity_is_committed_root_policy(_Fixture) ->
@@ -1740,3 +1742,81 @@ restore_env(Saved) ->
       fun({Key, {ok, Value}}) -> application:set_env(quod, Key, Value);
          ({Key, undefined}) -> application:unset_env(quod, Key)
       end, Saved).
+
+%% The procedure that adds quod:names to a running network, end to end on
+%% one node and in the order the fleet uses: root creates it (an admitted
+%% node's ordinary creation), the node actor commits its discoverable
+%% hosting fact through its own signed goal, root registers the exact anchor,
+%% and the namespace manager adopts it as system content from the catalogue
+%% alone. Nothing is re-founded and no source is injected over a history.
+system_names_is_created_hosted_and_registered(
+  #{actor_ns := ActorNs, actor_anchor := ActorAnchor,
+    actor_instance_text := InstanceText,
+    actor_keypair := {PublicKey, _} = KeyPair,
+    actor_principal := Principal}) ->
+    Names = <<"quod:names">>,
+    Source = list_to_binary(
+               filename:join(code:priv_dir(quod), "ontologies/quod_names.pl")),
+    ?assertMatch({ok, _, [], #{}}, quod_system_ontology:catalog()),
+    {ok, [#{'Anchor' := Anchor}], _} =
+        quod_prolog:execute(
+          ?ROOT_NS,
+          {create_ontology, Names, [{source_file, Source}], {'Anchor'}}),
+    ok = wait_ready(Names, 300),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Names)),
+    ?assertMatch({ok, [#{'N' := Name}], _} when is_binary(Name),
+                 quod_prolog:prove(Names, {draw, before_registration, {'N'}})),
+    %% Created, hosted locally, but not yet a catalogue row.
+    ?assertMatch({ok, _, [], #{}}, quod_system_ontology:catalog()),
+    ?assertNotMatch(#{system_ontology := true}, desired_content_or_none(Names)),
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Peer = {127, 0, 0, 9},
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    unlink(AuthPid),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Agent = #{namespace => ActorNs, anchor => ActorAnchor,
+                  instance_text => InstanceText},
+        GoalText = iolist_to_binary(
+                     ["\"", ActorNs, "\"::assertz(hosts_ontology(",
+                      agent_ref_source(NodeRef, InstanceText), ", ",
+                      prolog_binary_literal(Names), ", ",
+                      prolog_binary_literal(Anchor), ", discoverable))."]),
+        {RequestBytes, Signature} = signed_agent_goal_version(
+                                      NetworkId, PublicKey, KeyPair,
+                                      Agent, execute, SessionExpires,
+                                      GoalText, 2),
+        ok = assert_signed_action_result(
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, RequestBytes, Signature, Peer),
+               SessionId, RequestBytes, Signature, Peer)
+    after
+        stop_process(AuthPid)
+    end,
+    ok = wait_desired_content(Names, Anchor, 300),
+    ok = commit_root({assertz, {system_ontology, {':', quod, names}, Anchor}}),
+    ?assertMatch({ok, _, [#{namespace := Names, anchor := Anchor}], #{}},
+                 quod_system_ontology:catalog()),
+    ok = wait_system_content(Names, Anchor, 300),
+    ?assertMatch({ok, [#{'N' := Name}], _} when is_binary(Name),
+                 quod_prolog:prove(Names, {draw, after_registration, {'N'}})),
+    ?assertMatch({ok, [#{'C' := 384}], _},
+                 quod_prolog:prove(
+                   Names, {count, halfling, personal, male, {'C'}})).
+
+desired_content_or_none(Ns) ->
+    Desired = application:get_env(
+                quod, namespace_desired, #{content => #{}, brahms => #{}}),
+    maps:get(Ns, maps:get(content, Desired), none).
+
+wait_system_content(_Ns, _Anchor, 0) -> error(system_content_not_adopted);
+wait_system_content(Ns, Anchor, N) ->
+    case desired_content_or_none(Ns) of
+        #{genesis_hash := Anchor, system_ontology := true} -> ok;
+        _ -> receive after 10 -> wait_system_content(Ns, Anchor, N - 1) end
+    end.

@@ -13,7 +13,7 @@ production_artifact_inventory_test() ->
     Forms = [production_forms(File, Root) || File <- Files],
     Declarations = lists:append([declarations(F) || F <- Forms]),
     ?assertEqual([{quod_ledger, [bytes, view, block]},
-                  {quod_ledger, [index, hash, cert, count, record]}], Declarations),
+                  {quod_ledger, [index, hash, cert, count, record, bytes]}], Declarations),
     Inventory = lists:append([inventory(F) || F <- Forms]),
     ?assertEqual(lists:sort(reviewed_sites()), lists:sort(Inventory)),
     %% The only mint is private even though all production call sites are also
@@ -25,9 +25,11 @@ production_artifact_inventory_test() ->
 
 reviewed_sites() ->
     [%% Byte ingress: each framed page/feed/sidecar or on-disk frame reaches
-     %% the same codec once. The public /1 delegation selects its old mode.
+     %% the same codec once. Hints decode only a selection at ingress; actual
+     %% history import materializes all bytes through that same full decoder.
      {{quod_catchup, decode_entry_blobs, 3}, {call, quod_ledger, decode_entry, 2}},
-     {{quod_dtx_endpoint, decode_sidecar, 2}, {call, quod_ledger, decode_entry, 2}},
+     {{quod_foreign_log, import_exact_entry_hint, 8}, {call, quod_ledger, materialize_hint, 1}},
+     {{quod_ledger, materialize_hint, 1}, {call, quod_ledger, decode_entry, 2}},
      {{quod_feed, decode_inner, 1}, {call, quod_ledger, decode_entry, 1}},
      {{quod_ledger_store, materialize_entry, 2}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger_store, scan, 9}, {call, quod_ledger, decode_entry, 2}},
@@ -49,13 +51,18 @@ reviewed_sites() ->
      {{quod_ledger, entry_view, 1}, artifact_record},
      {{quod_ledger, entry_index, 1}, artifact_record},
      {{quod_ledger, select_entry, 3}, artifact_record},
+     {{quod_ledger, materialize_hint, 1}, artifact_record},
      {{quod_ledger, record_commitment, 2}, artifact_record},
-     %% Separate read-only selections cannot reach the full-artifact mint or
-     %% any encode/append/apply boundary. Their record/byte bindings are tested
-     %% through the public reader and real certificates in the selection suite.
+     %% Selections cannot be appended or treated as fully authenticated. Only
+     %% the checked materialize_hint byte ingress above can promote one; the
+     %% selection suite pins full verification of every item before import.
      {{quod_ledger, select_entry, 3}, selection_record},
      {{quod_ledger, select_entry, 3}, selection_record},
      {{quod_ledger, select_entry, 3}, selection_update},
+     {{quod_ledger, select_entry, 3}, selection_update},
+     {{quod_ledger, select_entry, 3}, selection_update},
+     {{quod_ledger, hint_bytes, 1}, selection_record},
+     {{quod_ledger, materialize_hint, 1}, selection_record},
      {{quod_ledger, selected, 5}, selection_record},
      {{quod_ledger, selected, 5}, selection_record},
      {{quod_ledger, selected_record, 1}, selection_record},
@@ -152,7 +159,7 @@ remote_sites({atom, _, Mod}, Fun, _Arity, _Kind, M, I)
 remote_sites({atom, _, _Other}, Fun, _Arity, _Kind, M, I) -> walk(Fun, M, I);
 remote_sites(Mod, {atom, _, Fun}, _Arity, _Kind, M, I)
   when Fun =:= entry; Fun =:= new_entry; Fun =:= noop_entry;
-       Fun =:= decode_entry; Fun =:= from_entry_view; Fun =:= mint_artifact;
+       Fun =:= decode_entry; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
        Fun =:= encode_entry_view;
        Fun =:= append ->
     [{dynamic_boundary, Fun} | walk(Mod, M, I)];
@@ -162,7 +169,7 @@ remote_sites(Mod, Fun, _Arity, _Kind, M, I) ->
 
 boundary(quod_ledger, Fun, Arity, Kind)
   when Fun =:= entry; Fun =:= new_entry; Fun =:= noop_entry;
-       Fun =:= decode_entry; Fun =:= from_entry_view; Fun =:= mint_artifact;
+       Fun =:= decode_entry; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
        Fun =:= encode_entry_view ->
     [{Kind, quod_ledger, Fun, Arity}];
 boundary(quod_ledger_store, append, Arity, Kind) ->

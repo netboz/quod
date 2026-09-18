@@ -112,6 +112,7 @@ retained index; point I/O and exact verification run in the existing caller.
          verify/5, verify_reference/3, verify_local/4,
          verify_reference/4, verify_reference/5,
          resolve_reference/6, verify_local_deadline/4,
+         verify_local_entry_deadline/5,
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, refresh/1, ack/2, projection_clauses/3, unfollow/1,
@@ -435,7 +436,7 @@ correctness path.
 """.
 -spec verify_reference(quod_dtx:certified_ref(),
                        entry | transaction | vote | resolve | complete,
-                       none | {<<_:256>>, term()}, none | quod_ledger:entry_artifact(),
+                       none | {<<_:256>>, term()}, none | quod_ledger:entry_artifact() | quod_ledger:selected_entry(),
                        pos_integer()) -> {ok, map()} | {error, term()}.
 verify_reference(Ref, ExpectedPhase, Contact, EntryHint0, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
@@ -474,7 +475,7 @@ before any owner capture or routed admission.
 -spec resolve_reference({binary(), <<_:256>>}, quod_dtx:certified_ref(),
                         entry | transaction | vote | resolve | complete,
                         none | {<<_:256>>, term()},
-                        none | quod_ledger:entry_artifact(), integer()) ->
+                        none | quod_ledger:entry_artifact() | quod_ledger:selected_entry(), integer()) ->
           {ok, map()} | {error, term()}.
 resolve_reference(Target, Ref, Phase, Contact, EntryHint, Deadline)
   when is_integer(Deadline) ->
@@ -585,22 +586,56 @@ verify_local(_View, _Ref, _ExpectedPhase, _TimeoutMs) ->
                             entry | transaction | vote | resolve | complete, integer() | infinity) ->
           {ok, map()} | {error, term()}.
 verify_local_deadline(
-  #{owner := Owner, identity := Identity, slot := Height, applied := Applied,
-    snapshot := Snapshot, projection := Projection} = View,
+  #{identity := {Ns, _}, snapshot := Snapshot} = View,
   Ref, ExpectedPhase, Deadline)
+  when is_integer(Deadline) orelse Deadline =:= infinity ->
+    verify_captured_local(
+      View, Ref, ExpectedPhase, Deadline,
+      fun(_Height, Projection) ->
+          verify_resident_snapshot(
+            Snapshot, ref_slot(Ref), Ns, Ref, ExpectedPhase, Projection)
+      end);
+verify_local_deadline(_View, _Ref, _ExpectedPhase, _Deadline) ->
+    {error, bad_foreign_reference}.
+
+-doc "Verify one already-read entry against its captured local history view.".
+-spec verify_local_entry_deadline(quod_simplex:history_view(),
+                                  quod_dtx:certified_ref(),
+                                  entry | transaction | vote | resolve | complete,
+                                  quod_ledger:entry_artifact() | quod_ledger:selected_entry(), integer() | infinity) ->
+          {ok, map()} | {error, term()}.
+verify_local_entry_deadline(
+  View,
+  Ref, ExpectedPhase, Entry, Deadline)
+  when is_integer(Deadline) orelse Deadline =:= infinity ->
+    verify_captured_local(
+      View, Ref, ExpectedPhase, Deadline,
+      fun(Height, Projection) ->
+          case reference_projection(ref_slot(Ref), Height, Projection) of
+              {ok, EvidenceProjection} ->
+                  verify_exact_reference_entry(
+                    Ref, ExpectedPhase, Entry, EvidenceProjection);
+              error -> {error, retry}
+          end
+      end);
+verify_local_entry_deadline(_View, _Ref, _ExpectedPhase, _Entry, _Deadline) ->
+    {error, bad_foreign_reference}.
+
+verify_captured_local(
+  #{owner := Owner, identity := Identity, slot := Height,
+    applied := Applied, projection := Projection} = View,
+  Ref, ExpectedPhase, Deadline, Verify)
   when is_pid(Owner), is_integer(Height), Height >= 0,
        is_integer(Applied), Applied >= 0, Applied =< Height,
-       (is_integer(Deadline) orelse Deadline =:= infinity) ->
+       is_function(Verify, 2) ->
     Remaining = caller_remaining(Deadline),
     Result = case Remaining =/= 0 andalso
                   validate_local_request(View, Ref, ExpectedPhase, Remaining) of
-        {ok, Identity = {Ns, _Anchor}} ->
+        {ok, Identity} ->
             ?LOCAL_READ_GATE(before_read),
             with_local_view_owner(
-              View,
-              fun() ->
-                  Read = verify_resident_snapshot(
-                           Snapshot, ref_slot(Ref), Ns, Ref, ExpectedPhase, Projection),
+              View, fun() ->
+                  Read = Verify(Height, Projection),
                   ?LOCAL_READ_GATE(after_read),
                   Read
               end);
@@ -608,7 +643,7 @@ verify_local_deadline(
         false -> {error, retry}
     end,
     caller_result(Deadline, Result);
-verify_local_deadline(_View, _Ref, _ExpectedPhase, _Deadline) ->
+verify_captured_local(_View, _Ref, _ExpectedPhase, _Deadline, _Verify) ->
     {error, bad_foreign_reference}.
 
 -ifdef(TEST).
@@ -2263,9 +2298,9 @@ validate_reference_request(Ref, Phase) ->
     end.
 
 normalize_entry_hint(Entry) ->
-    case quod_catchup:page_stats([Entry]) of
-        {ok, 1, _Bytes} -> Entry;
-        {error, _} -> none
+    case quod_ledger:hint_bytes(Entry) of
+        {ok, Bytes} when byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES -> Entry;
+        _ -> none
     end.
 
 validate_route_request(
@@ -5738,9 +5773,10 @@ fetch_hint_parent(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
 import_exact_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
                         Cursor = #verified_cursor{height = Height}, Root, Entry) ->
     Slot = Height + 1,
-    case entry_index(Entry) of
-        Slot -> import_next_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
-                                       Cursor, Root, Entry, Slot);
+    case {entry_index(Entry), quod_ledger:materialize_hint(Entry)} of
+        {Slot, {ok, FullEntry}} ->
+            import_next_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
+                                   Cursor, Root, FullEntry, Slot);
         _ -> fallback
     end.
 
@@ -6560,7 +6596,7 @@ page_indices([Entry | Rest], Next, To) when Next =< To ->
 page_indices(_, _Next, _To) -> false.
 
 entry_index(Entry) ->
-    try (quod_ledger:entry_view(Entry))#entry.index
+    try quod_ledger:entry_index(Entry)
     catch error:_ -> error
     end.
 

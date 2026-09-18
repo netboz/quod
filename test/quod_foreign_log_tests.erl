@@ -2699,6 +2699,12 @@ accepted_entry_hint_advances_through_the_one_verified_cache_path_test() ->
                  vote, 5000)),
             [SessionFile] = phase_session_files(Dir, Identity),
             FinalizeEntry = lists:last(maps:get(chain, Fixture)),
+            ResolveRef = maps:get(resolve_ref, Fixture),
+            {ok, WireHints} = quod_dtx_endpoint:encode_validation_sidecar(
+                               [{ResolveRef, FinalizeEntry}]),
+            [{ResolveRef, ReceivedEntry}] =
+                quod_dtx_endpoint:decode_validation_sidecar(WireHints),
+            ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(ReceivedEntry)),
 
             %% The response-carried entry is only acceleration material.  It is
             %% accepted here solely because the ordinary history fold validates
@@ -2709,7 +2715,7 @@ accepted_entry_hint_advances_through_the_one_verified_cache_path_test() ->
                {ok, #{identity := Identity, phase := resolve}},
                quod_foreign_log:verify_reference(
                  maps:get(resolve_ref, Fixture), resolve,
-                 {Peer, Endpoint}, FinalizeEntry, 5000)),
+                 {Peer, Endpoint}, ReceivedEntry, 5000)),
             ?assertEqual([SessionFile], phase_session_files(Dir, Identity)),
             ?assertMatch({3, _}, cache_checkpoint(Dir, Identity))
         after

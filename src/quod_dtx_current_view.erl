@@ -26,9 +26,12 @@ subsets for that same claim remain interchangeable evidence. The collector
 keeps the plan vocabulary opaque.
 
 Independent application certificates bind the exact applied entry to its
-historical committee. Submission and receipt discovery share correlation,
-but retain a separate write walk: uncertain delivery is never retried at a
-different endpoint. Observation votes do not authorize a new submission.
+historical committee. A successful application response may carry the exact
+entry already read by that target and that responder's signed result vote.
+Both pass through the ordinary exact-entry and vote verifiers, then seed the
+same quorum collector; they create no second authority or recovery path.
+Uncertain delivery is never retried at a different endpoint. Observation votes
+do not authorize a new submission.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -73,6 +76,8 @@ different endpoint. Observation votes do not authorize a new submission.
 -spec submit_operation(binary(), identity(), quod_dtx_endpoint:request(),
                        pos_integer()) ->
           {ok, quod_dtx_endpoint:response()} |
+          {ok, quod_dtx_endpoint:response(),
+           [quod_dtx_endpoint:validation_item()]} |
           {error, busy | not_ready | invalid_request | timeout |
                   connection_lost}.
 submit_operation(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
@@ -97,7 +102,8 @@ submit_operation(_OwnerNs, _Target, _Request, _TimeoutMs) ->
 -doc "Submit a claimed application through the route implied by its effect custody.".
 -spec submit_claim_application(binary(), identity(), tuple(),
                                quod_dtx_endpoint:request(), pos_integer()) ->
-          {ok, quod_dtx_endpoint:response()} |
+          {ok, quod_dtx_endpoint:response(),
+           [quod_dtx_endpoint:validation_item()]} |
           {error, busy | not_ready | invalid_request | timeout |
                   connection_lost}.
 submit_claim_application(OwnerNs, Target, Claim,
@@ -118,6 +124,8 @@ submit_claim_application(_OwnerNs, _Target, _Claim, _Request, _TimeoutMs) ->
 -spec submit_operation_to(binary(), identity(), <<_:256>>,
                           quod_dtx_endpoint:request(), pos_integer()) ->
           {ok, quod_dtx_endpoint:response()} |
+          {ok, quod_dtx_endpoint:response(),
+           [quod_dtx_endpoint:validation_item()]} |
           {error, busy | not_ready | invalid_request | timeout |
                   connection_lost}.
 submit_operation_to(OwnerNs, {TargetNs, <<_:256>> = Anchor} = Target,
@@ -228,7 +236,6 @@ submit_operation_candidates(OwnerNs, TargetNs,
         Remaining ->
             Result = Attempt(PeerKey, Endpoint, Remaining),
             case operation_response(Request, Result) of
-                {ok, _} = Ok -> Ok;
                 {error, Reason} ->
                     case endpoint_failure_disposition(Request, Reason) of
                         stop -> {error, Reason};
@@ -236,7 +243,8 @@ submit_operation_candidates(OwnerNs, TargetNs,
                             submit_operation_candidates(
                               OwnerNs, TargetNs, Rest, Request,
                               Deadline, Reason, Attempt)
-                    end
+                    end;
+                Ok -> Ok
             end
     end.
 
@@ -251,6 +259,12 @@ endpoint_failure_disposition(_Request, timeout) -> stop;
 endpoint_failure_disposition(_Request, connection_lost) -> stop;
 endpoint_failure_disposition(_Request, _Reason) -> next.
 
+operation_response({apply_claim, _, _, _} = Request,
+                   {ok, Response, ValidationSidecar}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true -> {ok, Response, ValidationSidecar};
+        false -> {error, invalid_request}
+    end;
 operation_response(Request, {ok, Response, _ValidationSidecar}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         true -> {ok, Response};
@@ -277,16 +291,10 @@ certify_applied_many(OwnerNs, Requests, Deadline) ->
     certify_applied_many_with(
       OwnerNs, Requests, Deadline, production_dependencies()).
 
-%% Collect an exact operation result from its application-era committee.
--spec certify_operation(binary(), quod_dtx:certified_ref(), map(), integer()) ->
-          {ok, quod_applied_certificate:operation_certificate()} |
-          {error, retry | invalid_request}.
-certify_operation(OwnerNs, Ref, Evidence, Deadline) ->
-    certify_operation_with(OwnerNs, Ref, Evidence, Deadline, production_dependencies()).
-
 certify_operation_with(OwnerNs, Ref,
   Evidence = #{identity := Target, phase := transaction, slot := Slot,
-               block_hash := Hash, record_digest := Digest}, Deadline, Dependencies)
+               block_hash := Hash, record_digest := Digest}, SeedVotes,
+  Deadline, Dependencies)
   when is_binary(OwnerNs), is_integer(Deadline) ->
     case {quod_dtx:certified_ref_claim(Ref), historical_committee_view(Target, Evidence),
           dependency_network_identity(Dependencies)} of
@@ -306,9 +314,18 @@ certify_operation_with(OwnerNs, Ref,
                     ignore -> ignore
                 end
             end,
-            with_probe_sources({local, Target}, Committee, Routes, Deadline, Dependencies,
+            Seeds = operation_seed_votes(
+                      Ref, Network, Evidence, Committee, SeedVotes),
+            Seeded = maps:from_list(
+                       [{Signer, true}
+                        || {signed, _, {Signer, _}, _} <- Seeds]),
+            with_probe_sources(
+              {local, Target}, Committee, Routes, Seeded,
+              Deadline, Dependencies,
                 fun(Sources, Needed) ->
-                    case collect_quorum(operation_applied_probe, Sources, Needed, Deadline, Probe) of
+                    case collect_quorum(
+                           operation_applied_probe, Sources,
+                           Needed, Deadline, Probe, Seeds) of
                         {ok, {signed, {operation, Statement}, Rows}} ->
                             {ok, Certificate} = quod_applied_certificate:operation_certificate(
                                                   Statement, signed_rows(Rows)),
@@ -324,7 +341,7 @@ certify_operation_with(OwnerNs, Ref,
         {_, _, {error, _}} -> {error, retry};
         _ -> {error, invalid_request}
     end;
-certify_operation_with(_, _, _, _, _) -> {error, invalid_request}.
+certify_operation_with(_, _, _, _, _, _) -> {error, invalid_request}.
 
 %% The same finite verify/certify work serves live delivery, restarted owners
 %% and read-only receipt lookup. Known is either an already-verified capture
@@ -336,6 +353,8 @@ certify_operation_with(_, _, _, _, _) -> {error, invalid_request}.
           {error, term()}.
 certify_operation_evidence(OwnerNs, Target, Ref,
                            #{transaction := Transaction} = Known, Certificate, Deadline) ->
+    EntryHint = maps:get(entry_hint, Known, none),
+    SeedVotes = maps:get(operation_votes, Known, []),
     Exact = quod_trace:with_optional_span(
       quod_trace:context(), <<"quod.operation.exact_evidence">>, internal,
       #{'quod.owner.namespace' => OwnerNs},
@@ -343,23 +362,26 @@ certify_operation_evidence(OwnerNs, Target, Ref,
           case Known of
               #{phase := transaction, committee := _} -> {ok, Known};
               _ -> quod_foreign_log:resolve_reference(
-                     Target, Ref, transaction, none, none, Deadline)
+                     Target, Ref, transaction, none, EntryHint, Deadline)
           end
       end),
     case Exact of
         {ok, #{transaction := ExactTransaction} = Evidence} ->
             certify_matching_operation_evidence(
               quod_transaction:same_ledger_transaction(Transaction, ExactTransaction),
-              OwnerNs, Ref, Evidence, Certificate, Deadline);
+              OwnerNs, Ref, Evidence, Certificate, SeedVotes, Deadline);
         {ok, _} -> {error, invalid_target_evidence};
         {error, _} -> {error, retry}
     end.
 
-certify_matching_operation_evidence(false, _, _, _, _, _) ->
+certify_matching_operation_evidence(false, _, _, _, _, _, _) ->
     {error, invalid_target_evidence};
-certify_matching_operation_evidence(true, OwnerNs, Ref, Evidence, Certificate, Deadline) ->
+certify_matching_operation_evidence(
+  true, OwnerNs, Ref, Evidence, Certificate, SeedVotes, Deadline) ->
     Result = case Certificate of
-        none -> certify_operation(OwnerNs, Ref, Evidence, Deadline);
+        none -> certify_operation_with(
+                  OwnerNs, Ref, Evidence, SeedVotes,
+                  Deadline, production_dependencies());
         _ ->
             case quod_ontology:network_identity() of
                 {ok, Network} ->
@@ -474,17 +496,38 @@ certify_receipt_rows(OwnerNs, [{Target, #{reference := Ref, evidence := Discover
 
 operation_response_vote(Request, Network, Evidence, Key,
   {ok, {operation_applied, _RequestId, _Ref, Statement, Key, Signature} = Response}) ->
-    case quod_applied_certificate:operation_statement_binding(Statement) of
-        {ok, #{result := Result}} ->
-            case quod_dtx_endpoint:correlates(Request, Response) andalso
-                 quod_applied_certificate:operation_statement(Network, Evidence, Result) =:= {ok, Statement} andalso
-                 quod_applied_certificate:verify_operation_vote(Statement, Key, Signature) of
-                true -> {ok, Statement, {Key, Signature}};
-                false -> ignore
-            end;
-        error -> ignore
+    case quod_dtx_endpoint:correlates(Request, Response) andalso
+         operation_vote_valid(Network, Evidence, Key, Statement, Signature) of
+        true -> {ok, Statement, {Key, Signature}};
+        false -> ignore
     end;
 operation_response_vote(_, _, _, _, _) -> ignore.
+
+operation_seed_votes(Ref, Network, Evidence, Committee, Votes) ->
+    lists:filtermap(
+      fun({{operation_vote, VoteRef, Signer}, {Statement, Signature}})
+            when is_binary(Signer), is_binary(Signature) ->
+              case VoteRef =:= Ref andalso lists:member(Signer, Committee) andalso
+                   operation_vote_valid(
+                     Network, Evidence, Signer, Statement, Signature) of
+                  true ->
+                      {true,
+                       {signed, {operation, Statement},
+                        {Signer, Signature}, none}};
+                  false -> false
+              end;
+         (_) -> false
+      end, quod_dtx_endpoint:normalize_sidecar(Votes)).
+
+operation_vote_valid(Network, Evidence, Signer, Statement, Signature) ->
+    case quod_applied_certificate:operation_statement_binding(Statement) of
+        {ok, #{result := Result}} ->
+            quod_applied_certificate:operation_statement(
+              Network, Evidence, Result) =:= {ok, Statement} andalso
+                quod_applied_certificate:verify_operation_vote(
+                  Statement, Signer, Signature);
+        error -> false
+    end.
 
 -doc "Build one `f + 1` certificate within the original absolute monotonic deadline.".
 -spec certify_reads(binary(), {source(), binary()}, integer()) ->
@@ -1038,9 +1081,18 @@ valid_routes(Routes, Committee) ->
           Routes).
 
 with_probe_sources(Source, Committee, Routes, Deadline, Dependencies, Collect) ->
-    Sources = probe_sources(Source, Committee, Routes, Dependencies),
+    with_probe_sources(
+      Source, Committee, Routes, #{}, Deadline, Dependencies, Collect).
+
+with_probe_sources(Source, Committee, Routes, Seeded,
+                   Deadline, Dependencies, Collect) ->
+    Sources = [{Key, Endpoint}
+               || {Key, Endpoint} <-
+                      probe_sources(Source, Committee, Routes, Dependencies),
+                  not maps:is_key(Key, Seeded)],
     Needed = quod_quorum:honest_threshold(length(Committee)),
-    case length(Sources) >= Needed andalso remaining(Deadline) > 0 of
+    case length(Sources) + map_size(Seeded) >= Needed andalso
+         remaining(Deadline) > 0 of
         true -> Collect(Sources, Needed);
         false -> {error, retry}
     end.
@@ -1160,29 +1212,45 @@ collect_outcomes(OwnerNs, Sources, Claim, Needed, Deadline, Dependencies) ->
     collect_quorum(dtx_outcome_probe, Sources, Needed, Deadline, Probe).
 
 collect_quorum(Tag, Sources, Needed, Deadline, Probe) ->
+    collect_quorum(Tag, Sources, Needed, Deadline, Probe, []).
+
+collect_quorum(Tag, Sources, Needed, Deadline, Probe, Seeds) ->
     quod_trace:with_optional_span(
       quod_trace:context(), <<"quod.dtx.quorum.collect">>, internal,
       #{'quod.probe.family' => atom_to_binary(Tag, utf8),
-        'quod.quorum.required' => Needed, 'quod.quorum.sources' => length(Sources)},
+        'quod.quorum.required' => Needed,
+        'quod.quorum.seeded' => length(Seeds),
+        'quod.quorum.sources' => length(Sources)},
       fun() ->
-          Parent = self(),
-          TraceCtx = quod_trace:context(),
-          ProbeRef = make_ref(),
-          Pending = lists:foldl(
-                fun({Key, Source}, Acc) ->
-                    {Pid, Monitor} = spawn_opt(
-                      fun() ->
-                          Result = quod_trace:with_optional_span(
-                                     TraceCtx, <<"quod.dtx.quorum.probe">>, client,
-                                     #{'quod.probe.family' => atom_to_binary(Tag, utf8)},
-                                     fun() -> Probe(Key, Source) end),
-                          Parent ! {Tag, ProbeRef, self(), Key, Result}
-                      end, [link, monitor]),
-                    Acc#{Pid => {Monitor, Key}}
-                end, #{}, Sources),
-          collect_quorum_results(
-            Tag, ProbeRef, Pending, Needed, #{}, Deadline)
+          case seed_quorum(Seeds, Needed, #{}) of
+              {reached, Value} -> {ok, Value};
+              {continue, Counts} ->
+                  Parent = self(),
+                  TraceCtx = quod_trace:context(),
+                  ProbeRef = make_ref(),
+                  Pending = lists:foldl(
+                        fun({Key, Source}, Acc) ->
+                            {Pid, Monitor} = spawn_opt(
+                              fun() ->
+                                  Result = quod_trace:with_optional_span(
+                                             TraceCtx, <<"quod.dtx.quorum.probe">>, client,
+                                             #{'quod.probe.family' => atom_to_binary(Tag, utf8)},
+                                             fun() -> Probe(Key, Source) end),
+                                  Parent ! {Tag, ProbeRef, self(), Key, Result}
+                              end, [link, monitor]),
+                            Acc#{Pid => {Monitor, Key}}
+                        end, #{}, Sources),
+                  collect_quorum_results(
+                    Tag, ProbeRef, Pending, Needed, Counts, Deadline)
+          end
       end).
+
+seed_quorum([], _Needed, Counts) -> {continue, Counts};
+seed_quorum([Seed | Rest], Needed, Counts) ->
+    case count_match(Seed, Needed, Counts) of
+        {reached, _} = Reached -> Reached;
+        {continue, Next} -> seed_quorum(Rest, Needed, Next)
+    end.
 
 collect_quorum_results(Tag, ProbeRef, Pending, _Needed, _Counts, _Deadline)
   when map_size(Pending) =:= 0 ->
@@ -1520,7 +1588,9 @@ remaining(Deadline) ->
 
 -ifdef(TEST).
 test_certify_operation(OwnerNs, Ref, Evidence, Deadline, Dependencies) ->
-    certify_operation_with(OwnerNs, Ref, Evidence, Deadline, Dependencies).
+    certify_operation_with(
+      OwnerNs, Ref, Evidence, maps:get(operation_votes, Evidence, []),
+      Deadline, Dependencies).
 
 test_certify_applied(
   OwnerNs, Source, Claim, Evidence, TimeoutMs, Dependencies) ->

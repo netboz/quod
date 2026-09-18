@@ -133,8 +133,8 @@ evidence_reads_borrow_one_view_without_scanning_test() ->
               receive go -> ok end,
               Deadline = quod_time:mono_ms() + 3000,
               Results = [quod_simplex:operation_claim_evidence(Ns, Slot, OperationRef, Deadline),
-                         quod_simplex:transaction_evidence(Ns, Slot, Claim#transaction.tx_id, Deadline),
-                         quod_simplex:transaction_evidence(Ns, Slot, <<0:256>>, Deadline)],
+                         quod_simplex:operation_claim_evidence(
+                           Ns, Slot, setelement(5, OperationRef, <<0:256>>), Deadline)],
               Parent ! {evidence_results, self(), Results},
               receive stop -> ok end
           end),
@@ -147,13 +147,13 @@ evidence_reads_borrow_one_view_without_scanning_test() ->
               Reader ! go,
               receive
                   {evidence_results, Reader, Results} ->
-                      ?assertEqual([{ok, ExpectedRef, Claim}, {ok, ExpectedRef, Claim},
+                      ?assertEqual([{ok, ExpectedRef, Claim},
                                     {error, not_found}], Results)
               after 3000 -> error(evidence_reader_stalled)
               end,
               TraceRef = erlang:trace_delivered(Reader),
               Counts = evidence_trace_counts(Reader, TraceRef, #{scans => 0, snapshots => 0}),
-              ?assertEqual(#{scans => 0, snapshots => 3}, Counts),
+              ?assertEqual(#{scans => 0, snapshots => 2}, Counts),
               ?assertEqual(true, is_process_alive(Owner))
           after
               _ = erlang:trace(Reader, false, [call]),

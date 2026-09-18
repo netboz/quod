@@ -335,10 +335,17 @@ pending_application_joins_owner(Result) ->
             Expected = case Result of committed -> committed; rejected -> {rejected, not_authorized} end,
             Results = lists:map(fun(Id) ->
                 Tag = maps:get(tag, F),
-                receive {Tag, {ok, {application, Id, Expected, Evidence}, []}} ->
+                receive {Tag, {ok, {application, Id, Expected, Evidence}, Sidecar}} ->
                     {ok, Ref, _} = quod_transaction:decode_evidence(Evidence),
-                    ?assertEqual(TargetRef, quod_transaction:stable_ref(Ref)), Evidence;
-                    {Tag, {ok, Reply, []}} when element(2, Reply) =:= Id ->
+                    ?assertEqual(TargetRef, quod_transaction:stable_ref(Ref)),
+                    ?assertEqual(Sidecar, quod_dtx_endpoint:normalize_sidecar(Sidecar)),
+                    ?assertMatch({Ref, _}, lists:keyfind(Ref, 1, Sidecar)),
+                    VoteKey = {operation_vote, Ref, maps:get(pubkey, Signer)},
+                    {VoteKey, {Statement, Signature}} = lists:keyfind(VoteKey, 1, Sidecar),
+                    ?assert(quod_applied_certificate:verify_operation_vote(
+                              Statement, maps:get(pubkey, Signer), Signature)),
+                    Evidence;
+                    {Tag, {ok, Reply, _Sidecar}} when element(2, Reply) =:= Id ->
                         error({unexpected_application_result, element(1, Reply)})
                 after 1000 -> error({missing_own_block_result, Id}) end
             end, [A, B]),

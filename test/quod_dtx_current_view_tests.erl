@@ -33,6 +33,7 @@ quorum_collection_has_one_parent_and_preserves_result_test_() ->
                 ?assert(Probe#span.end_time =< Collection#span.end_time),
                 Attrs = otel_attributes:map(Collection#span.attributes),
                 ?assertEqual(1, maps:get('quod.quorum.required', Attrs)),
+                ?assertEqual(0, maps:get('quod.quorum.seeded', Attrs)),
                 ?assertEqual(1, maps:get('quod.quorum.sources', Attrs)),
                 receive
                     {quod_test_span, #span{name = <<"quod.dtx.quorum.collect">>,
@@ -344,6 +345,23 @@ endpoint_failure_never_immediately_resubmits_uncertain_work_test() ->
        {{ok, PhaseReply}, 2},
        quod_dtx_current_view:test_submit_operation_candidates(
          Phase, [{error, not_ready}, {ok, PhaseReply, []}])).
+
+application_delivery_preserves_evidence_through_the_candidate_walk_test() ->
+    quod_operation_fixture:with(1, fun(F) ->
+        Target = maps:get(target, F),
+        Ref = maps:get(certified_target_ref, F),
+        {ok, ClaimBlob} = quod_transaction:encode_evidence(
+                            maps:get(certified_claim_ref, F), maps:get(claim, F)),
+        {ok, AppBlob} = quod_transaction:encode_evidence(
+                          Ref, maps:get(application, F)),
+        Request = {apply_claim, <<91:128>>, Target, ClaimBlob},
+        Response = {application, <<91:128>>, committed, AppBlob},
+        Entry = maps:get(entry, F),
+        Hints = [{Ref, Entry}],
+        ?assertEqual({{ok, Response, Hints}, 1},
+          quod_dtx_current_view:test_submit_operation_candidates(
+            Request, [{ok, Response, Hints}, {error, timeout}]))
+    end).
 
 exact_f_plus_one_resolve_committee_certificate_succeeds_test() ->
     F = fixture(4),

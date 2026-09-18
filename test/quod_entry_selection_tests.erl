@@ -47,6 +47,32 @@ unselected_bytes_still_bind_the_certificate_test() ->
     ?assertNot(quod_dtx:certified_entry_ref_matches(Identity, Good, Tx, BadRef,
                                                  [maps:get(pubkey, Signer)])).
 
+carried_entry_decodes_only_its_selected_application_test() ->
+    {Identity, Signer, Full, Bytes} = fixture(),
+    #entry{data = {batch, [Tx | _]}} = quod_ledger:entry_view(Full),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Full, Tx),
+    {ok, Selected} = quod_ledger:select_entry(Full, {application, Tx#transaction.tx_id}, wrapped),
+    {{ok, Wire}, EncodeChecks} = counted(fun() ->
+        quod_dtx_endpoint:encode_validation_sidecar([{Ref, Selected}])
+    end),
+    ?assertEqual(0, EncodeChecks),
+    {[{Ref, Received}], DecodeChecks} = counted(fun() ->
+        quod_dtx_endpoint:decode_validation_sidecar(Wire)
+    end),
+    ?assertEqual(7, DecodeChecks),
+    ?assertEqual({ok, Bytes}, quod_ledger:hint_bytes(Received)),
+    ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Received)),
+    ?assert(quod_dtx:certified_entry_ref_matches(Identity, Received, Tx, Ref,
+                                              [maps:get(pubkey, Signer)])),
+    %% Only actual prefix advancement materializes all eight applications.
+    {{ok, Imported}, ImportChecks} = counted(fun() -> quod_ledger:materialize_hint(Received) end),
+    ?assertEqual(56, ImportChecks),
+    ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Imported)),
+    {I, Parent, [First, {transaction, Other} | Rest], Time, Cert} = unpack(Bytes),
+    BadBytes = pack(I, Parent, [First, {transaction, bad_signature(Other)} | Rest], Time, Cert),
+    {ok, BadHint} = quod_ledger:select_entry(BadBytes, {application, Tx#transaction.tx_id}, wrapped),
+    ?assertEqual({error, bad_entry}, quod_ledger:materialize_hint(BadHint)).
+
 ambiguous_missing_and_wrong_slot_selections_fail_closed_test() ->
     {_, _, _, Bytes} = fixture(),
     {I, Parent, [First | _], Time, Cert} = unpack(Bytes),

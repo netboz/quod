@@ -43,8 +43,9 @@ remote_first_cohosted(Mode) ->
         ?assertEqual(1, length(calls(quod_ledger_store, open_ro_snapshot, Calls))),
         ?assertEqual(1, length(calls(quod_ledger_store, read_at, Calls))),
         assert_resolver_admission(F, Hint, Calls),
-        ?assertMatch({{reply_source, remote, Winner, [{Ref, Hint}]}, {ok, _}}, Result),
-        {_, {ok, Snapshot}} = Result,
+        ?assertMatch({{reply_source, remote, Winner, [{Ref, _}]}, {ok, _}}, Result),
+        {{reply_source, remote, Winner, [{Ref, ReceivedHint}]}, {ok, Snapshot}} = Result,
+        ?assertEqual(quod_ledger:hint_bytes(Hint), quod_ledger:hint_bytes(ReceivedHint)),
         ?assertMatch(#{{resolve, Target} := #{ref := Ref, outcome := commit}},
                      maps:get(evidence, Snapshot)),
         receive {local_submit_held, Local} -> ok
@@ -175,8 +176,10 @@ absent_resolve_rediscovers_certified_vote_test() ->
         ?assertEqual([Deadline], lists:usort(
             [maps:get(request_deadline, Context) || [_, _, _, Context, _, _]
               <- calls(quod_dtx_coordinator, phase_command_sources, Calls)])),
-        ?assertEqual([[Target, Ref, vote, none, maps:get(hint, F), Deadline]],
-                     calls(quod_foreign_log, resolve_reference, Calls)),
+        [[Target, Ref, vote, none, VoteHint, Deadline]] =
+            calls(quod_foreign_log, resolve_reference, Calls),
+        ?assertEqual(quod_ledger:hint_bytes(maps:get(hint, F)),
+                     quod_ledger:hint_bytes(VoteHint)),
         ?assertEqual([resolve, resolve, resolve, vote],
                      phase_queries(maps:get(router, F)))
     end).
@@ -471,7 +474,8 @@ applied_collection_keeps_the_wave_deadline_through_child_admission_test() ->
              prepare_applied, prepare_applied_many, certify_applied_many_requests,
              certify_applied_prepared, with_probe_sources, collect_many_results],
     Bodies = [F || F = {function, _, Name, _, _} <- View, lists:member(Name, Names)],
-    ?assertEqual(length(Names), length(Bodies)),
+    ?assertEqual(lists:sort(Names),
+                 lists:usort([Name || {function, _, Name, _, _} <- Bodies])),
     ?assertNot(contains_atom(mono_ms, Bodies)),
     ?assert(contains_atom(remaining, Bodies)).
 
@@ -485,8 +489,13 @@ wait_past(Deadline) -> receive after max(0, Deadline - quod_time:mono_ms()) + 1 
 
 assert_resolver_admission(#{target := Target, ref := Ref}, Hint, Calls) ->
     Admissions = calls(quod_foreign_log, resolve_reference, Calls),
-    ?assertMatch([[Target, Ref, resolve, none, Hint, _]], Admissions),
-    [[_, _, _, _, _, Deadline]] = Admissions,
+    ?assertMatch([[Target, Ref, resolve, none, _, _]], Admissions),
+    [[_, _, _, _, ReceivedHint, Deadline]] = Admissions,
+    case Hint of
+        none -> ?assertEqual(none, ReceivedHint);
+        _ -> ?assertEqual(quod_ledger:hint_bytes(Hint),
+                          quod_ledger:hint_bytes(ReceivedHint))
+    end,
     ?assert(is_integer(Deadline)),
     ?assert(Deadline =< quod_time:mono_ms() + 2000),
     %% The original allowance reaches the sufficient-view API once, with the

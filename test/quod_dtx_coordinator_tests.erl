@@ -618,22 +618,65 @@ remote_operation_temporary_reply_parks_on_progress_test() ->
              {error, retry},
              quod_dtx_coordinator:
                test_operation_application_evidence(
-                 Request, {ok, {error, RequestId, Reason}}))
+                 #{}, Request, {ok, {error, RequestId, Reason}, []}))
       end,
       [busy, not_ready, not_found, conflict_retry,
        read_certificate_unavailable]),
     ?assertEqual(
        {error, invalid_operation_claim},
        quod_dtx_coordinator:test_operation_application_evidence(
-         Request, {ok, {error, RequestId, invalid_request}})),
+         #{}, Request, {ok, {error, RequestId, invalid_request}, []})),
     ?assertEqual(
        {error, invalid_target_response},
        quod_dtx_coordinator:test_operation_application_evidence(
-         Request, {ok, {error, <<200:128>>, not_ready}})),
+         #{}, Request, {ok, {error, <<200:128>>, not_ready}, []})),
     ?assertEqual(
        {error, invalid_target_response},
        quod_dtx_coordinator:test_operation_application_evidence(
-         Request, {ok, malformed})).
+         #{}, Request, {ok, malformed, []})).
+
+application_result_carries_only_its_bound_acceleration_test() ->
+    quod_operation_fixture:with(2, fun(F) ->
+        {ok, Model} = quod_operation:new(
+                        maps:get(source_ns, F), maps:get(operation_ref, F),
+                        maps:get(certified_claim_ref, F), maps:get(claim, F)),
+        [Target, OtherTarget] = maps:get(targets, F),
+        Data = maps:get(target_data, F),
+        Own = maps:get(Target, Data),
+        Other = maps:get(OtherTarget, Data),
+        RequestId = <<201:128>>,
+        {ok, ClaimBlob} = quod_transaction:encode_evidence(
+                            maps:get(certified_claim_ref, F), maps:get(claim, F)),
+        {ok, ApplicationBlob} = quod_transaction:encode_evidence(
+                                  maps:get(certified_target_ref, Own),
+                                  maps:get(application, Own)),
+        Request = {apply_claim, RequestId, Target, ClaimBlob},
+        Response = {application, RequestId, committed, ApplicationBlob},
+        Signer = maps:get(node_identity, F),
+        Key = maps:get(pubkey, Signer),
+        Vote = fun(D) ->
+            Ref = maps:get(certified_target_ref, D),
+            {ok, Statement} = quod_applied_certificate:operation_statement(
+                                maps:get(network, F), maps:get(evidence, D), applied),
+            {ok, {Key, Signature}} =
+                quod_applied_certificate:sign_operation_vote(Statement, Signer),
+            {{operation_vote, Ref, Key}, {Statement, Signature}}
+        end,
+        OwnRef = maps:get(certified_target_ref, Own),
+        OwnVote = Vote(Own),
+        Sidecar = [{OwnRef, maps:get(entry, Own)}, OwnVote,
+                   {maps:get(certified_target_ref, Other), maps:get(entry, Other)},
+                   Vote(Other)],
+        ?assertMatch(
+           {ok, OwnRef,
+            #{entry_hint := _, operation_votes := [OwnVote]}},
+           quod_dtx_coordinator:test_operation_application_evidence(
+             Model, Request, {ok, Response, Sidecar})),
+        {ok, OwnRef, Acceleration} =
+            quod_dtx_coordinator:test_operation_application_evidence(
+              Model, Request, {ok, Response, Sidecar}),
+        ?assertEqual(maps:get(entry, Own), maps:get(entry_hint, Acceleration))
+    end).
 
 %% Completed receipts restore their certified vector without fresh votes or
 %% target application. Only owner interfaces are stubs; unexpected transport

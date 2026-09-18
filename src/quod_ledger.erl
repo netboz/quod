@@ -39,7 +39,8 @@ import; artifacts themselves never cross a wire or persistence boundary.
          new_entry/4, entry/2, noop_entry/2, block_from_entry/1,
          entry_view/1, from_entry_view/1,
          encode_entry/1, decode_entry/1, decode_entry/2,
-         select_entry/3, selected_record/1, entry_index/1, record_commitment/2]).
+         select_entry/3, selected_record/1, entry_index/1, record_commitment/2,
+         hint_bytes/1, materialize_hint/1]).
 
 -export_type([kind/0, entry_artifact/0, selected_entry/0]).
 
@@ -51,9 +52,11 @@ import; artifacts themselves never cross a wire or persistence boundary.
 -opaque entry_artifact() :: #canonical_entry{}.
 
 %% A point reader authenticates only its selected item. This value cannot be
-%% encoded, appended, replayed or mistaken for a fully materialized artifact.
+%% appended, replayed or mistaken for a fully materialized artifact. Original
+%% envelope bytes may be forwarded as an untrusted hint; importing that hint
+%% into history still requires full decoding and forward verification.
 %% Finality still binds the hash of ALL the original block bytes.
--record(selected_entry, {index, hash, cert, count, record = none}).
+-record(selected_entry, {index, hash, cert, count, record = none, bytes}).
 -opaque selected_entry() :: #selected_entry{}.
 
 -type control_kind() :: vote | resolve | complete.
@@ -439,12 +442,13 @@ select_entry(#selected_entry{record = Record} = Entry, Selection, _Mode) ->
         true -> {ok, Entry};
         false -> {ok, Entry#selected_entry{record = none}}
     end;
-select_entry(#canonical_entry{view = #entry{index = I, data = Data, cert = Cert},
+select_entry(#canonical_entry{bytes = Bytes, view = #entry{index = I, data = Data, cert = Cert},
                               block = Block}, Selection, _Mode) ->
-    {ok, selected(I, entry_hash(Block), Cert, Data, Selection)};
+    {ok, (selected(I, entry_hash(Block), Cert, Data, Selection))#selected_entry{bytes = Bytes}};
 select_entry(Bytes, Selection, Mode) when Mode =:= materialized; Mode =:= wrapped ->
     case entry_envelope(Bytes, Mode) of
-        {ok, I, none, Cert} -> {ok, selected(I, none, Cert, noop, Selection)};
+        {ok, I, none, Cert} ->
+            {ok, (selected(I, none, Cert, noop, Selection))#selected_entry{bytes = Bytes}};
         {ok, I, BlockBytes, Cert} ->
             case block_envelope(BlockBytes) of
                 {ok, {quod_block, 1, I, _, Wire, _}} ->
@@ -452,7 +456,7 @@ select_entry(Bytes, Selection, Mode) when Mode =:= materialized; Mode =:= wrappe
                         {ok, Count, Record} ->
                             {ok, #selected_entry{index = I,
                               hash = crypto:hash(sha256, BlockBytes), cert = Cert,
-                              count = Count, record = Record}};
+                              count = Count, record = Record, bytes = Bytes}};
                         error -> {error, bad_entry}
                     end;
                 _ -> {error, bad_entry}
@@ -460,6 +464,17 @@ select_entry(Bytes, Selection, Mode) when Mode =:= materialized; Mode =:= wrappe
         _ -> {error, bad_entry}
     end;
 select_entry(_, _, _) -> {error, bad_entry}.
+
+-doc "Extract original envelope bytes for bounded, untrusted evidence transport; this grants no append authority.".
+-spec hint_bytes(entry_artifact() | selected_entry()) -> {ok, binary()} | {error, bad_entry}.
+hint_bytes(#selected_entry{bytes = Bytes}) when is_binary(Bytes) -> {ok, Bytes};
+hint_bytes(Entry) -> encode_entry(Entry).
+
+-doc "Fully decode a selected hint before history import; existing full artifacts need no decoding.".
+-spec materialize_hint(entry_artifact() | selected_entry()) -> {ok, entry_artifact()} | {error, bad_entry}.
+materialize_hint(#canonical_entry{} = Entry) -> {ok, Entry};
+materialize_hint(#selected_entry{bytes = Bytes}) -> decode_entry(Bytes, wrapped);
+materialize_hint(_) -> {error, bad_entry}.
 
 selected_payload({batch, [{transaction, _} | _] = Items}, Selection, Mode) ->
     try

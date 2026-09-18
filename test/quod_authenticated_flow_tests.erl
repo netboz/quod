@@ -117,6 +117,84 @@ am3_collection_authenticates_votes_not_its_assembled_certificate_test() ->
           maps:get(source_ns, F), Ref, E, quod_time:mono_ms(), D))
     end).
 
+carried_am3_vote_uses_the_same_verifier_and_removes_its_probe_test() ->
+    quod_operation_fixture:with(1, fun(F) ->
+        E = (maps:get(evidence, F))#{routes => #{}},
+        Ref = maps:get(certified_target_ref, F),
+        Signer = maps:get(node_identity, F),
+        Key = maps:get(pubkey, Signer),
+        Network = maps:get(network, F),
+        {ok, Statement} = quod_applied_certificate:operation_statement(
+                            Network, E, applied),
+        {ok, {Key, Signature}} =
+            quod_applied_certificate:sign_operation_vote(Statement, Signer),
+        Vote = {{operation_vote, Ref, Key}, {Statement, Signature}},
+        Base = #{node_key => fun() -> Key end,
+                 network_identity => fun() -> {ok, Network} end,
+                 resolve => fun(_) -> undefined end},
+        NoProbe = Base#{node_key => fun() -> none end,
+                        local => fun(_, _, _) -> error(seed_was_reprobed) end},
+        {ok, SeededCertificate} = quod_dtx_current_view:test_certify_operation(
+                                    maps:get(source_ns, F), Ref,
+                                    E#{operation_votes => [Vote, Vote]},
+                                    quod_time:mono_ms() + 1000, NoProbe),
+        ?assert(quod_applied_certificate:verify_operation_certificate(
+                  SeededCertificate, Network, E)),
+        Parent = self(),
+        InvalidVote = {{operation_vote, Ref, Key},
+                       {Statement, <<0:512>>}},
+        Probe = Base#{local => fun(_, {operation_applied, Id, R}, _) ->
+             Parent ! operation_vote_probe,
+             {ok, {operation_applied, Id, R, Statement, Key, Signature}, []}
+        end},
+        ?assertMatch(
+           {ok, _},
+           quod_dtx_current_view:test_certify_operation(
+             maps:get(source_ns, F), Ref,
+             E#{operation_votes => [InvalidVote]},
+             quod_time:mono_ms() + 1000, Probe)),
+        receive operation_vote_probe -> ok
+        after 0 -> error(invalid_seed_gained_authority)
+        end
+    end).
+
+carried_votes_need_distinct_historical_members_and_matching_results_test() ->
+    quod_operation_fixture:with(1, fun(F) ->
+        Members = [begin
+            {K, Seed} = quod_identity:generate(),
+            #{pubkey => K, key => quod_identity:key_term({K, Seed})}
+        end || _ <- lists:seq(1, 4)],
+        [First, Second | _] = Members,
+        K1 = maps:get(pubkey, First), K2 = maps:get(pubkey, Second),
+        E = (maps:get(evidence, F))#{routes => #{},
+              committee => lists:sort([maps:get(pubkey, S) || S <- Members])},
+        Ref = maps:get(certified_target_ref, F), Network = maps:get(network, F),
+        {ok, Statement} = quod_applied_certificate:operation_statement(Network, E, applied),
+        {ok, {K1, Sig1}} = quod_applied_certificate:sign_operation_vote(Statement, First),
+        Vote = {{operation_vote, Ref, K1}, {Statement, Sig1}},
+        D0 = #{node_key => fun() -> none end,
+               network_identity => fun() -> {ok, Network} end,
+               resolve => fun(_) -> undefined end},
+        Certify = fun(Votes, D) -> quod_dtx_current_view:test_certify_operation(
+              maps:get(source_ns, F), Ref, E#{operation_votes => Votes},
+              quod_time:mono_ms() + 1000, D) end,
+        ?assertEqual({error, retry}, Certify([Vote, Vote], D0)),
+        lists:foreach(fun(Result) ->
+            {ok, OtherStatement} = quod_applied_certificate:operation_statement(Network, E, Result),
+            {ok, {K2, Sig2}} = quod_applied_certificate:sign_operation_vote(OtherStatement, Second),
+            D = D0#{node_key => fun() -> K2 end,
+                    local => fun(_, {operation_applied, Id, R}, _) ->
+                        {ok, {operation_applied, Id, R, OtherStatement, K2, Sig2}, []}
+                    end},
+            case Result of
+                applied ->
+                    {ok, Certificate} = Certify([Vote], D),
+                    ?assert(quod_applied_certificate:verify_operation_certificate(Certificate, Network, E));
+                _ -> ?assertEqual({error, retry}, Certify([Vote], D))
+            end
+        end, [applied, {rejected, not_authorized}])
+    end).
+
 counted(Fun) ->
     [{module, M} = code:ensure_loaded(M) || M <- [quod_dtx, quod_transaction, quod_identity]],
     {Result, {call_count, Rows}} = tprof:profile(Fun, #{type => call_count, report => return,

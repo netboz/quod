@@ -146,7 +146,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_binding/1, dtx_ready_binding/1, register_dtx_vote/6, activate_dtx_vote/3,
          cancel_dtx_vote/3,
          dtx_endpoint_request/7, dtx_endpoint_local/4,
-         history_view/3, history_view_at/3, history_view_live/1, transaction_evidence/4,
+         history_view/3, history_view_at/3, history_view_live/1,
          operation_claim_evidence/4,
          operation_completion_evidence/4,
          dtx_local_evidence/4, dtx_applied_source/2,
@@ -2783,20 +2783,6 @@ history_owner_live(Owner, Ns) when is_pid(Owner) ->
     end;
 history_owner_live(_, _) -> false.
 
--doc "Return the exact signed transaction and certified reference at a known slot.".
--spec transaction_evidence(binary(), pos_integer(), <<_:256>>, integer()) ->
-          {ok, quod_dtx:certified_ref(), #transaction{}} |
-          {error, timeout | not_ready | not_found | invalid_request}.
-transaction_evidence(Ns, Slot, <<_:256>> = TxId, Deadline)
-  when is_binary(Ns), byte_size(Ns) > 0, is_integer(Slot), Slot > 0,
-       is_integer(Deadline) ->
-    case history_view(Ns, any, Deadline) of
-        {ok, View} -> evidence_at(View, Slot, {application, TxId});
-        {error, _} = Error -> Error
-    end;
-transaction_evidence(_Ns, _Slot, _TxId, _Deadline) ->
-    {error, invalid_request}.
-
 -doc "Return the exact certified claim at its projected first slot.".
 -spec operation_claim_evidence(binary(), pos_integer(), term(), integer()) ->
           {ok, quod_dtx:certified_ref(), #transaction{}} |
@@ -2837,7 +2823,13 @@ operation_completion_evidence(#{identity := {Ns, Anchor}} = View, Slot,
     end;
 operation_completion_evidence(_, _, _) -> {error, invalid_request}.
 
-evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
+evidence_at(View, Slot, Selection) ->
+    case read_evidence_at(View, Slot, Selection) of
+        {ok, Ref, Transaction, _Entry} -> {ok, Ref, Transaction};
+        {error, _} = Error -> Error
+    end.
+
+read_evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
             Slot, {Kind, _} = Selection) ->
     Attributes = #{'quod.namespace' => Ns, 'quod.ledger.slot' => Slot,
                    'quod.evidence.kind' => atom_to_binary(Kind)},
@@ -2855,7 +2847,7 @@ evidence_at(#{identity := {Ns, _} = Identity, snapshot := Snapshot},
                         case quod_ledger:selected_record(Entry) of
                             #transaction{} = Transaction ->
                                 case quod_dtx:certified_entry_ref(Identity, Entry, Transaction) of
-                                    {ok, Ref} -> {ok, Ref, Transaction};
+                                    {ok, Ref} -> {ok, Ref, Transaction, Entry};
                                     _ -> {error, invalid_request}
                                 end;
                             none -> {error, not_found}
@@ -6430,17 +6422,38 @@ claimed_terminal_application(Ns, TargetRef, TxId, Deadline) ->
     end.
 
 claimed_application_evidence(Ns, Slot, TxId, Result, Deadline) ->
-    case transaction_evidence(Ns, Slot, TxId, Deadline) of
-        {ok, Ref, Transaction} ->
+    case application_result_evidence(Ns, Slot, TxId, Deadline) of
+        {ok, Ref, Entry, Evidence = #{transaction := Transaction}} ->
             case quod_transaction:encode_evidence(Ref, Transaction) of
                 {ok, EvidenceBlob} ->
-                    {application_result, Result, EvidenceBlob};
+                    {application_result, Result, EvidenceBlob,
+                     Ref, Entry, Evidence};
                 {error, _} ->
                     {error, not_ready}
             end;
         {error, _} ->
             {error, not_ready}
     end.
+
+%% Read the application once. The same checked selection supplies the
+%% discovery bytes, exact-history acceleration and this member's AM3 vote.
+%% It never leaves as authority: the receiver runs the ordinary exact verifier.
+application_result_evidence(Ns, Slot, <<_:256>> = TxId, Deadline) ->
+    case history_view(Ns, any, Deadline) of
+        {ok, View} ->
+            case read_evidence_at(View, Slot, {application, TxId}) of
+                {ok, Ref, _Transaction, Entry} ->
+                    case quod_foreign_log:verify_local_entry_deadline(
+                           View, Ref, transaction, Entry, Deadline) of
+                        {ok, Evidence} -> {ok, Ref, Entry, Evidence};
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end;
+application_result_evidence(_Ns, _Slot, _TxId, _Deadline) ->
+    {error, invalid_request}.
 
 execute_outcome_snapshot(Ns, OutcomeRef, TimeoutMs) ->
     case quod_outcome:ref_identity(OutcomeRef) of
@@ -6615,8 +6628,15 @@ dtx_endpoint_result_response(
     end;
 dtx_endpoint_result_response(
   {apply_claim, RequestId, _Target, _ClaimEvidence},
-  {application_result, Result, TargetEvidence}, _S) ->
-    {{application, RequestId, Result, TargetEvidence}, []};
+  {application_result, Result, TargetEvidence, Ref,
+   Entry, Evidence}, S) ->
+    Vote = operation_vote_hint(Ref, application_vote_result(Result), Evidence, S),
+    Hints = case Vote of
+                none -> [{Ref, Entry}];
+                _ -> [{Ref, Entry}, Vote]
+            end,
+    {{application, RequestId, Result, TargetEvidence},
+     quod_dtx_endpoint:normalize_sidecar(Hints)};
 dtx_endpoint_result_response(
   {cancel_operation_effect, RequestId, _Target, _SubmissionBlob},
   {operation_effect_cancelled, Status}, _S) ->
@@ -6697,8 +6717,13 @@ valid_generated_dtx_response(Request, {Response, ValidationSidecar}, Ns) ->
     case quod_dtx_endpoint:encode_response(Ns, Response, ValidationSidecar) of
         {ok, _Frame} -> {Response, ValidationSidecar};
         {error, {too_large, dtx_endpoint}} when ValidationSidecar =/= [] ->
-            valid_generated_dtx_response(
-              Request, {Response, lists:droplast(ValidationSidecar)}, Ns);
+            case drop_optional_entry_hint(ValidationSidecar) of
+                {ok, Reduced} ->
+                    valid_generated_dtx_response(
+                      Request, {Response, Reduced}, Ns);
+                error ->
+                    valid_generated_dtx_response(Request, {Response, []}, Ns)
+            end;
         {error, _} ->
             {{error, quod_dtx_endpoint:request_id(Request), not_ready}, []}
     end.
@@ -6751,19 +6776,44 @@ retained_dtx_phase_pending(
       end, false, Submissions).
 
 operation_applied_response(RequestId, Ref, Evidence, Snapshot,
-                           S = #s{self = Self, id = Signer}) ->
-    case {endpoint_read_ready(S), quod_operation:applied_result(Ref, Evidence, Snapshot),
-          applied_evidence_committee(target_identity(S), Evidence),
-          quod_ontology:network_identity()} of
-        {true, {ok, Result}, {ok, Committee, _CommitteeId}, {ok, Network}} ->
-            case lists:member(Self, Committee) andalso applied_signer_matches(Self, Signer) of
-                true ->
-                    {ok, Statement} = quod_applied_certificate:operation_statement(Network, Evidence, Result),
-                    {ok, {Self, Signature}} = quod_applied_certificate:sign_operation_vote(Statement, Signer),
+                           S) ->
+    case quod_operation:applied_result(Ref, Evidence, Snapshot) of
+        {ok, Result} ->
+            case operation_vote_hint(Ref, Result, Evidence, S) of
+                {{operation_vote, Ref, Self}, {Statement, Signature}} ->
                     {operation_applied, RequestId, Ref, Statement, Self, Signature};
-                false -> {error, RequestId, not_ready}
+                none -> {error, RequestId, not_ready}
             end;
         _ -> {error, RequestId, not_ready}
+    end.
+
+application_vote_result(committed) -> applied;
+application_vote_result({rejected, Reason}) -> {rejected, Reason}.
+
+operation_vote_hint(Ref, Result, Evidence,
+                    S = #s{self = Self, id = Signer}) ->
+    case {endpoint_read_ready(S),
+          applied_evidence_committee(target_identity(S), Evidence),
+          quod_ontology:network_identity()} of
+        {true, {ok, Committee, _CommitteeId}, {ok, Network}} ->
+            case lists:member(Self, Committee) andalso
+                 applied_signer_matches(Self, Signer) of
+                true ->
+                    case quod_applied_certificate:operation_statement(
+                           Network, Evidence, Result) of
+                        {ok, Statement} ->
+                            case quod_applied_certificate:sign_operation_vote(
+                                   Statement, Signer) of
+                                {ok, {Self, Signature}} ->
+                                    {{operation_vote, Ref, Self},
+                                     {Statement, Signature}};
+                                error -> none
+                            end;
+                        error -> none
+                    end;
+                false -> none
+            end;
+        _ -> none
     end.
 
 applied_endpoint_response(
@@ -7108,6 +7158,11 @@ relevant_response_hints(
         #{Ref := Entry} -> [{Ref, Entry}];
         _ -> []
     end;
+relevant_response_hints(
+  {application, _RequestId, _Result, _EvidenceBlob}, ValidationSidecar) ->
+    %% The worker authenticates the blob and selects its exact reference.
+    %% The transport owner must not repeat that work to filter optional hints.
+    quod_dtx_endpoint:normalize_sidecar(ValidationSidecar);
 relevant_response_hints(_Response, _ValidationSidecar) ->
     [].
 
@@ -7126,6 +7181,8 @@ drop_optional_entry_hint(Hints) ->
 drop_optional_entry_hint([], _Prefix) ->
     error;
 drop_optional_entry_hint([{{applied, _, _}, _} = Hint | Rest], Prefix) ->
+    drop_optional_entry_hint(Rest, [Hint | Prefix]);
+drop_optional_entry_hint([{{operation_vote, _, _}, _} = Hint | Rest], Prefix) ->
     drop_optional_entry_hint(Rest, [Hint | Prefix]);
 drop_optional_entry_hint([{_Ref, _Entry} | Rest], Prefix) ->
     {ok, lists:reverse(Rest) ++ lists:reverse(Prefix)}.

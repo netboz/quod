@@ -67,9 +67,10 @@ canonical_block_and_sidecar_wire_test() ->
      [{entry_bytes, Ref, EntryBytes}]} = binary_to_term(Inner, [safe]),
     ?assertEqual(quod_ledger:block_bytes(Block), BlockBytes),
     ?assert(is_binary(EntryBytes)),
-    ?assertEqual(
-       {consensus, {propose, Block, Hints}},
-       quod_relay:decode_consensus_frame(Frame, Ns)),
+    {consensus, {propose, Block, [{Ref, Received}]}} =
+        quod_relay:decode_consensus_frame(Frame, Ns),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Received)),
+    ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Received)),
 
     SubmitFrame = quod_relay:encode_consensus_frame(
                     Ns, {dtx_submit, [<<"control">>], Hints}),
@@ -77,9 +78,9 @@ canonical_block_and_sidecar_wire_test() ->
     {dtx_submit_bytes, [<<"control">>],
      [{entry_bytes, Ref, EntryBytes}]} =
         binary_to_term(SubmitInner, [safe]),
-    ?assertEqual(
-       {consensus, {dtx_submit, [<<"control">>], Hints}},
-       quod_relay:decode_consensus_frame(SubmitFrame, Ns)).
+    {consensus, {dtx_submit, [<<"control">>], [{Ref, Submitted}]}} =
+        quod_relay:decode_consensus_frame(SubmitFrame, Ns),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Submitted)).
 
 decoded_block_wire_shapes_are_hard_rejected_test() ->
     Ns = <<"relay:old-record-wire">>,

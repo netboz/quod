@@ -257,12 +257,44 @@ entry_hint_roundtrips_as_untrusted_sidecar_test() ->
         binary_to_term(InnerBinary, [safe]),
     ?assert(is_binary(EntryBytes)),
     ?assertEqual({ok, Entry}, quod_ledger:decode_entry(EntryBytes)),
-    ?assertEqual({ok, Request, Hints, []},
-                 quod_dtx_endpoint:decode_request(Ns, Frame)),
+    {ok, Request, [{Ref, Selected}], []} =
+        quod_dtx_endpoint:decode_request(Ns, Frame),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Selected)),
+    ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Selected)),
     %% The codec deliberately checks only bounded shape.  An uncertified
     %% entry survives transport so the one foreign-log verifier, rather than
     %% this framing module, remains responsible for rejecting or importing it.
     ?assertEqual(none, (quod_ledger:entry_view(Entry))#entry.cert).
+
+application_result_sidecar_roundtrips_entry_and_member_vote_test() ->
+    quod_operation_fixture:with(1, fun(F) ->
+        Ns = element(1, maps:get(target, F)),
+        Ref = maps:get(certified_target_ref, F),
+        Entry = maps:get(entry, F),
+        Evidence = maps:get(evidence, F),
+        Signer = maps:get(node_identity, F),
+        Key = maps:get(pubkey, Signer),
+        {ok, Statement} = quod_applied_certificate:operation_statement(
+                            maps:get(network, F), Evidence, applied),
+        {ok, {Key, Signature}} =
+            quod_applied_certificate:sign_operation_vote(Statement, Signer),
+        Vote = {{operation_vote, Ref, Key}, {Statement, Signature}},
+        Hints = [{Ref, Entry}, Vote],
+        Response = {application, id(64), committed,
+                    element(2, quod_transaction:encode_evidence(
+                                 Ref, maps:get(application, F)))},
+        {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response, Hints),
+        {ok, Response, [{Ref, Selected}, Vote]} =
+            quod_dtx_endpoint:decode_response(Ns, Frame),
+        ?assertEqual(quod_ledger:encode_entry(Entry), quod_ledger:hint_bytes(Selected)),
+        ?assertEqual(maps:get(application, F), quod_ledger:selected_record(Selected)),
+        BadVote = {{operation_vote, maps:get(certified_claim_ref, F), Key},
+                   {Statement, Signature}},
+        ?assertEqual([], quod_dtx_endpoint:normalize_sidecar([BadVote])),
+        ?assertEqual(
+           {error, {protocol_error, bad_hints}},
+           quod_dtx_endpoint:encode_response(Ns, Response, [BadVote]))
+    end).
 
 malformed_received_hint_is_ignored_without_losing_the_request_test() ->
     Ns = <<"quod:endpoint">>,
@@ -301,7 +333,7 @@ malformed_received_hint_is_ignored_without_losing_the_request_test() ->
 
 entry_sidecar_keeps_foreign_symbols_wrapped_test() ->
     Ns = <<"quod:endpoint">>,
-    Ref = certified_ref(),
+    Ref = setelement(7, certified_ref(), <<1:256>>),
     Name = <<"cut2_sidecar_foreign_", (integer_to_binary(
                                       erlang:unique_integer([positive])))/binary>>,
     Symbol = {'$quod_symbol', Name},
@@ -317,8 +349,8 @@ entry_sidecar_keeps_foreign_symbols_wrapped_test() ->
                    {quod_entry, 1, 7, BlockBytes, none}, [deterministic]),
     [{Ref, Entry}] = quod_dtx_endpoint:decode_validation_sidecar(
                       [{entry_bytes, Ref, EntryBytes}]),
-    ?assertEqual({ok, EntryBytes}, quod_ledger:encode_entry(Entry)),
-    #entry{data = {batch, [Decoded]}} = quod_ledger:entry_view(Entry),
+    ?assertEqual({ok, EntryBytes}, quod_ledger:hint_bytes(Entry)),
+    Decoded = quod_ledger:selected_record(Entry),
     ?assertEqual(Transaction#transaction.diff, Decoded#transaction.diff),
     ?assertError(badarg, binary_to_existing_atom(Name, utf8)).
 

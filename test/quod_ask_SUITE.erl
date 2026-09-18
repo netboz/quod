@@ -919,7 +919,8 @@ remote_exact_claim_redelivery(Config) ->
                      quod_transaction:encode_evidence(CertifiedClaimRef, Claim)),
         RequestId = crypto:strong_rand_bytes(16),
         Request = {apply_claim, RequestId, Target, ClaimBytes},
-        {ok, {application, RequestId, committed, ApplicationBytes} = Response} =
+        {ok, {application, RequestId, committed, ApplicationBytes} = Response,
+         _Hints} =
             peer:call(Asker, quod_dtx_current_view, submit_claim_application,
                       [?ASKER_NS, Target, Claim, Request, 5000], 10000),
         ?assert(quod_dtx_endpoint:correlates(Request, Response)),
@@ -1406,7 +1407,7 @@ assert_operation_redelivery(Config, Op, Rows, Owners) ->
         lists:foreach(fun(_) ->
             ?assertEqual({ok, Bytes}, quod_transaction:encode_evidence(ClaimRef, Claim)),
             Id = crypto:strong_rand_bytes(16), Request = {apply_claim, Id, Identity, Bytes},
-            ?assertMatch({ok, {application, Id, Verdict, _}}, peer:call(
+            ?assertMatch({ok, {application, Id, Verdict, _}, _Hints}, peer:call(
               Asker, quod_dtx_current_view, submit_claim_application,
               [?ASKER_NS, Identity, Claim, Request, 5000], 10000)),
             ?assertEqual(Before, peer:call(Peer, ?MODULE, claim_application_occurrences, [Ns, TxId]))

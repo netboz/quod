@@ -216,7 +216,8 @@ artifact_bytes_survive_store_feed_and_sidecar_test() ->
         {Ref, HintEntry} = Hint,
         ?assertEqual(entry_bytes(quod_ledger, HintEntry), HintBytes),
         {ok, Request, [{Ref, Recovered}], []} = quod_dtx_endpoint:decode_request(?NS, Sidecar),
-        ?assertEqual(HintBytes, entry_bytes(quod_ledger, Recovered))
+        ?assertEqual({ok, HintBytes}, quod_ledger:hint_bytes(Recovered)),
+        ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Recovered))
     after
         ok = quod_ledger_store:close(Store0),
         _ = file:del_dir_r(Dir)

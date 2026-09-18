@@ -1121,6 +1121,14 @@ source claim/operation, exact application occurrence and terminal result.
 `quod_quorum` owns the shared exact-f+1 verifier used by read and applied
 certificates. Collectors authenticate votes once, assemble their certificate,
 and recheck the original deadline; they do not verify their own votes again.
+The target's application response carries the original committed entry bytes
+from its point selection and its own signed result vote as optional acceleration evidence.
+Transport decodes only the referenced item. A selected hint is never appendable;
+the history owner fully decodes it only when advancing its certified prefix.
+The source runs that entry and vote through these same verifiers, then seeds
+this same collector and contacts only the still-needed historical members.
+Malformed, unrelated or oversized hints grant no authority and never create a
+second result path; recovery without carried evidence uses the same collector.
 Batch certification validates every input before launching workers and carries
 the checked statement/committee forward. The four observation families share
 source selection and quorum admission, with distinct terminal policies. Stored

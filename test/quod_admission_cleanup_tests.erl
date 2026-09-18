@@ -27,7 +27,17 @@ captured_projection_is_validated_once_before_exact_evidence_test() ->
             ?assertEqual(maps:get(target, F), maps:get(identity, Evidence)),
             ?assertEqual(maps:get(application, F), maps:get(transaction, Evidence)),
             ?assertEqual(1, lists:sum([N || {quod_foreign_log, valid_projection, 2, Ps} <- Counts,
-                                            {_, N, _} <- Ps]))
+                                            {_, N, _} <- Ps])),
+            ?assertMatch(
+               {ok, #{transaction := _}},
+               quod_foreign_log:verify_local_entry_deadline(
+                 View, Ref, transaction, maps:get(entry, F), infinity)),
+            Other = hd([D || {Target, D} <- maps:to_list(maps:get(target_data, F)),
+                              Target =/= maps:get(target, F)]),
+            ?assertEqual(
+               {error, invalid_foreign_reference},
+               quod_foreign_log:verify_local_entry_deadline(
+                 View, Ref, transaction, maps:get(entry, Other), infinity))
         after gproc:unreg(quod_reg:name({quod_simplex, Ns}))
         end
     end).

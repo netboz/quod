@@ -29,10 +29,12 @@ second copy of that namespace in a hard-break envelope. The direction-aware
 `decode_request/2` and `decode_response/2` functions bind that copy to the
 channel the caller subscribed to. Semantic DTX record bytes stay opaque to
 this module. A validation sidecar may carry exact committed entries or applied
-certificates beside the semantic term. This module only bounds and shape-checks
-them: `quod_foreign_log` verifies entries and `quod_applied_certificate` verifies
-certificates. An application request carries an exact anchored target and a
-opaque certified vector claim owned by `quod_transaction`; that target
+certificates beside the semantic term. The codec bounds the sidecar and decodes
+only the selected record in each entry hint; `quod_foreign_log` verifies its
+historical binding and `quod_applied_certificate` verifies certificates and
+carried operation votes. An application request carries an
+exact anchored target and an opaque certified vector claim owned by
+`quod_transaction`; that target
 reconstructs only its own deterministic application. It enters the existing
 target signing and consensus machinery. Framing and correlation do not
 authenticate claim/application blobs: the existing endpoint worker decodes
@@ -76,9 +78,12 @@ outside the semantic request, evidence, signatures and correlation checks.
 -type outcome_ref() :: transaction_ref() | group_ref() | operation_ref().
 -type phase_kind() :: vote | resolve | complete.
 -type verdict() :: commit | abort.
--type entry_hint() :: {quod_dtx:certified_ref(), quod_ledger:entry_artifact()}.
+-type entry_hint() :: {quod_dtx:certified_ref(),
+                       quod_ledger:entry_artifact() | quod_ledger:selected_entry()}.
 -type validation_item() ::
         entry_hint() |
+        {{operation_vote, quod_dtx:certified_ref(), <<_:256>>},
+         {tuple(), <<_:512>>}} |
         {{applied, identity(), quod_dtx:certified_ref()},
          quod_applied_certificate:applied_certificate()}.
 -type request() ::
@@ -293,8 +298,10 @@ encode_sidecar([], Acc) ->
     {ok, lists:reverse(Acc)};
 encode_sidecar([{{applied, _, _}, _} = AppliedCertificate | Rest], Acc) ->
     encode_sidecar(Rest, [AppliedCertificate | Acc]);
+encode_sidecar([{{operation_vote, _, _}, _} = OperationVote | Rest], Acc) ->
+    encode_sidecar(Rest, [OperationVote | Acc]);
 encode_sidecar([{Ref, Entry} | Rest], Acc) ->
-    case quod_ledger:encode_entry(Entry) of
+    case quod_ledger:hint_bytes(Entry) of
         {ok, EntryBytes} ->
             encode_sidecar(
               Rest, [{entry_bytes, Ref, EntryBytes} | Acc]);
@@ -318,13 +325,22 @@ decode_sidecar([{entry_bytes, Ref, EntryBytes} | Rest], Acc)
     %% These are acceleration hints for foreign-reference verification, not
     %% target-owned execution. Local references use the owner's ledger view;
     %% no sidecar may allocate a foreign ontology's callable vocabulary.
-    case quod_ledger:decode_entry(EntryBytes, wrapped) of
-        {ok, Entry} -> decode_sidecar(Rest, [{Ref, Entry} | Acc]);
-        {error, _} -> decode_sidecar(Rest, Acc)
+    case quod_dtx:certified_ref_claim(Ref) of
+        {ok, {_Identity, Slot, _Hash, Digest}} ->
+            case quod_ledger:select_entry(EntryBytes, {digest, Slot, Digest}, wrapped) of
+                {ok, Entry} -> decode_sidecar(Rest, [{Ref, Entry} | Acc]);
+                {error, _} -> decode_sidecar(Rest, Acc)
+            end;
+        _ -> decode_sidecar(Rest, Acc)
     end;
 decode_sidecar([{{applied, _, _}, _} = AppliedCertificate | Rest], Acc) ->
     case valid_validation_item(AppliedCertificate) of
         true -> decode_sidecar(Rest, [AppliedCertificate | Acc]);
+        false -> decode_sidecar(Rest, Acc)
+    end;
+decode_sidecar([{{operation_vote, _, _}, _} = OperationVote | Rest], Acc) ->
+    case valid_validation_item(OperationVote) of
+        true -> decode_sidecar(Rest, [OperationVote | Acc]);
         false -> decode_sidecar(Rest, Acc)
     end;
 decode_sidecar([_Invalid | Rest], Acc) ->
@@ -352,17 +368,17 @@ normalize_sidecar(_Improper, _Seen, _Acc) ->
     [].
 
 valid_entry_hint({Ref, Entry}) ->
-    View = try quod_ledger:entry_view(Entry)
+    Slot = try quod_ledger:entry_index(Entry)
            catch error:_ -> invalid
            end,
-    valid_entry_hint_view(Ref, Entry, View).
+    valid_entry_hint_view(Ref, Entry, Slot).
 
-valid_entry_hint_view(Ref, Entry, #entry{index = Slot}) ->
+valid_entry_hint_view(Ref, Entry, Slot) when is_integer(Slot) ->
     quod_dtx:validate_certified_ref(Ref) andalso
         case quod_dtx:certified_ref_binding(Ref) of
             {ok, _Identity, Slot, _Digest} ->
-                case quod_catchup:page_stats([Entry]) of
-                    {ok, 1, _Bytes} -> true;
+                case quod_ledger:hint_bytes(Entry) of
+                    {ok, Bytes} -> byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES;
                     {error, _} -> false
                 end;
             _ ->
@@ -376,6 +392,11 @@ valid_validation_item(
         {ok, #{target := Target, resolve_ref := ResolveRef}} -> true;
         _ -> false
     end;
+valid_validation_item(
+  {{operation_vote, Ref, Signer}, {Statement, Signature}}) ->
+    valid_digest(Signer) andalso is_binary(Signature) andalso
+        byte_size(Signature) =:= 64 andalso
+        valid_operation_vote_binding(Ref, Statement);
 valid_validation_item({Ref, _Entry} = Hint) ->
     quod_dtx:validate_certified_ref(Ref) andalso valid_entry_hint(Hint).
 

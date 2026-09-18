@@ -34,7 +34,7 @@ does not cancel or resubmit the uncertain operation.
          test_install_applied_results/4, test_observation_updates/3,
          test_dormant_cancel_disposition/2,
          test_dormant_cancel_request/3,
-         test_operation_application_evidence/2,
+         test_operation_application_evidence/3,
          test_operation_continuation_admission/6,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
@@ -548,8 +548,8 @@ test_observation_state(S = #state{group_id = GroupId}) ->
         _ -> S
     end.
 
-test_operation_application_evidence(Request, Result) ->
-    operation_application_evidence(#{}, Request, Result).
+test_operation_application_evidence(Model, Request, Result) ->
+    operation_application_evidence(Model, Request, Result).
 
 %% Direct scheduling-boundary fixture: the caller supplies a genuine signed
 %% operation model, never a bypass into target validation or consensus. Count
@@ -620,7 +620,9 @@ operation_item_io({application, {TargetNs, _} = Target},
     ok = quod_metrics:observe_remote_operation_stage(TargetNs, target_application,
            operation_target_metric_result(Result), erlang:monotonic_time() - Started),
     case operation_application_evidence(Model, Request, Result) of
-        {ok, Ref, Tx} -> quod_dtx_current_view:certify_operation_evidence(Ns, Target, Ref, #{transaction => Tx}, none, Deadline);
+        {ok, Ref, Evidence} ->
+            quod_dtx_current_view:certify_operation_evidence(
+              Ns, Target, Ref, Evidence, none, Deadline);
         {error, _} = Error -> Error
     end;
 operation_item_io({certify, Target, Ref, Evidence}, #{owner_ns := Ns}, Deadline, _Remaining) ->
@@ -637,7 +639,8 @@ operation_item_io({receipt, Complete}, #{owner_ns := Ns}, _Deadline, Remaining) 
 %% A reply is discovery only, INCLUDING its result label. Exact history and
 %% AM3 decide the result. Never turn an unavailable vote into a rejection.
 operation_application_evidence(Model, {apply_claim, _, Target, _} = Request,
-                               {ok, {application, _, _, Blob} = Response}) ->
+                               {ok, {application, _, _, Blob} = Response,
+                                ValidationSidecar}) ->
     case {quod_dtx_endpoint:correlates(Request, Response),
           quod_trace:with_optional_span(
             quod_trace:context(), <<"quod.operation.result_evidence_decode">>, internal,
@@ -646,12 +649,17 @@ operation_application_evidence(Model, {apply_claim, _, Target, _} = Request,
             %% Transport correlation is not authority. Bind the decoded
             %% evidence to the model's exact claim/target before any AM3 work.
             case quod_operation:accept(Target, Ref, #{transaction => Tx}, none, Model) of
-                {ok, _} -> {ok, Ref, Tx};
+                {ok, _} ->
+                    {EntryHint, Votes} = application_acceleration(
+                                           Ref, ValidationSidecar),
+                    {ok, Ref,
+                     #{transaction => Tx, entry_hint => EntryHint,
+                       operation_votes => Votes}};
                 {error, _} -> {error, invalid_operation_claim}
             end;
         _ -> {error, invalid_operation_claim}
     end;
-operation_application_evidence(_Model, Request, {ok, Response}) ->
+operation_application_evidence(_Model, Request, {ok, Response, _Sidecar}) ->
     case quod_dtx_endpoint:correlates(Request, Response) of
         false -> {error, invalid_target_response};
         true ->
@@ -664,9 +672,19 @@ operation_application_evidence(_Model, Request, {ok, Response}) ->
 operation_application_evidence(_, _, {error, invalid_request}) -> {error, invalid_operation_claim};
 operation_application_evidence(_, _, _) -> {error, retry}.
 
+application_acceleration(Ref, ValidationSidecar) ->
+    lists:foldl(
+      fun({HintRef, Entry}, {_Hint, Votes}) when HintRef =:= Ref ->
+              {Entry, Votes};
+         (Vote = {{operation_vote, VoteRef, _Signer}, _}, {Hint, Votes})
+            when VoteRef =:= Ref -> {Hint, [Vote | Votes]};
+         (_, Acc) -> Acc
+      end, {none, []},
+      quod_dtx_endpoint:normalize_sidecar(ValidationSidecar)).
 
-operation_target_metric_result({ok, {application, _, committed, _}}) -> ok;
-operation_target_metric_result({ok, {application, _, {rejected, _}, _}}) -> rejected;
+
+operation_target_metric_result({ok, {application, _, committed, _}, _}) -> ok;
+operation_target_metric_result({ok, {application, _, {rejected, _}, _}, _}) -> rejected;
 operation_target_metric_result({error, _}) -> uncertain;
 operation_target_metric_result(_) -> failed.
 

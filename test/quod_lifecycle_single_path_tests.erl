@@ -1809,7 +1809,7 @@ system_names_is_created_hosted_and_registered(
                  quod_prolog:prove(Names, {draw, after_registration, {'N'}})),
     ?assertMatch({ok, [#{'C' := 384}], _},
                  quod_prolog:prove(
-                   Names, {count, halfling, personal, male, {'C'}})).
+                   Names, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'C'}})).
 
 desired_content_or_none(Ns) ->
     Desired = application:get_env(

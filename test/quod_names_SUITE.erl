@@ -64,7 +64,7 @@ init_per_suite(Config) ->
     NamesAnchor = peer:call(Target, quod_simplex, genesis_hash, [?NAMES_NS]),
     lists:foreach(fun(Peer) -> set_network_identity(Peer, RootAnchor) end,
                   [Target, Asker]),
-    ok = wait_ready(Target, ?NAMES_NS, {count, halfling, personal, male, {'_'}}),
+    ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
     ok = wait_ready(Target, ?AGENT_NS, true),
     ok = wait_ready(Asker, ?ASKER_NS, true),
     ok = peer:call(Asker, quod_quic, learn, [TargetPub, TargetAddr]),
@@ -147,15 +147,14 @@ remote_draw_from_non_hosting_node(Config) ->
                     {'L'}})),
     {ok, [#{'N' := Elf}], _} =
         quod_ct:peer_prove(Asker, ?ASKER_NS,
-                           {'::', ?NAMES, {draw, elf, personal, female, s3, {'N'}}}),
-    ?assert(lists:member({elf, personal, female}, classes(Target, ?NAMES_NS, Elf))),
+                           {'::', ?NAMES, {draw, <<"elf">>, <<"personal">>, <<"female">>, s3, {'N'}}}),
+    ?assert(lists:member({<<"elf">>, <<"personal">>, <<"female">>}, classes(Target, ?NAMES_NS, Elf))),
     ?assertMatch({ok, [#{'C' := 384}], _},
                  quod_ct:peer_prove(
                    Asker, ?ASKER_NS,
-                   {'::', ?NAMES, {count, halfling, personal, male, {'C'}}})),
-    %% The asker never loaded quod:names, so its cultures arrive as opaque
-    %% symbols rather than freshly allocated atoms.
-    ?assertMatch({ok, [#{'L' := [{'$quod_symbol', <<"orc">>}]}], _},
+                   {'::', ?NAMES, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'C'}}})),
+    %% Cultures are binaries: nothing to allocate on the asker.
+    ?assertMatch({ok, [#{'L' := [<<"orc">>]}], _},
                  quod_ct:peer_prove(
                    Asker, ?ASKER_NS,
                    {findall, {'C'},
@@ -182,9 +181,9 @@ public_queries_open_mutation_refused(Config) ->
                       Result
               end,
     Refused({assertz, {elements, <<"zz">>, [<<"zzz">>]}}),
-    Refused({',', {name, {'N'}, orc, personal, male},
+    Refused({',', {name, {'N'}, <<"orc">>, <<"personal">>, <<"male">>},
              {assertz, {elements, <<"zz">>, [<<"zzz">>]}}}),
-    Refused({retract, {pool, orc, personal, male, {'_'}}}),
+    Refused({retract, {pool, <<"orc">>, <<"personal">>, <<"male">>, {'_'}}}),
     Refused({assertz, {naming_query, {assertz, {'_'}}}}),
     ?assertEqual(Before, count(Target, ?NAMES_NS)),
     ?assertMatch({fail, _},
@@ -192,7 +191,7 @@ public_queries_open_mutation_refused(Config) ->
     ?assertMatch({ok, [#{'N' := _}], _},
                  quod_ct:peer_prove(
                    Asker, ?ASKER_NS,
-                   {'::', ?NAMES, {name_nth, orc, personal, male, 0, {'N'}}})).
+                   {'::', ?NAMES, {name_nth, <<"orc">>, <<"personal">>, <<"male">>, 0, {'N'}}})).
 
 %% Backtracking re-asks and re-hears the same answer; a cut keeps it; a
 %% rolled-back candidate that drew changes nothing for the draw after it.
@@ -232,7 +231,7 @@ restart_recovery(Config) ->
     true = peer:call(Target, erlang, exit, [OldEngine, kill]),
     true = peer:call(Target, erlang, exit, [OldSimplex, kill]),
     ok = wait_restarted(Target, ?NAMES_NS, OldSimplex, 400),
-    ok = wait_ready(Target, ?NAMES_NS, {count, halfling, personal, male, {'_'}}),
+    ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
     ?assertEqual(?config(names_anchor, Config),
                  peer:call(Target, quod_simplex, genesis_hash, [?NAMES_NS])),
     {ok, [#{'N' := Local}], _} =
@@ -264,7 +263,7 @@ cold_peer_joins_quod_names(Config) ->
     Cfg = #{node_id => AskerPub, mode => join, genesis_hash => Anchor,
             data_dir => DataDir, seed_peers => [TargetAddr]},
     {ok, _} = peer:call(Asker, quod_ns_sup, start_namespace, [?NAMES_NS, Cfg]),
-    ok = wait_ready(Asker, ?NAMES_NS, {count, halfling, personal, male, {'_'}}),
+    ok = wait_ready(Asker, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
     ?assertEqual(Anchor, peer:call(Asker, quod_simplex, genesis_hash, [?NAMES_NS])),
     ?assertMatch(#{role := observer, syncing := false},
                  peer:call(Asker, quod_simplex, status, [?NAMES_NS])),
@@ -294,7 +293,7 @@ founder_restarts_and_replays(Config) ->
                     Config, names_target),
     RootAnchor = peer:call(Target, quod_simplex, genesis_hash, [?ROOT_NS]),
     set_network_identity(Target, RootAnchor),
-    ok = wait_ready(Target, ?NAMES_NS, {count, halfling, personal, male, {'_'}}),
+    ok = wait_ready(Target, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
     ok = wait_ready(Target, ?AGENT_NS, true),
     ?assertEqual(Anchor, peer:call(Target, quod_simplex, genesis_hash, [?NAMES_NS])),
     ?assertEqual(1449227, count(Target, ?NAMES_NS)),

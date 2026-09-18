@@ -7,6 +7,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
+-export([quod_names_dormant_marker_function/1]).
 
 -define(NS, <<"test:primitives">>).
 -define(DRAW, '$quod_draw').
@@ -122,6 +123,25 @@ invalid_inputs_fail_plainly_test() ->
                                 Committed, Scope, proof_ctx(),
                                 {?DRAW, {f, [1, <<"b">>, c]}, 10, I}))
     end).
+
+%% The founding guard's basis is the release's own applications, not the
+%% code path: this test module is on the path and loaded here, yet a symbol
+%% only it defines is still reported as new — as a release node that never
+%% ships it would see it.
+cold_vocabulary_ignores_modules_outside_the_basis_test() ->
+    Marker = list_to_atom("quod_names_dormant_marker_" ++ integer_to_list(?LINE)),
+    ?assert(lists:member(Marker, quod_wire_term:cold_new_symbols({Marker, x}))),
+    ?assert(lists:member(quod_names_dormant_marker_function,
+                         quod_wire_term:cold_new_symbols(
+                           [{quod_names_dormant_marker_function, 1}]))),
+    ?assertEqual([], quod_wire_term:cold_new_symbols({findall, ':-', is, member})),
+    Modules = quod_wire_term:release_modules(),
+    ?assert(lists:member(quod_wire_term, Modules)),
+    ?assert(lists:member(erlog_int, Modules)),
+    ?assertNot(lists:member(?MODULE, Modules)),
+    ?assert(lists:all(fun(M) -> code:which(M) =/= non_existing end, Modules)).
+
+quod_names_dormant_marker_function(X) -> X.
 
 %% --- helpers ---------------------------------------------------------------
 

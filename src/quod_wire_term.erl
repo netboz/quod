@@ -33,7 +33,7 @@ payload; one aggregate payload gets one bounded allocation budget.
          goal_symbol_names/1, symbol_names/1,
          is_symbol/1, callable_functor/1,
          is_ground/1,
-         release_vocabulary/0, cold_new_symbols/1,
+         release_vocabulary/0, release_modules/0, cold_new_symbols/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
 
@@ -139,30 +139,46 @@ decode_canonical(_Blob, _MaxBytes) ->
     {error, bad_term}.
 
 -doc """
-The symbols every node of this release already knows: the atom tables of
-every module on the code path, identical on every node running the release.
-A node that never saw an ontology's source knows nothing beyond this, so a
-founder measures a genesis against it rather than against its own atom table,
-which the source it just loaded has already filled.
+The vocabulary every node of this release holds: the atom tables of the
+modules of the `quod` and `erlog` applications. The release runs embedded,
+so every one of them is loaded at boot on every node — a receiver that
+decodes an envelope knows exactly these symbols and nothing else. No code
+path is scanned: modules from test or plugin directories never count.
+Cached per VM.
 """.
 -spec release_vocabulary() -> #{atom() => true}.
 release_vocabulary() ->
-    case persistent_term:get(?MODULE, undefined) of
+    case persistent_term:get({?MODULE, vocabulary}, undefined) of
         #{} = Known -> Known;
         undefined ->
-            Beams = [Beam || Dir <- code:get_path(),
-                             Beam <- filelib:wildcard(filename:join(Dir, "*.beam"))],
-            Known = lists:foldl(
-                      fun(Beam, Acc) ->
-                          case beam_lib:chunks(Beam, [atoms]) of
-                              {ok, {_, [{atoms, Atoms}]}} ->
-                                  lists:foldl(fun({_, A}, M) -> M#{A => true} end,
-                                              Acc, Atoms);
-                              _ -> Acc
-                          end
-                      end, #{}, Beams),
-            persistent_term:put(?MODULE, Known),
+            Known = lists:foldl(fun module_atoms/2, #{}, release_modules()),
+            persistent_term:put({?MODULE, vocabulary}, Known),
             Known
+    end.
+
+-doc "The modules of the release's own applications, as their app files list them.".
+-spec release_modules() -> [module()].
+release_modules() ->
+    lists:append(
+      [case application:get_key(App, modules) of
+           {ok, Modules} -> Modules;
+           undefined ->
+               _ = application:load(App),
+               case application:get_key(App, modules) of
+                   {ok, Modules} -> Modules;
+                   undefined -> []
+               end
+       end || App <- [quod, erlog]]).
+
+module_atoms(Module, Acc) ->
+    case code:which(Module) of
+        Beam when is_list(Beam) ->
+            case beam_lib:chunks(Beam, [atoms]) of
+                {ok, {_, [{atoms, Atoms}]}} ->
+                    lists:foldl(fun({_, A}, M) -> M#{A => true} end, Acc, Atoms);
+                _ -> Acc
+            end;
+        _ -> Acc
     end.
 
 -doc """

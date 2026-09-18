@@ -4,15 +4,16 @@
 %% system_ontology(quod:names, Anchor) so every node carries it. Agents get
 %% their display labels from it.
 %%
-%% Ask it with `::`; names are binaries:
-%%   quod:names::name(Name, orc, personal, male)     every male orc name
-%%   quod:names::name(<<"Ugbash">>, C, K, G)         the selection(s) a name is in
-%%   quod:names::draw(orc, personal, male, salt, N)  one name of the selection
-%%   quod:names::draw(salt, N)                       one name from any pool
-%% Unbound arguments are wildcards. A wider culture (vile, doughty, fantastic)
-%% selects every culture under it in the isa tree. draw/5 and draw/2 are fixed
-%% by the running proof and the salt (proof_draw/3, a common primitive): same
-%% proof, same salt, same name; different agents use different salts.
+%% Ask it with `::`; names, cultures, kinds and genders are binaries:
+%%   quod:names::name(N, <<"orc">>, <<"personal">>, <<"male">>)   every male orc name
+%%   quod:names::name(<<"Ugbash">>, C, K, G)                       the selection(s) a name is in
+%%   quod:names::draw(<<"orc">>, <<"personal">>, <<"male">>, salt, N)   one name of the selection
+%%   quod:names::draw(salt, N)                                     one name from any pool
+%% Unbound arguments are wildcards. A wider culture (<<"vile">>, <<"doughty">>,
+%% <<"fantastic">>) selects every culture under it in the isa tree. draw/5 and
+%% draw/2 are fixed by the running proof and the salt (proof_draw/3, a common
+%% primitive): same proof, same salt, same name; different agents use
+%% different salts.
 %%
 %% Data: the element tables and listed names below are Open Game Content used
 %% under the Open Game License v1.0a — see OGL-1.0a.txt beside this file for
@@ -26,11 +27,11 @@
 %%
 %% Vocabulary: a genesis may introduce at most 64 new symbols to a node that
 %% never saw this source (quod_vm_limits), so every piece of data — table
-%% names, syllables, names — is a binary, never an atom. Only the structure
-%% (predicates, cultures, kinds, genders, recipe functors) is symbolic.
+%% names, syllables, names, cultures, kinds, genders — is a binary, never an
+%% atom. Only the predicates and the recipe functors are symbolic.
 %%
 %% Model, in the house vocabulary:
-%%   isa(Culture, Wider)                        culture tree, rooted at thing
+%%   isa(Culture, Wider)                        culture tree, rooted at <<"thing">>
 %%   pool(Culture, Kind, Gender, Source)        a pool of names; Source is
 %%                                              recipe(Recipe) or listed
 %%   listed(Culture, Kind, Gender, Names)       the names of a listed pool
@@ -107,7 +108,7 @@ draw(Salt, Name) :-
             pool(Culture, Kind, Gender, Source), Pools),
     length(Pools, Count),
     proof_draw(pool(Salt), Count, K),
-    nth_(K, Pools, pool(Culture, Kind, Gender, Source)),
+    nth(K, Pools, pool(Culture, Kind, Gender, Source)),
     pool_size(Culture, Kind, Gender, Source, Size),
     proof_draw(Salt, Size, I),
     pool_nth(Culture, Kind, Gender, Source, I, Name).
@@ -120,11 +121,11 @@ draw(Salt, Name) :-
 select(Culture, Kind, Gender, Own, Source) :-
     pool(Own, Kind, Gender, Source),
     (   var(Culture) -> Culture = Own
-    ;   isa_star(Own, Culture)
+    ;   within(Own, Culture)
     ).
 
-isa_star(Culture, Culture).
-isa_star(Culture, Wider) :- isa(Culture, Between), isa_star(Between, Wider).
+within(Culture, Culture).
+within(Culture, Wider) :- isa(Culture, Between), within(Between, Wider).
 
 pool_size(_, _, _, recipe(Recipe), N) :- size(Recipe, N).
 pool_size(Culture, Kind, Gender, listed, N) :-
@@ -138,12 +139,12 @@ pools_nth([pool(Culture, Kind, Gender, Source) | Pools], I, Name) :-
     ).
 
 pool_nth(_, _, _, recipe(Recipe), I, Name) :-
-    nth(Recipe, I, Lower, []),
+    pick(Recipe, I, Lower, []),
     title(Lower, Codes),
     binary_codes(Name, Codes).
 pool_nth(Culture, Kind, Gender, listed, I, Name) :-
     listed(Culture, Kind, Gender, Names),
-    nth_(I, Names, Name).
+    nth(I, Names, Name).
 
 generate(recipe(Recipe), _, _, _, Name) :-
     build(Recipe, Lower, []),
@@ -162,11 +163,12 @@ recognise(listed, Culture, Kind, Gender, Name) :-
     listed(Culture, Kind, Gender, Names),
     member(Name, Names).
 
-%% --- recipes: build (both ways), size, nth ------------------------------------
-%% build/3 and nth/4 walk a recipe over a difference list of byte codes. With
+%% --- recipes: build (both ways), size, pick -----------------------------------
+%% build/3 and pick/4 walk a recipe over a difference list of byte codes. With
 %% the codes unbound build/3 enumerates names; with them bound it parses.
-%% nth/4 picks the I-th name in build/3's order: in a sequence the first part
-%% is the most significant digit, so the last part varies fastest.
+%% pick/4 takes the I-th name in build/3's order: in a sequence the first part
+%% is the most significant digit, so the last part varies fastest. A
+%% rep(Min, Max, R) part stands for Min..Max copies of R in a row.
 
 build(element(Table), Cs0, Cs) :-
     elements(Table, Fragments),
@@ -184,139 +186,126 @@ build(join(Sep, Recipes), Cs0, Cs) :-
 %% seq(Parts, Lead, Sep, Cs0, Cs): Lead goes before the next part, Sep before
 %% every part after it.
 seq([], _, _, Cs, Cs).
-seq([Part | Parts], Lead, Sep, Cs0, Cs) :-
+seq([rep(Min, Max, Recipe) | Parts], Lead, Sep, Cs0, Cs) :- !,
+    copies(Min, Max, Recipe, Copies),
+    append(Copies, Parts, Flat),
+    seq(Flat, Lead, Sep, Cs0, Cs).
+seq([Recipe | Parts], Lead, Sep, Cs0, Cs) :-
     append(Lead, Cs1, Cs0),
-    part(Part, Sep, Cs1, Cs2),
+    build(Recipe, Cs1, Cs2),
     seq(Parts, Sep, Sep, Cs2, Cs).
 
-part(rep(Min, Max, Recipe), Sep, Cs0, Cs) :- !,
-    between_(Min, Max, N),
-    copies(N, Recipe, Copies),
-    seq(Copies, [], Sep, Cs0, Cs).
-part(Recipe, _, Cs0, Cs) :-
-    build(Recipe, Cs0, Cs).
+%% copies(Min, Max, Recipe, Copies): Min copies first, then one more each time.
+copies(Min, Max, Recipe, Copies) :-
+    Min =< Max,
+    (   count_copies(Min, Recipe, Copies)
+    ;   Next is Min + 1, copies(Next, Max, Recipe, Copies)
+    ).
+
+count_copies(0, _, []) :- !.
+count_copies(N, Recipe, [Recipe | Copies]) :-
+    M is N - 1, count_copies(M, Recipe, Copies).
 
 emit(Fragment, Cs0, Cs) :-
     binary_codes(Fragment, FragmentCodes),
     append(FragmentCodes, Cs, Cs0).
 
 size(element(Table), N) :- elements(Table, Fragments), length(Fragments, N).
-size(one_of(Recipes), N) :- sizes(Recipes, Sizes), sum(Sizes, N).
+size(one_of(Recipes), N) :- findall(S, (member(R, Recipes), size(R, S)), Ss), sum(Ss, N).
 size(concat(Recipes), N) :- seq_size(Recipes, N).
 size(join(_, Recipes), N) :- seq_size(Recipes, N).
 
-sizes([], []).
-sizes([Recipe | Recipes], [Size | Sizes]) :-
-    size(Recipe, Size),
-    sizes(Recipes, Sizes).
-
 seq_size([], 1).
-seq_size([Part | Parts], N) :-
-    part_size(Part, Size),
+seq_size([rep(Min, Max, Recipe) | Parts], N) :- !,
+    size(Recipe, Size),
+    seq_size(Parts, Rest),
+    rep_size(Min, Max, Size, Rest, N).
+seq_size([Recipe | Parts], N) :-
+    size(Recipe, Size),
     seq_size(Parts, Rest),
     N is Size * Rest.
 
-part_size(rep(Min, Max, Recipe), N) :- !,
-    size(Recipe, Size),
-    rep_size(Min, Max, Size, N).
-part_size(Recipe, N) :-
-    size(Recipe, N).
-
-%% rep_size(Min, Max, Size, N): Size^Min + ... + Size^Max.
-rep_size(Min, Max, _, 0) :- Min > Max, !.
-rep_size(Min, Max, Size, N) :-
+%% rep_size(Min, Max, Size, Rest, N): (Size^Min + ... + Size^Max) * Rest.
+rep_size(Min, Max, _, _, 0) :- Min > Max, !.
+rep_size(Min, Max, Size, Rest, N) :-
     power(Size, Min, P),
     Next is Min + 1,
-    rep_size(Next, Max, Size, Rest),
-    N is P + Rest.
+    rep_size(Next, Max, Size, Rest, More),
+    N is P * Rest + More.
 
-nth(element(Table), I, Cs0, Cs) :-
+pick(element(Table), I, Cs0, Cs) :-
     elements(Table, Fragments),
-    nth_(I, Fragments, Fragment),
+    nth(I, Fragments, Fragment),
     emit(Fragment, Cs0, Cs).
-nth(one_of(Recipes), I, Cs0, Cs) :-
-    one_of_nth(Recipes, I, Cs0, Cs).
-nth(concat(Recipes), I, Cs0, Cs) :-
-    seq_nth(Recipes, I, [], [], Cs0, Cs).
-nth(join(Sep, Recipes), I, Cs0, Cs) :-
-    binary_codes(Sep, SepCodes),
-    seq_nth(Recipes, I, [], SepCodes, Cs0, Cs).
-
-one_of_nth([Recipe | Recipes], I, Cs0, Cs) :-
+pick(one_of([Recipe | Recipes]), I, Cs0, Cs) :-
     size(Recipe, Size),
-    (   I < Size -> nth(Recipe, I, Cs0, Cs)
-    ;   J is I - Size, one_of_nth(Recipes, J, Cs0, Cs)
+    (   I < Size -> pick(Recipe, I, Cs0, Cs)
+    ;   J is I - Size, pick(one_of(Recipes), J, Cs0, Cs)
     ).
+pick(concat(Recipes), I, Cs0, Cs) :-
+    seq_pick(Recipes, I, [], [], Cs0, Cs).
+pick(join(Sep, Recipes), I, Cs0, Cs) :-
+    binary_codes(Sep, SepCodes),
+    seq_pick(Recipes, I, [], SepCodes, Cs0, Cs).
 
-seq_nth([], 0, _, _, Cs, Cs).
-seq_nth([Part | Parts], I, Lead, Sep, Cs0, Cs) :-
+seq_pick([], 0, _, _, Cs, Cs).
+seq_pick([rep(Min, Max, Recipe) | Parts], I, Lead, Sep, Cs0, Cs) :- !,
+    size(Recipe, Size),
+    seq_size(Parts, Rest),
+    rep_pick(Min, Max, Size, Rest, I, N, J),
+    count_copies(N, Recipe, Copies),
+    append(Copies, Parts, Flat),
+    seq_pick(Flat, J, Lead, Sep, Cs0, Cs).
+seq_pick([Recipe | Parts], I, Lead, Sep, Cs0, Cs) :-
     seq_size(Parts, Rest),
     Own is I // Rest,
     Next is I mod Rest,
     append(Lead, Cs1, Cs0),
-    part_nth(Part, Own, Sep, Cs1, Cs2),
-    seq_nth(Parts, Next, Sep, Sep, Cs2, Cs).
+    pick(Recipe, Own, Cs1, Cs2),
+    seq_pick(Parts, Next, Sep, Sep, Cs2, Cs).
 
-part_nth(rep(Min, Max, Recipe), I, Sep, Cs0, Cs) :- !,
-    size(Recipe, Size),
-    rep_nth(Min, Max, Size, I, N, J),
-    copies(N, Recipe, Copies),
-    seq_nth(Copies, J, [], Sep, Cs0, Cs).
-part_nth(Recipe, I, _, Cs0, Cs) :-
-    nth(Recipe, I, Cs0, Cs).
-
-%% rep_nth(Min, Max, Size, I, N, J): the I-th repetition is the J-th among
-%% those with N parts.
-rep_nth(Min, Max, Size, I, N, J) :-
+%% rep_pick(Min, Max, Size, Rest, I, N, J): the I-th of a rep followed by
+%% parts of total size Rest is the J-th among those with N copies.
+rep_pick(Min, Max, Size, Rest, I, N, J) :-
     Min =< Max,
     power(Size, Min, P),
-    (   I < P -> N = Min, J = I
-    ;   K is I - P, Next is Min + 1, rep_nth(Next, Max, Size, K, N, J)
+    Block is P * Rest,
+    (   I < Block -> N = Min, J = I
+    ;   K is I - Block, Next is Min + 1, rep_pick(Next, Max, Size, Rest, K, N, J)
     ).
 
 %% --- bytes --------------------------------------------------------------------
 
 %% title(?Lower, ?Title): Title is Lower capitalised at the start and after
-%% every separator; either side may be the bound one. Going backwards, a
-%% lowercase start is refused, so only the capitalised form names anything.
+%% every separator (hyphen, space); either side may be the bound one. Going
+%% backwards, a lowercase start is refused, so only the capitalised form
+%% names anything.
 title([Lower | Lowers], [Upper | Uppers]) :-
     upcase(Lower, Upper),
     title_rest(Lowers, Uppers).
 
 title_rest([], []).
 title_rest([Code | Lowers], [Code | Uppers]) :-
-    separator(Code), !,
+    (Code =:= 0'- ; Code =:= 32), !,
     title(Lowers, Uppers).
 title_rest([Code | Lowers], [Code | Uppers]) :-
     title_rest(Lowers, Uppers).
 
-separator(0'-).
-separator(32).                  % space
-
 upcase(Lower, Upper) :-
     nonvar(Lower), !,
-    (   lower(Lower) -> Upper is Lower - 32
+    (   Lower >= 0'a, Lower =< 0'z -> Upper is Lower - 32
     ;   Upper = Lower
     ).
 upcase(Lower, Upper) :-
-    \+ lower(Upper),
-    (   upper(Upper) -> Lower is Upper + 32
+    \+ (Upper >= 0'a, Upper =< 0'z),
+    (   Upper >= 0'A, Upper =< 0'Z -> Lower is Upper + 32
     ;   Lower = Upper
     ).
 
-lower(Code) :- Code >= 0'a, Code =< 0'z.
-upper(Code) :- Code >= 0'A, Code =< 0'Z.
+%% --- small helpers (erlog has no nth0/3, sum_list/2 or **) -------------------
 
-%% --- small helpers (erlog has no between/3, nth0/3 or sum_list/2) -------------
-
-between_(Min, Max, Min) :- Min =< Max.
-between_(Min, Max, N) :- Min < Max, Next is Min + 1, between_(Next, Max, N).
-
-copies(0, _, []) :- !.
-copies(N, Recipe, [Recipe | Copies]) :- N > 0, M is N - 1, copies(M, Recipe, Copies).
-
-nth_(0, [X | _], X) :- !.
-nth_(I, [_ | Xs], X) :- I > 0, J is I - 1, nth_(J, Xs, X).
+nth(0, [X | _], X) :- !.
+nth(I, [_ | Xs], X) :- I > 0, J is I - 1, nth(J, Xs, X).
 
 sum([], 0).
 sum([X | Xs], N) :- sum(Xs, M), N is X + M.
@@ -325,50 +314,50 @@ power(_, 0, 1) :- !.
 power(Base, K, P) :- K > 0, J is K - 1, power(Base, J, Q), P is Base * Q.
 
 %% --- the culture tree ---------------------------------------------------------
-isa(culture, thing).
-isa(fantastic, culture).
-isa(vile, fantastic).           % Vile & Crude: table 5-3, by size
-isa(goblin, vile).
-isa(orc, vile).
-isa(ogre, vile).
-isa(primitive, fantastic).      % Primitive: table 5-4
-isa(doughty, fantastic).        % Doughty & Homely: table 5-5
-isa(dwarf, doughty).
-isa(gnome, doughty).
-isa(halfling, doughty).
-isa(fair, fantastic).           % Fair & Noble: table 5-6
-isa(elf, fair).
-isa(faerie, fantastic).         % Faerykind: table 5-7
-isa(spirit, fantastic).         % Nymphs and Sirens: myth lists
-isa(nymph, spirit).
-isa(siren, spirit).
+isa(<<"culture">>, <<"thing">>).
+isa(<<"fantastic">>, <<"culture">>).
+isa(<<"vile">>, <<"fantastic">>).        % Vile & Crude: table 5-3, by size
+isa(<<"goblin">>, <<"vile">>).
+isa(<<"orc">>, <<"vile">>).
+isa(<<"ogre">>, <<"vile">>).
+isa(<<"primitive">>, <<"fantastic">>).   % Primitive: table 5-4
+isa(<<"doughty">>, <<"fantastic">>).     % Doughty & Homely: table 5-5
+isa(<<"dwarf">>, <<"doughty">>).
+isa(<<"gnome">>, <<"doughty">>).
+isa(<<"halfling">>, <<"doughty">>).
+isa(<<"fair">>, <<"fantastic">>).        % Fair & Noble: table 5-6
+isa(<<"elf">>, <<"fair">>).
+isa(<<"faerie">>, <<"fantastic">>).      % Faerykind: table 5-7
+isa(<<"spirit">>, <<"fantastic">>).      % Nymphs and Sirens: myth lists
+isa(<<"nymph">>, <<"spirit">>).
+isa(<<"siren">>, <<"spirit">>).
 
 %% --- the pools ----------------------------------------------------------------
-%% pool(Culture, Kind, Gender, Source). Kind is `personal` throughout this
+%% pool(Culture, Kind, Gender, Source). Kind is <<"personal">> throughout this
 %% book; epithets, places and taverns are later kinds.
 
 %% Vile & Crude: two elements of the size table; females add an ending.
-pool(goblin, personal, male,
+pool(<<"goblin">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"vile_small">>), element(<<"vile_small">>)]))).
-pool(goblin, personal, female,
+pool(<<"goblin">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"vile_small">>), element(<<"vile_small">>),
                     element(<<"vile_female_ending">>)]))).
-pool(orc, personal, male,
+pool(<<"orc">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"vile_medium">>), element(<<"vile_medium">>)]))).
-pool(orc, personal, female,
+pool(<<"orc">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"vile_medium">>), element(<<"vile_medium">>),
                     element(<<"vile_female_ending">>)]))).
-pool(ogre, personal, male,
+pool(<<"ogre">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"vile_large">>), element(<<"vile_large">>)]))).
-pool(ogre, personal, female,
+pool(<<"ogre">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"vile_large">>), element(<<"vile_large">>),
                     element(<<"vile_female_ending">>)]))).
 
 %% Primitive: one to three hyphenated parts (one or two for females, who
 %% carry a sung element at either end).
-pool(primitive, personal, male,
+pool(<<"primitive">>, <<"personal">>, <<"male">>,
      recipe(join(<<"-">>, [rep(1, 3, element(<<"primitive">>))]))).
-pool(primitive, personal, female,
+pool(<<"primitive">>, <<"personal">>, <<"female">>,
      recipe(one_of([join(<<"-">>, [rep(1, 2, element(<<"primitive">>)),
                                    element(<<"primitive_song">>)]),
                     join(<<"-">>, [element(<<"primitive_song">>),
@@ -376,39 +365,39 @@ pool(primitive, personal, female,
 
 %% Doughty & Homely: prefix + gendered suffix; gnomes mix the two tables.
 %% Dwarves also have the listed Norse myth names (a second, listed pool).
-pool(dwarf, personal, male,
+pool(<<"dwarf">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"doughty_prefix">>), element(<<"doughty_male">>)]))).
-pool(dwarf, personal, male, listed).
-pool(dwarf, personal, female,
+pool(<<"dwarf">>, <<"personal">>, <<"male">>, listed).
+pool(<<"dwarf">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"doughty_prefix">>), element(<<"doughty_female">>)]))).
-pool(gnome, personal, male,
+pool(<<"gnome">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"doughty_prefix">>), element(<<"homely_male">>)]))).
-pool(gnome, personal, female,
+pool(<<"gnome">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"doughty_prefix">>), element(<<"homely_female">>)]))).
-pool(halfling, personal, male,
+pool(<<"halfling">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"homely_prefix">>), element(<<"homely_male">>)]))).
-pool(halfling, personal, female,
+pool(<<"halfling">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"homely_prefix">>), element(<<"homely_female">>)]))).
 
 %% Fair & Noble: prefix + middle + gendered suffix, or prefix + suffix.
-pool(elf, personal, male,
+pool(<<"elf">>, <<"personal">>, <<"male">>,
      recipe(one_of([concat([element(<<"fair_prefix">>), element(<<"fair_middle">>),
                             element(<<"fair_male">>)]),
                     concat([element(<<"fair_prefix">>), element(<<"fair_male">>)])]))).
-pool(elf, personal, female,
+pool(<<"elf">>, <<"personal">>, <<"female">>,
      recipe(one_of([concat([element(<<"fair_prefix">>), element(<<"fair_middle">>),
                             element(<<"fair_female">>)]),
                     concat([element(<<"fair_prefix">>), element(<<"fair_female">>)])]))).
 
 %% Faerykind: prefix + gendered suffix.
-pool(faerie, personal, male,
+pool(<<"faerie">>, <<"personal">>, <<"male">>,
      recipe(concat([element(<<"spry_prefix">>), element(<<"spry_male">>)]))).
-pool(faerie, personal, female,
+pool(<<"faerie">>, <<"personal">>, <<"female">>,
      recipe(concat([element(<<"spry_prefix">>), element(<<"spry_female">>)]))).
 
 %% Nymphs and Sirens: listed Greek myth names.
-pool(nymph, personal, female, listed).
-pool(siren, personal, female, listed).
+pool(<<"nymph">>, <<"personal">>, <<"female">>, listed).
+pool(<<"siren">>, <<"personal">>, <<"female">>, listed).
 
 %% --- the element tables ------------------------------------------------------
 %% elements(Table, Fragments): vile_small 100, vile_medium 100, vile_large 100, vile_female_ending 6, primitive 100, primitive_song 8, doughty_prefix 60, doughty_male 16, doughty_female 15, homely_prefix 48, homely_male 8, homely_female 7, fair_prefix 80, fair_middle 20, fair_male 19, fair_female 17, spry_prefix 72, spry_male 24, spry_female 24.
@@ -598,7 +587,7 @@ elements(<<"spry_female">>,
 %% listed(Culture, Kind, Gender, Names): names the book lists as such (Norse and
 %% Greek myth).
 
-listed(dwarf, personal, male,
+listed(<<"dwarf">>, <<"personal">>, <<"male">>,
        [<<"Ai">>, <<"An">>, <<"Andvari">>, <<"Annar">>, <<"Austi">>,
        <<"Austri">>, <<"Bafur">>, <<"Berling">>, <<"Bifur">>, <<"Bombor">>,
        <<"Brokk">>, <<"Dain">>, <<"Delling">>, <<"Dolgthvari">>, <<"Dori">>,
@@ -614,7 +603,7 @@ listed(dwarf, personal, male,
        <<"Skirfir">>, <<"Sudri">>, <<"Thekkr">>, <<"Thorin">>, <<"Thror">>,
        <<"Thrurinn">>, <<"Veigur">>, <<"Vestri">>, <<"Vig">>, <<"Virvir">>,
        <<"Vithur">>, <<"Yingi">>]).
-listed(nymph, personal, female,
+listed(<<"nymph">>, <<"personal">>, <<"female">>,
        [<<"Adrasteia">>, <<"Aegina">>, <<"Amaltheia">>, <<"Ankhiale">>,
        <<"Arethusa">>, <<"Asterodeia">>, <<"Bakkhe">>, <<"Bromie">>,
        <<"Daphne">>, <<"Doris">>, <<"Dryope">>, <<"Dynamene">>, <<"Ekho">>,
@@ -622,7 +611,7 @@ listed(nymph, personal, female,
        <<"Idaea">>, <<"Io">>, <<"Iynx">>, <<"Kallirrhoe">>, <<"Kallisto">>,
        <<"Kalyke">>, <<"Kalypso">>, <<"Klytia">>, <<"Kreusa">>, <<"Linos">>,
        <<"Makris">>, <<"Nysa">>]).
-listed(siren, personal, female,
+listed(<<"siren">>, <<"personal">>, <<"female">>,
        [<<"Aglaope">>, <<"Aglaophonos">>, <<"Leukosia">>, <<"Ligeia">>,
        <<"Molpe">>, <<"Parthenope">>, <<"Peisinoe">>, <<"Raidne">>,
        <<"Teles">>, <<"Thelxepeia">>, <<"Thelxiope">>]).

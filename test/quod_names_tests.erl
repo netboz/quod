@@ -21,7 +21,7 @@ generation_matches_count_test() ->
         Names = halfling_males(St),
         ?assertEqual(?HALFLING_MALES, length(Names)),
         ?assertEqual(?HALFLING_MALES,
-                     value({'N'}, {count, halfling, personal, male, {'N'}}, St)),
+                     value({'N'}, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'N'}}, St)),
         ?assertEqual(<<"Adald">>, hd(Names)),
         ?assertEqual(<<"Wydwise">>, lists:last(Names)),
         ?assert(lists:all(fun is_binary/1, Names))
@@ -32,19 +32,19 @@ name_nth_follows_enumeration_order_test() ->
         Names = halfling_males(St),
         lists:foreach(
           fun({I, Name}) ->
-                  ?assertEqual(Name, value({'N'}, {name_nth, halfling, personal,
-                                                    male, I, {'N'}}, St))
+                  ?assertEqual(Name, value({'N'}, {name_nth, <<"halfling">>, <<"personal">>,
+                                                    <<"male">>, I, {'N'}}, St))
           end, lists:zip(lists:seq(0, ?HALFLING_MALES - 1), Names)),
-        fails({name_nth, halfling, personal, male, ?HALFLING_MALES, {'N'}}, St),
-        fails({name_nth, halfling, personal, male, -1, {'N'}}, St),
-        fails({name_nth, halfling, personal, male, one, {'N'}}, St)
+        fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, ?HALFLING_MALES, {'N'}}, St),
+        fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, -1, {'N'}}, St),
+        fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, one, {'N'}}, St)
     end).
 
 recognition_test() ->
     with_names(fun(St) ->
-        ?assertEqual([{orc, personal, male}], selections(<<"Ugbash">>, St)),
-        %% Dain is both da+in and a listed Norse dwarf: one answer per pool.
-        ?assertEqual([{dwarf, personal, male}, {dwarf, personal, male}],
+        ?assertEqual([{<<"orc">>, <<"personal">>, <<"male">>}], selections(<<"Ugbash">>, St)),
+        %% Dain is both da+in and a listed Norse <<"dwarf">>: one answer per pool.
+        ?assertEqual([{<<"dwarf">>, <<"personal">>, <<"male">>}, {<<"dwarf">>, <<"personal">>, <<"male">>}],
                      selections(<<"Dain">>, St)),
         ?assertEqual([], selections(<<"Sally">>, St)),
         ?assertEqual([], selections(<<"ugbash">>, St)),
@@ -54,78 +54,78 @@ recognition_test() ->
         ?assertEqual([], selections(42, St)),
         ?assertEqual([], selections([$U, $g], St)),
         ?assertMatch({succeed, _},
-                     erlog_int:prove_goal({name, <<"Ugbash">>, orc, personal, male}, St)),
+                     erlog_int:prove_goal({name, <<"Ugbash">>, <<"orc">>, <<"personal">>, <<"male">>}, St)),
         ?assertMatch({succeed, _},
-                     erlog_int:prove_goal({name, <<"Ugbash">>, vile, personal, male}, St)),
-        fails({name, <<"Ugbash">>, goblin, personal, male}, St),
-        fails({name, <<"Ugbash">>, orc, personal, female}, St)
+                     erlog_int:prove_goal({name, <<"Ugbash">>, <<"vile">>, <<"personal">>, <<"male">>}, St)),
+        fails({name, <<"Ugbash">>, <<"goblin">>, <<"personal">>, <<"male">>}, St),
+        fails({name, <<"Ugbash">>, <<"orc">>, <<"personal">>, <<"female">>}, St)
     end).
 
 round_trip_test() ->
     with_names(fun(St) ->
         lists:foreach(
           fun({Culture, Gender}) ->
-                  Count = value({'N'}, {count, Culture, personal, Gender, {'N'}}, St),
+                  Count = value({'N'}, {count, Culture, <<"personal">>, Gender, {'N'}}, St),
                   lists:foreach(
                     fun(I) ->
-                            Name = value({'N'}, {name_nth, Culture, personal,
+                            Name = value({'N'}, {name_nth, Culture, <<"personal">>,
                                                  Gender, I, {'N'}}, St),
                             ?assert(is_binary(Name)),
-                            ?assert(lists:member({Culture, personal, Gender},
+                            ?assert(lists:member({Culture, <<"personal">>, Gender},
                                                  selections(Name, St)),
                                     {Culture, Gender, I, Name})
                     end, [0, Count div 2, Count - 1])
           end,
-          [{orc, female}, {primitive, male}, {primitive, female},
-           {gnome, female}, {elf, male}, {faerie, female}, {siren, female},
-           {dwarf, male}])
+          [{<<"orc">>, <<"female">>}, {<<"primitive">>, <<"male">>}, {<<"primitive">>, <<"female">>},
+           {<<"gnome">>, <<"female">>}, {<<"elf">>, <<"male">>}, {<<"faerie">>, <<"female">>}, {<<"siren">>, <<"female">>},
+           {<<"dwarf">>, <<"male">>}])
     end).
 
 recipe_shapes_test() ->
     with_names(fun(St) ->
         Nth = fun(Culture, Gender, I) ->
-                      value({'N'}, {name_nth, Culture, personal, Gender, I, {'N'}}, St)
+                      value({'N'}, {name_nth, Culture, <<"personal">>, Gender, I, {'N'}}, St)
               end,
         %% rep(1, 3): the 100 one-part names, then 100^2 two-part, then three-part.
         ?assertEqual(100 + 100 * 100 + 100 * 100 * 100,
-                     value({'N'}, {count, primitive, personal, male, {'N'}}, St)),
-        ?assertEqual(<<"Ahg">>, Nth(primitive, male, 0)),
-        ?assertEqual(<<"Ahg-Ahg">>, Nth(primitive, male, 100)),
-        ?assertEqual(<<"Ahg-Ahg-Ahg">>, Nth(primitive, male, 100 + 100 * 100)),
+                     value({'N'}, {count, <<"primitive">>, <<"personal">>, <<"male">>, {'N'}}, St)),
+        ?assertEqual(<<"Ahg">>, Nth(<<"primitive">>, <<"male">>, 0)),
+        ?assertEqual(<<"Ahg-Ahg">>, Nth(<<"primitive">>, <<"male">>, 100)),
+        ?assertEqual(<<"Ahg-Ahg-Ahg">>, Nth(<<"primitive">>, <<"male">>, 100 + 100 * 100)),
         ?assertEqual(<<"Zham-Zham-Zham">>,
-                     Nth(primitive, male, 100 + 100 * 100 + 100 * 100 * 100 - 1)),
+                     Nth(<<"primitive">>, <<"male">>, 100 + 100 * 100 + 100 * 100 * 100 - 1)),
         %% one_of over two join shapes, the sung element at either end.
         ?assertEqual((100 + 100 * 100) * 8 * 2,
-                     value({'N'}, {count, primitive, personal, female, {'N'}}, St)),
-        ?assertEqual(<<"Ahg-Doh">>, Nth(primitive, female, 0)),
-        ?assertEqual(<<"Doh-Ahg">>, Nth(primitive, female, (100 + 100 * 100) * 8)),
+                     value({'N'}, {count, <<"primitive">>, <<"personal">>, <<"female">>, {'N'}}, St)),
+        ?assertEqual(<<"Ahg-Doh">>, Nth(<<"primitive">>, <<"female">>, 0)),
+        ?assertEqual(<<"Doh-Ahg">>, Nth(<<"primitive">>, <<"female">>, (100 + 100 * 100) * 8)),
         %% concat of three tables: last part varies fastest.
-        ?assertEqual(<<"Agagah">>, Nth(orc, female, 0)),
-        ?assertEqual(<<"Agagay">>, Nth(orc, female, 1)),
-        ?assertEqual(<<"Agaugah">>, Nth(orc, female, 6)),
-        %% two pools for dwarf male: the recipe pool first, then the list.
-        ?assertEqual(<<"Balbor">>, Nth(dwarf, male, 0)),
-        ?assertEqual(<<"Ai">>, Nth(dwarf, male, 60 * 16)),
-        ?assertEqual(<<"Yingi">>, Nth(dwarf, male, 60 * 16 + 70))
+        ?assertEqual(<<"Agagah">>, Nth(<<"orc">>, <<"female">>, 0)),
+        ?assertEqual(<<"Agagay">>, Nth(<<"orc">>, <<"female">>, 1)),
+        ?assertEqual(<<"Agaugah">>, Nth(<<"orc">>, <<"female">>, 6)),
+        %% two pools for <<"dwarf">> male: the recipe pool first, then the list.
+        ?assertEqual(<<"Balbor">>, Nth(<<"dwarf">>, <<"male">>, 0)),
+        ?assertEqual(<<"Ai">>, Nth(<<"dwarf">>, <<"male">>, 60 * 16)),
+        ?assertEqual(<<"Yingi">>, Nth(<<"dwarf">>, <<"male">>, 60 * 16 + 70))
     end).
 
 wider_culture_test() ->
     with_names(fun(St) ->
         Count = fun(Culture, Gender) ->
-                        value({'N'}, {count, Culture, personal, Gender, {'N'}}, St)
+                        value({'N'}, {count, Culture, <<"personal">>, Gender, {'N'}}, St)
                 end,
-        ?assertEqual(3 * 100 * 100 * 6, Count(vile, female)),
-        ?assertEqual(60 * 16 + 71 + 60 * 8 + 48 * 8, Count(doughty, male)),
-        ?assertEqual(Count(fantastic, male) + Count(fantastic, female),
-                     Count(fantastic, {'_'})),
-        ?assertEqual(Count(fantastic, {'_'}), Count({'_'}, {'_'})),
+        ?assertEqual(3 * 100 * 100 * 6, Count(<<"vile">>, <<"female">>)),
+        ?assertEqual(60 * 16 + 71 + 60 * 8 + 48 * 8, Count(<<"doughty">>, <<"male">>)),
+        ?assertEqual(Count(<<"fantastic">>, <<"male">>) + Count(<<"fantastic">>, <<"female">>),
+                     Count(<<"fantastic">>, {'_'})),
+        ?assertEqual(Count(<<"fantastic">>, {'_'}), Count({'_'}, {'_'})),
         ?assertEqual(1449227, Count({'_'}, {'_'})),
-        ?assertEqual(0, Count(dragon, male)),
+        ?assertEqual(0, Count(<<"dragon">>, <<"male">>)),
         %% An unbound culture comes back as the pool's own culture, once per
         %% pool, in pool order.
-        ?assertEqual([goblin, orc, ogre, primitive, dwarf, dwarf, gnome, halfling,
-                      elf, faerie],
-                     solutions({'C'}, {select, {'C'}, personal, male, {'_'}, {'_'}}, St))
+        ?assertEqual([<<"goblin">>, <<"orc">>, <<"ogre">>, <<"primitive">>, <<"dwarf">>,
+                      <<"dwarf">>, <<"gnome">>, <<"halfling">>, <<"elf">>, <<"faerie">>],
+                     solutions({'C'}, {select, {'C'}, <<"personal">>, <<"male">>, {'_'}, {'_'}}, St))
     end).
 
 draw_test() ->
@@ -138,15 +138,15 @@ draw_test() ->
                                               proof_ctx(), Goal),
                            maps:get(Var, Bindings)
                    end,
-            Halfling = Draw({draw, halfling, personal, male, salt, {'N'}}, 'N'),
+            Halfling = Draw({draw, <<"halfling">>, <<"personal">>, <<"male">>, salt, {'N'}}, 'N'),
             ?assert(is_binary(Halfling)),
             ?assert(lists:member(Halfling, halfling_males(St))),
             ?assertEqual(Halfling,
-                         Draw({draw, halfling, personal, male, salt, {'N'}}, 'N')),
+                         Draw({draw, <<"halfling">>, <<"personal">>, <<"male">>, salt, {'N'}}, 'N')),
             ?assertEqual([Halfling, Halfling],
                          Draw({findall, {'N'},
-                               {';', {draw, halfling, personal, male, salt, {'N'}},
-                                {draw, halfling, personal, male, salt, {'N'}}},
+                               {';', {draw, <<"halfling">>, <<"personal">>, <<"male">>, salt, {'N'}},
+                                {draw, <<"halfling">>, <<"personal">>, <<"male">>, salt, {'N'}}},
                                {'L'}}, 'L')),
             Any = Draw({draw, salt, {'N'}}, 'N'),
             ?assert(is_binary(Any)),
@@ -154,16 +154,16 @@ draw_test() ->
             ?assertEqual(Any, Draw({draw, salt, {'N'}}, 'N')),
             lists:foreach(
               fun(Salt) ->
-                      Elf = Draw({draw, elf, personal, female, Salt, {'N'}}, 'N'),
-                      ?assert(lists:member({elf, personal, female},
+                      Elf = Draw({draw, <<"elf">>, <<"personal">>, <<"female">>, Salt, {'N'}}, 'N'),
+                      ?assert(lists:member({<<"elf">>, <<"personal">>, <<"female">>},
                                            selections(Elf, St)), Elf)
               end, [a, b, c]),
             ?assertEqual(fail, quod_ct:session_prove(
                                  Committed, {origin, test}, proof_ctx(),
-                                 {draw, dragon, personal, male, salt, {'N'}}))
+                                 {draw, <<"dragon">>, <<"personal">>, <<"male">>, salt, {'N'}}))
         end),
         %% Outside a proof nothing is drawn.
-        fails({draw, halfling, personal, male, salt, {'N'}}, St),
+        fails({draw, <<"halfling">>, <<"personal">>, <<"male">>, salt, {'N'}}, St),
         fails({draw, salt, {'N'}}, St)
     end).
 
@@ -175,17 +175,17 @@ policy_test() ->
                                erlog_int:prove_goal(
                                  {can_invoke, Goal, anyone, [], ns}, St))
           end,
-          [{name, {'N'}, orc, personal, male}, {name, <<"Ugbash">>, {'C'}, {'K'}, {'G'}},
+          [{name, {'N'}, <<"orc">>, <<"personal">>, <<"male">>}, {name, <<"Ugbash">>, {'C'}, {'K'}, {'G'}},
            {count, {'_'}, {'_'}, {'_'}, {'N'}},
-           {name_nth, elf, personal, female, 3, {'N'}},
-           {draw, orc, personal, male, salt, {'N'}}, {draw, salt, {'N'}}]),
+           {name_nth, <<"elf">>, <<"personal">>, <<"female">>, 3, {'N'}},
+           {draw, <<"orc">>, <<"personal">>, <<"male">>, salt, {'N'}}, {draw, salt, {'N'}}]),
         fails({can_invoke, {assertz, {elements, <<"zz">>, [<<"zzz">>]}}, anyone, [], ns}, St),
-        fails({can_invoke, {',', {name, {'N'}, orc, personal, male},
+        fails({can_invoke, {',', {name, {'N'}, <<"orc">>, <<"personal">>, <<"male">>},
                             {assertz, {elements, <<"zz">>, [<<"zzz">>]}}}, anyone, [], ns}, St),
-        fails({can_invoke, {assertz, {pool, x, personal, male, listed}}, {node, stranger}, [], ns}, St),
+        fails({can_invoke, {assertz, {pool, <<"x">>, <<"personal">>, <<"male">>, listed}}, {node, stranger}, [], ns}, St),
         ?assertMatch({succeed, _},
                      erlog_int:prove_goal(
-                       {can_invoke, {assertz, {pool, x, personal, male, listed}}, {node, k}, [], ns}, St))
+                       {can_invoke, {assertz, {pool, <<"x">>, <<"personal">>, <<"male">>, listed}}, {node, k}, [], ns}, St))
     end).
 
 %% The genesis of this source must fit what a node that never saw it can
@@ -208,7 +208,7 @@ vocabulary_fits_the_genesis_budget_test() ->
 %% --- helpers ---------------------------------------------------------------
 
 halfling_males(St) ->
-    solutions({'N'}, {name, {'N'}, halfling, personal, male}, St).
+    solutions({'N'}, {name, {'N'}, <<"halfling">>, <<"personal">>, <<"male">>}, St).
 
 %% Every (culture, kind, gender) selection a name belongs to, one per pool.
 selections(Name, St) ->

@@ -420,19 +420,26 @@ decode_entry(Bytes, SymbolMode)
 decode_entry(_, _SymbolMode) ->
     {error, bad_entry}.
 
-entry_envelope(Bytes, Mode) when is_binary(Bytes),
-                                byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-          quod_safe_term:decode(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
-        {ok, {ok, {quod_entry, 1, I, BlockBytes, CertWire}}}
-          when is_integer(I), I >= 1, (is_binary(BlockBytes) orelse BlockBytes =:= none) ->
+entry_envelope(Bytes, Mode) ->
+    case entry_wire(Bytes) of
+        {ok, I, BlockBytes, CertWire} ->
             case decode_cert_wire(CertWire, Mode) of
                 {ok, Cert} -> {ok, I, BlockBytes, Cert};
                 error -> error
             end;
+        error -> error
+    end.
+
+entry_wire(Bytes) when is_binary(Bytes),
+                       byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+          quod_safe_term:decode(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
+        {ok, {ok, {quod_entry, 1, I, BlockBytes, CertWire}}}
+          when is_integer(I), I >= 1, (is_binary(BlockBytes) orelse BlockBytes =:= none) ->
+            {ok, I, BlockBytes, CertWire};
         _ -> error
     end;
-entry_envelope(_, _) -> error.
+entry_wire(_) -> error.
 
 -doc "Select one exact item from checked history or canonical bytes; never mint a partial full-entry artifact.".
 -spec select_entry(binary() | entry_artifact() | selected_entry(), term(), materialized | wrapped) ->
@@ -523,10 +530,15 @@ entry_hash(none) -> none.
 -spec selected_record(selected_entry()) -> term().
 selected_record(#selected_entry{record = Record}) -> Record.
 
--doc "Read the checked index of a full artifact or point selection.".
--spec entry_index(entry_artifact() | selected_entry()) -> pos_integer().
+-doc "Read an artifact's index, or only the canonical outer index of untrusted transport bytes; the latter grants no decoding or append authority.".
+-spec entry_index(entry_artifact() | selected_entry() | binary()) -> pos_integer().
 entry_index(#canonical_entry{view = #entry{index = I}}) -> I;
-entry_index(#selected_entry{index = I}) -> I.
+entry_index(#selected_entry{index = I}) -> I;
+entry_index(Bytes) when is_binary(Bytes) ->
+    case entry_wire(Bytes) of
+        {ok, I, _, _} -> I;
+        error -> error(bad_entry)
+    end.
 
 -doc "Bind an exact unique record to its full block hash, certificate and item count, without asserting finality.".
 -spec record_commitment(entry_artifact() | selected_entry(), term()) ->

@@ -307,7 +307,7 @@ pending_application_joins_owner(Result) ->
           identity => Signer, outcome_backend => memory}),
         unlink(Prolog),
         try
-            {ok, [Genesis]} = quod_ledger_store:read_range(Store, 1, 1),
+            {ok, [Genesis]} = quod_ledger_store:read_range(Store, 1, 1, all),
             ok = quod_prolog:apply_entry(Ns, Genesis, replay),
             ok = quod_prolog:mark_ready(Ns),
             ?assertEqual(1, quod_prolog:applied(Ns)),

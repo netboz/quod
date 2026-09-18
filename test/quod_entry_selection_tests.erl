@@ -2,6 +2,90 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+served_page_authenticates_at_consumption_not_on_both_ends_test() ->
+    with_served_entry(fun(Ns, Store, Entry, Bytes, _Dir) ->
+        Snapshot = quod_ledger_store:snapshot(Store),
+        {{ok, [Bytes], 2}, ServeCount} = counted(fun() ->
+            quod_catchup:serve_blocks(Ns, Snapshot, 2, 2)
+        end),
+        ?assertEqual(0, ServeCount),
+        {{ok, [Entry]}, ReceiveCount} = counted(fun() -> quod_catchup:decode_entries([Bytes], wrapped) end),
+        ?assertEqual(56, ReceiveCount),
+        {{ok, [Entry], 2}, LocalCount} = counted(fun() ->
+            {ok, Reader} = quod_ledger_store:open_ro_snapshot(Snapshot),
+            try quod_catchup:read_blocks(Reader, 2, 2)
+            after quod_ledger_store:close(Reader) end
+        end),
+        ?assertEqual(56, LocalCount),
+        ?assertEqual({error, bad_entry}, quod_ledger:encode_entry(Bytes)),
+        ?assertException(error, function_clause, quod_ledger:entry_view(Bytes)),
+        {ok, Third} = quod_ledger:new_entry(3, noop, 0, none),
+        {ok, _Advanced} = quod_ledger_store:append(Store, [Third]),
+        ?assertEqual({ok, [Bytes], 2}, quod_catchup:serve_blocks(Ns, Snapshot, 2, 3))
+    end).
+
+served_page_retains_signature_checks_at_consumption_test() ->
+    with_served_entry(fun(Ns, Store, _Entry, Bytes, Dir) ->
+        {I, Parent, [{transaction, First} | Rest], Time, Cert} = unpack(Bytes),
+        Bad = pack(I, Parent, [{transaction, bad_signature(First)} | Rest], Time, Cert),
+        %% CRC-valid altered storage is still only transport data. The server
+        %% grants no authority; its receiver must reject the invalid signature.
+        rewrite_served_frame(Ns, Store, Dir, frame(Bad)),
+        ?assertEqual({ok, [Bad], 2}, quod_catchup:serve_blocks(Ns, quod_ledger_store:snapshot(Store), 2, 2)),
+        ?assertEqual({error, bad_frame}, quod_catchup:decode_entries([Bad], wrapped)),
+        ?assertException(error, {corrupt_entry, 2, bad_entry}, quod_ledger_store:read_range(Store, 2, 2, all))
+    end).
+
+served_implicit_child_is_authenticated_by_the_receiver_test() ->
+    with_served_entry(fun(Ns, Store, _Entry, Bytes, Dir) ->
+        {I, _Parent, [{transaction, First} | Rest], Time, Cert} = unpack(Bytes),
+        {quod_entry, 1, I, BlockBytes, _} = binary_to_term(Bytes, [safe]),
+        Child = canonical({quod_block, 1, I+1, I,
+                           {batch, [{transaction, bad_signature(First)} | Rest]}, Time}),
+        Bad = canonical({quod_entry, 1, I, BlockBytes, {implicit, Cert, Child, Cert}}),
+        rewrite_served_frame(Ns, Store, Dir, frame(Bad)),
+        ?assertEqual({ok, [Bad], 2}, quod_catchup:serve_blocks(Ns, quod_ledger_store:snapshot(Store), 2, 2)),
+        ?assertEqual({error, bad_frame}, quod_catchup:decode_entries([Bad], wrapped))
+    end).
+
+served_page_frame_integrity_test_() ->
+    [{atom_to_list(Case), fun() -> with_served_entry(fun(Ns, Store, _Entry, Bytes, Dir) ->
+        BadFrame = case Case of
+            wrong_index ->
+                {quod_entry, 1, 2, B, C} = binary_to_term(Bytes, [safe]),
+                frame(canonical({quod_entry, 1, 9, B, C}));
+            bad_crc ->
+                <<Magic:32, Len:32, CRC:32, Body/binary>> = frame(Bytes),
+                <<Magic:32, Len:32, (CRC bxor 1):32, Body/binary>>;
+            truncated -> binary:part(frame(Bytes), 0, byte_size(Bytes) + 11)
+        end,
+        rewrite_served_frame(Ns, Store, Dir, BadFrame),
+        Result = quod_catchup:serve_blocks(Ns, quod_ledger_store:snapshot(Store), 2, 2),
+        case Case of
+            %% Snapshot resume rejects a shortened file before the cursor runs.
+            truncated -> ?assertEqual({error, changed}, Result);
+            _ -> ?assertMatch({error, {corrupt_entry, 2, _}}, Result)
+        end
+    end) end} || Case <- [wrong_index, bad_crc, truncated]].
+
+with_served_entry(Fun) ->
+    {{Ns, _}, _Signer, Entry, Bytes} = fixture(),
+    Dir = filename:join("/tmp", "quod-served-page-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir, wrapped),
+    {ok, Genesis} = quod_ledger:new_entry(1, noop, 0, none),
+    try
+        {ok, Store} = quod_ledger_store:append(Store0, [Genesis, Entry]),
+        Fun(Ns, Store, Entry, Bytes, Dir)
+    after quod_ledger_store:close(Store0), file:del_dir_r(Dir) end.
+
+rewrite_served_frame(Ns, Store, Dir, Frame) ->
+    {ok, First} = quod_ledger_store:read_at(Store, 1),
+    {ok, Bytes} = quod_ledger:encode_entry(First),
+    Path = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
+    ok = file:write_file(Path, <<(frame(Bytes))/binary, Frame/binary>>).
+
+frame(Bytes) -> <<16#915106B0:32, (byte_size(Bytes)):32, (erlang:crc32(Bytes)):32, Bytes/binary>>.
+
 %% Real signed two-target claims and applications, not a claim of consensus
 %% admission. Each item has its own proof/request; the one-member QC is real.
 selected_item_authenticates_seven_authorities_not_the_whole_batch_test() ->

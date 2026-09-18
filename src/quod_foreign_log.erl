@@ -744,8 +744,16 @@ with_local_view_owner(View, Fun) ->
 
 local_view_fetch(#{identity := {Ns, _Anchor}, snapshot := Snapshot} = View,
                  Ns, From, To) ->
-    with_local_view_owner(
-      View, fun() -> quod_catchup:serve_blocks(Ns, Snapshot, From, To) end);
+    with_local_view_owner(View, fun() ->
+        case quod_catchup:serve_blocks(Ns, Snapshot, From, To) of
+            {ok, Blobs, Height} ->
+                case quod_catchup:decode_entries(Blobs, wrapped) of
+                    {ok, Entries} -> {ok, Entries, Height};
+                    {error, _} = Error -> Error
+                end;
+            {error, _} = Error -> Error
+        end
+    end);
 local_view_fetch(_View, _Ns, _From, _To) ->
     {error, wrong_namespace}.
 

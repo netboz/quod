@@ -102,7 +102,7 @@ t_append_read({Dir, Ns}) ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
         ?assertEqual(3, quod_ledger_store:last(S1)),
-        {ok, [E1, E2, E3]} = quod_ledger_store:read_range(S1, 1, 3),
+        {ok, [E1, E2, E3]} = quod_ledger_store:read_range(S1, 1, 3, all),
         ?assertEqual(1, entry_index(E1)),
         ?assertEqual(2, entry_index(E2)),
         ?assertEqual(3, entry_index(E3)),
@@ -184,7 +184,7 @@ t_reopen_persists({Dir, Ns}) ->
         ok = quod_ledger_store:close(S1),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
         ?assertEqual(2, quod_ledger_store:last(S2)),
-        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2)),
+        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2, all)),
         ok = quod_ledger_store:close(S2)
     end.
 
@@ -264,7 +264,7 @@ t_open_ro_reads({Dir, Ns}) ->
         ok = quod_ledger_store:close(S1),
         {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
         ?assertEqual(3, quod_ledger_store:last(RO)),
-        ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(RO, 1, 3)),
+        ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(RO, 1, 3, all)),
         ?assertMatch({ok, #entry{index = 2}}, read_view(quod_ledger_store:read_at(RO, 2))),
         ok = quod_ledger_store:close(RO),
         ?assertEqual({error, no_log}, quod_ledger_store:open_ro(<<"never:opened">>, Dir))
@@ -353,7 +353,7 @@ t_open_ro_non_truncating({Dir, Ns}) ->
         ?assert(TornSize > ValidSize),
         {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
         ?assertEqual(2, quod_ledger_store:last(RO)),             %% reads up to the last valid entry
-        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(RO, 1, 2)),
+        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(RO, 1, 2, all)),
         ok = quod_ledger_store:close(RO),
         ?assertEqual(TornSize, filelib:file_size(LogPath)),     %% open_ro left the torn tail (SAFE)
         {ok, W} = quod_ledger_store:open(Ns, Dir),              %% the writer's open DOES trim it
@@ -374,7 +374,7 @@ t_torn_tail_recovery({Dir, Ns}) ->
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
         ?assertEqual(3, quod_ledger_store:last(S2)),
-        ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(S2, 1, 3)),
+        ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(S2, 1, 3, all)),
         ok = quod_ledger_store:close(S2)
     end.
 
@@ -393,7 +393,7 @@ t_torn_tail_bad_crc_trims({Dir, Ns}) ->
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
         ?assertEqual(2, quod_ledger_store:last(S2)),  %% frame 3 trimmed, 1 & 2 kept
-        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2)),
+        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2, all)),
         ok = quod_ledger_store:close(S2)
     end.
 
@@ -473,7 +473,7 @@ t_checkpointed_reads({Dir, Ns}) ->
         ?assertEqual(data(256), entry_data(E256)),
         {ok, E257} = quod_ledger_store:read_at(S1, 257),   %% exactly on a checkpoint (0 hops)
         ?assertEqual(data(257), entry_data(E257)),
-        {ok, Es} = quod_ledger_store:read_range(S1, 250, 520),   %% one run across two boundaries
+        {ok, Es} = quod_ledger_store:read_range(S1, 250, 520, all),   %% one run across two boundaries
         ?assertEqual(lists:seq(250, 520), [entry_index(E) || E <- Es]),
         Sum = quod_ledger_store:fold(S1, 1, N, fun(E, Acc) -> Acc + entry_index(E) end, 0),
         ?assertEqual(N * (N + 1) div 2, Sum),
@@ -507,11 +507,11 @@ t_trim_across_checkpoints({Dir, Ns}) ->
         ?assertEqual(300, quod_ledger_store:last(S2)),
         ?assertMatch({ok, #entry{index = 256}}, read_view(quod_ledger_store:read_at(S2, 256))),   %% word 0, max hops
         ?assertMatch({ok, #entry{index = 257}}, read_view(quod_ledger_store:read_at(S2, 257))),   %% word 1, 0 hops
-        {ok, Run} = quod_ledger_store:read_range(S2, 250, 300),                        %% crosses the boundary
+        {ok, Run} = quod_ledger_store:read_range(S2, 250, 300, all),                        %% crosses the boundary
         ?assertEqual(lists:seq(250, 300), [entry_index(E) || E <- Run]),
         {ok, S3} = quod_ledger_store:append(S2, [ent(I) || I <- lists:seq(301, 600)]), %% resumes; cps at 513
         ?assertMatch({ok, #entry{index = 513}}, read_view(quod_ledger_store:read_at(S3, 513))),
-        {ok, Run2} = quod_ledger_store:read_range(S3, 500, 520),
+        {ok, Run2} = quod_ledger_store:read_range(S3, 500, 520, all),
         ?assertEqual(lists:seq(500, 520), [entry_index(E) || E <- Run2]),
         ok = quod_ledger_store:close(S3)
     end.
@@ -565,7 +565,7 @@ t_huge_len_tail_trimmed({Dir, Ns}) ->
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
         ?assertEqual(2, quod_ledger_store:last(S2)),
-        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2)),
+        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2, all)),
         ok = quod_ledger_store:close(S2)
     end.
 

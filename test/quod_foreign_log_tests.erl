@@ -2892,7 +2892,9 @@ byte_large_verified_cache_reopens_through_canonical_pages_test() ->
     Fetch =
         fun(_RoutePeer, _RouteEndpoint, RequestedNs, From, To)
               when RequestedNs =:= Ns ->
-                quod_catchup:serve_blocks(Ns, Snapshot, From, To);
+                {ok, Blobs, Height} = quod_catchup:serve_blocks(Ns, Snapshot, From, To),
+                {ok, Entries} = quod_catchup:decode_entries(Blobs, wrapped),
+                {ok, Entries, Height};
            (_RoutePeer, _RouteEndpoint, _RequestedNs, _From, _To) ->
                 {error, wrong_namespace}
         end,

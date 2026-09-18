@@ -60,7 +60,7 @@ index to the next worker through an immutable session.
          snapshot/1, resume/1,
          open_ro_snapshot/1, close/1,
          namespace/1,
-         append/2, read_at/2, read_at/3, read_range/3, fold/5, last/1]).
+         append/2, read_at/2, read_at/3, read_range/4, fold/5, last/1]).
 -export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
 -export_type([handle/0, session/0]).
@@ -348,15 +348,22 @@ read_at(S = #store{ns = Ns, log_fd = Fd, symbol_mode = Mode}, Index, Selection) 
       end).
 
 -doc """
-Read entries `From..To` (clamped to the live tail), in index order — one checkpoint
-seek, then a sequential streamed read. Each entry is CRC- and index-verified; a
-mismatch raises `{corrupt_entry, Index, Why}` rather than ever returning a wrong block.
+Read entries or opaque transport bytes `From..To` (clamped to the captured tail)
+in index order, through one checkpoint seek and sequential streamed cursor.
+Both representations check CRC and index; mismatches raise
+`{corrupt_entry, Index, Why}`. Opaque bytes still require full decoding and
+verification at consumption; they are never entry artifacts or append authority.
 """.
--spec read_range(handle(), pos_integer(), log_index()) -> {ok, [quod_ledger:entry_artifact()]}.
-read_range(S = #store{last_index = LI}, From, To0) ->
+-spec read_range(handle(), pos_integer(), log_index(), all | bytes) ->
+          {ok, [quod_ledger:entry_artifact()] | [binary()]}.
+read_range(S = #store{last_index = LI, log_fd = Fd, symbol_mode = Mode}, From, To0, Form)
+  when Form =:= all; Form =:= bytes ->
     case min(To0, LI) of
         To when From > To -> {ok, []};
-        To -> {ok, lists:reverse(fold(S, From, To, fun(E, Acc) -> [E | Acc] end, []))}
+        To ->
+            Representation = case Form of all -> {Mode, all}; bytes -> bytes end,
+            {ok, lists:reverse(fold_run(Fd, {locate(S, From), <<>>}, From, To,
+                                      fun(E, Acc) -> [E | Acc] end, [], Representation))}
     end.
 
 -doc """
@@ -381,7 +388,9 @@ fold_run(Fd, Cur, I, To, Fun, Acc, SymbolMode) ->
         {frame, Payload, Cur1} ->
             case materialize_entry(Payload, SymbolMode) of
                 {ok, E} ->
-                    case quod_ledger:entry_index(E) of
+                    Index = try quod_ledger:entry_index(E)
+                            catch error:Reason -> error({corrupt_entry, I, Reason}) end,
+                    case Index of
                         I ->
                             fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc),
                                      SymbolMode);
@@ -394,6 +403,7 @@ fold_run(Fd, Cur, I, To, Fun, Acc, SymbolMode) ->
         {stop, Why, At} -> error({corrupt_entry, I, {Why, At}})
     end.
 
+materialize_entry(Bytes, bytes) -> {ok, Bytes};
 materialize_entry(Bytes, {Mode, all}) -> quod_ledger:decode_entry(Bytes, Mode);
 materialize_entry(Bytes, {Mode, Selection}) -> quod_ledger:select_entry(Bytes, Selection, Mode).
 

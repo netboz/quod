@@ -923,6 +923,14 @@ measurements and authorization are recorded in their frozen handoffs.
 
 ### Shared history and coordination
 
+History serving forwards the captured ledger's exact envelope bytes through
+the shared CRC/index-checked range cursor. Transport creates no decoded entry
+artifact and performs no transaction-signature work. The receiving verifier
+still fully decodes and authenticates every parent/implicit-child payload and
+checks finality and the historical committee before installing the suffix.
+Local reconstruction and projection consumers retain full entry reads; no
+authentication cache or second owner is introduced.
+
 Simplex is the sole local ledger/signing/phase-index mutator. Catch-up captures
 one short read-only prefix, verifies its window, and returns a delta; the owner
 checks its base, appends and installs before publication. Exact ready-prefix

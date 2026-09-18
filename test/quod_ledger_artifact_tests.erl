@@ -174,7 +174,7 @@ assert_disk_ingress_refuses(Bad, F) ->
                     (frame(Bad))/binary>>,
         ok = file:write_file(Log, Corrupt),
         ?assertException(error, {corrupt_entry, 2, bad_entry},
-                          quod_ledger_store:read_range(Store, 2, 2)),
+                          quod_ledger_store:read_range(Store, 2, 2, all)),
         ?assertException(error, {corrupt_entry, 2, bad_entry},
                           quod_ledger_store:read_at(Store, 2,
                             {application, (maps:get(transaction, F))#transaction.tx_id})),
@@ -192,7 +192,7 @@ artifact_bytes_survive_store_feed_and_sidecar_test() ->
     {ok, Store0} = quod_ledger_store:open(?NS, Dir),
     try
         {ok, Store} = quod_ledger_store:append(Store0, Entries),
-        {ok, Read} = quod_ledger_store:read_range(Store, 1, length(Entries)),
+        {ok, Read} = quod_ledger_store:read_range(Store, 1, length(Entries), all),
         ?assertEqual(Expected, [entry_bytes(quod_ledger, A) || A <- Read]),
         {ok, FileBytes} = file:read_file(filename:join([Dir, base64url(?NS), "log.0001"])),
         ?assertEqual(iolist_to_binary([frame(B) || B <- Expected]), FileBytes),

@@ -44,10 +44,14 @@ entry(Index, Data, Timestamp, Cert) ->
     Entry.
 
 entry_views({ok, Entries, Height}) ->
-    {ok, [quod_ledger:entry_view(E) || E <- Entries], Height};
+    {ok, [quod_ledger:entry_view(materialized(E)) || E <- Entries], Height};
 entry_views({ok, Entries}) ->
     {ok, [quod_ledger:entry_view(E) || E <- Entries]};
 entry_views(Error) -> Error.
+
+materialized(Bytes) when is_binary(Bytes) ->
+    {ok, Entry} = quod_ledger:decode_entry(Bytes), Entry;
+materialized(Entry) -> Entry.
 
 serve_blocks_test_() ->
     {setup, fun setup/0, fun cleanup/1,
@@ -89,11 +93,7 @@ byte_cap_test() ->
         {ok, Served, 8} = quod_catchup:serve_blocks(Ns, Snapshot, 1, 1000),
         ?assert(length(Served) >= 1),      %% always makes progress
         ?assert(length(Served) < 8),       %% but byte-capped below the full window
-        Bytes = lists:sum(
-                  [begin
-                       {ok, Blob} = quod_ledger:encode_entry(E),
-                       byte_size(Blob)
-                   end || E <- Served]),
+        Bytes = lists:sum([byte_size(Blob) || Blob <- Served]),
         ?assert(Bytes < 1024 * 1024)       %% the served entries fit under quod_link's 1 MiB frame cap
     after
         _ = file:del_dir_r(Dir)
@@ -111,7 +111,7 @@ count_cap_serves_a_contiguous_prefix_test() ->
         {ok, Page, Height} = quod_catchup:serve_blocks(
                               Ns, quod_ledger_store:snapshot(Store), 1, Height),
         ?assertEqual(lists:seq(1, ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-                     [(quod_ledger:entry_view(E))#entry.index || E <- Page])
+                     [quod_ledger:entry_index(E) || E <- Page])
     after
         quod_ledger_store:close(Store0),
         _ = file:del_dir_r(Dir)

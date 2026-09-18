@@ -261,12 +261,14 @@ page_stats(_Malformed, _Count, _Bytes) ->
     {error, malformed_page}.
 
 -doc """
-Read the committed artifact range `[From, To]` (capped to `?MAX_BLOCKS` and the readable height) from a
-READ-ONLY store view. Returns the entries + the snapshot's captured committed height. Used by the server
-worker; pure w.r.t. the gen_server (opens/closes its own handle).
+Read the exact stored envelope bytes `[From, To]` (bounded by count, bytes and
+the captured committed height) through a read-only store view. CRC and outer
+index checks protect transport integrity, not transaction authority. The
+consumer must still decode and verify every entry before using its contents.
+The existing server worker opens/closes its own handle; no owner is blocked.
 """.
 -spec serve_blocks(binary(), quod_ledger_store:session(), non_neg_integer(), log_index()) ->
-        {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
+          {ok, [binary()], log_index()} | {error, term()}.
 serve_blocks(Ns, Snapshot, From, To) ->
     StartedNative = erlang:monotonic_time(),
     Result = serve_blocks_measured(Ns, Snapshot, From, To),
@@ -281,25 +283,29 @@ serve_blocks_measured(Ns, Snapshot, From, To) ->
         {ok, Store}    ->
             try
                 case quod_ledger_store:namespace(Store) of
-                    Ns -> read_blocks(Store, From, To);
+                    Ns -> read_blocks(Store, From, To, bytes);
                     _ -> {error, wrong_namespace}
                 end
             after quod_ledger_store:close(Store)
             end
     end.
 
-%% Cold cache recovery already owns an opened store. It uses this same bounded
-%% page reader directly, not a new open (and index scan) for each replay page.
+%% Cold cache recovery and projection actually consume entries, whereas the
+%% server forwards opaque envelopes. Both use one bounded CRC/index reader;
+%% transport never authenticates payloads merely to extract their same bytes.
 -spec read_blocks(quod_ledger_store:handle(), non_neg_integer(), log_index()) ->
           {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
 read_blocks(Store, From0, To) ->
+    read_blocks(Store, From0, To, all).
+
+read_blocks(Store, From0, To, Form) ->
     From = max(1, From0),
     try
         LastI = quod_ledger_store:last(Store),
         To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
         {ok, Es} = measure_serve_stage(
                      serve_range_read,
-                     fun() -> quod_ledger_store:read_range(Store, From, To1) end),
+                     fun() -> quod_ledger_store:read_range(Store, From, To1, Form) end),
         {ok, cap_bytes(Es, 0), LastI}
     catch _:R -> {error, R}
     end.
@@ -339,7 +345,10 @@ serve_stage_result({error, _}) -> failed.
 %% invariant, so no separate chunking protocol exists.
 cap_bytes([], _Acc) -> [];
 cap_bytes([E | Rest], Acc) ->
-    {ok, EntryBytes} = quod_ledger:encode_entry(E),
+    EntryBytes = case E of
+        Bytes when is_binary(Bytes) -> Bytes;
+        _ -> {ok, Bytes} = quod_ledger:encode_entry(E), Bytes
+    end,
     Acc1 = Acc + byte_size(EntryBytes),
     case Acc =:= 0 orelse Acc1 =< ?RESP_BUDGET of
         true  -> [E | cap_bytes(Rest, Acc1)];
@@ -889,13 +898,7 @@ spawn_reader(Ns, Op, From, To, Deadline, Row, S) ->
                 reader_gate(before_read, Gate, Op),
                 Result = try
                     case serve_hosted_blocks(Ns, From, To, Deadline, Owner, Op) of
-                        {ok, Entries, Height} ->
-                            {ok, Blobs} = measure_serve_stage(serve_encode,
-                              fun() ->
-                                  {ok, [begin {ok, Blob} = quod_ledger:encode_entry(E), Blob end
-                                        || E <- Entries]}
-                              end),
-                            {ok, Blobs, Height};
+                        {ok, _Blobs, _Height} = Page -> Page;
                         {error, _} -> {error, not_ready}
                     end
                 catch _:_ -> {error, server_error}

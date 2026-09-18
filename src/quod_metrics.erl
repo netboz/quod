@@ -1267,7 +1267,6 @@ foreign_history_stage(serve_snapshot_resume) ->
     {ok, <<"serve_snapshot_resume">>};
 foreign_history_stage(serve_range_read) ->
     {ok, <<"serve_range_read">>};
-foreign_history_stage(serve_encode) -> {ok, <<"serve_encode">>};
 foreign_history_stage(_) -> error.
 
 -doc "Observe one exact route demand completed by the ordinary directory availability edge.".

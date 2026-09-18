@@ -634,7 +634,7 @@ history_replay_baseline_probe() ->
      || M <- [quod_catchup, quod_ledger_store]],
     MFAs = [{{quod_catchup, verify_forward, 5}, [local]},
             {{quod_catchup, verify_forward, 6}, [local]},
-            {{quod_ledger_store, read_range, 3}, []}],
+            {{quod_ledger_store, read_range, 4}, []}],
     lists:foreach(fun({MFA, Flags}) ->
         1 = erlang:trace_pattern(MFA, true, Flags)
     end, MFAs),
@@ -709,7 +709,7 @@ history_replay_baseline_case(Height, Kind) ->
 
 history_probe_trace(Worker, Barrier, Height, Counts) ->
     receive
-        {trace, Worker, call, {quod_ledger_store, read_range, [_Store, From, To]}} ->
+        {trace, Worker, call, {quod_ledger_store, read_range, [_Store, From, To, _Form]}} ->
             N = max(0, min(To, Height) - From + 1),
             history_probe_trace(Worker, Barrier, Height,
                 maps:update_with(prefix_entries_read, fun(V) -> V + N end, Counts));
@@ -851,7 +851,7 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
             ?assertEqual(3, maps:get(slot, View3)),
             {3, DurableStore} = quod_simplex:test_committed_store(get(StateKey)),
             ?assertEqual({ok, [G, B2, B3]},
-                         quod_ledger_store:read_range(DurableStore, 1, 3)),
+                         quod_ledger_store:read_range(DurableStore, 1, 3, all)),
             %% The earlier writer acknowledgement remains a bounded prefix.
             {ok, Reader} = quod_ledger_store:open_ro_snapshot(maps:get(snapshot, View2)),
             try ?assertEqual(not_found, quod_ledger_store:read_at(Reader, 3))
@@ -888,7 +888,7 @@ catch_up_overtaken_same_group_window_cannot_reinstall_old_state_test() ->
         ?assertEqual(Installed, get(StateKey)),
         ?assertEqual(IndexStats, quod_dtx_phase_index:stats(Index)),
         {3, Store} = quod_simplex:test_committed_store(Installed),
-        ?assertEqual({ok, maps:get(chain, F)}, quod_ledger_store:read_range(Store, 1, 3))
+        ?assertEqual({ok, maps:get(chain, F)}, quod_ledger_store:read_range(Store, 1, 3, all))
     end).
 
 catch_up_failed_append_leaves_retained_index_unchanged_test() ->

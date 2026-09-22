@@ -14,6 +14,7 @@
          cohosted_draw_labels_an_agent/1,
          remote_draw_from_non_hosting_node/1,
          public_queries_open_mutation_refused/1,
+         creator_narrows_the_policy/1,
          backtracking_cut_and_savepoint/1,
          restart_recovery/1,
          cold_peer_joins_quod_names/1,
@@ -31,6 +32,7 @@ all() -> [remote_completion_of_deep_proof,
           cohosted_draw_labels_an_agent,
           remote_draw_from_non_hosting_node,
           public_queries_open_mutation_refused,
+          creator_narrows_the_policy,
           backtracking_cut_and_savepoint,
           restart_recovery,
           cold_peer_joins_quod_names,
@@ -119,9 +121,15 @@ cohosted_draw_labels_an_agent(Config) ->
                  {assertz, {attribute, other, display_name, {'N'}}}}),
     ?assertNotEqual([], classes(Target, ?NAMES_NS, Other)),
     ?assertEqual(Before, count(Target, ?NAMES_NS)),
+    %% quod:names has an attribute/3 of its own now, the class view over its
+    %% pools, so what matters is that the agent's label did not leak into it.
     ?assertMatch({fail, _},
                  quod_ct:peer_prove(Target, ?NAMES_NS,
-                                    {attribute, {'_'}, {'_'}, {'_'}})).
+                                    {attribute, me, display_name, {'_'}})),
+    ?assertMatch({ok, [#{'S' := Size}], _} when is_integer(Size),
+                 quod_ct:peer_prove(
+                   Target, ?NAMES_NS,
+                   {attribute, {pool, <<"orc">>, <<"personal">>, <<"male">>}, size, {'S'}})).
 
 %% The asker hosts nothing of quod:names; its draws travel to the target and
 %% are answered by the real scope there, with the asker's proof identity.
@@ -193,6 +201,101 @@ public_queries_open_mutation_refused(Config) ->
                    Asker, ?ASKER_NS,
                    {'::', ?NAMES, {name_nth, <<"orc">>, <<"personal">>, <<"male">>, 0, {'N'}}})).
 
+%% After founding, the creator narrows the policy with one ordinary write:
+%% the creating node alone changes the tables, other ontologies read them
+%% through their own proofs, and the naming questions stay open to anyone.
+creator_narrows_the_policy(Config) ->
+    Target = ?config(target, Config),
+    Asker = ?config(asker, Config),
+    TargetPub = ?config(target_pub, Config),
+    Before = count(Target, ?NAMES_NS),
+    {ok, _, _} = execute(Target, ?NAMES_NS, creator_policy(TargetPub)),
+    %% The admitted-node clause is gone; the policy is the creator's.
+    ?assert(failed(quod_ct:peer_prove(
+                     Target, ?NAMES_NS,
+                     {clause, {can_invoke, {'_'}, {node, {'K'}}, {'_'}, {'_'}},
+                      {peer_admitted, {'K'}, {'_'}, {'_'}, {'K'}}}))),
+    Policy = fun(Goal, Principal, Chain) ->
+                     quod_ct:peer_prove(
+                       Target, ?NAMES_NS,
+                       {can_invoke, Goal, Principal, Chain, ?NAMES_NS})
+             end,
+    Write = {assertz, {elements, <<"zz">>, [<<"zzz">>]}},
+    {OtherPub, _} = quod_identity:generate(),
+    %% Every caller that is not this host arrives with its origin ahead of it
+    %% (a non-empty call chain). Writing there is the creator's alone.
+    ?assertMatch({ok, _, _}, Policy(Write, {node, TargetPub}, [?ASKER_NS])),
+    ?assert(failed(Policy(Write, {node, OtherPub}, [?ASKER_NS]))),
+    ?assert(failed(Policy(Write, anonymous, [?ASKER_NS]))),
+    %% Reading the tables is open to them; before this write it was not.
+    Table = {pool, <<"orc">>, <<"personal">>, <<"male">>, {'_'}},
+    ?assertMatch({ok, _, _}, Policy(Table, anonymous, [?ASKER_NS])),
+    ?assertMatch({ok, _, _}, Policy({isa, <<"orc">>, {'_'}}, anonymous, [?ASKER_NS])),
+    %% The naming questions stay open to anyone, as before.
+    ?assertMatch({ok, _, _}, Policy({draw, s, {'_'}}, anonymous, [?ASKER_NS])),
+    ?assertMatch({ok, _, _},
+                 Policy({count, {'_'}, {'_'}, {'_'}, {'_'}}, anonymous, [?ASKER_NS])),
+    %% An empty chain is this host's own top-level proof, which founding
+    %% admits unconditionally in every ontology (quod_simplex host entry).
+    %% This write does not touch that, so it stays true of quod:names too.
+    ?assertMatch({ok, _, _}, Policy(Write, {node, TargetPub}, [])),
+    ?assertMatch({ok, _, _}, Policy(Write, anonymous, [])),
+    %% Another ontology reads the tables and draws; it still cannot write.
+    %% The orc male pool is a recipe; its tag reaches the asker as a symbol,
+    %% since the asker's own vocabulary has no such atom.
+    ?assertMatch({ok, [#{'S' := {{'$quod_symbol', <<"recipe">>}, _}}], _},
+                 quod_ct:peer_prove(
+                   Asker, ?ASKER_NS,
+                   {'::', ?NAMES, {pool, <<"orc">>, <<"personal">>, <<"male">>, {'S'}}})),
+    ?assertMatch({ok, [#{'W' := <<"vile">>}], _},
+                 quod_ct:peer_prove(
+                   Asker, ?ASKER_NS, {'::', ?NAMES, {isa, <<"orc">>, {'W'}}})),
+    ?assertMatch({ok, [#{'N' := Name}], _} when is_binary(Name),
+                 quod_ct:peer_prove(Asker, ?ASKER_NS, {remote_label, policy, {'N'}})),
+    ?assertNotMatch({ok, _, _},
+                    quod_ct:peer_prove(Asker, ?ASKER_NS, {'::', ?NAMES, Write})),
+    %% The creator writes: a private table joins the public ones.
+    {ok, _, _} = execute(Target, ?NAMES_NS,
+                         {',', {assertz, {isa, <<"testfolk">>, <<"thing">>}},
+                          {',', {assertz, {pool, <<"testfolk">>, <<"personal">>, <<"any">>, listed}},
+                           {assertz, {listed, <<"testfolk">>, <<"personal">>, <<"any">>,
+                                      [<<"Ada">>, <<"Bo">>, <<"Cy">>]}}}}),
+    ?assertEqual(Before + 3, count(Target, ?NAMES_NS)),
+    ?assertMatch({ok, [#{'N' := <<"Bo">>}], _},
+                 quod_ct:peer_prove(
+                   Asker, ?ASKER_NS,
+                   {'::', ?NAMES, {name_nth, <<"testfolk">>, <<"personal">>, <<"any">>, 1, {'N'}}})),
+    %% and takes it away again: the tables the other cases see are the ones
+    %% the ontology was founded with.
+    {ok, _, _} = execute(Target, ?NAMES_NS,
+                         {',', {retract, {isa, <<"testfolk">>, <<"thing">>}},
+                          {',', {retract, {pool, <<"testfolk">>, <<"personal">>, <<"any">>, listed}},
+                           {retract, {listed, <<"testfolk">>, <<"personal">>, <<"any">>, {'_'}}}}}),
+    ?assertEqual(Before, count(Target, ?NAMES_NS)),
+    ?assertMatch({fail, _},
+                 quod_ct:peer_prove(
+                   Target, ?NAMES_NS,
+                   {pool, <<"testfolk">>, {'_'}, {'_'}, {'_'}})).
+
+failed(fail) -> true;
+failed({fail, _Reasons}) -> true;
+failed(_) -> false.
+
+%% The one write the creator submits after founding, on the live fleet as
+%% here (see the handoff runbook).
+creator_policy(CreatorKey) ->
+    {',', {assertz, {creator, {node, CreatorKey}}},
+     {',', {assertz, {':-', {can_invoke, {'_'}, {'P'}, {'_'}, {'_'}},
+                      {creator, {'P'}}}},
+      {',', {assertz, {':-', {can_invoke, {'G'}, {'_'}, [{'_'} | {'_'}], {'_'}},
+                       {table_query, {'G'}}}},
+       {',', {assertz, {table_query, {isa, {'_'}, {'_'}}}},
+        {',', {assertz, {table_query, {pool, {'_'}, {'_'}, {'_'}, {'_'}}}},
+         {',', {assertz, {table_query, {listed, {'_'}, {'_'}, {'_'}, {'_'}}}},
+          {',', {assertz, {table_query, {elements, {'_'}, {'_'}}}},
+           {retract, {':-', {can_invoke, {'_'}, {node, {'K'}}, {'_'}, {'_'}},
+                      {peer_admitted, {'K'}, {'_'}, {'_'}, {'K'}}}}}}}}}}}.
+
 %% Backtracking re-asks and re-hears the same answer; a cut keeps it; a
 %% rolled-back candidate that drew changes nothing for the draw after it.
 backtracking_cut_and_savepoint(Config) ->
@@ -260,8 +363,25 @@ cold_peer_joins_quod_names(Config) ->
                 ?config(priv_dir, Config),
                 unicode:characters_to_list(
                   [atom_to_list(peer:call(Asker, erlang, node, [])), "_join_", ?NAMES_NS])),
-    Cfg = #{node_id => AskerPub, mode => join, genesis_hash => Anchor,
-            data_dir => DataDir, seed_peers => [TargetAddr]},
+    %% The directory is one an earlier join attempt left behind: that joiner
+    %% pinned another anchor, refused every page the target served and was
+    %% stopped with its ledger still empty. The recreated ontology joins
+    %% into the same directory.
+    StaleCfg = #{node_id => AskerPub, mode => join,
+                 genesis_hash => crypto:strong_rand_bytes(32),
+                 data_dir => DataDir, seed_peers => [TargetAddr]},
+    {ok, _} = peer:call(Asker, quod_ns_sup, start_namespace, [?NAMES_NS, StaleCfg]),
+    %% Starting is what shapes the directory: the empty ledger and the
+    %% signing journal bound to the wrong anchor exist before any page is
+    %% served, and no page under that pin can ever be appended.
+    ?assertMatch(#{syncing := true, slot := 0},
+                 peer:call(Asker, quod_simplex, status, [?NAMES_NS])),
+    ?assertMatch(#{slot := 0, appends := 0, submitted := 0},
+                 peer:call(Asker, quod_simplex, stats, [?NAMES_NS])),
+    ok = peer:call(Asker, quod_ns_sup, stop_namespace, [?NAMES_NS]),
+    ?assertEqual(undefined,
+                 peer:call(Asker, quod_reg, where, [{quod_prolog, ?NAMES_NS}])),
+    Cfg = StaleCfg#{genesis_hash => Anchor},
     {ok, _} = peer:call(Asker, quod_ns_sup, start_namespace, [?NAMES_NS, Cfg]),
     ok = wait_ready(Asker, ?NAMES_NS, {count, <<"halfling">>, <<"personal">>, <<"male">>, {'_'}}),
     ?assertEqual(Anchor, peer:call(Asker, quod_simplex, genesis_hash, [?NAMES_NS])),
@@ -367,9 +487,6 @@ start_namespace(Peer, Pub, Ns, Genesis, Config, DirKey) ->
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
     ok.
 
-start_root_namespace(Peer, Pub, Config) ->
-    start_root_namespace(Peer, Pub, Config, peer:call(Peer, erlang, node, [])).
-
 start_root_namespace(Peer, Pub, Config, DirKey) ->
     DataDir = filename:join(
                 ?config(priv_dir, Config),
@@ -401,6 +518,7 @@ wait_ready(Peer, Ns, Goal, Retries) ->
         {error, no_such_namespace} -> timer:sleep(20), wait_ready(Peer, Ns, Goal, Retries - 1);
         Other -> ct:fail({not_ready, Ns, Other})
     end.
+
 
 wait_restarted(_Peer, _Ns, _OldSimplex, 0) -> ct:fail(namespace_did_not_restart);
 wait_restarted(Peer, Ns, OldSimplex, Retries) ->

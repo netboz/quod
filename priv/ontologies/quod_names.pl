@@ -34,10 +34,14 @@
 %%   isa(Culture, Wider)                        culture tree, rooted at <<"thing">>
 %%   pool(Culture, Kind, Gender, Source)        a pool of names; Source is
 %%                                              recipe(Recipe) or listed
-%%   listed(Culture, Kind, Gender, Names)       the names of a listed pool
+%%   listed(Culture, Kind, Gender, Names)       names of a listed pool, in order
 %%   elements(Table, Fragments)                 the syllables of a table
 %% Tables and listed pools are one fact each with a list of binaries: a
 %% genesis is one envelope, and every repeated clause costs bytes in it.
+%% A pool grown after founding may hold SEVERAL listed facts: one ordinary
+%% write carries a bounded goal, so a pool of thousands of names arrives in
+%% chunks. The pool is their concatenation, in the order the facts were
+%% committed, and answers the same as if one fact held them all.
 %%
 %% Recipes:
 %%   element(Table)         one element of Table
@@ -63,7 +67,9 @@ naming_query(name(_, _, _, _)).
 naming_query(count(_, _, _, _)).
 naming_query(name_nth(_, _, _, _, _)).
 naming_query(draw(_, _, _, _, _)).
+naming_query(draw(_, _, _, _)).
 naming_query(draw(_, _)).
+naming_query(draw(_)).
 
 %% --- public predicates -------------------------------------------------------
 
@@ -100,18 +106,74 @@ draw(Culture, Kind, Gender, Salt, Name) :-
     proof_draw(Salt, N, I),
     name_nth(Culture, Kind, Gender, I, Name).
 
-%% draw(+Salt, -Name): one name from any pool — every pool equally likely,
-%% then every name of that pool equally likely (so small cultures are not
-%% drowned by the million cave-man names).
+%% The kinds that name a person. An unqualified draw answers with one of
+%% these, so it keeps meaning "a name for someone" as the ontology grows
+%% kinds that do not: titles, epithets, places. Ask for those by kind.
+person_kind(<<"personal">>).
+person_kind(<<"family">>).
+person_kind(<<"byname">>).
+person_kind(<<"theophoric">>).
+
+%% draw(+Salt, -Name): one name from any pool that names a person — every such
+%% pool equally likely, then every name of that pool equally likely (so small
+%% cultures are not drowned by the million cave-man names).
 draw(Salt, Name) :-
     findall(pool(Culture, Kind, Gender, Source),
-            pool(Culture, Kind, Gender, Source), Pools),
+            (pool(Culture, Kind, Gender, Source), person_kind(Kind)), Pools),
     length(Pools, Count),
     proof_draw(pool(Salt), Count, K),
     nth(K, Pools, pool(Culture, Kind, Gender, Source)),
     pool_size(Culture, Kind, Gender, Source, Size),
     proof_draw(Salt, Size, I),
     pool_nth(Culture, Kind, Gender, Source, I, Name).
+
+%% draw(-Name): one name, with nothing to say about which. The proof doing the
+%% asking is itself the entropy — proof_draw binds every draw to the proof's
+%% own identity — so no salt is needed here and no clock is ever consulted: a
+%% clock reads differently on every node, and the nodes could never agree on
+%% the answer. Asked twice inside one proof this gives the same name; the next
+%% proof draws again. Pass a salt when one proof must name several things.
+draw(Name) :- draw(0, Name).
+
+%% draw(?Culture, ?Kind, ?Gender, -Name): the same, narrowed to a selection.
+draw(Culture, Kind, Gender, Name) :- draw(Culture, Kind, Gender, 0, Name).
+
+%% --- the class view -----------------------------------------------------------
+%% The house vocabulary of doc/inter-ontology.md, derived from the relations
+%% above rather than stored beside them. The culture tree is already isa/2, so
+%% what this adds is the rest: a kind and a gender are things, a pool is the
+%% thing that a culture offers names of some kind for some gender, and its
+%% size is an attribute computed the same way count/4 computes it. A generic
+%% browser can walk all of it without knowing pool/4 or listed/4.
+
+isa(kind, thing).
+isa(gender, thing).
+isa(pool, thing).
+
+instance_of(kind, Kind) :-
+    findall(K, pool(_, K, _, _), Ks), sort(Ks, Unique), member(Kind, Unique).
+instance_of(gender, Gender) :-
+    findall(G, pool(_, _, G, _), Gs), sort(Gs, Unique), member(Gender, Unique).
+instance_of(pool, pool(Culture, Kind, Gender)) :-
+    pool(Culture, Kind, Gender, _).
+
+have_attribute(pool, culture, binary).
+have_attribute(pool, kind, binary).
+have_attribute(pool, gender, binary).
+have_attribute(pool, size, integer).
+have_attribute(culture, pool, term).
+
+attribute(pool(Culture, Kind, Gender), culture, Culture) :-
+    pool(Culture, Kind, Gender, _).
+attribute(pool(Culture, Kind, Gender), kind, Kind) :-
+    pool(Culture, Kind, Gender, _).
+attribute(pool(Culture, Kind, Gender), gender, Gender) :-
+    pool(Culture, Kind, Gender, _).
+attribute(pool(Culture, Kind, Gender), size, Size) :-
+    pool(Culture, Kind, Gender, Source),
+    pool_size(Culture, Kind, Gender, Source, Size).
+attribute(Culture, pool, pool(Culture, Kind, Gender)) :-
+    pool(Culture, Kind, Gender, _).
 
 %% --- selection ---------------------------------------------------------------
 
@@ -129,8 +191,12 @@ within(Culture, Wider) :- isa(Culture, Between), within(Between, Wider).
 
 pool_size(_, _, _, recipe(Recipe), N) :- size(Recipe, N).
 pool_size(Culture, Kind, Gender, listed, N) :-
+    findall(Size, chunk_size(Culture, Kind, Gender, Size), Sizes),
+    sum(Sizes, N).
+
+chunk_size(Culture, Kind, Gender, Size) :-
     listed(Culture, Kind, Gender, Names),
-    length(Names, N).
+    length(Names, Size).
 
 pools_nth([pool(Culture, Kind, Gender, Source) | Pools], I, Name) :-
     pool_size(Culture, Kind, Gender, Source, Size),
@@ -143,8 +209,14 @@ pool_nth(_, _, _, recipe(Recipe), I, Name) :-
     title(Lower, Codes),
     binary_codes(Name, Codes).
 pool_nth(Culture, Kind, Gender, listed, I, Name) :-
-    listed(Culture, Kind, Gender, Names),
-    nth(I, Names, Name).
+    findall(Names, listed(Culture, Kind, Gender, Names), Chunks),
+    chunk_nth(Chunks, I, Name).
+
+chunk_nth([Names | Chunks], I, Name) :-
+    length(Names, Size),
+    (   I < Size -> nth(I, Names, Name)
+    ;   J is I - Size, chunk_nth(Chunks, J, Name)
+    ).
 
 generate(recipe(Recipe), _, _, _, Name) :-
     build(Recipe, Lower, []),

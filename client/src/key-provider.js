@@ -84,17 +84,28 @@ export async function saveVerifiedLocalKeyProvider(provider, passphrase) {
   }
 }
 
+// `click()` only schedules the download; the browser fetches the blob after
+// this turn of the event loop. Revoking the object URL in the same turn — as
+// this did — cancels the fetch before it starts, and the file never reaches the
+// download manager at all: no file, no error, no entry to explain it. So the
+// link is released only once the browser has had its chance to read it, and the
+// only way out of this identity stays a file that actually lands on disk.
+const RELEASE_AFTER_MS = 60_000
+
 export async function downloadEncryptedKeyProvider(provider, passphrase, filename) {
   const encoded = await exportEncryptedKeyProvider(provider, passphrase)
   const blob = new Blob([encoded], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.hidden = true
+  document.body.append(link)
   try {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
     link.click()
   } finally {
-    URL.revokeObjectURL(url)
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), RELEASE_AFTER_MS)
   }
 }
 

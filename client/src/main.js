@@ -29,6 +29,8 @@ import {
   activeAgentReference,
   saveAgentReference,
 } from './agent-references.js'
+import { readLensView } from './lens.js'
+import { clearMarks, paintMarks } from './scene.js'
 import './style.css'
 
 const canvas = document.querySelector('#world')
@@ -44,6 +46,13 @@ const agentButton = document.querySelector('#agent')
 const signOutButton = document.querySelector('#sign-out')
 
 let identity = null
+let painted = new Map()
+
+// The one lens this client shows so far, and what it is asked about: which
+// licence this release may ship under, read from quod:lens under the viewer's
+// own signature.
+const LENS = 'work_licences'
+const WORK = 'quod'
 
 // One palette for the DOM and the scene.  Shades are scaled from the brand
 // values rather than being separate colours.
@@ -66,39 +75,27 @@ function startWorldPreview() {
     'observer',
     -Math.PI / 2.2,
     Math.PI / 2.7,
-    12,
-    new Vector3(0, 0.5, 0),
+    14,
+    new Vector3(0, 0.6, 1.6),
     scene,
   )
   camera.lowerRadiusLimit = 5
-  camera.upperRadiusLimit = 20
+  camera.upperRadiusLimit = 40
   camera.attachControl(canvas, true)
 
   const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
   light.intensity = 0.9
 
-  ground = MeshBuilder.CreateDisc('ground', { radius: 4, tessellation: 80 }, scene)
+  ground = MeshBuilder.CreateDisc('ground', { radius: 7, tessellation: 80 }, scene)
   ground.rotation.x = Math.PI / 2
   const groundMaterial = new StandardMaterial('ground-material', scene)
   groundMaterial.diffuseColor = greyBlue.scale(0.30)
   groundMaterial.emissiveColor = navy.scale(0.22)
   ground.material = groundMaterial
 
-  // Red action, gold manifested effect, green material state — the semantic
-  // triad of doc/client-world-direction.md §6.5, standing in for real entities.
-  for (const [index, color] of [
-    Color3.FromHexString(PALETTE.red),
-    Color3.FromHexString(PALETTE.gold),
-    Color3.FromHexString(PALETTE.green),
-  ].entries()) {
-    const orb = MeshBuilder.CreateSphere(`presence-${index}`, { diameter: 1.15, segments: 32 }, scene)
-    const angle = (index / 3) * Math.PI * 2 + 0.4
-    orb.position = new Vector3(Math.cos(angle) * 2.2, 0.55, Math.sin(angle) * 2.2)
-    const material = new StandardMaterial(`presence-material-${index}`, scene)
-    material.diffuseColor = color
-    material.emissiveColor = color.scale(0.18)
-    orb.material = material
-  }
+  // Nothing else is placed here. What stands on this ground comes from a lens,
+  // read under the viewer's own signature, so a signed-out browser shows an
+  // empty world rather than decoration standing in for entities.
 
   engine.runRenderLoop(() => scene.render())
   window.addEventListener('resize', () => engine.resize())
@@ -163,6 +160,7 @@ signOutButton.addEventListener('click', async () => {
       + 'Sign out anyway?',
   )) return
   signOutButton.disabled = true
+  painted = clearMarks(painted)
   try {
     await clearActiveKeyProvider()
   } catch {
@@ -252,6 +250,7 @@ agentButton.addEventListener('click', () => {
     if (instanceText === null) return
     const agent = saveAgentReference({ namespace, anchor, instanceText })
     status.textContent = `Active agent: ${agent.instanceText} in ${agent.namespace}. Open Explorer to send goals.`
+    void showWorld().then(note => { status.textContent += note })
   } catch (error) {
     status.textContent = `Could not save the agent reference: ${error.message || 'unknown error'}`
   }
@@ -284,6 +283,28 @@ async function confirmedPassphrase(promptText) {
     return null
   }
   return passphrase
+}
+
+// Read the lens and put what it answers on the ground. Applying a projection is
+// idempotent, so reading again reconciles the scene instead of adding to it. A
+// browser without WebGL still reads; only the painting is skipped.
+async function showWorld() {
+  const agent = activeAgentReference()
+  if (!identity || !agent) return ''
+  try {
+    const { marks, unmet, height } = await readLensView(identity, agent, LENS, [WORK])
+    if (!marks) {
+      painted = clearMarks(painted)
+      return unmet?.length
+        ? ` The ${LENS} lens cannot show ${WORK}: ${unmet.join('; ')}.`
+        : ` The ${LENS} lens has no answer for ${WORK}.`
+    }
+    if (scene) painted = paintMarks(scene, marks, painted)
+    return ` Showing ${marks.length} mark${marks.length === 1 ? '' : 's'}`
+      + ` of ${WORK}, read at height ${height}.`
+  } catch (error) {
+    return ` The ${LENS} lens could not be read: ${error.message || 'unknown error'}.`
+  }
 }
 
 async function authenticate(providerPromise) {
@@ -326,6 +347,7 @@ async function authenticate(providerPromise) {
     + `${activeAgentReference() ? ` Active agent: ${activeAgentReference().instanceText}.` : ' Add an agent reference before sending goals.'}`
     + identityStorageNote
     + worldPreviewNote
+  status.textContent += await showWorld()
 }
 
 // Sign in before anything is clicked when this browser already holds the

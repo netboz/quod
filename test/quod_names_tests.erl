@@ -40,6 +40,47 @@ name_nth_follows_enumeration_order_test() ->
         fails({name_nth, <<"halfling">>, <<"personal">>, <<"male">>, one, {'N'}}, St)
     end).
 
+%% A pool grown by ordinary writes arrives in chunks: several listed facts
+%% for one pool. It counts, enumerates, indexes and recognises exactly as the
+%% same names in a single fact would, and the pool ordering is the order the
+%% chunks were committed.
+chunked_pool_reads_as_one_list_test() ->
+    Chunks = <<"isa(<<\"testfolk\">>, <<\"thing\">>).\n"
+               "pool(<<\"testfolk\">>, <<\"personal\">>, <<\"any\">>, listed).\n"
+               "listed(<<\"testfolk\">>, <<\"personal\">>, <<\"any\">>, [<<\"Ada\">>, <<\"Bo\">>]).\n"
+               "listed(<<\"testfolk\">>, <<\"personal\">>, <<\"any\">>, [<<\"Cy\">>]).\n"
+               "listed(<<\"testfolk\">>, <<\"personal\">>, <<\"any\">>, [<<\"Di\">>, <<\"Ed\">>]).\n">>,
+    One = <<"isa(<<\"oldfolk\">>, <<\"thing\">>).\n"
+            "pool(<<\"oldfolk\">>, <<\"personal\">>, <<\"any\">>, listed).\n"
+            "listed(<<\"oldfolk\">>, <<\"personal\">>, <<\"any\">>, "
+            "[<<\"Ada\">>, <<\"Bo\">>, <<\"Cy\">>, <<\"Di\">>, <<\"Ed\">>]).\n">>,
+    Names = [<<"Ada">>, <<"Bo">>, <<"Cy">>, <<"Di">>, <<"Ed">>],
+    with_committed_names(<<Chunks/binary, One/binary>>, fun(_Committed, St) ->
+        lists:foreach(
+          fun(Culture) ->
+                  ?assertEqual(5, value({'N'}, {count, Culture, <<"personal">>, <<"any">>, {'N'}}, St)),
+                  ?assertEqual(Names,
+                               value({'L'}, {findall, {'N'},
+                                             {name, {'N'}, Culture, <<"personal">>, <<"any">>},
+                                             {'L'}}, St)),
+                  lists:foreach(
+                    fun({I, Name}) ->
+                            ?assertEqual(Name, value({'N'}, {name_nth, Culture, <<"personal">>,
+                                                             <<"any">>, I, {'N'}}, St))
+                    end, lists:zip(lists:seq(0, 4), Names)),
+                  fails({name_nth, Culture, <<"personal">>, <<"any">>, 5, {'N'}}, St),
+                  fails({name_nth, Culture, <<"personal">>, <<"any">>, -1, {'N'}}, St),
+                  ?assertMatch({succeed, _},
+                               erlog_int:prove_goal(
+                                 {name, <<"Cy">>, Culture, <<"personal">>, <<"any">>}, St)),
+                  fails({name, <<"Zz">>, Culture, <<"personal">>, <<"any">>}, St)
+          end, [<<"testfolk">>, <<"oldfolk">>]),
+        %% the chunks are one pool, not three
+        ?assertEqual([{<<"testfolk">>, <<"personal">>, <<"any">>},
+                      {<<"oldfolk">>, <<"personal">>, <<"any">>}],
+                     selections(<<"Cy">>, St))
+    end).
+
 recognition_test() ->
     with_names(fun(St) ->
         ?assertEqual([{<<"orc">>, <<"personal">>, <<"male">>}], selections(<<"Ugbash">>, St)),
@@ -167,6 +208,84 @@ draw_test() ->
         fails({draw, salt, {'N'}}, St)
     end).
 
+%% draw with no salt at all: the proof itself is the entropy. One proof gets
+%% one name and keeps giving that name; another proof draws again. No clock is
+%% consulted, so every node asking the same proof reaches the same answer.
+saltless_draw_test() ->
+    Run = fun(ProofId) ->
+                  with_committed_names(<<>>, fun(Committed, St) ->
+                      with_origin(ProofId, fun() ->
+                          Draw = fun(Goal, Var) ->
+                                         {ok, B} = quod_ct:session_prove(
+                                                     Committed, {origin, test},
+                                                     proof_ctx(), Goal),
+                                         maps:get(Var, B)
+                                 end,
+                          Any = Draw({draw, {'N'}}, 'N'),
+                          ?assert(is_binary(Any)),
+                          ?assertNotEqual([], selections(Any, St)),
+                          %% a bare draw names a person, never a title or an
+                          %% epithet, whatever other kinds the ontology holds
+                          ?assert(lists:all(
+                                    fun({_C, K, _G}) ->
+                                            lists:member(K, [<<"personal">>, <<"family">>,
+                                                             <<"byname">>, <<"theophoric">>])
+                                    end, selections(Any, St))),
+                          ?assertEqual(Any, Draw({draw, {'N'}}, 'N')),
+                          ?assertEqual([Any, Any],
+                                       Draw({findall, {'N'},
+                                             {';', {draw, {'N'}}, {draw, {'N'}}}, {'L'}}, 'L')),
+                          Halfling = Draw({draw, <<"halfling">>, <<"personal">>,
+                                           <<"male">>, {'N'}}, 'N'),
+                          ?assert(lists:member(Halfling, halfling_males(St))),
+                          ?assertEqual(Halfling,
+                                       Draw({draw, <<"halfling">>, <<"personal">>,
+                                             <<"male">>, {'N'}}, 'N')),
+                          %% the salted form with the same constant is the same draw
+                          ?assertEqual(Any, Draw({draw, 0, {'N'}}, 'N')),
+                          {Any, Halfling}
+                      end)
+                  end)
+          end,
+    First = Run(crypto:strong_rand_bytes(32)),
+    Others = [Run(crypto:strong_rand_bytes(32)) || _ <- lists:seq(1, 6)],
+    ?assert(lists:any(fun(Drawn) -> Drawn =/= First end, Others)),
+    %% and outside a proof it draws nothing
+    with_names(fun(St) ->
+        fails({draw, {'N'}}, St),
+        fails({draw, <<"halfling">>, <<"personal">>, <<"male">>, {'N'}}, St)
+    end).
+
+%% The class view is a projection of the pools, not a second copy of them: a
+%% browser that knows only the house vocabulary sees the same 21 pools, the
+%% same kinds and genders, and the same sizes that count/4 reports.
+class_view_test() ->
+    with_names(fun(St) ->
+        ?assertMatch({succeed, _}, erlog_int:prove_goal({isa, pool, thing}, St)),
+        ?assertEqual([<<"personal">>],
+                     solutions({'K'}, {instance_of, kind, {'K'}}, St)),
+        ?assertEqual([<<"female">>, <<"male">>],
+                     solutions({'G'}, {instance_of, gender, {'G'}}, St)),
+        Pools = solutions({'P'}, {instance_of, pool, {'P'}}, St),
+        ?assertEqual(?POOLS, length(Pools)),
+        ?assert(lists:member({pool, <<"halfling">>, <<"personal">>, <<"male">>}, Pools)),
+        %% an attribute agrees with the predicate it is derived from
+        ?assertEqual(?HALFLING_MALES,
+                     value({'S'}, {attribute, {pool, <<"halfling">>, <<"personal">>, <<"male">>},
+                                   size, {'S'}}, St)),
+        ?assertEqual(<<"halfling">>,
+                     value({'C'}, {attribute, {pool, <<"halfling">>, <<"personal">>, <<"male">>},
+                                   culture, {'C'}}, St)),
+        %% and the sizes of every pool add up to what count/4 says
+        Sizes = solutions({'S'}, {attribute, {'_'}, size, {'S'}}, St),
+        ?assertEqual(value({'N'}, {count, {'_'}, {'_'}, {'_'}, {'N'}}, St),
+                     lists:sum(Sizes)),
+        %% a culture reaches its pools
+        ?assertEqual([{pool, <<"orc">>, <<"personal">>, <<"female">>},
+                      {pool, <<"orc">>, <<"personal">>, <<"male">>}],
+                     lists:sort(solutions({'P'}, {attribute, <<"orc">>, pool, {'P'}}, St)))
+    end).
+
 policy_test() ->
     with_committed_names(<<"peer_admitted(k, h, p, k).">>, fun(_Committed, St) ->
         lists:foreach(
@@ -178,7 +297,8 @@ policy_test() ->
           [{name, {'N'}, <<"orc">>, <<"personal">>, <<"male">>}, {name, <<"Ugbash">>, {'C'}, {'K'}, {'G'}},
            {count, {'_'}, {'_'}, {'_'}, {'N'}},
            {name_nth, <<"elf">>, <<"personal">>, <<"female">>, 3, {'N'}},
-           {draw, <<"orc">>, <<"personal">>, <<"male">>, salt, {'N'}}, {draw, salt, {'N'}}]),
+           {draw, <<"orc">>, <<"personal">>, <<"male">>, salt, {'N'}}, {draw, salt, {'N'}},
+           {draw, <<"orc">>, <<"personal">>, <<"male">>, {'N'}}, {draw, {'N'}}]),
         fails({can_invoke, {assertz, {elements, <<"zz">>, [<<"zzz">>]}}, anyone, [], ns}, St),
         fails({can_invoke, {',', {name, {'N'}, <<"orc">>, <<"personal">>, <<"male">>},
                             {assertz, {elements, <<"zz">>, [<<"zzz">>]}}}, anyone, [], ns}, St),

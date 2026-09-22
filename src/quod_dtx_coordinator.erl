@@ -2332,50 +2332,33 @@ endpoint_request_candidates([Endpoint | Rest], PeerKey, Request,
                     Candidate = {ok, Response,
                                  {reply_source, remote, PeerKey,
                                   ResponseHints}},
-                    case endpoint_candidate_terminal(Request, Response) of
+                    %% A correlated application reply finishes address
+                    %% selection, even when this peer is not ready. The
+                    %% ordinary peer walk/wave handles readiness, rather than
+                    %% mistaking it for an unreachable address.
+                    case quod_dtx_endpoint:correlates(Request, Response) of
                         true -> Candidate;
                         false -> endpoint_request_candidates(
                                    Rest, PeerKey, Request, Deadline,
-                                   preferred_candidate_result(
-                                     Request, Candidate, Last),
+                                   preferred_candidate_result(Candidate, Last),
                                    RequestFun)
                     end;
                 {error, _} ->
                     endpoint_request_candidates(
                       Rest, PeerKey, Request, Deadline,
-                      preferred_candidate_result(Request, Result, Last),
+                      preferred_candidate_result(Result, Last),
                       RequestFun)
             end
     end.
 
-endpoint_candidate_terminal(Request, Response) ->
-    quod_dtx_endpoint:correlates(Request, Response) andalso
-        case Response of
-            {accepted, _, _, _} -> true;
-            {refused, _, _, _, _, _} -> true;
-            {phase, _, _, _} -> true;
-            {error, _, invalid_request} -> true;
-            _ -> false
-        end.
-
-preferred_candidate_result(_Request, Candidate, undefined) ->
+%% Only failed transport or uncorrelated replies reach this accumulator.
+%% Preserve a timeout's uncertainty over an ordinary connection failure.
+preferred_candidate_result(Candidate, undefined) ->
     Candidate;
-preferred_candidate_result(Request, Candidate, Current) ->
-    case candidate_result_rank(Request, Candidate) >
-         candidate_result_rank(Request, Current) of
-        true -> Candidate;
-        false -> Current
-    end.
-
-candidate_result_rank(Request, {ok, Response, _Source}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) of
-        true -> 3;
-        false -> 1
-    end;
-candidate_result_rank(_Request, {error, timeout}) ->
-    2;
-candidate_result_rank(_Request, _Result) ->
-    1.
+preferred_candidate_result({error, timeout} = Timeout, _Current) ->
+    Timeout;
+preferred_candidate_result(_Candidate, Current) ->
+    Current.
 
 endpoint_sources(Target) ->
     Cohosted = cohosted(Target),

@@ -956,6 +956,13 @@ keyed by the unchanged semantic record. Sibling cancellation releases transport
 resources, not durable work. Phase queries walk peers sequentially and release
 each correlation before advancing; they do not need a second fan-out mechanism.
 
+Endpoint alternatives are transport routes to the same authenticated peer.
+Any correlated application reply finishes address selection, including busy or
+not-ready. The existing peer walk/wave interprets it; unavailability never
+becomes phase absence or an abort verdict. Historical addresses remain fallback
+for failed transport or uncorrelated replies, under the same absolute deadline.
+An application-readiness dip does not cause a dial to an obsolete address.
+
 `quod_dtx_owner` is a pure registry/transition library, not an actor. Simplex
 executes its signing and publication decisions. The signing journal is the
 single pending-Vote authority; the `dtx_pending` shadow inventory is deleted.

@@ -99,31 +99,55 @@ wave_timeout_cancels_both_delivered_correlations_test() ->
         after exit(Coordinator, kill), demonitor(M, [flush]) end
     end).
 
-phase_query_reuses_id_only_after_previous_source_is_removed_test() ->
+phase_query_reuses_id_only_after_previous_source_is_removed_test_() ->
+    [{lists:flatten(io_lib:format("~p", [Reply])),
+      fun() -> phase_query_after_peer_reply(Reply, committed) end}
+     || Reply <- [not_found, {error, busy}, {error, not_ready}, {error, not_found}]].
+
+unavailable_peer_never_becomes_authoritative_absence_test_() ->
+    [{atom_to_list(Reason),
+      fun() -> phase_query_after_peer_reply({error, Reason}, not_found) end}
+     || Reason <- [busy, not_ready, not_found]].
+
+phase_query_after_peer_reply(FirstReply, LastReply) ->
     with_source(fun(#{source := Owner, owner_ns := OwnerNs, target := Target,
                      sources := Sources0, ref := Ref, record := Record}) ->
-        %% Third source must never be reached after the second returns a ref.
-        Sources = Sources0 ++ [{remote, <<203:256>>, [{"127.0.0.1", 34203}]}],
+        %% The live peer answers, so its retired address must not be dialed.
+        %% Real Simplex admission, encoded replies, exact correlation and lease
+        %% cleanup run here; only the remote transport/consensus is a fixture.
+        [{remote, KeyA, [Live]}, Other] = Sources0,
+        Sources = [{remote, KeyA, [Live, {"127.0.0.1", 34203}]}, Other],
         Request = {phase, <<201:128>>, quod_atomic:group_id(Record), vote},
-        Parent = self(),
+        Parent = self(), Deadline = quod_time:mono_ms() + 4000,
         {Walker, M} = spawn_monitor(fun() ->
             Result = quod_dtx_coordinator:test_phase_command_sources(
-                Sources, Target, vote, Request, OwnerNs, quod_time:mono_ms() + 4000),
+                Sources, Target, vote, Request, OwnerNs, Deadline),
             Parent ! {walk_result, self(), Result}
         end),
         try
             {PeerA, StreamA, Request} = wire(),
             ?assertMatch(#{correlations := 1}, counts(Owner)),
+            [FirstTimer] = gen_statem:call(Owner, timers),
             #{opens := [{PeerA, OpenA}], releases := []} = transport_barrier(Owner),
-            StreamA ! {respond, {phase, <<201:128>>, 0, not_found}},
+            ResponseA = case FirstReply of
+                {error, Reason} -> {error, <<201:128>>, Reason};
+                not_found -> {phase, <<201:128>>, 0, not_found}
+            end,
+            StreamA ! {respond, ResponseA},
             {PeerB, StreamB, Request} = wire(),
             ?assertNotEqual(PeerA, PeerB),
+            ?assertEqual(false, erlang:read_timer(FirstTimer)),
             ?assertMatch(#{correlations := 1}, counts(Owner)),
             #{opens := Opens, releases := [{PeerA, OpenA}]} = transport_barrier(Owner),
             ?assertEqual(2, length(Opens)),
-            StreamB ! {respond, {phase, <<201:128>>, 0, {committed, Ref}}},
+            ResponseB = case LastReply of committed -> {committed, Ref}; not_found -> not_found end,
+            StreamB ! {respond, {phase, <<201:128>>, 0, ResponseB}},
             receive {walk_result, Walker, Result} ->
-                ?assertEqual({committed, Ref, {reply_source, remote, PeerB, []}}, Result)
+                Expected = case LastReply of
+                    committed -> {committed, Ref, {reply_source, remote, PeerB, []}};
+                    not_found -> unresolved
+                end,
+                ?assertEqual(Expected, Result)
             after 1000 -> error(no_phase_walk_result) end,
             down(M, Walker),
             ?assertMatch(#{correlations := 0}, counts(Owner)),

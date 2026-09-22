@@ -986,7 +986,7 @@ remote_endpoint_fallback_preserves_uncertainty_and_correlation_test() ->
                TimeoutThenClosed)),
           assert_fallback_attempts(Live, Historical, Request),
 
-          BusyThenClosed =
+          LiveBusy =
               fun(Endpoint, CandidateRequest, _Timeout) ->
                   self() ! {fallback_attempt, Endpoint, CandidateRequest},
                   case Endpoint of
@@ -998,8 +998,11 @@ remote_endpoint_fallback_preserves_uncertainty_and_correlation_test() ->
              {ok, {error, RequestId, busy},
               {reply_source, remote, Peer, []}},
              quod_dtx_coordinator:test_endpoint_request_candidates(
-               [Live, Historical], Peer, Request, 1000, BusyThenClosed)),
-          assert_fallback_attempts(Live, Historical, Request),
+               [Live, Historical], Peer, Request, 1000, LiveBusy)),
+          receive {fallback_attempt, Live, Request} -> ok
+          after 1000 -> error(missing_live_peer_reply) end,
+          receive {fallback_attempt, Historical, _} -> error(redialed_live_peer_reply)
+          after 0 -> ok end,
 
           AcceptedFallback =
               fun(Endpoint, CandidateRequest, _Timeout) ->
@@ -1016,6 +1019,18 @@ remote_endpoint_fallback_preserves_uncertainty_and_correlation_test() ->
              quod_dtx_coordinator:test_endpoint_request_candidates(
                [Live, Historical], Peer, Request, 1000,
                AcceptedFallback)),
+          assert_fallback_attempts(Live, Historical, Request),
+
+          WrongCorrelation =
+              fun(Endpoint, CandidateRequest, _Timeout) ->
+                  self() ! {fallback_attempt, Endpoint, CandidateRequest},
+                  Id = case Endpoint of Live -> <<99:128>>; Historical -> RequestId end,
+                  {ok, {accepted, Id, Digest, Ref}, []}
+              end,
+          ?assertEqual(
+             {ok, {accepted, RequestId, Digest, Ref}, {reply_source, remote, Peer, []}},
+             quod_dtx_coordinator:test_endpoint_request_candidates(
+               [Live, Historical], Peer, Request, 1000, WrongCorrelation)),
           assert_fallback_attempts(Live, Historical, Request),
 
           InvalidRequest =

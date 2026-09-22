@@ -1353,6 +1353,12 @@ gate; a worker's earlier snapshot cannot reopen an acknowledged wait or certify
 a new application as already consumed. Historical rejection without a recorded
 reason is not attributed to this mechanism solely because its symptom matches.
 
+Canonical block-view validation reuses the block constructor: transaction/control
+encoding, payload byte limits and exact outer-byte binding are checked together.
+Consensus then checks content count, transaction shape and unique IDs without
+re-encoding the payload for a second size check. Entry certificates, historical
+committee checks and request freshness retain their existing verification seams.
+
 A shared current-view acquisition keeps its one verified cursor while a
 concrete authenticated feed or history observation raises the required tip.
 It advances and confirms that cursor until the exact tip is current or the

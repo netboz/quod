@@ -10627,14 +10627,14 @@ well_formed_block(_) -> false.
 well_formed_block_header(Slot, Parent, Timestamp) ->
     is_slot(Slot) andalso is_slot(Parent) andalso is_slot(Timestamp).
 
+%% valid_block_view/1 already checked canonical byte binding and payload size.
 well_formed_block_payload(Pl) ->
     case quod_ledger:classify(Pl) of
         {content, Transactions} ->
             bounded_transaction_list(Transactions)
-                andalso encoded_block_payload_fits(Pl)
                 andalso lists:all(fun well_formed_transaction/1, Transactions)
                 andalso unique_tx_ids(Transactions);
-        {controls, _Controls} -> encoded_block_payload_fits(Pl);
+        {controls, _Controls} -> true;
         noop -> false;
         invalid -> false
     end.

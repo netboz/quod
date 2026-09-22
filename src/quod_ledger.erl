@@ -203,29 +203,15 @@ block_envelope(_) -> error.
 block_bytes(#block{block_bytes = Bytes}) when is_binary(Bytes) -> Bytes;
 block_bytes(#block{}) -> error.
 
+-doc "Check canonical byte binding and both byte limits through the block constructor.".
 -spec valid_block_view(term()) -> boolean().
-valid_block_view(#block{block_bytes = Bytes} = Block) when is_binary(Bytes) ->
-    case encode_block_view(Block) of
-        {ok, Bytes} -> true;
+valid_block_view(#block{slot = Slot, parent = Parent, payload = Payload,
+                         timestamp = Timestamp, block_bytes = Bytes}) when is_binary(Bytes) ->
+    case new_block(Slot, Parent, Payload, Timestamp) of
+        {ok, #block{block_bytes = Bytes}} -> true;
         _ -> false
     end;
 valid_block_view(_) -> false.
-
-encode_block_view(#block{slot = Slot, parent = Parent, payload = Payload,
-                         timestamp = Timestamp})
-  when is_integer(Slot), Slot >= 0,
-       is_integer(Parent), Parent >= 0,
-       is_integer(Timestamp), Timestamp >= 0 ->
-    case encode_payload(Payload) of
-        {ok, PayloadWire} ->
-            quod_safe_term:encode_canonical(
-              {quod_block, 1, Slot, Parent, PayloadWire, Timestamp},
-              ?QUOD_MAX_CANONICAL_BLOCK_BYTES);
-        error ->
-            {error, bad_term}
-    end;
-encode_block_view(_) ->
-    {error, bad_term}.
 
 encode_payload(Payload) ->
     case classify(Payload) of

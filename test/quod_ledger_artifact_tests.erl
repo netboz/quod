@@ -1,6 +1,7 @@
 -module(quod_ledger_artifact_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include("quod_ingress_limits.hrl").
 
 %% Used only to freeze independent pre-cut vectors with the archived codec.
 -export([golden_vectors/1]).
@@ -20,6 +21,43 @@ golden_vectors(Codec) ->
 
 artifact_matches_v15_v7_golden_bytes_test() ->
     ?assertEqual(expected_golden_vectors(), golden_vectors(quod_ledger)).
+
+block_shape_reuses_one_bounded_payload_encoding_test() ->
+    F = fixture(quod_ledger),
+    Entry = proplists:get_value(content, maps:get(entries, F)),
+    {ok, Block} = quod_ledger:block_from_entry(Entry),
+    {true, Counts} = traced_calls([{quod_transaction, encode_ledger_transaction, 1}],
+                                 fun() -> quod_simplex:well_formed_block(Block) end),
+    ?assertEqual(1, maps:get({quod_transaction, encode_ledger_transaction, 1}, Counts)),
+    ?assert(quod_ledger:valid_block_view(Block)),
+    lists:foreach(fun(B) -> ?assertNot(quod_simplex:well_formed_block(B)) end,
+                  [Block#block{slot = 77}, Block#block{parent = 77},
+                   Block#block{timestamp = 77}, Block#block{payload = {batch, []}},
+                   Block#block{block_bytes = <<>>}]).
+
+block_binding_owns_the_payload_limit_test() ->
+    F = fixture(quod_ledger), {Ns, Anchor} = Binding = maps:get(binding, F),
+    Make = fun(Size) ->
+        Base = maps:get(transaction, F),
+        Tx0 = Base#transaction{diff = [{assert, {{padded, binary:copy(<<0>>, Size)}, true}}],
+                               sig = none, signed_bytes = none},
+        Tx1 = quod_transaction:bind_id(Binding, Tx0),
+        {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Tx1, maps:get(signer, F)),
+        {ok, Blob} = quod_transaction:encode_ledger_transaction(Tx),
+        Wire = {batch, [{transaction, Blob}]},
+        {ok, PayloadBytes} = quod_safe_term:encode_canonical(Wire, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
+        {Tx, Wire, byte_size(PayloadBytes)}
+    end,
+    {_, _, Overhead} = Make(0),
+    lists:foreach(fun(Extra) ->
+        {Tx, Wire, Size} = Make(?MAX_BLOCK_BYTES - Overhead + Extra),
+        ?assertEqual(?MAX_BLOCK_BYTES + Extra, Size),
+        Bytes = canonical({quod_block, 1, 2, 1, Wire, 101}),
+        ?assert(byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
+        Block = #block{slot = 2, parent = 1, payload = {batch, [Tx]}, timestamp = 101, block_bytes = Bytes},
+        ?assertEqual(Extra =:= 0, quod_ledger:valid_block_view(Block)),
+        ?assertEqual(Extra =:= 0, quod_simplex:well_formed_block(Block))
+    end, [0, 1]).
 
 checked_constructors_reject_changed_views_test() ->
     F = fixture(quod_ledger),

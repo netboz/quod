@@ -306,10 +306,10 @@ certify_operation_with(OwnerNs, Ref,
             Probe = fun(Key, Source) ->
                 Request = {operation_applied, request_id(), Ref},
                 Verify = fun(Result) ->
-                    operation_response_vote(Request, Network, Evidence, Key, Result)
+                    operation_response_vote(Network, Evidence, Key, Result)
                 end,
                 case probe_source(Source, OwnerNs, element(1, Target), Key,
-                                  Request, Deadline, Dependencies, Verify, ignore) of
+                                  Request, Deadline, Dependencies, Verify) of
                     {ok, Statement, Vote} -> {signed, {operation, Statement}, Vote, none};
                     ignore -> ignore
                 end
@@ -494,14 +494,13 @@ certify_receipt_rows(OwnerNs, [{Target, #{reference := Ref, evidence := Discover
         _ -> {error, retry}
     end.
 
-operation_response_vote(Request, Network, Evidence, Key,
-  {ok, {operation_applied, _RequestId, _Ref, Statement, Key, Signature} = Response}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) andalso
-         operation_vote_valid(Network, Evidence, Key, Statement, Signature) of
+operation_response_vote(Network, Evidence, Key,
+  {ok, {operation_applied, _RequestId, _Ref, Statement, Key, Signature}}) ->
+    case operation_vote_valid(Network, Evidence, Key, Statement, Signature) of
         true -> {ok, Statement, {Key, Signature}};
         false -> ignore
     end;
-operation_response_vote(_, _, _, _, _) -> ignore.
+operation_response_vote(_, _, _, _) -> ignore.
 
 operation_seed_votes(Ref, Network, Evidence, Committee, Votes) ->
     lists:filtermap(
@@ -1431,19 +1430,17 @@ probe_outcome(OwnerNs, PeerKey, Source,
                CommitteeId, MinimumSlot},
     probe_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
-      fun(Result) -> outcome_response(Request, Target, CommitteeId, Result) end,
-      ignore).
+      fun(Result) -> outcome_response(Target, CommitteeId, Result) end).
 
 outcome_response(
-  Request, Target, CommitteeId,
+  Target, CommitteeId,
   {ok, {outcome, _RequestId, Target, CommitteeId, _AppliedFloor,
-        Outcome} = Response}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) andalso
-         quorum_outcome_allowed(Outcome) of
+        Outcome}}) ->
+    case quorum_outcome_allowed(Outcome) of
         true -> {ok, Outcome};
         false -> ignore
     end;
-outcome_response(_Request, _Target, _CommitteeId, _Result) ->
+outcome_response(_Target, _CommitteeId, _Result) ->
     ignore.
 
 %% `pending_vote` is local journal/handoff state, not committed snapshot
@@ -1487,20 +1484,19 @@ probe_read_attest(
     probe_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
       fun(Result) -> read_attest_response_vote(
-                       Request, Target, ProofId, PlanDigest, CommitteeId, PeerKey, Result)
-      end, ignore).
+                       Target, ProofId, PlanDigest, CommitteeId, PeerKey, Result)
+      end).
 
 read_attest_response_vote(
-  Request, Target, ProofId, PlanDigest, CommitteeId, ExpectedSigner,
+  Target, ProofId, PlanDigest, CommitteeId, ExpectedSigner,
   {ok, {read_attest, _RequestId, Target, ProofId, PlanDigest, AnchorRef,
         CommitteeId,
-        ExpectedSigner, Signature} = Response}) ->
-    case {quod_dtx_endpoint:correlates(Request, Response),
-          quod_read_certificate:verify_vote(
+        ExpectedSigner, Signature}}) ->
+    case {quod_read_certificate:verify_vote(
             Target, ProofId, PlanDigest, AnchorRef,
             CommitteeId, ExpectedSigner, Signature),
           quod_dtx:certified_ref_claim(AnchorRef)} of
-        {true, true,
+        {true,
          {ok, {Target, Slot, BlockHash, RecordDigest}}} ->
             {ok,
              {Target, ProofId, PlanDigest,
@@ -1510,15 +1506,11 @@ read_attest_response_vote(
             ignore
     end;
 read_attest_response_vote(
-  Request, _Target, _ProofId, _PlanDigest, _CommitteeId,
+  _Target, _ProofId, _PlanDigest, _CommitteeId,
   _ExpectedSigner,
-  {ok, {error, _RequestId, conflict_retry} = Response}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) of
-        true -> conflict_retry;
-        false -> ignore
-    end;
+  {ok, {error, _RequestId, conflict_retry}}) -> conflict_retry;
 read_attest_response_vote(
-  _Request, _Target, _ProofId, _PlanDigest, _CommitteeId,
+  _Target, _ProofId, _PlanDigest, _CommitteeId,
   _ExpectedSigner, _Result) ->
     ignore.
 
@@ -1531,52 +1523,46 @@ probe_applied(OwnerNs, PeerKey, Source,
     probe_source(
       Source, OwnerNs, TargetNs, PeerKey, Request, Deadline, Dependencies,
       fun(Result) -> applied_response_vote(
-                       Request, NetworkIdentity, Target, CommitteeId, PeerKey, Result)
-      end, ignore).
+                       NetworkIdentity, Target, CommitteeId, PeerKey, Result)
+      end).
 
-%% One endpoint walk for every observation family. The verifier alone decides
-%% what is terminal; Exhausted is its existing non-evidence result. In
-%% particular a verified read conflict must stop this walk.
-probe_source(
-  {remote, []}, _OwnerNs, _TargetNs, _PeerKey, _Request,
-  _Deadline, _Dependencies, _Verify, Exhausted) -> Exhausted;
-probe_source(
-  {remote, [Endpoint | Rest]}, OwnerNs, TargetNs, PeerKey, Request,
-  Deadline, Dependencies, Verify, Exhausted) ->
-    Now = quod_time:mono_ms(),
-    Remaining = max(0, Deadline - Now),
-    AttemptDeadline = case Remaining of
-                          0 -> Deadline;
-                          _ -> Now + max(1, Remaining div (length(Rest) + 1))
-                      end,
-    Result = call_endpoint(OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
-                           AttemptDeadline, Dependencies),
-    case Verify(Result) of
-        Exhausted -> probe_source({remote, Rest}, OwnerNs, TargetNs, PeerKey, Request,
-                                   Deadline, Dependencies, Verify, Exhausted);
-        Accepted -> Accepted
-    end;
-probe_source(
-  local, OwnerNs, TargetNs, PeerKey, Request,
-  Deadline, Dependencies, Verify, _Exhausted) ->
-    Result = call_endpoint(
-               OwnerNs, TargetNs, PeerKey, local, Request,
-               Deadline, Dependencies),
-    Verify(Result).
+%% A correlated reply ends address selection, not evidence verification.
+%% Unready or invalid evidence contributes nothing to the committee collector;
+%% another address for that same peer is not another possible witness. Local
+%% and remote replies cross this same correlation boundary exactly once.
+probe_source(Source, OwnerNs, TargetNs, PeerKey, Request,
+  Deadline, Dependencies, Verify) ->
+    Select = fun({ok, Response} = Reply, Last) ->
+              case quod_dtx_endpoint:correlates(Request, Response) of
+                  true -> {done, Verify(Reply)};
+                  false -> {next, Last}
+              end;
+         (_, Last) -> {next, Last}
+      end,
+    case Source of
+        local ->
+            {_, Result} = Select(call_endpoint(
+              OwnerNs, TargetNs, PeerKey, local, Request, Deadline, Dependencies), ignore),
+            Result;
+        {remote, Endpoints} ->
+            quod_peer_route:walk(Endpoints, Deadline,
+              fun(Endpoint, Timeout) ->
+                  call_endpoint(OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
+                                min(Deadline, quod_time:mono_ms() + Timeout), Dependencies)
+              end, Select, ignore)
+    end.
 
 applied_response_vote(
-  Request, NetworkIdentity, Target, CommitteeId, ExpectedSigner,
+  NetworkIdentity, Target, CommitteeId, ExpectedSigner,
   {ok, {applied, _RequestId, Target, CommitteeId, GroupId,
-         ResolveRef, Generation, Verdict, ExpectedSigner, Signature}
-       = Response}) ->
-    case quod_dtx_endpoint:correlates(Request, Response) andalso
-         quod_applied_certificate:applied_vote_valid(
+         ResolveRef, Generation, Verdict, ExpectedSigner, Signature}}) ->
+    case quod_applied_certificate:applied_vote_valid(
            NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
            Generation, Verdict, ExpectedSigner, Signature) of
         true -> {ok, {ExpectedSigner, Signature}};
         false -> ignore
     end;
-applied_response_vote(_Request, _NetworkIdentity, _Target, _CommitteeId,
+applied_response_vote(_NetworkIdentity, _Target, _CommitteeId,
                       _ExpectedSigner, _Result) ->
     ignore.
 

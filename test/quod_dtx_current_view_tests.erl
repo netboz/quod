@@ -7,6 +7,109 @@
 
 deadline(TimeoutMs) -> quod_time:mono_ms() + TimeoutMs.
 
+peer_address_selection_is_not_committee_evidence_test_() ->
+    [{atom_to_list(Family) ++ "/" ++ atom_to_list(First), fun() ->
+        with_peer_observation(Family, remote, fun(Key, Deps0, Invoke, Reply) ->
+            Fresh = {"127.0.0.1", 31999},
+            Calls = atomics:new(1, []),
+            Remote = fun(_, _, Pinned, Endpoint, Request, Timeout) ->
+                ?assertEqual(Key, Pinned),
+                ?assert(Timeout > 0 andalso Timeout =< 1000),
+                case atomics:add_get(Calls, 1, 1) of
+                    1 ->
+                        ?assertEqual(Fresh, Endpoint),
+                        peer_first_reply(First, Family, Request, Reply);
+                    2 ->
+                        ?assertNotEqual(Fresh, Endpoint),
+                        Reply(Request);
+                    _ -> error(repeated_peer_address)
+                end
+            end,
+            Deps = Deps0#{resolve := fun(K) -> ?assertEqual(Key, K), {ok, Fresh} end,
+                          remote := Remote},
+            Result = Invoke(Deps),
+            case First of
+                not_ready -> ?assertEqual({error, retry}, Result);
+                invalid_evidence -> ?assertEqual({error, retry}, Result);
+                _ -> ?assertMatch({ok, _}, Result)
+            end,
+            Expected = case First of not_ready -> 1; invalid_evidence -> 1; _ -> 2 end,
+            ?assertEqual(Expected, atomics:get(Calls, 1))
+        end)
+    end} || Family <- [applied, read_attest, outcome, operation_applied],
+            First <- [not_ready, invalid_evidence, wrong_correlation, transport_failure]].
+
+local_observations_use_the_same_correlation_gate_test_() ->
+    [{atom_to_list(Family), fun() ->
+        with_peer_observation(Family, local, fun(Key, Deps0, Invoke, Reply) ->
+            Deps = Deps0#{node_key := fun() -> Key end,
+              local := fun(_, Request, _) ->
+                  peer_first_reply(wrong_correlation, Family, Request, Reply)
+              end,
+              remote := fun(_, _, _, _, _, _) -> error(local_observation_routed) end},
+            ?assertEqual({error, retry}, Invoke(Deps))
+        end)
+    end} || Family <- [applied, read_attest, outcome, operation_applied]].
+
+%% Production collectors and signature verifiers run unchanged; only I/O is
+%% supplied by the fixture. These are not full consensus-node witnesses.
+with_peer_observation(operation_applied, _Location, Fun) ->
+    quod_operation_fixture:with(1, fun(F) ->
+        #{pubkey := Key} = Signer = maps:get(node_identity, F),
+        Ref = maps:get(certified_target_ref, F),
+        Evidence = (maps:get(evidence, F))#{routes => #{Key => {"127.0.0.1", 34249}}},
+        Network = maps:get(network, F),
+        Deps = #{resolve => fun(_) -> error end, node_key => fun() -> none end,
+                 network_identity => fun() -> {ok, Network} end,
+                 local => fun(_, _, _) -> error(unused_local) end,
+                 remote => fun(_, _, _, _, _, _) -> error(unused_remote) end},
+        Invoke = fun(D) -> quod_dtx_current_view:test_certify_operation(
+            maps:get(source_ns, F), Ref, Evidence, deadline(1000), D) end,
+        Reply = fun({operation_applied, Id, Ref0}) ->
+            ?assertEqual(Ref, Ref0),
+            {ok, Statement} = quod_applied_certificate:operation_statement(Network, Evidence, applied),
+            {ok, {Key, Signature}} = quod_applied_certificate:sign_operation_vote(Statement, Signer),
+            {ok, {operation_applied, Id, Ref, Statement, Key, Signature}, []}
+        end,
+        Fun(Key, Deps, Invoke, Reply)
+    end);
+with_peer_observation(Family, Location, Fun) ->
+    F = fixture(1), [Key] = maps:get(committee, F),
+    Source = case Location of remote -> source(F); local -> {local, local_source(F)} end,
+    {Invoke, Reply} = case Family of
+        applied -> {fun(D) -> quod_dtx_current_view:test_certify_applied(
+                        maps:get(owner_ns, F), Source, maps:get(claim, F),
+                        maps:get(evidence, F), 1000, D) end,
+                    fun(R) -> applied_reply(F, Key, R) end};
+        read_attest ->
+            Plan = read_plan_blob(F, <<"peer_walk">>),
+            {fun(D) -> quod_dtx_current_view:test_certify_reads(
+                maps:get(owner_ns, F), {Source, Plan}, deadline(1000), D) end,
+             fun(R) -> read_attest_reply(F, Key, R) end};
+        outcome ->
+            Ref = outcome_group_ref(F, Key),
+            {fun(D) -> quod_dtx_current_view:test_lookup_outcome(
+                maps:get(owner_ns, F), Source, Ref, deadline(1000), D) end,
+             fun(R) -> outcome_reply(R, maps:get(target, F), maps:get(committee_id, F),
+                                     8, group_committed(Ref)) end}
+    end,
+    Fun(Key, dependencies(F, fun(_, _) -> error(unused_transport) end), Invoke, Reply).
+
+peer_first_reply(not_ready, _, Request, _) ->
+    {ok, {error, element(2, Request), not_ready}, []};
+peer_first_reply(transport_failure, _, _, _) -> {error, closed};
+peer_first_reply(wrong_correlation, _, Request, Reply) ->
+    {ok, Response, Hints} = Reply(Request),
+    {ok, setelement(2, Response, crypto:strong_rand_bytes(16)), Hints};
+peer_first_reply(invalid_evidence, outcome, Request, Reply) ->
+    {ok, Response, Hints} = Reply(Request),
+    Status = element(6, Response),
+    {ok, setelement(6, Response,
+                     #{status => pending, phase => pending_vote, ref => maps:get(ref, Status)}), Hints};
+peer_first_reply(invalid_evidence, _, Request, Reply) ->
+    {ok, Response, Hints} = Reply(Request),
+    {ok, setelement(tuple_size(Response), Response, <<0:512>>), Hints}.
+
 quorum_collection_has_one_parent_and_preserves_result_test_() ->
     [{atom_to_list(Outcome), fun() ->
         quod_trace_tests:with_tracer(fun() ->

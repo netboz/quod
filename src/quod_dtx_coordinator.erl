@@ -2307,48 +2307,31 @@ endpoint_request_raw({remote, PeerKey, Endpoints}, Target, Request,
               ValidationSidecar, Timeout)
         end,
     endpoint_request_candidates(
-      Endpoints, PeerKey, Request, Deadline, undefined, RequestFun).
+      Endpoints, PeerKey, Request, Deadline, RequestFun).
 
 
 endpoint_result({ok, _Response, _Source}) -> ok;
 endpoint_result({error, _}) -> uncertain.
 
-endpoint_request_candidates([], _PeerKey, _Request, _Deadline,
-                            undefined, _RequestFun) ->
+endpoint_request_candidates([], _PeerKey, _Request, _Deadline, _RequestFun) ->
     {error, not_ready};
-endpoint_request_candidates([], _PeerKey, _Request, _Deadline,
-                            Last, _RequestFun) ->
-    Last;
-endpoint_request_candidates([Endpoint | Rest], PeerKey, Request,
-                            Deadline, Last, RequestFun) ->
-    case max(0, Deadline - quod_time:mono_ms()) of
-        0 ->
-            case Last of undefined -> {error, timeout}; _ -> Last end;
-        Timeout ->
-            AttemptTimeout = max(1, Timeout div (length(Rest) + 1)),
-            Result = RequestFun(Endpoint, Request, AttemptTimeout),
-            case Result of
-                {ok, Response, ResponseHints} ->
-                    Candidate = {ok, Response,
-                                 {reply_source, remote, PeerKey,
-                                  ResponseHints}},
-                    %% A correlated application reply finishes address
-                    %% selection, even when this peer is not ready. The
-                    %% ordinary peer walk/wave handles readiness, rather than
-                    %% mistaking it for an unreachable address.
-                    case quod_dtx_endpoint:correlates(Request, Response) of
-                        true -> Candidate;
-                        false -> endpoint_request_candidates(
-                                   Rest, PeerKey, Request, Deadline,
-                                   preferred_candidate_result(Candidate, Last),
-                                   RequestFun)
-                    end;
-                {error, _} ->
-                    endpoint_request_candidates(
-                      Rest, PeerKey, Request, Deadline,
-                      preferred_candidate_result(Result, Last),
-                      RequestFun)
-            end
+endpoint_request_candidates(Endpoints, PeerKey, Request, Deadline, RequestFun) ->
+    Result = quod_peer_route:walk(
+      Endpoints, Deadline,
+      fun(Endpoint, Timeout) -> RequestFun(Endpoint, Request, Timeout) end,
+      fun({ok, Response, Hints}, Last) ->
+              Candidate = {ok, Response, {reply_source, remote, PeerKey, Hints}},
+              %% Readiness belongs to the peer walk, not address selection.
+              case quod_dtx_endpoint:correlates(Request, Response) of
+                  true -> {done, Candidate};
+                  false -> {next, preferred_candidate_result(Candidate, Last)}
+              end;
+         ({error, _} = Error, Last) ->
+              {next, preferred_candidate_result(Error, Last)}
+      end, undefined),
+    case Result of
+        undefined -> {error, timeout};
+        _ -> Result
     end.
 
 %% Only failed transport or uncorrelated replies reach this accumulator.
@@ -2459,7 +2442,7 @@ test_endpoint_request_candidates(
   Endpoints, PeerKey, Request, TimeoutMs, RequestFun) ->
     endpoint_request_candidates(
       Endpoints, PeerKey, Request,
-      quod_time:mono_ms() + TimeoutMs, undefined, RequestFun).
+      quod_time:mono_ms() + TimeoutMs, RequestFun).
 
 test_spawn_owned_worker(Owner, Fun) ->
     spawn_owned_monitor(Owner, Fun).

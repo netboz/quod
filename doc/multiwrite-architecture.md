@@ -963,6 +963,15 @@ becomes phase absence or an abort verdict. Historical addresses remain fallback
 for failed transport or uncorrelated replies, under the same absolute deadline.
 An application-readiness dip does not cause a dial to an obsolete address.
 
+`quod_peer_route` implements the address traversal inside existing peer workers,
+with one absolute deadline and no process of its own. Delivery, committee
+observations and foreign-page acquisition share it. Committee observations
+correlate local and remote replies once before their family-specific verifier;
+an invalid signature ends that peer's address walk but contributes no vote.
+Final tip confirmation retains its verified-evidence predicate, not page
+availability. Cross-peer submission and bootstrap cursor advancement remain
+their existing lifecycles, not address-selection algorithms.
+
 Foreign suffix acquisition keeps the peer grouping through the same page-fetch
 helper as discovery probes. A page reply ends that peer's address walk; an
 empty or invalid page advances to the next peer, not another address for the
@@ -1031,7 +1040,7 @@ coordinator's target-application fan-out; committed Complete recovery uses its
 origin QC through the existing certified-history path. No new state owner,
 timer, polling loop, durable format or voting authority is introduced.
 
-### Atomic groups: Vote, Resolve, Complete (I1, unreleased)
+### Atomic groups: Vote, Resolve, Complete
 
 One shared predicate selects whether an ordinary multiwrite needs the source
 role. Sealing includes O even if its own staged material is empty; independent
@@ -1351,7 +1360,7 @@ original dependency deadline expires; it does not close and reopen custody
 after an intermediate moving-tip result. No readiness poll or retry timer is
 involved, and the owner still refuses a result superseded before installation.
 
-### I1 source custody before private-effect binding (unreleased)
+### Source custody before private-effect binding
 
 The two-phase implementation saves source completion responsibility in the
 existing signing journal **before** any private effect is durably bound. This
@@ -1376,8 +1385,8 @@ committee membership cannot discard it: the existing coordinator may deliver
 to current members while this owner has a readable committed view, but local
 signing still requires current admission and the ordinary parent validation.
 No second queue, owner, polling loop, effect-journal driver or legacy decoder
-is introduced. QSJ5 is part of the unreleased clean break, not compatibility
-with deployed QSJ4. Full I1 integration and release gates remain outstanding.
+is introduced. QSJ5 is the current journal format; superseded formats are
+refused by name, without a compatibility decoder.
 
 Resolve's compact outcome row retains the exact manifest digest and its own
 plan digest from the already-authenticated reducer material, not another plan

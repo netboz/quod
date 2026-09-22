@@ -6132,14 +6132,14 @@ probe_pages(Owner, RequestRef, Hints, Ns, Height, FetchFun, PageTimeout) ->
 fetch_peer_page(Endpoints, Owner, RequestRef, Peer, Ns,
                 From, To, FetchFun, PageTimeout) ->
     Deadline = quod_time:mono_ms() + PageTimeout,
-    probe_candidate_endpoints(
+    quod_peer_route:walk(
       Endpoints, Deadline,
       fun(Endpoint, AttemptTimeout) ->
           fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
                      From, To, FetchFun, AttemptTimeout)
       end,
-      fun({ok, _Entries, _RemoteHeight} = Ok) -> {done, Ok};
-         ({error, _}) -> continue
+      fun({ok, _Entries, _RemoteHeight} = Ok, _Last) -> {done, Ok};
+         ({error, _}, Last) -> {next, Last}
       end,
       {error, retry}).
 
@@ -6418,38 +6418,21 @@ probe_confirmed_endpoint(
   Anchor, Identity, Projection, PhaseIndex, FetchFun, PageTimeout) ->
     To = Height + 1,
     Deadline = quod_time:mono_ms() + PageTimeout,
-    probe_candidate_endpoints(
+    quod_peer_route:walk(
       Endpoints, Deadline,
       fun(Endpoint, AttemptTimeout) ->
           fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
                      Height + 1, To, FetchFun, AttemptTimeout)
       end,
-      fun(Result) ->
+      fun(Result, Last) ->
           case tip_response_at_least(
                  Result, Ns, Anchor, Identity, Height,
                  Projection, PhaseIndex) of
               true -> {done, true};
-              false -> continue
+              false -> {next, Last}
           end
       end,
       false).
-
-probe_candidate_endpoints([], _Deadline, _Attempt, _Accept, Exhausted) ->
-    Exhausted;
-probe_candidate_endpoints(
-  [Endpoint | Rest], Deadline, Attempt, Accept, Exhausted) ->
-    Remaining = max(0, Deadline - quod_time:mono_ms()),
-    case Remaining of
-        0 -> Exhausted;
-        _ ->
-            AttemptTimeout = max(1, Remaining div (length(Rest) + 1)),
-            case Accept(Attempt(Endpoint, AttemptTimeout)) of
-                {done, Result} -> Result;
-                continue ->
-                    probe_candidate_endpoints(
-                      Rest, Deadline, Attempt, Accept, Exhausted)
-            end
-    end.
 
 tip_response_at_least(
   {ok, [], RemoteHeight}, _Ns, _Anchor, _Identity,

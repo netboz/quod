@@ -30,6 +30,7 @@ accepted.
          bytes/2, sign/3, sign_submission/3, verify/2,
          submission/2, submission_id/1, verify_submission/1,
          encode_ledger_transaction/1, decode_ledger_transaction/2,
+         decode_context/0, decode_ledger_transaction/3,
          encoded_ledger_transaction_size/1,
          decode_canonical_transaction/2,
          relay_attempt_id/5, decode_verified_submission/2,
@@ -39,7 +40,7 @@ accepted.
          validate_request/4, request_claim/1, remote_claim_route/2,
          requires_network_identity/1]).
 
--export_type([target_binding/0]).
+-export_type([target_binding/0, decode_context/0]).
 
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
@@ -73,6 +74,16 @@ accepted.
 %% Call-local derivation shared by every target in one claim. Only the private
 %% constructor below can produce it; no runtime owner or retained trust cache.
 -record(operation_identity, {claim_ref, binding, operation_ref, goal, result}).
+
+%% Trusted native carrier, like a signing receipt: only this module constructs
+%% it, and no wire grammar accepts it. It belongs to one bounded decode call,
+%% never an owner, ETS table or request's freshness/finality decision.
+-record(decoded_transactions, {completed = #{} :: map()}).
+-opaque decode_context() :: #decoded_transactions{}.
+
+-doc "Start one call-local record decoder; only this constructor and decoder returns may supply contexts.".
+-spec decode_context() -> decode_context().
+decode_context() -> #decoded_transactions{}.
 
 -doc """
 Build the unsigned semantic transaction carried by one sealed plan.
@@ -940,27 +951,28 @@ encode_signed_evidence({CertifiedRef, #transaction{} = Transaction}) ->
 encode_signed_evidence(_Evidence) ->
     {error, bad_term}.
 
-decode_signed_evidence(none) ->
-    {ok, none};
-decode_signed_evidence({certified_applications, Wires}) when is_list(Wires) ->
+decode_signed_evidence(none, Context) ->
+    {ok, none, Context};
+decode_signed_evidence({certified_applications, Wires}, Context) when is_list(Wires) ->
     try
-        {ok, {applications,
-              [begin
-                   {certified_transaction, _, _} = Wire,
-                   {ok, Pair} = decode_signed_evidence(Wire), Pair
-               end || Wire <- Wires]}}
+        {Pairs, Next} = lists:mapfoldl(fun(Wire, Acc) ->
+            {certified_transaction, _, _} = Wire,
+            {ok, Pair, Decoded} = decode_signed_evidence(Wire, Acc),
+            {Pair, Decoded}
+        end, Context, Wires),
+        {ok, {applications, Pairs}, Next}
     catch _:_ -> {error, malformed_material}
     end;
 decode_signed_evidence(
-  {certified_transaction, CertifiedRef, TransactionBytes})
+  {certified_transaction, CertifiedRef, TransactionBytes}, Context)
   when is_binary(TransactionBytes) ->
     %% Certified evidence describes another ontology.  It is never an
     %% authority to allocate that ontology's vocabulary in this VM.
-    case decode_ledger_transaction(TransactionBytes, wrapped) of
-        {ok, Transaction} -> {ok, {CertifiedRef, Transaction}};
+    case decode_ledger_transaction(TransactionBytes, wrapped, Context) of
+        {ok, Transaction, Next} -> {ok, {CertifiedRef, Transaction}, Next};
         {error, _} -> {error, malformed_material}
     end;
-decode_signed_evidence(_EvidenceWire) ->
+decode_signed_evidence(_EvidenceWire, _Context) ->
     {error, malformed_material}.
 
 -doc """
@@ -1232,24 +1244,52 @@ encode_genesis_transaction(_Genesis) ->
 -doc "Decode a ledger transaction with target-owned or opaque foreign symbols.".
 -spec decode_ledger_transaction(binary(), materialized | wrapped) ->
           {ok, #transaction{}} | {error, term()}.
-decode_ledger_transaction(Blob, SymbolMode)
+decode_ledger_transaction(Blob, SymbolMode) ->
+    decoded_result(decode_ledger_transaction(Blob, SymbolMode, decode_context())).
+
+-doc """
+Decode within the caller's bounded page, sharing only complete authenticated
+records under exact envelope bytes and symbol mode. Contexts are trusted native
+values minted here, not caller-seeded maps or wire data. Discard on page return
+or failure; never retain across pages. Enclosing reference, committee, finality,
+admission and freshness checks remain the consuming verifier's responsibility.
+""".
+-spec decode_ledger_transaction(binary(), materialized | wrapped, decode_context()) ->
+          {ok, #transaction{}, decode_context()} | {error, term()}.
+decode_ledger_transaction(Blob, SymbolMode,
+                          #decoded_transactions{completed = Completed} = Context)
   when is_binary(Blob),
        byte_size(Blob) =< ?QUOD_MAX_OPERATION_SUBMISSION_BYTES,
        (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
+    Key = {Blob, SymbolMode},
+    case maps:find(Key, Completed) of
+        {ok, Transaction} -> {ok, Transaction, Context};
+        error ->
+            case decode_ledger_record(Blob, SymbolMode, Context) of
+                {ok, Transaction, #decoded_transactions{completed = Nested} = Next} ->
+                    {ok, Transaction,
+                     Next#decoded_transactions{completed = Nested#{Key => Transaction}}};
+                {error, _} = Error -> Error
+            end
+    end;
+decode_ledger_transaction(_Blob, _SymbolMode, _Context) ->
+    {error, malformed_ledger_transaction}.
+
+decode_ledger_record(Blob, SymbolMode, Context) ->
     case decode_canonical_term(
            Blob, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES, SymbolMode) of
         {ok, {quod_genesis_transaction, 1, TxId, Origin,
               DiffBytes, Author}}
           when is_binary(TxId), is_binary(DiffBytes), is_binary(Author) ->
-            decode_genesis_transaction(
-              TxId, Origin, DiffBytes, Author, SymbolMode);
+            case decode_genesis_transaction(TxId, Origin, DiffBytes, Author, SymbolMode) of
+                {ok, Transaction} -> {ok, Transaction, Context};
+                {error, _} = Error -> Error
+            end;
         {ok, Submission = {submit, _, _, _}} ->
-            decode_self_bound_submission(Submission, SymbolMode);
+            decode_self_bound_submission(Submission, SymbolMode, Context);
         _ ->
             {error, malformed_ledger_transaction}
-    end;
-decode_ledger_transaction(_Blob, _SymbolMode) ->
-    {error, malformed_ledger_transaction}.
+    end.
 
 decode_genesis_transaction(TxId, Origin, DiffBytes, Author, SymbolMode) ->
     case quod_wire_term:decode_canonical(
@@ -1268,14 +1308,14 @@ decode_genesis_transaction(TxId, Origin, DiffBytes, Author, SymbolMode) ->
     end.
 
 decode_self_bound_submission(
-  Submission = {submit, Author, _Signature, Canonical}, SymbolMode) ->
+  Submission = {submit, Author, _Signature, Canonical}, SymbolMode, Context) ->
     case {verify_submission(Submission),
           decode_submission_metadata(Canonical)} of
         {true,
          {ok, #{target := {Ns, Anchor}, admission := Admission,
                 author := Author}}} ->
             decode_verified_submission(
-              {Ns, Anchor, Admission}, Submission, SymbolMode);
+              {Ns, Anchor, Admission}, Submission, SymbolMode, Context);
         _ ->
             {error, malformed_ledger_transaction}
     end.
@@ -1295,31 +1335,31 @@ decode_verified_submission(
        is_binary(Author), is_binary(Signature),
        is_binary(Canonical),
        byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
-    decode_verified_submission(Binding, {submit, Author, Signature, Canonical},
-                               materialized);
+    decoded_result(decode_verified_submission(
+      Binding, {submit, Author, Signature, Canonical}, materialized, decode_context()));
 decode_verified_submission(_Binding, _Submission) ->
     {error, malformed_submission}.
 
 decode_verified_submission(
   {TargetNs, TargetAnchor, AuthorAdmission} = Binding,
-  {submit, Author, Signature, Canonical}, SymbolMode)
+  {submit, Author, Signature, Canonical}, SymbolMode, Context)
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission),
        is_binary(Author), is_binary(Signature),
        is_binary(Canonical),
        byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES,
        (SymbolMode =:= materialized orelse SymbolMode =:= wrapped) ->
-    case decode_canonical_transaction(Binding, Canonical, SymbolMode) of
-        {ok, Transaction = #transaction{author = Author}} ->
+    case decode_canonical_transaction(Binding, Canonical, SymbolMode, Context) of
+        {ok, Transaction = #transaction{author = Author}, Next} ->
             {ok, Transaction#transaction{sig = Signature,
                                          signed_bytes = Canonical,
-                                         authentication = {Author, Signature, Canonical}}};
-        {ok, #transaction{}} ->
+                                         authentication = {Author, Signature, Canonical}}, Next};
+        {ok, #transaction{}, _Next} ->
             {error, namespace_or_author_mismatch};
         {error, _} = Error ->
             Error
     end;
-decode_verified_submission(_Binding, _Submission, _SymbolMode) ->
+decode_verified_submission(_Binding, _Submission, _SymbolMode, _Context) ->
     {error, malformed_submission}.
 
 -doc """
@@ -1337,12 +1377,12 @@ decode_canonical_transaction(
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission), is_binary(Canonical),
        byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES ->
-    decode_canonical_transaction(Binding, Canonical, materialized);
+    decoded_result(decode_canonical_transaction(Binding, Canonical, materialized, decode_context()));
 decode_canonical_transaction(_Binding, _Canonical) ->
     {error, malformed_submission}.
 
 decode_canonical_transaction(
-  {TargetNs, TargetAnchor, AuthorAdmission} = Binding, Canonical, SymbolMode)
+  {TargetNs, TargetAnchor, AuthorAdmission} = Binding, Canonical, SymbolMode, Context)
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission), is_binary(Canonical),
        byte_size(Canonical) =< ?QUOD_MAX_CANONICAL_TRANSACTION_BYTES,
@@ -1356,8 +1396,8 @@ decode_canonical_transaction(
           EvidenceWire, ForeignReads, RequestAuth, AuthTranscript,
           Author, AuthorSeq, SubmittedAt}} ->
             case {decode_material(MaterialWire, EffectsWire, SymbolMode),
-                  decode_signed_evidence(EvidenceWire)} of
-                {{ok, Diff, ReadCheck, Effects}, {ok, Evidence}} ->
+                  decode_signed_evidence(EvidenceWire, Context)} of
+                {{ok, Diff, ReadCheck, Effects}, {ok, Evidence, Next}} ->
                     Transaction0 =
                         #transaction{tx_id = TxId, role = Role,
                                      evidence = Evidence, origin = Origin,
@@ -1377,7 +1417,7 @@ decode_canonical_transaction(
                         {ok, Transaction} ->
                             case transaction_bytes(Binding, Transaction,
                                                    {ok, EvidenceWire}) of
-                                {ok, Canonical} -> {ok, Transaction};
+                                {ok, Canonical} -> {ok, Transaction, Next};
                                 {ok, _OtherCanonical} -> {error, noncanonical};
                                 {error, _} -> {error, malformed_material}
                             end;
@@ -1396,8 +1436,11 @@ decode_canonical_transaction(
         _ ->
             {error, malformed_canonical_bytes}
     end;
-decode_canonical_transaction(_Binding, _Canonical, _SymbolMode) ->
+decode_canonical_transaction(_Binding, _Canonical, _SymbolMode, _Context) ->
     {error, malformed_submission}.
+
+decoded_result({ok, Transaction, _Context}) -> {ok, Transaction};
+decoded_result({error, _} = Error) -> Error.
 
 -doc "Decode bounded metadata from the one current V15 transaction envelope.".
 -spec decode_submission_metadata(term()) ->

@@ -235,12 +235,14 @@ artifact_consumers_do_not_repeat_representation_or_signature_checks_test() ->
                           {ok, A} = quod_ledger:decode_entry(entry_bytes(quod_ledger, E), wrapped),
                           A
                       end || E <- Entries],
-    Hooks = [{quod_ledger, decode_entry, 2}, {quod_ledger, decode_block, 2},
+    Hooks = [{quod_ledger, decode_entry, 2}, {quod_ledger, decode_entry, 3},
+             {quod_ledger, decode_block, 2}, {quod_ledger, decode_block, 3},
              {quod_ledger, valid_block_view, 1},
              {quod_transaction, encode_ledger_transaction, 1},
              {quod_transaction, verify_submission, 1}],
     {ok, Positive} = traced_calls(Hooks, fun() ->
         {ok, _} = quod_ledger:decode_entry(ContentBytes, wrapped),
+        {ok, _} = quod_ledger:decode_block(quod_ledger:block_bytes(ContentBlock), wrapped),
         _ = quod_ledger:entry(ContentBlock, ContentView#entry.cert),
         ok
     end),

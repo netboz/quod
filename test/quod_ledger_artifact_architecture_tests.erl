@@ -3,7 +3,8 @@
 
 %% An opaque type is not proof against hostile code in this VM. This guard
 %% instead closes the reviewed production dataflow: one private representation,
-%% one mint, named checked constructors/byte ingresses, and the ordinary store
+%% one mint, named checked constructors/byte ingresses, call-local record reuse,
+%% and the ordinary store
 %% append sites. Accessors confer no new authority and are deliberately absent.
 production_artifact_inventory_test() ->
     Root = source_root(),
@@ -13,7 +14,8 @@ production_artifact_inventory_test() ->
     Forms = [production_forms(File, Root) || File <- Files],
     Declarations = lists:append([declarations(F) || F <- Forms]),
     ?assertEqual([{quod_ledger, [bytes, view, block]},
-                  {quod_ledger, [index, hash, cert, count, record, bytes]}], Declarations),
+                  {quod_ledger, [index, hash, cert, count, record, bytes]},
+                  {quod_transaction, [completed]}], Declarations),
     Inventory = lists:append([inventory(F) || F <- Forms]),
     ?assertEqual(lists:sort(reviewed_sites()), lists:sort(Inventory)),
     %% The only mint is private even though all production call sites are also
@@ -27,16 +29,20 @@ reviewed_sites() ->
     [%% Byte ingress: each framed page/feed/sidecar or on-disk frame reaches
      %% the same codec once. Hints decode only a selection at ingress; actual
      %% history import materializes all bytes through that same full decoder.
-     {{quod_catchup, decode_entry_blobs, 3}, {call, quod_ledger, decode_entry, 2}},
+     {{quod_catchup, decode_entries, 2}, {call, quod_ledger, decode_entries, 2}},
+     {{quod_ledger, decode_entries, 2}, {call, quod_ledger, decode_entries, 4}},
+     {{quod_ledger, decode_entries, 4}, {call, quod_ledger, decode_entries, 4}},
+     {{quod_ledger, decode_entries, 4}, {call, quod_ledger, decode_entry, 3}},
      {{quod_foreign_log, import_exact_entry_hint, 8}, {call, quod_ledger, materialize_hint, 1}},
      {{quod_ledger, materialize_hint, 1}, {call, quod_ledger, decode_entry, 2}},
      {{quod_feed, decode_inner, 1}, {call, quod_ledger, decode_entry, 1}},
      {{quod_ledger_store, materialize_entry, 2}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger_store, scan, 9}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger, decode_entry, 1}, {call, quod_ledger, decode_entry, 2}},
+     {{quod_ledger, decode_entry, 2}, {call, quod_ledger, decode_entry, 3}},
      %% The decoder's two arms and checked native constructor share one mint.
-     {{quod_ledger, decode_entry, 2}, {call, quod_ledger, mint_artifact, 3}},
-     {{quod_ledger, decode_entry, 2}, {call, quod_ledger, mint_artifact, 3}},
+     {{quod_ledger, decode_entry, 3}, {call, quod_ledger, mint_artifact, 3}},
+     {{quod_ledger, decode_entry, 3}, {call, quod_ledger, mint_artifact, 3}},
      {{quod_ledger, encode_entry_view, 2}, {call, quod_ledger, mint_artifact, 3}},
      {{quod_ledger, entry, 2}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, new_entry, 4}, {call, quod_ledger, encode_entry_view, 2}},
@@ -45,6 +51,12 @@ reviewed_sites() ->
      {{quod_ledger, from_entry_view, 1}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, from_entry_view, 1}, {call, quod_ledger, encode_entry_view, 2}},
      {{quod_ledger, mint_artifact, 3}, artifact_record},
+     %% Only the transaction decoder mints/updates the opaque call context.
+     %% Other modules may thread it, never seed it with native records.
+     {{quod_transaction, decode_context, 0}, decode_context_record},
+     {{quod_transaction, decode_ledger_transaction, 3}, decode_context_record},
+     {{quod_transaction, decode_ledger_transaction, 3}, decode_context_record},
+     {{quod_transaction, decode_ledger_transaction, 3}, decode_context_update},
      %% These are read-only destructuring sites, not constructors.
      {{quod_ledger, block_from_entry, 1}, artifact_record},
      {{quod_ledger, encode_entry, 1}, artifact_record},
@@ -99,7 +111,8 @@ module(Forms) ->
 declarations(Forms) ->
     [{module(Forms), [field_name(Field) || Field <- Fields]}
      || {attribute, _, record, {Name, Fields}} <- Forms,
-        Name =:= canonical_entry orelse Name =:= selected_entry].
+        Name =:= canonical_entry orelse Name =:= selected_entry orelse
+        Name =:= decoded_transactions].
 
 field_name({typed_record_field, Field, _}) -> field_name(Field);
 field_name({record_field, _, {atom, _, Name}}) -> Name;
@@ -112,6 +125,15 @@ inventory(Forms) ->
     lists:append([[{{Module, Name, Arity}, S} || S <- walk(Clauses, Module, Imports)]
                   || {function, _, Name, Arity, Clauses} <- Forms]).
 
+walk({record, _, decoded_transactions, Fields}, Module, Imports) ->
+    [decode_context_record | walk(Fields, Module, Imports)];
+walk({record, _, Base, decoded_transactions, Fields}, Module, Imports) ->
+    [decode_context_update | walk([Base, Fields], Module, Imports)];
+walk({record_field, _, Base, decoded_transactions, Field}, Module, Imports) ->
+    [decode_context_field | walk([Base, Field], Module, Imports)];
+walk({record_index, _, decoded_transactions, Field}, Module, Imports) ->
+    [decode_context_index | walk(Field, Module, Imports)];
+walk({atom, _, decoded_transactions}, _M, _I) -> [escaped_decode_context_tag];
 walk({record, _, selected_entry, Fields}, Module, Imports) ->
     [selection_record | walk(Fields, Module, Imports)];
 walk({record, _, Base, selected_entry, Fields}, Module, Imports) ->
@@ -159,7 +181,7 @@ remote_sites({atom, _, Mod}, Fun, _Arity, _Kind, M, I)
 remote_sites({atom, _, _Other}, Fun, _Arity, _Kind, M, I) -> walk(Fun, M, I);
 remote_sites(Mod, {atom, _, Fun}, _Arity, _Kind, M, I)
   when Fun =:= entry; Fun =:= new_entry; Fun =:= noop_entry;
-       Fun =:= decode_entry; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
+       Fun =:= decode_entry; Fun =:= decode_entries; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
        Fun =:= encode_entry_view;
        Fun =:= append ->
     [{dynamic_boundary, Fun} | walk(Mod, M, I)];
@@ -169,7 +191,7 @@ remote_sites(Mod, Fun, _Arity, _Kind, M, I) ->
 
 boundary(quod_ledger, Fun, Arity, Kind)
   when Fun =:= entry; Fun =:= new_entry; Fun =:= noop_entry;
-       Fun =:= decode_entry; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
+       Fun =:= decode_entry; Fun =:= decode_entries; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
        Fun =:= encode_entry_view ->
     [{Kind, quod_ledger, Fun, Arity}];
 boundary(quod_ledger_store, append, Arity, Kind) ->
@@ -189,6 +211,12 @@ new_constructor_in_an_approved_module_is_not_authorized_test() ->
     Forms = [form("-module(quod_ledger)."),
              form("unchecked(B,V,K) -> {canonical_entry,B,V,K}.")],
     ?assertEqual([{{quod_ledger, unchecked, 3}, escaped_artifact_tag}],
+                 inventory(Forms) -- reviewed_sites()).
+
+seeded_decode_context_in_an_owner_is_not_authorized_test() ->
+    Forms = [form("-module(quod_foreign_log)."),
+             form("unchecked(M) -> {decoded_transactions,M}.")],
+    ?assertEqual([{{quod_foreign_log, unchecked, 1}, escaped_decode_context_tag}],
                  inventory(Forms) -- reviewed_sites()).
 
 duplicate_mint_in_approved_function_is_not_authorized_test() ->

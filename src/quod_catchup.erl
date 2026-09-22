@@ -218,19 +218,13 @@ valid_blob_page(_, _, _) -> false.
 decode_entries(Blobs, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     case valid_blob_page(Blobs, 0, 0) of
-        true -> decode_entry_blobs(Blobs, SymbolMode, []);
+        true ->
+            case quod_ledger:decode_entries(Blobs, SymbolMode) of
+                {ok, Entries} -> {ok, Entries};
+                {error, _} -> {error, bad_frame}
+            end;
         false -> {error, bad_frame}
     end.
-
-decode_entry_blobs([Blob | Rest], SymbolMode, Acc) when is_binary(Blob) ->
-    case quod_ledger:decode_entry(Blob, SymbolMode) of
-        {ok, Entry} -> decode_entry_blobs(Rest, SymbolMode, [Entry | Acc]);
-        {error, _} -> {error, bad_frame}
-    end;
-decode_entry_blobs([], _SymbolMode, Acc) ->
-    {ok, lists:reverse(Acc)};
-decode_entry_blobs(_Malformed, _SymbolMode, _Acc) ->
-    {error, bad_frame}.
 
 -doc "Bound a decoded catch-up page by the shared entry-count and encoded-byte limits.".
 -spec page_stats(term()) ->

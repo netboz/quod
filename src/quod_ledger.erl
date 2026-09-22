@@ -38,7 +38,7 @@ import; artifacts themselves never cross a wire or persistence boundary.
          block_bytes/1, valid_block_view/1,
          new_entry/4, entry/2, noop_entry/2, block_from_entry/1,
          entry_view/1, from_entry_view/1,
-         encode_entry/1, decode_entry/1, decode_entry/2,
+         encode_entry/1, decode_entry/1, decode_entry/2, decode_entries/2,
          select_entry/3, selected_record/1, entry_index/1, record_commitment/2,
          hint_bytes/1, materialize_hint/1]).
 
@@ -75,7 +75,7 @@ Classify one committed slot's `data`:
 - `invalid` — not a recognized native variant or a malformed batch.
 
 Control payloads carry codec-created material, not wire blobs. Byte ingress
-authenticates each control in decode_payload/2; classification and serialization
+authenticates each control in the payload decoder; classification and serialization
 do not discard that result and repeat its signature/plan walk.
 """.
 -spec classify(term()) -> kind().
@@ -165,20 +165,23 @@ decode_block(Bytes) ->
 
 -spec decode_block(binary(), materialized | wrapped) ->
           {ok, #block{}} | {error, bad_block}.
-decode_block(Bytes, SymbolMode)
+decode_block(Bytes, SymbolMode) ->
+    decoded_result(decode_block(Bytes, SymbolMode, quod_transaction:decode_context())).
+
+decode_block(Bytes, SymbolMode, Context)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     case block_envelope(Bytes) of
         {ok, {quod_block, 1, Slot, Parent, PayloadWire, Timestamp}} ->
-            case decode_payload(PayloadWire, SymbolMode) of
-                {ok, Payload} ->
+            case decode_payload(PayloadWire, SymbolMode, Context) of
+                {ok, Payload, Next} ->
                     {ok, #block{slot = Slot, parent = Parent,
                                 payload = Payload, timestamp = Timestamp,
-                                block_bytes = Bytes}};
+                                block_bytes = Bytes}, Next};
                 error -> {error, bad_block}
             end;
         error -> {error, bad_block}
     end;
-decode_block(_Bytes, _SymbolMode) -> {error, bad_block}.
+decode_block(_Bytes, _SymbolMode, _Context) -> {error, bad_block}.
 
 block_envelope(Bytes)
   when is_binary(Bytes),
@@ -249,24 +252,19 @@ encode_payload(Payload) ->
             error
     end.
 
-decode_payload({batch, [{transaction, Blob} | _] = Items}, SymbolMode)
+decode_payload({batch, [{transaction, Blob} | _] = Items}, SymbolMode, Context)
   when is_binary(Blob) ->
     try
-        Transactions = [begin
-                            {transaction, TxBlob} = Item,
-                            {ok, Tx} =
-                                quod_transaction:decode_ledger_transaction(
-                                  TxBlob, SymbolMode),
-                            Tx
-                        end || Item <- Items],
-        case transaction_list(Transactions) of
-            true -> {ok, {batch, Transactions}};
-            false -> error
-        end
+        {Transactions, Next} = lists:mapfoldl(fun({transaction, TxBlob}, Acc) ->
+            {ok, #transaction{} = Tx, Decoded} =
+                quod_transaction:decode_ledger_transaction(TxBlob, SymbolMode, Acc),
+            {Tx, Decoded}
+        end, Context, Items),
+        {ok, {batch, Transactions}, Next}
     catch
         _:_ -> error
     end;
-decode_payload({batch, [{dtx, Blob} | _] = Items}, _SymbolMode)
+decode_payload({batch, [{dtx, Blob} | _] = Items}, _SymbolMode, Context)
   when is_binary(Blob) ->
     try
         Controls = [begin
@@ -275,11 +273,11 @@ decode_payload({batch, [{dtx, Blob} | _] = Items}, _SymbolMode)
         end || Item <- Items],
         Payload = {batch, Controls},
         case classify(Payload) of
-            {controls, _} -> {ok, Payload};
+            {controls, _} -> {ok, Payload, Context};
             _ -> error
         end
     catch _:_ -> error end;
-decode_payload(_, _SymbolMode) ->
+decode_payload(_, _SymbolMode, _Context) ->
     error.
 
 -spec entry(#block{}, term()) -> entry_artifact().
@@ -399,32 +397,55 @@ decode_entry(Bytes) ->
 
 -spec decode_entry(binary(), materialized | wrapped) ->
           {ok, entry_artifact()} | {error, bad_entry}.
-decode_entry(Bytes, SymbolMode)
+decode_entry(Bytes, SymbolMode) ->
+    decoded_result(decode_entry(Bytes, SymbolMode, quod_transaction:decode_context())).
+
+-doc """
+Decode an already byte/count-bounded page through the ordinary entry grammar.
+Exact transaction envelopes share a call-local interpretation, not an entry or
+certificate verdict. Keep every entry and discard the context on return/error.
+Transport page bounds remain the caller's responsibility.
+""".
+-spec decode_entries([binary()], materialized | wrapped) ->
+          {ok, [entry_artifact()]} | {error, bad_entry}.
+decode_entries(Blobs, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
-    case entry_envelope(Bytes, SymbolMode) of
-        {ok, Index, none, Cert} ->
-            {ok, mint_artifact(Bytes, #entry{index = Index, data = noop, cert = Cert}, none)};
-        {ok, Index, BlockBytes, Cert} ->
-            case decode_block(BlockBytes, SymbolMode) of
-                {ok, #block{slot = Index} = Block} ->
+    decode_entries(Blobs, SymbolMode, quod_transaction:decode_context(), []).
+
+decode_entries([Blob | Rest], Mode, Context, Acc) when is_binary(Blob) ->
+    case decode_entry(Blob, Mode, Context) of
+        {ok, Entry, Next} -> decode_entries(Rest, Mode, Next, [Entry | Acc]);
+        {error, _} = Error -> Error
+    end;
+decode_entries([], _Mode, _Context, Acc) -> {ok, lists:reverse(Acc)};
+decode_entries(_, _Mode, _Context, _Acc) -> {error, bad_entry}.
+
+decode_entry(Bytes, SymbolMode, Context)
+  when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
+    case entry_envelope(Bytes, SymbolMode, Context) of
+        {ok, {Index, none, Cert}, Next} ->
+            {ok, mint_artifact(Bytes, #entry{index = Index, data = noop, cert = Cert}, none), Next};
+        {ok, {Index, BlockBytes, Cert}, Next} ->
+            case decode_block(BlockBytes, SymbolMode, Next) of
+                {ok, #block{slot = Index} = Block, Decoded} ->
                     %% Both parent and implicit child have been decoded at
                     %% this boundary. Retain the exact envelope, not a new
                     %% serialization of their selected symbol interpretation.
-                    {ok, mint_artifact(Bytes, entry_view_from_block(Block, Cert), Block)};
+                    {ok, mint_artifact(Bytes, entry_view_from_block(Block, Cert), Block), Decoded};
                 _ ->
                     {error, bad_entry}
             end;
         _ ->
             {error, bad_entry}
     end;
-decode_entry(_, _SymbolMode) ->
+decode_entry(_, _SymbolMode, _Context) ->
     {error, bad_entry}.
 
-entry_envelope(Bytes, Mode) ->
+entry_envelope(Bytes, Mode, Context) ->
     case entry_wire(Bytes) of
         {ok, I, BlockBytes, CertWire} ->
-            case decode_cert_wire(CertWire, Mode) of
-                {ok, Cert} -> {ok, I, BlockBytes, Cert};
+            case decode_cert_wire(CertWire, Mode, Context) of
+                {ok, Cert, Next} -> {ok, {I, BlockBytes, Cert}, Next};
                 error -> error
             end;
         error -> error
@@ -453,13 +474,13 @@ select_entry(#canonical_entry{bytes = Bytes, view = #entry{index = I, data = Dat
                               block = Block}, Selection, _Mode) ->
     {ok, (selected(I, entry_hash(Block), Cert, Data, Selection))#selected_entry{bytes = Bytes}};
 select_entry(Bytes, Selection, Mode) when Mode =:= materialized; Mode =:= wrapped ->
-    case entry_envelope(Bytes, Mode) of
-        {ok, I, none, Cert} ->
+    case entry_envelope(Bytes, Mode, quod_transaction:decode_context()) of
+        {ok, {I, none, Cert}, _Context} ->
             {ok, (selected(I, none, Cert, noop, Selection))#selected_entry{bytes = Bytes}};
-        {ok, I, BlockBytes, Cert} ->
+        {ok, {I, BlockBytes, Cert}, Context} ->
             case block_envelope(BlockBytes) of
                 {ok, {quod_block, 1, I, _, Wire, _}} ->
-                    case selected_payload(Wire, Selection, Mode) of
+                    case selected_payload(Wire, Selection, Mode, Context) of
                         {ok, Count, Record} ->
                             {ok, #selected_entry{index = I,
                               hash = crypto:hash(sha256, BlockBytes), cert = Cert,
@@ -483,22 +504,22 @@ materialize_hint(#canonical_entry{} = Entry) -> {ok, Entry};
 materialize_hint(#selected_entry{bytes = Bytes}) -> decode_entry(Bytes, wrapped);
 materialize_hint(_) -> {error, bad_entry}.
 
-selected_payload({batch, [{transaction, _} | _] = Items}, Selection, Mode) ->
+selected_payload({batch, [{transaction, _} | _] = Items}, Selection, Mode, Context) ->
     try
         Blobs = [B || {transaction, B} <- Items, is_binary(B)],
         true = length(Blobs) =:= length(Items),
         Matches = [B || B <- Blobs, quod_transaction:matches_selection(Selection, B)],
         Record = case Matches of
-            [Blob] -> {ok, Tx} = quod_transaction:decode_ledger_transaction(Blob, Mode), Tx;
+            [Blob] -> {ok, Tx, _} = quod_transaction:decode_ledger_transaction(Blob, Mode, Context), Tx;
             _ -> none
         end,
         {ok, length(Items), Record}
     catch _:_ -> error end;
-selected_payload(Wire, Selection, Mode) ->
+selected_payload(Wire, Selection, Mode, Context) ->
     %% Controls have a whole-wave ordering invariant. Keep its one validator;
     %% selective transaction decoding does not weaken that separate grammar.
-    case decode_payload(Wire, Mode) of
-        {ok, {batch, Items}} -> {ok, length(Items), select_record(Items, Selection)};
+    case decode_payload(Wire, Mode, Context) of
+        {ok, {batch, Items}, _Next} -> {ok, length(Items), select_record(Items, Selection)};
         error -> error
     end.
 
@@ -562,16 +583,19 @@ cert_wire(#implicit_cert{support = Support,
 cert_wire({implicit, _, _, _}) -> error;
 cert_wire(Cert) -> {ok, Cert}.
 
-decode_cert_wire({implicit, Support, ChildBytes, Commit}, SymbolMode)
+decode_cert_wire({implicit, Support, ChildBytes, Commit}, SymbolMode, Context)
   when is_binary(ChildBytes) ->
-    case decode_block(ChildBytes, SymbolMode) of
-        {ok, Child} ->
+    case decode_block(ChildBytes, SymbolMode, Context) of
+        {ok, Child, Next} ->
             {ok, #implicit_cert{support = Support,
-                                child = Child, commit = Commit}};
+                                child = Child, commit = Commit}, Next};
         {error, _} -> error
     end;
 %% An implicit child arrives only as bytes through the grammar above. Never
 %% accept a serialized native child view as if this decoder had established it.
-decode_cert_wire(#implicit_cert{}, _SymbolMode) -> error;
-decode_cert_wire({implicit, _, _, _}, _SymbolMode) -> error;
-decode_cert_wire(Cert, _SymbolMode) -> {ok, Cert}.
+decode_cert_wire(#implicit_cert{}, _SymbolMode, _Context) -> error;
+decode_cert_wire({implicit, _, _, _}, _SymbolMode, _Context) -> error;
+decode_cert_wire(Cert, _SymbolMode, Context) -> {ok, Cert, Context}.
+
+decoded_result({ok, Value, _Context}) -> {ok, Value};
+decoded_result({error, _} = Error) -> Error.

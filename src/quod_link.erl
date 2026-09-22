@@ -41,7 +41,7 @@ and grant share one absolute bootstrap deadline; partial bytes cannot renew it.
 
 -ifdef(TEST).
 -export([header/3, parse_header/1, frame/1, parse/1,
-         test_fail_next_ordered/2, test_transport/1]).
+         test_fail_next_ordered/2, test_transport/1, channel_config/2]).
 -endif.
 
 -define(HEADER_TIMEOUT_MS, 5000).
@@ -103,12 +103,22 @@ to the holder) — a write alone is never treated as liveness.
 start_outbound(Conn, Sid, Peer, Channel, Self, ConnProc, LearnHint) ->
     spawn(fun() ->
         Deadline = erlang:monotonic_time(millisecond) + ?ACK_TIMEOUT_MS,
+        Catchup = set_priority(Conn, Sid, Channel, requester),
         _ = quic:send_data(Conn, Sid, header(Self, Channel, LearnHint), false),
         await_ack(ConnProc, ack, Deadline,
                   #s{conn = Conn, sid = Sid, channel = Channel,
                      peer = Peer, direction = out,
-                     catchup = catchup_channel(Channel, requester)})
+                     catchup = Catchup})
     end).
+
+set_priority(Conn, Sid, Channel, Role) ->
+    {{Urgency, Incremental}, Catchup} = channel_config(Channel, Role),
+    case quic:set_stream_priority(Conn, Sid, Urgency, Incremental) of
+        ok -> Catchup;
+        {error, _} ->
+            _ = quic:reset_stream(Conn, Sid, 0),
+            exit(stream_priority_failed)
+    end.
 
 %% Wait for the peer's first frame (its ACK that it authenticated our header)
 %% before announcing link_up (catch-up also consumes its initial grant here).
@@ -289,9 +299,10 @@ read_header(Conn, Sid, ConnProc, Acc) ->
 await_header_auth(Conn, Sid, ConnProc, Ref, Peer, Channel, Rest) ->
     receive
         {link_authenticated, ConnProc, Ref} ->
+            Catchup = set_priority(Conn, Sid, Channel, server),
             S = #s{conn = Conn, sid = Sid, channel = Channel,
                    peer = Peer, direction = in,
-                   catchup = catchup_channel(Channel, server)},
+                   catchup = Catchup},
             S1 = case S#s.catchup of
                      none ->
                          _ = quic:send_data(Conn, Sid, ack_frame(), false),
@@ -559,11 +570,21 @@ catchup_frames(S = #s{buf = Buf, catchup = #credit{ns = Ns}}) ->
             end
     end.
 
-catchup_channel(Channel, Role) ->
+channel_config(Channel, Role) ->
     case quod_safe_term:decode_wrapped(Channel, 16#FFFF) of
+        {ok, {log, Ns}} when is_binary(Ns), byte_size(Ns) > 0 ->
+            {{0, false}, none};
         {ok, {catchup, Ns}} when is_binary(Ns), byte_size(Ns) > 0 ->
-            #credit{ns = Ns, role = Role};
-        _ -> none
+            {{1, true}, #credit{ns = Ns, role = Role}};
+        {ok, {Tag, Ns}} when is_binary(Ns), byte_size(Ns) > 0,
+                            (Tag =:= ingress orelse Tag =:= quod_dtx) ->
+            {{2, false}, none};
+        {ok, quod_directory_control} -> {{2, false}, none};
+        {ok, {Tag, Ns}} when is_binary(Ns), byte_size(Ns) > 0,
+                            (Tag =:= feed orelse Tag =:= quod_scope) ->
+            {{4, true}, none};
+        {ok, {quod_scope_return, <<_:256>>}} -> {{4, true}, none};
+        _ -> {{6, true}, none}
     end.
 
 require_generic_channel(#s{catchup = none}) -> ok;

@@ -383,6 +383,9 @@ with_credit_connection(Results, Fun) ->
 
 credit_connection(Parent, Tag, Results) ->
     receive
+        {'$gen_call', From, {set_stream_priority, 0, 1, true}} ->
+            gen_server:reply(From, ok),
+            credit_connection(Parent, Tag, Results);
         {'$gen_call', From, {send_data, 0, Data, false}} ->
             Parent ! {credit_wire, Tag, iolist_to_binary(Data)},
             {Result, Rest} = case Results of

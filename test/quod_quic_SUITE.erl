@@ -9,6 +9,7 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
+         stream_priorities_survive_reopen/1, priority_mixed_traffic/1,
          tagged_catchup_open_preserves_pools/1,
          channel_stream_reset_isolated/1,
          ordered_send_waits_for_send_ready_fifo/1,
@@ -34,6 +35,7 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 -define(SELF, {"127.0.0.1", ?PORT}).
 
 all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
+          stream_priorities_survive_reopen, priority_mixed_traffic,
           tagged_catchup_open_preserves_pools,
           channel_stream_reset_isolated,
           ordered_send_waits_for_send_ready_fifo,
@@ -173,6 +175,83 @@ tagged_catchup_open_preserves_pools(Config) ->
         quod_reg:unsubscribe({channel, Channel}),
         gproc:unreg(quod_reg:name({quod_catchup, Ns}))
     end.
+
+stream_priorities_survive_reopen(_Config) ->
+    lists:foreach(
+      fun({Term, Priority}) ->
+          Channel = term_to_binary(Term, [deterministic]),
+          true = quod_reg:subscribe({channel, Channel}),
+          try
+              lists:foreach(
+                fun(_) ->
+                    Link = open_priority_link(Channel),
+                    {ok, {Conn, Sid}} = quod_link:test_transport(Link),
+                    {ok, Priority} = quic:get_stream_priority(Conn, Sid),
+                    ok = quod_link:send(Link, <<"priority-check">>),
+                    Inbound = receive
+                        {quod_message, {_, In}, Channel, <<"priority-check">>} -> In
+                    after 5000 -> ct:fail(no_priority_delivery) end,
+                    {ok, {RemoteConn, RemoteSid}} = quod_link:test_transport(Inbound),
+                    {ok, Priority} = quic:get_stream_priority(RemoteConn, RemoteSid),
+                    Ref = monitor(process, Link),
+                    ok = quod_link:close(Link),
+                    receive {'DOWN', Ref, process, Link, _} -> ok
+                    after 5000 -> ct:fail(priority_link_not_closed) end
+                end, [first, replacement])
+          after quod_reg:unsubscribe({channel, Channel}) end
+      end, [{{log, <<"priority-test">>}, {0, false}},
+            {{feed, <<"priority-test">>}, {4, true}},
+            {quod_client_goal_v1, {6, true}}]).
+
+priority_mixed_traffic(_Config) ->
+    LogChannel = term_to_binary({log, <<"priority-load">>}, [deterministic]),
+    BulkChannel = <<"priority-load-application">>,
+    true = quod_reg:subscribe({channel, LogChannel}),
+    true = quod_reg:subscribe({channel, BulkChannel}),
+    Log = open_priority_link(LogChannel),
+    Bulk = open_priority_link(BulkChannel),
+    {ok, {Conn, _}} = quod_link:test_transport(Log),
+    {ok, {Conn, _}} = quod_link:test_transport(Bulk),
+    Parent = self(), Tag = make_ref(),
+    {Worker, Monitor} = spawn_monitor(
+      fun() ->
+          Payload = binary:copy(<<"b">>, 65536),
+          lists:foreach(
+            fun(N) ->
+                ok = quod_link:send_reliable(Bulk, Payload, 5000),
+                case N of 1 -> Parent ! {Tag, started}; _ -> ok end
+            end, lists:seq(1, 64))
+      end),
+    try
+        receive {Tag, started} -> ok
+        after 5000 -> ct:fail(bulk_never_started) end,
+        lists:foreach(
+          fun(N) ->
+              Payload = <<N:32>>,
+              ok = quod_link:send(Log, Payload),
+              receive {quod_message, _, LogChannel, Payload} -> ok
+              after 5000 -> ct:fail(consensus_channel_starved) end
+          end, lists:seq(1, 32)),
+        receive {'DOWN', Monitor, process, Worker, normal} -> ok;
+                {'DOWN', Monitor, process, Worker, Reason} -> ct:fail({bulk_failed, Reason})
+        after 10000 -> ct:fail(bulk_producer_stalled) end,
+        lists:foreach(
+          fun(_) ->
+              receive {quod_message, _, BulkChannel, Payload}
+                        when byte_size(Payload) =:= 65536 -> ok
+              after 10000 -> ct:fail(bulk_delivery_stalled) end
+          end, lists:seq(1, 64))
+    after
+        exit(Worker, kill), demonitor(Monitor, [flush]),
+        quod_link:close(Log), quod_link:close(Bulk),
+        quod_reg:unsubscribe({channel, LogChannel}),
+        quod_reg:unsubscribe({channel, BulkChannel})
+    end.
+
+open_priority_link(Channel) ->
+    ok = quod_quic:open_link(?SELF, Channel),
+    receive {link_up, ?SELF, Channel, Link} -> Link
+    after 5000 -> ct:fail(no_priority_link) end.
 
 %% Ordinary payloads still arrive through the existing channel property.
 message_roundtrip(_Config) ->

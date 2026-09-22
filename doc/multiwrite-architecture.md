@@ -963,6 +963,14 @@ becomes phase absence or an abort verdict. Historical addresses remain fallback
 for failed transport or uncorrelated replies, under the same absolute deadline.
 An application-readiness dip does not cause a dial to an obsolete address.
 
+Foreign suffix acquisition keeps the peer grouping through the same page-fetch
+helper as discovery probes. A page reply ends that peer's address walk; an
+empty or invalid page advances to the next peer, not another address for the
+same identity. Failed transport still tries the authenticated same-key fallback
+within one peer budget. Peer order, canonical-page verification, historical
+committee checks and final tip confirmation are unchanged; no page reply alone
+confirms a current view. Confirmation still requires its own verified evidence.
+
 `quod_dtx_owner` is a pure registry/transition library, not an actor. Simplex
 executes its signing and publication decisions. The signing journal is the
 single pending-Vote authority; the `dtx_pending` shadow inventory is deleted.

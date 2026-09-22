@@ -1811,6 +1811,117 @@ feed_established_current_view(Case) ->
         ets:delete(Calls), file:del_dir_r(Dir)
     end.
 
+suffix_page_reply_uses_next_peer_through_owner_transport_test() ->
+    with_confirmation_fixture(fun(C0) ->
+        #{owner := Owner, peers := [A, B | _] = Peers, routes := Routes,
+          fixture := Fixture, ns := Ns, links := Links} = C0,
+        Identity = {Ns, maps:get(anchor, Fixture)},
+        [{A, [Historical]}, {B, [NextEndpoint]} | Rest] = Routes,
+        Live = {"127.0.0.1", 19997}, Parent = self(),
+        PageLink = spawn(fun() -> page_test_link(Parent) end),
+        FeedLinks = [spawn(fun() -> fake_feed_link(Parent) end) || _ <- tl(Peers)],
+        try
+            %% Establish the current-view watch through its real probe and
+            %% confirmation path before installing ordered feed progress.
+            {WarmCall, Token, WarmPulls} = begin_confirmation_wave(C0),
+            [reply_confirmation_pull(C0, maps:get(Peer, WarmPulls), {ok, [], 2})
+             || Peer <- Peers],
+            WarmWorker = receive_confirmation_return(Token, true),
+            WarmWorker ! {release_foreign_confirmation, Token},
+            ?assertMatch({reply, {ok, #{slot := 2}}}, gen_server:wait_response(WarmCall, 3000)),
+            [install_current_feed(Owner, Identity, Peer, Link, 4)
+             || {Peer, Link} <- lists:zip(tl(Peers), FeedLinks)],
+            C = C0#{contact => {A, Live},
+                     routes := [{A, [Live, Historical]}, {B, [NextEndpoint]} | Rest]},
+            Call = confirmation_current_request(C),
+            {Lease, Owner} = receive_page_open(A, Live, Ns),
+            Binding = install_page_test_link(Owner, Lease, A, Ns, PageLink),
+            Owner ! {catchup_credit, PageLink, Binding, crypto:strong_rand_bytes(16)},
+            Pull = receive_confirmation_pull(Owner, PageLink, 3, 4),
+            reply_confirmation_pull(C, Pull, {ok, [], 2}),
+            Channel = quod_catchup:channel(Ns), OldLink = maps:get(A, Links),
+            {SelectedPeer, SelectedEndpoint, NextLease} = receive
+                {page_test_open, P, E, Channel, Owner, R} -> {P, E, R};
+                {page_test_request, OldLink, Owner, _, _, _, 3, 4} ->
+                    {A, Historical, reused}
+            after 2000 -> error(next_page_source_not_selected)
+            end,
+            ?assertEqual({B, NextEndpoint}, {SelectedPeer, SelectedEndpoint}),
+            NextLink = maps:get(B, Links),
+            NextBinding = install_page_test_link(Owner, NextLease, B, Ns, NextLink),
+            Owner ! {catchup_credit, NextLink, NextBinding, crypto:strong_rand_bytes(16)},
+            NextPull = receive_confirmation_pull(Owner, NextLink, 3, 4),
+            reply_confirmation_pull(C, NextPull,
+                {ok, lists:nthtail(2, fixture_entry_blobs(Fixture)), 4}),
+            ?assertMatch({reply, {ok, #{slot := 4}}}, gen_server:wait_response(Call, 3000)),
+            assert_page_owner_drained()
+        after
+            PageLink ! close, [L ! close || L <- FeedLinks]
+        end
+    end).
+
+suffix_fetch_selects_one_page_per_peer_test_() ->
+    [{atom_to_list(Case), fun() -> suffix_fetch_selects_one_page_per_peer(Case) end}
+     || Case <- [behind, invalid_page, transport_failure]].
+
+suffix_fetch_selects_one_page_per_peer(Case) ->
+    Fixture = four_member_confirmation_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    [A, B | _] = Peers = maps:get(peers, Fixture),
+    [{A, [Historical]}, {B, [NextEndpoint]} | _] = Routes = maps:get(routes, Fixture),
+    Live = {"127.0.0.1", 19998},
+    Chain = maps:get(chain, Fixture),
+    Initial = peer_chain_fetch(Ns, lists:sublist(Chain, 2), Peers),
+    Full = peer_chain_fetch(Ns, Chain, Peers),
+    Mode = atomics:new(1, []),
+    Calls = ets:new(suffix_peer_calls, [public, ordered_set]),
+    Fetch = fun(P, E, N, From, To) ->
+        case atomics:get(Mode, 1) of
+            0 -> Initial(P, E, N, From, To);
+            1 ->
+                ets:insert(Calls, {erlang:unique_integer([monotonic]), {P, E, From, To}}),
+                case {P, E, Case} of
+                    {A, Live, behind} -> {ok, [], 2};
+                    {A, Live, invalid_page} -> {ok, [hd(Chain)], 4};
+                    {A, Live, transport_failure} -> {error, tls_identity_mismatch};
+                    _ -> Full(P, E, N, From, To)
+                end
+        end
+    end,
+    Dir = temp_dir("suffix-peer-addresses"), Owner = start_owner(Dir, Fetch),
+    Parent = self(),
+    Links = [spawn(fun() -> fake_feed_link(Parent) end) || _ <- lists:seq(1, 3)],
+    try
+        ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:current(Routes, Identity, 5000)),
+        %% Three other members have the suffix; A may genuinely lag. The
+        %% transport fixture replaces only page delivery, not authentication,
+        %% the certified projection or the owner's live-feed confirmation.
+        [install_current_feed(Owner, Identity, Peer, Link, 4)
+         || {Peer, Link} <- lists:zip(tl(Peers), Links)],
+        quod_foreign_log:observe_candidate(Identity, {A, Live}),
+        ?assertEqual([Live, Historical], proplists:get_value(A,
+            element(2, quod_foreign_log:route_hints(Identity, [])))),
+        atomics:put(Mode, 1, 1),
+        ?assertMatch({ok, #{slot := 4}}, quod_foreign_log:current(Routes, Identity, 5000)),
+        Second = case Case of
+            transport_failure -> {A, Historical, 3, 4};
+            _ -> {B, NextEndpoint, 3, 4}
+        end,
+        %% Structural count, not timing: even a fast historical address is
+        %% redundant once that same authenticated peer supplied a page.
+        ?assertEqual([{A, Live, 3, 4}, Second],
+                     [Call || {_, Call} <- ets:tab2list(Calls)]),
+        {4, Projection} = cache_checkpoint(Dir, Identity),
+        {ok, _, Expected} = quod_catchup:verify_forward(
+            Ns, element(2, Identity), quod_simplex:history_projection(Identity), 1, Chain),
+        %% Checkpoints omit the history of committee views, which remains
+        %% in the phase index; every stored projection field must still agree.
+        ?assertEqual(maps:remove(committee_views, Expected), Projection)
+    after
+        stop_owner(Owner), [L ! close || L <- Links],
+        ets:delete(Calls), file:del_dir_r(Dir)
+    end.
+
 install_current_feed(Owner, Identity = {Ns, Anchor}, Peer, Link, Height) ->
     Registration = crypto:strong_rand_bytes(16),
     ok = quod_foreign_log:test_install_feed_registration(Owner, Identity, Peer, Link, Registration),

@@ -5446,7 +5446,7 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
                       Root, FetchFun, PageTimeout, Cursor = #verified_cursor{height = Height}) ->
     Target = min(Tip, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
     case advance_snapshot_to_height(
-           [{LocalPeer, local}], Owner, RequestRef, Identity, Cursor,
+           [{LocalPeer, [local]}], Owner, RequestRef, Identity, Cursor,
            Root, Target, FetchFun, PageTimeout) of
         {ok, Final = #verified_cursor{height = FinalHeight, projection = Projection}} ->
             Evidence = (current_view_evidence(
@@ -5496,7 +5496,7 @@ converge_current_snapshot(
             Advanced = case worker_feed_tip(
                               Owner, RequestRef, Height, Projection, AttemptTimeout) of
                 Tip when is_integer(Tip) ->
-                    advance_snapshot_to_height(flatten_route_candidates(Hints), Owner,
+                    advance_snapshot_to_height(Hints, Owner,
                       RequestRef, Identity, Cursor, Root,
                       snapshot_target(AdvanceMode, Height, Tip),
                       FetchFun, AttemptTimeout);
@@ -5809,7 +5809,7 @@ fetch_exact_reference(
 
 fetch_hint_parent(Owner, RequestRef, Peer, Endpoint, Slot, Identity,
                   Cursor, Root, FetchFun, PageTimeout) ->
-    advance_snapshot_to_height([{Peer, Endpoint}], Owner, RequestRef, Identity,
+    advance_snapshot_to_height([{Peer, [Endpoint]}], Owner, RequestRef, Identity,
       Cursor, Root, Slot - 1, FetchFun, PageTimeout).
 
 import_exact_entry_hint(Owner, RequestRef, Ref, Phase, Identity,
@@ -6094,7 +6094,7 @@ sequential_snapshot_sources([Source | Rest], Owner, RequestRef, Identity, Cursor
     end.
 
 sequential_snapshot_source(
-  Source = {Peer, Endpoint}, Owner, RequestRef, Identity = {Ns, _Anchor},
+  {Peer, Endpoint}, Owner, RequestRef, Identity = {Ns, _Anchor},
   Cursor = #verified_cursor{height = Height}, Root, FetchFun,
   BootstrapTimeout, PageTimeout, AdvanceMode) ->
     ProbeTo = Height + 1,
@@ -6103,7 +6103,7 @@ sequential_snapshot_source(
         {ok, Entries, RemoteHeight} when is_integer(RemoteHeight), RemoteHeight > Height ->
             case validate_page(Entries, Height + 1, ProbeTo, RemoteHeight) of
                 {ok, _Count, _Bytes} ->
-                    advance_snapshot_to_height([Source], Owner, RequestRef, Identity,
+                    advance_snapshot_to_height([{Peer, [Endpoint]}], Owner, RequestRef, Identity,
                       Cursor, Root, snapshot_target(AdvanceMode, Height, RemoteHeight),
                       FetchFun, PageTimeout);
                 {error, Reason} -> {error, {bootstrap_page, Reason}, Cursor}
@@ -6120,14 +6120,17 @@ probe_pages(Owner, RequestRef, Hints, Ns, Height, FetchFun, PageTimeout) ->
     parallel_probes(
       Hints,
       fun({Peer, Endpoints}) ->
-          probe_page_endpoints(
+          fetch_peer_page(
             Endpoints, Owner, RequestRef, Peer, Ns,
             Height + 1, To, FetchFun, PageTimeout)
       end,
       PageTimeout).
 
-probe_page_endpoints(Endpoints, Owner, RequestRef, Peer, Ns,
-                     From, To, FetchFun, PageTimeout) ->
+%% Addresses locate one peer, not independent copies of its history. A page
+%% reply ends that peer's transport walk; verification decides whether to use
+%% it or try the next peer. Only failed transport needs another address.
+fetch_peer_page(Endpoints, Owner, RequestRef, Peer, Ns,
+                From, To, FetchFun, PageTimeout) ->
     Deadline = quod_time:mono_ms() + PageTimeout,
     probe_candidate_endpoints(
       Endpoints, Deadline,
@@ -6281,7 +6284,7 @@ advance_snapshot(Owner, RequestRef, Identity,
             Advertised = lists:max([H || {H, _Source} <- Candidates]),
             CandidateSources = [Source || {_H, Source} <-
                                 lists:reverse(lists:keysort(1, Candidates))],
-            advance_snapshot_to_height(flatten_route_candidates(CandidateSources),
+            advance_snapshot_to_height(CandidateSources,
               Owner, RequestRef, Identity, Cursor, Root,
               snapshot_target(AdvanceMode, Height, Advertised), FetchFun, PageTimeout)
     end.
@@ -6311,13 +6314,13 @@ advance_snapshot_to_height(Sources, Owner, RequestRef, Identity,
 advance_snapshot_sources([], _Owner, _RequestRef, _Identity, Cursor,
                          _Root, _Target, _FetchFun, _PageTimeout) ->
     {error, invalid_history, Cursor};
-advance_snapshot_sources([{Peer, Endpoint} | Rest], Owner, RequestRef,
+advance_snapshot_sources([{Peer, Endpoints} | Rest], Owner, RequestRef,
                          Identity = {Ns, Anchor},
                          Cursor = #verified_cursor{height = Height, projection = Projection,
                                                    phase_index = PhaseIndex},
                          Root, Target, FetchFun, PageTimeout) ->
-    case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Height + 1, Target,
-                    FetchFun, PageTimeout) of
+    case fetch_peer_page(Endpoints, Owner, RequestRef, Peer, Ns,
+                         Height + 1, Target, FetchFun, PageTimeout) of
         {ok, Entries, RemoteHeight}
           when is_list(Entries), is_integer(RemoteHeight), RemoteHeight >= 0 ->
             case prepare_verified_page(Ns, Anchor, Identity, Projection, PhaseIndex,

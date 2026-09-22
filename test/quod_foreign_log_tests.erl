@@ -3770,7 +3770,7 @@ feed_recipient_wake_is_exactly_correlated_and_interest_owned_test() ->
         {ok, Follow1} = quod_foreign_log:follow(Identity, projection),
         Building1 = receive_follow(Follow1, Identity),
         ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
-        _BlockedWorker = receive
+        BlockedWorker = receive
                              {feed_recipient_fetch_waiting, Worker} -> Worker
                          after 1000 ->
                              error(initial_follow_did_not_start)
@@ -3820,7 +3820,8 @@ feed_recipient_wake_is_exactly_correlated_and_interest_owned_test() ->
 
         %% One registration belongs to the anchored identity, not to an
         %% individual consumer.  It survives the first detach and is removed
-        %% exactly when the last interest disappears.
+        %% once the last consumer and the already-owned finite writer have
+        %% released it. Consumer withdrawal must not kill that writer.
         {ok, Follow2} = quod_foreign_log:follow(Identity, projection),
         Building2 = receive_follow(Follow2, Identity),
         ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
@@ -3829,6 +3830,9 @@ feed_recipient_wake_is_exactly_correlated_and_interest_owned_test() ->
                      maps:get(feed_registrations,
                               quod_foreign_log:stats())),
         ok = quod_foreign_log:unfollow(Follow2),
+        ?assertEqual(0, maps:get(follow_consumers, quod_foreign_log:stats())),
+        BlockedWorker ! release_feed_recipient_fetch,
+        await_history_idle(Identity, quod_time:mono_ms() + 2000),
         Unregister = receive_fake_feed_send(Link, 1000),
         ?assertMatch(
            {unregister, RegistrationId, Anchor},
@@ -3943,6 +3947,58 @@ local_commit_progress_subscription_is_namespace_refcounted_test() ->
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.
+
+owned_follow_withdrawal_test_() ->
+    [{atom_to_list(Case), fun() -> owned_follow_withdrawal(Case) end}
+     || Case <- [unfollow, new_consumer, deadline]].
+
+owned_follow_withdrawal(Case) ->
+    Fixture = foreign_fixture(unique_ns()), Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)}, Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31980}, Dir = temp_dir("follow-owned-withdrawal"),
+    Owner = start_owner_opts(Dir,
+                peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+                #{page_timeout_ms => 100}),
+    try
+        ?assertMatch({ok, _}, quod_foreign_log:verify(
+            Peer, Endpoint, maps:get(ref, Fixture), resolve, 5000)),
+        Token = make_ref(),
+        ok = gen_server:call(Owner, {test_hold_next_worker_result, self(), Token}),
+        {ok, Follow} = quod_foreign_log:follow(Identity, progress),
+        {Job, Worker} = receive {worker_result_held, Token, R, W} -> {R, W}
+                        after 2000 -> error(follow_handoff_not_held) end,
+        Row = maps:get(Identity, quod_foreign_log:test_lifecycle_state()),
+        ?assertMatch(#{active := #{ref := Job, worker := Worker, custody := held}}, Row),
+        #{active := #{work := {follow, Identity, _, Deadline}}} = Row,
+        Monitor = monitor(process, Worker),
+        ok = quod_foreign_log:unfollow(Follow),
+        ?assertEqual(0, maps:get(follow_consumers, quod_foreign_log:stats())),
+        Second = case Case of
+            new_consumer ->
+                {ok, Ref} = quod_foreign_log:follow(Identity, progress),
+                %% Demand joins the same finite writer. It must not enqueue
+                %% another follower or borrow its mutable cursor.
+                ?assertMatch(#{active := #{ref := Job, worker := Worker}, waiting := []},
+                             maps:get(Identity, quod_foreign_log:test_lifecycle_state())),
+                Ref;
+            _ -> none
+        end,
+        case Case of deadline -> ok; _ -> Worker ! {release_worker_result, Token} end,
+        Exit = receive {'DOWN', Monitor, process, Worker, Reason} -> Reason
+               after 2000 -> error(follow_outlived_original_deadline) end,
+        ExpectedExit = case Case of deadline -> killed; _ -> normal end,
+        ?assertEqual(ExpectedExit, Exit),
+        case Case of deadline -> ?assert(quod_time:mono_ms() >= Deadline); _ -> ok end,
+        await_history_ready(Identity, 2),
+        Stats = quod_foreign_log:stats(),
+        ?assertEqual(case Case of deadline -> 1; _ -> 0 end,
+                     maps:get(history_custody_losses, Stats)),
+        ?assertEqual(0, maps:get(history_corruptions, Stats)),
+        ?assertMatch({ok, #{phase := resolve}}, quod_foreign_log:verify(
+            Peer, Endpoint, maps:get(ref, Fixture), resolve, 5000)),
+        ?assertEqual(1, maps:get(follow_wakes, quod_foreign_log:stats())),
+        case Second of none -> ok; _ -> quod_foreign_log:unfollow(Second) end
+    after stop_owner(Owner), _ = file:del_dir_r(Dir) end.
 
 follow_attempt_permission_is_consumed_without_erasing_known_lag_test() ->
     Fixture = foreign_fixture(unique_ns()),

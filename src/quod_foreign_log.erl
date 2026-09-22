@@ -3330,7 +3330,9 @@ add_follow(Identity, Interest, From = {ConsumerPid, _Tag}, S0)
              true -> open_progress_signals(Identity, S3);
              false -> S3
          end,
-    case WasIdle of
+    %% A new consumer joins an existing custody holder. Registration/commit
+    %% edges still mark real advancement; demand alone does not repeat its job.
+    case WasIdle andalso not H0#history.follow_inflight of
          true -> wake_follow(Identity, S4);
          false when Interest =:= projection, H1#history.materializer =:= none ->
              ensure_materializer_advanced(Identity, S4);
@@ -3978,41 +3980,36 @@ stop_follow_target(Identity, S0) ->
                             reachability = unknown},
             S2 = put_history(Identity, H2, S1),
             maybe_close_progress_signals(
-              Identity, cancel_active_follow(Identity, S2));
+              Identity, withdraw_follow_demand(Identity, S2));
         undefined -> S0
     end.
 
-cancel_active_follow(Identity, S0) ->
-    Matches =
-        [{Ref, Worker}
-         || {Ref,
-             #request{from = {follow, RequestIdentity, _}, worker = Worker}} <-
-                maps:to_list(S0#s.pending),
-            RequestIdentity =:= Identity],
-    lists:foreach(fun({_Ref, Worker}) -> exit(Worker, kill) end, Matches),
-    Pending = lists:foldl(fun({Ref, _}, Acc) ->
-        Request = maps:get(Ref, Acc),
-        Acc#{Ref => Request#request{retiring = true}}
-    end, S0#s.pending, Matches),
-    S1 = S0#s{pending = Pending},
-    case maps:get(Identity, S1#s.histories, undefined) of
-        #history{waiting = Waiting0} = H0 ->
-            lists:foreach(fun(Q) ->
-                case queued_follow(Identity, Q) of
-                    true -> release_custody_monitor(Identity, Q);
-                    false -> ok
-                end
-            end, queue:to_list(Waiting0)),
-            Waiting1 =
-                queue:from_list(
-                  [Queued
-                   || Queued <- queue:to_list(Waiting0),
-                      not queued_follow(Identity, Queued)]),
-            start_next_request(
-              Identity, put_history(Identity, H0#history{waiting = Waiting1}, S1));
-        undefined ->
-            S1
-    end.
+withdraw_follow_demand(Identity, S0) ->
+    H = maps:get(Identity, S0#s.histories),
+    Ref = H#history.active,
+    S1 = case maps:get(Ref, S0#s.pending, none) of
+        #request{from = {follow, Identity, _}, custody = Custody,
+                 worker = Worker} = Request ->
+            %% Subscription demand ends now, not ownership of a mutable
+            %% cursor. A custody holder returns its verified state through
+            %% the ordinary bounded handoff. Before acquisition, cancellation
+            %% remains immediate; deadline and owner-death teardown are intact.
+            case Custody of
+                held -> put_history(Identity, H#history{follow_inflight = true}, S0);
+                _ -> exit(Worker, kill),
+                     S0#s{pending = (S0#s.pending)#{Ref => Request#request{retiring = true}}}
+            end;
+        _ -> S0
+    end,
+    #history{waiting = Waiting0} = H0 = maps:get(Identity, S1#s.histories),
+    Waiting1 = queue:filter(fun(Q) ->
+        case queued_follow(Identity, Q) of
+            true -> release_custody_monitor(Identity, Q), false;
+            false -> true
+        end
+    end, Waiting0),
+    start_next_request(
+      Identity, put_history(Identity, H0#history{waiting = Waiting1}, S1)).
 
 queued_follow(
   Identity,

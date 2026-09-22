@@ -1398,3 +1398,11 @@ coalesced until acknowledged. Each facts subscriber receives a state-only first
 baseline even when joining an existing materializer; earlier occurrences are
 not replayed, while established subscribers retain live event ordering. No
 new cache, owner, queue, readiness timer or durable/wire format is introduced.
+
+Removing the last follower withdraws future demand and queued follow work.
+Before writer custody is acquired, cancellation remains immediate. Once held,
+the existing bounded worker returns its coherent verified cursor through the
+ordinary handoff; unsubscribing does not kill that cursor and force a rebuild.
+A new subscriber joins that in-flight job. Genuine progress still grants the
+next attempt; demand alone does not repeat it. The original work deadline,
+owner-death teardown and exclusive registry custody remain unchanged.

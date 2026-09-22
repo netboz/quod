@@ -3788,6 +3788,80 @@ directory_renewal_does_not_probe_a_reachable_follow_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+covered_progress_notices_do_not_start_history_work_test_() ->
+    [{atom_to_list(Kind), fun() -> covered_progress_notice(Kind) end}
+     || Kind <- [registered, recipient, digest, committed, certified_head]].
+
+covered_progress_notice(Kind) ->
+    Fixture = foreign_fixture(unique_ns()),
+    #{ns := Ns, anchor := Anchor, pub := Peer, chain := Chain, ref := Ref} = Fixture,
+    Identity = {Ns, Anchor}, Endpoint = {"127.0.0.1", 31979},
+    Calls = atomics:new(1, []), Base = peer_chain_fetch(Ns, Chain, [Peer]),
+    Fetch = fun(P, E, N, F, T) ->
+        atomics:add_get(Calls, 1, 1), Base(P, E, N, F, T)
+    end,
+    Dir = temp_dir("covered-progress-notice"),
+    Owner = start_owner(Dir, Fetch), Parent = self(),
+    Link = spawn(fun() -> fake_feed_link(Parent) end),
+    Registration = crypto:strong_rand_bytes(16),
+    try
+        {ok, _} = quod_foreign_log:verify(Peer, Endpoint, Ref, resolve, 5000),
+        {ok, Follow} = quod_foreign_log:follow(Identity, progress),
+        {Notice, {certified, 2, _}} = receive_certified_follow(Follow, Identity),
+        ok = quod_foreign_log:ack(Follow, Notice),
+        await_history_idle(Identity, quod_time:mono_ms() + 2000),
+        ok = quod_foreign_log:test_install_feed_registration(
+               Owner, Identity, Peer, Link, Registration),
+        %% Establish the actual registration first. Reconnection is a real
+        %% availability edge even at the same height; subsequent duplicates
+        %% must not masquerade as another reconnection.
+        Initial = quod_feed:encode(Ns, {recipient_registered, 1, Registration, Anchor, 2}),
+        Owner ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Initial},
+        ?assertEqual({ack, Registration, Anchor, 2},
+                     quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
+        await_history_idle(Identity, quod_time:mono_ms() + 2000),
+        Wakes = maps:get(follow_wakes, quod_foreign_log:stats()),
+        Fetches = atomics:get(Calls, 1),
+        Send = fun(Height) ->
+            case Kind of
+                committed -> quod_reg:publish({committed, Ns}, {committed, Ns, Height, none});
+                certified_head -> quod_reg:publish({committed, Ns}, {certified_head, Ns, Height});
+                _ ->
+                    Term = case Kind of
+                        registered -> {recipient_registered, 1, Registration, Anchor, Height};
+                        recipient -> {recipient_wake, 1, Registration, Anchor, Height};
+                        digest -> {digest, Height}
+                    end,
+                    Owner ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), quod_feed:encode(Ns, Term)}
+            end,
+            case Kind of
+                K when K =:= registered; K =:= recipient ->
+                    ?assertEqual({ack, Registration, Anchor, Height},
+                                 quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns));
+                _ -> ok
+            end
+        end,
+        %% The owner reply is a processing barrier after the real message/gproc
+        %% delivery. No send-trace ordering assumption or timing-based absence.
+        lists:foreach(fun(H) ->
+            Send(H),
+            ?assertEqual(Wakes, maps:get(follow_wakes, quod_foreign_log:stats())),
+            ?assertEqual(Fetches, atomics:get(Calls, 1))
+        end, [2, 2, 1]),
+        %% A genuinely higher tip must still wake this same verifier; the hint
+        %% alone cannot turn the installed height into 3.
+        Token = make_ref(),
+        ok = gen_server:call(Owner, {test_hold_next_follow_worker, self(), Token}),
+        Send(3),
+        Worker = receive_follow_worker(Token),
+        ?assertEqual(Wakes + 1, maps:get(follow_wakes, quod_foreign_log:stats())),
+        ?assertMatch(#{height := 2}, gen_server:call(Owner, {test_follow_attempt_state, Identity})),
+        Worker ! {release_follow_worker, Token},
+        ok = quod_foreign_log:unfollow(Follow)
+    after
+        Link ! close, stop_owner(Owner), _ = file:del_dir_r(Dir)
+    end.
+
 feed_progress_is_correlated_to_each_anchored_committee_test() ->
     Dir = temp_dir("feed-progress-committee-correlation"),
     NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,

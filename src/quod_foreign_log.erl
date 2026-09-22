@@ -3468,7 +3468,7 @@ put_history(Identity, H, S) ->
 %% session already verified by this owner. A current-view watch keeps the feed
 %% freshness registration; the next real delta resumes the same verifier
 %% instead of replaying or rescanning history.
-%% After a node restart only the cache remains; first use verifies it fully.
+%% Node startup verifies retained disk state before publishing a reusable prefix.
 hibernate_history(Identity, S0) ->
     S1 = case maps:get(Identity, S0#s.histories, undefined) of
         #history{active = none, consumers = Consumers, materializer = none,
@@ -4477,13 +4477,14 @@ accept_feed_recipient_signal(Peer, Link, Identity = {Ns, Anchor},
                 Ns, Anchor, RegistrationId, Height)),
             Registration1 = Registration#feed_registration{
                               registered = true, height = Height},
-            S1 = note_feed_height(
-                   Identity, Height,
-                   S0#s{feed_registrations =
-                            (S0#s.feed_registrations)#{
-                              Key => Registration1}}),
-            wake_follow(
-              Identity, release_route_waiters(Identity, feed_recipient, S1));
+            Event = case Registration#feed_registration.registered of
+                        false -> feed_registered;
+                        true -> feed_recipient
+                    end,
+            wake_history_progress(
+              Identity, {ok, Height}, Event,
+              S0#s{feed_registrations =
+                       (S0#s.feed_registrations)#{Key => Registration1}});
         _CrossedOrStale ->
             S0
     end;
@@ -4584,11 +4585,7 @@ wake_namespace_progress(Ns, Height, S0) ->
             HistoryNs =:= Ns],
     lists:foldl(
       fun(Identity, Acc) ->
-              wake_follow(
-                Identity,
-                release_route_waiters(
-                  Identity, local_commit,
-                  note_feed_height(Identity, Height, Acc)))
+              wake_history_progress(Identity, {ok, Height}, local_commit, Acc)
       end, S0, Identities).
 
 %% A generic feed block/digest carries no anchor. Correlate its authenticated
@@ -4608,16 +4605,23 @@ wake_namespace_progress_from_peer(Peer, Ns, Progress, S0) ->
               Peer, quod_simplex:history_committee(Projection))],
     lists:foldl(
       fun(Identity, Acc) ->
-              Acc1 = release_route_waiters(Identity, peer_feed, Acc),
-              case progress_may_advance(Identity, Progress, Acc1) of
-                  true ->
-                      wake_follow(
-                        Identity,
-                        note_feed_progress(Identity, Progress, Acc1));
-                  false ->
-                      Acc1
-              end
+              wake_history_progress(Identity, Progress, peer_feed, Acc)
       end, S0, Identities).
+
+%% Feed registration, local commit and generic feed notices share one rule.
+%% Record freshness before releasing callers. A new registration is a genuine
+%% reconnection edge even at the same height; repeated covered heights on that
+%% registration cannot spend another follow job.
+wake_history_progress(Identity, Progress, Event, S0) ->
+    S1 = case Progress of
+             error -> S0;
+             _ -> note_feed_progress(Identity, Progress, S0)
+         end,
+    S2 = release_route_waiters(Identity, Event, S1),
+    case Event =:= feed_registered orelse progress_may_advance(Identity, Progress, S2) of
+        true -> wake_follow(Identity, S2);
+        false -> S2
+    end.
 
 %% Digest heights are authenticated reachability/freshness hints, never
 %% evidence. A height at or below the certified resident row cannot require

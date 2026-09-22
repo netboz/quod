@@ -1416,6 +1416,13 @@ baseline even when joining an existing materializer; earlier occurrences are
 not replayed, while established subscribers retain live event ordering. No
 new cache, owner, queue, readiness timer or durable/wire format is introduced.
 
+Registered feed heights, local commits and generic feed progress share one
+freshness/wake transition. A new authenticated registration is a reconnection
+edge, including at the same height. Repeated covered heights on that connection
+do not start history work. Acknowledgements and route-availability notices still
+serve their callers; freshness is recorded before releasing them. Higher or
+opaque progress and explicit consumer refresh keep their existing semantics.
+
 Removing the last follower withdraws future demand and queued follow work.
 Before writer custody is acquired, cancellation remains immediate. Once held,
 the existing bounded worker returns its coherent verified cursor through the

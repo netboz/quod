@@ -347,7 +347,7 @@ declare(NodeId) ->
     %% are deliberately absent from labels so hostile or high-cardinality
     %% durable subscription catalogues cannot grow Prometheus series.
     _ = N(quod_foreign_follow_targets, "Distinct foreign ontology histories actively followed on this node."),
-    _ = N(quod_foreign_follow_consumers, "Local runtime consumer references sharing the node-wide certified follows."),
+    _ = N(quod_foreign_follow_consumers, "Local progress and projection consumer references sharing the node-wide certified follows."),
     _ = N(quod_foreign_projection_workers, "Foreign fact-projection workers currently materializing or holding certified state."),
     _ = N(quod_foreign_projection_bytes, "MVCC memory bytes held by foreign fact projections currently active on this node."),
     _ = N(quod_foreign_follow_building, "Followed targets whose certified fact projection is rebuilding."),

@@ -1165,7 +1165,7 @@ enqueue_source_follow(Identity, S0) ->
 attach_source_follow(Identity, S0) ->
     Height = source_view_height(Identity, S0),
     {Attempt, S1} = next_source_attempt(S0),
-    case quod_foreign_log:follow(Identity) of
+    case quod_foreign_log:follow(Identity, projection) of
         {ok, FollowRef} ->
             put_source_view(
               Identity,

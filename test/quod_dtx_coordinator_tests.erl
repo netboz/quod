@@ -792,7 +792,7 @@ included_application_keeps_one_follow_and_ignores_nonprogress_notices_test() ->
                       dormant_await_idle(Worker),
                       send_operation_follow_notice(
                         Target, Worker, FollowRef,
-                        {resnapshot, 3, digest(250), #{}}),
+                        {certified, 3, digest(250)}),
                       %% Only this target changed. A fresh source read is
                       %% now an unexpected call, not a fixture requirement.
                       certify_operation_result(F, Worker, Pending),
@@ -1779,7 +1779,7 @@ with_operation_follow_owner(Fun) ->
     end.
 
 attach_operation_follow(#{target := Target}, Worker) ->
-    From = expect_operation_stub_call(foreign, {follow, Target}),
+    From = expect_operation_stub_call(foreign, {follow, Target, progress}),
     FollowRef = make_ref(),
     gen_server:reply(From, {ok, FollowRef}),
     %% Follow admission itself schedules acquisition. The common asynchronous
@@ -1792,7 +1792,7 @@ wake_operation_follow(#{target := Target}, Worker, FollowRef) ->
       Target, Worker, FollowRef, operation_follow_progress()).
 
 operation_follow_progress() ->
-    {advanced, 2, 3, digest(250), #{}, [], []}.
+    {certified, 3, digest(250)}.
 
 operation_status_notices(#{target := Target}, Worker, FollowRef) ->
     send_operation_follow_notice(Target, Worker, FollowRef, {building, 3}),

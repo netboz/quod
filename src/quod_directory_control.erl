@@ -1416,7 +1416,7 @@ validate_node_generation(Page, Blob, Catalog) ->
     end.
 
 validate_followed_node_generation(Page, Identity, Catalog) ->
-    case quod_foreign_log:follow(Identity) of
+    case quod_foreign_log:follow(Identity, projection) of
         {ok, FollowRef} ->
             try await_node_projection(Page, Identity, FollowRef, Catalog)
             after quod_foreign_log:unfollow(FollowRef) end;
@@ -1438,8 +1438,6 @@ await_node_projection(Page, Identity, FollowRef, Catalog) ->
                         {error, _} = Error -> Error
                     end;
                 {building, _} ->
-                    await_node_projection(Page, Identity, FollowRef, Catalog);
-                {advanced, _From, _To, _Pubs, _Projection, _Freshness} ->
                     await_node_projection(Page, Identity, FollowRef, Catalog);
                 {unreachable, Reason, _Height} -> {error, Reason}
             end

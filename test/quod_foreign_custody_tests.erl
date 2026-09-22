@@ -385,7 +385,7 @@ follow_cancel_case(Root) ->
            Identity, {maps:get(pub, Fixture), {"127.0.0.1", 31997}}),
     install_registration_barrier(),
     persistent_term:put({?MODULE, registration_gate}, writer_key(Identity)),
-    {ok, Follow} = quod_foreign_log:follow(Identity),
+    {ok, Follow} = quod_foreign_log:follow(Identity, projection),
     Worker = receive {registration_held, W} -> W
              after 5000 -> error(follow_registration_not_started) end,
     %% Queue the exact sibling while the real follow attempt is still active,
@@ -472,7 +472,7 @@ cancel_denied_case(Root, follow_cancel) ->
     persistent_term:put({?MODULE, registration_gate}, writer_key(Identity)),
     ok = quod_foreign_log:observe_candidate(
            Identity, {maps:get(pub, Fixture), {"127.0.0.1", 31997}}),
-    {ok, Follow} = quod_foreign_log:follow(Identity),
+    {ok, Follow} = quod_foreign_log:follow(Identity, projection),
     Worker = receive {registration_held, W} -> W
              after 5000 -> error(canceled_worker_did_not_enter_registration) end,
     #{active := #{ref := Job, worker := Worker}} = lifecycle(Owner, Identity),

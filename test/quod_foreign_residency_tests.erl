@@ -194,7 +194,7 @@ follow_borrow_refusal() ->
         receive {local_capture_gate_ready, Source} -> ok
         after 1000 -> error(follow_source_gate_not_ready) end,
         1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         receive {local_capture_held, Source, _Deadline} -> ok
         after 1000 -> error(follow_did_not_capture_source) end,
         #{active := #{worker := Worker}} = maps:get(

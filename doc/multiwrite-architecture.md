@@ -1372,3 +1372,22 @@ private preparation, while absence remains uncertain. The permanent real-node
 crash control stops source Prolog/Simplex after a remote effect is saved but
 before activation: recovery certifies abort, completes and retires the effect
 without applying either the ordinary fact or the private action.
+
+### Foreign follow demand
+
+Group and operation coordinators follow the exact remote identity's certified
+prefix, not its Prolog facts projection. `follow/2` and `follow_request/2`
+declare `progress` or `projection` within the same foreign-log registration,
+verifier, feed and notification-credit lifecycle. Runtime subscriptions and
+directory generation validation require projections; coordination does not.
+Only projection demand starts or retains the existing materializer. Removing
+that demand releases it even while progress consumers remain.
+
+Progress carries the installed prefix's height and hash, never a feed hint.
+It only wakes the existing target-scoped verifier; it neither authorizes an
+outcome nor certifies a fresh current view. Subscription replies precede their
+first correlated notice, owner loss invalidates references, and notices remain
+coalesced until acknowledged. Each facts subscriber receives a state-only first
+baseline even when joining an existing materializer; earlier occurrences are
+not replayed, while established subscribers retain live event ordering. No
+new cache, owner, queue, readiness timer or durable/wire format is introduced.

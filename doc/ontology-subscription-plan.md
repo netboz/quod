@@ -76,7 +76,7 @@ proof controller, or transaction executor:
 - `quod_runtime` reads the subscriber's exact `subscribes/2` facts and owns the
   subscriber-local follow references and P-before-E ordering;
 - `quod_foreign_log` owns one node-wide certificate-verified history and one
-  materialized projection per actively followed target identity;
+  materialized projection per target with active facts consumers;
 - `quod_foreign_projection` folds only certified cached entries through
   `quod_committed_projection`, the same canonical state transition used by the
   local ontology;
@@ -84,12 +84,13 @@ proof controller, or transaction executor:
   dissemination, verification input, and reachability.
 
 Multiple subscriber ontologies on one node share the same target history and
-projection. Each keeps its own monitored consumer reference. The final
-`unfollow` removes the projection worker and closes the history's ledger,
+projection. Each keeps its own monitored consumer reference. Removing the last
+facts consumer releases the projection even if progress consumers remain. The final
+`unfollow` closes the history's ledger,
 phase-index handle, and channel. The disposable certified cache and closed
 derived phase session may remain on disk. The running owner may retain its
-bounded verified current projection; after owner restart the first use replays
-and verifies the disk cache before reuse.
+bounded verified current projection; after owner restart initialization verifies
+the disk cache before admitting proof requests. Requests do not replay prefixes.
 
 ## 4. Authorization remains the ordinary ACL
 
@@ -149,10 +150,25 @@ silently replaces `::`.
 
 ## 6. Implemented continuous certified follow
 
-`quod_foreign_log:follow/1`, `ack/2`, and `unfollow/1` extend the existing
+`quod_foreign_log:follow/2`, `ack/2`, and `unfollow/1` extend the existing
 foreign-history owner. One exact `{Namespace, GenesisAnchor}` identity is
 verified and materialized once per node regardless of how many local consumers
-follow it.
+follow it. The second argument declares the consumer's demand: `projection`
+for runtime facts/reactions and directory projection validation, `progress` for
+multiwrite coordination. The asynchronous `follow_request/2` has the same
+contract and installs its correlated reference before the first notice.
+
+A progress consumer receives `{certified, Height, Hash}` from the owner's
+installed immutable prefix, never from an unverified feed height. This is a
+wake for its existing evidence verifier, not a verdict or current-view authority.
+It needs no Prolog database, prefix replay, effects or reaction processing.
+Both interests share the same verifier, anchored feed registrations, monitoring,
+one-outstanding-notice credit and coalescing lifecycle. Only facts consumers
+start or retain the materializer; its notices do not wake progress consumers.
+Same-height verified reconnection may notify progress again without replay.
+Every facts consumer starts with a state-only baseline, including one joining
+an existing or in-flight materializer. Its first ready delivery omits earlier
+occurrences; established consumers keep their ordinary live event stream.
 
 The follower:
 
@@ -161,7 +177,8 @@ The follower:
 3. verifies certificates, contiguous history, and committee changes through
    the existing verifier;
 4. persists the certified history once;
-5. folds it through `quod_committed_projection` in page-sized turns;
+5. folds it through `quod_committed_projection` in page-sized turns only when
+   a facts consumer requires it;
 6. publishes a correlated building, ready, or unreachable notice to each
    consumer; and
 7. requires acknowledgement so a slow consumer receives one coalesced newest
@@ -169,8 +186,8 @@ The follower:
 
 The projection reducer returns the actual ordered `applied_ops` and
 `changed_heads`. It preserves OCC rejection, duplicate suppression, membership,
-effects-as-D-only, noop, Prepare, Finalize, abort, and Complete semantics. A DTX
-participant's hidden changes appear once, at `Finalize(commit)`. The
+effects-as-D-only, noop, Vote, Resolve, abort, and Complete semantics. An atomic
+participant's hidden changes appear once, at `Resolve(commit)`. The
 materializer itself executes neither effects nor reactions. It supplies newly
 certified live `applied_ops` to the subscriber runtime; the runtime owns the
 one shared reaction dispatcher.

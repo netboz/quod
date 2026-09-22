@@ -814,7 +814,7 @@ async_follow_installs_reference_before_first_notice_test() ->
         Result = try
             with_owner(fun(_, _, _, _, _) -> {error, unavailable} end, fun(_Owner) ->
                 Target = {<<"quod:async-follow-order">>, <<173:256>>},
-                {ok, RequestId} = quod_foreign_log:follow_request(Target),
+                {ok, RequestId} = quod_foreign_log:follow_request(Target, progress),
                 %% Receive in arrival order. A selective wait for just the
                 %% reply would conceal the old notice-before-registration bug.
                 Reply = receive Message -> Message

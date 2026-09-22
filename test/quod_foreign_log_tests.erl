@@ -3204,6 +3204,211 @@ foreign_log_start_removes_only_disposable_projection_state_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+late_facts_subscriber_gets_state_only_baseline_test() ->
+    with_follow_demand_fixture(fun(Identity, _Pid) ->
+        {ok, First} = quod_foreign_log:follow(Identity, projection),
+        {R, {resnapshot, 2, Projection, _}} = receive_follow_resnapshot(First, Identity),
+        ok = quod_foreign_log:ack(First, R),
+        {ok, Second} = quod_foreign_log:follow(Identity, projection),
+        {R2, {resnapshot, 2, Projection, _}} = receive_follow_resnapshot(Second, Identity),
+        ok = quod_foreign_log:ack(Second, R2),
+        ?assertMatch(#{projection_workers := 1, projection_rebuilds := 1},
+                     quod_foreign_log:stats()),
+        receive {quod_foreign_follow, First, _, Identity, _} ->
+            error(join_republished_to_existing_consumer)
+        after 0 -> ok end,
+        ok = quod_foreign_log:unfollow(Second),
+        ok = quod_foreign_log:unfollow(First)
+    end).
+
+building_subscriber_baselines_without_replaying_live_occurrences_test() ->
+    with_follow_demand_fixture(fun(Identity, Pid) ->
+        {ok, First} = quod_foreign_log:follow(Identity, projection),
+        {R, {resnapshot, 2, Projection, _}} = receive_follow_resnapshot(First, Identity),
+        ok = quod_foreign_log:ack(First, R),
+        %% Drive the real owner callback with its actual materializer generation.
+        %% This is a delivery-state fixture, not a certificate/consensus witness.
+        Histories = follow_record_field(histories, sys:get_state(Pid)),
+        M = follow_record_field(materializer, maps:get(Identity, Histories)),
+        Gen = follow_record_field(generation, M),
+        Pid ! {foreign_projection_building, Identity, Gen, 2},
+        {Building, {building, 2}} = receive_follow(First, Identity),
+        ok = quod_foreign_log:ack(First, Building),
+        {ok, Second} = quod_foreign_log:follow(Identity, projection),
+        {Initial, {building, 2}} = receive_follow(Second, Identity),
+        Publications = [{3, [{event, {remote_ping, one}}]}],
+        Pid ! {foreign_projection_ready, Identity, Gen,
+               #{from => 2, height => 3, projection_id => Projection,
+                 changed_heads => [], resnapshot => false,
+                 publications => Publications, memory_bytes => 0}},
+        {Live, {advanced, 2, 3, Projection, _, [], Publications}} =
+            receive_follow(First, Identity),
+        %% Owner reply orders processing. First delivery is behind the initial
+        %% building credit and must still discard pre-baseline occurrences.
+        _ = quod_foreign_log:stats(),
+        ok = quod_foreign_log:ack(Second, Initial),
+        {Baseline, {resnapshot, 3, Projection, _}} = receive_follow(Second, Identity),
+        ok = quod_foreign_log:ack(First, Live),
+        ok = quod_foreign_log:ack(Second, Baseline),
+        ok = quod_foreign_log:unfollow(Second),
+        ok = quod_foreign_log:unfollow(First)
+    end).
+
+follow_record_field(Name, Record) ->
+    {ok, {quod_foreign_log, [{abstract_code, {raw_abstract_v1, Forms}}]}} =
+        beam_lib:chunks(code:which(quod_foreign_log), [abstract_code]),
+    [Fields] = [Fs || {attribute, _, record, {Tag, Fs}} <- Forms,
+                     Tag =:= element(1, Record)],
+    Names = [case F of {typed_record_field, R, _} -> R; R -> R end || F <- Fields],
+    [Index] = [I || {F, I} <- lists:zip(Names, lists:seq(2, length(Names) + 1)),
+                   {atom, _, N} <- [element(3, F)], N =:= Name],
+    element(Index, Record).
+
+progress_follow_never_materializes_facts_test() ->
+    with_follow_demand_fixture(fun(Identity, _Pid) ->
+        {ok, Ref} = quod_foreign_log:follow(Identity, progress),
+        {NoticeRef, Notice} = receive_certified_follow(Ref, Identity),
+        ?assertMatch({certified, 2, <<_:256>>}, Notice),
+        ?assert(quod_dtx_coordinator:foreign_progress_notice(Notice)),
+        ?assertEqual({error, not_projection},
+                     quod_foreign_log:projection_clauses(Ref, [], 1000)),
+        ?assertMatch(#{projection_workers := 0, projection_rebuilds := 0},
+                     quod_foreign_log:stats()),
+        ok = quod_foreign_log:ack(Ref, NoticeRef),
+        ok = quod_foreign_log:unfollow(Ref),
+        %% A later group reuses certified history but must not rebuild its
+        %% facts from slot one merely to receive a progress edge.
+        {ok, Ref2} = quod_foreign_log:follow(Identity, progress),
+        {NoticeRef2, Notice} = receive_certified_follow(Ref2, Identity),
+        ok = quod_foreign_log:ack(Ref2, NoticeRef2),
+        ?assertMatch(#{projection_workers := 0, projection_rebuilds := 0},
+                     quod_foreign_log:stats()),
+        ok = quod_foreign_log:unfollow(Ref2)
+    end).
+
+projection_demand_can_join_and_leave_a_progress_follow_test() ->
+    with_follow_demand_fixture(fun(Identity, _Pid) ->
+        {ok, Progress} = quod_foreign_log:follow(Identity, progress),
+        {R, _} = receive_certified_follow(Progress, Identity),
+        ok = quod_foreign_log:ack(Progress, R),
+        {ok, Facts} = quod_foreign_log:follow(Identity, projection),
+        {F, {resnapshot, 2, _, _}} = receive_follow_resnapshot(Facts, Identity),
+        ok = quod_foreign_log:ack(Facts, F),
+        ?assertMatch({ok, #{}}, quod_foreign_log:projection_clauses(Facts, [], 1000)),
+        ?assertMatch(#{projection_workers := 1, projection_rebuilds := 1},
+                     quod_foreign_log:stats()),
+        %% Both notices and the stats reply came from this same owner: the
+        %% reply is a delivery barrier, not an assumption about send tracing.
+        receive {quod_foreign_follow, Progress, _, Identity, _} ->
+            error(projection_notice_sent_to_progress_consumer)
+        after 0 -> ok end,
+        ok = quod_foreign_log:unfollow(Facts),
+        ?assertMatch(#{follow_consumers := 1, projection_workers := 0},
+                     quod_foreign_log:stats()),
+        %% The surviving progress demand uses the same verifier and credit,
+        %% but must not recreate the released materializer on another wake.
+        ok = quod_foreign_log:refresh(Progress),
+        {R2, {certified, 2, _}} = receive_certified_follow(Progress, Identity),
+        ok = quod_foreign_log:ack(Progress, R2),
+        ?assertMatch(#{projection_workers := 0, projection_rebuilds := 1},
+                     quod_foreign_log:stats()),
+        ok = quod_foreign_log:unfollow(Progress)
+    end).
+
+progress_attach_preserves_existing_projection_test() ->
+    with_follow_demand_fixture(fun(Identity, _Pid) ->
+        {ok, Facts} = quod_foreign_log:follow(Identity, projection),
+        {F, {resnapshot, 2, _, _}} = receive_follow_resnapshot(Facts, Identity),
+        ok = quod_foreign_log:ack(Facts, F),
+        {ok, Progress} = quod_foreign_log:follow(Identity, progress),
+        {R, {certified, 2, _}} = receive_certified_follow(Progress, Identity),
+        ok = quod_foreign_log:ack(Progress, R),
+        ?assertMatch({ok, #{}}, quod_foreign_log:projection_clauses(Facts, [], 1000)),
+        ok = quod_foreign_log:unfollow(Progress),
+        ?assertMatch(#{follow_consumers := 1, projection_workers := 1,
+                      projection_rebuilds := 1}, quod_foreign_log:stats()),
+        ok = quod_foreign_log:unfollow(Facts)
+    end).
+
+progress_follow_credit_and_same_height_refresh_test() ->
+    with_follow_demand_fixture(fun(Identity, Pid) ->
+        {ok, Ref} = quod_foreign_log:follow(Identity, progress),
+        {R, Notice} = receive_certified_follow(Ref, Identity),
+        Before = maps:get(follow_wakes, quod_foreign_log:stats()),
+        ok = quod_foreign_log:refresh(Ref),
+        %% Await processing through the existing owner state, not a sleep or
+        %% send trace. The second result remains behind this notice's credit.
+        ok = wait_follow_attempt_idle(Pid, Identity, 3000),
+        ?assert(maps:get(follow_wakes, quod_foreign_log:stats()) > Before),
+        ?assert(maps:get(follow_coalesced, quod_foreign_log:stats()) > 0),
+        receive {quod_foreign_follow, Ref, _, Identity, _} ->
+            error(progress_credit_bypassed)
+        after 0 -> ok end,
+        ok = quod_foreign_log:ack(Ref, R),
+        {R2, Notice} = receive_certified_follow(Ref, Identity),
+        ok = quod_foreign_log:ack(Ref, R2),
+        ok = quod_foreign_log:unfollow(Ref)
+    end).
+
+progress_follow_ignores_unverified_higher_feed_height_test() ->
+    Fixture = signed_content_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture), Dir = temp_dir("follow-unverified-height"),
+    Test = self(), Token = make_ref(), Registration = crypto:strong_rand_bytes(16),
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
+        Pid = start_owner(Dir, peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer])),
+        Link = spawn(fun() -> fake_feed_link(Test) end),
+        try
+            ok = quod_foreign_log:observe_candidate(Identity, {Peer, {"127.0.0.1", 31979}}),
+            {ok, Ref} = quod_foreign_log:follow(Identity, progress),
+            {R, Notice = {certified, 2, _}} = receive_certified_follow(Ref, Identity),
+            ok = quod_foreign_log:ack(Ref, R),
+            ok = gen_server:call(Pid, {test_hold_next_follow_worker, self(), Token}),
+            ok = quod_foreign_log:test_install_feed_registration(Pid, Identity, Peer, Link, Registration),
+            Payload = quod_feed:encode(Ns, {recipient_registered, 1, Registration,
+                                            element(2, Identity), 99}),
+            Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Payload},
+            ?assertMatch({ack, Registration, _, 99},
+                         quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
+            Worker = receive_follow_worker(Token),
+            %% The feed is authenticated, but its height has not been verified.
+            %% A new consumer snapshots only the installed certified prefix.
+            {ok, Second} = quod_foreign_log:follow(Identity, progress),
+            {R2, Notice} = receive_certified_follow(Second, Identity),
+            ok = quod_foreign_log:ack(Second, R2),
+            receive {quod_foreign_follow, Ref, _, Identity, _} ->
+                error(feed_hint_published_as_certified_progress)
+            after 0 -> ok end,
+            Worker ! {release_follow_worker, Token},
+            ok = quod_foreign_log:unfollow(Second),
+            ok = quod_foreign_log:unfollow(Ref)
+        after Link ! close, stop_owner(Pid), _ = file:del_dir_r(Dir)
+        end
+    end).
+
+with_follow_demand_fixture(Fun) ->
+    Fixture = signed_content_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture), Dir = temp_dir("follow-demand"),
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
+        Pid = start_owner(Dir, peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer])),
+        try
+            ok = quod_foreign_log:observe_candidate(Identity, {Peer, {"127.0.0.1", 31979}}),
+            Fun(Identity, Pid)
+        after stop_owner(Pid), _ = file:del_dir_r(Dir)
+        end
+    end).
+
+receive_certified_follow(Ref, Identity) ->
+    {NoticeRef, Notice} = receive_follow(Ref, Identity),
+    case Notice of
+        {certified, _, _} -> {NoticeRef, Notice};
+        {building, _} ->
+            ok = quod_foreign_log:ack(Ref, NoticeRef),
+            receive_certified_follow(Ref, Identity);
+        Unexpected -> error({unexpected_progress_notice, Unexpected})
+    end.
+
 opening_a_follow_signals_one_exact_directory_demand_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     stop_route_recovery_owners(),
@@ -3217,7 +3422,7 @@ opening_a_follow_signals_one_exact_directory_demand_test() ->
     Pid = start_owner_opts(Dir, NoFetch, #{}),
     Identity = {unique_ns(), key(100)},
     try
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         _ = receive_follow(FollowRef, Identity),
         ok = wait_route_demand(Identity, 100),
         ?assertEqual(
@@ -3273,7 +3478,7 @@ same_height_reconnection_republishes_progress_without_replaying_history_test() -
         Pid = start_owner(Dir, Fetch), Link = spawn(fun() -> fake_feed_link(Test) end),
         try
             ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
-            {ok, FollowRef} = quod_foreign_log:follow(Identity),
+            {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
             {InitialNotice, {resnapshot, 2, Projection, _}} = receive_follow_resnapshot(FollowRef, Identity),
             ok = quod_foreign_log:ack(FollowRef, InitialNotice),
             ok = await_history_ready(Identity, 2),
@@ -3288,7 +3493,7 @@ same_height_reconnection_republishes_progress_without_replaying_history_test() -
                          quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
             {NoticeRef, Notice} = receive_follow(FollowRef, Identity),
             ?assertMatch({advanced, 2, 2, Projection, _, [], []}, Notice),
-            ?assert(quod_dtx_coordinator:foreign_progress_notice(Notice)),
+            ?assertNot(quod_dtx_coordinator:foreign_progress_notice(Notice)),
             ?assertNot(quod_dtx_coordinator:foreign_progress_notice({building, 2})),
             ok = quod_foreign_log:ack(FollowRef, NoticeRef),
             ok = await_history_ready(Identity, 2),
@@ -3308,7 +3513,7 @@ follow_progress_is_message_driven_and_cleanup_is_exact_test() ->
     Pid = start_owner_opts(Dir, NoFetch, #{}),
     Identity = {unique_ns(), key(101)},
     try
-        {ok, Follow1} = quod_foreign_log:follow(Identity),
+        {ok, Follow1} = quod_foreign_log:follow(Identity, projection),
         Notice1 = receive_follow(Follow1, Identity),
         ?assertMatch({building, 0}, element(2, Notice1)),
         ok = quod_foreign_log:ack(Follow1, element(1, Notice1)),
@@ -3348,7 +3553,7 @@ follow_progress_is_message_driven_and_cleanup_is_exact_test() ->
         ok = quod_foreign_log:ack(Follow1, element(1, Unreachable4)),
         ?assertEqual(3, maps:get(follow_wakes, quod_foreign_log:stats())),
 
-        {ok, Follow2} = quod_foreign_log:follow(Identity),
+        {ok, Follow2} = quod_foreign_log:follow(Identity, projection),
         Notice2 = receive_follow(Follow2, Identity),
         ?assertMatch({building, 0}, element(2, Notice2)),
         ok = quod_foreign_log:ack(Follow2, element(1, Notice2)),
@@ -3395,7 +3600,7 @@ root_readiness_resumes_parked_projection_without_polling_test() ->
         application:set_env(
           quod, namespace_desired, #{content => #{}, brahms => #{}}),
         ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         Initial = receive_follow(FollowRef, Identity),
         ?assertMatch({building, 0}, element(2, Initial)),
         ok = quod_foreign_log:ack(FollowRef, element(1, Initial)),
@@ -3448,7 +3653,7 @@ directory_renewal_does_not_probe_a_reachable_follow_test() ->
     Pid = start_owner(Dir, Fetch),
     try
         ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         Building = receive_follow(FollowRef, Identity),
         ok = quod_foreign_log:ack(FollowRef, element(1, Building)),
         Ready = receive_follow_resnapshot(FollowRef, Identity),
@@ -3490,12 +3695,12 @@ feed_progress_is_correlated_to_each_anchored_committee_test() ->
                     Ns, maps:get(genesis, Fixture2),
                     quod_simplex:history_projection(Identity2)),
     try
-        {ok, Follow1} = quod_foreign_log:follow(Identity1),
+        {ok, Follow1} = quod_foreign_log:follow(Identity1, projection),
         Building1 = receive_follow(Follow1, Identity1),
         ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
         Unreachable1 = receive_follow(Follow1, Identity1),
         ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
-        {ok, Follow2} = quod_foreign_log:follow(Identity2),
+        {ok, Follow2} = quod_foreign_log:follow(Identity2, projection),
         Building2 = receive_follow(Follow2, Identity2),
         ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
         Unreachable2 = receive_follow(Follow2, Identity2),
@@ -3562,7 +3767,7 @@ feed_recipient_wake_is_exactly_correlated_and_interest_owned_test() ->
     try
         ok = quod_foreign_log:observe_candidate(
                Identity, {Peer, {"127.0.0.1", 32010}}),
-        {ok, Follow1} = quod_foreign_log:follow(Identity),
+        {ok, Follow1} = quod_foreign_log:follow(Identity, projection),
         Building1 = receive_follow(Follow1, Identity),
         ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
         _BlockedWorker = receive
@@ -3616,7 +3821,7 @@ feed_recipient_wake_is_exactly_correlated_and_interest_owned_test() ->
         %% One registration belongs to the anchored identity, not to an
         %% individual consumer.  It survives the first detach and is removed
         %% exactly when the last interest disappears.
-        {ok, Follow2} = quod_foreign_log:follow(Identity),
+        {ok, Follow2} = quod_foreign_log:follow(Identity, projection),
         Building2 = receive_follow(Follow2, Identity),
         ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
         ok = quod_foreign_log:unfollow(Follow1),
@@ -3700,13 +3905,13 @@ local_commit_progress_subscription_is_namespace_refcounted_test() ->
     Identity1 = {Ns, key(121)},
     Identity2 = {Ns, key(122)},
     try
-        {ok, Follow1} = quod_foreign_log:follow(Identity1),
+        {ok, Follow1} = quod_foreign_log:follow(Identity1, projection),
         Building1 = receive_follow(Follow1, Identity1),
         ok = quod_foreign_log:ack(Follow1, element(1, Building1)),
         Unreachable1 = receive_follow(Follow1, Identity1),
         ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
 
-        {ok, Follow2} = quod_foreign_log:follow(Identity2),
+        {ok, Follow2} = quod_foreign_log:follow(Identity2, projection),
         Building2 = receive_follow(Follow2, Identity2),
         ok = quod_foreign_log:ack(Follow2, element(1, Building2)),
         Unreachable2 = receive_follow(Follow2, Identity2),
@@ -3763,7 +3968,7 @@ follow_attempt_permission_is_consumed_without_erasing_known_lag_test() ->
         atomics:put(Mode, 1, 1),
         Token1 = make_ref(),
         ok = gen_server:call(Pid, {test_hold_next_follow_worker, self(), Token1}),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         Worker1 = receive_follow_worker(Token1),
         ok = quod_foreign_log:test_install_feed_registration(Pid, Identity, Peer, Link, Registration),
         Registered = quod_feed:encode(Ns, {recipient_registered, 1, Registration, element(2, Identity), 3}),
@@ -3834,7 +4039,7 @@ follow_wakes_coalesce_while_certified_work_is_inflight_test() ->
     Endpoint = {"127.0.0.1", 31990},
     try
         ok = quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint}),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         Building = receive_follow(FollowRef, Identity),
         ok = quod_foreign_log:ack(FollowRef, element(1, Building)),
         Worker1 = receive
@@ -4104,7 +4309,7 @@ follow_owner_identity_and_consumer_down_are_fail_closed_test() ->
     Parent = self(),
     Consumer = spawn(
                  fun() ->
-                         Result = quod_foreign_log:follow(Identity),
+                         Result = quod_foreign_log:follow(Identity, projection),
                          Parent ! {child_follow, self(), Result},
                          receive stop -> ok end
                  end),
@@ -4317,7 +4522,7 @@ local_follow_capture_uses_original_operation_budget_test() ->
     {SourcePid, SourceMRef, _Source} = start_local_borrow_source(SourceDir, Fixture),
     try
         hold_source_capture(SourcePid),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         Deadline = receive {local_capture_held, SourcePid, D} -> D
                    after 1000 -> error(local_capture_not_started)
                    end,
@@ -4362,7 +4567,7 @@ local_follow_terminal_borrow_admission_expiry_keeps_lag_until_fresh_request_test
         Pid ! {quod_message, {Peer, Link}, quod_feed:channel(Ns), Registered},
         ?assertMatch({ack, Registration, _, 3}, quod_feed:decode_recipient(receive_fake_feed_send(Link, 1000), Ns)),
         hold_source_capture(SourcePid),
-        {ok, FollowRef} = quod_foreign_log:follow(Identity),
+        {ok, FollowRef} = quod_foreign_log:follow(Identity, projection),
         Deadline = receive {local_capture_held, SourcePid, D} -> D
                    after 1000 -> error(local_capture_not_started)
                    end,

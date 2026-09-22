@@ -35,8 +35,10 @@ only the ordinary forward verifier can establish history authority.
 
 Long-lived ontology follows are another consumer of this same owner and cache.
 They add no verifier or history path: a short monitored verification worker
-advances at most one certified page, and one unregistered materializer folds
-only the already-persisted cache through `quod_committed_projection`. Normal
+advances at most one certified page. Progress consumers need only that installed
+prefix; projection consumers additionally share one unregistered materializer
+folding the persisted cache through `quod_committed_projection`. A coordinator
+never builds a remote facts database to learn that a certificate is available. Normal
 progress is message-driven: the initial attachment, exact directory-route
 events, local finalized commits, authenticated feed block/digest frames, Root
 replay readiness, and explicit consumer refresh wake one coalesced job. Commit
@@ -115,8 +117,8 @@ retained index; point I/O and exact verification run in the existing caller.
          verify_local_entry_deadline/5,
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
-         follow/1, refresh/1, ack/2, projection_clauses/3, unfollow/1,
-         follow_request/1, unfollow_request/1,
+         follow/2, refresh/1, ack/2, projection_clauses/3, unfollow/1,
+         follow_request/2, unfollow_request/1,
          stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -181,6 +183,8 @@ retained index; point I/O and exact verification run in the existing caller.
 -record(consumer, {
           pid :: pid(),
           mref :: reference(),
+          interest :: progress | projection,
+          baseline = pending :: pending | delivered,
           outstanding = none :: none | {reference(), term()},
           pending = none :: none | term()
          }).
@@ -853,16 +857,16 @@ current(Routes0, Identity, Contact, TimeoutMs)
 current(_Routes, _Identity, _Contact, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
--doc "Start one monitored consumer of the shared certified target projection.".
--spec follow({binary(), <<_:256>>}) ->
+-doc "Follow certified progress or materialized facts through the same monitored subscription.".
+-spec follow({binary(), <<_:256>>}, progress | projection) ->
           {ok, reference()} |
           {error, invalid_identity | unavailable}.
-follow(Identity) ->
-    case valid_identity(Identity) of
+follow(Identity, Interest) ->
+    case valid_identity(Identity) andalso valid_follow_interest(Interest) of
         true ->
             case quod_reg:where(?KEY) of
                 Pid when is_pid(Pid) ->
-                    try gen_server:call(Pid, {follow, Identity}, 1000)
+                    try gen_server:call(Pid, {follow, Identity, Interest}, 1000)
                     catch exit:_ -> {error, unavailable}
                     end;
                 undefined ->
@@ -873,13 +877,17 @@ follow(Identity) ->
     end.
 
 -doc "Register from the consumer's own receive loop without a helper owner.".
--spec follow_request({binary(), <<_:256>>}) ->
+-spec follow_request({binary(), <<_:256>>}, progress | projection) ->
           {ok, gen_server:request_id()} | {error, invalid_identity | unavailable}.
-follow_request(Identity) ->
-    case valid_identity(Identity) of
-        true -> send_follow_request({follow, Identity});
+follow_request(Identity, Interest) ->
+    case valid_identity(Identity) andalso valid_follow_interest(Interest) of
+        true -> send_follow_request({follow, Identity, Interest});
         false -> {error, invalid_identity}
     end.
+
+valid_follow_interest(progress) -> true;
+valid_follow_interest(projection) -> true;
+valid_follow_interest(_) -> false.
 
 -doc "Remove this consumer's follow without blocking its shutdown.".
 -spec unfollow_request(reference()) ->
@@ -1078,8 +1086,8 @@ handle_call(stats, _From, S) ->
                                              M =/= none]),
               projection_bytes => S#s.projection_bytes,
               follow_building => length(
-                                   [ok || #history{projection_state = building} <-
-                                              Followed]),
+                                   [ok || H = #history{projection_state = building} <-
+                                              Followed, needs_projection(H)]),
               follow_unreachable => length(
                                       [ok || #history{
                                                reachability =
@@ -1100,8 +1108,8 @@ handle_call(stats, _From, S) ->
               bootstrap_rejected => S#s.bootstrap_rejected,
               bootstrap_evicted => S#s.bootstrap_evicted},
     {reply, Reply, S};
-handle_call({follow, Identity}, From, S0) ->
-    {noreply, add_follow(Identity, From, S0)};
+handle_call({follow, Identity, Interest}, From, S0) ->
+    {noreply, add_follow(Identity, Interest, From, S0)};
 handle_call({unfollow, FollowRef}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
@@ -3298,17 +3306,16 @@ update_queued_caller(RequestRef, From, [Queued | Rest]) ->
 %%% Continuous certified follow lifecycle
 %%%===================================================================
 
-add_follow(Identity, From = {ConsumerPid, _Tag}, S0)
+add_follow(Identity, Interest, From = {ConsumerPid, _Tag}, S0)
   when is_pid(ConsumerPid) ->
     S1 = ensure_history(Identity, S0),
     H0 = maps:get(Identity, S1#s.histories),
     WasIdle = map_size(H0#history.consumers) =:= 0,
     FollowRef = make_ref(),
     MRef = erlang:monitor(process, ConsumerPid),
-    Consumer = #consumer{pid = ConsumerPid, mref = MRef},
+    Consumer = #consumer{pid = ConsumerPid, mref = MRef, interest = Interest},
     H1 = H0#history{
            consumers = (H0#history.consumers)#{FollowRef => Consumer},
-           projection_state = building,
            last_used = quod_time:mono_ms()},
     S2 = S1#s{
            histories = (S1#s.histories)#{Identity => H1},
@@ -3317,17 +3324,25 @@ add_follow(Identity, From = {ConsumerPid, _Tag}, S0)
     %% installs the correlated reference before seeing its first credit-bearing
     %% notice; no early-notice buffer or second registration turn is needed.
     ok = gen_server:reply(From, {ok, FollowRef}),
-    S3 = notify_follow(
-           FollowRef,
-           {building, materialized_height(H1)}, S2),
+    Notice = initial_follow_notice(Interest, WasIdle, H1),
+    S3 = notify_follow(FollowRef, Notice, S2),
     S4 = case WasIdle of
              true -> open_progress_signals(Identity, S3);
              false -> S3
          end,
     case WasIdle of
          true -> wake_follow(Identity, S4);
+         false when Interest =:= projection, H1#history.materializer =:= none ->
+             ensure_materializer_advanced(Identity, S4);
          false -> S4
     end.
+
+initial_follow_notice(progress, false, H) -> certified_notice(H);
+initial_follow_notice(projection, _, #history{projection_state = ready,
+                       materializer = #materializer{height = Height,
+                                                    projection_id = Projection}} = H) ->
+    {resnapshot, Height, Projection, follow_freshness(H, Height)};
+initial_follow_notice(_, _, H) -> {building, materialized_height(H)}.
 
 acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0) ->
     case follow_consumer(FollowRef, S0) of
@@ -3370,17 +3385,19 @@ remove_follow_any(FollowRef, S0) ->
             S1 = put_history(
                    Identity, H1,
                    S0#s{follows = maps:remove(FollowRef, S0#s.follows)}),
+            S2 = case needs_projection(H1) of
+                     true -> S1;
+                     false -> release_follow_materializer(Identity, S1)
+                 end,
             case map_size(Consumers1) of
                 0 ->
                     case H1#history.current_watch of
-                        Watch when Watch =/= none -> hibernate_history(
-                                  Identity,
-                                  release_follow_materializer(Identity, S1));
+                        Watch when Watch =/= none -> hibernate_history(Identity, S2);
                         none -> hibernate_history(
                                    Identity,
-                                   stop_follow_target(Identity, S1))
+                                   stop_follow_target(Identity, S2))
                     end;
-                _ -> S1
+                _ -> S2
             end;
         error ->
             S0
@@ -3412,6 +3429,8 @@ follow_consumer(FollowRef, S) ->
 
 follow_materializer(FollowRef, ConsumerPid, S) ->
     case follow_consumer(FollowRef, S) of
+        {ok, _Identity, #consumer{pid = ConsumerPid, interest = progress}, _} ->
+            {error, not_projection};
         {ok, _Identity, #consumer{pid = ConsumerPid},
          #history{projection_state = ready,
                   materializer = #materializer{pid = Pid,
@@ -3490,12 +3509,13 @@ bootstrap_candidate_count(#s{histories = Histories, bootstrap = Bootstrap}) ->
     lists:sum([length(H#history.bootstrap_hints) || H <- maps:values(Histories)]) +
         lists:sum([length(Hints) || Hints <- maps:values(Bootstrap)]).
 
-notify_history(Identity, Notice, S0) ->
+notify_history(Identity, Interest, Notice, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{consumers = Consumers} ->
             lists:foldl(
               fun(FollowRef, Acc) -> notify_follow(FollowRef, Notice, Acc) end,
-              S0, maps:keys(Consumers));
+              S0, [Ref || {Ref, C} <- maps:to_list(Consumers),
+                          Interest =:= all orelse C#consumer.interest =:= Interest]);
         undefined -> S0
     end.
 
@@ -3503,10 +3523,11 @@ notify_follow(FollowRef, Notice, S0) ->
     case follow_consumer(FollowRef, S0) of
         {ok, Identity, #consumer{outstanding = none, pid = Pid} = C0, H0} ->
             NoticeRef = make_ref(),
-            Pid ! {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice},
-            C1 = C0#consumer{outstanding = {NoticeRef, Notice}},
-            S1 = count_follow_resnapshot(Notice, S0),
-            put_history(Identity, put_consumer(FollowRef, C1, H0), S1);
+            {Delivery, C1} = follow_delivery(Notice, C0),
+            Pid ! {quod_foreign_follow, FollowRef, NoticeRef, Identity, Delivery},
+            C2 = C1#consumer{outstanding = {NoticeRef, Delivery}},
+            S1 = count_follow_resnapshot(Delivery, S0),
+            put_history(Identity, put_consumer(FollowRef, C2, H0), S1);
         {ok, Identity, #consumer{pending = Pending0} = C0, H0} ->
             C1 = C0#consumer{pending = coalesce_notice(Pending0, Notice)},
             put_history(
@@ -3515,6 +3536,15 @@ notify_follow(FollowRef, Notice, S0) ->
         error ->
             S0
     end.
+
+%% The first ready delivery establishes this consumer's baseline. A consumer
+%% joining an in-flight materialization must never replay its earlier events.
+follow_delivery({advanced, _, To, Projection, Freshness, _, _},
+                #consumer{baseline = pending} = C) ->
+    follow_delivery({resnapshot, To, Projection, Freshness}, C);
+follow_delivery({resnapshot, _, _, _} = Notice, C) ->
+    {Notice, C#consumer{baseline = delivered}};
+follow_delivery(Notice, C) -> {Notice, C}.
 
 count_follow_resnapshot({resnapshot, _To, _Projection, _Freshness}, S) ->
     S#s{follow_resnapshots = S#s.follow_resnapshots + 1};
@@ -3676,9 +3706,9 @@ finish_follow_refresh(Identity, _Token, Reply, S0) ->
             S1 = put_history(Identity, H1, S0),
             S2 = ensure_materializer_advanced(Identity, S1),
             S3 = case Reason of
-                     none -> S2;
+                     none -> notify_history(Identity, progress, certified_notice(H1), S2);
                      _ -> notify_history(
-                            Identity,
+                            Identity, all,
                             {unreachable, Reason,
                              materialized_height(
                                maps:get(Identity, S2#s.histories))}, S2)
@@ -3712,16 +3742,23 @@ continue_follow_progress(Identity, Advanced, Hint, S0) ->
             S0
     end.
 
+certified_notice(#history{published = #prefix{height = Height, projection = Projection}}) ->
+    {Height, Hash} = history_head(Projection),
+    {certified, Height, Hash};
+certified_notice(_) -> {building, 0}.
+
+needs_projection(#history{consumers = Consumers}) ->
+    lists:any(fun(#consumer{interest = I}) -> I =:= projection end,
+              maps:values(Consumers)).
+
 ensure_materializer_advanced(Identity, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{height = Height, projection = Projection,
                  cache_session = CacheSession,
-                 materializer = Materializer,
-                 consumers = Consumers} = H0
-          when Height > 0, is_map(Projection), CacheSession =/= none,
-               map_size(Consumers) > 0 ->
-            case history_head(Projection) of
-                {Height, <<_:256>>} ->
+                 materializer = Materializer} = H0
+          when Height > 0, is_map(Projection), CacheSession =/= none ->
+            case {needs_projection(H0), history_head(Projection)} of
+                {true, {Height, <<_:256>>}} ->
                     View = #{owner => self(), identity => Identity, slot => Height,
                              snapshot => CacheSession, projection => Projection},
                     case Materializer of
@@ -3764,7 +3801,7 @@ projection_building(Identity, Generation, Height, S0) ->
     case materializer_matches(Identity, Generation, S0) of
         {ok, H0, _M} ->
             notify_history(
-              Identity, {building, Height},
+              Identity, projection, {building, Height},
               put_history(
                 Identity,
                 H0#history{projection_state = building,
@@ -3776,7 +3813,7 @@ projection_waiting(Identity, Generation, Height, S0) ->
     case materializer_matches(Identity, Generation, S0) of
         {ok, H0, _M} ->
             S1 = notify_history(
-                   Identity, {building, Height},
+                   Identity, projection, {building, Height},
                    put_history(
                      Identity,
                      H0#history{projection_wait = network_identity}, S0)),
@@ -3844,7 +3881,7 @@ projection_ready(Identity, Generation,
                          false -> {advanced, From, Height, ProjectionId,
                                    Freshness, Heads, Publications}
                      end,
-            notify_history(Identity, Notice, S1);
+            notify_history(Identity, projection, Notice, S1);
         error -> S0
     end;
 projection_ready(_Identity, _Generation, _Result, S) ->
@@ -3901,7 +3938,7 @@ projection_down(MRef, _Pid, _Reason, S0) ->
             S1 = discard_materializer(Identity, H0, M0, S0),
             H1 = maps:get(Identity, S1#s.histories),
             notify_history(
-              Identity, {building, materialized_height(H0)},
+              Identity, projection, {building, materialized_height(H0)},
               put_history(
                 Identity,
                 H1#history{reachability = {unreachable, materializer_down}},

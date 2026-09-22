@@ -2071,12 +2071,14 @@ wait_for_foreign_progress(Target, S0) ->
 progress_source(Target, Target) -> owner;
 progress_source(_Target, _Origin) -> foreign.
 
-%% Both operation and group recovery consume the same follower contract.
+%% Both operation and group recovery consume certified-prefix progress, not
+%% a materialized remote facts database. This notice only wakes the existing
+%% evidence verifier; it cannot supply a verdict or authorize a write.
 %% Building/unreachable are status, not progress. In particular a new follow
 %% emits building immediately: treating it as a retry can manufacture a loop
 %% without any network or ledger change.
-foreign_progress_notice({advanced, _, _, _, _, _, _}) -> true;
-foreign_progress_notice({resnapshot, _, _, _}) -> true;
+foreign_progress_notice({certified, Height, <<_:256>>})
+  when is_integer(Height), Height > 0 -> true;
 foreign_progress_notice(_) -> false.
 
 local_progress_event({local_dtx_progress, Owner, Identity, Slot, Ready}, Identity)
@@ -2098,7 +2100,7 @@ attach_follow(Target, S = #state{follows = Follows}) ->
             S;
         {pending, _} -> S;
         undefined ->
-            case quod_foreign_log:follow_request(Target) of
+            case quod_foreign_log:follow_request(Target, progress) of
                 {ok, RequestId} ->
                     S#state{follows = Follows#{Target => {pending, RequestId}}};
                 {error, _} ->

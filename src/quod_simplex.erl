@@ -133,6 +133,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          valid_history_entry/4, valid_history_entry/5,
          history_projection/0, history_projection/1, history_projection/5,
          history_committee/1, history_committee_view/2,
+         history_certifying_committee_view/2,
          history_validator_routes/1,
          history_advance/3, history_advance/4,
          history_validate_advance/3, history_validate_advance/4,
@@ -15223,6 +15224,23 @@ history_committee_view(
             end
     end;
 history_committee_view(_Slot, _Projection) ->
+    error.
+
+-doc "Return the committee and routes which certified one exact history slot.".
+-spec history_certifying_committee_view(slot(), history_projection()) ->
+          {ok, [node_id()], binary(),
+           #{node_id() => {term(), pos_integer()}}} | error.
+history_certifying_committee_view(1, Projection) ->
+    %% Genesis has no quorum certificate. Its post-slot founding view is the
+    %% only committee era and keeps exact genesis evidence self-contained.
+    history_committee_view(1, Projection);
+history_certifying_committee_view(Slot, Projection)
+  when is_integer(Slot), Slot > 1 ->
+    %% A membership transaction changes authority only after this block is
+    %% certified. The block's certificate therefore belongs to the post-parent
+    %% era, while history_committee_view/2 deliberately remains post-slot.
+    history_committee_view(Slot - 1, Projection);
+history_certifying_committee_view(_Slot, _Projection) ->
     error.
 
 committee_view_at(Slot, [{Start, Committee, CommitteeId, Routes} | _Rest])

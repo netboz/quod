@@ -177,6 +177,12 @@ committee_view_projection_test() ->
     ?assertMatch(
        {ok, [A, B, C], AdmitCId, _},
        quod_simplex:history_committee_view(4, Full)),
+    ?assertMatch(
+       {ok, [A, B], GenesisId, _},
+       quod_simplex:history_certifying_committee_view(4, Full)),
+    ?assertMatch(
+       {ok, [A, B], GenesisId, _},
+       quod_simplex:history_certifying_committee_view(1, Full)),
     ?assertEqual(error, quod_simplex:history_committee_view(5, Full)).
 
 committee_view_is_not_invented_before_membership_test() ->

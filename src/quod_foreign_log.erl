@@ -6986,7 +6986,7 @@ valid_committee_view_rows(_, _) -> false.
 
 reference_projection(Slot, Height, Projection)
   when is_integer(Slot), Slot > 0, Slot =< Height ->
-    case quod_simplex:history_committee_view(Slot, Projection) of
+    case quod_simplex:history_certifying_committee_view(Slot, Projection) of
         {ok, Committee, CommitteeId, Routes} ->
             {ok, Projection#{committee := Committee,
                              committee_id := CommitteeId,

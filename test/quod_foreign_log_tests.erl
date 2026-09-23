@@ -5194,6 +5194,8 @@ verify_local_current_entry_uses_exact_historical_committee_test() ->
                          {Ns, Anchor, Admission}, Membership1, OldSigner),
     MembershipEntry = content_entry(
                         Ns, Anchor, OldPub, OldSigner, 3, [Membership]),
+    {ok, MembershipRef} = quod_dtx:certified_entry_ref(
+                            Binding, MembershipEntry, Membership),
     Chain = [Genesis, ReferencedEntry, MembershipEntry],
     {ok, Chain, Projection} = quod_catchup:verify_forward(
                                 Ns, Anchor,
@@ -5212,7 +5214,13 @@ verify_local_current_entry_uses_exact_historical_committee_test() ->
         ?assertMatch(
            {ok, #{phase := transaction, committee := [OldPub]}},
            quod_foreign_log:verify_local(
-             Source, Ref, transaction, 5000))
+             Source, Ref, transaction, 5000)),
+        %% The membership block itself was certified by the pre-change
+        %% committee. Its post-slot projection must not relabel that proof.
+        ?assertMatch(
+           {ok, #{phase := transaction, committee := [OldPub]}},
+           quod_foreign_log:verify_local(
+             Source, MembershipRef, transaction, 5000))
     after
         true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),

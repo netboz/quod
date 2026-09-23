@@ -9,6 +9,6 @@
 %% many previously unknown Prolog symbols.  Transaction relay and durable local
 %% plans share the same materializer, so neither path can drift to a different
 %% atom-allocation policy.
--define(QUOD_MAX_NEW_MATERIAL_ATOMS, 64).
+-define(QUOD_MAX_NEW_MATERIAL_ATOMS, 512).
 
 -endif.

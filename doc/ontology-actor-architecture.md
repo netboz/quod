@@ -281,7 +281,7 @@ ledger state, which is a consensus-safety failure rather than a boot-time
 convenience issue.
 
 A genesis is decoded by nodes that never saw its source — joiners, and the
-founder itself after a restart — and each of them admits at most 64 new
+founder itself after a restart — and each of them admits at most 512 new
 symbols per envelope (`quod_vm_limits`). Root's creation action therefore
 refuses a founding whose genesis would introduce more, measured against the
 vocabulary every node of the release holds: the atom tables of the modules

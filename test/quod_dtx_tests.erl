@@ -448,15 +448,16 @@ superseded_keyed_plan_v5_is_rejected_test() ->
           ?assertNot(quod_dtx:verify(Decoded))
       end).
 
-plan_material_has_one_aggregate_64_symbol_budget_test() ->
+plan_material_has_one_aggregate_release_symbol_budget_test() ->
     with_identity(
       fun(_Pub) ->
-          Prefix = <<"quod_dtx_material_",
-                     (integer_to_binary(
-                        erlang:unique_integer([positive])))/binary>>,
-          DiffNames = [unique_symbol(Prefix, N) || N <- lists:seq(1, 32)],
-          ReadNames = [unique_symbol(Prefix, N) || N <- lists:seq(33, 63)],
-          GoalNames = [unique_symbol(Prefix, N) || N <- lists:seq(64, 65)],
+          Budget = ?QUOD_MAX_NEW_MATERIAL_ATOMS,
+          Prefix = <<"z", (integer_to_binary(
+                                erlang:unique_integer([positive]), 36))/binary>>,
+          DiffNames = [unique_symbol(Prefix, 1)],
+          ReadNames = [unique_symbol(Prefix, 2)],
+          GoalNames = [unique_symbol(Prefix, N)
+                       || N <- lists:seq(3, Budget + 1)],
           AllNames = DiffNames ++ ReadNames ++ GoalNames,
           assert_symbols_absent(AllNames),
           Diff = [{assert, {{'$quod_symbol', Name}, true}}
@@ -464,13 +465,10 @@ plan_material_has_one_aggregate_64_symbol_budget_test() ->
           ReadPairs = [{{{'$quod_symbol', Name}, 0}, never_present}
                        || Name <- ReadNames],
 
-          %% The 65th symbol lives only inside RequestedGoalBin. It must still
-          %% be charged with diff/read vocabulary, and rejection must happen
+          %% The over-budget symbol lives only inside RequestedGoalBin. It is
+          %% still charged with diff/read vocabulary, and rejection happens
           %% before any member of the aggregate is allocated.
-          TooManyTranscript =
-              [transcript_with_goal(
-                 {{'$quod_symbol', hd(GoalNames)},
-                  {'$quod_symbol', lists:last(GoalNames)}})],
+          TooManyTranscript = symbol_transcript(GoalNames),
           TooMany = signed_material_plan(Diff, ReadPairs, TooManyTranscript),
           {ok, TooManyBlob} = quod_dtx:encode(TooMany),
           {ok, TooManyDecoded} = quod_dtx:decode(TooManyBlob),
@@ -479,22 +477,18 @@ plan_material_has_one_aggregate_64_symbol_budget_test() ->
                        quod_dtx:material(TooManyDecoded)),
           assert_symbols_absent(AllNames),
 
-          AtLimitTranscript =
-              [transcript_with_goal({'$quod_symbol', hd(GoalNames)})],
+          AtLimitTranscript = symbol_transcript(lists:droplast(GoalNames)),
           AtLimit = signed_material_plan(Diff, ReadPairs, AtLimitTranscript),
           {ok, AtLimitBlob} = quod_dtx:encode(AtLimit),
           {ok, AtLimitDecoded} = quod_dtx:decode(AtLimitBlob),
           ?assert(quod_dtx:verify(AtLimitDecoded)),
           {ok, #{diff := MaterialDiff, read_check := MaterialRead,
-                 transcript := [{_, _, GoalBlob, _, _, _, _}]}} =
+                 transcript := MaterialTranscript}} =
               quod_dtx:material(AtLimitDecoded),
-          ?assertEqual(32, length(MaterialDiff)),
-          ?assertEqual(31, map_size(MaterialRead)),
-          ?assertEqual(
-             {ok, binary_to_existing_atom(hd(GoalNames), utf8)},
-             quod_wire_term:decode_canonical(
-               GoalBlob, ?QUOD_MAX_NESTED_GOAL_BYTES)),
-          ?assertEqual(64, ?QUOD_MAX_NEW_MATERIAL_ATOMS),
+          ?assertEqual(1, length(MaterialDiff)),
+          ?assertEqual(1, map_size(MaterialRead)),
+          ?assertEqual(length(AtLimitTranscript), length(MaterialTranscript)),
+          ?assertEqual(512, ?QUOD_MAX_NEW_MATERIAL_ATOMS),
           [?assert(is_atom(binary_to_existing_atom(Name, utf8)))
            || Name <- lists:droplast(AllNames)],
           ?assertException(
@@ -1518,6 +1512,11 @@ manifest_with_plan(Manifest, Target, PlanDigest) ->
 transcript_with_goal(Goal) ->
     {<<1:128>>, [{?NS, key(1)}], wire_blob(Goal), allowed,
      0, <<0:256>>, complete}.
+
+symbol_transcript(Names) ->
+    [transcript_with_goal([{'$quod_symbol', Name} || Name <- Chunk])
+     || Start <- lists:seq(1, length(Names), 96),
+        Chunk <- [lists:sublist(Names, Start, 96)]].
 
 unique_symbol(Prefix, N) ->
     <<Prefix/binary, "_", (integer_to_binary(N))/binary>>.

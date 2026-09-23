@@ -661,7 +661,7 @@ For exact retained boundary values, the shared headers/code remain the single
 source of truth. The audited client/wire safety set currently includes: 4 KiB
 authentication JSON; 16,819-byte raw signed-request and 23,452-byte HTTP JSON
 admission ceilings; 512 KiB result and 528 KiB result envelope; a scope envelope derived from the largest exact signed operation submission, bounded certified reads, and scope metadata (currently 500,864 bytes);
-20,000 decoded term nodes, depth 64, and 1,024-byte symbols; at most 64 new
+20,000 decoded term nodes, depth 64, and 1,024-byte symbols; at most 512 new
 symbols per authenticated material payload, 16,384 cumulative client-created
 atoms per VM lifetime, and 100,000 atoms of VM headroom. Challenge lifetime is
 60 seconds, session lifetime 10 minutes, pruning 30 seconds, and auth calls 5

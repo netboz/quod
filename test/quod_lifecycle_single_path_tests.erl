@@ -20,6 +20,7 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(node_actor_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_agent_create_uses_the_same_goal_path(Fixture))},
           {timeout, 60, ?_test(create_and_host_is_one_ordinary_goal(Fixture))},
+          {timeout, 30, ?_test(bundled_agent_policy_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
           {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
           {timeout, 30, ?_test(prepared_genesis_survives_journal_restart(Fixture))},
@@ -229,6 +230,35 @@ repeated_create_is_a_noop(_Fixture) ->
     Before = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
     ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ?assertEqual(Before, maps:get(committed, quod_simplex:stats(?ROOT_NS))).
+
+bundled_agent_policy_uses_ordinary_creation(_Fixture) ->
+    Ns = unique_ns(<<"bundled-agent-policy">>),
+    Options =
+        [{source_file, filename:join([code:priv_dir(quod), "ontologies", File])}
+         || File <- ["agent_instance.pl", "agent_recovery_policy.pl"]] ++
+        [{terms, [{instance_of, agent, <<"worker">>},
+                  {domain_state, <<"worker">>, <<"before-loss">>},
+                  {agent_recovery_threshold, <<"worker">>, 2}]},
+         {external_predicate_modules, [quod_agent_predicates]}],
+    %% Go through root's action, prepared effect and namespace manager. Direct
+    %% namespace startup with an already-parsed diff bypasses the cold guard.
+    {ok, [#{'Anchor' := Anchor}], _} = quod_prolog:execute(
+        ?ROOT_NS, {create_ontology, Ns, Options, {'Anchor'}}),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    %% These owned revision waits cover installation of both founding handlers,
+    %% including their empty projections; no readiness sleep or polling.
+    ?assertEqual(ok, quod_runtime:await_revision(Ns, agent_hosting, 1, 5000)),
+    ?assertEqual(ok, quod_runtime:await_revision(Ns, agent_observation, 1, 5000)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
+        Ns, {domain_state, <<"worker">>, <<"before-loss">>})),
+    ?assertMatch({ok, [#{'Handlers' := [agent_hosting, agent_observation]}], _},
+        quod_prolog:prove_ro(Ns,
+            {findall, {'Handler'},
+             {state_handler, {'Handler'}, {'Watched'}, {'Needs'}, {'Converge'}},
+             {'Handlers'}})),
+    ?assertMatch([#{state := applied}],
+        [Row || #{target := {Target, _}} = Row <- quod_effect_journal:rows(),
+                Target =:= Ns]).
 
 failed_transaction_branch_discards_its_effect(_Fixture) ->
     FirstNs = unique_ns(<<"discarded">>),

@@ -25,7 +25,7 @@
 %% to weight dice; here each element counts once, and the few diaereses are
 %% dropped (roel, Kallirrhoe).
 %%
-%% Vocabulary: a genesis may introduce at most 64 new symbols to a node that
+%% Vocabulary: a genesis may introduce at most 512 new symbols to a node that
 %% never saw this source (quod_vm_limits), so every piece of data — table
 %% names, syllables, names, cultures, kinds, genders — is a binary, never an
 %% atom. Only the predicates and the recipe functors are symbolic.

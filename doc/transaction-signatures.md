@@ -188,7 +188,7 @@ The receiving proposer:
    binaries;
 3. verifies `Signature` over the still-opaque canonical bytes;
 4. safely decodes the fixed canonical envelope and bounded material wire;
-5. permits at most 64 previously unknown atom symbols in that authenticated
+5. permits at most 512 previously unknown atom symbols in that authenticated
    submission, rejecting the complete material before allocation if the bound
    is exceeded or allocation would consume the VM-wide atom safety reserve;
 6. requires its namespace and author to match the trusted outer context;

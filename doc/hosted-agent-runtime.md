@@ -328,7 +328,10 @@ include those support heads in its founding handler. The runtime owns the
 subscriptions; `quod_agent_observer` has no process, evaluator or work queue.
 Two instances watching the same physical host share the transport's probe.
 
-A new watcher must acquire an active, exact-author directory contact. Probes use
+A new watcher must acquire an active, exact-author directory contact. The
+contact comes from that actor's nonempty validated advertisement, regardless
+of which public ontologies it lists; its own ontology may remain private.
+An empty generation withdraws the contact as well as its public routes. Probes use
 the existing key-pinned connection pool and open no application stream. A
 completed connection timeout to that certified endpoint may support suspicion
 without a preceding healthy connection. An arbitrary replica route, address

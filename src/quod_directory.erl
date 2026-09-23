@@ -97,7 +97,7 @@ not evidence of host failure. Reads use the published generation high-water
 mark to exclude partially replaced rows.
 """.
 -spec node_transport_route(term()) -> {ok, map()} | unknown.
-node_transport_route({agent_instance_ref, Ns, Anchor, _} = NodeRef) ->
+node_transport_route({agent_instance_ref, _, _, _} = NodeRef) ->
     try
         {ok, Blob} = quod_wire_term:encode_canonical(NodeRef),
         {ok, _} = quod_agent_ref:decode(Blob),
@@ -111,9 +111,9 @@ node_transport_route({agent_instance_ref, Ns, Anchor, _} = NodeRef) ->
         Now = quod_time:mono_ms(),
         Contacts = lists:usort(
           [{Key, Endpoint, Expiry}
-           || {Ns0, system, {generation, A}, Key, Endpoint, confirmed,
-               Anchor0, _Role, Expiry, E, S} <- ets:lookup(Routes, Ns),
-              Ns0 =:= Ns, Anchor0 =:= Anchor, A =:= Author,
+           || {_, system, {generation, Author0}, Key, Endpoint, confirmed,
+               _, _Role, Expiry, E, S} <- generation_rows_for_author(Author, Routes),
+              Author0 =:= Author,
               E =:= Epoch, S =:= Sequence, Expiry > Now]),
         [{Author, Epoch, Sequence}] = ets:lookup(Highwater, Author),
         [{Key, Endpoint, Expiry}] = Contacts,

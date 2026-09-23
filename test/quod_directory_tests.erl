@@ -191,9 +191,13 @@ node_transport_requires_exact_author_test() ->
                     generation({root_bootstrap, key(99), key(8)}, key(8), 1,
                                [{Ns, Anchor, validator, system}])),
         ?assertEqual(unknown, quod_directory:node_transport_route(Ref)),
+        %% The node's own ontology may be private. Any nonempty generation
+        %% signed by that exact actor certifies its physical contact; the
+        %% advertised ontology is not the identity being monitored.
+        HostedNs = <<"public:hosted-by-physical-node">>,
         {ok, Expiry} = quod_directory:install_generation(
                     generation(Author, key(5), 1,
-                               [{Ns, Anchor, observer, node}])),
+                               [{HostedNs, anchor(HostedNs), observer, node}])),
         receive {node_identity_route_changed, Owner, Ref} -> ok
         after 1000 -> error(missing_identity_notice)
         end,

@@ -14,6 +14,12 @@ unavailable_custody_still_records_the_observation_test_() ->
             fun(Self) -> recovery_reaction(Self, unavailable) end)
     end}.
 
+recovery_acl_external_query_is_rejected_at_commit_test_() ->
+    {timeout, 60, fun() ->
+        quod_agent_hosting_tests:with_host(fun(Ctx) -> exercise_preparation(Ctx, invalid_acl) end,
+            fun(Self) -> recovery_reaction(Self, prepared) end)
+    end}.
+
 expired_vault_mailbox_request_never_creates_custody_test_() ->
     {timeout, 60, fun() ->
         quod_agent_hosting_tests:with_host(fun(#{reference := AgentRef, directory := Dir}) ->
@@ -97,7 +103,7 @@ recovery_reaction(Self, Kind) ->
     [{react_on, {node, Self}, Call, Call}, {':-', Call, Handler}].
 
 exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
-                       key := OldKey}, Kind) ->
+                       key := OldKey, identity := #{pubkey := NodeKey}}, Kind) ->
     Old = setelement(2, Node, <<"remote-node">>),
     Anchor = element(3, AgentRef),
     commit(Ns, {goal, {agent_hosted, actor, Old, 1, OldKey}}),
@@ -108,6 +114,19 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
         {':-', {agent_recovery_candidate, Node, actor, Old, 1, {'Round'}, Node, 1},
          {agent_failure_support, actor, Old, 1, {'Round'}, Node, suspected_unreachable}}],
     lists:foreach(fun(Fact) -> commit(Ns, {assertz, Fact}) end, Rules),
+    Entry = {report_agent_observation_with_custody, actor, Old, 1, none,
+             {'_'}, {'_'}, suspected_unreachable, {'_'}},
+    %% Exercise the real foreign-entry ACL, without the fixture's broad node
+    %% grant masking an invalid commit-time authorization rule. The anchored
+    %% guard is part of the admitted goal; the policy body stays pure Prolog.
+    Guarded = {',', {current_ontology_identity, Ns, Anchor}, {call, Entry}},
+    Policy = case Kind of
+        invalid_acl -> {current_ontology_identity, Ns, Anchor};
+        _ -> {can_report_agent_failure, Node, actor, Old, suspected_unreachable}
+    end,
+    commit(Ns, {',', {abolish, {'/', can_invoke, 4}},
+                {',', {assertz, {':-', {can_invoke, Guarded, Node, {'_'}, Ns}, Policy}},
+                      {assertz, {can_invoke, {'_'}, {node, NodeKey}, [], Ns}}}}),
     Grant = {can_execute_for, Ns, Anchor,
              {report_agent_observation_with_custody, actor, Old, 1, none,
               {'_'}, {'_'}, suspected_unreachable, {'_'}}},
@@ -120,12 +139,15 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
         commit(Ns, {trigger_event, {prepare_recovery, Old, Episode, Expiry}}),
         receive
             {agent_request_finished, _, _, #{source := {Ns, Anchor}}, _, Result} ->
-                ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Result),
+                case Kind of
+                    invalid_acl -> ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}}, Result);
+                    _ -> ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Result)
+                end,
                 {ok, #{request := Request}, _} = Result,
                 ?assertEqual(Expiry, maps:get(not_after_ms, Request))
         after 15000 -> error({prepared_observation_not_completed, quod_runtime:stats(Ns)}) end,
         %% One explicit wake occurrence and one complete recovery consequence.
-        ?assertEqual(Before + 2, quod_prolog:applied(Ns)),
+        case Kind of invalid_acl -> ok; _ -> ?assertEqual(Before + 2, quod_prolog:applied(Ns)) end,
         assert_preparation_result(Kind, Ns, AgentRef, Node, Old, OldKey, Episode, Expiry)
     after quod_reg:unsubscribe({agent, Node}) end.
 
@@ -142,6 +164,11 @@ assert_preparation_result(unavailable, Ns, _AgentRef, Node, Old, OldKey, Episode
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns,
         {agent_failure_report, actor, Old, 1, Episode, Node,
          {observation, 1, Episode, Expiry}, suspected_unreachable})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})).
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}}));
+assert_preparation_result(invalid_acl, Ns, _AgentRef, _Node, Old, OldKey, _Episode, _Expiry) ->
+    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Old, 1, OldKey})),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+        {agent_failure_report, actor, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})).
 
 commit(Ns, Goal) -> ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Goal)).

@@ -265,6 +265,11 @@ the foreign goal with an exact source-identity guard. Grant, guard and
 consequence share one transaction. The source ontology's ordinary entry ACL
 also applies. No grant is supplied by hosting or by loading this rule.
 
+Commit-time `can_invoke/4` bodies use ordinary Prolog; external predicates are
+unavailable there, including `current_ontology_identity/2`. An ACL can match
+the anchored guard in the requested goal as a term. Bind its exact namespace
+and anchor in the policy rather than executing the guard inside the ACL body.
+
 `submit_node_prepared_goal(Instance, OldEpoch, Result, GoalTemplate,
 AbsoluteExpiry)` is a reaction-class bridge for destination custody. It requires
 exactly one distinct unbound variable in the template, identical to `Result`.

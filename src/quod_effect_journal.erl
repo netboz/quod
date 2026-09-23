@@ -265,7 +265,7 @@ call(Request) ->
 
 init(DataDir) ->
     Path = filename:join(DataDir, "direct_effects.qej"),
-    ok = filelib:ensure_dir(Path),
+    ok = quod_file:ensure_parent(Path),
     {Capacity, Rows0} = load(Path),
     Rows = retire_unactivated_rows(Rows0),
     S0 = #s{path = Path, capacity = Capacity, rows = Rows},
@@ -1443,7 +1443,7 @@ persist(S = #s{path = Path, capacity = Capacity, rows = Rows}) ->
         ok = file:close(Fd)
     end,
     ok = file:rename(Tmp, Path),
-    ok = sync_dir(filename:dirname(Path)),
+    ok = quod_file:sync_dir(filename:dirname(Path)),
     S.
 
 load(Path) ->
@@ -1734,16 +1734,6 @@ schedule_reconcile(S = #s{retry_timer = undefined, rows = Rows,
     end;
 schedule_reconcile(S) -> S.
 
-sync_dir(Dir) ->
-    case file:open(Dir, [read, raw]) of
-        {ok, Fd} ->
-            try file:sync(Fd)
-            after _ = file:close(Fd)
-            end;
-        {error, eisdir} -> ok;
-        {error, enotsup} -> ok;
-        {error, Reason} -> error({effect_journal_dir_sync, Reason})
-    end.
 
 safe_effect_id(Effect) ->
     try quod_effect:effect_id(Effect)

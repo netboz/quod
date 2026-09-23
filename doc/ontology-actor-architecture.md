@@ -243,9 +243,10 @@ Prolog rules and actions describe the desired durable state. Governed Erlang
 external predicates are the narrow interface to the actual node, network, and
 runtime. Each ontology-specific external predicate belongs to the ontology
 whose immutable genesis names and hashes its shipped Erlang module. For the
-first implementation, only system ontologies are founded with such modules.
-Ordinary ontologies use Prolog plus the explicit common execution primitives;
-this restriction can be reconsidered only through a reviewed extension. The
+actor implementation, system ontologies and audited actor-instance ontologies
+may pin their required bridge modules at founding. Ordinary domain ontologies
+otherwise use Prolog plus the explicit common execution primitives; bridges
+are never installed globally. The
 common primitives are pure and read no node state: the action mechanics, the
 proof-bound draw `'$quod_draw'/3` (`proof_draw/3`, a function of the proof's
 identity and a caller salt) and `binary_codes/2`; none is a governed bridge.
@@ -438,12 +439,16 @@ path remains the sole authority that decides whether an agent may request the
 operation. The listener must not expose a public or unrestricted signing API.
 
 The bridge accepts only a typed canonical Quod request, never arbitrary bytes.
-The signed domain binds the network identity, target namespace and genesis
-anchor, stable `agent_instance_ref/3`, active public key, committed host epoch,
-operation identifier, nonce, goal, and every other field already required by
-the canonical signed-goal format. A signature released for one network,
-ontology, agent, host epoch, or operation therefore cannot be replayed as a
-different request. The external predicate receives engine-owned context,
+The existing `quod.agent.goal.v1` signed domain binds the network identity,
+containing ontology namespace and genesis anchor, stable `agent_instance_ref/3`,
+active public key, operation identifier, expiry, mode, parser version and goal.
+The hosted request builder generates a random 256-bit operation identifier;
+it also supplies request uniqueness, without another nonce field. Every host
+epoch advance atomically rotates to a previously unused active key and revokes
+the old one, including reassignment to the same node. Epoch fences local
+process incarnations; active-key verification fences new signed admissions.
+Already admitted operations retain their existing recovery semantics. No epoch
+field or security wrapper inside the goal is added. The external predicate receives engine-owned context,
 checks the ordinary Prolog policy, calls the local vault, and binds the
 signature through `unify_prove_body`.
 
@@ -486,7 +491,8 @@ local node is the committed current host. On a node failure, an authorised
 new host reconstructs the process from the containing ontology. A returning old
 host observes the newer epoch and stops.
 
-Moving an agent never copies its private key. The destination node first asks
+Advancing a host epoch, including on the same node, never reuses or copies an
+agent's private key. The destination node first asks
 its local vault to generate a staged key. One ordinary coordinated transaction
 then commits the newer host epoch and the new active public key while revoking
 the old key. Only after that commit does the destination start the agent

@@ -43,7 +43,8 @@ through channel-wide gproc publication.
          open_link_identified/2,
          send/3, send_pinned/4,
          learn/2, learn_if_absent/2, resolve/1, valid_endpoint/1,
-         liveness_opts/0, peer_connections/2]).
+         liveness_opts/0, peer_connections/2, peer_contact/2, confirm_peer/4,
+         confirm_peer_loss/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([ensure_cache/0]).   %% tests own the resolver cache themselves (store_hint no longer creates it)
@@ -60,8 +61,10 @@ through channel-wide gproc publication.
 %% (`node_addr`, which may differ from the local bind port). The receiver binds the proven peer
 %% pubkey and learns Pubkey => Addr — but only when Addr is a real endpoint (see `learn/2`).
 -record(state, {self, alpn, cert, key,
-                connections = #{}, %% Pid => {monitor, authenticated key | undefined}
+                connections = #{}, %% Pid => {monitor, authenticated key, accepted wire pid}
                 connection_revision = 0,
+                loss_confirmations = #{}, %% acquired contact and physical episode per peer
+                peer_observation_limit = 4096,
                 conns = #{}}).     %% dial-pool key => connection owner
 
 %% ======================================================================
@@ -86,6 +89,84 @@ it is not itself failure evidence. This read never dials or opens a stream.
 peer_connections(Transport, <<_:256>> = NodeKey) when is_pid(Transport) ->
     Ref = make_ref(),
     Transport ! {peer_connections, self(), Ref, NodeKey},
+    Ref.
+
+-doc """
+Acquire an exact node actor's certified contact from this transport owner.
+Use `quod_reg:subscribe_tracked/1` for `{node_identity_route, NodeReference}`
+before requesting it and monitor `Transport`. The tracked interest retains
+the contact even before the caller subscribes to its physical observations.
+Subscribe to `{peer_observation_capacity, Transport}` before acquisition;
+`{peer_observation_capacity, Transport, available}` wakes capacity-blocked work.
+The reply is `{Ref, {peer_contact, Transport, NodeReference,
+{ok, Contact} | unknown | {blocked, capacity}}}`.
+The directory supplies active contacts. This owner may also retain a previously
+acquired contact after its route lease expires, while its directory owner and
+generation remain current. Runtime restart does not erase that relationship;
+transport restart, withdrawal and directory replacement cannot manufacture it.
+""".
+-spec peer_contact(pid(), term()) -> reference().
+peer_contact(Transport, NodeReference) when is_pid(Transport) ->
+    Ref = make_ref(),
+    Transport ! {peer_contact, self(), Ref, NodeReference},
+    Ref.
+
+-doc """
+Confirm the exact key and endpoint through the existing pinned connection pool,
+without an application stream. Address hints cannot redirect this probe.
+The asynchronous reply is `{peer_confirmation, Transport, Ref, NodeKey,
+Connection, Result, ObservationTime}`. `Result` is `authenticated`, `{failed, Reason}` for a
+terminal connection attempt, or `{unknown, Reason}` for absent routing, expired
+caller budget or local owner loss. A caller must monitor the exact transport
+owner and retain its absolute deadline; absence of a reply is not peer failure.
+
+An existing authenticated connection is reused. This low-level result does not
+acquire a certified contact or grant authority to report an arbitrary peer.
+""".
+-spec confirm_peer(pid(), <<_:256>>, term(), integer()) -> reference().
+confirm_peer(Transport, <<_:256>> = NodeKey, Endpoint, Deadline)
+  when is_pid(Transport), is_integer(Deadline) ->
+    Ref = make_ref(),
+    Transport ! {confirm_peer, self(), Ref, NodeKey, Endpoint, Deadline},
+    Ref.
+
+-doc """
+Request a shared physical observation of a certified contact. `Contact` is a
+previously acquired directory snapshot. Subscribe to `{peer_loss, NodeKey}`
+first. The transport checks its owner/generation and pins its endpoint. Its
+retained contact survives runtime restart and route-lease expiry; a newer
+generation or owner fences it. New acquisition requires an active directory
+contact, including after transport restart.
+The snapshot reply is `{Ref, Notice}` or `{Ref, {unknown, route_unavailable}}`;
+notices are `{peer_loss, Transport, NodeKey, Episode, Status, ObservedAtMs}`.
+The completion wall timestamp bounds report validity; waiting carries `none`. Episodes are
+opaque portable binaries. Status is `waiting`, `reachable`,
+`suspected_unreachable`, or `{unknown, Reason}`. Repeated requests share the
+same pending episode. A completed result is reusable only when it completed
+strictly after `ObservedAfter` (a local monotonic millisecond timestamp captured
+at the dependency change). A new round can therefore request fresh evidence
+without per-agent probes. While subscribed and still suspect, the transport
+re-observes after thirty seconds so signed evidence can expire without losing
+failure detection. This timer is independent of every signed operation outcome;
+it performs a new pinned probe and creates a new episode, never a write retry.
+Published notices are wakes: request another snapshot with the dependency's
+original `ObservedAfter` before reporting. A queued completion notice may refer
+to an older observation; the snapshot enforces the completion-time fence.
+
+An actual pinned connection timeout may support suspicion without earlier
+successful authentication. Missing routing, local errors, identity rejection
+and exhausted budgets remain unknown. Suspicion is an observation, not
+authority to move an agent. With no authenticated connection, grace is one
+second; pooled confirmation has a six-second budget, including its five-second
+TLS handshake. Positive evidence also comes from the exact pooled confirmation,
+not from a connection-index snapshot. No application stream or per-agent
+connection is created.
+""".
+-spec confirm_peer_loss(pid(), term(), integer()) -> reference().
+confirm_peer_loss(Transport, Contact, ObservedAfter)
+  when is_pid(Transport), is_integer(ObservedAfter) ->
+    Ref = make_ref(),
+    Transport ! {confirm_peer_loss, self(), Ref, Contact, ObservedAfter},
     Ref.
 
 -doc """
@@ -281,6 +362,8 @@ valid_endpoint(Endpoint) -> is_endpoint(Endpoint).
 
 init([]) ->
     process_flag(trap_exit, true),
+    Limit = env(peer_observation_limit, 4096),
+    true = is_integer(Limit) andalso Limit > 0,
     Port    = env(listen_port, 14567),
     ALPN    = [to_bin(env(alpn, "quod"))],
     Pubkey0 = env(node_pubkey, undefined),
@@ -300,17 +383,19 @@ init([]) ->
                                  [CertReason]),
                     {stop, {cert_key_load_failed, CertReason}};
                 {ok, {Cert, Key}} ->
-                    start_listener(Port, ALPN, Self, Cert, Key)
+                    start_listener(Port, ALPN, Self, Cert, Key, Limit)
             end
     end.
 
 %% Bring up the listener once identity, address, and cert/key are all in hand.
-start_listener(Port, ALPN, {Pubkey0, Addr} = Self, Cert, Key) ->
+start_listener(Port, ALPN, {Pubkey0, Addr} = Self, Cert, Key, Limit) ->
     _ = ensure_cache(),
     Authority = self(),
     Handler =
         fun(Conn) ->
-            {ok, quod_conn:start_inbound(Conn, Self, Authority)}
+            Pid = quod_conn:start_inbound(Conn, Self, Authority),
+            Authority ! {conn_accepted, Pid, Conn},
+            {ok, Pid}
         end,
     %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
     %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
@@ -328,7 +413,8 @@ start_listener(Port, ALPN, {Pubkey0, Addr} = Self, Cert, Key) ->
         {ok, _} ->
             logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
                         [Port, hd(ALPN), id_str(Pubkey0), Addr]),
-            {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
+            {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key,
+                        peer_observation_limit = Limit}};
         {error, Reason} ->
             {stop, {listen_failed, Reason}}
     end.
@@ -439,19 +525,105 @@ handle_cast({send, Target, Channel, Frame}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({peer_contact, Caller, Ref, NodeReference}, State)
+  when is_pid(Caller), is_reference(Ref) ->
+    {Contact, S1} = acquire_peer_contact(NodeReference, all, State),
+    Caller ! {Ref, {peer_contact, self(), NodeReference, Contact}},
+    {noreply, S1};
+handle_info({confirm_peer_loss, Caller, Ref, Contact, ObservedAfter}, State)
+  when is_pid(Caller), is_reference(Ref), is_integer(ObservedAfter) ->
+    {Notice, S1} = request_loss_confirmation(Contact, Caller, ObservedAfter, State),
+    Caller ! {Ref, Notice},
+    {noreply, S1};
+handle_info({gproc, resource_on_zero, l, {node_identity_route, _} = Interest, Owner}, State)
+  when Owner =:= self() ->
+    maybe_publish_peer_capacity(Interest),
+    {noreply, State};
+handle_info({timeout, Timer, {peer_loss_grace, Key}}, State) ->
+    case {maps:find(Key, State#state.loss_confirmations), loss_subscribers(Key)} of
+        {{ok, #{timer := Timer}}, []} ->
+            {noreply, park_loss(Key, State)};
+        {{ok, #{timer := Timer, contact := Contact} = Episode}, _} ->
+            case quod_directory:node_contact_current(Contact) of
+                true ->
+                    {noreply, start_loss_confirmation(Key, Episode, State)};
+                false -> {noreply, finish_loss(Key, {unknown, stale_contact}, State)}
+            end;
+        _ -> {noreply, State}
+    end;
+handle_info({timeout, Timer, {peer_loss_reobserve, Key}}, State) ->
+    case {maps:find(Key, State#state.loss_confirmations), loss_subscribers(Key)} of
+        {{ok, #{timer := Timer}}, []} -> {noreply, park_loss(Key, State)};
+        {{ok, #{timer := Timer, contact := Contact}}, _} ->
+            case quod_directory:node_contact_current(Contact) of
+                true ->
+                    {_, S1} = ensure_loss_confirmation(
+                                Key, Contact, quod_time:mono_ms(), remove_loss(Key, State)),
+                    {noreply, S1};
+                false -> {noreply, finish_loss(Key, {unknown, stale_contact}, State)}
+            end;
+        _ -> {noreply, State}
+    end;
+handle_info({timeout, Timer, {peer_loss_deadline, Key}}, State) ->
+    case maps:find(Key, State#state.loss_confirmations) of
+        {ok, #{timer := Timer}} ->
+            {noreply, finish_loss(Key, {unknown, deadline_exceeded}, State)};
+        _ -> {noreply, State}
+    end;
+handle_info({peer_confirmation, Owner, Ref, Key, _Conn, Result, ObservationTime}, State)
+  when Owner =:= self() ->
+    case maps:find(Key, State#state.loss_confirmations) of
+        {ok, #{confirmation := Ref}} ->
+            Status = case Result of
+                authenticated -> reachable;
+                {failed, connect_timeout} -> suspected_unreachable;
+                {failed, {connect_closed, idle_timeout}} -> suspected_unreachable;
+                %% Local errors and rejected identities are not evidence of
+                %% remote death. Only a completed timeout supports suspicion.
+                {failed, Reason} -> {unknown, Reason};
+                {unknown, _} = Unknown -> Unknown
+            end,
+            {noreply, finish_loss(Key, Status, ObservationTime, State)};
+        _ -> {noreply, State}
+    end;
+handle_info({confirm_peer, Caller, Ref, <<_:256>> = NodeKey, Endpoint, Deadline}, State)
+  when is_pid(Caller), is_reference(Ref), is_integer(Deadline) ->
+    case Deadline > quod_time:mono_ms() of
+        true ->
+            case ensure_pinned_conn(NodeKey, Endpoint, State) of
+                {ok, Conn, S1} ->
+                    Conn ! {confirm_peer, Caller, Ref, NodeKey, Deadline},
+                    {noreply, S1};
+                error ->
+                    Caller ! {peer_confirmation, self(), Ref, NodeKey, undefined,
+                              {unknown, invalid_endpoint}, none},
+                    {noreply, State}
+            end;
+        false ->
+            Caller ! {peer_confirmation, self(), Ref, NodeKey, undefined,
+                      {unknown, deadline_exceeded}, none},
+            {noreply, State}
+    end;
 handle_info({peer_connections, Caller, Ref, <<_:256>> = NodeKey}, State)
   when is_pid(Caller), is_reference(Ref) ->
     Caller ! {Ref, connection_snapshot(NodeKey, State)},
     {noreply, State};
+handle_info({conn_accepted, Pid, Wire}, State) when is_pid(Pid), is_pid(Wire) ->
+    %% The listener owns accepted QUIC processes; the pinned library does not
+    %% monitor their application owner after set_owner_sync. Retain that exact
+    %% lifecycle reference in our existing inventory, including before auth.
+    S1 = track_connection(Pid, State),
+    {Monitor, Key, _} = maps:get(Pid, S1#state.connections),
+    {noreply, S1#state{connections = (S1#state.connections)#{Pid => {Monitor, Key, Wire}}}};
 handle_info({conn_authenticated, Pid, <<_:256>> = NodeKey}, State)
   when is_pid(Pid) ->
     S1 = track_connection(Pid, State),
     case maps:get(Pid, S1#state.connections) of
-        {Monitor, undefined} ->
-            S2 = S1#state{connections = (S1#state.connections)#{Pid => {Monitor, NodeKey}}},
+        {Monitor, undefined, Wire} ->
+            S2 = S1#state{connections = (S1#state.connections)#{Pid => {Monitor, NodeKey, Wire}}},
             {noreply, publish_connections(NodeKey, S2)};
-        {_Monitor, NodeKey} -> {noreply, S1};
-        {_Monitor, _Other} -> {noreply, S1}
+        {_Monitor, NodeKey, _Wire} -> {noreply, S1};
+        {_Monitor, _Other, _Wire} -> {noreply, S1}
     end;
 handle_info({conn_terminal, Pid, Ref}, State)
   when is_pid(Pid), is_reference(Ref) ->
@@ -463,7 +635,7 @@ handle_info({conn_terminal, Pid, Ref}, State)
     {noreply, S1};
 handle_info({'DOWN', Ref, process, Pid, _Reason}, State) ->
     case maps:find(Pid, State#state.connections) of
-        {ok, {Ref, _}} -> {noreply, forget_connection(Pid, State)};
+        {ok, {Ref, _, _}} -> {noreply, forget_connection(Pid, State)};
         _ -> {noreply, State}
     end;
 handle_info(_Info, State) ->
@@ -525,14 +697,17 @@ track_connection(Pid, State = #state{connections = Connections}) ->
     case maps:is_key(Pid, Connections) of
         true -> State;
         false -> State#state{connections =
-                   Connections#{Pid => {monitor(process, Pid), undefined}}}
+                   Connections#{Pid => {monitor(process, Pid), undefined, undefined}}}
     end.
 
 forget_connection(Pid, State = #state{connections = Connections, conns = Conns}) ->
     S1 = State#state{conns = maps:filter(fun(_, P) -> P =/= Pid end, Conns)},
     case maps:take(Pid, Connections) of
-        {{Monitor, Key}, Rest} ->
+        {{Monitor, Key, Wire}, Rest} ->
             demonitor(Monitor, [flush]),
+            %% Async close also resolves the remote peer's pending streams;
+            %% a dead application owner must not leave a live keepalive path.
+            case Wire of undefined -> ok; _ -> quic:close(Wire, normal) end,
             S2 = S1#state{connections = Rest},
             case Key of
                 undefined -> S2;
@@ -543,13 +718,207 @@ forget_connection(Pid, State = #state{connections = Connections, conns = Conns})
 
 connection_snapshot(Key, #state{connections = Connections,
                                 connection_revision = Revision}) ->
-    Pids = lists:sort([Pid || {Pid, {_, Peer}} <- maps:to_list(Connections), Peer =:= Key]),
+    Pids = lists:sort([Pid || {Pid, {_, Peer, _}} <- maps:to_list(Connections), Peer =:= Key]),
     {peer_connections, self(), Revision, Key, Pids}.
 
 publish_connections(Key, State = #state{connection_revision = Revision}) ->
     S1 = State#state{connection_revision = Revision + 1},
-    _ = quod_reg:publish({peer_connections, Key}, connection_snapshot(Key, S1)),
-    S1.
+    Snapshot = connection_snapshot(Key, S1),
+    _ = quod_reg:publish({peer_connections, Key}, Snapshot),
+    case {maps:find(Key, S1#state.loss_confirmations), loss_subscribers(Key)} of
+        {{ok, #{contact := Contact}}, [_ | _]} ->
+            case quod_directory:node_contact_current(Contact) of
+                true ->
+                    {_, S2} = ensure_loss_confirmation(Key, Contact, quod_time:mono_ms(), S1),
+                    S2;
+                false -> S1
+            end;
+        _ -> S1
+    end.
+
+acquire_peer_contact(NodeReference, Lookup,
+                     State = #state{loss_confirmations = Episodes,
+                                    peer_observation_limit = Limit}) ->
+    case quod_directory:node_transport_route(NodeReference) of
+        {ok, #{node_key := Key} = Contact} ->
+            case maps:find(Key, Episodes) of
+                {ok, #{contact := Contact}} -> {{ok, Contact}, State};
+                _ ->
+                    Replaced0 = forget_contact(Key, State),
+                    Interest = {node_identity_route, NodeReference},
+                    %% Only an already-retained actor can have rotated its
+                    %% physical key. Ordinary new acquisition needs no scan.
+                    Replaced = case gproc:where({rc, l, Interest}) of
+                        Owner when Owner =:= self() ->
+                            maps:fold(fun
+                                (K, #{contact := #{reference := R}}, Acc)
+                                  when R =:= NodeReference -> forget_contact(K, Acc);
+                                (_, _, Acc) -> Acc
+                            end, Replaced0, Replaced0#state.loss_confirmations);
+                        undefined -> Replaced0
+                    end,
+                    S1 = make_loss_room(Replaced),
+                    case map_size(S1#state.loss_confirmations) < Limit of
+                        true ->
+                            true = quod_reg:track_subscribers(Interest),
+                            %% A queued acquisition can outlive its caller.
+                            %% gproc does not emit on_zero for an initial zero.
+                            maybe_publish_peer_capacity(Interest),
+                            {{ok, Contact}, put_loss(Key, #{contact => Contact, status => idle}, S1)};
+                        false -> {{blocked, capacity}, S1}
+                    end
+            end;
+        unknown ->
+            %% Ordinary observation snapshots already identify their peer;
+            %% only initial actor-to-contact acquisition needs a bounded scan.
+            Retained = case Lookup of
+                all -> maps:to_list(Episodes);
+                Key -> [{Key, maps:get(Key, Episodes, #{})}]
+            end,
+            {Contacts, Invalid} = lists:partition(
+                fun({_, C}) -> quod_directory:node_contact_current(C) end,
+                [{K,C} || {K,#{contact := #{reference := R} = C}} <- Retained,
+                          R =:= NodeReference]),
+            S1 = lists:foldl(fun({K,_}, Acc) -> forget_contact(K, Acc) end, State, Invalid),
+            case Invalid of [] -> ok; [_ | _] -> publish_peer_capacity() end,
+            case Contacts of
+                [{_, Contact}] -> {{ok, Contact}, S1};
+                _ -> {unknown, S1}
+            end
+    end.
+
+request_loss_confirmation(#{reference := NodeReference, node_key := Key} = Contact,
+                          Caller, ObservedAfter, State) ->
+    case acquire_peer_contact(NodeReference, Key, State) of
+        {{ok, Contact}, S1} ->
+            case lists:member(Caller, loss_subscribers(Key)) of
+                false -> {loss_notice(Key, none, {unknown, not_subscribed}, none), S1};
+                true -> ensure_loss_confirmation(Key, Contact, ObservedAfter, S1)
+            end;
+        {_, S1} -> {{unknown, route_unavailable}, S1}
+    end;
+request_loss_confirmation(_, _, _, State) -> {{unknown, route_unavailable}, State}.
+
+ensure_loss_confirmation(Key, Contact, ObservedAfter, State = #state{loss_confirmations = Episodes}) ->
+    case maps:find(Key, Episodes) of
+        {ok, #{id := Id, status := waiting, contact := Contact}} ->
+            {loss_notice(Key, Id, waiting, none), State};
+        {ok, #{id := Id, status := Status, contact := Contact, completed := Completed, observed_at_ms := ObservedAt}}
+          when Completed > ObservedAfter -> {loss_notice(Key, Id, Status, ObservedAt), State};
+        {ok, _} ->
+            ensure_loss_confirmation(Key, Contact, ObservedAfter, remove_loss(Key, State));
+        error ->
+            %% Contact acquisition already owns this bounded slot; replacing
+            %% its episode cannot increase the number of observed peers.
+            Id = crypto:strong_rand_bytes(32),
+            Episode = #{id => Id, status => waiting, contact => Contact},
+            S1 = case connection_snapshot(Key, State) of
+                {peer_connections, _, _, _, []} ->
+                    Timer = erlang:start_timer(1000, self(), {peer_loss_grace, Key}),
+                    put_loss(Key, Episode#{timer => Timer}, State);
+                _ -> start_loss_confirmation(Key, Episode, State)
+            end,
+            {loss_notice(Key, Id, waiting, none), S1}
+    end.
+
+start_loss_confirmation(Key, Episode = #{contact := Contact}, State) ->
+    Deadline = quod_time:mono_ms() + 6000,
+    Ref = confirm_peer(self(), Key, maps:get(endpoint, Contact), Deadline),
+    Timer = erlang:start_timer(Deadline, self(), {peer_loss_deadline, Key}, [{abs, true}]),
+    put_loss(Key, Episode#{timer => Timer, confirmation => Ref}, State).
+
+make_loss_room(State = #state{loss_confirmations = Episodes,
+                              peer_observation_limit = Limit}) when map_size(Episodes) < Limit ->
+    State;
+make_loss_room(State = #state{loss_confirmations = Episodes,
+                              peer_observation_limit = Limit}) ->
+    %% Acquisition pressure collects unused contacts. Interest is installed
+    %% before acquisition, closing the later peer-loss subscription race.
+    maps:fold(fun(Peer, #{contact := #{reference := Host} = Contact}, Acc) ->
+        case map_size(Acc#state.loss_confirmations) >= Limit andalso
+             (not quod_directory:node_contact_current(Contact) orelse
+              quod_reg:tracked_subscribers({node_identity_route, Host}) =:= []) of
+            true -> forget_contact(Peer, Acc);
+            false -> Acc
+        end
+    end, State, Episodes).
+
+maybe_publish_peer_capacity(Interest) ->
+    %% A renewed interest can overtake a queued zero notice. The owner and
+    %% current interests determine whether the retained slot is evictable.
+    case gproc:where({rc, l, Interest}) =:= self() andalso
+         quod_reg:tracked_subscribers(Interest) =:= [] of
+        true -> publish_peer_capacity();
+        false -> ok
+    end.
+
+publish_peer_capacity() ->
+    _ = quod_reg:publish({peer_observation_capacity, self()},
+                          {peer_observation_capacity, self(), available}),
+    ok.
+
+forget_contact(Key, State = #state{loss_confirmations = Episodes}) ->
+    case maps:find(Key, Episodes) of
+        {ok, #{contact := #{reference := Host}}} ->
+            true = quod_reg:untrack_subscribers({node_identity_route, Host}),
+            remove_loss(Key, State);
+        error -> State
+    end.
+
+loss_subscribers(Key) ->
+    [Pid || Pid <- gproc:lookup_pids(quod_reg:prop({peer_loss, Key})),
+            is_process_alive(Pid)].
+
+loss_notice(Key, Id, Status, ObservedAt) ->
+    {peer_loss, self(), Key, Id, Status, ObservedAt}.
+
+put_loss(Key, Episode, State = #state{loss_confirmations = Episodes}) ->
+    State#state{loss_confirmations = Episodes#{Key => Episode}}.
+
+remove_loss(Key, State = #state{loss_confirmations = Episodes}) ->
+    case maps:take(Key, Episodes) of
+        {Episode, Rest} ->
+            case maps:find(timer, Episode) of
+                {ok, Timer} -> _ = erlang:cancel_timer(Timer), ok;
+                error -> ok
+            end,
+            State#state{loss_confirmations = Rest};
+        error -> State
+    end.
+
+park_loss(Key, State = #state{loss_confirmations = Episodes}) ->
+    case maps:find(Key, Episodes) of
+        {ok, #{contact := Contact}} ->
+            put_loss(Key, #{contact => Contact, status => idle}, remove_loss(Key, State));
+        error -> State
+    end.
+
+finish_loss(Key, Status, State) ->
+    finish_loss(Key, Status, {quod_time:mono_ms(), quod_time:now_ms()}, State).
+
+finish_loss(Key, Status, none, State) -> finish_loss(Key, Status, State);
+finish_loss(Key, ObservedStatus, {Completed, ObservedAt},
+            State = #state{loss_confirmations = Episodes}) ->
+    case maps:find(Key, Episodes) of
+        {ok, #{id := Id, contact := Contact}} ->
+            Status = case not quod_directory:node_contact_current(Contact) of
+                true -> {unknown, stale_contact};
+                false -> ObservedStatus
+            end,
+            S1 = remove_loss(Key, State),
+            _ = quod_reg:publish({peer_loss, Key}, loss_notice(Key, Id, Status, ObservedAt)),
+            Evidence = #{id => Id, status => Status, contact => Contact,
+                         completed => Completed, observed_at_ms => ObservedAt},
+            Retained = case Status =/= reachable andalso loss_subscribers(Key) =/= []
+                            andalso quod_directory:node_contact_current(Contact) of
+                true ->
+                    Timer = erlang:start_timer(30000, self(), {peer_loss_reobserve, Key}),
+                    Evidence#{timer => Timer};
+                false -> Evidence
+            end,
+            put_loss(Key, Retained, S1);
+        error -> State
+    end.
 
 directory_link_error({ReplyTo, Ref}, Peer, Channel) ->
     ReplyTo ! {link_error, Ref, Peer, Channel},

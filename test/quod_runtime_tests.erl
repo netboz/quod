@@ -1414,6 +1414,25 @@ subscription_retraction_precedes_later_queued_remote_reaction_test() ->
                    EstAfterRetraction))
       end).
 
+transient_observation_uses_reaction_unification_test() ->
+    Self = <<83:256>>,
+    Pattern = {observed, {host_loss, {'Instance'}, {'Epoch'}}},
+    Goal = {',', {'=', {'Instance'}, worker}, {'=', {'Epoch'}, 7}},
+    Reaction = {react_on, {node, Self}, Pattern, Goal},
+    Clause = reaction_clause({node, Self}, Pattern, Goal),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [Clause], #{subscriptions => [], reactions => [Clause]}),
+    with_reaction_est([Reaction], fun(Est) ->
+        %% A committed payload cannot impersonate an owner observation. Only
+        %% the explicit observation tier may invoke this privileged handler.
+        Work = [{local, 2, Est, [], [{observed, {host_loss, worker, 7}}], []},
+                {observed, {host_loss, worker, 7}}],
+        ?assertMatch({ok, 2, _, [], keep,
+                      #{candidates := 1, matches := 1, executed := 1}},
+                     quod_runtime:test_run_events(
+                       Work, Plan, Self, [Clause], 1, Est))
+    end).
+
 %% A participant's event-only plan becomes visible only through atomic Resolve.
 %% Vote and Complete are silent; the certified follower
 %% exposes the explicit occurrence once, through the normal reaction path,

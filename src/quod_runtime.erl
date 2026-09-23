@@ -106,14 +106,14 @@ observers therefore maintain current P without reconstructing best-effort effect
 
 -export([start_link/2, stats/1, effect_frontier/1,
          enqueue_heavy/4, revision/2, await_revision/4, reconcile_now/1,
-         project_agents/5, agent_request/6, agents/1]).
+         project_agents/4, project_agent_observers/4, agent_request/6, agents/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
 %% the pure planning + handler-selection core — driven directly by eunit
 -export([plan_handlers/2, founding_heads/1, with_scope/2, event_plan/4,
          test_read_founding/2, plan_runtime_catalog/2, alpha_normalize/1,
-         test_run_events/6]).
+         test_run_events/6, test_drain_observations/3]).
 -endif.
 
 -define(RECONCILE_BUDGET_MS, 30000).
@@ -177,6 +177,7 @@ observers therefore maintain current P without reconstructing best-effort effect
             %% before dispatch; remote entries enter the same reaction helper.
             queue = [] :: [tuple()],                  %% REVERSED work items
             queue_len = 0 :: non_neg_integer(),
+            physical_turn = false :: boolean(),
             %% Follow acknowledgements owned by the current event runner. They
             %% are released on success, collapse, replay, or termination, so a
             %% dead handler can never wedge the shared follower.
@@ -213,10 +214,12 @@ observers therefore maintain current P without reconstructing best-effort effect
             superseded = 0 :: non_neg_integer(),
             heavy_rejected = 0 :: non_neg_integer(),
             heavy_failures = 0 :: non_neg_integer(),
+            observer_handler = undefined, observer = none,
             agent_handler = undefined, agent_refresh = false,
-            agent_projection_waiter = none, agent_pending_bytes = 0, agent_desired_count = 0,
+            agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
+            agent_capacity_blocked = false, agent_capacity_refusals = 0,
             agents = #{} :: map(),
-            agent_dirty = #{} :: map()}).   %% heavy jobs that failed (isolated)
+            hosting_dirty = #{} :: map()}).   %% notices/work released after successful projection
 
 %%%===================================================================
 %%% API
@@ -227,17 +230,29 @@ start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_runtime, Ns}), ?MODULE, {Ns, Config}, []).
 
 -doc "Install hosted children from the current projection runner only.".
--spec project_agents(binary(), non_neg_integer(), term(), all | {keys, [term()]}, [term()]) -> ok | {error, term()}.
-project_agents(Ns, Height, Handler, Scope, Hosts) ->
-    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_agents, Height, Handler, Scope, Hosts}, infinity).
+-spec project_agents(binary(), term(), all | {keys, [term()]}, [term()]) ->
+          ok | {blocked, capacity} | {error, term()}.
+project_agents(Ns, Handler, Scope, Hosts) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_agents, Handler, Scope, Hosts}, infinity).
+
+-spec project_agent_observers(binary(), term(), all | {keys, [term()]}, [term()]) ->
+          ok | {blocked, capacity} | {error, term()}.
+project_agent_observers(Ns, Handler, Scope, Rows) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}),
+                    {project_agent_observers, Handler, Scope, Rows}, infinity).
 
 -doc "Queue a bounded live request for the executor selected by the current reaction.".
--spec agent_request(binary(), non_neg_integer(), term(), read | execute, term(), pos_integer()) ->
+-spec agent_request(binary(), non_neg_integer(), term(), read | execute, term(),
+                    pos_integer() | {expires, pos_integer()}) ->
           ok | {error, term()}.
-agent_request(Ns, Height, Executor, Mode, Goal, Timeout) ->
+agent_request(Ns, Height, Executor, Mode, Goal, Budget) ->
+    {Expires, Remaining} = case Budget of
+        {expires, Expiry} -> {Expiry, Expiry - quod_time:now_ms()};
+        Timeout -> {quod_time:now_ms() + Timeout, Timeout}
+    end,
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
       {agent_request, Height, Executor, Mode, Goal,
-       {quod_time:now_ms() + Timeout, quod_time:mono_ms() + Timeout}}, infinity).
+       {Expires, quod_time:mono_ms() + Remaining}}, infinity).
 
 -doc "Return current hosted process references, owned by this runtime incarnation.".
 -spec agents(binary()) -> {pid(), [map()]}.
@@ -323,56 +338,87 @@ handle_continue(try_attach, S = #s{mode = booting}) ->
 handle_continue(try_attach, S) ->
     {noreply, S}.
 
+handle_call({project_agent_observers, Handler, Scope, Rows}, {Caller, _},
+            S = #s{runner = {_, Caller, _, _, _}, observer_handler = Owner,
+                   observer = Existing, config = Config})
+  when Handler =/= undefined, (Owner =:= undefined orelse Owner =:= Handler) ->
+    Observer = case Existing of
+        none -> quod_agent_observer:new(maps:get(node_id, Config));
+        _ -> Existing
+    end,
+    case quod_agent_observer:project(Scope, Rows, Observer) of
+        {ok, Installed} ->
+            {reply, ok, install_observer(Observer, Installed, Handler, Scope, [], S)};
+        {blocked, capacity, Installed, Refused} ->
+            {reply, {blocked, capacity},
+                install_observer(Observer, Installed, Handler, Scope, Refused, S)};
+        {error, _} = Error ->
+            case Existing of none -> quod_agent_observer:stop(Observer); _ -> ok end,
+            {reply, Error, S}
+    end;
+handle_call({project_agent_observers, Handler, _, _}, {Caller, _},
+            S = #s{runner = {_, Caller, _, _, _}, observer_handler = Owner})
+  when Owner =/= undefined, Owner =/= Handler ->
+    {reply, {error, {conflicting_agent_observer_owner, Owner, Handler}}, S};
+handle_call({project_agent_observers, _, _, _}, _From, S) ->
+    {reply, {error, stale_observer_projection}, S};
 handle_call(agents, _From, S) ->
     {reply, {self(), [maps:with([binding, pid], A) || A = #{stopping := false} <- maps:values(S#s.agents)]}, S};
-handle_call({project_agents, _H, Handler, Scope, Hosts}, From = {Caller, _},
+handle_call({project_agents, Handler, Scope, Hosts}, From = {Caller, _},
             S = #s{runner = {_, Caller, _, _, _}, agent_handler = Owner,
                    founding = {ok, #{identity := Identity}, _}})
   when Handler =/= undefined, (Owner =:= undefined orelse Owner =:= Handler) ->
     case agent_projection(Identity, Scope, Hosts, S) of
-        {ok, Desired} ->
-            Installed = install_agents(Scope, Desired, S#s{agent_handler = Handler}),
+        {ok, Slots, Desired} ->
+            Base = S#s{agent_handler = Handler,
+                        agent_capacity_blocked = Scope =/= all andalso S#s.agent_capacity_blocked},
+            Installed = install_agents(Slots, Desired, Base),
+            Reply = case Installed#s.agent_capacity_refusals > S#s.agent_capacity_refusals of
+                        true -> {blocked, capacity};
+                        false -> ok
+                    end,
             Next = case S#s.agent_refresh of
                        true -> queue_agent_reconcile(Installed#s{agent_refresh = false});
                        false -> Installed
                    end,
-            case agent_retirements(Scope, Next#s.agents) of
+            case agent_retirements(Slots, Next#s.agents) of
                 Waiting when map_size(Waiting) > 0 ->
-                    {noreply, Next#s{agent_projection_waiter = {From, Waiting}}};
-                _ -> {reply, ok, Next}
+                    {noreply, Next#s{agent_projection_waiter = {From, Waiting, Reply}}};
+                _ -> {reply, Reply, Next}
             end;
         {error, _} = Error -> {reply, Error, S}
     end;
-handle_call({project_agents, _, Handler, _, _}, {Caller, _},
+handle_call({project_agents, Handler, _, _}, {Caller, _},
             S = #s{runner = {_, Caller, _, _, _}, agent_handler = Owner})
   when Owner =/= undefined, Owner =/= Handler ->
     {reply, {error, {conflicting_agent_projection_owner, Owner, Handler}}, S};
-handle_call({project_agents, _, _, _, _}, _From, S) ->
+handle_call({project_agents, _, _, _}, _From, S) ->
     {reply, {error, stale_projection}, S};
-handle_call({agent_request, H, {agent, Instance, Epoch, Key}, Mode, Goal, {Expires, Deadline}},
-            {Caller, _}, S = #s{runner = {events, Caller, _, _, _}, agents = Agents}) ->
-    case maps:get(Instance, Agents, none) of
-        #{binding := #{epoch := Epoch, public_key := Key}, pid := Pid, pending := Pending,
-          stopping := false} = Agent
+handle_call({agent_request, H, Executor, Mode, Goal, {Expires, Deadline}},
+            {Caller, _}, S = #s{runner = {events, Caller, _, _, _}}) ->
+    case request_executor(Executor, S) of
+        {ok, Slot, #{pid := Pid, pending := Pending} = Agent, S1}
           when map_size(Pending) < ?MAX_AGENT_PENDING ->
-            Bytes = erlang:external_size({Mode, Goal, Expires}),
+            Bytes = erlang:external_size({Mode, Goal, Expires, Deadline}),
             case Bytes =< ?MAX_AGENT_REQUEST_BYTES andalso
-                 S#s.agent_pending_bytes + Bytes =< ?MAX_AGENT_PENDING_BYTES of
+                 S1#s.agent_pending_bytes + Bytes =< ?MAX_AGENT_PENDING_BYTES of
                 true ->
                     Ref = make_ref(),
-                    Pid ! {agent_request, self(), Ref, H, {Mode, Goal, Expires, Deadline}},
-                    {reply, ok, S#s{agents = Agents#{Instance => Agent#{pending => Pending#{Ref => Bytes}}},
-                                    agent_pending_bytes = S#s.agent_pending_bytes + Bytes,
-                                    agent_dirty = (S#s.agent_dirty)#{Instance => maps:get(Instance, S#s.agent_dirty, work)}}};
-                false -> {reply, {error, busy}, S}
+                    Pid ! {agent_request, self(), Ref, H, {Mode, Goal, Expires, Deadline},
+                           erlang:monotonic_time(microsecond)},
+                    {reply, ok, S1#s{agents = (S1#s.agents)#{Slot => Agent#{pending => Pending#{Ref => Bytes}}},
+                                    agent_pending_bytes = S1#s.agent_pending_bytes + Bytes,
+                                    hosting_dirty = (S1#s.hosting_dirty)#{Slot => maps:get(Slot, S1#s.hosting_dirty, work)}}};
+                false -> {reply, {error, busy}, S1}
             end;
-        #{pending := Pending} when map_size(Pending) >= ?MAX_AGENT_PENDING -> {reply, {error, busy}, S};
-        _ -> {reply, {error, stale_executor}, S}
+        {ok, _, _, S1} -> {reply, {error, busy}, S1};
+        {error, Reason, S1} -> {reply, {error, Reason}, S1}
     end;
 handle_call({agent_request, _, _, _, _, _}, _From, S) ->
     {reply, {error, stale_executor}, S};
 handle_call(get_stats, _From, S) ->
-    {reply, #{mode => mode_tag(S#s.mode), height => S#s.height,
+    {reply, maps:merge(quod_agent_observer:stats(S#s.observer),
+             #{mode => mode_tag(S#s.mode), height => S#s.height,
               founding_ready => S#s.founding =/= unknown,
               runner_active => S#s.runner =/= none,
               handlers_active => map_size(S#s.handlers),
@@ -395,6 +441,11 @@ handle_call(get_stats, _From, S) ->
               reconciles => S#s.reconciles,
               reconcile_failures => S#s.reconcile_failures,
               hosted_agents => map_size(S#s.agents),
+              hosted_agent_instances => S#s.agent_slots,
+              agent_capacity_status => case S#s.agent_capacity_blocked of
+                                           true -> blocked; false -> ready
+                                       end,
+              agent_capacity_refusals_total => S#s.agent_capacity_refusals,
               agent_pending_bytes => S#s.agent_pending_bytes,
               collapses => S#s.collapses,
               dropped_events => S#s.dropped_events,
@@ -411,7 +462,7 @@ handle_call(get_stats, _From, S) ->
               heavy_superseded => S#s.superseded,
               heavy_rejected => S#s.heavy_rejected,
               heavy_failures => S#s.heavy_failures,
-              waiters => map_size(S#s.waiters)}, S};
+              waiters => map_size(S#s.waiters)}), S};
 handle_call(effect_frontier, _From, S) ->
     {reply, {ok, S#s.e_frontier}, S};
 handle_call({revision, Resource}, _From, S) ->
@@ -590,10 +641,10 @@ handle_info({applied_live, _Env}, S) -> {noreply, founding_wake(S)};
 handle_info({rejected_live, _Env}, S) -> {noreply, S};
 handle_info({projection_advanced, _Owner, _H}, S) ->
     {noreply, founding_wake(S)};
-handle_info({node_actor_installed, Owner, Principal}, S) ->
+handle_info({node_actor_installed, Owner, Principal}, S) when is_pid(Owner) ->
     case {quod_reg:where({namespace_manager, node}), quod_node_actor:principal()} of
         {Owner, Principal} ->
-            {noreply, queue_agent_reconcile(S)};
+            {noreply, queue_observer_reconcile(queue_agent_reconcile(refresh_node_executor(S)))};
         _ -> {noreply, S}
     end;
 handle_info({agent_completed, Instance, Pid, Ref}, S = #s{agents = Agents}) ->
@@ -601,14 +652,14 @@ handle_info({agent_completed, Instance, Pid, Ref}, S = #s{agents = Agents}) ->
         Agent = #{pid := Pid, pending := Pending} ->
             case maps:take(Ref, Pending) of
                 {Bytes, Rest} ->
-                    {noreply, S#s{agents = Agents#{Instance => Agent#{pending => Rest}},
-                                  agent_pending_bytes = S#s.agent_pending_bytes - Bytes}};
+                    {noreply, maybe_run_events(S#s{agents = Agents#{Instance => Agent#{pending => Rest}},
+                                  agent_pending_bytes = S#s.agent_pending_bytes - Bytes})};
                 error -> {noreply, S}
             end;
         _ -> {noreply, S}
     end;
 handle_info({{agent_down, Instance}, Monitor, process, Pid, _Reason}, S) ->
-    {noreply, agent_down(Instance, Pid, Monitor, S)};
+    {noreply, maybe_run_events(agent_down(Instance, Pid, Monitor, S))};
 handle_info({'DOWN', MRef, process, Pid, killed},
             S = #s{founding = unknown,
                    runner = {reconcile, Pid, MRef, _Ref, TRef}}) ->
@@ -654,6 +705,9 @@ handle_info({waiter_timeout, WRef}, S = #s{waiters = Waiters}) ->
     end;
 handle_info({collapse_retry, Ref}, S = #s{last_recovery = {collapse, Ref}}) ->
     {noreply, attach_and_reconcile({collapse, make_ref()}, S)};
+handle_info(Info, S = #s{observer = Observer}) when Observer =/= none ->
+    {Next, Events} = quod_agent_observer:handle(Info, Observer),
+    {noreply, queue_observations(Events, S#s{observer = Next})};
 handle_info(_Info, S) -> {noreply, S}.
 
 %% A dying server must not orphan its workers: unmonitored+unbudgeted (the kill timers die
@@ -813,7 +867,7 @@ reconcile_publish(
     _ = reconcile_direct_effects(),
     case S1#s.pending_edge of
         none -> maybe_run_events(drop_stale_queue(
-                                   pump_heavy(release_ready_waiters(release_agents(S1#s{mode = live})))));
+                                   pump_heavy(release_ready_waiters(release_hosting(S1#s{mode = live})))));
         Id   -> replace_snapshot_and_reconcile(Id, S1)
     end.
 
@@ -848,6 +902,8 @@ config_error({missing_dependency, _, _})-> true;
 config_error({handler_cycle, _})        -> true;
 config_error({handler_error, _, {erlog, {agent_projection_failed,
               {conflicting_agent_projection_owner, _, _}}}}) -> true;
+config_error({handler_error, _, {erlog, {agent_observer_projection_failed,
+              {conflicting_agent_observer_owner, _, _}}}}) -> true;
 config_error({founding_read_failed, _}) -> true;
 config_error(_)                         -> false.
 
@@ -872,13 +928,73 @@ mode_tag(M)                 -> element(1, M).
 %%%===================================================================
 
 maybe_run_events(
-  S = #s{mode = live, runner = none, queue = Q, handlers = Hs,
-         reaction_index = ReactionIndex})
+  S = #s{mode = live, runner = none, queue = Q})
   when Q =/= [] ->
-    %% One runner drains both local and certified-remote occurrences. Adjacent
-    %% local transactions at one block height still share one convergence;
-    %% remote notices retain their per-target certified order.
-    Items = lists:reverse(Q),
+    {Items, Remaining, Turn, Dropped} = ready_work(lists:reverse(Q), S),
+    Pending = S#s{queue = lists:reverse(Remaining), queue_len = length(Remaining),
+                 physical_turn = Turn, dropped_events = S#s.dropped_events + Dropped},
+    case Items of
+        [] -> Pending;
+        _ -> start_event_batch(Items, Pending)
+    end;
+maybe_run_events(S) -> S.
+
+%% Physical evidence waits for actual executor capacity. Committed advances
+%% continue while it waits, so its eventual Prolog proof sees current policy.
+%% Only one captured assignment is released per batch; completion, not a timer,
+%% wakes the remainder. All work still uses the same ordered runner and matcher.
+ready_work(Items, S) ->
+    {Ordinary, Physical} = lists:partition(fun({observed_host, _}) -> false;
+                                           (_) -> true end, Items),
+    case {Ordinary, Physical, S#s.physical_turn, physical_capacity(S)} of
+        {[_|_], [_|_], true, true} ->
+            case take_host_observation(Physical, S#s.observer, quod_time:now_ms(), 0) of
+                {[], [], Dropped} -> {Ordinary, [], false, Dropped};
+                {Selected, Rest, Dropped} -> {Selected, Ordinary ++ Rest, false, Dropped}
+            end;
+        {[_|_], _, _, _} -> {Ordinary, Physical, Physical =/= [], 0};
+        {[], _, _, true} ->
+            {Selected, Rest, Dropped} = take_host_observation(Physical, S#s.observer, quod_time:now_ms(), 0),
+            {Selected, Rest, false, Dropped};
+        {[], _, _, false} -> {[], Physical, true, 0}
+    end.
+
+physical_capacity(S) ->
+    NodeAvailable = case maps:get(node, S#s.agents, none) of
+        none -> true;
+        #{pending := Pending, stopping := false} -> map_size(Pending) < ?MAX_AGENT_PENDING;
+        _ -> false
+    end,
+    NodeAvailable andalso
+        S#s.agent_pending_bytes + ?MAX_AGENT_REQUEST_BYTES =< ?MAX_AGENT_PENDING_BYTES.
+
+%% Like queue overflow and reset, count discarded queue items: one physical
+%% batch, irrespective of how many captured instance bindings remain in it.
+take_host_observation([], _Observer, _Now, Dropped) -> {[], [], Dropped};
+take_host_observation([{observed_host, #{at := At}} | Rest], Observer, Now, Dropped)
+  when At + 60000 =< Now ->
+    take_host_observation(Rest, Observer, Now, Dropped + 1);
+take_host_observation([{observed_host, Batch} | Rest], Observer, Now, Dropped) ->
+    case quod_agent_observer:current(Batch, Observer) of
+        false -> take_host_observation(Rest, Observer, Now, Dropped + 1);
+        true ->
+            case quod_agent_observer:next(Batch) of
+                done -> take_host_observation(Rest, Observer, Now, Dropped);
+                {Event, #{bindings := []}} -> {[{observed, Event}], Rest, Dropped};
+                {Event, Next} -> {[{observed, Event}], Rest ++ [{observed_host, Next}], Dropped}
+            end
+    end.
+
+-ifdef(TEST).
+%% Exercise admission and its actual counter update without a running handler
+%% or a wall-clock wait. Contact currency still uses the real directory owner.
+test_drain_observations(Items, Observer, PhysicalTurn) ->
+    S = maybe_run_events(#s{mode = live, queue = lists:reverse(Items),
+        queue_len = length(Items), observer = Observer, physical_turn = PhysicalTurn}),
+    {lists:reverse(S#s.queue), S#s.dropped_events}.
+-endif.
+
+start_event_batch(Items, S = #s{handlers = Hs, reaction_index = ReactionIndex}) ->
     Work = coalesce_work_items(Items),
     RefreshCatalog = catalog_changed(Work),
     HasRemote = lists:any(fun is_remote_work/1, Work),
@@ -887,7 +1003,7 @@ maybe_run_events(
             %% no handlers: the tier is trivially complete through the batch tip
             {Tip, TipEst} = work_tip(Work, S#s.height, S#s.est),
             Effects = work_effects(Work),
-            S1 = S#s{queue = [], queue_len = 0, est = TipEst, height = Tip,
+            S1 = S#s{est = TipEst, height = Tip,
                      p_height = Tip, e_frontier = Tip},
             release_direct_effects(Effects),
             floor_raise(pump_heavy(release_ready_waiters(S1)));
@@ -916,10 +1032,8 @@ maybe_run_events(
                          maps:from_keys(Subscriptions, true),
                          Self, Founding, S#s.height, S#s.est)
               end,
-              S#s{queue = [], queue_len = 0, event_acks = Acks})
-    end;
-maybe_run_events(S) ->
-    S.
+              S#s{event_acks = Acks})
+    end.
 
 %% One local block retains two deliberately different views of its transactions:
 %% requested heads are unioned for state invalidation, while canonical applied
@@ -939,6 +1053,7 @@ coalesce_work_items(Batch) ->
                             E0 ++ Effects} | Rest];
                       _ -> [{local, H, Est, Heads, Events, Effects} | Acc]
                   end
+             ;({observed, _Event} = Item, Acc) -> [Item | Acc]
              ;({reconcile, _Heads} = Item, Acc) -> [Item | Acc]
              ;({remote, _FollowRef, _NoticeRef, _Identity, _Publications} = Item,
                Acc) ->
@@ -949,6 +1064,7 @@ coalesce_work_items(Batch) ->
            {local, H, Est, Heads, Events, Effects} ->
                {local, H, Est, lists:usort(Heads), Events, Effects};
            {remote, _, _, _, _} -> Item;
+           {observed, _} -> Item;
            {reconcile, _} -> Item
        end || Item <- Folded]).
 
@@ -994,6 +1110,18 @@ run_events(Ns, Work, Handlers, Order, Index, Deps,
                                  Ns, H, Est, Self, Events, Reactions1, Stats0),
                       {H, Est, Stats1, Reactions1, Sources1,
                        Subscriptions1, Catalog1};
+                 ({observed, Event},
+                  {H, Est, Stats0, Reactions0, Sources0,
+                   Subscriptions0, Catalog0}) ->
+                      %% Transient owner observations are not applied ledger
+                      %% events. They use the same Prolog matcher and explicit
+                      %% executor; any durable consequence needs signed ingress.
+                      Observation = {observed, Event},
+                      Candidates = maps:get({observed, 1}, Reactions0, []),
+                      Stats1 = dispatch_reaction_candidates(
+                                 Ns, H, Est, Self, Observation, Candidates, Stats0),
+                      {H, Est, Stats1, Reactions0, Sources0,
+                       Subscriptions0, Catalog0};
                  ({reconcile, Handler}, {H, Est, _, _, _, _, _} = Acc) ->
                       Run = transitive_closure([Handler], Deps),
                       lists:foreach(fun(Id) ->
@@ -1072,6 +1200,12 @@ empty_reaction_stats() ->
 
 dispatch_local_reactions(_Ns, _Height, _Est, _Self, [], _Index, Stats) ->
     Stats;
+dispatch_local_reactions(Ns, Height, Est, Self, [{observed, _} | Rest], Index, Stats0) ->
+    %% Committed user content cannot mint local owner evidence and borrow a
+    %% node observer's signing authority. Only the observed tier unwraps this
+    %% reserved outer vocabulary into the common Prolog matcher.
+    dispatch_local_reactions(Ns, Height, Est, Self, Rest, Index,
+                             reaction_stat(dropped, Stats0));
 dispatch_local_reactions(Ns, Height, Est, Self, [Event | Rest], Index, Stats0) ->
     Candidates = maps:get(functor_key(Event), Index, []),
     Stats1 = dispatch_reaction_candidates(
@@ -1207,7 +1341,7 @@ events_finished(
              dropped_events =
                  S#s.dropped_events + maps:get(dropped, ReactionStats)},
     release_direct_effects(Effects),
-    S2 = release_agents(release_event_acks(S1)),
+    S2 = release_hosting(release_event_acks(S1)),
     next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S2))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).
@@ -1568,7 +1702,7 @@ execution_failure(Reason, S0 = #s{ns = Ns}) ->
     end.
 
 kill_runner(S00) ->
-    S0 = #s{heavy_running = Running} = stop_agents(S00),
+    S0 = #s{heavy_running = Running} = drop_observations(stop_observer(stop_agents(S00))),
     %% collapse kills EVERY in-flight worker — tier runner AND heavy workers [DA M7]: their
     %% stale writes must not land after the clear, and the reconcile's converge goals
     %% re-enqueue heavy jobs, so revision barriers still resolve.
@@ -1620,15 +1754,57 @@ overflow_collapse(S0 = #s{ns = Ns}) ->
 
 %%% Hosted process lifecycle. D remains authoritative; these are current P handles.
 
+request_executor({agent, Instance, Epoch, Key}, S = #s{agents = Agents}) ->
+    Slot = {agent, Instance},
+    case maps:get(Slot, Agents, none) of
+        #{binding := #{epoch := Epoch, public_key := Key}, stopping := false} = Agent ->
+            {ok, Slot, Agent, S};
+        _ -> {error, stale_executor, S}
+    end;
+request_executor({node, Key}, S) ->
+    case node_executor_binding(Key, S) of
+        {ok, Binding} ->
+            case maps:get(node, S#s.agents, none) of
+                none ->
+                    Next = start_agent(node, Binding, S),
+                    {ok, node, maps:get(node, Next#s.agents), Next};
+                #{binding := Binding, stopping := false} = Agent -> {ok, node, Agent, S};
+                Agent ->
+                    {error, stale_executor,
+                     S#s{agents = (S#s.agents)#{node => stop_agent(Agent, Binding)}}}
+            end;
+        error -> {error, stale_executor, S}
+    end;
+request_executor(_, S) -> {error, stale_executor, S}.
+
+node_executor_binding(Key, #s{founding = {ok, #{identity := Source}, _}}) ->
+    case {quod_node_actor:principal(), application:get_env(quod, node_pubkey)} of
+        {{ok, Principal}, {ok, Key}} ->
+            {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+            {ok, #{reference => NodeRef, public_key => Key, epoch => 0, source => Source}};
+        _ -> error
+    end;
+node_executor_binding(_, _) -> error.
+
+refresh_node_executor(S) ->
+    case maps:is_key(node, S#s.agents) of
+        false -> S;
+        true ->
+            Key = application:get_env(quod, node_pubkey, undefined),
+            Desired = case node_executor_binding(Key, S) of
+                {ok, Binding} -> #{node => Binding};
+                error -> #{}
+            end,
+            install_agents({keys, [node]}, Desired, S)
+    end.
+
 agent_projection({Ns, Anchor}, Scope, Hosts, S) when is_list(Hosts) ->
     case agent_projection_scope(Scope, Hosts) of
         true ->
             case local_agent_projection(Ns, Anchor, Hosts) of
                 {ok, Desired} ->
-                    case agent_desired_count(Scope, Desired, S) =< ?MAX_HOSTED_AGENTS of
-                        true -> {ok, Desired};
-                        false -> {error, too_many_local_agents}
-                    end;
+                    Slots = agent_projection_slots(Scope, Desired, S#s.agents),
+                    {ok, Slots, Desired};
                 Error -> Error
             end;
         false -> {error, invalid_agent_projection}
@@ -1643,14 +1819,10 @@ agent_projection_scope({keys, Instances}, Hosts) when is_list(Instances) ->
                  (_) -> false end, Hosts);
 agent_projection_scope(_, _) -> false.
 
-agent_desired_count(all, Desired, _) -> map_size(Desired);
-agent_desired_count({keys, Changed}, Desired, S) ->
-    Removed = lists:sum([case maps:get(I, S#s.agents, none) of
-        none -> 0;
-        #{stopping := true, successor := none} -> 0;
-        _ -> 1
-    end || I <- Changed]),
-    S#s.agent_desired_count - Removed + map_size(Desired).
+agent_projection_slots(all, Desired, Existing) ->
+    {keys, lists:usort([Slot || Slot = {agent, _} <- maps:keys(Existing)] ++ maps:keys(Desired))};
+agent_projection_slots({keys, Instances}, _Desired, _Existing) ->
+    {keys, [{agent, Instance} || Instance <- Instances]}.
 
 local_agent_projection(Ns, Anchor, Hosts) ->
     case quod_node_actor:principal() of
@@ -1660,8 +1832,6 @@ local_agent_projection(Ns, Anchor, Hosts) ->
         _ -> {ok, #{}}
     end.
 
-agent_projection(_Hosts, _Node, _Ns, _Anchor, Acc, _Seen)
-  when map_size(Acc) > ?MAX_HOSTED_AGENTS -> {error, too_many_local_agents};
 agent_projection([], _Node, _Ns, _Anchor, Acc, _Seen) -> {ok, Acc};
 agent_projection([{host, Instance, Node, Epoch, <<_:256>> = Key} | Rest],
                  Local, Ns, Anchor, Acc, Seen)
@@ -1670,38 +1840,61 @@ agent_projection([{host, Instance, Node, Epoch, <<_:256>> = Key} | Rest],
         {true, false} when Node =:= Local ->
             Binding = #{reference => {agent_instance_ref, Ns, Anchor, Instance},
                         epoch => Epoch, public_key => Key},
-            agent_projection(Rest, Local, Ns, Anchor, Acc#{Instance => Binding}, Seen#{Instance => true});
+            agent_projection(Rest, Local, Ns, Anchor, Acc#{{agent, Instance} => Binding}, Seen#{Instance => true});
         {true, false} -> agent_projection(Rest, Local, Ns, Anchor, Acc, Seen#{Instance => true});
         _ -> {error, ambiguous_agent_projection}
     end;
 agent_projection(_, _, _, _, _, _) -> {error, invalid_agent_projection}.
 
-install_agents(Scope, Desired, S = #s{agents = Existing}) ->
-    Instances = case Scope of
-        all -> lists:usort(maps:keys(Existing) ++ maps:keys(Desired));
-        {keys, Changed} -> Changed
-    end,
+install_agents({keys, Instances}, Desired, S) ->
     %% Ordinary changes touch only the affected identities. Retiring children
-    %% retain the latest successor intent until their monitored worker joins.
-    {Agents, Dirty} = lists:foldl(fun(I, {Acc, D}) ->
+    %% occupy their slot until DOWN. Refused bindings are published with the
+    %% batch, not retained as another desired-state inventory.
+    lists:foldl(fun(I, Acc) ->
         Next = maps:get(I, Desired, none),
-        case {maps:get(I, Acc, none), Next} of
-            {none, none} -> {Acc, D};
-            {none, Binding} -> {Acc#{I => start_agent(I, Binding)}, D#{I => installed}};
-            {#{binding := Binding, stopping := false}, Binding} -> {Acc, D};
-            {Agent, Binding} -> {Acc#{I => stop_agent(Agent, Binding)}, D}
+        case {maps:get(I, Acc#s.agents, none), Next} of
+            {none, none} -> Acc#s{hosting_dirty = maps:remove(I, Acc#s.hosting_dirty)};
+            {none, Binding} ->
+                case agent_slot_count(I) =:= 0 orelse Acc#s.agent_slots < max_hosted_agents(Acc) of
+                    true -> start_agent(I, Binding, Acc);
+                    false -> Acc#s{hosting_dirty = (Acc#s.hosting_dirty)#{I => {refused, Binding}},
+                                    agent_capacity_blocked = true,
+                                    agent_capacity_refusals = Acc#s.agent_capacity_refusals + 1}
+                end;
+            {#{binding := Binding, stopping := false}, Binding} -> Acc;
+            {Agent, Binding} -> Acc#s{agents = (Acc#s.agents)#{I => stop_agent(Agent, Binding)}}
         end
-    end, {Existing, S#s.agent_dirty}, Instances),
-    S#s{agents = Agents, agent_dirty = Dirty,
-        agent_desired_count = agent_desired_count(Scope, Desired, S)}.
+    end, S, Instances).
 
-start_agent(Instance, Binding) ->
-    {ok, Pid} = quod_agent:start(self(), Binding),
-    #{binding => Binding, pid => Pid, monitor => monitor(process, Pid, [{tag, {agent_down, Instance}}]),
-      stopping => false, pending => #{}}.
+agent_slot_count(node) -> 0;
+agent_slot_count({agent, _}) -> 1.
 
-release_agents(S = #s{agent_dirty = Dirty, agents = Agents, e_frontier = H}) ->
-    maps:foreach(fun(I, Kind) ->
+max_hosted_agents(#s{config = Config}) ->
+    Limit = maps:get(runtime_max_hosted_agents, Config,
+                    application:get_env(quod, runtime_max_hosted_agents, ?MAX_HOSTED_AGENTS)),
+    true = is_integer(Limit) andalso Limit >= 0 andalso Limit =< ?MAX_HOSTED_AGENTS,
+    Limit.
+
+start_agent(Instance, Binding, S) ->
+    {ok, Pid} = quod_agent:start(self(), Instance, Binding),
+    Agent = #{binding => Binding, pid => Pid,
+              monitor => monitor(process, Pid, [{tag, {agent_down, Instance}}]),
+              stopping => false, pending => #{}},
+    S#s{agents = (S#s.agents)#{Instance => Agent},
+        agent_slots = S#s.agent_slots + agent_slot_count(Instance),
+        hosting_dirty = (S#s.hosting_dirty)#{Instance => installed}}.
+
+release_hosting(S = #s{hosting_dirty = Dirty, agents = Agents, e_frontier = H}) ->
+    maps:foreach(fun(_I, {refused, Binding}) ->
+        quod_reg:publish({agent_hosting, S#s.ns},
+                         {agent_refused, self(), Binding, capacity, H});
+      (_I, {observation_refused, {watch, I, Host, Epoch, _}}) ->
+        quod_reg:publish({agent_hosting, S#s.ns},
+                         {agent_observation_refused, self(), I, Host, Epoch, capacity, H});
+      (observer_capacity, {observation_status, Status}) ->
+        quod_reg:publish({agent_hosting, S#s.ns},
+                         {agent_observation_installed, self(), Status, H});
+      (I, Kind) ->
         case maps:get(I, Agents, none) of
             #{pid := Pid, binding := Binding, stopping := false} ->
                 Pid ! {agent_release, self(), H},
@@ -1713,7 +1906,7 @@ release_agents(S = #s{agent_dirty = Dirty, agents = Agents, e_frontier = H}) ->
             _ -> ok
         end
     end, Dirty),
-    S#s{agent_dirty = #{}}.
+    S#s{hosting_dirty = #{}}.
 
 stop_agent(Agent = #{pid := Pid, stopping := false}, Next) ->
     Pid ! {agent_stop, self()},
@@ -1722,43 +1915,121 @@ stop_agent(Agent, Next) -> Agent#{successor => Next}.
 
 stop_agents(S) ->
     Agents = maps:map(fun(_, A) -> stop_agent(A, none) end, S#s.agents),
-    S#s{agents = Agents, agent_dirty = #{}, agent_projection_waiter = none, agent_desired_count = 0}.
+    S#s{agents = Agents, hosting_dirty = #{}, agent_projection_waiter = none,
+        agent_capacity_blocked = false}.
 
 agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
     case maps:get(Instance, Agents, none) of
         Agent = #{pid := Pid, monitor := Monitor, pending := Pending} ->
             S1 = S#s{agents = maps:remove(Instance, Agents),
+                      agent_slots = S#s.agent_slots - agent_slot_count(Instance),
                       agent_pending_bytes = S#s.agent_pending_bytes - lists:sum(maps:values(Pending)),
-                      agent_dirty = maps:remove(Instance, S#s.agent_dirty)},
+                      hosting_dirty = maps:remove(Instance, S#s.hosting_dirty)},
             Result = case Agent of
                 #{stopping := true, successor := none} -> S1;
                 #{stopping := true, successor := Binding} ->
-                    Next = S1#s{agents = (S1#s.agents)#{Instance => start_agent(Instance, Binding)},
-                                agent_dirty = (S1#s.agent_dirty)#{Instance => installed}},
+                    Next = start_agent(Instance, Binding, S1),
                     case Next of
-                        #s{mode = live, runner = none} -> release_agents(Next);
+                        #s{mode = live, runner = none} -> release_hosting(Next);
                         _ -> Next
                     end;
                 #{stopping := false} ->
-                    queue_agent_reconcile(S1#s{agent_desired_count = S1#s.agent_desired_count - 1})
+                    case Instance of
+                        node -> S1;
+                        {agent, _} -> queue_agent_reconcile(
+                                        observe_agent_down(maps:get(binding, Agent), S1))
+                    end
             end,
-            finish_agent_projection(Monitor, Result);
+            Released = case Result#s.agent_capacity_blocked andalso
+                            Result#s.agent_slots < S#s.agent_slots of
+                true -> queue_agent_reconcile(Result);
+                false -> Result
+            end,
+            finish_agent_projection(Monitor, Released);
         _ -> S
     end.
 
-agent_retirements(all, Agents) ->
-    maps:from_list([{M, I} || {I, #{stopping := true, monitor := M}} <- maps:to_list(Agents)]);
+install_observer(Old, Installed, Handler, Scope, Refused, S) ->
+    Clean = maps:filter(fun({observer, I}, _) ->
+                            Scope =/= all andalso not lists:member(I, element(2, Scope));
+                          (_, _) -> true
+                        end, S#s.hosting_dirty),
+    Dirty = lists:foldl(fun(Row = {watch, I, _, _, _}, Acc) ->
+        Acc#{{observer, I} => {observation_refused, Row}}
+    end, Clean, Refused),
+    Status = quod_agent_observer:stats(Installed),
+    Notices = case Status =:= quod_agent_observer:stats(Old) of
+        true -> Dirty;
+        false -> Dirty#{observer_capacity => {observation_status, Status}}
+    end,
+    Next = S#s{observer = Installed, observer_handler = Handler, hosting_dirty = Notices},
+    case quod_agent_observer:capacity_released(Old, Installed) of
+        true -> queue_observer_reconcile(Next);
+        false -> Next
+    end.
+
+stop_observer(S = #s{observer = none}) -> S;
+stop_observer(S = #s{observer = Observer}) ->
+    ok = quod_agent_observer:stop(Observer),
+    S#s{observer = none}.
+
+queue_observations([], S) -> S;
+queue_observations(Events, S = #s{mode = Mode})
+  when Mode =:= live; is_tuple(Mode), element(1, Mode) =:= reconciling ->
+    maybe_run_events(lists:foldl(fun queue_observation/2, S, Events));
+queue_observations(Events, S) ->
+    S#s{dropped_events = S#s.dropped_events + length(Events)}.
+
+queue_observation({observed_host, Batch = #{host := Host}}, S = #s{queue = Queue}) ->
+    case replace_host_observation(Host, Batch, Queue) of
+        {replaced, Updated} -> S#s{queue = Updated, queue_len = length(Updated)};
+        absent ->
+            case maps:get(bindings, Batch) of
+                [] -> S;
+                _ -> admit_observation({observed_host, Batch}, S)
+            end
+    end;
+queue_observation(Event, S) -> admit_observation({observed, Event}, S).
+
+replace_host_observation(_Host, _Batch, []) -> absent;
+replace_host_observation(Host, Batch, [{observed_host, #{host := Host} = Old} | Rest]) ->
+    Merged = quod_agent_observer:merge(Batch, Old),
+    case maps:get(bindings, Merged) of
+        [] -> {replaced, Rest};
+        _ -> {replaced, [{observed_host, Merged} | Rest]}
+    end;
+replace_host_observation(Host, Batch, [Item | Rest]) ->
+    case replace_host_observation(Host, Batch, Rest) of
+        absent -> absent;
+        {replaced, Updated} -> {replaced, [Item | Updated]}
+    end.
+
+admit_observation(Item, S = #s{queue = Queue, queue_len = Count}) ->
+    case Count < max_queued_events(S) of
+        true -> S#s{queue = [Item | Queue], queue_len = Count + 1};
+        false -> S#s{dropped_events = S#s.dropped_events + 1}
+    end.
+
+queue_observer_reconcile(S = #s{observer_handler = undefined}) -> S;
+queue_observer_reconcile(S = #s{observer_handler = Handler}) ->
+    queue_handler_reconcile(Handler, S).
+
+observe_agent_down(#{reference := Ref, epoch := Epoch, public_key := Key}, S) ->
+    Event = {agent_process_down, Ref, Epoch, Key, crypto:strong_rand_bytes(32)},
+    queue_observations([Event], S);
+observe_agent_down(_, S) -> S.
+
 agent_retirements({keys, Instances}, Agents) ->
     maps:from_list([{M, I} || I <- Instances,
                             #{stopping := true, monitor := M} <- [maps:get(I, Agents, none)]]).
 
 finish_agent_projection(_Monitor, S = #s{agent_projection_waiter = none}) -> S;
-finish_agent_projection(Monitor, S = #s{agent_projection_waiter = {From, Waiting}}) ->
+finish_agent_projection(Monitor, S = #s{agent_projection_waiter = {From, Waiting, Reply}}) ->
     case maps:remove(Monitor, Waiting) of
         Remaining when map_size(Remaining) > 0 ->
-            S#s{agent_projection_waiter = {From, Remaining}};
+            S#s{agent_projection_waiter = {From, Remaining, Reply}};
         _ ->
-            gen_server:reply(From, ok),
+            gen_server:reply(From, Reply),
             S#s{agent_projection_waiter = none}
     end.
 
@@ -1767,6 +2038,9 @@ finish_agent_projection(Monitor, S = #s{agent_projection_waiter = {From, Waiting
 queue_agent_reconcile(S = #s{agent_handler = undefined}) ->
     S#s{agent_refresh = true};
 queue_agent_reconcile(S = #s{agent_handler = Handler}) ->
+    queue_handler_reconcile(Handler, S).
+
+queue_handler_reconcile(Handler, S) ->
     Item = {reconcile, Handler},
     case lists:member(Item, S#s.queue) of
         true -> S;
@@ -1917,34 +2191,31 @@ clear_blocked(Resource, NewRev, Blocked) ->
         _ -> Blocked
     end.
 
-drop_queue(S = #s{queue_len = 0}) -> S;
-drop_queue(S) ->
-    release_queue_acks(S#s.queue),
-    S#s{queue = [], queue_len = 0,
-        dropped_events = S#s.dropped_events + S#s.queue_len}.
+drop_queue(S) -> retain_queue(fun(_) -> false end, S).
 
-%% After a reconcile at height H: envelopes at or below H are already IN the snapshot.
-drop_stale_queue(S = #s{height = H, queue = Q}) ->
-    {Kept0, Dropped0} =
-        lists:partition(
-          fun({local, Env, _Est}) -> maps:get(height, Env, 0) > H;
-             ({remote, _, _, _, _}) -> true;
-             ({reconcile, _}) -> true
-          end, Q),
-    Dropped = length(Dropped0),
-    S#s{queue = Kept0, queue_len = length(Kept0),
-        dropped_events = S#s.dropped_events + Dropped}.
+%% Reset discards observations from the previous owner incarnation. New
+%% observations arriving while its replacement reconciles are not ledger data
+%% and must survive the later height-based queue trimming.
+drop_observations(S) ->
+    retain_queue(fun({observed, _}) -> false;
+                    ({observed_host, _}) -> false;
+                    (_) -> true end, S).
 
-drop_source_queue(Identity, S = #s{queue = Q}) ->
-    {Dropped, Kept} =
-        lists:partition(
-          fun({remote, _, _, Source, _}) -> Source =:= Identity;
-             (_) -> false
-          end, Q),
+%% Only local envelopes at or below H are already represented in the snapshot.
+drop_stale_queue(S = #s{height = H}) ->
+    retain_queue(fun({local, Env, _Est}) -> maps:get(height, Env, 0) > H;
+                    (_) -> true end, S).
+
+drop_source_queue(Identity, S) ->
+    retain_queue(fun({remote, _, _, Source, _}) -> Source =/= Identity;
+                    (_) -> true end, S).
+
+retain_queue(_Keep, S = #s{queue_len = 0}) -> S;
+retain_queue(Keep, S = #s{queue = Queue, dropped_events = Count}) ->
+    {Kept, Dropped} = lists:partition(Keep, Queue),
     release_queue_acks(Dropped),
-    N = length(Dropped),
-    S#s{queue = Kept, queue_len = S#s.queue_len - N,
-        dropped_events = S#s.dropped_events + N}.
+    S#s{queue = Kept, queue_len = length(Kept),
+        dropped_events = Count + length(Dropped)}.
 
 release_queue_acks(Items) ->
     lists:foreach(

@@ -6778,7 +6778,7 @@ read_small_term(Path) ->
     end.
 
 atomic_write(Path, Blob) ->
-    ok = filelib:ensure_dir(Path),
+    ok = quod_file:ensure_parent(Path),
     Token = integer_to_list(erlang:unique_integer([positive, monotonic])),
     Tmp = Path ++ ".new." ++ Token,
     case file:open(Tmp, [write, raw, binary, exclusive]) of
@@ -6794,7 +6794,7 @@ atomic_write(Path, Blob) ->
             case Result of
                 ok ->
                     case file:rename(Tmp, Path) of
-                        ok -> sync_dir(filename:dirname(Path));
+                        ok -> quod_file:sync_dir(filename:dirname(Path));
                         {error, _} = Error -> _ = file:delete(Tmp), Error
                     end;
                 {error, _} = Error ->
@@ -6804,19 +6804,6 @@ atomic_write(Path, Blob) ->
         {error, _} = Error -> Error
     end.
 
-sync_dir(Dir) ->
-    case file:open(Dir, [read, raw]) of
-        {ok, Fd} ->
-            Result = file:datasync(Fd),
-            _ = file:close(Fd),
-            case Result of
-                ok -> ok;
-                {error, eisdir} -> ok;
-                Error -> Error
-            end;
-        {error, eisdir} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
 
 %% Catalogue only bounded identity manifests at node-owner startup. Actual
 %% reconstruction runs under the existing per-identity writer custody, not

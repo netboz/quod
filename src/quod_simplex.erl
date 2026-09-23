@@ -69,6 +69,14 @@ three quorum restorations for one unchanged phase start a fresh full Delta; late
 deadline. A member that accepted a proposal while recovering runs that held proposal through the normal
 support or membership-verdict path once ready.
 
+A verified complaint from another current committee member also creates demand for this oldest-head
+watchdog, allowing a single honest origin to move past a silent leader. Duplicate complaints do not
+renew its deadline; readiness checks, durable vote guards and certificate thresholds still apply.
+A faulty member can therefore keep an otherwise idle namespace advancing through timeout-paced,
+certified `noop` skips while enough honest members remain ready. This consumes ledger space and
+signing-journal/network I/O without changing application facts. For `N=4`, a skip still needs three
+distinct signatures; two peer complaints permit amplification, not a two-signature certificate.
+
 Every first support or final-vote decision is appended and synced through `m:quod_signing_journal`
 before its signature can leave the node. Restart therefore reloads the same one-support and
 commit-versus-complaint decisions instead of creating a second vote. One decision table owns every
@@ -11854,14 +11862,21 @@ clear_requested_le(V, S = #s{requested_slot = Requested})
 clear_requested_le(_V, S) ->
     S.
 
-head_has_evidence(V, #s{eng = #eng{blocks = Blocks}, rounds = Rounds,
+head_has_evidence(V, #s{eng = #eng{blocks = Blocks, shares = Shares}, self = Self,
+                        rounds = Rounds,
                         local_proposals = Local, collecting = Collecting,
-                        commit_buf = CommitBuf}) ->
+                        commit_buf = CommitBuf} = S) ->
+    Complaints = maps:get({complaint, V, none}, Shares, #{}),
     maps:is_key(V, Rounds)
         orelse maps:is_key(V, Local)
         orelse maps:is_key(V, CommitBuf)
         orelse lists:any(fun(#block{slot = Sl}) -> Sl =:= V end, maps:values(Blocks))
-        orelse case Collecting of #batch{slot = V} -> true; _ -> false end;
+        orelse case Collecting of #batch{slot = V} -> true; _ -> false end
+        %% Only the engine's verified current-peer evidence creates demand.
+        %% It arms the existing head watchdog; choosing a final vote still
+        %% requires the ordinary timeout/readiness or f+1 amplification path.
+        orelse lists:any(fun(Peer) -> Peer =/= Self andalso maps:is_key(Peer, Complaints) end,
+                         active_validators(S));
 head_has_evidence(_V, _S) ->
     false.
 

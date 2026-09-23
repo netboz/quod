@@ -53,6 +53,18 @@ fields(node) ->
       %% Local diagnostic policy applies to every hosted ontology, including
       %% dynamically-created and recovered ones absent from the content list.
     , {consensus_owner_tracing, hoconsc:mk(boolean(), #{default => false})}
+      %% Local admission policy applies to dynamically hosted ontologies too.
+      %% Runtime limits are per ontology; the peer limit is shared by the node.
+      %% Zero hosted agents leaves the node executor and observations available.
+    , {runtime_max_hosted_agents,
+       hoconsc:mk(integer(), #{default => 1024,
+                             validator => fun(N) -> N >= 0 andalso N =< 1024 end})}
+    , {runtime_max_agent_observations,
+       hoconsc:mk(integer(), #{default => 4096, validator => fun(N) -> N > 0 end})}
+    , {runtime_max_agent_observation_bytes,
+       hoconsc:mk(integer(), #{default => 1048576, validator => fun(N) -> N > 0 end})}
+    , {peer_observation_limit,
+       hoconsc:mk(integer(), #{default => 4096, validator => fun(N) -> N > 0 end})}
     ];
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}

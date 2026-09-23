@@ -1,6 +1,7 @@
 -module(quod_agent_hosting_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([quod_predicate_module/0, load/1, test_host_barrier/3, test_fill_agents/3]).
+-export([quod_predicate_module/0, load/1, test_host_barrier/3, test_fill_agents/3,
+         with_host/1, with_host/2]).
 
 quod_predicate_module() -> true.
 load(Est) ->
@@ -38,6 +39,296 @@ hosted_reactions_and_incarnation_recovery_test_() ->
 
 hosted_agents_exchange_committed_events_test_() ->
     {timeout, 60, fun() -> with_host(fun exchange/1) end}.
+
+unexpected_child_exit_enters_ontology_reaction_test_() ->
+    {timeout, 60, fun() ->
+        with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
+            true = quod_reg:reg({host_test, barrier}),
+            try
+                commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+                {Owner, Child} = installed(Ref, 1),
+                exit(Child, kill),
+                Runner = receive {host_projection_waiting, R} -> R
+                         after 5000 -> error(missing_process_down_reaction) end,
+                %% Handler ran through real unification, with exact incarnation
+                %% guards. No event fact was asserted by lifecycle observation.
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+                    {agent_process_down, Ref, 1, Key, {'_'}})),
+                Runner ! release,
+                {Owner, Replacement} = installed(Ref, 1),
+                ?assertNotEqual(Child, Replacement),
+                %% Deliberate retirement must not enter the failure reaction.
+                #{reaction_candidates := BeforeRetirement} = quod_runtime:stats(Ns),
+                {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+                {ok, NextKey} = quod_agent_vault:generate(Blob),
+                commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
+                {Owner, _} = installed(Ref, 2),
+                ?assertMatch(#{reaction_candidates := BeforeRetirement}, quod_runtime:stats(Ns)),
+                receive {host_projection_waiting, _} -> error(intentional_exit_reported)
+                after 0 -> ok end
+            after gproc:unreg(quod_reg:name({host_test, barrier})) end
+        end, fun process_down_rules/1)
+    end}.
+
+process_down_rules(Pub) ->
+    [{react_on, {node, Pub},
+              {observed, {agent_process_down,
+                {agent_instance_ref, <<"host-test-agent">>, {'Anchor'}, actor},
+                1, {'Key'}, {'Observation'}}},
+              {process_down_handler, {'Key'}, {'Observation'}}},
+             {':-', {process_down_handler, {'Key'}, {'Observation'}},
+              {',', {agent_hosted, actor, {'Node'}, 1, {'Key'}},
+               {',', {agent_identifier, {'Observation'}}, test_reaction_barrier}}}].
+
+observation_during_reconcile_survives_snapshot_trimming_test_() ->
+    {timeout, 60, fun() ->
+        true = quod_reg:reg({host_test, barrier}),
+        try with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
+            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            {Runtime, _} = installed(Ref, 1),
+            commit(Ns, {assertz, pause_reconcile_enabled}),
+            gen_server:cast(Runtime, reconcile_now),
+            Runner = projection_before(),
+            {Runtime, [#{pid := Child}]} = quod_runtime:agents(Ns),
+            Parent = self(),
+            Handled = fun(State, {in, {{agent_down, {agent, actor}}, _, process, Pid, _}}, _)
+                           when Pid =:= Child -> Parent ! observed_child_down, State;
+                         (State, _, _) -> State end,
+            ok = sys:install(Runtime, {Handled, none}),
+            try
+                exit(Child, kill),
+                receive observed_child_down -> ok
+                after 5000 -> error(child_down_not_processed_during_reconcile) end,
+                quod_runtime:stats(Ns)
+            after sys:remove(Runtime, Handled) end,
+            Runner ! release,
+            await_reconciled_observation(),
+            Repair = projection_before(),
+            Repair ! release,
+            _ = installed(Ref, 1),
+            quod_runtime:stats(Ns),
+            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+                         {agent_process_down, Ref, 1, Key, {'_'}}))
+        end, fun(Pub) -> process_down_rules(Pub) ++
+            [{state_handler, pause_after_hosting, [], [{current, agent_hosting}], maybe_pause_hosting},
+             {':-', {maybe_pause_hosting, {'_'}},
+              {';', {'->', pause_reconcile_enabled, test_host_before}, true}}]
+        end)
+        after gproc:unreg(quod_reg:name({host_test, barrier})) end
+    end}.
+
+await_reconciled_observation() ->
+    receive
+        {host_projection_waiting, Reaction} -> Reaction ! release;
+        {host_projection_before, Reconcile} ->
+            Reconcile ! release, await_reconciled_observation()
+    after 5000 -> error(fresh_observation_lost_at_reconcile_completion) end.
+
+optional_recovery_policy_is_a_founding_runtime_catalogue_test_() ->
+    {timeout, 60, fun() -> with_host(fun(#{namespace := Ns, reference := Ref,
+                                         node := Node, key := Key}) ->
+        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        _ = installed(Ref, 1),
+        ?assertMatch(#{mode := live, handlers_active := 2}, quod_runtime:stats(Ns))
+    end, fun(_Pub) ->
+        {ok, Terms} = erlog_io:read_file(filename:join(code:priv_dir(quod),
+                                                      "ontologies/agent_recovery_policy.pl")),
+        Terms
+    end) end}.
+
+physical_loss_drives_signed_policy_and_host_activation_test_() ->
+    [{atom_to_list(Loss), {timeout, 60, fun() ->
+        with_host(fun(Ctx) -> physical_recovery(Ctx, Loss) end, fun(_Pub) ->
+            {ok, Terms} = erlog_io:read_file(filename:join(code:priv_dir(quod),
+                                                          "ontologies/agent_recovery_policy.pl")),
+            Terms
+        end)
+    end}} || Loss <- [graceful, abrupt]].
+
+physical_recovery(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns, Anchor, _},
+                    node := Node = {agent_instance_ref, NodeNs, _, _},
+                    key := Key, directory := Dir, identity := Identity}, Loss) ->
+    EnvKeys = [listen_port, node_addr, identity_cert],
+    Saved = [{K, application:get_env(quod, K)} || K <- EnvKeys],
+    {ok, _} = application:ensure_all_started(quic),
+    {ok, Socket} = gen_udp:open(0),
+    {ok, Port} = inet:port(Socket), ok = gen_udp:close(Socket),
+    application:set_env(quod, listen_port, Port),
+    application:set_env(quod, node_addr, {"127.0.0.1", Port}),
+    application:set_env(quod, identity_cert,
+                        maps:get(cert, Identity)),
+    {ok, Directory} = quod_directory:start_link(),
+    {ok, Transport} = quod_quic:start_link(),
+    {Peer, PeerKey, Endpoint} = quod_agent_peer:start(filename:join(Dir, "remote")),
+    Old = setelement(2, Node, <<"remote-node">>),
+    OldKey = crypto:strong_rand_bytes(32),
+    Runtime = quod_reg:where({quod_runtime, Ns}),
+    true = quod_reg:subscribe({agent, Node}),
+    try
+        %% Setup uses ordinary committed policy. Actual recovery has no operator
+        %% assignment and uses the optional policy's exact report threshold.
+        Facts = [{agent_recovery_observer, actor, Node}, {agent_recovery_threshold, actor, 1},
+                 {eligible_agent_host, actor, Node}, {agent_host_rank, actor, Node, 1},
+                 {ping, durable_before_loss}],
+        lists:foreach(fun(F) -> commit(Ns, {assertz, F}) end, Facts),
+        Grant = {can_execute_for, Ns, Anchor, {'_'}},
+        commit(NodeNs, {assertz, Grant}),
+        1 = erlang:trace_pattern({quod_agent_observer, handle, 2},
+                                 [{'_', [], [{return_trace}]}], [local]),
+        1 = erlang:trace(Runtime, true, [call]),
+        {ok, Blob} = quod_wire_term:encode_canonical(Old),
+        {ok, _} = quod_directory:install_generation(
+          #{author => {node_actor, Blob}, node_key => PeerKey, endpoint => Endpoint,
+            epoch => 1, generation => 1, page => 0, last => true,
+            hosted => [{element(2, Old), element(3, Old), observer, node}]}),
+        commit(Ns, {goal, {agent_hosted, actor, Old, 1, OldKey}}),
+        await_observer_coverage(Runtime, Old),
+        erlang:trace(Runtime, false, [call]),
+        erlang:trace_pattern({quod_agent_observer, handle, 2}, false, [local]),
+        Goal = {node_authorized_goal, Ns, Anchor,
+                {prepare_agent_and_converge, actor, Old, 1, Node, Key}},
+        {ok, Bytes, Signature} = quod_node_actor:signed_goal(execute, Goal,
+          crypto:strong_rand_bytes(32), quod_time:now_ms() + 10000),
+        ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, Ns, Anchor, _}}}},
+                     quod_client_goal_ingress:submit(Bytes, Signature)),
+        ok = case Loss of
+            graceful -> quod_agent_peer:stop(Peer);
+            %% Default stdio peer stop closes control and halts the VM without
+            %% joining application shutdown hooks. No UDP port is rebound here.
+            abrupt -> peer:stop(Peer)
+        end,
+        {Runtime, Child} = installed(Ref, 2),
+        ?assert(is_process_alive(Child)),
+        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, Key})),
+        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_key, actor, OldKey, revoked})),
+        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, durable_before_loss})),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_failure_report, actor,
+                     {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})),
+        commit(Ns, {trigger_event, {do_work, after_automatic_move}}),
+        receive {agent_request_finished, Runtime, Child, _, _, Result} ->
+            ?assertMatch({ok, _, {normalized, {committed, [_], _}}}, Result)
+        after 10000 -> error(recovered_agent_not_executing) end,
+        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, after_automatic_move}))
+    after
+        erlang:trace(Runtime, false, [call]),
+        erlang:trace_pattern({quod_agent_observer, handle, 2}, false, [local]),
+        catch quod_agent_peer:stop(Peer),
+        gen_server:stop(Transport), gen_server:stop(Directory),
+        quod_reg:unsubscribe({agent, Node}),
+        lists:foreach(fun({K, undefined}) -> application:unset_env(quod, K);
+                         ({K, {ok, V}}) -> application:set_env(quod, K, V) end, Saved)
+    end.
+
+await_observer_coverage(Runtime, Host) ->
+    receive
+        {trace, Runtime, return_from, {quod_agent_observer, handle, 2},
+         {#{hosts := Hosts}, _}} ->
+            case maps:find(Host, Hosts) of
+                {ok, #{delivered := {_, reachable, _}, pending := none}} -> ok;
+                _ -> await_observer_coverage(Runtime, Host)
+            end
+    after 6000 -> error(no_runtime_observer_coverage) end.
+
+node_execution_policy_installs_through_ordinary_signed_goal_test_() ->
+    {timeout, 60, fun() -> with_host(fun(Ctx = #{namespace := Ns,
+        reference := {agent_instance_ref, Ns, Anchor, _}, node := {agent_instance_ref, NodeNs, NodeAnchor, _}}) ->
+        Submit = fun(Goal) ->
+            {ok, B, Sig} = quod_node_actor:signed_goal(execute, Goal,
+                crypto:strong_rand_bytes(32), quod_time:now_ms() + 10000),
+            quod_client_goal_ingress:submit(B, Sig)
+        end,
+        ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, NodeNs, NodeAnchor, _}}}},
+                     Submit({assertz, {can_execute_for, Ns, Anchor, true}})),
+        ?assertMatch({ok, _, {normalized, {failed, _}}},
+                     Submit({node_authorized_goal, Ns, Anchor, true})),
+        Source = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+        {ok, SourceText} = file:read_file(Source),
+        {ok, #{goal := Rule}} = quod_client_goal_parser:parse(SourceText, 2),
+        {ok, Bytes, Signature} = quod_node_actor:signed_goal(
+          execute, {assertz, Rule}, crypto:strong_rand_bytes(32), quod_time:now_ms() + 10000),
+        ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, NodeNs, NodeAnchor, _}}}},
+                     quod_client_goal_ingress:submit(Bytes, Signature)),
+        %% The same denial/grant/revocation exercise now runs on a node founded
+        %% without the helper: ordinary pure-rule installation needs no new
+        %% system action or external-predicate manifest.
+        node_execution(Ctx)
+    end, [], legacy) end}.
+
+node_executor_requires_exact_delegation_at_execution_test_() ->
+    {timeout, 60, fun() -> with_host(fun node_execution/1) end}.
+
+node_execution(#{namespace := Ns, reference := {agent_instance_ref, Ns, Anchor, _},
+                 node := Node = {agent_instance_ref, NodeNs, _, _}}) ->
+    true = quod_reg:subscribe({agent, Node}),
+    try
+        Expiry = quod_time:now_ms() + 30000,
+        commit(Ns, {trigger_event, {node_work, delegated, Expiry}}),
+        {Owner, Child, Denied} = node_completion(Node),
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Denied),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, delegated})),
+        Wrong = {can_execute_for, Ns, <<99:256>>, {record_ping, delegated}},
+        commit(NodeNs, {assertz, Wrong}),
+        commit(Ns, {trigger_event, {node_work, delegated, Expiry}}),
+        {Owner, Child, WrongAnchor} = node_completion(Node),
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, WrongAnchor),
+        Grant = {can_execute_for, Ns, Anchor, {record_ping, delegated}},
+        commit(NodeNs, {assertz, Grant}),
+        commit(Ns, {trigger_event, {node_work, delegated, Expiry}}),
+        {Owner, Child, Allowed} = node_completion(Node),
+        ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, Ns, Anchor, _}}}}, Allowed),
+        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, delegated})),
+        commit(Ns, {trigger_event, {node_work, ungranted, Expiry}}),
+        {Owner, Child, WrongGoal} = node_completion(Node),
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, WrongGoal),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, ungranted})),
+        commit(NodeNs, {retract, Grant}),
+        commit(Ns, {trigger_event, {node_work, delegated, Expiry}}),
+        {Owner, Child, Withdrawn} = node_completion(Node),
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Withdrawn),
+        ?assertEqual({error, stale_node_executor}, quod_node_actor:signed_goal(
+          execute, true, crypto:strong_rand_bytes(32), Expiry, {Node, <<99:256>>})),
+        ?assertMatch(#{hosted_agents := 1, agent_pending_bytes := 0}, quod_runtime:stats(Ns))
+    after quod_reg:unsubscribe({agent, Node}) end.
+
+node_completion(Node) ->
+    receive
+        {agent_request_finished, Owner, Child, #{reference := Node}, _, Result} ->
+            {Owner, Child, Result}
+    after 10000 -> error(no_node_completion) end.
+
+host_projection_does_not_wait_for_retiring_node_executor_test_() ->
+    {timeout, 60, fun() -> with_host(fun unrelated_node_retirement/1) end}.
+
+unrelated_node_retirement(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
+    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    {Owner, Hosted} = installed(Ref, 1),
+    true = quod_reg:subscribe({agent, Node}),
+    commit(Ns, {trigger_event, {node_work, denied, quod_time:now_ms() + 10000}}),
+    {Owner, NodeChild, _} = node_completion(Node),
+    {ok, Principal} = quod_node_actor:principal(),
+    true = quod_reg:reg({namespace_manager, node}),
+    ok = sys:suspend(NodeChild),
+    1 = erlang:trace(Owner, true, ['receive']),
+    try
+        application:unset_env(quod, node_actor_principal),
+        quod_reg:publish({node_actor, node}, {node_actor_installed, self(), {error, unavailable}}),
+        receive
+            {trace, Owner, 'receive', {'$gen_cast', {runner_done, _, Outcome}}} ->
+                ?assertMatch({ok, _, _, _, _, _}, Outcome)
+        after 5000 -> error(unrelated_retirement_blocked_projection) end,
+        %% Receipt plus a synchronous owner reply establishes completed
+        %% projection, while the unrelated node executor still cannot stop.
+        ?assertMatch(#{runner_active := false, queue_len := 0}, quod_runtime:stats(Ns)),
+        ?assertNot(is_process_alive(Hosted)),
+        ?assert(is_process_alive(NodeChild)),
+        ?assertEqual({Owner, []}, quod_runtime:agents(Ns))
+    after
+        erlang:trace(Owner, false, ['receive']),
+        sys:resume(NodeChild),
+        application:set_env(quod, node_actor_principal, Principal),
+        quod_reg:unsubscribe({agent, Node}),
+        gproc:unreg(quod_reg:name({namespace_manager, node}))
+    end.
 
 signed_node_request_expiry_survives_foreign_scope_test_() ->
     {timeout, 60, fun() -> with_host(fun(#{namespace := Ns}) ->
@@ -175,7 +466,7 @@ host_teardown(#{namespace := Ns, reference := Ref, node := Node, key := Key}, Ho
         try
             commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
             Runner = receive
-                {trace, Owner, 'receive', {'$gen_call', {Caller, _}, {project_agents, _, _, _, _}}} -> Caller
+                {trace, Owner, 'receive', {'$gen_call', {Caller, _}, {project_agents, _, _, _}}} -> Caller
             after 5000 -> error(projection_not_delivered)
             end,
             case HoldMs of
@@ -209,7 +500,7 @@ failed_later_block_cannot_release_earlier_request_test_() ->
 
 failed_batch(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
-    {Owner, Child} = installed(Ref, 1),
+    {_Owner, Child} = installed(Ref, 1),
     Monitor = monitor(process, Child),
     1 = erlang:trace(Child, true, [procs]),
     true = quod_reg:reg({host_test, barrier}),
@@ -300,11 +591,12 @@ expired_queued_request_never_reaches_signing_test() ->
     Ref = {agent_instance_ref, <<"expired-agent">>, <<1:256>>, worker},
     Binding = #{reference => Ref, epoch => 1, public_key => <<2:256>>},
     true = quod_reg:subscribe({agent, Ref}),
-    {ok, Child} = quod_agent:start(self(), Binding),
+    {ok, Child} = quod_agent:start(self(), {agent, worker}, Binding),
     Token = make_ref(),
     try
         Child ! {agent_request, self(), Token, 7,
-                 {execute, true, quod_time:now_ms() + 60000, quod_time:mono_ms() - 1}},
+                 {execute, true, quod_time:now_ms() + 60000, quod_time:mono_ms() - 1},
+                 erlang:monotonic_time(microsecond)},
         %% The child's synchronous reply establishes that the request is queued.
         ?assertEqual({error, unsupported}, gen_server:call(Child, barrier)),
         Child ! {agent_release, self(), 7},
@@ -356,7 +648,7 @@ lifecycle_refresh(#{node := Node, directory := Dir, identity := Identity}) ->
         Second = projection_waiting(),
         {Runtime, [#{pid := Child}]} = quod_runtime:agents(Ns),
         Parent = self(),
-        ObserveDown = fun(State, {in, {{agent_down, local}, _, process, Pid, _}}, _) when Pid =:= Child ->
+        ObserveDown = fun(State, {in, {{agent_down, {agent, local}}, _, process, Pid, _}}, _) when Pid =:= Child ->
                               Parent ! hosting_down_handled, State;
                          (State, _, _) -> State
                       end,
@@ -477,7 +769,7 @@ exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     OtherRef = setelement(4, Ref, other),
     commit(Ns, {goal, {agent_hosted, other, Node, 1, <<91:256>>}}),
     {Owner, Other} = installed(OtherRef, 1),
-    ?assertEqual({error, stale_projection}, quod_runtime:project_agents(Ns, 1, agent_hosting, all, [])),
+    ?assertEqual({error, stale_projection}, quod_runtime:project_agents(Ns, agent_hosting, all, [])),
     ?assertEqual({error, stale_executor}, quod_runtime:agent_request(
       Ns, 1, {agent, actor, 1, Key}, execute, {record_ping, forged}, 5000)),
     commit(Ns, {trigger_event, {do_work, first}}),
@@ -536,7 +828,9 @@ commit(Ns, Goal) ->
 
 with_host(Fun) -> with_host(Fun, []).
 
-with_host(Fun, ExtraFacts) ->
+with_host(Fun, ExtraFacts) -> with_host(Fun, ExtraFacts, current).
+
+with_host(Fun, ExtraFacts, NodePolicy) ->
     BeamPath = filename:join(filename:dirname(code:which(quod_predicates)),
                              atom_to_list(?MODULE) ++ ".beam"),
     {ok, _} = file:copy(code:which(?MODULE), BeamPath),
@@ -549,7 +843,8 @@ with_host(Fun, ExtraFacts) ->
     application:set_env(quod, runtime_event_budget_ms, 10000),
     application:set_env(quod, runtime_reconcile_budget_ms, 10000),
     {Pub, _} = Pair = quod_identity:generate(),
-    Identity = #{pubkey => Pub, key => quod_identity:key_term(Pair)},
+    Identity = #{pubkey => Pub, key => quod_identity:key_term(Pair),
+                 cert => quod_identity:mint_cert(Pair)},
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(quod, identity_key, maps:get(key, Identity)),
     application:set_env(quod, namespace_desired,
@@ -559,10 +854,15 @@ with_host(Fun, ExtraFacts) ->
     Dir = filename:join("/tmp", "quod_hosted_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     ok = filelib:ensure_dir(filename:join(Dir, "file")),
     Unlock = filename:join(Dir, "unlock"),
-    ok = quod_identity:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
+    ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
     {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "keys"), unlock_file => Unlock}),
     NodeNs = <<"host-test-node">>, Ns = <<"host-test-agent">>,
-    NodeOntology = start_ontology(NodeNs, Dir, Identity, [],
+    NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+    NodeDiff = case NodePolicy of
+        current -> quod_prolog:genesis_diff(NodeExecution);
+        legacy -> []
+    end,
+    NodeOntology = start_ontology(NodeNs, Dir, Identity, NodeDiff,
       [{agent_key, physical_node, Pub, active},
        {can_invoke, {'_'}, {agent_instance_ref, NodeNs, {'_'}, physical_node}, {'_'}, NodeNs}]),
     Node = {agent_instance_ref, NodeNs, quod_simplex:genesis_hash(NodeNs), physical_node},
@@ -571,6 +871,10 @@ with_host(Fun, ExtraFacts) ->
     Source = filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl"),
     Diff = quod_prolog:genesis_diff(Source),
     true = quod_reg:subscribe({agent_hosting, Ns}),
+    Additional = case ExtraFacts of
+        F when is_function(F, 1) -> F(Pub);
+        Facts -> Facts
+    end,
     ActorOntology = start_ontology(Ns, Dir, Identity, Diff,
       [{can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, Node, {'_'}},
        {can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, setelement(2, Node, <<"remote-node">>), {'_'}},
@@ -579,13 +883,15 @@ with_host(Fun, ExtraFacts) ->
        {can_invoke, {record_ping, {'_'}}, {agent_instance_ref, Ns, {'_'}, actor}, {'_'}, Ns},
        {can_request_agent_signature, Node, actor, {'_'}},
        {react_on, {node, Pub}, pause_batch, test_reaction_barrier},
+       {react_on, {node, Pub}, {node_work, {'Value'}, {'Expiry'}},
+        {submit_node_goal, execute, {record_ping, {'Value'}}, {'Expiry'}}},
        {react_on, {agent, actor}, fill_agents, test_fill_agents},
        {react_on, {agent, actor}, {do_short_work, {'Value'}},
         {submit_agent_goal, actor, execute, {record_ping, {'Value'}}, 1000}},
        {react_on, {agent, actor}, {do_work, {'Value'}},
         {submit_agent_goal, actor, execute, {record_ping, {'Value'}}, 5000}},
        {':-', {record_ping, {'Value'}},
-         {',', {assertz, {ping, {'Value'}}}, {trigger_event, {request, {'Value'}}}}}] ++ ExtraFacts),
+         {',', {assertz, {ping, {'Value'}}}, {trigger_event, {request, {'Value'}}}}}] ++ Additional),
     Ref = {agent_instance_ref, Ns, quod_simplex:genesis_hash(Ns), actor},
     {ok, RefBlob} = quod_wire_term:encode_canonical(Ref),
     {ok, Key} = quod_agent_vault:generate(RefBlob),

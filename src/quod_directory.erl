@@ -27,7 +27,7 @@ data; subscribers always reread this one ordinary projection.
 -export([start_link/0, start_link/1]).
 -export([resolve/1, known_identities/1, validator_routes/2,
          await_validator_routes/2, directory_hosts/1,
-         route_needed/1,
+         route_needed/1, node_transport_route/1, node_contact_current/1,
          install_generation/1, install_private_projection/1,
          expire/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -87,6 +87,65 @@ resolve(Ns) when is_binary(Ns) ->
     end;
 resolve(_) ->
     unknown.
+
+-doc """
+Read the physical contact certified by this exact node actor, never a replica
+advertising its ontology. Use `quod_reg:subscribe_tracked/1` for
+`{node_identity_route, NodeRef}` before
+reading and monitor the returned owner. Expiry or owner loss means unknown,
+not evidence of host failure. Reads use the published generation high-water
+mark to exclude partially replaced rows.
+""".
+-spec node_transport_route(term()) -> {ok, map()} | unknown.
+node_transport_route({agent_instance_ref, Ns, Anchor, _} = NodeRef) ->
+    try
+        {ok, Blob} = quod_wire_term:encode_canonical(NodeRef),
+        {ok, _} = quod_agent_ref:decode(Blob),
+        Author = {node_actor, Blob},
+        Routes = ets:whereis(?ROUTES),
+        Highwater = ets:whereis(?HIGHWATER),
+        Owner = ets:info(Routes, owner),
+        true = is_pid(Owner),
+        Owner = ets:info(Highwater, owner),
+        [{Author, Epoch, Sequence}] = ets:lookup(Highwater, Author),
+        Now = quod_time:mono_ms(),
+        Contacts = lists:usort(
+          [{Key, Endpoint, Expiry}
+           || {Ns0, system, {generation, A}, Key, Endpoint, confirmed,
+               Anchor0, _Role, Expiry, E, S} <- ets:lookup(Routes, Ns),
+              Ns0 =:= Ns, Anchor0 =:= Anchor, A =:= Author,
+              E =:= Epoch, S =:= Sequence, Expiry > Now]),
+        [{Author, Epoch, Sequence}] = ets:lookup(Highwater, Author),
+        [{Key, Endpoint, Expiry}] = Contacts,
+        {ok, #{reference => NodeRef, owner => Owner, node_key => Key, endpoint => Endpoint,
+               epoch => Epoch, generation => Sequence, expiry => Expiry}}
+    catch
+        error:badarg -> unknown;
+        error:{badmatch, _} -> unknown
+    end;
+node_transport_route(_) -> unknown.
+
+-doc """
+Check the owner/generation of a previously obtained certified contact reference.
+This is not a routing lookup or validation of caller-invented contact data.
+Established monitors may retain their authenticated contact after route lease
+expiry; a newer generation (including withdrawal) or directory restart fences
+it. A new monitor must obtain an active node_transport_route/1 snapshot first.
+""".
+-spec node_contact_current(map()) -> boolean().
+node_contact_current(#{reference := Ref, owner := Owner, epoch := Epoch, generation := Sequence}) ->
+    try
+        {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+        Author = {node_actor, Blob},
+        Highwater = ets:whereis(?HIGHWATER),
+        Owner = ets:info(Highwater, owner),
+        [{Author, Epoch, Sequence}] = ets:lookup(Highwater, Author),
+        is_pid(Owner)
+    catch
+        error:badarg -> false;
+        error:{badmatch, _} -> false
+    end;
+node_contact_current(_) -> false.
 
 -doc "Exact anchored identities previously learned for `Namespace`.".
 -spec known_identities(binary()) -> [{binary(), <<_:256>>}].
@@ -329,6 +388,7 @@ install_generation_now(Author, NodeKey, Endpoint, Hosted, Epoch, Sequence,
     true = ets:insert(Known, [{Ns, Anchor} || {Ns, Anchor, _} <- Hosted]),
     true = ets:insert(Highwater, {Author, Epoch, Sequence}),
     notify_usable_identities(Namespaces, Hosted, Before, Now, S),
+    notify_node_identity(Author),
     {S, Expiry}.
 
 generation_rows_for_author(Author, Routes) ->
@@ -404,6 +464,10 @@ expire_routes(Now, S = #s{routes = Routes}) ->
           [{{'_', system, '_', '_', '_', '_', '_', '_', '$1', '_', '_'},
             [{'=<', '$1', Now}], [true]}]),
     notify_usable_identities(Namespaces, [], Before, Now, S),
+    lists:foreach(fun notify_node_identity/1,
+                  lists:usort([Author
+                    || {_, system, {generation, Author}, _, _, _, _, _, _, _, _}
+                         <- Expiring])),
     S.
 
 affected_namespaces(Hosted, OldRows) ->
@@ -448,6 +512,16 @@ notify_usable_identities(Namespaces, Installed, Before, Now,
     lists:foreach(fun publish_route_available/1, Notify),
     ok.
 
+
+notify_node_identity({node_actor, Blob}) ->
+    case quod_agent_ref:decode(Blob) of
+        {ok, #{reference := Ref}} ->
+            _ = quod_reg:publish_tracked({node_identity_route, Ref},
+                                  {node_identity_route_changed, self(), Ref}),
+            ok;
+        _ -> ok
+    end;
+notify_node_identity(_) -> ok.
 
 publish_route_available(Identity) ->
     _ = quod_reg:publish(

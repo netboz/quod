@@ -82,7 +82,7 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy, Owner) ->
                         logger:debug("quod: connect ~p:~p closed: ~p", [Host, Port, R]),
                         terminal_start(Peer, Owner, {connect_closed, R});
                     {'EXIT', Owner, Reason} ->
-                        fail_owner_startup(Peer),
+                        fail_owner_startup(Peer, Owner),
                         exit({shutdown, {transport_owner_down, Reason}})
                 after ?CONNECT_TIMEOUT_MS ->
                     logger:debug("quod: connect ~p:~p timed out", [Host, Port]),
@@ -98,13 +98,17 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy, Owner) ->
 %% Owner death is already the terminal ordering barrier: every message the
 %% owner sent this process precedes its linked EXIT signal. Drain those queued
 %% requests without a settle timer, resolve their callers, then stop.
-fail_owner_startup(Peer) ->
+fail_owner_startup(Peer, Owner) ->
     receive
+        {confirm_peer, Caller, Ref, Key, _Deadline} ->
+            Caller ! {peer_confirmation, Owner, Ref, Key, self(),
+                      {unknown, transport_owner_down}, none},
+            fail_owner_startup(Peer, Owner);
         {open_link, Channel, ReplyTo} ->
             notify_link_error(ReplyTo, Peer, Channel),
-            fail_owner_startup(Peer);
+            fail_owner_startup(Peer, Owner);
         {send, _Channel, _Frame} ->
-            fail_owner_startup(Peer)
+            fail_owner_startup(Peer, Owner)
     after 0 ->
         ok
     end.
@@ -171,6 +175,9 @@ run(S) ->
 
 loop(S = #s{conn = Conn}) ->
     receive
+        {confirm_peer, Caller, Ref, Key, Deadline} when Key =:= S#s.peer ->
+            confirm_reply(Caller, Ref, Key, Deadline, S#s.owner, authenticated),
+            loop(S);
         {open_link, Channel, ReplyTo} ->
             loop(handle_open(Channel, ReplyTo, S));
         {release_link, Channel, Lease} ->
@@ -716,25 +723,41 @@ fail_pending(Peer, Pending) ->
 %% terminal link_error; every later open selects a replacement connection.
 %% There is no settle timer and no dead-pid race.
 terminal_start(Peer, Owner, Reason) ->
+    Observation = {quod_time:mono_ms(), quod_time:now_ms()},
     Ref = make_ref(),
     Owner ! {conn_terminal, self(), Ref},
-    terminal_loop(Peer, Owner, Ref, Reason).
+    terminal_loop(Peer, Owner, Ref, Reason, Observation).
 
-terminal_loop(Peer, Owner, Ref, Reason) ->
+terminal_loop(Peer, Owner, Ref, Reason, Observation) ->
     receive
+        {confirm_peer, Caller, ConfirmRef, Key, Deadline} ->
+            confirm_reply(Caller, ConfirmRef, Key, Deadline, Owner, {failed, Reason}, Observation),
+            terminal_loop(Peer, Owner, Ref, Reason, Observation);
         {open_link, Channel, ReplyTo} ->
             notify_link_error(ReplyTo, Peer, Channel),
-            terminal_loop(Peer, Owner, Ref, Reason);
+            terminal_loop(Peer, Owner, Ref, Reason, Observation);
         {send, _Channel, _Frame} ->
-            terminal_loop(Peer, Owner, Ref, Reason);
+            terminal_loop(Peer, Owner, Ref, Reason, Observation);
         {conn_terminal_ack, Owner, Ref} ->
             exit({shutdown, Reason});
         {'EXIT', Owner, OwnerReason} ->
-            fail_owner_startup(Peer),
+            fail_owner_startup(Peer, Owner),
             exit({shutdown, {transport_owner_down, OwnerReason}});
         _Other ->
-            terminal_loop(Peer, Owner, Ref, Reason)
+            terminal_loop(Peer, Owner, Ref, Reason, Observation)
     end.
+
+confirm_reply(Caller, Ref, Key, Deadline, Owner, Result) ->
+    confirm_reply(Caller, Ref, Key, Deadline, Owner, Result,
+                  {quod_time:mono_ms(), quod_time:now_ms()}).
+
+confirm_reply(Caller, Ref, Key, Deadline, Owner, Result, Observation) ->
+    Reply = case Deadline > quod_time:mono_ms() of
+        true -> Result;
+        false -> {unknown, deadline_exceeded}
+    end,
+    Caller ! {peer_confirmation, Owner, Ref, Key, self(), Reply, Observation},
+    ok.
 
 %% Learn (once) which peer this connection serves — used to tag link_up / link_error and
 %% to address sends. We no longer register a {conn, Peer} gproc name: connection adoption

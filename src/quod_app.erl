@@ -86,7 +86,15 @@ quiet_transport_logging() ->
 %% (configuration-free test mode — see the moduledoc).
 load_config() ->
     case conf_path() of
-        none -> none;
+        none ->
+            %% Configuration-free boot uses application env directly. Apply
+            %% the same admission validation before any runtime can start.
+            Node = maps:from_list([{atom_to_binary(Key), Value} || Key <- agent_capacity_keys(),
+                                    {ok, Value} <- [application:get_env(quod, Key)]]),
+            Cfg = hocon_tconf:check_plain(quod_schema, #{<<"node">> => Node},
+                                          #{atom_key => true, apply_override_envs => false}),
+            apply_agent_capacity(maps:get(node, Cfg)),
+            none;
         Path ->
             os:putenv("HOCON_ENV_OVERRIDE_PREFIX", "QUOD_"),
             ok = drop_content_env_overrides(),
@@ -266,7 +274,16 @@ apply_transport_env(Cfg) ->
     application:set_env(quod, quic_keepalive_ms, maps:get(keepalive_ms, Node)),
     application:set_env(quod, consensus_owner_tracing,
                         maps:get(consensus_owner_tracing, Node, false)),
+    apply_agent_capacity(Node).
+
+apply_agent_capacity(Node) ->
+    _ = [application:set_env(quod, Key, maps:get(Key, Node))
+         || Key <- agent_capacity_keys()],
     ok.
+
+agent_capacity_keys() ->
+    [runtime_max_hosted_agents, runtime_max_agent_observations,
+     runtime_max_agent_observation_bytes, peer_observation_limit].
 
 %% Parse a configured bind IP (`explorer.ip`) into an inet address tuple; loopback on anything
 %% unparseable, so a typo can never accidentally widen the viewer to all interfaces.

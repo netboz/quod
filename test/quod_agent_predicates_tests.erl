@@ -46,6 +46,16 @@ signed_expiry_is_proof_bound_not_a_live_clock_test() ->
         after quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end) end
     end).
 
+node_submission_never_substitutes_for_an_agent_executor_test() ->
+    with_state(fun(St0) ->
+        Ctx = quod_predicates:with_executor(
+          quod_predicates:reaction_context(<<"receiver">>, 1),
+          {agent, worker, 1, <<1:256>>}),
+        St = quod_predicates:set_context(St0, Ctx),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          {submit_node_goal, execute, true, quod_time:now_ms() + 1000}, St))
+    end).
+
 dependency_declaration_preserves_live_failure_reads_test() ->
     with_state(fun(Est) ->
         WithLive = quod_predicates:register(Est, {live_probe, 0}, query, ?MODULE, probe),

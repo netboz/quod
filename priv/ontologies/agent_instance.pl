@@ -133,6 +133,41 @@ prepare_agent_key(Instance, OldNode, OldEpoch, NodeRef, PublicKey) :-
 
 %% These compositions run inside the caller's ordinary signed transaction.
 %% Check each action's postcondition before convergence consumes its state.
+%% A first report establishes its round in the same transaction. The producer
+%% captures ExpectedRound before observing: none cannot be rebased onto a
+%% competing round, and current(Round) cannot silently start another one.
+report_agent_observation(Instance, NodeRef, Epoch, ExpectedRound, Round, Observation, Kind) :-
+    term_variables(report(Instance, NodeRef, Epoch, ExpectedRound, Round, Observation, Kind), []),
+    agent_observation_round(ExpectedRound, Instance, NodeRef, Epoch, Round),
+    report_agent_and_converge(Instance, NodeRef, Epoch, Round, Observation, Kind),
+    (agent_recovery_current(Instance, NodeRef, Epoch, Round),
+     current_principal(Principal),
+     can_resolve_agent_recovery(Principal, Instance, NodeRef, Epoch, Round) ->
+        goal(agent_recovery_resolved(Instance, NodeRef, Epoch, Round))
+    ; true).
+
+%% A newly measured observation may supply its destination's stable custody in
+%% the same proof. Convergence follows reporting, after every prerequisite is
+%% present. Neither branch retries an earlier uncertain signed operation.
+report_agent_observation_with_custody(Instance, NodeRef, Epoch, ExpectedRound,
+                                      Round, Observation, Kind, Preparation) :-
+    term_variables(report(Instance, NodeRef, Epoch, ExpectedRound, Round,
+                           Observation, Kind, Preparation), []),
+    agent_observation_custody(Preparation, Instance, NodeRef, Epoch),
+    report_agent_observation(Instance, NodeRef, Epoch, ExpectedRound,
+                             Round, Observation, Kind).
+
+agent_observation_custody(prepared(PublicKey), Instance, OldNode, OldEpoch) :-
+    current_principal(Destination),
+    goal(agent_candidate_key(Instance, OldNode, OldEpoch, Destination, PublicKey)).
+agent_observation_custody(unavailable(_Reason), _, _, _).
+
+agent_observation_round(none, Instance, NodeRef, Epoch, Round) :-
+    \+ agent_recovery_round(Instance, _, _, _),
+    goal(agent_recovery_current(Instance, NodeRef, Epoch, Round)).
+agent_observation_round(current(Round), Instance, NodeRef, Epoch, Round) :-
+    agent_recovery_current(Instance, NodeRef, Epoch, Round).
+
 report_agent_and_converge(Instance, NodeRef, Epoch, Round, Observation, Kind) :-
     term_variables(report(Instance, NodeRef, Epoch, Round, Observation, Kind), []),
     current_principal(Observer),
@@ -211,6 +246,10 @@ report_agent_failure(Instance, NodeRef, Epoch, Round, Observation, Kind) :-
 %% A containing ontology still supplies the observer set and threshold policy.
 agent_failure_support(Instance, NodeRef, Epoch, Round, Observer, Kind) :-
     agent_failure_kind(Kind),
+    agent_report_support(Instance, NodeRef, Epoch, Round, Observer, Kind).
+
+agent_report_support(Instance, NodeRef, Epoch, Round, Observer, Kind) :-
+    agent_observation_kind(Kind),
     agent_recovery_current(Instance, NodeRef, Epoch, Round),
     current_request_expiry(RequestExpiry),
     agent_failure_report(Instance, NodeRef, Epoch, Round, Observer, _, Kind),

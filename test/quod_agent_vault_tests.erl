@@ -3,6 +3,18 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
+empty_custody_paths_refused_at_boot_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Parent = self(), Tag = make_ref(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        process_flag(trap_exit, true),
+        Parent ! {Tag, quod_agent_vault:start_link(#{directory => <<>>, unlock_file => <<>>})}
+    end),
+    receive {Tag, Result} -> ?assertEqual({error, invalid_vault_configuration}, Result)
+    after 5000 -> error(no_vault_boot_result) end,
+    receive {'DOWN', Monitor, process, Pid, normal} -> ok
+    after 5000 -> error(vault_boot_probe_not_done) end.
+
 custody_survives_restart_and_binds_exact_request_test() ->
     with_vault(fun(Config, Ref, Request0) ->
         {ok, Pub} = quod_agent_vault:generate(Ref),
@@ -12,7 +24,7 @@ custody_survives_restart_and_binds_exact_request_test() ->
         ?assertEqual({ok, Bytes}, quod_client_goal:encode(Request)),
         {ok, [File]} = file:list_dir(maps:get(directory, Config)),
         Path = filename:join(maps:get(directory, Config), File),
-        {ok, #file_info{mode = Mode, size = 60}} = file:read_file_info(Path),
+        {ok, #file_info{mode = Mode, size = 100}} = file:read_file_info(Path),
         ?assertEqual(8#600, Mode band 8#777),
         Vault = quod_reg:where({agent_vault, node}),
         ?assertMatch(#{state := encrypted_custody},
@@ -32,6 +44,81 @@ custody_survives_restart_and_binds_exact_request_test() ->
         ok = quod_agent_vault:delete(Ref, Pub),
         ?assertEqual({error, vault_key_unavailable}, sign(Request))
     end).
+
+preparation_is_stable_and_preserves_old_custody_test() ->
+    with_vault(fun(Config, Ref, Request0) ->
+        {ok, First} = quod_agent_vault:prepare(Ref, 1),
+        ?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 1)),
+        {Slot, [KeyFile]} = custody_files(Config),
+        {ok, #file_info{inode = Inode, links = 2, mode = Mode}} = file:read_file_info(Slot),
+        ?assertMatch({ok, #file_info{inode = Inode, links = 2}}, file:read_file_info(KeyFile)),
+        ?assertEqual(8#600, Mode band 8#777),
+        ok = gen_server:stop(quod_reg:where({agent_vault, node})),
+        {ok, _} = quod_agent_vault:start_link(Config),
+        ?assertEqual({ok, First}, quod_agent_vault:prepare(Ref, 1)),
+        {ok, Second} = quod_agent_vault:prepare(Ref, 2),
+        ?assertNotEqual(First, Second),
+        ?assertEqual({error, stale_preparation}, quod_agent_vault:prepare(Ref, 1)),
+        ?assertEqual({error, invalid_preparation_epoch}, quod_agent_vault:prepare(Ref, 0)),
+        ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => First})),
+        ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => Second})),
+        {Slot, [_, _]} = custody_files(Config),
+        ?assertMatch({ok, #file_info{inode = Inode, links = 1}}, file:read_file_info(KeyFile)),
+        ok = quod_agent_vault:delete(Ref, First),
+        ?assertEqual({ok, Second}, quod_agent_vault:prepare(Ref, 2)),
+        ok = quod_agent_vault:delete(Ref, Second),
+        ?assertEqual({error, vault_key_unavailable}, sign(Request0#{signing_public_key => Second})),
+        ?assertEqual({ok, []}, file:list_dir(maps:get(directory, Config)))
+    end).
+
+preparation_recovers_slot_only_crash_image_test() ->
+    with_vault(fun(Config, Ref, Request0) ->
+        {ok, Pub} = quod_agent_vault:prepare(Ref, 1),
+        {_Slot, [KeyFile]} = custody_files(Config),
+        ok = gen_server:stop(quod_reg:where({agent_vault, node})),
+        %% This is the exact durable image between atomic slot installation
+        %% and public-key link creation. The interrupted caller has no reply.
+        ok = file:delete(KeyFile),
+        {ok, Vault} = quod_agent_vault:start_link(Config),
+        ?assertEqual({error, vault_key_unavailable}, sign(Request0#{signing_public_key => Pub})),
+        ?assertEqual({ok, Pub}, quod_agent_vault:prepare(Ref, 1)),
+        ?assertMatch({ok, _, _}, sign(Request0#{signing_public_key => Pub})),
+        %% An abrupt vault loss after preparation also retains the same slot.
+        unlink(Vault), Monitor = monitor(process, Vault), exit(Vault, kill),
+        receive {'DOWN', Monitor, process, Vault, killed} -> ok
+        after 5000 -> error(vault_not_stopped) end,
+        {ok, _} = quod_agent_vault:start_link(Config),
+        ?assertEqual({ok, Pub}, quod_agent_vault:prepare(Ref, 1))
+    end).
+
+preparation_refuses_conflicting_alias_and_foreign_slot_test() ->
+    with_vault(fun(Config, Ref, _Request0) ->
+        {ok, Pub} = quod_agent_vault:prepare(Ref, 1),
+        {Slot, [KeyFile]} = custody_files(Config),
+        {ok, Bytes} = file:read_file(KeyFile),
+        %% A different inode is not silently replaced, even with equal bytes.
+        ok = file:delete(KeyFile),
+        ok = file:write_file(KeyFile, Bytes),
+        ?assertEqual({error, conflicting_vault_custody}, quod_agent_vault:prepare(Ref, 1)),
+        ok = file:delete(KeyFile),
+        ?assertEqual({ok, Pub}, quod_agent_vault:prepare(Ref, 1)),
+        {ok, Term} = quod_agent_ref:materialize(Ref),
+        {ok, Other} = quod_wire_term:encode_canonical(setelement(4, Term, other)),
+        {ok, _} = quod_agent_vault:prepare(Other, 1),
+        {ok, Files} = file:list_dir(maps:get(directory, Config)),
+        [OtherSlot] = [filename:join(maps:get(directory, Config), F) || F <- Files,
+                       lists:prefix("prepare-", F),
+                       filename:join(maps:get(directory, Config), F) =/= Slot],
+        ok = file:write_file(OtherSlot, Bytes),
+        ?assertEqual({error, invalid_vault_key}, quod_agent_vault:prepare(Other, 1)),
+        ?assertEqual({ok, Pub}, quod_agent_vault:prepare(Ref, 1))
+    end).
+
+custody_files(Config) ->
+    Dir = maps:get(directory, Config),
+    {ok, Files} = file:list_dir(Dir),
+    {[Slot], Keys} = lists:partition(fun(F) -> lists:prefix("prepare-", F) end, Files),
+    {filename:join(Dir, Slot), [filename:join(Dir, F) || F <- Keys]}.
 
 wrong_unlock_and_corrupt_ciphertext_fail_closed_test() ->
     with_vault(fun(Config, Ref, Request0) ->
@@ -273,7 +360,7 @@ with_provider(Config, Fun) ->
     ok = file:write_file(ServerCert, public_key:pem_encode(
             [{'Certificate', proplists:get_value(cert, Server), not_encrypted}])),
     {KeyType, KeyDER} = proplists:get_value(key, Server),
-    ok = quod_identity:write_atomic(ServerKeyFile, public_key:pem_encode(
+    ok = quod_file:write_atomic(ServerKeyFile, public_key:pem_encode(
             [{KeyType, KeyDER, not_encrypted}]), 8#600),
     Provider = #{ip => {127,0,0,1}, port => 0, peer_keys => [ClientKey],
                  tls => #{certfile => ServerCert,
@@ -302,7 +389,7 @@ with_vault(Fun) ->
     Dir = filename:join("/tmp", "quod_vault_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     Config = #{directory => filename:join(Dir, "keys"), unlock_file => filename:join(Dir, "unlock")},
     ok = filelib:ensure_dir(maps:get(unlock_file, Config)),
-    ok = quod_identity:write_atomic(maps:get(unlock_file, Config), crypto:strong_rand_bytes(32), 8#600),
+    ok = quod_file:write_atomic(maps:get(unlock_file, Config), crypto:strong_rand_bytes(32), 8#600),
     {ok, #{blob := Ref}} = quod_agent_ref:from_text(<<"agents">>, Anchor, <<"worker.">>, 2),
     {ok, _} = quod_agent_vault:start_link(Config),
     Request = #{network_identity => Network, agent_namespace => <<"agents">>,

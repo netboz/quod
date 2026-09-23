@@ -126,6 +126,33 @@ failure_report_rejects_wrong_principal_round_and_epoch_test() ->
                   Observer, {observation, 1, hash(11), Expiry}, suspected_unreachable}}, St))
     end).
 
+first_observation_establishes_round_without_rebasing_test() ->
+    Node = {agent_instance_ref, <<"node">>, hash(5), physical_node},
+    Round = hash(10),
+    Facts = [{agent_host, actor, Node, 1, hash(6)},
+             {agent_key, actor, hash(6), active}],
+    with_actor(Facts, <<"can_report_agent_failure(_, actor, _, _).\n">>,
+      fun(St, Observer) ->
+        {ok, Expiry} = quod_proof_context:request_expiry(),
+        First = {report_agent_observation, actor, Node, 1, none, Round,
+                 {observation, 1, hash(11), Expiry}, suspected_unreachable},
+        {succeed, Reported} = erlog_int:prove_goal(First, St),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_failure_report, actor, Node, 1, Round, Observer,
+           {observation, 1, hash(11), Expiry}, suspected_unreachable}, Reported)),
+        %% Even an identical first report is not a fresh observation of the
+        %% now-existing round; the expectation is checked before goal/1.
+        ?assertMatch({fail, _}, erlog_int:prove_goal(First, Reported)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          setelement(6, First, hash(12)), Reported)),
+        Next = {report_agent_observation, actor, Node, 1, {current, Round}, Round,
+                {observation, 2, hash(13), Expiry}, reachable},
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Next, Reported)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Next, St)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          setelement(5, First, {'Expected'}), St))
+    end).
+
 takeover_request_cannot_outlive_its_report_test() ->
     Node = {agent_instance_ref, <<"node">>, hash(5), physical_node},
     Round = hash(10),
@@ -289,6 +316,159 @@ assignment_grant_binds_threshold_expected_host_and_exact_candidate_key_test() ->
           {goal, setelement(4, Move, {'OldEpoch'})}, Supported)),
         ?assertMatch({succeed, _}, erlog_int:prove_goal({goal, Move}, Supported))
     end, Authority).
+
+remote_policy_requires_distinct_current_authorized_observers_test() ->
+    with_remote_policy(fun(St, Observer, Old, Other, Destination, Round, Expiry) ->
+        Move = {goal, {agent_assignment, actor, Old, 1, Destination, 2, hash(7)}},
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, St)),
+        %% Repeating the same authorized observer cannot manufacture a vote.
+        {succeed, Duplicate} = erlog_int:prove_goal(
+          {assertz, {agent_recovery_observer, actor, Other}}, St),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Duplicate)),
+        Report = {report_agent_and_converge, actor, Old, 1, Round,
+                    {observation, 1, hash(20), Expiry}, suspected_unreachable},
+        {succeed, Moved} = erlog_int:prove_goal(Report, Duplicate),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_hosted, actor, Destination, 2, hash(7)}, Moved)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          {agent_failure_report, actor, Old, 1, Round, Observer, {'O'}, {'K'}}, Moved)),
+        %% A principal removed from current observer policy contributes no
+        %% support, even if its old signed observation remains in the ontology.
+        {succeed, Removed} = erlog_int:prove_goal(
+          {retract, {agent_recovery_observer, actor, Other}}, St),
+        {succeed, Reported} = erlog_int:prove_goal(Report, Removed),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_hosted, actor, Old, 1, hash(6)}, Reported)),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_failure_report, actor, Old, 1, Round, Observer,
+           {observation, 1, hash(20), Expiry}, suspected_unreachable}, Reported))
+    end).
+
+remote_policy_refuses_ambiguous_threshold_and_expired_support_test() ->
+    with_remote_policy(fun(St, Observer, Old, Other, Destination, Round, Expiry) ->
+        Report = {goal, {agent_failure_report, actor, Old, 1, Round, Observer,
+                         {observation, 1, hash(20), Expiry}, suspected_unreachable}},
+        {succeed, Supported} = erlog_int:prove_goal(Report, St),
+        Move = {goal, {agent_assignment, actor, Old, 1, Destination, 2, hash(7)}},
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Move, Supported)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          {goal, {agent_assignment, actor, Old, 1, Destination, 2, hash(8)}}, Supported)),
+        {succeed, Ambiguous} = erlog_int:prove_goal(
+          {assertz, {agent_recovery_threshold, actor, 1}}, Supported),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Ambiguous)),
+        {succeed, Expired} = erlog_int:prove_goal(
+          {',', {retract, {agent_failure_report, actor, Old, 1, Round, Other, {'O'}, {'K'}}},
+                {assertz, {agent_failure_report, actor, Old, 1, Round, Other,
+                            {observation, 2, hash(22), 1}, suspected_unreachable}}}, Supported),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Expired))
+    end).
+
+remote_policy_resolves_false_alarm_without_losing_prepared_custody_test() ->
+    with_remote_policy(fun(St, Observer, Old, Other, Destination, Round, Expiry) ->
+        {succeed, Reachable} = erlog_int:prove_goal(
+          {',', {retract, {agent_failure_report, actor, Old, 1, Round, Other, {'O'}, {'K'}}},
+                {assertz, {agent_failure_report, actor, Old, 1, Round, Other,
+                            {observation, 2, hash(22), Expiry}, reachable}}}, St),
+        Resolution = {goal, {agent_recovery_resolved, actor, Old, 1, Round}},
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Resolution, Reachable)),
+        {succeed, Resolved} = erlog_int:prove_goal(
+          {',', {report_agent_and_converge, actor, Old, 1, Round,
+                   {observation, 1, hash(20), Expiry}, reachable}, Resolution}, Reachable),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          {agent_failure_report, actor, Old, 1, Round, Observer, {'R'}, {'T'}}, Resolved)),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_candidate_key, actor, Old, 1, Destination, hash(7)}, Resolved))
+    end).
+
+remote_policy_requires_fresh_destination_report_before_selecting_prepared_key_test() ->
+    with_remote_policy(fun(St, Observer, Old, _Other, Destination, Round, Expiry) ->
+        Third = {agent_instance_ref, <<"third-observer">>, hash(31), node},
+        {succeed, Quorum} = erlog_int:prove_goal(
+          {',', {assertz, {agent_recovery_observer, actor, Third}},
+                {assertz, {agent_failure_report, actor, Old, 1, Round, Third,
+                            {observation, 1, hash(32), Expiry}, suspected_unreachable}}}, St),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_observer_threshold, actor, Old, 1, Round, suspected_unreachable}, Quorum)),
+        Move = {goal, {agent_assignment, actor, Old, 1, Destination, 2, hash(7)}},
+        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Quorum)),
+        {succeed, PreparedAndLive} = erlog_int:prove_goal(
+          {goal, {agent_failure_report, actor, Old, 1, Round, Observer,
+                   {observation, 1, hash(33), Expiry}, suspected_unreachable}}, Quorum),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Move, PreparedAndLive))
+    end).
+
+observation_expiry_uses_live_authorized_subset_test() ->
+    with_remote_policy(fun(St, Observer, Old, Other, _Destination, Round, _Signed) ->
+        Now = quod_time:now_ms(), Maximum = Now + 60000, Short = Now + 30000,
+        Add = [{agent_recovery_observer, actor, shorter},
+               {agent_recovery_observer, actor, shorter},
+               {agent_failure_report, actor, Old, 1, Round, shorter,
+                {observation, 1, hash(40), Short}, suspected_unreachable},
+               {agent_recovery_observer, actor, expired},
+               {agent_failure_report, actor, Old, 1, Round, expired,
+                {observation, 1, hash(41), Now - 1}, suspected_unreachable}],
+        WithRows = lists:foldl(fun(F, Acc) ->
+            {succeed, Next} = erlog_int:prove_goal({assertz, F}, Acc), Next
+        end, St, Add),
+        Deadline = fun(E) -> {agent_observation_expiry, actor, Old, 1, Round,
+                              Observer, suspected_unreachable, Now, Maximum, E} end,
+        %% One long-lived authorized vote is sufficient; a shorter irrelevant
+        %% vote, expired vote and an untrusted vote cannot cap the request.
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Deadline(Maximum), WithRows)),
+        {succeed, WithoutLong} = erlog_int:prove_goal(
+            {retract, {agent_recovery_observer, actor, Other}}, WithRows),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Deadline(Short), WithoutLong)),
+        {succeed, RemovedOnce} = erlog_int:prove_goal(
+            {retract, {agent_recovery_observer, actor, shorter}}, WithoutLong),
+        {succeed, RemovedTwice} = erlog_int:prove_goal(
+            {retract, {agent_recovery_observer, actor, shorter}}, RemovedOnce),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(Deadline(Maximum), RemovedTwice))
+    end).
+
+reachable_observation_resolves_in_its_own_transaction_test() ->
+    Node = {agent_instance_ref, <<"node">>, hash(5), physical_node}, Round = hash(10),
+    Rules = <<"can_report_agent_failure(_, actor, _, _).\n"
+              "can_resolve_agent_recovery(P,I,H,E,R) :- "
+              "agent_failure_report(I,H,E,R,P,_,reachable).\n">>,
+    with_actor([{agent_host, actor, Node, 1, hash(6)}, {agent_key, actor, hash(6), active},
+                {agent_recovery_round, actor, Node, 1, Round},
+                {agent_candidate_key, actor, Node, 1, destination, hash(7)}], Rules,
+      fun(St, Observer) ->
+        {ok, Expiry} = quod_proof_context:request_expiry(),
+        {succeed, Resolved} = erlog_int:prove_goal(
+          {report_agent_observation, actor, Node, 1, {current, Round}, Round,
+           {observation, 1, hash(11), Expiry}, reachable}, St),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          {agent_recovery_round, actor, Node, 1, Round}, Resolved)),
+        ?assertMatch({fail, _}, erlog_int:prove_goal(
+          {agent_failure_report, actor, Node, 1, Round, Observer, {'_'}, {'_'}}, Resolved)),
+        ?assertMatch({succeed, _}, erlog_int:prove_goal(
+          {agent_candidate_key, actor, Node, 1, destination, hash(7)}, Resolved))
+    end).
+
+with_remote_policy(Fun) ->
+    {ok, Policy} = file:read_file(filename:join(code:priv_dir(quod),
+                                               "ontologies/agent_recovery_policy.pl")),
+    Old = {agent_instance_ref, <<"old">>, hash(5), node},
+    Other = {agent_instance_ref, <<"observer">>, hash(11), node},
+    Round = hash(10), Expiry = quod_time:now_ms() + 600000,
+    Facts = [{agent_host, actor, Old, 1, hash(6)}, {agent_key, actor, hash(6), active},
+             {agent_recovery_round, actor, Old, 1, Round},
+             {agent_recovery_threshold, actor, 2},
+             {agent_recovery_observer, actor, Other},
+             {agent_failure_report, actor, Old, 1, Round, Other,
+              {observation, 1, hash(21), Expiry}, suspected_unreachable},
+             {agent_failure_report, actor, Old, 1, Round, untrusted,
+              {observation, 1, hash(23), Expiry}, suspected_unreachable}],
+    with_actor(Facts, Policy, fun(St, Observer) ->
+        {succeed, Configured} = erlog_int:prove_goal(
+          {',', {assertz, {agent_recovery_observer, actor, Observer}},
+            {',', {assertz, {eligible_agent_host, actor, Observer}},
+              {',', {assertz, {agent_host_rank, actor, Observer, 1}},
+                    {assertz, {agent_candidate_key, actor, Old, 1, Observer, hash(7)}}}}}, St),
+        {ok, SignedExpiry} = quod_proof_context:request_expiry(),
+        Fun(Configured, Observer, Old, Other, Observer, Round, SignedExpiry)
+    end).
 
 recovery_fixture(Fun) ->
     recovery_fixture(Fun, <<"can_assign_agent_host(_, actor, _, _, _, _).\n">>).

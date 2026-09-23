@@ -3028,6 +3028,134 @@ finalized_request_is_not_resurrected_test() ->
                       requested_slot => 7})),
     ?assertEqual(7, quod_simplex:test_requested(Later)).
 
+%% One authenticated complaint is demand to watch, not enough evidence to
+%% select a final vote. Duplicate delivery must not restart that watchdog.
+single_peer_complaint_wakes_existing_watchdog_test() ->
+    [{A, IdA}, {B, _} = PeerB, {C, _}, {D, _}] = Committee = committee(4),
+    Peers = [B, C, D],
+    Common = #{self => A, id => IdA, validators => pubs(Committee), slot => 5,
+               eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5), sync => ready,
+               conns => maps:from_list([{P, {self(), make_ref()}} || P <- Peers])},
+    try
+        Share = complaint_share(6, PeerB),
+        Receive = fun(S) -> quod_simplex:reconcile_head_progress(
+            quod_simplex:dispatch(B, {share, Share}, S)) end,
+        Paused = Receive(st(Common)),
+        ?assertEqual({6, awaiting_notarization, false}, quod_simplex:test_progress(Paused)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, Paused)),
+        TimedOut = quod_simplex:on_progress_timeout(6, Paused),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, TimedOut)),
+        ?assertEqual({1, 1}, quod_simplex:test_progress_counts(TimedOut)),
+        Inbound = maps:from_list([{P, {self(), make_ref()}} || P <- Peers]),
+        Idle = st(Common#{inbound_conns => Inbound,
+                          peer_readiness => voting_readiness(Peers, self(), 5)}),
+        Watched = Receive(Idle),
+        ?assertEqual({6, awaiting_notarization, true}, quod_simplex:test_progress(Watched)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, Watched)),
+        ?assertMatch([{{timeout, progress}, _, {progress_timeout, 6}}],
+                     quod_simplex:progress_timer_actions(Idle, Watched)),
+        Repeated = Receive(Watched),
+        ?assertEqual([], quod_simplex:progress_timer_actions(Watched, Repeated)),
+        ?assertEqual({none, false, true}, quod_simplex:test_round(
+            6, quod_simplex:on_progress_timeout(6, Repeated)))
+    after flush_unordered_link_frames() end.
+
+%% A wire shape is not accepted evidence. Rejected signatures/domains, stale
+%% or far slots, self shares and removed committee members cannot create demand.
+unaccepted_complaints_do_not_wake_watchdog_test() ->
+    [{A, IdA} = Self, {B, _} = PeerB, {C, _}, {D, _}] = Committee = committee(4),
+    {Outsider, _} = Other = id(),
+    Base = #{self => A, id => IdA, validators => pubs(Committee), slot => 5,
+             eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5), sync => ready},
+    Valid = complaint_share(6, PeerB),
+    WrongDomain = quod_simplex:make_share(crypto:hash(sha256, <<"another-chain">>),
+                                         complaint, 6, none, element(2, PeerB)),
+    Cases = [{B, Valid#share{sig = <<0:512>>}}, {B, WrongDomain},
+             {Outsider, complaint_share(6, Other)}, {A, complaint_share(6, Self)},
+             {B, complaint_share(5, PeerB)}, {B, complaint_share(8, PeerB)}],
+    lists:foreach(fun({Sender, Share}) ->
+        S = quod_simplex:reconcile_head_progress(
+              quod_simplex:dispatch(Sender, {share, Share}, st(Base))),
+        ?assertEqual(idle, quod_simplex:test_progress(S)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, S))
+    end, Cases),
+    %% An earlier verified bucket may survive a committee projection. Only a
+    %% member of the current committee can supply the wake dependency.
+    {Retained, []} = quod_simplex:eng_offer({share, Valid}, maps:get(eng, Base)),
+    Removed = st(Base#{validators => [A, C, D], eng => Retained}),
+    ?assertEqual(idle, quod_simplex:test_progress(
+        quod_simplex:reconcile_head_progress(Removed))).
+
+passive_and_child_complaints_wait_for_current_ready_head_test() ->
+    [{A, IdA}, {B, _} = PeerB | _] = Committee = committee(4),
+    Base = #{self => A, id => IdA, validators => pubs(Committee), slot => 5,
+             eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), 5), sync => ready},
+    {HeadEvidence, []} = quod_simplex:eng_offer(
+        {share, complaint_share(6, PeerB)}, maps:get(eng, Base)),
+    Passive = st(Base#{eng => HeadEvidence, sync => unconfirmed}),
+    ?assertEqual(idle, quod_simplex:test_progress(
+        quod_simplex:reconcile_head_progress(Passive))),
+    Ready = quod_simplex:reconcile_head_progress(st(Base#{eng => HeadEvidence})),
+    ?assertEqual({6, awaiting_notarization, false}, quod_simplex:test_progress(Ready)),
+    ?assertEqual({none, false, false}, quod_simplex:test_round(6, Ready)),
+    ChildShare = complaint_share(7, PeerB),
+    Child = quod_simplex:reconcile_head_progress(
+        quod_simplex:dispatch(B, {share, ChildShare}, st(Base))),
+    ?assertEqual(idle, quod_simplex:test_progress(Child)),
+    {ChildEvidence, []} = quod_simplex:eng_offer({share, ChildShare}, maps:get(eng, Base)),
+    NextHead = st(Base#{slot => 6, eng => quod_simplex:eng_prune(6, ChildEvidence)}),
+    ?assertEqual({7, awaiting_notarization, false}, quod_simplex:test_progress(
+        quod_simplex:reconcile_head_progress(NextHead))).
+
+%% With an idle dead leader, one originating caller supplies the first
+%% complaint. The two other live validators must start their own existing
+%% timeout before contributing to a skip, then commit at the rotated leader.
+single_complaint_timeout_skips_and_next_slot_commits_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    [{Self, SelfId}, {FirstPeer, _} = First, Second | _] = Committee = committee(4),
+    Validators = pubs(Committee),
+    Peers = lists:delete(Self, Validators),
+    Dir = filename:join("/tmp", "quod_complaint_demand_" ++
+                                integer_to_list(erlang:unique_integer([positive]))),
+    {ok, Store0} = quod_ledger_store:open(<<"t">>, Dir),
+    {ok, Store1} = quod_ledger_store:append(Store0,
+        [quod_ledger:noop_entry(I, none) || I <- lists:seq(1, 5)]),
+    {ok, Journal} = quod_signing_journal:initialize(<<"t">>, ?DOMAIN, Dir),
+    try
+        Links = maps:from_list([{P, {self(), make_ref()}} || P <- Peers]),
+        Idle = st(#{self => Self, id => SelfId, validators => Validators,
+                    slot => 5, eng => quod_simplex:eng_new(?DOMAIN, Validators, 5),
+                    sync => ready, conns => Links, inbound_conns => Links,
+                    peer_readiness => voting_readiness(Peers, self(), 5),
+                    store => Store1, signing_journal => Journal, last_applied => 5}),
+        Watched = quod_simplex:reconcile_head_progress(quod_simplex:dispatch(
+            FirstPeer, {share, complaint_share(6, First)}, Idle)),
+        ?assertEqual({6, awaiting_notarization, true}, quod_simplex:test_progress(Watched)),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, Watched)),
+        Complained = quod_simplex:on_progress_timeout(6, Watched),
+        ?assertEqual({none, false, true}, quod_simplex:test_round(6, Complained)),
+        Skipped = quod_simplex:dispatch(element(1, Second),
+            {share, complaint_share(6, Second)}, Complained),
+        {6, Store2} = quod_simplex:test_committed_store(Skipped),
+        ?assertMatch(#entry{index = 6, data = noop}, stored_entry_view(Store2, 6)),
+        Leader = quod_simplex:leader(7, Validators),
+        {Leader, LeaderId} = lists:keyfind(Leader, 1, Committee),
+        Tx = signed_tx(<<"t">>, <<"after-demand-skip">>,
+            [{assert, {{after_demand_skip, live}, true}}], {Leader, LeaderId}),
+        Block = block(7, 6, {batch, [Tx]}),
+        Proposed = quod_simplex:dispatch(Leader, {propose, Block, []}, Skipped),
+        OtherVoters = [Pair || {P, _} = Pair <- Committee, P =/= Self],
+        Supported = dispatch_shares(supports(Block, OtherVoters, 2), Proposed),
+        Final = dispatch_shares(commits(Block, OtherVoters, 2), Supported),
+        {7, FinalStore} = quod_simplex:test_committed_store(Final),
+        ?assertMatch(#entry{index = 7}, stored_entry_view(FinalStore, 7))
+    after
+        flush_unordered_link_frames(),
+        quod_signing_journal:close(Journal),
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
 %% A peer counts only after reporting readiness on the authenticated inbound stream that carries its
 %% votes. Our own outbound stream may still be opening; that does not hide a peer that can already vote.
 inbound_link_counts_toward_quorum_test() ->

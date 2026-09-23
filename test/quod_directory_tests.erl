@@ -178,6 +178,56 @@ private_projection_wakes_when_its_host_actor_becomes_reachable_test() ->
                  {directory_route, {Target, TargetAnchor}})
     end).
 
+node_transport_requires_exact_author_test() ->
+    with_directory(fun() ->
+        Ns = <<"quod:physical-node">>, Anchor = anchor(Ns),
+        Ref = {agent_instance_ref, Ns, Anchor, physical_node},
+        {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+        Author = {node_actor, Blob},
+        Owner = quod_reg:where({directory, node}),
+        true = quod_reg:subscribe_tracked({node_identity_route, Ref}),
+        %% A valid replica route says nothing about the physical actor's key.
+        {ok, _} = quod_directory:install_generation(
+                    generation({root_bootstrap, key(99), key(8)}, key(8), 1,
+                               [{Ns, Anchor, validator, system}])),
+        ?assertEqual(unknown, quod_directory:node_transport_route(Ref)),
+        {ok, Expiry} = quod_directory:install_generation(
+                    generation(Author, key(5), 1,
+                               [{Ns, Anchor, observer, node}])),
+        receive {node_identity_route_changed, Owner, Ref} -> ok
+        after 1000 -> error(missing_identity_notice)
+        end,
+        ?assertMatch({ok, #{owner := Owner, node_key := _, generation := 1}},
+                     quod_directory:node_transport_route(Ref)),
+        {ok, #{node_key := Key} = Retained} = quod_directory:node_transport_route(Ref),
+        ?assertEqual(key(5), Key),
+        ?assert(quod_directory:node_contact_current(Retained)),
+        ok = quod_directory:expire(Expiry),
+        receive {node_identity_route_changed, Owner, Ref} -> ok
+        after 1000 -> error(missing_expiry_notice)
+        end,
+        ?assertEqual(unknown, quod_directory:node_transport_route(Ref)),
+        ?assert(quod_directory:node_contact_current(Retained)),
+        {ok, _} = quod_directory:install_generation(
+                    generation(Author, key(6), 2,
+                               [{Ns, Anchor, observer, node}])),
+        receive {node_identity_route_changed, Owner, Ref} -> ok
+        after 1000 -> error(missing_replacement_notice)
+        end,
+        ?assertNot(quod_directory:node_contact_current(Retained)),
+        {ok, #{node_key := NewKey, generation := 2} = Current} =
+            quod_directory:node_transport_route(Ref),
+        ?assertEqual(key(6), NewKey),
+        {ok, _} = quod_directory:install_generation(
+                    generation(Author, key(6), 3, [])),
+        receive {node_identity_route_changed, Owner, Ref} -> ok
+        after 1000 -> error(missing_withdrawal_notice)
+        end,
+        ?assertEqual(unknown, quod_directory:node_transport_route(Ref)),
+        ?assertNot(quod_directory:node_contact_current(Current)),
+        true = quod_reg:unsubscribe_tracked({node_identity_route, Ref})
+    end).
+
 with_directory(Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     stop_directory(),

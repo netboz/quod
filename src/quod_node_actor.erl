@@ -9,7 +9,7 @@ and verifies the resulting durable facts. It owns no process, lifecycle path,
 ACL evaluator, signer, route, or cache.
 """.
 
--export([creation_options/4, reference/4, bind/4, principal/0, signed_goal/4,
+-export([creation_options/4, reference/4, bind/4, principal/0, signed_goal/4, signed_goal/5,
          hosting_projection/5,
          bootstrap/0, verify/2]).
 -ifdef(TEST).
@@ -87,13 +87,23 @@ another agent's signature.
           {ok, binary(), binary()} | {error, term()}.
 signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry)
   when (Mode =:= read orelse Mode =:= execute), is_integer(Expiry), Expiry > 0 ->
+    signed_goal(Mode, Goal, Operation, Expiry, current);
+signed_goal(_, _, _, _) -> {error, invalid_request}.
+
+-doc "Construct a node request only while its explicit executor binding remains current.".
+-spec signed_goal(read | execute, term(), <<_:256>>, pos_integer(), current | {term(), <<_:256>>}) ->
+          {ok, binary(), binary()} | {error, term()}.
+signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry, Expected)
+  when (Mode =:= read orelse Mode =:= execute), is_integer(Expiry), Expiry > 0 ->
     case {principal(), quod_ontology:network_identity(),
           application:get_env(quod, node_pubkey), application:get_env(quod, identity_key)} of
         {{ok, Principal}, {ok, Network}, {ok, PublicKey}, {ok, Signer}} ->
             {ok, {agent_instance_ref, Ns, Anchor, Instance}} =
                 quod_agent_ref:materialize_principal(Principal),
-            case {quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
-                {{ok, InstanceText}, {ok, GoalText}} ->
+            Ref = {agent_instance_ref, Ns, Anchor, Instance},
+            case {Expected =:= current orelse Expected =:= {Ref, PublicKey},
+                  quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
+                {true, {ok, InstanceText}, {ok, GoalText}} ->
                     %% The canonical formatter emits version-2 binary terms.
                     Request = #{network_identity => Network, agent_namespace => Ns,
                       agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
@@ -104,11 +114,12 @@ signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry)
                         {ok, Bytes} -> {ok, Bytes, quod_identity:sign(Bytes, Signer)};
                         {error, _} = Error -> Error
                     end;
+                {false, _, _} -> {error, stale_node_executor};
                 _ -> {error, invalid_goal}
             end;
         _ -> {error, node_identity_unavailable}
     end;
-signed_goal(_, _, _, _) -> {error, invalid_request}.
+signed_goal(_, _, _, _, _) -> {error, invalid_request}.
 
 -doc "Validate and install one complete committed hosting projection.".
 -spec hosting_projection(binary(), non_neg_integer(), term(), [term()], [term()]) ->
@@ -270,14 +281,15 @@ verify_facts(Namespace, Instance, PublicKey, Blob) ->
     end.
 
 creation_terms(Namespace, InstanceTerm0, PublicKey) ->
-    case quod_wire_term:materialize_symbols(InstanceTerm0) of
-        {ok, InstanceTerm} ->
+    ExecutionPath = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+    case {quod_wire_term:materialize_symbols(InstanceTerm0), file:read_file(ExecutionPath)} of
+        {{ok, InstanceTerm}, {ok, ExecutionPolicy}} ->
             Terms =
                 [{instance_of, node, InstanceTerm},
                  {agent_key, InstanceTerm, PublicKey, active}],
             Ns = prolog_binary_literal(Namespace),
             Policy = iolist_to_binary(
-                        ["can_invoke(_, agent_instance_ref(", Ns,
+                        [ExecutionPolicy, "\ncan_invoke(_, agent_instance_ref(", Ns,
                         ", _, Agent), _, ", Ns,
                         ") :- instance_of(node, Agent).\n",
                         "state_handler(node_ontology_hosting, ",
@@ -299,8 +311,8 @@ creation_terms(Namespace, InstanceTerm0, PublicKey) ->
                   {source, Policy},
                   {external_predicate_modules,
                    [quod_ontology_predicates]}]};
-        {error, _} ->
-            {error, invalid_node_instance}
+        {{error, _}, _} -> {error, invalid_node_instance};
+        {_, {error, _}} -> {error, node_execution_policy_unavailable}
     end.
 
 prolog_binary_literal(Bytes) ->

@@ -45,6 +45,8 @@ quod_reg:publish({channel, Ns}, {quod_message, {Peer, self()}, Ns, Payload}).
 
 -export([name/1, prop/1, via/1, where/1]).
 -export([reg/1, publish/2, subscribe/1, unsubscribe/1,
+         publish_tracked/2, subscribe_tracked/1, unsubscribe_tracked/1,
+         tracked_subscribers/1, track_subscribers/1, untrack_subscribers/1,
          monitor_name/2, demonitor_name/2]).
 
 -export_type([key/0]).
@@ -88,6 +90,36 @@ subscribe(Key) -> gproc:reg({p, l, Key}).
 -doc "The **current** process stops receiving `Key`'s events.".
 -spec unsubscribe(key()) -> true.
 unsubscribe(Key) -> gproc:unreg({p, l, Key}).
+
+-doc "Post an event on a resource channel whose subscriber lifetime can be tracked.".
+-spec publish_tracked(key(), term()) -> term().
+publish_tracked(Key, Event) -> gproc:send({r, l, Key}, Event).
+
+-doc "Subscribe before acquiring the owner's resource; process death also releases the interest.".
+-spec subscribe_tracked(key()) -> true.
+subscribe_tracked(Key) -> gproc:reg({r, l, Key}).
+
+-doc "Release the current process's tracked channel interest.".
+-spec unsubscribe_tracked(key()) -> true.
+unsubscribe_tracked(Key) -> gproc:unreg({r, l, Key}).
+
+-doc "Live processes interested in a tracked channel.".
+-spec tracked_subscribers(key()) -> [pid()].
+tracked_subscribers(Key) ->
+    [Pid || Pid <- gproc:lookup_pids({r, l, Key}), is_process_alive(Pid)].
+
+-doc """
+The current resource owner receives `{gproc, resource_on_zero, l, Key, Owner}`
+when the last tracked interest disappears. Existing interests are included.
+There is one counter owner per channel; its death removes the counter.
+""".
+-spec track_subscribers(key()) -> true.
+track_subscribers(Key) ->
+    gproc:reg({rc, l, Key}, undefined, [{on_zero, [{send, self()}]}]).
+
+-doc "Stop owning the channel's subscriber counter when forgetting its resource.".
+-spec untrack_subscribers(key()) -> true.
+untrack_subscribers(Key) -> gproc:unreg({rc, l, Key}).
 
 -doc "Monitor a unique local name, optionally following owner replacement.".
 -spec monitor_name(key(), info | follow | standby) -> reference().

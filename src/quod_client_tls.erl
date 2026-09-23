@@ -47,7 +47,7 @@ first boot and re-minting when the stored certificate is missing, unreadable, or
 inside its renewal window.
 
 The private key is written with the same audited atomic/0600 path as `node.key`
-(`quod_identity:write_atomic/3`).
+(`quod_file:write_atomic/3`).
 """.
 -spec ensure(file:filename_all()) -> {ok, material()} | {error, term()}.
 ensure(Dir) ->
@@ -92,7 +92,7 @@ ensure_cert(CertPath, Key) ->
     end.
 
 mint_and_store(KeyPath, CertPath, Key) ->
-    case quod_identity:write_atomic(
+    case quod_file:write_atomic(
            KeyPath, public_key:der_encode('ECPrivateKey', Key), 8#600) of
         ok -> store_cert(CertPath, Key);
         {error, _} = Error -> Error
@@ -100,7 +100,7 @@ mint_and_store(KeyPath, CertPath, Key) ->
 
 store_cert(CertPath, Key) ->
     Cert = mint(Key),
-    case quod_identity:write_atomic(CertPath, Cert, 8#644) of
+    case quod_file:write_atomic(CertPath, Cert, 8#644) of
         ok -> {ok, #{cert => Cert, key => Key}};
         {error, _} = Error -> Error
     end.

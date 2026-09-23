@@ -33,7 +33,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 -export([ensure/1, advance_directory_epoch/1,
          load_node_actor_pointer/1, store_node_actor_pointer/2,
          generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
-         sign/2, verify/3, tls_key/1, write_atomic/3]).
+         sign/2, verify/3, tls_key/1]).
 
 -export_type([pubkey/0, seed/0, keypair/0, key_term/0, key_handle/0,
               signer/0, identity/0]).
@@ -97,7 +97,7 @@ advance_directory_epoch(Dir) ->
     case read_epoch(Path) of
         {ok, Previous} when Previous < 16#FFFFFFFFFFFFFFFF ->
             Next = Previous + 1,
-            case write_atomic(Path, <<Next:64/unsigned-big>>, 8#600) of
+            case quod_file:write_atomic(Path, <<Next:64/unsigned-big>>, 8#600) of
                 ok -> {ok, Next};
                 {error, _} = Error -> Error
             end;
@@ -139,7 +139,7 @@ store_node_actor_pointer(Dir, Blob) when is_binary(Blob) ->
                     Bytes = term_to_binary(
                               {quod_node_actor_pointer, 1, Blob},
                               [deterministic]),
-                    write_atomic(Path, Bytes, 8#600);
+                    quod_file:write_atomic(Path, Bytes, 8#600);
                 {ok, Blob} -> ok;
                 {ok, _Other} -> {error, node_actor_identity_mismatch};
                 {error, _} = Error -> Error
@@ -269,45 +269,8 @@ read_seed(Path) ->
 %%     umask-default world-readable mode.
 %% Returns `{error, _}` (never a badmatch crash) so `ensure/1` can relay a failure.
 write_secret(Path, Seed) ->
-    write_atomic(Path, Seed, 8#600).
+    quod_file:write_atomic(Path, Seed, 8#600).
 
--doc """
-Write `Bytes` to `Path` durably, privately and atomically (tmp + exclusive
-create + `chmod Mode` before the bytes land + rename + dirent fsync).
-
-Exported for the other on-disk secrets that live beside `node.key` — currently
-the browser-TLS keypair in `m:quod_client_tls` — so one audited write path
-covers every private file this node persists.
-""".
--spec write_atomic(file:filename_all(), iodata(), non_neg_integer()) ->
-          ok | {error, term()}.
-write_atomic(Path, Bytes, Mode) ->
-    case filelib:ensure_dir(Path) of
-        ok ->
-            Tmp = unicode:characters_to_list([Path, ".tmp"]),
-            _ = file:delete(Tmp),                      %% clear any stale/leftover tmp
-            try write_tmp(Tmp, Path, Bytes, Mode)
-            catch throw:{error, _} = Err -> _ = file:delete(Tmp), Err end;
-        {error, _} = Error ->
-            Error
-    end.
-
-write_tmp(Tmp, Path, Bytes, Mode) ->
-    case file:open(Tmp, [write, raw, binary, exclusive]) of
-        {ok, Fd} ->
-            try
-                ok_(file:change_mode(Tmp, Mode)),      %% lock down BEFORE bytes land
-                ok_(file:write(Fd, Bytes)),
-                ok_(file:datasync(Fd))
-            after
-                _ = file:close(Fd)
-            end,
-            ok_(file:rename(Tmp, Path)),
-            _ = sync_dir(filename:dirname(Path)),      %% durable dirent (POSIX rename)
-            ok;
-        {error, _} = E ->
-            E
-    end.
 
 read_epoch(Path) ->
     case file:read_file(Path) of
@@ -328,15 +291,4 @@ decode_node_actor_pointer(Bytes) ->
             {error, bad_node_actor_pointer}
     catch
         _:_ -> {error, bad_node_actor_pointer}
-    end.
-
-ok_(ok)               -> ok;
-ok_({error, _} = E)   -> throw(E).
-
-%% Best-effort fsync of the directory so the tmp+rename is durable across a power-cut
-%% (POSIX: the rename's new dirent is durable only once the dir inode is synced).
-sync_dir(Dir) ->
-    case file:open(Dir, [read, raw]) of
-        {ok, DirFd} -> _ = file:datasync(DirFd), _ = file:close(DirFd), ok;
-        {error, _}  -> ok
     end.

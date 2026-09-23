@@ -96,7 +96,7 @@ initialize(Ns, Domain, DataDir)
   when is_binary(Ns), is_binary(Domain), byte_size(Domain) =:= 32 ->
     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
     Path = journal_path(Dir),
-    ok = filelib:ensure_dir(Path),
+    ok = quod_file:ensure_parent(Path),
     ok = require_replaceable(Path),
     Tmp = temporary_path(Dir),
     _ = file:delete(Tmp),
@@ -110,7 +110,7 @@ initialize(Ns, Domain, DataDir)
         _ = file:close(TmpFd)
     end,
     ok = file:rename(Tmp, Path),
-    ok = sync_dir(Dir),
+    ok = quod_file:sync_dir(Dir),
     {ok, Fd} = file:open(Path, [read, write, raw, binary]),
     {ok, #journal{fd = Fd, path = Path, domain = Domain,
                   offset = byte_size(Header)}};
@@ -1017,7 +1017,7 @@ compact(J = #journal{fd = OldFd, path = Path, domain = Domain,
         _ = file:close(TmpFd)
     end,
     ok = file:rename(Tmp, Path),
-    ok = sync_dir(filename:dirname(Path)),
+    ok = quod_file:sync_dir(filename:dirname(Path)),
     _ = file:close(OldFd),
     {ok, Fd} = file:open(Path, [read, write, raw, binary]),
     J#journal{fd = Fd, offset = byte_size(Data)}.
@@ -1098,19 +1098,6 @@ pending_term({{Admission, Author}, Sequence, GroupId}, #{body := Body, envelope 
 journal_path(Dir) -> filename:join(Dir, "signing.0001").
 temporary_path(Dir) -> filename:join(Dir, "signing.0001.new").
 
-sync_dir(Dir) ->
-    case file:open(Dir, [read, raw]) of
-        {ok, DirFd} ->
-            Result = file:datasync(DirFd),
-            _ = file:close(DirFd),
-            case Result of
-                ok -> ok;
-                {error, eisdir} -> ok;
-                Error -> Error
-            end;
-        {error, eisdir} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
 
 -ifdef(TEST).
 test_frame(Payload) -> frame(Payload).

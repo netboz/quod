@@ -125,7 +125,9 @@ install_host(H, Existing, S = #{hosts := Hosts}) ->
             request_contact(H, S1)
     end.
 
-request_contact(H, S = #{transport := T}) when is_pid(T) ->
+request_contact(H = {agent_instance_ref, Ns, Anchor, _}, S = #{transport := T})
+  when is_pid(T) ->
+    ok = quod_directory:route_needed({Ns, Anchor}),
     S1 = subscribe_capacity(clear_pending(H, S)),
     P = maps:get(H, maps:get(hosts, S1)),
     request(quod_quic:peer_contact(T, H), H, contact, put_host(H, P#{contact_blocked => false}, S1));

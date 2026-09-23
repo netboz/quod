@@ -1,6 +1,52 @@
 -module(quod_agent_observation_drop_tests).
 -include_lib("eunit/include/eunit.hrl").
 
+missing_host_contact_requests_its_node_actor_route_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {ok, Directory} = quod_directory:start_link(#{expire_tick_ms => 60000}),
+    {Control, ControlMonitor} = fake_owner({directory, control}, true),
+    {Transport, TransportMonitor} = fake_owner({transport, node}, false),
+    Ns = <<"observation-route-node">>, Anchor = <<69:256>>,
+    Host = {agent_instance_ref, Ns, Anchor, physical_node},
+    Observer = quod_agent_observer:new(<<70:256>>),
+    {ok, Installed} = quod_agent_observer:project(
+                        all, [{watch, actor, Host, 1, none}], Observer),
+    try
+        receive
+            {fake_cast, Control, {route_needed, {Ns, Anchor}}} -> ok
+        after 1000 -> error(node_actor_route_not_requested)
+        end
+    after
+        ok = quod_agent_observer:stop(Installed),
+        stop_fake_owner(Transport, TransportMonitor),
+        stop_fake_owner(Control, ControlMonitor),
+        gen_server:stop(Directory)
+    end.
+
+fake_owner(Name, ForwardCasts) ->
+    Parent = self(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        true = quod_reg:reg(Name),
+        Parent ! {fake_owner_ready, self()},
+        fake_owner_loop(Parent, ForwardCasts)
+    end),
+    receive {fake_owner_ready, Pid} -> {Pid, Monitor}
+    after 1000 -> error({fake_owner_not_ready, Name}) end.
+
+fake_owner_loop(Parent, ForwardCasts) ->
+    receive
+        {'$gen_cast', Message} when ForwardCasts ->
+            Parent ! {fake_cast, self(), Message},
+            fake_owner_loop(Parent, ForwardCasts);
+        stop -> ok;
+        _ -> fake_owner_loop(Parent, ForwardCasts)
+    end.
+
+stop_fake_owner(Pid, Monitor) ->
+    Pid ! stop,
+    receive {'DOWN', Monitor, process, Pid, normal} -> ok
+    after 1000 -> error({fake_owner_not_stopped, Pid}) end.
+
 expired_physical_batches_count_once_and_keep_fresh_work_test() ->
     with_observation(fun(#{batch := Batch, observer := Observer}) ->
         Expired = Batch#{at => quod_time:now_ms() - 60000},

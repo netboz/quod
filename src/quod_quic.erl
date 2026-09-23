@@ -43,7 +43,7 @@ through channel-wide gproc publication.
          open_link_identified/2,
          send/3, send_pinned/4,
          learn/2, learn_if_absent/2, resolve/1, valid_endpoint/1,
-         liveness_opts/0]).
+         liveness_opts/0, peer_connections/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([ensure_cache/0]).   %% tests own the resolver cache themselves (store_hint no longer creates it)
@@ -59,7 +59,10 @@ through channel-wide gproc publication.
 %% Addr = the advertised `{Host,Port}` peers dial
 %% (`node_addr`, which may differ from the local bind port). The receiver binds the proven peer
 %% pubkey and learns Pubkey => Addr — but only when Addr is a real endpoint (see `learn/2`).
--record(state, {self, alpn, cert, key, conns = #{}}).
+-record(state, {self, alpn, cert, key,
+                connections = #{}, %% Pid => {monitor, authenticated key | undefined}
+                connection_revision = 0,
+                conns = #{}}).     %% dial-pool key => connection owner
 
 %% ======================================================================
 %% API
@@ -67,6 +70,23 @@ through channel-wide gproc publication.
 
 start_link() ->
     gen_server:start_link(quod_reg:via(?KEY), ?MODULE, [], []).
+
+-doc """
+Request an authenticated connection snapshot from this exact transport owner.
+Subscribe to `{peer_connections, NodeKey}` before requesting the snapshot and
+monitor `Transport`. Both snapshots and change notices carry
+`{peer_connections, Transport, Revision, NodeKey, ConnectionPids}`; a snapshot
+reply wraps that tuple as `{Ref, Notice}`. Compare revisions only
+within the same transport incarnation. An empty set means no known connection,
+not proof of peer failure. Address-only outbound connections are not indexed
+under a node key. An empty or shrinking set can trigger a confirmation probe;
+it is not itself failure evidence. This read never dials or opens a stream.
+""".
+-spec peer_connections(pid(), <<_:256>>) -> reference().
+peer_connections(Transport, <<_:256>> = NodeKey) when is_pid(Transport) ->
+    Ref = make_ref(),
+    Transport ! {peer_connections, self(), Ref, NodeKey},
+    Ref.
 
 -doc """
 Open (or reuse) a link to `Target` for `Channel`. `Target` is either a **`node_id()`**
@@ -419,16 +439,33 @@ handle_cast({send, Target, Channel, Frame}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({conn_terminal, Pid, Ref}, State = #state{conns = Conns})
+handle_info({peer_connections, Caller, Ref, <<_:256>> = NodeKey}, State)
+  when is_pid(Caller), is_reference(Ref) ->
+    Caller ! {Ref, connection_snapshot(NodeKey, State)},
+    {noreply, State};
+handle_info({conn_authenticated, Pid, <<_:256>> = NodeKey}, State)
+  when is_pid(Pid) ->
+    S1 = track_connection(Pid, State),
+    case maps:get(Pid, S1#state.connections) of
+        {Monitor, undefined} ->
+            S2 = S1#state{connections = (S1#state.connections)#{Pid => {Monitor, NodeKey}}},
+            {noreply, publish_connections(NodeKey, S2)};
+        {_Monitor, NodeKey} -> {noreply, S1};
+        {_Monitor, _Other} -> {noreply, S1}
+    end;
+handle_info({conn_terminal, Pid, Ref}, State)
   when is_pid(Pid), is_reference(Ref) ->
     %% Remove only mappings still owned by this exact connection generation.
     %% ACK after removal; all earlier owner->conn opens are ordered before it,
     %% while any later API call necessarily creates/selects the replacement.
-    Conns1 = maps:filter(fun(_, ConnPid) -> ConnPid =/= Pid end, Conns),
+    S1 = forget_connection(Pid, State),
     Pid ! {conn_terminal_ack, self(), Ref},
-    {noreply, State#state{conns = Conns1}};
-handle_info({'DOWN', _Ref, process, Pid, _Reason}, State = #state{conns = Conns}) ->
-    {noreply, State#state{conns = maps:filter(fun(_, P) -> P =/= Pid end, Conns)}};
+    {noreply, S1};
+handle_info({'DOWN', Ref, process, Pid, _Reason}, State) ->
+    case maps:find(Pid, State#state.connections) of
+        {ok, {Ref, _}} -> {noreply, forget_connection(Pid, State)};
+        _ -> {noreply, State}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -481,8 +518,38 @@ start_conn(ConnKey, Peer, {Host, Port}, Policy,
     Pid =
         quod_conn:start_outbound(
           Host, Port, Peer, Self, ALPN, Cert, Key, Policy, self()),
-    _ = erlang:monitor(process, Pid),
-    {Pid, State#state{conns = maps:put(ConnKey, Pid, Conns)}}.
+    S1 = track_connection(Pid, State),
+    {Pid, S1#state{conns = maps:put(ConnKey, Pid, Conns)}}.
+
+track_connection(Pid, State = #state{connections = Connections}) ->
+    case maps:is_key(Pid, Connections) of
+        true -> State;
+        false -> State#state{connections =
+                   Connections#{Pid => {monitor(process, Pid), undefined}}}
+    end.
+
+forget_connection(Pid, State = #state{connections = Connections, conns = Conns}) ->
+    S1 = State#state{conns = maps:filter(fun(_, P) -> P =/= Pid end, Conns)},
+    case maps:take(Pid, Connections) of
+        {{Monitor, Key}, Rest} ->
+            demonitor(Monitor, [flush]),
+            S2 = S1#state{connections = Rest},
+            case Key of
+                undefined -> S2;
+                _ -> publish_connections(Key, S2)
+            end;
+        error -> S1
+    end.
+
+connection_snapshot(Key, #state{connections = Connections,
+                                connection_revision = Revision}) ->
+    Pids = lists:sort([Pid || {Pid, {_, Peer}} <- maps:to_list(Connections), Peer =:= Key]),
+    {peer_connections, self(), Revision, Key, Pids}.
+
+publish_connections(Key, State = #state{connection_revision = Revision}) ->
+    S1 = State#state{connection_revision = Revision + 1},
+    _ = quod_reg:publish({peer_connections, Key}, connection_snapshot(Key, S1)),
+    S1.
 
 directory_link_error({ReplyTo, Ref}, Peer, Channel) ->
     ReplyTo ! {link_error, Ref, Peer, Channel},

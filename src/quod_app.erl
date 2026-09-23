@@ -95,6 +95,7 @@ load_config() ->
                                           #{atom_key => true, apply_override_envs => true}),
             apply_transport_env(Cfg),
             apply_identity(Cfg),
+            apply_agent_vault(Cfg),
             apply_directory(Cfg),
             apply_foreign_log(Cfg),
             apply_effect_journal(Cfg),
@@ -113,6 +114,21 @@ drop_content_env_overrides() ->
              os:unsetenv(K)
          end || {K, _V} <- os:env(), string:prefix(K, "QUOD_CONTENT__") =/= nomatch],
     ok.
+
+apply_agent_vault(Cfg) ->
+    case maps:get(agent_vault, Cfg) of
+        #{enabled := false} -> application:unset_env(quod, agent_vault);
+        #{enabled := true, directory := Dir, unlock_file := Unlock,
+          ip := Ip, port := Port, peer_keys := PeerHex} = Vault ->
+            Provider = case maps:get(provider_enabled, Vault) of
+                false -> none;
+                true -> #{ip => parse_ip(Ip), port => Port,
+                          peer_keys => [binary:decode_hex(Hex) || Hex <- PeerHex],
+                          tls => maps:with([certfile, keyfile, client_ca_file], Vault)}
+            end,
+            application:set_env(quod, agent_vault,
+              #{directory => Dir, unlock_file => Unlock, provider => Provider})
+    end.
 
 %% Load-or-create the node's Ed25519 identity and expose it in the application env
 %% (`node_pubkey`, the DER `identity_cert`, the `identity_key`). The pubkey becomes the

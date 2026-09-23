@@ -39,6 +39,12 @@ The typed **external-predicate contract** and the per-run **execution context**
    a wrong-context call throws a distinct `{context_violation, …}` error rather
    than silently succeeding.
 
+   Queries also declare whether they use proof-bound context, committed snapshot
+   reads, or live observations. The ordinary registration form conservatively
+   records queries as live observations. Audited modules explicitly declare the
+   other two dependency contracts through `register/6`; no predicate-name list
+   at the sealing boundary grants them an exception.
+
 The context *kinds* are `proof` (a normal client proof or staged write),
 `verdict` (a committee membership re-proof — strictly local),
 `policy_verdict` (a strictly local authorization re-proof with every governed
@@ -50,7 +56,7 @@ post-commit `react_on/3` continuation).
 %% registration + dispatch
 -export([load/1, load_manifest/2,
          module_manifest/1, valid_module_names/1,
-         valid_manifest_shape/1, register/5, dispatch/3]).
+         valid_manifest_shape/1, register/5, register/6, dispatch/3]).
 -ifdef(TEST).
 -export([load_modules/2, valid_manifest/1, descriptor/2]).
 -endif.
@@ -61,7 +67,7 @@ post-commit `react_on/3` continuation).
          policy_verdict_context/2, reaction_context/2]).
 %% context accessors
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
-         with_chain/2]).
+         with_chain/2, with_executor/2, ctx_executor/1, ctx_handler/1]).
 -export([projection_context/3]).
 %% class metadata (also drives dispatch)
 -export([class/2, allowed/2]).
@@ -83,10 +89,12 @@ post-commit `react_on/3` continuation).
                chain   = [] :: [quod_proof_context:identity()],
                %% the executing state_handler in a `projection` context;
                %% `undefined` elsewhere.
-               id      = undefined :: term()}).
+               id      = undefined :: term(),
+               executor = undefined :: term()}).
 
 -type kind()  :: proof | verdict | policy_verdict | projection | reaction.
 -type class() :: query | staging | projection | reaction.
+-type dependency() :: none | proof_bound | committed_snapshot | live_observation.
 -type ctx()   :: #qctx{} | undefined.
 -export_type([kind/0, class/0, ctx/0]).
 
@@ -276,14 +284,30 @@ safe_module_basename(Name) ->
 
 -doc "Register one bridge in this Erlog engine; conflicting ownership fails loud.".
 -spec register(tuple(), {atom(), arity()}, class(), module(), atom()) -> tuple().
+register(Est, Functor, Class, Module, Function) ->
+    Dependency = case Class of query -> live_observation; _ -> none end,
+    register(Est, Functor, Class, Dependency, Module, Function).
+
+-doc """
+Register a bridge with its dependency contract. Proof-bound queries derive
+only engine-authenticated context; committed-snapshot queries capture all reads
+through the ordinary MVCC dependency machinery. Live observations cannot
+authorize a durable diff. This declaration belongs to the audited pinned module,
+not to caller-supplied Prolog data.
+""".
+-spec register(tuple(), {atom(), arity()}, class(), dependency(), module(), atom()) -> tuple().
 register(#est{db = Db0, fs = Fs0} = Est, {Name, Arity} = Functor,
-         Class, Module, Function)
+         Class, Dependency, Module, Function)
   when is_atom(Name), is_integer(Arity), Arity >= 0,
        (Class =:= query orelse Class =:= staging orelse
         Class =:= projection orelse Class =:= reaction),
+       ((Class =:= query andalso
+         (Dependency =:= proof_bound orelse Dependency =:= committed_snapshot
+          orelse Dependency =:= live_observation)) orelse
+        (Class =/= query andalso Dependency =:= none)),
        is_atom(Module), is_atom(Function) ->
     Registry0 = registry(Fs0),
-    Descriptor = {Class, Module, Function},
+    Descriptor = {Class, Dependency, Module, Function},
     case maps:get(Functor, Registry0, undefined) of
         undefined ->
             Db1 = erlog_int:add_compiled_proc(
@@ -308,7 +332,7 @@ registry(Fs) ->
 
 -doc "Return this engine's exact bridge descriptor for one functor.".
 -spec descriptor(tuple(), {atom(), arity()}) ->
-          {class(), module(), atom()} | undefined.
+          {class(), dependency(), module(), atom()} | undefined.
 descriptor(#est{fs = Fs}, Functor) ->
     maps:get(Functor, registry(Fs), undefined).
 
@@ -332,10 +356,10 @@ dispatch(Goal, Next, St) ->
             Functor = functor(Goal),
             case descriptor(St, Functor) of
                 undefined -> erlog_int:fail(St);
-                {Class, Mod, Fun} ->
+                {Class, Dependency, Mod, Fun} ->
                     case allowed(Class, ctx_kind(Ctx)) of
                         true  ->
-                            ok = record_bridge_use(Functor, Class, Ctx, St),
+                            ok = record_bridge_use(Functor, Dependency, Ctx, St),
                             Mod:Fun(Goal, Next, St);
                         false -> throw({erlog_error,
                                         {context_violation, Functor, Class, ctx_kind(Ctx)}})
@@ -343,18 +367,18 @@ dispatch(Goal, Next, St) ->
             end
     end.
 
-%% A query-class bridge reads live node state no later validation can re-prove,
+%% A live-observation query reads node state no later validation can re-prove,
 %% so a sealed plan must not silently depend on one (`m:quod_dtx`). Recorded at
 %% dispatch — a bridge that found no solution still influenced the outcome.
 %% Proof contexts can seal plans. The sealing boundary decides
 %% whether a live bridge is admissible for the exact resulting diff/effect;
 %% dispatch cannot know that yet.
-record_bridge_use(Functor, query, Ctx, St) ->
+record_bridge_use(Functor, live_observation, Ctx, St) ->
     case ctx_kind(Ctx) =:= proof of
         true -> quod_erlog_db_local_prove:record_live_bridge(St, Functor);
         false -> ok
     end;
-record_bridge_use(_Functor, _Class, _Ctx, _St) ->
+record_bridge_use(_Functor, _Dependency, _Ctx, _St) ->
     ok.
 
 functor(Goal) when is_atom(Goal)  -> {Goal, 0};
@@ -364,7 +388,7 @@ functor(Goal) when is_tuple(Goal) -> {element(1, Goal), tuple_size(Goal) - 1}.
 -spec class(tuple(), {atom(), arity()}) -> class() | undefined.
 class(Est, Functor) ->
     case descriptor(Est, Functor) of
-        {Class, _, _} -> Class;
+        {Class, _, _, _} -> Class;
         undefined -> undefined
     end.
 
@@ -454,6 +478,18 @@ with_chain(#qctx{} = Ctx, Chain) when is_list(Chain) ->
     Ctx#qctx{chain = Chain};
 with_chain(undefined, _Chain) ->
     undefined.
+
+-doc "Bind the executor selected by the existing reaction continuation.".
+-spec with_executor(ctx(), term()) -> ctx().
+with_executor(Ctx = #qctx{kind = reaction}, Executor) -> Ctx#qctx{executor = Executor}.
+
+-spec ctx_handler(ctx()) -> term().
+ctx_handler(#qctx{kind = projection, id = Id}) -> Id;
+ctx_handler(_) -> undefined.
+
+-spec ctx_executor(ctx()) -> term().
+ctx_executor(#qctx{executor = Executor}) -> Executor;
+ctx_executor(undefined) -> undefined.
 
 -spec ctx_kind(ctx()) -> kind() | undefined.
 ctx_kind(#qctx{kind = K}) -> K;

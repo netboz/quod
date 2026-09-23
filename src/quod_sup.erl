@@ -66,6 +66,9 @@ init([]) ->
          #{id => quod_client_goal_router,
            start => {quod_client_goal_router, start_link, []},
            type => worker},
+         #{id => quod_agent_vault,
+           start => {quod_agent_vault, start_link, []},
+           type => worker},
          #{id => quod_client,
            start => {quod_client, start_link, []},
            type => worker}

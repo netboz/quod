@@ -26,6 +26,7 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
          resolve_and_dial_by_pubkey/1, pinned_dial_suppresses_hint_learning/1,
          ordinary_pubkey_dial_rejects_wrong_cert/1,
          connection_is_owned_by_transport/1,
+         authenticated_peer_connections/1,
          pinned_reverse_stream_suppresses_hint_learning/1,
          identified_dial_suppresses_hint_learning/1,
          ordinary_dial_still_learns_hint/1,
@@ -53,6 +54,7 @@ all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
           resolve_and_dial_by_pubkey,
           ordinary_pubkey_dial_rejects_wrong_cert,
           connection_is_owned_by_transport,
+          authenticated_peer_connections,
           pinned_dial_suppresses_hint_learning,
           pinned_reverse_stream_suppresses_hint_learning,
           identified_dial_suppresses_hint_learning,
@@ -1004,6 +1006,69 @@ connection_is_owned_by_transport(_Config) ->
     Authority = quod_reg:where({transport, node}),
     {links, OwnerLinks} = process_info(ConnOwner, links),
     true = lists:member(Authority, OwnerLinks).
+
+%% The connection authority reports authenticated host contact, not stream
+%% readiness. A stream reset must not remove a live connection. A terminal
+%% notice for an old owner must not remove its replacement.
+authenticated_peer_connections(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Unknown = crypto:strong_rand_bytes(32),
+    Authority = quod_reg:where({transport, node}),
+    true = quod_reg:subscribe({peer_connections, Pub}),
+    try
+        {_, []} = peer_snapshot(Authority, Unknown),
+        Channel = <<"peer-connection-observation">>,
+        Ref = quod_quic:open_link_pinned(Pub, ?SELF, Channel),
+        Link = receive
+            {link_up, Ref, Pub, Channel, Pid} -> Pid
+        after 5000 -> ct:fail(no_observed_link)
+        end,
+        {links, [Conn]} = process_info(Link, links),
+        {Before, Connections} = peer_snapshot(Authority, Pub),
+        true = lists:member(Conn, Connections),
+        LinkMonitor = monitor(process, Link),
+        ok = quod_conn:reset_inbound_channel(Channel),
+        receive
+            {'DOWN', LinkMonitor, process, Link, _} -> ok
+        after 5000 -> ct:fail(stream_not_reset)
+        end,
+        {Before, Connections} = peer_snapshot(Authority, Pub),
+        exit(Conn, kill),
+        Removed = await_connection_removed(Authority, Pub, Conn, Before),
+        Ref2 = quod_quic:open_link_pinned(Pub, ?SELF, Channel),
+        Link2 = receive
+            {link_up, Ref2, Pub, Channel, Pid2} -> Pid2
+        after 5000 -> ct:fail(no_replacement_link)
+        end,
+        {links, [Replacement]} = process_info(Link2, links),
+        true = Replacement =/= Conn,
+        {After, NewConnections} = peer_snapshot(Authority, Pub),
+        true = After > Removed,
+        true = lists:member(Replacement, NewConnections),
+        Authority ! {conn_terminal, Conn, make_ref()},
+        {After, NewConnections} = peer_snapshot(Authority, Pub)
+    after
+        true = quod_reg:unsubscribe({peer_connections, Pub})
+    end.
+
+peer_snapshot(Authority, Key) ->
+    Ref = quod_quic:peer_connections(Authority, Key),
+    receive
+        {Ref, {peer_connections, Authority, Revision, Key, Connections}} ->
+            {Revision, Connections}
+    after 5000 -> ct:fail(no_peer_snapshot)
+    end.
+
+await_connection_removed(Authority, Key, Conn, Previous) ->
+    receive
+        {peer_connections, Authority, Revision, Key, Connections}
+          when Revision > Previous ->
+            case lists:member(Conn, Connections) of
+                false -> Revision;
+                true -> await_connection_removed(Authority, Key, Conn, Revision)
+            end
+    after 5000 -> ct:fail(no_connection_withdrawal)
+    end.
 
 %% A successful pinned directory link must suppress the receiver's normal
 %% header-driven Pubkey=>Addr learning. Preloading a divergent value makes the

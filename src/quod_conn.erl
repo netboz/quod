@@ -66,6 +66,7 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy, Owner) ->
                     {quic, Conn, {connected, _}} ->
                         case outbound_identity(Conn, Peer, Policy) of
                             {ok, BoundPeer, ExpectedPeer, LearnHint} ->
+                                Owner ! {conn_authenticated, self(), BoundPeer},
                                 run(#s{conn = Conn, owner = Owner,
                                        self = Self, peer = BoundPeer,
                                        expected_peer = ExpectedPeer, learn_hint = LearnHint});
@@ -372,6 +373,12 @@ authenticate_inbound(RemotePeer, LearnHint,
             %% even transiently.
             EffectivePolicy = effective_learn_policy(LearnHint, S),
             maybe_learn_remote(EffectivePolicy, RemotePeer),
+            _ = case S#s.peer of
+                undefined ->
+                    {PeerKey, _} = RemotePeer,
+                    S#s.owner ! {conn_authenticated, self(), PeerKey};
+                _ -> ok
+            end,
             {ok, (ensure_peer(RemotePeer, S))#s{
                    learn_hint = EffectivePolicy}};
         {{fail, Reason}, _} ->

@@ -34,8 +34,8 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          wait_until/1, wait_until/2,
          install_directory_generation/5]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
--export([session_prove/4]).
--export([proof_gate_row/3]).
+-export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
+-export([proof_gate_row/3, https_request/4, https_request/5]).
 
 %% Assertions inspect one decoded owner-side material object; production has
 %% no field getter which silently decodes the whole plan on every access.
@@ -1018,3 +1018,62 @@ session_prove(Committed, Metadata, Ctx, Goal) ->
     after
         quod_proof_session:stop(Session)
     end.
+
+action_overlay(Source, Modules) ->
+    action_overlay(Source, Modules, []).
+
+action_overlay(Source, Modules, Facts) ->
+    quod_erlog_db_local_prove:wrap_state(action_kb(Source, Modules, Facts), #{read_set => true}).
+
+action_kb(Source, Modules, Facts) ->
+    Base = quod_committed_projection:new_est(),
+    Loaded = quod_predicates:load_modules(Base, Modules),
+    quod_ct:commit_kb(assert_facts(Facts, load_source(Source, Loaded))).
+
+load_source(<<>>, St) -> St;
+load_source(Source, #est{db = Db0} = St) ->
+    {ok, Terms} = erlog_io:read_string_terms(
+                    unicode:characters_to_list(Source)),
+    Db1 = lists:foldl(fun erlog_int:assertz_clause/2, Db0, Terms),
+    St#est{db = Db1}.
+
+%% HTTPS request/response framing shared by client and internal provider tests.
+
+https_request(Socket, Method, Path, Body) ->
+    https_request(Socket, Method, Path, Body, []).
+
+https_request(Socket, Method, Path, Body, TraceHeaders) ->
+    Verb = case Method of get -> <<"GET">>; post -> <<"POST">> end,
+    Request = [Verb, <<" ">>, Path, <<" HTTP/1.1\r\nhost: localhost\r\n">>,
+               <<"content-type: application/json\r\n">>,
+               TraceHeaders,
+               <<"content-length: ">>, integer_to_binary(byte_size(Body)),
+               <<"\r\n\r\n">>, Body],
+    ok = ssl:send(Socket, Request),
+    read_response(Socket).
+
+read_response(Socket) ->
+    {Head, Rest} = read_until_headers(Socket, <<>>),
+    [StatusLine | HeaderLines] = binary:split(Head, <<"\r\n">>, [global]),
+    [_Version, Status | _] = binary:split(StatusLine, <<" ">>, [global]),
+    Headers = maps:from_list([header(L) || L <- HeaderLines, L =/= <<>>]),
+    Length = binary_to_integer(maps:get(<<"content-length">>, Headers, <<"0">>)),
+    {binary_to_integer(Status), Headers, read_body(Socket, Rest, Length)}.
+
+read_until_headers(Socket, Acc) ->
+    case binary:split(Acc, <<"\r\n\r\n">>) of
+        [Head, Rest] -> {Head, Rest};
+        [_] ->
+            {ok, More} = ssl:recv(Socket, 0, 5000),
+            read_until_headers(Socket, <<Acc/binary, More/binary>>)
+    end.
+
+read_body(_Socket, Acc, Length) when byte_size(Acc) >= Length ->
+    binary:part(Acc, 0, Length);
+read_body(Socket, Acc, Length) ->
+    {ok, More} = ssl:recv(Socket, 0, 5000),
+    read_body(Socket, <<Acc/binary, More/binary>>, Length).
+
+header(Line) ->
+    [Name, Value] = binary:split(Line, <<": ">>),
+    {string:lowercase(Name), Value}.

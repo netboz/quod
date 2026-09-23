@@ -105,7 +105,8 @@ observers therefore maintain current P without reconstructing best-effort effect
 -include("quod_ledger.hrl").
 
 -export([start_link/2, stats/1, effect_frontier/1,
-         enqueue_heavy/4, revision/2, await_revision/4, reconcile_now/1]).
+         enqueue_heavy/4, revision/2, await_revision/4, reconcile_now/1,
+         project_agents/5, agent_request/6, agents/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
@@ -119,6 +120,10 @@ observers therefore maintain current P without reconstructing best-effort effect
 -define(EVENT_BUDGET_MS, 1000).
 -define(EVENT_BUDGET_CAP_MS, 60000).      %% ceiling on a whole batch's runner budget
 -define(HEAVY_BUDGET_MS, 30000).
+-define(MAX_AGENT_PENDING, 16).
+-define(MAX_AGENT_REQUEST_BYTES, 65536).
+-define(MAX_AGENT_PENDING_BYTES, 1048576).
+-define(MAX_HOSTED_AGENTS, 1024).
 -define(MAX_EXEC_FAILURES, 5).            %% then crash deliberately: the supervisor path runs
 -define(DEFAULT_MAX_QUEUED_EVENTS, 1024). %% >= 4 max-size blocks of per-tx envelopes
 -define(DEFAULT_MAX_HEAVY_WORKERS, 8).    %% global concurrent resource-worker cap
@@ -207,7 +212,11 @@ observers therefore maintain current P without reconstructing best-effort effect
                                                reference()}},    %% WRef => {From,Res,Rev,TRef}
             superseded = 0 :: non_neg_integer(),
             heavy_rejected = 0 :: non_neg_integer(),
-            heavy_failures = 0 :: non_neg_integer()}).   %% heavy jobs that failed (isolated)
+            heavy_failures = 0 :: non_neg_integer(),
+            agent_handler = undefined, agent_refresh = false,
+            agent_projection_waiter = none, agent_pending_bytes = 0, agent_desired_count = 0,
+            agents = #{} :: map(),
+            agent_dirty = #{} :: map()}).   %% heavy jobs that failed (isolated)
 
 %%%===================================================================
 %%% API
@@ -216,6 +225,23 @@ observers therefore maintain current P without reconstructing best-effort effect
 -spec start_link(binary(), map()) -> {ok, pid()} | {error, term()}.
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_runtime, Ns}), ?MODULE, {Ns, Config}, []).
+
+-doc "Install hosted children from the current projection runner only.".
+-spec project_agents(binary(), non_neg_integer(), term(), all | {keys, [term()]}, [term()]) -> ok | {error, term()}.
+project_agents(Ns, Height, Handler, Scope, Hosts) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}), {project_agents, Height, Handler, Scope, Hosts}, infinity).
+
+-doc "Queue a bounded live request for the executor selected by the current reaction.".
+-spec agent_request(binary(), non_neg_integer(), term(), read | execute, term(), pos_integer()) ->
+          ok | {error, term()}.
+agent_request(Ns, Height, Executor, Mode, Goal, Timeout) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}),
+      {agent_request, Height, Executor, Mode, Goal,
+       {quod_time:now_ms() + Timeout, quod_time:mono_ms() + Timeout}}, infinity).
+
+-doc "Return current hosted process references, owned by this runtime incarnation.".
+-spec agents(binary()) -> {pid(), [map()]}.
+agents(Ns) -> gen_server:call(quod_reg:via({quod_runtime, Ns}), agents).
 
 -doc "Operational counters + mode for `m:quod_metrics` and tests.".
 -spec stats(binary()) -> map().
@@ -280,6 +306,7 @@ init({Ns, Config}) ->
     %% Subscribe BEFORE the (deferred) attach attempt: any ready edge published after the
     %% attach answer lands in our mailbox, so the boot race has no window.
     true = quod_reg:subscribe({runtime, Ns}),
+    true = quod_reg:subscribe({node_actor, node}),
     LedgerMonitor = quod_reg:monitor_name({quod_simplex, Ns}, follow),
     {ok, #s{ns = Ns, config = Config, ledger_monitor = LedgerMonitor},
      {continue, try_attach}}.
@@ -296,6 +323,54 @@ handle_continue(try_attach, S = #s{mode = booting}) ->
 handle_continue(try_attach, S) ->
     {noreply, S}.
 
+handle_call(agents, _From, S) ->
+    {reply, {self(), [maps:with([binding, pid], A) || A = #{stopping := false} <- maps:values(S#s.agents)]}, S};
+handle_call({project_agents, _H, Handler, Scope, Hosts}, From = {Caller, _},
+            S = #s{runner = {_, Caller, _, _, _}, agent_handler = Owner,
+                   founding = {ok, #{identity := Identity}, _}})
+  when Handler =/= undefined, (Owner =:= undefined orelse Owner =:= Handler) ->
+    case agent_projection(Identity, Scope, Hosts, S) of
+        {ok, Desired} ->
+            Installed = install_agents(Scope, Desired, S#s{agent_handler = Handler}),
+            Next = case S#s.agent_refresh of
+                       true -> queue_agent_reconcile(Installed#s{agent_refresh = false});
+                       false -> Installed
+                   end,
+            case agent_retirements(Scope, Next#s.agents) of
+                Waiting when map_size(Waiting) > 0 ->
+                    {noreply, Next#s{agent_projection_waiter = {From, Waiting}}};
+                _ -> {reply, ok, Next}
+            end;
+        {error, _} = Error -> {reply, Error, S}
+    end;
+handle_call({project_agents, _, Handler, _, _}, {Caller, _},
+            S = #s{runner = {_, Caller, _, _, _}, agent_handler = Owner})
+  when Owner =/= undefined, Owner =/= Handler ->
+    {reply, {error, {conflicting_agent_projection_owner, Owner, Handler}}, S};
+handle_call({project_agents, _, _, _, _}, _From, S) ->
+    {reply, {error, stale_projection}, S};
+handle_call({agent_request, H, {agent, Instance, Epoch, Key}, Mode, Goal, {Expires, Deadline}},
+            {Caller, _}, S = #s{runner = {events, Caller, _, _, _}, agents = Agents}) ->
+    case maps:get(Instance, Agents, none) of
+        #{binding := #{epoch := Epoch, public_key := Key}, pid := Pid, pending := Pending,
+          stopping := false} = Agent
+          when map_size(Pending) < ?MAX_AGENT_PENDING ->
+            Bytes = erlang:external_size({Mode, Goal, Expires}),
+            case Bytes =< ?MAX_AGENT_REQUEST_BYTES andalso
+                 S#s.agent_pending_bytes + Bytes =< ?MAX_AGENT_PENDING_BYTES of
+                true ->
+                    Ref = make_ref(),
+                    Pid ! {agent_request, self(), Ref, H, {Mode, Goal, Expires, Deadline}},
+                    {reply, ok, S#s{agents = Agents#{Instance => Agent#{pending => Pending#{Ref => Bytes}}},
+                                    agent_pending_bytes = S#s.agent_pending_bytes + Bytes,
+                                    agent_dirty = (S#s.agent_dirty)#{Instance => maps:get(Instance, S#s.agent_dirty, work)}}};
+                false -> {reply, {error, busy}, S}
+            end;
+        #{pending := Pending} when map_size(Pending) >= ?MAX_AGENT_PENDING -> {reply, {error, busy}, S};
+        _ -> {reply, {error, stale_executor}, S}
+    end;
+handle_call({agent_request, _, _, _, _, _}, _From, S) ->
+    {reply, {error, stale_executor}, S};
 handle_call(get_stats, _From, S) ->
     {reply, #{mode => mode_tag(S#s.mode), height => S#s.height,
               founding_ready => S#s.founding =/= unknown,
@@ -319,6 +394,8 @@ handle_call(get_stats, _From, S) ->
               queue_len => S#s.queue_len,
               reconciles => S#s.reconciles,
               reconcile_failures => S#s.reconcile_failures,
+              hosted_agents => map_size(S#s.agents),
+              agent_pending_bytes => S#s.agent_pending_bytes,
               collapses => S#s.collapses,
               dropped_events => S#s.dropped_events,
               rejected_dynamic => S#s.rejected_dynamic,
@@ -513,6 +590,25 @@ handle_info({applied_live, _Env}, S) -> {noreply, founding_wake(S)};
 handle_info({rejected_live, _Env}, S) -> {noreply, S};
 handle_info({projection_advanced, _Owner, _H}, S) ->
     {noreply, founding_wake(S)};
+handle_info({node_actor_installed, Owner, Principal}, S) ->
+    case {quod_reg:where({namespace_manager, node}), quod_node_actor:principal()} of
+        {Owner, Principal} ->
+            {noreply, queue_agent_reconcile(S)};
+        _ -> {noreply, S}
+    end;
+handle_info({agent_completed, Instance, Pid, Ref}, S = #s{agents = Agents}) ->
+    case maps:get(Instance, Agents, none) of
+        Agent = #{pid := Pid, pending := Pending} ->
+            case maps:take(Ref, Pending) of
+                {Bytes, Rest} ->
+                    {noreply, S#s{agents = Agents#{Instance => Agent#{pending => Rest}},
+                                  agent_pending_bytes = S#s.agent_pending_bytes - Bytes}};
+                error -> {noreply, S}
+            end;
+        _ -> {noreply, S}
+    end;
+handle_info({{agent_down, Instance}, Monitor, process, Pid, _Reason}, S) ->
+    {noreply, agent_down(Instance, Pid, Monitor, S)};
 handle_info({'DOWN', MRef, process, Pid, killed},
             S = #s{founding = unknown,
                    runner = {reconcile, Pid, MRef, _Ref, TRef}}) ->
@@ -540,7 +636,7 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, S = #s{heavy_running = Running
             S1 = S#s{heavy_running = maps:remove(Resource, Running)},
             {noreply, heavy_failed(Resource, {worker_down, Reason}, S1)};
         [] ->
-            handle_info_rest({'DOWN', MRef, process, Pid, Reason}, S)
+            {noreply, S}
     end;
 handle_info({heavy_kill, Resource, Ref}, S) ->
     case maps:get(Resource, S#s.heavy_running, undefined) of
@@ -717,7 +813,7 @@ reconcile_publish(
     _ = reconcile_direct_effects(),
     case S1#s.pending_edge of
         none -> maybe_run_events(drop_stale_queue(
-                                   pump_heavy(release_ready_waiters(S1#s{mode = live}))));
+                                   pump_heavy(release_ready_waiters(release_agents(S1#s{mode = live})))));
         Id   -> replace_snapshot_and_reconcile(Id, S1)
     end.
 
@@ -750,6 +846,8 @@ config_error({missing_founding_reaction, _}) -> true;
 config_error(invalid_runtime_catalog) -> true;
 config_error({missing_dependency, _, _})-> true;
 config_error({handler_cycle, _})        -> true;
+config_error({handler_error, _, {erlog, {agent_projection_failed,
+              {conflicting_agent_projection_owner, _, _}}}}) -> true;
 config_error({founding_read_failed, _}) -> true;
 config_error(_)                         -> false.
 
@@ -841,6 +939,7 @@ coalesce_work_items(Batch) ->
                             E0 ++ Effects} | Rest];
                       _ -> [{local, H, Est, Heads, Events, Effects} | Acc]
                   end
+             ;({reconcile, _Heads} = Item, Acc) -> [Item | Acc]
              ;({remote, _FollowRef, _NoticeRef, _Identity, _Publications} = Item,
                Acc) ->
                   [Item | Acc]
@@ -849,7 +948,8 @@ coalesce_work_items(Batch) ->
       [case Item of
            {local, H, Est, Heads, Events, Effects} ->
                {local, H, Est, lists:usort(Heads), Events, Effects};
-           {remote, _, _, _, _} -> Item
+           {remote, _, _, _, _} -> Item;
+           {reconcile, _} -> Item
        end || Item <- Folded]).
 
 is_remote_work({remote, _, _, _, _}) -> true;
@@ -859,8 +959,7 @@ work_tip(Work, Height0, Est0) ->
     lists:foldl(
       fun({local, Height, Est, _Heads, _Events, _Effects}, _Acc) ->
               {Height, Est};
-         ({remote, _, _, _, _}, Acc) ->
-              Acc
+         (_, Acc) -> Acc
       end, {Height0, Est0}, Work).
 
 work_effects(Work) ->
@@ -890,16 +989,18 @@ run_events(Ns, Work, Handlers, Order, Index, Deps,
                           refresh_runtime_catalog(
                             Heads, Est, Founding, Reactions0, Sources0,
                             Subscriptions0, Catalog0),
-                      {Run, Scopes} = event_plan(Heads, Index, Order, Deps),
-                      lists:foreach(
-                        fun(Id) ->
-                                #handler{goal = Goal} = maps:get(Id, Handlers),
-                                converge(Ns, Est, H, Id, Goal, maps:get(Id, Scopes))
-                        end, Run),
+                      converge_changed(Ns, Est, H, Heads, Handlers, Order, Index, Deps),
                       Stats1 = dispatch_local_reactions(
                                  Ns, H, Est, Self, Events, Reactions1, Stats0),
                       {H, Est, Stats1, Reactions1, Sources1,
                        Subscriptions1, Catalog1};
+                 ({reconcile, Handler}, {H, Est, _, _, _, _, _} = Acc) ->
+                      Run = transitive_closure([Handler], Deps),
+                      lists:foreach(fun(Id) ->
+                          #handler{goal = Goal} = maps:get(Id, Handlers),
+                          converge(Ns, Est, H, Id, Goal, all)
+                      end, [Id || Id <- Order, lists:member(Id, Run)]),
+                      Acc;
                  ({remote, _FollowRef, _NoticeRef, Identity, Publications},
                   {H, Est, Stats0, Reactions0, Sources0,
                    Subscriptions0, Catalog0}) ->
@@ -921,6 +1022,13 @@ run_events(Ns, Work, Handlers, Order, Index, Deps,
          ReactionStats}
     catch throw:R -> {error, R}
     end.
+
+converge_changed(Ns, Est, H, Heads, Handlers, Order, Index, Deps) ->
+    {Run, Scopes} = event_plan(Heads, Index, Order, Deps),
+    lists:foreach(fun(Id) ->
+        #handler{goal = Goal} = maps:get(Id, Handlers),
+        converge(Ns, Est, H, Id, Goal, maps:get(Id, Scopes))
+    end, Run).
 
 -ifdef(TEST).
 %% Drive the real ordered fold without a gen_server race. This is deliberately
@@ -1021,8 +1129,7 @@ catalog_changed(Work) ->
     lists:any(
       fun({local, _H, _Est, Heads, _Events, _Effects}) ->
               lists:any(fun catalog_head/1, Heads);
-         ({remote, _, _, _, _}) ->
-              false
+         (_) -> false
       end, Work).
 
 catalog_head({subscribes, _, _}) -> true;
@@ -1100,7 +1207,7 @@ events_finished(
              dropped_events =
                  S#s.dropped_events + maps:get(dropped, ReactionStats)},
     release_direct_effects(Effects),
-    S2 = release_event_acks(S1),
+    S2 = release_agents(release_event_acks(S1)),
     next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S2))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).
@@ -1460,7 +1567,8 @@ execution_failure(Reason, S0 = #s{ns = Ns}) ->
             S#s{mode = {unhealthy, Reason}, last_recovery = {collapse, Ref}}
     end.
 
-kill_runner(S0 = #s{heavy_running = Running}) ->
+kill_runner(S00) ->
+    S0 = #s{heavy_running = Running} = stop_agents(S00),
     %% collapse kills EVERY in-flight worker — tier runner AND heavy workers [DA M7]: their
     %% stale writes must not land after the clear, and the reconcile's converge goals
     %% re-enqueue heavy jobs, so revision barriers still resolve.
@@ -1509,6 +1617,162 @@ overflow_collapse(S0 = #s{ns = Ns}) ->
     S1 = kill_runner(S0),
     S = drop_queue(S1#s{collapses = S1#s.collapses + 1}),
     attach_and_reconcile({collapse, make_ref()}, S).
+
+%%% Hosted process lifecycle. D remains authoritative; these are current P handles.
+
+agent_projection({Ns, Anchor}, Scope, Hosts, S) when is_list(Hosts) ->
+    case agent_projection_scope(Scope, Hosts) of
+        true ->
+            case local_agent_projection(Ns, Anchor, Hosts) of
+                {ok, Desired} ->
+                    case agent_desired_count(Scope, Desired, S) =< ?MAX_HOSTED_AGENTS of
+                        true -> {ok, Desired};
+                        false -> {error, too_many_local_agents}
+                    end;
+                Error -> Error
+            end;
+        false -> {error, invalid_agent_projection}
+    end;
+agent_projection(_, _, _, _) -> {error, invalid_agent_projection}.
+
+agent_projection_scope(all, _) -> true;
+agent_projection_scope({keys, Instances}, Hosts) when is_list(Instances) ->
+    length(Instances) =:= length(lists:usort(Instances)) andalso
+    quod_wire_term:is_ground(Instances) andalso
+    lists:all(fun({host, I, _, _, _}) -> lists:member(I, Instances);
+                 (_) -> false end, Hosts);
+agent_projection_scope(_, _) -> false.
+
+agent_desired_count(all, Desired, _) -> map_size(Desired);
+agent_desired_count({keys, Changed}, Desired, S) ->
+    Removed = lists:sum([case maps:get(I, S#s.agents, none) of
+        none -> 0;
+        #{stopping := true, successor := none} -> 0;
+        _ -> 1
+    end || I <- Changed]),
+    S#s.agent_desired_count - Removed + map_size(Desired).
+
+local_agent_projection(Ns, Anchor, Hosts) ->
+    case quod_node_actor:principal() of
+        {ok, Principal} ->
+            {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+            agent_projection(Hosts, NodeRef, Ns, Anchor, #{}, #{});
+        _ -> {ok, #{}}
+    end.
+
+agent_projection(_Hosts, _Node, _Ns, _Anchor, Acc, _Seen)
+  when map_size(Acc) > ?MAX_HOSTED_AGENTS -> {error, too_many_local_agents};
+agent_projection([], _Node, _Ns, _Anchor, Acc, _Seen) -> {ok, Acc};
+agent_projection([{host, Instance, Node, Epoch, <<_:256>> = Key} | Rest],
+                 Local, Ns, Anchor, Acc, Seen)
+  when is_integer(Epoch), Epoch > 0 ->
+    case {quod_wire_term:is_ground({Instance, Node}), maps:is_key(Instance, Seen)} of
+        {true, false} when Node =:= Local ->
+            Binding = #{reference => {agent_instance_ref, Ns, Anchor, Instance},
+                        epoch => Epoch, public_key => Key},
+            agent_projection(Rest, Local, Ns, Anchor, Acc#{Instance => Binding}, Seen#{Instance => true});
+        {true, false} -> agent_projection(Rest, Local, Ns, Anchor, Acc, Seen#{Instance => true});
+        _ -> {error, ambiguous_agent_projection}
+    end;
+agent_projection(_, _, _, _, _, _) -> {error, invalid_agent_projection}.
+
+install_agents(Scope, Desired, S = #s{agents = Existing}) ->
+    Instances = case Scope of
+        all -> lists:usort(maps:keys(Existing) ++ maps:keys(Desired));
+        {keys, Changed} -> Changed
+    end,
+    %% Ordinary changes touch only the affected identities. Retiring children
+    %% retain the latest successor intent until their monitored worker joins.
+    {Agents, Dirty} = lists:foldl(fun(I, {Acc, D}) ->
+        Next = maps:get(I, Desired, none),
+        case {maps:get(I, Acc, none), Next} of
+            {none, none} -> {Acc, D};
+            {none, Binding} -> {Acc#{I => start_agent(I, Binding)}, D#{I => installed}};
+            {#{binding := Binding, stopping := false}, Binding} -> {Acc, D};
+            {Agent, Binding} -> {Acc#{I => stop_agent(Agent, Binding)}, D}
+        end
+    end, {Existing, S#s.agent_dirty}, Instances),
+    S#s{agents = Agents, agent_dirty = Dirty,
+        agent_desired_count = agent_desired_count(Scope, Desired, S)}.
+
+start_agent(Instance, Binding) ->
+    {ok, Pid} = quod_agent:start(self(), Binding),
+    #{binding => Binding, pid => Pid, monitor => monitor(process, Pid, [{tag, {agent_down, Instance}}]),
+      stopping => false, pending => #{}}.
+
+release_agents(S = #s{agent_dirty = Dirty, agents = Agents, e_frontier = H}) ->
+    maps:foreach(fun(I, Kind) ->
+        case maps:get(I, Agents, none) of
+            #{pid := Pid, binding := Binding, stopping := false} ->
+                Pid ! {agent_release, self(), H},
+                case Kind of
+                    installed -> quod_reg:publish({agent_hosting, S#s.ns},
+                                   {agent_installed, self(), Pid, Binding, H});
+                    work -> ok
+                end;
+            _ -> ok
+        end
+    end, Dirty),
+    S#s{agent_dirty = #{}}.
+
+stop_agent(Agent = #{pid := Pid, stopping := false}, Next) ->
+    Pid ! {agent_stop, self()},
+    Agent#{stopping => true, successor => Next};
+stop_agent(Agent, Next) -> Agent#{successor => Next}.
+
+stop_agents(S) ->
+    Agents = maps:map(fun(_, A) -> stop_agent(A, none) end, S#s.agents),
+    S#s{agents = Agents, agent_dirty = #{}, agent_projection_waiter = none, agent_desired_count = 0}.
+
+agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
+    case maps:get(Instance, Agents, none) of
+        Agent = #{pid := Pid, monitor := Monitor, pending := Pending} ->
+            S1 = S#s{agents = maps:remove(Instance, Agents),
+                      agent_pending_bytes = S#s.agent_pending_bytes - lists:sum(maps:values(Pending)),
+                      agent_dirty = maps:remove(Instance, S#s.agent_dirty)},
+            Result = case Agent of
+                #{stopping := true, successor := none} -> S1;
+                #{stopping := true, successor := Binding} ->
+                    Next = S1#s{agents = (S1#s.agents)#{Instance => start_agent(Instance, Binding)},
+                                agent_dirty = (S1#s.agent_dirty)#{Instance => installed}},
+                    case Next of
+                        #s{mode = live, runner = none} -> release_agents(Next);
+                        _ -> Next
+                    end;
+                #{stopping := false} ->
+                    queue_agent_reconcile(S1#s{agent_desired_count = S1#s.agent_desired_count - 1})
+            end,
+            finish_agent_projection(Monitor, Result);
+        _ -> S
+    end.
+
+agent_retirements(all, Agents) ->
+    maps:from_list([{M, I} || {I, #{stopping := true, monitor := M}} <- maps:to_list(Agents)]);
+agent_retirements({keys, Instances}, Agents) ->
+    maps:from_list([{M, I} || I <- Instances,
+                            #{stopping := true, monitor := M} <- [maps:get(I, Agents, none)]]).
+
+finish_agent_projection(_Monitor, S = #s{agent_projection_waiter = none}) -> S;
+finish_agent_projection(Monitor, S = #s{agent_projection_waiter = {From, Waiting}}) ->
+    case maps:remove(Monitor, Waiting) of
+        Remaining when map_size(Remaining) > 0 ->
+            S#s{agent_projection_waiter = {From, Remaining}};
+        _ ->
+            gen_server:reply(From, ok),
+            S#s{agent_projection_waiter = none}
+    end.
+
+%% Keep readiness edges even before the first projection identifies its owner.
+%% Lifecycle refreshes target the owning handler, never a domain fact schema.
+queue_agent_reconcile(S = #s{agent_handler = undefined}) ->
+    S#s{agent_refresh = true};
+queue_agent_reconcile(S = #s{agent_handler = Handler}) ->
+    Item = {reconcile, Handler},
+    case lists:member(Item, S#s.queue) of
+        true -> S;
+        false -> maybe_run_events(S#s{queue = [Item | S#s.queue],
+                                       queue_len = S#s.queue_len + 1})
+    end.
 
 %%%===================================================================
 %%% heavy-worker framework (§8 — framework only, no product worker yet)
@@ -1653,8 +1917,6 @@ clear_blocked(Resource, NewRev, Blocked) ->
         _ -> Blocked
     end.
 
-handle_info_rest(_Info, S) -> {noreply, S}.
-
 drop_queue(S = #s{queue_len = 0}) -> S;
 drop_queue(S) ->
     release_queue_acks(S#s.queue),
@@ -1666,7 +1928,8 @@ drop_stale_queue(S = #s{height = H, queue = Q}) ->
     {Kept0, Dropped0} =
         lists:partition(
           fun({local, Env, _Est}) -> maps:get(height, Env, 0) > H;
-             ({remote, _, _, _, _}) -> true
+             ({remote, _, _, _, _}) -> true;
+             ({reconcile, _}) -> true
           end, Q),
     Dropped = length(Dropped0),
     S#s{queue = Kept0, queue_len = length(Kept0),

@@ -22,7 +22,7 @@ a synchronous call to itself.
          bind_group_effects/3,
          bind_operation_effect/3, submit_plan/5,
          materialize/4, restore_many/2, release_many/2,
-         dispatch/1, remaining_ms/0, principal/0,
+         dispatch/1, remaining_ms/0, principal/0, request_expiry/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
 
 -ifdef(TEST).
@@ -39,6 +39,7 @@ a synchronous call to itself.
           anchor    :: <<_:256>>,
           principal :: quod_dtx:principal(),
           request_binding = none :: quod_client_goal:request_binding(),
+          request_expiry = none :: none | pos_integer(),
           height    :: non_neg_integer(),
           engine    :: pid(),
           ref       :: reference(),
@@ -68,6 +69,14 @@ start(<<_:128>> = ScopeId, <<_:256>> = ProofId, Origin,
        is_pid(Engine), is_integer(DeadlineMs) ->
     true = quod_dtx:valid_principal(Principal),
     true = quod_client_goal:valid_request_binding(RequestBinding),
+    %% Only the verified signed-request path may supply authenticated expiry.
+    %% Check before spawning so an inconsistent owner context fails locally.
+    true = case maps:get(request_expiry, Opts, none) of
+               none -> true;
+               Expiry -> is_integer(Expiry) andalso Expiry > 0 andalso
+                         RequestBinding =/= none andalso
+                         maps:get(signed_request, Opts, false)
+           end,
     Ref = make_ref(),
     %% The engine mailbox and this worker do not inherit the caller's context.
     %% Keep the received context only for this proof-owned process lifetime.
@@ -1182,6 +1191,15 @@ principal() ->
         undefined -> error
     end.
 
+-doc "Signed expiry verified by the scope owner; absent for unsigned scopes.".
+-spec request_expiry() -> {ok, pos_integer()} | none | error.
+request_expiry() ->
+    case get(?RUNTIME) of
+        #runtime{request_expiry = none} -> none;
+        #runtime{request_expiry = Expiry} -> {ok, Expiry};
+        undefined -> error
+    end.
+
 init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
      Est, Engine, Ref, Opts) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
@@ -1196,6 +1214,7 @@ init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
                                principal = maps:get(principal, Opts),
                                request_binding = maps:get(
                                                    request_binding, Opts),
+                               request_expiry = maps:get(request_expiry, Opts, none),
                                height = Height, engine = Engine,
                                ref = Ref,
                                deadline_ms = maps:get(deadline_ms, Opts),

@@ -9,7 +9,7 @@ and verifies the resulting durable facts. It owns no process, lifecycle path,
 ACL evaluator, signer, route, or cache.
 """.
 
--export([creation_options/4, reference/4, bind/4, principal/0,
+-export([creation_options/4, reference/4, bind/4, principal/0, signed_goal/4,
          hosting_projection/5,
          bootstrap/0, verify/2]).
 -ifdef(TEST).
@@ -75,6 +75,40 @@ principal() ->
         _ ->
             {error, unavailable}
     end.
+
+-doc """
+Construct one ordinary signed goal under this node's installed agent identity.
+The caller owns the operation id and expiry; this helper neither submits nor
+retries it. Authorization remains the target ontology's ordinary ACL. It uses
+the existing physical identity signer and never substitutes node authority for
+another agent's signature.
+""".
+-spec signed_goal(read | execute, term(), <<_:256>>, pos_integer()) ->
+          {ok, binary(), binary()} | {error, term()}.
+signed_goal(Mode, Goal, <<_:256>> = Operation, Expiry)
+  when (Mode =:= read orelse Mode =:= execute), is_integer(Expiry), Expiry > 0 ->
+    case {principal(), quod_ontology:network_identity(),
+          application:get_env(quod, node_pubkey), application:get_env(quod, identity_key)} of
+        {{ok, Principal}, {ok, Network}, {ok, PublicKey}, {ok, Signer}} ->
+            {ok, {agent_instance_ref, Ns, Anchor, Instance}} =
+                quod_agent_ref:materialize_principal(Principal),
+            case {quod_client_goal_parser:format(Instance), quod_client_goal_parser:format(Goal)} of
+                {{ok, InstanceText}, {ok, GoalText}} ->
+                    %% The canonical formatter emits version-2 binary terms.
+                    Request = #{network_identity => Network, agent_namespace => Ns,
+                      agent_genesis_anchor => Anchor, agent_instance_text => InstanceText,
+                      signing_public_key => PublicKey, operation_id => Operation,
+                      not_after_ms => Expiry, mode => Mode, parser_version => 2,
+                      goal_text => GoalText},
+                    case quod_client_goal:encode(Request) of
+                        {ok, Bytes} -> {ok, Bytes, quod_identity:sign(Bytes, Signer)};
+                        {error, _} = Error -> Error
+                    end;
+                _ -> {error, invalid_goal}
+            end;
+        _ -> {error, node_identity_unavailable}
+    end;
+signed_goal(_, _, _, _) -> {error, invalid_request}.
 
 -doc "Validate and install one complete committed hosting projection.".
 -spec hosting_projection(binary(), non_neg_integer(), term(), [term()], [term()]) ->
@@ -270,8 +304,5 @@ creation_terms(Namespace, InstanceTerm0, PublicKey) ->
     end.
 
 prolog_binary_literal(Bytes) ->
-    iolist_to_binary(
-      ["<<\"",
-       [["\\x", io_lib:format("~2.16.0B", [Byte]), "\\"]
-        || <<Byte>> <= Bytes],
-       "\">>"]).
+    {ok, Source} = quod_client_goal_parser:format(Bytes),
+    binary:part(Source, 0, byte_size(Source) - 1).

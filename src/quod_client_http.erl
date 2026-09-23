@@ -57,6 +57,18 @@ test_trace_request(Req, State, Dispatch) ->
     trace_request(Req, State, Dispatch).
 -endif.
 
+%% This private listener authenticates transport only. The signed request
+%% supplies its own principal and reaches the same governed read-only bridge.
+dispatch(Req0, {vault_read, AllowedPeers} = State) ->
+    case quod_identity:pubkey_of_cert(cowboy_req:cert(Req0)) of
+        {ok, Peer} ->
+            case lists:member(Peer, AllowedPeers) of
+                true -> post_json(Req0, State, ?MAX_SIGNED_GOAL_BODY,
+                                  fun(Body, _Req) -> vault_read(Body, Peer) end);
+                false -> {ok, json_reply(403, #{error => provider_not_authorized}, Req0), State}
+            end;
+        error -> {ok, json_reply(403, #{error => provider_not_authenticated}, Req0), State}
+    end;
 dispatch(Req0, health) ->
     {ok, text_reply(200, <<"ok\n">>, Req0), health};
 %% Cowboy considers the paths with and without a trailing slash equivalent
@@ -192,21 +204,42 @@ signed_goal_outcome(Body, Req) ->
               SessionId, RequestBytes, Signature, peer_ip(Req)))
       end).
 
-with_signed_request(
-  #{<<"session_id">> := SessionId64,
-    <<"request">> := Request64,
-    <<"signature">> := Signature64}, Fun) when is_function(Fun, 3) ->
-    case {decode_b64url(SessionId64, 32),
-          decode_b64url_bounded(
-            Request64, ?QUOD_CLIENT_GOAL_REQUEST_BYTES),
+
+with_signed_request(#{<<"session_id">> := SessionId64} = Body, Fun)
+  when is_function(Fun, 3) ->
+    case decode_b64url(SessionId64, 32) of
+        {ok, SessionId} ->
+            with_signed_request(Body, fun(Bytes, Signature) ->
+                Fun(SessionId, Bytes, Signature)
+            end);
+        error -> {400, #{error => invalid_signed_goal_request}}
+    end;
+with_signed_request(#{<<"request">> := Request64,
+                      <<"signature">> := Signature64}, Fun)
+  when is_function(Fun, 2) ->
+    case {decode_b64url_bounded(Request64, ?QUOD_CLIENT_GOAL_REQUEST_BYTES),
           decode_b64url(Signature64, 64)} of
-        {{ok, SessionId}, {ok, RequestBytes}, {ok, Signature}} ->
-            Fun(SessionId, RequestBytes, Signature);
-        _ ->
-            {400, #{error => invalid_signed_goal_request}}
+        {{ok, RequestBytes}, {ok, Signature}} -> Fun(RequestBytes, Signature);
+        _ -> {400, #{error => invalid_signed_goal_request}}
     end;
 with_signed_request(_Body, _Fun) ->
     {400, #{error => invalid_signed_goal_request}}.
+
+vault_read(Body, Peer) ->
+    with_signed_request(Body, fun(Bytes, Signature) ->
+        case quod_client_goal:decode(Bytes) of
+            {ok, #{mode := read, agent_namespace := Ns,
+                   agent_genesis_anchor := Anchor}} ->
+                %% Custody belongs to this host. A nonlocal outer target is an
+                %% availability failure, not permission to move the signing query.
+                case quod_client_goal_target:available({Ns, Anchor}) of
+                    ok -> signed_goal_result(quod_client_goal_ingress:submit(Bytes, Signature, Peer));
+                    {error, _} = Error -> signed_goal_result(Error)
+                end;
+            {ok, _} -> {400, #{error => unsupported_goal_mode}};
+            {error, _} = Error -> signed_goal_result(Error)
+        end
+    end).
 
 cursor_command(Req0, Method, Command) ->
     case cowboy_req:method(Req0) of

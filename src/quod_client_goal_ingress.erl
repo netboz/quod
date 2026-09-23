@@ -14,7 +14,7 @@ Foreign scopes carry the same verified request evidence and agent principal;
 each target applies its ordinary `can_invoke/4` policy to that principal.
 """.
 
--export([submit/5, resolve_operation/4, cursor_command/4]).
+-export([submit/2, submit/3, submit/5, resolve_operation/2, resolve_operation/4, cursor_command/4]).
 -ifdef(TEST).
 -export([test_forward_routes/3]).
 -endif.
@@ -46,6 +46,37 @@ submit(ExpectedMode, SessionId, RequestBytes, Signature, Peer)
 submit(_ExpectedMode, _SessionId, _RequestBytes, _Signature, _Peer) ->
     {error, unsupported_goal_mode}.
 
+-doc """
+Submit signed read or execute work from a local process through the shared
+routing and execution path. The signature identifies the agent; the local node
+key is only the admission peer. This entry creates no browser session or cursor.
+""".
+-spec submit(binary(), binary()) -> result().
+submit(RequestBytes, Signature) ->
+    case application:get_env(quod, node_pubkey) of
+        {ok, <<_:256>> = Peer} -> submit(RequestBytes, Signature, Peer);
+        _ -> {error, node_identity_unavailable}
+    end.
+
+-doc "Submit from an authenticated provider peer, preserving shared per-peer admission accounting.".
+-spec submit(binary(), binary(), <<_:256>>) -> result().
+submit(RequestBytes, Signature, <<_:256>> = Peer) ->
+    case quod_client_goal_target:verify_request(RequestBytes, Signature) of
+        {ok, #{request := #{mode := Mode, signing_public_key := Key},
+               agent_ref_blob := AgentRef} = Evidence}
+          when Mode =:= read; Mode =:= execute ->
+            case quod_client_auth:admit_forwarded_goal(Key, Peer) of
+                ok ->
+                    execute_gateway(Evidence, RequestBytes, Signature,
+                                    {agent, AgentRef}, Key, Peer,
+                                    {process, self(), Key});
+                {error, _} = Error -> Error
+            end;
+        {ok, _} -> {error, unsupported_goal_mode};
+        {error, _} = Error -> Error
+    end;
+submit(_RequestBytes, _Signature, _Peer) -> {error, invalid_peer}.
+
 -doc "Resolve the existing operation named by one exact signed request.".
 -spec resolve_operation(binary(), binary(), binary(), term()) -> result().
 resolve_operation(SessionId, RequestBytes, Signature, Peer) ->
@@ -55,6 +86,26 @@ resolve_operation(SessionId, RequestBytes, Signature, Peer) ->
               PublicKey, RequestBytes, Signature);
         {error, _} = Error ->
             Error
+    end.
+
+-doc """
+Resolve an exact signed request against locally held outcomes, including after
+its write expiry. This does not forward to another node: a node without the
+claim returns pending. Resolution shares signing-key and peer admission budgets;
+rate-limit and availability errors remain errors, not operation_pending.
+""".
+-spec resolve_operation(binary(), binary()) -> result().
+resolve_operation(RequestBytes, Signature) ->
+    Deadline = quod_time:mono_ms() + ?OPERATION_RESOLVE_BUDGET_MS,
+    case {application:get_env(quod, node_pubkey),
+          quod_client_goal:verify(RequestBytes, Signature)} of
+        {{ok, <<_:256>> = Peer}, {ok, #{request := #{signing_public_key := Key}} = Evidence}} ->
+            case quod_client_auth:admit_forwarded_goal(Key, Peer) of
+                ok -> resolve_operation_evidence(Evidence, Deadline);
+                {error, _} = Error -> Error
+            end;
+        {_, {error, _} = Error} -> Error;
+        _ -> {error, node_identity_unavailable}
     end.
 
 -doc "Run one authenticated operation on an already-open signed cursor.".
@@ -110,24 +161,23 @@ request_session_binding(_Request, _ExpectedMode, _PublicKey, _SessionExpires) ->
 resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
     Deadline = quod_time:mono_ms() + ?OPERATION_RESOLVE_BUDGET_MS,
     case quod_client_goal:verify(RequestBytes, Signature) of
-        {ok, #{request := #{signing_public_key := PublicKey,
-                            network_identity := RequestNetwork},
-               request_digest := Digest,
-               operation_ref := OperationRef} = Evidence} ->
-            case network_identity() of
-                {ok, RequestNetwork} ->
-                    resolved_operation(
-                      Evidence, Digest, OperationRef,
-                      quod_prolog:outcome(OperationRef), Deadline);
-                {ok, _OtherNetwork} ->
-                    {error, wrong_network};
-                {error, _} = Error ->
-                    Error
-            end;
+        {ok, #{request := #{signing_public_key := PublicKey}} = Evidence} ->
+            resolve_operation_evidence(Evidence, Deadline);
         {ok, _OtherPrincipal} ->
             {error, session_principal_mismatch};
         {error, _} = Error ->
             Error
+    end.
+
+resolve_operation_evidence(#{request := #{network_identity := RequestNetwork},
+                             request_digest := Digest,
+                             operation_ref := OperationRef} = Evidence, Deadline) ->
+    case network_identity() of
+        {ok, RequestNetwork} ->
+            resolved_operation(Evidence, Digest, OperationRef,
+                               quod_prolog:outcome(OperationRef), Deadline);
+        {ok, _OtherNetwork} -> {error, wrong_network};
+        {error, _} = Error -> Error
     end.
 
 resolved_operation(

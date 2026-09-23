@@ -10,7 +10,8 @@
 signed_local_read_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
-         [?_test(local_read_uses_agent_acl_and_returns_named_bindings(Ctx)),
+         [?_test(local_process_uses_signed_ingress_without_a_session(Ctx)),
+          ?_test(local_read_uses_agent_acl_and_returns_named_bindings(Ctx)),
           ?_test(forged_request_never_materializes_its_functor(Ctx)),
           ?_test(read_mode_cannot_write_or_open_a_foreign_scope(Ctx)),
           ?_test(same_ontology_scope_keeps_the_agent_principal(Ctx)),
@@ -22,8 +23,31 @@ signed_local_read_test_() ->
           ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
           ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
           ?_test(operation_absence_remains_unresolved(Ctx)),
+          ?_test(local_operation_resolution_preserves_evidence_and_expiry(Ctx)),
           ?_test(operation_resolution_follows_the_existing_claim(Ctx))]
      end}.
+
+local_process_uses_signed_ingress_without_a_session(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Previous = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, <<16#73:256>>),
+    try
+        {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
+        ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}},
+                     quod_client_goal_ingress:submit(Bytes, Signature)),
+        ?assertEqual({error, invalid_signature},
+                     quod_client_goal_ingress:submit(Bytes, <<0:512>>)),
+        {Write, WriteSig} = signed_read(Ns, ?ANCHOR, KeyPair, Session,
+                                        <<"assertz(local_process_must_not_write).">>),
+        ?assertMatch({ok, _, {normalized, {error, read_only}}},
+                     quod_client_goal_ingress:submit(Write, WriteSig)),
+        {WrongAnchor, AnchorSig} = signed_read(Ns, <<0:256>>, KeyPair, Session, <<"true.">>),
+        ?assertEqual({error, wrong_target},
+                     quod_client_goal_ingress:submit(WrongAnchor, AnchorSig)),
+        application:unset_env(quod, node_pubkey),
+        ?assertEqual({error, node_identity_unavailable},
+                     quod_client_goal_ingress:submit(Bytes, Signature))
+    after restore_env(node_pubkey, Previous) end.
 
 local_read_uses_agent_acl_and_returns_named_bindings(
   #{namespace := Ns, key_pair := KeyPair,
@@ -275,6 +299,28 @@ operation_absence_remains_unresolved(
        quod_client_goal_ingress:resolve_operation(
          maps:get(session_id, Session), Bytes, Signature, ?PEER)).
 
+local_operation_resolution_preserves_evidence_and_expiry(
+  #{namespace := Ns, key_pair := KeyPair}) ->
+    Previous = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, <<16#73:256>>),
+    try
+        Fixture = quod_ct:signed_goal_fixture(
+          #{network => ?NETWORK, target => {Ns, ?ANCHOR}, key_pair => KeyPair,
+            deadline => quod_time:now_ms() - 1, goal_text => <<"true.">>}),
+        Bytes = maps:get(request_bytes, Fixture),
+        Signature = maps:get(signature, Fixture),
+        ?assertEqual({error, expired}, quod_client_goal_ingress:submit(Bytes, Signature)),
+        ?assertMatch({ok, _, {operation_pending, {operation, Ns, ?ANCHOR, _, _}}},
+                     quod_client_goal_ingress:resolve_operation(Bytes, Signature)),
+        ?assertEqual({error, invalid_signature},
+                     quod_client_goal_ingress:resolve_operation(Bytes, <<0:512>>)),
+        Wrong = quod_ct:signed_goal_fixture(
+          #{network => <<0:256>>, target => {Ns, ?ANCHOR}, key_pair => KeyPair}),
+        ?assertEqual({error, wrong_network},
+          quod_client_goal_ingress:resolve_operation(
+            maps:get(request_bytes, Wrong), maps:get(signature, Wrong)))
+    after restore_env(node_pubkey, Previous) end.
+
 operation_resolution_follows_the_existing_claim(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
     Deadline = min(maps:get(expires_ms, Session),
@@ -295,6 +341,14 @@ operation_resolution_follows_the_existing_claim(
        quod_client_goal_ingress:resolve_operation(
          maps:get(session_id, Session), maps:get(request_bytes, Fixture),
          maps:get(signature, Fixture), ?PEER)),
+    Previous = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, <<16#73:256>>),
+    try
+        ?assertMatch({ok, _, {operation_outcome, #{status := claimed},
+                             #{status := committed, height := 2}}},
+          quod_client_goal_ingress:resolve_operation(
+            maps:get(request_bytes, Fixture), maps:get(signature, Fixture)))
+    after restore_env(node_pubkey, Previous) end,
     Other = quod_ct:signed_goal_fixture(
               #{network => ?NETWORK, target => {Ns, ?ANCHOR},
                 key_pair => KeyPair,

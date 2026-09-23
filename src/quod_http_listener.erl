@@ -22,7 +22,10 @@ means.
                   port := inet:port_number(),
                   routes := cowboy_router:routes(),
                   stream_handlers => [module()],
-                  tls => quod_client_tls:material()}.
+                  tls => quod_client_tls:material() |
+                         #{certfile := file:filename_all(),
+                           keyfile := file:filename_all(),
+                           client_ca_file => file:filename_all()}}.
 -export_type([opts/0]).
 
 -doc """
@@ -43,7 +46,7 @@ start(#{name := Name, ip := Ip, port := Port, routes := Routes} = Opts) ->
     Protocol = protocol_opts(Routes, Opts),
     Result = case maps:find(tls, Opts) of
                  {ok, Tls} ->
-                     cowboy:start_tls(Name, Transport ++ tls_opts(Tls), Protocol);
+                     cowboy:start_tls(Name, Transport ++ tls_opts(Tls) ++ client_auth_opts(Tls), Protocol);
                  error ->
                      cowboy:start_clear(Name, Transport, Protocol)
              end,
@@ -74,3 +77,7 @@ tls_opts(#{certfile := CertFile, keyfile := KeyFile}) ->
 tls_opts(#{cert := Cert, key := Key}) ->
     Type = element(1, Key),
     [{cert, Cert}, {key, {Type, public_key:der_encode(Type, Key)}}].
+
+client_auth_opts(#{client_ca_file := File}) ->
+    [{cacertfile, File}, {verify, verify_peer}, {fail_if_no_peer_cert, true}];
+client_auth_opts(_) -> [].

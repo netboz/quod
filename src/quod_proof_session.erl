@@ -22,7 +22,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          open/6, next/2, cancel/2,
          publish/1, refresh/1, context/1,
          access_guard/1, check_access/1, check_mutable/1,
-         committed_state/1, local_changes/1, effects/1,
+         committed_state/1, read_only_state/1, local_changes/1, effects/1,
          prepared_effect/2, sealed_plan/1, effect_reservation/1,
          signer_from_state/1,
          read_set/1, absorb_read_set/2,
@@ -43,6 +43,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
 
 -record(session_state, {
           scope_id    :: <<_:128>>,
+          read_only = false :: boolean(),
           current     :: tuple(),
           signer = none :: quod_identity:signer() | none,
           invocations = #{} :: #{term() => invocation_state()},
@@ -109,6 +110,7 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
         end,
     Signer = maps:get(signer, OverlayOpts, none),
     put_session(Handle, #session_state{scope_id = ScopeId,
+                                       read_only = maps:get(read_only, OverlayOpts, false),
                                        current = Wrapped,
                                        signer = Signer,
                                        transcript_bytes = TranscriptBytes}),
@@ -328,6 +330,15 @@ context(#est{} = St) ->
     case quod_erlog_db_local_prove:proof_context(St) of
         {ok, {session_ref, #session_ref{}, Metadata}} -> Metadata;
         _ -> erlang:error(badarg)
+    end.
+
+-doc "Whether this state belongs to a session founded read-only, independent of temporary frames.".
+-spec read_only_state(tuple()) -> boolean().
+read_only_state(St) ->
+    case quod_erlog_db_local_prove:proof_context(St) of
+        {ok, {session_ref, #session_ref{} = Handle, _}} ->
+            (get_session(Handle))#session_state.read_only;
+        _ -> false
     end.
 
 -doc "The immutable namespace access token shared by this session and its sub-proofs.".

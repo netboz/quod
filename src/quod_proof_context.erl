@@ -12,7 +12,7 @@ the scope wire as Erlang references.
 -include("quod_proof_limits.hrl").
 
 -export([start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
-         request_evidence/0, request_auth/0, request_binding/0,
+         request_evidence/0, request_auth/0, request_binding/0, request_expiry/0,
          ensure_scope_authentication/0,
          durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0, vote_deadline_ms/0,
@@ -150,6 +150,14 @@ principal() -> (context())#ctx.principal.
 
 -spec request_evidence() -> none | quod_client_goal:evidence().
 request_evidence() -> (context())#ctx.request_evidence.
+
+-doc "Read the admitted request's signed expiry without sampling a clock.".
+-spec request_expiry() -> {ok, pos_integer()} | none.
+request_expiry() ->
+    case get(?KEY) of
+        #ctx{request_evidence = #{request := #{not_after_ms := Expiry}}} -> {ok, Expiry};
+        _ -> none
+    end.
 
 -spec request_auth() -> none | quod_client_goal:request_auth().
 request_auth() ->

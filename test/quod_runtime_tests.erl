@@ -99,18 +99,30 @@ explicit_event_unification_continues_the_bound_handler_test() ->
                    {assert, {alarm, disk, critical}}, Est))
       end).
 
+reaction_handler_uses_normal_prolog_control_test() ->
+    with_reaction_est(fun(Est) ->
+        Self = <<12:256>>,
+        Run = fun(Handler) -> quod_runtime_predicates:run_reaction(
+          <<"reaction:control">>, 1, Self,
+          {react_on, {node, Self}, {value, {'X'}}, Handler}, {value, bound}, Est) end,
+        ?assertEqual(executed, Run(true)),
+        ?assertEqual(executed, Run({',', {'=', {'X'}, bound}, true})),
+        ?assertEqual(executed, Run({';', fail, {'=', {'X'}, bound}})),
+        ?assertEqual({failed, handler_failed}, Run({';', {',', '!', fail}, true}))
+    end).
+
 reaction_executor_must_resolve_uniquely_to_this_node_test() ->
     Self = <<2:256>>,
     Other = <<3:256>>,
     Terms =
-        [{executor_owner_node, {agent, alice}, Self},
-         {executor_owner_node, {agent, disputed}, Self},
-         {executor_owner_node, {agent, disputed}, Other}],
+        [{executor_owner_node, {worker, alice}, Self},
+         {executor_owner_node, {worker, disputed}, Self},
+         {executor_owner_node, {worker, disputed}, Other}],
     with_reaction_est(
       Terms,
       fun(Est) ->
               R = fun(Agent) ->
-                          {react_on, {agent, Agent},
+                          {react_on, {worker, Agent},
                            {assert, {wake, Agent}},
                            {member, Agent, [alice]}}
                   end,
@@ -130,6 +142,36 @@ reaction_executor_must_resolve_uniquely_to_this_node_test() ->
                    <<"reaction:test">>, 8, Self, R(disputed),
                    {assert, {wake, disputed}}, Est))
       end).
+
+agent_reaction_requires_exact_local_incarnation_test() ->
+    Node = {agent_instance_ref, <<"node">>, <<31:256>>, physical_node},
+    Remote = setelement(2, Node, <<"remote-node">>),
+    {ok, Blob} = quod_wire_term:encode_canonical(Node),
+    Saved = application:get_env(quod, node_actor_principal),
+    application:set_env(quod, node_actor_principal, {agent, Blob}),
+    Terms = [{executor_owner_node, {agent, local}, {host, Node, 2, <<32:256>>}},
+             {executor_owner_node, {agent, remote}, {host, Remote, 2, <<32:256>>}},
+             {executor_owner_node, {agent, raw}, <<33:256>>},
+             {executor_owner_node, {agent, ambiguous}, {host, Node, 1, <<32:256>>}},
+             {executor_owner_node, {agent, ambiguous}, {host, Node, 2, <<34:256>>}}],
+    try with_reaction_est(Terms, fun(Est) ->
+        Run = fun(I) -> quod_runtime_predicates:run_reaction(
+                  <<"reaction:agent">>, 1, <<33:256>>,
+                  {react_on, {agent, I}, wake, true}, wake, Est) end,
+        ?assertEqual(executed, Run(local)),
+        ?assertEqual({inert, remote_executor}, Run(remote)),
+        ?assertEqual({inert, malformed_executor_owners}, Run(raw)),
+        ?assertEqual({inert, ambiguous_executor}, Run(ambiguous)),
+        ?assertEqual({inert, unresolved_executor}, Run(missing)),
+        application:unset_env(quod, node_actor_principal),
+        ?assertEqual({inert, unresolved_executor}, Run(local))
+    end)
+    after
+        case Saved of
+            undefined -> application:unset_env(quod, node_actor_principal);
+            {ok, Value} -> application:set_env(quod, node_actor_principal, Value)
+        end
+    end.
 
 reaction_handler_cannot_stage_d_test() ->
     with_reaction_est(

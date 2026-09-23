@@ -26,6 +26,7 @@ roots() ->
     , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
     , {explorer, hoconsc:mk(hoconsc:ref(?MODULE, explorer), #{default => #{}})}
     , {client,   hoconsc:mk(hoconsc:ref(?MODULE, client),   #{default => #{}})}
+    , {agent_vault, hoconsc:mk(hoconsc:ref(?MODULE, agent_vault), #{default => #{}})}
     , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
     %% Kept as an empty schema solely so retired directory authority fields
     %% fail configuration validation instead of being silently ignored.
@@ -80,6 +81,18 @@ fields(client) ->
     , {port,     hoconsc:mk(integer(), #{default => 14570})}
     , {certfile, hoconsc:mk(binary(),  #{default => <<>>})}
     , {keyfile,  hoconsc:mk(binary(),  #{default => <<>>})}
+    ];
+fields(agent_vault) ->
+    [ {enabled, hoconsc:mk(boolean(), #{default => false})}
+    , {provider_enabled, hoconsc:mk(boolean(), #{default => false})}
+    , {directory, hoconsc:mk(binary(), #{default => <<>>})}
+    , {unlock_file, hoconsc:mk(binary(), #{default => <<>>})}
+    , {ip, hoconsc:mk(binary(), #{default => <<"127.0.0.1">>})}
+    , {port, hoconsc:mk(integer(), #{default => 14571})}
+    , {certfile, hoconsc:mk(binary(), #{default => <<>>})}
+    , {keyfile, hoconsc:mk(binary(), #{default => <<>>})}
+    , {client_ca_file, hoconsc:mk(binary(), #{default => <<>>})}
+    , {peer_keys, hoconsc:mk(hoconsc:array(binary()), #{default => []})}
     ];
 fields(identity) ->
     %% The node's Ed25519 keypair (its `node_id` is the pubkey) is generated on first

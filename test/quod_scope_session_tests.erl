@@ -4,6 +4,45 @@
 -include("quod_proof_limits.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
 
+scope_worker_retains_authenticated_request_expiry_test() ->
+    Ns = <<"quod:expiry-scope">>,
+    ProofId = key(90),
+    #{principal := Principal, evidence := Evidence} = quod_ct:signed_goal_fixture(#{}),
+    Expiry = maps:get(not_after_ms, maps:get(request, Evidence)),
+    Est = quod_ct:action_kb(<<>>, [quod_agent_predicates],
+                           [{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]),
+    {Handle, MRef} = quod_scope_session:start(
+        id(91), ProofId, self(), Ns, key(92), 1, Est, self(),
+        #{principal => Principal, request_binding => quod_client_goal:request_binding(Evidence),
+          signed_request => true, request_expiry => Expiry, deadline_ms => quod_time:mono_ms() + 5000}),
+    {quod_scope_session, Worker, _, ProofId, SessionRef, _, _} = Handle,
+    try
+        Invocation = id(94),
+        {ok, Open} = quod_scope_session:invoke_open(
+            Handle, Invocation, {current_request_expiry, Expiry},
+            [{<<"quod:origin">>, key(95)}], quod_transaction_scope:empty_selection()),
+        ?assertEqual({opened, Invocation}, receive_scope_reply(Worker, ProofId, SessionRef, Open)),
+        {ok, Next} = quod_scope_session:invoke_next(Handle, Invocation, 1),
+        ?assertMatch({solution, 1, _, _, false},
+                     receive_scope_reply(Worker, ProofId, SessionRef, Next))
+    after
+        ok = quod_scope_session:close(Handle),
+        receive {'DOWN', MRef, process, Worker, _} -> ok
+        after 1000 -> error(expiry_scope_not_stopped)
+        end
+    end.
+
+unsigned_scope_cannot_supply_authenticated_expiry_test() ->
+    Est = quod_ct:action_kb(<<>>, [quod_agent_predicates], []),
+    lists:foreach(fun(Options) ->
+        ?assertError({badmatch, false}, quod_scope_session:start(
+          id(91), key(90), self(), <<"quod:expiry-scope">>, key(92), 1, Est, self(),
+          Options#{principal => {node, key(93)}, request_expiry => 123456,
+                   deadline_ms => quod_time:mono_ms() + 5000}))
+    end, [#{request_binding => none},
+          #{request_binding => none, signed_request => true},
+          #{request_binding => {agent_goal_v1, key(94)}, signed_request => false}]).
+
 invocation_worker_retains_received_trace_context_test() ->
     quod_trace_tests:with_tracer(fun() ->
         Parent = <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>,

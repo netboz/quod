@@ -24,7 +24,50 @@ instead of silently changing how signed text is interpreted.
 -include("quod_client_goal_limits.hrl").
 -include("quod_vm_limits.hrl").
 
--export([parse/2, supported_version/1]).
+-export([parse/2, supported_version/1, format/1]).
+
+-doc "Render exact version-2 source, refusing terms the frozen grammar cannot represent.".
+-spec format(term()) -> {ok, binary()} | {error, invalid_term}.
+format(Term) ->
+    case quod_wire_term:encode_canonical(Term) of
+        {ok, Original} ->
+            try iolist_to_binary([source_term(Term), $.]) of
+                Text ->
+                    case parse(Text, 2) of
+                        {ok, #{goal := Parsed}} ->
+                            case quod_wire_term:encode_canonical(Parsed) of
+                                {ok, Original} -> {ok, Text};
+                                _ -> {error, invalid_term}
+                            end;
+                        _ -> {error, invalid_term}
+                    end
+            catch error:_ -> {error, invalid_term}
+            end;
+        _ -> {error, invalid_term}
+    end.
+
+source_term({'$quod_symbol', Name}) -> source_symbol(Name);
+source_term(Atom) when is_atom(Atom) -> source_symbol(atom_to_binary(Atom, utf8));
+source_term(Bytes) when is_binary(Bytes) -> ["<<\"", source_bytes(Bytes), "\">>"];
+source_term(N) when is_integer(N) -> integer_to_binary(N);
+source_term(N) when is_float(N) -> float_to_binary(N, [short]);
+source_term({N}) when is_integer(N), N >= 0 -> [$V, integer_to_binary(N)];
+source_term([]) -> "[]";
+source_term([H | T]) -> [$[, source_term(H), source_tail(T), $]];
+source_term(Term) when is_tuple(Term), tuple_size(Term) > 1 ->
+    [Functor | Args] = tuple_to_list(Term),
+    [source_term(Functor), $(, lists:join($,, [source_term(A) || A <- Args]), $)].
+
+source_tail([]) -> [];
+source_tail([H | T]) -> [$,, source_term(H), source_tail(T)];
+source_tail(T) -> [$|, source_term(T)].
+
+source_symbol(Name) ->
+    [$', [["\\x", integer_to_list(C, 16), $\\]
+          || C <- unicode:characters_to_list(Name)], $'].
+
+source_bytes(Bytes) ->
+    [["\\x", integer_to_list(B, 16), $\\] || <<B>> <= Bytes].
 
 %% Guard BIFs cannot call local helpers, so keep the ASCII identifier contract
 %% in one macro used by the lexer guard.

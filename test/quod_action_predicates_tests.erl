@@ -123,33 +123,7 @@ failed_candidates_retain_explicit_failure_reasons_test() ->
     ?assert(lists:member(denied_first, Final#est.fail_reasons)),
     ?assert(lists:member(denied_second, Final#est.fail_reasons)).
 
-overlay(Source) ->
-    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
-    C0 = element(3, Erl),
-    C1 = quod_predicates:load(C0),
-    C2 = quod_ask:load(C1),
-    C3 = quod_transaction_predicates:load(C2),
-    C4 = quod_action_predicates:load(C3),
-    C5 = load_source(common_source(), C4),
-    C6 = load_source(Source, C5),
-    {succeed, C7} = erlog_int:prove_goal(
-                      {set_prolog_flag, unknown, fail}, C6),
-    Committed = quod_ct:commit_kb(C7),
-    quod_erlog_db_local_prove:wrap_state(
-      Committed, #{read_set => true}).
-
-common_source() ->
-    File = filename:join(code:priv_dir(quod),
-                         "ontologies/common_predicates.pl"),
-    {ok, Binary} = file:read_file(File),
-    Binary.
-
-load_source(<<>>, St) -> St;
-load_source(Source, #est{db = Db0} = St) ->
-    {ok, Terms} = erlog_io:read_string_terms(
-                    unicode:characters_to_list(Source)),
-    Db1 = lists:foldl(fun erlog_int:assertz_clause/2, Db0, Terms),
-    St#est{db = Db1}.
+overlay(Source) -> quod_ct:action_overlay(Source, []).
 
 changes(#est{db = #db{ref = Overlay}}) ->
     quod_erlog_db_local_prove:get_local_changes(Overlay).

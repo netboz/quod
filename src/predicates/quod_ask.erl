@@ -27,7 +27,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -export([load/1, ask_2/3, follow_unique_2/3,
          authorize_scope/6, open_authorized_scope/8, authenticate_agent/5,
          validate_authorization_transcript/6, validate_agent_key/5,
-         close_stream/1]).
+         close_stream/1, authorization_result/2]).
 -ifdef(TEST).
 -export([checked_completion/1]).
 -export([test_serve_nested/1, test_await_scope_reply/2,
@@ -1747,6 +1747,8 @@ prove_bool(Goal, W) ->
         invalid -> false
     end.
 
+-doc "Evaluate a policy with the shared denial/error contract, preserving infrastructure fences.".
+-spec authorization_result(term(), tuple()) -> allowed | denied | invalid.
 authorization_result(Goal, W) ->
     try erlog_int:prove_goal(Goal, W) of
         {succeed, _} -> allowed;

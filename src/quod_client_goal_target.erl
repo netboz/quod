@@ -14,6 +14,7 @@ does not classify predicates or authorize goals.
 
 -type owner() ::
         {session, <<_:256>>, <<_:256>>} |
+        {process, pid(), <<_:256>>} |
         {forwarder, <<_:256>>, pid(), <<_:256>>}.
 -type prepared() ::
         {quod_client_goal:evidence(), term(), {agent, binary()}, owner()}.

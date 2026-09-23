@@ -19,7 +19,8 @@ cursor continuation lives only in `quod_client_cursor`.
          test_cursor_target_result/1, test_submit_target_result/2]).
 -endif.
 
--type owner() :: {session, <<_:256>>, <<_:256>>}.
+-type owner() :: {session, <<_:256>>, <<_:256>>} |
+                 {process, pid(), <<_:256>>}.
 -type route() :: #{node_key := <<_:256>>, endpoint := term()}.
 -type request_result() ::
         {ok, quod_client_goal:evidence(),
@@ -294,6 +295,7 @@ valid_route(#{node_key := <<_:256>>, endpoint := Endpoint}) ->
 valid_route(_) -> false.
 
 valid_owner({session, <<_:256>>, <<_:256>>}) -> true;
+valid_owner({process, Pid, <<_:256>>}) -> is_pid(Pid);
 valid_owner(_) -> false.
 
 valid_deadline(Value) -> is_integer(Value) andalso Value >= 0.

@@ -104,7 +104,7 @@ reaction_dispatch_6(
     Continue =
         [{findall, Owner, {executor_owner_node, Executor, Owner}, Owners},
          {'$quod_reaction_owner', Ref, Self, Executor, Owners},
-         Handler,
+         {call, Handler},
          {'$quod_reaction_complete', Ref} | Next],
     erlog_int:unify_prove_body(Pattern, Event, Continue,
                                St#est{vn = Vn + 2}).
@@ -120,9 +120,10 @@ reaction_owner_4(
             Executor = erlog_int:dderef(Executor0, Bs),
             Owners = erlog_int:dderef(Owners0, Bs),
             case executor_owner(Executor, Self, Owners) of
-                selected ->
+                {selected, BoundExecutor} ->
                     put(Key, selected),
-                    erlog_int:prove_body(Next, St);
+                    Ctx = quod_predicates:with_executor(quod_predicates:context(St), BoundExecutor),
+                    erlog_int:prove_body(Next, quod_predicates:set_context(St, Ctx));
                 {inert, _Reason} = Inert ->
                     put(Key, Inert),
                     erlog_int:fail(St)
@@ -131,9 +132,22 @@ reaction_owner_4(
             erlog_int:fail(St)
     end.
 
-executor_owner({node, <<_:256>> = Self}, Self, _Owners) -> selected;
+executor_owner({node, <<_:256>> = Self}, Self, _Owners) -> {selected, {node, Self}};
 executor_owner({node, <<_:256>>}, _Self, _Owners) -> {inert, remote_node};
-executor_owner(_Executor, Self, Owners) when is_list(Owners) ->
+executor_owner({agent, Instance}, _Self, [{host, NodeRef, Epoch, <<_:256>> = Key}])
+  when is_integer(Epoch), Epoch > 0 ->
+    case quod_node_actor:principal() of
+        {ok, Principal} ->
+            case quod_agent_ref:materialize_principal(Principal) of
+                {ok, NodeRef} -> {selected, {agent, Instance, Epoch, Key}};
+                _ -> {inert, remote_executor}
+            end;
+        _ -> {inert, unresolved_executor}
+    end;
+executor_owner({agent, _}, _Self, []) -> {inert, unresolved_executor};
+executor_owner({agent, _}, _Self, [_]) -> {inert, malformed_executor_owners};
+executor_owner({agent, _}, _Self, _) -> {inert, ambiguous_executor};
+executor_owner(Executor, Self, Owners) when is_list(Owners) ->
     case lists:all(
            fun(Owner) -> is_binary(Owner) andalso byte_size(Owner) =:= 32 end,
            Owners) of
@@ -141,7 +155,7 @@ executor_owner(_Executor, Self, Owners) when is_list(Owners) ->
             {inert, malformed_executor_owners};
         true ->
             case lists:usort(Owners) of
-                [Self] -> selected;
+                [Self] -> {selected, Executor};
                 [] -> {inert, unresolved_executor};
                 [_One] -> {inert, remote_executor};
                 _ -> {inert, ambiguous_executor}

@@ -49,6 +49,24 @@ result_is_correlated_and_fully_cleaned_test() ->
           await_stats(Router, #{correlations => 0, routes => 0})
       end).
 
+local_process_uses_the_existing_wire_and_correlation_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        Parent = self(),
+        Caller = spawn(fun() ->
+            Parent ! {self(), quod_client_goal_router:test_submit(
+              Router, route(), {process, self(), <<16#43:256>>},
+              maps:get(evidence, Fixture), maps:get(request_bytes, Fixture),
+              maps:get(signature, Fixture), none, [], quod_time:now_ms() + 5000, 1000)}
+        end),
+        {Request, _} = sent_request(Link),
+        RequestId = quod_client_goal_endpoint:request_id(Request),
+        {ok, Blob} = quod_client_result:encode({answers, 7, []}),
+        respond(Router, Link, {result, RequestId, Blob}),
+        receive {Caller, {ok, _, {normalized, {answers, 7, []}}}} -> ok
+        after 1000 -> error(local_process_result_missing) end,
+        await_stats(Router, #{correlations => 0, routes => 0})
+    end).
+
 wrong_peer_never_satisfies_an_exact_correlation_test() ->
     with_router(
       fun(Router, Link, Fixture) ->

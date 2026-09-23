@@ -225,6 +225,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -record(remote_scope, {
           binding      :: quod_scope_wire:binding(),
           request_binding = none :: quod_client_goal:request_binding(),
+          request_expiry = none :: none | pos_integer(),
           request_auth = none :: none | quod_client_goal:request_auth(),
           trace_ctx = undefined :: undefined | quod_trace:context(),
           peer_key     :: <<_:256>>,
@@ -1889,6 +1890,7 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                                      #{read_only => ReadOnly,
                                        principal => Principal,
                                        request_binding => RequestBinding,
+                                       request_expiry => maps:get(request_expiry, RequestContext, none),
                                        signed_request => maps:get(request_auth, RequestContext) =/= none,
                                        trace_ctx => maps:get(
                                          trace_ctx, RequestContext,
@@ -2199,6 +2201,7 @@ verify_scope_authentication(
                         ok ->
                             {ok, #{request_binding =>
                                        quod_client_goal:request_binding(Evidence),
+                                   request_expiry => maps:get(not_after_ms, maps:get(request, Evidence)),
                                    request_auth =>
                                        quod_client_goal:request_auth(Evidence)}};
                         {error, _} ->
@@ -2330,6 +2333,7 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
     Scope = #remote_scope{
                binding = Binding, request_binding = RequestBinding,
                request_auth = RequestAuth,
+               request_expiry = maps:get(request_expiry, RequestContext, none),
                trace_ctx = maps:get(trace_ctx, RequestContext, otel_ctx:new()),
                peer_key = PeerKey,
                request_link = RequestLink, request_mref = RequestMRef,
@@ -2919,6 +2923,7 @@ start_admitted_remote_scope_session(
                              #{read_only => ReadOnly,
                                principal => Principal,
                                request_binding => RequestBinding,
+                               request_expiry => Scope#remote_scope.request_expiry,
                                signed_request => Scope#remote_scope.request_auth =/= none,
                                trace_ctx => Scope#remote_scope.trace_ctx,
                                signer => S#s.signer,

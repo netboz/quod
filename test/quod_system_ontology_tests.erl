@@ -121,16 +121,16 @@ predicate_modules_are_engine_local_test() ->
                    quod_committed_projection:new_est(), Manifest),
     try
         ?assertMatch(
-           {query, quod_committee_predicates, peer_ready_1},
+           {query, live_observation, quod_committee_predicates, peer_ready_1},
            quod_predicates:descriptor(Common, {peer_ready, 1})),
         ?assertEqual(
            undefined,
            quod_predicates:descriptor(Common, {directory_host, 5})),
         ?assertMatch(
-           {query, quod_directory_predicates, directory_host_5},
+           {query, live_observation, quod_directory_predicates, directory_host_5},
            quod_predicates:descriptor(Root, {directory_host, 5})),
         ?assertMatch(
-           {staging, quod_ontology_predicates,
+           {staging, none, quod_ontology_predicates,
             lifecycle_request_predicate},
            quod_predicates:descriptor(Root, {create_ontology, 3})),
         ?assertEqual(

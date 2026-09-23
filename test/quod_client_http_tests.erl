@@ -226,8 +226,8 @@ client_http_test_() ->
 %% handler breaks its contract, so a successful second request is the assertion.
 health_is_reusable(Port) ->
     {ok, Connection} = connect(Port),
-    ?assertMatch({200, _, <<"ok\n">>}, request(Connection, get, "/health", <<>>)),
-    ?assertMatch({200, _, <<"ok\n">>}, request(Connection, get, "/health", <<>>)),
+    ?assertMatch({200, _, <<"ok\n">>}, quod_ct:https_request(Connection, get, "/health", <<>>)),
+    ?assertMatch({200, _, <<"ok\n">>}, quod_ct:https_request(Connection, get, "/health", <<>>)),
     close(Connection).
 
 api_reply_is_clean(Port) ->
@@ -235,15 +235,15 @@ api_reply_is_clean(Port) ->
     %% Malformed on purpose: the reply's content is not the point, surviving it
     %% is. A bad field is a bad request, never a failed authentication.
     ?assertMatch({400, _, _},
-                 request(Connection, post, "/api/auth/challenge", <<"{}">>)),
+                 quod_ct:https_request(Connection, post, "/api/auth/challenge", <<"{}">>)),
     ?assertMatch({400, _, _},
-                 request(Connection, post, "/api/auth/complete", <<"nonsense">>)),
+                 quod_ct:https_request(Connection, post, "/api/auth/complete", <<"nonsense">>)),
     ?assertMatch({404, _, _},
-                 request(Connection, post, "/api/user/register", <<"{}">>)),
+                 quod_ct:https_request(Connection, post, "/api/user/register", <<"{}">>)),
     ?assertMatch({400, _, _},
-                 request(Connection, post, "/api/goals/read", <<"{}">>)),
+                 quod_ct:https_request(Connection, post, "/api/goals/read", <<"{}">>)),
     %% Still usable, so none of those replies killed the stream.
-    ?assertMatch({200, _, _}, request(Connection, get, "/health", <<>>)),
+    ?assertMatch({200, _, _}, quod_ct:https_request(Connection, get, "/health", <<>>)),
     close(Connection).
 
 %% The real signal for a broken handler contract: cowboy sends the response and
@@ -253,16 +253,16 @@ routes_are_crash_free(Port) ->
     Crashes = collect_crashes(
                 fun() ->
                     {ok, Connection} = connect(Port),
-                    _ = request(Connection, get, "/health", <<>>),
-                    _ = request(Connection, post, "/api/auth/challenge", <<"{}">>),
-                    _ = request(Connection, post, "/api/auth/complete", <<"{}">>),
-                    _ = request(Connection, post, "/api/user/register", <<"{}">>),
-                    _ = request(Connection, post, "/api/goals/read", <<"{}">>),
-                    _ = request(Connection, post, "/api/goals/execute", <<"{}">>),
-                    _ = request(Connection, post, "/api/goals/outcomes", <<"{}">>),
-                    _ = request(Connection, post, "/api/goals/cursors", <<"{}">>),
-                    _ = request(Connection, get, "/api/auth/challenge", <<>>),
-                    _ = request(Connection, post, "/api/auth/challenge",
+                    _ = quod_ct:https_request(Connection, get, "/health", <<>>),
+                    _ = quod_ct:https_request(Connection, post, "/api/auth/challenge", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/auth/complete", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/user/register", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/goals/read", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/goals/execute", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/goals/outcomes", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, post, "/api/goals/cursors", <<"{}">>),
+                    _ = quod_ct:https_request(Connection, get, "/api/auth/challenge", <<>>),
+                    _ = quod_ct:https_request(Connection, post, "/api/auth/challenge",
                                 binary:copy(<<"A">>, 8192)),
                     close(Connection)
                 end),
@@ -274,24 +274,24 @@ oversized_body_is_refused(Port) ->
     {ok, Connection} = connect(Port),
     Body = <<"{\"public_key\":\"", (binary:copy(<<"A">>, 8192))/binary, "\"}">>,
     ?assertMatch({413, _, _},
-                 request(Connection, post, "/api/auth/challenge", Body)),
+                 quod_ct:https_request(Connection, post, "/api/auth/challenge", Body)),
     %% Pin the independent, larger cap on the signed-goal route as well.  Raw
     %% junk is intentional: body admission must happen before JSON decoding.
     SignedGoalBody = binary:copy(
                        <<"A">>, ?QUOD_CLIENT_GOAL_REQUEST_BYTES * 2),
     ?assertMatch({413, _, _},
-                 request(Connection, post, "/api/goals/read", SignedGoalBody)),
+                 quod_ct:https_request(Connection, post, "/api/goals/read", SignedGoalBody)),
     close(Connection).
 
 method_is_enforced(Port) ->
     {ok, Connection} = connect(Port),
     ?assertMatch({405, _, _},
-                 request(Connection, get, "/api/auth/challenge", <<>>)),
+                 quod_ct:https_request(Connection, get, "/api/auth/challenge", <<>>)),
     close(Connection).
 
 security_headers_present(Port) ->
     {ok, Connection} = connect(Port),
-    {200, Headers, _} = request(Connection, get, "/health", <<>>),
+    {200, Headers, _} = quod_ct:https_request(Connection, get, "/health", <<>>),
     ?assertMatch(#{<<"content-security-policy">> := _}, Headers),
     ?assertEqual(<<"nosniff">>, maps:get(<<"x-content-type-options">>, Headers)),
     close(Connection).
@@ -303,7 +303,7 @@ signed_http_parent_is_carried(Port) ->
             %% Malformed goal JSON still follows the real signed HTTP dispatch:
             %% validation refusal must finish the same incoming-parent span.
             ?assertMatch({400, _, _},
-              request(Connection, post, "/api/goals/execute", <<"{}">>,
+              quod_ct:https_request(Connection, post, "/api/goals/execute", <<"{}">>,
                       [[<<"traceparent: ">>, trace_parent(), <<"\r\n">>],
                        <<"baggage: private=not-a-trace-attribute\r\n">>])),
             Span = quod_trace_tests:take_span(<<"quod.client.request">>),
@@ -314,7 +314,7 @@ signed_http_parent_is_carried(Port) ->
             ?assertEqual(server, Span#span.kind),
             ?assertNot(Span#span.is_recording),
             ?assert(Span#span.end_time >= Span#span.start_time),
-            ?assertMatch({200, _, _}, request(Connection, get, "/health", <<>>))
+            ?assertMatch({200, _, _}, quod_ct:https_request(Connection, get, "/health", <<>>))
         after close(Connection)
         end
     end).
@@ -410,45 +410,6 @@ connect(Port) ->
                 [binary, {active, false}, {verify, verify_none}], 5000).
 
 close(Socket) -> ssl:close(Socket).
-
-request(Socket, Method, Path, Body) ->
-    request(Socket, Method, Path, Body, []).
-
-request(Socket, Method, Path, Body, TraceHeaders) ->
-    Verb = case Method of get -> <<"GET">>; post -> <<"POST">> end,
-    Request = [Verb, <<" ">>, Path, <<" HTTP/1.1\r\nhost: localhost\r\n">>,
-               <<"content-type: application/json\r\n">>,
-               TraceHeaders,
-               <<"content-length: ">>, integer_to_binary(byte_size(Body)),
-               <<"\r\n\r\n">>, Body],
-    ok = ssl:send(Socket, Request),
-    read_response(Socket).
-
-read_response(Socket) ->
-    {Head, Rest} = read_until_headers(Socket, <<>>),
-    [StatusLine | HeaderLines] = binary:split(Head, <<"\r\n">>, [global]),
-    [_Version, Status | _] = binary:split(StatusLine, <<" ">>, [global]),
-    Headers = maps:from_list([header(L) || L <- HeaderLines, L =/= <<>>]),
-    Length = binary_to_integer(maps:get(<<"content-length">>, Headers, <<"0">>)),
-    {binary_to_integer(Status), Headers, read_body(Socket, Rest, Length)}.
-
-read_until_headers(Socket, Acc) ->
-    case binary:split(Acc, <<"\r\n\r\n">>) of
-        [Head, Rest] -> {Head, Rest};
-        [_] ->
-            {ok, More} = ssl:recv(Socket, 0, 5000),
-            read_until_headers(Socket, <<Acc/binary, More/binary>>)
-    end.
-
-read_body(_Socket, Acc, Length) when byte_size(Acc) >= Length ->
-    binary:part(Acc, 0, Length);
-read_body(Socket, Acc, Length) ->
-    {ok, More} = ssl:recv(Socket, 0, 5000),
-    read_body(Socket, <<Acc/binary, More/binary>>, Length).
-
-header(Line) ->
-    [Name, Value] = binary:split(Line, <<": ">>),
-    {string:lowercase(Name), Value}.
 
 b64url(Bytes) ->
     base64:encode(Bytes, #{mode => urlsafe, padding => false}).

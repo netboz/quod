@@ -16,7 +16,7 @@ when they need the complete validator check.
 -include("quod_proof_limits.hrl").
 
 -export([encode/1, decode/1, verify/2, verify_for/5,
-         operation_ref/1,
+         operation_ref/1, operation_ref/4,
          request_auth/1, request_binding/1,
          named_bindings/2, durable_bindings/2,
          valid_request_binding/1, authorization_transcript/3,
@@ -117,9 +117,11 @@ operation_ref(#{request := #{agent_namespace := Namespace,
                              agent_genesis_anchor := Anchor,
                              operation_id := OperationId},
                 agent_ref_blob := AgentRef}) ->
-    make_operation_ref(Namespace, Anchor, AgentRef, OperationId).
+    operation_ref(Namespace, Anchor, AgentRef, OperationId).
 
-make_operation_ref(Namespace, Anchor, AgentRef, OperationId) ->
+-doc "Construct the canonical reference from an exact agent identity and operation id.".
+-spec operation_ref(binary(), <<_:256>>, binary(), <<_:256>>) -> tuple().
+operation_ref(Namespace, Anchor, AgentRef, OperationId) ->
     {operation, Namespace, Anchor, AgentRef, OperationId}.
 
 -doc "Build the one canonical durable evidence object from verified ingress evidence.".
@@ -472,7 +474,7 @@ parsed_evidence(#{goal_text := GoalText,
                                   goal => Goal,
                                   goal_blob => GoalBlob,
                                   variables => Variables},
-                    OperationRef = make_operation_ref(
+                    OperationRef = operation_ref(
                                      AgentNs, AgentAnchor, AgentRef,
                                      maps:get(operation_id, Request0)),
                     {ok, Evidence0#{operation_ref => OperationRef}};

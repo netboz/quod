@@ -161,7 +161,7 @@ init([]) ->
     Content = content_projection(Bootstrap, System, #{}),
     Desired = Desired0#{content => Content},
     persist_desired(Desired),
-    application:unset_env(quod, node_actor_principal),
+    install_node_actor_principal(unavailable),
     true = quod_reg:subscribe({runtime, ?ROOT_NS}),
     true = quod_reg:subscribe({namespace_topology, node}),
     NsMonitor = quod_reg:monitor_name({quod_ns_sup, node}, follow),
@@ -858,12 +858,27 @@ node_actor_complete(Result) ->
 
 install_node_actor_result(Result) ->
     case node_actor_result_class(Result) of
-        absent -> ok;
+        absent -> install_node_actor_principal(unavailable);
         {ready, Principal} ->
-            application:set_env(quod, node_actor_principal, Principal),
-            ok;
+            install_node_actor_principal({ok, Principal});
         pending -> ok;
-        {fatal, Reason} -> {error, Reason}
+        {fatal, Reason} ->
+            install_node_actor_principal(unavailable),
+            {error, Reason}
+    end.
+
+install_node_actor_principal(Value) ->
+    case quod_node_actor:principal() of
+        {error, unavailable} when Value =:= unavailable -> ok;
+        Value -> ok;
+        _ ->
+            case Value of
+                {ok, Principal} -> application:set_env(quod, node_actor_principal, Principal);
+                unavailable -> application:unset_env(quod, node_actor_principal)
+            end,
+            quod_reg:publish({node_actor, node},
+                             {node_actor_installed, self(), quod_node_actor:principal()}),
+            ok
     end.
 
 node_actor_result_class(none) -> absent;

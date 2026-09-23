@@ -3,6 +3,20 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_client_goal_limits.hrl").
 
+source_formatter_preserves_terms_and_byte_values_test() ->
+    Terms = [{agent_instance_ref, <<"agents">>, <<1:256>>, {worker, 'quoted name'}},
+             {'::', <<"target">>, {',', {sign, <<0, 255, 34, 92>>, {0}}, {check, {0}}}},
+             {payload, [a, b | tail], {'-', 3}, 1.25, {'$quod_symbol', <<"unknown_symbol">>}}],
+    lists:foreach(fun(Term) ->
+        {ok, Text} = quod_client_goal_parser:format(Term),
+        {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(Text, 2),
+        ?assertEqual(canonical(Term), canonical(Parsed))
+    end, Terms),
+    ?assertEqual({error, invalid_term}, quod_client_goal_parser:format(self())),
+    %% The frozen grammar parses -3 as the unary expression, not a numeric
+    %% literal. Never silently change a bound numeric payload into that term.
+    ?assertEqual({error, invalid_term}, quod_client_goal_parser:format({payload, -3})).
+
 basic_goal_and_variable_numbering_test() ->
     {ok, #{goal := Goal, variables := Variables}} =
         parse(<<"pair(X, _, X, _Tail, _Tail, _).">>),

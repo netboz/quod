@@ -228,7 +228,7 @@ genesis_manifest_loads_the_same_predicates_in_projection_test() ->
         {ok, Projection1, #{kind := content}} =
             project(1, {batch, [Genesis]}, Projection0),
         ?assertMatch(
-           {query, quod_directory_predicates, directory_host_5},
+           {query, live_observation, quod_directory_predicates, directory_host_5},
            quod_predicates:descriptor(
              quod_committed_projection:est(Projection1),
              {directory_host, 5}))

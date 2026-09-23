@@ -79,6 +79,9 @@ signed_scope_authentication_is_verified_and_bound_test() ->
           ?assertEqual(
              quod_client_goal:request_auth(Fixture),
              maps:get(request_auth, Authorization)),
+          ?assertEqual(
+             maps:get(not_after_ms, maps:get(request, Fixture)),
+             maps:get(request_expiry, Authorization)),
           lists:foreach(
             fun({Auth, Identity, TestPrincipal, Digest}) ->
                 ?assertEqual(

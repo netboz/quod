@@ -126,6 +126,32 @@ removed_ask_scope_config_names_rejected_test_() ->
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
+local_vault_boot_does_not_require_https_provider_test() ->
+    _ = application:load(quod),
+    {ok, _} = application:ensure_all_started(gproc),
+    Dir = tmp_dir(),
+    Saved = application:get_env(quod, agent_vault),
+    try
+        ConfigPath = write_boot_conf(Dir, ""),
+        Unlock = filename:join(Dir, "unlock"),
+        ok = quod_identity:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
+        ok = file:write_file(ConfigPath,
+          ["agent_vault { enabled = true, directory = \"", filename:join(Dir, "vault"),
+           "\", unlock_file = \"", Unlock, "\" }\n"], [append]),
+        os:putenv("QUOD_CONF", ConfigPath),
+        _ = quod_app:load_config(),
+        {ok, #{provider := none}} = application:get_env(quod, agent_vault),
+        {ok, Vault} = quod_agent_vault:start_link(),
+        ok = gen_server:stop(Vault)
+    after
+        reset_boot_env(),
+        case Saved of
+            undefined -> application:unset_env(quod, agent_vault);
+            {ok, Value} -> application:set_env(quod, agent_vault, Value)
+        end,
+        _ = file:del_dir_r(Dir)
+    end.
+
 boot_identity_test() ->
     _ = application:load(quod),
     Dir = tmp_dir(),

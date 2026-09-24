@@ -3,8 +3,9 @@
 **Status:** revised architecture direction. The runtime/reaction substrate,
 explicit committed events, generic agent identity, durable DTX effects,
 prioritized shared streams, and generic hosted-agent recovery are delivered
-through 0.7.236. FIPA-level acknowledged delivery, conversation obligations,
-AMS/DF services, and later FIPA work remain pending.
+through 0.7.236. The first internal Request conversation is implemented on the
+feature branch in `fipa-request-transactions.md`; automatic pending-conversation
+continuation, AMS/DF services, and the remaining FIPA profile are pending.
 `ontology-actor-architecture.md` is the
 authority for actor identity, system-ontology bootstrap, key ownership, and
 hosting. It corrects this document's former Agent Platform record model: every
@@ -25,6 +26,25 @@ Client projection, GUI, physics, and editable voxel worlds are recorded
 separately in `doc/client-world-direction.md`. That document is a performance
 forcing function for this substrate, not part of this plan's implementation
 scope.
+
+### Current internal FIPA contract
+
+Within Quod, FIPA defines Prolog actions, authorization and conversation rules
+over the existing multi-ontology transactions, recovery and reactions. Related
+state changes and receiver consequences commit in the same transaction. A
+request may atomically record A waiting and B pending; B's later decision may
+atomically establish its domain goal and record completion at both agents.
+There is no intermediate message queue, delivery acknowledgement or additional
+reliable-messaging subsystem. Committed events participate in the normal diff
+and Prolog pattern unification without becoming asserted message history.
+
+This contract supersedes the older outbox/scheduler prerequisites in Slices
+3–4 for internal agent communication. The delivery choices in §9 describe
+separate effect requirements, not prerequisites for internal FIPA. External
+FIPA transport is deferred. Completed state and admitted transactions recover
+through the existing ontology/transaction owners; automatically continuing a
+pending decision must also respect uncertain-operation identity and custody.
+Restoring state does not replay historical reactions.
 
 ## 1. Objective
 

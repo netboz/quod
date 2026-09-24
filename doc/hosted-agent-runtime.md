@@ -78,6 +78,12 @@ batch releases queued requests only after its installed projection frontier.
 Failed batches, replay and runtime replacement discard unreleased work.
 Children monitor their runtime; each request worker belongs to its child.
 
+Runtime reconciliation, reaction and heavy projection workers belong to their
+runtime owner's lifetime. Links terminate them when that owner is killed;
+monitors retain normal result/failure correlation. Supervised shutdown runs the
+existing cleanup before the runtime exits. A blocked worker cannot survive its
+owner and later act from an obsolete projection.
+
 Children contain no private Prolog state or private signing key. The node vault
 holds encrypted custody. A signed read under the hosting node's agent identity
 re-proves the current assignment, key and explicit signing grant in the agent's

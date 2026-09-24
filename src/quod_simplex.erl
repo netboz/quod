@@ -1082,6 +1082,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                  trace_span :: quod_trace:span_ctx() | undefined}).
 
 -record(local_proposal, {hash :: binary(),
+                         block :: #block{},
                          waiters = [] :: [term()],
                          trace_ctxs = [] :: [quod_trace:context()],
                          validation_sidecar = [] ::
@@ -1375,6 +1376,7 @@ test_state(Overrides) ->
                      (ingress, _V, Acc) -> Acc;
                      (validators, _V, Acc) -> Acc;
                      (author_admissions, _V, Acc) -> Acc;
+                     (local_proposal, _V, Acc) -> Acc;
                      (K, V, Acc) -> test_state_set(K, V, Acc)
                   end,
                   #s{ns = <<"t">>, self = <<"self">>,
@@ -1416,9 +1418,14 @@ test_state(Overrides) ->
                          quod_atomic:initial_projection(
                            target_identity(S3), 0)}
         end,
+    %% Proposal bodies depend on the completed engine override, not map order.
+    S5 = case maps:find(local_proposal, Overrides) of
+             {ok, Proposal} -> test_state_set(local_proposal, Proposal, S4);
+             error -> S4
+         end,
     case maps:find(ingress, Overrides) of
-        {ok, Items} -> test_state_set(ingress, Items, S4);
-        error       -> S4
+        {ok, Items} -> test_state_set(ingress, Items, S5);
+        error       -> S5
     end.
 test_author_admission(Pubkey) ->
     crypto:hash(
@@ -1509,11 +1516,16 @@ test_state_set(retained_dtx, empty, S) ->
     S#s{retained_dtx = quod_dtx_owner:new()};
 test_state_set(dtx_coordinators, V, S) -> S#s{dtx_coordinators = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
-    S#s{local_proposals =
-            (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
+    test_state_set(local_proposal, {Slot, Hash, []}, S);
 test_state_set(local_proposal, {Slot, Hash, Contexts}, S) ->
+    %% Trace-only fixtures need no engine; redrive fixtures provide the body.
+    Block = case S#s.eng of
+                #eng{} = Eng -> block_for(Hash, Eng);
+                undefined -> undefined
+            end,
     S#s{local_proposals = (S#s.local_proposals)#{
-          Slot => #local_proposal{hash = Hash, trace_ctxs = Contexts}}};
+          Slot => #local_proposal{hash = Hash, block = Block,
+                                  trace_ctxs = Contexts}}};
 %% Plant parked ingress items: [{Origin, From, Change, EnqueuedAtMonoMs}] — waiter
 %% envelopes, byte accounting, and per-author counts are derived exactly as park_ingress
 %% derives them, so drain/expiry tests exercise the real bookkeeping.
@@ -2007,7 +2019,7 @@ test_relay_transport_counts(Ns) ->
             {0, 0}
     end.
 test_redrive_head(Slot, Hash, S) ->
-    Local = #local_proposal{hash = Hash, waiters = []},
+    Local = #local_proposal{hash = Hash, block = block_for(Hash, S#s.eng), waiters = []},
     redrive_head(Slot, S#s{local_proposals = #{Slot => Local}}).
 test_block_requests(#s{block_requests = Requests}) -> Requests.
 test_signing_journal(#s{signing_journal = Journal}) -> Journal.
@@ -9241,7 +9253,7 @@ propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
                   'quod.batch.wait_ms' => WaitMs})
       end, Items),
     quod_metrics:observe_batch(S#s.ns, Count, WaitMs),
-    Local = #local_proposal{hash = BH, waiters = Waiters,
+    Local = #local_proposal{hash = BH, block = Block, waiters = Waiters,
                             trace_ctxs = [waiter_trace_ctx(W) || W <- Waiters]},
     S1 = S#s{collecting = none,
              local_proposals = (S#s.local_proposals)#{Slot => Local},
@@ -9444,7 +9456,7 @@ propose_dtx_wave(Block = #block{slot = Slot, parent = Parent, payload = Payload}
                              Controls, ValidationSidecar0)),
             BH = block_hash(Block),
             Local = #local_proposal{
-                      hash = BH, validation_sidecar = ValidationSidecar,
+                      hash = BH, block = Block, validation_sidecar = ValidationSidecar,
                       trace_ctxs = dtx_control_trace_contexts(Controls, S)},
             S1 = S#s{
                    local_proposals =
@@ -10813,6 +10825,12 @@ preflight_proposal(
 on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known, S) ->
     Round = round_state(Sl, S),
     case {Known, Round#round.candidate} of
+        _ when Sl =< S#s.slot; Round#round.invalid =:= BH ->
+            S;
+        {_, {OtherBH, _}} when OtherBH =/= BH ->
+            S;
+        {_, {offered, OtherBH, _}} when OtherBH =/= BH ->
+            S;
         {true, _} ->
             admit_proposed_block(BH, Block, ValidationSidecar, S);
         {false, {BH, Block}} ->
@@ -10821,7 +10839,7 @@ on_propose(BH, #block{slot = Sl} = Block, ValidationSidecar, Known, S) ->
             Merged = merge_validation_sidecars(Round#round.validation_sidecar,
                                                ValidationSidecar),
             offer_proposal(BH, Block, Merged, S);
-        {false, none} when Round#round.invalid =/= BH ->
+        {false, none} ->
             offer_proposal(BH, Block, ValidationSidecar, S);
         _ -> S
     end.
@@ -12302,23 +12320,21 @@ emit_slot_evidence(Slot, Scope, S0) ->
 
 local_proposal_evidence(Slot, S0 = #s{local_proposals = Local}) ->
     case maps:get(Slot, Local, undefined) of
-        #local_proposal{hash = BH, validation_sidecar = ValidationSidecar} ->
-            case block_for(BH, S0#s.eng) of
-                #block{} = Block ->
-                    %% Membership proposals re-enter their common verdict path; an outstanding verdict is
-                    %% idempotent, and an abstention may be retried. Do this before rebuilding vote frames.
-                    S1 = support_or_validate(Block, BH, S0),
-                    case Slot > S1#s.slot of
-                        true  ->
-                            trace_block_event(
-                              Slot, BH, <<"consensus.proposal_redriven">>,
-                              #{'quod.validation.kind' => trace_validation_kind(round_state(Slot, S1))}, S1),
-                            {[{propose, Block, ValidationSidecar}],
-                             S1#s{redrives = S1#s.redrives + 1}};
-                        false -> {[], S1}
-                    end;
-                undefined ->
-                    {[], S0}
+        #local_proposal{hash = BH, block = Block,
+                        validation_sidecar = ValidationSidecar} ->
+            %% Proposal custody outlives a temporary validation abstention.
+            %% DTX bodies enter the engine only after validation, so the local
+            %% proposer retains its exact immutable body until slot retirement.
+            %% Reuse admission's verdict path; outstanding work stays idempotent.
+            S1 = on_propose(BH, Block, ValidationSidecar, true, S0),
+            case Slot > S1#s.slot of
+                true ->
+                    trace_block_event(
+                      Slot, BH, <<"consensus.proposal_redriven">>,
+                      #{'quod.validation.kind' => trace_validation_kind(round_state(Slot, S1))}, S1),
+                    {[{propose, Block, ValidationSidecar}],
+                     S1#s{redrives = S1#s.redrives + 1}};
+                false -> {[], S1}
             end;
         undefined ->
             {[], S0}

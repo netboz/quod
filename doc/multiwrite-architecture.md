@@ -1330,6 +1330,14 @@ Progress walks slot numbers and re-reads each current row, so a nested commit
 cannot resurrect a stale snapshot. Recovery for a gap of at least two slots
 and all signing/finality rules remain unchanged.
 
+The local proposal owner also retains its exact immutable proposed body until
+slot retirement. A temporary DTX validation abstention clears the validation
+candidate and its monitor, but cannot discard the leader's only resendable
+body: unvalidated DTX blocks are deliberately absent from the voting engine.
+The existing consensus watchdog re-enters the same proposal/validation path.
+It neither submits a new client operation nor duplicates outstanding validation;
+finalized slots and rejected hashes cannot regain candidate custody.
+
 ### Recovery projection and local application progress
 
 Installed membership and routes remain visible across apply fences. Issuing

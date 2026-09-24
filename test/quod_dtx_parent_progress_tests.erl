@@ -1015,6 +1015,101 @@ expired_validation_keeps_latch_until_recovery_reseats_test_() ->
         end
     end) end) end).
 
+local_proposal_redrives_after_parent_abstention_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        Leader = leader(2, Keys),
+        S = quod_simplex:test_state_set(id, maps:get(Leader, Keys),
+              quod_simplex:test_state_set(self, Leader, S0)),
+        {ok, Blob} = quod_atomic:encode_control(maps:get(vote_control, F)),
+        Proposed = quod_simplex:test_propose_dtx_wave(
+                     2, [Blob], [], S),
+        {Hash, Token, Owner} = take_request(2),
+        {Hash, {dtx, Token, Owner, Monitor, _}, {Hash, Block}, _, undefined} =
+            quod_simplex:test_dtx_round(2, Proposed),
+        Abstained = quod_simplex:test_on_dtx_verdict(
+                      2, Hash, Token, Owner, 1, abstain, Proposed),
+        ?assertEqual({none, none, none, none, undefined},
+                     quod_simplex:test_dtx_round(2, Abstained)),
+        Redriven = quod_simplex:on_progress_timeout(2, Abstained),
+        {Hash, Token, Owner} = take_request(2),
+        ?assertMatch({Hash, _, {Hash, Block}, _, undefined},
+                     quod_simplex:test_dtx_round(2, Redriven)),
+        {_, {dtx, Token, Owner, NextMonitor, _}, _, _, _} =
+            quod_simplex:test_dtx_round(2, Redriven),
+        ?assert(Monitor =/= NextMonitor),
+        ?assertNot(erlang:demonitor(Monitor, [flush, info])),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(2, Redriven)),
+        %% A second watchdog tick cannot duplicate an outstanding validation.
+        Again = quod_simplex:on_progress_timeout(2, Redriven),
+        assert_no_request(),
+        ?assertEqual(quod_simplex:test_dtx_round(2, Redriven),
+                     quod_simplex:test_dtx_round(2, Again)),
+        _ = quod_simplex:test_on_dtx_verdict(
+              2, Hash, Token, Owner, 1, abstain, Again)
+    end) end).
+
+local_proposal_redrive_preserves_rejection_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        Leader = leader(2, Keys),
+        S = quod_simplex:test_state_set(id, maps:get(Leader, Keys),
+              quod_simplex:test_state_set(self, Leader, S0)),
+        {ok, Blob} = quod_atomic:encode_control(maps:get(vote_control, F)),
+        Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S),
+        {Hash, Token, Owner} = take_request(2),
+        Rejected = quod_simplex:test_on_dtx_verdict(
+                     2, Hash, Token, Owner, 1, {invalid, refused}, Proposed),
+        Redriven = quod_simplex:on_progress_timeout(2, Rejected),
+        assert_no_request(),
+        ?assertEqual({none, none, none, none, undefined},
+                     quod_simplex:test_dtx_round(2, Redriven)),
+        ?assertEqual({Hash, refused}, quod_simplex:test_proposal_rejection(2, Redriven)),
+        ?assertEqual(quod_simplex:test_round(2, Rejected),
+                     quod_simplex:test_round(2, Redriven))
+    end) end).
+
+local_content_redrive_preserves_certified_dtx_candidate_test_() ->
+    isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
+        Leader = leader(2, Keys),
+        S = quod_simplex:test_state_set(id, maps:get(Leader, Keys),
+              quod_simplex:test_state_set(self, Leader, S0)),
+        {OwnBlock, OwnHash, OwnSupported} = receipt_content_parent(F, S, Keys),
+        Local = quod_simplex:test_state_set(local_proposal, {2, OwnHash}, OwnSupported),
+        {ok, Alternate} = quod_ledger:new_block(
+            2, 1, {batch, [{dtx, maps:get(vote_control, F)}]}, quod_time:now_ms()),
+        Hash = quod_simplex:block_hash(Alternate),
+        {Ns, Anchor} = maps:get(origin, F),
+        Domain = quod_simplex:consensus_domain(Ns, Anchor),
+        Committee = lists:sort(maps:keys(Keys)),
+        Peers = lists:delete(Leader, Committee),
+        %% The other three validators notarized the alternate. Do not forge
+        %% an equivocating support vote for this locally supporting leader.
+        Shares = [quod_simplex:make_share(Domain, support, 2, Hash, maps:get(P, Keys))
+                  || P <- Peers],
+        {ok, Certificate} = quod_simplex:form_cert(
+                              Domain, support, 2, Hash, Shares, Committee),
+        Supported = quod_simplex:dispatch(hd(Peers), {cert, Certificate}, Local),
+        Requested = quod_simplex:test_state_set(
+                      block_requests, #{{2, Hash} => {1, 0}}, Supported),
+        Pending = quod_simplex:dispatch(
+                    hd(Peers), {certified_block, Alternate, Hash}, Requested),
+        {Hash, Token, Owner} = take_request(2),
+        ?assertMatch({Hash, _, {Hash, Alternate}, none, OwnBlock},
+                     quod_simplex:test_dtx_round(2, Pending)),
+        Redriven = quod_simplex:on_progress_timeout(2, Pending),
+        ?assertEqual(quod_simplex:test_dtx_round(2, Pending),
+                     quod_simplex:test_dtx_round(2, Redriven)),
+        assert_no_request(),
+        Judged = quod_simplex:test_on_dtx_verdict(
+                   2, Hash, Token, Owner, 1, {valid, #{}}, Redriven),
+        CommitShares = [quod_simplex:make_share(Domain, commit, 2, Hash, maps:get(P, Keys))
+                        || P <- Peers],
+        {ok, Commit} = quod_simplex:form_cert(Domain, commit, 2, Hash, CommitShares, Committee),
+        Done = quod_simplex:dispatch(hd(Peers), {cert, Commit}, Judged),
+        {2, Store} = quod_simplex:test_committed_store(Done),
+        {ok, Entry} = quod_ledger_store:read_at(Store, 2),
+        ?assertEqual({ok, Alternate}, quod_ledger:block_from_entry(Entry))
+    end) end).
+
 foreign_validation_inherits_expired_parent_allowance_test_() ->
     isolated(fun() -> with_fixture(fun(F, S0, _Keys) ->
         Target = maps:get(origin, F), Signer = maps:get(node_identity, F),
@@ -1046,7 +1141,10 @@ foreign_validation_inherits_expired_parent_allowance_test_() ->
 foreign_validation_worker_is_atomically_monitored_test_() ->
     isolated(fun() ->
         {{ok, Caller}, {call_time, Counts}} = tprof:profile(fun() ->
-            with_fixture(fun(F, S0, _Keys) ->
+            with_fixture(fun(F, S0, Keys) ->
+                Leader = leader(2, Keys),
+                S = quod_simplex:test_state_set(id, maps:get(Leader, Keys),
+                      quod_simplex:test_state_set(self, Leader, S0)),
                 Target = {Ns, Anchor} = maps:get(origin, F),
                 Group = maps:get(group, F),
                 {ok, Vote} = quod_atomic:new_vote(Group, Target, none, {refused, [expired]}),
@@ -1061,7 +1159,7 @@ foreign_validation_worker_is_atomically_monitored_test_() ->
                 {ok, Control} = quod_atomic:sign_control(Target, Material,
                     maps:get(admission, F), 1, 1, maps:get(node_identity, F)),
                 {ok, Blob} = quod_atomic:encode_control(Control),
-                Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S0),
+                Proposed = quod_simplex:test_propose_dtx_wave(2, [Blob], [], S),
                 {Hash, Token, Owner} = take_request(2),
                 {_, {dtx, _, _, _, Deadline}, _, _, _} = quod_simplex:test_dtx_round(2, Proposed),
                 Pending = callback_state(quod_simplex:running(info,
@@ -1077,7 +1175,16 @@ foreign_validation_worker_is_atomically_monitored_test_() ->
                 after 0 -> error(foreign_verdict_missing_before_down) end,
                 Done = callback_state(quod_simplex:running(info, Message, Pending)),
                 ?assertEqual({none, none, none, none, undefined}, quod_simplex:test_dtx_round(2, Done)),
-                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Done)))
+                ?assertEqual(1, element(1, quod_simplex:test_committed_store(Done))),
+                %% The failed foreign attempt releases validation custody, but
+                %% the local proposer still owns the exact body for redrive.
+                Redriven = quod_simplex:on_progress_timeout(2, Done),
+                {Hash, Token, Owner} = take_request(2),
+                ?assertMatch({Hash, _, {Hash, _}, none, undefined},
+                             quod_simplex:test_dtx_round(2, Redriven)),
+                ?assertEqual({none, false, false}, quod_simplex:test_round(2, Redriven)),
+                _ = quod_simplex:test_on_dtx_verdict(
+                      2, Hash, Token, Owner, 1, abstain, Redriven)
             end),
             {ok, self()}
         end, #{type => call_time, report => return, set_on_spawn => false,

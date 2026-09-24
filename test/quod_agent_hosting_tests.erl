@@ -40,6 +40,190 @@ hosted_reactions_and_incarnation_recovery_test_() ->
 hosted_agents_exchange_committed_events_test_() ->
     {timeout, 60, fun() -> with_host(fun exchange/1) end}.
 
+runtime_owner_death_reaps_blocked_workers_test_() ->
+    [{atom_to_list(Kind) ++ "/" ++ atom_to_list(Reason), {timeout, 30, fun() ->
+        with_host(fun(#{namespace := Ns}) ->
+            true = quod_reg:reg({host_test, barrier}),
+            try
+                case Kind of
+                    reaction -> commit(Ns, {trigger_event, pause_batch});
+                    heavy -> commit(Ns, {assertz, block_heavy})
+                end,
+                Runner = receive {host_projection_waiting, Pid} -> Pid
+                         after 5000 -> error(worker_not_started) end,
+                Monitor = monitor(process, Runner),
+                try
+                    case Reason of
+                        shutdown ->
+                            ok = supervisor:terminate_child(quod_reg:where({quod_ns, Ns}),
+                                                            quod_runtime);
+                        kill -> exit(quod_reg:where({quod_runtime, Ns}), kill)
+                    end,
+                    receive {'DOWN', Monitor, process, Runner, _} -> ok
+                    after 1000 -> error({orphaned_worker, Kind, Reason}) end
+                after exit(Runner, kill), demonitor(Monitor, [flush]) end
+            after gproc:unreg(quod_reg:name({host_test, barrier})) end
+        end, [{state_handler, blocked_heavy, [{'/', block_heavy, 0}], [], run_blocked_heavy},
+              {':-', {run_blocked_heavy, {'_'}},
+               {';', {'->', block_heavy, {enqueue_projection, blocked, test_host_barrier}}, true}}])
+    end}} || Kind <- [reaction, heavy], Reason <- [shutdown, kill]].
+
+fipa_action_and_reply_commit_together_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(complete) end}.
+
+fipa_rejected_reply_rolls_back_domain_action_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(reject_reply) end}.
+
+fipa_unstarted_request_survives_restart_without_event_replay_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(restart_pending) end}.
+
+with_fipa_request(Scenario) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    true = quod_reg:reg({host_test, barrier}),
+    try with_host(fun(Ctx = #{directory := Dir}) ->
+        {ok, Foreign} = quod_foreign_log:start_link(
+                          #{cache_dir => filename:join(Dir, "foreign")}),
+        try fipa_request_exchange(Ctx, Scenario)
+        after gen_server:stop(Foreign) end
+    end, fipa_initiator_rules())
+    after gproc:unreg(quod_reg:name({host_test, barrier})) end.
+
+fipa_initiator_rules() ->
+    Ns = <<"host-test-agent">>,
+    Id = {'Id'}, Peer = {'Peer'}, Action = {'Action'}, Anchor = {'Anchor'},
+    quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/fipa_request.pl")) ++
+      [allow_fipa_reply,
+       {can_invoke, {fipa_request, actor, Id, Peer, Action},
+        {agent_instance_ref, Ns, {'_'}, actor}, {'_'}, Ns},
+       {':-', {can_invoke,
+               {',', {current_ontology_identity, Ns, Anchor},
+                      {fipa_receive_done, actor, Id, Action}}, Peer, {'_'}, Ns},
+        {',', allow_fipa_reply,
+         {fipa_conversation, actor, Id, initiator, Peer, Action, waiting}}},
+       {react_on, {agent, actor}, {start_fipa, Id, Peer, Action},
+        {submit_agent_goal, actor, execute, {fipa_request, actor, Id, Peer, Action}, 5000}}].
+
+fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
+                       node := Node, key := SenderKey, directory := Dir,
+                       identity := Identity}, Scenario) ->
+    commit(SenderNs, {goal, {agent_hosted, actor, Node, 1, SenderKey}}),
+    _ = installed(SenderRef, 1),
+    ReceiverNs = <<"host-test-fipa-receiver">>,
+    Diff = lists:append([quod_prolog:genesis_diff(filename:join(code:priv_dir(quod),
+                                       "ontologies/" ++ File))
+                         || File <- ["agent_instance.pl", "fipa_request.pl"]]),
+    Rules = fipa_participant_rules(ReceiverNs, Node, SenderRef, maps:get(pubkey, Identity)),
+    true = quod_reg:subscribe({agent_hosting, ReceiverNs}),
+    Receiver = start_ontology(ReceiverNs, Dir, Identity, Diff, Rules),
+    ReceiverRef = {agent_instance_ref, ReceiverNs, quod_simplex:genesis_hash(ReceiverNs), receiver},
+    {ok, Blob} = quod_wire_term:encode_canonical(ReceiverRef),
+    {ok, Key} = quod_agent_vault:generate(Blob),
+    true = quod_reg:subscribe({agent, ReceiverRef}),
+    Id = crypto:strong_rand_bytes(32), Action = {reserve, object},
+    Waiting = {fipa_conversation, actor, Id, initiator, ReceiverRef, Action, waiting},
+    Pending = {fipa_conversation, receiver, Id, participant, SenderRef, Action, pending},
+    try
+        commit(ReceiverNs, {goal, {agent_hosted, receiver, Node, 1, Key}}),
+        _ = installed(ReceiverRef, 1),
+        case Scenario of
+            complete ->
+                WrongAnchor = setelement(3, ReceiverRef, <<99:256>>),
+                lists:foreach(fun({Peer, Requested}) ->
+                    commit(SenderNs, {trigger_event, {start_fipa, Id, Peer, Requested}}),
+                    ?assertMatch({normalized, {failed, _}}, fipa_request_result(SenderRef)),
+                    ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs,
+                         {fipa_conversation, actor, Id, {'_'}, {'_'}, {'_'}, {'_'}})),
+                    ?assertMatch({fail, _}, quod_prolog:prove_ro(ReceiverNs, injected))
+                end, [{WrongAnchor, Action}, {ReceiverRef, {assertz, injected}}]);
+            _ -> ok
+        end,
+        commit(SenderNs, {trigger_event, {start_fipa, Id, ReceiverRef, Action}}),
+        Reaction = receive {host_projection_waiting, Runner} -> Runner
+                   after 10000 -> error(fipa_request_reaction_missing) end,
+        ?assertMatch({normalized, {committed, _, _}}, fipa_request_result(SenderRef)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, Waiting)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
+        case Scenario of
+            restart_pending ->
+                %% The barrier precedes queue admission: no unknown request is
+                %% resubmitted. Restart restores state but never replays this event.
+                stop_ontology(Receiver),
+                Resumed = start_ontology(ReceiverNs, Dir, Identity, [], [],
+                            #{mode => join, genesis_hash => element(3, ReceiverRef)}),
+                try
+                    _ = installed(ReceiverRef, 1),
+                    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
+                    ?assertMatch(#{reaction_candidates := 0}, quod_runtime:stats(ReceiverNs)),
+                    commit(ReceiverNs, {trigger_event, {continue_fipa, Id}}),
+                    ?assertMatch({normalized, {committed, _, _}},
+                                 fipa_request_result(ReceiverRef)),
+                    fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending)
+                after stop_ontology(Resumed) end;
+            reject_reply ->
+                commit(SenderNs, {retract, allow_fipa_reply}),
+                Reaction ! release,
+                ?assertMatch({normalized, {failed, _}}, fipa_request_result(ReceiverRef)),
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(ReceiverNs, {reserved, object})),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, {available, object})),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, Waiting));
+            complete ->
+                Reaction ! release,
+                ?assertMatch({normalized, {committed, _, _}}, fipa_request_result(ReceiverRef)),
+                fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending),
+                commit(SenderNs, {trigger_event, {start_fipa, Id, ReceiverRef, Action}}),
+                ?assertMatch({normalized, {failed, _}}, fipa_request_result(SenderRef)),
+                fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending),
+                %% Read back through real ledger replay with A's old processes gone.
+                stop_ontology(quod_reg:where({quod_ns, SenderNs})),
+                Resumed = start_ontology(SenderNs, Dir, Identity, [], [],
+                            #{mode => join, genesis_hash => element(3, SenderRef)}),
+                try
+                    _ = installed(SenderRef, 1),
+                    fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending),
+                    ?assertMatch(#{reaction_candidates := 0}, quod_runtime:stats(SenderNs))
+                after stop_ontology(Resumed) end
+        end
+    after
+        quod_reg:unsubscribe({agent, ReceiverRef}),
+        quod_reg:unsubscribe({agent_hosting, ReceiverNs}),
+        stop_ontology(Receiver)
+    end.
+
+fipa_participant_rules(Ns, Node, Sender, Pub) ->
+    Id = {'Id'}, Action = {'Action'}, Anchor = {'Anchor'},
+    [{can_assign_agent_host, {node, Pub}, receiver, {'_'}, {'_'}, Node, {'_'}},
+     {can_invoke, {'_'}, Node, {'_'}, Ns},
+     {can_invoke, {fipa_fulfil_request, receiver, Id},
+      {agent_instance_ref, Ns, {'_'}, receiver}, {'_'}, Ns},
+     {can_invoke, {',', {current_ontology_identity, Ns, Anchor},
+                       {fipa_receive_request, receiver, Id, Action}}, Sender, {'_'}, Ns},
+     {can_request_agent_signature, Node, receiver, {'_'}},
+     {fipa_request_allowed, receiver, Sender, {reserve, object}},
+     {fipa_request_goal, receiver, {reserve, object}, {reserved, object}},
+     {available, object},
+     {action, reserve_object, [{available, object}], {reserved, object}},
+     {':-', reserve_object, {',', {retract, {available, object}}, {assertz, {reserved, object}}}},
+     {react_on, {agent, receiver}, {fipa_request_received, receiver, Id, Sender, Action},
+      {',', test_reaction_barrier,
+       {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}},
+     {react_on, {agent, receiver}, {continue_fipa, Id},
+      {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}].
+
+fipa_request_result(Ref) ->
+    receive
+        {agent_request_finished, _, _, #{reference := Ref}, _, {ok, _, Outcome}} -> Outcome;
+        {agent_request_finished, _, _, #{reference := Ref}, _, Result} -> Result
+    after 10000 -> error({fipa_request_result_missing, Ref}) end.
+
+fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending) ->
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, setelement(7, Waiting, done))),
+    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, setelement(7, Pending, done))),
+    ?assertMatch({ok, [#{'Objects' := [object]}], _}, quod_prolog:prove_ro(ReceiverNs,
+       {findall, {'Object'}, {reserved, {'Object'}}, {'Objects'}})),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs,
+       {fipa_request_completed, actor, element(3, Waiting), element(5, Waiting), element(6, Waiting)})).
+
 unexpected_child_exit_enters_ontology_reaction_test_() ->
     {timeout, 60, fun() ->
         with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
@@ -911,12 +1095,15 @@ with_host(Fun, ExtraFacts, NodePolicy) ->
     end.
 
 start_ontology(Ns, Dir, Identity, Diff, Terms) ->
+    start_ontology(Ns, Dir, Identity, Diff, Terms, #{}).
+
+start_ontology(Ns, Dir, Identity, Diff, Terms, BootConfig) ->
     true = quod_reg:subscribe({runtime, Ns}),
-    {ok, Sup} = quod_ns:start_link(Ns,
+    {ok, Sup} = quod_ns:start_link(Ns, maps:merge(
       #{node_id => maps:get(pubkey, Identity), identity => Identity,
         data_dir => filename:join(Dir, binary_to_list(Ns)), mode => create,
         external_predicate_modules => [quod_agent_predicates, ?MODULE],
-        genesis_diff => Diff ++ quod_prolog:terms_to_diff(Terms)}),
+        genesis_diff => Diff ++ quod_prolog:terms_to_diff(Terms)}, BootConfig)),
     unlink(Sup),
     receive {replay_ready, _, _} -> ok after 10000 -> error({ontology_not_ready, Ns}) end,
     quod_reg:unsubscribe({runtime, Ns}),

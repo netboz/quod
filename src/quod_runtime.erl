@@ -318,6 +318,9 @@ await_revision(Ns, Resource, Rev, TimeoutMs) ->
 %%%===================================================================
 
 init({Ns, Config}) ->
+    %% Supervised shutdown must run terminate/2. Links also stop owned workers
+    %% on an untrappable runtime kill; monitors retain result/error correlation.
+    process_flag(trap_exit, true),
     %% Subscribe BEFORE the (deferred) attach attempt: any ready edge published after the
     %% attach answer lands in our mailbox, so the boot race has no window.
     true = quod_reg:subscribe({runtime, Ns}),
@@ -705,6 +708,9 @@ handle_info({waiter_timeout, WRef}, S = #s{waiters = Waiters}) ->
     end;
 handle_info({collapse_retry, Ref}, S = #s{last_recovery = {collapse, Ref}}) ->
     {noreply, attach_and_reconcile({collapse, make_ref()}, S)};
+handle_info({'EXIT', _Worker, _Reason}, S) ->
+    %% DOWN owns worker completion; gen_server handles the supervisor's exit.
+    {noreply, S};
 handle_info(Info, S = #s{observer = Observer}) when Observer =/= none ->
     {Next, Events} = quod_agent_observer:handle(Info, Observer),
     {noreply, queue_observations(Events, S#s{observer = Next})};
@@ -765,14 +771,14 @@ spawn_runner(Kind, Budget, Fun, S) ->
     Server = self(),
     Ref = make_ref(),
     Deadline = erlang:monotonic_time(millisecond) + Budget,
-    {Pid, MRef} = spawn_monitor(fun() ->
+    {Pid, MRef} = spawn_opt(fun() ->
                                         Report = fun(Binding, Founding) ->
                                             gen_server:cast(Server,
                                               {founding_captured, Ref, Binding, Founding})
                                         end,
                                         gen_server:cast(Server,
                                           {runner_done, Ref, Fun(Deadline, Report)})
-                                end),
+                                end, [link, monitor]),
     TRef = erlang:send_after(max(0, Deadline - erlang:monotonic_time(millisecond)),
                              self(), {runner_kill, Ref}),
     S#s{runner = {Kind, Pid, MRef, Ref, TRef}}.
@@ -2096,13 +2102,13 @@ start_heavy(Resource, S = #s{ns = Ns, est = Est, height = EstH,
     Ref = make_ref(),
     Budget = application:get_env(quod, runtime_heavy_budget_ms, ?HEAVY_BUDGET_MS),
     {Pid, MRef} =
-        spawn_monitor(
+        spawn_opt(
           fun() ->
                   Outcome = try heavy_job(Ns, Est, EstH, Resource, Rev, Job)
                             catch throw:R -> {error, R}
                             end,
                   gen_server:cast(Server, {heavy_done, Resource, Ref, Outcome})
-          end),
+          end, [link, monitor]),
     TRef = erlang:send_after(Budget, self(), {heavy_kill, Resource, Ref}),
     S#s{heavy_pending = Pending, heavy_order = lists:delete(Resource, Order),
         heavy_running = (S#s.heavy_running)#{Resource => {Pid, MRef, TRef, Ref, Rev, EstH}}}.

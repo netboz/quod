@@ -53,7 +53,9 @@ job "tempo" {
     }
 
     ephemeral_disk {
-      size = 2000
+      size    = 2000
+      sticky  = true
+      migrate = true
     }
 
     task "tempo" {
@@ -102,7 +104,7 @@ job "tempo" {
 
       resources {
         cpu    = 500
-        memory = 768
+        memory = 4096
       }
     }
   }

@@ -1436,3 +1436,37 @@ ordinary handoff; unsubscribing does not kill that cursor and force a rebuild.
 A new subscriber joins that in-flight job. Genuine progress still grants the
 next attempt; demand alone does not repeat it. The original work deadline,
 owner-death teardown and exclusive registry custody remain unchanged.
+
+### Pending claim delivery and live custody
+
+The durable outcome index records knowledge of an application result. A pending
+row is not evidence that Simplex still holds live submission custody. Under
+R4-UNCERTAIN-CLAIM-DELIVERY-01, exact delivery of an already committed claim's
+ordinary target application joins an outstanding append request or a known
+commit awaiting ordered apply. When neither exists it enters the same append
+path. Existing parked callers retain
+their original timer. Delivery remains driven by the coordinator's actual
+progress edges; admission creates no retry timer or additional work owner.
+
+Simplex alone decides whether that application still has live custody. Before
+signing, it compares the application and its carried evidence with the retained
+submission, accepting equivalent finality certificates for the same immutable
+reference while retaining the exact signed source claim. Only the local
+admission timestamp and target signing fields are excluded. A match retains the original signed envelope, placement and custody deadline.
+After custody has ended, ordinary target admission may author an envelope for
+the same deterministic application. This does not replace or re-sign the source
+claim: its bytes, operation identity, request signature and target material stay
+fixed. This is the existing cross-validator target admission contract: different
+target validators may already author envelopes for the same application, whose
+identity excludes that target author envelope. Custody loss on one validator
+does not create another source submission. Current admission and normal
+signing/consensus checks still apply.
+
+A refusal of a resumed delivery says nothing definitive about an earlier
+in-flight envelope. It therefore cannot erase the pending outcome or report a
+terminal rejection. Ordered application supplies the verdict, including a late
+commit, and the first terminal outcome retains its original slot. Terminal
+redelivery performs no append. This transition is limited to ordinary target
+applications of durable claims. Unknown ordinary writes/source claims retain
+their existing contract; private effects retain their journal's custody path.
+No durable or wire format changes are required.

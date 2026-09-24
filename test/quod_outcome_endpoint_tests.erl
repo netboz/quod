@@ -288,10 +288,195 @@ target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test() 
 %% interface is held, not a second consensus implementation. The signed fixture
 %% history is deliberately not claimed as consensus-admitted (the CT redelivery
 %% witness covers that). No receipt or unrelated block releases these callers.
+exact_claim_reuses_live_consensus_custody_test() ->
+    quod_operation_fixture:with(2, fun(#{target := {Ns, Anchor},
+      projection := Projection, node_identity := Signer, application := Signed,
+      claim := Claim, certified_claim_ref := ClaimRef}) ->
+        {Ref, AlternateRef} = equivalent_claim_certificates(ClaimRef, Claim),
+        Key = maps:get(pubkey, Signer),
+        S0 = quod_simplex:test_state(#{ns => Ns, self => Key, id => Signer,
+          genesis_hash => Anchor, validators => [Key], slot => 1, approved => 1,
+          last_applied => 1, sync => ready, prolog_ready => true, store => memory,
+          eng => quod_simplex:eng_with_certs(1, [])}),
+        S = quod_simplex:test_install_projection(Projection, S0),
+        Change = Signed#transaction{author_seq = 0, sig = none,
+                                    signed_bytes = none, authentication = none,
+                                    evidence = {Ref, Claim}},
+        First = {self(), make_ref()}, Duplicate = {self(), make_ref()},
+        {Owned, _} = quod_simplex:test_append(First, Change, S),
+        [Original = {SubmissionId, 1, _, _, Deadline, _}] =
+            quod_simplex:test_custody(Owned),
+        Redelivery = Change#transaction{submitted_at = Change#transaction.submitted_at + 1},
+        {Joined, [{reply, Duplicate, {ok, pending}}]} =
+            quod_simplex:test_append(Duplicate, Redelivery, Owned),
+        ?assertEqual([Original], quod_simplex:test_custody(Joined)),
+        EquivalentFrom = {self(), make_ref()},
+        {Equivalent, [{reply, EquivalentFrom, {ok, pending}}]} =
+            quod_simplex:test_append(EquivalentFrom,
+              Redelivery#transaction{evidence = {AlternateRef, Claim}}, Joined),
+        ?assertEqual([Original], quod_simplex:test_custody(Equivalent)),
+        %% Missing claim evidence is refused by ordinary ingress encoding
+        %% before it can join the existing valid custody.
+        BadFrom = {self(), make_ref()},
+        {Unchanged, [{reply, BadFrom, {error, too_large}}]} =
+            quod_simplex:test_append(BadFrom, Redelivery#transaction{evidence = none}, Equivalent),
+        ?assertEqual([Original], quod_simplex:test_custody(Unchanged)),
+        Expired = quod_simplex:test_expire_custody(Unchanged),
+        ?assertEqual([], quod_simplex:test_custody(Expired)),
+        FirstTag = element(2, First),
+        receive {FirstTag, {error, not_in_charge, unavailable}} -> ok
+        after 1000 -> error(custody_did_not_expire) end,
+        {Resumed, _} = quod_simplex:test_append({self(), make_ref()}, Redelivery, Expired),
+        [{NewSubmissionId, 2, _, _, NewDeadline, _}] = quod_simplex:test_custody(Resumed),
+        ?assertNotEqual(SubmissionId, NewSubmissionId),
+        ?assert(NewDeadline >= Deadline)
+    end).
+
+%% Independently valid quorum subsets certify the exact same claim/block.
+%% As above, this is a custody-owner control, not source history admission.
+equivalent_claim_certificates(
+  {quod_dtx_ref, _, Ns, Anchor, Slot, _, _, _}, Claim) ->
+    Signers = [begin
+        {Key, Seed} = quod_identity:generate(),
+        #{pubkey => Key, key => quod_identity:key_term({Key, Seed})}
+    end || _ <- lists:seq(1, 4)],
+    Committee = lists:sort([maps:get(pubkey, S) || S <- Signers]),
+    {ok, Block} = quod_ledger:new_block(Slot, Slot - 1, {batch, [Claim]}, Slot),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    Hash = quod_simplex:block_hash(Block),
+    Shares = maps:from_list([{maps:get(pubkey, S),
+      quod_simplex:make_share(Domain, commit, Slot, Hash, S)} || S <- Signers]),
+    [A, B, C, D] = Committee,
+    Make = fun(Keys) ->
+        {ok, Cert} = quod_simplex:form_cert(Domain, commit, Slot, Hash,
+                       [maps:get(K, Shares) || K <- Keys], Committee),
+        Entry = quod_ledger:entry(Block, Cert),
+        {ok, Ref} = quod_dtx:certified_entry_ref({Ns, Anchor}, Entry, Claim),
+        ?assert(quod_dtx:certified_entry_ref_matches(
+                  {Ns, Anchor}, Entry, Claim, Ref, Committee)),
+        Ref
+    end,
+    Ref = Make([A, B, C]), Alternate = Make([B, C, D]),
+    ?assertNotEqual(Ref, Alternate),
+    ?assert(quod_dtx:same_certified_ref(Ref, Alternate)),
+    {Ref, Alternate}.
+
+%% Both deadline orders occur: caller custody normally ends first, but a
+%% delivery refusal may arrive while callers still wait. Reopening the actual
+%% DETS index must preserve the same uncertainty and deterministic application.
+uncertain_claim_redelivery_test_() ->
+    [{atom_to_list(Mode), fun() -> uncertain_claim_redelivery(Mode) end}
+     || Mode <- [caller_expired, custody_expired, restarted]].
+
+uncertain_claim_redelivery(Mode) ->
+    with_claim_prolog(fun(F = #{target := Target, target_ref := TargetRef,
+      entry := Entry}, Ns, Prolog, Config, Genesis, Bytes) ->
+        A = maps:get(request_id, F), B = crypto:strong_rand_bytes(16),
+        ok = admit(F, {apply_claim, A, Target, Bytes}, 3000),
+        {First, FirstFrom} = claim_append(),
+        OriginalTimer = quod_prolog:test_parked_timer(Prolog, First#transaction.tx_id),
+        case Mode of
+            custody_expired ->
+                gen_statem:reply(FirstFrom, {error, not_in_charge, unavailable}),
+                ?assertEqual(1, maps:get(parked, quod_prolog:stats(Ns)));
+            _ ->
+                await_claim_uncertainty(F, A),
+                ?assertEqual(0, maps:get(parked, quod_prolog:stats(Ns))),
+                %% The original alias has expired. Its later custody signal
+                %% cannot be mistaken for the new delivery's completion.
+                gen_statem:reply(FirstFrom, {error, not_in_charge, unavailable})
+        end,
+        Active = case Mode of
+            restarted ->
+                ok = gen_server:stop(Prolog),
+                {ok, Restarted} = quod_prolog:start_link(Ns, Config),
+                unlink(Restarted),
+                ok = quod_prolog:apply_entry(Ns, Genesis, replay),
+                ok = quod_prolog:mark_ready(Ns),
+                Restarted;
+            _ -> Prolog
+        end,
+        try
+            ?assertMatch({ok, #{status := pending}}, quod_prolog:outcome(TargetRef)),
+            ok = admit(F, {apply_claim, B, Target, Bytes}, 3000),
+            {Resumed, ResumedFrom} = claim_append(),
+            case Mode of
+                custody_expired ->
+                    ?assertEqual(OriginalTimer,
+                        quod_prolog:test_parked_timer(Active, Resumed#transaction.tx_id));
+                _ -> ok
+            end,
+            ?assertEqual(First#transaction{submitted_at = Resumed#transaction.submitted_at},
+                         Resumed),
+            %% A refusal of this delivery is NOT rejection of the earlier
+            %% in-flight envelope. In particular it must not delete pending.
+            gen_statem:reply(ResumedFrom, {error, busy}),
+            ?assertEqual(1, maps:get(parked, quod_prolog:stats(Ns))),
+            ?assertMatch({ok, #{status := pending}}, quod_prolog:outcome(TargetRef)),
+            assert_no_reply(F),
+            ok = quod_prolog:apply_entry(Ns, Entry, live),
+            Ids = case Mode of custody_expired -> [A, B]; _ -> [B] end,
+            lists:foreach(fun(Id) -> await_claim_committed(F, Id, TargetRef) end, Ids),
+            ?assertMatch({ok, #{status := committed, height := 2}},
+                         quod_prolog:outcome(TargetRef)),
+            %% Terminal redelivery remains read-only and retains its first slot.
+            C = crypto:strong_rand_bytes(16),
+            ok = admit(F, {apply_claim, C, Target, Bytes}, 3000),
+            await_claim_committed(F, C, TargetRef),
+            receive {append_call, _, _} -> error(terminal_delivery_appended)
+            after 0 -> ok end
+        after gen_server:stop(Active) end
+    end).
+
+with_claim_prolog(Test) ->
+    Diff = quod_prolog:terms_to_diff([{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]),
+    with_operation_endpoint(2, Diff, fun(F = #{target := {Ns, Anchor},
+      store := Store, node_identity := Signer, claim := Claim,
+      certified_claim_ref := ClaimRef}) ->
+        stop_process(quod_reg:where({quod_prolog, Ns})),
+        Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
+                        [named_table, protected]),
+        true = ets:insert(Table, {anchor, Anchor}),
+        Dir = filename:join("/tmp", binary_to_list(Ns)),
+        Config = #{node_id => maps:get(pubkey, Signer), identity => Signer,
+                   outcome_backend => disk, ledger_dir => Dir,
+                   transaction_ttl_ms => 500},
+        {ok, Prolog} = quod_prolog:start_link(Ns, Config),
+        unlink(Prolog),
+        try
+            {ok, [Genesis]} = quod_ledger_store:read_range(Store, 1, 1, all),
+            ok = quod_prolog:apply_entry(Ns, Genesis, replay),
+            ok = quod_prolog:mark_ready(Ns),
+            {ok, Bytes} = quod_transaction:encode_evidence(ClaimRef, Claim),
+            Test(F, Ns, Prolog, Config, Genesis, Bytes)
+        after
+            case quod_reg:where({quod_prolog, Ns}) of
+                undefined -> ok;
+                Current -> gen_server:stop(Current)
+            end,
+            ets:delete(Table), file:del_dir_r(Dir)
+        end
+    end).
+
+claim_append() ->
+    receive {append_call, Change, From} -> {Change, From}
+    after 1000 -> error(exact_claim_has_no_submission_owner) end.
+
+await_claim_uncertainty(#{tag := Tag}, Id) ->
+    receive {Tag, {ok, {error, Id, not_ready}, _}} -> ok
+    after 1500 -> error(missing_claim_uncertainty) end.
+
+await_claim_committed(#{tag := Tag}, Id, TargetRef) ->
+    receive {Tag, {ok, {application, Id, committed, Evidence}, _}} ->
+        {ok, Ref, _} = quod_transaction:decode_evidence(Evidence),
+        ?assertEqual(TargetRef, quod_transaction:stable_ref(Ref))
+    after 1000 -> error(missing_claim_commit) end.
+
 pending_application_joins_the_existing_owner_test_() ->
-    [{atom_to_list(Result), fun() -> pending_application_joins_owner(Result) end}
-     || Result <- [committed, rejected]].
-pending_application_joins_owner(Result) ->
+    [{atom_to_list(Mode), fun() -> pending_application_joins_owner(Mode) end}
+     || Mode <- [committed, rejected, committed_before_apply]].
+pending_application_joins_owner(Mode) ->
+    Result = case Mode of committed_before_apply -> committed; _ -> Mode end,
     Diff = case Result of
         committed -> quod_prolog:terms_to_diff([{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]);
         rejected -> []
@@ -314,11 +499,18 @@ pending_application_joins_owner(Result) ->
             {ok, Bytes} = quod_transaction:encode_evidence(ClaimRef, Claim),
             A = maps:get(request_id, F), B = crypto:strong_rand_bytes(16),
             ?assertEqual(ok, admit(F, {apply_claim, A, Target, Bytes}, 3000)),
-            receive {append_call, #transaction{tx_id = TxId}} ->
-                ?assertEqual(element(4, TargetRef), TxId)
+            receive {append_call, #transaction{tx_id = TxId}, AppendFrom} ->
+                ?assertEqual(element(4, TargetRef), TxId),
+                case Mode of
+                    committed_before_apply -> gen_statem:reply(AppendFrom, {ok, 2});
+                    _ -> ok
+                end
             after 1000 -> error(no_first_admission) end,
+            %% Same-sender call observes the reply before the next delivery;
+            %% ordered apply is deliberately withheld until after admission.
+            ?assertEqual(1, maps:get(parked, quod_prolog:stats(Ns))),
             erlang:trace_pattern({quod_prolog, admit_bound_plan, 9}, true, [local]),
-            erlang:trace_pattern({quod_prolog, submit_new_plan, 6}, true, [local]),
+            erlang:trace_pattern({quod_prolog, submit_plan, 7}, true, [local]),
             erlang:trace(Prolog, true, [call, {tracer, self()}]),
             ?assertEqual(ok, admit(F, {apply_claim, B, Target, Bytes}, 3000)),
             receive {trace, Prolog, call, {quod_prolog, admit_bound_plan, _}} -> ok
@@ -326,7 +518,7 @@ pending_application_joins_owner(Result) ->
             ?assertEqual(1, maps:get(parked, quod_prolog:stats(Ns))),
             Barrier = erlang:trace_delivered(Prolog),
             receive {trace_delivered, Prolog, Barrier} -> ok after 1000 -> error(no_trace_barrier) end,
-            receive {trace, Prolog, call, {quod_prolog, submit_new_plan, _}} ->
+            receive {trace, Prolog, call, {quod_prolog, submit_plan, _}} ->
                 error(duplicate_proposal) after 0 -> ok end,
             assert_no_reply(F),
             ok = quod_prolog:apply_entry(Ns, Entry, live),
@@ -354,7 +546,7 @@ pending_application_joins_owner(Result) ->
             ?assertEqual(0, maps:get(parked, quod_prolog:stats(Ns)))
         after
             erlang:trace_pattern({quod_prolog, admit_bound_plan, 9}, false, [local]),
-            erlang:trace_pattern({quod_prolog, submit_new_plan, 6}, false, [local]),
+            erlang:trace_pattern({quod_prolog, submit_plan, 7}, false, [local]),
             stop_process(Prolog), ets:delete(Table)
         end
     end).
@@ -413,8 +605,8 @@ prolog_stub(Ns, Parent) ->
 
 owner_loop(Parent, S) ->
     receive
-        {'$gen_call', _From, {append, Change, _Trace}} ->
-            Parent ! {append_call, Change}, owner_loop(Parent, S);
+        {'$gen_call', From, {append, Change, _Trace}} ->
+            Parent ! {append_call, Change, From}, owner_loop(Parent, S);
         {'$gen_call', From, {dtx_endpoint_local, Request, [], Timeout, _TraceCtx}} ->
             case quod_simplex:test_start_local_dtx_endpoint_request(Request, [], Timeout, From, S) of
                 {ok, S1, Actions} -> reply_actions(Actions), owner_loop(Parent, S1);

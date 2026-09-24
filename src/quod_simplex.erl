@@ -6341,7 +6341,7 @@ decode_claimed_application(Target, EvidenceBlob) ->
     end.
 
 %% Ordinary applications go straight to Prolog's single new/pending/terminal
-%% admission: an exact pending delivery joins its existing waiters. Only private
+%% admission: exact redelivery joins or resumes the same application. Only private
 %% effects need a terminal lookup before journal custody, because their prepared
 %% material may already be retired. Neither path creates another application.
 submit_claimed_application(
@@ -7735,6 +7735,37 @@ execute_ready(Pass, Origin, From, Request, Anchor, Decision,
 %% keep their terminal skip/re-proof contract.
 sign_then(From, Change, Membership, Anchor, S, Then)
   when is_boolean(Membership) ->
+    case claimed_application_custody(Change, S#s.custody) of
+        retained -> reply_now(From, {ok, pending}, S);
+        conflict -> reject_append(From, bad_change, S);
+        absent -> sign_and_place(From, Change, Membership, Anchor, S, Then)
+    end.
+
+%% The committed source claim is immutable; the local author envelope is not
+%% its identity. While custody exists, reuse its exact signature and deadline.
+%% Compare the complete application and exact source claim, allowing equivalent
+%% finality certificates for the same immutable claim reference. Only the local
+%% admission timestamp and signing fields are outside that comparison.
+claimed_application_custody(
+  #transaction{tx_id = Tx, role = {remote_application, _, _, _},
+               evidence = {Ref, Claim}} = Change, Custody) ->
+    case transaction_custody_by_id(Tx, Custody) of
+        {ok, _, #custody{change =
+                         #transaction{evidence = {StoredRef, Claim}} = Stored}} ->
+            Expected = Change#transaction{
+                         submitted_at = Stored#transaction.submitted_at,
+                         evidence = Stored#transaction.evidence},
+            case quod_dtx:same_certified_ref(StoredRef, Ref) andalso
+                 unsigned_envelope(Stored) =:= Expected of
+                true -> retained;
+                false -> conflict
+            end;
+        {ok, _, _} -> conflict;
+        not_found -> absent
+    end;
+claimed_application_custody(_Change, _Custody) -> absent.
+
+sign_and_place(From, Change, Membership, Anchor, S, Then) ->
     case sign_local_change(Change, S) of
         {error, _} ->
             reject_append(From, bad_change, S);
@@ -10272,6 +10303,8 @@ finish_waiter_trace(#waiter{trace_ctx = TraceCtx, trace_span = SpanCtx}, Reply) 
           TraceCtx, <<"consensus.append_result">>, trace_reply_attributes(Reply)),
     quod_trace:finish_span(SpanCtx, Reply).
 
+trace_reply_attributes({ok, pending}) ->
+    #{'quod.outcome' => <<"pending">>};
 trace_reply_attributes({ok, Slot}) ->
     #{'quod.outcome' => <<"committed">>, 'quod.consensus.slot' => Slot};
 trace_reply_attributes({error, Reason}) when is_atom(Reason) ->

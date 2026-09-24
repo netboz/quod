@@ -91,7 +91,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_finalize_pinned_result/1,
          test_terminal_result/1,
          test_not_ready_plan_submission/1,
-         test_submit_outcome/1,
+         test_submit_outcome/1, test_parked_timer/2,
          test_release_absent_group_waiter/3,
          test_resolve_validation/4,
          test_signed_origin_policy_goal/2,
@@ -214,6 +214,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           height :: log_index(),
           timer :: reference(),
           request_id = none :: term(),
+          consensus_slot = undefined :: log_index() | undefined,
           span_ctx :: quod_trace:span_ctx(),
           started :: integer()
          }).
@@ -3786,9 +3787,10 @@ drop_remote_record(
 
 handle_response_info(Info, S = #s{requests = Requests}) ->
     case gen_statem:check_response(Info, Requests, true) of
-        {{reply, Result}, {append, Tx}, Requests1} ->
-            {noreply, append_result(Tx, Result, S#s{requests = Requests1})};
-        {{error, _Reason}, {append, Tx}, Requests1} ->
+        {{reply, Result}, {append, Tx, Admission}, Requests1} ->
+            {noreply, append_result(
+                        Tx, Admission, Result, S#s{requests = Requests1})};
+        {{error, _Reason}, {append, Tx, _Admission}, Requests1} ->
             %% The server may have committed immediately before exiting. Keep the caller
             %% parked so replay/apply can still provide the unambiguous result.
             {noreply, request_completed(Tx, S#s{requests = Requests1})};
@@ -6072,25 +6074,12 @@ handoff_and_park_effect(
              discard_unsubmitted(Change#transaction.tx_id, S)}
     end.
 
-park_handed_off_effect(
-  From, Change, ReplyBindings, TraceCtx, S = #s{ns = Ns}) ->
-    Tx = Change#transaction.tx_id,
-    {TransactionCtx, SpanCtx} = quod_trace:start_span(
-                                  TraceCtx, <<"quod.transaction">>, internal,
-                                  #{'quod.namespace' => Ns,
-                                    'quod.tx.id' => quod_trace:tx_id(Tx),
-                                    'quod.kb.read_height' => S#s.applied,
-                                    'quod.diff.operations' => 0}),
+park_handed_off_effect(From, Change, ReplyBindings, TraceCtx, S) ->
+    {TransactionCtx, S1} = park_plan(
+                            From, Change, ReplyBindings, [], TraceCtx, S),
     _ = quod_trace:add_event(
           TransactionCtx, <<"transaction.handed_off">>, #{}),
-    TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
-    T0 = quod_time:mono_ms(),
-    Parked1 = (S#s.parked)#{Tx =>
-                 #parked_write{waiters = [{From, ReplyBindings}],
-                               height = S#s.applied, timer = TRef,
-                               request_id = none, span_ctx = SpanCtx,
-                               started = T0}},
-    {noreply, S#s{parked = Parked1}}.
+    {noreply, S1}.
 
 outcome_admission_error(Reason, S) ->
     {reply, {error, Reason}, S}.
@@ -6161,18 +6150,26 @@ admit_bound_plan(From, Change, ReplyBindings, Diff, TraceCtx, Ref,
         {{terminal, Stored}, Outcomes1} ->
             {reply, terminal_submission_reply(Stored, ReplyBindings),
              S#s{outcomes = Outcomes1}};
-        {pending, Outcomes1} when is_map_key(Tx, Parked) ->
-            {noreply, add_parked_waiter(
-                        Tx, From, ReplyBindings,
-                        S#s{outcomes = Outcomes1})};
         {pending, Outcomes1} ->
-            park_existing_plan(
-              From, Change, ReplyBindings, Diff, TraceCtx,
-              S#s{outcomes = Outcomes1});
+            S1 = S#s{outcomes = Outcomes1},
+            case {Change#transaction.role, maps:get(Tx, Parked, undefined)} of
+                {_, #parked_write{request_id = ReqId, consensus_slot = Slot}}
+                  when ReqId =/= none; Slot =/= undefined ->
+                    {noreply, add_parked_waiter(Tx, From, ReplyBindings, S1)};
+                {{remote_application, _, _, _}, _}
+                  when Change#transaction.effects =:= [] ->
+                    submit_plan(From, Change, ReplyBindings, Diff,
+                                TraceCtx, pending, S1);
+                {_, #parked_write{}} ->
+                    {noreply, add_parked_waiter(Tx, From, ReplyBindings, S1)};
+                {_, undefined} ->
+                    park_existing_plan(
+                      From, Change, ReplyBindings, Diff, TraceCtx, S1)
+            end;
         {new, Outcomes1} ->
-            submit_new_plan(
+            submit_plan(
               From, Change, ReplyBindings, Diff,
-              TraceCtx, S#s{outcomes = Outcomes1});
+              TraceCtx, new, S#s{outcomes = Outcomes1});
         {error, Reason} ->
             outcome_index_error(Reason, Ref, S)
     end.
@@ -6304,20 +6301,29 @@ worker_operations(Operations) ->
        || Operation <- Operations]).
 -endif.
 
-park_existing_plan(From, Change, ReplyBindings, Diff, TraceCtx,
-                   S = #s{ns = Ns}) ->
-    Tx = Change#transaction.tx_id,
-    {_TransactionCtx, SpanCtx} = quod_trace:start_span(
-                                   TraceCtx, <<"quod.transaction">>, internal,
-                                   #{'quod.namespace' => Ns,
-                                     'quod.tx.id' => quod_trace:tx_id(Tx),
-                                     'quod.kb.read_height' => S#s.applied,
-                                     'quod.diff.operations' => length(Diff)}),
-    TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
-    Row = #parked_write{waiters = [{From, ReplyBindings}],
-                        height = S#s.applied, timer = TRef,
-                        span_ctx = SpanCtx, started = quod_time:mono_ms()},
-    {noreply, S#s{parked = (S#s.parked)#{Tx => Row}}}.
+park_existing_plan(From, Change, ReplyBindings, Diff, TraceCtx, S) ->
+    {_TransactionCtx, S1} = park_plan(
+                             From, Change, ReplyBindings, Diff, TraceCtx, S),
+    {noreply, S1}.
+
+park_plan(From, #transaction{tx_id = Tx}, ReplyBindings, Diff, TraceCtx,
+          S = #s{ns = Ns, parked = Parked}) ->
+    case maps:is_key(Tx, Parked) of
+        true ->
+            %% Joining or resuming never extends the original caller timer.
+            {TraceCtx, add_parked_waiter(Tx, From, ReplyBindings, S)};
+        false ->
+            {TransactionCtx, SpanCtx} = quod_trace:start_span(
+              TraceCtx, <<"quod.transaction">>, internal,
+              #{'quod.namespace' => Ns, 'quod.tx.id' => quod_trace:tx_id(Tx),
+                'quod.kb.read_height' => S#s.applied,
+                'quod.diff.operations' => length(Diff)}),
+            TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
+            Row = #parked_write{waiters = [{From, ReplyBindings}],
+                                height = S#s.applied, timer = TRef,
+                                span_ctx = SpanCtx, started = quod_time:mono_ms()},
+            {TransactionCtx, S#s{parked = Parked#{Tx => Row}}}
+    end.
 
 add_parked_waiter(Tx, From, ReplyBindings, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked) of
@@ -6327,38 +6333,26 @@ add_parked_waiter(Tx, From, ReplyBindings, S = #s{parked = Parked}) ->
                       waiters = [{From, ReplyBindings} | Waiters]}}}
     end.
 
-submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
-                S = #s{ns = Ns}) ->
+submit_plan(From, Change, ReplyBindings, Diff, TraceCtx, Admission, S) ->
     Tx = Change#transaction.tx_id,
-    {TransactionCtx, SpanCtx} = quod_trace:start_span(
-                                  TraceCtx, <<"quod.transaction">>, internal,
-                                  #{'quod.namespace' => Ns,
-                                    'quod.tx.id' => quod_trace:tx_id(Tx),
-                                    'quod.kb.read_height' => S#s.applied,
-                                    'quod.diff.operations' => length(Diff)}),
+    {TransactionCtx, S1} = park_plan(
+                            From, Change, ReplyBindings, Diff, TraceCtx, S),
     _ = quod_trace:add_event(TransactionCtx, <<"transaction.proved">>, #{}),
     try gen_statem:send_request(
-          quod_reg:via({quod_simplex, Ns}), {append, Change, TransactionCtx}) of
+          quod_reg:via({quod_simplex, S#s.ns}),
+          {append, Change, TransactionCtx}) of
         ReqId ->
             Requests1 = gen_statem:reqids_add(
-                          ReqId, {append, Tx}, S#s.requests),
-            TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
-            %% T0 anchors the tx-latency histogram: same node, same monotonic clock
-            %% as the observation in release/4 — never a cross-node wall-clock delta.
-            T0 = quod_time:mono_ms(),
-            S1 = S#s{parked = (S#s.parked)#{Tx =>
-                       #parked_write{
-                         waiters = [{From, ReplyBindings}],
-                         height = S#s.applied, timer = TRef,
-                         request_id = ReqId, span_ctx = SpanCtx,
-                         started = T0}},
-                     requests = Requests1},
-            {noreply, S1}
+                          ReqId, {append, Tx, Admission}, S1#s.requests),
+            Parked = S1#s.parked,
+            Row = maps:get(Tx, Parked),
+            {noreply, S1#s{parked = Parked#{Tx =>
+                            Row#parked_write{request_id = ReqId}},
+                          requests = Requests1}}
     catch
         error:badarg ->
-            quod_trace:finish_span(SpanCtx, {error, consensus_unavailable}),
-            {reply, {error, consensus_unavailable},
-             discard_unsubmitted(Tx, S)}
+            {noreply, append_result(
+                        Tx, Admission, {error, consensus_unavailable}, S1)}
     end.
 
 %% The outer wire decoder has only bounded the four opaque blobs. Decode the
@@ -6394,6 +6388,12 @@ submit_outcome({error, _Reason}) -> {rejected, bad_plan}.
 
 -ifdef(TEST).
 test_submit_outcome(Reply) -> submit_outcome(Reply).
+
+test_parked_timer(Engine, Tx) ->
+    #s{parked = Parked} = sys:get_state(Engine),
+    #parked_write{timer = Timer, started = Started} = maps:get(Tx, Parked),
+    {Timer, Started}.
+
 -endif.
 
 %% Reply to whoever parked a submission: a gen_server caller directly, or an
@@ -6411,6 +6411,18 @@ reply_parked_waiters(Waiters, Reply) ->
     lists:foreach(fun({From, _Bindings}) -> reply_parked(From, Reply) end,
                   Waiters).
 
+%% A refused delivery cannot settle an earlier submission of the same durable
+%% claim. Only ordered application may replace its pending outcome. The request
+%% label records admission knowledge, not another custody owner.
+append_result(Tx, pending, {ok, Slot}, S) when is_integer(Slot) ->
+    append_result(Tx, {ok, Slot}, S);
+append_result(Tx, pending, _DeliveryResult, S) ->
+    request_completed(Tx, S);
+append_result(Tx, new, Result, S) ->
+    append_result(Tx, Result, S).
+
+append_result(Tx, {ok, pending}, S) ->
+    request_completed(Tx, S);
 append_result(Tx, {ok, Slot}, S) ->
     request_completed(Tx, mark_consensus_reply(Tx, Slot, S));
 append_result(Tx, {error, not_in_charge, unavailable}, S) ->
@@ -6448,9 +6460,11 @@ request_completed(Tx, S = #s{parked = Parked}) ->
 
 mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked, undefined) of
-        #parked_write{span_ctx = SpanCtx} ->
+        Row = #parked_write{span_ctx = SpanCtx} ->
             _ = quod_trace:set_attributes(SpanCtx, #{'quod.consensus.slot' => Slot}),
-            S;
+            %% Commit notification can precede ordered apply. Redelivery joins
+            %% these callers while the already committed entry is applying.
+            S#s{parked = Parked#{Tx => Row#parked_write{consensus_slot = Slot}}};
         undefined ->
             S
     end.

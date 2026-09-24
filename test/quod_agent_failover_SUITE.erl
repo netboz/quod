@@ -9,10 +9,15 @@ without failback.
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("quod_ledger.hrl").
 -export([all/0, init_per_testcase/2, end_per_testcase/2,
          validator_host_loss_recovers_state/1,
          abrupt_host_loss_recovers_state/1,
-         suspended_host_retires_stale_process/1]).
+         suspended_host_retires_stale_process/1,
+         uncertain_claim_recovers_after_quorum_loss/1,
+         uncertain_claim_recovers_after_target_restart/1]).
+-export([hold_claim_admission/3, begin_uncertain_claim/1,
+         release_claim_and_await_expiry/3]).
 -export([bind_node/2, submit_node/1, await_goal/3, await_agent/3,
          resumed_work/4, restart_runtime/2, diagnostics/0,
          await_node_principal/2, assert_old_key_fenced/2]).
@@ -21,7 +26,9 @@ without failback.
 -define(ROOT, <<"quod:root">>).
 
 all() -> [validator_host_loss_recovers_state, abrupt_host_loss_recovers_state,
-          suspended_host_retires_stale_process].
+          suspended_host_retires_stale_process,
+          uncertain_claim_recovers_after_quorum_loss,
+          uncertain_claim_recovers_after_target_restart].
 
 init_per_testcase(TestCase, Config0) ->
     Config = [{host_loss, TestCase} | Config0],
@@ -68,6 +75,124 @@ init_per_testcase(TestCase, Config0) ->
 end_per_testcase(_TestCase, Config) ->
     stop_peers([maps:get(peer, N) || N <- ?config(nodes, Config)]),
     ok.
+
+%% Keep all transports and hosted children alive. Suspend two of four target
+%% consensus owners only AFTER the ordinary signed source claim commits. Proof
+%% admission therefore succeeded with quorum; the fault tests delivery custody.
+uncertain_claim_recovers_after_quorum_loss(Config) ->
+    uncertain_claim_recovers(Config, false).
+
+uncertain_claim_recovers_after_target_restart(Config) ->
+    uncertain_claim_recovers(Config, true).
+
+uncertain_claim_recovers(Config, Restart) ->
+    ct:timetrap({minutes, 3}),
+    [A, B, C, D] = Nodes = ?config(nodes, Config),
+    {agent_instance_ref, ?NS, Anchor, actor} = ?config(agent_ref, Config),
+    Goal = {node_authorized_goal, ?NS, Anchor, {record_delivery, durable_delivery}},
+    {Prolog, Token, Tx, ClaimRef, OperationRef, Bytes, Signature} =
+        call(B, ?MODULE, begin_uncertain_claim, [Goal]),
+    SourceNs = maps:get(node_namespace, B),
+    ?assertMatch({ok, #{status := claimed}}, call(B, quod_prolog, outcome, [OperationRef])),
+    Held = [{N, call(N, quod_reg, where, [{quod_simplex, ?NS}])} || N <- [A, D]],
+    try
+        lists:foreach(fun({N, Owner}) -> ok = call(N, sys, suspend, [Owner]) end, Held),
+        TargetRef = {transaction, ?NS, Anchor, Tx},
+        ok = call(B, ?MODULE, release_claim_and_await_expiry, [Prolog, Token, Tx]),
+        ?assertMatch({ok, #{status := pending}}, call(B, quod_prolog, outcome, [TargetRef])),
+        ?assertMatch({ok, #{operation_state := unresolved}},
+                     call(B, quod_prolog, outcome, [OperationRef])),
+        %% Fixture caller TTL is shorter than the observed custody deadline.
+        ?assertEqual(0, maps:get(parked, call(B, quod_prolog, stats, [?NS]))),
+        case Restart of
+            true ->
+                %% Drop every target's volatile proposals/relay mailboxes while
+                %% retaining all four ledgers. Otherwise a late old proposal can
+                %% complete even on the broken implementation. Source ontology
+                %% owners and their original committed claim stay running.
+                lists:foreach(fun(N) ->
+                    ok = call(N, quod_ns_sup, stop_namespace, [?NS])
+                end, [A, D, B, C]),
+                lists:foreach(fun(N) ->
+                    start_namespace(N, ?NS, #{mode => join, genesis_hash => Anchor,
+                        seed_peers => [maps:get(endpoint, Other) || Other <- Nodes, Other =/= N]})
+                end, Nodes);
+            false ->
+                lists:foreach(fun({N, Owner}) -> ok = call(N, sys, resume, [Owner]) end, Held)
+        end,
+        %% Only real consensus/application progress may wake the existing
+        %% source coordinator. The test never resubmits the signed goal/claim.
+        #{operation_state := terminal} =
+            call(B, quod_ct, await_operation_complete, [SourceNs, OperationRef, 60000]),
+        ?assertMatch({ok, _, {operation_outcome, #{operation_state := terminal},
+                             #{status := completed}}},
+            call(B, quod_client_goal_ingress, resolve_operation, [Bytes, Signature])),
+        {ok, #{status := committed, height := Height}} =
+            call(B, quod_prolog, outcome, [TargetRef]),
+        lists:foreach(fun(N) ->
+            ok = call(N, quod_ct, await_applied, [?NS, Height, 30000]),
+            ?assertMatch({ok, [#{}], _}, call(N, quod_prolog, prove_ro,
+                [?NS, {findall, {'X'}, {delivered, {'X'}}, [durable_delivery]}]))
+        end, Nodes),
+        ?assertMatch({ok, #{status := committed}}, call(B, quod_prolog, outcome, [ClaimRef])),
+        ct:pal("Original operation completed after custody expiry; restart=~p, target height=~p",
+               [Restart, Height])
+    after
+        lists:foreach(fun({N, Owner}) -> catch call(N, sys, resume, [Owner]) end, Held),
+        catch call(B, erlang, send, [Prolog, {release_claim, Token}]),
+        catch call(B, sys, remove, [Prolog, Token])
+    end.
+
+begin_uncertain_claim(Goal) ->
+    Prolog = quod_reg:where({quod_prolog, ?NS}),
+    Token = make_ref(), Parent = self(),
+    ok = sys:install(Prolog, {Token, fun ?MODULE:hold_claim_admission/3, {Parent, Token}}),
+    {Numbered, _, _} = erlog_int:term_instance(Goal, 0),
+    {ok, Bytes, Signature} = quod_node_actor:signed_goal(execute, Numbered,
+        crypto:strong_rand_bytes(32), quod_time:now_ms() + 30000),
+    spawn(fun() -> Parent ! {claim_submission_result, Token,
+                            quod_client_goal_ingress:submit(Bytes, Signature)} end),
+    receive
+        {claim_held, Token, Tx, ClaimRef, OperationRef} ->
+            {Prolog, Token, Tx, ClaimRef, OperationRef, Bytes, Signature};
+        {claim_submission_result, Token, Result} ->
+            error({submission_ended_before_claim_gate, Result})
+    after 15000 -> error(claim_not_admitted)
+    end.
+
+hold_claim_admission({Parent, Token},
+  {in, {'$gen_call', _, {submit_role,
+    #transaction{tx_id = Tx, role = {remote_application, ClaimRef, OperationRef, _}}, _, _}}}, _) ->
+    Parent ! {claim_held, Token, Tx, ClaimRef, OperationRef},
+    receive {release_claim, Token} -> done
+    after 15000 -> error(claim_gate_not_released)
+    end;
+hold_claim_admission(State, _, _) -> State.
+
+release_claim_and_await_expiry(Prolog, Token, Tx) ->
+    Owner = quod_reg:where({quod_simplex, ?NS}),
+    Pattern = {quod_simplex, complete_custody, 3},
+    erlang:trace_pattern(Pattern,
+        [{['_', {error, not_in_charge, unavailable}, '_'], [], [{return_trace}]}], [local]),
+    erlang:trace(Owner, true, [call, {tracer, self()}]),
+    try
+        Prolog ! {release_claim, Token},
+        receive
+            {trace, Owner, call, {quod_simplex, complete_custody, [Id, _, State]}} ->
+                [{Id, _, {submit, _, _, Canonical}, _, _, _}] =
+                    [Row || Row <- quod_simplex:test_custody(State), element(1, Row) =:= Id],
+                {ok, #{tx_id := Tx}} = quod_transaction:decode_submission_metadata(Canonical)
+        after 45000 -> error(custody_did_not_expire_without_quorum)
+        end,
+        receive {trace, Owner, return_from, Pattern, _} -> ok
+        after 1000 -> error(custody_expiry_did_not_complete) end,
+        {_, Current} = sys:get_state(Owner),
+        ?assertEqual([], quod_simplex:test_custody(Current)),
+        ok
+    after
+        erlang:trace(Owner, false, [call]),
+        erlang:trace_pattern(Pattern, false, [local])
+    end.
 
 abrupt_host_loss_recovers_state(Config) ->
     validator_host_loss_recovers_state(Config).
@@ -406,6 +531,8 @@ agent_policy(Old, Observers, Eligible, Administrator) ->
                           {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}},
         {failover_entry, {goal, {agent_hosted, actor, OldRef, 1, {'_'}}}},
         {failover_entry, {trigger_event, {resume_work, Value}}},
+        {failover_entry, {record_delivery, durable_delivery}},
+        {':-', {record_delivery, Value}, {assertz, {delivered, Value}}},
         {':-', {can_invoke, Signing, Principal, {'_'}, ?NS},
          {agent_hosted, actor, Principal, {'Epoch'}, {'Key'}}},
         {':-', {can_invoke, {record_recovered_work, Value},
@@ -427,7 +554,8 @@ install_grants(Observers, Old, Anchor) ->
         Initial = case N =:= Administrator of
             true -> [{goal, {agent_hosted, actor, OldRef, 1, {'_'}}}]; false -> []
         end,
-        Work = [{trigger_event, {resume_work, V}} || V <- work_values()],
+        Work = [{record_delivery, durable_delivery} |
+                [{trigger_event, {resume_work, V}} || V <- work_values()]],
         lists:foreach(fun(G) ->
             committed(call(N, ?MODULE, submit_node,
                            [{assertz, {can_execute_for, ?NS, Anchor, G}}]))

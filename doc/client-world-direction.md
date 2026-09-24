@@ -1146,10 +1146,37 @@ across the post-commit lifecycle effect.
 Each device class defines its offered Prolog operations and eidolon recipes;
 lenses may supply its data views. For example, the Prolog-console class offers
 `prove_goal`, presented as an entry in its target pie menu. Choosing it opens a
-GUI containing an exact ontology target, a goal editor and results. Submission
-binds those inputs and uses the normal signed proof path. The full signature and
-exact action binding of that class operation remain to be specified; it must not execute
-arbitrary input with the lobby service's privileges.
+focused working interface containing an exact ontology target, a goal editor
+and results. The screen expands to fill the desktop client view; in VR it becomes
+a large readable panel in front of the user rather than requiring work on a tiny
+in-world screen. Closing the focused interface returns to the room without
+implicitly submitting a draft or cancelling an already admitted operation.
+Focus is personal session state and does not resize the device for other users.
+
+The minimum usable console provides multiline goal entry, variable bindings for
+each solution, next-solution and stop controls, explicit acceptance of staged
+changes, and clear failure/error or unknown-outcome feedback. Submission binds
+those inputs and uses the normal signed proof path. The full signature and
+exact action binding remain to be specified; it must not execute arbitrary input
+with the lobby service's privileges. Ontology browsing and source editing are
+later workstation capabilities using the same authorization and draft/apply
+model, not requirements to complete before the first usable goal console.
+
+The console's playing eidolon describes its normal operating presentation,
+including access to that focused workspace. Its edition eidolon serves authoring
+of the console itself: dimensions, parts, screen placement, materials and exposed
+configuration, where permitted. Editing another ontology through the working
+console is still normal use of the tool, not selection of the console's edition
+eidolon. A class need not provide an edition recipe until it has actual editable
+properties. Presentation choice is per view, not a global playing/editing mode.
+
+The visual direction is futuristic, with a simple first realization built from
+reusable geometry and GUI components. A recipe can describe a console body as a
+box with given dimensions, a screen surface and material/texture references;
+the client maps those primitive descriptions to its rendering engine. GUI
+components define the functional editor and results independently of that body.
+The exact common primitive fields and update identities are an implementation
+contract, not extra device-specific behavior for the user to configure.
 
 The console reuses the Explorer console's signing, cursor lifecycle, exact
 Accept/Next/Stop semantics and error handling. Shared client logic should be
@@ -1234,7 +1261,9 @@ Acceptance must demonstrate:
   before admission or linking and duplicate observations neither lose the
   obligation nor create competing lobbies, and lobby birth does not recurse.
 - Point at an instantiated console, select `prove_goal` through the touchpad pie
-  menu, enter a goal through its GUI and see the normal signed proof result.
+  menu, enter a multiline goal in its focused workspace and inspect solutions
+  with variable bindings through the existing signed proof/cursor path. Return
+  to the lobby without losing or silently submitting the local draft.
 - Switch a device between playing and edition eidolon recipes without changing
   its domain identity, permissions or authoritative state.
 - Return to the same personal lobby after logout/reconnect, with saved layout

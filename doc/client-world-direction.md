@@ -997,7 +997,7 @@ Camera, controller poses, selection and unfinished forms remain session state.
 
 Key authentication alone does not create a human agent. Once a user ontology
 is actually created, the selected direction is automatic creation of its own
-lobby ontology through an ontology reaction (section 11.3). The existing
+lobby ontology through durable state convergence (section 11.3). The existing
 explicit agent-reference selection remains the bootstrap until an enrollment
 flow is defined. Login follows the resulting lobby reference or shows its
 pending/unavailable state; it must not create another lobby to replace a missing
@@ -1053,59 +1053,75 @@ own eidolon recipe. The output makes both targets explicit, so selecting a
 device and acting on its remote subject cannot be confused. The same node may appear in several
 lobbies without copying its authoritative state into them.
 
-### 11.3 Creation events and automatic lobby provisioning
+### 11.3 Durable lobby provisioning and creation notifications
+
+The selected guarantee is a durable requirement: every newly created user must
+have a personal lobby. Establish that requirement in the user's founding state,
+not in a later live reaction that may never run. Illustrative current-state
+terms, using the user's local instance name, are:
+
+```prolog
+lobby_provisioning(LocalUser, pending).
+% Replaced after verified creation and linking, not asserted alongside pending:
+lobby_provisioning(LocalUser, ready(LobbyRef)).
+```
+
+These describe successive states of one domain obligation, not an accumulating
+message history. The exact intermediate operation-reference terms and predicate
+signatures remain to be specified. The ready state supplies the one authoritative
+lobby link rather than duplicating it in another mutable profile fact.
 
 The intended flow is:
 
 ```text
-authorized user-ontology creation
-    -> actual creation completion for its exact identity
-    -> committed ontology-created occurrence
-    -> Prolog reaction recognizing a newly created user
-    -> ordinary lobby-ontology creation, with initial device instances
-    -> completion records the user's exact lobby reference
+user genesis commits its instance and lobby requirement together
+    -> founding state handler reconciles current requirements
+    -> authorized execution stages ordinary lobby creation
+    -> existing lifecycle owner completes that exact operation
+    -> ordinary transaction replaces pending state with the exact lobby link
 ```
 
-Root is a candidate owner of the provisioning policy because it already owns
-creation policy, but that placement is not settled. Keep the general lifecycle
-notification independent of the lobby-specific rule. The rule must recognize an
-authorized user instance in the created ontology, not infer its class from a
-namespace string or from the creator alone. Pattern unification carries the
-exact created identity and correlation into that rule. Creation of the lobby
-itself must not recursively qualify as another user creation.
+The same state handler runs for live changes and startup reconciliation. It
+selects affected work through existing projection/runtime mechanisms; it does
+not perform creation IO in the ordered projection tier. The chosen executor
+uses ordinary signed goals, root creation policy and the existing durable effect
+journal. D holds the requirement and resulting reference; P reconstructs work
+from that state; the effect owner retains creation custody. These are existing
+responsibilities, not new event categories or additional executors.
 
-An illustrative notification is
-`ontology_created(CreationRef, Namespace, GenesisAnchor, CreatorRef)`; this is a
-proposed occurrence, distinct from the existing local postcondition
-`ontology_created/2`. Creation accepted in the controlling ledger and the actual
-creation of the target ontology are different moments. Emit the completion only
-after the existing lifecycle owner establishes the exact created identity; do
-not append a premature success event beside the original create request.
-Current availability/readiness is a separate observation from historical birth.
+Root remains the authority for creation permission. Lobby provisioning policy
+recognizes the actual authorized user instance, never a namespace naming pattern
+or the creator alone. Lobby genesis instantiates devices but does not declare
+another human user's provisioning requirement. Founding declarations and the
+executor's explicit grants must satisfy the existing runtime/ACL contracts.
 
-The implementation has the normal durable effect journal and namespace owner,
-but no such committed completion event. `finish_effect/3` records the verified
-local effect result and releases waiters; namespace-topology pub/sub publishes
-local availability changes, not an authenticated Prolog birth occurrence. The
-missing bridge must extend that existing completion path, with an authorized
-ordinary ontology transaction. No lifecycle broker, second executor, generic
-outbox or periodic scan is implied.
+Recovery must cover a crash before work starts, around creation admission, after
+creation but before linking, and after linking. Retain the exact operation and
+created identity through the existing custody handoffs. Pending state alone does
+not prove that no creation was submitted. Unknown outcomes use the existing
+operation-resolution path, not a newly signed create. The guarded FIPA
+continuation exception does not implicitly authorize repeating lifecycle effects.
+Duplicate observations must not create competing lobbies: a chosen namespace
+alone cannot ensure this because concurrent creations can have distinct anchors.
+The exact admission/correlation and completion-to-link handoffs remain an
+implementation contract to settle; recording the requirement does not solve
+those handoffs by itself.
 
-A live reaction is not by itself enough to guarantee every user a lobby:
-historical replay does not rerun reactions. Creation/provisioning must remain
-recoverable if a process dies before publishing completion, before the reaction
-runs, or after lobby creation but before the user link is installed. Retain the
-unfinished domain obligation and exact operation/target references under the
-existing lifecycle and ontology owners, and reconcile through their real
-progress notifications. Duplicate observations must converge to one selected
-lobby per exact user identity. A chosen namespace alone does not ensure this:
-concurrent creations can have distinct anchors. Unknown operation outcomes
-remain subject to existing resolution rules, never a fresh create submission.
+A general `ontology_created(CreationRef, Namespace, GenesisAnchor, CreatorRef)`
+occurrence remains useful for live notifications and independent reactions, but
+is not the source of provisioning responsibility. This proposed event differs
+from the existing local postcondition `ontology_created/2`. Publish it only after
+actual creation of the exact identity, not when the controlling request is merely
+accepted. Historical birth and current availability/readiness remain distinct.
 
-The reporting transaction's authorization, completion evidence, owner and crash
-handoff, and the domain terms for the provisioning guard/link must be specified
-before implementation. This is a concrete lifecycle gap, not a reason to change
-Prolog reaction semantics. No root-wide ontology catalogue is introduced.
+The existing lifecycle journal's `finish_effect/3` records verified local
+completion and releases waiters; namespace-topology pub/sub reports local
+availability. Neither currently publishes that committed Prolog occurrence.
+Its authorized reporting transaction and completion evidence still need design.
+Missing a notification must not lose the lobby requirement, and historical
+reactions remain unreplayed. No second reaction wake path for provisioning,
+lifecycle broker, generic outbox, periodic scan or root-wide ontology catalogue
+is introduced.
 
 ### 11.4 Devices and existing paths
 
@@ -1214,8 +1230,9 @@ semantics. Detailed world authoring and shared presence follow this checkpoint.
 Acceptance must demonstrate:
 
 - Creating an authorized user ontology provisions one personal lobby with its
-  initial classed devices; interruption and duplicate notification do not lose
-  the obligation or create competing lobbies, and lobby birth does not recurse.
+  initial classed devices even when no creation notification is delivered; crashes
+  before admission or linking and duplicate observations neither lose the
+  obligation nor create competing lobbies, and lobby birth does not recurse.
 - Point at an instantiated console, select `prove_goal` through the touchpad pie
   menu, enter a goal through its GUI and see the normal signed proof result.
 - Switch a device between playing and edition eidolon recipes without changing

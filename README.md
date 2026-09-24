@@ -1,15 +1,54 @@
 # Quod
 
-Quod is an ontology-first distributed runtime. Each ontology is a Prolog
-knowledge base backed by its own signed, consensus-ordered history. Authorized
-goals read or change that knowledge through normal Prolog proofs; committed
-changes drive rebuildable runtime projections and reactions.
+Quod is a distributed virtual-reality and simulation system built around
+executable Prolog ontologies. Its goal is to host persistent shared worlds in
+which people and autonomous agents can perceive, reason, communicate, act, and
+change a simulated environment through the same semantic model.
+
+An ontology describes what exists, what it means, who may change it, and which
+consequences follow. Each ontology is a Prolog knowledge base backed by its own
+signed, consensus-ordered history. Authorized goals read or change that
+knowledge through normal Prolog proofs; committed changes drive scenes,
+interactions, simulations, agent behavior, and rebuildable runtime projections.
 
 The system is written in Erlang/OTP and communicates over pure-Erlang QUIC. It
 does not require a message broker. Its current release is declared in
 `src/quod.app.src`.
 
-## What Quod provides
+## Product direction
+
+Quod is intended to support:
+
+- persistent multi-user worlds presented through immersive WebXR or ordinary
+  desktop clients;
+- shared semantic scene graphs, composable models, spatial interfaces, and
+  ontology-selected presentations;
+- server-authoritative real-time simulation with bodies, joints, collision,
+  materials, energy, anatomy, ecology, devices, and environmental processes;
+- editable procedural and voxel worlds whose meaningful edits survive restart
+  while generated geometry and per-frame motion remain transient;
+- human, autonomous, and FIPA agents represented by the same anchored identity
+  and authorization model;
+- explanations derived from ontology rules: physics measures an interaction,
+  while Prolog determines its meaning and durable consequences;
+- multiple renderers and device profiles consuming the same bounded semantic
+  projections, from VR controllers and hand tracking to keyboard, mouse, and
+  flat displays.
+
+World facts and semantic consequences belong in durable ontology state.
+Per-frame transforms, interpolation, visibility, scene indexes, meshes, and
+physics working state are rebuildable or transient. This separation lets Quod
+provide responsive simulation without putting every frame into consensus.
+
+The client/world architecture is described in
+[`doc/client-world-direction.md`](doc/client-world-direction.md). The intended
+simulation consequence model is recorded in
+[`doc/world-consequence-direction.md`](doc/world-consequence-direction.md).
+These layers are the product goal; substantial parts remain architectural
+direction while the distributed ontology and agent substrate is implemented
+first.
+
+## Current foundation
 
 - **Durable Prolog ontologies.** Facts, policy, actions, and authorization live
   together in an anchored ontology history.
@@ -34,7 +73,7 @@ does not require a message broker. Its current release is declared in
   challenge-response authentication and one predicate-neutral signed-goal API.
   The Explorer provides ledger inspection and an authenticated Prolog console.
 
-FIPA agents are the next protocol layer above this substrate. FIPA ontologies
+FIPA agents are another protocol layer above this substrate. FIPA ontologies
 will define ACL envelopes, conversations, AMS/DF behavior, and the durable
 obligations they need. They reuse Quod actions, reactions, hosted processes,
 and signed-goal delivery rather than introducing another executor or message
@@ -210,12 +249,17 @@ redeploy. The persistence and signature-domain rules are documented in
 - [`test/`](test/) — EUnit and Common Test coverage
 - [`doc/ontology-actor-architecture.md`](doc/ontology-actor-architecture.md) — actor identity, bootstrap, hosting, and recovery authority
 - [`doc/hosted-agent-runtime.md`](doc/hosted-agent-runtime.md) — current hosted-process and event contract
+- [`doc/client-world-direction.md`](doc/client-world-direction.md) — VR clients, semantic scenes, presentation, physics, and editable worlds
+- [`doc/world-consequence-direction.md`](doc/world-consequence-direction.md) — simulation meaning, materials, ecology, combat, and durable consequences
 - [`doc/inter-ontology.md`](doc/inter-ontology.md) — proved scopes and cross-ontology behavior
 - [`doc/write-lanes-plan.md`](doc/write-lanes-plan.md) — read, independent-write, and atomic-write lanes
 - [`doc/performance-roadmap.md`](doc/performance-roadmap.md) — measured performance state and deferred work
 - [`AGENTS.md`](AGENTS.md) — repository engineering rules
 
-The generic hosting substrate is deployed through release 0.7.236. FIPA ACL
-syntax, conversations, AMS/DF services, and application-specific presentation
-and world ontologies remain later layers. Performance investigations remain
-deferred unless they reveal a concrete correctness or availability blocker.
+The distributed ontology, signed-goal, reaction, and generic hosting substrate
+is deployed through release 0.7.236. FIPA conversations and the VR/world
+runtime are the next product layers. Presentation experiments already exist,
+but the complete scene projection, client synchronization, physics authority,
+and editable-world milestones remain to be implemented and validated.
+Performance investigations remain deferred unless they reveal a concrete
+correctness or availability blocker.

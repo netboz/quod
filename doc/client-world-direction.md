@@ -871,6 +871,8 @@ commitments; concrete modules should be introduced only with implementation.
 ## 10. Candidate validation milestones
 
 These milestones are intentionally outside the numbered agent/FIPA slices.
+The personal lobby in section 11 is the proposed first application for C1; the
+full C1 checklist remains broader than that initial application.
 
 ### C1 -- client projection and GUI
 
@@ -918,3 +920,185 @@ old authorities are rejected; two clients converge under concurrent cross-chunk
 edits; stale revisions conflict cleanly; missed deltas resnapshot; replay,
 failover, and compaction preserve matching voxel/collider revisions; world load
 cannot starve block apply or reliable traffic.
+
+## 11. First application: the personal lobby
+
+**Concept direction:** after login, a user enters a personal lobby described by
+ontology state. Personal first, shared spaces later is the selected scope. The
+model below is a proposal for refinement, not an implemented world protocol or
+a final predicate schema.
+
+### 11.1 Purpose and arrival
+
+The lobby is a persistent place to inspect and operate Quod through meaningful
+objects. Its room, devices, placement, presentation choices and saved links are
+ontology data. The client renders their eidolons and interactions from authorized
+projections; it does not hard-code a different screen for every device.
+
+A returning user authenticates with the existing key provider, selects their
+stable human-agent identity where necessary, and resolves its configured lobby.
+The client obtains a current authorized snapshot and follows scoped changes.
+Desktop and immersive clients enter the same lobby with the same domain actions.
+Camera, controller poses, selection and unfinished forms remain session state.
+
+Key authentication alone does not create a human agent or a lobby. First-use
+provisioning must use ordinary authorized genesis/transactions and record the
+resulting references. The current explicit agent-reference selection remains the
+bootstrap until an enrollment flow is defined. An unavailable lobby yields an
+honest unavailable/loading state; login must not create a replacement ontology.
+
+The lobby is independent of the node serving the browser. Reconnecting through
+another node must resolve the same anchored lobby and recover outstanding
+operation outcomes through the existing client journal.
+
+### 11.2 Ownership and references
+
+A lobby is a domain instance in an ordinary personal ontology. The user's
+containing ontology may hold it when its ownership and ACL permit this; there
+is no requirement for an additional ledger per lobby or per device. Shared
+presentation definitions belong in reusable ontologies. Personal device
+instances and layout belong in the personal ontology.
+
+The exact human-agent reference receives explicit lobby read/edit permissions.
+Class membership, containment and an editable layout grant no rights over the
+nodes, ontologies or agents represented by its devices. A later shared space
+will have its own access and collaboration policy rather than making this
+private lobby public by default.
+
+Illustrative durable relationships, with schematic reference variables:
+
+```prolog
+instance_of(lobby, my_lobby).
+lobby_user(my_lobby, HumanAgentRef).
+instance_of(prolog_console, console_1).
+lobby_device(my_lobby, console_1).
+instance_of(node_station, node_station_1).
+lobby_device(my_lobby, node_station_1).
+device_target(node_station_1, NodeAgentRef).
+lobby_agent_link(my_lobby, AgentRef, Label).
+```
+
+These examples describe the domain, not access grants or founding input ready to
+submit. References to external ontologies and instances bind their exact genesis
+anchors. Local instances use local names, never a circular own-genesis hash.
+The authenticated identity's ordinary profile may point to its selected lobby;
+the exact profile predicate and first-use policy remain to be specified.
+
+A device is a lobby entity; the node it represents is a different entity. A
+console-shaped device eidolon may contain an eidolon depicting that node. The
+representation makes their targets explicit, so selecting a device and acting
+on its remote subject cannot be confused. The same node may appear in several
+lobbies without copying its authoritative state into them.
+
+### 11.3 Devices and existing paths
+
+| Device | User experience | Authoritative source and action path |
+| --- | --- | --- |
+| Node station | Inspect a node the user administers, its hosting state and the operations exposed to this user | Exact node identity, its governing policy and runtime observations; existing node action/execution paths |
+| Ontology workshop | Draft an ontology from a versioned template, inspect its initial rules and permissions, then create it | Root-owned `create_ontology/3`, existing prepared effect, outcome and namespace lifecycle |
+| Prolog console | Select an exact ontology, enter a goal, inspect bindings or submit a change | Existing signed read/execute/cursor APIs and operation journal |
+| Agent display | Inspect linked agents, their committed assignments, observed availability and domain-reported activity | Each agent's containing ontology and existing hosting observations |
+| World entrance | Inspect and enter a known world once a compatible world is available | An anchored world reference and its entry policy; changing view does not copy the world |
+
+A world template is ordinary ontology founding input using the world vocabulary;
+it is not another creation executor. The workshop initially supports one small,
+reviewed template plus inspection of the resulting goal. Template provenance,
+version, parameters and proposed initial access policy are visible before
+submission. Creating an ontology and observing that it is usable are separate
+stages of the existing lifecycle. The workshop shows both and never starts a
+second creation because the first result is uncertain. Saving a convenient lobby
+link is a later domain edit, not evidence of creation and not an atomicity claim
+across the post-commit lifecycle effect.
+
+The console reuses the Explorer console's signing, cursor lifecycle, exact
+Accept/Next/Stop semantics and error handling. Shared client logic should be
+extracted where needed, not copied into a VR executor. Ordinary forms keep drafts
+locally and do not hold a proof while awaiting input. An explicitly opened expert
+proof cursor retains its existing bounded lifetime and expiry behavior.
+
+An agent link is a saved reference or a relationship established by application
+policy. It is not an ownership or delegation grant. The first list is explicit
+and bounded; there is no fleet-wide search or private global agent inventory.
+The user signs as their own agent unless an existing valid acting identity is
+explicitly selected. Merely selecting a displayed agent does not wield it.
+
+### 11.4 Actions and perceptible activity
+
+Devices expose ontology-authored contextual goals, not all internal predicates
+or every `action/3` clause. Prolog rules derive entries from the device, its
+target, current domain state and the authenticated user. Pattern unification
+binds the target and parameters. Every submitted goal still passes the target's
+ordinary policy, independently of whether the UI offered it.
+
+Each representation defines visual and sound behavior for the device's actions,
+following section 4.5. The workshop may show a prepared local draft, work in
+progress, a completed artifact or a truthful failure. Its animation follows the
+actual creation outcome and readiness observations; an elapsed animation is not
+proof that an ontology exists. One-shot completion sounds are not replayed after
+reconnection. Ongoing activity is reconstructed from its current owner.
+
+The lobby also provides a concrete physical acceptance example: a door closing
+against an obstruction stops halfway, with matching geometry and audio, while
+`door_closed(Door)` remains false. This requires the actual simulation bridge;
+a scripted obstruction animation cannot count as physics acceptance. The first
+lobby can establish device interactions before that bridge is ready.
+
+### 11.5 Current implementation gaps
+
+- The Babylon prototype reads one lens and reconciles primitive eidolons. It
+  lacks the proposed general view session, change stream, attachment projection,
+  device interactions and coordinated audio. Extend the shared presentation
+  path rather than implementing one client renderer per lobby device.
+- Browser-saved agent references are currently local conveniences. A durable
+  profile/lobby link and explicit agent relations need ordinary ontology rules;
+  no global user table or special user-home creation path is reintroduced.
+- Human administration of a physical node needs explicit target-owned grants
+  and a supported exact-node invocation contract. Current `quod:node` hosting
+  policy admits node principals; a human login does not supply that authority.
+  Reuse node execution where applicable and bind the intended node, never infer
+  it from the browser endpoint or choose whichever host answered a scope call.
+- Root has a creation prerequisite, but its shipped authored `can_invoke/4` is
+  default-open. The workshop's creator grant cannot be treated as a protection
+  against callers allowed to rewrite that policy. Root policy must enforce the
+  intended permissions before a multi-user authorization acceptance claim.
+- Committed host assignment and a currently observed live process are different
+  facts. The agent display must distinguish assigned, observed running,
+  recovering, refused and unavailable/unknown without inventing a universal
+  agent-state engine. Domain activity is supplied by the agent's ontology.
+- Existing foundation locks on runtime declarations still apply. Any necessary
+  system-ontology declaration change needs its normal activation/succession
+  plan; updating a `.pl` file does not update a deployed ontology.
+
+Visibility and private observations are authorized before projection. Revoked
+access removes affected controls/content through scoped notifications; stale
+controls cannot authorize a later command. Subscription ordering, cancellation
+and original deadlines remain properties of the shared projection paths. No
+per-device polling, copied knowledge base, new broker or duplicate executor is
+part of the lobby model.
+
+### 11.6 First acceptance and later expansion
+
+Keep the first implementation as one usable room: a console, an ontology
+workshop, an agent display and one authorized node station. Reusable primitives
+and spatial panels suffice; desktop and one XR input profile use the same device
+semantics. Detailed world authoring and shared presence follow this checkpoint.
+
+Acceptance must demonstrate:
+
+- Return to the same personal lobby after logout/reconnect, with saved layout
+  and links restored and another user's private data excluded.
+- Invoke the same permitted operation from a device and the direct console;
+  deny the same forbidden operation through both paths.
+- Create one ontology through the workshop, show its exact identity and actual
+  readiness, and resolve a lost reply without another creation request.
+- Follow a linked agent's real host change/recovery without duplicate actors or
+  a fabricated running status, including an observation becoming unavailable.
+- Reconcile state after a gap or slow client without replaying sounds; preserve
+  pending-operation truth through reconnect and remove revoked controls.
+- Render and operate the same device model on desktop and in XR. Validate the
+  obstructed-door case separately when physical activity is integrated.
+
+Remaining product choices are the initial room's appearance, the first small
+world template, which specific node operations deserve controls, and whether
+later lobby visits require avatars or can initially be observer viewpoints.
+They do not require choosing a different action, identity or transaction model.

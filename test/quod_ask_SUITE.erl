@@ -533,11 +533,11 @@ remote_scope_trace_parentage(Config) ->
         ?assertEqual(Directory#span.span_id, ScopeOpen#span.parent_span_id),
         ?assertEqual(Open#span.span_id, Request#span.parent_span_id),
         Auth = peer:call(Target, quod_trace_fixture, take_span,
-                         [Collector, <<"quod.scope.authenticate">>]),
+                         [Collector, <<"quod.scope.authenticate">>, Public#span.trace_id]),
         InvokeOpen = peer:call(Target, quod_trace_fixture, take_span,
-                              [Collector, <<"quod.scope.invoke_open">>]),
+                              [Collector, <<"quod.scope.invoke_open">>, Public#span.trace_id]),
         InvokeNext = peer:call(Target, quod_trace_fixture, take_span,
-                              [Collector, <<"quod.scope.invoke_next">>]),
+                              [Collector, <<"quod.scope.invoke_next">>, Public#span.trace_id]),
         %% These spans are emitted by the actual remote authentication worker
         %% and target invocation worker, not by a codec-only fixture.
         lists:foreach(fun(Span) ->

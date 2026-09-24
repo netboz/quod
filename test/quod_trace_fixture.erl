@@ -4,7 +4,7 @@
 %% target would allocate its intentionally caller-only ontology symbols. Calls
 %% enter through peer:call, so no distribution to the controlling CT VM is
 %% needed. All pid messaging and monitors below are local to this peer.
--export([start/0, take_span/2, stop/1, prove/2]).
+-export([start/0, take_span/3, stop/1, prove/2]).
 
 start() ->
     Owner = self(),
@@ -26,8 +26,8 @@ start() ->
         error(trace_fixture_start_timeout)
     end.
 
-take_span(Pid, Name) ->
-    gen_server:call(Pid, {take_span, Name}, 5000).
+take_span(Pid, Name, TraceId) ->
+    gen_server:call(Pid, {take_span, Name, TraceId}, 5000).
 
 stop(Pid) ->
     Monitor = monitor(process, Pid),
@@ -44,19 +44,26 @@ stop(Pid) ->
 
 loop() ->
     receive
-        {'$gen_call', From, {take_span, Name}} ->
-            gen_server:reply(From, quod_trace_tests:take_span(Name)),
+        {'$gen_call', From, {take_span, Name, TraceId}} ->
+            gen_server:reply(From, quod_trace_tests:take_span(Name, TraceId)),
             loop();
         stop -> ok
     end.
 
 prove(Namespace, Goal) ->
     quod_trace_tests:with_tracer(fun() ->
-        Result = quod_prolog:prove(Namespace, Goal),
-        {Result,
-         quod_trace_tests:take_span(<<"quod.prolog.public_proof">>),
-         quod_trace_tests:take_span(<<"quod.ask.open">>),
-         quod_trace_tests:take_span(<<"quod.ask.directory_resolve">>),
-         quod_trace_tests:take_span(<<"quod.ask.remote_scope_open">>),
-         quod_trace_tests:take_span(<<"quod.ask.invoke_open_request">>)}
+        %% Pick the request identity before dispatch: even public_proof can
+        %% have unrelated namesakes in this application-wide exporter.
+        quod_trace:with_span(otel_ctx:new(), <<"fixture.remote_scope">>, internal, #{},
+          fun(Parent) ->
+            TraceId = otel_span:trace_id(Parent),
+            Take = fun(Name) -> quod_trace_tests:take_span(Name, TraceId) end,
+            Result = quod_prolog:prove(Namespace, Goal),
+            {Result,
+             Take(<<"quod.prolog.public_proof">>),
+             Take(<<"quod.ask.open">>),
+             Take(<<"quod.ask.directory_resolve">>),
+             Take(<<"quod.ask.remote_scope_open">>),
+             Take(<<"quod.ask.invoke_open_request">>)}
+          end)
     end).

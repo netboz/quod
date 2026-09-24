@@ -200,6 +200,32 @@ trace_correlated_selector_ignores_other_same_named_spans_test() ->
         end
     end).
 
+peer_collector_ignores_other_same_named_spans_test() ->
+    Collector = quod_trace_fixture:start(),
+    try
+        quod_trace:with_span(otel_ctx:new(), <<"collector.expected">>, internal, #{},
+          fun(Parent) ->
+            TraceId = otel_span:trace_id(Parent),
+            lists:foreach(fun(Name) ->
+                %% Real SDK exports, wrong trace first. The collector must
+                %% retain that span while selecting this request's child.
+                OtherTrace = quod_trace:with_span(otel_ctx:new(), Name, internal, #{},
+                  fun(Other) -> otel_span:trace_id(Other) end),
+                ?assertNotEqual(TraceId, OtherTrace),
+                ok = quod_trace:with_span(quod_trace:context(), Name, internal, #{},
+                  fun(_) -> ok end),
+                Wanted = quod_trace_fixture:take_span(Collector, Name, TraceId),
+                ?assertEqual(TraceId, Wanted#span.trace_id),
+                ?assertEqual(otel_span:span_id(Parent), Wanted#span.parent_span_id),
+                Leftover = quod_trace_fixture:take_span(Collector, Name, OtherTrace),
+                ?assertEqual(OtherTrace, Leftover#span.trace_id)
+            end, [<<"quod.scope.authenticate">>, <<"quod.scope.invoke_open">>,
+                  <<"quod.scope.invoke_next">>])
+          end)
+    after
+        ok = quod_trace_fixture:stop(Collector)
+    end.
+
 sampled_parent_child_lifecycle_test() ->
     with_tracer(fun() ->
         Parent = <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>,

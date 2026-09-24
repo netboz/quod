@@ -1,271 +1,221 @@
-# quod
+# Quod
 
-A **Prolog/Brahms** P2P node over **QUIC** — no broker, no EMQX.
+Quod is an ontology-first distributed runtime. Each ontology is a Prolog
+knowledge base backed by its own signed, consensus-ordered history. Authorized
+goals read or change that knowledge through normal Prolog proofs; committed
+changes drive rebuildable runtime projections and reactions.
 
-Transport is QUIC via the pure-Erlang [`quic`](https://hex.pm/packages/quic)
-library (no NIF, no msquic). Membership is [Brahms](https://www.cs.technion.ac.il/~idish/ftp/brahms.pdf)
-byzantine-resistant peer sampling, one instance per **namespace** (ontology).
-This re-bases onbrater's L1: where onbrater used an in-VM MQTT broker, quod uses
-QUIC streams + Brahms gossip for fan-out.
+The system is written in Erlang/OTP and communicates over pure-Erlang QUIC. It
+does not require a message broker. Its current release is declared in
+`src/quod.app.src`.
 
-## Architecture
+## What Quod provides
 
+- **Durable Prolog ontologies.** Facts, policy, actions, and authorization live
+  together in an anchored ontology history.
+- **Byzantine fault tolerant ordering.** Each ontology has its own committee,
+  DispersedSimplex ordering process, signed transactions, finality certificates,
+  verified catch-up, and live feed.
+- **Authenticated agents.** A stable `agent_instance_ref/3` identifies an actor
+  inside an exact ontology history. Active keys and permissions are proved from
+  committed state before a signed goal can execute.
+- **Cross-ontology proofs and writes.** Read dependencies use certified
+  snapshots. A single foreign writer uses the source-claimed independent lane;
+  changes to several writers use the atomic DTX lane.
+- **Deterministic reactions.** Applied diffs become events. `react_on/3` patterns
+  match them with ordinary Prolog unification, so bindings flow into the
+  reaction goal. `trigger_event/1` records an event without asserting it as a
+  permanent fact.
+- **Generic agent hosting.** Committed host assignments select one local Erlang
+  process per agent epoch. The process and its transient queues are disposable;
+  its durable state remains in its ontology. Host moves rotate the signing key,
+  and ontology policy decides recovery from authenticated failure reports.
+- **Browser and machine clients.** The TLS client endpoint uses
+  challenge-response authentication and one predicate-neutral signed-goal API.
+  The Explorer provides ledger inspection and an authenticated Prolog console.
+
+FIPA agents are the next protocol layer above this substrate. FIPA ontologies
+will define ACL envelopes, conversations, AMS/DF behavior, and the durable
+obligations they need. They reuse Quod actions, reactions, hosted processes,
+and signed-goal delivery rather than introducing another executor or message
+ledger.
+
+## The execution model
+
+Quod separates a committed change into three ordered layers:
+
+1. **D — durable state.** Consensus commits a transaction and applies its fact
+   diff to the ontology knowledge base.
+2. **P — projection.** The runtime installs the derived state required by the
+   change, such as subscriptions and hosted-agent bindings.
+3. **E — effects and reactions.** Live commits may publish events and schedule
+   bounded external work. Historical replay rebuilds state without re-emitting
+   effects.
+
+An Erlang process is never a second durable owner. It may hold sockets, working
+state, timers, and references to secret custody, but it must reconstruct from
+committed ontology state after restart. Cross-process readiness uses the
+existing `gproc`/`quod_reg` notifications and direct messages; owners do not
+poll one another.
+
+```text
+signed goal
+    │
+    ▼
+proof + ACL + staged diff ── foreign reads/writes ── certified ontology scopes
+    │
+    ▼
+per-ontology consensus ── signed block history ── catch-up/feed
+    │
+    ▼
+committed Prolog state (D)
+    │
+    ├── rebuildable runtime projection (P)
+    └── unified events, reactions, and governed effects (E)
 ```
-quod_brahms (gen_statem, one per namespace Ns) ── view V + min-wise sampler
-   │   gossips on channel Ns; open_link / quod_link:send / monitor(LinkPid)
-   ▼
-quod_quic (gen_server, singleton) ──────────────── server + dialer + authority
-   │   one connection per pool key (no dial race within a pool); pure-Erlang QUIC
-   ▼
-quod_conn (one process per QUIC connection) ────── OWNS that connection
-   │   demuxes {stream_data, StreamId, ..} to the right link
-   ▼
-quod_link (one process per (peer, channel)) ────── framing + publish + send
-       publishes to {channel, Channel}; its death is the disconnect signal
+
+The settled contracts are in
+[`doc/content-layer-design.md`](doc/content-layer-design.md),
+[`doc/multiwrite-architecture.md`](doc/multiwrite-architecture.md), and
+[`doc/agent-fipa-plan.md`](doc/agent-fipa-plan.md).
+
+## Ontologies and system bootstrap
+
+`quod:root` is the only ontology pinned in node configuration. After root is
+ready, the node proves its committed `system_ontology/2` catalogue and starts or
+joins each exact anchored history through the ordinary lifecycle. System status
+is therefore network state, not an Erlang allowlist or a property inferred from
+a source filename.
+
+The bundled system vocabulary includes node, agent, and human-user policy. The
+current domain system ontologies also include:
+
+| ontology | purpose |
+| --- | --- |
+| `quod:names` | name pools, recognition, and deterministic proof-bound drawing |
+| `quod:licence` | licence families, compatibility, obligations, and release reach |
+| `quod:measure` | quantities, units, dimensions, and conversion |
+| `quod:lens` | reusable selections and presentation encodings |
+| `quod:present` | bounded renderer-neutral presentation marks |
+
+The naming and licence sources and tests live at
+[`priv/ontologies/quod_names.pl`](priv/ontologies/quod_names.pl),
+[`priv/ontologies/quod_licence.pl`](priv/ontologies/quod_licence.pl),
+[`test/quod_names_tests.erl`](test/quod_names_tests.erl), and
+[`test/quod_licence_tests.erl`](test/quod_licence_tests.erl). They become system
+ontologies only when their exact genesis anchors are registered in root. The
+deployed 0.7.236 network has both entries and hosts both histories on every
+node.
+
+The full bootstrap and actor model is specified in
+[`doc/ontology-actor-architecture.md`](doc/ontology-actor-architecture.md).
+
+## Runtime components
+
+| component | responsibility |
+| --- | --- |
+| `quod_ns` / `quod_simplex` | one ontology's supervised lifecycle and ordering owner |
+| `quod_ledger_store` | append-only durable block storage |
+| `quod_prolog` | MVCC Prolog state, proof staging, validation, and apply |
+| `quod_runtime` | ordered projections, subscriptions, reactions, and hosted children |
+| `quod_foreign_log` / `quod_foreign_projection` | shared verified foreign history and subscribed projections |
+| `quod_client_goal*` | parsing, authentication, routing, custody, and outcome resolution for signed goals |
+| `quod_agent` / `quod_agent_vault` | hosted process lifetime and governed private-key custody |
+| `quod_node_actor` / `quod_system_ontology` | node identity, lifecycle actions, and root-driven system startup |
+| `quod_quic` / `quod_conn` / `quod_link` | authenticated QUIC connections, prioritized streams, and framed channels |
+| `quod_brahms` | Byzantine-resistant peer sampling per ontology |
+
+Transport connections are shared by peer identity, while streams remain scoped
+to their protocol channels. Consensus traffic receives higher stream priority
+than bulk catch-up and application traffic. Peer identity is an Ed25519 public
+key bound to mutual TLS; endpoint addresses are routing hints rather than actor
+identity.
+
+## Build and test
+
+Quod requires a recent Erlang/OTP installation and `rebar3`. The QUIC stack is
+pure Erlang, so a C toolchain is not required.
+
+```bash
+./scripts/gen-cert.sh       # create local development certificates once
+rebar3 compile
+rebar3 shell
 ```
 
-| module | role |
-| ------ | ---- |
-| `quod_brahms` | per-namespace membership statem (push/pull/reconstruct rounds) |
-| `quod_brahms_sampler` | secret-keyed min-wise uniform sampler (HMAC-SHA256) |
-| `quod_quic` | QUIC server + dialer; serializes ordinary, pinned, and identity-discovery pools |
-| `quod_conn` | per-connection owner; routes stream data to links |
-| `quod_link` | per-(peer, channel) stream: header handshake + length-prefixed frames |
-| `quod_reg` | gproc nomenclature (`{channel,Ns}`, `{quod_brahms,Ns}`, `{quod_ns,Ns}`, …) |
-| `quod_app` | env-driven boot (config from the orchestrator) |
-| `quod_simplex` | per-namespace BFT ordering, batching, failover, and recovery |
-| `quod_transaction` | namespace-bound canonical transaction signing and relay envelopes |
-| `quod_relay` | one-pass relay/consensus wire dispatch and bounded relay-result caching |
-| `quod_prolog` | committed Prolog state, optimistic validation, reads, and ordered apply |
-| `quod_diff` / `quod_committed_projection` | one canonical fact/outcome transition for live apply and certified foreign materialization |
-| `quod_runtime` | per-ontology rebuildable P state, durable subscription catalogue, and P-before-E ordering |
-| `quod_foreign_log` / `quod_foreign_projection` | shared certified foreign history and demand-driven subscribed projection |
-| `quod_ledger_store` | append-only durable block log; one fsync per committed batch |
-| `quod_catchup` / `quod_feed` | verified historical catch-up and live dissemination |
+The default example in [`config/quod.conf`](config/quod.conf) founds
+`quod:root` on first use. A production node instead receives its exact root
+anchor and persistent data directory from the orchestrator.
 
-The target actor and system-startup model is specified in
-[`doc/ontology-actor-architecture.md`](doc/ontology-actor-architecture.md):
-nodes, agents, human-facing users, and services are classed instances in exact
-containing ontologies; Prolog actions own policy and governed Erlang external
-predicates bridge committed truth to the live node and network.
-Explicit ontology subscriptions and their shared certified projections are
-specified in
-[`doc/ontology-subscription-plan.md`](doc/ontology-subscription-plan.md); the
-implemented single applied-operation-to-`react_on/3` path above them is specified
-in
-[`doc/event-reaction-refinement-plan.md`](doc/event-reaction-refinement-plan.md).
+Useful verification commands are:
 
-**Identity.** A node's id is its **Ed25519 public key** (`node_id`), generated on first
-boot and persisted; the address `{Host, Port}` is demoted to a resolvable routing hint.
-The first frame on a stream is a header announcing the opener's `{Pubkey, Addr}` + channel,
-and **mutual TLS** binds the connection to that key (`quic:peercert/1` must match the
-claimed pubkey). The committee is identified by pubkeys; Brahms discovery still works in
-addresses (it reads the `Addr` from the header). Consensus shares, finality
-certificates, and every non-genesis transaction are Ed25519-signed. Consensus
-signatures are bound to the ontology namespace and its pinned genesis hash, so
-an overlapping committee cannot replay a vote or certificate from another
-ontology or differently anchored chain. The sole founder records a fresh,
-queryable `consensus_incarnation/1` nonce in slot 1, so wiping and re-founding
-the same namespace produces a new signature domain. A write sent
-to a non-leader validator is transparently relayed to the proposer of its exact
-earliest usable slot using the signed canonical bytes; signatures authenticate
-authors but never replace target `can_invoke/4` authorization. Signed goals use
-the deployed generic anchored agent principal: the canonical
-`agent_instance_ref/3` identifies the actor, and its containing ontology proves
-the active signing key.
-For a signed write with one foreign writer, the agent ontology first
-commits a batchable operation claim, the target commits one ordinary
-application under its normal ACL/OCC path, and the agent ontology records the
-completion asynchronously. Any read-only ontologies contribute f+1 snapshot
-certificates, not Prepare/Finalize records. Only two or more writers use the
-five-record atomic DTX protocol; their read-only dependencies remain
-participants of that atomic group for now.
-The canonical consensus signature contract is
+```bash
+rebar3 as test eunit
+rebar3 as test ct
+rebar3 xref
+rebar3 dialyzer
+rebar3 as prod release
+```
+
+Common Test opens real loopback peers and QUIC connections. Run stateful suites
+sequentially when collecting release evidence; concurrent `rebar3` commands
+must not share the same `_build/test` tree.
+
+## Configuration and interfaces
+
+The node reads HOCON from `config/quod.conf` by default. Set `QUOD_CONF` to use
+another file. Scalar settings can be overridden with `QUOD_` environment
+variables using `__` for nesting; the `content` list is rendered as a whole by
+the deployment.
+
+The main listeners are:
+
+| listener | default | role |
+| --- | ---: | --- |
+| QUIC | `14567` | consensus, feed, catch-up, discovery, and internal requests |
+| Prometheus | `14568` | `/metrics` |
+| Explorer | `14569` | optional loopback read-only ledger viewer |
+| TLS client | `14570` | authenticated client, Explorer, and signed-goal API |
+
+The browser client source is under [`client/`](client/) and the Explorer source
+under [`ui/`](ui/). Built assets are committed in `priv/client/` and
+`priv/explorer/`.
+
+Container deployments must retain the VM limits in `config/vm.args`. In
+particular, `+Q 65536` prevents the BEAM from sizing an enormous port table from
+a container runtime's unusually high `nofile` limit. Scheduler counts and
+Nomad CPU allocations should be changed together.
+
+## Deployment
+
+The Docker image builds the production release, and
+[`deploy/quod.nomad`](deploy/quod.nomad) defines the fleet. Validate both the
+release and the rendered Nomad job before rollout:
+
+```bash
+rebar3 as prod release
+docker build -t REGISTRY/quod:VERSION .
+nomad job validate deploy/quod.nomad
+```
+
+Routine upgrades preserve every anchored ledger and use the existing root
+genesis hash. Founding a network and purging ledgers are separate operations;
+purging destroys ontology history and must never be part of an ordinary
+redeploy. The persistence and signature-domain rules are documented in
 [`doc/consensus-signatures.md`](doc/consensus-signatures.md).
 
-**Message contract.** A consumer of channel `Ns`:
+## Project map
 
-```erlang
-quod_reg:subscribe({channel, Ns}),
-receive {quod_message, {Peer, LinkPid}, Ns, Payload} -> ... end,  %% inbound gossip
-quod_link:send(LinkPid, Reply),                                   %% reply on the same stream
-erlang:monitor(process, LinkPid)  %% -> {'DOWN', ...} is the disconnect
-```
+- [`priv/ontologies/`](priv/ontologies/) — shipped Prolog founding sources
+- [`src/`](src/) — Erlang/OTP runtime and protocol implementation
+- [`test/`](test/) — EUnit and Common Test coverage
+- [`doc/ontology-actor-architecture.md`](doc/ontology-actor-architecture.md) — actor identity, bootstrap, hosting, and recovery authority
+- [`doc/hosted-agent-runtime.md`](doc/hosted-agent-runtime.md) — current hosted-process and event contract
+- [`doc/inter-ontology.md`](doc/inter-ontology.md) — proved scopes and cross-ontology behavior
+- [`doc/write-lanes-plan.md`](doc/write-lanes-plan.md) — read, independent-write, and atomic-write lanes
+- [`doc/performance-roadmap.md`](doc/performance-roadmap.md) — measured performance state and deferred work
+- [`AGENTS.md`](AGENTS.md) — repository engineering rules
 
-## Build & run
-
-Pure Erlang — no C toolchain, fast build.
-
-```bash
-./scripts/gen-cert.sh        # once: self-signed dev cert in priv/certs/
-rebar3 compile
-rebar3 shell                 # QUIC listener on :14567
-```
-
-Join a namespace from the shell, or via env (see below):
-
-```erlang
-quod_brahms:start_namespace(<<"ont:test">>, #{
-    node_id    => {"127.0.0.1", 14567},
-    seed_peers => [{"127.0.0.1", 14568}, {"127.0.0.1", 14569}]}).
-quod_brahms:view(<<"ont:test">>).     %% the converged peer view
-quod_brahms:sample(<<"ont:test">>).   %% a uniform sample
-```
-
-`rebar3 eunit` (unit) and `rebar3 ct` (real loopback QUIC) cover the stack.
-
-## Configuration
-
-Each release reads its HOCON configuration file (normally `config/quod.conf`,
-rendered by the orchestrator). Scalar settings may be overridden with `QUOD_`
-environment variables using `__` for nesting; content namespaces remain file
-configured because `content` is a list. See `config/quod.conf` for the current
-configuration surface.
-
-Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
-`14568`): `quod_up` and per-namespace `quod_brahms_{view_size,sample_size,links,rounds}`.
-
-The **web explorer** has two entry points. `explorer.enabled` exposes the
-optional unauthenticated, read-only ledger viewer, loopback-bound by default
-(`explorer.ip`/`explorer.port`, default `14569`). The TLS client listener serves
-the same UI at `/explorer`; after challenge-response login its backtracking
-console submits ordinary signed goals. Frontend source lives in `ui/`; its
-built bundle is committed under `priv/explorer/` — see `ui/README.md`.
-
-Explorer history uses the running ontology's committed snapshot. Stopped-ledger
-inspection requires `?mode=offline` on `/api/txs`, `/api/tx/:ns/:id`, or
-`/api/block/:ns/:slot`; it refuses a running ontology. Live-owner failure returns
-HTTP 503, never an automatic disk scan. `explorer.read_budget_ms` configures one
-read deadline (default 30 seconds), including WebSocket Finalize enrichment.
-Synchronous disk I/O is not forcibly interrupted: if it finishes after the
-deadline, the read is refused and its handle closed. This is not a hard bound on
-HTTP completion time.
-
-> #### `+Q` is not optional in a container {: .warning }
->
-> The BEAM sizes its port table from `ulimit -n`. Container runtimes default
-> `nofile` to ~1e9, which preallocates **~1.5 GB** of `port_table`. `config/vm.args`
-> caps it with `+Q 65536` (KB-sized table). Without it a node uses ~2 GB instead
-> of ~100 MB.
-
-The release also caps BEAM at four normal/dirty CPU schedulers, two dirty-I/O
-schedulers, and four async threads. Nomad grants each Quod task 500 MHz; inheriting
-all 16 host CPUs created 58 scheduler/async threads and made a normal recovery peak
-near the 512 MiB task limit. Raise the VM thread counts together with task CPU when
-deploying on substantially larger dedicated resources.
-
-## Deploy (Docker + Nomad)
-
-```bash
-set -euo pipefail
-
-TAG=0.7.165
-REGISTRY=192.168.1.11:5000
-NODE_COUNT=8
-docker build -t "$REGISTRY/quod:$TAG" .
-docker push "$REGISTRY/quod:$TAG"
-
-# 0.7.152 changes the catch-up channel to page-credit frames. Stop every home
-# and cloud allocation before the upgrade; never mix the old/new wire.
-# Persisted ledger formats are unchanged: preserve the anchored volumes.
-nomad job stop quod
-
-# STEADY-STATE REDEPLOY — use this only when the release declares no persisted
-# format break and the network has already been founded with the current
-# generation. If a release declares a break, use the clean founding procedure
-# below exactly once; subsequent deploys resume its anchored volumes.
-nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
-  -var node_count="$NODE_COUNT" -var cloud_node_count=0 \
-  -var genesis_hash="$GENESIS_HASH" deploy/quod.nomad
-
-# ---------------------------------------------------------------------------
-# FOUNDING A NEW NETWORK — only when the release breaks the persisted format,
-# which each such release states explicitly. It destroys all ledger history.
-# Everything below is skipped by a routine upgrade.
-#
-# Stop the fleet, then delete every
-# dynamic compute volume named quod-node-local[N]. Obtain and verify the IDs
-# before deleting them; /quod/data is the allocation mount, not the host path.
-nomad job stop -purge quod
-nomad volume status -type host
-nomad volume status -type host -json |
-  jq -r '.[] | select(.Name | test("^quod-node-local\\[[0-9]+\\]$")) | .ID' |
-  while IFS= read -r volume_id; do
-    nomad volume delete -type host "$volume_id"
-  done
-[ "$(nomad volume status -type host -json |
-       jq '[.[] | select(.Name | test("^quod-node-local\\[[0-9]+\\]$"))] | length')" -eq 0 ]
-
-# Recreate one empty mkdir-plugin host volume per allocation index, distributed
-# deterministically across the ready compute nodes.
-mapfile -t COMPUTE_NODE_IDS < <(
-  nomad node status -json |
-    jq -r '.[] |
-      select(.NodeClass == "compute" and
-             .Status == "ready" and
-             .SchedulingEligibility == "eligible") |
-      .ID' |
-    sort
-)
-[ "${#COMPUTE_NODE_IDS[@]}" -gt 0 ]
-COMPUTE_NODE_COUNT="${#COMPUTE_NODE_IDS[@]}"
-for i in $(seq 0 $((NODE_COUNT - 1))); do
-  node_id="${COMPUTE_NODE_IDS[$((i % COMPUTE_NODE_COUNT))]}"
-  sed -e "s/quod-node-local\\[0\\]/quod-node-local[$i]/" \
-      -e "s/__COMPUTE_NODE_ID__/$node_id/" \
-    deploy/volumes/quod-node-local.hcl | nomad volume create -
-done
-nomad volume status -type host
-[ "$(nomad volume status -type host -json |
-       jq '[.[] |
-         select((.Name | test("^quod-node-local\\[[0-9]+\\]$")) and
-                .PluginID == "mkdir" and .State == "ready")] |
-         length')" -eq "$NODE_COUNT" ]
-
-# Founding is explicit: one allocation creates a fresh random incarnation.
-nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
-  -var bootstrap=true -var cloud_node_count=0 deploy/quod.nomad
-
-# Copy the logged genesis anchor, then expand the same homogeneous group.
-read -r -p "Genesis anchor (64 hexadecimal characters): " GENESIS_HASH
-[[ "$GENESIS_HASH" =~ ^[0-9A-Fa-f]{64}$ ]]
-nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
-  -var node_count="$NODE_COUNT" -var cloud_node_count=0 \
-  -var genesis_hash="$GENESIS_HASH" deploy/quod.nomad
-
-# The new allocations join as observers. Once each is caught up, submit one
-# admit(Pubkey, Host, Port) transaction from a validator, until N validators
-# are present.
-```
-
-The complete persistence and wipe contract is
-[`doc/consensus-signatures.md`](doc/consensus-signatures.md). If cloud
-satellites have previously run, wipe their `quod-node-cloud` allocation
-subdirectories too before they join the new anchor. The founder is only the
-first event: after the anchor is supplied, every allocation belongs to the same
-`quod-node` task group and runs with `mode=join`; new nodes remain observers
-until explicitly admitted. Each compute allocation has its own dynamic host
-volume mounted at `/quod/data`. A single task group makes `max_parallel=1`
-fleet-wide, and Nomad waits for consensus recovery before advancing an ordinary
-anchored rolling update.
-Health gates must also inspect Erlang supervisor restart logs/metrics: child
-restart loops do not increment Nomad's task-restart counter.
-
-## Status / next steps
-
-- **Done:** pure-Erlang QUIC transport, Brahms membership, Prolog content, the
-  DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
-  member recovery, bounded per-ontology transaction micro-batches, depth-one pipelining with
-  implicit predecessor finality, signed transaction relay, inter-ontology asks,
-  retained-custody ingress, the signed fact-backed live ontology directory
-  with committed private host knowledge, runtime projection, durable multi-ontology transactions,
-  generic agent-signed goals, root-owned ontology creation, root-driven system
-  ontologies, engine-local external-predicate ownership, explicit durable
-  ontology subscriptions, shared certified foreign projections, local and
-  subscribed `react_on/3` dispatch, explicit `trigger_event/1`, durable effects
-  in ordinary and multi-ontology transactions, the source-claimed batchable
-  remote-singleton transaction path, metrics, and durable
-  Docker/Nomad deployment.
-- **Next:** measure and optimize only the remaining genuine multi-target DTX
-  work in `doc/dtx-latency-optimization-plan.md`. Physical-node identity Slices 2--4
-  and ontology-backed hosted-agent/FIPA delivery remain planned work.
+The generic hosting substrate is deployed through release 0.7.236. FIPA ACL
+syntax, conversations, AMS/DF services, and application-specific presentation
+and world ontologies remain later layers. Performance investigations remain
+deferred unless they reveal a concrete correctness or availability blocker.

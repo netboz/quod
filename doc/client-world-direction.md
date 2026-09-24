@@ -105,19 +105,20 @@ Durable D facts describe:
 - standard model/UI declarations, entity identity, model/material references,
   baseline transform, collision shape, component attachment, and simulation
   parameters;
+- presentation policies, class associations, reusable lens definitions, and
+  authored shared appearance;
 - current logical simulation authority and monotonically increasing epoch;
 - structured GUI component trees, durable pending interactions, private menu
-  entries/preferences governed by the containing ontology's ACL, and client
-  view sessions;
+  entries/preferences governed by the containing ontology's ACL;
 - sparse voxel edits and semantic checkpoints.
 
 Rebuildable P contains:
 
 - shared scene and spatial indexes;
 - filtered per-agent client view sessions;
-- client model and GUI indexes;
-- projected contextual menus, session device capabilities, and unsubmitted GUI
-  drafts;
+- derived presentation descriptors and client model/GUI indexes;
+- projected contextual menus, selected presentation purposes, session device
+  capabilities, and unsubmitted GUI/VR editing drafts;
 - simulation processes, bodies, ghosts, and colliders;
 - generated voxel chunks, overlays, meshes, and caches.
 
@@ -214,13 +215,15 @@ not part of reconnect snapshots.
 
 ## 4. Scene and view projection
 
-Illustrative durable vocabulary:
+Illustrative scene vocabulary (authored declarations may be durable; derived
+descriptors and client view sessions are P-state):
 
 ```prolog
 world(WorldId, WorldClass, GeneratorVersion, Seed).
 scene_entity(EntityId, WorldId).
-model(EntityId, ModelDescriptor).
-transform(EntityId, Transform).
+depicts(MarkId, EntityRef).
+model(MarkId, ModelDescriptor).
+transform(MarkId, Transform).
 attached(ChildId, ParentId, Socket, LocalTransform).
 gui_component(ViewId, ComponentId, Kind).
 gui_attribute(ViewId, ComponentId, Name, Value).
@@ -235,6 +238,11 @@ and queue are not committed ontology subscriptions.
 
 The exact vocabulary belongs to future `quod:world` and `quod:client`
 ontologies, not hard-coded Erlang dispatch.
+
+Projected model/transform descriptors address visual marks (section 4.3).
+Authored domain appearance and placement are their inputs; entity references
+and mark IDs are distinct typed identities. A mark transform does not replace
+the entity's authoritative domain placement or physical attachment.
 
 Asset references are content-addressed and policy checked. Ontology content
 cannot cause clients to fetch arbitrary executable code or untrusted URLs.
@@ -265,6 +273,32 @@ Large meshes, textures, heightfields, audio, and video remain content-addressed
 data. An ontology carries their identity, type, integrity hash, metadata, and
 policy—not their unbounded bytes. Fetch, decoding, and resource limits are
 validated outside consensus before a client resource becomes usable.
+
+Presentation knowledge is also ontology content: classes and entities may
+reference several reusable presentations for different purposes, and one
+presentation may serve several classes. References identify the exact anchored
+ontology. They are presentation associations, distinct from physical
+`attached/4` relationships. Neither association requires a new namespace per
+class, presentation, or visual primitive.
+
+A lens selects subjects, properties, relations, grouping, measures, and detail
+for a purpose. Its visual encoding declares marks, scales, layout, and
+interaction bindings. Shared layout algorithms produce bounded renderer-neutral
+descriptors from these declarations; the client adapter realizes them. Both
+authored appearances and appearances derived from class/attribute rules enter
+the same projection path. For example, a licence overview can group by family
+and encode ordinal reach as height; a naming lens can compare pool capacities
+or explain selection probabilities. These are distinct questions over the
+same domain, not an intrinsic shape assigned to every predicate.
+
+Encodings require explicit semantic preconditions: entity identity, value
+cardinality, ordinal versus quantitative scales, missing-value meaning, and
+aggregation rules. An integer type alone does not establish a quantitative
+measure; `attribute/3` need not be single-valued. Tree layouts must not silently
+discard additional parents, and multiple memberships must remain represented.
+An incompatible encoding yields a bounded diagnostic or a policy-declared
+alternative. Begin with authored lenses and reusable encodings; automatic
+selection may later rank compatible encodings without inventing domain meaning.
 
 ### 4.2 Composition and attachment
 
@@ -305,8 +339,108 @@ wielded agent's sight/view policy:
 - reconnect starts from current state, not presentation-event replay.
 
 Creating a model instance or GUI widget is the idempotent client result of
-applying projected state, not a one-shot reaction. Stable entity/component IDs
-drive create, update, and remove.
+applying projected state, not a one-shot reaction. Stable entity references
+identify domain subjects; stable visual mark and GUI component IDs drive
+client create, update, and remove.
+
+### 4.3 Presentation selection and visual identity
+
+The world/application ontology owns presentation selection policy. Class
+ontologies supply reusable defaults; entities supply particular appearance and
+equipment; a view session supplies its purpose, requested presentation, and
+device capabilities. Policy determines which combinations and overrides are
+permitted. Class specificity alone is insufficient when several inherited
+presentations match: precedence must be explicit, with unresolved ambiguity
+reported rather than resolved by incidental enumeration order. Capability
+alternatives remain subject to the same policy and authorization checks.
+
+Illustrative relationships, whose exact predicates remain subject to review:
+
+```prolog
+presentation_policy(enchanted_forest, fantasy_realistic).
+class_presentation(elf, fantasy_realistic, elven_character).
+entity_appearance(aria, appearance_aria).
+view_purpose(ViewId, first_person).
+view_subject(ViewId, aria).
+depicts(MarkId, EntityRef).
+```
+
+An acting identity may control a character without being identical to that
+character or having any visible body itself. The character participates in a
+world, whose policy selects its representation. A FIPA agent platform (AP)
+coordinates agents through the existing hosting and lifecycle machinery;
+hosting alone does not select appearance. An AP may carry an explicit
+application/world policy, but moving an agent between hosts must not implicitly
+change its presentation. An ontology hosting classes
+may recommend presentations without imposing them on every consuming world.
+
+First-person, third-person, tactical-map, inspection, and editing presentations
+can coexist for one entity. In an FPS-style world, the controlling user's view
+may render specialized hands and weapon geometry while other users see the
+whole avatar. Both refer to the same character and equipment. Camera offsets,
+display proportions, and animation conveniences do not change authoritative
+collision, reach, attachment, or other gameplay state.
+
+Each visual occurrence has a stable mark identity scoped to its view and
+occurrence, and refers to the domain entity in its exact anchored ontology.
+Several marks can depict one entity, including references under several visual
+parents; a bounded scene tree therefore does not require the domain graph to
+be a tree. Switching presentations preserves domain identity and reconciles
+marks through the ordinary create/update/remove projection. Selection and
+inspection resolve through the entity reference, not a mesh name.
+
+Presentation policies, reusable definitions, and authored shared appearance are
+D-state. Derived descriptors are rebuildable P-state; selected purpose, camera,
+and temporary editing controls are session state, with persistent preferences
+stored only when explicitly requested. Views reuse the shared scene index and
+MVCC/verified projection machinery, not private KBs or full per-view world
+copies. Dependency changes use existing scoped installed-state notifications,
+with snapshot ordering, cancellation, and original deadlines preserved.
+Reproducible derived descriptors require exact source snapshot references,
+presentation versions, parameters, and layout algorithm version; one ledger
+height alone does not identify a multi-ontology view or its camera image.
+
+### 4.4 Editing presentations and authorization
+
+An `edition` purpose may apply to one selected component while the rest of the
+world keeps its normal presentation. For example, selecting an avatar's arm in
+VR can expose a skeleton, joint handles, dimensions, attachment points, and
+material controls. Other users continue to see the normal avatar. Shared draft
+visibility requires an explicit collaboration policy; entering an editor does
+not publish intermediate changes or mutate the arm.
+
+The interaction reuses the GUI draft and signed-goal flow in section 6.1:
+
+1. Request the editing presentation for the selected entity/component.
+2. Authorize that view and project its permitted properties and controls.
+3. Manipulate a local draft with immediate visual preview.
+4. Apply by constructing and signing a bounded domain goal through normal
+   ingress, with the relevant base revision/preconditions checked for conflict.
+5. Render the accepted state through the chosen presentation. Returning to
+   normal view alone never commits a draft; discard is explicit. Rejected or
+   uncertain submissions are not displayed as accepted changes, and uncertain
+   operations use the existing operation-resolution flow without resubmission.
+
+Each control declares its semantic target and operation: changing a display
+material updates appearance, changing anatomical length invokes the domain
+action responsible for geometry and its consequences, and moving an editor
+handle alone changes only the draft. Presentations do not establish gameplay
+consequences or bypass the authoritative simulation update boundary.
+
+Existing ontology ACL/proof authorization remains the sole authority. The
+presentation contract distinguishes three checks: availability of a requested
+presentation, permission to read every exposed property/asset, and permission
+to perform the submitted domain edit. Availability does not imply readable
+private anatomy or writable attributes. Selection and filtering occur
+server-side before protected content is sent; hiding controls is not an access
+check. Every edit is independently authorized under the authenticated subject
+and current policy, including direct signed goals that bypass the UI.
+
+Policy changes invalidate affected view content and controls through ordinary
+projection updates; stale editor state cannot authorize a later write. Removing
+previously delivered content cannot erase what its recipient already learned.
+Exact view-access predicates and descriptor schemas must be defined at the
+implementation boundary without introducing a parallel ACL system.
 
 ## 5. Cue descriptors
 
@@ -478,8 +612,8 @@ input adapters, not separate VR and desktop domain logic.
 
 ### 6.5 Icons and semantic themes
 
-Presentation metadata belongs primarily to the requested goal/desired state,
-because several transitions may reach that state and the actual transition is
+Action-menu presentation metadata belongs primarily to the requested
+goal/desired state, because several transitions may reach that state and the actual transition is
 chosen only during proof. Illustrative metadata includes a label, description,
 group, priority, and icon. Icon resolution is:
 
@@ -703,6 +837,13 @@ These milestones are intentionally outside the numbered agent/FIPA slices.
   and prove that a user-pinned entry grants no extra authority.
 - Render the same semantic menu through one immersive capability profile and
   one desktop profile, including icon fallback and non-colour labels.
+- Resolve class defaults and world policy for two presentations of one entity;
+  preserve entity identity across view switches and diagnose ambiguous matches.
+- Edit one avatar component in VR through a local draft and one authorized
+  domain submission while another client retains its normal presentation.
+- Verify separate presentation/read/edit permissions, stale revisions, policy
+  revocation, and direct-goal authorization; denied properties never enter a
+  descriptor, and switching views neither commits a draft nor changes collision.
 - Test disconnect, sequence gaps, owner failover, and slow clients.
 
 Success means reconnect reconstructs models/GUI without replaying cues; unknown

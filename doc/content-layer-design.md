@@ -963,17 +963,20 @@ Every committed change runs in three layers, in order:
 
 - **The fact change (D)** — the assert/retract into the kb. *This is what the
   ordering layer already applies (§13).*
-- **Derived views (P)** — in-memory state computed from the facts: indexes,
-  explicit active-subscription projections, and (later) a scene graph. Rebuilt
-  **synchronously, right after D**, so that by the time anyone is notified the
-  derived views are already consistent.
+- **Derived views (P)** — installed indexes advance from the applied changes
+  **synchronously, right after D**, before their notifications are published.
+  Heavy scene elaboration, meshing, and resource preparation run outside the
+  ordered handler; dependent output waits for the required installed resource
+  revision. See `client-world-direction.md` sections 2 and 4 for the future
+  presentation consumer. Ordinary updates do not rebuild the scene or KB.
 - **Reactions (E)** — the outward/reactive stuff: `react_on` rules firing,
   messages sent, client/3D updates pushed. Runs **after commit, and only on a
   live commit.**
 
 Order: commit → apply the diff (D) → refresh derived views (P) → fire reactions
-(E). D+P are synchronous and finished before anyone is notified; E is the async,
-outward part.
+(E). The relevant installed P-state precedes its notification; this does not
+require all asynchronous resource work to finish before unrelated notifications.
+E is the async, outward part.
 
 ### The one rule that matters: replay must not re-fire reactions
 

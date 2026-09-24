@@ -22,6 +22,13 @@ predicate classes, actions, handlers, reactions) and `doc/inter-ontology.md`
 (cross-ontology asks). The ordering and validation contract is
 `doc/content-layer-design.md`. Where this document and those disagree, they win.
 
+Presentation selection and component editing follow
+[`client-world-direction.md` sections 4.3–4.4](client-world-direction.md#43-presentation-selection-and-visual-identity).
+Normal, first-person, and editing views refer to the same domain entities;
+visual marks, camera offsets, and local drafts do not change authoritative
+anatomy or collision. An accepted geometry edit enters the ordinary authorized
+domain and simulation update flow before its consequences become authoritative.
+
 ---
 
 ## 0. Core objective

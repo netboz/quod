@@ -1,12 +1,13 @@
 # Ontology actors and system bootstrap
 
-**Status:** architectural principles, identity shape, and initial key-custody
-model confirmed by Yan (2026-08-21). The generic agent request and identity
-certificate are implemented, committed, and deployed. The node vault and agent
-hosting/migration remain planned. This document is the
-authority for actor identity, system-ontology startup, agent hosting, and the
-boundary between Prolog and Erlang. `generic-agent-identity-plan.md` owns the
-exact wire and recovery contracts.
+**Status:** architectural principles and identity shape confirmed by Yan
+(2026-08-21). Generic signed goals, node-local key custody, epoch-fenced agent
+hosting, host migration, and ontology-governed recovery are implemented,
+committed, and deployed through 0.7.236. This document is the authority for
+actor identity, system-ontology startup, agent hosting, and the boundary between
+Prolog and Erlang. `generic-agent-identity-plan.md` owns the identity wire
+contract; `generic-agent-hosting-plan.md` and `hosted-agent-runtime.md` record
+the implemented hosting and recovery contracts.
 
 ## 1. One durable model
 
@@ -128,6 +129,16 @@ The system family includes:
 | `quod:agent` | generic acting class, key vocabulary, and common agent rules |
 | `quod:human_user` | `human_user` subclass and human profile/ownership vocabulary |
 | `quod:names` | display names for agents: name pools, generation and recognition from one set of tables, and the proof-bound `draw` every node answers locally once it has joined |
+| `quod:licence` | licence families, compatibility, obligations, and release reach |
+| `quod:measure` | quantities, units, dimensions, and conversion |
+| `quod:lens` | reusable selections and presentation encodings |
+| `quod:present` | bounded renderer-neutral presentation marks |
+
+The table describes bundled system roles. A non-root ontology has system status
+only when root contains its exact `system_ontology/2` row. In the deployed
+0.7.236 network, `quod:names`, `quod:licence`, `quod:measure`, `quod:lens`, and
+`quod:present` are registered by anchor and hosted on every node; their source
+filenames do not confer that status.
 
 These are vocabulary and policy ontologies, not containers for every instance.
 Each physical node has a node ontology containing an instance of the `node`
@@ -528,24 +539,24 @@ quorum rule, block phase, or special actor transaction is introduced. An
 actor's state, class, hosting assignment, and action result are ordinary
 ontology facts and use ordinary single-ontology or DTX commit paths.
 
-It does require work above consensus:
+The work above consensus has the following disposition:
 
-1. catalogue the existing external predicates and eliminate direct management
-   paths that duplicate their governed Prolog route;
-2. make root's committed system catalogue drive `quod:node`, `quod:agent`, and
-   `quod:human_user` startup;
-3. migrate the signed-goal principal from the temporary user-key label to
+1. **Implemented:** catalogue external predicates and eliminate direct
+   management paths that duplicate their governed Prolog route.
+2. **Implemented:** make root's committed system catalogue drive exact anchored
+   system-ontology startup.
+3. **Implemented:** migrate the signed-goal principal from the temporary user-key label to
    `agent_instance_ref/3` plus its active key binding, in one reviewed format
-   break;
-4. move agent durable state from an Agent Platform record to the exact
+   break.
+4. **Implemented:** move agent durable state from an Agent Platform record to the exact
    ontology containing each agent instance; policy may use a dedicated
    ontology or deliberately place several instances in one, while Agent
-   Platforms coordinate them as ordinary ontologies;
-5. implement host assignment/failover through `quod:node` actions and the
-   existing `state_handler` projection tier;
-6. implement the node-local vault and rotation-based host migration; later HSM
-   or threshold backends retain the same narrow provider boundary;
-7. align class and identity vocabulary with the selected Web Ontology
+   Platforms coordinate them as ordinary ontologies.
+5. **Implemented:** host assignment and failover through ordinary ontology
+   actions and the existing `state_handler` projection tier.
+6. **Implemented:** node-local vault custody and rotation-based host migration;
+   later HSM or threshold backends retain the same narrow provider boundary.
+7. **Future vocabulary work:** align class and identity vocabulary with the selected Web Ontology
    representation without embedding domain class logic in Erlang.
 
 ## 7. Current-state honesty
@@ -555,9 +566,12 @@ ontology bootstrap described above. It creates no ontology from a catalogue
 row: an ontology is founded normally, its exact anchor is committed in root,
 and every node then joins or resumes that exact history through the existing
 namespace manager and directory. The anchored agent-instance identity, generic
-agent signing principal, and stable operation custody are deployed. Root still
-carries node admission facts; moving internal node
-principals to node-instance references remains later work.
+agent signing principal, stable operation custody, encrypted node vault,
+hosted-agent projection, epoch/key fencing, shared peer observation, and
+policy-governed recovery are deployed. Root still carries node admission
+facts; moving internal node principals to node-instance references remains
+later work. FIPA conversation semantics and directories remain above this
+generic substrate.
 
 ## 8. Required acceptance tests
 
@@ -617,10 +631,10 @@ Before implementation is declared complete, tests must show:
    binding, removes special user-home creation in favour of ordinary facts and
    generic ontology genesis, and replaces `{user, Key}`/`user_goal_v1` in one
    format break. Browser and machine actors use the same signed-goal endpoint.
-3. **Node vault.** Add the one supervised local vault, narrow authority-query
+3. **Node vault—implemented and deployed.** The one supervised local vault, narrow authority-query
    bridge, encrypted local store, internal mutually authenticated HTTPS
    provider boundary, canonical request binding, and negative security tests.
-4. **Hosting and migration.** Add `quod:node` actions, committed host fencing,
+4. **Hosting and migration—implemented and deployed.** Ordinary actions, committed host fencing,
    `state_handler` reconciliation, and move-by-rotation through destination
    vaults.
 5. **FIPA specialisation.** Resume message, AMS, DF, delegation, and
@@ -631,16 +645,9 @@ Each slice must close its old names, routes, comments, tests, metrics, and docs
 before the next starts. None creates a new proof, ACL, transaction, consensus,
 directory, or runtime-projection path.
 
-The current `peer_ready/1` availability policy uses compile-time freshness and
-height-window values (`15 s` and `256` slots). Those are existing operational
-defaults, not security guarantees or population limits. Before this bootstrap
-work is released they must become explicit validated configuration, or be
-deliberately retained through a separately reviewed policy decision; they must
-not remain accidental magic numbers.
-
 The concrete capability vocabulary carried by `subject/3` remains a later
 delegation/FIPA design decision. It does not block the bootstrap, identity, or
-vault slices because those slices preserve the existing ACL evaluator and do
+hosting slices because those slices preserve the existing ACL evaluator and do
 not manufacture capabilities.
 
 ## 10. Reviewed decisions and remaining proof obligation

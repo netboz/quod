@@ -1,9 +1,11 @@
 # Quod agents and FIPA -- architecture and implementation plan
 
 **Status:** revised architecture direction. The runtime/reaction substrate,
-explicit committed events, generic agent identity, and durable DTX effects are
-delivered; acknowledged delivery, the durable agent outbox, agent hosting, and
-later FIPA work remain pending. `ontology-actor-architecture.md` is the
+explicit committed events, generic agent identity, durable DTX effects,
+prioritized shared streams, and generic hosted-agent recovery are delivered
+through 0.7.236. FIPA-level acknowledged delivery, conversation obligations,
+AMS/DF services, and later FIPA work remain pending.
+`ontology-actor-architecture.md` is the
 authority for actor identity, system-ontology bootstrap, key ownership, and
 hosting. It corrects this document's former Agent Platform record model: every
 durable agent is a classed instance in ontology state and its optional Erlang
@@ -714,7 +716,10 @@ other logical executor; only its current host arms and fires the BEAM timer.
 
 Client and world effects consume this ownership and delivery machinery but do
 not define it. Their directional design lives in
-`doc/client-world-direction.md`.
+`doc/client-world-direction.md`. Its sections 4.3–4.4 assign presentation
+selection to world/application policy, with class defaults and per-view
+purposes. Platform hosting does not select appearance, and an editing
+presentation grants no authority beyond ordinary read and signed-goal checks.
 
 ## 10. Agents, users, and authorization
 
@@ -1321,18 +1326,17 @@ certified-subscribed reactions from canonical `applied_ops`, commits explicit
 one journal. This does not claim that all Slice-3 messaging is complete:
 acknowledged volatile delivery and the agent durable outbox remain open.
 
-Exactly three prerequisites remain before the Slice-4 hosted-agent vertical can
-start: durable outbox delivery; node-instance Slices 2--3, which provide the
-stable active `NodeRef`; and the node-vault canonical signing bridge required by
-an autonomous hosted agent. Hosting projection is part of the vertical itself,
-through the sole owner in `event-reaction-refinement-plan.md` Slice 4.
+The generic hosting checkpoint has passed: stable NodeRefs, vault-backed
+signing, epoch/key fencing, committed host assignment, process reconstruction,
+authenticated failure reporting, policy-selected takeover, and restart/partition
+acceptance are deployed. Reactions can submit bounded work through a hosted
+agent into the ordinary signed-goal path. They do not recover volatile queues or
+automatically resubmit an uncertain write.
 
-The product checkpoint remains open. It is Slice 4: two statically configured
-agent ontologies, one action, one host-fenced durable message, and recovery
-under process and host failure.
-
-Generic agent signing is already deployed. Complete lifecycle, FIPA syntax,
-directories, and federation begin only after the product checkpoint survives
-restart, repeated catch-up, churn, and load testing. Client/world work remains
-a separate consumer of the same runtime architecture and does not gate these
-slices.
+The next product checkpoint belongs to FIPA ontology policy: two hosted agents
+exchange a durable protocol message, commit the receiver consequence once, and
+resume the conversation obligation after process or host restart. That work
+must build on the existing event and signed-goal paths; it must not add a generic
+Erlang outbox, private KB, or second executor. FIPA syntax, AMS/DF directories,
+delegation, and federation follow that checkpoint. Client/world work remains a
+separate consumer of the same runtime architecture and does not gate it.

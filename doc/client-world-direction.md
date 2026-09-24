@@ -221,9 +221,9 @@ descriptors and client view sessions are P-state):
 ```prolog
 world(WorldId, WorldClass, GeneratorVersion, Seed).
 scene_entity(EntityId, WorldId).
-depicts(MarkId, EntityRef).
-model(MarkId, ModelDescriptor).
-transform(MarkId, Transform).
+depicts(EidolonId, EntityRef).
+model(EidolonId, ModelDescriptor).
+transform(EidolonId, Transform).
 attached(ChildId, ParentId, Socket, LocalTransform).
 gui_component(ViewId, ComponentId, Kind).
 gui_attribute(ViewId, ComponentId, Name, Value).
@@ -239,9 +239,9 @@ and queue are not committed ontology subscriptions.
 The exact vocabulary belongs to future `quod:world` and `quod:client`
 ontologies, not hard-coded Erlang dispatch.
 
-Projected model/transform descriptors address visual marks (section 4.3).
+Projected model/transform descriptors address visual eidolons (section 4.3).
 Authored domain appearance and placement are their inputs; entity references
-and mark IDs are distinct typed identities. A mark transform does not replace
+and eidolon IDs are distinct typed identities. An eidolon transform does not replace
 the entity's authoritative domain placement or physical attachment.
 
 Asset references are content-addressed and policy checked. Ontology content
@@ -282,7 +282,7 @@ ontology. They are presentation associations, distinct from physical
 class, presentation, or visual primitive.
 
 A lens selects subjects, properties, relations, grouping, measures, and detail
-for a purpose. Its visual encoding declares marks, scales, layout, and
+for a purpose. Its visual encoding declares eidolons, scales, layout, and
 interaction bindings. Shared layout algorithms produce bounded renderer-neutral
 descriptors from these declarations; the client adapter realizes them. Both
 authored appearances and appearances derived from class/attribute rules enter
@@ -340,10 +340,15 @@ wielded agent's sight/view policy:
 
 Creating a model instance or GUI widget is the idempotent client result of
 applying projected state, not a one-shot reaction. Stable entity references
-identify domain subjects; stable visual mark and GUI component IDs drive
+identify domain subjects; stable visual eidolon and GUI component IDs drive
 client create, update, and remove.
 
 ### 4.3 Presentation selection and visual identity
+
+An **eidolon** is one visual representation of an entity in a particular view.
+The current prototype calls these representations `mark/7` in `quod:present`;
+that implementation vocabulary has not yet been migrated. Presentation includes
+visual and auditory behavior; an eidolon specifically names the visual part.
 
 The world/application ontology owns presentation selection policy. Class
 ontologies supply reusable defaults; entities supply particular appearance and
@@ -362,7 +367,7 @@ class_presentation(elf, fantasy_realistic, elven_character).
 entity_appearance(aria, appearance_aria).
 view_purpose(ViewId, first_person).
 view_subject(ViewId, aria).
-depicts(MarkId, EntityRef).
+depicts(EidolonId, EntityRef).
 ```
 
 An acting identity may control a character without being identical to that
@@ -381,12 +386,12 @@ whole avatar. Both refer to the same character and equipment. Camera offsets,
 display proportions, and animation conveniences do not change authoritative
 collision, reach, attachment, or other gameplay state.
 
-Each visual occurrence has a stable mark identity scoped to its view and
+Each visual occurrence has a stable eidolon identity scoped to its view and
 occurrence, and refers to the domain entity in its exact anchored ontology.
-Several marks can depict one entity, including references under several visual
+Several eidolons can depict one entity, including references under several visual
 parents; a bounded scene tree therefore does not require the domain graph to
 be a tree. Switching presentations preserves domain identity and reconciles
-marks through the ordinary create/update/remove projection. Selection and
+eidolons through the ordinary create/update/remove projection. Selection and
 inspection resolve through the entity reference, not a mesh name.
 
 Presentation policies, reusable definitions, and authored shared appearance are
@@ -441,6 +446,50 @@ projection updates; stale editor state cannot authorize a later write. Removing
 previously delivered content cannot erase what its recipient already learned.
 Exact view-access predicates and descriptor schemas must be defined at the
 implementation boundary without introducing a parallel ACL system.
+
+### 4.5 Presenting actions in progress
+
+The agreed direction is that a representation ontology describes both an
+entity's appearance and how its actions are perceived, visually and audibly.
+Different representations may interpret the same action differently. Action
+patterns use ordinary Prolog unification to bind the affected entity and action
+parameters. Yan's illustrative form is:
+
+```prolog
+eidolon(MyAction) :- do_something_visual(MyAction).
+```
+
+This expresses representation-owned behavior, not a settled predicate signature
+or permission to render during an ordinary proof. The representation rules
+produce governed descriptions for the rendering and audio adapters. They do not
+invoke arbitrary client code or give failed proof branches external effects.
+The implementation must reuse existing projection, reaction and effect owners;
+a separately authored completion event and reaction for every animation is not
+required by this model.
+
+Presentation follows an action's actual progress and outcome, including partial
+movement, interruption and failure to reach its intended result. For example,
+authorized closing starts a door moving; an obstruction stops it halfway. Its
+eidolon shows the actual angle, movement sound stops, and an impact sound may
+occur. `door_closed(Door)` remains false. A visual animation cannot independently
+assume the door reached its target or override authoritative collision.
+
+The existing `action/3` and `goal/1` contracts remain unchanged: a successful
+candidate must establish its desired state, and a failed candidate rolls back
+its staged changes. A physical activity lasting several seconds spans bounded
+transitions rather than one suspended proof. An ordinary action may establish
+an authorized start/request state; runtime motion follows that accepted state,
+and later transitions record meaningful outcomes. Acceptance of the start is
+not success of `goal(door_closed(Door))`. Actual movement is not rolled back
+because the ultimate physical objective was not reached. Exact activity state,
+correlation, interruption and recovery terms remain to be specified.
+
+Continuous movement and ongoing sounds follow current simulation/activity state;
+one-shot visual and audio cues describe occurrences. Both modalities share the
+same entity, activity and timing references. Sounds may be spatially associated
+with an entity without a visible eidolon. Reconnect restores current presentation
+and any still-active sound without replaying past impacts or completed activity.
+Local previews remain distinguishable from accepted simulation state.
 
 ## 5. Cue descriptors
 

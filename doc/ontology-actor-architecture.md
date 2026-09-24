@@ -481,20 +481,21 @@ control of that agent reference; it is not the ACL subject's durable identity.
 
 ## 5. Hosting, restart, and migration
 
-The code does not yet provide cross-node agent-process failover. That is the
-missing feature—not a consensus problem. The durable assignment will include a
-monotonically advancing host epoch and the stable `agent_instance_ref/3`
+The hosting layer provides cross-node agent-process failover through ordinary
+signed observations and ontology-defined recovery policy. The durable assignment
+includes a monotonically advancing host epoch and the stable `agent_instance_ref/3`
 `NodeRef` from `node-instance-identity-plan.md`; a raw node key is never a
 substitute hosting identity. A runtime projection starts only when its
-local node is the committed current host. On a node failure, an authorised
-`quod:node` action selects another host and commits the newer assignment. The
-new host reconstructs the process from the containing ontology. A returning old
-host observes the newer epoch and stops.
+local node is the committed current host. Surviving observers report a suspected
+failure through their node principals. The containing ontology's ordinary actions
+check the configured observer threshold and eligible prepared destinations, then
+commit the newer assignment. The new host reconstructs the process from the
+containing ontology. A returning old host observes the newer epoch and stops.
 
 Advancing a host epoch, including on the same node, never reuses or copies an
-agent's private key. The destination node first asks
-its local vault to generate a staged key. One ordinary coordinated transaction
-then commits the newer host epoch and the new active public key while revoking
+agent's private key. The destination node first asks its local vault to reserve
+stable custody for the exact instance and old epoch. One ordinary coordinated
+transaction then commits the newer host epoch and the new active public key while revoking
 the old key. Only after that commit does the destination start the agent
 process. Validators reject the old key from that committed view onward, and a
 returning old host also observes the newer epoch and stops. The host epoch
@@ -502,10 +503,12 @@ fences the runtime while key rotation fences its authority cryptographically;
 the existing receiver-side operation/effect identifiers still deduplicate the
 short crash-overlap window.
 
-A staged key that never commits is inert local garbage: no validator recognizes
-it, and the destination vault may collect it after a bounded local retention
-period. The first implementation keeps staged keys only in the destination
-vault; a destination failure simply requires generating another candidate key.
+A prepared key grants no agent authority until assignment commits. Publishing
+its candidate fact does create a durable custody promise: the destination must
+retain the private key while a candidate or active assignment refers to it.
+Repeated local preparation for the same instance and old epoch returns the same
+key, including after vault restart. Private custody cleanup remains governed;
+local elapsed time alone does not release a published candidate's custody.
 If the transaction commits but the destination cannot start, the committed
 assignment remains visible, the agent cannot act, and reconciliation retries.
 Recovery never silently restores the old key or compensates the committed

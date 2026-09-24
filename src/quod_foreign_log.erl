@@ -712,8 +712,8 @@ verification_call(Pid, Request, Deadline) ->
 
 %% The owner returns a bounded, already-published read capability. Actual
 %% point I/O and the SAME exact verifier run in the existing caller, not in
-%% the node owner's mailbox or another per-identity queue. The historical era
-%% is resolved during capture; no live index handle escapes that owner turn.
+%% the node owner's mailbox or another per-identity queue. Both the certifying
+%% and resulting eras are resolved at capture; no live index handle escapes.
 consume_reference_reply(Owner,
   {ready_reference, Snapshot, Ref, Phase, Projection}, Deadline) ->
     {Height, _Hash} = maps:get(history_head, Projection),
@@ -1471,10 +1471,12 @@ ready_reference(Ref, Phase, Identity, S) ->
           when Slot =< Height ->
             Reply = case quod_dtx_phase_index:capture(Hold, Height) of
                 {ok, View} ->
-                    case quod_dtx_phase_index:committee(View, Slot) of
-                        {ok, Era} ->
-                            %% One immutable era, not an eras/history copy.
-                            Exact = (maps:remove(history_index, Projection))#{committee_views := [Era]},
+                    case {quod_dtx_phase_index:committee(View, Slot),
+                          quod_dtx_phase_index:committee(View, max(1, Slot - 1))} of
+                        {{ok, Era}, {ok, CertifyingEra}} ->
+                            %% At most two immutable rows; never copy history.
+                            Eras = lists:reverse(lists:usort([Era, CertifyingEra])),
+                            Exact = (maps:remove(history_index, Projection))#{committee_views := Eras},
                             {ready_reference, Snapshot, Ref, Phase, Exact};
                         _ -> {error, retry}
                     end;
@@ -6658,16 +6660,22 @@ verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection) ->
 
 verify_exact_record(Ref, Entry, Record, Phase, Field, Projection) ->
     Identity = ref_identity(Ref),
-    Committee = quod_simplex:history_committee(Projection),
-    case quod_dtx:certified_entry_ref_matches(Identity, Entry, Record, Ref, Committee) of
-        true ->
-            #{generation := Generation} = maps:get(dtx, Projection),
-            {ok, #{identity => Identity, slot => ref_slot(Ref),
-                   block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
-                   phase => Phase, generation => Generation, Field => Record, entry => Entry,
-                   committee => Committee, committee_id => maps:get(committee_id, Projection),
-                   routes => quod_simplex:history_validator_routes(Projection)}};
-        false -> {error, invalid_foreign_reference}
+    case quod_simplex:history_certifying_committee_view(ref_slot(Ref), Projection) of
+        {ok, Certifiers, _, _} ->
+            case quod_dtx:certified_entry_ref_matches(Identity, Entry, Record, Ref, Certifiers) of
+                true ->
+                    %% Certifiers authorize the block; its resulting committee
+                    %% authorizes attestations about the post-slot state.
+                    #{generation := Generation} = maps:get(dtx, Projection),
+                    {ok, #{identity => Identity, slot => ref_slot(Ref),
+                           block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
+                           phase => Phase, generation => Generation, Field => Record, entry => Entry,
+                           committee => quod_simplex:history_committee(Projection),
+                           committee_id => maps:get(committee_id, Projection),
+                           routes => quod_simplex:history_validator_routes(Projection)}};
+                false -> {error, invalid_foreign_reference}
+            end;
+        error -> {error, retry}
     end.
 
 %%%===================================================================
@@ -6986,7 +6994,7 @@ valid_committee_view_rows(_, _) -> false.
 
 reference_projection(Slot, Height, Projection)
   when is_integer(Slot), Slot > 0, Slot =< Height ->
-    case quod_simplex:history_certifying_committee_view(Slot, Projection) of
+    case quod_simplex:history_committee_view(Slot, Projection) of
         {ok, Committee, CommitteeId, Routes} ->
             {ok, Projection#{committee := Committee,
                              committee_id := CommitteeId,

@@ -5177,7 +5177,8 @@ verify_local_current_entry_uses_exact_historical_committee_test() ->
     OldPub = maps:get(pub, Fixture),
     OldSigner = maps:get(signer, Fixture),
     Admission = maps:get(admission, Fixture),
-    NewPub = key(historical_committee_new_member),
+    {NewPub, NewSeed} = quod_identity:generate(),
+    NewSigner = #{pubkey => NewPub, key => quod_identity:key_term({NewPub, NewSeed})},
     Membership0 = #transaction{
                     origin = Binding,
                     proof_id = key(historical_committee_proof),
@@ -5201,12 +5202,23 @@ verify_local_current_entry_uses_exact_historical_committee_test() ->
                                 Ns, Anchor,
                                 quod_simplex:history_projection(Binding),
                                 1, Chain),
+    CommitteeId = maps:get(committee_id, Projection),
+    ProofId = key(membership_read_proof),
+    PlanDigest = key(membership_read_plan),
+    {ok, ReadVote} = quod_read_certificate:sign(
+                       Binding, ProofId, PlanDigest, MembershipRef,
+                       CommitteeId, NewSigner),
+    {ok, Certificate} = quod_read_certificate:new(
+                         Binding, ProofId, PlanDigest, MembershipRef,
+                         CommitteeId, [ReadVote]),
+    Read = #transaction{proof_id = ProofId, foreign_reads = [Certificate]},
     SourceDir = temp_dir("historical-local-source"),
     CacheDir = temp_dir("historical-local-cache"),
     {ok, Store0} = quod_ledger_store:open(Ns, SourceDir),
     {ok, Store1} = quod_ledger_store:append(Store0, Chain),
+    {ok, Index} = quod_dtx_phase_index:open(SourceDir, Ns),
     Pid = start_owner(CacheDir, fun(_, _, _, _, _) -> {error, network_used} end),
-    Source = local_test_view(Store1, Projection),
+    Source = local_fixture_view(Store1, #{ns => Ns, anchor => Anchor, chain => Chain}, Index),
     try
         %% Ref was certified by the former committee. The current projection
         %% must not be substituted; the existing historical verifier supplies
@@ -5215,18 +5227,39 @@ verify_local_current_entry_uses_exact_historical_committee_test() ->
            {ok, #{phase := transaction, committee := [OldPub]}},
            quod_foreign_log:verify_local(
              Source, Ref, transaction, 5000)),
-        %% The membership block itself was certified by the pre-change
-        %% committee. Its post-slot projection must not relabel that proof.
-        ?assertMatch(
-           {ok, #{phase := transaction, committee := [OldPub]}},
-           quod_foreign_log:verify_local(
-             Source, MembershipRef, transaction, 5000))
+        %% The old committee certifies the membership block, but reads of its
+        %% resulting state are attested by the post-slot committee.
+        {ok, Evidence} = quod_foreign_log:verify_local(
+                           Source, MembershipRef, transaction, 5000),
+        ?assertEqual(ok, quod_commit_validation:validate_evidence(
+                           Read, #{MembershipRef => Evidence})),
+        ?assertEqual(lists:sort([OldPub, NewPub]), maps:get(committee, Evidence)),
+        ?assertEqual(CommitteeId, maps:get(committee_id, Evidence))
     after
         true = gproc:unreg(quod_reg:name({quod_simplex, Ns})),
         stop_owner(Pid),
+        quod_dtx_phase_index:close(Index),
         quod_ledger_store:close(Store1),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(CacheDir)
+    end,
+    RemoteDir = temp_dir("membership-read-cache"),
+    Remote = start_owner(RemoteDir, peer_chain_fetch(Ns, Chain, [OldPub])),
+    try
+        %% First acquisition verifies the final fetched page. Once published,
+        %% another reader uses the owner's bounded immutable read capability.
+        {ok, Fetched} = quod_foreign_log:verify(
+                          OldPub, {"127.0.0.1", 19101}, MembershipRef, transaction, 5000),
+        ?assertEqual(ok, quod_commit_validation:validate_evidence(
+                           Read, #{MembershipRef => Fetched})),
+        await_history_ready(Binding, 3),
+        {ok, Published} = quod_foreign_log:verify(
+                            OldPub, {"127.0.0.1", 19101}, MembershipRef, transaction, 5000),
+        ?assertEqual(ok, quod_commit_validation:validate_evidence(
+                           Read, #{MembershipRef => Published}))
+    after
+        stop_owner(Remote),
+        _ = file:del_dir_r(RemoteDir)
     end.
 
 verify_local_committee_shrink_never_relabels_historical_entry_test() ->

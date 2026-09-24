@@ -173,6 +173,8 @@ timeout may support suspicion, including without a preceding healthy connection.
 Missing routes, identity rejection and local errors remain unknown. Runtime
 restart can reuse the transport's retained contact; transport restart requires
 an active certified contact again. Neither condition grants assignment authority.
+The host must publish at least one discoverable ontology hosting row in its
+certified advertisement; agents and private ontologies alone supply no contact.
 A surviving authorized node principal submits reporting and placement
 requests through shared signed ingress; neither an absent agent nor a projection
 handler can use the reaction-only submit_agent_goal path. Keep bounded proposal

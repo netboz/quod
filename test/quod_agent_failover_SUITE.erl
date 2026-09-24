@@ -1,6 +1,6 @@
 -module(quod_agent_failover_SUITE).
 -moduledoc """
-Four real QUIC validators retain quorum after the execution host's VM stops.
+Four real QUIC validators retain quorum after graceful or abrupt host VM loss.
 Three surviving node actors observe that host; the ontology requires two reports
 and chooses between two eligible destinations. Replacement custody is generated
 by the ordinary recovery reaction, never installed by the test.
@@ -8,8 +8,9 @@ The former host returns from its retained disk and key custody without failback.
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
--export([all/0, init_per_suite/1, end_per_suite/1,
-         validator_host_loss_recovers_state/1]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2,
+         validator_host_loss_recovers_state/1,
+         abrupt_host_loss_recovers_state/1]).
 -export([bind_node/2, submit_node/1, await_goal/3, await_agent/3,
          resumed_work/4, restart_runtime/2, diagnostics/0,
          await_node_principal/2, assert_old_key_fenced/2]).
@@ -17,9 +18,10 @@ The former host returns from its retained disk and key custody without failback.
 -define(NS, <<"agent:failover">>).
 -define(ROOT, <<"quod:root">>).
 
-all() -> [validator_host_loss_recovers_state].
+all() -> [validator_host_loss_recovers_state, abrupt_host_loss_recovers_state].
 
-init_per_suite(Config) ->
+init_per_testcase(TestCase, Config0) ->
+    Config = [{host_loss, TestCase} | Config0],
     put(failover_peers, []),
     try
         Pairs = lists:sort([quod_identity:generate() || _ <- lists:seq(1, 4)]),
@@ -60,9 +62,12 @@ init_per_suite(Config) ->
         erlang:raise(Class, Reason, Stack)
     end.
 
-end_per_suite(Config) ->
+end_per_testcase(_TestCase, Config) ->
     stop_peers([maps:get(peer, N) || N <- ?config(nodes, Config)]),
     ok.
+
+abrupt_host_loss_recovers_state(Config) ->
+    validator_host_loss_recovers_state(Config).
 
 validator_host_loss_recovers_state(Config) ->
     ct:timetrap({minutes, 3}),
@@ -90,7 +95,7 @@ exercise_host_loss(Config) ->
     ?assertMatch({ok, _, {normalized, {failed, _}}},
         call(Administrator, ?MODULE, submit_node,
           [{node_authorized_goal, ?NS, Anchor, {assertz, unauthorized_recovery}}])),
-    ok = peer:stop(maps:get(peer, Old)),
+    ok = stop_host(Old, ?config(host_loss, Config)),
     {#{'Host' := NewHost, 'Key' := NewKey}, RecoveryHeight} =
         call(Administrator, ?MODULE, await_goal,
              [?NS, {agent_hosted, actor, {'Host'}, 2, {'Key'}}, 90000]),
@@ -181,11 +186,24 @@ assert_replicated(Nodes, Height, Host, Key, OldKey, Work) ->
         ?assertMatch({ok, [#{}], _}, call(N, quod_prolog, prove_ro, [?NS, Goal]))
     end, Nodes).
 
+stop_host(#{peer := Peer}, validator_host_loss_recovers_state) ->
+    peer:stop(Peer);
+stop_host(#{peer := Peer}, abrupt_host_loss_recovers_state) ->
+    Monitor = monitor(process, Peer),
+    %% No application shutdown, output flush, port cleanup or pending I/O drain.
+    ok = peer:cast(Peer, erlang, halt, [137, [{flush, false}]]),
+    receive
+        {'DOWN', Monitor, process, Peer, {exit_status, 137}} -> ok;
+        {'DOWN', Monitor, process, Peer, Reason} -> ct:fail({unexpected_host_exit, Reason})
+    after 10000 -> ct:fail(host_did_not_exit)
+    end.
+
 start_node(Index, Pair = {Pub, _}, Config) ->
     {ok, Socket} = gen_udp:open(0),
     {ok, Port} = inet:port(Socket),
     ok = gen_udp:close(Socket),
-    Dir = filename:join(?config(priv_dir, Config), "peer-" ++ integer_to_list(Index)),
+    Dir = filename:join([?config(priv_dir, Config), atom_to_list(?config(host_loss, Config)),
+                         "peer-" ++ integer_to_list(Index)]),
     Unlock = filename:join(Dir, "vault-unlock"),
     ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
     VaultDir = filename:join(Dir, "keys"),
@@ -207,7 +225,7 @@ start_node(Index, Pair = {Pub, _}, Config) ->
 boot_node(N0 = #{peer_name := Name, boot_env := Env, data_dir := Dir}) ->
     Ebin = filename:dirname(code:which(quod_simplex)),
     Paths = [Ebin | lists:delete(Ebin, code:get_path())],
-    {ok, Peer, _} = peer:start(#{name => Name, connection => standard_io,
+    {ok, Peer, _} = peer:start(#{name => Name, connection => standard_io, peer_down => crash,
                                 args => ["+S", "2:2", "-pa" | Paths]}),
     Peers = case get(failover_peers) of undefined -> []; Existing -> Existing end,
     put(failover_peers, [Peer | Peers]),

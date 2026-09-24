@@ -336,6 +336,8 @@ Two instances watching the same physical host share the transport's probe.
 A new watcher must acquire an active, exact-author directory contact. The
 contact comes from that actor's nonempty validated advertisement, regardless
 of which public ontologies it lists; its own ontology may remain private.
+An execution host therefore needs at least one discoverable ontology hosting
+row; hosting only agents and private ontologies does not provide a contact.
 An empty generation withdraws the contact as well as its public routes. Probes use
 the existing key-pinned connection pool and open no application stream. A
 completed connection timeout to that certified endpoint may support suspicion

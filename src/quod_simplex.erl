@@ -3095,6 +3095,7 @@ refresh_proof_gate(
      dtx_projection = #{generation := _Generation,
                         apply_fences := _Fences}} = S)
   when is_record(Before, s) ->
+    ok = publish_released_agent_work(Before, S),
     CurrentRow = proof_gate_tuple(S#s.prolog_ready, S),
     %% Before storage initialization there is deliberately no DTX projection
     %% and therefore no publishable gate row.  Compare only complete rows; the
@@ -4045,6 +4046,10 @@ running_impl(
               {GroupId, Slot, Generation}, S0#s.dtx_workers),
             {keep_state, S0}
     end;
+running_impl(
+  info, {agent_work_custody, Caller, Token, Agent, Prior}, S) ->
+    Caller ! {agent_work_custody, self(), Token, prior_agent_work(Agent, Prior, S)},
+    {keep_state, S};
 %% `{log, Ns}` is consensus-only. Decode only after the authenticated peer is
 %% known to be an active participant; a relay envelope on this channel is an
 %% exact no-op and cannot replace a consensus/readiness generation.
@@ -7436,6 +7441,31 @@ pending_vote_rows(PendingVotes) ->
     [maps:get(group_ref, Pending)
      || {_GroupId, Pending} <- lists:sort(maps:to_list(PendingVotes))].
 
+%% Read the existing journal/committed-role handoff, including dormant source
+%% responsibility before Vote. This is a recovery snapshot of references only,
+%% not a request-time ledger scan or another inventory of transactions.
+prior_agent_work(Agent, Prior,
+                  #s{ns = Ns, genesis_hash = Anchor, signing_journal = Journal,
+                     dtx_projection = #{groups := Groups}}) ->
+    Rows = maps:values(pending_votes_snapshot(Journal)) ++ maps:values(Groups),
+    maps:from_list([{Id, true} ||
+        #{material := {_, _, #{group := #{origin := {SourceNs, SourceAnchor}, group_id := Id,
+             request := #{claim := #{operation_ref := {operation, _, _, Blob, _}}}}}}} <- Rows,
+        SourceNs =:= Ns, SourceAnchor =:= Anchor, Blob =:= Agent,
+        Prior =:= all orelse is_map_key(Id, Prior)]).
+
+publish_agent_work_custody(_Ns, []) -> ok;
+publish_agent_work_custody(Ns, Groups) ->
+    quod_reg:publish({agent_work_custody, Ns},
+                     {agent_work_custody_changed, self(), Groups}),
+    ok.
+
+publish_released_agent_work(#s{dtx_projection = #{groups := Before}},
+                            #s{ns = Ns, dtx_projection = #{groups := After}})
+  when Before =/= After ->
+    publish_agent_work_custody(Ns, [Id || Id <- maps:keys(Before), not is_map_key(Id, After)]);
+publish_released_agent_work(_, _) -> ok.
+
 project_pending_votes(Ns, Journal) ->
     quod_prolog:project_pending_votes(
       Ns, pending_vote_rows(pending_votes_snapshot(Journal))).
@@ -10493,6 +10523,7 @@ finish_pending_votes_reconciliation(
     lists:foreach(
       fun(GroupRef) -> ok = quod_prolog:dtx_group_resolved(Ns, GroupRef) end,
       GroupRefs),
+    ok = publish_agent_work_custody(Ns, [element(6, Ref) || Ref <- GroupRefs]),
     S;
 finish_pending_votes_reconciliation(none, S) ->
     S.

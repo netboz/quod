@@ -1,6 +1,7 @@
 -module(quod_agent_hosting_tests).
 -include_lib("eunit/include/eunit.hrl").
 -export([quod_predicate_module/0, load/1, test_host_barrier/3, test_fill_agents/3,
+         test_work_status/3, test_fill_work_queue/3,
          with_host/1, with_host/2]).
 
 quod_predicate_module() -> true.
@@ -13,7 +14,11 @@ load(Est) ->
                               ?MODULE, test_host_barrier),
     Completion = quod_predicates:register(Reaction, {test_fipa_completion, 0}, query, proof_bound,
                               ?MODULE, test_host_barrier),
-    quod_predicates:register(Completion, {test_fill_agents, 0}, reaction,
+    WorkStatus = quod_predicates:register(Completion, {test_work_status, 0}, projection,
+                              ?MODULE, test_work_status),
+    WorkQueue = quod_predicates:register(WorkStatus, {test_fill_work_queue, 0}, reaction,
+                              ?MODULE, test_fill_work_queue),
+    quod_predicates:register(WorkQueue, {test_fill_agents, 0}, reaction,
                               ?MODULE, test_fill_agents).
 test_host_barrier(test_fipa_completion, Next, St) ->
     #{operation_ref := Operation} = quod_proof_context:request_evidence(),
@@ -38,6 +43,85 @@ test_fill_agents(test_fill_agents, _Next, St) ->
                        lists:duplicate(9, {agent, other, 1, <<91:256>>})],
     quod_reg:where({host_test, barrier}) ! {agent_queue_filled, self(), Results},
     receive release -> erlog_int:fail(St) end.
+
+test_work_status(test_work_status, Next, St) ->
+    Ns = quod_predicates:ctx_ns(quod_predicates:context(St)),
+    Stats = quod_runtime:stats(Ns),
+    quod_reg:where({host_test, barrier}) !
+        {agent_work_status, maps:with([agent_work_idle, agent_work_blocked], Stats)},
+    erlog_int:prove_body(Next, St).
+
+test_fill_work_queue(test_fill_work_queue, Next, St) ->
+    Ctx = quod_predicates:context(St),
+    Goal = {',', test_fipa_completion, {record_ping, queued}},
+    Results = [quod_runtime:agent_request(quod_predicates:ctx_ns(Ctx),
+                   quod_predicates:ctx_height(Ctx), quod_predicates:ctx_executor(Ctx),
+                   execute, Goal, 5000) || _ <- lists:seq(1, 16)],
+    quod_reg:where({host_test, barrier}) ! {work_queue_admitted, Results},
+    erlog_int:prove_body(Next, St).
+
+projected_work_drains_more_than_queue_capacity_and_skips_refusal_test_() ->
+    {timeout, 60, fun() -> with_projected_work(fun(#{namespace := Ns, reference := Ref,
+                                                   node := Node, key := Key}) ->
+        Keys = [<<N:256>> || N <- lists:seq(0, 23)],
+        commit(Ns, work_assertions([{work_rejected, <<0:256>>} |
+                                    [{work_pending, K} || K <- Keys]])),
+        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        _ = installed(Ref, 1),
+        work_status(agent_work_idle, 1),
+        ?assertMatch({ok, [#{'Rows' := [<<0:256>>]}], _}, quod_prolog:prove_ro(Ns,
+                     {findall, {'K'}, {work_pending, {'K'}}, {'Rows'}})),
+        {ok, [#{'Rows' := Done}], _} = quod_prolog:prove_ro(Ns,
+                     {findall, {'K'}, {work_done, {'K'}}, {'Rows'}}),
+        ?assertEqual(tl(Keys), lists:sort(Done)),
+        ?assertMatch(#{agent_pending_bytes := 0, reconcile_failures := 0,
+                       agent_work_idle := 1}, quod_runtime:stats(Ns))
+    end) end}.
+
+projected_work_wakes_after_real_queue_capacity_release_test_() ->
+    {timeout, 60, fun() -> with_projected_work(fun(#{namespace := Ns, reference := Ref,
+                                                   node := Node, key := Key}) ->
+        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        _ = installed(Ref, 1),
+        work_status(agent_work_idle, 1),
+        commit(Ns, {trigger_event, fill_work_queue}),
+        receive {work_queue_admitted, Results} ->
+            ?assertEqual(lists:duplicate(16, ok), Results)
+        after 5000 -> error(work_queue_not_filled) end,
+        First = receive {fipa_completion_prepared, Pid, _} -> Pid
+                after 5000 -> error(work_queue_not_started) end,
+        commit(Ns, {assertz, {work_pending, <<1:256>>}}),
+        work_status(agent_work_blocked, 1),
+        First ! release,
+        lists:foreach(fun(_) ->
+            receive {fipa_completion_prepared, NextProof, _} -> NextProof ! release
+            after 5000 -> error(work_queue_not_released) end
+        end, lists:seq(1, 15)),
+        work_status(agent_work_idle, 1),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {work_done, <<1:256>>})),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {work_pending, <<1:256>>})),
+        ?assertMatch(#{agent_work_blocked := 0, agent_pending_bytes := 0}, quod_runtime:stats(Ns))
+    end) end}.
+
+with_projected_work(Fun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    true = quod_reg:reg({host_test, barrier}),
+    Ns = <<"host-test-agent">>,
+    Principal = {agent_instance_ref, Ns, {'_'}, actor},
+    Rules = quod_prolog:read_terms("test/fixtures/agent_work.pl") ++
+        [{can_invoke, {finish_work, {'_'}}, Principal, {'_'}, Ns},
+         {can_invoke, {',', test_fipa_completion, {record_ping, queued}}, Principal, {'_'}, Ns},
+         {react_on, {agent, actor}, fill_work_queue, test_fill_work_queue}],
+    try with_host(Fun, Rules)
+    after gproc:unreg(quod_reg:name({host_test, barrier})) end.
+
+work_assertions(Facts) ->
+    lists:foldr(fun(Fact, Rest) -> {',', {assertz, Fact}, Rest} end, true, Facts).
+
+work_status(Key, Value) ->
+    receive {agent_work_status, #{Key := Value}} -> ok;
+            {agent_work_status, _} -> work_status(Key, Value)
+    after 10000 -> error({agent_work_status_missing, Key, Value}) end.
 
 
 hosted_reactions_and_incarnation_recovery_test_() ->
@@ -83,6 +167,15 @@ fipa_rejected_reply_rolls_back_domain_action_test_() ->
 fipa_unstarted_request_survives_restart_without_event_replay_test_() ->
     {timeout, 60, fun() -> with_fipa_request(restart_pending) end}.
 
+fipa_request_continues_after_restart_during_proof_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(restart_proof) end}.
+
+fipa_request_continues_after_key_rotation_during_proof_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(rotate_proof) end}.
+
+fipa_request_continues_after_runtime_loss_with_durable_custody_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(restart_admitted) end}.
+
 fipa_competing_completions_commit_once_test_() ->
     {timeout, 60, fun() -> with_fipa_request(competing_completion) end}.
 
@@ -118,12 +211,16 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
     commit(SenderNs, {goal, {agent_hosted, actor, Node, 1, SenderKey}}),
     _ = installed(SenderRef, 1),
     ReceiverNs = <<"host-test-fipa-receiver">>,
-    Diff = lists:append([quod_prolog:genesis_diff(filename:join(code:priv_dir(quod),
+    Continuation = case fipa_automatic(Scenario) of
+                       true -> ["fipa_request_continuation.pl"];
+                       false -> []
+                   end,
+    Terms = lists:append([quod_prolog:read_terms(filename:join(code:priv_dir(quod),
                                        "ontologies/" ++ File))
-                         || File <- ["agent_instance.pl", "fipa_request.pl"]]),
-    Rules = fipa_participant_rules(ReceiverNs, Node, SenderRef, maps:get(pubkey, Identity)),
+                         || File <- ["agent_instance.pl", "fipa_request.pl"] ++ Continuation]),
+    Rules = fipa_participant_rules(ReceiverNs, Node, SenderRef, maps:get(pubkey, Identity), Scenario),
     true = quod_reg:subscribe({agent_hosting, ReceiverNs}),
-    Receiver = start_ontology(ReceiverNs, Dir, Identity, Diff, Rules),
+    Receiver = start_ontology(ReceiverNs, Dir, Identity, [], Terms ++ Rules),
     ReceiverRef = {agent_instance_ref, ReceiverNs, quod_simplex:genesis_hash(ReceiverNs), receiver},
     {ok, Blob} = quod_wire_term:encode_canonical(ReceiverRef),
     {ok, Key} = quod_agent_vault:generate(Blob),
@@ -160,20 +257,88 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                 fipa_competing_completions(ReceiverRef, Key, Id),
                 fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending);
             restart_pending ->
-                %% The barrier precedes queue admission: no unknown request is
-                %% resubmitted. Restart restores state but never replays this event.
+                %% Projection queued the guarded step, but the ordered reaction
+                %% barrier has not released it. Startup continues from state,
+                %% without replaying this event or sending a manual wake.
                 stop_ontology(Receiver),
                 Resumed = start_ontology(ReceiverNs, Dir, Identity, [], [],
                             #{mode => join, genesis_hash => element(3, ReceiverRef)}),
                 try
                     _ = installed(ReceiverRef, 1),
-                    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
-                    ?assertMatch(#{reaction_candidates := 0}, quod_runtime:stats(ReceiverNs)),
-                    commit(ReceiverNs, {trigger_event, {continue_fipa, Id}}),
                     ?assertMatch({normalized, {committed, _, _}},
                                  fipa_request_result(ReceiverRef)),
+                    ?assertMatch(#{reaction_candidates := 0}, quod_runtime:stats(ReceiverNs)),
                     fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending)
                 after stop_ontology(Resumed) end;
+            restart_admitted ->
+                Engine = quod_reg:where({quod_prolog, ReceiverNs}),
+                Parent = self(), Token = make_ref(),
+                Hold = fun(_State, {in, {'$gen_call', _, {activate_dtx_vote, _, Group}}}, _) ->
+                               Parent ! {fipa_custody_held, Token, Group},
+                               receive {release_fipa_custody, Token} -> done end;
+                          (State, _, _) -> State
+                       end,
+                ok = sys:install(Engine, {Token, Hold, none}),
+                try
+                    Reaction ! release,
+                    GroupRef = receive {fipa_custody_held, Token, Group0} -> Group0
+                               after 5000 -> error(fipa_custody_not_reserved) end,
+                    {_, Consensus} = sys:get_state(quod_reg:where({quod_simplex, ReceiverNs})),
+                    ?assertMatch(#{reserved := 1}, quod_simplex:test_dtx_admission_state(Consensus)),
+                    {OldRuntime, [#{pid := OldChild}]} = quod_runtime:agents(ReceiverNs),
+                    ChildMonitor = monitor(process, OldChild),
+                    exit(OldRuntime, kill),
+                    receive {'DOWN', ChildMonitor, process, OldChild, _} -> ok
+                    after 5000 -> error(admitted_worker_survived_owner) end,
+                    Engine ! {release_fipa_custody, Token},
+                    {NewRuntime, _} = installed(ReceiverRef, 1),
+                    ?assertNotEqual(OldRuntime, NewRuntime),
+                    case fipa_request_result(ReceiverRef) of
+                        {normalized, {committed, _, _}} -> ok;
+                        {error, {outcome_unknown, Operation}} ->
+                            try quod_ct:await_operation_complete(ReceiverNs, Operation, 15000) of
+                                #{operation_state := terminal} -> ok
+                            catch Class:Reason:Stack ->
+                                io:format("custody failure: ~p~n", [
+                                    #{old_group => quod_prolog:outcome(GroupRef),
+                                      new_operation => quod_prolog:outcome(Operation),
+                                      runtime => maps:with([mode, queue_len, agent_work_idle,
+                                          agent_work_blocked, agent_pending_bytes], quod_runtime:stats(ReceiverNs))}]),
+                                erlang:raise(Class, Reason, Stack)
+                            end
+                    end,
+                    fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending)
+                after
+                    Engine ! {release_fipa_custody, Token},
+                    catch sys:remove(Engine, Token)
+                end;
+            During when During =:= restart_proof; During =:= rotate_proof ->
+                Reaction ! release,
+                {OldProof, OldOperation} = fipa_prepared(),
+                ProofMonitor = monitor(process, OldProof),
+                Resume = case During of
+                    restart_proof ->
+                        stop_ontology(Receiver),
+                        Reopened = start_ontology(ReceiverNs, Dir, Identity, [], [],
+                                    #{mode => join, genesis_hash => element(3, ReceiverRef)}),
+                        _ = installed(ReceiverRef, 1),
+                        Reopened;
+                    rotate_proof ->
+                        {ok, NextKey} = quod_agent_vault:generate(Blob),
+                        commit(ReceiverNs, {goal, {agent_assignment, receiver,
+                                                   Node, 1, Node, 2, NextKey}}),
+                        _ = installed(ReceiverRef, 2),
+                        Receiver
+                end,
+                try
+                    receive {'DOWN', ProofMonitor, process, OldProof, _} -> ok
+                    after 5000 -> error(old_fipa_proof_survived) end,
+                    {NewProof, NewOperation} = fipa_prepared(),
+                    ?assertNotEqual(OldOperation, NewOperation),
+                    NewProof ! release,
+                    ?assertMatch({normalized, {committed, _, _}}, fipa_request_result(ReceiverRef)),
+                    fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending)
+                after stop_ontology(Resume) end;
             reject_reply ->
                 commit(SenderNs, {retract, allow_fipa_reply}),
                 Reaction ! release,
@@ -205,8 +370,24 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
         stop_ontology(Receiver)
     end.
 
-fipa_participant_rules(Ns, Node, Sender, Pub) ->
+fipa_participant_rules(Ns, Node, Sender, Pub, Scenario) ->
     Id = {'Id'}, Action = {'Action'}, Anchor = {'Anchor'},
+    Handling = case fipa_automatic(Scenario) of
+        true ->
+            [{fipa_request_continuation, receiver, 5000},
+             {react_on, {agent, receiver}, {fipa_request_received, receiver, Id, Sender, Action},
+              test_reaction_barrier}];
+        false ->
+            [{react_on, {agent, receiver}, {fipa_request_received, receiver, Id, Sender, Action},
+              {',', test_reaction_barrier,
+               {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}}]
+    end,
+    Reserve = {',', {retract, {available, object}}, {assertz, {reserved, object}}},
+    ReserveBody = case Scenario of
+        During when During =:= restart_proof; During =:= rotate_proof ->
+            {',', test_fipa_completion, Reserve};
+        _ -> Reserve
+    end,
     [{can_assign_agent_host, {node, Pub}, receiver, {'_'}, {'_'}, Node, {'_'}},
      {can_invoke, {'_'}, Node, {'_'}, Ns},
      {can_invoke, {fipa_fulfil_request, receiver, Id},
@@ -220,12 +401,17 @@ fipa_participant_rules(Ns, Node, Sender, Pub) ->
      {fipa_request_goal, receiver, {reserve, object}, {reserved, object}},
      {available, object},
      {action, reserve_object, [{available, object}], {reserved, object}},
-     {':-', reserve_object, {',', {retract, {available, object}}, {assertz, {reserved, object}}}},
-     {react_on, {agent, receiver}, {fipa_request_received, receiver, Id, Sender, Action},
-      {',', test_reaction_barrier,
-       {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}},
-     {react_on, {agent, receiver}, {continue_fipa, Id},
-      {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}].
+     {':-', reserve_object, ReserveBody}] ++ Handling.
+
+fipa_automatic(restart_pending) -> true;
+fipa_automatic(restart_proof) -> true;
+fipa_automatic(rotate_proof) -> true;
+fipa_automatic(restart_admitted) -> true;
+fipa_automatic(_) -> false.
+
+fipa_prepared() ->
+    receive {fipa_completion_prepared, Proof, Operation} -> {Proof, Operation}
+    after 5000 -> error(fipa_proof_not_prepared) end.
 
 fipa_competing_completions({agent_instance_ref, Ns, Anchor, receiver}, Key, Id) ->
     {ok, Network} = quod_ontology:network_identity(),

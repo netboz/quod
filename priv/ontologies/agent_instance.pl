@@ -37,6 +37,23 @@ agent_hosting_instances(all, Node, Instances) :-
 executor_owner_node(agent(Instance), host(NodeRef, Epoch, PublicKey)) :-
     agent_hosted(Instance, NodeRef, Epoch, PublicKey).
 
+%% Opt-in domain continuation. The selector yields the least eligible binary
+%% key after Cursor and its guarded goal. A pass advances even after refusal or
+%% an unknown outcome; only changed dependencies or reincarnation revisit it.
+%% No pending goal or conversation state is copied into a private work ledger.
+project_next_agent_goal(Instance, Wake, Selector, Budget) :-
+    (agent_work_cursor(Instance, Wake, Cursor) ->
+        Selector =.. Parts,
+        append(Parts, [Cursor, Key, Goal], Arguments),
+        Selection =.. Arguments,
+        (call(Selection) ->
+            project_agent_goal(Instance, work(Key, Goal, Budget))
+        ; project_agent_goal(Instance, none))
+    ; true).
+
+agent_work_after(start, _).
+agent_work_after(after(Previous), Key) :- Key @> Previous.
+
 action(initialize_agent_host(Instance, NodeRef, PublicKey),
        [current_principal(Administrator),
         can_assign_agent_host(Administrator, Instance, none, 0, NodeRef, PublicKey),

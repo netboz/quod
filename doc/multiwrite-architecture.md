@@ -1478,3 +1478,28 @@ redelivery performs no append. This transition is limited to ordinary target
 applications of durable claims. Unknown ordinary writes/source claims retain
 their existing contract; private effects retain their journal's custody path.
 No durable or wire format changes are required.
+
+### Explicit guarded domain continuation
+
+An optional ontology-owned conversation policy may request a distinct signed
+attempt at a still-pending domain step after recovery, despite an earlier
+attempt's unknown outcome. This is the narrow, revisitable exception approved
+by Yan on 2026-09-24; it is not generic ingress or coordinator retry behavior.
+The same transaction must consume the pending guard, perform the consequence
+and record both agents' completion, so competing attempts cannot both commit.
+Every operation retains its own immutable signed identity, deadline and truthful
+outcome. An already admitted transaction keeps its existing recovery owner.
+
+The hosted runtime uses its existing bounded queue and worker. Prolog selects
+pending work; a finite cursor visits each key once per dependency-driven pass.
+Before a new hosted incarnation starts its pass, it subscribes and snapshots
+earlier source custody for that exact agent from the existing Simplex journal
+and committed-role projection. Owner notices recheck only those references;
+the set cannot grow to include the incarnation's own new attempts. This avoids
+colliding with known earlier reservations or turning an abort into an endless
+self-triggered retry. No deadline is renewed and no absence is reported as a
+definitive outcome of an earlier request.
+
+`doc/fipa-pending-continuation-plan.md` specifies the current policy and its
+limitations. It must not be implicitly applied to arbitrary goals or irreversible
+external actions lacking the existing effect guarantees.

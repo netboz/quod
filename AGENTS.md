@@ -86,6 +86,11 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
 
 ## Continuity
 
+Yan's standing instruction (2026-09-24): do not initiate Claude reviews or
+consultations unless Yan explicitly requests one. Review the work independently.
+When explicitly requested, use the Fable model; its advice remains consultative
+and must be checked against the code and architecture.
+
 Yan's standing instruction (2026-09-10): keep progressing through authorized
 work without stopping at routine intermediate steps, including while Yan is
 away. Use the authority already granted for the current workflow; do not ask

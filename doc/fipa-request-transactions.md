@@ -3,8 +3,10 @@
 This is the first implementation of the transaction composition selected for
 FIPA within Quod. It is not a complete FIPA platform or wire protocol. The
 source is `priv/ontologies/fipa_request.pl`, composed into an agent's founding
-ontology alongside `agent_instance.pl`. It changes no signed-request format,
-transaction coordinator, runtime queue or system ontology.
+ontology alongside `agent_instance.pl`. The optional
+`fipa_request_continuation.pl` profile continues pending work through the shared
+runtime queue. Neither changes the signed-request format, transaction coordinator
+or system ontology.
 
 ## State and authority
 
@@ -57,7 +59,8 @@ the initiator's waiting state and uses `::` to call the receiver's
 state and stages `fipa_request_received(Instance, Id, Sender, Action)` as an event.
 The selector includes an exact genesis-identity check inside the target scope.
 
-A founding reaction can use the existing unification and hosted submission:
+A founding reaction can use the existing unification and hosted submission
+when automatic pending-work continuation is not enabled:
 
 ```prolog
 react_on(agent(receiver),
@@ -94,23 +97,31 @@ as new reactions. An in-progress durable transaction belongs to Quod's existing
 transaction recovery. Different machines need not apply its decision at the
 same wall-clock instant.
 
-Autonomous continuation of a pending request that has not entered durable
-transaction custody is not implemented by this file. The existing hosted queue
-is volatile, and startup projection handlers cannot invoke reaction-only
-submission predicates. Restoring `pending` alone does not prove that no request
-was submitted. Integration must preserve the exact operation and uncertain
-outcome rules before enabling automatic continuation. An explicit continuation
-in the test is safe because a barrier proves the previous worker never submitted.
+For automatic continuation, compose `fipa_request_continuation.pl` at founding
+and explicitly supply `fipa_request_continuation(Instance, BudgetMs)`, retaining
+the existing entry ACL and signing grants. Its state handler depends on hosting,
+selects pending work in Prolog and uses the same bounded request queue. Omit a
+reaction that separately submits the same completion. The profile watches current
+conversation and opt-in policy changes; domain-specific readiness dependencies
+must be included in its founding declaration.
+
+Restoring `pending` does not prove that an earlier operation was never submitted.
+The approved exception permits a **distinct guarded domain attempt**, whose
+transaction can consume that pending state only once. It does not retry an
+ordinary uncertain request, cancel its custody or extend its deadline. Each pass
+visits pending keys once; a failed step lets later work proceed. Genuine watched
+state changes or a replacement hosted incarnation permit another pass. See
+`fipa-pending-continuation-plan.md` for the revisitable decision and exact scope.
 
 The focused integration tests use real hosted signing, two ontology ledgers,
 ordinary ACLs, foreign proofs, actions, atomic commit and restart from the same
-anchored history. They distinguish completed-state recovery from that unfinished
-continuation requirement. They do not establish remote hardware acceptance.
+anchored history. They distinguish completed-state recovery from automatic
+pending-work continuation. They do not establish remote hardware acceptance.
 
 ## Remaining profile work
 
 AP/AMS policy, complete ACL/content representation, refusal/agreement/failure,
-cancellation, result-bearing responses, retention, pending-step continuation
+cancellation, result-bearing responses, retention
 and external interoperability are not supplied here. No automatic pruning is
 introduced; retention must respect domain rules and existing operation replay
 protection. Existing historical generic-outbox prerequisites in the broader

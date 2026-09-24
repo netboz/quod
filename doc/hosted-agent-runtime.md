@@ -44,6 +44,42 @@ a worker starts is a definite refusal. Expiry of a running execute request kills
 and joins that worker and reports an unknown outcome with its operation reference;
 it does not assert that a submitted write failed or authorize resubmission.
 
+## Opt-in guarded domain continuation
+
+A founding projection may explicitly continue transactionally guarded domain
+steps using `project_next_agent_goal/4` from `agent_instance.pl`. The ontology
+selects one eligible goal and a monotonically increasing binary work key. The
+existing runtime agent row retains a volatile pass cursor and outstanding
+request reference; the existing queue and worker retain signing, admission,
+deadline and installed-frontier guarantees. No second executor or durable work
+inventory is involved.
+
+Before the incarnation's first pass, runtime subscribes and asynchronously
+snapshots earlier source custody for that exact agent from Simplex. The snapshot
+combines the existing pre-Vote journal with committed roles. Only references
+survive in runtime; owner notices cause a recheck of those references, never
+the addition of new work. Journal retirement and committed-role removal both
+notify this path, covering their responsibility handoff. Requests in the new
+pass cannot replenish this finite recovery wait set. Owner loss follows the
+existing runtime reset and hosting lifecycle.
+
+The projection bridges `agent_work_cursor/3` and `project_agent_goal/2` are
+available only in a founding projection context. One handler owns each hosted
+instance's work cursor. Completion and capacity release wake that handler for
+the affected instance with scope `agent_work(Instance)`; ordinary changed heads
+and startup use the existing scopes. A completion wake advances the current
+pass even when the operation failed or remains unknown. It cannot, by itself,
+start another pass. Watched state changes and replacement hosting provide the
+separate dependency/lifecycle edges needed to revisit unfinished work.
+
+This is an explicit domain-policy exception, approved for guarded Request
+continuation. Pending state does not prove non-submission of an earlier signed
+operation. A new domain attempt must atomically consume the same pending guard
+with all its consequences, so competing attempts cannot both commit. Ordinary
+requests retain their uncertainty contract, and an admitted transaction retains
+its existing recovery owner and original deadline. See
+`fipa-pending-continuation-plan.md` for the retained decision and limitations.
+
 ## Ownership and custody
 
 The containing ontology owns `agent_host(Instance, NodeRef, Epoch, PublicKey)`

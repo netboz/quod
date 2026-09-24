@@ -56,6 +56,19 @@ node_submission_never_substitutes_for_an_agent_executor_test() ->
           {submit_node_goal, execute, true, quod_time:now_ms() + 1000}, St))
     end).
 
+guarded_continuation_bridges_require_projection_context_test() ->
+    with_state(fun(St0) ->
+        lists:foreach(fun(Ctx) ->
+            St = quod_predicates:set_context(St0, Ctx),
+            lists:foreach(fun(Goal) ->
+                ?assertMatch({erlog_error, {context_violation, _, projection, _}},
+                             catch erlog_int:prove_goal(Goal, St))
+            end, [{agent_work_cursor, worker, changed, {'Cursor'}},
+                  {project_agent_goal, worker, {work, <<1:256>>, true, 5000}}])
+        end, [quod_predicates:proof_context(<<"receiver">>, 1, undefined, []),
+              quod_predicates:reaction_context(<<"receiver">>, 1)])
+    end).
+
 dependency_declaration_preserves_live_failure_reads_test() ->
     with_state(fun(Est) ->
         WithLive = quod_predicates:register(Est, {live_probe, 0}, query, ?MODULE, probe),

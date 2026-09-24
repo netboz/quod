@@ -106,7 +106,8 @@ observers therefore maintain current P without reconstructing best-effort effect
 
 -export([start_link/2, stats/1, effect_frontier/1,
          enqueue_heavy/4, revision/2, await_revision/4, reconcile_now/1,
-         project_agents/4, project_agent_observers/4, agent_request/6, agents/1]).
+         project_agents/4, project_agent_observers/4, agent_request/6,
+         project_agent_work/5, agents/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
@@ -218,6 +219,7 @@ observers therefore maintain current P without reconstructing best-effort effect
             agent_handler = undefined, agent_refresh = false,
             agent_projection_waiter = none, agent_pending_bytes = 0, agent_slots = 0,
             agent_capacity_blocked = false, agent_capacity_refusals = 0,
+            agent_work_subscribed = false,
             agents = #{} :: map(),
             hosting_dirty = #{} :: map()}).   %% notices/work released after successful projection
 
@@ -253,6 +255,12 @@ agent_request(Ns, Height, Executor, Mode, Goal, Budget) ->
     gen_server:call(quod_reg:via({quod_runtime, Ns}),
       {agent_request, Height, Executor, Mode, Goal,
        {Expires, quod_time:mono_ms() + Remaining}}, infinity).
+
+%% The projection runner selects domain work in Prolog. Only its cursor and
+%% outstanding queue reference live here; the ontology remains the work source.
+project_agent_work(Ns, Handler, Height, Instance, Step) ->
+    gen_server:call(quod_reg:via({quod_runtime, Ns}),
+      {project_agent_work, Handler, Height, Instance, Step}, infinity).
 
 -doc "Return current hosted process references, owned by this runtime incarnation.".
 -spec agents(binary()) -> {pid(), [map()]}.
@@ -400,25 +408,21 @@ handle_call({project_agents, _, _, _}, _From, S) ->
 handle_call({agent_request, H, Executor, Mode, Goal, {Expires, Deadline}},
             {Caller, _}, S = #s{runner = {events, Caller, _, _, _}}) ->
     case request_executor(Executor, S) of
-        {ok, Slot, #{pid := Pid, pending := Pending} = Agent, S1}
-          when map_size(Pending) < ?MAX_AGENT_PENDING ->
-            Bytes = erlang:external_size({Mode, Goal, Expires, Deadline}),
-            case Bytes =< ?MAX_AGENT_REQUEST_BYTES andalso
-                 S1#s.agent_pending_bytes + Bytes =< ?MAX_AGENT_PENDING_BYTES of
-                true ->
-                    Ref = make_ref(),
-                    Pid ! {agent_request, self(), Ref, H, {Mode, Goal, Expires, Deadline},
-                           erlang:monotonic_time(microsecond)},
-                    {reply, ok, S1#s{agents = (S1#s.agents)#{Slot => Agent#{pending => Pending#{Ref => Bytes}}},
-                                    agent_pending_bytes = S1#s.agent_pending_bytes + Bytes,
-                                    hosting_dirty = (S1#s.hosting_dirty)#{Slot => maps:get(Slot, S1#s.hosting_dirty, work)}}};
-                false -> {reply, {error, busy}, S1}
+        {ok, Slot, Agent, S1} ->
+            case enqueue_agent_request(Slot, Agent, H, {Mode, Goal, Expires, Deadline}, S1) of
+                {ok, _Ref, Next} -> {reply, ok, Next};
+                {error, Reason} -> {reply, {error, Reason}, S1}
             end;
-        {ok, _, _, S1} -> {reply, {error, busy}, S1};
         {error, Reason, S1} -> {reply, {error, Reason}, S1}
     end;
 handle_call({agent_request, _, _, _, _, _}, _From, S) ->
     {reply, {error, stale_executor}, S};
+handle_call({project_agent_work, Handler, H, Instance, Step}, {Caller, _},
+            S = #s{runner = {_, Caller, _, _, _}}) when Handler =/= undefined ->
+    {Reply, Next} = project_work(Handler, H, {agent, Instance}, Step, S),
+    {reply, Reply, Next};
+handle_call({project_agent_work, _, _, _, _}, _From, S) ->
+    {reply, {error, stale_projection}, S};
 handle_call(get_stats, _From, S) ->
     {reply, maps:merge(quod_agent_observer:stats(S#s.observer),
              #{mode => mode_tag(S#s.mode), height => S#s.height,
@@ -450,6 +454,8 @@ handle_call(get_stats, _From, S) ->
                                        end,
               agent_capacity_refusals_total => S#s.agent_capacity_refusals,
               agent_pending_bytes => S#s.agent_pending_bytes,
+              agent_work_idle => agent_work_count(idle, S),
+              agent_work_blocked => agent_work_count(blocked, S),
               collapses => S#s.collapses,
               dropped_events => S#s.dropped_events,
               rejected_dynamic => S#s.rejected_dynamic,
@@ -650,13 +656,43 @@ handle_info({node_actor_installed, Owner, Principal}, S) when is_pid(Owner) ->
             {noreply, queue_observer_reconcile(queue_agent_reconcile(refresh_node_executor(S)))};
         _ -> {noreply, S}
     end;
+handle_info({agent_work_custody, Owner, Token, Pending}, S) when is_map(Pending) ->
+    Next = maps:fold(fun(Slot, #{stopping := false,
+                         work := Work = #{custody_owner := Owner0,
+                                           status := {custody_query, Token0}}}, Acc)
+                          when Owner0 =:= Owner, Token0 =:= Token ->
+                        W = Work#{prior => Pending,
+                                  status => case map_size(Pending) of 0 -> ready; _ -> custody end},
+                        Updated = put_agent_work(Slot, W, Acc),
+                        case map_size(Pending) of
+                            0 -> queue_agent_work(Slot, W, Updated);
+                            _ -> Updated
+                        end;
+                       (_, _, Acc) -> Acc
+                    end, S, S#s.agents),
+    {noreply, maybe_run_events(Next)};
+handle_info({agent_work_custody_changed, Owner, Groups}, S) ->
+    Next = maps:fold(fun(Slot, Agent = #{stopping := false,
+                         work := Work = #{custody_owner := Owner0, status := custody,
+                                           prior := Prior}}, Acc) when Owner0 =:= Owner ->
+                        case lists:any(fun(Id) -> maps:is_key(Id, Prior) end, Groups) of
+                            true -> query_agent_work_custody(Slot, Agent, Work, Acc);
+                            false -> Acc
+                        end;
+                       (_, _, Acc) -> Acc
+                    end, S, S#s.agents),
+    {noreply, Next};
 handle_info({agent_completed, Instance, Pid, Ref}, S = #s{agents = Agents}) ->
     case maps:get(Instance, Agents, none) of
         Agent = #{pid := Pid, pending := Pending} ->
             case maps:take(Ref, Pending) of
                 {Bytes, Rest} ->
-                    {noreply, maybe_run_events(S#s{agents = Agents#{Instance => Agent#{pending => Rest}},
-                                  agent_pending_bytes = S#s.agent_pending_bytes - Bytes})};
+                    Next = S#s{agents = Agents#{Instance => Agent#{pending => Rest}},
+                               agent_pending_bytes = S#s.agent_pending_bytes - Bytes},
+                    %% Waiting projections get the released capacity before
+                    %% the completing agent offers its next work item.
+                    {noreply, maybe_run_events(finish_agent_work(
+                                                Instance, Ref, wake_work_capacity(Next)))};
                 error -> {noreply, S}
             end;
         _ -> {noreply, S}
@@ -1061,6 +1097,7 @@ coalesce_work_items(Batch) ->
                   end
              ;({observed, _Event} = Item, Acc) -> [Item | Acc]
              ;({reconcile, _Heads} = Item, Acc) -> [Item | Acc]
+             ;({agent_work, _, _} = Item, Acc) -> [Item | Acc]
              ;({remote, _FollowRef, _NoticeRef, _Identity, _Publications} = Item,
                Acc) ->
                   [Item | Acc]
@@ -1072,6 +1109,7 @@ coalesce_work_items(Batch) ->
            {remote, _, _, _, _} -> Item;
            {observed, _} -> Item;
            {reconcile, _} -> Item
+           ;{agent_work, _, _} -> Item
        end || Item <- Folded]).
 
 is_remote_work({remote, _, _, _, _}) -> true;
@@ -1134,6 +1172,10 @@ run_events(Ns, Work, Handlers, Order, Index, Deps,
                           #handler{goal = Goal} = maps:get(Id, Handlers),
                           converge(Ns, Est, H, Id, Goal, all)
                       end, [Id || Id <- Order, lists:member(Id, Run)]),
+                      Acc;
+                 ({agent_work, Handler, Instance}, {H, Est, _, _, _, _, _} = Acc) ->
+                      #handler{goal = Goal} = maps:get(Handler, Handlers),
+                      converge(Ns, Est, H, Handler, Goal, {agent_work, Instance}),
                       Acc;
                  ({remote, _FollowRef, _NoticeRef, Identity, Publications},
                   {H, Est, Stats0, Reactions0, Sources0,
@@ -1881,6 +1923,138 @@ max_hosted_agents(#s{config = Config}) ->
     true = is_integer(Limit) andalso Limit >= 0 andalso Limit =< ?MAX_HOSTED_AGENTS,
     Limit.
 
+enqueue_agent_request(Slot, Agent = #{pid := Pid, pending := Pending}, H, Request, S) ->
+    Bytes = erlang:external_size(Request),
+    case map_size(Pending) < ?MAX_AGENT_PENDING andalso
+         Bytes =< ?MAX_AGENT_REQUEST_BYTES andalso
+         S#s.agent_pending_bytes + Bytes =< ?MAX_AGENT_PENDING_BYTES of
+        true ->
+            Ref = make_ref(),
+            Pid ! {agent_request, self(), Ref, H, Request, erlang:monotonic_time(microsecond)},
+            {ok, Ref, S#s{agents = (S#s.agents)#{Slot => Agent#{pending => Pending#{Ref => Bytes}}},
+                          agent_pending_bytes = S#s.agent_pending_bytes + Bytes,
+                          hosting_dirty = (S#s.hosting_dirty)#{Slot =>
+                                             maps:get(Slot, S#s.hosting_dirty, work)}}};
+        false -> {error, busy}
+    end.
+
+%% A pass visits increasing binary domain keys once. An unsuccessful/unknown
+%% request advances the pass too: completion is a wake, never a retry trigger.
+%% Only a changed watched projection or a new hosted incarnation grants a new
+%% pass. None of this progress is durable or evidence about a signed operation.
+project_work(Handler, H, Slot, Step, S) ->
+    case maps:get(Slot, S#s.agents, none) of
+        Agent = #{stopping := false} ->
+            case maps:get(work, Agent, none) of
+                none when is_tuple(Step), element(1, Step) =:= cursor ->
+                    Work = #{handler => Handler, height => H, cursor => start,
+                             prior => all, dirty => false,
+                             custody_owner => quod_reg:where({quod_simplex, S#s.ns})},
+                    {skip, query_agent_work_custody(Slot, Agent, Work, S)};
+                none -> {{error, invalid_agent_work}, S};
+                Work = #{handler := Handler} -> project_work_step(Step, H, Slot, Work, S);
+                #{handler := Other} -> {{error, {conflicting_agent_work_owner, Other, Handler}}, S}
+            end;
+        _ -> {skip, S}
+    end.
+
+%% Recovery asks the existing transaction owner for earlier custody once per
+%% hosted incarnation. Subscribe before the snapshot; replies and subsequent
+%% notices come from that same owner. Later refreshes can only shrink this set
+%% of references, so this agent's new attempts cannot wake their own retry loop.
+query_agent_work_custody(_Slot, _Agent, #{custody_owner := undefined}, S) -> S;
+query_agent_work_custody(Slot, #{binding := #{reference := Ref}}, Work, S) ->
+    case S#s.agent_work_subscribed of
+        false -> true = quod_reg:subscribe({agent_work_custody, S#s.ns});
+        true -> ok
+    end,
+    {ok, Blob} = quod_wire_term:encode_canonical(Ref),
+    Token = make_ref(), Owner = maps:get(custody_owner, Work),
+    Owner ! {agent_work_custody, self(), Token, Blob, maps:get(prior, Work)},
+    put_agent_work(Slot, Work#{status => {custody_query, Token}},
+                    S#s{agent_work_subscribed = true}).
+
+project_work_step({cursor, Wake}, H, Slot, Work0, S) ->
+    Work = case Wake of
+               changed -> refresh_agent_work(H, Work0);
+               continue -> Work0
+           end,
+    case maps:get(status, Work) of
+        Status when Status =:= ready; Status =:= blocked ->
+            case agent_work_capacity(Slot, S) of
+                true -> {{ok, maps:get(cursor, Work)},
+                         put_agent_work(Slot, Work#{status => ready}, S)};
+                false -> {skip, put_agent_work(Slot, Work#{status => blocked}, S)}
+            end;
+        _ -> {skip, put_agent_work(Slot, Work, S)}
+    end;
+project_work_step(none, _H, Slot, Work = #{status := ready, dirty := Dirty}, S) ->
+    case Dirty of
+        true ->
+            Next = put_agent_work(Slot, Work#{cursor => start, dirty => false}, S),
+            {ok, queue_agent_work(Slot, Work, Next)};
+        false -> {ok, put_agent_work(Slot, Work#{status => idle}, S)}
+    end;
+project_work_step({work, Key, Goal, Budget}, H, Slot,
+                  Work = #{status := ready, cursor := Cursor}, S)
+  when is_binary(Key), is_integer(Budget), Budget > 0, Budget =< 60000 ->
+    Request = {execute, Goal, quod_time:now_ms() + Budget, quod_time:mono_ms() + Budget},
+    case (Cursor =:= start orelse Key > element(2, Cursor)) andalso
+         erlang:external_size({Key, Request}) =< ?MAX_AGENT_REQUEST_BYTES of
+        true ->
+            case enqueue_agent_request(Slot, maps:get(Slot, S#s.agents), H, Request, S) of
+                {ok, Ref, Next} ->
+                    {ok, put_agent_work(Slot, Work#{cursor => {'after', Key}, status => {active, Ref}}, Next)};
+                {error, busy} -> {ok, put_agent_work(Slot, Work#{status => blocked}, S)}
+            end;
+        false -> {{error, invalid_agent_work}, S}
+    end;
+project_work_step(_, _, _, _, S) -> {{error, invalid_agent_work}, S}.
+
+refresh_agent_work(H, Work = #{height := Before, status := Status}) when H > Before ->
+    case Status of
+        idle -> Work#{height => H, cursor => start, status => ready, dirty => false};
+        _ -> Work#{height => H, dirty => true}
+    end;
+refresh_agent_work(_, Work) -> Work.
+
+put_agent_work(Slot, Work, S = #s{agents = Agents}) ->
+    S#s{agents = Agents#{Slot => (maps:get(Slot, Agents))#{work => Work}}}.
+
+agent_work_capacity(Slot, S) ->
+    #{pending := Pending} = maps:get(Slot, S#s.agents),
+    map_size(Pending) < ?MAX_AGENT_PENDING andalso
+        S#s.agent_pending_bytes + ?MAX_AGENT_REQUEST_BYTES =< ?MAX_AGENT_PENDING_BYTES.
+
+agent_work_count(Status, S) ->
+    length([ok || #{stopping := false, work := #{status := W}} <- maps:values(S#s.agents),
+                  W =:= Status]).
+
+finish_agent_work(Slot, Ref, S) ->
+    case maps:get(Slot, S#s.agents) of
+        #{stopping := false, work := Work = #{status := {active, Ref}}} ->
+            queue_agent_work(Slot, Work, put_agent_work(Slot, Work#{status => ready}, S));
+        _ -> S
+    end.
+
+%% Refused work retains only its existing cursor, not another copy of a goal.
+%% A real queue release wakes only projections waiting for that capacity.
+wake_work_capacity(S) ->
+    maps:fold(fun(Slot, #{stopping := false, work := Work = #{status := blocked}}, Acc) ->
+                      case agent_work_capacity(Slot, Acc) of
+                          true -> queue_agent_work(Slot, Work, Acc);
+                          false -> Acc
+                      end;
+                 (_, _, Acc) -> Acc
+              end, S, S#s.agents).
+
+queue_agent_work({agent, Instance}, #{handler := Handler}, S) ->
+    Item = {agent_work, Handler, Instance},
+    case lists:member(Item, S#s.queue) of
+        true -> S;
+        false -> S#s{queue = [Item | S#s.queue], queue_len = S#s.queue_len + 1}
+    end.
+
 start_agent(Instance, Binding, S) ->
     {ok, Pid} = quod_agent:start(self(), Instance, Binding),
     Agent = #{binding => Binding, pid => Pid,
@@ -1951,7 +2125,7 @@ agent_down(Instance, Pid, Monitor, S = #s{agents = Agents}) ->
                 true -> queue_agent_reconcile(Result);
                 false -> Result
             end,
-            finish_agent_projection(Monitor, Released);
+            wake_work_capacity(finish_agent_projection(Monitor, Released));
         _ -> S
     end.
 

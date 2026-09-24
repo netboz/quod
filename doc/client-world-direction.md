@@ -300,6 +300,76 @@ An incompatible encoding yields a bounded diagnostic or a policy-declared
 alternative. Begin with authored lenses and reusable encodings; automatic
 selection may later rank compatible encodings without inventing domain meaning.
 
+### 4.1.1 Modelling and edition toolkit
+
+Eidolon authors should have convenience predicates for building and arranging
+models, rather than hand-writing every descriptor. The toolkit expresses common
+3D concepts; Babylon's API is a capability reference, not the ontology API.
+The same recipes must remain meaningful to a future Unreal or other adapter.
+
+| Area | Shared modelling concepts |
+| --- | --- |
+| Geometry | Plane, box, sphere, cylinder; later curves, extrusion, lathe and imported meshes |
+| Composition | Named parts, groups, local transforms, pivots and reusable subrecipes |
+| Arrangement | Named anchors/faces, alignment, spacing, repetition and distribution |
+| Surfaces | Reusable materials, texture slots, UV coordinates, tiling and sampling |
+| Motion | Rig/bone references, animation clips, blending and morph targets |
+| Effects | Particle emitters, emission shape/rate, lifetime and appearance |
+| Scene | Lights and camera descriptions, subject to the viewer's profile |
+
+This is the vocabulary's direction, not a requirement to implement every row
+before the lobby. Begin with its actual consumer: a console body, a screen,
+their placement, reusable materials and a GUI surface. Extend the same model
+for subsequent consumers rather than creating a second advanced-model path.
+
+An authoring predicate computes model data. It does not create a Babylon object,
+assert each generated shape into the ontology, or issue rendering side effects
+during proof/backtracking. Authored recipes and their accepted parameters are
+ontology content; evaluated descriptions are derived presentation state.
+Shared recipes and assets may be reused, while each placed occurrence has its
+own stable identity and transform. A graphical editor manipulates a local
+parameter draft, previews through the same descriptor schema, then submits
+accepted changes through the existing authorized action/transaction path.
+
+Alignment needs a precise meaning: which anchor or face of each part, in which
+coordinate frame, with what gap and orientation. For example, place the screen's
+back anchor against the console body's front anchor with a small outward offset.
+The helper derives a local transform from declared geometry or asset metadata;
+it must not depend on measuring Babylon's rendered result. Re-evaluation after
+an input change recomputes the arrangement. This is not a physical joint or a
+continuous collision/constraint solver. Cyclic layout dependencies are invalid.
+
+A material describes how a surface responds to light. A texture supplies image
+or other sampled data to one of that material's properties. Prefer the glTF
+metallic/roughness material model as the common baseline: base colour, metallic
+factor, roughness, normal, occlusion and emission, with explicit opacity mode.
+Texture references include their semantic slot, colour-space interpretation,
+UV set and sampling/tiling rules. Do not expose Babylon class names or shader
+source as the material contract. Advanced surface features require a declared
+capability and an authored alternative or a visible unsupported-feature result;
+clients must not silently substitute a different meaning.
+
+The descriptor contract must also specify axes/handedness, transform order,
+units, numeric precision and normal-map conventions. The current prototype
+uses integer millimetres and whole degrees; this direction does not silently
+change that format. Asset units and engine coordinates are converted at the
+adapter boundary under the eventual versioned contract. Compatible clients
+preserve geometry and surface meaning, not necessarily pixel-identical lighting.
+
+Particle recipes describe an emitter, not one ontology fact per particle.
+The client advances cosmetic particles and evaluates skeletal animation between
+authoritative updates. Particle collisions or visual bones do not establish
+domain damage, physical attachment or other authoritative consequences.
+Procedural geometry, asset sizes and emitter costs need declared resource
+budgets; CPU versus GPU implementation remains an adapter choice.
+
+References for the capability vocabulary: Babylon's
+[standard shapes](https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/set),
+[parametric shapes](https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/param),
+[PBR materials](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/masterPBR),
+[particles](https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/particle_system_intro)
+and the [glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
+
 ### 4.2 Composition and attachment
 
 Presentation is compositional. A character may use body, arm, equipment, and
@@ -337,6 +407,17 @@ wielded agent's sight/view policy:
 - view streams target GUI, table, log, and editor rendering;
 - no connected client means no envelope construction;
 - reconnect starts from current state, not presentation-event replay.
+
+Keep two responsibilities distinct: a scene graph composes parts through
+parent/local transforms; a spatial index finds nearby or potentially visible
+objects. The client engine already supplies the rendered transform hierarchy.
+The server index supports perception selection and does not become another
+domain knowledge base; geometric candidates still pass the ontology's access
+and perception policies. Onia's projection design proposes an initial Erlang/ETS
+implementation and later measurement of rstar or Parry for spatial indexing.
+Treat these as candidates, not an existing integrated Quod library or a
+prerequisite for drawing the first lobby. Any native acceleration belongs
+behind the same projection owner and governed external-predicate boundary.
 
 Creating a model instance or GUI widget is the idempotent client result of
 applying projected state, not a one-shot reaction. Stable entity references
@@ -577,6 +658,16 @@ The first vocabulary needs only what the console and workshop consume:
 panels/forms, text or goal editors, labels, result lists, action menus and menu
 entries. Extend that shared model as devices require it, not one ontology or
 client implementation per widget.
+
+The modelling toolkit and GUI vocabulary meet at a surface/view binding. The
+toolkit supplies the console body and screen geometry; the GUI supplies the
+goal editor, controls, focus, input and result bindings. The same GUI view can
+appear on that screen or in the focused workspace without duplicating device
+actions or widget semantics. Babylon supports both mesh-mounted and fullscreen
+[GUI rendering](https://doc.babylonjs.com/features/featuresDeepDive/gui/gui);
+the adapter chooses the appropriate realization for desktop or spatial XR.
+GUI eidolons may use modelling helpers for their appearance, but decorative
+shapes alone do not replace the planned semantic GUI components.
 
 ### 6.1 Current values and local drafts
 

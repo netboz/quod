@@ -11,8 +11,14 @@ load(Est) ->
                                        ?MODULE, test_host_barrier),
     Reaction = quod_predicates:register(Before, {test_reaction_barrier, 0}, reaction,
                               ?MODULE, test_host_barrier),
-    quod_predicates:register(Reaction, {test_fill_agents, 0}, reaction,
+    Completion = quod_predicates:register(Reaction, {test_fipa_completion, 0}, query, proof_bound,
+                              ?MODULE, test_host_barrier),
+    quod_predicates:register(Completion, {test_fill_agents, 0}, reaction,
                               ?MODULE, test_fill_agents).
+test_host_barrier(test_fipa_completion, Next, St) ->
+    #{operation_ref := Operation} = quod_proof_context:request_evidence(),
+    quod_reg:where({host_test, barrier}) ! {fipa_completion_prepared, self(), Operation},
+    receive release -> erlog_int:prove_body(Next, St) end;
 test_host_barrier(test_host_before, Next, St) ->
     quod_reg:where({host_test, barrier}) ! {host_projection_before, self()},
     receive release -> erlog_int:prove_body(Next, St) end;
@@ -76,6 +82,9 @@ fipa_rejected_reply_rolls_back_domain_action_test_() ->
 
 fipa_unstarted_request_survives_restart_without_event_replay_test_() ->
     {timeout, 60, fun() -> with_fipa_request(restart_pending) end}.
+
+fipa_competing_completions_commit_once_test_() ->
+    {timeout, 60, fun() -> with_fipa_request(competing_completion) end}.
 
 with_fipa_request(Scenario) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -144,6 +153,12 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, Waiting)),
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
         case Scenario of
+            competing_completion ->
+                %% Both separately signed proofs stage the whole transition
+                %% before either can commit. This tests domain concurrency,
+                %% not permission to retry an uncertain signed operation.
+                fipa_competing_completions(ReceiverRef, Key, Id),
+                fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending);
             restart_pending ->
                 %% The barrier precedes queue admission: no unknown request is
                 %% resubmitted. Restart restores state but never replays this event.
@@ -196,6 +211,8 @@ fipa_participant_rules(Ns, Node, Sender, Pub) ->
      {can_invoke, {'_'}, Node, {'_'}, Ns},
      {can_invoke, {fipa_fulfil_request, receiver, Id},
       {agent_instance_ref, Ns, {'_'}, receiver}, {'_'}, Ns},
+     {can_invoke, {',', {fipa_fulfil_request, receiver, Id}, test_fipa_completion},
+      {agent_instance_ref, Ns, {'_'}, receiver}, {'_'}, Ns},
      {can_invoke, {',', {current_ontology_identity, Ns, Anchor},
                        {fipa_receive_request, receiver, Id, Action}}, Sender, {'_'}, Ns},
      {can_request_agent_signature, Node, receiver, {'_'}},
@@ -209,6 +226,51 @@ fipa_participant_rules(Ns, Node, Sender, Pub) ->
        {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}},
      {react_on, {agent, receiver}, {continue_fipa, Id},
       {submit_agent_goal, receiver, execute, {fipa_fulfil_request, receiver, Id}, 5000}}].
+
+fipa_competing_completions({agent_instance_ref, Ns, Anchor, receiver}, Key, Id) ->
+    {ok, Network} = quod_ontology:network_identity(),
+    Goal = {',', {fipa_fulfil_request, receiver, Id}, test_fipa_completion},
+    {ok, GoalText} = quod_client_goal_parser:format(Goal),
+    Request = #{network_identity => Network, agent_namespace => Ns,
+                agent_genesis_anchor => Anchor, agent_instance_text => <<"receiver.">>,
+                signing_public_key => Key, not_after_ms => quod_time:now_ms() + 10000,
+                mode => execute, parser_version => 2, goal_text => GoalText},
+    Parent = self(),
+    Jobs = [begin
+        {ok, Bytes, Signature} = quod_agent_vault:sign(
+            Request#{operation_id => crypto:strong_rand_bytes(32)}, quod_time:mono_ms() + 5000),
+        {ok, #{operation_ref := Operation}} = quod_client_goal:verify(Bytes, Signature),
+        {Pid, Monitor} = spawn_monitor(fun() ->
+            Result = case quod_client_goal_ingress:submit(Bytes, Signature) of
+                         {ok, _, Outcome} -> Outcome;
+                         Error -> Error
+                     end,
+            Parent ! {fipa_completion_result, Operation, Result}
+        end),
+        {Operation, Pid, Monitor}
+    end || _ <- [first, second]],
+    try
+        Prepared = [receive {fipa_completion_prepared, Proof, Op} -> {Op, Proof}
+                    after 5000 -> error(fipa_completion_not_prepared) end
+                    || {Op, _, _} <- Jobs],
+        [{First, FirstProof}, {Second, SecondProof}] = Prepared,
+        FirstProof ! release,
+        receive {fipa_completion_result, First, FirstResult} ->
+            ?assertMatch({normalized, {committed, _, _}}, FirstResult)
+        after 5000 -> error(first_fipa_completion_missing) end,
+        SecondProof ! release,
+        receive {fipa_completion_result, Second, SecondResult} ->
+            ?assertMatch({normalized, {failed, _}}, SecondResult),
+            {normalized, {failed, Reasons}} = SecondResult,
+            ?assertEqual({ok, [conflict_retry]}, quod_wire_term:decode_failure_reasons(Reasons))
+        after 5000 -> error(second_fipa_completion_missing) end
+    after
+        lists:foreach(fun({_Op, Pid, Monitor}) ->
+            exit(Pid, kill),
+            receive {'DOWN', Monitor, process, Pid, _} -> ok
+            after 1000 -> error(fipa_completion_worker_survived) end
+        end, Jobs)
+    end.
 
 fipa_request_result(Ref) ->
     receive

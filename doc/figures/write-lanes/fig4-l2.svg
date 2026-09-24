@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 582" width="1120" height="582" role="img" aria-label="L2: one claim lists several targets; each target validates and commits on its own in parallel; one receipt records per-target outcomes; nothing is undone."><rect x="0" y="0" width="1120" height="582" fill="#FFFFFF"/><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000000"/></marker></defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 582" width="1120" height="582" role="img" aria-label="L2 (planned, not yet built): one claim lists several targets; each target validates and commits on its own in parallel; one receipt records per-target outcomes; nothing is undone."><rect x="0" y="0" width="1120" height="582" fill="#FFFFFF"/><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000000"/></marker></defs>
 <line x1="100" y1="76" x2="100" y2="572" stroke="#444444" stroke-width="1.6" stroke-dasharray="5 4"/>
 <line x1="340" y1="76" x2="340" y2="572" stroke="#444444" stroke-width="1.6" stroke-dasharray="5 4"/>
 <line x1="600" y1="76" x2="600" y2="572" stroke="#444444" stroke-width="1.6" stroke-dasharray="5 4"/>
 <line x1="820" y1="76" x2="820" y2="572" stroke="#444444" stroke-width="1.6" stroke-dasharray="5 4"/>
 <rect x="250" y="138" width="660" height="378" rx="6" fill="none" stroke="#228833" stroke-width="3" stroke-dasharray="8 5"/>
-<rect x="250" y="138" width="284.40000000000003" height="20" fill="#228833"/>
-<text x="259" y="152.5" text-anchor="start" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12" font-weight="700">NEW · one claim, fan-out, one receipt</text>
+<rect x="250" y="138" width="400" height="20" fill="#228833"/>
+<text x="259" y="152.5" text-anchor="start" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12" font-weight="700">PLANNED · slices 6–8: one claim, fan-out, one receipt</text>
 <rect x="256" y="198" width="648" height="240" rx="4" fill="none" stroke="#333333" stroke-width="2"/>
 <rect x="256" y="198" width="95.2" height="20" fill="#333333"/>
 <text x="264" y="212.5" text-anchor="start" fill="#FFFFFF" font-family="&#x27;IBM Plex Sans&#x27;, &#x27;Segoe UI&#x27;, Helvetica, Arial, sans-serif" font-size="12" font-weight="700">in parallel</text>

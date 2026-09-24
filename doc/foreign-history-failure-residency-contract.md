@@ -1,9 +1,10 @@
 # Verified-history lifetime across failed route attempts
 
-**Architecture review approved — 2026-09-10, baseline `c2bf308`, 0.7.159.
-The single residency/observation owner cut is implemented and locally gated.
-The complete tree must return for implementation review before commit or
-deployment; no performance gate is closed by these local results.**
+**Architecture and final implementation reviews approved — 2026-09-10.
+The single residency/observation owner cut is committed as `76045c4`, separately
+bumped (`3b58f51`) and deployed as 0.7.160 with preserved ledgers. The
+[new warm pilot](residency-owner-hardware-results.md) stopped under c4; its
+evidence awaits review. No performance or client-attribution gate is closed.**
 
 ## 1. Evidence and the problem to solve
 
@@ -116,23 +117,21 @@ verification and follow replies retain their different public grammars.
 Publication remains checked against each original absolute caller deadline;
 one caller's expiration does not corrupt or cancel another caller's work.
 
-**Freshness-installation proof obligation:** `install_worker_meta` currently
-changes height/projection while leaving the boolean `current_view` field, and
-`retain_current_watch` changes that field only on a successful current result.
-`resident_confirmed_current` also requires a quorum of matching ordered feed
-registrations; the boolean alone is not its authority. Widening reusable error
-outcomes must explicitly reconcile this state at the common installation seam.
-An assertion for H/its committee era must not be silently rebound to a retained
-K/new era merely because `resident_verified` remains true.
+**Freshness rule (2026-09-16 ruling):** verified history and current-tip
+confirmation remain separate; there is no stored `confirmed` boolean. A
+current-view check may confirm a newly installed suffix at K using live,
+authenticated ordered-feed registrations from a quorum of distinct members
+of the committee verified at K, each reporting exactly K. Feed and probe
+paths share one quorum predicate; existing probe validation is unchanged.
+H's old confirmation never becomes K's merely because the prefix was retained.
 
-The conservative candidate is to preserve a confirmed assertion only for the
-same head/era, otherwise mark it unconfirmed until the existing current-view
-rule establishes the new binding. Review must prove whether the existing
-matching-feed rule already establishes K's freshness after partial advance;
-do not add a second current verifier or gratuitous quorum probe if it does.
-This is a named obligation for the wider error-state lifetime, not a claim that
-today's successful current-view fast path is unsound or an excuse to backdate
-confirmation. Failed tip confirmation plus later feed arrival must be tested.
+A known higher tip blocks returning a lower current view, including a success
+that became stale while queued. Progress of unknown height withdraws that
+identity's feed heights without closing links or forgetting higher hints;
+each member counts again only after its own next ordered observation. A
+failed caller stays failed, but a new caller may use sufficient live feeds
+without redundant probes, under its original deadline. Failed confirmation
+followed by feed arrival, committee changes and queued progress require tests.
 
 Only a genuinely verified prefix advance may emit the existing progress edge.
 Retaining an unchanged cursor or finishing a failed attempt must not mint a
@@ -252,7 +251,7 @@ measurement only; never touch sync frequency or durability.
    cannot extend or cancel durable obligations.
    Also drive confirmed H → verified partial advance K → failed confirmation,
    then ordered feed notifications for K. Assert the exact reviewed freshness
-   binding and committee-era rule: no success based merely on H's old flag,
+   binding and committee-era rule: no success based merely on H's old confirmation,
    no unnecessary network confirmation if existing K evidence already suffices.
 7. Group trace tests drive real reserve→activate→spawn and existing endpoint
    carriage, mixed sampled callers, duplicate admission and recovery without a
@@ -275,7 +274,7 @@ and durable/state checks permit. The >=95%-of-means gate applies to any claimed
 causal latency explanation; sampled request trees and replica counter sums are
 not a substitute.
 
-## 6. Implementation checkpoint — final review required
+## 6. Implementation checkpoint — final review closed
 
 The implementation uses one private `verified_cursor` in the existing
 verification worker. `verification_work` opens/resumes it once under acquired
@@ -308,12 +307,12 @@ authority.
 
 `install_verified_progress` is the common metadata/wake seam. Only a strictly
 higher verified height releases queued route parks. An unchanged failed job
-does not wake its failed sibling. `install_worker_meta` preserves a confirmed
-current-view assertion only for the same height and projection; otherwise it
-is unconfirmed. A later K feed registration cannot turn H's old assertion
-into K's: the existing feed handler never promotes an unconfirmed row. After
-ordinary K confirmation, unchanged K requests still take the existing zero-
-fetch fast path. No extra verifier or confirmation algorithm was introduced.
+does not wake its failed sibling. Current-view confirmation follows §3.3:
+resident reuse and the existing custody-holding worker check live exact-height
+feed observations against the verified committee. The feed handler records
+observations, not a persistent confirmation flag; insufficient observations
+use the existing probes. No second verifier, owner or confirmation inventory
+is introduced.
 
 Observation uses existing transient rows. Group admission, activation,
 coordinator ownership, phase fan-out and locally proposed group controls carry
@@ -355,8 +354,10 @@ QUIC CT **26/26**, `quod_simplex_SUITE` **12/12**, extra N=4 `simplex_SUITE`
 Commands and true exit codes are in the archive's `final-gates/` and
 `run-final-gates-v2.sh`; previous failed attempts remain separately preserved.
 The production release still starts gproc as `permanent`. The review prompt is
-`/tmp/quod-residency-cut-M39iVr/CLAUDE-REVIEW-PROMPT.md`. No commit, version
-bump, deployment or post-fix performance measurement has occurred.
+`/tmp/quod-residency-cut-M39iVr/CLAUDE-REVIEW-PROMPT.md`. Claude independently
+reproduced these gates and approved the fingerprint-matched final tree.
+The cut and separate bump are committed/deployed as recorded above; the new
+hardware campaign preserves its c4 failure rather than claiming closure.
 
 ## 7. Review questions and retained gates
 

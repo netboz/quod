@@ -11,7 +11,7 @@ blocker. Slice 5, the documentation closure, is complete and reviewed with no
 blocker;
 slices 6–8 are not built.
 
-Diagrams (static SVG, exists-today in dark blue, new in green):
+Diagrams (static SVG, exists-today in dark blue, planned in green):
 `figures/write-lanes/` — overview, lane chooser, one sequence per lane,
 propagation layer.
 

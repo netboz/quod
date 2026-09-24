@@ -91,12 +91,28 @@ remain preserved. A four-case isolated probe now proves that a retryable
 exact-route failure discards resident state and replays the same disk prefix
 on the healthy fallback; it does not identify the hardware predecessor. The
 [failure-residency/observation contract](foreign-history-failure-residency-contract.md)
-was architecture-reviewed on 2026-09-10. Its single owner cut is implemented
-with the full local gates green; the complete tree must return for
-implementation review before commit or deployment. The change preserves a
+was architecture- and implementation-reviewed on 2026-09-10, with independently
+reproduced EUnit 1972/0, ask/QUIC 26/26, Simplex 12/12 plus N=4 8/8,
+xref, Dialyzer and release gates. Its cut `76045c4` and separate bump `3b58f51`
+are deployed as 0.7.160 with all 40 home namespace states retained. The change preserves a
 healthy certified cursor across failed routes, separates prefix advance from
 wake permission, and makes the existing group/queue work observable. It does
-not yet establish the exclusive c4 cause or any improved hardware number.
+not establish the exclusive c4 cause. The separately labeled
+[post-cut warm pilot](residency-owner-hardware-results.md) passed c1 20/20
+(mean 591.722 ms), but c4 stopped after 14 admissions: ten original committed
+replies and four pending, all-attempt mean 23.629 s. All fourteen later had
+bound committed outcomes without resubmission; original latencies/categories
+are unchanged. The capture finds same-host A verification rebuilding 1210
+entries, missing coordinator-parent export, and a source Simplex child crash
+at `stale_retained_dtx`. Client-level 95% attribution still fails. The next
+step is correction at those existing seams, not further workload or timer
+changes. Independent .160 evidence review is closed. C's
+[unchanged-source crash reproduction and proposed ordering](retained-dtx-renewal-ordering-contract.md)
+now precede the [A+B source-resolution/observation contracts](dtx-evidence-and-observation-contract.md).
+These are paper proposals awaiting review, not implemented fixes. The
+unexplained serial mean increase (~8.7%) and runtime replaying-1302 versus
+applied-1304/health-0 discrepancy remain separate open findings. Both
+BENCH_STOPs stay; no new workload is admitted.
 Cold and warm observations must not be averaged. No exact-reference/outlier,
 absolute-latency, checkpoint/compaction or other architecture gate closes here.
 This is not authorization for a

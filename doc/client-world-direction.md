@@ -221,9 +221,9 @@ descriptors and client view sessions are P-state):
 ```prolog
 world(WorldId, WorldClass, GeneratorVersion, Seed).
 scene_entity(EntityId, WorldId).
-depicts(EidolonId, EntityRef).
-model(EidolonId, ModelDescriptor).
-transform(EidolonId, Transform).
+depicts(VisualId, EntityRef).
+model(VisualId, ModelDescriptor).
+transform(VisualId, Transform).
 attached(ChildId, ParentId, Socket, LocalTransform).
 gui_component(ViewId, ComponentId, Kind).
 gui_attribute(ViewId, ComponentId, Name, Value).
@@ -239,10 +239,10 @@ and queue are not committed ontology subscriptions.
 The exact vocabulary belongs to future `quod:world` and `quod:client`
 ontologies, not hard-coded Erlang dispatch.
 
-Projected model/transform descriptors address visual eidolons (section 4.3).
-Authored domain appearance and placement are their inputs; entity references
-and eidolon IDs are distinct typed identities. An eidolon transform does not replace
-the entity's authoritative domain placement or physical attachment.
+Projected model/transform descriptors address rendered occurrences (section 4.3).
+Authored domain appearance and placement are their inputs; entity references,
+eidolon recipe identities and visual occurrence IDs are distinct. A visual
+transform does not replace authoritative domain placement or physical attachment.
 
 Asset references are content-addressed and policy checked. Ontology content
 cannot cause clients to fetch arbitrary executable code or untrusted URLs.
@@ -282,7 +282,7 @@ ontology. They are presentation associations, distinct from physical
 class, presentation, or visual primitive.
 
 A lens selects subjects, properties, relations, grouping, measures, and detail
-for a purpose. Its visual encoding declares eidolons, scales, layout, and
+for a purpose. Its visual encoding selects eidolon recipes, scales, layout, and
 interaction bindings. Shared layout algorithms produce bounded renderer-neutral
 descriptors from these declarations; the client adapter realizes them. Both
 authored appearances and appearances derived from class/attribute rules enter
@@ -340,15 +340,44 @@ wielded agent's sight/view policy:
 
 Creating a model instance or GUI widget is the idempotent client result of
 applying projected state, not a one-shot reaction. Stable entity references
-identify domain subjects; stable visual eidolon and GUI component IDs drive
+identify domain subjects; stable visual occurrence and GUI component IDs drive
 client create, update, and remove.
 
 ### 4.3 Presentation selection and visual identity
 
-An **eidolon** is one visual representation of an entity in a particular view.
-The current prototype calls these representations `mark/7` in `quod:present`;
-that implementation vocabulary has not yet been migrated. Presentation includes
-visual and auditory behavior; an eidolon specifically names the visual part.
+An **eidolon** is a reusable representation recipe defined in ontology rules.
+A class may offer playing, edition, inspection or other eidolons. Applying a
+selected recipe to a concrete instance produces its visual description in a
+view. The recipe and the rendered occurrence are distinct: the term eidolon
+names the recipe, not a mesh, occurrence ID or client object.
+
+For example, a Prolog-console class can offer a playing eidolon composed from a
+box body, a screen plane and textures, and an edition eidolon exposing its
+structure and adjustable properties. Illustrative class associations are:
+
+```prolog
+class_eidolon(prolog_console, playing, console_playing).
+class_eidolon(prolog_console, edition, console_edition).
+```
+
+Recipes use renderer-neutral primitive predicates/descriptors: box, sphere,
+plane, cylinder, transforms, materials and textures first; mesh assets, bones,
+skeletons, joints and animation bindings as the vocabulary grows. Rendering
+bones and joints do not by themselves establish physical bodies or constraints.
+The client reads the resulting bounded descriptions and realizes the supported
+primitives. It does not execute arbitrary ontology code or a Babylon API encoded
+as Prolog. Exact primitive signatures and recipe evaluation remain to be defined.
+
+A lens selects the subjects and relevant data for a purpose; an eidolon supplies
+the representation recipe. A simple object presentation need not invent a
+separate data-analysis lens just to render one instance. Both reuse the same
+projection and authorization path.
+
+The current `mark/7` prototype in `quod:present` describes output occurrences,
+not recipes. It must not simply be renamed to `eidolon/7`: implementation
+vocabulary will be revised after the recipe/output contract is settled.
+Presentation also covers sound; its relation to action progress is deferred in
+section 4.5.
 
 The world/application ontology owns presentation selection policy. Class
 ontologies supply reusable defaults; entities supply particular appearance and
@@ -367,7 +396,7 @@ class_presentation(elf, fantasy_realistic, elven_character).
 entity_appearance(aria, appearance_aria).
 view_purpose(ViewId, first_person).
 view_subject(ViewId, aria).
-depicts(EidolonId, EntityRef).
+depicts(VisualId, EntityRef).
 ```
 
 An acting identity may control a character without being identical to that
@@ -386,13 +415,13 @@ whole avatar. Both refer to the same character and equipment. Camera offsets,
 display proportions, and animation conveniences do not change authoritative
 collision, reach, attachment, or other gameplay state.
 
-Each visual occurrence has a stable eidolon identity scoped to its view and
+Each rendered occurrence has a stable visual identity scoped to its view and
 occurrence, and refers to the domain entity in its exact anchored ontology.
-Several eidolons can depict one entity, including references under several visual
-parents; a bounded scene tree therefore does not require the domain graph to
-be a tree. Switching presentations preserves domain identity and reconciles
-eidolons through the ordinary create/update/remove projection. Selection and
-inspection resolve through the entity reference, not a mesh name.
+Applying one or several eidolon recipes can produce multiple occurrences for
+the same entity, including under several visual parents. A bounded scene tree
+does not require the domain graph to be a tree. Switching eidolons preserves
+domain identity and reconciles output through ordinary create/update/remove
+projection. Selection resolves through the entity reference, not a mesh name.
 
 Presentation policies, reusable definitions, and authored shared appearance are
 D-state. Derived descriptors are rebuildable P-state; selected purpose, camera,
@@ -449,6 +478,10 @@ implementation boundary without introducing a parallel ACL system.
 
 ### 4.5 Presenting actions in progress
 
+**Deferred elaboration:** retain the agreed direction below, but settle the
+eidolon recipes, GUI and menu model first. Action/activity and sound predicate
+signatures are not selected by this section.
+
 The agreed direction is that a representation ontology describes both an
 entity's appearance and how its actions are perceived, visually and audibly.
 Different representations may interpret the same action differently. Action
@@ -469,9 +502,9 @@ required by this model.
 
 Presentation follows an action's actual progress and outcome, including partial
 movement, interruption and failure to reach its intended result. For example,
-authorized closing starts a door moving; an obstruction stops it halfway. Its
-eidolon shows the actual angle, movement sound stops, and an impact sound may
-occur. `door_closed(Door)` remains false. A visual animation cannot independently
+authorized closing starts a door moving; an obstruction stops it halfway. The
+rendered door shows the actual angle, movement sound stops, and an impact sound
+may occur. `door_closed(Door)` remains false. A visual animation cannot independently
 assume the door reached its target or override authoritative collision.
 
 The existing `action/3` and `goal/1` contracts remain unchanged: a successful
@@ -487,8 +520,8 @@ correlation, interruption and recovery terms remain to be specified.
 Continuous movement and ongoing sounds follow current simulation/activity state;
 one-shot visual and audio cues describe occurrences. Both modalities share the
 same entity, activity and timing references. Sounds may be spatially associated
-with an entity without a visible eidolon. Reconnect restores current presentation
-and any still-active sound without replaying past impacts or completed activity.
+with an entity without a visible rendered occurrence. Reconnect restores current
+presentation and any still-active sound without replaying past impacts or completed activity.
 Local previews remain distinguishable from accepted simulation state.
 
 ## 5. Cue descriptors
@@ -523,7 +556,8 @@ ontology with a semantic class tree such as:
 gui_component
 |- container: panel, form, row, column, grid
 |- display:   label, image, progress, table, log, editor
-`- input:     text_box, number_box, checkbox, select, slider, button
+|- input:     text_box, number_box, checkbox, select, slider, button
+`- menu:      action_menu, menu_entry
 ```
 
 The standard ontology defines roles, value and event schemas, containment, and
@@ -531,6 +565,18 @@ accessibility meaning. Domain ontologies instantiate or derive these concepts;
 they do not each require a separate consensus namespace. Rendering adapters may
 map the same semantic roles to spatial panels, a flat desktop UI, speech, or
 native accessibility facilities.
+
+GUI classes have their own eidolon recipes: the same form may be a spatial
+panel in the lobby or a flat panel on desktop. A pie menu is a presentation of
+an action menu. Device classes own their offered Prolog operations; GUI classes
+supply reusable parameter entry, labels, selection and result display. The GUI
+ontology therefore belongs in the first lobby design, alongside the primitive
+representation vocabulary. There is no implemented general GUI ontology yet.
+
+The first vocabulary needs only what the console and workshop consume:
+panels/forms, text or goal editors, labels, result lists, action menus and menu
+entries. Extend that shared model as devices require it, not one ontology or
+client implementation per widget.
 
 ### 6.1 Current values and local drafts
 
@@ -651,6 +697,13 @@ The default VR profile uses two related radial menus:
 - the self context presents avatar, limb, equipment, and user-pinned goals;
 - the target context follows the pointing ray and combines target-provided
   goals with avatar/tool goals applicable to that target.
+
+The initial target interaction is explicit: point the controller's ray (the
+"god ray") at a device, use the round touchpad to open and select within its pie
+menu, then confirm the chosen entry. Bind an open menu to the selected instance;
+moving the ray must not silently retarget the eventual command. An entry with
+parameters opens its declared GUI before any goal is submitted. Exact touch,
+press, confirmation and cancellation bindings remain profile details.
 
 The hand assignment is configurable. A Vive touchpad maps naturally to a pie
 gesture; a Quest 3 controller can use a thumbstick or button to open, tilt to
@@ -932,8 +985,9 @@ a final predicate schema.
 
 The lobby is a persistent place to inspect and operate Quod through meaningful
 objects. Its room, devices, placement, presentation choices and saved links are
-ontology data. The client renders their eidolons and interactions from authorized
-projections; it does not hard-code a different screen for every device.
+ontology data. The client applies their class-selected eidolon recipes and
+renders the resulting authorized projections and interactions; it does not
+hard-code a different screen for every device.
 
 A returning user authenticates with the existing key provider, selects their
 stable human-agent identity where necessary, and resolves its configured lobby.
@@ -941,11 +995,13 @@ The client obtains a current authorized snapshot and follows scoped changes.
 Desktop and immersive clients enter the same lobby with the same domain actions.
 Camera, controller poses, selection and unfinished forms remain session state.
 
-Key authentication alone does not create a human agent or a lobby. First-use
-provisioning must use ordinary authorized genesis/transactions and record the
-resulting references. The current explicit agent-reference selection remains the
-bootstrap until an enrollment flow is defined. An unavailable lobby yields an
-honest unavailable/loading state; login must not create a replacement ontology.
+Key authentication alone does not create a human agent. Once a user ontology
+is actually created, the selected direction is automatic creation of its own
+lobby ontology through an ontology reaction (section 11.3). The existing
+explicit agent-reference selection remains the bootstrap until an enrollment
+flow is defined. Login follows the resulting lobby reference or shows its
+pending/unavailable state; it must not create another lobby to replace a missing
+reply or temporarily unavailable ontology.
 
 The lobby is independent of the node serving the browser. Reconnecting through
 another node must resolve the same anchored lobby and recover outstanding
@@ -953,11 +1009,18 @@ operation outcomes through the existing client journal.
 
 ### 11.2 Ownership and references
 
-A lobby is a domain instance in an ordinary personal ontology. The user's
-containing ontology may hold it when its ownership and ACL permit this; there
-is no requirement for an additional ledger per lobby or per device. Shared
-presentation definitions belong in reusable ontologies. Personal device
-instances and layout belong in the personal ontology.
+A shared lobby-class ontology defines the lobby class, its reusable device
+classes or class references, and its eidolon associations. Each newly created
+user receives a separate personal lobby ontology containing a lobby instance,
+its initial device instances, layout and saved references. The user ontology
+records the resulting exact lobby reference.
+
+Device classes are Prolog classes, using the existing class-first convention.
+For example, the shared vocabulary may declare `isa(prolog_console,
+lobby_device)`, while the personal lobby contains
+`instance_of(prolog_console, console_1)`. Its founding input instantiates the
+initial devices together. Devices share class definitions and eidolon recipes;
+there is no separate ledger per device or graphical primitive.
 
 The exact human-agent reference receives explicit lobby read/edit permissions.
 Class membership, containment and an editable layout grant no rights over the
@@ -981,16 +1044,70 @@ lobby_agent_link(my_lobby, AgentRef, Label).
 These examples describe the domain, not access grants or founding input ready to
 submit. References to external ontologies and instances bind their exact genesis
 anchors. Local instances use local names, never a circular own-genesis hash.
-The authenticated identity's ordinary profile may point to its selected lobby;
-the exact profile predicate and first-use policy remain to be specified.
+The user's ontology stores the selected lobby reference once provisioned;
+the exact profile predicate and enrollment policy remain to be specified.
 
 A device is a lobby entity; the node it represents is a different entity. A
-console-shaped device eidolon may contain an eidolon depicting that node. The
-representation makes their targets explicit, so selecting a device and acting
-on its remote subject cannot be confused. The same node may appear in several
+console-shaped representation may include a rendering of that node using its
+own eidolon recipe. The output makes both targets explicit, so selecting a
+device and acting on its remote subject cannot be confused. The same node may appear in several
 lobbies without copying its authoritative state into them.
 
-### 11.3 Devices and existing paths
+### 11.3 Creation events and automatic lobby provisioning
+
+The intended flow is:
+
+```text
+authorized user-ontology creation
+    -> actual creation completion for its exact identity
+    -> committed ontology-created occurrence
+    -> Prolog reaction recognizing a newly created user
+    -> ordinary lobby-ontology creation, with initial device instances
+    -> completion records the user's exact lobby reference
+```
+
+Root is a candidate owner of the provisioning policy because it already owns
+creation policy, but that placement is not settled. Keep the general lifecycle
+notification independent of the lobby-specific rule. The rule must recognize an
+authorized user instance in the created ontology, not infer its class from a
+namespace string or from the creator alone. Pattern unification carries the
+exact created identity and correlation into that rule. Creation of the lobby
+itself must not recursively qualify as another user creation.
+
+An illustrative notification is
+`ontology_created(CreationRef, Namespace, GenesisAnchor, CreatorRef)`; this is a
+proposed occurrence, distinct from the existing local postcondition
+`ontology_created/2`. Creation accepted in the controlling ledger and the actual
+creation of the target ontology are different moments. Emit the completion only
+after the existing lifecycle owner establishes the exact created identity; do
+not append a premature success event beside the original create request.
+Current availability/readiness is a separate observation from historical birth.
+
+The implementation has the normal durable effect journal and namespace owner,
+but no such committed completion event. `finish_effect/3` records the verified
+local effect result and releases waiters; namespace-topology pub/sub publishes
+local availability changes, not an authenticated Prolog birth occurrence. The
+missing bridge must extend that existing completion path, with an authorized
+ordinary ontology transaction. No lifecycle broker, second executor, generic
+outbox or periodic scan is implied.
+
+A live reaction is not by itself enough to guarantee every user a lobby:
+historical replay does not rerun reactions. Creation/provisioning must remain
+recoverable if a process dies before publishing completion, before the reaction
+runs, or after lobby creation but before the user link is installed. Retain the
+unfinished domain obligation and exact operation/target references under the
+existing lifecycle and ontology owners, and reconcile through their real
+progress notifications. Duplicate observations must converge to one selected
+lobby per exact user identity. A chosen namespace alone does not ensure this:
+concurrent creations can have distinct anchors. Unknown operation outcomes
+remain subject to existing resolution rules, never a fresh create submission.
+
+The reporting transaction's authorization, completion evidence, owner and crash
+handoff, and the domain terms for the provisioning guard/link must be specified
+before implementation. This is a concrete lifecycle gap, not a reason to change
+Prolog reaction semantics. No root-wide ontology catalogue is introduced.
+
+### 11.4 Devices and existing paths
 
 | Device | User experience | Authoritative source and action path |
 | --- | --- | --- |
@@ -1010,6 +1127,14 @@ second creation because the first result is uncertain. Saving a convenient lobby
 link is a later domain edit, not evidence of creation and not an atomicity claim
 across the post-commit lifecycle effect.
 
+Each device class defines its offered Prolog operations and eidolon recipes;
+lenses may supply its data views. For example, the Prolog-console class offers
+`prove_goal`, presented as an entry in its target pie menu. Choosing it opens a
+GUI containing an exact ontology target, a goal editor and results. Submission
+binds those inputs and uses the normal signed proof path. The full signature and
+exact action binding of that class operation remain to be specified; it must not execute
+arbitrary input with the lobby service's privileges.
+
 The console reuses the Explorer console's signing, cursor lifecycle, exact
 Accept/Next/Stop semantics and error handling. Shared client logic should be
 extracted where needed, not copied into a VR executor. Ordinary forms keep drafts
@@ -1022,7 +1147,7 @@ and bounded; there is no fleet-wide search or private global agent inventory.
 The user signs as their own agent unless an existing valid acting identity is
 explicitly selected. Merely selecting a displayed agent does not wield it.
 
-### 11.4 Actions and perceptible activity
+### 11.5 Actions and perceptible activity
 
 Devices expose ontology-authored contextual goals, not all internal predicates
 or every `action/3` clause. Prolog rules derive entries from the device, its
@@ -1037,21 +1162,24 @@ actual creation outcome and readiness observations; an elapsed animation is not
 proof that an ontology exists. One-shot completion sounds are not replayed after
 reconnection. Ongoing activity is reconstructed from its current owner.
 
-The lobby also provides a concrete physical acceptance example: a door closing
-against an obstruction stops halfway, with matching geometry and audio, while
+Detailed activity/sound elaboration remains deferred while recipes, menus and
+GUI are settled. The lobby retains a later physical acceptance example: a door
+closing against an obstruction stops halfway, with matching geometry and audio, while
 `door_closed(Door)` remains false. This requires the actual simulation bridge;
 a scripted obstruction animation cannot count as physics acceptance. The first
 lobby can establish device interactions before that bridge is ready.
 
-### 11.5 Current implementation gaps
+### 11.6 Current implementation gaps
 
-- The Babylon prototype reads one lens and reconciles primitive eidolons. It
+- The Babylon prototype reads one lens and reconciles primitive output shapes. It
   lacks the proposed general view session, change stream, attachment projection,
   device interactions and coordinated audio. Extend the shared presentation
   path rather than implementing one client renderer per lobby device.
 - Browser-saved agent references are currently local conveniences. A durable
-  profile/lobby link and explicit agent relations need ordinary ontology rules;
-  no global user table or special user-home creation path is reintroduced.
+  profile/lobby link and explicit agent relations need ordinary ontology rules.
+  The creation-completion bridge and recoverable user-to-lobby provisioning are
+  missing, as detailed in section 11.3. They reuse generic creation and do not
+  restore a special Erlang user-home operation or global user table.
 - Human administration of a physical node needs explicit target-owned grants
   and a supported exact-node invocation contract. Current `quod:node` hosting
   policy admits node principals; a human login does not supply that authority.
@@ -1076,7 +1204,7 @@ and original deadlines remain properties of the shared projection paths. No
 per-device polling, copied knowledge base, new broker or duplicate executor is
 part of the lobby model.
 
-### 11.6 First acceptance and later expansion
+### 11.7 First acceptance and later expansion
 
 Keep the first implementation as one usable room: a console, an ontology
 workshop, an agent display and one authorized node station. Reusable primitives
@@ -1085,6 +1213,13 @@ semantics. Detailed world authoring and shared presence follow this checkpoint.
 
 Acceptance must demonstrate:
 
+- Creating an authorized user ontology provisions one personal lobby with its
+  initial classed devices; interruption and duplicate notification do not lose
+  the obligation or create competing lobbies, and lobby birth does not recurse.
+- Point at an instantiated console, select `prove_goal` through the touchpad pie
+  menu, enter a goal through its GUI and see the normal signed proof result.
+- Switch a device between playing and edition eidolon recipes without changing
+  its domain identity, permissions or authoritative state.
 - Return to the same personal lobby after logout/reconnect, with saved layout
   and links restored and another user's private data excluded.
 - Invoke the same permitted operation from a device and the direct console;

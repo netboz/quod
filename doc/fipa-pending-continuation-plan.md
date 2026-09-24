@@ -2,8 +2,8 @@
 
 This contract follows the Request prototype in `fipa-request-transactions.md`.
 Yan approved guarded domain continuation on 2026-09-24, with an explicit request
-to retain the decision for later improvement. The optional founding profile in
-`priv/ontologies/fipa_request_continuation.pl` implements this policy through
+to retain the decision for later improvement. The opt-in continuation rules in
+`priv/ontologies/fipa_request.pl` implement this policy through
 the existing hosted runtime; deployment and acceptance evidence are separate.
 
 **Revisitable decision:** explicit Prolog policy may initiate a separate signed

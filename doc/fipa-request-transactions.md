@@ -3,10 +3,9 @@
 This is the first implementation of the transaction composition selected for
 FIPA within Quod. It is not a complete FIPA platform or wire protocol. The
 source is `priv/ontologies/fipa_request.pl`, composed into an agent's founding
-ontology alongside `agent_instance.pl`. The optional
-`fipa_request_continuation.pl` profile continues pending work through the shared
-runtime queue. Neither changes the signed-request format, transaction coordinator
-or system ontology.
+ontology alongside `agent_instance.pl`. The same file contains the opt-in
+continuation rules for pending work through the shared runtime queue. These rules
+do not change the signed-request format, transaction coordinator or system ontology.
 
 ## State and authority
 
@@ -97,11 +96,12 @@ as new reactions. An in-progress durable transaction belongs to Quod's existing
 transaction recovery. Different machines need not apply its decision at the
 same wall-clock instant.
 
-For automatic continuation, compose `fipa_request_continuation.pl` at founding
-and explicitly supply `fipa_request_continuation(Instance, BudgetMs)`, retaining
-the existing entry ACL and signing grants. Its state handler depends on hosting,
+For automatic continuation, explicitly supply
+`fipa_request_continuation(Instance, BudgetMs)`, retaining the existing entry ACL
+and signing grants. Without that policy fact, the Request state handler selects
+no work. The handler depends on hosting,
 selects pending work in Prolog and uses the same bounded request queue. Omit a
-reaction that separately submits the same completion. The profile watches current
+reaction that separately submits the same completion. The handler watches current
 conversation and opt-in policy changes; domain-specific readiness dependencies
 must be included in its founding declaration.
 

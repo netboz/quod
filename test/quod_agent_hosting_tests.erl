@@ -211,13 +211,9 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
     commit(SenderNs, {goal, {agent_hosted, actor, Node, 1, SenderKey}}),
     _ = installed(SenderRef, 1),
     ReceiverNs = <<"host-test-fipa-receiver">>,
-    Continuation = case fipa_automatic(Scenario) of
-                       true -> ["fipa_request_continuation.pl"];
-                       false -> []
-                   end,
     Terms = lists:append([quod_prolog:read_terms(filename:join(code:priv_dir(quod),
                                        "ontologies/" ++ File))
-                         || File <- ["agent_instance.pl", "fipa_request.pl"] ++ Continuation]),
+                         || File <- ["agent_instance.pl", "fipa_request.pl"]]),
     Rules = fipa_participant_rules(ReceiverNs, Node, SenderRef, maps:get(pubkey, Identity), Scenario),
     true = quod_reg:subscribe({agent_hosting, ReceiverNs}),
     Receiver = start_ontology(ReceiverNs, Dir, Identity, [], Terms ++ Rules),

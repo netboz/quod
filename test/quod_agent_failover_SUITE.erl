@@ -1,16 +1,18 @@
 -module(quod_agent_failover_SUITE).
 -moduledoc """
-Four real QUIC validators retain quorum after graceful or abrupt host VM loss.
+Four real QUIC validators retain quorum after host VM loss or suspension.
 Three surviving node actors observe that host; the ontology requires two reports
 and chooses between two eligible destinations. Replacement custody is generated
 by the ordinary recovery reaction, never installed by the test.
-The former host returns from its retained disk and key custody without failback.
+The former host returns from retained custody, either rebooted or still running,
+without failback.
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 -export([all/0, init_per_testcase/2, end_per_testcase/2,
          validator_host_loss_recovers_state/1,
-         abrupt_host_loss_recovers_state/1]).
+         abrupt_host_loss_recovers_state/1,
+         suspended_host_retires_stale_process/1]).
 -export([bind_node/2, submit_node/1, await_goal/3, await_agent/3,
          resumed_work/4, restart_runtime/2, diagnostics/0,
          await_node_principal/2, assert_old_key_fenced/2]).
@@ -18,7 +20,8 @@ The former host returns from its retained disk and key custody without failback.
 -define(NS, <<"agent:failover">>).
 -define(ROOT, <<"quod:root">>).
 
-all() -> [validator_host_loss_recovers_state, abrupt_host_loss_recovers_state].
+all() -> [validator_host_loss_recovers_state, abrupt_host_loss_recovers_state,
+          suspended_host_retires_stale_process].
 
 init_per_testcase(TestCase, Config0) ->
     Config = [{host_loss, TestCase} | Config0],
@@ -69,6 +72,9 @@ end_per_testcase(_TestCase, Config) ->
 abrupt_host_loss_recovers_state(Config) ->
     validator_host_loss_recovers_state(Config).
 
+suspended_host_retires_stale_process(Config) ->
+    validator_host_loss_recovers_state(Config).
+
 validator_host_loss_recovers_state(Config) ->
     ct:timetrap({minutes, 3}),
     try exercise_host_loss(Config)
@@ -82,8 +88,7 @@ validator_host_loss_recovers_state(Config) ->
 
 exercise_host_loss(Config) ->
     [Old | Survivors] = ?config(nodes, Config),
-    AgentRef = {agent_instance_ref, ?NS, Anchor, actor} = ?config(agent_ref, Config),
-    OldKey = ?config(old_key, Config),
+    {agent_instance_ref, ?NS, Anchor, actor} = ?config(agent_ref, Config),
     lists:foreach(fun(N) ->
         ?assertMatch(#{role := validator}, call(N, quod_simplex, status, [?NS]))
     end, [Old | Survivors]),
@@ -95,10 +100,23 @@ exercise_host_loss(Config) ->
     ?assertMatch({ok, _, {normalized, {failed, _}}},
         call(Administrator, ?MODULE, submit_node,
           [{node_authorized_goal, ?NS, Anchor, {assertz, unauthorized_recovery}}])),
-    ok = stop_host(Old, ?config(host_loss, Config)),
+    Fault = stop_host(Old, Config),
+    ct:pal("Host fault accepted at ~p", [quod_time:mono_ms()]),
+    try exercise_recovery(Config, Fault)
+    after
+        %% Closing the controller's stdin resumes its exact peer on failure.
+        case Fault of stopped -> ok; {suspended, P} -> catch port_close(P) end
+    end.
+
+exercise_recovery(Config, Fault) ->
+    [Old | Survivors] = ?config(nodes, Config),
+    AgentRef = {agent_instance_ref, ?NS, Anchor, actor} = ?config(agent_ref, Config),
+    OldKey = ?config(old_key, Config),
+    [Administrator | _] = Survivors,
     {#{'Host' := NewHost, 'Key' := NewKey}, RecoveryHeight} =
         call(Administrator, ?MODULE, await_goal,
              [?NS, {agent_hosted, actor, {'Host'}, 2, {'Key'}}, 90000]),
+    ct:pal("Committed epoch 2 at height ~p, time ~p", [RecoveryHeight, quod_time:mono_ms()]),
     [Destination] = [N || N <- ?config(eligible, Config), maps:get(reference, N) =:= NewHost],
     ?assertNotEqual(OldKey, NewKey),
     {Runtime, Child, #{public_key := NewKey}} =
@@ -117,9 +135,18 @@ exercise_host_loss(Config) ->
                          [AgentRef, NextRuntime, NextChild, after_runtime_restart]),
     assert_replicated(Survivors, RestartHeight, NewHost, NewKey, OldKey,
                       [after_recovery, after_runtime_restart]),
-    Returned = boot_node(Old),
+    ct:pal("Replacement work committed before host return at ~p", [quod_time:mono_ms()]),
+    Returned = case Fault of
+        stopped -> boot_node(Old);
+        {suspended, Port} ->
+            ok = restore_host({suspended, Port}),
+            Old
+    end,
     try
-        resume_host(Returned, Survivors, ?config(root_anchor, Config), Anchor),
+        case Fault of
+            stopped -> resume_host(Returned, Survivors, ?config(root_anchor, Config), Anchor);
+            {suspended, _} -> ok
+        end,
         assert_replicated([Returned], RestartHeight, NewHost, NewKey, OldKey,
                           [after_recovery, after_runtime_restart]),
         ok = call(Returned, quod_runtime, await_revision,
@@ -127,6 +154,15 @@ exercise_host_loss(Config) ->
         {_, ReturnedChildren} = call(Returned, quod_runtime, agents, [?NS]),
         ?assertEqual([], [B || #{binding := #{reference := R} = B} <- ReturnedChildren,
                               R =:= AgentRef]),
+        case Fault of
+            {suspended, _} ->
+                %% The same VM and runtime must retire their surviving old child
+                %% when committed state catches up; no test-triggered restart.
+                {ReturnedRuntime, _} = call(Returned, quod_runtime, agents, [?NS]),
+                ?assertEqual(?config(old_runtime, Config), ReturnedRuntime),
+                ?assertNot(call(Returned, erlang, is_process_alive, [?config(old_child, Config)]));
+            stopped -> ok
+        end,
         ok = call(Returned, ?MODULE, assert_old_key_fenced, [AgentRef, OldKey]),
         FinalHeight = call(Destination, ?MODULE, resumed_work,
                           [AgentRef, NextRuntime, NextChild, after_old_host_return]),
@@ -186,16 +222,52 @@ assert_replicated(Nodes, Height, Host, Key, OldKey, Work) ->
         ?assertMatch({ok, [#{}], _}, call(N, quod_prolog, prove_ro, [?NS, Goal]))
     end, Nodes).
 
-stop_host(#{peer := Peer}, validator_host_loss_recovers_state) ->
-    peer:stop(Peer);
-stop_host(#{peer := Peer}, abrupt_host_loss_recovers_state) ->
+stop_host(Old, Config) ->
+    stop_host(Old, ?config(host_loss, Config), Config).
+
+stop_host(#{peer := Peer}, validator_host_loss_recovers_state, _Config) ->
+    ok = peer:stop(Peer),
+    stopped;
+stop_host(#{peer := Peer}, abrupt_host_loss_recovers_state, _Config) ->
     Monitor = monitor(process, Peer),
     %% No application shutdown, output flush, port cleanup or pending I/O drain.
     ok = peer:cast(Peer, erlang, halt, [137, [{flush, false}]]),
     receive
-        {'DOWN', Monitor, process, Peer, {exit_status, 137}} -> ok;
+        {'DOWN', Monitor, process, Peer, {exit_status, 137}} -> stopped;
         {'DOWN', Monitor, process, Peer, Reason} -> ct:fail({unexpected_host_exit, Reason})
     after 10000 -> ct:fail(host_did_not_exit)
+    end;
+stop_host(Old, suspended_host_retires_stale_process, Config) ->
+    Python = os:find_executable("python3"),
+    Script = filename:join(?config(data_dir, Config), "suspend_peer.py"),
+    Pid = call(Old, os, getpid, []),
+    Port = open_port({spawn_executable, Python},
+                     [{args, [Script, Pid]}, binary, {line, 1024}, exit_status, stderr_to_stdout]),
+    try
+        ok = fault_reply(Port, <<"stop_accepted">>, quod_time:mono_ms() + 10000, []),
+        {suspended, Port}
+    catch Class:Reason:Stack ->
+        catch port_close(Port),
+        erlang:raise(Class, Reason, Stack)
+    end.
+
+restore_host({suspended, Port}) ->
+    true = port_command(Port, <<"resume\n">>),
+    try
+        ok = fault_reply(Port, <<"resumed">>, quod_time:mono_ms() + 10000, []),
+        receive {Port, {exit_status, 0}} -> ok;
+                {Port, Exit} -> error({host_resumption_exit, Exit})
+        after 10000 -> error(host_resumption_exit_timeout)
+        end
+    after catch port_close(Port) end.
+
+fault_reply(Port, Expected, Deadline, Lines) ->
+    receive
+        {Port, {data, {eol, Expected}}} -> ok;
+        {Port, {data, {_, Line}}} -> fault_reply(Port, Expected, Deadline, [Line | Lines]);
+        {Port, Exit} -> error({fault_controller_failed, Expected, Exit, lists:reverse(Lines)})
+    after max(0, Deadline - quod_time:mono_ms()) ->
+        error({fault_controller_timeout, Expected, lists:reverse(Lines)})
     end.
 
 start_node(Index, Pair = {Pub, _}, Config) ->

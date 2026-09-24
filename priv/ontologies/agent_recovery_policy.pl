@@ -123,6 +123,11 @@ react_agent_host_observation(Observer, I, Host, Epoch, Expected, Round,
         submit_node_prepared_goal(I, Epoch, Preparation,
             report_agent_observation_with_custody(I, Host, Epoch, Expected,
                                                    Round, Report, Kind, Preparation), Expiry)
+    %% Keep live support stable for competing takeover proofs. The sequence
+    %% check above rejects ambiguous rows; missing custody still takes its branch.
+    ; agent_failure_report(I, Host, Epoch, Round, Observer,
+                           observation(_, _, ReportExpiry), Kind),
+      ReportExpiry > ObservedAt -> true
     ; submit_node_goal(execute,
         report_agent_observation(I, Host, Epoch, Expected, Round, Report, Kind), Expiry)).
 

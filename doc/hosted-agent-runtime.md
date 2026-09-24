@@ -378,6 +378,14 @@ probe has a fresh portable episode ID and completion timestamp, shared across
 interested instances. A genuinely new assignment/round dependency can request
 fresh evidence sooner; simultaneous requests share the pending probe.
 
+The optional Prolog policy keeps a current unexpired report unchanged when a
+later physical observation has the same kind for that observer, host, epoch and
+round. This preserves the report snapshot used by other observers' takeover
+proofs. A changed kind, missing or expired report still needs a new report;
+an eligible destination lacking published custody still attempts the ordinary
+preparation/report composition. Actions supplying recovery prerequisites must
+invoke shared convergence in their own transaction, as required above.
+
 Each outstanding observer request retains its absolute deadline. Expiry clears
 the request without reporting failure or issuing another attempt. A later owner
 or projection edge can progress it. Positive confirmation uses the same pinned

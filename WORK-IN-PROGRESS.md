@@ -970,3 +970,38 @@ executor, polling loop or parallel domain store was added.
 The pre-rollout cluster capture is healthy with 108 retained namespace replicas.
 Image publication, exact pinned-BEAM comparison, activation and hardware browser
 acceptance are the remaining release steps at this checkpoint.
+
+
+## 2026-09-25 — .237 clean container rollout; hardware acceptance incomplete
+
+Implementation 54ca17a and release label fa13360 are pushed on
+`feature/fipa-request-transactions`. Image `0.7.237-c4p1` uses the production
+profile and preserves all eight historically pinned predicate BEAMs exactly.
+All ten .236 allocations were stopped before ten .237 replacements started.
+After cold replay, all 108 previous replicas retained their anchors, committees
+and history frontiers; initial premature captures are retained as failures.
+
+Yan requested no obsolete presentation left active. The former planned
+`quod:present:models` was therefore not created. The old `quod:present` catalogue
+and founder-hosting entries were retired through Prolog transactions. After
+all ten replicas stopped, only that ontology's validated height-one directories
+were archived beside their original locations. Current `quod:present`, GUI,
+lobby and signup were founded and registered; unrelated histories are retained.
+Eight home nodes serve them. Both cloud nodes have the current root catalogue
+but remain waiting for four new routes; this is not a completed fleet activation.
+
+Hardware browser acceptance failed. One signup reached its newly created
+profile before readiness and lobby execution returned `ontology_rebuilding`.
+A subsequent independent signup completed both creation actions, but its first
+scene read returned `proof_unavailable`; a later read of the same lobby returns
+the scene. Neither failure was hidden or counted as a pass.
+
+Inspection also found that profile/lobby creation does not commit node-actor
+`hosts_ontology/4` declarations. Existing creation effects are not durable
+hosting authority. Correct the domain composition using the existing node
+hosting projection, and trace/wait on existing readiness notifications rather
+than introducing sleeps, polling or uncertain-operation retries. No production
+fix has been made for these issues; Yan explicitly requested no ugly workaround.
+Release acceptance remains incomplete. Evidence and the exact stop state:
+`_build/lobby-provisioning-20260925/release-v1/deployment/ACCEPTANCE-STOP.md`,
+`hardware-browser-v1/` and `hardware-browser-v2/`.

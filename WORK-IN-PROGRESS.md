@@ -1282,6 +1282,12 @@ worker occupancy measurements. They are not part of this policy correction.
 
 ## 2026-09-25 — exact local wake, XR action menu and startup identity (.243–.245)
 
+**Correction after Yan's review:** the .244/.245 exact-selector extension
+described below violates `distributed-proof-plan.md` §3: Prolog selection
+names only the namespace. These results are historical test evidence, not
+architecture acceptance. The extension is being removed; see the correction
+entry below. Parentheses group ordinary Prolog goals and are valid.
+
 .243 implementation 7932285 and release bb3ad81 are pushed. Signed ingress and
 cross-ontology proof selection now share the directory owner's exact
 validator-target wait: subscribe before snapshot, then wake on either the exact
@@ -1332,3 +1338,30 @@ The remaining product follow-ups are the previously deferred Prolog admission
 cost/capacity policy and replicated account hosting. XR radial-menu behavior is
 covered by adapter tests and the production bundle, but still needs a physical
 headset check.
+
+## 2026-09-25 — remove the unapproved exact-selector extension
+
+The working tree reverses implementations 51a2ae9 and 9de85a5: browser goals
+again use namespace-only `::`, Ask and signed-origin authorization use the
+existing name grammar, and nested scope messages carry namespace-only targets
+with the original scope wire version 13. No compatibility path is retained.
+`ontology_ref/2` remains ordinary reference data; the existing
+`current_ontology_identity/2` goal unifies against the selected proof scope's
+identity. Neither is new selector syntax.
+
+Negative controls now reject the removed selector in Ask, signed-origin
+classification and nested scope transport. Existing lobby controls retain
+the expected-identity guard, privacy and restart obligations. Focused validation
+passes: 144 Erlang tests, 48 client tests, production compile and xref. Logs
+are retained under `_build/selector-removal-20260925/`. Production source and
+browser assets match .243 again (apart from the unchanged release label);
+the source delta is +22/-73, net -51 lines, excluding generated assets.
+This correction has not been deployed. The last recorded fleet release
+remains .245.
+
+The saved .243 trace establishes an immediate `unknown_ontology` before any
+readiness wait. It does not establish whether a local Simplex process already
+existed at that instant. Its immutable genesis-anchor accessor is a candidate
+source for namespace resolution during startup, not a verified complete fix.
+Trace the actual creation/hosting installation order before changing that
+boundary. Removing the unsupported selector does not itself fix the race.

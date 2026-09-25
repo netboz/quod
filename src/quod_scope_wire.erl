@@ -34,7 +34,7 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 14).
+-define(VERSION, 13).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -49,7 +49,6 @@ renew the scope lifetime.
 -type lineage() :: none | opaque_id().
 -type selection() :: quod_transaction_scope:selection().
 -type identity() :: {binary(), key()}.
--type target_selector() :: binary() | identity().
 -type authentication() ::
         node |
         {signed_goal, binary(), <<_:512>>,
@@ -97,7 +96,7 @@ renew the scope lifetime.
          opaque_id(), pos_integer(), binary()} |
         {invocation_error, opaque_id(), pos_integer(), term()} |
         {scope_error, term()} |
-        {nested_open, opaque_id(), target_selector(), [identity()], binary(), selection()} |
+        {nested_open, opaque_id(), binary(), [identity()], binary(), selection()} |
         {nested_next, opaque_id(), opaque_id(), pos_integer(), selection()} |
         {nested_cancel, opaque_id(), opaque_id()} |
         {tx_activate, opaque_id(), opaque_id(), lineage(), [opaque_id()]} |
@@ -605,8 +604,8 @@ validate_event_operation({invocation_error, InvocationId, AnswerSeq, Reason}) ->
 validate_event_operation({scope_error, Reason}) ->
     validate_public_error(Reason);
 validate_event_operation(
-  {nested_open, ControllerId, TargetSelector, Chain, GoalBlob, Selection}) ->
-    case {valid_target_selector(TargetSelector), validate_selection(Selection)} of
+  {nested_open, ControllerId, TargetNs, Chain, GoalBlob, Selection}) ->
+    case {valid_namespace(TargetNs), validate_selection(Selection)} of
         {true, ok} -> validate_id_chain_blob(ControllerId, Chain, GoalBlob, goal);
         {false, _} -> protocol_error(bad_identity);
         {_, {error, _} = Error} -> Error
@@ -902,11 +901,6 @@ valid_mode(_) -> false.
 valid_role(validator) -> true;
 valid_role(observer) -> true;
 valid_role(_) -> false.
-
-valid_target_selector(Target) when is_binary(Target) ->
-    valid_namespace(Target);
-valid_target_selector(Target) ->
-    valid_identity(Target).
 
 valid_finish_mode(finish) -> true;
 valid_finish_mode(discard) -> true;

@@ -259,10 +259,10 @@ signed_remote_selector_materializes_only_its_authenticated_target_test() ->
     ?assertEqual(
        remote_selector,
        quod_prolog:test_signed_origin_policy_goal(Source, MaterializedGoal)),
-    ExactRemote = {'::', {ontology_ref, Remote, <<1:256>>}, true},
-    ?assertEqual(
-       remote_selector,
-       quod_prolog:test_signed_origin_policy_goal(Source, ExactRemote)),
+    lists:foreach(fun(Target) ->
+        ?assertEqual(invalid, quod_prolog:test_signed_origin_policy_goal(
+            Source, {'::', {ontology_ref, Target, <<1:256>>}, true}))
+    end, [Source, Remote]),
     %% The route selector is the only origin-owned syntax.  Even a self route
     %% leaves its inner goal intact for the normal target stage.
     SelfGoal = {'::',
@@ -277,10 +277,6 @@ signed_remote_selector_materializes_only_its_authenticated_target_test() ->
          {'$quod_symbol', <<"ok">>}}},
        quod_prolog:test_signed_origin_policy_goal(
          Source, MaterializedSelfGoal)),
-    ?assertEqual(
-       {local, true},
-       quod_prolog:test_signed_origin_policy_goal(
-         Source, {'::', {ontology_ref, Source, <<2:256>>}, true})),
     ?assertEqual(
        invalid,
        quod_prolog:test_signed_origin_policy_goal(

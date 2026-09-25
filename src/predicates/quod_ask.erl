@@ -105,39 +105,20 @@ remember_follow_answer_above(Answer, Bs, Cp, Rest) ->
 
 do_ask(NsTerm, Inner, Next, St) ->
     Self = quod_predicates:ctx_ns(quod_predicates:context(St)),
-    case quod_ontology_name:selector(NsTerm) of
-        error -> ask_error({bad_name, NsTerm});
-        {ok, Selector} ->
-            case self_selector(Selector, Self,
-                               quod_predicates:context(St)) of
-                true ->
-                    %% Self-ask stays in place: no hop and no chain growth.
-                    erlog_int:prove_body([Inner | Next], St);
-                false -> guarded_ask(Self, Selector, Inner, Next, St);
-                {error, Reason} -> ask_error(Reason)
-            end
+    case quod_ontology_name:flatten(NsTerm) of
+        error  -> ask_error({bad_name, NsTerm});
+        Self   -> erlog_int:prove_body([Inner | Next], St);  %% self-ask: in place, no hop, no chain growth
+        Target -> guarded_ask(Self, Target, Inner, Next, St)
     end.
 
-self_selector(Self, Self, _Context) -> true;
-self_selector({Self, Anchor}, Self, Context) ->
-    case quod_predicates:ctx_chain(Context) of
-        [{Self, Anchor} | _] -> true;
-        _ -> {error, {anchor_conflict, Self}}
-    end;
-self_selector(_Selector, _Self, _Context) -> false.
-
-target_namespace({Target, <<_:256>>}) -> Target;
-target_namespace(Target) when is_binary(Target) -> Target.
-
-guarded_ask(Self, Selector, Inner, Next, St) ->
-    Target = target_namespace(Selector),
+guarded_ask(Self, Target, Inner, Next, St) ->
     quod_predicates:local_only(St) andalso ask_error(ask_in_membership_verdict),
     Chain = quod_predicates:ctx_chain(quod_predicates:context(St)),
     length(Chain) >= ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
         ask_error(
           {proof_depth_exceeded, ?QUOD_MAX_ACTIVE_PROOF_DEPTH}),
     InnerTerm = erlog_int:dderef(Inner, St#est.bs),
-    case open(Self, Selector, InnerTerm, Chain, St) of
+    case open(Self, Target, InnerTerm, Chain, St) of
         {ok, Stream, St1} ->
             drive_stream(Stream, InnerTerm, Target, Next, St1);
         {error, R}   -> ask_error(R)
@@ -234,8 +215,7 @@ ask_error(Reason) -> throw({quod_ask_error, Reason}).
 %% A shared proof session routes every selection through its one origin-owned
 %% scope map. Raw snapshot adapters have no origin authority and are rejected
 %% here before directory resolution, dialing, or target-worker allocation.
-open(_Self, Selector, GoalTerm, Chain, St) ->
-    Target = target_namespace(Selector),
+open(_Self, Target, GoalTerm, Chain, St) ->
     quod_trace:with_span(
       quod_trace:context(), <<"quod.ask.open">>, internal,
       #{'quod.namespace' => Target},
@@ -249,7 +229,7 @@ open(_Self, Selector, GoalTerm, Chain, St) ->
                   ok = quod_transaction_scope:activate(St1),
                   Actor = quod_transaction_scope:current_actor(),
                   Selection = quod_transaction_scope:current_selection(St1),
-                  case origin_open(Selector, GoalTerm, Chain, Actor, Selection) of
+                  case origin_open(Target, GoalTerm, Chain, Actor, Selection) of
                       {ok, Stream} -> {ok, Stream, refresh_session(St1)};
                       {error, _} = Error -> Error
                   end;
@@ -262,7 +242,7 @@ open(_Self, Selector, GoalTerm, Chain, St) ->
                   case Actor of
                       {ScopeId, _InvocationId} ->
                           case nested_open(
-                                 Origin, ProofId, Selector, GoalTerm, Chain,
+                                 Origin, ProofId, Target, GoalTerm, Chain,
                                  Actor, Selection) of
                               {ok, Stream} ->
                                   {ok, Stream, refresh_session(St1)};
@@ -276,9 +256,8 @@ open(_Self, Selector, GoalTerm, Chain, St) ->
           end
       end).
 
-origin_open(Selector, Goal, Chain, OwnerActor, Selection) ->
-    Target = target_namespace(Selector),
-    case origin_scope(Selector) of
+origin_open(Target, Goal, Chain, OwnerActor, Selection) ->
+    case origin_scope(Target) of
         {ok, _ScopeId, Scope} ->
             case open_scope_invocation(Scope, Goal, Chain, Selection) of
                 {ok, Invocation} ->
@@ -294,13 +273,7 @@ origin_open(Selector, Goal, Chain, OwnerActor, Selection) ->
         {error, _} = Error -> Error
     end.
 
-origin_scope({Target, <<_:256>> = Anchor}) ->
-    case local_scope_status(Target, Anchor) of
-        ready -> open_anchored_local_scope(Target, Anchor);
-        waiting -> await_directory_scope(Target, {Target, Anchor});
-        {error, _} -> {error, {anchor_conflict, Target}}
-    end;
-origin_scope(Target) when is_binary(Target) ->
+origin_scope(Target) ->
     origin_scope_admitted(Target).
 
 origin_scope_admitted(Target) ->

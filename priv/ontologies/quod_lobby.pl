@@ -14,7 +14,18 @@ lobby_query(class_eidolon(_, _, _)).
 lobby_query(lobby_options(_, _)).
 lobby_query(ontology_creation_allowed(_, _, _)).
 
-ontology_creation_allowed(Owner, _, Options) :- lobby_options(Owner, Options).
+%% A user's editable facts cannot grant names outside its own personal lobby.
+%% The pending requirement is read in the same proof as the prepared creation.
+ontology_creation_allowed(Owner, Name, Options) :-
+    current_principal(Owner),
+    Owner = agent_instance_ref(UserNamespace, UserAnchor, Instance),
+    binary_codes(UserNamespace, UserBytes),
+    append(UserBytes, [47,108,111,98,98,121], LobbyBytes),
+    binary_codes(Name, LobbyBytes),
+    UserNamespace::(current_ontology_identity(UserNamespace, UserAnchor),
+                    instance_of(human_user, Instance),
+                    lobby_provisioning(Instance, pending(Name))),
+    lobby_options(Owner, Options).
 
 %% A template is reviewed founding source stored in this ontology, not a path
 %% read from whichever node happens to receive the creation request.

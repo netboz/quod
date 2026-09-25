@@ -597,7 +597,23 @@ open_signup_uses_policy_and_ordinary_signed_goals(
                 Applicant = #{reference => {agent_instance_ref, SignupNs, SignupAnchor, {signup, Public}},
                               keypair => Pair, network => Network},
                 Token = crypto:strong_rand_bytes(32),
-                Name = unique_ns(<<"signup-user">>),
+                Name = signup_namespace(Token),
+                Reserved = <<"quod:signup-test-reserved">>,
+                [begin
+                    {Bad, BadSig} = lobby_user_request(Applicant, execute,
+                        {signup, Token, BadName, {0}}),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        quod_client_goal_ingress:submit(Bad, BadSig)),
+                    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(BadName))
+                 end || BadName <- [Reserved, signup_namespace(crypto:strong_rand_bytes(32))]],
+                {ok, [#{'Options' := SignupOptions}], _} = quod_prolog:prove_ro(SignupNs,
+                    {signup_options, maps:get(reference, Applicant), Name, Token, {'Options'}}),
+                %% Root must independently enforce the name even when callers
+                %% bypass signup/3 and supply otherwise valid founding options.
+                {Direct, DirectSig} = lobby_user_request(Applicant, execute,
+                    {'::', ?ROOT_NS, {create_ontology, Reserved, SignupOptions, {0}}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Direct, DirectSig)),
                 {Bytes, Signature} = lobby_user_request(Applicant, execute,
                     {signup, Token, Name, {0}}),
                 ?assertMatch({ok, _, {normalized, {committed, _, _}}},
@@ -633,6 +649,27 @@ open_signup_uses_policy_and_ordinary_signed_goals(
                     {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}),
                 ?assertMatch({ok, _, {normalized, {failed, _}}},
                              quod_client_goal_ingress:submit(Escalation, EscalationSig)),
+                {ok, [#{'Options' := LobbyOptions}], _} = quod_prolog:prove_ro(ClassNs,
+                    {lobby_options, Owner, {'Options'}}),
+                ExpectedLobby = <<Name/binary, "/lobby">>,
+                Pending = {lobby_provisioning, me, {pending, ExpectedLobby}},
+                CreateLobby = {'::', ?ROOT_NS,
+                    {create_ontology, ExpectedLobby, LobbyOptions, {0}}},
+                %% User-owned facts cannot grant arbitrary names. Missing
+                %% requirements and a nonhuman owner cannot use the policy.
+                [begin
+                    {Bad, BadSig} = lobby_user_request(User, execute, BadGoal),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        quod_client_goal_ingress:submit(Bad, BadSig)),
+                    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Reserved)),
+                    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(ExpectedLobby)),
+                    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name, Pending))
+                 end || BadGoal <- [
+                    {'::', ?ROOT_NS, {create_ontology, Reserved, LobbyOptions, {0}}},
+                    {transaction, {',', {assertz, {lobby_provisioning, me, {pending, Reserved}}},
+                        {'::', ?ROOT_NS, {create_ontology, Reserved, LobbyOptions, {0}}}}},
+                    {transaction, {',', {retract, Pending}, CreateLobby}},
+                    {transaction, {',', {retract, {instance_of, human_user, me}}, CreateLobby}}]],
                 {Provision, ProvisionSig} = lobby_user_request(User, execute, {provision_lobby, me}),
                 ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                              quod_client_goal_ingress:submit(Provision, ProvisionSig)),
@@ -667,7 +704,7 @@ open_signup_uses_policy_and_ordinary_signed_goals(
                 Applicant = #{reference => {agent_instance_ref, SignupNs, SignupAnchor, {signup, Public}},
                               keypair => Pair, network => Network},
                 Token = crypto:strong_rand_bytes(32),
-                Name = unique_ns(<<"denied-signup">>),
+                Name = signup_namespace(Token),
                 {Rejected, RejectedSig} = lobby_user_request(Applicant, execute,
                     {signup, Token, Name, {0}}),
                 ?assertMatch({ok, _, {normalized, {failed, _}}},
@@ -679,6 +716,10 @@ open_signup_uses_policy_and_ordinary_signed_goals(
             after {ok, _, _} = quod_prolog:execute(ActorNs, {assertz, Policy}) end
         after [commit_root({retract, Grant}) || Grant <- Grants] end
     after stop_process(Auth) end.
+
+signup_namespace(Token) ->
+    Encoded = base64:encode(Token, #{mode => urlsafe, padding => false}),
+    <<"human:", Encoded/binary>>.
 
 found_lobby_classes() ->
     {PresentNs, PresentAnchor} = found_lobby_source(<<"presentation">>, "quod_present.pl", []),

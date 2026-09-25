@@ -1494,6 +1494,16 @@ profile's founding options contain its owner key, pinned lobby class, pending
 lobby requirement, chosen `hosting_node/1` and exact signup receipt identity. No separate registration
 HTTP command or permanent central human registry is introduced.
 
+The creation policy derives `human:<base64url(Token)>` from the 32-byte token;
+root independently checks that derivation against the complete founding options.
+A caller-supplied name cannot reserve a system or unrelated namespace. Lobby
+creation is confined to the authenticated owner's namespace plus `/lobby` and
+requires that exact human owner's pending requirement in the same proof. The
+provisioning action consumes the requirement only after creation permission has
+been proved, still inside the same atomic transition. User-editable requirements
+do not grant names outside this scope.
+
+
 `human_user_instance.pl` defines `provision_lobby/1`: the pending requirement,
 prepared lobby reference and receiver creation effect form one atomic transition.
 The same transaction records the lobby's node hosting declaration and consumes

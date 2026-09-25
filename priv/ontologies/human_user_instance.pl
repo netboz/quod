@@ -30,11 +30,12 @@ provision_lobby(Instance) :-
     human_user_owner(Owner),
     Owner = agent_instance_ref(_, _, Instance),
     transaction((
-        retract(lobby_provisioning(Instance, pending(Name))),
+        lobby_provisioning(Instance, pending(Name)),
         lobby_vocabulary(Namespace, Anchor),
         Namespace::(current_ontology_identity(Namespace, Anchor),
                     lobby_options(Owner, Options)),
         quod:root::create_ontology(Name, Options, CreatedAnchor),
+        retract(lobby_provisioning(Instance, pending(Name))),
         assertz(lobby_provisioning(Instance,
             linked(ontology_ref(Name, CreatedAnchor)))),
         hosting_node(Node),

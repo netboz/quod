@@ -10,6 +10,36 @@ agent_key(signup(Key), Key, active) :- open_signup, signup_key(Key).
 
 signup_key(Key) :- binary_codes(Key, Bytes), length(Bytes, 32).
 
+%% Names are derived by policy, including when root is called directly.
+%% URL-safe base64 without padding preserves the browser's namespace spelling.
+signup_name(Token, Name) :-
+    binary_codes(Token, Bytes), length(Bytes, 32),
+    signup_token_codes(Bytes, Encoded),
+    append([104,117,109,97,110,58], Encoded, Codes),
+    binary_codes(Name, Codes).
+
+signup_token_codes([A,B], [X,Y,Z]) :-
+    I is A // 4, J is (A mod 4) * 16 + B // 16, K is (B mod 16) * 4,
+    signup_digit(I, X), signup_digit(J, Y), signup_digit(K, Z).
+signup_token_codes([A,B,C|Rest], [W,X,Y,Z|Codes]) :-
+    I is A // 4, J is (A mod 4) * 16 + B // 16,
+    K is (B mod 16) * 4 + C // 64, L is C mod 64,
+    signup_digit(I, W), signup_digit(J, X),
+    signup_digit(K, Y), signup_digit(L, Z),
+    signup_token_codes(Rest, Codes).
+
+signup_digit(N, Code) :-
+    (N < 26 -> Code is N + 65
+    ; N < 52 -> Code is N + 71
+    ; N < 62 -> Code is N - 4
+    ; N = 62 -> Code = 45
+    ; Code = 95).
+
+signup_lobby_name(Name, LobbyName) :-
+    binary_codes(Name, NameBytes),
+    append(NameBytes, [47,108,111,98,98,121], LobbyBytes),
+    binary_codes(LobbyName, LobbyBytes).
+
 signup_principal(agent_instance_ref(Namespace, Anchor, signup(Key)), Key) :-
     current_ontology_identity(Namespace, Anchor),
     signup_key(Key).
@@ -54,9 +84,7 @@ ontology_hosting_allowed(Owner, Node, Name, Anchor, discoverable) :-
     signup_host(Node),
     enrollment_receipt(_, _, Owner),
     Owner = agent_instance_ref(UserNamespace, UserAnchor, me),
-    binary_codes(UserNamespace, UserBytes),
-    append(UserBytes, [47,108,111,98,98,121], LobbyBytes),
-    binary_codes(Name, LobbyBytes),
+    signup_lobby_name(UserNamespace, Name),
     UserNamespace::(current_ontology_identity(UserNamespace, UserAnchor),
                     lobby_reference(ontology_ref(Name, Anchor))).
 
@@ -84,10 +112,8 @@ signup_options(Principal, Name, Token,
             signup_origin(Namespace, Anchor, Token)]),
      external_predicate_modules([quod_agent_predicates])]) :-
     signup_principal(Principal, Key),
-    signup_key(Token),
-    binary_codes(Name, NameBytes),
-    append(NameBytes, [47,108,111,98,98,121], LobbyBytes),
-    binary_codes(LobbyName, LobbyBytes),
+    signup_name(Token, Name),
+    signup_lobby_name(Name, LobbyName),
     current_ontology_identity(Namespace, Anchor),
     user_template(Source),
     signup_host(Node),

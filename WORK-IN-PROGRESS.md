@@ -1220,3 +1220,29 @@ selection. Extracting the shared anchored local opener retains the selected
 genesis anchor through scope admission instead of resolving the name again.
 No additional production lines; 62 focused Ask/lobby tests, xref and production
 compile pass. The final pin refinement still needs deployment and acceptance.
+
+
+## 2026-09-25 — .241 accepted; signup creation policy review
+
+.241 (9584e18) replaced all ten tasks with retained ledgers and identical pinned
+predicate bridges. Both fresh browser signup/scene/reload and Finish account
+setup for the explicitly refused .238 account pass. The retention audit after
+recovery verifies all 152 prior replicas; the new lobby brings that capture to
+153. The subsequent fresh signup also passes. Recovery observer expirations on
+two old source replicas and CLI alarm exits remain preserved as failed probes.
+
+Claude's consultative review identified unrestricted creation names. Verified
+locally: the previous signup and lobby policies each admit a reserved test name
+through ordinary signed goals. The new negative tests fail against each original
+policy (with the dependent restart fixture then also failing); both logs remain
+under `_build/signup-policy-20260925/`.
+
+The correction belongs entirely in Prolog: derive the existing human namespace
+spelling from the token, independently constrain delegated root creation, and
+require the owner's exact pending personal lobby plus namespace confinement.
+The requirement remains present until creation permission has been checked;
+consumption, creation, hosting and receipt cleanup remain one transaction.
+Existing profiles need the same clause update when activating the policy.
+Admission pricing/capacity, multi-host user durability, bridge pinning granularity
+and proof-worker capacity remain separate follow-ups; no new budget or consensus
+change is introduced. Deployment and final verification are still pending.

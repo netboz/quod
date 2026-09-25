@@ -26,6 +26,12 @@ export function memoryOperationJournal() {
       rows.set(row.id, structuredClone(row))
     },
     async delete(id) { rows.delete(id) },
+    async replace(id, row) {
+      validateRow(row)
+      if (!rows.has(id)) throw new Error('operation already advanced')
+      rows.set(row.id, structuredClone(row))
+      if (row.id !== id) rows.delete(id)
+    },
     async list() { return [...rows.values()].map(row => structuredClone(row)) },
   }
 }
@@ -39,6 +45,18 @@ function indexedDbJournal() {
     },
     async delete(id) {
       await request(database, 'readwrite', store => store.delete(id))
+    },
+    async replace(id, row) {
+      validateRow(row)
+      await request(database, 'readwrite', store => {
+        const previous = store.get(id)
+        previous.onsuccess = () => {
+          if (!previous.result) { store.transaction.abort(); return }
+          store.put(row)
+          if (row.id !== id) store.delete(id)
+        }
+        return previous
+      })
     },
     async list() {
       const rows = await request(database, 'readonly', store => store.getAll())

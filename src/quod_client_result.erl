@@ -15,7 +15,7 @@ where the proof ran.
 
 -export([normalize/2, normalize_error/1, encode/1, decode/1,
          observe_outcome_unknown/3, report_outcome_unknown/3,
-         http_normalized/2, http_error/1]).
+         http_normalized/2, http_error/1, binding_json/1]).
 -export_type([result/0]).
 
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
@@ -429,10 +429,13 @@ http_error({error, proof_unavailable}) ->
     {503, #{error => proof_unavailable}}.
 
 render_bindings(Blobs) ->
-    [maps:from_list(
-       [{Name, quod_client_goal_parser:value_text(Value)}
-        || {Name, Value} <- decoded_binding(Blob)])
-     || Blob <- Blobs].
+    [binding_json(decoded_binding(Blob)) || Blob <- Blobs].
+
+-doc "Render verified named bindings identically for live and recovered results.".
+-spec binding_json([{binary(), term()}]) -> #{binary() => binary()}.
+binding_json(Pairs) ->
+    maps:from_list([{Name, quod_client_goal_parser:value_text(Value)}
+                   || {Name, Value} <- Pairs]).
 
 decoded_binding(Blob) ->
     {ok, Pairs} = quod_durable_term:decode_result(Blob),

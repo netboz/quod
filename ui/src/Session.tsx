@@ -16,9 +16,10 @@ import {
 import {
   assertCrypto,
   authenticateKey,
-  resolveSignedOperations,
+  pendingSignedOperations,
 } from '../../client/src/signed-client.js'
-import type { SignedIdentity } from '../../client/src/signed-client.js'
+import type { SignedIdentity, AgentReference } from '../../client/src/signed-client.js'
+import { accountReference, createAccount, resumeAccounts } from '../../client/src/accounts.js'
 import {
   activeAgentReference,
   agentReferences,
@@ -36,13 +37,15 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   const [unresolved, setUnresolved] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const login = async (providerPromise: ReturnType<typeof createKeyProvider>) => {
+  const login = async (providerPromise: ReturnType<typeof createKeyProvider>, enroll = false) => {
     setBusy(true)
     setError(null)
+    let next: SignedIdentity | null = null
     try {
       assertCrypto()
-      const next = await authenticateKey(await providerPromise)
+      next = await authenticateKey(await providerPromise)
       setIdentity(next)
+      if (enroll) setAgent(null)
       // Same identity store as the client page of this origin, so signing in
       // on either surface signs in on both.
       try {
@@ -51,23 +54,37 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
         /* a browser that keeps nothing still works for this session */
       }
       setSaved(localKeyMatches(next.provider))
-      try {
-        const recovered = await resolveSignedOperations(next)
-        setUnresolved(
-          recovered.filter(({ reply }) => reply?.terminal !== true).length,
-        )
-      } catch {
-        setUnresolved(0)
-        setError('Signed in, but durable write storage is unavailable. Reads remain available; writes are disabled.')
+      const onAccount = (reference: AgentReference) => {
+        const selected = saveAgentReference({ ...reference,
+          anchor: typeof reference.anchor === 'string' ? reference.anchor : b64url(reference.anchor) })
+        setAgents(agentReferences())
+        setAgent(selected)
+      }
+      const account = accountReference(next)
+      if (account) onAccount(account)
+      const recovered = await resumeAccounts(next, { onAccount })
+      setUnresolved(recovered.unresolved)
+      const recoveryError = recovered.results.find(result => result.error)?.error
+      if (recoveryError) setError(message(recoveryError))
+      if (enroll && recovered.unresolved === 0 && !accountReference(next)) {
+        const result = await createAccount(next, { onAccount })
+        setUnresolved(typeof result.unresolved === 'number' ? result.unresolved : 0)
       }
     } catch (reason) {
       setError(message(reason))
     } finally {
+      if (next) {
+        try { setUnresolved((await pendingSignedOperations(next)).length) }
+        catch (reason) {
+          setIdentity(null)
+          setError(`Could not read pending operations: ${message(reason)}`)
+        }
+      }
       setBusy(false)
     }
   }
 
-  const create = () => login(createKeyProvider())
+  const create = () => login(createKeyProvider(), true)
 
   const signOut = async () => {
     if (identity && !saved && !window.confirm(
@@ -205,6 +222,7 @@ export function SessionControls() {
         </span>
         {session.agents.length > 0 && (
           <select
+            disabled={session.busy}
             value={session.agent?.id || ''}
             onChange={(event) => session.selectAgent(event.target.value)}
             className="rounded-md border border-cream/40 bg-teal px-2 py-1 text-cream"
@@ -217,6 +235,7 @@ export function SessionControls() {
         <button
           type="button"
           onClick={session.addAgent}
+          disabled={session.busy}
           className="rounded-md border border-gold/60 px-2 py-1 text-gold hover:bg-teal-light"
         >
           Add agent
@@ -264,7 +283,7 @@ export function SessionControls() {
         onClick={() => void session.create()}
         className="rounded-md bg-gold px-2 py-1 font-semibold text-teal disabled:opacity-40"
       >
-        Create identity
+        Create account
       </button>
       {hasLocalKeyProvider() && (
         <button

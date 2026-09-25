@@ -1322,22 +1322,21 @@ lobby can establish device interactions before that bridge is ready.
   through an ontology-derived device menu. It still lacks a general subscribed
   view session, governed attachment projection, headset menus and coordinated
   audio. Extend this shared path rather than adding a renderer per device.
-- Browser-saved agent references are currently local conveniences. The initial
-  lobby uses an explicit durable `lobby_reference/1` fact. Automatic provisioning
-  must instead derive that view from its one authoritative obligation state;
-  explicit agent relations also need ordinary ontology rules. Recoverable user
-  provisioning and a generic creation notification are missing, as detailed in
-  section 11.3. They reuse generic creation and do not
-  restore a special Erlang user-home operation or global user table.
+- Human-user profiles derive `lobby_reference/1` from their authoritative
+  `lobby_provisioning/2` state. Browser signup and signed lobby creation use the
+  ordinary lifecycle and operation journal (section 11.9). Fully autonomous
+  provisioning without a returning browser and a generic creation notification
+  remain gaps from section 11.3; no extra executor or global user registry fills
+  them. Explicit agent relations also need ordinary ontology rules.
 - Human administration of a physical node needs explicit target-owned grants
   and a supported exact-node invocation contract. Current `quod:node` hosting
   policy admits node principals; a human login does not supply that authority.
   Reuse node execution where applicable and bind the intended node, never infer
   it from the browser endpoint or choose whichever host answered a scope call.
-- Root has a creation prerequisite, but its shipped authored `can_invoke/4` is
-  default-open. The workshop's creator grant cannot be treated as a protection
-  against callers allowed to rewrite that policy. Root policy must enforce the
-  intended permissions before a multi-user authorization acceptance claim.
+- Root's authored policy restricts mutations to admitted nodes or explicit
+  administrator agents. Its ordinary creation action can delegate permission
+  to anchored Prolog policies. Activating open signup requires this restriction
+  in the actual root history before publishing the signup catalogue entry.
 - Committed host assignment and a currently observed live process are different
   facts. The agent display must distinguish assigned, observed running,
   recovering, refused and unavailable/unknown without inventing a universal
@@ -1397,8 +1396,8 @@ The first implementation covers the presentation recipe, one private console
 and its desktop workspace. It is a foundation for the acceptance in section
 11.7, not completion of that broader milestone. The shipped Prolog sources are
 founding inputs; adding a source file does not create or upgrade a system
-ontology in a running fleet. No automatic user enrollment or lobby provisioning
-is installed by this change.
+ontology in a running fleet. Browser enrollment and lobby creation are specified
+in section 11.9; activating their sources is a separate deployment operation.
 
 `quod_lobby.pl` defines the shared lobby/device classes, class-to-eidolon
 associations and console menu. `quod_gui.pl` defines the first composite proof
@@ -1413,8 +1412,8 @@ instance_of(prolog_console, console).
 lobby_vocabulary(LobbyClassNamespace, LobbyClassAnchor).
 presentation_vocabulary(PresentationNamespace, PresentationAnchor).
 gui_vocabulary(GuiNamespace, GuiAnchor).
-% Selected user's ontology:
-lobby_reference(ontology_ref(PersonalLobbyNamespace, PersonalLobbyAnchor)).
+% Selected user's ontology (lobby_reference/1 is derived):
+lobby_provisioning(me, linked(ontology_ref(PersonalLobbyNamespace, PersonalLobbyAnchor))).
 ```
 
 The shared lobby vocabulary also has an anchored `presentation_vocabulary/2`
@@ -1483,3 +1482,44 @@ The isolated integration fixture creates real ontology owners, makes actual
 signed cross-ontology reads, rejects the wrong anchor and another valid actor,
 and restores the same scene from the personal lobby ledger after owner restart.
 It does not prove automatic creation, remote-node transfer or fleet activation.
+
+
+### 11.9 Open signup and browser recovery
+
+`quod:signup` offers an open Prolog creation policy. A new key signs as the derived
+`signup(Key)` applicant in that exact ontology, with authority only to create its
+profile and inspect its own unfinished enrollment. `signup/3` commits the prepared
+human-user identity and its temporary receipt in one ordinary transaction. The
+profile's founding options contain its owner key, pinned lobby class, pending
+lobby requirement and the exact signup receipt identity. No separate registration
+HTTP command or permanent central human registry is introduced.
+
+`human_user_instance.pl` defines `provision_lobby/1`: the pending requirement,
+prepared lobby reference and receiver creation effect form one atomic transition.
+The same transaction consumes the signup receipt. `quod_lobby.pl` supplies reviewed
+instance source and exact presentation/GUI references as Prolog founding data.
+Root proves the full options through the delegated creation policy. No imported
+source path is evaluated on whichever node receives a public signup request.
+
+The normal browser Create account flow executes those two signed actions. Its
+existing IndexedDB operation journal atomically replaces the completed signup
+record with the lobby request before sending that request. A committed outcome
+includes its named bindings, so lost replies recover the exact prepared identity.
+The account reference is saved alongside the active browser key and inside its
+encrypted export; importing that export recovers the same profile and lobby.
+Readiness remains distinct from a committed reference. Unknown operations are
+resolved using their original bytes, never resubmitted for proof.
+
+This provides ordinary browser enrollment and recovery of admitted operations.
+It does not yet provide autonomous provisioning while the browser stays offline.
+A crash between journaling and admission remains subject to the existing strict
+unknown-operation rule; absence of a known commit is not permission to create
+another identity. The FIPA guarded-continuation exception is not extended to
+lifecycle creation by this flow.
+
+The browser discovers system references through the root catalogue, checks its
+network identity, and disables the licence view when its lens or licence ontology
+is not registered. Registration is a discoverability check, not proof of current
+readiness or permission; each actual view still uses an ordinary authorized read.
+View changes clear old scene content, and renderer-startup errors are visible
+without preventing the semantic console from operating.

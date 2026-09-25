@@ -102,6 +102,7 @@ routes() ->
         {"/explorer/api/tx/:ns/:id", quod_explorer_http, tx},
         {"/explorer/api/block/:ns/:slot", quod_explorer_http, block},
         {"/health", quod_client_http, health},
+        {"/api/ontologies/system", quod_client_http, system_ontologies},
         {"/api/auth/challenge", quod_client_http, auth_challenge},
         {"/api/auth/complete", quod_client_http, auth_complete},
         {"/api/goals/read", quod_client_http, signed_goal_read},

@@ -14,3 +14,8 @@ export function saveAgentReference(agent: {
 }): StoredAgentReference
 export function selectAgentReference(id: string): void
 export function removeAgentReference(id: string): void
+export function normalizeAgentReference(agent: {
+  namespace: string
+  anchor: string
+  instanceText: string
+}): StoredAgentReference

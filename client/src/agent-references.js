@@ -12,7 +12,7 @@ export function activeAgentReference() {
 }
 
 export function saveAgentReference(agent) {
-  const row = normalized(agent)
+  const row = normalizeAgentReference(agent)
   const state = readState()
   const rows = [...state.rows.filter(existing => existing.id !== row.id), row]
   writeState({ active: row.id, rows })
@@ -31,7 +31,7 @@ export function removeAgentReference(id) {
   writeState({ rows, active: state.active === id ? (rows[0]?.id || null) : state.active })
 }
 
-function normalized(agent) {
+export function normalizeAgentReference(agent) {
   const namespace = agent?.namespace?.trim()
   const anchor = agent?.anchor?.trim()
   const instanceText = agent?.instanceText?.trim()
@@ -59,7 +59,7 @@ function readState() {
   if (!decoded || !Array.isArray(decoded.rows)) {
     throw new Error('saved agent references are damaged')
   }
-  const rows = decoded.rows.map(normalized)
+  const rows = decoded.rows.map(normalizeAgentReference)
   const active = typeof decoded.active === 'string' ? decoded.active : null
   return { rows, active }
 }

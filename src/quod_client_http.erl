@@ -71,6 +71,12 @@ dispatch(Req0, {vault_read, AllowedPeers} = State) ->
     end;
 dispatch(Req0, health) ->
     {ok, text_reply(200, <<"ok\n">>, Req0), health};
+dispatch(Req0, system_ontologies) ->
+    {Code, Body} = case cowboy_req:method(Req0) of
+        <<"GET">> -> system_ontologies();
+        _ -> {405, #{error => method_not_allowed}}
+    end,
+    {ok, json_reply(Code, Body, Req0), system_ontologies};
 %% Cowboy considers the paths with and without a trailing slash equivalent
 %% during dispatch. One handler must therefore distinguish them; two route
 %% entries make the redirect shadow the index page.
@@ -162,6 +168,17 @@ read_json(Req0, MaxBody, Handler) ->
             {413, #{error => body_too_large}, Req};
         {more, _Partial, Req} ->
             {413, #{error => body_too_large}, Req}
+    end.
+
+%% Discovery exposes the existing root catalogue, never a second service list
+%% or a registration command. Subsequent goals still pin the selected anchor.
+system_ontologies() ->
+    case {quod_ontology:network_identity(), quod_system_ontology:catalog()} of
+        {{ok, Network}, {ok, Height, Rows, Rejected}} when map_size(Rejected) =:= 0 ->
+            {200, #{network_id => b64url(Network), height => Height,
+                    ontologies => [#{namespace => Ns, anchor => b64url(Anchor)} ||
+                                   #{namespace := Ns, anchor := Anchor} <- Rows]}};
+        _ -> {503, #{error => system_catalogue_unavailable}}
     end.
 
 auth_challenge(#{<<"public_key">> := PublicKey64,
@@ -347,7 +364,12 @@ signed_operation_outcome(
     Terminal = Status =:= committed orelse Status =:= rejected orelse
                    Status =:= aborted,
     Code = case Terminal of true -> 200; false -> 202 end,
-    Details0 = maps:with([height, phase, reason], Outcome),
+    Details0 = case maps:find(bindings, Outcome) of
+                   {ok, Bindings} when Status =:= committed ->
+                       (maps:with([height, phase, reason], Outcome))#{
+                           bindings => [quod_client_result:binding_json(Bindings)]};
+                   _ -> maps:with([height, phase, reason], Outcome)
+               end,
     Details = case maps:get(reasons, Outcome, undefined) of
                   Reasons when is_list(Reasons) ->
                       Details0#{reasons =>

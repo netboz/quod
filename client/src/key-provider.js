@@ -1,3 +1,5 @@
+import { normalizeAgentReference } from './agent-references.js'
+
 const STORAGE_KEY = 'quod.agent-signing-key.v1'
 const IDENTITY_DATABASE = 'quod.identity.v1'
 const IDENTITY_STORE = 'identity'
@@ -45,9 +47,9 @@ export async function importEncryptedKeyProvider(encoded, passphrase) {
   } catch {
     throw new Error('Wrong passphrase or damaged saved identity')
   }
-  let privateJwk
+  let privateJwk, accounts
   try {
-    ({ private_jwk: privateJwk } = JSON.parse(decoder.decode(plaintext)))
+    ({ private_jwk: privateJwk, accounts } = JSON.parse(decoder.decode(plaintext)))
   } catch {
     throw new Error('Saved identity is damaged')
   }
@@ -65,7 +67,7 @@ export async function importEncryptedKeyProvider(encoded, passphrase) {
     'jwk', { kty: 'OKP', crv: 'Ed25519', x: privateJwk.x, ext: true },
     { name: 'Ed25519' }, true, ['verify'],
   )
-  return providerFromKeyPair({ privateKey, publicKey })
+  return providerFromKeyPair({ privateKey, publicKey }, accounts)
 }
 
 export async function saveLocalKeyProvider(provider, passphrase) {
@@ -119,7 +121,8 @@ export async function storeActiveKeyProvider(provider) {
   try {
     await identityTransaction(
       database, 'readwrite',
-      store => store.put({ id: ACTIVE_KEY, key_pair: provider.keyPair }))
+      store => store.put({ id: ACTIVE_KEY, key_pair: provider.keyPair,
+                          accounts: normalizeAccounts(provider.accounts) }))
   } finally {
     database.close()
   }
@@ -138,7 +141,7 @@ export async function loadActiveKeyProvider() {
       database, 'readonly', store => store.get(ACTIVE_KEY))
     const keyPair = stored?.key_pair
     if (!keyPair?.privateKey || !keyPair?.publicKey) return null
-    return providerFromKeyPair(keyPair)
+    return providerFromKeyPair(keyPair, stored.accounts)
   } catch {
     return null
   } finally {
@@ -190,7 +193,8 @@ export async function exportEncryptedKeyProvider(provider, passphrase) {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const wrappingKey = await deriveWrappingKey(passphrase, salt, PBKDF2_ITERATIONS)
   const privateJwk = await crypto.subtle.exportKey('jwk', provider.keyPair.privateKey)
-  const plaintext = encoder.encode(JSON.stringify({ private_jwk: privateJwk }))
+  const plaintext = encoder.encode(JSON.stringify({ private_jwk: privateJwk,
+                                                    accounts: normalizeAccounts(provider.accounts) }))
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: bundleAad() }, wrappingKey, plaintext,
   )
@@ -226,13 +230,28 @@ export function localKeyMatches(provider) {
   }
 }
 
-async function providerFromKeyPair(keyPair) {
+async function providerFromKeyPair(keyPair, accounts) {
   const publicKey = new Uint8Array(await crypto.subtle.exportKey('raw', keyPair.publicKey))
   return {
     keyPair,
     publicKey,
+    accounts: normalizeAccounts(accounts),
     sign: bytes => crypto.subtle.sign('Ed25519', keyPair.privateKey, bytes),
   }
+}
+
+// References are encrypted portable identity metadata, never authority. Every
+// use still proves the active key and exact ontology identity on the server.
+function normalizeAccounts(accounts = []) {
+  if (!Array.isArray(accounts)) throw new Error('Saved account references are damaged')
+  const networks = new Set()
+  return accounts.map(account => {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(account?.network || '') || networks.has(account.network)) {
+      throw new Error('Saved account references are damaged')
+    }
+    networks.add(account.network)
+    return { ...normalizeAgentReference(account), network: account.network }
+  })
 }
 
 async function deriveWrappingKey(passphrase, salt, iterations) {

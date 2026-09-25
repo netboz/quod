@@ -927,3 +927,46 @@ the gated tree, recorded in `release-v1/FINAL-FREEZE.json`; executable sources,
 tests and assets are unchanged. Production source delta is +878/-604, net +274
 lines, after removing the duplicate standalone client shell. Browser preview
 processes are stopped; no active test fault or fleet change remains.
+
+
+## 2026-09-25 — open signup, personal-lobby creation and view errors
+
+Normal Create account uses a scoped key-bound applicant in `quod:signup`, then
+ordinary signed profile/lobby actions. Root delegates complete creation options
+to anchored Prolog policies and restricts administrative writes. The profile's
+pending requirement, exact lobby reference and creation effect share one atomic
+transition; that transition also consumes the temporary signup receipt.
+Encrypted account exports retain the exact profile reference. Recovery resolves
+original signed operations and exposes their already-durable named bindings;
+the browser journal atomically advances between the two actions.
+
+This is browser-led provisioning, not autonomous offline convergence. Uncertain
+lifecycle writes are not resubmitted. Section 11.9 of client-world-direction
+records the implementation and its remaining boundaries.
+
+Missing licence/lens catalogue entries disable that menu option with a reason.
+Renderer startup errors are exposed, and the console remains usable without
+WebGL. Lobby materials now use terracotta, green, ivory and amber independently
+of the interface palette; Yan accepted them provisionally.
+
+Pre-deployment review found that earlier FIPA work changed the pinned agent
+predicate module. Its deployed source is restored exactly; the two continuation
+bridges now live in the explicit `quod_agent_work_predicates` extension, with no
+new process or scheduler. The old presentation ontology has no bridge imports;
+new lobbies will pin a freshly founded `quod:present:models` vocabulary. Existing
+presentation/licence/lens histories are retained. System activation was rehearsed
+through ordinary lifecycle actions and atomic root-policy replacement.
+
+Focused release verification: 45 client tests, 202 Erlang tests, xref, UI
+build/lint and production release. Browser checks cover two separate accounts,
+reload, encrypted export/import and operation without WebGL. The full core suites
+were not rerun, per Yan's explicit instruction; unchanged runtime/consensus work
+was already gated at 4f8b7c8. Source review and exact logs are under
+`_build/lobby-provisioning-20260925/release-v1/`; harness failures are retained
+and diagnosed there. Production-source delta: +575/-124, net +451,
+for enrollment/recovery and explicit immutable bridge separation. No duplicate
+executor, polling loop or parallel domain store was added.
+
+The pre-rollout cluster capture is healthy with 108 retained namespace replicas.
+Image publication, exact pinned-BEAM comparison, activation and hardware browser
+acceptance are the remaining release steps at this checkpoint.

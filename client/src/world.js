@@ -4,6 +4,7 @@ import { binary, compound, atom, renderTerm, variable } from './prolog-term.js'
 import { readTerm } from './prolog-read.js'
 import { readMarks } from './marks.js'
 import { signedGoal } from './signed-client.js'
+import { b64url } from './key-provider.js'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -56,6 +57,13 @@ export function readReference(binding) {
   return { namespace: textValue(ns), anchor: anchor.value }
 }
 
+export function readAgentReference(binding) {
+  const [ns, anchor, instance] = args(readTerm(binding), 'agent_instance_ref', 3)
+  if (anchor.type !== 'binary' || anchor.value.length !== 32) throw new Error('invalid agent anchor')
+  return { namespace: textValue(ns), anchor: b64url(anchor.value),
+           instanceText: `${renderTerm(instance)}.` }
+}
+
 export function readProofView(binding) {
   const [title, components] = args(readTerm(binding), 'form', 2)
   if (components.type !== 'list' || components.tail !== null) throw new Error('invalid form')
@@ -74,7 +82,8 @@ export function readProofView(binding) {
 }
 
 export function singleBinding(reply, name) {
-  if (reply.result !== 'ok' || reply.bindings?.length !== 1 ||
+  const committed = reply.result === 'operation_outcome' && reply.status === 'committed' && reply.terminal === true
+  if ((reply.result !== 'ok' && !committed) || reply.bindings?.length !== 1 ||
       typeof reply.bindings[0][name] !== 'string') {
     throw new Error(`expected one ${name} answer; received ${reply.result ?? 'no result'}`)
   }

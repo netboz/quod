@@ -9,20 +9,26 @@
 %% ontology `root`, owned by `quod`.
 acl_sovereign(quod:root).
 
-%% Default-open invocation. The rule sees the whole call chain at once — a
-%% restrictive policy relates its members itself rather than judging them one at
-%% a time. `Principal` is engine-owned (`{node, NodeKey}`, a stable
-%% `agent_instance_ref/3`, or `anonymous`);
-%% a refusal is ordinary failure carrying not_allowed(Ns).
-%%
-%% NOTE: this is not the whole effective policy. Founding injects a generated
-%% bodyless host-entry clause `can_invoke(_, _, [], _)` into EVERY genesis, so a
-%% proof entered on the host itself (an empty call chain) is always admitted and
-%% cannot be locked out by narrowing this clause. Author clauses here govern
-%% remote and cross-ontology callers (a non-empty chain); with none, an ontology
-%% is host-answerable and otherwise closed. This root ships open to all so it is
-%% queryable fleet-wide.
-can_invoke(_Goal, _Principal, _CallChain, _Ns).
+%% Public callers may inspect the catalogue and request governed creation.
+%% Creation permission is checked by the action below. Root mutations require
+%% an admitted physical node or an explicitly named administrator agent.
+%% Founding also supplies the local empty-call-chain host entry; signed goals
+%% and cross-ontology callers still enter through these authored rules.
+can_invoke(Goal, _, _, _) :- root_public_goal(Goal).
+can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).
+can_invoke(_, Principal, _, _) :- root_administrator_agent(Principal).
+
+root_public_goal(system_ontology(_, _)).
+root_public_goal(ontology_creation_policy(_, _)).
+root_public_goal(effect_custody_capacity(_)).
+root_public_goal(peer_admitted(_, _, _, _)).
+root_public_goal(acl_sovereign(_)).
+root_public_goal(create_ontology(_, _, _)).
+root_public_goal(findall(_, Query, _)) :- root_catalogue_query(Query).
+
+root_catalogue_query(system_ontology(_, _)).
+root_catalogue_query(ontology_creation_policy(_, _)).
+root_catalogue_query(peer_admitted(_, _, _, _)).
 
 %% Root is the one ontology every node starts before it can execute durable
 %% effects, so it owns the node-wide custody capacity without a bootstrap
@@ -80,6 +86,14 @@ can_create_ontology(node(NodeKey), _Name, _Options) :-
 
 can_create_ontology(AgentRef, _Name, _Options) :-
     ontology_creator_agent(AgentRef).
+
+%% Root may delegate a bounded creation policy to an exact ontology history.
+%% The selected policy must approve the complete founding options in this same
+%% proof; a class, namespace convention or client request grants no authority.
+can_create_ontology(Principal, Name, Options) :-
+    ontology_creation_policy(Namespace, Anchor),
+    Namespace::(current_ontology_identity(Namespace, Anchor),
+                ontology_creation_allowed(Principal, Name, Options)).
 
 %% Admission rule proved when a node asks to join this namespace's committee. Proved TWICE: once by
 %% the submitting node (via the `admit` predicate), then re-proved by EVERY validator against its own

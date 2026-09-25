@@ -3,6 +3,8 @@ export type ProofView = { title: string; goal: string; results: string; run: str
 export function anchoredGoal(reference: { namespace: string; anchor: Uint8Array }, goal: unknown): string
 export function readProofView(binding: string): ProofView
 export function singleBinding(reply: Record<string, unknown>, name: string): string
+export function readAgentReference(binding: string): { namespace: string; anchor: string; instanceText: string }
+export function readReference(binding: string): { namespace: string; anchor: Uint8Array }
 import type { PrologTerm } from './prolog-term.js'
 export type Subject = { ontology: string; anchor: Uint8Array | null; entity: PrologTerm }
 export type WorldMark = { id: string; depicts: Subject | null }

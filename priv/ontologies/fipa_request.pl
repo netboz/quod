@@ -1,6 +1,7 @@
 %% Internal Request conversation transitions, composed with agent_instance.pl.
 %% The containing ontology supplies its entry ACL, fipa_request_allowed/3 and
 %% fipa_request_goal/3. This is not an ACL wire codec or an implicit grant.
+%% Automatic continuation additionally pins quod_agent_work_predicates at founding.
 %% A conversation is current domain state, not an asserted message history:
 %% fipa_conversation(Instance, Id, Role, Peer, Action, State).
 

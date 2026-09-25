@@ -20,6 +20,8 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(node_actor_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_agent_create_uses_the_same_goal_path(Fixture))},
           {timeout, 60, ?_test(create_and_host_is_one_ordinary_goal(Fixture))},
+          {timeout, 90, ?_test(personal_lobbies_use_shared_creation_and_recovery(Fixture))},
+          {timeout, 90, ?_test(open_signup_uses_policy_and_ordinary_signed_goals(Fixture))},
           {timeout, 30, ?_test(bundled_agent_policy_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
           {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
@@ -441,8 +443,186 @@ create_and_host_is_one_ordinary_goal(
         stop_process(AuthPid)
     end.
 
+personal_lobbies_use_shared_creation_and_recovery(_Fixture) ->
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    try
+        Classes = found_lobby_classes(),
+        Users = [found_lobby_user(Classes, Network) || _ <- [first, second]],
+        [begin
+             #{reference := Owner, lobby_name := Name} = User,
+             commit_root({assertz, {ontology_creator_agent, Owner}}),
+             Goal = {',', {provision_lobby, me}, {lobby_reference, {0}}},
+             {Bytes, Signature} = lobby_user_request(User, execute, Goal),
+             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                          quod_client_goal_ingress:submit(Bytes, Signature)),
+             ok = wait_ready(Name, 300),
+             Ref = {ontology_ref, Name, quod_simplex:genesis_hash(Name)},
+             ?assertEqual(Ref, lobby_user_reference(User)),
+             %% The committed operation is recoverable independently of the
+             %% live reply; no new signed creation is used for resolution.
+             Resolved = resolve_lobby_request(Bytes, Signature),
+             ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}}, Resolved),
+             {200, #{bindings := [Recovered]}} = quod_client_http:signed_goal_result(Resolved),
+             ?assertEqual(quod_client_goal_parser:value_text(Ref), maps:get(<<"V0">>, Recovered)),
+             {Again, AgainSignature} = lobby_user_request(User, execute, Goal),
+             ?assertMatch({ok, _, {normalized, {failed, _}}},
+                          quod_client_goal_ingress:submit(Again, AgainSignature)),
+             ?assertEqual(Ref, lobby_user_reference(User)),
+             commit_root({retract, {ontology_creator_agent, Owner}})
+         end || User <- Users],
+        [First, Second] = Users,
+        {ontology_ref, FirstLobby, FirstAnchor} = FirstRef = lobby_user_reference(First),
+        SecondRef = lobby_user_reference(Second),
+        ?assertNotEqual(FirstRef, SecondRef),
+        SceneGoal = {'::', FirstLobby,
+            {',', {current_ontology_identity, FirstLobby, FirstAnchor},
+                  {lobby_view, playing, {0}}}},
+        {SceneBytes, SceneSig} = lobby_user_request(First, read, SceneGoal),
+        ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+                     quod_client_goal_ingress:submit(SceneBytes, SceneSig)),
+        {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
+        ?assertMatch({ok, _, {normalized, {failed, _}}},
+                     quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),
+        ok = quod_namespace_manager:stop_content(FirstLobby),
+        {ok, resumed, FirstLobby, FirstAnchor} = quod_ontology:join(
+            FirstLobby, binary:encode_hex(FirstAnchor, lowercase),
+            [{seed, "127.0.0.1", 14567}]),
+        ok = wait_ready(FirstLobby, 300),
+        ?assertEqual(FirstRef, lobby_user_reference(First)),
+        {ResumedBytes, ResumedSig} = lobby_user_request(First, read, SceneGoal),
+        ?assertMatch({ok, _, {normalized, {answers, _, [_]}}},
+                     quod_client_goal_ingress:submit(ResumedBytes, ResumedSig))
+    after stop_process(Auth) end.
+
+open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    try
+        {ClassNs, ClassAnchor} = found_lobby_classes(),
+        {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
+                                                     "ontologies/human_user_instance.pl")),
+        {SignupNs, SignupAnchor} = found_lobby_source(<<"signup">>, "quod_signup.pl",
+            [{user_template, Template}, {lobby_vocabulary, ClassNs, ClassAnchor}]),
+        Grants = [{ontology_creation_policy, ClassNs, ClassAnchor},
+                  {ontology_creation_policy, SignupNs, SignupAnchor}],
+        [commit_root({assertz, Grant}) || Grant <- Grants],
+        try
+            Users = [begin
+                {Public, _} = Pair = quod_identity:generate(),
+                Applicant = #{reference => {agent_instance_ref, SignupNs, SignupAnchor, {signup, Public}},
+                              keypair => Pair, network => Network},
+                Token = crypto:strong_rand_bytes(32),
+                Name = unique_ns(<<"signup-user">>),
+                {Bytes, Signature} = lobby_user_request(Applicant, execute,
+                    {signup, Token, Name, {0}}),
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                             quod_client_goal_ingress:submit(Bytes, Signature)),
+                ok = wait_ready(Name, 300),
+                Owner = {agent_instance_ref, Name, quod_simplex:genesis_hash(Name), me},
+                {200, #{bindings := [Recovered]}} = quod_client_http:signed_goal_result(
+                    resolve_lobby_request(Bytes, Signature)),
+                ?assertEqual(quod_client_goal_parser:value_text(Owner), maps:get(<<"V0">>, Recovered)),
+                %% A new key can obtain its own account, never arbitrary source
+                %% writes or authority to change root's policy.
+                [begin
+                    {BadBytes, BadSig} = lobby_user_request(Applicant, execute, BadGoal),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                                 quod_client_goal_ingress:submit(BadBytes, BadSig))
+                 end || BadGoal <- [{assertz, {unexpected, fact}},
+                       {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}]],
+                User = Applicant#{reference => Owner},
+                {Escalation, EscalationSig} = lobby_user_request(User, execute,
+                    {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                             quod_client_goal_ingress:submit(Escalation, EscalationSig)),
+                {Provision, ProvisionSig} = lobby_user_request(User, execute, {provision_lobby, me}),
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                             quod_client_goal_ingress:submit(Provision, ProvisionSig)),
+                {ontology_ref, LobbyNs, _} = lobby_user_reference(User),
+                ok = wait_ready(LobbyNs, 300),
+                %% The signup ontology retains unfinished receipts, not a
+                %% permanent table of human-user instances.
+                {Status, StatusSig} = lobby_user_request(Applicant, read, {signup_status, Token, {0}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                             quod_client_goal_ingress:submit(Status, StatusSig)),
+                User
+            end || _ <- [first, second]],
+            [First, Second] = Users,
+            ?assertNotEqual(lobby_user_reference(First), lobby_user_reference(Second))
+        after [commit_root({retract, Grant}) || Grant <- Grants] end
+    after stop_process(Auth) end.
+
+found_lobby_classes() ->
+    {PresentNs, PresentAnchor} = found_lobby_source(<<"presentation">>, "quod_present.pl", []),
+    {GuiNs, GuiAnchor} = found_lobby_source(<<"gui">>, "quod_gui.pl", []),
+    {ok, Template} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/lobby_instance.pl")),
+    found_lobby_source(<<"lobby-classes">>, "quod_lobby.pl",
+        [{presentation_vocabulary, PresentNs, PresentAnchor},
+         {gui_vocabulary, GuiNs, GuiAnchor}, {instance_template, Template}]).
+
+found_lobby_source(Prefix, File, Facts) ->
+    Ns = unique_ns(Prefix),
+    Source = list_to_binary(filename:join(code:priv_dir(quod), "ontologies/" ++ File)),
+    {ok, created, Ns, _} = quod_ontology:create(Ns,
+        [{source_file, Source}, {terms, Facts},
+         {external_predicate_modules, [quod_agent_predicates]}]),
+    ok = wait_ready(Ns, 300),
+    {Ns, quod_simplex:genesis_hash(Ns)}.
+
+found_lobby_user({ClassNs, ClassAnchor}, Network) ->
+    {Public, _} = Pair = quod_identity:generate(),
+    Name = unique_ns(<<"personal-lobby">>),
+    {Ns, Anchor} = found_lobby_source(<<"human-user">>, "human_user_instance.pl",
+        [{instance_of, human_user, me}, {agent_key, me, Public, active},
+         {lobby_vocabulary, ClassNs, ClassAnchor},
+         {lobby_provisioning, me, {pending, Name}}]),
+    #{reference => {agent_instance_ref, Ns, Anchor, me},
+      keypair => Pair, network => Network, lobby_name => Name}.
+
+lobby_user_request(#{reference := {agent_instance_ref, Ns, Anchor, Instance},
+                     keypair := {Public, _} = Pair, network := Network}, Mode, Goal) ->
+    {ok, InstanceText} = quod_client_goal_parser:format(Instance),
+    {ok, GoalText} = quod_client_goal_parser:format(Goal),
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => Network,
+        signing_public_key => Public, operation_id => crypto:strong_rand_bytes(32),
+        agent_namespace => Ns, agent_genesis_anchor => Anchor,
+        agent_instance_text => InstanceText, mode => Mode, parser_version => 2,
+        not_after_ms => quod_time:now_ms() + 30000, goal_text => GoalText}),
+    {Bytes, quod_identity:sign(Bytes, quod_identity:key_term(Pair))}.
+
+lobby_user_reference(User) ->
+    {Bytes, Signature} = lobby_user_request(User, read, {lobby_reference, {0}}),
+    {ok, _, {normalized, {answers, _, [Answer]}}} =
+        quod_client_goal_ingress:submit(Bytes, Signature),
+    {ok, [{<<"V0">>, Reference}]} = quod_durable_term:decode_result(Answer),
+    Reference.
+
+resolve_lobby_request(Bytes, Signature) ->
+    {ok, #{agent_namespace := Ns}} = quod_client_goal:decode(Bytes),
+    true = quod_reg:subscribe({runtime, Ns}),
+    try
+        resolve_lobby_request(Bytes, Signature, quod_reg:where({quod_prolog, Ns}),
+                              quod_time:mono_ms() + 5000)
+    after quod_reg:unsubscribe({runtime, Ns}) end.
+
+resolve_lobby_request(Bytes, Signature, Engine, Deadline) ->
+    Result = quod_client_goal_ingress:resolve_operation(Bytes, Signature),
+    case Result of
+        {ok, _, {operation_outcome, _, #{status := committed}}} -> Result;
+        {ok, _, _} ->
+            receive {projection_advanced, Engine, _} ->
+                resolve_lobby_request(Bytes, Signature, Engine, Deadline)
+            after max(0, Deadline - quod_time:mono_ms()) -> error({unresolved, Result}) end;
+        Error -> Error
+    end.
+
 signed_root_create_obeys_entry_acl(_Fixture) ->
-    OpenClause = root_open_invoke_clause(),
+    RootClauses = root_invocation_clauses(),
     HostEntry = {can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}},
     ok = replace_root_invocation_policy([HostEntry]),
     try
@@ -476,7 +656,7 @@ signed_root_create_obeys_entry_acl(_Fixture) ->
             stop_process(AuthPid)
         end
     after
-        ok = replace_root_invocation_policy([HostEntry, OpenClause])
+        ok = replace_root_invocation_policy([HostEntry | RootClauses])
     end.
 
 prepared_source_is_used_exactly_once(#{dir := Dir}) ->
@@ -1467,12 +1647,10 @@ host_locally(#{actor_ns := ActorNs, actor_principal := Principal}, Ns, Anchor) -
          {assertz, {hosts_ontology, NodeRef, Ns, Anchor, private}})),
     wait_desired_content(Ns, Anchor, 300).
 
-root_open_invoke_clause() ->
+root_invocation_clauses() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
-    [Clause] =
-        [Term || {can_invoke, _, _, _, _} = Term <-
-                     quod_prolog:read_terms(File)],
-    Clause.
+    [Term || {':-', {can_invoke, _, _, _, _}, _} = Term <-
+                 quod_prolog:read_terms(File)].
 
 replace_root_invocation_policy(Clauses) ->
     Assertions = [{assertz, Clause} || Clause <- Clauses],

@@ -30,6 +30,19 @@ export async function authenticateKey(provider, options = {}) {
   return { provider, session, networkId: fromB64url(challenge.network_id) }
 }
 
+// Discover system ontologies from this network's root catalogue. Registration
+// identifies installed services; ordinary goal reads still determine readiness.
+export async function readSystemOntologies(identity, options = {}) {
+  const response = await (options.fetch || fetch)('/api/ontologies/system')
+  if (!response.ok) throw new Error('The system catalogue is unavailable.')
+  const catalogue = await response.json()
+  if (catalogue.network_id !== b64url(identity.networkId)) {
+    throw new Error('The system catalogue belongs to another network.')
+  }
+  if (!Array.isArray(catalogue.ontologies)) throw new Error('The system catalogue is invalid.')
+  return catalogue.ontologies
+}
+
 // Sign and submit one ordinary Prolog goal. Modes select proof behaviour only;
 // they do not classify predicates or create a second authorization path.
 export async function signedGoal(identity, { mode, agent, goal }, options = {}) {
@@ -40,9 +53,10 @@ export async function signedGoal(identity, { mode, agent, goal }, options = {}) 
   if (mode === 'read') return post('/api/goals/read', body)
 
   const operation = await operationRow(identity, request, signature)
+  if (options.context) operation.context = options.context
   if (mode === 'execute') {
     const journal = options.journal || signedOperationJournal()
-    return submitDurable(journal, operation, '/api/goals/execute', body, post)
+    return submitDurable(journal, operation, '/api/goals/execute', body, post, options)
   }
   const reply = await post('/api/goals/cursors', body)
   if (reply.result === 'solution' && typeof reply.cursor === 'string') {
@@ -89,26 +103,31 @@ export async function signedCursorCommand(identity, cursor, command) {
 // proof endpoint again.
 export async function resolveSignedOperations(identity, options = {}) {
   const journal = options.journal || signedOperationJournal()
-  const signingKey = b64url(identity.provider.publicKey)
-  const network = b64url(identity.networkId)
-  const rows = (await journal.list()).filter(
-    row => row.signing_key === signingKey && row.network === network,
-  )
+  const rows = await pendingSignedOperations(identity, { journal })
   const results = []
   for (const row of rows) {
     try {
-      const reply = await postJson('/api/goals/outcomes', {
+      const reply = await (options.post || postJson)('/api/goals/outcomes', {
         session_id: identity.session.session_id,
         request: row.request,
         signature: row.signature,
       })
-      if (reply.terminal === true) await journal.delete(row.id)
-      results.push({ id: row.id, reply })
+      if (reply.terminal === true) await settleOperation(journal, row, reply, options)
+      results.push({ id: row.id, operation: row, reply })
     } catch (error) {
-      results.push({ id: row.id, error })
+      results.push({ id: row.id, operation: row, error })
     }
   }
   return results
+}
+
+export async function pendingSignedOperations(identity, options = {}) {
+  const journal = options.journal || signedOperationJournal()
+  const signingKey = b64url(identity.provider.publicKey)
+  const network = b64url(identity.networkId)
+  return (await journal.list()).filter(
+    row => row.signing_key === signingKey && row.network === network,
+  )
 }
 
 export function goalRequestBytes(identity, { mode, agent, goal }) {
@@ -126,16 +145,29 @@ export function goalRequestBytes(identity, { mode, agent, goal }) {
   })
 }
 
-async function submitDurable(journal, operation, url, body, post) {
-  await journal.put(operation)
+async function submitDurable(journal, operation, url, body, post, options) {
+  if (options.replaceOperation) await journal.replace(options.replaceOperation, operation)
+  else await journal.put(operation)
+  let reply
   try {
-    const reply = await post(url, body)
-    if (reply.result !== 'pending') await journal.delete(operation.id)
-    return reply
+    reply = await post(url, body)
   } catch (error) {
     if (!error.outcomeUnknown) await journal.delete(operation.id)
     throw error
   }
+  // Saving a returned reference or handing off to the next operation is part
+  // of consuming the result. A local callback failure must retain recovery
+  // evidence, not masquerade as a rejected server write.
+  if (reply.result !== 'pending') await settleOperation(journal, operation, reply, options)
+  return reply
+}
+
+async function settleOperation(journal, operation, reply, options) {
+  if (options.onTerminal) {
+    if (await options.onTerminal(reply, operation) === false) return
+  }
+  else if (operation.context) return
+  await journal.delete(operation.id)
 }
 
 async function operationRow(identity, request, signature) {

@@ -57,7 +57,7 @@ node_submission_never_substitutes_for_an_agent_executor_test() ->
     end).
 
 guarded_continuation_bridges_require_projection_context_test() ->
-    with_state(fun(St0) ->
+    with_state(fun quod_agent_work_predicates:load/1, fun(St0) ->
         lists:foreach(fun(Ctx) ->
             St = quod_predicates:set_context(St0, Ctx),
             lists:foreach(fun(Goal) ->

@@ -144,6 +144,20 @@ signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
        {409, #{error => operation_conflict}},
        quod_client_http:signed_goal_result({error, operation_conflict})).
 
+recovered_group_result_preserves_exact_named_bindings_test() ->
+    Evidence = #{request_digest => <<1:256>>,
+                 request => #{operation_id => <<2:256>>}},
+    Ref = {ontology_ref, <<"a-personal-lobby">>, <<0, 255, 128, 17, 0:224>>},
+    {200, Reply} = quod_client_http:signed_goal_result(
+        {ok, Evidence, {operation_outcome, #{height => 3},
+            #{status => committed, height => 4,
+              bindings => [{<<"Lobby">>, Ref}, {<<"Label">>, <<"console">>}]}}}),
+    ?assertEqual([#{<<"Lobby">> => quod_client_goal_parser:value_text(Ref),
+                   <<"Label">> => quod_client_goal_parser:value_text(<<"console">>)}],
+                 maps:get(bindings, Reply)),
+    ?assertEqual(true, maps:get(terminal, Reply)),
+    ?assert(is_binary(iolist_to_binary(json:encode(Reply)))).
+
 signed_goal_busy_is_not_misreported_as_cursor_contention_test() ->
     ?assertEqual(
        {503, #{error => ontology_busy}},

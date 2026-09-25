@@ -3,12 +3,29 @@ import test from 'node:test'
 import {
   encodeGoalRequest,
   postJson,
+  readSystemOntologies,
   resolveSignedOperations,
   signedCursorCommand,
   signedGoal,
 } from '../src/signed-client.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { SIGNED_GOAL_LIMITS } from '../src/protocol-limits.js'
+
+test('system discovery rejects unavailable or wrong-network catalogues', async () => {
+  const identity = { networkId: u256(1) }
+  const catalogue = { network_id: Buffer.from(identity.networkId).toString('base64url'),
+    ontologies: [{ namespace: 'quod:lens', anchor: Buffer.from(u256(2)).toString('base64url') }] }
+  const read = (status, body) => readSystemOntologies(identity, {
+    fetch: async url => {
+      assert.equal(url, '/api/ontologies/system')
+      return jsonResponse(status, body)
+    },
+  })
+  assert.deepEqual(await read(200, catalogue), catalogue.ontologies)
+  await assert.rejects(read(503, {}), /unavailable/)
+  await assert.rejects(read(200, { ...catalogue, network_id: 'other' }), /another network/)
+  await assert.rejects(read(200, { ...catalogue, ontologies: null }), /invalid/)
+})
 
 test('optional traceparent changes only HTTP metadata, not signed request bytes', async () => {
   const previousFetch = globalThis.fetch

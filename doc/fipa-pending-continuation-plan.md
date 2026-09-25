@@ -71,6 +71,11 @@ or irreversible external actions lacking the existing effect guarantees.
 
 ## Runtime integration
 
+Founding an ontology with automatic continuation pins `quod_agent_work_predicates`
+alongside `quod_agent_predicates`. The extension registers the cursor and work
+projection bridges with the existing runtime. The original agent module stays
+byte-identical for deployed histories whose immutable manifest pins its digest.
+
 1. Keep `fipa_conversation/6` as the sole durable conversation state. Derive the
    eligible completion goal in Prolog; add no asserted message history or second
    work ledger. Keep the pending-state guard and both agents' completion in the

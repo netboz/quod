@@ -1346,7 +1346,7 @@ start_ontology(Ns, Dir, Identity, Diff, Terms, BootConfig) ->
     {ok, Sup} = quod_ns:start_link(Ns, maps:merge(
       #{node_id => maps:get(pubkey, Identity), identity => Identity,
         data_dir => filename:join(Dir, binary_to_list(Ns)), mode => create,
-        external_predicate_modules => [quod_agent_predicates, ?MODULE],
+        external_predicate_modules => [quod_agent_predicates, quod_agent_work_predicates, ?MODULE],
         genesis_diff => Diff ++ quod_prolog:terms_to_diff(Terms)}, BootConfig)),
     unlink(Sup),
     receive {replay_ready, _, _} -> ok after 10000 -> error({ontology_not_ready, Ns}) end,

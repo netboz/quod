@@ -1059,3 +1059,42 @@ retained in `_build/signup-hosting-20260925/REVIEW.md`.
 Cluster activation remains next. A fresh read-only inspection confirms both
 cloud nodes still await the four current system routes. Initial-read readiness
 also remains distinct from durable hosting and needs acceptance verification.
+
+## 2026-09-25 — hosting activation; resource-budget correction takes priority
+
+Implementation d2ee3eb is committed and pushed. The generic hosting clauses were
+installed through ordinary transactions in all eight existing home node actors.
+Both cloud nodes currently have no active node-actor principal. Signup policy and
+its profile template were updated on the founder without deleting histories.
+The selected host is quod:arch203-node-6; both cloud system-route gaps persist.
+
+The initial bulk signup-policy update was rejected before execution with
+`{too_large,transcript}`. The node's policy delegation had already committed as
+a separate preceding operation. Signup was subsequently disabled, updated in
+bounded ordinary transactions, and re-enabled at height 16. Evidence is under
+`_build/signup-hosting-20260925/deployment-v1/`; no uncertain write was retried.
+
+Hardware browser v1 then committed a new profile and its hosting declaration,
+but immediate profile read/provisioning requests returned signed_target_unavailable.
+The account export and IndexedDB journal were preserved in that campaign. This
+is a failed acceptance, not a release pass. An unverified readiness patch was
+saved as `_build/signup-hosting-20260925/readiness-unverified.patch` and removed
+from the working tree when Yan redirected priority to resource limits.
+
+Yan explicitly reiterated that hardcoded resource limits are unacceptable. The
+standing engineering rule is now recorded in AGENTS.md. Do not work around this
+by splitting domain work or just raising constants. A read-only measurement of
+the rejected bulk update found 15,927 canonical goal bytes: the first failed
+check was actually the 8 KiB nested-goal bound in charge_transcript, which reports
+the same error as the separate 12 KiB transcript bound. The earlier explanation
+naming only the transcript bound was corrected. A 24 KiB plan bound and other
+linked codec/validation limits also exist. These are explicitly prescribed by
+the old distributed-proof-plan section 4.2, which conflicts with Yan's reiterated
+rule and needs a coordinated revision, not an isolated constant change.
+
+Next priority: define and implement authoritative Prolog resource budgets across
+admission, sealing, validation and transport, keeping historical verification
+independent of current mutable quotas and preserving pinned bridge identities.
+Do not change only the producer: decoder/validator/replay acceptance must remain
+coherent. Runtime readiness and final fleet/browser acceptance remain open.
+No resource-limit code change has yet been made.

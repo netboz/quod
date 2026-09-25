@@ -15,6 +15,12 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
   authorization and protocol/conversation rules belong there. External Erlang
   predicates are the governed interface to the real world and runtime services;
   they must not become a second domain engine or private knowledge base.
+- Do not hardcode resource budgets or population ceilings in Erlang. Resource
+  allocation is Prolog policy, including future pricing of scarce resources.
+  When an existing numeric cap blocks ordinary work, fix its policy ownership
+  and related enforcement paths; do not silently raise the constant or split
+  domain transactions to evade it. Distinguish actual encoding constraints from
+  configurable budgets, and report the resource that was actually exceeded.
 - Build every new domain, including FIPA, on Quod's existing actions,
   multi-ontology transactions, ontology recovery and reaction framework. This
   is a foundational rule, not an optional optimization. Before proposing new

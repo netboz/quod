@@ -1365,3 +1365,45 @@ existed at that instant. Its immutable genesis-anchor accessor is a candidate
 source for namespace resolution during startup, not a verified complete fix.
 Trace the actual creation/hosting installation order before changing that
 boundary. Removing the unsupported selector does not itself fix the race.
+
+## 2026-09-25 — selector removal deployed (.246), signup acceptance still failing
+
+Yan explicitly requested deployment of the removal. Source 0066b95 and label
+977e2e7 are pushed. All ten .245 tasks were stopped and replaced with .246;
+volumes were retained and all eight historically pinned predicate BEAMs were
+verified unchanged. All four service checks pass on all ten replacements.
+The first completed retention capture is healthy and preserves all 176 prior
+replicas, their anchors and committees. No ledger or account was erased.
+
+Hardware browser acceptance using an encrypted export of an existing account
+passes login, its retained lobby and reload on the configured signup host.
+The current URL is `https://192.168.1.10:25783/`. Browser storage-state JSON
+alone did not restore the earlier test identity; that failed harness attempt
+is retained and is not a server-acceptance result.
+
+Fresh-signup acceptance does not pass. On the configured signup host,
+creation/provisioning returned successfully, then the first scene read failed
+in 23 ms with `proof_unavailable`; trace 37a0b7619f09383e548b8dec75280bdf
+records `unknown_ontology` in the proof. Two separately labelled node-0
+gateway campaigns instead waited for the new profile route; the fully
+observed attempt returned HTTP 503 at the existing 30-second request deadline.
+No request deadline was extended. A subsequent signup-host diagnostic returned
+HTTP 202 pending, trace 9fd23fcc74c55c1642a26e44277f990e. Its uncertain write
+was not resubmitted. Browser states, journals and traces remain in the evidence
+directory. A bounded local selector trace was stopped; it captured no target
+lookup that establishes Simplex's presence at the original failure instant.
+
+Some initial relx recovery observers exited 142 (`Alarm clock`); their logs
+remain separate from the later healthy retention capture. The final capture
+still preserves all 176 prior rows (180 current rows), but fails its idle
+assertion: the eight local root replicas report height/applied 164 and
+`awaiting_commit` after the pending signup. This is outstanding work, not a
+successful final health gate or evidence of data loss. Do not silently rerun
+the uncertain signup. Resolve its original outcome and inspect root progress
+before another acceptance campaign or deployment.
+
+All evidence: `_build/selector-removal-20260925/`, particularly
+`deployment-246/`, `existing-key-246/`, `acceptance-246-signup-host/`,
+`acceptance-246-stable/` and `acceptance-246-probed/`. The unsupported selector
+is removed from the running fleet; namespace-readiness/discovery remains
+unresolved and requires an architectural correction through existing owners.

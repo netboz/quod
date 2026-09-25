@@ -18,6 +18,7 @@ const GEOMETRY = Object.freeze({
   sphere: ['diameter'],
   plane: ['width', 'height'],
   cylinder: ['diameter', 'height'],
+  group: [],
 })
 
 const FINISHES = Object.freeze(['matte', 'glossy', 'emissive'])
@@ -30,6 +31,13 @@ export function readMarks(text) {
   const marks = readList(text).map(readMark)
   const ids = new Set(marks.map(mark => mark.id))
   if (ids.size !== marks.length) throw new Error('two marks share one identity')
+  const seen = new Set()
+  for (const mark of marks) {
+    if (mark.parent !== null && !seen.has(mark.parent)) {
+      throw new Error('a parent must precede its child')
+    }
+    seen.add(mark.id)
+  }
   return marks
 }
 
@@ -39,12 +47,19 @@ function readMark(term) {
   const name = binaryValue(kind, 'mark kind')
   const fields = GEOMETRY[name]
   if (!fields) throw new Error(`this client cannot draw a ${name}`)
+  const relative = transform.type === 'compound' && transform.functor === 'relative'
+  const [parent, local] = relative ? args(transform, 'relative', 2) : [null, transform]
+  const group = name === 'group'
+  if (group && (material.type !== 'atom' || material.value !== 'no_surface')) {
+    throw new Error('a group has no surface')
+  }
   return Object.freeze({
     id: binaryValue(id, 'mark id'),
     kind: name,
     size: readSize(size, fields),
-    transform: readTransform(transform),
-    material: readMaterial(material),
+    parent: parent === null ? null : binaryValue(parent, 'parent id'),
+    transform: readTransform(local),
+    material: group ? null : readMaterial(material),
     label: readLabel(label),
     depicts: readDepicts(depicts),
   })
@@ -62,6 +77,7 @@ function readSize(term, fields) {
       throw new Error(`expected ${fields[at]} and found ${named}`)
     }
     size[named] = whole(extent, 'a dimension')
+    if (size[named] <= 0) throw new Error('a dimension must be positive')
   })
   return Object.freeze(size)
 }
@@ -79,10 +95,28 @@ function readTransform(term) {
 }
 
 function readMaterial(term) {
+  if (term?.functor === 'pbr') {
+    const [colour, metallic, roughness, emission] = args(term, 'pbr', 4)
+    return Object.freeze({
+      colour: readColour(colour),
+      metallic: fraction(metallic), roughness: fraction(roughness),
+      emission: fraction(emission),
+    })
+  }
   const [colour, finish] = args(term, 'material', 2)
+  return Object.freeze({ colour: readColour(colour), finish: oneOf(finish, FINISHES, 'finish') })
+}
+
+function readColour(colour) {
   const hex = binaryValue(colour, 'a colour')
   if (!COLOUR.test(hex)) throw new Error(`${hex} is not a colour`)
-  return Object.freeze({ colour: hex, finish: oneOf(finish, FINISHES, 'finish') })
+  return hex
+}
+
+function fraction(term) {
+  const n = whole(term, 'a material factor')
+  if (n < 0 || n > 1000) throw new Error('a material factor must be between 0 and 1000')
+  return n / 1000
 }
 
 function readLabel(term) {
@@ -99,10 +133,17 @@ function readLabel(term) {
 // never through a mesh name.
 function readDepicts(term) {
   if (term.type === 'atom' && term.value === 'depicts_nothing') return null
-  const [ontology, thing] = args(term, 'depicts', 2)
+  const anchored = term?.args?.length === 3
+  const values = args(term, 'depicts', anchored ? 3 : 2)
+  const [ontology] = values
+  const anchor = anchored ? values[1] : null
+  if (anchor !== null && (anchor.type !== 'binary' || anchor.value.length !== 32)) {
+    throw new Error('an ontology anchor must contain 32 bytes')
+  }
   return Object.freeze({
     ontology: binaryValue(ontology, 'an ontology name'),
-    entity: thing,
+    anchor: anchor?.value ?? null,
+    entity: values.at(-1),
   })
 }
 
@@ -117,7 +158,7 @@ function args(term, functor, arity) {
 function binaryValue(term, what) {
   if (term?.type !== 'binary') throw new Error(`${what} is not text`)
   if (term.value.length === 0) throw new Error(`${what} is empty`)
-  return term.value
+  return new TextDecoder('utf-8', { fatal: true }).decode(term.value)
 }
 
 function whole(term, what) {

@@ -1,6 +1,5 @@
-// The BBSVX house palette.  These five values are the single source of truth
-// for both the DOM (mirrored as CSS custom properties in style.css) and the
-// Babylon scene; nothing in the client may introduce another colour literal.
+// The BBSVX house palette shared by the default scene decoration.
+// Ontology-authored surfaces carry their own explicit colours.
 //
 // Semantic roles follow doc/client-world-direction.md §6.5: red carries
 // action/transition, gold its manifested effect, green material/growing state,

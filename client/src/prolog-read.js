@@ -2,13 +2,12 @@
 // from a signed read as Prolog text, and this turns that text back into terms.
 // prolog-term.js renders; this reads. Neither one knows any predicate.
 //
-// It is deliberately small and deliberately strict. It accepts the shapes the
-// reply renderer produces — compounds, lists, binaries, whole numbers, plain
-// and quoted atoms — and throws on everything else, including the two lossy
-// renderings a reply can contain: a 32-byte binary, which arrives as a key
-// fingerprint rather than as data, and a binary with unprintable bytes, which
-// arrives truncated. Failing there is the point: a descriptor that did not
-// survive the wire must not be drawn as though it had.
+// Projection reads are ground data. Reuse the request term representation so
+// a selected exact identity can be put into another signed goal without a
+// display-name or byte conversion. Result numbers may be negative literals;
+// this reader does not interpret goal expressions or execute operators.
+
+import { atom, binary, compound, list, number } from './prolog-term.js'
 
 const LIMITS = Object.freeze({
   text: 65536,
@@ -19,18 +18,6 @@ const LIMITS = Object.freeze({
 
 const ATOM = /^[a-z][A-Za-z0-9_]*/
 const INTEGER = /^-?[0-9]+/
-
-export const binary = value => Object.freeze({ type: 'binary', value })
-export const atom = value => Object.freeze({ type: 'atom', value })
-export const number = value => Object.freeze({ type: 'number', value })
-
-export function compound(functor, args) {
-  return Object.freeze({ type: 'compound', functor, args: Object.freeze(args) })
-}
-
-export function list(items) {
-  return Object.freeze({ type: 'list', items: Object.freeze(items) })
-}
 
 // Read exactly one term from one binding's text. Trailing content is an error
 // rather than something quietly ignored.
@@ -122,31 +109,26 @@ function readItems(state, depth) {
   }
 }
 
-// `<<"text">>` only. `<<0x…>>` is the renderer's shortened form for bytes it
-// could not print, and a bare `kp_…` is its form for a 32-byte binary; neither
-// carries the value, so neither is accepted here.
+// Byte escapes retain anchors, hashes and arbitrary binary values exactly.
 function readBinary(state) {
   if (!state.text.startsWith('<<"', state.at)) {
     throw new Error('this binary did not survive the reply intact')
   }
   state.at += 3
-  let value = ''
+  const bytes = []
   for (;;) {
     const character = state.text[state.at]
     if (character === undefined) throw new Error('unterminated binary')
     if (character === '"') {
-      if (!state.text.startsWith('">>', state.at)) {
-        throw new Error('unterminated binary')
-      }
+      if (!state.text.startsWith('">>', state.at)) throw new Error('unterminated binary')
       state.at += 3
-      return binary(value)
+      return binary(Uint8Array.from(bytes))
     }
     state.at += 1
-    if (character === '\\') {
-      value += unescape(state)
-      continue
-    }
-    value += character
+    const value = character === '\\' ? unescape(state) : character
+    const code = value.codePointAt(0)
+    if (code > 255) throw new Error('a byte escape is out of range')
+    bytes.push(code)
   }
 }
 
@@ -161,6 +143,16 @@ function unescape(state) {
     case 'n': return '\n'
     case 'r': return '\r'
     case 't': return '\t'
+    case 'x': {
+      const match = /^[0-9a-fA-F]+\\/.exec(state.text.slice(state.at))
+      if (!match) throw new Error('invalid hexadecimal escape')
+      state.at += match[0].length
+      const code = Number.parseInt(match[0].slice(0, -1), 16)
+      if (code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+        throw new Error('invalid escaped character')
+      }
+      return String.fromCodePoint(code)
+    }
     default: throw new Error(`unsupported escape \\${character}`)
   }
 }

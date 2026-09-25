@@ -36,6 +36,8 @@ client_serves_https_from_config_test() ->
           try
               Port = ranch:get_port(quod_client_listener),
               ?assertEqual(<<"ok\n">>, get_health(Port)),
+              {200, World} = get_path(Port, <<"/">>),
+              ?assertNotEqual(nomatch, binary:match(World, <<"data-surface=\"world\"">>)),
               {308, RedirectHead, <<>>} =
                   get_response(Port, <<"/explorer">>),
               ?assertNotEqual(

@@ -102,6 +102,21 @@ local_http_uses_the_normalized_binary_name_result_test() ->
                bindings => [#{<<"X">> => <<"bob">>}]}},
        quod_client_result:http_normalized(Evidence, Result)).
 
+signed_binding_preserves_binary_identity_and_numeric_values_test() ->
+    Evidence = maps:get(evidence, fixture()),
+    Anchor = <<0:248, 255>>,
+    Value = {depicts, <<"lobby">>, Anchor, {user, binary:copy(<<"x">>, 32)}},
+    Result = quod_client_result:normalize(Evidence, {ok, [#{0 => Value}], 7}),
+    {200, #{bindings := [#{<<"X">> := Text}]}} =
+        quod_client_result:http_normalized(Evidence, Result),
+    ?assertEqual(nomatch, binary:match(Text, <<"kp_">>)),
+    {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(<<Text/binary, ".">>, 2),
+    ?assertEqual(quod_wire_term:encode_canonical(Value),
+                 quod_wire_term:encode_canonical(Parsed)),
+    ?assertEqual(<<"transform(-150,0,0,0,0,0)">>,
+                 quod_client_goal_parser:value_text({transform, -150, 0, 0, 0, 0, 0})),
+    ?assertEqual(<<"[65,66,67]">>, quod_client_goal_parser:value_text("ABC")).
+
 aggregate_result_bound_is_identical_before_transport_test() ->
     Evidence = maps:get(evidence, fixture()),
     Value = binary:copy(<<"x">>, 12000),

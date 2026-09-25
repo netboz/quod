@@ -430,7 +430,7 @@ http_error({error, proof_unavailable}) ->
 
 render_bindings(Blobs) ->
     [maps:from_list(
-       [{Name, quod_explorer_http:prolog_text(Value)}
+       [{Name, quod_client_goal_parser:value_text(Value)}
         || {Name, Value} <- decoded_binding(Blob)])
      || Blob <- Blobs].
 

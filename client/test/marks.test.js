@@ -33,7 +33,7 @@ test('a reply becomes drawable marks', () => {
   // the subject stays a term: selection resolves through it, not a mesh name
   assert.equal(verdict.depicts.entity.functor, 'ships')
   assert.equal(part.depicts.entity.functor, 'component')
-  assert.equal(part.depicts.entity.args[1].value, 'cowboy')
+  assert.deepEqual(part.depicts.entity.args[1].value, new TextEncoder().encode('cowboy'))
 })
 
 test('a mark may show nothing and carry no label', () => {
@@ -51,7 +51,7 @@ test('several marks may depict one entity', () => {
     .replace('ships(<<"quod">>, <<"NOASSERTION">>)',
              'component(<<"quod">>, <<"cowboy">>)')
   const marks = readMarks(twice)
-  const subjects = marks.map(mark => mark.depicts.entity.args[1].value)
+  const subjects = marks.map(mark => new TextDecoder().decode(mark.depicts.entity.args[1].value))
   assert.deepEqual(subjects, ['cowboy', 'cowboy'])
   assert.deepEqual(marks.map(mark => mark.id), ['m0', 'm2'])
 })
@@ -76,20 +76,18 @@ test('an unreadable descriptor fails closed', () => {
   }
 })
 
-// The reply renderer turns any 32-byte binary into a key fingerprint and
-// shortens a binary it cannot print. Neither carries the value any more, so
-// neither may be drawn as though it did.
+// Display-only Explorer abbreviations must never be mistaken for signed result data.
 test('a binary that did not survive the reply is refused', () => {
   assert.throws(() => readMarks(REPLY.replace('<<"cowboy">>', 'kp_545337d5')))
   assert.throws(() => readMarks(REPLY.replace('<<"cowboy">>', '<<0x0badc0de…>>')))
 })
 
 test('the reader accepts what the renderer writes and nothing more', () => {
-  assert.deepEqual(readTerm('[]'), { type: 'list', items: [] })
+  assert.deepEqual(readTerm('[]'), { type: 'list', items: [], tail: null })
   assert.equal(readTerm('-1800').value, -1800)
   assert.equal(readTerm('unlabelled').value, 'unlabelled')
   assert.equal(readTerm("'quod:licence'").value, 'quod:licence')
-  assert.equal(readTerm('<<"a \\"quoted\\" name">>').value, 'a "quoted" name')
+  assert.deepEqual(readTerm('<<"a \\"quoted\\" name">>').value, new TextEncoder().encode('a "quoted" name'))
   assert.equal(readList('[a, b, c]').length, 3)
   for (const bad of ['[a, b', 'f(a', 'f(a,)', '[a|b]', '<<"open', 'a b', '', '??']) {
     assert.throws(() => readTerm(bad), undefined, `${bad} was accepted`)
@@ -109,3 +107,16 @@ test('the lens is asked by its flat binary name, with the dot the grammar needs'
        assert.equal(diagnosisGoal('work_licences', ['quod']),
                     '<<"quod:lens">> :: (diagnosis(<<"work_licences">>,[<<"quod">>],Unmet)).')
      })
+
+test('binary identities and UTF-8 text survive lossless signed bindings', () => {
+  const bytes = Uint8Array.from({ length: 256 }, (_, i) => i)
+  const text = '<<"' + [...bytes].map(b => `\\x${b.toString(16)}\\`).join('') + '">>'
+  assert.deepEqual(readTerm(text).value, bytes)
+  assert.deepEqual(readTerm('<<"' + 'x'.repeat(32) + '">>').value,
+                   new TextEncoder().encode('x'.repeat(32)))
+  assert.deepEqual(readTerm('[65,66,67]').items.map(t => t.value), [65, 66, 67])
+  assert.equal(readTerm("'\\x3bb\\'(a)").functor, 'λ')
+  for (const bad of ['<<"\\x100\\">>', '<<"\\xgg\\">>', '<<"\\x0">>']) {
+    assert.throws(() => readTerm(bad))
+  }
+})

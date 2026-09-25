@@ -3,6 +3,12 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_client_goal_limits.hrl").
 
+source_formatter_request_spelling_is_stable_test() ->
+    %% Existing prepared operations can bind these exact bytes, independently
+    %% of the more readable formatting used for result values.
+    ?assertEqual({ok, <<"'\\x61\\'(<<\"\\x0\\\\x41\\\">>).">>},
+                 quod_client_goal_parser:format({a, <<0, 65>>})).
+
 source_formatter_preserves_terms_and_byte_values_test() ->
     Terms = [{agent_instance_ref, <<"agents">>, <<1:256>>, {worker, 'quoted name'}},
              {'::', <<"target">>, {',', {sign, <<0, 255, 34, 92>>, {0}}, {check, {0}}}},

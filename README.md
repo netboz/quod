@@ -215,9 +215,20 @@ The main listeners are:
 | Explorer | `14569` | optional loopback read-only ledger viewer |
 | TLS client | `14570` | authenticated client, Explorer, and signed-goal API |
 
-The browser client source is under [`client/`](client/) and the Explorer source
-under [`ui/`](ui/). Built assets are committed in `priv/client/` and
-`priv/explorer/`.
+The world renderer and signed-client helpers live under [`client/`](client/).
+The shared browser shell, session controls and Explorer live under [`ui/`](ui/).
+One UI build produces both entry pages and their shared assets in `priv/explorer/`:
+
+```sh
+npm --prefix client ci
+npm --prefix ui ci
+npm --prefix ui run build
+```
+
+The initial personal-lobby sources define a console device, renderer-neutral
+primitive recipes and a focused signed Prolog workspace. Automatic lobby
+provisioning, headset interaction and model editing remain work in progress;
+see [the implementation contract](doc/client-world-direction.md#118-initial-lobby-and-toolkit-implementation-contract).
 
 Container deployments must retain the VM limits in `config/vm.args`. In
 particular, `+Q 65536` prevents the BEAM from sizing an enormous port table from

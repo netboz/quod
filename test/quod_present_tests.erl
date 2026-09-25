@@ -11,10 +11,24 @@
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_vm_limits.hrl").
 
+recipe_expressions_and_exact_subject_test() ->
+    with_present(fun(St) ->
+        Anchor = <<42:256>>,
+        Parts = [{part, <<"one">>, {box, {'*', 2, 200}, 600, 100},
+                  {transform, 0, {'-', 50}, 0, 0, 0, 0},
+                  {pbr, <<"#0B3954">>, 0, 800, 0}, unlabelled,
+                  {depicts, <<"personal">>, Anchor, console}}],
+        [Marks] = solutions({'M'}, {model, Parts, {'M'}}, St),
+        ?assertMatch([{mark, _, _, [{f, _, 400}, _, _],
+                       {transform, 0, -50, 0, 0, 0, 0}, _, _, _}], Marks),
+        holds({depicted, Marks, <<"one">>, <<"personal">>, Anchor, console}, St),
+        fails({depicted, Marks, <<"one">>, <<"personal">>, <<0:256>>, console}, St)
+    end).
+
 kinds_declare_their_fields_in_order_test() ->
     with_present(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
-        ?assertEqual([<<"box">>, <<"cylinder">>, <<"plane">>, <<"sphere">>],
+        ?assertEqual([<<"box">>, <<"cylinder">>, <<"group">>, <<"plane">>, <<"sphere">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
         %% the order a descriptor must use is the order they are written in.
@@ -160,7 +174,7 @@ a_scene_needs_distinct_mark_ids_test() ->
 the_class_view_is_derived_test() ->
     with_present(fun(St) ->
         holds({isa, mark, thing}, St),
-        ?assertEqual([<<"box">>, <<"cylinder">>, <<"plane">>, <<"sphere">>],
+        ?assertEqual([<<"box">>, <<"cylinder">>, <<"group">>, <<"plane">>, <<"sphere">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],
                      solutions({'F'}, {attribute, <<"cylinder">>, field, {'F'}}, St))
@@ -188,6 +202,56 @@ has_float(T) when is_float(T) -> true;
 has_float([Head | Tail]) -> has_float(Head) orelse has_float(Tail);
 has_float(T) when is_tuple(T) -> lists:any(fun has_float/1, tuple_to_list(T));
 has_float(_) -> false.
+
+recipe_compilation_and_alignment_test() ->
+    with_present(fun(St) ->
+        [ScreenAt] = solutions({'At'},
+            {align, {plane, 1000, 600}, centre, {box, 1200, 800, 200},
+             front, 5, {'At'}}, St),
+        ?assertEqual({transform, 0, 0, -105, 0, 0, 0}, ScreenAt),
+        BodyAt = {transform, 0, 900, 0, 0, 30, 0},
+        Parts = [{part, <<"console">>, {box, 1200, 800, 200}, BodyAt,
+                  {pbr, <<"#0B3954">>, 600, 300, 0}, unlabelled, depicts_nothing},
+                 {part, <<"screen">>, {plane, 1000, 600},
+                  {relative, <<"console">>, ScreenAt},
+                  {pbr, <<"#F9C80E">>, 0, 900, 700}, unlabelled, depicts_nothing}],
+        [Scene] = solutions({'Scene'}, {model, Parts, {'Scene'}}, St),
+        holds({well_formed_scene, Scene}, St),
+        ?assertEqual(2, length(Scene)),
+        %% Pure authoring: repeated evaluation has exactly the same result.
+        ?assertEqual([Scene], solutions({'Scene'}, {model, Parts, {'Scene'}}, St)),
+        fails({model, [{'Unknown'}], {'Scene'}}, St),
+        fails({align, {plane, 1000, 600}, centre, {box, 1200, 800, 201},
+               front, 5, {'At'}}, St),
+        fails({align, {plane, 0, 600}, centre, {box, 1200, 800, 200},
+               front, 5, {'At'}}, St)
+    end).
+
+parent_order_prevents_cycles_and_dangling_children_test() ->
+    with_present(fun(St) ->
+        Group = {mark, <<"root">>, <<"group">>, [],
+                 {transform, 0, 0, 0, 0, 0, 0}, no_surface, unlabelled, depicts_nothing},
+        Child = setelement(5, box(<<"child">>),
+                           {relative, <<"root">>, {transform, 0, 0, 0, 0, 0, 0}}),
+        holds({well_formed_scene, [Group, Child]}, St),
+        fails({well_formed_scene, [Child]}, St),
+        fails({well_formed_scene, [Child, Group]}, St),
+        Cycle = setelement(5, Group,
+                           {relative, <<"child">>, {transform, 0, 0, 0, 0, 0, 0}}),
+        fails({well_formed_scene, [Cycle, Child]}, St),
+        fails({well_formed_scene, [Group, Group]}, St),
+        fails({well_formed_scene, [setelement(6, Group, {material, <<"#FFFFFF">>, <<"matte">>})]}, St)
+    end).
+
+pbr_factors_are_bounded_integers_test() ->
+    with_present(fun(St) ->
+        lists:foreach(fun(Value) ->
+            Mark = setelement(6, box(<<"surface">>), {pbr, <<"#F9C80E">>, Value, 300, 0}),
+            fails({well_formed_mark, Mark}, St)
+        end, [-1, 1001, 0.5, {'X'}]),
+        holds({well_formed_mark, setelement(6, box(<<"surface">>),
+                                          {pbr, <<"#F9C80E">>, 1000, 0, 1000})}, St)
+    end).
 
 %% --- helpers ---------------------------------------------------------------
 

@@ -860,3 +860,70 @@ host both anchored histories. `quod:lens`, `quod:measure`, and `quod:present`
 are registered and hosted the same way. No static Erlang catalogue was added:
 the committed root `system_ontology/2` rows remain the only post-bootstrap
 authority for system status.
+
+## 2026-09-25 — initial personal lobby, model toolkit and shared console
+
+The feature branch now implements a private lobby projection with one classed
+Prolog-console device. Pure Prolog recipes compile boxes, planes, spheres,
+cylinders and transform groups; helpers align bounding-box faces and describe
+integer-permille PBR surfaces. The client reconciles parent-relative occurrences
+without recreating unchanged meshes/materials. Interactive subjects retain exact
+ontology anchors; signed result bindings now preserve full bytes, while signed
+request spelling remains unchanged.
+
+The world and Explorer share one React build, signing session and proof console;
+the duplicate standalone client shell/build/assets are removed. Ontology-derived
+menu/form descriptors open the focused console. Closing it retains draft and
+live proof; switching actor/session/target retires that console. Goal entry accepts
+an omitted full stop and trailing comments through the shared source helper.
+
+Focused evidence includes actual signed reads across five isolated ontology
+owners, wrong-anchor and other-actor rejection, and restoration of the same lobby
+from its ledger. Browser acceptance on a real isolated HTTPS node covers 3D ray
+selection, projected menu/form, bindings, Next/Stop, discarded staged writes,
+explicit committed writes, retained draft/live cursor, two representations,
+operation without WebGL and same-namespace actor-switch cursor cleanup. Earlier
+failed runs remain recorded, including the missing Babylon ray-picking import
+that the browser test found. The renderer regression now checks a real ray hit.
+
+Source contract and remaining work: `doc/client-world-direction.md` section 11.8.
+This is not automatic lobby provisioning, an ontology editor or completed VR
+interaction. The new ontology files are founding inputs, not already activated
+system ontologies. Textures/assets/bones/particles, subscribed projections,
+round-touchpad menus and a headset workspace remain follow-ups. The edition
+recipe is currently a structure view, not a model-editing tool. The historical
+`quod:present` namespace has not been renamed. Existing Explorer remote-target
+anchor enforcement is not expanded by this work; the focused console uses the
+selected actor's exact signed origin.
+
+Validation, frozen-tree review and publication evidence are retained under
+`_build/lobby-toolkit-20260925/` and its `release-v1/` campaign. No Claude review
+was initiated. This work uses isolated test ledgers; the production fleet remains
+.236, with no purge or fleet rollout for these unprovisioned lobby sources.
+
+
+### Lobby checkpoint validation and provisioning simplification
+
+All 23 clean sequential gates passed on the frozen executable tree: 3,021 EUnit,
+132 CT and 39 client tests, xref, Dialyzer, production/diagnostic releases, UI
+build/lint and diff checks. Clean UI output reproduced the frozen asset bytes.
+Two additional current suites also passed (namespace admission: 3; naming: 9),
+for 144 CT cases overall. Browser acceptance and the 16 focused lobby/presentation
+checks are retained separately. No production source changed during validation.
+
+A separately labelled integration experiment also passed: a source pending fact
+can be consumed and replaced by the prepared exact lobby reference in the same
+ordinary atomic group that stages root's creation effect. Root stays effect-only.
+A second invocation after known completion fails before another creation. The
+preferred provisioning direction in section 11.3 now uses that existing path,
+removing the proposed creation-then-link handoff. Unknown-admission recovery,
+executor grants and permanent loss of local effect custody still require work;
+the experiment does not authorize uncertain-effect resubmission. Its first
+compiler invocation failed because erlc takes one -pa path per option; that log
+is retained alongside the corrected compile and successful execution.
+
+The final architecture/closure documentation is a reviewed docs-only addition to
+the gated tree, recorded in `release-v1/FINAL-FREEZE.json`; executable sources,
+tests and assets are unchanged. Production source delta is +878/-604, net +274
+lines, after removing the duplicate standalone client shell. Browser preview
+processes are stopped; no active test fault or fleet change remains.

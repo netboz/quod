@@ -5,6 +5,7 @@ import {
   b64url,
   createKeyProvider,
   downloadEncryptedKeyProvider,
+  importEncryptedKeyProvider,
   hasLocalKeyProvider,
   loadActiveKeyProvider,
   loadLocalKeyProvider,
@@ -105,6 +106,13 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
     await login(loadLocalKeyProvider(passphrase))
   }
 
+  const importKey = async (file: File) => {
+    if (file.size > 16_384) { setError('That encrypted key file is too large.'); return }
+    const passphrase = window.prompt('Passphrase for the encrypted key file')
+    if (passphrase === null) return
+    await login(file.text().then(text => importEncryptedKeyProvider(text, passphrase)))
+  }
+
   const save = async () => {
     if (!identity) return
     const passphrase = window.prompt('Choose a passphrase of at least 12 characters')
@@ -180,7 +188,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider
       value={{ identity, agent, agents, busy, saved, unresolved, error,
-        create, unlock, save, exportKey, signOut, addAgent, selectAgent }}>
+        create, unlock, save, exportKey, importKey, signOut, addAgent, selectAgent }}>
       {children}
     </SessionContext.Provider>
   )
@@ -188,6 +196,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
 
 export function SessionControls() {
   const session = useSignedSession()
+  const importFile = useRef<HTMLInputElement>(null)
   if (session.identity) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -267,6 +276,13 @@ export function SessionControls() {
           Unlock saved key
         </button>
       )}
+      <button type="button" disabled={session.busy} onClick={() => importFile.current?.click()}
+        className="rounded-md border border-cream/40 px-2 py-1 text-cream disabled:opacity-40">Import encrypted key</button>
+      <input ref={importFile} type="file" accept="application/json,.quodkey" hidden onChange={event => {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (file) void session.importKey(file)
+      }} />
       {session.error && <span className="max-w-64 text-rose-light">{session.error}</span>}
     </div>
   )

@@ -1,7 +1,7 @@
 // Types mirroring quod_explorer_http's JSON, plus thin fetch helpers.
 
 import { signedCursorCommand, signedGoal } from '../../client/src/signed-client.js'
-import { atom, renderTerm } from '../../client/src/prolog-term.js'
+import { scopedGoal } from '../../client/src/prolog-term.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
 import type { AgentReference } from '../../client/src/signed-client.js'
 
@@ -278,7 +278,7 @@ export const openProofCursor = (
   goal: string,
 ) => signedGoal(
   identity,
-  { mode: 'cursor', agent, goal: routedGoal(agent.namespace, ns, goal) },
+  { mode: 'cursor', agent, goal: scopedGoal(agent.namespace, ns, goal) },
 ) as Promise<ProveReply>
 
 export const nextProofSolution = (identity: SignedIdentity, cursor: string) =>
@@ -289,8 +289,3 @@ export const acceptProofSolution = (identity: SignedIdentity, cursor: string) =>
 
 export const stopProofCursor = (identity: SignedIdentity, cursor: string) =>
   signedCursorCommand(identity, cursor, 'stop') as Promise<ProveReply>
-
-function routedGoal(agentNamespace: string, targetNamespace: string, goal: string) {
-  if (agentNamespace === targetNamespace) return goal
-  return `${renderTerm(atom(targetNamespace))} :: (${goal})`
-}

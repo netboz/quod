@@ -8,7 +8,10 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: './',
-  build: { outDir: '../priv/explorer', emptyOutDir: true },
+  build: {
+    outDir: '../priv/explorer', emptyOutDir: true,
+    rolldownOptions: { input: { explorer: 'index.html', world: 'world.html' } },
+  },
   server: {
     proxy: {
       '/api/auth': { target: 'https://127.0.0.1:14570', secure: false },

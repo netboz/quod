@@ -2,7 +2,7 @@
 // the live table, the detail drawer, and the prove console.
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { fetchBlock, fetchSummary, fetchTx, fetchTxs } from './api'
 import type { NsSummary } from './api'
 import { Console } from './Console'
@@ -14,7 +14,15 @@ import { TxDetail } from './TxDetail'
 import { TxTable } from './TxTable'
 import { SessionControls } from './Session'
 
+const World = lazy(() => import('./World'))
+
 export default function App() {
+  return document.getElementById('root')?.dataset.surface === 'world'
+    ? <Suspense fallback={<p>Opening your world…</p>}><World /></Suspense>
+    : <Explorer />
+}
+
+function Explorer() {
   // The TLS client mounts this bundle at /explorer/ and owns the signed-goal
   // routes. The standalone HTTP Explorer remains a read-only ledger browser.
   const interactive = window.location.pathname.startsWith('/explorer/')

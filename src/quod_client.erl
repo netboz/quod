@@ -89,8 +89,8 @@ replace_or_retry_listener(State, _Tls, true) ->
 
 routes() ->
     [{'_', [
-        {"/", cowboy_static, {priv_file, quod, "client/index.html"}},
-        {"/assets/[...]", cowboy_static, {priv_dir, quod, "client/assets"}},
+        {"/", cowboy_static, {priv_file, quod, "explorer/world.html"}},
+        {"/assets/[...]", cowboy_static, {priv_dir, quod, "explorer/assets"}},
         {"/explorer", quod_client_http, explorer_index},
         {"/explorer/favicon.png", cowboy_static,
          {priv_file, quod, "explorer/favicon.png"}},

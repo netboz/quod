@@ -70,3 +70,13 @@ function u256(lastByte) {
   value[31] = lastByte
   return value
 }
+
+test('console scope construction handles terminators, quoted periods and trailing comments', async () => {
+  const { scopedGoal } = await import('../src/prolog-term.js')
+  assert.equal(scopedGoal('a', 'a', 'member(X, [a, b])'), 'member(X, [a, b])\n.')
+  assert.equal(scopedGoal('a', 'a', 'true. % retained'), 'true % retained\n.')
+  assert.equal(scopedGoal('a', 'b', 'true. /* retained */'), 'b :: (\ntrue /* retained */\n).')
+  assert.equal(scopedGoal('a', 'b', 'write(<<"a.%/*">>).'), 'b :: (\nwrite(<<"a.%/*">>)\n).')
+  assert.equal(scopedGoal('a', 'b', "'a\\x27\\b'."), "b :: (\n'a\\x27\\b'\n).")
+  for (const bad of ['', ' % no goal', '/* open', "'open"]) assert.throws(() => scopedGoal('a', 'b', bad))
+})

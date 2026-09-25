@@ -11,10 +11,26 @@ import {
 import type { ProveReply } from './api'
 import { useSignedSession } from './session-context'
 import { shortNamespace } from './namespace'
+import type { ProofView } from '../../client/src/world.js'
 
 const EXAMPLES = ['isa(X, Y)', 'assertz(capital(france, paris))', 'capital(france, X)']
 
-export function Console({ ns, anchor }: { ns: string; anchor: string }) {
+const DEFAULT_VIEW: ProofView = {
+  title: 'Prove console', goal: 'Prolog goal', results: 'Bindings',
+  run: 'Run', next: 'Next solution', accept: 'Accept solution', stop: 'Stop',
+}
+
+type ConsoleProps = { ns: string; anchor: string; view?: ProofView }
+
+export function Console(props: ConsoleProps) {
+  const { identity, agent } = useSignedSession()
+  // A cursor belongs to its signing session, actor and exact target. Changing
+  // any of them retires the old component, even within the same namespace.
+  const scope = JSON.stringify([identity?.session.session_id, agent?.id, props.ns, props.anchor])
+  return <ScopedConsole key={scope} {...props} />
+}
+
+function ScopedConsole({ ns, anchor, view = DEFAULT_VIEW }: ConsoleProps) {
   const { identity, agent, error: sessionError } = useSignedSession()
   const [goal, setGoal] = useState('')
   const [busy, setBusy] = useState(false)
@@ -22,10 +38,7 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
   const [cursor, setCursor] = useState<string | null>(null)
   const [solutionNumber, setSolutionNumber] = useState(0)
   const cursorRef = useRef<string | null>(null)
-  const identityRef = useRef(identity)
-  identityRef.current = identity
-  const nsRef = useRef(ns)
-  nsRef.current = ns
+  const active = useRef(true)
 
   const rememberCursor = (next: string | null) => {
     cursorRef.current = next
@@ -33,24 +46,13 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
   }
 
   useEffect(() => {
-    const openCursor = cursorRef.current
-    if (openCursor) {
-      cursorRef.current = null
-      setCursor(null)
-      setReply(null)
-      setSolutionNumber(0)
-      if (identityRef.current) void stopProofCursor(identityRef.current, openCursor)
-    }
-  }, [ns])
-
-  useEffect(() => {
+    active.current = true
     return () => {
+      active.current = false
       const openCursor = cursorRef.current
-      if (openCursor && identityRef.current) {
-        void stopProofCursor(identityRef.current, openCursor)
-      }
+      if (openCursor && identity) void stopProofCursor(identity, openCursor)
     }
-  }, [])
+  }, [identity])
 
   const applyReply = (next: ProveReply, isNext = false) => {
     if ('error' in next && (next.error === 'cursor_busy' || next.error === 'cursor_not_ready')) {
@@ -73,10 +75,9 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
     if (!identity || !agent || !goal.trim() || busy || cursor) return
     setBusy(true)
     setReply(null)
-    const requestNs = ns
     try {
-      const next = await openProofCursor(identity, agent, requestNs, anchor, goal)
-      if (nsRef.current !== requestNs) {
+      const next = await openProofCursor(identity, agent, ns, anchor, goal)
+      if (!active.current) {
         if ('result' in next && next.result === 'solution') {
           void stopProofCursor(identity, next.cursor)
         }
@@ -84,16 +85,15 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
       }
       applyReply(next)
     } catch (e) {
-      setReply({ error: String(e) })
+      if (active.current) setReply({ error: String(e) })
     } finally {
-      setBusy(false)
+      if (active.current) setBusy(false)
     }
   }
 
   const command = async (kind: 'next' | 'accept' | 'stop') => {
     if (!identity || !cursor || busy) return
     setBusy(true)
-    const requestNs = ns
     try {
       const next =
         kind === 'next'
@@ -101,12 +101,12 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
           : kind === 'accept'
             ? await acceptProofSolution(identity, cursor)
             : await stopProofCursor(identity, cursor)
-      if (nsRef.current !== requestNs) return
+      if (!active.current) return
       applyReply(next, kind === 'next')
     } catch (e) {
-      setReply({ error: String(e) })
+      if (active.current) setReply({ error: String(e) })
     } finally {
-      setBusy(false)
+      if (active.current) setBusy(false)
     }
   }
 
@@ -114,7 +114,7 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
     <div className="rounded-xl border border-teal/35 bg-white/90 shadow-sm">
       <header className="flex items-center justify-between border-b border-teal-dark/30 bg-teal px-4 py-2.5 text-cream">
         <h2 className="min-w-0 text-[11px] font-semibold tracking-wider text-cream/80 uppercase">
-          Prove console —{' '}
+          {view.title} —{' '}
           <span className="font-mono normal-case" title={ns}>
             {shortNamespace(ns)}
           </span>
@@ -128,6 +128,7 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
               <span className="pt-2 font-mono text-sm text-gray select-none">?-</span>
               <textarea
                 value={goal}
+                aria-label={view.goal}
                 onChange={(e) => setGoal(e.target.value)}
                 disabled={cursor !== null}
                 onKeyDown={(e) => {
@@ -146,7 +147,7 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
                 disabled={busy || !goal.trim() || cursor !== null}
                 className="rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-teal shadow-sm transition hover:bg-gold-soft disabled:opacity-40"
               >
-                {busy ? 'Proving…' : 'Run'}
+                {busy ? 'Proving…' : view.run}
               </button>
             </div>
             <div className="mt-2 flex gap-2 text-[11px] text-gray">
@@ -167,7 +168,7 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
             {sessionError && <span className="ml-2 text-rose">{sessionError}</span>}
           </div>
         )}
-        {reply && <Reply reply={reply} solutionNumber={solutionNumber} />}
+        {reply && <div aria-label={view.results}><Reply reply={reply} solutionNumber={solutionNumber} /></div>}
         {cursor && (
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-teal/15 pt-3">
             <button
@@ -175,21 +176,21 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
               disabled={busy}
               className="rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-cream hover:bg-teal-light disabled:opacity-40"
             >
-              {busy ? 'Working…' : 'Next solution'}
+              {busy ? 'Working…' : view.next}
             </button>
             <button
               onClick={() => void command('accept')}
               disabled={busy}
               className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-teal hover:bg-gold-soft disabled:opacity-40"
             >
-              Accept solution
+              {view.accept}
             </button>
             <button
               onClick={() => void command('stop')}
               disabled={busy}
               className="rounded-lg border border-rose/35 px-4 py-2 text-sm font-semibold text-rose hover:bg-rose/5 disabled:opacity-40"
             >
-              Stop
+              {view.stop}
             </button>
             <span className="text-xs text-gray">
               Writes remain staged until you accept; ordinary writes survive Next unless wrapped in transaction/1.
@@ -318,4 +319,22 @@ function Reply({ reply, solutionNumber }: { reply: ProveReply; solutionNumber: n
       ))}
     </div>
   )
+}
+
+// Kept mounted while the world hides its focused panel: drafts and cursors
+// survive returning to the room. The signed origin binds the exact agent.
+export function ConsoleWorkspace({ view, onClose }: { view: ProofView; onClose: () => void }) {
+  const { identity, agent } = useSignedSession()
+  return <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 p-8">
+    <header className="flex items-center justify-between gap-4">
+      <div><p className="text-xs tracking-widest uppercase">Quod · personal workspace</p>
+        <h1 className="text-2xl font-semibold">{view.title}</h1></div>
+      <button className="rounded-lg border px-4 py-2" onClick={onClose}>Return to lobby</button>
+    </header>
+    {identity && agent && <Console
+      ns={agent.namespace} anchor={String(agent.anchor)} view={view} />}
+    <p className="text-sm">The goal runs in your selected agent's ontology. Use an explicit
+      ontology selection in the goal to work in another scope. Returning to the lobby preserves
+      your draft; accepting a solution is the step that commits staged changes.</p>
+  </main>
 }

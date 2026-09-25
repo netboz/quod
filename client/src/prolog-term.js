@@ -129,3 +129,48 @@ function escapeBinary(value) {
   }
   return result
 }
+
+// Wrap console input as one goal. Only its final full stop is moved; quoted
+// content and comments are retained. Newlines keep trailing % comments from
+// consuming the closing scope or terminator. The server remains the parser.
+export function scopedGoal(agentNamespace, targetNamespace, source) {
+  if (typeof source !== 'string' || !source.trim()) throw new Error('empty goal')
+  let last = -1
+  for (let at = 0; at < source.length;) {
+    const c = source[at]
+    if (/\s/.test(c)) { at++; continue }
+    if (c === '%') {
+      const end = source.indexOf('\n', at)
+      at = end < 0 ? source.length : end + 1
+      continue
+    }
+    if (source.startsWith('/*', at)) {
+      const end = source.indexOf('*/', at + 2)
+      if (end < 0) throw new Error('unterminated comment')
+      at = end + 2
+      continue
+    }
+    if (c === '"' || c === "'") {
+      const quote = c
+      at++
+      for (;;) {
+        if (at >= source.length) throw new Error('unterminated quoted value')
+        if (source[at] === quote) { last = at++; break }
+        if (source[at] === '\\') {
+          if (source[at + 1] === 'x') {
+            const end = source.indexOf('\\', at + 2)
+            if (end < 0) throw new Error('unterminated hexadecimal escape')
+            at = end + 1
+          } else { at += 2 }
+        } else { at++ }
+      }
+      continue
+    }
+    last = at++
+  }
+  if (last < 0) throw new Error('empty goal')
+  const body = source[last] === '.' ? source.slice(0, last) + source.slice(last + 1) : source
+  return agentNamespace === targetNamespace
+    ? `${body}\n.`
+    : `${renderTerm(atom(targetNamespace))} :: (\n${body}\n).`
+}

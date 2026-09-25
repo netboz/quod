@@ -1,59 +1,72 @@
-// The Babylon half of the adapter: marks become meshes.
-//
-// Applying a projection is idempotent: a mark still in the projection is
-// replaced by its current descriptor, one that is gone is disposed, and
-// painting the same marks twice leaves the same scene — so a reconnect or a
-// refreshed read reconciles rather than accumulating. Mark identity drives
-// create, update and remove; the domain entity a mark depicts is carried in the
-// mesh's metadata, because selection resolves through the entity and never
-// through a mesh name. Replacing rather than mutating is this slice's choice:
-// it keeps one code path, and a mark whose descriptor is unchanged is cheap
-// enough at a projection's bounded size.
-//
-// Descriptors are in millimetres and whole degrees. This is where they become
-// the renderer's metres and radians, and the only place that conversion lives.
+// Reconcile one ontology-derived scene. Stable occurrences retain their engine
+// objects; parents compose local transforms. No domain state is stored here.
 
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
-import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture'
-import { Color3 } from '@babylonjs/core/Maths/math.color'
-import { Vector3 } from '@babylonjs/core/Maths/math.vector'
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
+import { Color3 } from '@babylonjs/core/Maths/math.color.js'
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js'
+
+import { PALETTE } from './palette.js'
 
 const MM = 1000
 const DEGREES = Math.PI / 180
 const LABEL_HEIGHT_MM = 220
 
-// Paint `marks` into `scene`, reconciling against what a previous call left.
-// Returns the painted set, to be handed back on the next call.
+// Entries own only rendering resources. Reparent surviving nodes before disposing
+// removed parents, so removing a group cannot accidentally remove a kept child.
 export function paintMarks(scene, marks, painted = new Map()) {
   const next = new Map()
+  const retired = []
   for (const mark of marks) {
-    const existing = painted.get(mark.id)
-    if (existing) existing.dispose(false, true)
-    next.set(mark.id, paintOne(scene, mark))
+    const geometry = JSON.stringify([mark.kind, mark.size])
+    let entry = painted.get(mark.id)
+    if (entry && entry.geometry !== geometry) {
+      retired.push(entry)
+      entry = null
+    }
+    if (!entry) {
+      const node = mark.kind === 'group'
+        ? new TransformNode(`mark:${mark.id}`, scene)
+        : buildGeometry(scene, mark)
+      entry = { node, geometry, signature: null, label: null }
+    }
+    const signature = JSON.stringify(mark)
+    if (entry.signature !== signature) {
+      const { x, y, z, rx, ry, rz } = mark.transform
+      entry.node.position.set(x / MM, y / MM, z / MM)
+      entry.node.rotation.set(rx * DEGREES, ry * DEGREES, rz * DEGREES)
+      entry.node.metadata = { markId: mark.id, depicts: mark.depicts }
+      if (mark.material) applyMaterial(scene, entry.node, mark)
+      const labelSignature = JSON.stringify([mark.label, mark.size, mark.material?.colour])
+      if (entry.labelSignature !== labelSignature) {
+        entry.label?.dispose(false, true)
+        entry.label = mark.label ? attachLabel(scene, entry.node, mark) : null
+        entry.labelSignature = labelSignature
+      }
+      entry.signature = signature
+    }
+    entry.node.parent = mark.parent === null ? null : next.get(mark.parent).node
+    next.set(mark.id, entry)
   }
-  for (const [id, mesh] of painted) {
-    if (!next.has(id)) mesh.dispose(false, true)
+  for (const [id, entry] of painted) {
+    if (!next.has(id)) retired.push(entry)
   }
+  for (const entry of retired) disposeEntry(entry)
   return next
 }
 
-// Remove everything a previous paint left, leaving the rest of the scene alone.
 export function clearMarks(painted) {
-  for (const mesh of painted.values()) mesh.dispose(false, true)
+  for (const entry of painted.values()) disposeEntry(entry)
   return new Map()
 }
 
-function paintOne(scene, mark) {
-  const mesh = buildGeometry(scene, mark)
-  const { x, y, z, rx, ry, rz } = mark.transform
-  mesh.position = new Vector3(x / MM, y / MM, z / MM)
-  mesh.rotation = new Vector3(rx * DEGREES, ry * DEGREES, rz * DEGREES)
-  mesh.material = buildMaterial(scene, mark)
-  // The subject, not the mesh name, is what a later selection resolves.
-  mesh.metadata = { markId: mark.id, depicts: mark.depicts }
-  if (mark.label) attachLabel(scene, mesh, mark)
-  return mesh
+function disposeEntry({ node, label }) {
+  label?.dispose(false, true)
+  node.dispose(true, true)
 }
 
 function buildGeometry(scene, { id, kind, size }) {
@@ -81,21 +94,17 @@ function buildGeometry(scene, { id, kind, size }) {
   }
 }
 
-function buildMaterial(scene, { id, material }) {
-  const surface = new StandardMaterial(`mark-material:${id}`, scene)
+// Named finishes are authoring presets over the same physical material model.
+// Explicit PBR factors arrive normalized from integer permille by readMarks.
+function applyMaterial(scene, mesh, { id, material }) {
+  const surface = mesh.material ?? new PBRMaterial(`mark-material:${id}`, scene)
   const colour = Color3.FromHexString(material.colour)
-  surface.diffuseColor = colour
-  surface.emissiveColor = colour.scale(emission(material.finish))
-  surface.specularColor = material.finish === 'glossy'
-    ? Color3.White().scale(0.4)
-    : Color3.Black()
-  return surface
-}
-
-function emission(finish) {
-  if (finish === 'emissive') return 0.65
-  if (finish === 'glossy') return 0.12
-  return 0.2
+  const finish = material.finish
+  surface.albedoColor = colour
+  surface.metallic = material.metallic ?? 0
+  surface.roughness = material.roughness ?? (finish === 'glossy' ? 0.2 : 0.9)
+  surface.emissiveColor = colour.scale(material.emission ?? (finish === 'emissive' ? 0.65 : 0))
+  mesh.material = surface
 }
 
 // A label is display text on its mark. It is drawn as a billboarded plane so it
@@ -114,7 +123,7 @@ function attachLabel(scene, mesh, mark) {
   )
   texture.hasAlpha = true
   texture.drawText(text, null, 46, 'bold 40px system-ui, sans-serif',
-                   mark.material.colour, 'transparent', true)
+                   mark.material?.colour ?? PALETTE.greyBlue, 'transparent', true)
   const surface = new StandardMaterial(`mark-label-material:${mark.id}`, scene)
   surface.diffuseTexture = texture
   surface.emissiveTexture = texture

@@ -24,7 +24,11 @@ instead of silently changing how signed text is interpreted.
 -include("quod_client_goal_limits.hrl").
 -include("quod_vm_limits.hrl").
 
--export([parse/2, supported_version/1, format/1]).
+-export([parse/2, supported_version/1, format/1, value_text/1]).
+
+-doc "Lossless text for normalized result values, without display-only key shortening.".
+-spec value_text(term()) -> binary().
+value_text(Term) -> iolist_to_binary(source_term(Term, value)).
 
 -doc "Render exact version-2 source, refusing terms the frozen grammar cannot represent.".
 -spec format(term()) -> {ok, binary()} | {error, invalid_term}.
@@ -46,28 +50,54 @@ format(Term) ->
         _ -> {error, invalid_term}
     end.
 
-source_term({'$quod_symbol', Name}) -> source_symbol(Name);
-source_term(Atom) when is_atom(Atom) -> source_symbol(atom_to_binary(Atom, utf8));
-source_term(Bytes) when is_binary(Bytes) -> ["<<\"", source_bytes(Bytes), "\">>"];
-source_term(N) when is_integer(N) -> integer_to_binary(N);
-source_term(N) when is_float(N) -> float_to_binary(N, [short]);
-source_term({N}) when is_integer(N), N >= 0 -> [$V, integer_to_binary(N)];
-source_term([]) -> "[]";
-source_term([H | T]) -> [$[, source_term(H), source_tail(T), $]];
-source_term(Term) when is_tuple(Term), tuple_size(Term) > 1 ->
+%% Request spelling is retained byte-for-byte: durable prepared operations may
+%% already bind it. Result values use readable symbols and lossless byte escapes.
+source_term(Term) -> source_term(Term, request).
+
+source_term({'$quod_symbol', Name}, Style) -> source_symbol(Name, Style);
+source_term(Atom, Style) when is_atom(Atom) -> source_symbol(atom_to_binary(Atom, utf8), Style);
+source_term(Bytes, Style) when is_binary(Bytes) -> ["<<\"", source_bytes(Bytes, Style), "\">>"];
+source_term(N, _) when is_integer(N) -> integer_to_binary(N);
+source_term(N, _) when is_float(N) -> float_to_binary(N, [short]);
+source_term({N}, _) when is_integer(N), N >= 0 -> [$V, integer_to_binary(N)];
+source_term([], _) -> "[]";
+source_term([H | T], Style) -> [$[, source_term(H, Style), source_tail(T, Style), $]];
+source_term(Term, Style) when is_tuple(Term), tuple_size(Term) > 1 ->
     [Functor | Args] = tuple_to_list(Term),
-    [source_term(Functor), $(, lists:join($,, [source_term(A) || A <- Args]), $)].
+    [source_term(Functor, Style), $(,
+     lists:join($,, [source_term(A, Style) || A <- Args]), $)].
 
-source_tail([]) -> [];
-source_tail([H | T]) -> [$,, source_term(H), source_tail(T)];
-source_tail(T) -> [$|, source_term(T)].
+source_tail([], _) -> [];
+source_tail([H | T], Style) -> [$,, source_term(H, Style), source_tail(T, Style)];
+source_tail(T, Style) -> [$|, source_term(T, Style)].
 
-source_symbol(Name) ->
-    [$', [["\\x", integer_to_list(C, 16), $\\]
-          || C <- unicode:characters_to_list(Name)], $'].
+source_symbol(Name, request) ->
+    [$', [source_hex(C) || C <- unicode:characters_to_list(Name)], $'];
+source_symbol(Name, value) ->
+    case binary_to_list(Name) of
+        [First | Rest] when First >= $a, First =< $z ->
+            case lists:all(fun symbol_char/1, Rest) of
+                true -> Name;
+                false -> quoted_symbol(Name)
+            end;
+        _ -> quoted_symbol(Name)
+    end.
 
-source_bytes(Bytes) ->
-    [["\\x", integer_to_list(B, 16), $\\] || <<B>> <= Bytes].
+symbol_char(C) ->
+    (C >= $a andalso C =< $z) orelse (C >= $A andalso C =< $Z) orelse
+        (C >= $0 andalso C =< $9) orelse C =:= $_.
+
+quoted_symbol(Name) ->
+    [$', [source_character(C, $') || C <- unicode:characters_to_list(Name)], $'].
+
+source_bytes(Bytes, request) -> [source_hex(B) || <<B>> <= Bytes];
+source_bytes(Bytes, value) -> [source_character(B, $") || <<B>> <= Bytes].
+
+source_character(C, Quote) when C =:= Quote; C =:= $\\ -> [$\\, C];
+source_character(C, _Quote) when C >= 32, C =< 126 -> C;
+source_character(C, _Quote) -> source_hex(C).
+
+source_hex(C) -> ["\\x", integer_to_list(C, 16), $\\].
 
 %% Guard BIFs cannot call local helpers, so keep the ASCII identifier contract
 %% in one macro used by the lexer guard.

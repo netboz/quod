@@ -13,6 +13,7 @@ export type SessionState = {
   unlock: () => Promise<void>
   save: () => Promise<void>
   exportKey: () => Promise<void>
+  importKey: (file: File) => Promise<void>
   signOut: () => Promise<void>
   addAgent: () => void
   selectAgent: (id: string) => void

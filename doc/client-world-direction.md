@@ -3,8 +3,9 @@
 **Status:** the browser key, login, signed local and multi-ontology goals,
 cursor, unresolved-operation journal, retired user-home generation, and
 Explorer-console foundation are implemented and deployed. The world, agent, presentation,
-and simulation sections remain non-normative direction and must be revalidated
-before their implementation.
+and simulation sections remain direction except for the initial lobby/toolkit
+contracts recorded in section 11.8; remaining proposals must be revalidated
+before implementation.
 
 The generic acting identity is now the deployed actor model in
 `ontology-actor-architecture.md`: every acting node, agent, service, or
@@ -1153,24 +1154,34 @@ terms, using the user's local instance name, are:
 
 ```prolog
 lobby_provisioning(LocalUser, pending).
-% Replaced after verified creation and linking, not asserted alongside pending:
-lobby_provisioning(LocalUser, ready(LobbyRef)).
+% Replaced atomically with the admitted root creation effect:
+lobby_provisioning(LocalUser, linked(LobbyRef)).
 ```
 
 These describe successive states of one domain obligation, not an accumulating
 message history. The exact intermediate operation-reference terms and predicate
-signatures remain to be specified. The ready state supplies the one authoritative
-lobby link rather than duplicating it in another mutable profile fact.
+signatures remain to be specified. The linked state supplies the one authoritative
+lobby reference rather than duplicating it in another mutable profile fact. It
+means creation was committed, not that the new ontology is currently available.
 
 The intended flow is:
 
 ```text
 user genesis commits its instance and lobby requirement together
     -> founding state handler reconciles current requirements
-    -> authorized execution stages ordinary lobby creation
-    -> existing lifecycle owner completes that exact operation
-    -> ordinary transaction replaces pending state with the exact lobby link
+    -> one ordinary atomic transaction stages root creation and replaces
+       the pending requirement with its prepared exact lobby reference
+    -> existing lifecycle owner applies that committed creation effect
+    -> the client opens that exact lobby when it becomes available
 ```
+
+The existing creation predicate binds the prepared genesis anchor before
+commit. Its root plan remains effect-only; the user's separate source plan can
+record that anchor in the same atomic group. This removes a separate
+creation-then-link handoff. An isolated integration experiment has exercised
+this exact composition, including consumption of the pending guard and refusal
+of a second invocation after known completion. It does not establish automatic
+admission recovery or authorize a fresh attempt after an unknown outcome.
 
 The same state handler runs for live changes and startup reconciliation. It
 selects affected work through existing projection/runtime mechanisms; it does
@@ -1186,17 +1197,18 @@ or the creator alone. Lobby genesis instantiates devices but does not declare
 another human user's provisioning requirement. Founding declarations and the
 executor's explicit grants must satisfy the existing runtime/ACL contracts.
 
-Recovery must cover a crash before work starts, around creation admission, after
-creation but before linking, and after linking. Retain the exact operation and
+Recovery must cover a crash before work starts, around group admission, after
+commit but before creation is applied, and after creation. Retain the exact operation and
 created identity through the existing custody handoffs. Pending state alone does
 not prove that no creation was submitted. Unknown outcomes use the existing
 operation-resolution path, not a newly signed create. The guarded FIPA
 continuation exception does not implicitly authorize repeating lifecycle effects.
 Duplicate observations must not create competing lobbies: a chosen namespace
 alone cannot ensure this because concurrent creations can have distinct anchors.
-The exact admission/correlation and completion-to-link handoffs remain an
-implementation contract to settle; recording the requirement does not solve
-those handoffs by itself.
+The exact executor admission/correlation handoff remains an implementation
+contract to settle; recording the requirement does not solve it by itself.
+Recovery must also distinguish process restart from permanent loss of an
+executor holding local durable creation custody.
 
 A general `ontology_created(CreationRef, Namespace, GenesisAnchor, CreatorRef)`
 occurrence remains useful for live notifications and independent reactions, but
@@ -1305,14 +1317,17 @@ lobby can establish device interactions before that bridge is ready.
 
 ### 11.6 Current implementation gaps
 
-- The Babylon prototype reads one lens and reconciles primitive output shapes. It
-  lacks the proposed general view session, change stream, attachment projection,
-  device interactions and coordinated audio. Extend the shared presentation
-  path rather than implementing one client renderer per lobby device.
-- Browser-saved agent references are currently local conveniences. A durable
-  profile/lobby link and explicit agent relations need ordinary ontology rules.
-  The creation-completion bridge and recoverable user-to-lobby provisioning are
-  missing, as detailed in section 11.3. They reuse generic creation and do not
+- The browser now reads a personal lobby or the existing licence lens, reconciles
+  a hierarchy of primitive output shapes, and opens the shared proof console
+  through an ontology-derived device menu. It still lacks a general subscribed
+  view session, governed attachment projection, headset menus and coordinated
+  audio. Extend this shared path rather than adding a renderer per device.
+- Browser-saved agent references are currently local conveniences. The initial
+  lobby uses an explicit durable `lobby_reference/1` fact. Automatic provisioning
+  must instead derive that view from its one authoritative obligation state;
+  explicit agent relations also need ordinary ontology rules. Recoverable user
+  provisioning and a generic creation notification are missing, as detailed in
+  section 11.3. They reuse generic creation and do not
   restore a special Erlang user-home operation or global user table.
 - Human administration of a physical node needs explicit target-owned grants
   and a supported exact-node invocation contract. Current `quod:node` hosting
@@ -1374,3 +1389,97 @@ Remaining product choices are the initial room's appearance, the first small
 world template, which specific node operations deserve controls, and whether
 later lobby visits require avatars or can initially be observer viewpoints.
 They do not require choosing a different action, identity or transaction model.
+
+
+### 11.8 Initial lobby and toolkit implementation contract
+
+The first implementation covers the presentation recipe, one private console
+and its desktop workspace. It is a foundation for the acceptance in section
+11.7, not completion of that broader milestone. The shipped Prolog sources are
+founding inputs; adding a source file does not create or upgrade a system
+ontology in a running fleet. No automatic user enrollment or lobby provisioning
+is installed by this change.
+
+`quod_lobby.pl` defines the shared lobby/device classes, class-to-eidolon
+associations and console menu. `quod_gui.pl` defines the first composite proof
+form using semantic editor, bindings and button roles. `lobby_instance.pl`
+defines private instance behaviour and grants invocation only to its explicit
+owner. Founding supplies these facts, using exact real anchors:
+
+```prolog
+% Personal lobby:
+lobby_owner(agent_instance_ref(UserNamespace, UserAnchor, UserInstance)).
+instance_of(prolog_console, console).
+lobby_vocabulary(LobbyClassNamespace, LobbyClassAnchor).
+presentation_vocabulary(PresentationNamespace, PresentationAnchor).
+gui_vocabulary(GuiNamespace, GuiAnchor).
+% Selected user's ontology:
+lobby_reference(ontology_ref(PersonalLobbyNamespace, PersonalLobbyAnchor)).
+```
+
+The shared lobby vocabulary also has an anchored `presentation_vocabulary/2`
+reference. These ontologies are founded with `quod_agent_predicates` so their
+ordinary scoped reads can prove `current_ontology_identity/2`. Device subjects
+use `depicts(Namespace, Anchor, Entity)`; an unanchored subject from an older
+lens remains display-only. Neither a namespace string nor a mesh name grants
+authority. All console requests use the user's selected signing identity.
+
+The existing presentation vocabulary supplies pure authoring helpers:
+
+```prolog
+model(Parts, Marks).
+% Parts are a parent-before-child list of:
+part(Id, Shape, Transform, Surface, Label, Subject).
+% Shape: group | box(W,H,D) | sphere(D) | plane(W,H) | cylinder(D,H)
+% Transform: transform(X,Y,Z,RX,RY,RZ) | relative(ParentId, transform(...))
+% Surface: no_surface (groups only) | material(Colour,Finish)
+%          | pbr(Colour,Metallic,Roughness,Emission)
+align(Shape, Face, TargetShape, TargetFace, Gap, Transform).
+```
+
+A recipe is an eidolon; its compiled `mark/7` values are visual occurrences.
+Recipes can evaluate arithmetic in dimensions and transforms through Prolog
+`is/2`; the resulting descriptors contain bounded whole millimetres/degrees.
+PBR factors are integer permille, converted at the rendering edge. Alignment
+joins axis-aligned bounding-box anchors in the target's local frame. A positive
+gap follows the target face's outward normal; a fractional-millimetre result
+fails instead of rounding. Parent ordering excludes cycles, duplicate identities
+and dangling references. Groups compose transforms without manufacturing a
+visible object. Labels may attach to groups or shapes.
+
+Babylon maps these values to transform nodes, primitive meshes and PBR materials.
+Unchanged occurrences retain their rendering resources. Changed geometry retires
+its own resources; surviving children are reparented before old parents are
+disposed. This client scene tree supplies no server spatial/perception index.
+Textures, asset-backed meshes, bones and particles need their later neutral
+asset/animation contracts and are not implemented by these helpers.
+
+One React build serves the world at `/` and Explorer at `/explorer/`, sharing
+session controls, key providers, signed operation journal and proof console.
+`client/` retains reusable protocol/renderer modules; both entry pages and their
+shared assets are built by `ui/` into `priv/explorer/`. There is no second console
+executor. Result bindings retain full binary bytes, including genesis anchors;
+display-only key abbreviations are not suitable for this data boundary. Signed
+request text retains its existing exact spelling.
+
+The desktop user can click the model or its accessible device button, select
+`prove_goal`, and work in the focused form. Its goal runs in the selected agent's
+exact signed origin; an explicit ontology selection uses the existing scoped
+proof semantics. Next retains the same proof, Stop discards staged changes and
+Accept submits the displayed solution. Closing the panel preserves its draft
+and live cursor within that session. Changing identity, actor or target retires
+the old console. This is not durable restoration of an interactive cursor after
+a browser restart; admitted operation outcomes remain in the existing journal.
+
+The edition recipe currently exposes a distinct structure presentation, not a
+model editor. Desktop controls remain usable without WebGL. Optional WebXR scene
+entry does not yet supply the round-touchpad menu or a headset proof workspace;
+headset acceptance remains outstanding. Projection is an explicit signed snapshot
+at entry/refresh, not a subscribed live view. Automatic revocation removal,
+continuous updates and missed-delta resynchronization therefore remain part of
+the future shared view-session work. A later command still passes ordinary ACLs.
+
+The isolated integration fixture creates real ontology owners, makes actual
+signed cross-ontology reads, rejects the wrong anchor and another valid actor,
+and restores the same scene from the personal lobby ledger after owner restart.
+It does not prove automatic creation, remote-node transfer or fleet activation.

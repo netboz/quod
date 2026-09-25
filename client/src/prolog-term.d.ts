@@ -16,3 +16,4 @@ export function compound(functor: string, args: PrologTerm[]): PrologTerm
 export function list(items: PrologTerm[], tail?: PrologTerm | null): PrologTerm
 export function renderTerm(value: PrologTerm): string
 export function goalText(value: PrologTerm): string
+export function scopedGoal(agentNamespace: string, targetNamespace: string, source: string): string

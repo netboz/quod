@@ -23,6 +23,7 @@ can_join(_, _, Key) :- peer_ready(Key).
 signup_invocation(signup(_, _, _), Principal) :- signup_principal(Principal, _).
 signup_invocation(signup_status(_, _), Principal) :- signup_principal(Principal, _).
 signup_invocation(ontology_creation_allowed(_, _, _), _).
+signup_invocation(ontology_hosting_allowed(Principal, _, _, _, _), Principal).
 signup_invocation(acknowledge_signup(Token, Reference), Reference) :-
     enrollment_receipt(_, Token, Reference).
 
@@ -36,7 +37,28 @@ signup(Token, Name, Reference) :-
         signup_options(Principal, Name, Token, Options),
         quod:root::create_ontology(Name, Options, Anchor),
         Reference = agent_instance_ref(Name, Anchor, me),
-        assertz(enrollment_receipt(Key, Token, Reference)))).
+        assertz(enrollment_receipt(Key, Token, Reference)),
+        signup_host(Node),
+        Node = agent_instance_ref(NodeNamespace, _, _),
+        NodeNamespace::request_ontology_hosting(Principal, Node, Name, Anchor, discoverable))).
+
+%% The node explicitly delegates this policy. Only the exact enrollment and
+%% its linked personal lobby qualify; consuming the receipt ends the grant.
+ontology_hosting_allowed(Principal, Node, Name, Anchor, discoverable) :-
+    current_principal(Principal),
+    signup_host(Node),
+    signup_principal(Principal, Key),
+    enrollment_receipt(Key, _, agent_instance_ref(Name, Anchor, me)).
+ontology_hosting_allowed(Owner, Node, Name, Anchor, discoverable) :-
+    current_principal(Owner),
+    signup_host(Node),
+    enrollment_receipt(_, _, Owner),
+    Owner = agent_instance_ref(UserNamespace, UserAnchor, me),
+    binary_codes(UserNamespace, UserBytes),
+    append(UserBytes, [47,108,111,98,98,121], LobbyBytes),
+    binary_codes(Name, LobbyBytes),
+    UserNamespace::(current_ontology_identity(UserNamespace, UserAnchor),
+                    lobby_reference(ontology_ref(Name, Anchor))).
 
 signup_status(Token, Reference) :-
     current_principal(Principal),
@@ -58,6 +80,7 @@ signup_options(Principal, Name, Token,
      terms([instance_of(human_user, me), agent_key(me, Key, active),
             lobby_vocabulary(LobbyNamespace, LobbyAnchor),
             lobby_provisioning(me, pending(LobbyName)),
+            hosting_node(Node),
             signup_origin(Namespace, Anchor, Token)]),
      external_predicate_modules([quod_agent_predicates])]) :-
     signup_principal(Principal, Key),
@@ -67,4 +90,5 @@ signup_options(Principal, Name, Token,
     binary_codes(LobbyName, LobbyBytes),
     current_ontology_identity(Namespace, Anchor),
     user_template(Source),
+    signup_host(Node),
     lobby_vocabulary(LobbyNamespace, LobbyAnchor).

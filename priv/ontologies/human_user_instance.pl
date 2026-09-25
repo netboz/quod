@@ -1,7 +1,10 @@
 %% Human-user instance behaviour. Founding supplies the local instance/key,
 %% exact lobby vocabulary and one pending personal-lobby requirement.
 %% Found with quod_agent_predicates; identity is the signed ontology instance.
-can_invoke(_, Principal, _, _) :- human_user_owner(Principal).
+%% The signed boundary verifies the principal's exact anchor. Admission must
+%% re-prove from local facts without invoking an external predicate.
+can_invoke(_, agent_instance_ref(Namespace, _, Instance), _, Namespace) :-
+    instance_of(human_user, Instance).
 
 human_user_owner(agent_instance_ref(Namespace, Anchor, Instance)) :-
     current_ontology_identity(Namespace, Anchor),
@@ -34,6 +37,9 @@ provision_lobby(Instance) :-
         quod:root::create_ontology(Name, Options, CreatedAnchor),
         assertz(lobby_provisioning(Instance,
             linked(ontology_ref(Name, CreatedAnchor)))),
+        hosting_node(Node),
+        Node = agent_instance_ref(NodeNamespace, _, _),
+        NodeNamespace::request_ontology_hosting(Owner, Node, Name, CreatedAnchor, discoverable),
         acknowledge_user_signup(Owner))).
 
 %% A pre-existing independently founded human may have no signup receipt.

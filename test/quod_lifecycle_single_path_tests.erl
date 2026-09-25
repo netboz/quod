@@ -504,17 +504,21 @@ hosting_action_checks_policy_and_conflicts(
     ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
     ok = wait_desired_absent(Ns, 300).
 
-personal_lobbies_use_shared_creation_and_recovery(_Fixture) ->
+personal_lobbies_use_shared_creation_and_recovery(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    {ok, Node} = quod_agent_ref:materialize_principal(Principal),
     {ok, Network} = quod_ontology:network_identity(),
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
     unlink(Auth),
     try
         Classes = found_lobby_classes(),
-        Users = [found_lobby_user(Classes, Network) || _ <- [first, second]],
+        Users = [found_lobby_user(Classes, Network, Node) || _ <- [first, second]],
         [begin
              #{reference := Owner, lobby_name := Name} = User,
              commit_root({assertz, {ontology_creator_agent, Owner}}),
+             {ok, _, _} = quod_prolog:execute(ActorNs, {assertz,
+                 {can_host_ontology, Owner, Node, Name, {'Anchor'}, discoverable}}),
              Goal = {',', {provision_lobby, me}, {lobby_reference, {0}}},
              {Bytes, Signature} = lobby_user_request(User, execute, Goal),
              ?assertMatch({ok, _, {normalized, {committed, _, _}}},
@@ -547,7 +551,17 @@ personal_lobbies_use_shared_creation_and_recovery(_Fixture) ->
         {DeniedBytes, DeniedSig} = lobby_user_request(Second, read, SceneGoal),
         ?assertMatch({ok, _, {normalized, {failed, _}}},
                      quod_client_goal_ingress:submit(DeniedBytes, DeniedSig)),
-        ok = quod_namespace_manager:stop_content(FirstLobby),
+        {ok, _, _} = quod_prolog:execute(ActorNs,
+            {retract, {hosts_ontology, Node, FirstLobby, FirstAnchor, discoverable}}),
+        ok = wait_desired_absent(FirstLobby, 300),
+        LobbyPid = quod_reg:where({quod_prolog, FirstLobby}),
+        case LobbyPid of
+            undefined -> ok;
+            _ ->
+                LobbyMonitor = monitor(process, LobbyPid),
+                receive {'DOWN', LobbyMonitor, process, LobbyPid, _} -> ok
+                after 5000 -> error(lobby_not_stopped) end
+        end,
         {ok, resumed, FirstLobby, FirstAnchor} = quod_ontology:join(
             FirstLobby, binary:encode_hex(FirstAnchor, lowercase),
             [{seed, "127.0.0.1", 14567}]),
@@ -558,7 +572,9 @@ personal_lobbies_use_shared_creation_and_recovery(_Fixture) ->
                      quod_client_goal_ingress:submit(ResumedBytes, ResumedSig))
     after stop_process(Auth) end.
 
-open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
+open_signup_uses_policy_and_ordinary_signed_goals(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    {ok, Node} = quod_agent_ref:materialize_principal(Principal),
     {ok, Network} = quod_ontology:network_identity(),
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
@@ -568,7 +584,10 @@ open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
         {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
                                                      "ontologies/human_user_instance.pl")),
         {SignupNs, SignupAnchor} = found_lobby_source(<<"signup">>, "quod_signup.pl",
-            [{user_template, Template}, {lobby_vocabulary, ClassNs, ClassAnchor}]),
+            [{user_template, Template}, {lobby_vocabulary, ClassNs, ClassAnchor},
+             {signup_host, Node}]),
+        {ok, _, _} = quod_prolog:execute(ActorNs,
+            {assertz, {ontology_hosting_policy, SignupNs, SignupAnchor}}),
         Grants = [{ontology_creation_policy, ClassNs, ClassAnchor},
                   {ontology_creation_policy, SignupNs, SignupAnchor}],
         [commit_root({assertz, Grant}) || Grant <- Grants],
@@ -585,6 +604,8 @@ open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
                              quod_client_goal_ingress:submit(Bytes, Signature)),
                 ok = wait_ready(Name, 300),
                 Owner = {agent_instance_ref, Name, quod_simplex:genesis_hash(Name), me},
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ActorNs,
+                    {hosts_ontology, Node, Name, quod_simplex:genesis_hash(Name), discoverable})),
                 {200, #{bindings := [Recovered]}} = quod_client_http:signed_goal_result(
                     resolve_lobby_request(Bytes, Signature)),
                 ?assertEqual(quod_client_goal_parser:value_text(Owner), maps:get(<<"V0">>, Recovered)),
@@ -597,6 +618,17 @@ open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
                  end || BadGoal <- [{assertz, {unexpected, fact}},
                        {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}]],
                 User = Applicant#{reference => Owner},
+                %% An enrollment receipt is not permission to host arbitrary
+                %% content, and a caller cannot supply someone else's identity.
+                [begin
+                    {Rejected, RejectedSig} = lobby_user_request(User, execute,
+                        {'::', ActorNs, Request}),
+                    ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        quod_client_goal_ingress:submit(Rejected, RejectedSig))
+                 end || Request <- [
+                    {request_ontology_hosting, Owner, Node, <<"unrelated">>, <<1:256>>, discoverable},
+                    {request_ontology_hosting, maps:get(reference, Applicant), Node,
+                     Name, quod_simplex:genesis_hash(Name), discoverable}]],
                 {Escalation, EscalationSig} = lobby_user_request(User, execute,
                     {'::', ?ROOT_NS, {assertz, {root_administrator_agent, Owner}}}),
                 ?assertMatch({ok, _, {normalized, {failed, _}}},
@@ -604,8 +636,19 @@ open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
                 {Provision, ProvisionSig} = lobby_user_request(User, execute, {provision_lobby, me}),
                 ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                              quod_client_goal_ingress:submit(Provision, ProvisionSig)),
-                {ontology_ref, LobbyNs, _} = lobby_user_reference(User),
+                {ontology_ref, LobbyNs, LobbyAnchor} = lobby_user_reference(User),
                 ok = wait_ready(LobbyNs, 300),
+                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ActorNs,
+                    {hosts_ontology, Node, LobbyNs, LobbyAnchor, discoverable})),
+                {Unauthorized, UnauthorizedSig} = lobby_user_request(User, execute,
+                    {'::', ActorNs, {host_ontology, Node, LobbyNs, LobbyAnchor, discoverable}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Unauthorized, UnauthorizedSig)),
+                {Revoked, RevokedSig} = lobby_user_request(User, execute,
+                    {'::', ActorNs, {request_ontology_hosting, Owner, Node,
+                                    LobbyNs, LobbyAnchor, discoverable}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Revoked, RevokedSig)),
                 %% The signup ontology retains unfinished receipts, not a
                 %% permanent table of human-user instances.
                 {Status, StatusSig} = lobby_user_request(Applicant, read, {signup_status, Token, {0}}),
@@ -614,7 +657,26 @@ open_signup_uses_policy_and_ordinary_signed_goals(_Fixture) ->
                 User
             end || _ <- [first, second]],
             [First, Second] = Users,
-            ?assertNotEqual(lobby_user_reference(First), lobby_user_reference(Second))
+            ?assertNotEqual(lobby_user_reference(First), lobby_user_reference(Second)),
+            %% A denied host request must roll back the prepared creation and
+            %% receipt, not leave an ontology with no restart authority.
+            Policy = {ontology_hosting_policy, SignupNs, SignupAnchor},
+            {ok, _, _} = quod_prolog:execute(ActorNs, {retract, Policy}),
+            try
+                {Public, _} = Pair = quod_identity:generate(),
+                Applicant = #{reference => {agent_instance_ref, SignupNs, SignupAnchor, {signup, Public}},
+                              keypair => Pair, network => Network},
+                Token = crypto:strong_rand_bytes(32),
+                Name = unique_ns(<<"denied-signup">>),
+                {Rejected, RejectedSig} = lobby_user_request(Applicant, execute,
+                    {signup, Token, Name, {0}}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    quod_client_goal_ingress:submit(Rejected, RejectedSig)),
+                ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Name)),
+                ?assertMatch({fail, _}, quod_prolog:prove_ro(SignupNs,
+                    {enrollment_receipt, Public, Token, {'_'}})),
+                ?assertEqual(false, desired_has_content(Name))
+            after {ok, _, _} = quod_prolog:execute(ActorNs, {assertz, Policy}) end
         after [commit_root({retract, Grant}) || Grant <- Grants] end
     after stop_process(Auth) end.
 
@@ -635,12 +697,13 @@ found_lobby_source(Prefix, File, Facts) ->
     ok = wait_ready(Ns, 300),
     {Ns, quod_simplex:genesis_hash(Ns)}.
 
-found_lobby_user({ClassNs, ClassAnchor}, Network) ->
+found_lobby_user({ClassNs, ClassAnchor}, Network, Node) ->
     {Public, _} = Pair = quod_identity:generate(),
     Name = unique_ns(<<"personal-lobby">>),
     {Ns, Anchor} = found_lobby_source(<<"human-user">>, "human_user_instance.pl",
         [{instance_of, human_user, me}, {agent_key, me, Public, active},
          {lobby_vocabulary, ClassNs, ClassAnchor},
+         {hosting_node, Node},
          {lobby_provisioning, me, {pending, Name}}]),
     #{reference => {agent_instance_ref, Ns, Anchor, me},
       keypair => Pair, network => Network, lobby_name => Name}.
@@ -1589,6 +1652,17 @@ dynamic_hosting_survives_content_tree_restart(
            #{actor_ns => ActorNs, actor_principal => ActorPrincipal},
            Ns, Anchor),
     RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
+    %% Include the ordinary signup products in this real content-tree restart.
+    %% The only restart inventory after reset comes from committed hosting.
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(ActorPrincipal),
+    {ok, [#{'Refs' := Hosted}], _} = quod_prolog:prove_ro(ActorNs,
+        {findall, {ontology_ref, {'Ns'}, {'Anchor'}},
+         {hosts_ontology, NodeRef, {'Ns'}, {'Anchor'}, discoverable}, {'Refs'}}),
+    ?assert(length(Hosted) >= 4),
+    Profiles = [{Name, Anchor0, State} || {ontology_ref, Name, Anchor0} <- Hosted,
+        {ok, [#{'State' := State}], _} <-
+            [quod_prolog:prove_ro(Name, {lobby_provisioning, me, {'State'}})]],
+    ?assertEqual(2, length(Profiles)),
 
     stop_process(Manager),
     stop_process(NsSup),
@@ -1607,6 +1681,17 @@ dynamic_hosting_survives_content_tree_restart(
     ?assertEqual(ActorAnchor, quod_simplex:genesis_hash(ActorNs)),
     ok = wait_node_actor_principal(ActorPrincipal, 300),
     ?assertEqual({ok, ready}, quod_ontology:local_state(Ns)),
+    [begin
+        ok = wait_ready(Name, 300),
+        ?assertEqual(Anchor0, quod_simplex:genesis_hash(Name)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name,
+            {lobby_provisioning, me, State})),
+        {linked, {ontology_ref, LobbyName, LobbyAnchor}} = State,
+        ok = wait_ready(LobbyName, 300),
+        ?assertEqual(LobbyAnchor, quod_simplex:genesis_hash(LobbyName)),
+        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(LobbyName,
+            {lobby_owner, {agent_instance_ref, Name, Anchor0, me}}))
+     end || {Name, Anchor0, State} <- Profiles],
     Config = desired_content(Ns),
     ?assertEqual(Anchor, maps:get(genesis_hash, Config)),
     ?assertNot(maps:is_key(prepared_genesis_entry, Config)),

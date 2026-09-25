@@ -16,10 +16,21 @@ can_invoke(_, Principal, _, Namespace) :-
     node_ontology(Namespace), node_instance_reference(Principal).
 can_invoke(host_ontology(Node, Namespace, Anchor, Visibility), Principal, _, _) :-
     can_host_ontology(Principal, Node, Namespace, Anchor, Visibility).
+can_invoke(request_ontology_hosting(Principal, _, _, _, _), Principal, _, _).
 
 %% Applications may add narrower can_host_ontology/5 rules to this node's
 %% policy. A user login or a hosting declaration alone grants no authority.
 can_host_ontology(Node, Node, _, _, _) :- node_instance_reference(Node).
+%% Entry binds the requester to the authenticated principal. Foreign policy
+%% belongs in the ordinary proof, not the strictly local admission predicate.
+request_ontology_hosting(Principal, Node, Namespace, Anchor, Visibility) :-
+    can_host_ontology(Principal, Node, Namespace, Anchor, Visibility),
+    host_ontology(Node, Namespace, Anchor, Visibility).
+request_ontology_hosting(Principal, Node, Namespace, Anchor, Visibility) :-
+    ontology_hosting_policy(Policy, PolicyAnchor),
+    Policy::(current_ontology_identity(Policy, PolicyAnchor),
+             ontology_hosting_allowed(Principal, Node, Namespace, Anchor, Visibility)),
+    host_ontology(Node, Namespace, Anchor, Visibility).
 
 action(host_ontology(Node, Namespace, Anchor, Visibility),
        [ontology_hosting_request(Node, Namespace, Anchor, Visibility)],

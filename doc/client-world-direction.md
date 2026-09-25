@@ -1489,17 +1489,29 @@ It does not prove automatic creation, remote-node transfer or fleet activation.
 `quod:signup` offers an open Prolog creation policy. A new key signs as the derived
 `signup(Key)` applicant in that exact ontology, with authority only to create its
 profile and inspect its own unfinished enrollment. `signup/3` commits the prepared
-human-user identity and its temporary receipt in one ordinary transaction. The
+human-user identity, temporary receipt and node hosting declaration in one ordinary transaction. The
 profile's founding options contain its owner key, pinned lobby class, pending
-lobby requirement and the exact signup receipt identity. No separate registration
+lobby requirement, chosen `hosting_node/1` and exact signup receipt identity. No separate registration
 HTTP command or permanent central human registry is introduced.
 
 `human_user_instance.pl` defines `provision_lobby/1`: the pending requirement,
 prepared lobby reference and receiver creation effect form one atomic transition.
-The same transaction consumes the signup receipt. `quod_lobby.pl` supplies reviewed
+The same transaction records the lobby's node hosting declaration and consumes
+the signup receipt. `quod_lobby.pl` supplies reviewed
 instance source and exact presentation/GUI references as Prolog founding data.
 Root proves the full options through the delegated creation policy. No imported
 source path is evaluated on whichever node receives a public signup request.
+
+Host selection is explicit Prolog policy: signup supplies `signup_host(NodeRef)`.
+The selected node opts in with `ontology_hosting_policy(SignupNs, SignupAnchor)`.
+Its `request_ontology_hosting/5` entry binds the supplied requester to the signed
+principal; the action proves the anchored foreign policy before calling the
+shared `host_ontology/4`. Admission itself remains a strictly local proof.
+The enrollment policy permits only the applicant's exact receipted profile or
+that profile's linked personal lobby; consuming the receipt ends this permission.
+Denied hosting rolls back creation in the same transaction. `discoverable`
+publishes the route, while profile and lobby content remain owner-authorized.
+No browser endpoint or incidental proof executor selects the durable host.
 
 The normal browser Create account flow executes those two signed actions. Its
 existing IndexedDB operation journal atomically replaces the completed signup

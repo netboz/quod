@@ -259,6 +259,15 @@ content-access rights.
 
 The target's `can_invoke/4` policy admits delegated requests through
 `can_host_ontology(Principal, NodeRef, Namespace, GenesisAnchor, Visibility)`.
+
+For policy owned by another ontology, the node installs an exact
+`ontology_hosting_policy(PolicyNamespace, PolicyAnchor)`. Callers use
+`request_ontology_hosting(Principal, NodeRef, Namespace, Anchor, Visibility)`;
+the entry ACL binds `Principal` to the authenticated caller. The ordinary action
+then proves that policy's `ontology_hosting_allowed/5` through an anchored scope
+and invokes the same `host_ontology/4`. This also accepts existing local
+`can_host_ontology/5` grants. Foreign policy queries must not run inside
+`can_invoke/4`, whose admission verdict is rechecked using committed local facts.
 The node's own authenticated instance retains its administrative authority;
 other callers need an explicit node-owned rule or fact. Delegating this action
 does not delegate raw assertions. Its `action/3` declaration also lets the normal

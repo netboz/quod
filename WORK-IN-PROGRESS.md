@@ -1032,3 +1032,30 @@ This generic action has not been installed into the deployed node ontologies.
 Automatic signup still needs an explicit host-selection rule and its node-owned
 delegation; it is not inferred from the browser endpoint. The .237 browser and
 cloud-discovery acceptance failures recorded above remain unresolved.
+
+
+## 2026-09-25 — signup and lobby creation include durable hosting
+
+Signup now chooses its host through explicit `signup_host/1` Prolog policy.
+The selected node delegates to the exact signup ontology through
+`ontology_hosting_policy/2`. Its ordinary `request_ontology_hosting/5` binds the
+requester at entry and proves foreign policy inside the transaction, then calls
+the shared `host_ontology/4`. Admission remains strictly local.
+
+Profile creation and lobby creation each commit their exact discoverable hosting
+fact with the existing domain transition. Enrollment permission ends when the
+lobby transaction consumes the receipt. The profile's existing entry ACL was
+also corrected to be re-provable without an external predicate; exact signed
+identity validation and owner checks remain in the existing boundaries.
+
+Focused verification: 61 tests passed and xref passed. Negative checks cover
+unrelated hosting, principal substitution, receipt revocation and full rollback
+when hosting is denied. The real content-tree restart test clears in-memory
+hosting/storage maps and restores both signup profiles and their lobbies from
+committed hosting facts. No Erlang production change or pinned module change.
+Production delta +43/-2, net +41 lines. Evidence and earlier failed attempts are
+retained in `_build/signup-hosting-20260925/REVIEW.md`.
+
+Cluster activation remains next. A fresh read-only inspection confirms both
+cloud nodes still await the four current system routes. Initial-read readiness
+also remains distinct from durable hosting and needs acceptance verification.

@@ -1450,3 +1450,36 @@ Evidence and the complete verification:
 The oversized first forensic capture's truncated output is retained separately
 from the successfully decoded bounded capture; no silent rerun or erased
 failure. Fleet remains .246 with existing data retained.
+
+
+## 2026-09-25 — consensus correction resumed
+
+Yan authorized the coherent consensus correction and its necessary performance
+work. After discussion, portable snapshots/compaction are deferred: retain full
+certified history and existing recovery. Snapshots would restore the same
+irreversible split, not repair it. No old votes, ledgers or accounts are changed.
+
+`doc/finality-round-recovery-plan.md` §0 reconciles the historical prerequisite
+list with current source. Phase 1A owner/scanning work already shipped; the
+later settled AM3 contract and its implementation already authenticate exact
+applied/rejected results. The older proposed block-receipt format is not an
+additional prerequisite. Both atomic Vote/Resolve/Complete and independent
+execution exist. Current journal/store formats are QSJ5/V7; proposed cut labels
+are QSJ6/V8. The atomic source cut, review and full release gates remain needed.
+
+The real pre-cut engine, timeout/vote handlers and disk signing journals now
+reproduce N=8, quorum=6, 8 support / 3 commit / 5 complaint at slot165. All eight
+journals recover the same final latches. Even granting a notarized child166,
+only three can commit it; proposal167 is blocked. This starts at the admitted
+block seam, not a full QUIC/DTX deployment, and does not establish what caused
+the original hardware timeouts. The diagnostic is a retained negative control,
+not a passing recovery test for the future implementation.
+
+Evidence: `_build/finality-resume-20260925/finality_split_probe.erl`,
+`split-run-1.log`, and `run-1/result.term` (journals retained alongside).
+The baseline result-authority check ran 21 existing focused tests against the
+available test build: 13 certificate/vector checks, four coordinator lifecycle
+checks and four fresh-result cases, including a deliberately false transport
+label. All passed; no full gate or current-tree rebuild is claimed. Production
+source delta at this checkpoint is zero. Fleet remains .246, original signup
+unresolved, and d8deff1's narrow startup correction is still not deployed.

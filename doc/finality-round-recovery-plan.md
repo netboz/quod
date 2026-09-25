@@ -1,5 +1,12 @@
 # Finality recovery without sacrificing write throughput — reviewed plan
 
+**Current implementation entry point: §0.** The round-9 review below is the
+historical architecture approval, not a current inventory of prerequisites.
+Yan authorized continuation of the consensus correction on 2026-09-25. The
+snapshot scope in §0 was then accepted: retain full history for this correction
+and defer portable snapshots/compaction. Implementation/release verification
+boundaries remain in force.
+
 Status: **architecture, compact-witness representation and exact-claim witness
 selection approved in round 9 (review of `6dd1bd5`); F0's core
 paper/confirmation and H1 attribution gates are closed. Performance Roadmap
@@ -38,6 +45,85 @@ Round 9 confirms the correction at the existing exact-entry verifier; it changes
 the supplied-witness contract explicitly, not the consensus vote rule.
 Consensus, DTX and signing-journal code still require review before commit.
 This commit is a plan only: no code, format, release bump or fleet change.
+
+## 0. Current implementation contract and prerequisite reconciliation
+
+The source baseline is `d8deff1`; the retained development fleet is .246.
+The approved Simplex direction, terminal-material-era boundary and selected
+compact-witness contract remain §§4.1, 4.3.10 and 7.1. Do not revive any of
+the withdrawn candidates recorded below. The following dispositions supersede
+historical statements that Phase 1A or independent-lane implementation still
+need to begin.
+
+| Prerequisite | Current disposition |
+|---|---|
+| Live ledger scans / owner lifetime | Phase 1A was implemented, reviewed and deployed in .152; subsequent owner/history work is governed by `multiwrite-architecture.md`. Preserve those owners, captured views, indexed lookup and verified deltas. Do not redo the retired scan-removal programme. Absolute latency targets are still acceptance gates, not completed work. |
+| Application-result authentication | The later settled AM3 contract in `multiwrite-architecture.md` §3 and its subsequent amendments replaced the old proposed block-receipt solution. Preserve the existing exact application proof plus historical-committee result certificate. F1 changes their nested finality evidence, not the canonical applied/rejected result authority. No speculative receipt vector or second result path is required for this repair. |
+| Atomic and independent execution | Both exist. Atomic controls are Vote/Resolve/Complete; the old Prepare/Decision/Finalize terminology below does not describe the current implementation. Preserve applied-before-success, exact request identity and original deadlines. |
+| Recovery saves versus portable snapshots | AM2 approves tip-bound local saves; this is not a portable, committee-authenticated recovery snapshot or authority to prune history. The current foreign-history checkpoint is compared with a startup replay. Yan accepted deferring the portable snapshot/compaction contract until after this correction; AM2 is not claimed to implement it. |
+| Remaining .226 performance findings | Missing demanded history and redundant replica recovery drivers remain the named deferred findings in the performance closure. Reopen only when new evidence makes one a dependency of this correction. |
+
+AM3's concrete path is `quod_dtx_coordinator:operation_application_evidence`
+(the transport label is discovery only), `quod_dtx_current_view` (exact
+history followed by the existing result collector), `quod_applied_certificate`
+(domain, occurrence, canonical result and historical signers), and
+`quod_commit_validation:validate_receipt_evidence` (persisted receipt
+verification). The signer remains behind local durable application. Retain
+same-block OCC, duplicate, restart and wrong-result tests; signing a result
+must never become permission to change it. This supersedes the older
+block-receipt prerequisite, not the need to verify F1's integration with AM3.
+
+**Accepted snapshot scope:** retain full certified history,
+existing startup reconstruction and journal custody in F1. Defer portable
+snapshot/compaction design and implementation; do not add an unexplained root
+field to the consensus grammar. This explicitly supersedes the older pre-F1
+snapshot-design dependency. It does not promise that a later
+snapshot design can avoid every future format change. Snapshots accelerate
+restoration; they cannot erase final-vote latches, translate old signatures,
+or recover an unresolved operation by declaring it aborted. No snapshot root or new pruning authority is included in F1.
+
+### Implementation order within the one coherent cut
+
+1. **Represent protocol progress and material history separately.** Replace
+   slot-as-both meanings at the existing codec, signature and journal seams.
+   Use era/view for votes, candidates, leader placement and protocol evidence;
+   material height for Prolog revisions, OCC, outcomes, history reads and DTX
+   references. Pin genesis and terminal-M virtual-root vectors. Journal and
+   store versions available for this cut are QSJ6 and V8, not the already-used
+   QSJ4/V6 labels in the historical review.
+2. **Replace the existing consensus/finality path and its consumers together.**
+   Advance on notarization or complaint certificate; a complaint appends no
+   entry. Permit an empty carrier through application barriers, and finalize
+   material ancestors through the one ancestry verifier. Keep useful material
+   pipelining and terminal-M restrictions. Extend durable proof custody,
+   streamed history and exact-entry witness selection through their existing
+   owners. Update ingress placement from that same era/view state. Remove the
+   old cross-slot exclusion, terminal skip, complaint-camp/grace policy,
+   immediate-child-only finality and global depth-one progress fence in this
+   same source cut. No intermediate deployment.
+3. **Validate and release that complete candidate.** Exercise the reproduced
+   N=8 split, the N=4 and stacked splits, silent/delayed leaders, restart,
+   custody failure and membership overlap in §8. Measure unique durable
+   completions and healthy-write overlap, not carrier counts as throughput.
+   Run focused checks while editing; full sequential gates and consensus-area
+   review at the completed-cut boundary. Then isolated hardware acceptance,
+   followed by one separately labeled coordinated activation. Preserve the
+   old network and uncertain requests until that boundary; archive them as
+   unresolved rather than resubmitting them on a new identity.
+
+### Existing-path integration and deletion obligations
+
+| Existing seam | Required replacement / retained responsibility |
+|---|---|
+| `quod_simplex:eng_offer`, `grow_tree`, `detect_commits`, `detect_complaints` | One complete parent-bound tree and generalized ancestor finality; complaint certificates advance views without synthesizing ledger rows. Replace repeated whole-tree scans with dependency-local advancement if counted carrier-chain work establishes a slope; no second engine. |
+| `choose_final_vote`, `proposal_slot`, `live_pipeline_slot`, `consensus_barrier` | One same-era/view final-vote latch; distinguish material admission pressure from necessary proof progress. A stalled last write must progress without another client request. |
+| `restore_signing_state`, `quod_signing_journal:record_support/2`, `record_vote/4`, `reconcile/2` | Keep durable-before-send ordering and exact bodies. Key protocol decisions by era/view; release retained ancestry only after the existing archive durably owns its selected proof. The journal currently fences same-slot final votes; the cross-slot rule lives in the consensus guard. |
+| `quod_ledger` native/wrapped artifact boundary | One canonical block, material entry and compact witness grammar; retain decode-once authentication and zero foreign-symbol allocation. Replace native `#implicit_cert{}` and synthetic `noop` skip semantics. |
+| `quod_ledger_store:append/2`, sessions and sparse material index | Sync proof-plus-entry groups before publishing material height. Preserve borrowed immutable views and one batch sync; do not index carriers as material entries or create a carrier side log. |
+| `quod_catchup:verify_forward`, `verify_entry_finality`, page workers | One streamed ancestry and era verifier shared with live history. Keep verified prefix/job state through pages; no prefix rereads or complete unbounded witness blob. |
+| `quod_dtx:certified_entry_ref_matches/5`, `quod_foreign_log` | Match the exact immutable material claim with a fully verified selected witness. Preserve local-host ownership, historical committee lookup and original caller deadlines. |
+| `quod_ingress_state`, Simplex relay/custody reconciliation | Derive leader placement from era/view, retaining the original signed request and existing event-driven ownership. Retire obsolete placement on view/era changes without creating a fresh operation. |
+| `quod_committed_projection`, Prolog, outcome/phase indexes and runtime | Consume contiguous material entries only. Empty carriers produce no KB mutation, result, runtime reaction or effect; a real empty-diff transaction still does. Existing AM3/atomic result publication remains after durable application. |
 
 ## 1. Throughput is a design requirement
 
@@ -194,7 +280,7 @@ forward ancestry walk, including after restart.
 ### 4.2 Application ordering versus consensus progress
 
 DTX must still prevent later application work from assuming an uncommitted
-Prepare/Decision/Finalize has been applied. That does not justify preventing
+Vote/Resolve/Complete has been applied. That does not justify preventing
 consensus from exchanging the evidence needed to finish the pending block.
 Effects and facts remain released only through certified, ordered apply.
 
@@ -959,7 +1045,7 @@ the atomic cut is authorized.
 | Owner | Keep | Refactor/delete in the atomic cut |
 |---|---|---|
 | `quod_simplex` | one engine, useful pipeline, certificate pool, validation workers, ordered finalization, singleton membership payload | proposed terminal M / empty-suffix rule at the shared semantic gate and certified M era root; no I/A sequence; use `active_validators`; delete terminal complaint-to-ledger-skip, adjacent-slot exclusions, camp/grace machinery only in the approved atomic cut |
-| `quod_signing_journal` | atomic supported-body/vote custody, DTX/content custody | one era/view discipline in QSJ4; no round/typed-complaint/SKIP/lock branch; transfer proof custody to the existing durable archive before pruning; §7.1 defines the review contract |
+| `quod_signing_journal` | atomic supported-body/vote custody, DTX/content custody | one era/view discipline in QSJ6; no round/typed-complaint/SKIP/lock branch; transfer proof custody to the existing durable archive before pruning; §7.1 defines the review contract |
 | `quod_ingress_state` and relay custody | existing queues, signed submissions and authenticated delivery | one consensus-derived leader; duplicated leadership calculation and stale placement assumptions |
 | `quod_ledger` and records | canonical bytes, store and codec ownership | proposed material-only append with carrier ancestry proofs; no second carrier log; delete complaint-certified synthetic terminal entries and slot/index equality |
 | `quod_catchup` | one chain/era/certificate verifier; exact canonical bytes | generalized ancestry grammar, terminal-M empty suffix and certified virtual root verified identically live and on fresh catch-up; never rewrite signed parent hashes |
@@ -1011,7 +1097,8 @@ The completed H1 attribution remains the pre-cut evidence baseline:
 One lost overlap does not explain the earlier 11–17 s chains. Neither
 algorithm restoration nor replacement proves the measured scan cost gone.
 Preserve the archived H1 traces and the stuck group. Cold start, compaction and
-carried small fixes stay separate. L2 remains gated; Yan's lane files untouched.
+carried small fixes stay separate. Both existing write lanes remain covered;
+Yan's lane files stay untouched.
 
 ## 7. Review and implementation sequence
 
@@ -1107,12 +1194,12 @@ hard breaks, not bumps to files or network state performed by this plan:
 
 | Family / current source | New cut | Invariant |
 |---|---|---|
-| `quod_ledger`: `{quod_block,1,…}` | Block grammar **2** | Canonical era id, era-local view, exact protocol-parent reference and payload; height is not the view. Empty carriers use a distinct empty payload, never the retired `noop` skip. Their timestamp is derived from the parent, so no proposer-local clock changes carrier bytes for a fixed parent/era/view. This grammar must not freeze until two separate reviewed contracts define (a) deterministic per-transaction outcome computation/verification against the exact parent, including same-block OCC and pipelined proposals, and (b) the minimum canonical recovery-state commitment, atomic installation and custody/archive proof. Reserving unexplained fields is not closure. |
+| `quod_ledger`: `{quod_block,1,…}` | Block grammar **2** | Canonical era id, era-local view, exact protocol-parent reference and payload; height is not the view. Empty carriers use a distinct empty payload, never the retired `noop` skip. Their timestamp is derived from the parent, so no proposer-local clock changes carrier bytes for a fixed parent/era/view. Preserve the implemented AM3 outcome contract and existing recovery as specified in §0. No speculative outcome vector or snapshot-root field; no pruning authority. |
 | `quod_ledger`: `{quod_entry,1,…}` and direct/immediate-child proof shapes | Entry grammar **2**, one versioned generalized finality-witness grammar | Material index, original block bytes, compact finality head/QC and binding to a separately streamed ancestry span. A direct commit is the zero-descendant case. No raw old `#implicit_cert{}` compatibility branch; no carrier-only entry. |
 | `quod_simplex`: `SHARE_DOMAIN_VERSION=2` | Signature-domain/message version **3** | Sign vote kind, ontology incarnation, era, view and exact value; complaints still have no value. Never compare era-local views without their era identity. |
 | `quod_relay`: `{sx2,Ns,Inner}` | **`sx3`** consensus envelope | Same authenticated channel/owner, new era-aware shares/certificates and block bytes; reject old consensus envelope. This module, not a new wire module, owns consensus framing. |
-| `quod_signing_journal`: **QSJ3**, record version 3 | **QSJ4**, record version **4** | One chain-bound journal; per-era/view rows and signing floors, exact supported bytes, final latches and custody. No journal-per-era service or rewriting old votes. |
-| `quod_ledger_store`: **V5**, magic `0x915106AE` | **V6**, magic `0x915106AF` | Proof-kind frames and complete proof-plus-entry groups at the existing CRC/sparse-index owner; journal custody transfers after sync. No unrelated phase-index backend replacement or carrier side log. Before F1, the compaction contract must define canonical recovery encoding/root, atomic install, exact-reference/DTX/finality-carrier custody, archive availability and dormant recovery. Do not force a second format/re-found by deciding after the cut. |
+| `quod_signing_journal`: **QSJ5**, record version 5 | **QSJ6**, record version **6** | One chain-bound journal; per-era/view rows and signing floors, exact supported bytes, final latches and custody. No journal-per-era service or rewriting old votes. |
+| `quod_ledger_store`: **V7**, magic `0x915106B0` | **V8**, magic `0x915106B1` | Proof-kind frames and complete proof-plus-entry groups at the existing CRC/sparse-index owner; journal custody transfers after sync. No unrelated phase-index backend replacement or carrier side log. Retain full history and selected ancestry custody; portable snapshots and compaction are deferred by §0. Do not claim this prevents every later format change. |
 | `quod_catchup`: height-only `blocks_req` / complete-entry `blocks_resp_bytes` | One replacement paged grammar with a bound ancestry-span cursor | Material descriptors and proof parts use the same serving/verification workers and transport. Current height-only pages cannot address unindexed proof suffixes; replace/generalize the grammar, no parallel chunk service or old/new fallback. |
 | `quod_dtx`: certified ref **2** | Certified ref **3** | Same immutable identity/height/block/record claim plus compact era/view/hash head and its commit QC. The head is a preferred witness, not claim identity or a sole permitted proof. One exact-entry verifier. |
 
@@ -1402,7 +1489,7 @@ suffixes is deliberately replaced by material-prefix compatibility:
   final vote. Ordinary implicit finality through a material child must pass;
   a material child above terminal M must fail.
 - **Witness larger than a physical envelope:** stream one logical witness
-  across multiple 900 KiB network pages and multiple V6 proof frames, including
+  across multiple 900 KiB network pages and multiple V8 proof frames, including
   a total larger than the 64 MiB physical-frame ceiling. Keep the compact ref
   below its existing bound. Missing/reordered/tampered parts cannot authorize
   it; page continuation must not re-read each earlier prefix. No carrier-count
@@ -1447,7 +1534,7 @@ gate exceptions. No implementation gates are claimed for this planning edit.
 | `active_validators`, `committee_delta`, history committee views, membership action docs | one ordinary M delta and certified era root, no I/A sequence; old proof suffix verified with O; preserve singleton selection and ordinary durable result semantics |
 | Signing journal moduledoc | crash-safe view decisions, retained evidence, pruning and break |
 | `include/quod_ledger.hrl`, ledger and catch-up docs | proposed material-only append, era-local views, proof-only carrier custody and exact unmodified parent binding; remove old skip/depth-one-only claims |
-| `quod_ledger_store:append/2`, `scan`, `locate/2`; `quod_catchup:serve_blocks`, `cap_bytes` and wire grammar | one V6 complete-group/sparse-material index contract and paged proof spans; delete one-frame-per-complete-entry assumptions, preserve bounded seeks, read-only snapshots and one batch sync |
+| `quod_ledger_store:append/2`, `scan`, `locate/2`; `quod_catchup:serve_blocks`, `cap_bytes` and wire grammar | one V8 complete-group/sparse-material index contract and paged proof spans; delete one-frame-per-complete-entry assumptions, preserve bounded seeks, read-only snapshots and one batch sync |
 | `quod_dtx:certified_entry_ref_matches/5`, `valid_certified_ref_finality`; exact-reference/foreign-history docs | in F1, immutable claim verified using the existing owner's selected valid witness; identify the intentional replacement of supplied-proof-only validation, never silently weaken it or rewrite signed references |
 | Ingress and DTX relay comments | one leader projection and custody wake |
 | `doc/content-layer.md` around lines 220–262 | replace terminal-skip/adjacent-vote/camp/grace story with the approved protocol |

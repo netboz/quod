@@ -1150,3 +1150,26 @@ initial signup/profile/lobby readiness and the Prolog resource-policy refactor
 remain open. This release does not claim those issues fixed. No full test suite
 was repeated. Evidence, image digest, retained failures and final checks:
 `_build/proof-budget-128k-20260925/deployment-v1/`.
+
+
+## 2026-09-25 — reproduced signed_target_unavailable during account setup
+
+A fresh browser signup on .238 committed, then its profile read and lobby action
+both received HTTP 503 signed_target_unavailable 27–31 ms later. The test key,
+journal and trace are retained under `_build/signed-target-unavailable-20260925/browser-v1/`.
+The founder also has a separate newly created profile without a lobby; whether
+that is Yan's reported account has not yet been confirmed.
+
+Ingress now uses the existing exact directory-route notification wait before
+initial submission, bounded by the signed deadline. It rechecks local ownership
+and preserves the original peer/principal when the new target starts locally.
+No uncertain operation is retried. Local admission and hosted-route publication
+now require Simplex's installed Prolog-ready acknowledgement. Its ready event
+is identity/owner scoped, after the gate installation; stale notices are inert.
+Production delta is +54/-20 (net +34) across four existing modules, with no new
+owner, queue, executor or readiness timer.
+
+Focused tests passed: 303 covering ingress, target, directory, hosting and
+Simplex, then 19 covering the final manager adjustment and real lobby recovery.
+Xref and production compile pass. No full suite repeated. Deployment and a
+successful ordinary browser signup remain next; this is not acceptance yet.

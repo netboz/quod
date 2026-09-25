@@ -297,6 +297,19 @@ session and does not need to: it independently verifies the user signature,
 operation ID, and deadline, and may apply operator-configured rate policy to
 the authenticated forwarding node and signing key.
 
+When an exact route is not yet available, the request worker subscribes through
+the existing directory route wait and rereads its projection. The signed
+admission deadline bounds this initial wait; no proof has been submitted yet.
+After the route arrives, ingress checks local availability again because a new
+ontology may have started here during discovery. The original browser peer,
+principal, request bytes and cursor binding remain unchanged.
+
+A local validator is available only after Simplex has installed the exact
+Prolog owner's ready acknowledgement. Simplex publishes that installed edge
+with the anchored identity and owner PID; the namespace manager uses it to
+finish advertising a waiting hosted ontology. Replay completion alone precedes
+that acknowledgement and cannot establish request readiness.
+
 Routing failure returns a typed availability result. It never causes the
 gateway to execute the goal in another namespace or to substitute a local
 ontology with the same name and a different genesis anchor.

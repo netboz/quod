@@ -64,17 +64,20 @@ hosted_runtime_is_not_publishable_before_replay_ready_test() ->
          {ok, Anchor}, #{role => validator, recovery => pulling})),
     ?assertNot(
        quod_namespace_manager:test_content_runtime_ready(
-         {ok, Anchor}, #{role => joining, recovery => ready})),
+         {ok, Anchor}, #{role => joining, recovery => ready, prolog_ready => true})),
     ?assertNot(
        quod_namespace_manager:test_content_runtime_ready(
          {error, genesis_mismatch},
-         #{role => validator, recovery => ready})),
+         #{role => validator, recovery => ready, prolog_ready => true})),
+    ?assertNot(
+       quod_namespace_manager:test_content_runtime_ready(
+         {ok, Anchor}, #{role => validator, recovery => ready, prolog_ready => false})),
     ?assert(
        quod_namespace_manager:test_content_runtime_ready(
-         {ok, Anchor}, #{role => validator, recovery => ready})),
+         {ok, Anchor}, #{role => validator, recovery => ready, prolog_ready => true})),
     ?assert(
        quod_namespace_manager:test_content_runtime_ready(
-         {ok, Anchor}, #{role => observer, recovery => ready})).
+         {ok, Anchor}, #{role => observer, recovery => ready, prolog_ready => true})).
 
 hosting_projection_rejects_ambiguous_visibility_test() ->
     NodeRef = node_ref(<<1:256>>),

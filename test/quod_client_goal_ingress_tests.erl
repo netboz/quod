@@ -22,6 +22,8 @@ signed_local_read_test_() ->
           ?_test(wrong_network_and_expired_request_stop_at_ingress(Ctx)),
           ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
           ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
+          ?_test(new_local_target_waits_for_its_route(Ctx)),
+          ?_test(missing_target_wait_ends_at_signed_deadline(Ctx)),
           ?_test(operation_absence_remains_unresolved(Ctx)),
           ?_test(local_operation_resolution_preserves_evidence_and_expiry(Ctx)),
           ?_test(operation_resolution_follows_the_existing_claim(Ctx))]
@@ -289,6 +291,70 @@ directory_anchor_conflict_is_not_flattened(
     after
         gen_server:stop(Directory)
     end.
+
+new_local_target_waits_for_its_route(
+  #{namespace := Ns, engine := Engine, key_pair := KeyPair,
+    session := Session}) ->
+    stop_directory(),
+    {ok, Directory} = quod_directory:start_link(#{}),
+    1 = erlang:trace(Directory, true, ['receive']),
+    _ = sys:replace_state(Engine, fun(S) ->
+        true = gproc:unreg(quod_reg:name({quod_prolog, Ns})), S
+    end),
+    {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
+    Parent = self(),
+    Caller = spawn(fun() ->
+        Parent ! {route_wait_result, self(), quod_client_goal_ingress:submit(
+            read, maps:get(session_id, Session), Bytes, Signature, ?PEER)}
+    end),
+    try
+        receive
+            {trace, Directory, 'receive',
+             {'$gen_cast', {route_needed, {Ns, ?ANCHOR}}}} -> ok
+        after 1000 -> error(route_wait_not_armed)
+        end,
+        %% A different identity must not release this request.
+        quod_reg:publish({directory_route, {Ns, ?ANCHOR}},
+                         {directory_route_available, {Ns, <<0:256>>}}),
+        ?assert(lists:member(Caller, gproc:lookup_pids(
+                  quod_reg:prop({directory_route, {Ns, ?ANCHOR}})))),
+        _ = sys:replace_state(Engine, fun(S) ->
+            true = quod_reg:reg({quod_prolog, Ns}), S
+        end),
+        {ok, _} = quod_ct:install_directory_generation(
+            <<16#78:256>>, {"127.0.0.1", 5001}, [{Ns, ?ANCHOR, validator}], 1, 1),
+        receive
+            {route_wait_result, Caller, Result} ->
+                ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}}, Result)
+        after 2000 -> error(route_wait_did_not_execute_locally)
+        end,
+        ?assertNot(lists:member(Caller, gproc:lookup_pids(
+                     quod_reg:prop({directory_route, {Ns, ?ANCHOR}}))))
+    after
+        erlang:trace(Directory, false, ['receive']),
+        exit(Caller, kill),
+        _ = sys:replace_state(Engine, fun(S) ->
+            case quod_reg:where({quod_prolog, Ns}) of
+                undefined -> true = quod_reg:reg({quod_prolog, Ns});
+                Engine -> ok
+            end, S
+        end),
+        gen_server:stop(Directory)
+    end.
+
+missing_target_wait_ends_at_signed_deadline(
+  #{key_pair := KeyPair, session := Session}) ->
+    Ns = unique_symbol(<<"signed-not-started:">>),
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"true.">>))#{
+        not_after_ms => quod_time:now_ms() + 150},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
+    ?assertEqual({error, signed_target_unavailable},
+        quod_client_goal_ingress:submit(
+            read, maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+    ?assert(quod_time:now_ms() >= maps:get(not_after_ms, Request)),
+    ?assertNot(lists:member(self(), gproc:lookup_pids(
+                 quod_reg:prop({directory_route, {Ns, ?ANCHOR}})))).
 
 operation_absence_remains_unresolved(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->

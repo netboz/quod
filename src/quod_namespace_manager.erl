@@ -419,6 +419,21 @@ handle_info(refresh_system_catalogue, S) ->
 handle_info({replay_ready, _Id, _Height}, S) ->
     self() ! reconcile,
     {noreply, request_system_refresh(S)};
+handle_info({proof_ready, {Ns, Anchor}, Owner}, S) ->
+    %% Replay announces completion before Simplex installs the engine ACK.
+    %% Only that installed edge can make a waiting host publishable.
+    case maps:is_key(Ns, maps:get(content, S#s.desired)) andalso
+         quod_reg:where({quod_simplex, Ns}) =:= Owner andalso
+         quod_simplex:genesis_hash(Ns) =:= Anchor of
+        true ->
+            self() ! reconcile,
+            S1 = case Ns of
+                     ?ROOT_NS -> request_system_refresh(S);
+                     _ -> S
+                 end,
+            {noreply, S1};
+        false -> {noreply, S}
+    end;
 handle_info({applied_live, Envelope}, S) ->
     case system_catalogue_changed(Envelope) of
         true ->
@@ -1073,13 +1088,13 @@ runtime_wait_required(Ns, Config) ->
 
 %% A started supervisor is not yet a route that this node may advertise. The
 %% runtime first validates the exact retained identity and finishes replay;
-%% its replay_ready edge wakes the manager through runtime_waits above.
+%% Simplex's proof_ready edge follows installation of the engine's ready ACK.
 content_runtime_ready(Ns, Config) ->
     content_runtime_ready_result(
       started_genesis(Ns, Config), quod_simplex:status(Ns)).
 
 content_runtime_ready_result(
-  {ok, _GenesisHash}, #{role := Role, recovery := ready})
+  {ok, _GenesisHash}, #{role := Role, recovery := ready, prolog_ready := true})
   when Role =:= validator; Role =:= observer ->
     true;
 content_runtime_ready_result(_GenesisResult, _Status) ->

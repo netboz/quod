@@ -3040,7 +3040,12 @@ acquire_attestation_gate(Ns, {Owner, CommitteeId} = Binding, Deadline, Monitors)
             end
     end.
 
-publish_proof_gate_changes(Before, {proof_gate, Ready, _, Fences, _, _, CommitteeId, _}, Ns) ->
+publish_proof_gate_changes(Before, {proof_gate, Ready, _, Fences, _, _, CommitteeId, _},
+                           {Ns, _Anchor} = Identity) ->
+    case Ready andalso not Before#s.prolog_ready of
+        true -> quod_reg:publish({runtime, Ns}, {proof_ready, Identity, self()});
+        false -> ok
+    end,
     case proof_gate_row_for_state(Before) of
         {proof_gate, WasReady, _, Previous, _, _, OldCommitteeId, _} ->
             case (WasReady andalso not Ready) orelse CommitteeId =/= OldCommitteeId of
@@ -3107,7 +3112,7 @@ refresh_proof_gate(
                 true = ets:insert(
                          binary_to_existing_atom(genesis_table_name(Ns), utf8),
                          CurrentRow),
-                publish_proof_gate_changes(Before, CurrentRow, Ns)
+                publish_proof_gate_changes(Before, CurrentRow, {Ns, S#s.genesis_hash})
             catch
                 error:badarg -> ok
             end
@@ -16143,6 +16148,7 @@ status_map(S) ->
       slot => S#s.slot,
       committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
       syncing => syncing(S), recovery => recovery_phase(S#s.sync),
+      prolog_ready => S#s.prolog_ready,
       finality_slot => S#s.slot + 1,
       dtx_coordinators => dtx_coordinator_status(S#s.dtx_coordinators),
       dtx_admission_waiting => DtxWaiting, dtx_admission_dormant => DtxDormant,

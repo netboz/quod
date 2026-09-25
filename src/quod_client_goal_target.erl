@@ -65,7 +65,7 @@ available({Ns, <<_:256>> = Anchor}) when is_binary(Ns), byte_size(Ns) > 0 ->
 available(_Target) ->
     {error, wrong_target}.
 
-available_status(#{role := validator, syncing := false}) -> ok;
+available_status(#{role := validator, syncing := false, prolog_ready := true}) -> ok;
 available_status(#{role := observer}) -> {error, signed_target_unavailable};
 available_status(#{syncing := true}) -> {error, signed_target_unavailable};
 available_status(Status) -> test_fixture_status(Status).

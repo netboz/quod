@@ -250,18 +250,22 @@ execute_gateway(
            <<"quod.client.local_target_lookup">>, internal,
            fun() -> quod_client_goal_target:available({Ns, Anchor}) end) of
         ok ->
-            case quod_client_goal_target:prepare_local(
-                   Evidence, Peer, Owner, CursorBinding) of
-                {ok, {Evidence, Goal, Principal, Owner}} ->
-                    quod_client_goal_target:execute(
-                      Evidence, Goal, Principal, Owner, CursorBinding);
-                {error, _} = Error -> Error
-            end;
+            execute_local(Evidence, Principal, Peer, Owner, CursorBinding);
         {error, wrong_target} ->
             {error, wrong_target};
         {error, _NotLocal} ->
             forward_gateway(
-              Evidence, RequestBytes, Signature, Owner, CursorBinding)
+              Evidence, RequestBytes, Signature, Principal, Peer, Owner,
+              CursorBinding)
+    end.
+
+execute_local(Evidence, Principal, Peer, Owner, CursorBinding) ->
+    case quod_client_goal_target:prepare_local(
+           Evidence, Peer, Owner, CursorBinding) of
+        {ok, {Evidence, Goal, Principal, Owner}} ->
+            quod_client_goal_target:execute(
+              Evidence, Goal, Principal, Owner, CursorBinding);
+        {error, _} = Error -> Error
     end.
 
 cursor_binding(cursor) -> crypto:strong_rand_bytes(32);
@@ -271,16 +275,25 @@ cursor_binding(execute) -> none.
 forward_gateway(
   #{request := #{agent_namespace := Ns,
                  agent_genesis_anchor := Anchor}} = Evidence,
-  RequestBytes, Signature, Owner, CursorBinding) ->
+  RequestBytes, Signature, Principal, Peer, Owner, CursorBinding) ->
+    ExpiresMs = maps:get(not_after_ms, maps:get(request, Evidence)),
     case trace_stage(
            <<"quod.client.gateway_route_lookup">>, internal,
-           fun() -> quod_directory:validator_routes(Ns, Anchor) end) of
+           fun() -> quod_directory:await_validator_routes(
+                      {Ns, Anchor}, request_timeout(ExpiresMs)) end) of
         {ok, Routes} when Routes =/= [] ->
-            TraceCarrier = quod_trace:inject(quod_trace:context()),
-            ExpiresMs = maps:get(not_after_ms, maps:get(request, Evidence)),
-            forward_routes(
-              Routes, Evidence, RequestBytes, Signature, Owner,
-              CursorBinding, TraceCarrier, ExpiresMs);
+            %% Creation may have started the exact local owner while route
+            %% discovery was pending. Preserve its ordinary local admission.
+            case quod_client_goal_target:available({Ns, Anchor}) of
+                ok ->
+                    execute_local(Evidence, Principal, Peer, Owner, CursorBinding);
+                {error, wrong_target} -> {error, wrong_target};
+                {error, _} ->
+                    TraceCarrier = quod_trace:inject(quod_trace:context()),
+                    forward_routes(
+                      Routes, Evidence, RequestBytes, Signature, Owner,
+                      CursorBinding, TraceCarrier, ExpiresMs)
+            end;
         {ok, []} -> {error, signed_target_unavailable};
         {error, anchor_conflict} -> {error, {anchor_conflict, Ns}};
         {error, _} -> {error, signed_target_unavailable}

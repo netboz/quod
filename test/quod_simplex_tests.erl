@@ -334,6 +334,7 @@ proof_gate_requires_exact_ready_ack_test() ->
       Ns, quod_ct:proof_gate_row(false, 7, []),
       fun(_Tab) ->
           Owner = registered_prolog_owner(Ns),
+          true = quod_reg:subscribe({runtime, Ns}),
           Access = {quod_proof_access, Ns, self(), 7, <<251:256>>},
           try
               S0 = st(#{ns => Ns, committee_id => <<251:256>>,
@@ -361,6 +362,7 @@ proof_gate_requires_exact_ready_ack_test() ->
                            maps:get(prolog_ready,
                                     quod_simplex:stats_map(WrongHeight))),
 
+              receive {proof_ready, _, _} -> error(premature_ready_edge) after 0 -> ok end,
               Ready = result_state(
                         quod_simplex:running(
                           cast, {prolog_ready, Owner, 0, []}, S0)),
@@ -369,6 +371,14 @@ proof_gate_requires_exact_ready_ack_test() ->
                                     quod_simplex:stats_map(Ready))),
               ?assertEqual(
                  ok, quod_simplex:check_proof_access(Access)),
+
+              receive
+                  {proof_ready, {Ns, Anchor}, Sender} when Sender =:= self() ->
+                      ?assertEqual(ok, quod_simplex:check_proof_access(Access))
+              after 0 -> error(missing_installed_ready_edge)
+              end,
+              _ = quod_simplex:running(cast, {prolog_ready, Owner, 0, []}, Ready),
+              receive {proof_ready, _, _} -> error(duplicate_ready_edge) after 0 -> ok end,
 
               %% Rebuild closes the row synchronously; a queued mark_ready
               %% cannot reopen it without the later owner acknowledgement.
@@ -381,6 +391,7 @@ proof_gate_requires_exact_ready_ack_test() ->
                  {error, {ontology_rebuilding, Ns}},
                  quod_simplex:check_proof_access(Access))
           after
+              quod_reg:unsubscribe({runtime, Ns}),
               stop_registered_owner(Owner)
           end
       end).

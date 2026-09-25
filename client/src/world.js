@@ -16,7 +16,8 @@ export function anchoredGoal(reference, goal) {
     throw new Error('an exact ontology reference is required')
   }
   const guard = compound('current_ontology_identity', [ns, binary(reference.anchor)])
-  return `${renderTerm(ns)} :: (${renderTerm(guard)}, ${renderTerm(goal)}).`
+  const selector = compound('ontology_ref', [ns, binary(reference.anchor)])
+  return `${renderTerm(selector)} :: (${renderTerm(guard)}, ${renderTerm(goal)}).`
 }
 
 export async function readPersonalLobby(identity, agent, mode = 'playing', options = {}) {

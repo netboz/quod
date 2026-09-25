@@ -8,8 +8,9 @@ const FORM = 'form(<<"Console">>,[editor(goal,<<"Goal">>),bindings(results,<<"Bi
 test('a device projection binds the exact selected ontology before reading content', () => {
   const anchor = new Uint8Array(32).fill(255)
   const goal = anchoredGoal({ namespace: 'lobby', anchor }, compound('lobby_view', [atom('playing'), variable('Scene')]))
-  assert.ok(goal.startsWith('<<"lobby">> :: (current_ontology_identity(<<"lobby">>,<<"'))
+  assert.ok(goal.startsWith('ontology_ref(<<"lobby">>,<<"'))
   assert.ok(goal.includes('\\xff\\'.repeat(32)))
+  assert.ok(goal.includes('>>) :: (current_ontology_identity(<<"lobby">>,<<"'))
   assert.ok(goal.endsWith('lobby_view(playing,Scene)).'))
   assert.throws(() => anchoredGoal({ namespace: 'lobby', anchor: new Uint8Array(31) }, atom('true')))
 })

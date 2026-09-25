@@ -302,6 +302,7 @@ ask_test_() ->
           ?_test(t_repeated_follow_queries_are_independent(Ctx)),
           ?_test(t_cut_follow_dedup_does_not_cross_invocations(Ctx)),
           ?_test(t_grounded_ask(Ctx)),
+          ?_test(t_exact_selector(Ctx)),
           ?_test(t_self_ask(Ctx)),
           ?_test(t_raw_snapshot_selector_boundary(Ctx)),
           ?_test(t_loud_routing_errors(Ctx)),
@@ -551,6 +552,20 @@ unique_tmp_dir(Prefix) ->
 t_single_answer(#{pets := P}) ->
     ?assertMatch({ok, [#{'D' := fish}], _},
                  prove(P, {'::', animals, {diet, cat, {'D'}}})).
+
+t_exact_selector(#{pets := P, animals := A}) ->
+    Anchor = quod_simplex:genesis_hash(A),
+    SelfAnchor = quod_simplex:genesis_hash(P),
+    ?assertMatch(
+       {ok, [#{}], _},
+       prove(P, {'::', {ontology_ref, P, SelfAnchor},
+                 {instance_of, pet, my_dog}})),
+    ?assertMatch(
+       {ok, [#{'D' := fish}], _},
+       prove(P, {'::', {ontology_ref, A, Anchor}, {diet, cat, {'D'}}})),
+    ?assertEqual(
+       {error, {anchor_conflict, A}},
+       prove(P, {'::', {ontology_ref, A, <<0:256>>}, {diet, cat, {'D'}}})).
 
 t_backtracking_all_answers(#{pets := P}) ->
     ?assertMatch({ok, [#{'L' := [kibble, meat]}], _},

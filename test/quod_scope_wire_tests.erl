@@ -75,6 +75,7 @@ independent_metadata_roundtrips_and_refuses_malformed_values_test() ->
     end, [{solution, id(1), 1, payload(answer, true), true},
           {plan_sealed, <<"plan">>, 2}, {plan_sealed, <<"plan">>, 3},
           {nested_open, id(2), <<"other">>, chain(2), payload(goal, true), Selection},
+          {nested_open, id(2), {<<"other">>, key(7)}, chain(2), payload(goal, true), Selection},
           {nested_next, id(2), id(3), 1, Selection}]),
     lists:foreach(fun(Operation) ->
         ?assertMatch({error, {protocol_error, _}},
@@ -82,6 +83,8 @@ independent_metadata_roundtrips_and_refuses_malformed_values_test() ->
     end, [{solution, id(1), 1, payload(answer, true), 1},
           {plan_sealed, <<"plan">>, -1}, {plan_sealed, <<"plan">>, 4},
           {plan_sealed, <<"plan">>},
+          {nested_open, id(2), {<<"other">>, <<7:248>>}, chain(2),
+           payload(goal, true), Selection},
           {nested_next, id(2), id(3), 1, {tx_selection, none, []}}]),
     ?assert(quod_transaction_scope:valid_selection(
               {tx_selection, id(4), [], independent})),
@@ -883,7 +886,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 13, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 14, Frame}, [deterministic]).
 
 signed_auth(RequestBytes, Signature) ->
     {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(

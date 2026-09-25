@@ -1,6 +1,6 @@
 -module(quod_ontology_name).
 -moduledoc """
-Canonical conversion of written Prolog ontology names to their flat binary form.
+Canonical conversion of written Prolog ontology names and exact selectors.
 
 Both inter-ontology asks and runtime directory queries use this module so the
 accepted name grammar cannot drift between the two APIs.
@@ -11,7 +11,23 @@ used by Erlang callers.  This is one name grammar for consoles, policies, and
 runtime APIs; callers do not need a console-specific representation.
 """.
 
--export([flatten/1]).
+-export([flatten/1, selector/1]).
+
+-type identity() :: {binary(), <<_:256>>}.
+-export_type([identity/0]).
+
+-doc "Normalize a `::` selector while retaining an exact ontology anchor.".
+-spec selector(term()) -> {ok, binary() | identity()} | error.
+selector({ontology_ref, Name, <<_:256>> = Anchor}) ->
+    case flatten(Name) of
+        Namespace when is_binary(Namespace) -> {ok, {Namespace, Anchor}};
+        error -> error
+    end;
+selector(Name) ->
+    case flatten(Name) of
+        Namespace when is_binary(Namespace) -> {ok, Namespace};
+        error -> error
+    end.
 
 -spec flatten(term()) -> binary() | error.
 flatten(A) when is_atom(A) ->

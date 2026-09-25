@@ -4427,9 +4427,10 @@ signed_origin_policy_goal(Ns, {'::', TargetTerm, Inner}) ->
     %% Ingress has already materialized the origin-owned route selector while
     %% preserving the foreign inner goal opaquely. Policy only classifies the
     %% resulting route; it does not repeat wire materialization.
-    case quod_ontology_name:flatten(TargetTerm) of
-        Ns -> {local, Inner};
-        Target when is_binary(Target) -> remote_selector;
+    case quod_ontology_name:selector(TargetTerm) of
+        {ok, Ns} -> {local, Inner};
+        {ok, {Ns, _Anchor}} -> {local, Inner};
+        {ok, _Remote} -> remote_selector;
         error -> invalid
     end;
 signed_origin_policy_goal(_Ns, Goal) ->

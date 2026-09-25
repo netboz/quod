@@ -105,7 +105,7 @@ remember_follow_answer_above(Answer, Bs, Cp, Rest) ->
 
 do_ask(NsTerm, Inner, Next, St) ->
     Self = quod_predicates:ctx_ns(quod_predicates:context(St)),
-    case target_selector(NsTerm) of
+    case quod_ontology_name:selector(NsTerm) of
         error -> ask_error({bad_name, NsTerm});
         {ok, Selector} ->
             case self_selector(Selector, Self,
@@ -116,17 +116,6 @@ do_ask(NsTerm, Inner, Next, St) ->
                 false -> guarded_ask(Self, Selector, Inner, Next, St);
                 {error, Reason} -> ask_error(Reason)
             end
-    end.
-
-target_selector({ontology_ref, NsTerm, <<_:256>> = Anchor}) ->
-    case quod_ontology_name:flatten(NsTerm) of
-        error -> error;
-        Target -> {ok, {Target, Anchor}}
-    end;
-target_selector(NsTerm) ->
-    case quod_ontology_name:flatten(NsTerm) of
-        error -> error;
-        Target -> {ok, Target}
     end.
 
 self_selector(Self, Self, _Context) -> true;

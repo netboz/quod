@@ -24,7 +24,7 @@ export default function World() {
   const [revision, setRevision] = useState(0)
   const [licenceCheck, setLicenceCheck] = useState<{ identity: SignedIdentity; reason: string | null } | null>(null)
   const [selected, setSelected] = useState<Subject | null>(null)
-  const [menu, setMenu] = useState<MenuEntry[] | null>(null)
+  const [menu, setMenu] = useState<{ subject: Subject; entries: MenuEntry[] } | null>(null)
   const [workspace, setWorkspace] = useState<{ key: string; view: ProofView } | null>(null)
   const [focused, setFocused] = useState(false)
   const pick = useRef(setSelected)
@@ -114,18 +114,27 @@ export default function World() {
     let active = true
     setMenu(null)
     if (identity && agent && selected) {
-      void readDeviceMenu(identity, agent, selected).then(entries => {
-        if (active) setMenu(entries)
-      }).catch(error => { if (active) { setMenu([]); setStatus(`Could not read the actions: ${String(error)}`) } })
+      const subject = selected
+      void readDeviceMenu(identity, agent, subject).then(entries => {
+        if (active) setMenu({ subject, entries })
+      }).catch(error => { if (active) { setMenu({ subject, entries: [] }); setStatus(`Could not read the actions: ${String(error)}`) } })
     }
     return () => { active = false }
   }, [identity, agent, selected])
 
-  const openWorkspace = async () => {
+  const openWorkspace = async (entry: MenuEntry) => {
+    if (entry.view !== 'proof_console') {
+      setStatus(`This client cannot open ${entry.view}.`)
+      return
+    }
     if (!identity || !agent || !selected?.anchor) return
     const requestContext = context.current
     const key = `${selected.ontology}:${[...selected.anchor]}:${renderTerm(selected.entity)}`
-    if (workspace?.key === key) { setFocused(true); return }
+    if (workspace?.key === key) {
+      await scene?.leaveImmersive()
+      setFocused(true)
+      return
+    }
     try {
       const goal = anchoredGoal({ namespace: selected.ontology, anchor: selected.anchor },
         compound('lobby_workspace', [selected.entity, variable('View')]))
@@ -134,6 +143,10 @@ export default function World() {
       const current = context.current
       if (current.identity !== requestContext.identity || current.agent !== requestContext.agent ||
           current.selected !== requestContext.selected) return
+      await scene?.leaveImmersive()
+      const afterExit = context.current
+      if (afterExit.identity !== requestContext.identity || afterExit.agent !== requestContext.agent ||
+          afterExit.selected !== requestContext.selected) return
       setWorkspace({ key, view: form })
       setFocused(true)
     } catch (error) {
@@ -142,6 +155,14 @@ export default function World() {
           current.selected === requestContext.selected) setStatus(`Could not open the console: ${String(error)}`)
     }
   }
+
+  const selectedMenu = menu?.subject === selected ? menu.entries : null
+  const activate = useRef<(entry: MenuEntry) => void>(() => {})
+  activate.current = entry => { void openWorkspace(entry) }
+  useEffect(() => {
+    scene?.setActionMenu(selectedMenu ?? [], entry => activate.current(entry))
+    return () => scene?.setActionMenu([], entry => activate.current(entry))
+  }, [scene, selected, selectedMenu])
 
   const account = identity ? accountReference(identity) : null
   const selectedAccount = account && account.namespace === agent?.namespace &&
@@ -187,8 +208,8 @@ export default function World() {
         {devices.map(device => <button key={device.id} onClick={() => setSelected(device.depicts)}>{device.id}</button>)}
       </div>}
       {selected && <div className="world-menu" aria-label="Device actions">
-        {menu === null ? <p>Reading actions…</p> : menu.length === 0 ? <p>No available actions.</p> : menu.map(entry =>
-          <button key={entry.id} onClick={() => void openWorkspace()}>{entry.label}</button>)}
+        {selectedMenu === null ? <p>Reading actions…</p> : selectedMenu.length === 0 ? <p>No available actions.</p> : selectedMenu.map(entry =>
+          <button key={entry.id} onClick={() => void openWorkspace(entry)}>{entry.label}</button>)}
         <button onClick={() => setSelected(null)}>Dismiss</button>
       </div>}
     </section>

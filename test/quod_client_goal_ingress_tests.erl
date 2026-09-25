@@ -22,7 +22,7 @@ signed_local_read_test_() ->
           ?_test(wrong_network_and_expired_request_stop_at_ingress(Ctx)),
           ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
           ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
-          ?_test(new_local_target_waits_for_its_route(Ctx)),
+          ?_test(new_local_target_wakes_on_its_installed_ready_edge(Ctx)),
           ?_test(missing_target_wait_ends_at_signed_deadline(Ctx)),
           ?_test(operation_absence_remains_unresolved(Ctx)),
           ?_test(local_operation_resolution_preserves_evidence_and_expiry(Ctx)),
@@ -292,7 +292,7 @@ directory_anchor_conflict_is_not_flattened(
         gen_server:stop(Directory)
     end.
 
-new_local_target_waits_for_its_route(
+new_local_target_wakes_on_its_installed_ready_edge(
   #{namespace := Ns, engine := Engine, key_pair := KeyPair,
     session := Session}) ->
     stop_directory(),
@@ -321,15 +321,17 @@ new_local_target_waits_for_its_route(
         _ = sys:replace_state(Engine, fun(S) ->
             true = quod_reg:reg({quod_prolog, Ns}), S
         end),
-        {ok, _} = quod_ct:install_directory_generation(
-            <<16#78:256>>, {"127.0.0.1", 5001}, [{Ns, ?ANCHOR, validator}], 1, 1),
+        quod_reg:publish({runtime, Ns},
+                         {proof_ready, {Ns, ?ANCHOR}, Engine}),
         receive
             {route_wait_result, Caller, Result} ->
                 ?assertMatch({ok, _, {normalized, {answers, 1, [_]}}}, Result)
         after 2000 -> error(route_wait_did_not_execute_locally)
         end,
         ?assertNot(lists:member(Caller, gproc:lookup_pids(
-                     quod_reg:prop({directory_route, {Ns, ?ANCHOR}}))))
+                     quod_reg:prop({directory_route, {Ns, ?ANCHOR}})))),
+        ?assertNot(lists:member(Caller, gproc:lookup_pids(
+                     quod_reg:prop({runtime, Ns}))))
     after
         erlang:trace(Directory, false, ['receive']),
         exit(Caller, kill),

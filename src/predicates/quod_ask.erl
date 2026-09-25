@@ -395,12 +395,17 @@ await_directory_scope(Target, Identity) ->
     case execution_remaining_ms() of
         0 -> {error, current_proof_limit()};
         RemainingMs ->
+            {Target, Anchor} = Identity,
+            LocalStatus = fun() -> local_scope_status(Target, Anchor) end,
             case quod_trace:with_span(
                    quod_trace:context(), <<"quod.ask.route_wait">>, internal,
                    #{'quod.namespace' => Target},
                    fun(_SpanCtx) ->
-                       quod_directory:await_validator_routes(Identity, RemainingMs)
+                       quod_directory:await_validator_target(
+                         Identity, LocalStatus, RemainingMs)
                    end) of
+                {ok, local} ->
+                    open_anchored_local_scope(Target, Anchor);
                 {ok, [#{genesis_anchor := Anchor} | _] = Routes} ->
                     %% A local creation may have installed this target while
                     %% discovery waited. Never route back to our own node.
@@ -415,6 +420,19 @@ await_directory_scope(Target, Identity) ->
                 {error, anchor_conflict} -> {error, {anchor_conflict, Target}};
                 {error, unavailable} -> {error, {ontology_unreachable, Target}}
             end
+    end.
+
+local_scope_status(Target, Anchor) ->
+    case {quod_reg:where({quod_prolog, Target}),
+          quod_simplex:genesis_hash(Target)} of
+        {Engine, Anchor} when is_pid(Engine) ->
+            case quod_simplex:status(Target) of
+                #{syncing := false, prolog_ready := true} -> ready;
+                _ -> waiting
+            end;
+        {Engine, <<_:256>>} when is_pid(Engine) ->
+            {error, {anchor_conflict, Target}};
+        _ -> waiting
     end.
 
 choose_directory_scope(Target, Routes) ->

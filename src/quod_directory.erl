@@ -26,7 +26,7 @@ data; subscribers always reread this one ordinary projection.
 
 -export([start_link/0, start_link/1]).
 -export([resolve/1, known_identities/1, validator_routes/2,
-         await_validator_routes/2, directory_hosts/1,
+         await_validator_routes/2, await_validator_target/3, directory_hosts/1,
          route_needed/1, node_transport_route/1, node_contact_current/1,
          install_generation/1, install_private_projection/1,
          expire/1, stats/0]).
@@ -216,6 +216,61 @@ await_validator_routes({Ns, <<_:256>>} = Identity, TimeoutMs)
     end;
 await_validator_routes(_Identity, _TimeoutMs) ->
     {error, unavailable}.
+
+-doc """
+Wait for either an exact ready local target or the ordinary exact-route edge.
+
+`LocalStatus` rereads the caller's own local authority and returns `ready`,
+`waiting`, or an error. The transient request worker subscribes before both
+snapshots, so neither installed-local readiness nor directory publication can
+be missed. No readiness result is cached here.
+""".
+-spec await_validator_target(
+        {binary(), <<_:256>>},
+        fun(() -> ready | waiting | {error, term()}), non_neg_integer()) ->
+          {ok, local | [map()]} | {error, term()}.
+await_validator_target({Ns, <<_:256>>} = Identity, LocalStatus, TimeoutMs)
+  when is_binary(Ns), is_function(LocalStatus, 0),
+       is_integer(TimeoutMs), TimeoutMs >= 0 ->
+    true = quod_reg:subscribe({runtime, Ns}),
+    true = quod_reg:subscribe({directory_route, Identity}),
+    try
+        ok = route_needed(Identity),
+        await_validator_target_loop(
+          Identity, LocalStatus, quod_time:mono_ms() + TimeoutMs)
+    after
+        _ = catch quod_reg:unsubscribe({directory_route, Identity}),
+        _ = catch quod_reg:unsubscribe({runtime, Ns})
+    end;
+await_validator_target(_Identity, _LocalStatus, _TimeoutMs) ->
+    {error, unavailable}.
+
+await_validator_target_loop(
+  {Ns, Anchor} = Identity, LocalStatus, Deadline) ->
+    case LocalStatus() of
+        ready -> {ok, local};
+        {error, _} = Error -> Error;
+        waiting ->
+            case validator_routes(Ns, Anchor) of
+                {ok, [_ | _]} = Ready -> Ready;
+                {error, anchor_conflict} = Conflict -> Conflict;
+                {error, unavailable} ->
+                    case max(0, Deadline - quod_time:mono_ms()) of
+                        0 -> {error, unavailable};
+                        Remaining ->
+                            receive
+                                {directory_route_available, Identity} ->
+                                    await_validator_target_loop(
+                                      Identity, LocalStatus, Deadline);
+                                {proof_ready, {Ns, _}, _} ->
+                                    await_validator_target_loop(
+                                      Identity, LocalStatus, Deadline)
+                            after Remaining ->
+                                {error, unavailable}
+                            end
+                    end
+            end
+    end.
 
 await_validator_routes_loop({Ns, Anchor} = Identity, Deadline) ->
     case validator_routes(Ns, Anchor) of

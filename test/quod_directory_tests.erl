@@ -97,6 +97,37 @@ exact_route_wait_is_woken_by_the_directory_transition_test() ->
         end
     end).
 
+exact_target_wait_prefers_the_installed_local_identity_test() ->
+    with_directory(fun() ->
+        Ns = <<"quod:local-target">>, Anchor = anchor(Ns),
+        Identity = {Ns, Anchor}, State = atomics:new(1, []),
+        LocalStatus = fun() ->
+            case atomics:get(State, 1) of 1 -> ready; _ -> waiting end
+        end,
+        Parent = self(), Ref = make_ref(),
+        Waiter = spawn(fun() ->
+            Parent ! {Ref, quod_directory:await_validator_target(
+                             Identity, LocalStatus, 1000)}
+        end),
+        wait_for_route_subscription(Identity, Waiter, 100),
+        ?assert(lists:member(Waiter, gproc:lookup_pids(
+                  quod_reg:prop({runtime, Ns})))),
+        %% A stale incarnation's ready edge never releases the exact wait.
+        quod_reg:publish({runtime, Ns},
+                         {proof_ready, {Ns, <<0:256>>}, self()}),
+        receive {Ref, _} -> ?assert(false) after 20 -> ok end,
+        atomics:put(State, 1, 1),
+        quod_reg:publish({runtime, Ns},
+                         {proof_ready, Identity, self()}),
+        receive {Ref, {ok, local}} -> ok
+        after 1000 -> ?assert(false)
+        end,
+        ?assertNot(lists:member(Waiter, gproc:lookup_pids(
+                     quod_reg:prop({runtime, Ns})))),
+        ?assertNot(lists:member(Waiter, gproc:lookup_pids(
+                     quod_reg:prop({directory_route, Identity}))))
+    end).
+
 stale_generation_cannot_restore_a_route_test() ->
     with_directory(fun() ->
         Author = {root_bootstrap, key(91), key(2)}, Ns = <<"quod:stale">>,

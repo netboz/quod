@@ -4,7 +4,7 @@ import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import { readMarks } from '../src/marks.js'
-import '../src/world-scene.js'
+import { radialIndex } from '../src/world-scene.js'
 import { Ray } from '@babylonjs/core/Culling/ray.js'
 import { paintMarks, clearMarks } from '../src/scene.js'
 
@@ -80,4 +80,12 @@ test('the world adapter registers ray picking for rendered geometry', () => {
     assert.equal(hit.pickedMesh.parent, painted.get('console').node)
     clearMarks(painted)
   })
+})
+
+test('radial selection starts at the top, proceeds clockwise, and preserves its dead zone', () => {
+  assert.equal(radialIndex({ x: 0, y: 0 }, 4), null)
+  assert.equal(radialIndex({ x: 0, y: -1 }, 4), 0)
+  assert.equal(radialIndex({ x: 1, y: 0 }, 4), 1)
+  assert.equal(radialIndex({ x: 0, y: 1 }, 4), 2)
+  assert.equal(radialIndex({ x: -1, y: 0 }, 4), 3)
 })

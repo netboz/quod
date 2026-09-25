@@ -277,10 +277,20 @@ forward_gateway(
                  agent_genesis_anchor := Anchor}} = Evidence,
   RequestBytes, Signature, Principal, Peer, Owner, CursorBinding) ->
     ExpiresMs = maps:get(not_after_ms, maps:get(request, Evidence)),
+    LocalStatus = fun() ->
+        case quod_client_goal_target:available({Ns, Anchor}) of
+            ok -> ready;
+            {error, wrong_target} -> {error, wrong_target};
+            {error, _} -> waiting
+        end
+    end,
     case trace_stage(
            <<"quod.client.gateway_route_lookup">>, internal,
-           fun() -> quod_directory:await_validator_routes(
-                      {Ns, Anchor}, request_timeout(ExpiresMs)) end) of
+           fun() -> quod_directory:await_validator_target(
+                      {Ns, Anchor}, LocalStatus,
+                      request_timeout(ExpiresMs)) end) of
+        {ok, local} ->
+            execute_local(Evidence, Principal, Peer, Owner, CursorBinding);
         {ok, Routes} when Routes =/= [] ->
             %% Creation may have started the exact local owner while route
             %% discovery was pending. Preserve its ordinary local admission.

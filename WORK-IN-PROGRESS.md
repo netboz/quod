@@ -1407,3 +1407,46 @@ All evidence: `_build/selector-removal-20260925/`, particularly
 `acceptance-246-stable/` and `acceptance-246-probed/`. The unsupported selector
 is removed from the running fleet; namespace-readiness/discovery remains
 unresolved and requires an architectural correction through existing owners.
+
+
+## 2026-09-25 — consultative review verified; startup correction isolated
+
+Claude's review was checked against the implementation, not adopted as orders.
+The narrow namespace lookup correction now consults the existing Simplex
+identity when its Prolog child has not registered, then uses the existing
+exact-identity readiness wait. It removes the redundant origin_scope_admitted
+wrapper. Production delta +12/-12; no new owner or selector syntax. Both
+startup variants and the existing lobby/privacy/recovery controls pass:
+63 focused tests, zero failures, plus production compile. Shutdown explicitly
+checks that no stale Simplex genesis row survives. This code is not deployed.
+
+The earlier pre-start gap remains: a signed multi-ontology creation can commit
+before either its creation effect or hosting projection runs. A retained
+lifecycle reproduction proves it. Reading committed node hosting policy is
+preferred to the discarded broad projection-wait draft, but its bounded,
+anchored proof and application-progress contract still needs completion.
+The plain prove_ro/2 API is not sufficient as-is: it supplies neither the
+outer deadline nor an expected anchor. applied_live alone also misses replay;
+existing owner-scoped projection_advanced notices must be considered. Bind
+the exact local NodeRef, distinguish absence from unavailability, and replace
+superseded lookup machinery rather than accumulating fallback paths.
+
+Read-only captures from all eight validators now confirm root's slot-165
+split with independently checked signatures: nodes 0/3/4 latched commit,
+nodes 1/2/5/6/7 complaint; all share pools show 8 support / 3 commit /
+5 complaint. Root remains at committed/applied 164. The captured latches are
+read from live journal handles, not from a new disk-journal parser. No votes,
+accounts, ledgers or pending operations were changed. The original signup
+remains unresolved; this is an actual acceptance blocker.
+
+Two review corrections: directory control already resynchronizes on link
+installation; the finality plan's proposed QSJ4/V6 labels are obsolete
+(current QSJ5/V7). Current directory stats and retained logs were captured,
+but do not establish the cause of the earlier remote routing failure.
+No consensus format change or network re-found is included in this correction.
+
+Evidence and the complete verification:
+`_build/namespace-readiness-20260925/claude-verification/VERIFIED-REVIEW.md`.
+The oversized first forensic capture's truncated output is retained separately
+from the successfully decoded bounded capture; no silent rerun or erased
+failure. Fleet remains .246 with existing data retained.

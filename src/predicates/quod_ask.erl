@@ -274,18 +274,18 @@ origin_open(Target, Goal, Chain, OwnerActor, Selection) ->
     end.
 
 origin_scope(Target) ->
-    origin_scope_admitted(Target).
-
-origin_scope_admitted(Target) ->
-    case quod_reg:where({quod_prolog, Target}) of
-        undefined -> open_directory_scope(Target);
-        _Engine ->
-            case quod_simplex:genesis_hash(Target) of
-                <<_:256>> = Anchor ->
-                    open_anchored_local_scope(Target, Anchor);
-                undefined ->
-                    {error, {ontology_unreachable, Target}}
-            end
+    %% Simplex installs its immutable identity before the Prolog child starts.
+    %% A namespace in that interval is known locally even if hosting and route
+    %% projections have not caught up. Pin the owner's identity and use the
+    %% existing readiness subscription; selection never starts a namespace.
+    case {quod_simplex:genesis_hash(Target),
+          quod_reg:where({quod_prolog, Target})} of
+        {<<_:256>> = Anchor, Engine} when is_pid(Engine) ->
+            open_anchored_local_scope(Target, Anchor);
+        {<<_:256>> = Anchor, undefined} ->
+            await_directory_scope(Target, {Target, Anchor});
+        {undefined, undefined} -> open_directory_scope(Target);
+        {undefined, _Engine} -> {error, {ontology_unreachable, Target}}
     end.
 
 open_anchored_local_scope(Target, Anchor) ->

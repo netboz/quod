@@ -149,6 +149,8 @@ re-entrant selection of that identity reuses the same frozen committed base and 
 view, whether the scope is local, co-hosted, or remote.
 
 1. **Resolve and pin.** A co-hosted target is pinned to its live genesis anchor.
+   Its Simplex owner exposes that identity before the Prolog child registers;
+   selection in that interval uses the existing exact-identity readiness wait.
    If its process and route are not installed yet, the namespace manager's
    published desired-hosting projection may already supply its exact anchor.
    In that case the existing directory wait observes that exact identity under

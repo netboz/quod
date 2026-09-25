@@ -35,6 +35,7 @@ lobby_projection_recovery_test_() ->
             %% model facts are replayed into another database.
             {Sup, Config} = maps:get(Ns, maps:get(ontologies, Ctx)),
             stop_process(Sup),
+            ?assertEqual(undefined, quod_simplex:genesis_hash(Ns)),
             {Resumed, _} = start_namespace(Ns, Config#{mode => join, genesis_hash => Anchor}),
             try
                 ?assertEqual({ok, [#{<<"V0">> => Scene}], Height}, read(Ctx, Goal))
@@ -43,6 +44,10 @@ lobby_projection_recovery_test_() ->
     end}.
 
 first_scene_waits_for_new_lobby_route_test_() ->
+    [first_scene_waits_for_new_lobby_route(Discovery)
+     || Discovery <- [desired_hosting, starting_consensus]].
+
+first_scene_waits_for_new_lobby_route(Discovery) ->
     {timeout, 30, fun() ->
         Dir = filename:join("/tmp", "quod-lobby-route-" ++ integer_to_list(erlang:unique_integer([positive]))),
         Ctx = start(Dir),
@@ -50,8 +55,11 @@ first_scene_waits_for_new_lobby_route_test_() ->
         Engine = quod_reg:where({quod_prolog, Ns}),
         Desired = application:get_env(quod, namespace_desired, #{}),
         Content = maps:get(content, Desired, #{}),
-        application:set_env(quod, namespace_desired,
-            Desired#{content => Content#{Ns => #{mode => join, genesis_hash => Anchor}}}),
+        NextContent = case Discovery of
+            desired_hosting -> Content#{Ns => #{mode => join, genesis_hash => Anchor}};
+            starting_consensus -> maps:remove(Ns, Content)
+        end,
+        application:set_env(quod, namespace_desired, Desired#{content => NextContent}),
         {ok, Directory} = quod_directory:start_link(#{}),
         Trace = trace:session_create(lobby_route_test, self(), []),
         trace:function(Trace, {quod_reg, subscribe, 1},
@@ -73,8 +81,14 @@ first_scene_waits_for_new_lobby_route_test_() ->
             _ = sys:replace_state(Engine, fun(S) ->
                 true = quod_reg:reg({quod_prolog, Ns}), S
             end),
-            {ok, _} = quod_ct:install_directory_generation(
-                <<98:256>>, {"127.0.0.1", 5001}, [{Ns, Anchor, validator}], 1, 1),
+            case Discovery of
+                desired_hosting ->
+                    {ok, _} = quod_ct:install_directory_generation(
+                        <<98:256>>, {"127.0.0.1", 5001}, [{Ns, Anchor, validator}], 1, 1);
+                starting_consensus ->
+                    quod_reg:publish({runtime, Ns},
+                        {proof_ready, {Ns, Anchor}, quod_reg:where({quod_simplex, Ns})})
+            end,
             receive
                 {first_scene, Caller, Result} ->
                     ?assertMatch({ok, [#{<<"V0">> := [_,_,_,_,_,_,_]}], _}, Result)

@@ -19,7 +19,7 @@ import {
   pendingSignedOperations,
 } from '../../client/src/signed-client.js'
 import type { SignedIdentity, AgentReference } from '../../client/src/signed-client.js'
-import { accountReference, createAccount, resumeAccounts } from '../../client/src/accounts.js'
+import { accountReference, createAccount, resumeAccounts, finishAccountSetup } from '../../client/src/accounts.js'
 import {
   activeAgentReference,
   agentReferences,
@@ -36,6 +36,13 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   const [saved, setSaved] = useState(false)
   const [unresolved, setUnresolved] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  const onAccount = (reference: AgentReference) => {
+    const selected = saveAgentReference({ ...reference,
+      anchor: typeof reference.anchor === 'string' ? reference.anchor : b64url(reference.anchor) })
+    setAgents(agentReferences())
+    setAgent(selected)
+  }
 
   const login = async (providerPromise: ReturnType<typeof createKeyProvider>, enroll = false) => {
     setBusy(true)
@@ -54,12 +61,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
         /* a browser that keeps nothing still works for this session */
       }
       setSaved(localKeyMatches(next.provider))
-      const onAccount = (reference: AgentReference) => {
-        const selected = saveAgentReference({ ...reference,
-          anchor: typeof reference.anchor === 'string' ? reference.anchor : b64url(reference.anchor) })
-        setAgents(agentReferences())
-        setAgent(selected)
-      }
+
       const account = accountReference(next)
       if (account) onAccount(account)
       const recovered = await resumeAccounts(next, { onAccount })
@@ -80,6 +82,21 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
           setError(`Could not read pending operations: ${message(reason)}`)
         }
       }
+      setBusy(false)
+    }
+  }
+
+  const finishSetup = async () => {
+    if (!identity) return
+    setBusy(true)
+    setError(null)
+    try {
+      await finishAccountSetup(identity, { onAccount })
+    } catch (reason) {
+      setError(message(reason))
+    } finally {
+      try { setUnresolved((await pendingSignedOperations(identity)).length) }
+      catch (reason) { setError(message(reason)) }
       setBusy(false)
     }
   }
@@ -205,7 +222,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider
       value={{ identity, agent, agents, busy, saved, unresolved, error,
-        create, unlock, save, exportKey, importKey, signOut, addAgent, selectAgent }}>
+        create, finishSetup, unlock, save, exportKey, importKey, signOut, addAgent, selectAgent }}>
       {children}
     </SessionContext.Provider>
   )

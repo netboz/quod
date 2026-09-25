@@ -33,7 +33,7 @@ itself owns only projection state, ordering, and replies.
 -export([start_link/0,
          start_content/2, start_new_content/2, stop_content/1,
          start_brahms/2, stop_brahms/1, adopt_node_actor/0,
-         project_node_policy/4, hosting_snapshot/0, stats/0]).
+         project_node_policy/4, hosting_snapshot/0, desired_identity/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
 -ifdef(TEST).
@@ -97,6 +97,15 @@ start_brahms(Ns, Config) ->
 
 stop_brahms(Ns) ->
     stop_child(brahms, Ns).
+
+-doc "Read the exact identity from the manager's published desired-hosting projection.".
+-spec desired_identity(binary()) -> {ok, {binary(), <<_:256>>}} | {error, unavailable}.
+desired_identity(Ns) ->
+    Desired = application:get_env(quod, ?DESIRED_ENV, #{}),
+    case maps:get(Ns, maps:get(content, Desired, #{}), undefined) of
+        #{genesis_hash := <<_:256>> = Anchor} -> {ok, {Ns, Anchor}};
+        _ -> {error, unavailable}
+    end.
 
 -doc "Adopt the exact node-actor pointer persisted by the enrollment seam.".
 adopt_node_actor() ->

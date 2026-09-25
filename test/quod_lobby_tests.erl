@@ -42,6 +42,58 @@ lobby_projection_recovery_test_() ->
         after stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
+first_scene_waits_for_new_lobby_route_test_() ->
+    {timeout, 30, fun() ->
+        Dir = filename:join("/tmp", "quod-lobby-route-" ++ integer_to_list(erlang:unique_integer([positive]))),
+        Ctx = start(Dir),
+        {ontology_ref, Ns, Anchor} = maps:get(lobby, Ctx),
+        Engine = quod_reg:where({quod_prolog, Ns}),
+        Desired = application:get_env(quod, namespace_desired, #{}),
+        Content = maps:get(content, Desired, #{}),
+        application:set_env(quod, namespace_desired,
+            Desired#{content => Content#{Ns => #{mode => join, genesis_hash => Anchor}}}),
+        {ok, Directory} = quod_directory:start_link(#{}),
+        Trace = trace:session_create(lobby_route_test, self(), []),
+        trace:function(Trace, {quod_reg, subscribe, 1},
+                       [{[{directory_route, {Ns, Anchor}}], [], [{return_trace}]}], [local]),
+        trace:process(Trace, all, true, [call]),
+        _ = sys:replace_state(Engine, fun(S) ->
+            true = gproc:unreg(quod_reg:name({quod_prolog, Ns})), S
+        end),
+        Parent = self(),
+        Caller = spawn(fun() ->
+            Parent ! {first_scene, self(), read(Ctx, {'::', Ns,
+                {',', {current_ontology_identity, Ns, Anchor}, {lobby_view, playing, {0}}}})}
+        end),
+        try
+            receive
+                {trace, _, return_from, {quod_reg, subscribe, 1}, true} -> ok
+            after 1000 -> error(scene_did_not_subscribe)
+            end,
+            _ = sys:replace_state(Engine, fun(S) ->
+                true = quod_reg:reg({quod_prolog, Ns}), S
+            end),
+            {ok, _} = quod_ct:install_directory_generation(
+                <<98:256>>, {"127.0.0.1", 5001}, [{Ns, Anchor, validator}], 1, 1),
+            receive
+                {first_scene, Caller, Result} ->
+                    ?assertMatch({ok, [#{<<"V0">> := [_,_,_,_,_,_,_]}], _}, Result)
+            after 5000 -> error(first_scene_timeout)
+            end
+        after
+            trace:session_destroy(Trace),
+            exit(Caller, kill),
+            _ = sys:replace_state(Engine, fun(S) ->
+                case quod_reg:where({quod_prolog, Ns}) of
+                    undefined -> true = quod_reg:reg({quod_prolog, Ns});
+                    Engine -> ok
+                end, S
+            end),
+            gen_server:stop(Directory),
+            stop(Ctx), file:del_dir_r(Dir)
+        end
+    end}.
+
 start(Dir) ->
     {ok, _} = application:ensure_all_started(gproc),
     Keys = [node_pubkey, identity_key, namespace_desired, client_enabled,

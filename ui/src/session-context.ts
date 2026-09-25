@@ -10,6 +10,7 @@ export type SessionState = {
   unresolved: number
   error: string | null
   create: () => Promise<void>
+  finishSetup: () => Promise<void>
   unlock: () => Promise<void>
   save: () => Promise<void>
   exportKey: () => Promise<void>

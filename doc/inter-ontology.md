@@ -148,7 +148,13 @@ ontology opens one scope for its exact `{Namespace, GenesisAnchor}` identity. Ev
 re-entrant selection of that identity reuses the same frozen committed base and private staged
 view, whether the scope is local, co-hosted, or remote.
 
-1. **Resolve and pin.** A co-hosted target is pinned to its live genesis anchor. A remote
+1. **Resolve and pin.** A co-hosted target is pinned to its live genesis anchor.
+   If its process and route are not installed yet, the namespace manager's
+   published desired-hosting projection may already supply its exact anchor.
+   In that case the existing directory wait observes that exact identity under
+   the proof's original deadline; it grants no permission and starts no process.
+   After notification, selection rechecks whether the target now exists locally.
+   A genuinely unknown name still fails immediately. A remote
    target comes from the directory; the transport pins both the advertised endpoint and the
    authenticated node key. Conflicting anchors fail before any goal runs. A private route is
    derived from a committed `knows_ontology_host/4` fact and the referenced node actor's current

@@ -58,18 +58,9 @@ function accountResult(identity, options) {
     if (operation.context.step === 'signup') {
       const reference = await rememberAccount(identity,
         readAgentReference(singleBinding(reply, 'Account')), options)
-      const instance = readTerm(reference.instanceText.replace(/\.\s*$/, ''))
-      const goal = `${renderTerm(compound('provision_lobby', [instance]))}, lobby_reference(Lobby).`
-      // Atomic journal replacement prevents two tabs consuming the same signup
-      // result from both submitting a continuation. A crash before replacement
-      // retains signup; afterwards it retains only the original lobby request.
-      const next = await signedGoal(identity, { mode: 'execute', agent: reference, goal }, {
-        ...options, context: { flow: 'account', step: 'lobby' },
-        replaceOperation: operation.id, onTerminal: accountResult(identity, options),
-      })
-      if (!committed(next) && next.result !== 'pending') {
-        throw new Error('Your account exists, but the lobby creation was refused.')
-      }
+      // The exact parent is replaced before sending; an unknown child outcome
+      // remains in the existing operation journal.
+      await provisionLobby(identity, reference, { ...options, replaceOperation: operation.id })
     } else if (operation.context.step === 'lobby') {
       readReference(singleBinding(reply, 'Lobby'))
       await rememberAccount(identity, { namespace: operation.agent.namespace,
@@ -78,6 +69,31 @@ function accountResult(identity, options) {
       throw new Error('Unknown account operation; its recovery record has been retained.')
     }
   }
+}
+
+// Explicit user action for an account whose setup was refused before admission.
+// An unresolved enrollment must be resolved first, never replaced by this action.
+export async function finishAccountSetup(identity, options = {}) {
+  const journal = options.journal || signedOperationJournal()
+  if ((await accountOperations(identity, journal)).length) {
+    throw new Error('Account setup has an unresolved operation. Resolve it before continuing.')
+  }
+  const reference = accountReference(identity)
+  if (!reference) throw new Error('This identity has no account on this network.')
+  return provisionLobby(identity, reference, { ...options, journal })
+}
+
+async function provisionLobby(identity, reference, options) {
+  const instance = readTerm(reference.instanceText.replace(/\.\s*$/, ''))
+  const goal = `${renderTerm(compound('provision_lobby', [instance]))}, lobby_reference(Lobby).`
+  const reply = await signedGoal(identity, { mode: 'execute', agent: reference, goal }, {
+    ...options, context: { flow: 'account', step: 'lobby' },
+    onTerminal: accountResult(identity, options),
+  })
+  if (!committed(reply) && reply.result !== 'pending') {
+    throw new Error('Your account exists, but the lobby creation was refused.')
+  }
+  return reply
 }
 
 async function rememberAccount(identity, reference, options) {

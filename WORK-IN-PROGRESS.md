@@ -1173,3 +1173,35 @@ Focused tests passed: 303 covering ingress, target, directory, hosting and
 Simplex, then 19 covering the final manager adjustment and real lobby recovery.
 Xref and production compile pass. No full suite repeated. Deployment and a
 successful ordinary browser signup remain next; this is not acceptance yet.
+
+
+## 2026-09-25 — .239 deployed; scene startup race isolated and corrected
+
+Implementation 46ec9a0 and label f34d07d are pushed and .239 runs on all ten
+replacement tasks. No ledger/key reset. The first capture was during recovery;
+a later capture verifies all 144 prior namespace replicas with unchanged
+identities/committees and nonregressing frontiers, 146 running and healthy.
+Fresh browser signup and lobby provisioning now both commit, but the first
+scene read still fails: bounded OTP trace sessions show an unknown target
+before its local process/route starts. Their observer sessions self-destroyed.
+
+A second capture at the failing call proves the namespace manager's existing
+desired-hosting projection already has the exact lobby anchor. The resolver now
+uses that published projection, waits on the existing exact directory event,
+and rechecks local ownership before opening its normal scope. This replaces a
+broader uncommitted experiment; no name-wide event or wait for unknown names
+remains. No request-time repair, history rebuild or proof retry was added.
+
+The browser now offers explicit Finish account setup for the selected saved
+account if it has no lobby. It shares the existing provisioning action and
+journal handoff implementation. Unknown enrollment operations block a fresh
+submission; the action is never automatically retried. This covers accounts
+left pending by .238's explicit pre-admission refusal without creating a new
+profile or bypassing owner policy.
+
+Final focused tests: 91 Erlang and 47 client tests pass, xref and production
+compile pass. UI build passes. Production source delta +107/-41, net +66
+across the resolver, published-projection accessor and browser recovery UI;
+no new production module/process. Full logs, abandoned draft and failed browser
+campaigns remain in `_build/signed-target-unavailable-20260925/`.
+The second correction is not deployed or hardware-accepted yet.

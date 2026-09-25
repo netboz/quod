@@ -1522,6 +1522,13 @@ encrypted export; importing that export recovers the same profile and lobby.
 Readiness remains distinct from a committed reference. Unknown operations are
 resolved using their original bytes, never resubmitted for proof.
 
+For an existing account with no lobby, the browser offers an explicit **Finish
+account setup** action. It submits the same `provision_lobby/1` action using the
+saved account reference; it does not create another account. An unresolved
+account operation blocks this submission and is resolved through the existing
+journal. Ordinary Prolog policy and the pending-to-linked transaction still
+control whether provisioning can occur.
+
 This provides ordinary browser enrollment and recovery of admitted operations.
 It does not yet provide autonomous provisioning while the browser stays offline.
 A crash between journaling and admission remains subject to the existing strict

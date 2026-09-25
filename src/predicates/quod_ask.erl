@@ -369,7 +369,11 @@ open_directory_scope(Target) ->
       #{'quod.namespace' => Target},
       fun(_SpanCtx) ->
           case quod_directory:resolve(Target) of
-              unknown -> {error, {unknown_ontology, Target}};
+              unknown ->
+                  case quod_namespace_manager:desired_identity(Target) of
+                      {ok, Identity} -> await_directory_scope(Target, Identity);
+                      {error, unavailable} -> {error, {unknown_ontology, Target}}
+                  end;
               {known, []} -> await_known_directory_scope(Target);
               {known, Routes} ->
                   case [Route || Route = #{status := confirmed,
@@ -382,26 +386,35 @@ open_directory_scope(Target) ->
 
 await_known_directory_scope(Target) ->
     case quod_directory:known_identities(Target) of
-        [{Target, _Anchor} = Identity] ->
-            case execution_remaining_ms() of
-                0 -> {error, current_proof_limit()};
-                RemainingMs ->
-                    case quod_trace:with_span(
-                           quod_trace:context(), <<"quod.ask.route_wait">>,
-                           internal, #{'quod.namespace' => Target},
-                           fun(_SpanCtx) ->
-                               quod_directory:await_validator_routes(
-                                 Identity, RemainingMs)
-                           end) of
-                        {ok, Routes} -> choose_directory_scope(Target, Routes);
-                        {error, anchor_conflict} ->
-                            {error, {anchor_conflict, Target}};
-                        {error, unavailable} ->
-                            {error, {ontology_unreachable, Target}}
-                    end
-            end;
+        [{Target, _Anchor} = Identity] -> await_directory_scope(Target, Identity);
         [] -> {error, {ontology_unreachable, Target}};
         _ -> {error, {anchor_conflict, Target}}
+    end.
+
+await_directory_scope(Target, Identity) ->
+    case execution_remaining_ms() of
+        0 -> {error, current_proof_limit()};
+        RemainingMs ->
+            case quod_trace:with_span(
+                   quod_trace:context(), <<"quod.ask.route_wait">>, internal,
+                   #{'quod.namespace' => Target},
+                   fun(_SpanCtx) ->
+                       quod_directory:await_validator_routes(Identity, RemainingMs)
+                   end) of
+                {ok, [#{genesis_anchor := Anchor} | _] = Routes} ->
+                    %% A local creation may have installed this target while
+                    %% discovery waited. Never route back to our own node.
+                    case {quod_reg:where({quod_prolog, Target}),
+                          quod_simplex:genesis_hash(Target)} of
+                        {Engine, Anchor} when is_pid(Engine) ->
+                            origin_scope_admitted(Target);
+                        {Engine, <<_:256>>} when is_pid(Engine) ->
+                            {error, {anchor_conflict, Target}};
+                        _ -> choose_directory_scope(Target, Routes)
+                    end;
+                {error, anchor_conflict} -> {error, {anchor_conflict, Target}};
+                {error, unavailable} -> {error, {ontology_unreachable, Target}}
+            end
     end.
 
 choose_directory_scope(Target, Routes) ->

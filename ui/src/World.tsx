@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { SessionControls } from './Session'
+import { accountReference } from '../../client/src/accounts.js'
 import { useSignedSession } from './session-context'
 import { ConsoleWorkspace } from './Console'
 import { compound, renderTerm, variable } from '../../client/src/prolog-term.js'
@@ -11,13 +12,14 @@ import type { MenuEntry, ProofView, Subject, WorldMark } from '../../client/src/
 import type { WorldScene } from '../../client/src/world-scene.js'
 
 export default function World() {
-  const { identity, agent, error: sessionError } = useSignedSession()
+  const { identity, agent, busy, unresolved, finishSetup, error: sessionError } = useSignedSession()
   const canvas = useRef<HTMLCanvasElement>(null)
   const [scene, setScene] = useState<WorldScene | null>(null)
   const [sceneError, setSceneError] = useState<string | null>(null)
   const [marks, setMarks] = useState<WorldMark[]>([])
   const [status, setStatus] = useState('Sign in and select an agent to open its lobby.')
   const [view, setView] = useState('lobby')
+  const [missingLobby, setMissingLobby] = useState(false)
   const [mode, setMode] = useState('playing')
   const [revision, setRevision] = useState(0)
   const [licenceCheck, setLicenceCheck] = useState<{ identity: SignedIdentity; reason: string | null } | null>(null)
@@ -73,6 +75,7 @@ export default function World() {
     setSelected(null)
     setMenu(null)
     setMarks([])
+    setMissingLobby(false)
     setWorkspace(null)
     setFocused(false)
     if (!identity || !agent) {
@@ -90,6 +93,7 @@ export default function World() {
           const result = await readPersonalLobby(identity, agent, mode)
           if (!active) return
           setMarks(result?.marks ?? [])
+          setMissingLobby(result === null)
           setStatus(result
             ? 'Your personal lobby. Select the console to see its actions.'
             : 'This agent has no personal lobby yet.')
@@ -139,6 +143,9 @@ export default function World() {
     }
   }
 
+  const account = identity ? accountReference(identity) : null
+  const selectedAccount = account && account.namespace === agent?.namespace &&
+    account.anchor === agent?.anchor && account.instanceText === agent?.instanceText
   const devices = marks.filter(mark => mark.depicts?.anchor)
   return <div className="world-shell">
     <canvas ref={canvas} className="world-canvas" aria-label="Personal lobby" />
@@ -169,6 +176,8 @@ export default function World() {
           <option value="playing">Playing</option><option value="edition">Structure</option>
         </select></label>}
         <button onClick={() => setRevision(n => n + 1)} disabled={!identity || !agent}>Refresh view</button>
+        {missingLobby && selectedAccount &&
+          <button disabled={busy || unresolved > 0} onClick={() => void finishSetup()}>Finish account setup</button>}
         <button disabled={!scene} onClick={() => {
           void scene?.immersive().catch(error => setStatus(`Immersive mode unavailable: ${String(error)}`))
         }}>Enter VR</button>

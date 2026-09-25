@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { accountReference, createAccount, resumeAccounts } from '../src/accounts.js'
+import { accountReference, createAccount, resumeAccounts, finishAccountSetup } from '../src/accounts.js'
 import { createKeyProvider, b64url } from '../src/key-provider.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
 import { binary, atom, compound, renderTerm } from '../src/prolog-term.js'
@@ -95,4 +95,39 @@ test('a consumed parent operation cannot be handed off twice', async () => {
   await f.journal.replace(parent.id, child)
   await assert.rejects(f.journal.replace(parent.id, { ...child, id: b64url(bytes(9)) }), /already advanced/)
   assert.deepEqual((await f.journal.list()).map(row => row.id), [child.id])
+})
+
+
+test('explicitly refused lobby setup can be finished without creating another account', async () => {
+  let submitted = 0
+  const f = await fixture(async () => {
+    if (++submitted === 1) return signupReply
+    throw new Error('signed_target_unavailable')
+  })
+  await assert.rejects(createAccount(f.identity, f.options), /signed_target_unavailable/)
+  assert.deepEqual(await f.journal.list(), [])
+  const reference = accountReference(f.identity)
+  let stage
+  await finishAccountSetup(f.identity, { ...f.options, post: async url => {
+    assert.equal(url, '/api/goals/execute')
+    const [operation] = await f.journal.list()
+    stage = operation.context.step
+    return lobbyReply
+  } })
+  assert.equal(stage, 'lobby')
+  assert.deepEqual(accountReference(f.identity), reference)
+  assert.deepEqual(await f.journal.list(), [])
+})
+
+test('explicit setup action cannot replace an unknown lobby operation', async () => {
+  let submitted = 0
+  const f = await fixture(async () => {
+    if (++submitted === 1) return signupReply
+    throw Object.assign(new Error('reply lost'), { outcomeUnknown: true })
+  })
+  await assert.rejects(createAccount(f.identity, f.options), /reply lost/)
+  const before = await f.journal.list()
+  await assert.rejects(finishAccountSetup(f.identity, f.options), /unresolved operation/)
+  assert.deepEqual(await f.journal.list(), before)
+  assert.equal(submitted, 2)
 })

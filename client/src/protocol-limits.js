@@ -2,8 +2,8 @@
 // values in one module so saved agent references, request encoding, and the
 // unresolved-operation journal accept exactly the same shapes.
 const MAX_NAMESPACE_BYTES = 255
-const MAX_AGENT_INSTANCE_TEXT_BYTES = 8_192
-const MAX_GOAL_TEXT_BYTES = 8_192
+const MAX_AGENT_INSTANCE_TEXT_BYTES = 131_072
+const MAX_GOAL_TEXT_BYTES = 131_072
 
 // The server deliberately reserves 32 bytes for the request domain in its
 // decode-admission bound, although the current domain is shorter. Mirror that

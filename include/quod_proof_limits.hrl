@@ -16,15 +16,15 @@
 -define(QUOD_MAX_PROXIES_PER_PROOF,
         (?QUOD_MAX_SCOPES_PER_PROOF * ?QUOD_MAX_INVOCATIONS_PER_SCOPE)).
 -define(QUOD_MAX_ANSWERS_PER_INVOCATION, 10000).
--define(QUOD_MAX_NESTED_GOAL_BYTES, 8192).
+-define(QUOD_MAX_NESTED_GOAL_BYTES, (128 * 1024)).
 -define(QUOD_MAX_PROOF_ANSWER_BYTES, 65536).
 -define(QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 1024).
 
 %% Sealing bounds (distributed-proof-plan §4.2). The transcript charge is taken
 %% BEFORE a goal runs; the plan bounds are enforced at seal time and again on
 %% every decode of a plan blob.
--define(QUOD_MAX_SCOPE_TRANSCRIPT_BYTES, (12 * 1024)).
--define(QUOD_MAX_PLAN_ENVELOPE_BYTES, (24 * 1024)).
+-define(QUOD_MAX_SCOPE_TRANSCRIPT_BYTES, (128 * 1024)).
+-define(QUOD_MAX_PLAN_ENVELOPE_BYTES, (128 * 1024)).
 -define(QUOD_MAX_PLAN_DIFF_OPS, 1024).
 -define(QUOD_MAX_PLAN_READ_FUNCTORS, 1024).
 %% Direct effects are deliberately singleton in the first protocol version.
@@ -34,7 +34,7 @@
 -define(QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
 -define(QUOD_MAX_PREPARED_EFFECT_BYTES, (256 * 1024)).
 %% The committed envelope's durable top-level goal and selected result.
--define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (8 * 1024)).
+-define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, ?QUOD_MAX_NESTED_GOAL_BYTES).
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
 %% Durable multi-ontology control records.  The semantic body limit leaves a
 %% fixed margin below the existing 256 KiB block ceiling for the target-bound

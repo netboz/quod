@@ -327,6 +327,25 @@ signed_plan_verifies_and_rejects_tamper_test() ->
           end
       end).
 
+large_goal_seals_and_roundtrips_test() ->
+    with_identity(fun(_PublicKey) ->
+        Session = session([]),
+        try
+            Goal = {assertz, {large_value, binary:copy(<<$x>>, 32 * 1024)}},
+            {ok, GoalBytes} = quod_durable_term:encode_goal(Goal),
+            ?assert(byte_size(GoalBytes) > 32 * 1024),
+            ?assertEqual({ok, Goal}, quod_durable_term:decode_goal(GoalBytes)),
+            {_Id, {solution, _}} = first(Session, Goal),
+            {ok, Plan} = quod_dtx:seal_session(Session, bind()),
+            ?assert(quod_dtx:verify(Plan)),
+            {ok, PlanBytes} = quod_dtx:encode(Plan),
+            ?assert(byte_size(PlanBytes) > 64 * 1024),
+            ?assertEqual({ok, Plan}, quod_dtx:decode(PlanBytes)),
+            ?assertEqual(quod_proof_session:local_changes(Session),
+                         quod_ct:plan_material(diff, Plan))
+        after quod_proof_session:stop(Session) end
+    end).
+
 decode_is_bounded_and_shape_checked_test() ->
     ?assertEqual({error, {too_large, plan}},
                  quod_dtx:decode(

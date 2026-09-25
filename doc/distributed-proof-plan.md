@@ -611,16 +611,16 @@ codec seam:
 | complete proof / idle scope lifetime | existing configurable 60,000 ms |
 | one actively deriving step | existing configurable 30,000 ms |
 | one transport frame | existing 1 MiB |
-| one encoded nested goal / one answer | 8 KiB / 64 KiB |
-| one session command/reply envelope | derived from the largest exact signed operation submission, bounded certified reads, and scope metadata (currently 500,864 bytes) |
+| one encoded nested goal / one answer | 128 KiB / 64 KiB |
+| one session command/reply envelope | derived from the largest exact signed operation submission, bounded certified reads, and scope metadata (currently 623,744 bytes) |
 | one failure reason / complete reason stack / retained entries / diagnostic choice-point boundaries | existing 4 KiB / 32 KiB / 256 / 256 |
-| one scope invocation transcript | 12 KiB |
-| one signed local-plan envelope | 24 KiB |
-| top-level goal bytes / durable selected-result bytes | 8 KiB / 16 KiB |
+| one scope invocation transcript | 128 KiB |
+| one signed local-plan envelope | 128 KiB |
+| top-level goal bytes / durable selected-result bytes | 128 KiB / 16 KiB |
 | complete Begin manifest, plans, goal and result | 224 KiB |
 | one Complete target/finalize-reference set | 224 KiB |
 | one Begin/Prepare/Decision/Finalize/Complete record and its canonical control-wave block | existing 256 KiB block bound |
-| diff operations or read-set functors in one local plan | 1,024 each, also subject to the 24 KiB plan cap |
+| diff operations or read-set functors in one local plan | 1,024 each, also subject to the 128 KiB plan cap |
 | ledger-active distributed groups per ontology | no compiled population cap; exact conflict descriptors and the block-byte bound govern admission |
 | volatile pre-Begin registrations waiting per local ontology/validator | existing configurable proof-worker capacity and deadline; no separate handoff quota |
 | accepted dormant Begin intents per local ontology/validator | one exact row per group; no separate compiled population cap |
@@ -631,6 +631,11 @@ codec seam:
 | outgoing DTX endpoint correlations / inbound endpoint workers per ontology | no compiled population cap; each exact live request is owned by its caller deadline and monitored worker |
 | cached foreign ontology histories / total cache bytes | no protocol population ceiling; dormant disk caches reopen lazily and operator storage monitoring remains operational policy |
 | validators in one committee | 64 |
+
+The 128 KiB goal, transcript and plan allowances are Yan's temporary increase
+(2026-09-25), pending replacement with Prolog-governed resource policy. These
+are component ceilings: transcript metadata, the complete plan and the complete
+transaction must also fit their enclosing budgets.
 
 The same constants are used by schema, producer, decoder, validator, replay,
 and tests; there are no duplicated magic values. A potentially writable goal is

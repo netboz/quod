@@ -1098,3 +1098,23 @@ independent of current mutable quotas and preserving pinned bridge identities.
 Do not change only the producer: decoder/validator/replay acceptance must remain
 coherent. Runtime readiness and final fleet/browser acceptance remain open.
 No resource-limit code change has yet been made.
+
+## 2026-09-25 — authorized temporary 128 KiB proof allowances
+
+Yan explicitly requested increasing the blocking limits to at least 128 Ko for
+now. This is a temporary exception to the resource-policy refactor priority.
+Nested and top-level goals, scope transcripts and signed local-plan envelopes
+now have 128 KiB component ceilings. Browser request limits match the server;
+derived request and scope envelopes increase with their existing formulas.
+The shared producer/decoder/validator constants remain coherent. Aggregate
+transaction/block limits and other resource budgets are unchanged; a component
+at its exact ceiling is still subject to enclosing-envelope overhead.
+
+Focused verification: 165 Erlang tests and all 45 client tests passed. A new
+regression then passed with the 48 DTX tests: a 32 KiB payload goes through real
+proof execution, signing/sealing into a plan over 64 KiB, verification and exact
+wire roundtrip. Existing boundary and boundary+1 checks pass at the new values.
+No full suite was run. Evidence: `_build/proof-budget-128k-20260925/`.
+Production line delta is +6/-6, net zero; no executor or protocol format added.
+This source change is not deployed yet. Readiness and cloud route acceptance
+remain open as recorded above; Prolog-governed budgets remain deferred work.

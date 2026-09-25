@@ -282,16 +282,16 @@ origin_scope_admitted(Target) ->
         _Engine ->
             case quod_simplex:genesis_hash(Target) of
                 <<_:256>> = Anchor ->
-                    Identity = {Target, Anchor},
-                    quod_proof_context:get_or_open_scope(
-                      Identity,
-                      fun(ScopeId) ->
-                          open_cohosted_scope(Target, Anchor, ScopeId)
-                      end);
+                    open_anchored_local_scope(Target, Anchor);
                 undefined ->
                     {error, {ontology_unreachable, Target}}
             end
     end.
+
+open_anchored_local_scope(Target, Anchor) ->
+    quod_proof_context:get_or_open_scope(
+      {Target, Anchor},
+      fun(ScopeId) -> open_cohosted_scope(Target, Anchor, ScopeId) end).
 
 open_cohosted_scope(Target, Anchor, ScopeId) ->
     %% Location is not write eligibility. Consensus-installed membership
@@ -407,7 +407,7 @@ await_directory_scope(Target, Identity) ->
                     case {quod_reg:where({quod_prolog, Target}),
                           quod_simplex:genesis_hash(Target)} of
                         {Engine, Anchor} when is_pid(Engine) ->
-                            origin_scope_admitted(Target);
+                            open_anchored_local_scope(Target, Anchor);
                         {Engine, <<_:256>>} when is_pid(Engine) ->
                             {error, {anchor_conflict, Target}};
                         _ -> choose_directory_scope(Target, Routes)

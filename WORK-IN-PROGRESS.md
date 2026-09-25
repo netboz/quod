@@ -1205,3 +1205,18 @@ across the resolver, published-projection accessor and browser recovery UI;
 no new production module/process. Full logs, abandoned draft and failed browser
 campaigns remain in `_build/signed-target-unavailable-20260925/`.
 The second correction is not deployed or hardware-accepted yet.
+
+
+## 2026-09-25 — first complete hardware signup; final anchor pin refinement
+
+.240 source abde283, assets a0081a5 and label be0624e are pushed and deployed
+on all ten replacement tasks. Hardware browser v5 passes ordinary signup,
+lobby creation, first scene and reload, with no HTTP errors. Account and
+journal are retained. An initial 45-second recovery observer expired on two
+old source replicas; this evidence remains intact, separate from later audits.
+
+Final inspection found a narrow identity-change window in the post-wait local
+selection. Extracting the shared anchored local opener retains the selected
+genesis anchor through scope admission instead of resolving the name again.
+No additional production lines; 62 focused Ask/lobby tests, xref and production
+compile pass. The final pin refinement still needs deployment and acceptance.

@@ -1278,3 +1278,57 @@ inventory corrections, exact activation and final results are retained under
 Remaining follow-ups are admission cost/capacity in Prolog, replicated account
 hosting, predicate-manifest granularity, shared exact-route selection and proof
 worker occupancy measurements. They are not part of this policy correction.
+
+
+## 2026-09-25 — exact local wake, XR action menu and startup identity (.243–.245)
+
+.243 implementation 7932285 and release bb3ad81 are pushed. Signed ingress and
+cross-ontology proof selection now share the directory owner's exact
+validator-target wait: subscribe before snapshot, then wake on either the exact
+local runtime identity becoming Prolog-ready or an exact validator route. The
+wait retains the caller's absolute deadline and adds no polling, retry or repair
+path. The Babylon scene uses the existing Prolog `lobby_menu/2` description for
+both desktop buttons and an XR radial menu; opening the proof console reuses the
+existing signed cursor and commit path.
+
+A fresh .243 signup exposed a smaller race. Profile and lobby creation had
+committed, but the first scene used a namespace-only `::` selector. Before the
+hosting projection published that new namespace locally, Ask could not know
+which exact ontology to await and returned `unknown_ontology`. .244 implementation
+51a2ae9 carries the already-returned `ontology_ref(Name, Anchor)` in the ordinary
+Prolog selector. Ask can therefore subscribe directly to the exact runtime and
+route events before the namespace projection catches up. The inner
+`current_ontology_identity/2` guard remains, and scope wire version 14 carries
+the exact selector for nested proofs. Name-only selectors remain supported.
+
+The first .244 browser acceptance found one duplicated interpretation: the Ask
+executor understood the exact selector, while signed top-level authorization
+still classified only plain names. It refused the exact form before execution
+with `not_allowed(Profile)`. .245 implementation 9de85a5 moves selector
+normalization into `quod_ontology_name`; authorization and execution now use the
+same parser. This replaces the duplicate logic rather than adding a browser
+exception. Release labels c9585e9 (.244) and 00ca32d (.245) are pushed.
+
+Focused final verification covers 145 Erlang tests with zero failures, 48
+client tests, UI build/lint, production compile and xref. No full suite was
+repeated. .245 is running on all ten clean replacement allocations with retained
+volumes and byte-identical historical predicate bridges. The stable post-restart
+capture preserves all 170 pre-deployment namespace rows and reports 176 healthy
+rows after three diagnostic signup/lobby pairs. Earlier captures during history
+loading are retained as failures rather than overwritten.
+
+Fresh .245 browser acceptance passes signup, atomic profile/lobby creation,
+first scene, semantic console action and the focused Prolog console. In the
+accepted run the first exact scene read took 2.2 seconds; its Tempo trace places
+2.179 seconds in `quod.ask.route_wait`, followed by millisecond lobby and
+presentation proofs. This is the intended event-driven wait for the committed
+new lobby to become locally ready. Earlier 7.7-second successful startup and
+stale acceptance-label failures (`Prove goal` versus `Prove a goal`, then
+`Prove console` versus `Prolog console`) remain preserved. Evidence is under
+`_build/scene-delay-20260925/`, especially `deployment-245/` and
+`acceptance-245-v3/`.
+
+The remaining product follow-ups are the previously deferred Prolog admission
+cost/capacity policy and replicated account hosting. XR radial-menu behavior is
+covered by adapter tests and the production bundle, but still needs a physical
+headset check.

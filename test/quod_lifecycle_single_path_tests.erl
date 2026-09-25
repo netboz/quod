@@ -20,6 +20,7 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(node_actor_uses_ordinary_creation(Fixture))},
           {timeout, 30, ?_test(signed_agent_create_uses_the_same_goal_path(Fixture))},
           {timeout, 60, ?_test(create_and_host_is_one_ordinary_goal(Fixture))},
+          {timeout, 30, ?_test(hosting_action_checks_policy_and_conflicts(Fixture))},
           {timeout, 90, ?_test(personal_lobbies_use_shared_creation_and_recovery(Fixture))},
           {timeout, 90, ?_test(open_signup_uses_policy_and_ordinary_signed_goals(Fixture))},
           {timeout, 30, ?_test(bundled_agent_policy_uses_ordinary_creation(Fixture))},
@@ -411,10 +412,10 @@ create_and_host_is_one_ordinary_goal(
         GoalText = iolist_to_binary(
                      ["quod:root::create_ontology(\"", NewNs,
                       "\", [], Anchor), \"", ActorNs,
-                      "\"::assertz(hosts_ontology(",
+                      "\"::host_ontology(",
                       agent_ref_source(NodeRef, InstanceText), ", ",
                       prolog_binary_literal(NewNs),
-                      ", Anchor, private))."]),
+                      ", Anchor, private)."]),
         {RequestBytes, Signature} = signed_agent_goal_version(
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
@@ -442,6 +443,66 @@ create_and_host_is_one_ordinary_goal(
               ?ROOT_NS, {retract, {ontology_creator_agent, NodeRef}}),
         stop_process(AuthPid)
     end.
+
+hosting_action_checks_policy_and_conflicts(
+  #{actor_ns := ActorNs, actor_principal := Principal}) ->
+    {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
+    Ns = unique_ns(<<"hosting-action">>),
+    Anchor = crypto:strong_rand_bytes(32),
+    Goal = {host_ontology, NodeRef, Ns, Anchor, private},
+    Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, Goal)),
+    ok = wait_desired_content(Ns, Anchor, 300),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, Goal)),
+    ?assertMatch({ok, [#{'Rows' := [Host]}], _},
+       quod_prolog:prove_ro(ActorNs, {findall, Host, Host, {'Rows'}})),
+    %% No silent identity/visibility replacement, and malformed inputs cannot
+    %% enter the committed projection and strand its existing valid work.
+    [begin
+        ?assertMatch({fail, _}, quod_prolog:execute(ActorNs, Bad))
+     end || Bad <- [{host_ontology, NodeRef, Ns, <<1:256>>, private},
+                    {host_ontology, NodeRef, Ns, Anchor, discoverable},
+                    {host_ontology, NodeRef, <<>>, Anchor, private},
+                    {host_ontology, NodeRef, Ns, <<1>>, private},
+                    {host_ontology, NodeRef, Ns, Anchor, unknown},
+                    {host_ontology, NodeRef, {'Name'}, Anchor, private}]],
+    {ok, Network} = quod_ontology:network_identity(),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {Public, _} = Pair = quod_identity:generate(),
+    Agent = provision_agent(Public, false),
+    AgentRef = maps:get(reference, Agent),
+    User = Agent#{keypair => Pair, network => Network},
+    {ok, Auth} = quod_client_auth:start_link(#{network_id => Network, node_key => NodeKey}),
+    unlink(Auth),
+    Submit = fun(G) ->
+        {Bytes, Sig} = lobby_user_request(User, execute, {'::', ActorNs, G}),
+        quod_client_goal_ingress:submit(Bytes, Sig)
+    end,
+    DelegatedNs = unique_ns(<<"delegated-hosting-action">>),
+    DelegatedGoal = {host_ontology, NodeRef, DelegatedNs, Anchor, private},
+    Grant = {can_host_ontology, AgentRef, NodeRef, DelegatedNs, Anchor, private},
+    try
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Submit(DelegatedGoal)),
+        ?assertMatch({ok, _, _}, quod_prolog:execute(ActorNs, {assertz, Grant})),
+        ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Submit(DelegatedGoal)),
+        ok = wait_desired_content(DelegatedNs, Anchor, 300),
+        ?assertMatch({ok, _, _}, quod_prolog:execute(ActorNs, {retract, Grant})),
+        %% Revocation is checked even when the requested hosting fact exists.
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Submit(DelegatedGoal)),
+        ?assertMatch({ok, _, {normalized, {failed, _}}}, Submit(
+            {assertz, {hosts_ontology, NodeRef, Ns, <<2:256>>, private}}))
+    after stop_process(Auth) end,
+    ?assertMatch({ok, _, _}, quod_prolog:execute(ActorNs,
+       {retract, {hosts_ontology, NodeRef, DelegatedNs, Anchor, private}})),
+    ok = wait_desired_absent(DelegatedNs, 300),
+    RollbackNs = unique_ns(<<"rollback-hosting-action">>),
+    ?assertMatch({fail, _}, quod_prolog:execute(ActorNs,
+       {transaction, {',', {host_ontology, NodeRef, RollbackNs, Anchor, private}, fail}})),
+    ?assertEqual(false, desired_has_content(RollbackNs)),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs,
+       {hosts_ontology, NodeRef, RollbackNs, Anchor, private})),
+    ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
+    ok = wait_desired_absent(Ns, 300).
 
 personal_lobbies_use_shared_creation_and_recovery(_Fixture) ->
     {ok, Network} = quod_ontology:network_identity(),
@@ -1644,7 +1705,7 @@ host_locally(#{actor_ns := ActorNs, actor_principal := Principal}, Ns, Anchor) -
        {ok, [_ | _], _},
        quod_prolog:execute(
          ActorNs,
-         {assertz, {hosts_ontology, NodeRef, Ns, Anchor, private}})),
+         {host_ontology, NodeRef, Ns, Anchor, private})),
     wait_desired_content(Ns, Anchor, 300).
 
 root_invocation_clauses() ->

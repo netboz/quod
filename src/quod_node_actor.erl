@@ -285,36 +285,16 @@ creation_terms(Namespace, InstanceTerm0, PublicKey) ->
     case {quod_wire_term:materialize_symbols(InstanceTerm0), file:read_file(ExecutionPath)} of
         {{ok, InstanceTerm}, {ok, ExecutionPolicy}} ->
             Terms =
-                [{instance_of, node, InstanceTerm},
+                [{node_ontology, Namespace},
+                 {instance_of, node, InstanceTerm},
                  {agent_key, InstanceTerm, PublicKey, active}],
-            Ns = prolog_binary_literal(Namespace),
-            Policy = iolist_to_binary(
-                        [ExecutionPolicy, "\ncan_invoke(_, agent_instance_ref(", Ns,
-                        ", _, Agent), _, ", Ns,
-                        ") :- instance_of(node, Agent).\n",
-                        "state_handler(node_ontology_hosting, ",
-                        "[hosts_ontology/4, knows_ontology_host/4], [], ",
-                        "reconcile_node_ontology_hosting).\n",
-                        "reconcile_node_ontology_hosting(Scope) :-\n",
-                        "  findall(host(NodeRef, Namespace, Anchor, Visibility),\n",
-                        "          hosts_ontology(NodeRef, Namespace, Anchor, Visibility),\n",
-                        "          Hosts),\n",
-                        "  findall(contact(NodeRef, Namespace, Anchor, HostNodeRef),\n",
-                        "          knows_ontology_host(NodeRef, Namespace, Anchor, HostNodeRef),\n",
-                        "          Contacts),\n",
-                        "  '$quod_project_node_ontology_hosting'(",
-                        "Hosts, Contacts, Scope).\n"]),
             {ok, [{terms, Terms},
                   %% Source is chardata; retain its compact binary form on the
                   %% public goal and materialize characters only inside the
                   %% existing lifecycle parser.
-                  {source, Policy},
+                  {source, ExecutionPolicy},
                   {external_predicate_modules,
                    [quod_ontology_predicates]}]};
         {{error, _}, _} -> {error, invalid_node_instance};
         {_, {error, _}} -> {error, node_execution_policy_unavailable}
     end.
-
-prolog_binary_literal(Bytes) ->
-    {ok, Source} = quod_client_goal_parser:format(Bytes),
-    binary:part(Source, 0, byte_size(Source) - 1).

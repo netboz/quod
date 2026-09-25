@@ -248,6 +248,40 @@ reused without rescanning their ledgers. Identical root facts deduplicate. A
 malformed fact is logged and skipped, while conflicting anchors are visibly
 blocked until a root-catalogue or newer node-policy revision changes the facts.
 
+The node's `node_execution.pl` provides the ordinary Prolog action
+`host_ontology(NodeRef, Namespace, GenesisAnchor, Visibility)`. It records the
+existing `hosts_ontology/4` fact in that node's ontology. All arguments must be
+ground; `Visibility` is `private` or `discoverable`. Repeating the same request
+adds no duplicate. A different anchor or visibility for an existing assignment
+fails rather than silently replacing it. This records desired hosting, not a
+claim that recovery or joining has finished, and does not grant validator or
+content-access rights.
+
+The target's `can_invoke/4` policy admits delegated requests through
+`can_host_ontology(Principal, NodeRef, Namespace, GenesisAnchor, Visibility)`.
+The node's own authenticated instance retains its administrative authority;
+other callers need an explicit node-owned rule or fact. Delegating this action
+does not delegate raw assertions. Its `action/3` declaration also lets the normal
+`goal/1` planner establish `hosts_ontology/4` where entry policy permits it.
+
+Creation and hosting can be composed in one ordinary transaction:
+
+```prolog
+transaction((
+    quod:root::create_ontology(Name, Options, Anchor),
+    NodeNamespace::host_ontology(NodeRef, Name, Anchor, private)
+)).
+```
+
+Here `NodeNamespace` and the exact `NodeRef` are chosen explicitly by policy;
+both creation and node-hosting permissions still apply. Removing the hosting
+fact withdraws that node's assignment without deleting history; a root system
+catalogue entry can independently require the ontology to remain hosted.
+Existing deployed node ontologies need the new ordinary clauses and their
+`node_ontology/1` identity fact installed through authorized transactions.
+Their existing locked hosting-handler declaration and bridge imports are
+unchanged; editing this source file alone does not update committed ontologies.
+
 ## 3. Prolog is the authority; Erlang is the bridge
 
 Prolog rules and actions describe the desired durable state. Governed Erlang

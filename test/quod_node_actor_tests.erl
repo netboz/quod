@@ -13,6 +13,7 @@ creation_options_are_ordinary_ontology_content_test() ->
               {instance_of, node, {physical_node, alpha}}, Terms)),
     ?assert(lists:member(
               {agent_key, {physical_node, alpha}, PublicKey, active}, Terms)),
+    ?assert(lists:member({node_ontology, Namespace}, Terms)),
     ?assert(is_binary(Policy)),
     {ok, PolicyTerms} = erlog_io:read_string_terms(binary_to_list(Policy)),
     ?assert(lists:any(fun is_node_acl/1, PolicyTerms)),
@@ -166,10 +167,9 @@ node_ref(Key) ->
 
 is_node_acl(
   {':-',
-   {can_invoke, _,
-    {agent_instance_ref, <<"node:alpha">>, _, {'Agent'}},
-    _, <<"node:alpha">>},
-   {instance_of, node, {'Agent'}}}) -> true;
+   {can_invoke, _, {'Principal'}, _, {'Namespace'}},
+   {',', {node_ontology, {'Namespace'}},
+         {node_instance_reference, {'Principal'}}}}) -> true;
 is_node_acl(_) -> false.
 
 is_hosting_handler(

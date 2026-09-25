@@ -1005,3 +1005,30 @@ fix has been made for these issues; Yan explicitly requested no ugly workaround.
 Release acceptance remains incomplete. Evidence and the exact stop state:
 `_build/lobby-provisioning-20260925/release-v1/deployment/ACCEPTANCE-STOP.md`,
 `hardware-browser-v1/` and `hardware-browser-v2/`.
+
+
+## 2026-09-25 — ordinary Prolog hosting convenience action
+
+Added `host_ontology(NodeRef, Namespace, Anchor, Visibility)` to the existing
+node ontology source. It records `hosts_ontology/4` through an ordinary action,
+without duplicate facts or implicit anchor/visibility replacement. Delegation
+uses node-owned `can_host_ontology/5` policy through the existing entry ACL;
+raw assertions remain administrative. Creation and hosting compose in one
+signed transaction and use the unchanged namespace manager for recovery.
+
+Moved generated node ACL/hosting-handler Prolog out of Erlang strings and into
+`node_execution.pl`; founding now supplies `node_ontology/1` with the existing
+instance/key facts. No predicate import, runtime declaration meaning, executor,
+queue or runtime storage changed. Production delta is +49/-23, net +26 lines.
+The actor architecture documents invocation, permissions and installation.
+
+Focused tests: 61 passed, plus xref. The initial failed attempt and its diagnosis
+are retained under `_build/prolog-hosting-20260925/REVIEW.md`. Tests cover signed
+atomic creation/hosting, delegated permission/revocation, duplicate prevention,
+conflicts, rollback and recovery with cleared in-memory desired state. No full
+suite or browser campaign repeated.
+
+This generic action has not been installed into the deployed node ontologies.
+Automatic signup still needs an explicit host-selection rule and its node-owned
+delegation; it is not inferred from the browser endpoint. The .237 browser and
+cloud-discovery acceptance failures recorded above remain unresolved.

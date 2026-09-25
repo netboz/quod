@@ -1246,3 +1246,35 @@ Existing profiles need the same clause update when activating the policy.
 Admission pricing/capacity, multi-host user durability, bridge pinning granularity
 and proof-worker capacity remain separate follow-ups; no new budget or consensus
 change is introduced. Deployment and final verification are still pending.
+
+
+## 2026-09-25 — creation policy correction deployed and accepted (.242)
+
+Implementation 5948534 and release label 5057543 are pushed. The correction adds
+38 production Prolog lines, with no Erlang/client/format changes. Fifty focused
+lifecycle/lobby tests and production compilation pass; no full suite repeated.
+Ordinary transactions installed the two policies and migrated all ten existing
+profile clauses. Two historical profiles were checked against 54ca17a before
+replacing the known template and recording their already-declared hosting node.
+Signup was briefly closed during activation and is open again. No identity,
+ledger, key or user-authored clause was discarded.
+
+All ten .242 containers replaced the old tasks and pass all four service checks;
+all eight historically pinned bridge BEAMs remain byte-identical to .236. Final
+hardware audit verifies all 155 prior replicas with unchanged anchors/committees
+and nonregressing frontiers, 158 current replicas healthy. Fresh browser signup,
+lobby creation, first scene and reload pass; a migrated existing account also
+opens its retained lobby and survives reload. The current founder browser origin
+is `https://192.168.1.10:21628/`; keys remain browser-origin bound.
+
+Two early retention captures and the 45-second readiness observer encountered
+old source replicas still loading. The first fresh-browser harness also crashed
+on an unhandled export-download timeout while signup was busy; its profile
+committed and remains pending. Nothing was resubmitted or erased. The corrected
+harness and a separately labelled identity passed. Failed evidence, operator
+inventory corrections, exact activation and final results are retained under
+`_build/signup-policy-20260925/`, particularly `FAILURES.md` and `RESULTS.json`.
+
+Remaining follow-ups are admission cost/capacity in Prolog, replicated account
+hosting, predicate-manifest granularity, shared exact-route selection and proof
+worker occupancy measurements. They are not part of this policy correction.

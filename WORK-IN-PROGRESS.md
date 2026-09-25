@@ -1118,3 +1118,35 @@ No full suite was run. Evidence: `_build/proof-budget-128k-20260925/`.
 Production line delta is +6/-6, net zero; no executor or protocol format added.
 This source change is not deployed yet. Readiness and cloud route acceptance
 remain open as recorded above; Prolog-governed budgets remain deferred work.
+
+## 2026-09-25 — .238 deployed; 128 KiB allowances verified on hardware
+
+Source d9f5596, rebuilt browser assets 8a06d32 and label-only e73c805 are pushed.
+Production image `192.168.1.11:5000/quod:0.7.238-c4p1` is published and running
+on all ten replacement allocations. All ten .237 tasks were confirmed dead
+before .238 started; no ledgers, keys or operation journals were erased. All
+eight historically pinned predicate BEAMs match .236/.237 byte for byte.
+
+Before restart, the three still-running profile/lobby test ontologies created
+by the earlier incomplete signup path received ordinary node hosting facts on
+their existing founder. The newer test profile already had its hosting fact.
+The post-recovery capture verifies all 134 original namespace replicas with
+unchanged genesis anchors and committees and nonregressing history frontiers.
+There are now 138 running replicas: cloud[1] also recovered the four newer
+system ontologies. All ten nodes pass all four service checks. The first
+45-second recovery wait expired on one source replica; its later successful
+recovery and the initial evidence are both retained.
+
+Every deployed node reports .238 and accepts a durable goal larger than the old
+8 KiB allowance. A real signed request of 82,551 bytes committed through the
+ordinary node-agent ingress and its exact test fact was removed and verified
+absent. The initial probe had a harness syntax error before execution; cleanup
+then encountered unsupported retractall/1 and was completed with retract/1.
+Neither error caused an uncertain operation to be resubmitted. The new browser
+bundle/login entry passes the smoke test at https://192.168.1.10:20526/.
+
+Existing unresolved work: cloud[0] still lacks the four newer system routes;
+initial signup/profile/lobby readiness and the Prolog resource-policy refactor
+remain open. This release does not claim those issues fixed. No full test suite
+was repeated. Evidence, image digest, retained failures and final checks:
+`_build/proof-budget-128k-20260925/deployment-v1/`.

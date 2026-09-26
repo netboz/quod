@@ -131,6 +131,13 @@ signing when the owner becomes capable again. Recovery grants no signing,
 voting or application permission. Inbound relay placements are still invalidated
 on re-seat; their originating custody remains responsible for the exact bytes.
 
+Empty finality also ends volatile proposer and relay placement work when it
+adds no material entry. Reuse the existing exclusion/custody cleanup for that
+protocol prefix, while retaining its unarchived proof and signing latches.
+Only a completed material archive group may advance archive custody and retire
+those durable latches. A finished empty proposal is not demand for another
+view, and must not keep an otherwise idle ontology's watchdog running.
+
 ### Existing-path integration and deletion obligations
 
 | Existing seam | Required replacement / retained responsibility |

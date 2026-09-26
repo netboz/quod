@@ -9621,7 +9621,11 @@ probe_prune(_Sl, S) ->
 %% before publishing any entry, replying, or releasing a signing latch.
 commit_finality(Cert, S = #s{slot = Height, protocol_root = MaterialRoot, eng = Eng}) ->
     case eng_archive_group(Cert, Height, MaterialRoot, Eng) of
-        none -> S;
+        none ->
+            %% Empty finality still closes proposal/custody placement work.
+            %% Its proof and vote latches remain owned until a material archive
+            %% group takes custody; no ledger row or journal floor moves here.
+            retire_proposal_work(Cert#cert.slot, S);
         {Source, Entries, Summary} ->
             {ok, Store} = timed_step(S, persist,
                 fun() -> quod_ledger_store:append(S#s.store, {Source, Entries}) end),
@@ -9934,11 +9938,7 @@ project_dtx_batch_items(Items, LaneSequences, Entry, Projection0) ->
 finalize_protocol({Era, View, _} = Head, S0 = #s{eng = Eng, archive_tip = {Root, _} = Tip}) ->
     NewEra = element(1, Root) =/= Era,
     Cutoff = case NewEra of true -> infinity; false -> View end,
-    SCollected = nack_collecting_le(Cutoff, S0),
-    SExcluded = mark_custody_excluded_le(Cutoff, SCollected),
-    S1 = nack_relays_le(Cutoff, SExcluded),
-    S2 = lists:foldl(fun(V, Acc) -> reply_local(V, {error, skipped}, Acc) end,
-                     S1, [V || V <- maps:keys(S1#s.local_proposals), V =< Cutoff]),
+    S2 = retire_proposal_work(Cutoff, S0),
     maps:foreach(fun(V, Round) ->
         case V =< Cutoff of true -> release_validation_monitor(Round); false -> ok end
     end, S2#s.rounds),
@@ -9950,10 +9950,20 @@ finalize_protocol({Era, View, _} = Head, S0 = #s{eng = Eng, archive_tip = {Root,
         true -> signing_rounds(S2#s.signing_journal, Engine#eng.era);
         false -> maps:filter(fun(V, _) -> V > Cutoff end, S2#s.rounds)
     end,
-    clear_requested_le(Cutoff,
-      probe_prune(Cutoff, S2#s{eng = Engine,
+    S2#s{eng = Engine,
           block_requests = prune_block_requests(Cutoff, S2#s.block_requests),
-          rounds = Rounds})).
+          rounds = Rounds}.
+
+%% Finalized protocol work and archived evidence have different lifetimes.
+%% Re-place excluded exact envelopes through their existing custody owner;
+%% only finalize_protocol/2 may release the durable proof/signing prefix.
+retire_proposal_work(Cutoff, S0) ->
+    SCollected = nack_collecting_le(Cutoff, S0),
+    SExcluded = mark_custody_excluded_le(Cutoff, SCollected),
+    S1 = nack_relays_le(Cutoff, SExcluded),
+    S2 = lists:foldl(fun(V, Acc) -> reply_local(V, {error, skipped}, Acc) end,
+                     S1, [V || V <- maps:keys(S1#s.local_proposals), V =< Cutoff]),
+    clear_requested_le(Cutoff, probe_prune(Cutoff, S2)).
 
 reply_local(Slot, Reply, S = #s{local_proposals = Local}) ->
     case maps:take(Slot, Local) of

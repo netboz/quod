@@ -514,6 +514,37 @@ era_owner_admits_carriers_without_consuming_material_window_test() ->
           {{<<8:256>>, 65}, {<<8:256>>, 64, element(3, Head)}, 0}]),
     flush_consensus_fixture_frames().
 
+%% Empty finality closes proposer work without inventing a material entry.
+%% Keeping its local proposal alive makes an idle ontology complain forever.
+finalized_empty_proposal_does_not_keep_watchdog_alive_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Committee = [{Self, Signer} | _] = committee(4),
+    Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
+    {ok, Empty} = quod_ledger:new_block({Era, 1}, Root, empty, 0),
+    {E1, _} = quod_simplex:eng_offer({block, Empty},
+        quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+    {E2, _} = feed_shares(era_shares(support, Empty, Committee), E1),
+    {E3, _} = feed_shares(era_shares(commit, Empty, Committee), E2),
+    Hash = element(3, quod_ledger:block_ref(Empty)),
+    Cert = quod_simplex:persisted_cert(commit, 1, Hash, E3),
+    Owner = st(#{self => Self, id => Signer, validators => pubs(Committee),
+        eng => E3, sync => ready, slot => 500, history_head => {500, element(3, Root)},
+        protocol_root => Root, local_proposal => {1, Hash}}),
+    Settled = quod_simplex:commit_finality(Cert, Owner),
+    ?assertEqual(idle, quod_simplex:test_progress(
+        quod_simplex:reconcile_head_progress(Settled))),
+    ?assertEqual(500, element(1, quod_simplex:test_committed_store(Settled))),
+    %% Exact proof bodies and certificates remain available; closing volatile
+    %% proposer work is not permission to prune unarchived signing evidence.
+    ?assertEqual(quod_simplex:test_engine_pool_sizes(Owner),
+                 quod_simplex:test_engine_pool_sizes(Settled)),
+    ?assertEqual(quod_simplex:test_protocol_position(Owner),
+                 quod_simplex:test_protocol_position(Settled)),
+    ?assertEqual(quod_simplex:test_signing_journal(Owner),
+                 quod_simplex:test_signing_journal(Settled)),
+    Later = quod_simplex:reconcile_head_progress(quod_simplex:watch_requested(2, Settled)),
+    ?assertEqual({Era, 2, awaiting_proposal}, quod_simplex:test_progress(Later)).
+
 era_watchdog_tracks_view_without_quorum_grace_or_deadline_renewal_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = committee(4), [{Self, Signer} | _] = Committee,

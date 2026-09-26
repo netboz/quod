@@ -2717,3 +2717,45 @@ No full backend rerun is needed for that CSS directive. Hardware baseline v3
 and its separately labelled follow-on/serial/observed campaigns are retained;
 all baseline containers are now stopped with their volumes intact so candidate
 measurements run without their competing background load. Production untouched.
+
+## 2026-09-26 — first finality hardware candidate and retained failure
+
+Packaging-v2 passed clean UI reproducibility and both release builds, with
+explicit byte-identical backend/client/application inheritance from all25
+successful clean-v7 commands. Original v7 freeze failure and packaging-v1 setup
+failure remain retained. Independent completed-cut review bound manifest
+034a7334eed01a574238d5777e14b24e613894e89beae5d3ce581c7a1f4f5412.
+Committed/pushed bf29c1b, published immutable finality-bf29c1b-v1, and founded
+isolated8-node candidate. Production quod remains .246-c4p1 untouched.
+
+Candidate passed actual forwarded cursor open/Next/Stop, isolated local/remote
+writes, all3 repeats of64 local/remote writes at c1/c4/c16, and3 certified-read
+runs, with exact fact-set/no-duplicate readback. Remote means improved but p99
+still misses450ms; local throughput is mixed. No performance acceptance claimed.
+Atomic c4 stopped after4 pending/uncertain original operations. None resubmitted.
+Bounded archive inspection found both first votes promptly, source Resolve at
++165ms, but target Resolve only about87s later; finally1group committed and3
+aborted. Two refused-source operations still report pending via original-operation
+lookup despite group Complete records. This remains an explicit investigation,
+not silently reclassified as a passing cohort.
+
+Idle traffic then grew, node2 was OOM-killed and its restart failed once.
+Nomad task events, memory/mailbox summaries, outcomes, ledger tails and all
+original request journals are retained under hardware-candidate-v1. A separate
+C/D diagnostic failed during trace setup because that task was down: no new
+C/D goal was submitted, and started observers were cleaned up. The isolated
+candidate is now stopped with all8volumes retained; production untouched.
+
+Deterministic negative proves finalized empty proposals retain volatile local
+work and incorrectly keep the watchdog active after useful work is complete.
+Reuse proposal/custody-placement cleanup for zero-material finality, separately
+from archive/journal-prefix retirement. No row, signing permission, deadline or
+fresh request is introduced; exact proof/journal custody remains. Negative-v1
+was a rebar CLI selection mistake; negative-v2 fails the intended idle assertion.
+Positive-v1 passes; focused consensus/ingress/journal/DTX-owner345/345 pass.
+Real fault/restart and new release checks are next. The atomic delay and hardware
+resource failure are not yet claimed causally resolved by this correction.
+
+The first correction also passes the real4-node QUIC fault/restart suite9/9.
+Clean-v8 freezes this small lifecycle correction and repeats the required
+sequential release gates before another consensus commit/candidate publication.

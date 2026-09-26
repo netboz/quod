@@ -56,6 +56,7 @@ system is introduced.
          verify/5, verify_reference/3, verify_local/4,
          verify_reference/4, verify_reference/5,
          resolve_reference/6, verify_local_deadline/4,
+         reselect_verified/4,
          read_local_application_deadline/4,
          current/3, current/4,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
@@ -609,8 +610,55 @@ verify_captured_local(
         {error, _} = Error -> Error;
         false -> {error, retry}
     end,
-    caller_result(Deadline, Result);
+    caller_result(Deadline, bind_local_evidence(Result, View));
 verify_captured_local(_View, _Ref, _ExpectedPhase, _Deadline, _Verify) ->
+    {error, bad_foreign_reference}.
+
+bind_local_evidence({ok, Evidence}, #{owner := Owner, identity := Identity}) ->
+    {ok, Evidence#{local_owner => #{owner => Owner, identity => Identity}}};
+bind_local_evidence(Result, _View) -> Result.
+
+-doc """
+Select another record from a completed, locally verified exact-entry result.
+
+This accepts only a successful verifier result retained by the current
+validation call, never a wire map or an untrusted entry hint. Identity, signed
+height and block hash must match; the shared exact checker still decodes and
+binds the new record and phase. Hosted evidence keeps its original owner
+incarnation, without retaining another snapshot or projection.
+""".
+-spec reselect_verified(map(), quod_dtx:certified_ref(),
+                        entry | transaction | vote | resolve | complete,
+                        integer()) -> {ok, map()} | {error, term()}.
+reselect_verified(
+  #{identity := Identity, slot := Height, block_hash := Hash,
+    entry := Entry, committee := Committee, committee_id := CommitteeId,
+    routes := Routes} = Evidence, Ref, Phase, Deadline)
+  when is_integer(Deadline) ->
+    case {quod_dtx:certified_ref_claim(Ref), valid_phase(Phase), caller_live(Deadline)} of
+        {error, _, _} -> {error, bad_foreign_reference};
+        {_, false, _} -> {error, bad_foreign_reference};
+        {_, _, false} -> {error, retry};
+        {{ok, {Identity, Height, Hash, _Digest}}, true, true} ->
+            Authority = #{committee => Committee, committee_id => CommitteeId,
+                          validator_routes => Routes},
+            Select = fun() ->
+                Result = case quod_ledger:hint_bytes(Entry) of
+                    {ok, Bytes} -> verify_exact_reference_entry(Ref, Phase, Bytes, Authority);
+                    {error, _} -> {error, invalid_foreign_reference}
+                end,
+                ?LOCAL_READ_GATE(after_read),
+                Result
+            end,
+            ?LOCAL_READ_GATE(before_read),
+            Result = case maps:find(local_owner, Evidence) of
+                {ok, View} -> bind_local_evidence(with_local_view_owner(View, Select), View);
+                error -> Select()
+            end,
+            caller_result(Deadline, Result);
+        _ -> {error, invalid_foreign_reference}
+    end;
+reselect_verified(_Evidence, _Ref, _Phase, _Deadline) ->
     {error, bad_foreign_reference}.
 
 -ifdef(TEST).
@@ -6540,8 +6588,13 @@ verify_exact_reference_entry(
       end).
 
 verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection) ->
-    {ok, Selected} = quod_ledger:select_entry(
-      Entry, {digest, ref_slot(Ref), ref_record_digest(Ref)}, wrapped),
+    case quod_ledger:select_entry(
+           Entry, {digest, ref_slot(Ref), ref_record_digest(Ref)}, wrapped) of
+        {ok, Selected} -> verify_exact_selection(Ref, ExpectedPhase, Selected, Projection);
+        {error, _} -> {error, invalid_foreign_reference}
+    end.
+
+verify_exact_selection(Ref, ExpectedPhase, Selected, Projection) ->
     case quod_ledger:selected_record(Selected) of
         #transaction{} = Transaction
           when ExpectedPhase =:= transaction; ExpectedPhase =:= entry ->

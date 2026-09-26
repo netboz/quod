@@ -2948,3 +2948,49 @@ state and actions, preserving the tracing assertions. All 13 consensus tracing
 tests pass; no production code changed. The original failure and causal evidence
 remain in `clean-v14-trace-triage-v1`. Clean-v15 binds the corrected fixture for
 the release gates; deployment still requires isolated hardware acceptance.
+
+Clean-v15 passed all 25 sequential gates: 3,127 EUnit and 145 Common Test cases,
+client checks, xref, Dialyzer, both release profiles and UI checks. The reviewed
+manifest is `eb781bda2dec7b91033b1c0521cce1c45ff51d3c6bddcb5eb4c37096deea9b52`.
+Commit `481f89a` is pushed. Its isolated v5 candidate passed all 1,401 healthy
+requests with exact readbacks, cursor forwarding, retained-volume restart,
+system catalog, paused proposer, membership removal/re-admission and two normal
+browser account/console/reload flows. Idle windows created no empty carriers.
+The cold pair took 480 ms (one sample); remote c4 mean was 443 ms and p99 707 ms.
+The 450 ms gate remains failed, so production activation has not occurred.
+Production .246, all old volumes and the original uncertain operation remain.
+
+A separate 64-request c4 diagnostic passed every exact readback, with mean
+436 ms and p99 682 ms. It does not replace the failed acceptance measurement.
+All 64 traces have complete submitting-node stage accounting: mean HTTP 432 ms
+comprises identity 17 ms, scope opening 28 ms, source claim 178 ms, result wait
+165 ms and other work 43 ms; client work outside HTTP adds about 5 ms. The
+slow claims contain consensus placement/progress waits. Missing follower and
+attester spans prevent attributing those waits to transport, queueing or I/O.
+No genesis replay was observed and repeated replica calls do not establish
+repeated durable writes. Evidence and independently checked qualifications are
+in `v5-traced-remote-attribution-v1` under the retained campaign directory.
+
+One bounded refinement is implemented: the existing validation-local
+evidence map reuses a verified foreign block for different records from that
+same anchored identity, height and hash. Each record still crosses the shared
+exact checker; newly selected hosted records retain the existing before/after
+owner-incarnation checks. No new cache, process, protocol or recovery-driver
+election is introduced. Two observed source validations each made sequential
+requests to the same foreign height; actual same-block reuse and its negative
+controls are covered by production-seam tests. No p99 gain is claimed in advance.
+
+The two existing source modules add 81 lines and remove 23 (net +58, including
+the TEST facade); duplicate result mapping is removed. Production and TEST
+compilation pass with warnings as errors. Two independent source reviews found
+no blocker. The first focused run retained 79 passes and one new fixture failure:
+its global zero-read assertion incorrectly counted the archive sender's initial
+proof reads. The corrected assertion separates that worker from the validation
+caller and retains one acquisition, two reselections and exact-record checks.
+The resolver-only follow-up passes all 39 cases; the other 41 focused checks
+passed in the first run. All 297 freshly compiled modules had explicit path and
+code-hash binding before and after both runs. These include owner replacement,
+co-hosting, malformed references, witness selection, actual signature decoding
+and expiry after selection. Evidence is in `batch-entry-reuse-focused-v1/v2`;
+the original failure and its causal triage are retained. Clean-v16 binds the
+completed source for release checks before commit and new hardware acceptance.

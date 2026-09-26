@@ -180,6 +180,17 @@ finality certificate: honest validators have checked semantic admission,
 authorization, sequences and phase transitions before voting. A full material
 projection continues to verify those transitions by ordered folding. Missing
 sparse entries cannot prove nonexistence, consumption, or an absent decision.
+Within one immutable candidate validation, exact references to different records
+of the same certified block share that block's verified bytes and historical
+authority. The reuse key includes anchored identity, signed material height and
+full block hash. Each new record is still decoded and checked against its own
+reference, signature, digest and required phase through the same exact verifier.
+A completed hosted proof retains only its exact owner/identity binding for this
+purpose; selecting another record checks that incarnation before and after the
+selection. It neither recaptures a lost owner nor copies its history projection.
+Completed foreign proof bytes require no additional owner lease. This reuse
+lasts only for the existing validation and keeps its original absolute deadline;
+it adds no retained cache or alternate source of authority.
 Current committee discovery additionally requires the existing current-committee
 quorum confirmation under the original deadline. A higher verified tip changes
 the question to confirm; a failed probe cannot renew the deadline.

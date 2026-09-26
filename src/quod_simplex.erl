@@ -217,7 +217,7 @@ Remaining work and hardware acceptance are tracked in `doc/deferred.md` and
          test_dtx_endpoint_ready/2,
          test_dtx_outcome_result/2,
          test_validate_dtx_reference_evidence/2,
-         test_verify_content_requirements/2,
+         test_verify_content_requirements/2, test_verify_content_requirements/6,
          test_content_reference_contacts/3,
          test_verify_complete_applied/3,
          test_relevant_validation_sidecar/2,
@@ -1624,6 +1624,8 @@ test_verify_content_requirements(Requirements, Seen) ->
     verify_content_requirements(
       Requirements, <<0:256>>, undefined, #{}, Seen,
       quod_time:mono_ms() + ?DTX_FOREIGN_VERIFY_MS).
+test_verify_content_requirements(Requirements, Identity, Source, Contacts, Seen, Deadline) ->
+    verify_content_requirements(Requirements, Identity, Source, Contacts, Seen, Deadline).
 test_content_reference_contacts(
   ReferencePlan, TargetIdentity, #s{dtx_workers = Workers}) ->
     content_reference_contacts(ReferencePlan, Workers, TargetIdentity).
@@ -11011,18 +11013,33 @@ verify_content_requirements([{Phase, Ref} | Rest],
                 false -> {invalid, foreign_reference}
             end;
         error ->
-            case verify_content_reference(
-                   Ref, Phase, LocalIdentity, LedgerRoot, Contacts, Deadline) of
+            EntryKey = content_entry_key(Ref),
+            Result = case maps:find(EntryKey, Seen0) of
+                {ok, Prior} ->
+                    verify_dtx_reference_result(
+                      quod_foreign_log:reselect_verified(Prior, Ref, Phase, Deadline));
+                error -> verify_content_reference(
+                           Ref, Phase, LocalIdentity, LedgerRoot, Contacts, Deadline)
+            end,
+            case Result of
                 {valid, Evidence} ->
                     verify_content_requirements(
                       Rest, LocalIdentity, LedgerRoot, Contacts,
-                      Seen0#{Ref => Evidence}, Deadline);
+                      Seen0#{Ref => Evidence, EntryKey => Evidence}, Deadline);
                 Other -> Other
             end
     end;
 verify_content_requirements(_Malformed, _LocalIdentity, _LedgerRoot,
                             _Contacts, _Seen, _Deadline) ->
     {invalid, malformed_foreign_references}.
+
+%% A candidate owns this bounded result reuse. Different record digests in
+%% one immutable block share its checked bytes, never a height-only claim.
+content_entry_key(Ref) ->
+    case quod_dtx:certified_ref_claim(Ref) of
+        {ok, {Identity, Height, Hash, _Digest}} -> {entry, Identity, Height, Hash};
+        error -> invalid
+    end.
 
 reference_evidence_satisfies(transaction,
                              #{transaction := #transaction{}}) -> true;
@@ -11406,22 +11423,10 @@ preview_protocol_era(PreviousRoot,
     end;
 preview_protocol_era(_PreviousRoot, _Projection, Delta) -> Delta.
 
-verify_local_dtx_reference_result(
-  {ok, #{transaction := _Transaction} = Evidence}) ->
-    {valid, Evidence};
-verify_local_dtx_reference_result(
-  {ok, #{control := _Control} = Evidence}) ->
-    {valid, Evidence};
-verify_local_dtx_reference_result({ok, _MalformedEvidence}) ->
-    {invalid, foreign_reference};
 verify_local_dtx_reference_result({error, phase_mismatch}) ->
     {invalid, foreign_phase};
-verify_local_dtx_reference_result({error, invalid_foreign_reference}) ->
-    {invalid, foreign_reference};
-verify_local_dtx_reference_result({error, bad_foreign_reference}) ->
-    {invalid, foreign_reference};
-verify_local_dtx_reference_result({error, _Unavailable}) ->
-    abstain.
+verify_local_dtx_reference_result(Result) ->
+    verify_dtx_reference_result(Result).
 
 local_dtx_evidence_source(
   Ref, ExpectedPhase,
@@ -11484,11 +11489,11 @@ verify_remote_dtx_reference(Ref, Phase, Identity, Contact, Deadline) ->
     verify_remote_dtx_reference(Ref, Phase, Identity, Contact, none, Deadline).
 
 verify_remote_dtx_reference(Ref, Phase, Identity, Contact, EntryHint, Deadline) ->
-    verify_remote_dtx_reference_result(
+    verify_dtx_reference_result(
       quod_foreign_log:resolve_reference(
         Identity, Ref, Phase, Contact, EntryHint, Deadline)).
 
-verify_remote_dtx_reference_result(Result) ->
+verify_dtx_reference_result(Result) ->
     case Result of
         {ok, #{transaction := _Transaction} = Evidence} ->
             {valid, Evidence};

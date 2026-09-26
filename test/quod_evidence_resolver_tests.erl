@@ -550,6 +550,231 @@ local_serving_wrong_expected_namespace_is_invalid_before_capture_test() ->
         assert_no_fetch()
     end).
 
+%% One immutable candidate can require different records from the same block.
+%% Each record still crosses the ordinary signed decoder and exact checker;
+%% only the completed block proof is shared within this candidate.
+candidate_same_entry_reuses_one_verified_source_test_() ->
+    [{atom_to_list(Mode), fun() -> candidate_same_entry_reuses_one_verified_source(Mode) end}
+     || Mode <- [foreign, local, cohosted]].
+
+candidate_same_entry_reuses_one_verified_source(Mode) ->
+    F = batch_fixture(),
+    SourceMode = case Mode of foreign -> none; _ -> current end,
+    with_case(F, SourceMode, fun(C) ->
+        [First | _] = Refs = maps:get(refs, F),
+        {LocalIdentity, LocalSource} = case Mode of
+            local -> {identity(F), gen_server:call(source_pid(C), view)};
+            _ -> {{<<"validating:other">>, digest(validating_other)}, undefined}
+        end,
+        Contacts = #{First => {identity(F), maps:get(contact, C)}},
+        Caller = traced_async(fun() ->
+            quod_simplex:test_verify_content_requirements(
+              [{transaction, Ref} || Ref <- Refs], LocalIdentity,
+              LocalSource, Contacts, #{}, deadline(3000))
+        end),
+        {valid, Seen} = result(Caller),
+        lists:foreach(fun({Ref, Transaction}) ->
+            Evidence = maps:get(Ref, Seen),
+            assert_selected_transaction(F, Ref, Transaction, Evidence),
+            Candidate = #transaction{role = {remote_application, none, none, none},
+              evidence = {Ref, Transaction}, foreign_reads = []},
+            ?assertEqual(ok, quod_commit_validation:validate_evidence(Candidate, Seen)),
+            [Other | _] = [Tx || Tx <- maps:get(transactions, F), Tx =/= Transaction],
+            ?assertEqual({error, foreign_reference_binding},
+              quod_commit_validation:validate_evidence(
+                Candidate#transaction{evidence = {Ref, Other}}, Seen))
+        end, lists:zip(Refs, maps:get(transactions, F))),
+        T = traces(),
+        ?assertEqual(2, calls(T, quod_foreign_log, reselect_verified, 4)),
+        case Mode of
+            foreign ->
+                ?assertEqual(1, calls(T, quod_foreign_log, verification_call, 2)),
+                ?assertEqual(1, calls(T, quod_foreign_log, spawn_verification_worker, 3)),
+                ?assert(calls(T, quod_catchup, evidence_accept, 4) > 0),
+                %% The real fixture sender runs in the first proof worker
+                %% and reads its archive. Reselection stays in the caller.
+                [SourcePid] = lists:usort([Pid || {trace, Pid, call,
+                    {quod_catchup, evidence_accept, _}} <- T]),
+                ?assertNotEqual(Caller, SourcePid),
+                ReadPids = lists:usort([Pid || {trace, Pid, call,
+                    {quod_ledger_store, read_at, [_, _, _]}} <- T]),
+                ?assertEqual([SourcePid], ReadPids),
+                receive {resolver_fetch, _, _} -> ok
+                after 0 -> error(first_record_was_not_fetched)
+                end;
+            _ ->
+                ?assertEqual(1, calls(T, quod_ledger_store, read_at, 3)),
+                ?assertEqual(1, calls(T, quod_foreign_log, verify_local_deadline, 4)),
+                ?assertEqual(case Mode of local -> 0; cohosted -> 1 end,
+                             calls(T, quod_simplex, history_view_at, 3)),
+                assert_no_foreign_work(T),
+                assert_no_fetch()
+        end
+    end).
+
+same_entry_reselection_preserves_claim_and_witness_rules_test_() ->
+    [{atom_to_list(Mode), fun() -> same_entry_reselection_preserves_claim_and_witness_rules(Mode) end}
+     || Mode <- [none, current]].
+
+same_entry_reselection_preserves_claim_and_witness_rules(Mode) ->
+    F = batch_fixture(),
+    with_case(F, Mode, fun(C) ->
+        [First, Second, Third] = maps:get(refs, F),
+        [_, Tx2, Tx3] = maps:get(transactions, F),
+        {ok, Evidence} = resolve(C, First, transaction, deadline(3000)),
+        _ = traces(),
+        flush_fetches(),
+        Alternate = reference_with_signers(F, Second, tl(maps:get(members, F))),
+        ?assertNotEqual(Second, Alternate),
+        ?assert(quod_dtx:same_certified_ref(Second, Alternate)),
+        {ok, Selected} = reselect(Evidence, Alternate, transaction, deadline(3000)),
+        assert_selected_transaction(F, Second, Tx2, Selected),
+        %% Provenance must survive successive selections, not only the first.
+        {ok, Selected3} = reselect(Selected, Third, entry, deadline(3000)),
+        assert_selected_transaction(F, Third, Tx3, Selected3),
+        {ok, Cert} = quod_ledger:decode_finality_head(element(8, Second)),
+        [{Signer, _} | Signatures] = Cert#cert.sigs,
+        UnusedBadWitness = reference_with_head(Second,
+            Cert#cert{sigs = [{Signer, <<0:512>>} | Signatures]}),
+        ?assertEqual({ok, Selected},
+          reselect(Evidence, UnusedBadWitness, transaction, deadline(3000))),
+        Invalid = [setelement(3, Second, <<"wrong:namespace">>),
+                   setelement(4, Second, digest(wrong_reselect_anchor)),
+                   setelement(5, Second, 3),
+                   setelement(6, Second, digest(wrong_reselect_block)),
+                   setelement(7, Second, digest(absent_record))],
+        lists:foreach(fun(Ref) ->
+            ?assertEqual({error, invalid_foreign_reference},
+              reselect(Evidence, Ref, transaction, deadline(3000)))
+        end, Invalid),
+        ?assertEqual({error, invalid_foreign_reference},
+          reselect(Evidence, Second, vote, deadline(3000))),
+        lists:foreach(fun(Ref) ->
+            ?assertEqual({error, bad_foreign_reference},
+              reselect(Evidence, Ref, transaction, deadline(3000)))
+        end, [malformed, setelement(4, Second, malformed),
+              setelement(8, Second, <<"malformed-finality">>)]),
+        ?assertEqual({error, bad_foreign_reference},
+          reselect(Evidence, Second, unknown_phase, deadline(3000))),
+        ?assertEqual({error, retry},
+          reselect(Evidence, Second, transaction, deadline(-1))),
+        T = traces(),
+        ?assertEqual(0, calls(T, quod_simplex, history_view_at, 3)),
+        ?assertEqual(0, calls(T, quod_ledger_store, read_at, 3)),
+        ?assert(calls(T, quod_transaction, verify_submission, 1) >= 3),
+        assert_no_foreign_work(T),
+        assert_no_fetch()
+    end).
+
+same_entry_new_selection_preserves_hosted_incarnation_test_() ->
+    [{atom_to_list(Stage) ++ "-" ++ atom_to_list(Change),
+      fun() -> same_entry_new_selection_preserves_hosted_incarnation(Stage, Change) end}
+     || Stage <- [before_read, after_read], Change <- [death, replacement]].
+
+same_entry_new_selection_preserves_hosted_incarnation(Stage, Change) ->
+    F = batch_fixture(),
+    with_case(F, current, fun(C) ->
+        [First, Second, Third] = maps:get(refs, F),
+        {ok, Evidence} = resolve(C, First, transaction, deadline(3000)),
+        {ok, SecondEvidence} = reselect(Evidence, Second, transaction, deadline(3000)),
+        _ = traces(),
+        Token = make_ref(), Parent = self(),
+        Caller = traced_async(fun() ->
+            put({quod_foreign_log, local_read_gate}, {Stage, Parent, Token}),
+            quod_foreign_log:reselect_verified(SecondEvidence, Third, transaction, deadline(3000))
+        end),
+        receive {local_read_held, Token, Caller} -> ok
+        after 2000 -> exit(Caller, kill), error(reselection_not_held)
+        end,
+        ReplacementDir = temp_dir("reselect-replacement"),
+        stop_source(maps:get(source, C)),
+        Replacement = case Change of
+            death -> none;
+            replacement -> start_source(ReplacementDir, F, current)
+        end,
+        try
+            Caller ! {release_local_read, Token},
+            ?assertEqual({error, retry}, result(Caller)),
+            case Replacement of
+                none -> ok;
+                _ -> ?assertEqual([], source_captures(Replacement))
+            end,
+            T = traces(),
+            ?assertEqual(0, calls(T, quod_simplex, history_view_at, 3)),
+            ?assertEqual(0, calls(T, quod_ledger_store, read_at, 3)),
+            assert_no_foreign_work(T),
+            assert_no_fetch()
+        after
+            exit(Caller, kill),
+            stop_source(Replacement),
+            _ = file:del_dir_r(ReplacementDir)
+        end
+    end).
+
+completed_foreign_entry_reselection_needs_no_live_foreign_capture_test() ->
+    F = batch_fixture(),
+    with_case(F, none, fun(C) ->
+        [First, Second | _] = maps:get(refs, F),
+        [_, Transaction | _] = maps:get(transactions, F),
+        {ok, Evidence} = resolve(C, First, transaction, deadline(3000)),
+        quod_foreign_log_tests:stop_owner(maps:get(foreign, C)),
+        _ = traces(),
+        flush_fetches(),
+        {ok, Selected} = reselect(Evidence, Second, transaction, deadline(3000)),
+        assert_selected_transaction(F, Second, Transaction, Selected),
+        T = traces(),
+        ?assertEqual(0, calls(T, quod_simplex, history_view_at, 3)),
+        ?assertEqual(0, calls(T, quod_ledger_store, read_at, 3)),
+        assert_no_foreign_work(T),
+        assert_no_fetch()
+    end).
+
+same_entry_reselection_cannot_publish_after_original_deadline_test() ->
+    F = batch_fixture(),
+    with_case(F, current, fun(C) ->
+        [First, Second | _] = maps:get(refs, F),
+        {ok, Evidence} = resolve(C, First, transaction, deadline(3000)),
+        _ = traces(),
+        Token = make_ref(), Parent = self(), D = deadline(400),
+        Caller = traced_async(fun() ->
+            put({quod_foreign_log, local_read_gate}, {after_read, Parent, Token}),
+            quod_foreign_log:reselect_verified(Evidence, Second, transaction, D)
+        end),
+        receive {local_read_held, Token, Caller} -> ok
+        after 2000 -> exit(Caller, kill), error(reselection_not_held)
+        end,
+        try
+            %% Selection has completed; only the captured absolute deadline
+            %% is allowed to elapse. This is expiry, not a readiness wait.
+            wait_expired(D),
+            Caller ! {release_local_read, Token},
+            ?assertEqual({error, retry}, result(Caller)),
+            T = traces(),
+            ?assertEqual(0, calls(T, quod_simplex, history_view_at, 3)),
+            ?assertEqual(0, calls(T, quod_ledger_store, read_at, 3)),
+            ?assertEqual(1, calls(T, quod_transaction, verify_submission, 1)),
+            assert_no_foreign_work(T),
+            assert_no_fetch()
+        after exit(Caller, kill)
+        end
+    end).
+
+reselect(Evidence, Ref, Phase, Deadline) ->
+    result(traced_async(fun() ->
+        quod_foreign_log:reselect_verified(Evidence, Ref, Phase, Deadline)
+    end)).
+
+assert_selected_transaction(F, Ref, Transaction, Evidence) ->
+    ?assertEqual(identity(F), maps:get(identity, Evidence)),
+    ?assertEqual(2, maps:get(slot, Evidence)),
+    ?assertEqual(element(6, Ref), maps:get(block_hash, Evidence)),
+    ?assertEqual(element(7, Ref), maps:get(record_digest, Evidence)),
+    ?assertEqual(transaction, maps:get(phase, Evidence)),
+    ?assertEqual([Key || {Key, _} <- maps:get(members, F)], maps:get(committee, Evidence)),
+    Selected = maps:get(transaction, Evidence),
+    ?assert(quod_transaction:same_ledger_transaction(Transaction, Selected)),
+    ?assertEqual(Selected, quod_ledger:selected_record(maps:get(entry, Evidence))).
+
 %% Harness: reuse the foreign-log suite's signed genesis/control fixtures,
 %% verified projection constructor, real fetch bytes, and real foreign owner.
 fixture() -> quod_foreign_log_tests:foreign_fixture(quod_foreign_log_tests:unique_ns()).
@@ -778,6 +1003,7 @@ trace_patterns() ->
      {quod_simplex, history_view_at, 3},
      {quod_foreign_log, verification_call, 2},
      {quod_foreign_log, verify_local_deadline, 4},
+     {quod_foreign_log, reselect_verified, 4},
      {quod_foreign_log, verify_resident_snapshot, 6},
      {quod_foreign_log, start_distinct_worker, 7},
      {quod_foreign_log, spawn_verification_worker, 3},
@@ -789,7 +1015,8 @@ trace_patterns() ->
      {quod_ledger_store, open, 3},
      {quod_ledger_store, open_ro, 3},
      {quod_ledger_store, open_ro_snapshot, 1},
-     {quod_ledger_store, read_at, 3}].
+     {quod_ledger_store, read_at, 3},
+     {quod_transaction, verify_submission, 1}].
 
 start_trace(Owner) ->
     lists:foreach(fun({M, _, _} = MFA) ->
@@ -888,15 +1115,36 @@ signed_transaction(Identity, Binding, Author, Signer, Seq, Diff) ->
     {ok, Tx} = quod_transaction:sign(Binding, quod_transaction:bind_id(Identity, Tx0), Signer),
     Tx.
 
-committee_entry({Ns, Anchor}, Members, Height, {Era, View, _} = Parent, Tx) ->
+committee_entry(Identity, Members, Height, Parent, Tx) ->
+    committee_entries(Identity, Members, Height, Parent, [Tx]).
+
+committee_entries({Ns, Anchor}, Members, Height, {Era, View, _} = Parent, Transactions) ->
     Position = {Era, View + 1},
-    {ok, Block} = quod_ledger:new_block(Position, Parent, Height, {batch, [Tx]}, 0),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, Height, {batch, Transactions}, 0),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Sigs = [{Pub, (quod_simplex:make_share(Domain, commit, Position, Hash, Signer))#share.sig}
             || {Pub, Signer} <- lists:sublist(Members, 4)],
     quod_ledger:entry(Height, Block, #cert{kind = commit, era = Era, slot = View + 1,
                                           block_hash = Hash, sigs = Sigs}).
+
+batch_fixture() ->
+    F = committee_fixture(false),
+    [Genesis, _] = maps:get(chain, F),
+    Identity = identity(F),
+    Members = maps:get(members, F),
+    [{Author, Signer} | _] = Members,
+    {ok, Projection} = quod_simplex:history_validate_advance(
+        Identity, Genesis, quod_simplex:history_projection(Identity)),
+    {ok, Binding} = quod_simplex:history_binding(Identity, Author, Projection),
+    Transactions = [signed_transaction(Identity, Binding, Author, Signer, Seq,
+        [{assert, {{resolver_record, Seq}, true}}]) || Seq <- [1, 2, 3]],
+    Entry = committee_entries(Identity, Members, 2,
+                              maps:get(protocol_root, Projection), Transactions),
+    Refs = [begin {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Tx), Ref end
+            || Tx <- Transactions],
+    F#{chain := [Genesis, Entry], ref := hd(Refs),
+       refs => Refs, transactions => Transactions}.
 
 reference_with_signers(F, Ref, Signers) ->
     {ok, #cert{era = Era, slot = View, block_hash = Hash} = Cert} =

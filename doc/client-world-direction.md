@@ -460,11 +460,11 @@ remain distinguishable and require an explicit selection rule. No invented
 physical constants enter the first catalogue just to make the scene render.
 
 The generic `have_attribute`/`attribute` view is derived from the authoritative
-property relations; it is not a second stored copy. `isa/2` declares taxonomy,
-not automatic property inheritance. Any applicable-class traversal and override
-rule is explicit Prolog with cycle/ambiguity handling. A broad class range does
-not silently override a sample's measurement. The current framework's qualified
-name following does not supply these semantic rules by itself.
+property relations; it is not a second stored copy. `isa/2` is the shared,
+transitive subclass relation; it does not by itself make physical property
+claims inheritable. Any property applicability and override rule remains
+explicit Prolog with ambiguity handling. A broad class range does not silently
+override a sample's measurement.
 
 An eventual simulation can query this knowledge through ordinary governed
 predicates. Mass derived from density uses authoritative physical volume, never

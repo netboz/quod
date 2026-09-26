@@ -105,6 +105,12 @@ made_of(my_stuff:door, materials:oak).         % ANY relation can cross, not jus
   registration, no handshake; the pointed-at ontology doesn't know it is being pointed at.
 - **A link is exercised at ask time** — when a question actually needs what it points at.
 
+`isa/2` is the Web Ontology subclass relation and is transitive across these
+links. Thus `isa(local_class, other:parent)` combined with
+`other::isa(parent, ancestor)` entails `isa(local_class, other:ancestor)`.
+The closure is shared Prolog semantics; it is not separately materialized in
+the ledger.
+
 ### 3.1 Every relation follows its links by default
 
 No blessed list of "following" relations — `isa`, `have_attribute`, `made_of`: all

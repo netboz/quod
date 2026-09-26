@@ -31,7 +31,7 @@ class_eidolon(Material, playing, Style, recipe(Ns, Anchor, Recipe)) :-
 
 eidolon(Recipe, material(Material), Surface) :-
     surface_recipe(Class, _, Recipe, Surface), material_vocabulary(Ns, Anchor),
-    Ns::(current_ontology_identity(Ns, Anchor), material_kind(Material, Class)).
+    Ns::(current_ontology_identity(Ns, Anchor), isa(Material, Class)).
 
 instance_of(surface_eidolon, Recipe) :- surface_recipe(_, _, Recipe, _).
 

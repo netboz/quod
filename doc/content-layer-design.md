@@ -304,6 +304,13 @@ notice a `::`-tagged argument and re-issue themselves as a goal-position call in
 that ontology. **One mechanism**, not two; both bottom out in the staged proved
 scope.
 
+`isa(Subclass, Superclass)` has the transitive semantics of
+`rdfs:subClassOf`. Immediate class declarations remain ordinary local Prolog
+facts or rules, while the shared Prolog vocabulary derives longer paths with
+cycle protection. For example, `isa(dog, mammal)` and `isa(mammal, animal)`
+entail `isa(dog, animal)`. Ontologies must use `isa/2` itself for this query,
+not introduce a parallel `isa_ancestor/2` relation.
+
 ### When a foreign name triggers a trip
 
 The rule: **a foreign-tagged name causes a cross-ontology trip only when one of

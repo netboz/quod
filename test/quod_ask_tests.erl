@@ -297,8 +297,9 @@ ask_test_() ->
           ?_test(t_scope_trace_covers_open_and_answer(Ctx)),
           ?_test(t_backtracking_all_answers(Ctx)),
           ?_test(t_cursor_backtracks_across_ontology(Ctx)),
-          ?_test(t_default_link_following(Ctx)),
-          ?_test(t_multi_position_follow_dedup(Ctx)),
+	          ?_test(t_default_link_following(Ctx)),
+	          ?_test(t_transitive_isa_crosses_class_link(Ctx)),
+	          ?_test(t_multi_position_follow_dedup(Ctx)),
           ?_test(t_repeated_follow_queries_are_independent(Ctx)),
           ?_test(t_cut_follow_dedup_does_not_cross_invocations(Ctx)),
           ?_test(t_grounded_ask(Ctx)),
@@ -722,6 +723,11 @@ t_default_link_following(#{animals := A}) ->
     ?assertMatch({ok, [#{'L' := [kibble, meat]}], _},
                  prove(A, {findall, {'D'},
                            {diet, {':', animals, dog}, {'D'}}, {'L'}})).
+
+t_transitive_isa_crosses_class_link(#{pets := P}) ->
+    ?assertMatch(
+       {ok, [#{}], _},
+       prove(P, {isa, my_dog, {':', animals, animal}})).
 
 t_multi_position_follow_dedup(#{animals := A, pets := P}) ->
     Goal = {isa, {':', animals, dog}, {':', animals, mammal}},

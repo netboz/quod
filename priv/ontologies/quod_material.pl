@@ -8,7 +8,6 @@ can_join(_, _, Key) :- peer_ready(Key).
 
 material_query(isa(_, _)).
 material_query(material_class(_)).
-material_query(material_kind(_, _)).
 material_query(most_specific_materials(_, _, _)).
 material_query(property_unit(_, _)).
 material_query(material_property(_, _, _, _, _)).
@@ -29,28 +28,23 @@ isa(metal, material).
 isa(steel, metal).
 isa(bronze, metal).
 
-%% Taxonomy reachability is a rule, not an implicit engine inheritance feature.
-%% The visited set excludes cycles; sorting removes duplicate inheritance paths.
+%% `isa/2` has the shared transitive Web Ontology semantics. The material
+%% ontology declares only its taxonomy and material-specific selection policy.
 material_class(Class) :-
     findall(C, isa(C, _), Raw), sort(Raw, Classes), member(Class, Classes),
-    material_kind(Class, material).
-material_kind(Class, Kind) :-
-    nonvar(Class), findall(K, material_ancestor(Class, K, []), Raw),
-    sort(Raw, Kinds), member(Kind, Kinds).
-material_ancestor(Class, Class, _) :- isa(Class, _).
-material_ancestor(Class, Kind, Seen) :-
-    isa(Class, Parent), \+ member(Class, Seen),
-    material_ancestor(Parent, Kind, [Class | Seen]).
+    isa(Class, material).
 
 %% Resolve a collection of candidate classes in one scoped proof. Callers
 %% retain their recipe associations; this ontology owns taxonomy traversal.
 most_specific_materials(Material, Candidates, Selected) :-
     term_variables(Candidates, []), sort(Candidates, Classes),
-    findall(Class, (member(Class, Classes), material_kind(Material, Class)), Applicable),
+    findall(Class, (member(Class, Classes), isa(Material, Class)), RawApplicable),
+    sort(RawApplicable, Applicable),
     findall(Class, (member(Class, Applicable),
-                   \+ more_specific_material(Class, Applicable)), Selected).
+                   \+ more_specific_material(Class, Applicable)), RawSelected),
+    sort(RawSelected, Selected).
 more_specific_material(Class, Classes) :-
-    member(Other, Classes), Other \== Class, material_kind(Other, Class).
+    member(Other, Classes), Other \== Class, isa(Other, Class).
 
 property_unit(density, <<"kg/m3">>).
 property_unit(temperature, <<"K">>).

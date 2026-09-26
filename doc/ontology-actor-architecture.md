@@ -140,6 +140,12 @@ only when root contains its exact `system_ontology/2` row. In the deployed
 `quod:present` are registered by anchor and hosted on every node; their source
 filenames do not confer that status.
 
+The replacement design in `client-world-direction.md` section 4.1.2 separates
+the presentation contract (`quod_presentation`), pure modelling toolkit,
+physical materials and material representations. The `quod:present` row above
+describes the deployed prototype, not the target name or ownership boundary.
+System status for its replacements still requires exact root catalogue rows.
+
 These are vocabulary and policy ontologies, not containers for every instance.
 Each physical node has a node ontology containing an instance of the `node`
 class. An independently managed agent will normally place its durable state

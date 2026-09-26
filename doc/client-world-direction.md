@@ -7,6 +7,10 @@ and simulation sections remain direction except for the initial lobby/toolkit
 contracts recorded in section 11.8; remaining proposals must be revalidated
 before implementation.
 
+Section 4.1.2 records the material/presentation/toolkit separation requested by
+Yan on 2026-09-26. It is the next implementation design, not a claim that the
+deployed `quod:present` prototype has already been replaced.
+
 The generic acting identity is now the deployed actor model in
 `ontology-actor-architecture.md`: every acting node, agent, service, or
 human-facing user is a classed instance in an exact ontology history; `agent`
@@ -371,6 +375,310 @@ References for the capability vocabulary: Babylon's
 [particles](https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/particle_system_intro)
 and the [glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
 
+### 4.1.2 Ontology ownership, materials and reusable representations
+
+The target name is **`quod_presentation`**, exactly with an underscore, replacing
+`quod:present`. Its role is the shared description contract: what a visual
+occurrence, surface, recipe reference and GUI-surface binding mean, and how to
+validate them. For example, it defines the meaning of a box's dimensions and
+a texture's slot. It contains neither the function that arranges a row of boxes
+nor the knowledge that oak is wood nor the recipe for a wooden console.
+
+The source layout follows the ownership boundaries below. Each initial domain
+has one source file; there is no ontology or file per shape, material or recipe.
+Existing GUI, measurement, lobby and lens ontologies retain their own purposes.
+
+| Ontology / source | Owns | Does not own |
+| --- | --- | --- |
+| `quod_presentation` / `quod_presentation.pl` | Common description types, descriptor validation, geometry/surface/asset conventions and capability names | Model-building helpers, material catalogue, world selection policy, particular appearances |
+| `quod_modelling` / `quod_modelling.pl` | Pure construction, composition, face/anchor alignment, spacing, repetition, surface and texture-binding helpers | Physical properties, named wood/stone appearances, Babylon calls |
+| `quod_material` / `quod_material.pl` | Material classes, property definitions, contextual physical-property knowledge and queries | Textures, shaders, client objects or an autonomous physics engine |
+| `quod_material_presentations` / `quod_material_presentations.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
+| Existing `quod:gui` / `quod_gui.pl` | Semantic components, form/input/result/action roles and their reusable presentation declarations | A second proof executor or material catalogue |
+| Existing `quod:lobby` / `quod_lobby.pl` | Lobby/device classes, device eidolons, arrangement and default presentation policy | Copies of shared materials, toolkit functions or private user state |
+| Each personal lobby or world | Instances, their physical material assignments, accepted appearance choices and world policy | Copies of the standard class/recipe libraries |
+| Existing `quod:measure` / `quod_measure.pl` | Units, dimensions and exact conversions | A second material or surface catalogue |
+
+The dependency direction is deliberate. Physical material queries use
+`quod:measure` and must work without a rendering library. The modelling toolkit
+uses the presentation contract. Material representations read the material
+ontology and use that toolkit. Object recipes, such as the console, compose
+those results. `quod_presentation` validates the resulting descriptions without
+calling back into the lobby or choosing which wood a world must use. Recipe
+libraries are explicit anchored dependencies of their consumers, not entries
+in a new global mutable registry.
+
+#### Physical materials and their properties
+
+Use the existing class-first vocabulary. A starting hierarchy can express:
+
+```prolog
+isa(material, thing).
+isa(wood, material).
+isa(oak_wood, wood).
+isa(stone, material).
+isa(granite, stone).
+isa(metal, material).
+```
+
+These are classes of material. A particular material sample/batch is an
+instance, with its condition and measurements in its owning ontology. An object
+may have material-bearing parts: a door's wooden core, metal hinges and a
+coating are separate assignments. An assignment identifies the material class
+or exact sample and the affected part; it does not infer physical composition
+from whatever surface the current viewer sees. Physical coating/thickness and
+a purely decorative appearance override are separate concepts.
+
+Define properties where they have meaningful semantics: mass density,
+temperature, moisture content, thermal conductivity, specific heat and elastic
+properties are candidates. Friction is a contact property involving two
+surfaces and conditions; it must not become a universal coefficient attached
+to every instance of wood. Acoustic response also depends on the object and
+contact, rather than being one intrinsic sound file for all wood.
+
+The proposed material relation is:
+
+```prolog
+material_property(Material, Property, Value, Conditions, Evidence).
+% Value: q(Number, Unit) or range(q(Low, Unit), q(High, Unit)).
+% Number: integer or the existing exact Num/Den representation.
+```
+
+Property definitions specify the expected dimension and relevant conditions.
+Reuse `quod:measure`'s `q/2`, dimension checking and conversion predicates.
+That ontology currently lacks density and thermal-property units: add the
+necessary ordinary `unit/5` declarations there, not a second conversion engine
+or an assumed general compound-unit parser. Temperature differences must not
+be confused with absolute temperature conversions.
+
+Density is mass per volume, typically expressed in kg/m³. There is no single
+unconditional density for the entire wood class. A property value must identify
+its material scope, conditions, and whether it comes from a cited measurement,
+a reference range or an explicitly authored simulation assumption. Missing
+knowledge stays unknown; it is not zero. Conflicting applicable measurements
+remain distinguishable and require an explicit selection rule. No invented
+physical constants enter the first catalogue just to make the scene render.
+
+The generic `have_attribute`/`attribute` view is derived from the authoritative
+property relations; it is not a second stored copy. `isa/2` declares taxonomy,
+not automatic property inheritance. Any applicable-class traversal and override
+rule is explicit Prolog with cycle/ambiguity handling. A broad class range does
+not silently override a sample's measurement. The current framework's qualified
+name following does not supply these semantic rules by itself.
+
+An eventual simulation can query this knowledge through ordinary governed
+predicates. Mass derived from density uses authoritative physical volume, never
+the dimensions of a stylised or exaggerated rendering. Adding this catalogue
+does not silently connect the current lobby to a new physics simulation.
+
+#### Material representations and class-selected eidolons
+
+An eidolon remains a reusable representation recipe. A surface recipe describes
+how material appears on a model; an inspection recipe may expose its physical
+properties using the existing GUI vocabulary. Both refer to the same material.
+A wood class can therefore have natural-grain, stylised and property-inspection
+representations without duplicating its physical knowledge.
+
+The presentation contract declares `eidolon` with `model_eidolon`,
+`surface_eidolon` and `gui_eidolon` subclasses. A named recipe is an instance of
+the appropriate class, for example a natural-oak recipe is a `surface_eidolon`.
+Its generic attributes expose parameters and required capabilities for tooling.
+Derive the output-kind query from that class declaration rather than storing a
+second independent classification. Physical `wood` and a wood-surface recipe
+are never subclasses of one another.
+
+Purpose and style are separate inputs: `playing` versus `edition` describes
+what the user is doing; `natural` versus `stylised` describes an appearance.
+Specificity, instance overrides and capability alternatives follow explicit
+world policy. A glossy surface never authorizes a change to density or friction.
+
+The proposed shared association replaces the prototype's `class_eidolon/3`:
+
+```prolog
+class_eidolon(Class, Purpose, Style, RecipeRef).
+% RecipeRef = recipe(Namespace, Anchor, RecipeId), ordinary ground data.
+eidolon(RecipeId, Inputs, Output).
+```
+
+Object associations normally live beside the object's class. Shared material
+associations live in `quod_material_presentations`, against material classes
+qualified by the collection's exact material-vocabulary dependency. This lets
+the physical catalogue remain usable without a presentation dependency.
+An application selects the recipe collections it trusts; libraries do not
+install declarations into other ontologies. The inputs carry the authorized
+subject, its relevant state, selected purpose/style and supported capabilities.
+Outputs have declared kinds (model, surface or GUI); they are not arbitrary
+client instructions.
+
+Selection and invocation remain ordinary Prolog in the existing view proof:
+
+1. Read the instance's classes, material assignments and world policy under the
+   viewer's ordinary authorization.
+2. Query the declared recipe libraries for matching associations. Prefer only
+   as the explicit policy specifies; report an unresolved tie. A missing edition
+   recipe is unavailable, not silently the playing recipe.
+3. Invoke the selected library's allowlisted `eidolon/3`, checking its exact
+   ontology identity through the existing
+   `Namespace::(current_ontology_identity(Namespace, Anchor), Goal)` form.
+4. Compose parts, surfaces and semantic GUI bindings with `quod_modelling`,
+   then validate the complete description with `quod_presentation`.
+5. Return the description through the existing signed projection; the adapter
+   constructs or updates client resources for the stable occurrence identities.
+
+`RecipeRef` is data, not another `::` target syntax or an unrestricted dynamic
+call. The standard recipe entry point is the invocation contract. Neither a
+recipe association nor a capability claim grants access to hidden properties,
+assets or actions. Material and class identity checks use the same exact scoped
+read pattern. No hardcoded console dispatch, Erlang inheritance service or
+second presentation execution process is needed.
+
+The toolkit's reusable subrecipe placement gives occurrences a structural
+identity from the instance occurrence, named part and repetition key. Reusing
+a recipe twice must not collide because both contain a part named `screen`.
+The prototype's 16-byte mark ID budget is not a structural identity convention;
+identity encoding and configurable resource policy must be treated separately.
+Identities persist while their named occurrences persist, including refreshes.
+
+#### Portable surface, asset and toolkit contract
+
+Use **surface** for the client-facing optical description and **material** for
+the physical substance. Retire the ambiguous prototype `material(Colour,Finish)`
+term together with the old descriptor path when installing its replacement.
+Surface descriptions include base colour, metallic factor, roughness, emission,
+opacity mode and typed texture bindings. They are derived from authored Prolog
+recipes; they are not individual generated facts asserted into every lobby.
+
+The portable optical baseline is the glTF metallic/roughness model. Its
+semantics are the reference, not a Babylon material constructor or an Unreal
+shader graph. Texture bindings state the slot, asset digest, channels, colour
+space, UV set, tiling and sampler. Texture scale may be derived from a declared
+physical repeat size so the same wooden grain does not stretch differently on
+every board. Grain direction is a surface mapping input. Asset metadata records
+dimensions, media type, units where applicable, integrity and licence provenance;
+reuse `quod:licence` for applicable licence reasoning.
+
+Assets remain content-addressed bytes outside ontology facts. Governed resource
+access resolves an authorized reference; recipes do not inject arbitrary URLs,
+JavaScript, GLSL, HLSL or engine-specific procedural textures. Imported models
+use the same occurrence/surface contract, initially through glTF/GLB. Portable
+procedural generation requires an explicitly specified operation; otherwise
+publish an authored texture or mesh asset. Do not embed Babylon's procedural
+API under Prolog names and call that engine independence.
+
+The first complete schema must declare coordinate handedness, axes, winding,
+transform composition and normal-map orientation. Use right-handed coordinates,
+Y up, with the existing console's front toward -Z; adapters perform any engine
+conversion. Local transforms apply X, then Y, then Z rotations, then translation,
+and parent composition follows that local transform. Keep current integer
+millimetres and degrees for the initial geometry contract; surface factors
+retain exact permille. Material quantities use the richer rational unit model.
+Test asymmetric shapes and rotated parents so a conversion error cannot hide
+behind a symmetric sphere. Texture colour channels and normal/data channels
+must use their declared colour spaces, not one blanket texture setting.
+
+Capabilities describe supported concepts, such as textured surfaces, mesh assets,
+skeletal animation or particle emitters. A future Unreal adapter maps those
+concepts to Unreal resources. Recipes never branch on the string `Babylon` or
+`Unreal`. Missing features require an explicitly authored, policy-selected
+alternative or a visible unsupported result. Same semantics does not promise
+pixel-identical lighting or identical visual tessellation on every GPU.
+
+The initial toolkit extends the existing `model/2`, shape mapping and `align/6`
+with named subrecipe placement, spacing/repetition, reusable surface bindings
+and texture coordinates. Import, curves/extrusion, bones, animation, particles,
+lights and camera descriptions extend these same types as their consumers are
+implemented; they do not create parallel advanced-renderer paths. Particle
+recipes describe emitters, not committed facts for individual particles.
+The world's lighting/environment choices belong in its presentation recipe;
+tracked head motion and input devices remain client session concerns.
+
+Keep the existing scene reconciler as the resource owner. Shared immutable
+assets/surfaces may be retained by their live consumers and released when those
+consumers disappear. An unchanged view must not reconstruct meshes, reread
+history or reload textures. Async asset completion must be tied to the current
+occurrence/revision so a late load cannot resurrect a removed object. Limits
+on geometry, assets and effects are governed resource policy, not population
+ceilings or arbitrary constants hidden in the client or Erlang.
+
+#### GUI, actions and the improved lobby
+
+The console recipe supplies the physical-looking body and a screen surface.
+`quod:gui` supplies the proof form's meaning. A surface/view binding places that
+form on the device, in a focused desktop view or in a spatial workspace. The
+same draft/cursor/command owner remains in charge in every case. Prolog recipes
+should supply the selectable layout and appearance; client adapters implement
+semantic input controls and accessibility, rather than a separate form per
+device or a screen assembled solely from decorative 3D geometry.
+
+The first meaningful pair of lobby representations is operational and edition:
+playing shows the usable device; edition exposes named parts, material/recipe
+assignments and the permitted parameter controls. Picking an editing handle
+only changes a local draft. Apply invokes the existing authorized action and
+multi-ontology transaction path. An accepted appearance edit changes appearance
+facts; replacing a physical substance invokes the owning domain action.
+
+Action and sound presentation remains in representation recipes as in section
+4.5. Action/event patterns bind subjects and parameters by Prolog unification.
+The existing reaction framework handles relevant accepted transitions; progress
+descriptions show actual partial motion, interruption and failure as well as
+completion. No new broker, completion-only animation rule or messaging subsystem
+is introduced. Sound samples and response recipes can reuse the material
+identity without placing all audio behaviour inside the material catalogue.
+
+Use the lobby as the first complete consumer: a stone floor, wood and metal
+device parts, coherent surface mapping and lighting, plus genuine playing and
+edition recipes. The exact palette and arrangement are authored presentation
+choices. Each user still owns an instance, not a copied catalogue of every
+material, texture and GUI class.
+
+#### Replacement, verification and implementation order
+
+Complete this in three connected changes, each replacing the path it supersedes:
+
+1. **Separate responsibilities.** Rename the contract to `quod_presentation`,
+   move the existing pure builders into `quod_modelling`, introduce the physical
+   material and material-recipe ontologies, and route class-selected eidolons
+   through the existing lobby projection. Reuse current geometry and alignment
+   tests at their new owners. Add real cross-ontology tests for physical queries
+   without any presentation dependency, ambiguous class matches and exact refs.
+2. **Make the lobby demonstrate the design.** Add the portable texture/asset
+   contract, named recipe composition and GUI surface bindings; author the
+   improved lobby and distinct edition recipe in Prolog. Exercise actual browser
+   rendering, two instances of one recipe, stable resources on refresh, missing
+   assets/capabilities, identity switching and preserved proof state. Test a
+   second minimal non-Babylon descriptor consumer to expose engine assumptions;
+   it is a contract test, not a claim to have shipped an Unreal client.
+3. **Replace the deployed vocabulary and verify existing users.** Found and
+   host the new exact ontology identities through current creation/hosting
+   actions. Update the root catalogue, lobby template, existing lobby vocabulary
+   references, recipe dependencies and lens references through governed writes.
+   If changed locked declarations require succession, use the existing governed
+   lifecycle; do not patch compiled clauses into running owners. Stage the
+   complete dependency set and client assets before switching consumers, and
+   verify a pre-existing user's lobby as well as new signup and restart.
+
+The catalogue's presentation name and source filename both change; hiding an
+old label is insufficient. Inventory all live consumers before retiring the old
+host declarations/catalogue entry. Current mutable references can change by
+transaction, but historical signed references remain historical identities.
+No compatibility alias, silent old/new fallback, ledger rewrite or data purge
+is required by this design. Preserve the deployed client until the complete
+replacement is ready, then remove superseded source, schemas, adapters and
+console-specific selection. Publish migration/readiness through the existing
+owners and notifications, not sleeps or route polling.
+
+This section specifies the target boundaries and semantics. Exact extended
+descriptor arities, asset delivery integration and governed migration actions
+must be checked against their real consumers in the first implementation;
+their availability is not assumed here. Live view subscriptions and a full
+physics/animation system remain separate work; this change does not claim them.
+
+Capability references:
+[glTF 2.0 material and asset specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html),
+[Babylon PBR materials](https://doc.babylonjs.com/features/featuresDeepDive/materials/using/masterPBR/),
+[Babylon parametric shapes](https://doc.babylonjs.com/features/featuresDeepDive/mesh/creation/param/),
+[Unreal physically based materials](https://dev.epicgames.com/documentation/unreal-engine/physically-based-materials-in-unreal-engine).
+
 ### 4.2 Composition and attachment
 
 Presentation is compositional. A character may use body, arm, equipment, and
@@ -456,8 +764,9 @@ separate data-analysis lens just to render one instance. Both reuse the same
 projection and authorization path.
 
 The current `mark/7` prototype in `quod:present` describes output occurrences,
-not recipes. It must not simply be renamed to `eidolon/7`: implementation
-vocabulary will be revised after the recipe/output contract is settled.
+not recipes. Section 4.1.2 replaces that ontology with the narrowly scoped
+`quod_presentation` contract and a separate modelling toolkit. Output occurrences
+must not simply be renamed to `eidolon/7`; eidolons are their reusable recipes.
 Presentation also covers sound; its relation to action progress is deferred in
 section 4.5.
 
@@ -653,7 +962,8 @@ panel in the lobby or a flat panel on desktop. A pie menu is a presentation of
 an action menu. Device classes own their offered Prolog operations; GUI classes
 supply reusable parameter entry, labels, selection and result display. The GUI
 ontology therefore belongs in the first lobby design, alongside the primitive
-representation vocabulary. There is no implemented general GUI ontology yet.
+representation vocabulary. The initial proof-form vocabulary is implemented
+(section 11.8); general components and selectable GUI recipes remain incomplete.
 
 The first vocabulary needs only what the console and workshop consume:
 panels/forms, text or goal editors, labels, result lists, action menus and menu

@@ -3059,3 +3059,29 @@ Physical-headset comfort/input acceptance remains outstanding. No core source,
 consensus protocol, public fleet or resource-policy change. The normal Vite proxy
 now routes the system catalogue to the client listener. Initial harness failures
 and their resolutions remain in `_build/client-workspace-20260926/FAILURES.md`.
+
+### Material and presentation ownership design (2026-09-26)
+
+The client workspace commit `f1350df` was subsequently pushed and deployed as
+`client-f1350df-v1` on all eight candidate nodes. Deployed signup, lobby,
+Next/Stop/Accept and committed readback after reload passed; backend and existing
+ontology identities/data were preserved. Deployment evidence is in
+`_build/client-workspace-20260926/deployment/`. Physical headset acceptance is
+still outstanding.
+
+Yan requested orderly ontology boundaries and the exact replacement name
+`quod_presentation`. The implementation design now lives in the existing
+`doc/client-world-direction.md` section 4.1.2: a small description contract,
+`quod_modelling` for pure builders, `quod_material` for physical knowledge,
+and `quod_material_presentations` for reusable material recipes. Existing GUI,
+lobby, measurement and lens responsibilities remain separate. The design
+includes class-selected eidolons, contextual quantities, textures/assets,
+distinct playing/edition recipes and migration of existing lobby references.
+
+This turn changes design documents only. The live `quod:present` identity and
+source have not yet been replaced. No constants for physical materials have
+been invented or installed. Source inspection found the current unit library
+lacks density/thermal units and class declarations do not implement automatic
+inheritance; implementation must reuse and extend their actual Prolog paths.
+No Claude consultation, runtime change, test-suite rerun or deployment occurred
+in this design turn. User-owned untracked Forgejo deployment files were preserved.

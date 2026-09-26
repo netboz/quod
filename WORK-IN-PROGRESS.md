@@ -2759,3 +2759,41 @@ resource failure are not yet claimed causally resolved by this correction.
 The first correction also passes the real4-node QUIC fault/restart suite9/9.
 Clean-v8 freezes this small lifecycle correction and repeats the required
 sequential release gates before another consensus commit/candidate publication.
+
+Clean-v8 passed all25 sequential checks, including3090 EUnit, real fault/restart,
+agent failover, xref, Dialyzer, both releases and reproducible UI. Independent
+review bound manifest1c81ba46fea1f09b2664819e748df0531972b4112f043715b36a0afcf1f071ea;
+committed/pushed cb6436a and deployed immutable finality-cb6436a-v2 to a fresh
+isolated8-node candidate. Production .246-c4p1 remains untouched.
+
+Candidate-v2 passed forwarded cursors, both isolated writes, all3x64 ordinary
+local/remote c1/c4/c16 runs and3certified-read runs, with exact readback. Remote
+latency regressed against both prior runs; this is not performance acceptance.
+The first atomic c4 diagnostic again returned4pending originals around30s.
+No original was resubmitted. Source decisions were recorded within1s; target
+Resolve/Complete followed around90s. Original-operation read-only lookup finds
+1commit/1abort;2refused-source requests still lack permanent operation claims,
+as explicitly required by the current prepared-source-only claim contract.
+The original replies retain their group IDs. Do not fix that boundary by letting
+arbitrary refused votes reserve request identities. All4groups have terminal
+ledger records. Candidate-v2 is stopped with its8volumes and all evidence retained.
+
+The empty-finality cleanup is independently confirmed:32hosted instances show
+zero view/proposal/timeout changes and idle/no-demand state across the15s
+observation; sampled large mailboxes are empty and no task OOM is observed.
+Atomic failure therefore has a separate cause. Its event metrics record1854
+checkpoint writes consuming48.09s summed across nodes in the first30s, versus
+7.41s for1856ledger appends. The previous path checkpointed fetched pages; the
+new archive path moved that work inside every group. Page-fetch timing includes
+consumption, so it must not be mislabeled network time. The actual cold-history
+stall is not solved or causally exhausted by these aggregate durations alone.
+
+Restore checkpointing at the existing bounded range/publication boundary.
+Keep group proof verification, append datasync, phase-index deltas and accounting;
+checkpoint every advanced returned prefix, including transport-error prefixes,
+and invalidate on checkpoint failure. No new writer, format, timer or allowance.
+Negative regression sees2checkpoints for one range; positive passes the retained
+failure/partial-prefix suite16/16. Extend counts across2/64/257-entry fixtures.
+Focused-v1 named a nonexistent old test module and ran no tests; retained setup
+failure. Focused-v2 uses the actual foreign-history/catch-up modules. Hardware
+confirmation and release review/checks remain pending for this second correction.

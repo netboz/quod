@@ -2,6 +2,46 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
+-include("quod_proof_limits.hrl").
+
+checkpoint_once_per_verified_range_test_() ->
+    [{integer_to_list(Height), {timeout, 15,
+       fun() -> checkpoint_once_per_verified_range(Height) end}}
+     || Height <- [2, 64, 257]].
+
+checkpoint_once_per_verified_range(Height) ->
+    Fixture = quod_foreign_log_tests:long_identity_fixture(
+        quod_foreign_log_tests:unique_ns(), Height),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    Chain = maps:get(chain, Fixture), Peer = maps:get(pub, Fixture),
+    Dir = quod_foreign_log_tests:temp_dir("range-checkpoint"),
+    Owner = quod_foreign_log_tests:start_owner(
+        Dir, quod_foreign_log_tests:chain_fetch(Ns, Chain)),
+    MFA = {quod_foreign_log, write_checkpoint, 5},
+    Session = trace:session_create(?MODULE, self(), []),
+    try
+        1 = trace:function(Session, MFA, true, [local]),
+        1 = trace:process(Session, Owner, true, [call, arity, set_on_spawn]),
+        ?assertMatch({ok, #{slot := Height}}, quod_foreign_log:current(
+            [{Peer, [{"127.0.0.1", 19000}]}], Identity, 3000)),
+        Delivery = trace:delivered(Session, all),
+        Ranges = (Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
+                 div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
+        ?assertEqual(Ranges, checkpoint_calls(Delivery, 0)),
+        assert_retained_entries(Owner, Identity, Chain)
+    after
+        trace:session_destroy(Session),
+        quod_foreign_log_tests:stop_owner(Owner),
+        _ = file:del_dir_r(Dir)
+    end.
+
+checkpoint_calls(Delivery, Count) ->
+    receive
+        {trace, _, call, {quod_foreign_log, write_checkpoint, 5}} ->
+            checkpoint_calls(Delivery, Count + 1);
+        {trace_delivered, all, Delivery} -> Count
+    after 3000 -> error(checkpoint_trace_delivery_missing)
+    end.
 
 %% These are the preserved public-API replay probe, with the old undesirable
 %% behavior replaced by the permanent architectural assertion. A failed route
@@ -61,11 +101,15 @@ persistence_failure(Stage) ->
                 ?assertEqual([], [S || S = {E, _, _} <- Sources, E =:= Second]),
                 ?assertEqual({error, retry}, Result),
                 ?assertEqual(0, maps:get(resident_verified, quod_foreign_log:stats())),
-                %% The first complete group survives the injected failure;
-                %% the second group was never installed. Cold recovery owns
-                %% that physical prefix; it is not served
+                %% Group-local failures retain one group; checkpointing runs
+                %% after the complete bounded acquisition. Cold recovery owns
+                %% either physical prefix; it is not served
                 %% using the pre-append cursor or silently deleted to retry.
-                assert_physical_entries(Dir, Identity, [hd(Chain)])
+                Retained = case Stage of
+                    checkpoint_write -> Chain;
+                    _ -> [hd(Chain)]
+                end,
+                assert_physical_entries(Dir, Identity, Retained)
         end
     after
         quod_foreign_log_tests:stop_owner(Owner),

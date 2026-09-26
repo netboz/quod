@@ -5914,7 +5914,7 @@ fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
         fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, {range, Height + 1, To},
                     Deadline, FetchFun, Range, Install)
     end),
-    case Result of
+    Outcome = case Result of
         {ok, Final} ->
             {Next, Selected} = quod_catchup:range_context(Final),
             {ok, Next, Selected};
@@ -5922,10 +5922,36 @@ fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
             {Next, _Selected} = quod_catchup:range_context(Final),
             {error, Why, Next};
         {error, Why} -> {error, Why, Cursor}
+    end,
+    Retained = case Outcome of
+        {ok, C, _} -> C;
+        {error, _, C} -> C
+    end,
+    case checkpoint_range(Height, Retained, Identity, Root, Owner, RequestRef) of
+        ok -> Outcome;
+        {error, _} -> {error, cache_corrupt, Retained#verified_cursor{state = invalid}}
+    end.
+
+%% The bounded acquisition owns its unpublished cursor. Each certified group
+%% is durable already; checkpoint its final prefix once before returning it,
+%% including a verified prefix retained after a partial transport failure.
+checkpoint_range(_Before, #verified_cursor{state = invalid}, _, _, _, _) -> ok;
+checkpoint_range(Height, #verified_cursor{height = Height}, _, _, _, _) -> ok;
+checkpoint_range(_Before, #verified_cursor{height = Height, projection = Projection},
+                 Identity, Root, Owner, RequestRef) ->
+    try
+        ok = persistence_stage(checkpoint_write,
+               fun() -> write_checkpoint(Root, Identity, cache_namespace(Identity),
+                                         Height, Projection) end),
+        Bytes = cache_persisted_bytes(Root, cache_namespace(Identity)),
+        ok = persistence_stage(cache_accounting,
+               fun() -> gen_server:call(Owner, {set_cache_size, RequestRef, Bytes}) end)
+    catch _:_ -> {error, cache_corrupt}
     end.
 
 %% Retain only this request's result from the verified group, after durable
-%% append/index/checkpoint. A witness may end beyond the requested claim;
+%% append/index. It stays private until the range checkpoint is durable.
+%% A witness may end beyond the requested claim;
 %% its historical committee comes from that group's checked projection.
 select_committed_claim(none, _Group, Selected) -> Selected;
 select_committed_claim({Ref, Phase}, #{entries := Entries, projection := Projection}, Selected) ->
@@ -5982,9 +6008,6 @@ persist_verified_group(
                 ok = persistence_stage(phase_commit,
                        fun() -> quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) end),
                 {NextHeight, _} = maps:get(history_head, Projection),
-                ok = persistence_stage(checkpoint_write,
-                       fun() -> write_checkpoint(Root, Identity, cache_namespace(Identity),
-                                                 NextHeight, Projection) end),
                 ActualBytes = cache_persisted_bytes(Root, cache_namespace(Identity)),
                 ok = persistence_stage(cache_accounting,
                        fun() -> gen_server:call(Owner, {set_cache_size, RequestRef, ActualBytes}) end),

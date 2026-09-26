@@ -138,6 +138,14 @@ Only a completed material archive group may advance archive custody and retire
 those durable latches. A finished empty proposal is not demand for another
 view, and must not keep an otherwise idle ontology's watchdog running.
 
+Foreign-history acquisition verifies and durably appends each complete archive
+group, but checkpoints once per existing bounded acquisition range. Its cursor
+and selected result remain private until that checkpoint is durable. A partial
+transport failure checkpoints the verified prefix before returning it to the
+existing owner or source walk; a persistence failure invalidates the cursor.
+The recovery checkpoint is not a second per-group commit record. Neither the
+archive's group durability nor the original acquisition deadline is relaxed.
+
 ### Existing-path integration and deletion obligations
 
 | Existing seam | Required replacement / retained responsibility |

@@ -3197,3 +3197,32 @@ object, so no signed recovery request was made. It is not counted as product
 recovery evidence. Final system-catalogue checks pass on all eight nodes after
 replacement. Evidence is under
 `_build/material-network-20260927/semantic-v4/`.
+
+### Eidolon geometry extension and clean deployment (2026-09-27)
+
+Commit `f1ca1bf` extends the renderer-neutral contract and modelling toolkit
+with `capsule(Diameter, Height)` and `torus(Diameter, Thickness)`. Their field
+order and dimension relationships are validated in `quod:rendering`; pure
+construction and alignment bounds live in `quod:modelling`. The Babylon client
+adapter maps only these neutral dimensions to Babylon builders. The lobby
+console now uses a capsule support and torus status ring. No Erlang runtime or
+domain path changed, and no parallel model format was introduced.
+
+Focused verification passed 18/18 rendering/lobby tests and 60/60 client tests;
+the production UI build and lint passed. The immutable overlay
+`client-eidolon-geometry-v5@sha256:d5d449b97ff5d8e59543da5a744ebceb25eda855f99cf8951be9850b80dd306d`
+has backend libraries byte-identical to its accepted parent. The candidate was
+rebuilt on a fresh volume family with root anchor
+`ED1C53B86FC02432F6DD7907791AC06CCFB9F8E30824D225FA48FD98BB6FD83F`.
+All eight allocations are healthy and all fourteen canonical system ontologies
+are ready through root-catalogue loading. Production remained unchanged at
+Nomad index 773043.
+
+Hardware browser acceptance used the ordinary signup and signed-goal paths and
+confirmed that the returned scene contains both new kinds. Signup to the
+textured lobby took 13.91 seconds and unchanged refresh took 281 ms. Six texture
+assets were fetched and decoded once; Next/Stop/Accept, committed readback and
+reload passed. Two preliminary browser attempts are retained: the first used
+the previous allocation's dynamic port and the second recorded the resulting
+connection refusal clearly. Evidence is under
+`_build/material-network-20260927/geometry-v5/`.

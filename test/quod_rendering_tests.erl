@@ -1,6 +1,6 @@
 -module(quod_rendering_tests).
 
-%% The `quod_rendering` ontology (priv/ontologies/quod_rendering.pl): the bounded
+%% The `quod:rendering` ontology (priv/ontologies/quod_rendering.pl): the bounded
 %% mark vocabulary a renderer is given. What is checked here is that the schema
 %% actually refuses a malformed descriptor — a missing field, a reordered one, a
 %% colour that is not one, a label that is too long, a float where a whole

@@ -377,7 +377,7 @@ and the [glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.
 
 ### 4.1.2 Ontology ownership, materials and reusable representations
 
-The client description contract is **`quod_rendering`**, replacing
+The client description contract is **`quod:rendering`**, replacing
 `quod:present`. Its role is the shared description contract: what a visual
 occurrence, surface, recipe reference and GUI-surface binding mean, and how to
 validate them. For example, it defines the meaning of a box's dimensions and
@@ -390,10 +390,10 @@ Existing GUI, measurement, lobby and lens ontologies retain their own purposes.
 
 | Ontology / source | Owns | Does not own |
 | --- | --- | --- |
-| `quod_rendering` / `quod_rendering.pl` | Common description types, descriptor validation, geometry/surface/asset conventions and capability names | Model-building helpers, material catalogue, world selection policy, particular appearances |
-| `quod_modelling` / `quod_modelling.pl` | Pure construction, composition, face/anchor alignment, spacing, repetition, surface and texture-binding helpers | Physical properties, named wood/stone appearances, Babylon calls |
-| `quod_material` / `quod_material.pl` | Material classes, property definitions, contextual physical-property knowledge and queries | Textures, shaders, client objects or an autonomous physics engine |
-| `quod_material_eidolons` / `quod_material_eidolons.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
+| `quod:rendering` / `quod_rendering.pl` | Common description types, descriptor validation, geometry/surface/asset conventions and capability names | Model-building helpers, material catalogue, world selection policy, particular appearances |
+| `quod:modelling` / `quod_modelling.pl` | Pure construction, composition, face/anchor alignment, spacing, repetition, surface and texture-binding helpers | Physical properties, named wood/stone appearances, Babylon calls |
+| `quod:material` / `quod_material.pl` | Material classes, property definitions, contextual physical-property knowledge and queries | Textures, shaders, client objects or an autonomous physics engine |
+| `quod:material:eidolons` / `quod_material_eidolons.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
 | Existing `quod:gui` / `quod_gui.pl` | Semantic components, form/input/result/action roles and their reusable eidolon declarations | A second proof executor or material catalogue |
 | Existing `quod:lobby` / `quod_lobby.pl` | Lobby/device classes, device eidolons, arrangement and default eidolon policy | Copies of shared materials, toolkit functions or private user state |
 | Each personal lobby or world | Instances, their physical material assignments, accepted appearance choices and world policy | Copies of the standard class/recipe libraries |
@@ -403,7 +403,7 @@ The dependency direction is deliberate. Physical material queries use
 `quod:measure` and must work without a rendering library. The modelling toolkit
 uses the rendering contract. Material representations read the material
 ontology and use that toolkit. Object recipes, such as the console, compose
-those results. `quod_rendering` validates the resulting descriptions without
+those results. `quod:rendering` validates the resulting descriptions without
 calling back into the lobby or choosing which wood a world must use. Recipe
 libraries are explicit anchored dependencies of their consumers, not entries
 in a new global mutable registry.
@@ -501,7 +501,7 @@ eidolon(RecipeId, Inputs, Output).
 ```
 
 Object associations normally live beside the object's class. Shared material
-associations live in `quod_material_eidolons`, against material classes
+associations live in `quod:material:eidolons`, against material classes
 qualified by the collection's exact material-vocabulary dependency. This lets
 the physical catalogue remain usable without a rendering dependency.
 An application selects the recipe collections it trusts; libraries do not
@@ -520,8 +520,8 @@ Selection and invocation remain ordinary Prolog in the existing view proof:
 3. Invoke the selected library's allowlisted `eidolon/3`, checking its exact
    ontology identity through the existing
    `Namespace::(current_ontology_identity(Namespace, Anchor), Goal)` form.
-4. Compose parts, surfaces and semantic GUI bindings with `quod_modelling`,
-   then validate the complete description with `quod_rendering`.
+4. Compose parts, surfaces and semantic GUI bindings with `quod:modelling`,
+   then validate the complete description with `quod:rendering`.
 5. Return the description through the existing signed projection; the adapter
    constructs or updates client resources for the stable occurrence identities.
 
@@ -680,8 +680,8 @@ material, texture and GUI class.
 
 Complete this in three connected changes, each replacing the path it supersedes:
 
-1. **Separate responsibilities.** Rename the contract to `quod_rendering`,
-   move the existing pure builders into `quod_modelling`, introduce the physical
+1. **Separate responsibilities.** Rename the contract to `quod:rendering`,
+   move the existing pure builders into `quod:modelling`, introduce the physical
    material and material-recipe ontologies, and route class-selected eidolons
    through the existing lobby projection. Reuse current geometry and alignment
    tests at their new owners. Add real cross-ontology tests for physical queries
@@ -812,7 +812,7 @@ projection and authorization path.
 
 The current `mark/7` prototype in `quod:present` describes output occurrences,
 not recipes. Section 4.1.2 replaces that ontology with the narrowly scoped
-`quod_rendering` contract and a separate modelling toolkit. Output occurrences
+`quod:rendering` contract and a separate modelling toolkit. Output occurrences
 must not simply be renamed to `eidolon/7`; eidolons are their reusable recipes.
 Eidolons may also define sound; their relation to action progress is described
 in section 4.5. The rendering contract itself describes visual output.

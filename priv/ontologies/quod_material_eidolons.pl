@@ -1,6 +1,6 @@
 %% Surface recipes use the existing renderer-neutral optical vocabulary.
 %% Colours are authored appearances, not measurements of physical substances.
-acl_sovereign(quod_material_eidolons).
+acl_sovereign(quod:material:eidolons).
 can_invoke(Goal, _, _, _) :- eidolon_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- eidolon_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).

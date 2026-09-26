@@ -3,7 +3,7 @@
 %% The `quod:lens` ontology (priv/ontologies/quod_lens.pl): a lens and its
 %% encoding declared apart, an encoding's preconditions actually refusing a
 %% picture the data does not support, and one authored lens over `quod:licence`
-%% producing descriptors that `quod_rendering` accepts.
+%% producing descriptors that `quod:rendering` accepts.
 %%
 %% The end-to-end tests load both sources into one engine whose proof context is
 %% `quod:licence`, so the lens's `::` asks take the real self-ask path in
@@ -41,7 +41,7 @@ a_lens_and_its_encoding_are_separate_test() ->
         %% the encoding says how it is shown, and is reached through the lens
         ?assertEqual([<<"reach_columns">>],
                      solutions({'E'}, {encoding, {'E'}, <<"work_licences">>, {'_'}}, St)),
-        ?assertEqual([<<"quod_rendering">>],
+        ?assertEqual([<<"quod:rendering">>],
                      solutions({'P'}, {encoding, <<"reach_columns">>, {'_'}, {'P'}}, St)),
         ?assertEqual([<<"box">>],
                      solutions({'K'}, {encoding_mark, <<"reach_columns">>, {'K'}}, St)),
@@ -111,7 +111,7 @@ the_scene_bound_is_its_own_test() ->
         holds({satisfied, {within, <<"marks">>}, tl(Rows)}, St)
     end).
 
-%% The lens never produces more marks, or longer labels, than `quod_rendering`
+%% The lens never produces more marks, or longer labels, than `quod:rendering`
 %% accepts. Each ontology owns its own bound; this is the check that the two
 %% agree, so neither has to restate the other's number.
 the_lens_bounds_sit_inside_the_presentation_bounds_test() ->
@@ -243,7 +243,7 @@ a_height_channel_must_carry_an_ordinal_measure_test() ->
           "lens(<<\"by_family\">>, <<\"which families are here\">>).\n"
           "lens_subject(<<\"by_family\">>, <<\"quod:licence\">>, <<\"component\">>).\n"
           "lens_measure(<<\"by_family\">>, <<\"family\">>, <<\"nominal\">>).\n"
-          "encoding(<<\"family_columns\">>, <<\"by_family\">>, <<\"quod_rendering\">>).\n"
+          "encoding(<<\"family_columns\">>, <<\"by_family\">>, <<\"quod:rendering\">>).\n"
           "encoding_mark(<<\"family_columns\">>, <<\"box\">>).\n"
           "encoding_layout(<<\"family_columns\">>, <<\"grouped_columns\">>).\n"
           "encoding_channel(<<\"family_columns\">>, <<\"high\">>, <<\"family\">>).\n"

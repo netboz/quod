@@ -3,7 +3,7 @@
 %% integer millimetres; angles degrees; optical factors and UV repeat permille.
 %% Surface texture slots: base_colour is sRGB; normal is OpenGL tangent space;
 %% orm is linear R=occlusion/G=roughness/B=metallic. JPEG assets use SHA-256.
-%% quod_rendering — the marks a renderer may be asked to draw.
+%% quod:rendering — the marks a renderer may be asked to draw.
 %%
 %% A mark is a visual occurrence. It is not the thing it shows: several marks
 %% may depict one entity, and a mark may depict nothing at all. Keeping the two
@@ -49,7 +49,7 @@
 %% Interactive subjects carry the exact history anchor. The client proves that
 %% identity in the selected scope before reading its menu or workspace.
 
-acl_sovereign(quod_rendering).
+acl_sovereign(quod:rendering).
 
 %% Anyone may read the vocabulary and check a descriptor against it. Changing
 %% the vocabulary stays with admitted nodes, as in the other system ontologies.

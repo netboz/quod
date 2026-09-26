@@ -22,7 +22,7 @@
 %% written in — `group_at/2` declares precedence explicitly, and a group with
 %% none is a refused view rather than an arbitrary one.
 %%
-%% Descriptors are built to the schema of `quod_rendering`, named here by its
+%% Descriptors are built to the schema of `quod:rendering`, named here by its
 %% flat binary name. This ontology does not re-prove that schema on every read;
 %% conformance is a tested invariant of the two sources, so one ordinary read
 %% is one selection and one layout, not a validation round trip.
@@ -84,7 +84,7 @@ lens_query(attribute(_, _, _)).
 
 %% --- the bounds ---------------------------------------------------------------
 %% This ontology's own bounds on what it will produce, not a copy of anyone
-%% else's. They are held below `quod_rendering`'s corresponding limits, which the
+%% else's. They are held below `quod:rendering`'s corresponding limits, which the
 %% tests check against that source rather than restating here.
 
 limit(<<"marks">>, 256).
@@ -294,7 +294,7 @@ lens_measure(<<"work_licences">>, <<"reach">>, <<"ordinal">>).
 lens_measure(<<"work_licences">>, <<"family">>, <<"nominal">>).
 lens_detail(<<"work_licences">>, <<"component">>).
 
-encoding(<<"reach_columns">>, <<"work_licences">>, <<"quod_rendering">>).
+encoding(<<"reach_columns">>, <<"work_licences">>, <<"quod:rendering">>).
 encoding_mark(<<"reach_columns">>, <<"box">>).
 encoding_layout(<<"reach_columns">>, <<"grouped_columns">>).
 encoding_channel(<<"reach_columns">>, <<"high">>, <<"reach">>).

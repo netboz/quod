@@ -1,6 +1,6 @@
 %% Pure model construction. Rendering policy and descriptor validation belong
 %% to the exact rendering vocabulary supplied at founding.
-acl_sovereign(quod_modelling).
+acl_sovereign(quod:modelling).
 can_invoke(Goal, _, _, _) :- modelling_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- modelling_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).

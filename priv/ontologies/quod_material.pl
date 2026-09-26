@@ -1,6 +1,6 @@
 %% Physical material knowledge. Appearance is owned by material eidolons.
 %% Quantity conversion uses the exact measure vocabulary supplied at founding.
-acl_sovereign(quod_material).
+acl_sovereign(quod:material).
 can_invoke(Goal, _, _, _) :- material_query(Goal).
 can_invoke((current_ontology_identity(_, _), Goal), _, _, _) :- material_query(Goal).
 can_invoke(_, node(Key), _, _) :- peer_admitted(Key, _, _, Key).

@@ -3140,3 +3140,17 @@ explicit ambiguity diagnostics and XR locomotion affordances remain recorded
 in the adjudication. New shape recipes using the supported contract require no
 object-specific JavaScript; additional engine concepts require adapter work.
 Unrelated user-owned Forgejo/CI files remain untouched and excluded.
+
+### Canonical system ontology identities (2026-09-27)
+
+The source split remains unchanged, but the deployed ontology identities use
+Quod's canonical structured namespace grammar. They are `quod:rendering`,
+`quod:modelling`, `quod:material`, and the nested
+`quod:material:eidolons`. Underscores remain only in source filenames and
+Erlang module names. The first fresh deployment attempt registered underscore
+identities; root's system catalogue correctly rejected those four rows as
+malformed because system ontologies must be descendants of `quod`. That
+attempt was stopped before creation-policy activation and is retained offline
+as failed evidence. The authorized test-network reset will be repeated with
+fresh storage and canonical identities. System rows drive automatic fleet
+joining; no per-node or durable host declaration is part of system installation.

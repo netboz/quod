@@ -132,19 +132,15 @@ The system family includes:
 | `quod:licence` | licence families, compatibility, obligations, and release reach |
 | `quod:measure` | quantities, units, dimensions, and conversion |
 | `quod:lens` | reusable selections and rendering encodings |
-| `quod:present` | bounded renderer-neutral rendering marks |
+| `quod:rendering` | client-neutral geometry, surface and asset contract |
+| `quod:modelling` | pure model construction, alignment and named composition |
+| `quod:material` | physical material classes and contextual properties |
+| `quod:material:eidolons` | reusable surface recipes and texture references |
 
 The table describes bundled system roles. A non-root ontology has system status
-only when root contains its exact `system_ontology/2` row. In the deployed
-0.7.236 network, `quod:names`, `quod:licence`, `quod:measure`, `quod:lens`, and
-`quod:present` are registered by anchor and hosted on every node; their source
-filenames do not confer that status.
-
-The replacement design in `client-world-direction.md` section 4.1.2 separates
-the rendering contract (`quod_rendering`), pure modelling toolkit,
-physical materials and material representations. The `quod:present` row above
-describes the deployed prototype, not the target name or ownership boundary.
-System status for its replacements still requires exact root catalogue rows.
+only when root contains its exact `system_ontology/2` row. Source filenames do
+not confer that status. The split rendering, modelling and material design is
+specified in `client-world-direction.md` section 4.1.2.
 
 These are vocabulary and policy ontologies, not containers for every instance.
 Each physical node has a node ontology containing an instance of the `node`

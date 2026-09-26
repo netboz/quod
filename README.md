@@ -135,10 +135,10 @@ bundled domain ontology sources also include:
 | `quod:licence` | licence families, compatibility, obligations, and release reach |
 | `quod:measure` | quantities, units, dimensions, and conversion |
 | `quod:lens` | reusable selections and rendering encodings |
-| `quod_rendering` | client-neutral geometry, surface and asset contract |
-| `quod_modelling` | pure Prolog construction, alignment and named composition |
-| `quod_material` | material classes and contextual physical properties |
-| `quod_material_eidolons` | reusable surface recipes and texture references |
+| `quod:rendering` | client-neutral geometry, surface and asset contract |
+| `quod:modelling` | pure Prolog construction, alignment and named composition |
+| `quod:material` | material classes and contextual physical properties |
+| `quod:material:eidolons` | reusable surface recipes and texture references |
 
 The naming and licence sources and tests live at
 [`priv/ontologies/quod_names.pl`](priv/ontologies/quod_names.pl),

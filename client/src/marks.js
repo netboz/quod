@@ -1,6 +1,6 @@
 // One signed read's bindings become marks this client can draw.
 //
-// `quod_rendering` is the authority on what a descriptor may contain; this is the
+// `quod:rendering` is the authority on what a descriptor may contain; this is the
 // Babylon adapter's half of the contract — which renderer-neutral kind becomes
 // which mesh, and which field name becomes which parameter. It recognises what
 // it can draw and refuses everything else, so an unknown kind, an unknown
@@ -12,7 +12,7 @@
 
 import { readList } from './prolog-read.js'
 
-// kind -> the fields it takes, in the order quod_rendering declares them.
+// kind -> the fields it takes, in the order quod:rendering declares them.
 const GEOMETRY = Object.freeze({
   box: ['width', 'height', 'depth'],
   sphere: ['diameter'],

@@ -74,8 +74,8 @@ rendering_query(have_attribute(_, _, _)).
 rendering_query(attribute(_, _, _)).
 
 %% --- the geometries -----------------------------------------------------------
-%% Four bounded parameterized shapes and a transform group. A kind's fields are declared once, in
-%% order, and a descriptor carries exactly those fields under those names: the
+%% Six bounded parameterized shapes and a transform group. A kind's fields are
+%% declared once, in order, and a descriptor carries exactly those fields: the
 %% client never has to know that a box's three numbers happen to be width,
 %% height and depth.
 
@@ -83,6 +83,8 @@ mark_kind(<<"box">>).
 mark_kind(<<"sphere">>).
 mark_kind(<<"plane">>).
 mark_kind(<<"cylinder">>).
+mark_kind(<<"capsule">>).
+mark_kind(<<"torus">>).
 mark_kind(<<"group">>).
 
 geometry_field(<<"box">>, 1, <<"width">>).
@@ -93,6 +95,10 @@ geometry_field(<<"plane">>, 1, <<"width">>).
 geometry_field(<<"plane">>, 2, <<"height">>).
 geometry_field(<<"cylinder">>, 1, <<"diameter">>).
 geometry_field(<<"cylinder">>, 2, <<"height">>).
+geometry_field(<<"capsule">>, 1, <<"diameter">>).
+geometry_field(<<"capsule">>, 2, <<"height">>).
+geometry_field(<<"torus">>, 1, <<"diameter">>).
+geometry_field(<<"torus">>, 2, <<"thickness">>).
 
 
 placement(<<"above">>).
@@ -122,6 +128,7 @@ well_formed_mark(mark(Id, Kind, Size, Transform, Material, Label, Depicts)) :-
     mark_kind(Kind),
     findall(Field, geometry_field(Kind, _, Field), Fields),
     sized(Fields, Size),
+    geometry_constraint(Kind, Size),
     placed(Transform),
     appearance(Kind, Material, Label),
     refers(Depicts).
@@ -135,6 +142,16 @@ sized([Field | Fields], [f(Field, Extent) | Rest]) :-
     limit(<<"extent">>, Max),
     Extent =< Max,
     sized(Fields, Rest).
+
+%% These two shapes have relationships between their dimensions which field
+%% validation alone cannot express. A capsule's total height contains both
+%% rounded ends; a torus tube must fit inside its overall diameter.
+geometry_constraint(<<"capsule">>, [f(<<"diameter">>, D), f(<<"height">>, H)]) :-
+    H >= D.
+geometry_constraint(<<"torus">>, [f(<<"diameter">>, D), f(<<"thickness">>, T)]) :-
+    T < D.
+geometry_constraint(Kind, _) :-
+    mark_kind(Kind), Kind \== <<"capsule">>, Kind \== <<"torus">>.
 
 placed(transform(X, Y, Z, RX, RY, RZ)) :-
     offset(X), offset(Y), offset(Z),

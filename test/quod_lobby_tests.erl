@@ -13,7 +13,7 @@ lobby_projection_recovery_test_() ->
             Goal = {'::', Ns, {',', {current_ontology_identity, Ns, Anchor},
                                     {lobby_view, playing, {0}}}},
             {ok, [#{<<"V0">> := Scene}], Height} = read(Ctx, Goal),
-            ?assertEqual(7, length(Scene)),
+            ?assertEqual(8, length(Scene)),
             ?assert(lists:member({mark, <<"console">>, <<"group">>, [],
                {transform, 0, 0, 0, 0, 0, 0}, no_surface, unlabelled,
                {depicts, Ns, Anchor, console}}, Scene)),
@@ -92,7 +92,7 @@ first_scene_waits_for_new_lobby_route(Discovery) ->
             end,
             receive
                 {first_scene, Caller, Result} ->
-                    ?assertMatch({ok, [#{<<"V0">> := [_,_,_,_,_,_,_]}], _}, Result)
+                    ?assertMatch({ok, [#{<<"V0">> := [_,_,_,_,_,_,_,_]}], _}, Result)
             after 5000 -> error(first_scene_timeout)
             end
         after
@@ -133,6 +133,10 @@ modelling_and_material_libraries_test_() ->
                 {align, {plane, 1000, 600}, centre, {box, 1200, 800, 201}, front, 5, {0}})),
             ?assertMatch({fail, _}, Ask(ModelNs,
                 {align, {plane, 0, 600}, centre, {box, 1200, 800, 200}, front, 5, {0}})),
+            ?assertMatch({ok, _, _}, Ask(ModelNs,
+                {align, {torus, 110, 18}, centre, {box, 1200, 800, 200}, front, 5, {0}})),
+            ?assertMatch({fail, _}, Ask(ModelNs,
+                {align, {capsule, 460, 459}, centre, {box, 1200, 800, 200}, front, 5, {0}})),
             At = {transform, 0, 0, 0, 0, 0, 0},
             {ok, [#{<<"V0">> := A}], _} = Ask(ModelNs, {place_model, <<"a">>, At, depicts_nothing, Parts, {0}}),
             {ok, [#{<<"V0">> := B}], _} = Ask(ModelNs, {place_model, <<"b">>, At, depicts_nothing, Parts, {0}}),

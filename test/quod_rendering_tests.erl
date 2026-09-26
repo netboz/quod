@@ -14,7 +14,8 @@
 kinds_declare_their_fields_in_order_test() ->
     with_rendering(fun(St) ->
         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
-        ?assertEqual([<<"box">>, <<"cylinder">>, <<"group">>, <<"plane">>, <<"sphere">>],
+        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>,
+                      <<"plane">>, <<"sphere">>, <<"torus">>],
                      lists:sort(Kinds)),
         %% Every kind's fields are declared at consecutive positions from 1, so
         %% the order a descriptor must use is the order they are written in.
@@ -37,6 +38,12 @@ a_well_formed_mark_test() ->
                 {transform, 0, 450, 0, 0, 0, 0},
                 {surface, <<"#C14953">>, 0, 900, 650, []},
                 unlabelled, depicts_nothing}}, St),
+        holds({well_formed_mark,
+               sized(<<"capsule">>, [{f, <<"diameter">>, 460},
+                                      {f, <<"height">>, 850}])}, St),
+        holds({well_formed_mark,
+               sized(<<"torus">>, [{f, <<"diameter">>, 110},
+                                    {f, <<"thickness">>, 18}])}, St),
         %% a mark may sit behind the origin and be turned
         holds({well_formed_mark,
                {mark, <<"m3">>, <<"plane">>,
@@ -62,8 +69,14 @@ the_schema_refuses_a_malformed_descriptor_test() ->
         fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, 1.5}])}, St),
         fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, {'/', 3, 2}}])}, St),
         fails({well_formed_mark, sized(<<"sphere">>, [{f, <<"diameter">>, 100001}])}, St),
+        fails({well_formed_mark,
+               sized(<<"capsule">>, [{f, <<"diameter">>, 460},
+                                      {f, <<"height">>, 459}])}, St),
+        fails({well_formed_mark,
+               sized(<<"torus">>, [{f, <<"diameter">>, 110},
+                                    {f, <<"thickness">>, 110}])}, St),
         %% an unknown kind has no schema, so it has no answer either
-        fails({well_formed_mark, sized(<<"torus">>, [{f, <<"diameter">>, 100}])}, St)
+        fails({well_formed_mark, sized(<<"cone">>, [{f, <<"diameter">>, 100}])}, St)
     end).
 
 transforms_are_whole_millimetres_and_degrees_test() ->
@@ -160,7 +173,8 @@ a_scene_needs_distinct_mark_ids_test() ->
 the_class_view_is_derived_test() ->
     with_rendering(fun(St) ->
         holds({isa, mark, thing}, St),
-        ?assertEqual([<<"box">>, <<"cylinder">>, <<"group">>, <<"plane">>, <<"sphere">>],
+        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>,
+                      <<"plane">>, <<"sphere">>, <<"torus">>],
                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
         ?assertEqual([<<"diameter">>, <<"height">>],
                      solutions({'F'}, {attribute, <<"cylinder">>, field, {'F'}}, St))
@@ -173,7 +187,7 @@ policy_test() ->
                        {well_formed_mark, box(<<"m1">>)},
                        {limit, <<"label">>, {'N'}},
                        {instance_of, geometry, {'K'}}]),
-        Change = {assertz, {mark_kind, <<"torus">>}},
+        Change = {assertz, {mark_kind, <<"cone">>}},
         fails({can_invoke, Change, anyone, [], ns}, St),
         holds({can_invoke, Change, {node, k}, [], ns}, St)
     end).

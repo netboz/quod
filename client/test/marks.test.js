@@ -58,7 +58,7 @@ test('several marks may depict one entity', () => {
 
 test('an unreadable descriptor fails closed', () => {
   const cases = {
-    'unknown kind': REPLY.replace('<<"box">>', '<<"torus">>'),
+    'unknown kind': REPLY.replace('<<"box">>', '<<"cone">>'),
     'unknown field': REPLY.replace('<<"width">>', '<<"girth">>'),
     'reordered fields': REPLY.replace(
       '[f(<<"width">>, 400), f(<<"height">>, 1500), f(<<"depth">>, 400)]',
@@ -74,6 +74,23 @@ test('an unreadable descriptor fails closed', () => {
   for (const [what, text] of Object.entries(cases)) {
     assert.throws(() => readMarks(text), undefined, `${what} was accepted`)
   }
+})
+
+test('capsules and tori keep their neutral dimensions', () => {
+  const surface = 'surface(<<"#F9C80E">>,0,900,0,[])'
+  const [capsule, torus] = readMarks(
+    `[mark(<<"support">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,850)],` +
+    `transform(0,425,0,0,0,0),${surface},unlabelled,depicts_nothing),` +
+    `mark(<<"ring">>,<<"torus">>,[f(<<"diameter">>,110),f(<<"thickness">>,18)],` +
+    `transform(0,0,0,90,0,0),${surface},unlabelled,depicts_nothing)]`)
+  assert.deepEqual(capsule.size, { diameter: 460, height: 850 })
+  assert.deepEqual(torus.size, { diameter: 110, thickness: 18 })
+  assert.throws(() => readMarks(
+    `[mark(<<"bad">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,459)],` +
+    `transform(0,0,0,0,0,0),${surface},unlabelled,depicts_nothing)]`))
+  assert.throws(() => readMarks(
+    `[mark(<<"bad">>,<<"torus">>,[f(<<"diameter">>,110),f(<<"thickness">>,110)],` +
+    `transform(0,0,0,0,0,0),${surface},unlabelled,depicts_nothing)]`))
 })
 
 // Display-only Explorer abbreviations must never be mistaken for signed result data.

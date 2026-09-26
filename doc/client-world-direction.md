@@ -7,9 +7,10 @@ and simulation sections remain direction except for the initial lobby/toolkit
 contracts recorded in section 11.8; remaining proposals must be revalidated
 before implementation.
 
-Section 4.1.2 records the material/rendering/toolkit separation requested by
-Yan on 2026-09-26. It is the next implementation design, not a claim that the
-deployed `quod:present` prototype has already been replaced.
+Section 4.1.2 records the implemented material/rendering/toolkit separation
+requested by Yan on 2026-09-26. The canonical system ontologies are
+`quod:rendering`, `quod:modelling`, `quod:material`, and
+`quod:material:eidolons`.
 
 The generic acting identity is now the deployed actor model in
 `ontology-actor-architecture.md`: every acting node, agent, service, or
@@ -314,7 +315,7 @@ The same recipes must remain meaningful to a future Unreal or other adapter.
 
 | Area | Shared modelling concepts |
 | --- | --- |
-| Geometry | Plane, box, sphere, cylinder; later curves, extrusion, lathe and imported meshes |
+| Geometry | Plane, box, sphere, cylinder, capsule and torus; later curves, extrusion, lathe and imported meshes |
 | Composition | Named parts, groups, local transforms, pivots and reusable subrecipes |
 | Arrangement | Named anchors/faces, alignment, spacing, repetition and distribution |
 | Surfaces | Reusable materials, texture slots, UV coordinates, tiling and sampling |
@@ -375,10 +376,9 @@ References for the capability vocabulary: Babylon's
 [particles](https://doc.babylonjs.com/features/featuresDeepDive/particles/particle_system/particle_system_intro)
 and the [glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
 
-### 4.1.2 Ontology ownership, materials and reusable representations
+### 4.1.2 Ontology ownership, materials and reusable eidolons
 
-The client description contract is **`quod:rendering`**, replacing
-`quod:present`. Its role is the shared description contract: what a visual
+The client description contract is **`quod:rendering`**. Its role is the shared description contract: what a visual
 occurrence, surface, recipe reference and GUI-surface binding mean, and how to
 validate them. For example, it defines the meaning of a box's dimensions and
 a texture's slot. It contains neither the function that arranges a row of boxes
@@ -798,21 +798,21 @@ class_eidolon(prolog_console, edition, natural,
 ```
 
 Recipes use renderer-neutral primitive predicates/descriptors: box, sphere,
-plane, cylinder, transforms, materials and textures first; mesh assets, bones,
+plane, cylinder, capsule, torus, transforms, materials and textures first; mesh assets, bones,
 skeletons, joints and animation bindings as the vocabulary grows. Rendering
 bones and joints do not by themselves establish physical bodies or constraints.
 The client reads the resulting bounded descriptions and realizes the supported
 primitives. It does not execute arbitrary ontology code or a Babylon API encoded
-as Prolog. Exact primitive signatures and recipe evaluation remain to be defined.
+as Prolog. The implemented signatures are recorded in section 11.8 and grow
+through the same rendering-contract and client-adapter boundary.
 
 A lens selects the subjects and relevant data for a purpose; an eidolon defines
 how to render them. Rendering one object need not introduce a separate
 data-analysis lens. Both reuse the same
 projection and authorization path.
 
-The current `mark/7` prototype in `quod:present` describes output occurrences,
-not recipes. Section 4.1.2 replaces that ontology with the narrowly scoped
-`quod:rendering` contract and a separate modelling toolkit. Output occurrences
+The current `mark/7` contract in `quod:rendering` describes output occurrences,
+not recipes. The separate `quod:modelling` toolkit constructs them. Output occurrences
 must not simply be renamed to `eidolon/7`; eidolons are their reusable recipes.
 Eidolons may also define sound; their relation to action progress is described
 in section 4.5. The rendering contract itself describes visual output.
@@ -1788,6 +1788,7 @@ model(Parts, Marks).
 % Parts are a parent-before-child list of:
 part(Id, Shape, Transform, Surface, Label, Subject).
 % Shape: group | box(W,H,D) | sphere(D) | plane(W,H) | cylinder(D,H)
+%        | capsule(Diameter,Height) | torus(Diameter,Thickness)
 % Transform: transform(X,Y,Z,RX,RY,RZ) | relative(ParentId, transform(...))
 % Surface: no_surface (groups only) | material(Colour,Finish)
 %          | pbr(Colour,Metallic,Roughness,Emission)

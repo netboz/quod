@@ -18,6 +18,8 @@ const GEOMETRY = Object.freeze({
   sphere: ['diameter'],
   plane: ['width', 'height'],
   cylinder: ['diameter', 'height'],
+  capsule: ['diameter', 'height'],
+  torus: ['diameter', 'thickness'],
   group: [],
 })
 
@@ -55,7 +57,7 @@ function readMark(term) {
   return Object.freeze({
     id: binaryValue(id, 'mark id'),
     kind: name,
-    size: readSize(size, fields),
+    size: readSize(size, fields, name),
     parent: parent === null ? null : binaryValue(parent, 'parent id'),
     transform: readTransform(local),
     material: group ? null : readMaterial(material),
@@ -64,7 +66,7 @@ function readMark(term) {
   })
 }
 
-function readSize(term, fields) {
+function readSize(term, fields, kind) {
   if (term.type !== 'list' || term.items.length !== fields.length) {
     throw new Error('a mark carries the wrong number of dimensions')
   }
@@ -78,6 +80,12 @@ function readSize(term, fields) {
     size[named] = whole(extent, 'a dimension')
     if (size[named] <= 0) throw new Error('a dimension must be positive')
   })
+  if (kind === 'capsule' && size.height < size.diameter) {
+    throw new Error('a capsule height must include both rounded ends')
+  }
+  if (kind === 'torus' && size.thickness >= size.diameter) {
+    throw new Error('a torus thickness must be smaller than its diameter')
+  }
   return Object.freeze(size)
 }
 

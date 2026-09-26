@@ -42,6 +42,8 @@ shape(box(W, H, D), <<"box">>,
 shape(sphere(D), <<"sphere">>, [f(<<"diameter">>, D)]).
 shape(plane(W, H), <<"plane">>, [f(<<"width">>, W), f(<<"height">>, H)]).
 shape(cylinder(D, H), <<"cylinder">>, [f(<<"diameter">>, D), f(<<"height">>, H)]).
+shape(capsule(D, H), <<"capsule">>, [f(<<"diameter">>, D), f(<<"height">>, H)]).
+shape(torus(D, T), <<"torus">>, [f(<<"diameter">>, D), f(<<"thickness">>, T)]).
 
 %% Align two axis-aligned bounding-box anchors in the target's local frame.
 %% A positive gap runs outward along the target face's normal. The returned
@@ -59,6 +61,8 @@ bounds(box(W, H, D), W, H, D).
 bounds(sphere(D), D, D, D).
 bounds(plane(W, H), W, H, 0).
 bounds(cylinder(D, H), D, H, D).
+bounds(capsule(D, H), D, H, D) :- H >= D.
+bounds(torus(D, T), D, T, D) :- T < D.
 
 face(centre, 0, 0, 0).
 face(left, -1, 0, 0).

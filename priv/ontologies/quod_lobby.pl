@@ -87,7 +87,7 @@ material_surface(Material, Surface) :-
 eidolon(console_playing, device(_), Parts) :- console_parts(playing, Parts).
 eidolon(console_edition, device(_), Parts) :- console_parts(edition, Parts).
 console_parts(Mode,
-    [part(<<"pedestal">>, cylinder(460, 850), transform(0, 425, 0, 0, 0, 0),
+    [part(<<"pedestal">>, capsule(460, 850), transform(0, 425, 0, 0, 0, 0),
           Bronze, PedestalLabel, depicts_nothing),
      part(<<"body">>, box(1600, 1000, 160), transform(0, 1400, 0, 0, 0, 0),
           Wood, BodyLabel, depicts_nothing),
@@ -95,15 +95,19 @@ console_parts(Mode,
           surface(<<"#102024">>,0,450,80,[]), ScreenLabel, depicts_nothing),
      part(<<"status">>, sphere(55), relative(<<"body">>, transform(700, -465, -95, 0, 0, 0)),
           surface(<<"#DDAB46">>,0,500,400,[]), unlabelled, depicts_nothing),
+     part(<<"status-ring">>, torus(110, 18),
+          relative(<<"body">>, transform(700, -465, -100, 90, 0, 0)),
+          Bronze, RingLabel, depicts_nothing),
      part(<<"label">>, group, relative(<<"body">>, transform(0, 640, 0, 0, 0, 0)),
           no_surface, label(Title, <<"centre">>), depicts_nothing)]) :-
     material_surface(oak_wood, Wood), material_surface(bronze, Bronze),
-    console_layout(Mode, Gap, Title, PedestalLabel, BodyLabel, ScreenLabel),
+    console_layout(Mode, Gap, Title, PedestalLabel, BodyLabel, ScreenLabel, RingLabel),
     modelling_vocabulary(Ns, Anchor),
     Ns::(current_ontology_identity(Ns, Anchor),
          align(plane(1440, 820), centre, box(1600, 1000, 160), front, Gap, ScreenAt)).
-console_layout(playing, 5, <<"PROLOG CONSOLE">>, unlabelled, unlabelled, unlabelled).
+console_layout(playing, 5, <<"PROLOG CONSOLE">>, unlabelled, unlabelled, unlabelled, unlabelled).
 console_layout(edition, 400, <<"CONSOLE PARTS">>,
                label(<<"BRONZE SUPPORT">>, <<"above">>),
                label(<<"OAK BODY">>, <<"above">>),
-               label(<<"SCREEN">>, <<"above">>)).
+               label(<<"SCREEN">>, <<"above">>),
+               label(<<"STATUS RING">>, <<"above">>)).

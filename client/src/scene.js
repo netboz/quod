@@ -2,6 +2,8 @@
 // objects; parents compose local transforms. No domain state is stored here.
 
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
+import { CreateCapsule } from '@babylonjs/core/Meshes/Builders/capsuleBuilder.js'
+import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js'
@@ -94,6 +96,14 @@ function buildGeometry(scene, { id, kind, size }) {
     case 'cylinder':
       return MeshBuilder.CreateCylinder(name, {
         diameter: size.diameter / MM, height: size.height / MM, tessellation: 24,
+      }, scene)
+    case 'capsule':
+      return CreateCapsule(name, {
+        radius: size.diameter / (2 * MM), height: size.height / MM, tessellation: 24,
+      }, scene)
+    case 'torus':
+      return CreateTorus(name, {
+        diameter: size.diameter / MM, thickness: size.thickness / MM, tessellation: 32,
       }, scene)
     default:
       // readMarks refuses an unknown kind, so reaching this is a bug here.

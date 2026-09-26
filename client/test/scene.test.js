@@ -39,6 +39,26 @@ test('hierarchy composes transforms and unchanged snapshots retain engine resour
   })
 })
 
+test('the Babylon adapter builds capsule and torus geometry from neutral dimensions', () => {
+  withScene(scene => {
+    const surface = 'surface(<<"#F9C80E">>,0,900,0,[])'
+    const marks = readMarks(
+      `[mark(<<"support">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,850)],` +
+      `transform(0,425,0,0,0,0),${surface},unlabelled,depicts_nothing),` +
+      `mark(<<"ring">>,<<"torus">>,[f(<<"diameter">>,110),f(<<"thickness">>,18)],` +
+      `transform(0,0,0,90,0,0),${surface},unlabelled,depicts_nothing)]`)
+    let painted = paintMarks(scene, marks)
+    const support = painted.get('support').node
+    const ring = painted.get('ring').node
+    assert.ok(support.getTotalVertices() > 0)
+    assert.ok(ring.getTotalVertices() > 0)
+    painted = paintMarks(scene, marks, painted)
+    assert.equal(painted.get('support').node, support)
+    assert.equal(painted.get('ring').node, ring)
+    clearMarks(painted)
+  })
+})
+
 test('reparented children survive removed parents; geometry replacement retires only old resources', () => {
   withScene(scene => {
     let painted = paintMarks(scene, readMarks(`[${root},${child}]`))

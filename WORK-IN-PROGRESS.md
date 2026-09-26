@@ -3226,3 +3226,22 @@ reload passed. Two preliminary browser attempts are retained: the first used
 the previous allocation's dynamic port and the second recorded the resulting
 connection refusal clearly. Evidence is under
 `_build/material-network-20260927/geometry-v5/`.
+
+### Prolog-console eidolon redesign (2026-09-27)
+
+The first capsule-based console did not read as a coherent machine in the
+hardware render. Commits `ffb06f2` and `93ceccd` replace that recipe with a
+grounded retro-futurist console assembled entirely in `quod:lobby`: weighted
+plinth, oak deck, enclosed support, display housing, oak side cheeks, recessed
+bezel and screen, angled control shelf, bronze trim, status lamp/ring, knob and
+nameplate. The title placement was corrected after inspecting the first render.
+No renderer special case or Erlang change was added.
+
+Focused rendering/lobby tests pass 18/18. A clean eight-node candidate with
+fourteen ready system ontologies runs
+`client-console-v7@sha256:ad0c002b73c5d6976ce12d39efd03ac56befad11ffe7c528ce15d0cbb2821e97`.
+Browser acceptance on the corrected render passed signup, six verified texture
+loads, unchanged refresh, Next/Stop/Accept, committed readback and reload.
+Signup to the textured lobby took 10.71 seconds and unchanged refresh 281 ms.
+Production remained unchanged at Nomad index 773043. Evidence is under
+`_build/material-network-20260927/console-v7/`.

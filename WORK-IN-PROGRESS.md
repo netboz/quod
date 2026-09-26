@@ -2797,3 +2797,63 @@ failure/partial-prefix suite16/16. Extend counts across2/64/257-entry fixtures.
 Focused-v1 named a nonexistent old test module and ran no tests; retained setup
 failure. Focused-v2 uses the actual foreign-history/catch-up modules. Hardware
 confirmation and release review/checks remain pending for this second correction.
+
+## 2026-09-26 — coherent correction after the hardware review
+
+Yan authorized fixing the verified review findings together. Exact foreign
+claims and progress now share indexed genesis/era succession and selected-entry
+proof verification; only facts projections acquire the complete material
+archive. Projection acquisition uses that same current-tip verifier. Canonical
+blocks sign their material height (block3, V9 archive, QSJ7 journal, cache7).
+No legacy decoder or second owner is introduced. Material ranges copy complete
+groups and perform one sync, index installation, checkpoint and accounting
+handoff. Explicit startup verifies and retains complete groups beyond a saved
+checkpoint. Healthy notarization no longer creates a carrier; recovery carriers
+require complaint-driven progress. Finalized protocol views leave periodic
+redrive while retaining signing/proof custody, and existing readiness links
+recover missing QCs at unchanged material height.
+
+Known distributed group references can be retained by the browser and observed
+through the existing signed outcome endpoint, after checking the archived
+source Vote against the original signed request. This does not create a
+prepared operation claim or authorize resubmission. Loss of both the Execute
+reply's group reference and any prepared claim remains explicitly uncertain.
+
+Focused production-seam tests cover sparse membership authority, long proof
+streams, range durability, startup suffix retention, owner death and persistence
+failure. The old full-prefix test fixtures are being migrated to explicit facts
+demand where their obligation is archive custody. A real shared-call deadline
+regression was found and fixed: expiring one caller must not shorten the page
+budget of work another caller still owns. All18 page-credit/owner cases pass,
+as do the associated tracing checks. Failed runs and frozen sources remain
+under `_build/finality-resume-20260925/`. Completed-cut release gates, independent
+review and new isolated hardware measurements are still required. No new
+commit, image or production deployment yet; production .246-c4p1 and all original
+uncertain operations remain preserved.
+
+The remaining foreign-history fixtures now use actual sparse proofs or explicit
+projection demand as appropriate. Routing tests found and corrected committee
+contact protection still consulting material state instead of verified authority.
+Timing attribution retained its90% assertion: a redacted trace identified cold
+caller setup and owner admission outside the previously counted intervals.
+Those intervals now have explicit metrics; the existing ledger-sync stage is
+also registered, and obsolete nomination/confirmation branches were removed.
+All41 focused metrics/tracing cases pass. The browser bundle was regenerated.
+Clean-v10 freezes this complete tree for the required sequential release gates.
+Independent authority/storage review memos and all failed runs remain retained.
+
+Clean-v10 stopped at EUnit with3107passes/11failures; no later gate ran.
+The failures exposed remaining test contracts: old archive/journal magic and
+genesis vectors, sparse-proof fixtures still expecting a material-prefix walk,
+the changed phase/current-view shape, the artifact boundary inventory, and a
+router statistics assertion racing worker cleanup. Corrections retain the
+original safety assertions and observe actual cleanup delivery. The artifact
+inventory now also guards the batch append boundary. Focused corrected cases
+pass; a new exact freeze is required before release. Production remains unchanged.
+
+Clean-v11 passed3117 EUnit cases and exposed one intermittent test-ordering
+failure: the corruption fixture read its deliberately injected height before
+the owner diagnosed it. Both affected tests now await actual projection refusal,
+the held initializer and its installed result, checking that reconstruction is
+counted exactly once. Both focused cases pass; production bytes are unchanged.
+Clean-v12 will repeat the release gates on this corrected frozen test contract.

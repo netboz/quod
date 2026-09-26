@@ -95,8 +95,13 @@ restart_case(Root, Mode) ->
     persistent_term:put({?MODULE, held_owner}, Owner),
     persistent_term:put({?MODULE, append_gate}, true),
     OwnerRef = monitor(process, Owner),
-    OldRequest = request(Owner, Fixture, 30000),
+    projection_follow(Fixture),
     {OldWorker, OldStore, OldFile} = await_before(),
+    %% Enqueue the observer only after the writer is held, so its owner-death
+    %% assertion covers a known pending caller rather than a completed proof.
+    OldRequest = request(Owner, Fixture, 30000),
+    ?assertMatch(#{active := #{worker := OldWorker}, waiting := [#{callers := [_]}]},
+                 lifecycle(Owner, Identity)),
     OldWorkerRef = monitor(process, OldWorker),
     Watcher = receive
         {watcher_held, Owner, OldWorker, W} -> W
@@ -120,7 +125,7 @@ restart_case(Root, Mode) ->
     ReplacementRoot = case Mode of root_alias -> Root ++ "/."; _ -> Root end,
     Replacement = start_owner(ReplacementRoot, fetch(Fixture)),
     trace_owner(Replacement),
-    NewRequest = request(Replacement, Fixture, 30000),
+    NewRequest = projection_request(Replacement, Fixture, 30000),
     case Mode of
         Protected when Protected =/= watcher_only ->
             {_Job, Denied} = await_park(Replacement, Identity),
@@ -207,11 +212,11 @@ queue_case(Root) ->
     assert_verified(OtherRequest),
     ?assert(atomics:get(Counts, 2) > 0),
     ?assert(is_process_alive(Holder)),
-    ?assert(filelib:is_file(log_path(Root, identity(Other)))),
+    ?assertNot(filelib:is_file(log_path(Root, identity(Other)))),
     ?assertEqual(0, atomics:get(Counts, 1)),
     Holder ! stop,
     await_done(Owner, Job),
-    ?assertMatch(#{active := none, waiting := [], height := 2},
+    ?assertMatch(#{active := none, waiting := [], height := 0},
                  lifecycle(Owner, Identity)),
     ?assert(atomics:get(Counts, 1) > 0),
     %% A route-unavailable park has the opposite last-caller rule.
@@ -242,7 +247,7 @@ session_case(Root) ->
     ?assertNotEqual(Path, AbandonedPath),
     Holder = holder(Identity),
     trace_owner(Owner),
-    Request = request(Owner, Fixture, 5000),
+    Request = projection_request(Owner, Fixture, 5000),
     await_park(Owner, Identity),
     ?assertEqual(Session, history_field(Owner, Identity, phase_session)),
     ?assert(filelib:is_file(Path)),
@@ -276,7 +281,8 @@ discovery_case(Root, Mode) ->
         atomics:add_get(Count, 1, 1), BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,
     Seed = start_owner(Root, Fetch),
-    assert_verified(request(Seed, Fixture, 5000)),
+    ?assertMatch({ok, #{slot := 2}}, quod_foreign_log_tests:prime_projection(
+        [{maps:get(pub, Fixture), [{"127.0.0.1", 31997}]}], Identity, 2, 5000)),
     ?assert(atomics:get(Count, 1) > 0),
     await_name_free(Identity), stop_owner(Seed),
     atomics:put(Count, 1, 0),
@@ -574,7 +580,22 @@ fixture() -> quod_foreign_log_tests:foreign_fixture(
                <<"foreign:custody:", (binary:encode_hex(crypto:strong_rand_bytes(8)))/binary>>).
 identity(F) -> {maps:get(ns, F), maps:get(anchor, F)}.
 writer_key(Identity) -> {foreign_cache_writer, Identity}.
-fetch(F) -> quod_foreign_log_tests:chain_fetch(maps:get(ns, F), maps:get(chain, F)).
+fetch(F) ->
+    Full = quod_foreign_log_tests:chain_fetch(maps:get(ns, F), maps:get(chain, F)),
+    Genesis = quod_foreign_log_tests:chain_fetch(maps:get(ns, F), [hd(maps:get(chain, F))]),
+    fun(P, E, N, Query, Deadline, Consume) ->
+        Selected = case persistent_term:get({?MODULE, genesis_only, identity(F)}, false) of
+            true -> Genesis;
+            false -> Full
+        end,
+        put({?MODULE, source_fixture}, true),
+        try Selected(P, E, N, Query, Deadline, fun(Parts, Height, Continuation) ->
+            erase({?MODULE, source_fixture}),
+            try Consume(Parts, Height, Continuation)
+            after put({?MODULE, source_fixture}, true) end
+        end)
+        after erase({?MODULE, source_fixture}) end
+    end.
 
 start_owner(Root, Fetch) ->
     %% Install tracing before init: retained-cache custody acquisition is now
@@ -599,6 +620,16 @@ stop_owner(Owner) -> gen_server:stop(Owner).
 request(Owner, F, Timeout) ->
     send_request(Owner, {verify, maps:get(pub, F), {"127.0.0.1", 31997},
                          maps:get(ref, F), resolve, Timeout}, Timeout).
+
+projection_request(Owner, F, Timeout) ->
+    projection_follow(F),
+    request(Owner, F, Timeout).
+
+projection_follow(F) ->
+    %% Material mutation is demanded by the real projection consumer.
+    ok = quod_foreign_log:observe_candidate(identity(F), {maps:get(pub, F), {"127.0.0.1", 31997}}),
+    {ok, _Follow} = quod_foreign_log:follow(identity(F), projection),
+    ok.
 send_request(Owner, Request, Timeout) ->
     gen_server:send_request(Owner, {verification, quod_time:mono_ms() + Timeout,
                                     undefined, erlang:monotonic_time(), Request}).
@@ -607,13 +638,13 @@ assert_verified(Request) ->
                  quod_foreign_log_tests:consume_verification_reply(
                    quod_reg:where({foreign_log, node}),
                    gen_server:wait_response(Request, 10000))).
-seed_genesis(Owner, F) ->
-    Entry = hd(maps:get(chain, F)),
-    {batch, [Genesis]} = element(3, quod_ledger:entry_view(Entry)),
-    {ok, Ref} = quod_dtx:certified_entry_ref(identity(F), Entry, Genesis),
-    Request = send_request(Owner,
-      {verify, maps:get(pub, F), {"127.0.0.1", 31997}, Ref, transaction, 5000}, 5000),
-    ?assertMatch({reply, {ok, #{slot := 1}}}, gen_server:wait_response(Request, 10000)).
+seed_genesis(_Owner, F) ->
+    Key = {?MODULE, genesis_only, identity(F)},
+    persistent_term:put(Key, true),
+    try
+        ?assertMatch({ok, #{slot := 1}}, quod_foreign_log_tests:prime_projection(
+            [{maps:get(pub, F), [{"127.0.0.1", 31997}]}], identity(F), 1, 5000))
+    after persistent_term:erase(Key) end.
 
 holder(Identity) ->
     Parent = self(),
@@ -642,7 +673,15 @@ await_park(Owner, Identity) ->
     ?assertMatch(#{ref := Job, wait_reason := custody}, Head),
     case maps:get(work, Head) of
         {initialize, Identity, startup} ->
-            ?assertMatch([#{wait_reason := runnable, callers := [_]}], Tail);
+            case Tail of
+                [#{work := {follow, Identity, _, _}, wait_reason := runnable, callers := []},
+                 #{work := {exact, _, _, _, resolve}, wait_reason := runnable, callers := [_]}] -> ok;
+                _ -> ?assertMatch([#{work := {exact, _, _, _, resolve},
+                                    wait_reason := runnable, callers := [_]}], Tail)
+            end;
+        {follow, Identity, _, _} ->
+            ?assertMatch([#{work := {exact, _, _, _, resolve},
+                           wait_reason := runnable, callers := [_]}], Tail);
         _ -> ?assertEqual([], Tail)
     end,
     {Job, Worker}.
@@ -702,13 +741,17 @@ await_after(Worker) ->
 %% All instrumentation below is peer-local, source-derived, and checked for
 %% a non-vacuous match. It adds scheduling barriers around ORIGINAL bodies.
 mutation(Module, Function) ->
-    quod_custody_test_controller ! {mutation, self(), Module, Function}, ok.
+    case get({?MODULE, source_fixture}) of
+        true -> ok;
+        _ -> quod_custody_test_controller ! {mutation, self(), Module, Function}, ok
+    end.
 mutations() -> mutations([]).
 mutations(Acc) ->
     receive {mutation, Pid, M, F} -> mutations([{Pid, M, F} | Acc])
     after 0 -> lists:reverse(Acc) end.
 before_append(Store, _Entries) ->
-    case persistent_term:get({?MODULE, append_gate}, false) of
+    case persistent_term:get({?MODULE, append_gate}, false) andalso
+         get({?MODULE, source_fixture}) =/= true of
         true ->
             C = whereis(quod_custody_test_controller),
             C ! {append_before, self(), Store, store_summary(Store)},
@@ -716,7 +759,8 @@ before_append(Store, _Entries) ->
         false -> ok
     end.
 after_append(_Store, {ok, NewStore}) ->
-    case persistent_term:get({?MODULE, append_gate}, false) of
+    case persistent_term:get({?MODULE, append_gate}, false) andalso
+         get({?MODULE, source_fixture}) =/= true of
         true ->
             C = whereis(quod_custody_test_controller),
             C ! {append_after, self(), store_summary(NewStore)},
@@ -791,14 +835,14 @@ observe_cache_deletions(_, Forms) -> Forms.
 install_append_barriers() ->
     Module = quod_ledger_store,
     Forms = current_forms(Module),
-    [{function, L, append, 2, [Empty, {clause, CL, Args, Guards, Body}]}] =
-      [F || F = {function, _, append, 2, _} <- Forms],
+    [{function, L, append_group, 3, [{clause, CL, Args, Guards, Body}]}] =
+      [F || F = {function, _, append_group, 3, _} <- Forms],
     Result = {var, CL, 'CustodyAppendResult'},
     NewBody = [remote(before_append, [{var, CL, 'S'}, {var, CL, 'Entries'}]),
                {match, CL, Result, {block, CL, Body}},
                remote(after_append, [{var, CL, 'S'}, Result]), Result],
-    New = {function, L, append, 2, [Empty, {clause, CL, Args, Guards, NewBody}]},
-    load_forms(Module, [case F of {function, _, append, 2, _} -> New; _ -> F end || F <- Forms]).
+    New = {function, L, append_group, 3, [{clause, CL, Args, Guards, NewBody}]},
+    load_forms(Module, [case F of {function, _, append_group, 3, _} -> New; _ -> F end || F <- Forms]).
 
 install_watcher_barrier() ->
     Forms = original_forms(quod_process),

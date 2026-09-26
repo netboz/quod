@@ -204,7 +204,7 @@ local_current_view_uses_the_captured_projection_and_apply_sent_frontier_test() -
         %% A second owner call here would self-call and fail; the complete
         %% semantic view must instead be derived from the supplied object.
         ?assertEqual(
-           {ok, #{identity => Target, slot => 7, generation => 5,
+           {ok, #{identity => Target, slot => 7,
                   committee => [Key], committee_id => CommitteeId,
                   route_candidates => [{Key, [Endpoint]}]}},
            ReadView({local, Source}, {identity, Target}, 1000)),
@@ -1479,7 +1479,7 @@ fixture(N) ->
     Claim = #{target => Target, group_id => GroupId,
               resolve_ref => ResolveRef, generation => Generation,
               verdict => commit},
-    View = #{identity => Target, slot => 8, generation => 9,
+    View = #{identity => Target, slot => 8,
              committee => Committee, committee_id => CommitteeId,
              route_candidates => Routes},
     #{owner_ns => OwnerNs, target => Target, claim => Claim,
@@ -1504,7 +1504,7 @@ resolve_evidence(Target, GroupId, Generation, Verdict,
     Payload = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, Slot - 1}, {Era, 0, element(2, Target)}, Payload, 0),
+                    {Era, Slot - 1}, {Era, 0, element(2, Target)}, Slot, Payload, 0),
     Entry = quod_ledger:entry(Slot, Block,
         quod_ct:protocol_certificate(Block, #{identity => Target, signer => ControlSigner})),
     {ok, ResolveRef} = quod_dtx:certified_entry_ref(Target, Entry, Control),

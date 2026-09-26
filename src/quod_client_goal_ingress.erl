@@ -14,9 +14,10 @@ Foreign scopes carry the same verified request evidence and agent principal;
 each target applies its ordinary `can_invoke/4` policy to that principal.
 """.
 
--export([submit/2, submit/3, submit/5, resolve_operation/2, resolve_operation/4, cursor_command/4]).
+-export([submit/2, submit/3, submit/5, resolve_operation/2, resolve_operation/4,
+         resolve_operation/5, cursor_command/4]).
 -ifdef(TEST).
--export([test_forward_routes/3]).
+-export([test_forward_routes/3, group_request_matches/3]).
 -endif.
 
 -include("quod_client_goal_limits.hrl").
@@ -80,18 +81,24 @@ submit(_RequestBytes, _Signature, _Peer) -> {error, invalid_peer}.
 -doc "Resolve the existing operation named by one exact signed request.".
 -spec resolve_operation(binary(), binary(), binary(), term()) -> result().
 resolve_operation(SessionId, RequestBytes, Signature, Peer) ->
+    resolve_operation(SessionId, RequestBytes, Signature, Peer, none).
+
+-doc "Resolve an operation or its selected source group using the same signed request.".
+-spec resolve_operation(binary(), binary(), binary(), term(), none | tuple()) -> result().
+resolve_operation(SessionId, RequestBytes, Signature, Peer, Selector) ->
+    Deadline = quod_time:mono_ms() + ?OPERATION_RESOLVE_BUDGET_MS,
     case quod_client_auth:admit_goal(SessionId, Peer) of
         {ok, #{public_key := PublicKey}} ->
             resolve_verified_operation(
-              PublicKey, RequestBytes, Signature);
+              PublicKey, RequestBytes, Signature, Selector, Deadline);
         {error, _} = Error ->
             Error
     end.
 
 -doc """
-Resolve an exact signed request against locally held outcomes, including after
-its write expiry. This does not forward to another node: a node without the
-claim returns pending. Resolution shares signing-key and peer admission budgets;
+Resolve an exact signed request through the existing outcome reader, including
+after its write expiry. A missing claim remains pending; resolution never
+submits the request. It shares signing-key and peer admission budgets;
 rate-limit and availability errors remain errors, not operation_pending.
 """.
 -spec resolve_operation(binary(), binary()) -> result().
@@ -158,26 +165,92 @@ request_session_binding(#{signing_public_key := PublicKey},
 request_session_binding(_Request, _ExpectedMode, _PublicKey, _SessionExpires) ->
     {error, session_principal_mismatch}.
 
-resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
-    Deadline = quod_time:mono_ms() + ?OPERATION_RESOLVE_BUDGET_MS,
+resolve_verified_operation(PublicKey, RequestBytes, Signature, Selector, Deadline) ->
     case quod_client_goal:verify(RequestBytes, Signature) of
         {ok, #{request := #{signing_public_key := PublicKey}} = Evidence} ->
-            resolve_operation_evidence(Evidence, Deadline);
+            resolve_operation_evidence(Evidence, Deadline, Selector);
         {ok, _OtherPrincipal} ->
             {error, session_principal_mismatch};
         {error, _} = Error ->
             Error
     end.
 
+resolve_operation_evidence(Evidence, Deadline) ->
+    resolve_operation_evidence(Evidence, Deadline, none).
+
 resolve_operation_evidence(#{request := #{network_identity := RequestNetwork},
                              request_digest := Digest,
-                             operation_ref := OperationRef} = Evidence, Deadline) ->
+                             operation_ref := OperationRef} = Evidence, Deadline, Selector) ->
     case network_identity() of
         {ok, RequestNetwork} ->
-            resolved_operation(Evidence, Digest, OperationRef,
-                               quod_prolog:outcome(OperationRef), Deadline);
+            {operation, Ns, _, _, _} = OperationRef,
+            Claim = case {Selector, quod_reg:where({quod_prolog, Ns})} of
+                {none, _} -> read_outcome(OperationRef, Deadline);
+                {_, undefined} -> {error, unavailable};
+                _ -> read_outcome(OperationRef, Deadline)
+            end,
+            case Claim of
+                {error, _} when Selector =/= none ->
+                    resolve_selected_group(Evidence, Selector, Deadline);
+                Outcome ->
+                    %% The operation's prepared winner takes precedence over
+                    %% a refused duplicate attempt. Once a claim is known,
+                    %% its unresolved result cannot fall back to that abort.
+                    %% Otherwise an explicit selector observes only its group,
+                    %% without spending its budget on remote claim discovery.
+                    resolved_operation(Evidence, Digest, OperationRef, Outcome, Deadline)
+            end;
         {ok, _OtherNetwork} -> {error, wrong_network};
         {error, _} = Error -> Error
+    end.
+
+%% The selector identifies one submitted group, never the operation's winning
+%% claim. Its certified source Vote must bind these exact signed request bytes.
+resolve_selected_group(Evidence = #{operation_ref := {operation, Ns, Anchor, _, _}},
+                       Group = {group, Ns, Anchor, <<_:256>>, <<_:256>>, <<_:256>> = GroupId},
+                       Deadline) ->
+    Pending = {ok, Evidence, {group_outcome, Group, #{status => pending}}},
+    case lists:sort(quod_simplex:namespaces()) of
+        [OwnerNs | _] ->
+            case quod_dtx_coordinator:observe_phase(OwnerNs, {Ns, Anchor}, GroupId, vote, Deadline) of
+                {ok, #{control := Control}} ->
+                    case group_request_matches(Group, Evidence, Control) of
+                        true ->
+                            case read_outcome(Group, Deadline) of
+                                {ok, Outcome} -> {ok, Evidence, {group_outcome, Group, Outcome}};
+                                _ -> Pending
+                            end;
+                        false -> {error, invalid_outcome_ref}
+                    end;
+                _ -> Pending
+            end;
+        [] -> Pending
+    end;
+resolve_selected_group(_Evidence, _Selector, _Deadline) -> {error, invalid_outcome_ref}.
+
+group_request_matches(Group, #{operation_ref := Operation, request_digest := Digest}, Control) ->
+    Material = quod_atomic:control_material(Control),
+    case {quod_atomic:source_group_ref(Material), Material} of
+        {{ok, Group}, {_, _, #{group := #{request := #{claim :=
+                #{operation_ref := Operation, digest := Digest}}}}}} -> true;
+        _ -> false
+    end.
+
+read_outcome(Ref, Deadline) ->
+    {ok, {Ns, _Anchor}} = quod_outcome:ref_identity(Ref),
+    case Deadline - quod_time:mono_ms() of
+        Remaining when Remaining > 0 ->
+            Result = case quod_reg:where({quod_prolog, Ns}) of
+                undefined -> quod_simplex:dtx_outcome_lookup(Ref, Remaining);
+                _ ->
+                    case quod_prolog:outcome_snapshot(Ns, Ref, Remaining) of
+                        {ok, #{outcome := Outcome}} when is_map(Outcome) -> {ok, Outcome};
+                        {ok, #{outcome := not_found}} -> {error, not_found};
+                        _ -> {error, retry}
+                    end
+            end,
+            case Deadline > quod_time:mono_ms() of true -> Result; false -> {error, retry} end;
+        _ -> {error, retry}
     end.
 
 resolved_operation(
@@ -216,8 +289,8 @@ resolve_claim_outcome({applications, Refs}, #{request_digest := Digest} = Claim,
             end;
         [] -> pending
     end;
-resolve_claim_outcome(OrdinaryOrGroupRef, _Claim, _Op, _Deadline) ->
-    case quod_prolog:outcome(OrdinaryOrGroupRef) of
+resolve_claim_outcome(OrdinaryOrGroupRef, _Claim, _Op, Deadline) ->
+    case read_outcome(OrdinaryOrGroupRef, Deadline) of
         {ok, _} = Found -> Found;
         {error, _} -> pending
     end.

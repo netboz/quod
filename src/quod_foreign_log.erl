@@ -1,106 +1,48 @@
 -module(quod_foreign_log).
 -moduledoc """
-Node-wide verifier/cache for foreign certified DTX references.
+Node-wide owner for certified foreign evidence and optional material projections.
 
-The owner is intentionally separate from every hosted namespace.  It selects
-from certified directory/history routes, caller-supplied historical routes,
-and authenticated contacts learned from peers. Callers may also name one
-explicit authenticated route. The owner admits an exact certified reference,
-then a monitored worker pulls the existing catch-up page format over an identity-pinned
-connection.  The worker folds the history from the caller-pinned
-`{Namespace, GenesisAnchor}` through `quod_catchup`; no route, peer response,
-cache checkpoint, or reference field is trusted by itself.
-The node serving history bytes grants no authority: after certified committee
-sources are exhausted, an authenticated live host may supply bytes to the same
-verifier so a retained prefix can cross a complete host or committee move.
-Only the verified chain and its slot-specific committee certify an exact
-reference. Execution routes, current-view quorum replies, and plain reads stay
-restricted to validators in the certified current projection.
+Exact claims and progress consumers use the existing credited history reader to
+fetch the pinned genesis, necessary committee transitions, and selected finality
+proof. The shared verifier authenticates signed material heights and each new
+era under its predecessor committee. Only projection demand acquires and folds
+a contiguous material archive. Sparse evidence never proves absence. Routes,
+peer heights, checkpoints and reference fields confer no authority themselves.
 
-The same owner also derives a certificate-verified current committee view for
-an anchored identity. `quod_dtx_current_view` uses that frozen view to select
-distinct current validator keys and to bind outcome/application probes to one
-committee id and minimum slot. Routes remain transport hints and never become
-committee evidence.
+Immutable verified era records, certified progress and any complete material
+prefix belong to this one identity-scoped owner. Current views additionally need
+current-committee quorum confirmation. Exact reads covered by a published prefix
+borrow its pinned snapshot/index directly, without a new worker or network read.
+No request rebuilds retained history: startup and diagnosed corruption own that
+explicit lifecycle. A borrowed hosted view retains its source-PID lifetime.
 
-`verify/5`, `verify_reference/3`, and the current-view APIs are synchronous only from the caller's
-perspective. The gen_server never waits for network, disk replay, certificate
-verification, or crypto; DTX validation callers invoke them from their existing
-asynchronous verdict/recovery worker boundary.
-Incoming pages are decoded by the requesting verifier or its existing probe
-child, not by this shared gen_server. The owner retains the page deadline,
-caller monitor and exact link credit until it accepts that worker's local
-decode completion. Raw delivery is neither page completion nor evidence;
-only the ordinary forward verifier can establish history authority.
+The gen_server never waits for network, disk, replay or crypto. Its existing
+monitored verifier owns each credited pull and decodes pages outside the owner.
+Raw delivery is not completion: the correlated decode acknowledgement retains
+link credit and the original page deadline until acceptance. Owner death,
+cancellation and stale replies cannot transfer authority to another incarnation.
 
-Long-lived ontology follows are another consumer of this same owner and cache.
-They add no verifier or history path: a short monitored verification worker
-advances at most one certified page. Progress consumers need only that installed
-prefix; projection consumers additionally share one unregistered materializer
-folding the persisted cache through `quod_committed_projection`. A coordinator
-never builds a remote facts database to learn that a certificate is available. Normal
-progress is message-driven: the initial attachment, exact directory-route
-events, local finalized commits, authenticated feed block/digest frames, Root
-replay readiness, and explicit consumer refresh wake one coalesced job. Commit
-and feed messages are freshness hints only; the ordinary certified follow
-remains the sole authority.
-For each certified current target validator, the owner maintains one volatile,
-identity-bound feed registration. Height-only wakes acknowledge freshness and
-release the existing certified follower; they carry no facts or authority and
-never alter either ontology's Brahms view. There is no per-follow poll or
-retry-backoff ladder.
+One per-identity queue serves exact, current and follow demand. A caller has its
+own absolute deadline, including mailbox time; expiry detaches that caller.
+Runnable shared work survives, while a callerless unavailable-route park retires.
+Distinct directory, feed, installed-readiness and certified-progress events wake
+only affected dependencies. An unchanged failed request cannot wake itself or
+renew its allowance. There is no readiness polling or retry timer.
 
-Exact and current routed verification uses this same owner and its one
-per-identity queue. A row with no usable route stays parked under its original
-caller deadline. Exact directory/feed progress and a genuinely advanced
-verified prefix release it; merely retaining an unchanged prefix does not.
-A later row with a request-scoped contact may run past it.
-No endpoint becomes authority or retained configuration, and no retry timer is
-used to discover that progress.
+A projection follows the existing archive and shared committed materializer.
+The registered foreign-cache writer holds exclusive mutation custody across
+open, recovery and append. Complete groups are copied before proof-stage reuse;
+one range sync, accumulated index delta and checkpoint precede publication.
+Persistence failure invalidates that cursor; a later source cannot borrow its
+stale state. A transport failure retains its independently verified durable
+prefix. Startup verifies any complete suffix beyond a valid saved checkpoint.
 
-A caller registration is not the shared job. Its absolute deadline includes
-owner-mailbox time and is checked again when publishing and returning a result.
-Expiry detaches only that caller: active and runnable/custody-blocked admitted
-work survives, while a callerless unavailable-route park retires. Borrowed
-local views retain their exact source-PID lifetime. A routed attempt remembers
-one accepted external progress edge until its failure/park transition; its own
-cache installation cannot create a new attempt. Trace metadata never changes
-sharing, route eligibility, deadlines or authority.
-
-The existing verifier worker holds the gproc name `{foreign_cache_writer,
-Identity}` before any mutable cache recovery/open/cleanup. The name is released
-only by actual worker death, not result delivery or a kill request. The owner-
-death watcher stops an orphan; the registered name prevents its replacement
-from writing during that asynchronous stop. Contention parks in this same
-queue under a correlated name monitor, separately from route availability.
-Admission only inspects metadata; the custodian revalidates it before mutation
-and preserves the exact handed-off suspended phase session during cleanup.
-This is one-BEAM custody: the release requires permanent gproc, and two VMs
-must not share a live data directory, as for the main ledger.
-
-Inside that custody, one worker-owned cursor carries the store, certified
-projection and phase index through exact/current/follow work and every route
-attempt. Request failure does not discard a healthy prefix or its suspended
-session. A partially failed local mutation makes the cursor unusable: no next
-source sees its stale prefix. A diagnosed integrity failure is reported and
-scheduled separately from the request. Empty caches are not certified resident history.
-
-There is no numeric limit on foreign identities, follows, encoded cache, or
-materialized projections. An inactive identity retains its bounded current
-projection only after this running owner has verified it. Ledger handles,
-workers and catch-up link leases remain active only for proof or follow work.
-The existing index's backend resource follows the published prefix lifetime;
-exclusive mutation custody still passes only between registered writers. A
-current-view row, once watched, keeps its existing committee
-feed registrations open so unchanged requests can reuse that verified
-projection; any missing or newer height returns to the ordinary verifier.
-At owner startup, existing per-identity writers initialize the retained disk
-caches before proof requests can use them. Requests never reconstruct a
-prefix. Ready exact reads borrow the published prefix without joining a newer
-range's acquisition queue. Publication also releases already-queued readers
-through that same capture, without taking writer custody or selecting a route.
-Capture selects one historical era from the same
-retained index; point I/O and exact verification run in the existing caller.
+The gproc writer name is released by actual worker death, never by a result or
+kill request. Contention parks in the same queue under a correlated monitor.
+Sparse workers leave retained material sessions untouched. Current watches keep
+existing exact-identity feed registrations so unchanged quorum-confirmed tips
+need no network reacquisition. No second executor, facts database or messaging
+system is introduced.
 """.
 
 -behaviour(gen_server).
@@ -133,7 +75,7 @@ retained index; point I/O and exact verification run in the existing caller.
          test_install_feed_registration/5,
          test_set_feed_height/4,
          test_install_feed_opening/5,
-         test_install_feed_projection/3,
+         test_install_feed_authority/3,
          test_corrupt_resident_height/3,
          test_lifecycle_state/0,
          measure_foreign_stage/2,
@@ -148,7 +90,7 @@ retained index; point I/O and exact verification run in the existing caller.
 -define(MANIFEST, "identity.term").
 -define(CHECKPOINT, "checkpoint.term").
 -define(LOG, "log.0001").
--define(CACHE_VERSION, 6). %% separate material history and era-local protocol roots
+-define(CACHE_VERSION, 7). %% signed material heights in archive and era authority
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
@@ -164,6 +106,7 @@ retained index; point I/O and exact verification run in the existing caller.
           height,
           projection,
           phase_index,
+          batch = none,
           state = verified
          }).
 
@@ -227,6 +170,8 @@ retained index; point I/O and exact verification run in the existing caller.
           phase_session = none :: none | term(),
           cache_session = none :: none | quod_ledger_store:session(),
           published = none :: none | #prefix{},
+          authorities = #{} :: map(),
+          certified_tip = none :: none | map(),
           waiting = {[], []} :: term(),
           last_used = 0 :: integer(),
           active = none :: none | reference(),
@@ -267,6 +212,7 @@ retained index; point I/O and exact verification run in the existing caller.
           timer = none :: none | reference(),
           progress_edge = false :: boolean(),
           custody = acquiring :: acquiring | held,
+          material_custody = false :: boolean(),
           phase_hold = none :: none | quod_dtx_phase_index:index(),
           proof_stages = #{} :: #{file:filename_all() => pid()},
           retiring = false :: boolean(),
@@ -827,10 +773,10 @@ verify_projected_entry(Lookup, Slot, Ref, ExpectedPhase, Projection) ->
 -doc """
 Return one certificate-verified current committee view for an anchored identity.
 
-It starts from the pinned genesis anchor, advances the shared lazy history
-cache through certified entries, then requires a full quorum of the resulting
-committee to corroborate the captured durable height.  Supplied routes remain
-identity-pinned fetch hints only.
+It verifies committee succession from the pinned genesis anchor and a proof
+of the selected tip, then requires a full quorum of that committee to
+corroborate its height and hash. Ordinary material history is not downloaded.
+Supplied routes remain identity-pinned fetch hints only.
 
 Before genesis is certified, candidates retain discovery order. Afterwards the
 returned route view contains only certified committee keys, with live
@@ -867,6 +813,7 @@ current(Routes0, Identity, Contact, TimeoutMs)
                        quod_trace:context(), <<"quod.foreign.current">>, internal,
                        #{'quod.namespace' => Ns},
                        fun(SpanCtx) ->
+                           observe_foreign_stage(current_setup, ok, StartedNative),
                            R = verification_call(
                                  {current, Routes, Identity, Contact, TimeoutMs}, Deadline),
                            _ = quod_trace:result(SpanCtx, R),
@@ -1004,10 +951,10 @@ test_install_feed_opening(Pid, Identity, Peer, RegistrationId, OpenRef)
       {test_install_feed_opening,
        Identity, Peer, RegistrationId, OpenRef}).
 
-test_install_feed_projection(Pid, Identity, Projection)
+test_install_feed_authority(Pid, Identity, Projection)
   when is_pid(Pid), is_map(Projection) ->
     gen_server:call(
-      Pid, {test_install_feed_projection, Identity, Projection}).
+      Pid, {test_install_feed_authority, Identity, Projection}).
 
 test_corrupt_resident_height(Pid, Identity, Height)
   when is_pid(Pid), is_integer(Height), Height >= 0 ->
@@ -1150,7 +1097,8 @@ handle_call({verification, Deadline, TraceCtx, EnqueuedNative, Request}, From, S
             observe_unadmitted_caller(Caller, Cause),
             {reply, {error, retry}, S0};
         true ->
-            handle_verification(Request, Caller, From, S0)
+            measure_foreign_ok(owner_admission,
+              fun() -> handle_verification(Request, Caller, From, S0) end)
     end;
 handle_call({claim_cache_custody, RequestRef}, {Worker, _}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
@@ -1159,20 +1107,27 @@ handle_call({claim_cache_custody, RequestRef}, {Worker, _}, S0) ->
             case request_source_live(Request) andalso
                  quod_reg:where(cache_writer_key(Identity)) =:= Worker of
                 true ->
-                    Resident = resident_cache(Identity, S0),
                     H0 = maps:get(Identity, S0#s.histories),
-                    H1 = H0#history{resident_verified = false, phase_session = none},
+                    Material = material_work(Request#request.work, H0),
+                    Resident = case Material of true -> resident_cache(Identity, S0); false -> none end,
+                    H1 = case Material of
+                        true -> H0#history{resident_verified = false, phase_session = none};
+                        false -> H0
+                    end,
                     S1 = put_history(Identity, H1, S0),
                     Running = stage_callers(Callers, running),
                     annotate_caller_stages(Running, work_lifetime_attributes(Request#request.work)),
                     S2 = S1#s{pending = (S1#s.pending)#{RequestRef =>
-                                      Request#request{custody = held,
+                                      Request#request{custody = held, material_custody = Material,
                                           callers = Running}}},
                     Keep = [Index || Index <- [H0#history.phase_session,
                                                 prefix_index(H0#history.published)],
                                      Index =/= none],
+                    Context = #{material => Material, authorities => H0#history.authorities,
+                                certified_tip => H0#history.certified_tip,
+                                deadline => evidence_work_deadline(Request)},
                     {reply, {ok, Resident, Keep, worker_trace(Identity, Callers,
-                              Request#request.job_id, Request#request.attempt)}, S2};
+                              Request#request.job_id, Request#request.attempt), Context}, S2};
                 false -> {reply, {error, retry}, S0}
             end;
         _ -> {reply, {error, retry}, S0}
@@ -1299,7 +1254,7 @@ test_install_verified_progress(RequestRef, Meta, S) ->
     install_verified_progress(RequestRef, Meta, S).
 
 test_fail_persist_after(Stage)
-  when Stage =:= ledger_append; Stage =:= phase_commit;
+  when Stage =:= ledger_append; Stage =:= ledger_sync; Stage =:= phase_commit;
        Stage =:= checkpoint_write; Stage =:= cache_accounting;
        Stage =:= reserve_page ->
     put({?MODULE, persistence_failure}, Stage),
@@ -1357,7 +1312,8 @@ handle_private_call({test_hold_next_confirmation, TestPid, Token}, _From, S)
     {reply, ok, S};
 handle_private_call({test_follow_attempt_state, Identity}, _From, S) ->
     H = maps:get(Identity, S#s.histories),
-    {reply, #{height => H#history.height, hint => H#history.hinted_height,
+    {reply, #{height => H#history.height, certified_height => history_progress_height(H),
+              hint => H#history.hinted_height,
               inflight => H#history.follow_inflight, dirty => H#history.follow_dirty,
               token => H#history.follow_token}, S};
 handle_private_call(test_page_rows, _From, S) ->
@@ -1420,14 +1376,15 @@ handle_private_call(
        feed_registration_openings =
            (S0#s.feed_registration_openings)#{OpenRef => Key}}};
 handle_private_call(
-  {test_install_feed_projection, Identity, Projection}, _From, S0) ->
+  {test_install_feed_authority, Identity, Projection}, _From, S0) ->
     case valid_identity(Identity) andalso
          valid_projection(Projection, Identity) of
         true ->
             S1 = ensure_history(Identity, S0),
             H0 = maps:get(Identity, S1#s.histories),
-            H1 = H0#history{projection = Projection,
-                            resident_verified = true},
+            {Height, Hash} = history_head(Projection),
+            H1 = retain_verified_evidence(H0, #{certified_tip =>
+                #{height => Height, hash => Hash, authority => Projection}}),
             {reply, ok, put_history(Identity, H1, S1)};
         false ->
             {reply, {error, bad_projection}, S0}
@@ -1621,11 +1578,11 @@ launch_request_owned(
                        RequestRef, RequestWork,
                        fun() ->
                            case acquire_cache_custody(Owner, RequestRef, Identity) of
-                               {ok, Resident, Keep, Trace} ->
+                               {ok, Resident, Keep, Trace, Context} ->
                                    verification_custody_acquired(RequestRef),
                                    verification_worker(
                                      Owner, RequestRef, WorkerWork, Root, FetchFun,
-                                     PageTimeout, Resident, Keep, Trace);
+                                     PageTimeout, Resident, Keep, Trace, Context);
                                denied -> ok
                            end
                        end),
@@ -1670,7 +1627,7 @@ acquire_cache_custody(Owner, RequestRef, Identity) ->
             %% The owner and source lifetimes are monitored. This local
             %% handoff does not borrow a detachable caller's deadline.
             case gen_server:call(Owner, {claim_cache_custody, RequestRef}, infinity) of
-                {ok, _, _, _} = Grant -> Grant;
+                {ok, _, _, _, _} = Grant -> Grant;
                 {error, _} -> denied
             end;
         false ->
@@ -1900,18 +1857,18 @@ resident_current_identity(_Work, _Identity, _S) ->
 resident_confirmed_current(Sources, Identity,
                            S = #s{histories = Histories}) ->
     case maps:get(Identity, Histories, undefined) of
-        #history{height = Height, projection = Projection,
-                 resident_verified = true, phase_session = PhaseSession,
-                 current_watch = remote, progress_signals_open = true}
-          when Height > 0, is_map(Projection), PhaseSession =/= none ->
-            Committee = quod_simplex:history_committee(Projection),
-            case current_feed_tip(Identity, Height, Committee, S) of
-                Height -> {ok, current_view_evidence(Identity, Height, Projection,
-                                 current_route_candidates(Sources, Projection))};
-                _ -> miss
+        #history{current_watch = remote, progress_signals_open = true} = H ->
+            case history_certified_view(H) of
+                #{height := Height, authority := Authority} ->
+                    Committee = maps:get(committee, Authority),
+                    case current_feed_tip(Identity, Height, Committee, S) of
+                        Height -> {ok, current_view_evidence(Identity, Height, Authority,
+                                     current_route_candidates(Sources, Authority))};
+                        _ -> miss
+                    end;
+                none -> miss
             end;
-        _ ->
-            miss
+        _ -> miss
     end.
 
 current_feed_tip(Identity, Height, Committee0, S) ->
@@ -1946,17 +1903,14 @@ touch_history(Identity, S0) ->
     end.
 
 retain_current_watch(
-  Identity,
-  #routed_work{kind = {current_identity, Identity}},
+  Identity, #routed_work{kind = {current_identity, Identity}},
   {ok, #{slot := Height}}, S0) ->
-    case maps:get(Identity, S0#s.histories, undefined) of
-        #history{height = Height, resident_verified = true} = H0 ->
-            H1 = H0#history{
-                   current_watch = remote,
-                   hinted_height = retained_hint(Height, H0)},
+    H0 = maps:get(Identity, S0#s.histories),
+    case history_progress_height(H0) =:= Height of
+        true ->
+            H1 = H0#history{current_watch = remote, hinted_height = retained_hint(Height, H0)},
             open_progress_signals(Identity, put_history(Identity, H1, S0));
-        _ ->
-            S0
+        false -> S0
     end;
 retain_current_watch(_Identity, _Work, _Result, S0) -> S0.
 
@@ -2274,9 +2228,9 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
                         down -> source_down;
                         _ -> worker_down
                     end,
-                    S1 = case {Request#request.work, Request#request.custody} of
+                    S1 = case {Request#request.work, Request#request.material_custody} of
                         {{initialize, _, _}, _} -> S0;
-                        {_, held} ->
+                        {_, true} ->
                             %% The sole mutator died without handing back its
                             %% coherent cursor. Recover on this actual DOWN,
                             %% not from a future request discovering the loss.
@@ -2492,7 +2446,7 @@ selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
         {ok, Directory} ->
             {Projection, Bootstrap} =
                 case maps:get(Identity, S#s.histories, undefined) of
-                    #history{projection = P, bootstrap_hints = B} -> {P, B};
+                    #history{bootstrap_hints = B} = H -> {history_authority(H), B};
                     undefined -> {undefined, bootstrap_hints(Identity, S)}
                 end,
             {ok, #{request => [], live => Directory, supplied => Supplied,
@@ -2567,7 +2521,7 @@ remember_bootstrap_candidate(Identity, PeerKey, Endpoint, S0) ->
             {Hints, Evicted} = put_bootstrap_hint(
                                  PeerKey, Endpoint,
                                  H0#history.bootstrap_hints,
-                                 H0#history.projection),
+                                 history_authority(H0)),
             H1 = H0#history{bootstrap_hints = Hints,
                             last_used = quod_time:mono_ms()},
             S2 = put_history(
@@ -2744,15 +2698,16 @@ install_worker_result(RequestRef, Result, Meta,
     end;
 install_worker_result(RequestRef, Result0, Meta,
                       #request{identity = Identity, work = Work}, S0) ->
-    S2 = measure_foreign_ok(
+    {Result, S3} = measure_foreign_ok(
            result_install,
            fun() ->
-               install_verified_progress(RequestRef, Meta, S0)
+               S1 = install_verified_progress(RequestRef, Meta, S0),
+               %% Installed authority includes its current-view watch and
+               %% feed registrations; charge that owner work to this stage.
+               %% A newer feed hint still invalidates a queued current reply.
+               Reply = current_reply(Work, Result0, maps:get(Identity, S1#s.histories)),
+               {Reply, retain_current_watch(Identity, Work, Reply, S1)}
            end),
-    %% A feed can advance while the worker's reply is queued. Its verified
-    %% prefix stays installed, but a known newer tip is not a current result.
-    Result = current_reply(Work, Result0, maps:get(Identity, S2#s.histories)),
-    S3 = retain_current_watch(Identity, Work, Result, S2),
     case {Result, maps:get(RequestRef, S3#s.pending, undefined)} of
         {{error, retry}, #request{work = #routed_work{}}} ->
             {noreply, park_failed_routed_request(RequestRef, S3)};
@@ -3385,7 +3340,11 @@ add_follow(Identity, Interest, From = {ConsumerPid, _Tag}, S0)
     case WasIdle andalso not H0#history.follow_inflight of
          true -> wake_follow(Identity, S4);
          false when Interest =:= projection, H1#history.materializer =:= none ->
-             ensure_materializer_advanced(Identity, S4);
+             case H1#history.published =:= none orelse
+                  H1#history.height < history_progress_height(H1) of
+                 true -> wake_follow(Identity, S4);
+                 false -> ensure_materializer_advanced(Identity, S4)
+             end;
          false -> S4
     end.
 
@@ -3541,6 +3500,8 @@ hibernate_idle_history(_Identity,
     S0;
 hibernate_idle_history(_Identity, #history{published = #prefix{}}, S0) ->
     S0;
+hibernate_idle_history(_Identity, #history{certified_tip = Tip}, S0) when Tip =/= none ->
+    S0;
 hibernate_idle_history(Identity, H, S0) ->
     close_phase_session(H#history.phase_session),
     Bootstrap = case H#history.bootstrap_hints of
@@ -3690,7 +3651,7 @@ begin_follow_refresh(Identity, Token, S0) ->
                     H1 = H0#history{follow_token = none,
                                     follow_inflight = true,
                                     follow_dirty = false,
-                                    follow_start_height = H0#history.height},
+                                    follow_start_height = follow_verified_height(H0)},
                     S1 = put_history(Identity, H1, S0),
                     Timeout = follow_request_timeout(S1),
                     Deadline = quod_time:mono_ms() + Timeout,
@@ -3747,7 +3708,7 @@ finish_follow_refresh(Identity, _Token, Reply, S0) ->
                             {_, New} -> New
                         end,
             Advanced = Reason =:= none andalso
-                       H0#history.height > H0#history.follow_start_height,
+                       follow_verified_height(H0) > H0#history.follow_start_height,
             H1 = H0#history{last_probe_ms = Now, hinted_height = KnownHint,
                             follow_inflight = false,
                             reachability =
@@ -3777,7 +3738,8 @@ finish_follow_refresh(Identity, _Token, Reply, S0) ->
 %% or failed result can create a loop.
 continue_follow_progress(Identity, Advanced, Hint, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
-        #history{follow_dirty = Dirty, height = Height} = H0 ->
+        #history{follow_dirty = Dirty} = H0 ->
+            Height = follow_verified_height(H0),
             MoreCertified =
                 Advanced andalso
                     is_integer(Hint) andalso Hint > Height,
@@ -3794,10 +3756,36 @@ continue_follow_progress(Identity, Advanced, Hint, S0) ->
             S0
     end.
 
-certified_notice(#history{published = #prefix{height = Height, projection = Projection}}) ->
-    {Height, Hash} = history_head(Projection),
-    {certified, Height, Hash};
-certified_notice(_) -> {building, 0}.
+newer_certified_tip(none, Tip) -> Tip;
+newer_certified_tip(Tip, none) -> Tip;
+newer_certified_tip(#{height := Height, hash := Hash} = Old,
+                    #{height := Height, hash := Hash}) -> Old;
+newer_certified_tip(#{height := OldHeight}, #{height := Height} = New) when Height > OldHeight -> New;
+newer_certified_tip(#{height := OldHeight} = Old, #{height := Height}) when Height < OldHeight -> Old;
+newer_certified_tip(_, _) -> error(conflicting_verified_tip).
+
+history_certified_view(#history{published = Prefix, certified_tip = Tip}) ->
+    Material = case Prefix of
+        #prefix{height = H, projection = P} ->
+            {H, Hash} = history_head(P), #{height => H, hash => Hash, authority => P};
+        none -> none
+    end,
+    newer_certified_tip(Tip, Material).
+
+history_progress_height(H) ->
+    case history_certified_view(H) of none -> 0; #{height := Height} -> Height end.
+
+history_authority(H) ->
+    case history_certified_view(H) of none -> undefined; #{authority := A} -> A end.
+
+certified_notice(H) ->
+    case history_certified_view(H) of
+        #{height := Height, hash := Hash} -> {certified, Height, Hash};
+        none -> {building, 0}
+    end.
+
+follow_verified_height(H) ->
+    case needs_projection(H) of true -> H#history.height; false -> history_progress_height(H) end.
 
 needs_projection(#history{consumers = Consumers}) ->
     lists:any(fun(#consumer{interest = I}) -> I =:= projection end,
@@ -4086,28 +4074,39 @@ cancel_request_pulls(RequestRef, S0) ->
 %% request back and forth without an external progress edge.
 install_verified_progress(RequestRef, Meta, S0) ->
     {ok, Identity} = request_identity(RequestRef, S0),
-    OldHeight = (maps:get(Identity, S0#s.histories))#history.height,
+    OldHeight = history_progress_height(maps:get(Identity, S0#s.histories)),
     S1 = install_worker_meta(
            RequestRef, Meta, record_follow_progress(RequestRef, Meta, S0)),
-    case maps:get(resident_verified, Meta, false) andalso
-         maps:get(height, Meta, OldHeight) > OldHeight of
+    case history_progress_height(maps:get(Identity, S1#s.histories)) > OldHeight of
         true -> release_queued_route_waiters(Identity, S1);
         false -> S1
     end.
 
+retain_verified_evidence(H0, Meta) ->
+    Authorities = maps:fold(fun(Era, A, Acc) ->
+        case maps:find(Era, Acc) of
+            error -> Acc#{Era => A};
+            {ok, A} -> Acc;
+            {ok, _} -> error(conflicting_verified_authority)
+        end
+    end, H0#history.authorities, maps:get(authorities, Meta, #{})),
+    Tip = newer_certified_tip(H0#history.certified_tip, maps:get(certified_tip, Meta, none)),
+    H0#history{authorities = Authorities, certified_tip = Tip}.
+
+install_worker_meta(RequestRef, #{evidence_only := true} = Meta, S0) ->
+    {ok, Identity} = request_identity(RequestRef, S0),
+    H0 = maps:get(Identity, S0#s.histories),
+    install_verified_history(Identity, H0, retain_verified_evidence(H0, Meta), S0);
 install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
     case request_identity(RequestRef, S0) of
         {ok, Identity} ->
             case maps:get(Identity, S0#s.histories, undefined) of
-                #history{} = H0 ->
+                #history{} = Previous ->
+                    H0 = retain_verified_evidence(Previous, Meta),
                     ActualBytes = maps:get(bytes, Meta, H0#history.bytes),
                     Projection = maps:get(
                                    projection, Meta,
                                    H0#history.projection),
-                    Bootstrap = case is_map(Projection) of
-                                    true -> [];
-                                    false -> H0#history.bootstrap_hints
-                                end,
                     ResidentVerified =
                         maps:get(resident_verified, Meta, false),
                     PhaseSession = maps:get(phase_session, Meta, none),
@@ -4130,21 +4129,26 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
                                     resident_verified = ResidentVerified,
                                     phase_session = PhaseSession,
                                     cache_session = CacheSession,
-                                    published = Published,
-                                    bootstrap_hints = Bootstrap},
+                                    published = Published},
                     Total1 = max(
                                0, S0#s.total_bytes - H0#history.bytes +
                                       ActualBytes),
-                    reconcile_feed_registrations(
-                      Identity,
-                      S1#s{histories =
-                               (S1#s.histories)#{Identity => H1},
-                           total_bytes = Total1});
+                    install_verified_history(
+                      Identity, Previous, H1, S1#s{total_bytes = Total1});
                 undefined -> S0
             end;
         error -> S0
     end;
 install_worker_meta(_RequestRef, _Meta, S) -> S.
+
+install_verified_history(Identity, Previous, Installed, S) ->
+    %% First certified authority replaces discovery guesses. Later live
+    %% contacts remain useful, including when material custody is absent.
+    H = case {is_map(history_authority(Previous)), is_map(history_authority(Installed))} of
+        {false, true} -> Installed#history{bootstrap_hints = []};
+        _ -> Installed
+    end,
+    reconcile_feed_registrations(Identity, put_history(Identity, H, S)).
 
 publish_prefix(RequestRef, true, Height, Projection, Session, Snapshot, Previous, S0)
   when Height > 0, is_map(Projection), Snapshot =/= none ->
@@ -4252,9 +4256,9 @@ maybe_close_progress_signals(Identity = {Ns, _Anchor}, S0) ->
         #history{progress_signals_open = true,
                  consumers = Consumers,
                  current_watch = CurrentWatch,
-                 resident_verified = ResidentVerified} = H0 ->
+                 certified_tip = Tip, resident_verified = ResidentVerified} = H0 ->
             case map_size(Consumers) =:= 0 andalso
-                 not (CurrentWatch =/= none andalso ResidentVerified) andalso
+                 not (CurrentWatch =/= none andalso (ResidentVerified orelse Tip =/= none)) andalso
                  H0#history.active =:= none andalso
                  queue:is_empty(H0#history.waiting) of
                 true ->
@@ -4345,22 +4349,14 @@ close_all_feed_registrations(S0) ->
 
 desired_feed_registration_routes(Identity, S) ->
     case maps:get(Identity, S#s.histories, undefined) of
-        #history{progress_signals_open = true,
-                 current_watch = Watch, consumers = Consumers,
-                 projection = Projection}
-          when is_map(Projection),
-               (map_size(Consumers) > 0 orelse Watch =:= remote) ->
-            case selected_route_sources(Identity, [], S) of
-                {ok, Sources} ->
-                    maps:from_list(
-                      [{Peer, Endpoints}
-                       || {<<_:256>> = Peer, [_ | _] = Endpoints} <-
-                              current_route_candidates(Sources, Projection)]);
-                {error, anchor_conflict} ->
-                    #{}
+        #history{progress_signals_open = true, current_watch = Watch, consumers = Consumers} = H
+          when map_size(Consumers) > 0 orelse Watch =:= remote ->
+            case {history_authority(H), selected_route_sources(Identity, [], S)} of
+                {Authority, {ok, Sources}} when is_map(Authority) ->
+                    maps:from_list(current_route_candidates(Sources, Authority));
+                _ -> #{}
             end;
-        _ ->
-            #{}
+        _ -> #{}
     end.
 
 ensure_feed_registration(Identity, Peer, Endpoints,
@@ -4671,13 +4667,12 @@ wake_namespace_progress_from_peer(Peer, Ns, Progress, S0) ->
     Identities =
         [Identity
          || {Identity = {HistoryNs, _Anchor},
-             #history{progress_signals_open = true,
-                      projection = Projection}} <-
+             #history{progress_signals_open = true} = H} <-
                 maps:to_list(S0#s.histories),
             HistoryNs =:= Ns,
-            is_map(Projection),
+            is_map(history_authority(H)),
             lists:member(
-              Peer, quod_simplex:history_committee(Projection))],
+              Peer, quod_simplex:history_committee(history_authority(H)))],
     lists:foldl(
       fun(Identity, Acc) ->
               wake_history_progress(Identity, Progress, peer_feed, Acc)
@@ -4704,8 +4699,7 @@ wake_history_progress(Identity, Progress, Event, S0) ->
 progress_may_advance(
   Identity, {ok, Height}, #s{histories = Histories}) ->
     case maps:get(Identity, Histories, undefined) of
-        #history{height = ResidentHeight} when is_integer(ResidentHeight) ->
-            Height > ResidentHeight;
+        #history{} = H -> Height > history_progress_height(H);
         _ ->
             true
     end;
@@ -4883,7 +4877,7 @@ accept_live_page_result(_Link, Ref, _Grant, ReqId, {error, _} = Error, NextGrant
     finish_page_turn(ReqId, Ref, Error, NextGrant, S0).
 
 complete_page_decode({Owner, ReqId, Ref, Link, Grant}, Verdict, Caller, S0)
-  when Owner =:= self(), (Verdict =:= decoded orelse Verdict =:= malformed orelse Verdict =:= abandoned) ->
+  when Owner =:= self(), (Verdict =:= decoded orelse Verdict =:= malformed) ->
     case {maps:get(ReqId, S0#s.pulls, undefined),
           maps:get(Ref, S0#s.page_bindings, undefined)} of
         {#pull{from = none, caller = Caller, binding = Ref, deadline = Deadline,
@@ -4891,7 +4885,6 @@ complete_page_decode({Owner, ReqId, Ref, Link, Grant}, Verdict, Caller, S0)
          #page_binding{ref = Ref, link = Link, active = ReqId,
                        credit = none, retiring = false}} ->
             case {Verdict, Deadline > quod_time:mono_ms()} of
-                {abandoned, true} -> {ok, cancel_pull(ReqId, probe_complete, S0)};
                 {decoded, true} -> {ok, finish_page_turn(ReqId, Ref, ok, NextGrant, S0)};
                 _ ->
                     Cause = case Verdict of
@@ -5041,7 +5034,7 @@ page_identity_interested(Identity, S) ->
 %%%===================================================================
 
 verification_worker(
-  Owner, RequestRef, Work, Root, FetchFun, PageTimeout, Resident, Keep, Trace) ->
+  Owner, RequestRef, Work, Root, FetchFun, PageTimeout, Resident, Keep, Trace, Context) ->
     %% Probe children are linked so terminating their verification worker also
     %% terminates every in-flight route fetch. Expected transport exits are
     %% normalized where the dependency is called; an internal fault takes
@@ -5050,13 +5043,19 @@ verification_worker(
     traced_verification_work(
       Trace, Work, Owner, RequestRef,
       fun(SpanCtx) ->
-          trace_foreign_stage(cache_prepare,
-            fun() -> prepare_cache_custody(Root, verification_identity(Work), Keep) end),
-          Result0 = verification_work(
-                      Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
-                      Resident),
+          Result0 = case maps:get(material, Context) of
+              true ->
+                  trace_foreign_stage(cache_prepare,
+                    fun() -> prepare_cache_custody(Root, verification_identity(Work), Keep) end),
+                  verification_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Resident, Context);
+              false ->
+                  verification_evidence_work(Work, Owner, RequestRef, FetchFun, PageTimeout, Context)
+          end,
           {Result, Meta0} = normalize_worker_result(Result0),
-          Meta = close_worker_cache(Meta0),
+          Meta = case maps:get(material, Context) of
+              true -> close_worker_cache(Meta0);
+              false -> Meta0#{evidence_only => true}
+          end,
           ?WORKER_RESULT_GATE(RequestRef),
           observe_foreign_stage(
             verification_stage(Work), foreign_result(Result), StartedNative),
@@ -5327,14 +5326,173 @@ foreign_stage_observation(Stage, {error, Reason, _Retained})
   when Stage =:= page_fetch; Stage =:= page_consume -> {error, Reason};
 foreign_stage_observation(page_fetch, {ok, {error, Reason, _Retained}, _Height, _Continuation}) ->
     {error, Reason};
-foreign_stage_observation(page_consume, {nomination, Height})
-  when is_integer(Height), Height >= 0 -> ok;
 foreign_stage_observation(probe_collection, Results) when is_list(Results) -> ok;
 foreign_stage_observation(ledger_suspend, #{cache_session := _} = Meta)
   when not is_map_key(cache_store, Meta) -> ok;
 foreign_stage_observation(_Stage, Result) -> Result.
 
-verification_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Resident) ->
+%% A point claim or a progress subscription needs certified evidence, not a
+%% reconstructed foreign material projection. They retain authority in this
+%% same owner; only projection demand acquires a contiguous archive.
+evidence_work_deadline(#request{work = {follow, _, _, Deadline}}) -> Deadline;
+evidence_work_deadline(#request{}) ->
+    %% Callers can join or detach after custody transfer. Their individual
+    %% timers cancel shared work only when its last owner leaves; they do not
+    %% shorten the fixed page/probe budget of an existing acquisition.
+    infinity.
+
+material_work({initialize, _, _}, _H) -> true;
+material_work({follow, _, _, _}, H) -> needs_projection(H);
+material_work(_, _) -> false.
+
+verification_evidence_work({exact, Peer, Endpoint, Ref, Phase}, Owner, RequestRef,
+                           FetchFun, PageTimeout, Context) ->
+    exact_evidence_sources([{Peer, Endpoint}], Ref, Phase, Owner, RequestRef,
+                           FetchFun, evidence_deadline(Context, PageTimeout), Context);
+verification_evidence_work({exact_routes, Routes, Ref, Phase, _Hint}, Owner, RequestRef,
+                           FetchFun, PageTimeout, Context) ->
+    exact_evidence_sources(Routes, Ref, Phase, Owner, RequestRef,
+                           FetchFun, evidence_deadline(Context, PageTimeout), Context);
+verification_evidence_work({current_identity, Sources, Identity, Timeout}, Owner, RequestRef,
+                           FetchFun, _PageTimeout, Context) ->
+    current_evidence(Sources, Identity, Owner, RequestRef, FetchFun,
+                     evidence_deadline(Context, Timeout), Context);
+verification_evidence_work({follow, Identity, Sources, Deadline}, Owner, RequestRef,
+                           FetchFun, _PageTimeout, Context) ->
+    case quod_simplex:history_view(Identity, any, Deadline) of
+        {ok, #{identity := Identity, slot := Height, projection := Projection} = View}
+          when Height > 0 ->
+            case gen_server:call(Owner, {borrow_local_view, RequestRef, View},
+                                 max(1, Deadline - quod_time:mono_ms())) of
+                ok ->
+                    case with_local_view_owner(View, fun() ->
+                        {Height, Hash} = history_head(Projection),
+                        Tip = #{height => Height, hash => Hash, authority =>
+                                  maps:with([identity, committee, committee_id, validator_routes], Projection)},
+                        {{ok, current_view_evidence(Identity, Height, Projection,
+                                  current_route_candidates(Sources, Projection))},
+                         #{certified_tip => Tip, authorities => #{}}}
+                    end) of
+                        {error, _} = Error -> {Error, #{}};
+                        Result -> Result
+                    end;
+                _ -> {{error, retry}, #{}}
+            end;
+        {error, _} -> current_evidence(Sources, Identity, Owner, RequestRef,
+                                     FetchFun, Deadline, Context);
+        _ -> {{error, retry}, #{}}
+    end.
+
+evidence_deadline(Context, Timeout) ->
+    min(maps:get(deadline, Context), quod_time:mono_ms() + Timeout).
+
+exact_evidence_sources([], _Ref, _Phase, _Owner, _RequestRef, _Fetch, _Deadline, _Context) ->
+    {{error, retry}, #{}};
+exact_evidence_sources([{Peer, Endpoint} | Rest], Ref, Phase, Owner, RequestRef,
+                       Fetch, Deadline, Context) ->
+    Era = case ref_slot(Ref) of
+        1 -> genesis;
+        _ -> {ok, #cert{era = E}} = quod_ledger:decode_finality_head(element(8, Ref)), E
+    end,
+    Selection = {exact, ref_slot(Ref), Era},
+    Authority = maps:get(Era, maps:get(authorities, Context), none),
+    case trace_foreign_stage(exact_route, fun() ->
+             fetch_evidence(Owner, RequestRef, Peer, [Endpoint], ref_identity(Ref),
+                            Authority, Selection, Fetch, Deadline)
+         end) of
+        {ok, #{entry := Entry, authority := AuthorityAtEntry} = Verified} ->
+            {verify_exact_reference_entry(Ref, Phase, Entry, AuthorityAtEntry), evidence_meta(Verified)};
+        {error, _} -> exact_evidence_sources(Rest, Ref, Phase, Owner, RequestRef,
+                                            Fetch, Deadline, Context)
+    end.
+
+current_evidence(Sources, Identity, Owner, RequestRef, Fetch, Deadline, Context) ->
+    Authority = latest_authority(maps:get(authorities, Context)),
+    Candidates = history_source_candidates(Sources),
+    case first_evidence(Candidates, Identity, Authority, Owner, RequestRef, Fetch, Deadline) of
+        {ok, Verified} -> confirm_evidence(Verified, Sources, Identity, Owner, RequestRef, Fetch, Deadline);
+        {error, _} -> {{error, retry}, #{}}
+    end.
+
+latest_authority(Authorities) when map_size(Authorities) =:= 0 -> none;
+latest_authority(Authorities) ->
+    lists:foldl(fun(A, none) -> A;
+                  (#{height := H} = A, #{height := Old}) when H > Old -> A;
+                  (_, Best) -> Best
+                end, none, maps:values(Authorities)).
+
+first_evidence([], _Identity, _Authority, _Owner, _RequestRef, _Fetch, _Deadline) -> {error, retry};
+first_evidence([{Peer, Endpoint} | Rest], Identity, Authority, Owner, RequestRef, Fetch, Deadline) ->
+    case fetch_evidence(Owner, RequestRef, Peer, [Endpoint], Identity, Authority, tip, Fetch, Deadline) of
+        {ok, _} = Ok -> Ok;
+        {error, _} -> first_evidence(Rest, Identity, Authority, Owner, RequestRef, Fetch, Deadline)
+    end.
+
+confirm_evidence(Verified = #{authority := Authority, entry := Entry}, Sources, Identity,
+                 Owner, RequestRef, Fetch, Deadline) ->
+    Height = quod_ledger:entry_index(Entry),
+    Committee = maps:get(committee, Authority),
+    Routes = current_route_candidates(Sources, Authority),
+    case worker_feed_tip(Owner, RequestRef, Height, Authority, max(1, Deadline - quod_time:mono_ms())) of
+        Height -> {{ok, current_view_evidence(Identity, Height, Authority, Routes)}, evidence_meta(Verified)};
+        _ ->
+            Probes = parallel_probes(confirmation_candidates(Routes, Committee),
+              fun({Peer, Endpoints}) ->
+                  fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, tip, Fetch, Deadline)
+              end, max(0, Deadline - quod_time:mono_ms()),
+              {evidence, quod_simplex:quorum(length(Committee)), Verified}),
+            Confirmed = [V || {_Peer, {ok, V}} <- Probes, same_evidence_tip(V, Verified)],
+            case confirmation_collected(length(Confirmed) >= quod_simplex:quorum(length(Committee))) of
+                true -> {{ok, current_view_evidence(Identity, Height, Authority, Routes)}, evidence_meta(Verified)};
+                false ->
+                    Newer = [V || {_Peer, {ok, #{entry := E} = V}} <- Probes,
+                                  quod_ledger:entry_index(E) > Height],
+                    case {Newer, Deadline > quod_time:mono_ms()} of
+                        {[_ | _], true} ->
+                            Next = lists:foldl(fun(V = #{entry := E}, Acc = #{entry := Prior}) ->
+                                case quod_ledger:entry_index(E) > quod_ledger:entry_index(Prior) of
+                                    true -> V; false -> Acc
+                                end
+                            end, Verified, Newer),
+                            confirm_evidence(Next, Sources, Identity, Owner, RequestRef, Fetch, Deadline);
+                        _ -> {{error, retry}, evidence_meta(Verified)}
+                    end
+            end
+    end.
+
+same_evidence_tip(#{entry := A}, #{entry := B}) ->
+    quod_ledger:entry_index(A) =:= quod_ledger:entry_index(B) andalso
+        quod_simplex:entry_history_hash(A) =:= quod_simplex:entry_history_hash(B).
+
+evidence_meta(#{authority := Authority, authorities := Authorities, entry := Entry}) ->
+    #{authorities => Authorities, certified_tip =>
+        #{height => quod_ledger:entry_index(Entry), hash => quod_simplex:entry_history_hash(Entry),
+          authority => Authority}}.
+
+fetch_evidence(Owner, RequestRef, Peer, Endpoints, Identity, Authority, Selection, Fetch, Deadline) ->
+    KnownEra = case Authority of none -> genesis; #{protocol_root := {Era, _, _}} -> Era end,
+    Receiver = quod_catchup:evidence_begin(Identity, Authority, Selection),
+    Query = {evidence, KnownEra, Selection},
+    quod_peer_route:walk(Endpoints, Deadline,
+      fun(Endpoint, _Remaining) ->
+          fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity, Query, Receiver, Fetch, Deadline)
+      end,
+      fun({ok, _} = Ok, _) -> {done, Ok}; (Error, _) -> {next, Error} end,
+      {error, retry}).
+
+fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity = {Ns, _}, Query, Receiver, Fetch, Deadline) ->
+    Consume = fun(Parts, Height, Continuation) ->
+        quod_catchup:evidence_accept(Receiver, Parts, Height, Continuation)
+    end,
+    case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, Query, Fetch, Deadline, Consume) of
+        {ok, {ok, Next}, _Height, done} -> quod_catchup:evidence_result(Next);
+        {ok, {ok, Next}, _Height, {Token, Sequence}} ->
+            fetch_evidence_pages(Owner, RequestRef, Peer, Endpoint, Identity,
+                                 {continue, Token, Sequence}, Next, Fetch, Deadline);
+        _ -> {error, retry}
+    end.
+
+verification_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Resident, Context) ->
     Identity = verification_identity(Work),
     %% All work, including a follow that loses its source before borrowing,
     %% returns through this one cursor scope after custody transfer. No early
@@ -5345,58 +5503,17 @@ verification_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Resident
     end,
     with_verified_cache(Owner, RequestRef, Identity, Root, OpenMode,
       fun(Cursor) ->
-          verification_cursor_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Cursor)
+          verification_cursor_work(Work, Owner, RequestRef, Root, FetchFun, PageTimeout, Cursor, Context)
       end).
 
 verification_cursor_work({initialize, Identity, _Cause}, _Owner, _RequestRef,
-                          _Root, _FetchFun, _PageTimeout, Cursor) ->
-    {{ok, #{identity => Identity, slot => Cursor#verified_cursor.height}}, Cursor};
-verification_cursor_work(
-  {exact, Peer, Endpoint, Ref, Phase}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, Cursor) ->
-    verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, ref_identity(Ref),
-                  Root, FetchFun, PageTimeout, Cursor, none);
-verification_cursor_work(
-  {exact_routes, Routes, Ref, Phase, EntryHint}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, Cursor) ->
-    verify_exact_routes(Routes, Owner, RequestRef, Ref, Phase, ref_identity(Ref),
-                        Root, FetchFun, PageTimeout, none, Cursor, EntryHint);
-verification_cursor_work(
-  {current_identity, Sources, Identity, ProbeTimeout}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, Cursor) ->
-    certified_current_snapshot(Owner, RequestRef, Sources, Identity, Root,
-                               FetchFun, PageTimeout, ProbeTimeout, Cursor, to_tip);
+                          _Root, _FetchFun, _PageTimeout, Cursor, _Context) ->
+    {{ok, #{identity => Identity, slot => Cursor#verified_cursor.height}}, Cursor, #{}};
 verification_cursor_work(
   {follow, Identity, Sources, Deadline}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout, Cursor) ->
+  Root, FetchFun, PageTimeout, Cursor, Context) ->
     follow_identity(Owner, RequestRef, Identity, Sources, Root, FetchFun,
-                    PageTimeout, Deadline, Cursor).
-
-%% Both availability and definitive request failures retain the same sound
-%% prefix. A local persistence failure is different: the cursor cannot be
-%% borrowed by the next route, even when its old height still looks plausible.
-verify_exact_routes([], _Owner, _RequestRef, _Ref, _Phase, _Identity,
-                    _Root, _FetchFun, _PageTimeout, Prior, Cursor, _EntryHint) ->
-    Reason = case Prior of none -> retry; definitive -> invalid_foreign_reference end,
-    {{error, Reason}, Cursor};
-verify_exact_routes([{Peer, Endpoint} | Rest], Owner, RequestRef, Ref, Phase, Identity,
-                    Root, FetchFun, PageTimeout, Prior, Cursor, EntryHint) ->
-    case trace_foreign_stage(exact_route,
-           fun() -> verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
-                                  Identity, Root, FetchFun, PageTimeout, Cursor, EntryHint)
-           end) of
-        {Result, #verified_cursor{state = invalid} = Invalid} ->
-            {Result, Invalid};
-        {{ok, _} = Result, Next} ->
-            {Result, Next};
-        {{error, Reason}, Next}
-          when Reason =:= phase_mismatch; Reason =:= invalid_foreign_reference ->
-            verify_exact_routes(Rest, Owner, RequestRef, Ref, Phase, Identity,
-                                Root, FetchFun, PageTimeout, definitive, Next, EntryHint);
-        {{error, _}, Next} ->
-            verify_exact_routes(Rest, Owner, RequestRef, Ref, Phase, Identity,
-                                Root, FetchFun, PageTimeout, Prior, Next, EntryHint)
-    end.
+                    PageTimeout, Deadline, Cursor, Context).
 
 %% The one worker opens/resumes once, and every route receives its cursor.
 %% Existing corrupt-cache recovery is an admission boundary, never a fallback
@@ -5407,8 +5524,8 @@ with_verified_cache(Owner, RequestRef, Identity, Root, Resident, Work) ->
             Cursor = #verified_cursor{store = Store, height = Height,
                                       projection = Projection, phase_index = PhaseIndex},
             try Work(Cursor) of
-                {Result, #verified_cursor{} = Final} ->
-                    {Result, #{cache_cursor => Final,
+                {Result, #verified_cursor{} = Final, Evidence} ->
+                    {Result, Evidence#{cache_cursor => Final,
                                bytes => cache_persisted_bytes(
                                           Root, cache_namespace(Identity))}}
             catch Class:Reason:Stack ->
@@ -5483,7 +5600,7 @@ close_worker_cache(Meta) ->
     Meta.
 
 follow_identity(Owner, RequestRef, Identity, Sources, Root,
-                FetchFun, PageTimeout, Deadline, Cursor) ->
+                FetchFun, PageTimeout, Deadline, Cursor, Context) ->
     case quod_simplex:history_view(Identity, any, Deadline) of
         {ok, #{identity := Identity, slot := Tip} = SourceView} ->
             Remaining = max(0, Deadline - quod_time:mono_ms()),
@@ -5491,21 +5608,29 @@ follow_identity(Owner, RequestRef, Identity, Sources, Root,
                            Owner, {borrow_local_view, RequestRef, SourceView}, Remaining)
                      catch exit:_ -> {error, retry}
                      end,
-            case Borrow of
+            {Result, Next} = case Borrow of
                 ok -> follow_borrowed_local_view(
                         Owner, RequestRef, Identity, Tip, SourceView, Root,
                         PageTimeout, Deadline, Cursor);
                 {error, _} -> {{error, {unreachable, unavailable}}, Cursor}
-            end;
+            end,
+            {Result, Next, #{}};
         {error, _} ->
-            Remaining = Deadline - quod_time:mono_ms(),
-            case {Remaining > 0, route_candidates(Sources)} of
-                {true, [_ | _]} ->
-                    certified_current_snapshot(
-                      Owner, RequestRef, Sources, Identity, Root, FetchFun,
-                      PageTimeout, Remaining, Cursor, one_page);
-                _ ->
-                    {{error, {unreachable, unavailable}}, Cursor}
+            case current_evidence(Sources, Identity, Owner, RequestRef,
+                                  FetchFun, Deadline, Context) of
+                {{ok, #{slot := Tip, route_candidates := Routes}}, Evidence} ->
+                    Remaining = max(0, Deadline - quod_time:mono_ms()),
+                    Target = min(Tip, Cursor#verified_cursor.height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                    Fallback = [{Peer, [Endpoint]} || {Peer, Endpoint} <-
+                                   history_fallback_sources(Sources, Routes)],
+                    case advance_snapshot_to_height(Routes ++ Fallback, Owner, RequestRef,
+                           Identity, Cursor, Root, Target, FetchFun, min(PageTimeout, Remaining)) of
+                        {ok, Next = #verified_cursor{height = Height, projection = P}} ->
+                            Reply = (current_view_evidence(Identity, Height, P, Routes))#{hinted_height => Tip},
+                            {{ok, Reply}, Next, Evidence};
+                        {error, _Reason, Next} -> {{error, retry}, Next, Evidence}
+                    end;
+                {Error, Evidence} -> {Error, Cursor, Evidence}
             end
     end.
 
@@ -5541,106 +5666,6 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, Tip, Identity,
                          hinted_height => Tip},
             {{ok, Evidence}, Final};
         {error, _Reason, Final} -> {{error, retry}, Final}
-    end.
-
-verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-              Root, FetchFun, PageTimeout, Cursor, EntryHint) ->
-    case fetch_exact_reference(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
-                               Identity, Cursor, Root, FetchFun, PageTimeout, EntryHint) of
-        {ok, Next, Result} ->
-            {Result, Next};
-        {error, _Reason, Next} ->
-            {{error, retry}, Next}
-    end.
-
-certified_current_snapshot(
-  Owner, RequestRef, Sources, Identity,
-  Root, FetchFun, PageTimeout, RequestTimeout,
-  Cursor, AdvanceMode) ->
-    Deadline = quod_time:mono_ms() + RequestTimeout,
-    converge_current_snapshot(
-      Owner, RequestRef, Sources, Identity, Root, FetchFun,
-      PageTimeout, Deadline, Cursor, AdvanceMode).
-
-%% A current view is a moving certified prefix. Keep the one open cursor while
-%% a concrete feed/history observation advances its target; closing and
-%% re-queueing the same job would only repeat custody, decode and verification.
-%% The original dependency deadline bounds convergence, and lack of verified
-%% progress returns retry immediately. This is neither polling nor permission
-%% to answer from a superseded height.
-converge_current_snapshot(
-  Owner, RequestRef, Sources, Identity,
-  Root, FetchFun, PageTimeout, Deadline,
-  Cursor = #verified_cursor{height = Height, projection = Projection}, AdvanceMode) ->
-    Remaining = Deadline - quod_time:mono_ms(),
-    AttemptTimeout = min(PageTimeout, max(0, Remaining)),
-    Hints = current_route_candidates(Sources, Projection),
-    case Remaining > 0 of
-        false ->
-            {{error, retry}, Cursor};
-        true ->
-            Advanced = case worker_feed_tip(
-                              Owner, RequestRef, Height, Projection, AttemptTimeout) of
-                Tip when is_integer(Tip) ->
-                    advance_snapshot_to_height(Hints, Owner,
-                      RequestRef, Identity, Cursor, Root,
-                      snapshot_target(AdvanceMode, Height, Tip),
-                      FetchFun, AttemptTimeout);
-                _ -> advance_current_snapshot(
-                       Owner, RequestRef, Hints, Identity, Cursor, Root,
-                       FetchFun, AttemptTimeout, Remaining, AdvanceMode)
-            end,
-            case Advanced of
-                {ok, Next} ->
-                    confirm_current_snapshot(
-                      Owner, RequestRef, Sources, Identity, Next, Root,
-                      FetchFun, PageTimeout, Deadline, AdvanceMode);
-                {error, _Reason, Next} ->
-                    {{error, retry}, Next}
-            end
-    end.
-
-confirm_current_snapshot(
-  Owner, RequestRef, Sources, Identity = {Ns, Anchor},
-  Cursor = #verified_cursor{height = Height, projection = Projection, phase_index = PhaseIndex},
-  Root, FetchFun, PageTimeout, Deadline, AdvanceMode) ->
-    Remaining = Deadline - quod_time:mono_ms(),
-    AttemptTimeout = min(PageTimeout, max(0, Remaining)),
-    ConfirmHints = current_route_candidates(Sources, Projection),
-    Status = measure_foreign_stage(tip_confirm,
-      fun() -> current_view_status(Owner, RequestRef, ConfirmHints, Ns, Anchor,
-                 Identity, Height, Projection, PhaseIndex, FetchFun,
-                 AttemptTimeout) end),
-    case Status of
-        confirmed ->
-            {{ok, current_view_evidence(Identity, Height, Projection, ConfirmHints)}, Cursor};
-        {behind, _NewHeight} when Remaining > 0 ->
-            converge_current_snapshot(
-              Owner, RequestRef, Sources, Identity, Root, FetchFun,
-              PageTimeout, Deadline, Cursor, AdvanceMode);
-        unconfirmed when Remaining > 0 ->
-            advance_unconfirmed_current_snapshot(
-              Owner, RequestRef, Sources, ConfirmHints, Identity, Cursor, Root,
-              FetchFun, PageTimeout, Deadline, AdvanceMode);
-        _ ->
-            {{error, retry}, Cursor}
-    end.
-
-advance_unconfirmed_current_snapshot(
-  Owner, RequestRef, Sources, ConfirmHints, Identity, Cursor = #verified_cursor{height = Height},
-  Root, FetchFun, PageTimeout, Deadline, AdvanceMode) ->
-    Fallback = history_fallback_sources(Sources, ConfirmHints),
-    Remaining = max(0, Deadline - quod_time:mono_ms()),
-    AttemptTimeout = min(PageTimeout, Remaining),
-    RouteTimeout = bootstrap_route_timeout(AttemptTimeout, Remaining, length(Fallback)),
-    case sequential_snapshot_sources(Fallback, Owner, RequestRef, Identity, Cursor,
-                                     Root, FetchFun, RouteTimeout, AttemptTimeout, AdvanceMode) of
-        {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
-            converge_current_snapshot(
-              Owner, RequestRef, Sources, Identity, Root, FetchFun,
-              PageTimeout, Deadline, Next, AdvanceMode);
-        {ok, Next} -> {{error, retry}, Next};
-        {error, _Reason, Next} -> {{error, retry}, Next}
     end.
 
 open_cache(Owner, RequestRef, Identity, Root, Resident) ->
@@ -5716,7 +5741,7 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, Mode)
                                    checkpoint_read,
                                    fun() ->
                                        load_checkpoint(
-                                         Root, Identity, CacheNs, Height)
+                                         Root, Identity, CacheNs, Store)
                                    end),
                     case Checkpoint of
                         {error, {unsupported_foreign_checkpoint_format, _}} = Error ->
@@ -5726,6 +5751,9 @@ open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, Mode)
                             open_replayed_cache(
                               Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store,
                               Height, CheckpointProjection);
+                        new when Mode =/= none, Height > 0 ->
+                            open_replayed_cache(Owner, RequestRef, Root, CacheNs, Ns, Anchor,
+                                                Store, Height, none);
                         new when Height =:= 0 ->
                             case measure_foreign_stage(
                                    phase_open,
@@ -5777,18 +5805,15 @@ open_replayed_cache_raw(Owner, RequestRef, Root, CacheNs, Ns, Anchor, Store, Hei
                              fun() ->
                                  replay_cache(
                                    Store, Ns, Anchor, Height,
-                                   Projection0, PhaseIndex)
+                                   Projection0, PhaseIndex, CheckpointProjection)
                              end),
             case ReplayResult of
                 {ok, Projection} ->
-                    case trace_foreign_stage(checkpoint_compare,
-                           fun() ->
-                               checkpoint_projection(Projection) =:= CheckpointProjection
-                           end) of
-                        true ->
-                            {ok, Store, Height, Projection, PhaseIndex};
-                        false ->
-                            close_cache(Store, PhaseIndex, cache_corrupt)
+                    %% Replaying this explicit startup verifies an older checkpoint at
+                    %% its own group boundary and preserves every complete suffix group.
+                    case write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) of
+                        ok -> {ok, Store, Height, Projection, PhaseIndex};
+                        {error, _} -> close_cache(Store, PhaseIndex, cache_io)
                     end;
                 {error, network_identity} ->
                     close_cache(Store, PhaseIndex, network_identity);
@@ -5826,10 +5851,10 @@ release_cache(Store, PhaseIndex, Result) ->
 
 -ifdef(TEST).
 test_replay_cache(Store, {Ns, Anchor}, Projection, Index) ->
-    replay_cache(Store, Ns, Anchor, quod_ledger_store:last(Store), Projection, Index).
+    replay_cache(Store, Ns, Anchor, quod_ledger_store:last(Store), Projection, Index, none).
 -endif.
 
-replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex) ->
+replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex, Checkpoint) ->
     %% Startup consumes each archive group's selected ancestry once. Material
     %% page boundaries are not proof boundaries: one witness may span many
     %% network pages and certify several entries. Exact foreign claims need
@@ -5845,6 +5870,7 @@ replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex) ->
                           true -> ok;
                           false -> throw({cache_replay, cache_corrupt})
                       end,
+                      ok = verify_replayed_checkpoint(Checkpoint, P1),
                       ok = quod_dtx_phase_index:commit_delta(PhaseIndex, Delta),
                       trace_count(replayed_entries, length(Entries)),
                       current_era_projection(P1);
@@ -5862,53 +5888,27 @@ replay_cache(Store, Ns, Anchor, Height, Projection0, PhaseIndex) ->
         _:_ -> {error, cache_corrupt}
     end.
 
-fetch_exact_reference(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-                      Cursor, Root, FetchFun, PageTimeout, _EntryHint) ->
-    %% A reference fixes the material claim, not this source's selected witness.
-    %% Acquire missing ancestry through the same group reader as every follow.
-    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-                    Cursor, Root, FetchFun, PageTimeout).
-
-fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-                Cursor = #verified_cursor{store = Store, height = Height, projection = Projection,
-                                          phase_index = PhaseIndex},
-                Root, FetchFun, PageTimeout) ->
-    Slot = ref_slot(Ref),
-    case Height >= Slot of
-        true ->
-            case quod_dtx_phase_index:capture(PhaseIndex, Height) of
-                {ok, IndexView} ->
-                    {ok, Cursor, verify_resident_store(Store, Slot, Ref, Phase,
-                                   Projection#{history_index => IndexView})};
-                {error, _} -> {error, cache_corrupt, Cursor#verified_cursor{state = invalid}}
-            end;
-        false ->
-            To = min(Slot, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-            case fetch_verified_range(Owner, RequestRef, Peer, [Endpoint], Identity,
-                                      Cursor, Root, To, FetchFun, PageTimeout, {Ref, Phase}) of
-                {ok, Next, {selected, Result}} -> {ok, Next, Result};
-                {ok, Next = #verified_cursor{height = NextHeight}, none}
-                  when NextHeight > Height, NextHeight < Slot ->
-                    fetch_to_height(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
-                                    Next, Root, FetchFun, PageTimeout);
-                {ok, Next, none} -> {error, invalid_history, Next};
-                {error, _, _} = Error -> Error
-            end
-    end.
+verify_replayed_checkpoint({Height, Saved}, #{history_head := {Height, _}} = Projection) ->
+    case checkpoint_projection(Projection) =:= Saved of
+        true -> ok;
+        false -> throw({cache_replay, cache_corrupt})
+    end;
+verify_replayed_checkpoint(_, _) -> ok.
 
 fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
                      Cursor = #verified_cursor{height = Height, projection = P, phase_index = Index},
-                     Root, To, FetchFun, PageTimeout, Claim) ->
+                     Root, To, FetchFun, PageTimeout) ->
     Deadline = quod_time:mono_ms() + PageTimeout,
     Result = with_request_proof_stage(Owner, RequestRef, fun(Stage) ->
-        Range = quod_catchup:range_begin(Identity, To, wrapped, Stage, {Cursor, none}, P, Index),
-        Install = fun(Group, {Current, Selected}) ->
+        Working = Cursor#verified_cursor{batch = quod_ledger_store:batch_begin(Cursor#verified_cursor.store)},
+        Range = quod_catchup:range_begin(Identity, To, wrapped, Stage, Working, P, Index),
+        Install = fun(Group, Current) ->
             case persist_verified_group(Owner, RequestRef, Identity, Current, Root, Group) of
                 {ok, Next} ->
                     trace_verified_page(Peer, length(maps:get(entries, Group))),
-                    Result = select_committed_claim(Claim, Group, Selected),
-                    {ok, {Next, Result}, Next#verified_cursor.projection, Next#verified_cursor.phase_index};
-                {error, Why, Failed} -> {error, Why, {Failed, none}}
+                    {ok, Next, Next#verified_cursor.projection,
+                     Next#verified_cursor.phase_index, maps:get(delta, Group)};
+                {error, Why, Failed} -> {error, Why, Failed}
             end
         end,
         fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, {range, Height + 1, To},
@@ -5916,15 +5916,21 @@ fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
     end),
     Outcome = case Result of
         {ok, Final} ->
-            {Next, Selected} = quod_catchup:range_context(Final),
-            {ok, Next, Selected};
+            Next = quod_catchup:range_context(Final),
+            case finish_verified_range(Next, quod_catchup:range_delta(Final)) of
+                {ok, Durable} -> {ok, Durable};
+                {error, Failed} -> {error, cache_corrupt, Failed}
+            end;
         {error, Why, Final} ->
-            {Next, _Selected} = quod_catchup:range_context(Final),
-            {error, Why, Next};
+            Next = quod_catchup:range_context(Final),
+            case finish_verified_range(Next, quod_catchup:range_delta(Final)) of
+                {ok, Durable} -> {error, Why, Durable};
+                {error, Failed} -> {error, cache_corrupt, Failed}
+            end;
         {error, Why} -> {error, Why, Cursor}
     end,
     Retained = case Outcome of
-        {ok, C, _} -> C;
+        {ok, C} -> C;
         {error, _, C} -> C
     end,
     case checkpoint_range(Height, Retained, Identity, Root, Owner, RequestRef) of
@@ -5932,9 +5938,22 @@ fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity = {Ns, _},
         {error, _} -> {error, cache_corrupt, Retained#verified_cursor{state = invalid}}
     end.
 
-%% The bounded acquisition owns its unpublished cursor. Each certified group
-%% is durable already; checkpoint its final prefix once before returning it,
-%% including a verified prefix retained after a partial transport failure.
+%% Proof staging may be reused after each copied group. The existing writer
+%% retains the unpublished batch and preview delta until this one durable sink.
+finish_verified_range(Cursor = #verified_cursor{state = invalid}, _Delta) ->
+    {error, Cursor};
+finish_verified_range(Cursor = #verified_cursor{batch = Batch, phase_index = Index}, Delta) ->
+    try
+        {ok, Store} = persistence_stage(ledger_sync,
+                       fun() -> quod_ledger_store:batch_sync(Batch) end),
+        ok = persistence_stage(phase_commit,
+               fun() -> quod_dtx_phase_index:commit_delta(Index, Delta) end),
+        {ok, Cursor#verified_cursor{store = Store, batch = none}}
+    catch _:_ -> {error, Cursor#verified_cursor{state = invalid}}
+    end.
+
+%% The bounded acquisition owns its unpublished cursor. Checkpoint its synced
+%% prefix once before returning it, including a partial transport result.
 checkpoint_range(_Before, #verified_cursor{state = invalid}, _, _, _, _) -> ok;
 checkpoint_range(Height, #verified_cursor{height = Height}, _, _, _, _) -> ok;
 checkpoint_range(_Before, #verified_cursor{height = Height, projection = Projection},
@@ -5949,17 +5968,6 @@ checkpoint_range(_Before, #verified_cursor{height = Height, projection = Project
     catch _:_ -> {error, cache_corrupt}
     end.
 
-%% Retain only this request's result from the verified group, after durable
-%% append/index. It stays private until the range checkpoint is durable.
-%% A witness may end beyond the requested claim;
-%% its historical committee comes from that group's checked projection.
-select_committed_claim(none, _Group, Selected) -> Selected;
-select_committed_claim({Ref, Phase}, #{entries := Entries, projection := Projection}, Selected) ->
-    Slot = ref_slot(Ref),
-    case lists:search(fun(E) -> quod_ledger:entry_index(E) =:= Slot end, Entries) of
-        {value, Entry} -> {selected, verify_projected_entry({ok, Entry}, Slot, Ref, Phase, Projection)};
-        false -> Selected
-    end.
 
 fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, Query, Deadline, FetchFun, Range, Install) ->
     Consume = fun(Parts, H, Continuation) ->
@@ -5990,9 +5998,9 @@ fetch_range(Owner, RequestRef, Peer, Endpoints, Ns, Query, Deadline, FetchFun, R
 
 persist_verified_group(
   Owner, RequestRef, Identity,
-  Cursor = #verified_cursor{store = Store, phase_index = PhaseIndex},
-  Root, #{entries := Entries, proof := Proof, projection := Projection,
-          delta := Delta, finality := Finality})
+  Cursor = #verified_cursor{batch = Batch},
+  _Root, #{entries := Entries, proof := Proof, projection := Projection,
+           finality := Finality})
   when Finality =:= genesis; map_get(complete_group, Finality) =:= true ->
     %% No mutation precedes reservation. After append is attempted, any
     %% failure invalidates the cursor, including failures after durable I/O.
@@ -6003,15 +6011,10 @@ persist_verified_group(
            fun() -> gen_server:call(Owner, {reserve_page, RequestRef, Reservation}) end)) of
         ok ->
             try
-                {ok, NextStore} = persistence_stage(ledger_append,
-                                   fun() -> quod_ledger_store:append(Store, {Proof, Entries}) end),
-                ok = persistence_stage(phase_commit,
-                       fun() -> quod_dtx_phase_index:commit_delta(PhaseIndex, Delta) end),
+                {ok, NextBatch} = persistence_stage(ledger_append,
+                                   fun() -> quod_ledger_store:batch_append(Batch, {Proof, Entries}) end),
                 {NextHeight, _} = maps:get(history_head, Projection),
-                ActualBytes = cache_persisted_bytes(Root, cache_namespace(Identity)),
-                ok = persistence_stage(cache_accounting,
-                       fun() -> gen_server:call(Owner, {set_cache_size, RequestRef, ActualBytes}) end),
-                {ok, Cursor#verified_cursor{store = NextStore, height = NextHeight,
+                {ok, Cursor#verified_cursor{batch = NextBatch, height = NextHeight,
                                             projection = current_era_projection(Projection)}}
             catch _:_ ->
                 {error, cache_corrupt, Cursor#verified_cursor{state = invalid}}
@@ -6128,98 +6131,8 @@ flatten_route_candidates(Candidates) ->
      || {Peer, Endpoints} <- Candidates,
         Endpoint <- Endpoints].
 
-advance_current_snapshot(Owner, RequestRef, Hints, Identity,
-                         Cursor = #verified_cursor{height = Height, projection = Projection},
-                         Root, FetchFun, PageTimeout, RequestTimeout, AdvanceMode) ->
-    case maps:size(quod_simplex:history_validator_routes(Projection)) of
-        0 ->
-            Sources = flatten_route_candidates(Hints),
-            sequential_snapshot_sources(Sources, Owner, RequestRef, Identity, Cursor,
-              Root, FetchFun, bootstrap_route_timeout(PageTimeout, RequestTimeout, length(Sources)),
-              PageTimeout, AdvanceMode);
-        _ ->
-            {Ns, _Anchor} = Identity,
-            Results = probe_pages(Owner, RequestRef, Hints, Ns, Height, FetchFun, PageTimeout),
-            advance_snapshot(Owner, RequestRef, Identity, Cursor, Root,
-                             Results, FetchFun, PageTimeout, AdvanceMode)
-    end.
-
-bootstrap_route_timeout(PageTimeout, RequestTimeout, RouteCount) ->
-    %% Discovery gets at most half the request. The remaining half is reserved
-    %% for downloading and verifying the selected history and corroborating
-    %% its resulting committee view.
-    PerRoute = erlang:max(1, RequestTimeout div (2 * erlang:max(1, RouteCount))),
-    erlang:min(PageTimeout, PerRoute).
-
-%% A route owns no prefix. Partial verified advancement survives its failure;
-%% an invalid local cursor stops the walk before another source sees that file.
-sequential_snapshot_sources([], _Owner, _RequestRef, _Identity, Cursor,
-                            _Root, _FetchFun, _BootstrapTimeout, _PageTimeout, _AdvanceMode) ->
-    {error, invalid_history, Cursor};
-sequential_snapshot_sources([Source | Rest], Owner, RequestRef, Identity, Cursor,
-                            Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode) ->
-    case sequential_snapshot_source(Source, Owner, RequestRef, Identity, Cursor,
-                                    Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode) of
-        {ok, _} = Ok -> Ok;
-        {error, _, #verified_cursor{state = invalid}} = Invalid -> Invalid;
-        {error, {unavailable, network_identity, _}, _} = Global -> Global;
-        {error, Reason, Next} ->
-            logger:debug("foreign history bootstrap source failed identity=~p source=~p reason=~p",
-                         [Identity, Source, Reason]),
-            sequential_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
-                                        Root, FetchFun, BootstrapTimeout, PageTimeout, AdvanceMode)
-    end.
-
-sequential_snapshot_source(
-  {Peer, Endpoint}, Owner, RequestRef, Identity = {Ns, _Anchor},
-  Cursor = #verified_cursor{height = Height}, Root, FetchFun,
-  BootstrapTimeout, PageTimeout, AdvanceMode) ->
-    case probe_page(Owner, RequestRef, Peer, Endpoint, Ns, Height + 1, Height + 1,
-                    FetchFun, BootstrapTimeout) of
-        {ok, RemoteHeight} when RemoteHeight > Height ->
-            advance_snapshot_to_height([{Peer, [Endpoint]}], Owner, RequestRef, Identity,
-              Cursor, Root, snapshot_target(AdvanceMode, Height, RemoteHeight), FetchFun, PageTimeout);
-        {ok, _} -> {error, no_new_page, Cursor};
-        {error, Reason} -> {error, {bootstrap_fetch, Reason}, Cursor}
-    end.
-
-probe_pages(Owner, RequestRef, Hints, Ns, Height, FetchFun, PageTimeout) ->
-    %% Snapshot probes need only the first available certified candidate plus
-    %% the responder's captured durable height. Keeping one entry per route
-    %% prevents an N-validator fanout from retaining N near-900-KiB pages.
-    To = Height + 1,
-    parallel_probes(
-      Hints,
-      fun({Peer, Endpoints}) ->
-          fetch_peer_page(
-            Endpoints, Owner, RequestRef, Peer, Ns,
-            Height + 1, To, FetchFun, PageTimeout)
-      end,
-      PageTimeout).
-
-%% Addresses locate one peer, not independent copies of its history. A page
-%% reply ends that peer's transport walk; verification decides whether to use
-%% it or try the next peer. Only failed transport needs another address.
-fetch_peer_page(Endpoints, Owner, RequestRef, Peer, Ns,
-                From, To, FetchFun, PageTimeout) ->
-    Deadline = quod_time:mono_ms() + PageTimeout,
-    quod_peer_route:walk(
-      Endpoints, Deadline,
-      fun(Endpoint, AttemptTimeout) ->
-          probe_page(Owner, RequestRef, Peer, Endpoint, Ns,
-                     From, To, FetchFun, AttemptTimeout)
-      end,
-      fun({ok, _RemoteHeight} = Ok, _Last) -> {done, Ok};
-         ({error, _}, Last) -> {next, Last}
-      end,
-      {error, retry}).
-
-parallel_probes(Items, Probe, TimeoutMs) ->
-    parallel_probes(Items, Probe, TimeoutMs, all).
-
-%% Initial discovery needs every result for maximum-height selection. Only
-%% final confirmation selects a threshold, over one worker per committee key.
-%% Both policies share correlation, the absolute deadline and child cleanup.
+%% Confirmation counts distinct committee keys and retains newer verified
+%% tips for convergence. Every child shares the same absolute probe deadline.
 parallel_probes(Items, Probe, TimeoutMs, Completion) ->
     trace_foreign_stage(probe_collection,
       #{'quod.foreign.expected_probe_children' => length(Items)},
@@ -6244,11 +6157,8 @@ parallel_probes_raw(Items, Probe, TimeoutMs, Completion) ->
                     Acc#{Pid => {MRef, Item}}
                 end, #{}, lists:enumerate(Items)),
     Deadline = quod_time:mono_ms() + TimeoutMs,
-    Collection = case Completion of
-                     all -> {all, []};
-                     {threshold, Needed} when is_integer(Needed), Needed > 0 ->
-                         {threshold, Needed, #{}}
-                 end,
+    {evidence, Needed, Expected} = Completion,
+    Collection = {evidence, Needed, Expected, #{}, []},
     collect_probes(Tag, Pending, Deadline, Collection).
 
 traced_probe_work(TraceCtx, true, Ordinal, Fun) ->
@@ -6312,20 +6222,18 @@ collect_probes(Tag, Pending, Deadline, Collection) ->
             end
     end.
 
-probe_collection_complete({all, _Results}, Remaining) -> Remaining =:= 0;
-probe_collection_complete({threshold, Needed, Confirmed}, Remaining) ->
-    confirmation_sufficient(Needed, Confirmed) orelse map_size(Confirmed) + Remaining < Needed.
+probe_collection_complete({evidence, Needed, _Expected, Confirmed, _Results}, Remaining) ->
+    confirmation_sufficient(Needed, Confirmed) orelse Remaining =:= 0.
 
-collect_probe_result({all, Results}, Item, Result) ->
-    {all, [{Item, Result} | Results]};
-collect_probe_result({threshold, Needed, Confirmed}, {Peer, _Endpoints}, true) ->
-    {threshold, Needed, Confirmed#{Peer => true}};
-collect_probe_result({threshold, _, _} = Collection, _Item, _Result) ->
-    Collection.
+collect_probe_result({evidence, Needed, Expected, Confirmed, Results}, {Peer, _} = Item, Result) ->
+    Next = case Result of
+        {ok, V} -> case same_evidence_tip(V, Expected) of
+            true -> Confirmed#{Peer => true}; false -> Confirmed end;
+        _ -> Confirmed
+    end,
+    {evidence, Needed, Expected, Next, [{Item, Result} | Results]}.
 
-probe_collection_result({all, Results}) -> lists:reverse(Results);
-probe_collection_result({threshold, Needed, Confirmed}) ->
-    confirmation_sufficient(Needed, Confirmed).
+probe_collection_result({evidence, _Needed, _Expected, _Confirmed, Results}) -> lists:reverse(Results).
 
 %% Both live feeds and authenticated probes count distinct admitted members.
 %% Their source-specific checks establish each observation before this quorum.
@@ -6339,28 +6247,6 @@ stop_current_probes(Pending) ->
           _ = unlink(Pid),
           exit(Pid, kill)
       end, Pending).
-
-advance_snapshot(Owner, RequestRef, Identity,
-                 Cursor = #verified_cursor{height = Height}, Root, Results,
-                 FetchFun, PageTimeout, AdvanceMode) ->
-    Candidates = [{RemoteHeight, Source}
-                  || {Source, {ok, RemoteHeight}} <- Results,
-                     is_integer(RemoteHeight), RemoteHeight > Height],
-    case Candidates of
-        [] -> {ok, Cursor};
-        _ ->
-            Advertised = lists:max([H || {H, _Source} <- Candidates]),
-            CandidateSources = [Source || {_H, Source} <-
-                                lists:reverse(lists:keysort(1, Candidates))],
-            advance_snapshot_to_height(CandidateSources,
-              Owner, RequestRef, Identity, Cursor, Root,
-              snapshot_target(AdvanceMode, Height, Advertised), FetchFun, PageTimeout)
-    end.
-
-snapshot_target(one_page, Height, Advertised) ->
-    min(Advertised, Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES);
-snapshot_target(to_tip, _Height, Advertised) ->
-    Advertised.
 
 advance_snapshot_to_height(_Sources, _Owner, _RequestRef, _Identity,
                            Cursor = #verified_cursor{height = Height},
@@ -6386,10 +6272,10 @@ advance_snapshot_sources([{Peer, Endpoints} | Rest], Owner, RequestRef,
                          Identity, Cursor = #verified_cursor{height = Height},
                          Root, Target, FetchFun, PageTimeout) ->
     case fetch_verified_range(Owner, RequestRef, Peer, Endpoints, Identity, Cursor,
-                              Root, Target, FetchFun, PageTimeout, none) of
-        {ok, Next = #verified_cursor{height = NextHeight}, none} when NextHeight > Height ->
+                              Root, Target, FetchFun, PageTimeout) of
+        {ok, Next = #verified_cursor{height = NextHeight}} when NextHeight > Height ->
             {ok, Next};
-        {ok, Next, none} ->
+        {ok, Next} ->
             advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
                                      Root, Target, FetchFun, PageTimeout);
         {error, _, #verified_cursor{state = invalid}} = Invalid -> Invalid;
@@ -6398,41 +6284,6 @@ advance_snapshot_sources([{Peer, Endpoints} | Rest], Owner, RequestRef,
             advance_snapshot_sources(Rest, Owner, RequestRef, Identity, Next,
                                      Root, Target, FetchFun, PageTimeout)
     end.
-
-current_view_status(
-  Owner, RequestRef, Hints, Ns, Anchor, Identity, Height, Projection,
-  PhaseIndex,
-  FetchFun, PageTimeout) ->
-    Committee = quod_simplex:history_committee(Projection),
-    case {Committee, worker_feed_tip(Owner, RequestRef, Height, Projection, PageTimeout)} of
-        {[], _} -> unconfirmed;
-        {_, Height} -> confirmed;
-        {_, Tip} when is_integer(Tip), Tip > Height -> {behind, Tip};
-        {_, {behind, Tip}} -> {behind, Tip};
-        {[_ | _], _} ->
-            case current_committee_confirmed(
-                   Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity,
-                   Height, Projection, PhaseIndex, FetchFun, PageTimeout) of
-                true -> confirmed;
-                false -> unconfirmed
-            end
-    end.
-
-current_committee_confirmed(
-  Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity, Height,
-  Projection, PhaseIndex, FetchFun, PageTimeout) ->
-    Candidates = confirmation_candidates(Hints, Committee),
-    Needed = quod_simplex:quorum(length(Committee)),
-    Confirmed = parallel_probes(
-                Candidates,
-                fun({Peer, Endpoints}) ->
-                    probe_confirmed_endpoint(
-                      Endpoints, Owner, RequestRef, Peer, Ns, Height,
-                      Anchor, Identity, Projection, PhaseIndex,
-                      FetchFun, PageTimeout)
-                end,
-                PageTimeout, {threshold, Needed}),
-    confirmation_collected(Confirmed).
 
 %% Reachability rows can repeat; neither another endpoint nor another hint is
 %% another possible confirmer. Preserve the existing first-seen endpoint walk.
@@ -6473,29 +6324,9 @@ confirmation_collected(Result) ->
 confirmation_collected(Result) -> Result.
 -endif.
 
-probe_confirmed_endpoint(Endpoints, Owner, RequestRef, Peer, Ns, Height,
-                         _Anchor, Identity, Projection, PhaseIndex, FetchFun, PageTimeout) ->
-    Deadline = quod_time:mono_ms() + PageTimeout,
-    with_request_proof_stage(Owner, RequestRef, fun(Stage) ->
-        Range = quod_catchup:range_begin(Identity, Height + 1, wrapped,
-                                         Stage, Height, Projection, PhaseIndex),
-        Install = fun(#{entries := Entries, projection := P,
-                        finality := #{complete_group := true}}, _) ->
-                          {ok, quod_ledger:entry_index(lists:last(Entries)), P, PhaseIndex};
-                     (_, _) -> {error, incomplete_finality_group}
-                  end,
-        case fetch_range(Owner, RequestRef, Peer, Endpoints, Ns,
-                         {range, Height + 1, Height + 1}, Deadline, FetchFun, Range, Install) of
-            {ok, Final} -> quod_catchup:range_context(Final) >= Height;
-            _ -> false
-        end
-    end).
-
 current_view_evidence(Identity, Height, Projection, Routes) ->
-    Dtx = maps:get(dtx, Projection),
     #{identity => Identity,
       slot => Height,
-      generation => maps:get(generation, Dtx),
       committee => quod_simplex:history_committee(Projection),
       committee_id => maps:get(committee_id, Projection),
       route_candidates => Routes}.
@@ -6543,7 +6374,6 @@ consume_pulled_page(Owner, Key, Parts, Height, Continuation, Deadline, Gate, Con
             Verdict = case Consumed of
                           {error, _, _} -> malformed;
                           {error, _} -> malformed;
-                          {nomination, _} when Continuation =/= done -> abandoned;
                           _ -> decoded
                       end,
             page_decode_gate(before_completion, Gate, Key),
@@ -6566,18 +6396,6 @@ consume_pulled_page(Owner, Key, Parts, Height, Continuation, Deadline, Gate, Con
 
 %% Discovery only nominates a source. It never imports a partial proof, and
 %% releases an unfinished source cursor instead of leaving it until expiry.
-probe_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun, Timeout) ->
-    Consume = fun([], H, done) -> {nomination, H};
-                 ([{group, From0, Last} | _], H, _) when From0 =:= From, Last =< H ->
-                      {nomination, H};
-                 (_, _, _) -> {error, invalid_history}
-              end,
-    case fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, {range, From, To}, FetchFun,
-                    quod_time:mono_ms() + Timeout, Consume) of
-        {ok, {nomination, H}, H, _} -> {ok, H};
-        _ -> {error, retry}
-    end.
-
 page_trace_context() ->
     case get(?TRACE_STAGE_ACTIVE) of
         true -> quod_trace:context();
@@ -6663,26 +6481,19 @@ verify_exact_reference_entry_raw(Ref, ExpectedPhase, Entry, Projection) ->
             end
     end.
 
-verify_exact_record(Ref, Entry, Record, Phase, Field, Projection) ->
+verify_exact_record(Ref, Entry, Record, Phase, Field, Authority) ->
     Identity = ref_identity(Ref),
-    case quod_simplex:history_certifying_committee_view(ref_slot(Ref), Projection) of
-        {ok, _Certifiers, _, _} ->
-            case quod_dtx:certified_entry_claim_matches(Identity, Entry, Record, Ref) of
-                true ->
-                    %% Entry came from the owner's certified prefix or this
-                    %% job's fully verified page. The carried witness is only a
-                    %% preference; the selected proof has already established
-                    %% authority. The resulting committee certifies AM3 results.
-                    #{generation := Generation} = maps:get(dtx, Projection),
-                    {ok, #{identity => Identity, slot => ref_slot(Ref),
-                           block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
-                           phase => Phase, generation => Generation, Field => Record, entry => Entry,
-                           committee => quod_simplex:history_committee(Projection),
-                           committee_id => maps:get(committee_id, Projection),
-                           routes => quod_simplex:history_validator_routes(Projection)}};
-                false -> {error, invalid_foreign_reference}
-            end;
-        error -> {error, retry}
+    %% The caller has already authenticated finality and historical authority:
+    %% a retained complete prefix or the shared exact-evidence verifier.
+    case quod_dtx:certified_entry_claim_matches(Identity, Entry, Record, Ref) of
+        true ->
+            {ok, #{identity => Identity, slot => ref_slot(Ref),
+                   block_hash => ref_block_hash(Ref), record_digest => ref_record_digest(Ref),
+                   phase => Phase, Field => Record, entry => Entry,
+                   committee => maps:get(committee, Authority),
+                   committee_id => maps:get(committee_id, Authority),
+                   routes => maps:get(validator_routes, Authority)}};
+        false -> {error, invalid_foreign_reference}
     end.
 
 %%%===================================================================
@@ -6755,15 +6566,15 @@ write_checkpoint(Root, {Ns, Anchor}, CacheNs, Height, Projection) ->
         false -> {error, checkpoint_too_large}
     end.
 
-load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Height) ->
+load_checkpoint(Root, Identity = {Ns, Anchor}, CacheNs, Store) ->
     Path = checkpoint_path(Root, CacheNs),
     case read_small_term(Path) of
         {ok, {quod_foreign_log_checkpoint, ?CACHE_VERSION,
               Ns, Anchor, Height, StoredBytes, Projection}}
           when is_integer(StoredBytes), StoredBytes >= 0 ->
-            case StoredBytes =:= cache_log_bytes(Root, CacheNs) andalso
-                 valid_projection(Projection, Identity) of
-                true -> {ok, Projection};
+            case quod_ledger_store:committed_boundary(Store, Height) =:= {ok, StoredBytes}
+                 andalso valid_projection(Projection, Identity) of
+                true -> {ok, {Height, Projection}};
                 false -> {error, corrupt_checkpoint}
             end;
         {ok, {quod_foreign_log_checkpoint, Version, _, _, _, _, _}}

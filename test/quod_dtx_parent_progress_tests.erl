@@ -126,7 +126,7 @@ mixed_membership_child_is_rejected_not_parked_test_() ->
         {batch, [MT]} = M#block.payload,
         {batch, [CT]} = C#block.payload,
         ?assertNotEqual(MT#transaction.tx_id, CT#transaction.tx_id),
-        {ok, Child} = quod_ledger:new_block({Parent#block.era, 3}, quod_ledger:block_ref(Parent), {batch, [MT, CT]}, Parent#block.timestamp),
+        {ok, Child} = quod_ledger:new_block({Parent#block.era, 3}, quod_ledger:block_ref(Parent), Parent#block.height + 1, {batch, [MT, CT]}, Parent#block.timestamp),
         Hash = quod_simplex:block_hash(Child),
         Start = case Delivery of
             early -> Approved;
@@ -155,7 +155,7 @@ signed_receipt_child(F, Parent, Transaction, Sequence) ->
         {Ns, Anchor, maps:get(admission, F)},
         Transaction#transaction{author_seq = Sequence, sig = none, signed_bytes = none},
         maps:get(node_identity, F)),
-    {ok, Child} = quod_ledger:new_block({Parent#block.era, 3}, quod_ledger:block_ref(Parent), {batch, [Signed]}, Parent#block.timestamp),
+    {ok, Child} = quod_ledger:new_block({Parent#block.era, 3}, quod_ledger:block_ref(Parent), Parent#block.height + 1, {batch, [Signed]}, Parent#block.timestamp),
     Child.
 
 take_content_request(Slot, Hash) ->
@@ -359,8 +359,8 @@ early_child_duplicates_do_not_repeat_full_admission_test_() ->
 early_child_bad_input_is_not_retained_test_() ->
     isolated(fun() -> with_fixture(fun(F, S0, Keys) ->
         {Child, _} = receipt_child(F, {maps:get(era, F), 2, <<2:256>>}, 3, 2),
-        {ok, Beyond} = quod_ledger:new_block({maps:get(era, F), 4}, quod_ledger:block_ref(Child), Child#block.payload, Child#block.timestamp),
-        {ok, WrongParent} = quod_ledger:new_block({<<92:256>>, 3}, {<<92:256>>, 2, <<2:256>>}, Child#block.payload, Child#block.timestamp),
+        {ok, Beyond} = quod_ledger:new_block({maps:get(era, F), 4}, quod_ledger:block_ref(Child), Child#block.height + 1, Child#block.payload, Child#block.timestamp),
+        {ok, WrongParent} = quod_ledger:new_block({<<92:256>>, 3}, {<<92:256>>, 2, <<2:256>>}, Child#block.height, Child#block.payload, Child#block.timestamp),
         NonLeader = hd([P || P <- maps:keys(Keys), P =/= leader(3, Keys)]),
         Huge = binary:copy(<<0>>, 256 * 1024 + 129),
         Cases = [{NonLeader, Child}, {leader(3, Keys), WrongParent},
@@ -498,7 +498,7 @@ early_child_binds_actual_replacement_parent_not_old_offer_test_() ->
         %% Parent identity includes its hash. A different committed parent must
         %% never authorize the old child, even at the same protocol view.
         {NewParent0, _} = receipt_child(F, maps:get(parent, F), 2, 1),
-        {ok, NewParent} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), NewParent0#block.payload, Child#block.timestamp),
+        {ok, NewParent} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), NewParent0#block.height, NewParent0#block.payload, Child#block.timestamp),
         NewHash = quod_simplex:block_hash(NewParent),
         ?assertNotEqual(OldHash, NewHash),
         Certified = receipt_certificates(NewParent, [support, commit], F, Keys, Released),
@@ -510,7 +510,7 @@ early_child_binds_actual_replacement_parent_not_old_offer_test_() ->
         assert_receipt_offer(3, Hash, Child, Resumed),
         NewToken = {2, NewHash},
         {ok, ReplacementChild} = quod_ledger:new_block({maps:get(era, F), 3},
-            quod_ledger:block_ref(NewParent), Child#block.payload, Child#block.timestamp),
+            quod_ledger:block_ref(NewParent), NewParent#block.height + 1, Child#block.payload, Child#block.timestamp),
         ReplacementHash = quod_simplex:block_hash(ReplacementChild),
         Supported = receipt_certificates(ReplacementChild, [support], F, Keys, Resumed),
         Admitted = quod_simplex:dispatch(peer(Keys),
@@ -568,7 +568,7 @@ early_child_receipt_does_not_cross_parent_committee_change_test_() ->
         #{era := NewEra, view := 1, root := NewRoot} = quod_simplex:test_protocol_position(Settled),
         ?assertNotEqual(maps:get(era, F), NewEra),
         {ok, NewChild} = quod_ledger:new_block({NewEra, 1}, NewRoot,
-                                              Child#block.payload, Parent#block.timestamp),
+                                              Parent#block.height + 1, Child#block.payload, Parent#block.timestamp),
         NewHash = quod_simplex:block_hash(NewChild),
         Admitted = quod_simplex:dispatch(NewLeader, {propose, NewChild, []}, Settled),
         Token = {2, ParentHash},
@@ -1100,7 +1100,7 @@ local_content_redrive_preserves_certified_dtx_candidate_test_() ->
         {OwnBlock, OwnHash, OwnSupported} = receipt_content_parent(F, S, Keys),
         Local = quod_simplex:test_state_set(local_proposal, {2, OwnHash}, OwnSupported),
         {ok, Alternate} = quod_ledger:new_block(
-            {maps:get(era, F), 2}, maps:get(parent, F), {batch, [{dtx, maps:get(vote_control, F)}]}, quod_time:now_ms()),
+            {maps:get(era, F), 2}, maps:get(parent, F), 2, {batch, [{dtx, maps:get(vote_control, F)}]}, quod_time:now_ms()),
         Hash = quod_simplex:block_hash(Alternate),
         {Ns, Anchor} = maps:get(origin, F),
         Domain = quod_simplex:consensus_domain(Ns, Anchor),
@@ -1357,7 +1357,7 @@ receipt_child(F, Parent, Slot, Sequence) ->
     Material = quod_atomic:control_material(maps:get(vote_control, ChildFixture)),
     {ok, Control} = quod_atomic:sign_control(Target, Material,
                        maps:get(admission, F), Sequence, 1, maps:get(node_identity, F)),
-    {ok, Block} = quod_ledger:new_block({maps:get(era, F), Slot}, Parent, {batch, [{dtx, Control}]}, quod_time:now_ms()),
+    {ok, Block} = quod_ledger:new_block({maps:get(era, F), Slot}, Parent, Slot, {batch, [{dtx, Control}]}, quod_time:now_ms()),
     {Block, quod_simplex:block_hash(Block)}.
 
 receipt_fixture(F, Slot) ->
@@ -1378,11 +1378,11 @@ receipt_content(F, Parent, Slot, Sequence) ->
                      {Ns, Anchor, maps:get(admission, F)},
                      Transaction#transaction{author_seq = Sequence, sig = none, signed_bytes = none},
                      maps:get(node_identity, F)),
-    {ok, Block} = quod_ledger:new_block({maps:get(era, F), Slot}, Parent, {batch, [Signed]}, quod_time:now_ms()),
+    {ok, Block} = quod_ledger:new_block({maps:get(era, F), Slot}, Parent, Slot, {batch, [Signed]}, quod_time:now_ms()),
     {Block, quod_simplex:block_hash(Block)}.
 
 receipt_content_parent(F, S0, Keys) ->
-    {ok, Parent} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), {batch, [maps:get(transaction, F)]}, quod_time:now_ms()),
+    {ok, Parent} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), 2, {batch, [maps:get(transaction, F)]}, quod_time:now_ms()),
     Hash = quod_simplex:block_hash(Parent),
     Proposed = quod_simplex:dispatch(leader(2, Keys), {propose, Parent, []}, S0),
     Owner = self(),
@@ -1442,7 +1442,7 @@ receipt_membership_parent(F, S, Removed) ->
                               {Ns, Anchor, maps:get(admission, F)},
                               Unsigned#transaction{author = maps:get(pubkey, Signer),
                                                    author_seq = 1, submitted_at = 1}, Signer),
-        {ok, Block} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), {batch, [Transaction]}, quod_time:now_ms()),
+        {ok, Block} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), 2, {batch, [Transaction]}, quod_time:now_ms()),
         {Block, quod_simplex:block_hash(Block)}
     after quod_proof_session:stop(Session) end.
 
@@ -1451,7 +1451,7 @@ receipt_junk(Block) -> receipt_junk(Block, <<0:512>>).
 receipt_junk(Block = #block{slot = Slot, parent = Parent, payload = {batch, [{dtx, Control}]}}, Sig) ->
     {ok, JunkBlob} = quod_atomic:encode_control(setelement(10, Control, Sig)),
     {ok, JunkControl} = quod_atomic:decode_control(JunkBlob),
-    {ok, Junk} = quod_ledger:new_block({Block#block.era, Slot}, Parent, {batch, [{dtx, JunkControl}]}, Block#block.timestamp),
+    {ok, Junk} = quod_ledger:new_block({Block#block.era, Slot}, Parent, Block#block.height, {batch, [{dtx, JunkControl}]}, Block#block.timestamp),
     Junk.
 
 assert_receipt_offer(Slot, Hash, Block, S) ->
@@ -1518,7 +1518,7 @@ certified_first(F, S, Keys, Kinds) ->
     {Ns, Anchor} = maps:get(origin, F),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Control = maps:get(vote_control, F),
-    {ok, Block} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), {batch, [{dtx, Control}]}, quod_time:now_ms()),
+    {ok, Block} = quod_ledger:new_block({maps:get(era, F), 2}, maps:get(parent, F), 2, {batch, [{dtx, Control}]}, quod_time:now_ms()),
     Hash = quod_simplex:block_hash(Block),
     Committee = lists:sort(maps:keys(Keys)),
     Certs = [begin
@@ -1560,10 +1560,10 @@ with_fixture(GenesisOptions, Fun) ->
     F0 = quod_ct:signed_atomic_fixture(#{target => Target, node_identity => maps:get(Author, Keys),
             admission => maps:get(Author, maps:get(admissions, Projection))}),
     Root = {Era, 0, Anchor} = maps:get(protocol_root, Projection),
-    {ok, Carrier} = quod_ledger:new_block({Era, 1}, Root, empty, 0),
+    {ok, Carrier} = quod_ledger:new_block({Era, 1}, Root, 1, empty, 0),
     CarrierHash = quod_simplex:block_hash(Carrier),
     {E0, _} = quod_simplex:eng_offer({block, Carrier},
-        quod_simplex:eng_new(Domain, Committee, {Root, 0})),
+        quod_simplex:eng_new(Domain, Committee, {Root, 1, 0})),
     Engine = lists:foldl(fun(Pub, Eng) ->
         Share = quod_simplex:make_share(Domain, support, {Era, 1}, CarrierHash, maps:get(Pub, Keys)),
         element(1, quod_simplex:eng_offer({share, Share}, Eng))

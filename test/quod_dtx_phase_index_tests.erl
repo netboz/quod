@@ -2,6 +2,86 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+protocol_era_path_is_bounded_by_membership_changes_and_capture_test() ->
+    with_index(fun(Index, _Dir) ->
+        Initial = {key(801), genesis, 1, key(901)},
+        First = {key(802), key(801), 10000, key(902)},
+        Second = {key(803), key(802), 90000, key(903)},
+        ok = quod_dtx_phase_index:commit_delta(Index, protocol_delta([Initial, First])),
+        {ok, Before} = quod_dtx_phase_index:capture(Index, 10000),
+        ok = quod_dtx_phase_index:commit_delta(Index, protocol_delta([Second])),
+        {ok, After} = quod_dtx_phase_index:capture(Index, 90000),
+        ?assertEqual({ok, [Initial, First]},
+            quod_dtx_phase_index:authority_path(Before, genesis, key(802))),
+        ?assertEqual({ok, [First, Second]},
+            quod_dtx_phase_index:authority_path(After, key(801), key(803))),
+        ?assertEqual({ok, []},
+            quod_dtx_phase_index:authority_path(After, key(803), key(803))),
+        ?assertEqual(not_found, quod_dtx_phase_index:protocol_era(Before, key(803))),
+        ?assertEqual({error, unknown_era},
+            quod_dtx_phase_index:authority_path(Before, key(801), key(803))),
+        ?assertEqual({error, unknown_era},
+            quod_dtx_phase_index:authority_path(After, key(999), key(803))),
+        ?assertEqual({ok, First}, quod_dtx_phase_index:protocol_era(After, key(802)))
+    end).
+
+protocol_era_delta_rejects_replacement_forks_and_nonincreasing_heights_test() ->
+    with_index(fun(Index, _Dir) ->
+        Initial = {key(801), genesis, 1, key(901)},
+        First = {key(802), key(801), 4, key(902)},
+        ok = quod_dtx_phase_index:commit_delta(Index, protocol_delta([Initial, First])),
+        lists:foreach(fun(Row) ->
+            ?assertEqual({error, bad_phase_index_delta},
+                quod_dtx_phase_index:commit_delta(Index, protocol_delta([Row])))
+        end, [{key(802), key(801), 4, key(999)},
+              {key(803), key(801), 5, key(903)},
+              {key(803), key(802), 4, key(903)},
+              {key(803), key(999), 5, key(903)}]),
+        ok = quod_dtx_phase_index:commit_delta(Index, protocol_delta([Initial, First])),
+        {ok, View} = quod_dtx_phase_index:capture(Index, 6),
+        ?assertEqual({ok, [Initial, First]},
+            quod_dtx_phase_index:authority_path(View, genesis, key(802))),
+        ?assertEqual(not_found, quod_dtx_phase_index:protocol_era(View, key(803))),
+        _Discarded = protocol_delta([{key(803), key(802), 5, key(903)}]),
+        ?assertEqual(not_found, quod_dtx_phase_index:protocol_era(View, key(803)))
+    end).
+
+protocol_era_path_performs_only_indexed_predecessor_reads_test() ->
+    with_tmp(fun(Dir, Ns) ->
+        Parent = self(),
+        {Owner, Monitor} = spawn_monitor(fun() ->
+            {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+            Initial = {key(801), genesis, 1, key(901)},
+            Last = {key(802), key(801), 1000000, key(902)},
+            ok = quod_dtx_phase_index:commit_delta(Index, protocol_delta([Initial, Last])),
+            {ok, View} = quod_dtx_phase_index:capture(Index, 1000000),
+            Parent ! {path_ready, self()},
+            receive read ->
+                Parent ! {path_result, self(), quod_dtx_phase_index:authority_path(View, genesis, key(802))}
+            end,
+            receive stop -> ok = quod_dtx_phase_index:close(Index) end
+        end),
+        receive {path_ready, Owner} -> ok after 1000 -> error(path_not_ready) end,
+        _ = erlang:trace_pattern({dets, '_', '_'}, true, []),
+        1 = erlang:trace(Owner, true, [call, {tracer, self()}]),
+        try
+            Owner ! read,
+            receive {path_result, Owner, {ok, [_, _]}} -> ok after 1000 -> error(path_missing) end,
+            Calls = capture_calls(Owner, erlang:trace_delivered(Owner), []),
+            ?assertMatch([{lookup, [_, {protocol_era, _}]},
+                          {lookup, [_, {protocol_era, _}]}], Calls)
+        after
+            _ = erlang:trace(Owner, false, [call]),
+            _ = erlang:trace_pattern({dets, '_', '_'}, false, []),
+            Owner ! stop,
+            receive {'DOWN', Monitor, process, Owner, normal} -> ok after 1000 -> error(owner_not_stopped) end
+        end
+    end).
+
+protocol_delta(Rows) ->
+    lists:foldl(fun(Row, Delta) -> quod_dtx_phase_index:preview_protocol_era(Delta, Row) end,
+                quod_dtx_phase_index:new_delta(), Rows).
+
 same_group_append_is_invisible_to_an_older_capture_test() ->
     with_index(fun(Index, _Dir) ->
         F = quod_foreign_log_tests:prepared_then_committed_fixture(<<"index:as-of:signed">>),

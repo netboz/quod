@@ -174,7 +174,7 @@ certificate_variants({Ns, Anchor} = Target, Tx) ->
       #{pubkey => P, key => quod_identity:key_term({P, S})} end || _ <- lists:seq(1, 4)],
     Validators = [maps:get(pubkey, I) || I <- Identities],
     Era = quod_ledger:initial_era(Target),
-    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, [Tx]}, 0),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2, {batch, [Tx]}, 0),
     Hash = quod_simplex:block_hash(Block), Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Sigs = [begin #share{sig = S} = quod_simplex:make_share(Domain, commit, {Era, 1}, Hash, I),
                   {maps:get(pubkey, I), S} end || I <- Identities],

@@ -22,7 +22,7 @@ does not cancel or resubmit the uncertain operation.
 -include("quod_proof_limits.hrl").
 
 -export([deliver_votes/5, start_monitor/4, start_operation_monitor/4,
-         start_dormant_operation_monitor/3]).
+         start_dormant_operation_monitor/3, observe_phase/5]).
 
 -ifdef(TEST).
 -export([test_options/1, test_put_evidence/3,
@@ -1705,6 +1705,22 @@ phase_command_io({phase, Target, GroupId, Kind}, Context) ->
 phase_command_io(_Command, _Context) ->
     {error, invalid_recovery_record}.
 
+%% Read-only callers share recovery's phase discovery and exact verifier.
+%% Neither a missing phase nor a transport reply authorizes another submission.
+observe_phase(OwnerNs, Target, GroupId, Kind, Deadline) ->
+    Context = #{owner_ns => OwnerNs, request_deadline => Deadline},
+    case Deadline > quod_time:mono_ms() of
+        false -> {error, retry};
+        true ->
+            case phase_query_io(Target, GroupId, Kind, Context) of
+                {ok, Target, GroupId, Kind, _Request, {committed, Ref, Source}} ->
+                    phase_evidence_result(
+                      phase_evidence_io({Target, GroupId, Kind, Ref, Source},
+                                         #{evidence_deadline => Deadline}), Deadline);
+                _ -> {error, retry}
+            end
+    end.
+
 phase_query_io(Target, GroupId, Kind, Context) ->
     Request = {phase, request_id(), GroupId, Kind},
     Observation = phase_command_sources(endpoint_sources(Target), Target, Request,
@@ -2153,7 +2169,7 @@ wait_for_commands_progress(Commands, S) ->
 
 install_phase_evidence(Target, GroupId, Kind, Ref, Evidence, S) ->
     case valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence) of
-        {ok, Control, _Generation, VerifiedEvidence, _Entry} ->
+        {ok, Control, VerifiedEvidence, _Entry} ->
             case put_evidence({Target, Control, Ref}, S) of
                 {Freshness, S1} when Freshness =:= progress; Freshness =:= same ->
                     %% Another valid quorum subset preserves the first exact
@@ -2184,12 +2200,10 @@ valid_phase_evidence(Target, GroupId, Kind, Ref, Evidence)
     Kind = maps:get(phase, Evidence),
     Control = maps:get(control, Evidence),
     Ref = maps:get(ref, Evidence, Ref),
-    Generation = maps:get(generation, Evidence),
     Committee = maps:get(committee, Evidence),
     CommitteeId = maps:get(committee_id, Evidence),
     Routes = maps:get(routes, Evidence),
     Entry = maps:get(entry, Evidence),
-    true = valid_generation(Generation),
     true = valid_committee(Committee),
     true = valid_validator_routes(Routes, Committee),
     true = is_binary(CommitteeId) andalso byte_size(CommitteeId) =:= 32,
@@ -2202,10 +2216,10 @@ case checked_phase_binding(Target, GroupId, Kind, Ref, Control) of
                 {ok, EntryRef} ->
                     case quod_dtx:same_certified_ref(EntryRef, Ref) of
                         true ->
-                            {ok, Control, Generation,
+                            {ok, Control,
                              #{identity => Target, phase => Kind,
                                control => Control, ref => Ref,
-                               generation => Generation, entry => Entry,
+                               entry => Entry,
                                committee => Committee,
                                committee_id => CommitteeId, routes => Routes},
                              Entry};
@@ -2654,9 +2668,6 @@ put_applied({Target, Certificate}, S = #state{own_row = Own, snapshot = Snapshot
         {ok, Next} -> {progress, S#state{snapshot = Next}, {applied, Target}};
         {error, Reason} -> {fatal, Reason, S}
     end.
-
-valid_generation(G) ->
-    is_integer(G) andalso G >= 0 andalso G =< ?MAX_UINT64.
 
 valid_committee(Committee) when is_list(Committee), Committee =/= [],
                                 length(Committee) =< ?MAX_VALIDATORS ->

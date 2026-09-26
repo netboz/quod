@@ -12,14 +12,19 @@ never become material ledger rows.
 The existing recovery, foreign-history or observer worker consumes each page,
 verifies the descendant-to-prefix ancestry and transactions once, then hands
 complete groups to its existing writer. A staging file is temporary, unlinked
-before bytes are written and closed on worker death. Append acknowledgement
-precedes staging reuse, projection publication and journal custody release.
+before bytes are written and closed on worker death. The writer copies each
+group before staging reuse; synchronization precedes projection publication
+and journal custody release. Exact claims stream only their era transitions
+and selected ancestry, without copying unrelated material history.
 Transport receipt or caller-supplied witness preference grants no authority.
 
 `pull/5` retains page credit through the calling worker's consumption. `catch_up/7`
 drives the same group verifier for hosted recovery and observers, pinning the
 original owner and returning its installed views between groups. Foreign jobs
 thread their existing cache cursor through `range_begin/7` and `range_accept/5`.
+Sparse evidence uses the same indexed archive reader, page credit and ancestry
+verifier. Its commit certificate attests the selected entry; it is not an
+applied-result certificate or proof that a later phase is absent.
 Local consumers materialize application symbols; foreign readers retain the
 wrapped vocabulary. All finality uses the caller-pinned namespace/genesis
 identity and the historical certifying committee, never the serving peer.
@@ -33,7 +38,8 @@ identity and the historical certifying committee, never the serving peer.
          channel/1, encode_frame/2, decode_frame/2,
          finality_begin/3, finality_block/2, verify_finality/4, verify_forward_group/5,
          transfer_open/3, transfer_page/2, transfer_begin/6, transfer_accept/3,
-         range_begin/7, range_accept/5, range_context/1,
+         range_begin/7, range_accept/5, range_context/1, range_delta/1,
+         evidence_open/4, evidence_begin/3, evidence_accept/4, evidence_result/1,
          catch_up/7]).
 -export_type([finality_cursor/0, transfer/0, transfer_sender/0, range_receiver/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -69,14 +75,19 @@ identity and the historical certifying committee, never the serving peer.
                  operation = none, sequence = 0, sent = false,
                  started_ms :: integer()}).
 
--record(transfer, {binding, last, next, projection, index, mode, stage,
+-record(transfer, {binding, last, next, projection, index, mode, stage, delta,
                     entries = [], finality = pending}).
 -opaque transfer() :: #transfer{}.
--record(transfer_sender, {next, last, current = none, pending = none}).
+-record(transfer_sender, {next, last, current = none, pending = none, selections = range,
+                          known_root = none}).
 -opaque transfer_sender() :: #transfer_sender{}.
--record(range_receiver, {binding, to, mode, stage, context, projection, index,
+-record(range_receiver, {binding, to, mode, stage, context, projection, index, delta,
                           transfer = none, height = none}).
 -opaque range_receiver() :: #range_receiver{}.
+
+-record(evidence_receiver, {identity, authority, selection, authorities = #{},
+    active = none, entry = none, finality = none,
+    height = none, complete = false}).
 
 -record(s, {ns       :: binary(),
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
@@ -246,9 +257,20 @@ decode_wire_term(_Term, _Bytes) ->
 
 valid_transfer_query({range, From, To}) ->
     is_integer(From) andalso From > 0 andalso is_integer(To) andalso To >= From;
+valid_transfer_query({evidence, KnownEra, Selection}) ->
+    valid_era(KnownEra) andalso valid_evidence_selection(Selection);
 valid_transfer_query({continue, Token, Sequence}) ->
     valid_transfer_continuation({Token, Sequence});
 valid_transfer_query(_) -> false.
+
+valid_era(genesis) -> true;
+valid_era(<<_:256>>) -> true;
+valid_era(_) -> false.
+
+valid_evidence_selection(tip) -> true;
+valid_evidence_selection({exact, Height, Era}) ->
+    is_integer(Height) andalso Height > 0 andalso valid_era(Era);
+valid_evidence_selection(_) -> false.
 
 valid_transfer_continuation(done) -> true;
 valid_transfer_continuation({<<_:128>>, Sequence}) -> is_integer(Sequence) andalso Sequence > 0;
@@ -270,7 +292,7 @@ read_blocks(Store, From0, To) ->
     catch _:R -> {error, R}
     end.
 
-serve_hosted_range(Ns, From, To, Deadline, Owner, Token, Gate) ->
+serve_hosted_history(Ns, Query, Deadline, Owner, Token, Gate) ->
     case measure_serve_stage(
            serve_snapshot_lookup,
            fun() -> quod_simplex:history_view(Ns, committed, Deadline) end) of
@@ -281,13 +303,54 @@ serve_hosted_range(Ns, From, To, Deadline, Owner, Token, Gate) ->
                     {ok, Store} = quod_ledger_store:open_ro_snapshot(Snapshot),
                     try
                         Ns = quod_ledger_store:namespace(Store),
-                        serve_transfer_pages(Store, transfer_open(Store, From, To),
-                                             Owner, Token, 0, Deadline, Gate)
+                        case open_history_transfer(Store, View, Query) of
+                            {ok, Cursor} -> serve_transfer_pages(Store, Cursor,
+                                                Owner, Token, 0, Deadline, Gate);
+                            {error, _} = Error -> Error
+                        end
                     after quod_ledger_store:close(Store) end;
                 {error, _} = Error -> Error
             end;
         {error, _} = Error -> Error
     end.
+
+open_history_transfer(Store, _View, {range, From, To}) ->
+    {ok, transfer_open(Store, From, To)};
+open_history_transfer(Store, #{projection := #{history_index := Index}},
+                      {evidence, KnownEra, Selection}) ->
+    evidence_open(Store, Index, KnownEra, Selection).
+
+-doc "Select only indexed era transitions and one requested material claim from a captured archive.".
+-spec evidence_open(quod_ledger_store:handle(), term(), term(), term()) ->
+          {ok, transfer_sender()} | {error, term()}.
+evidence_open(Store, Index, KnownEra, Selection) ->
+    Height = case Selection of tip -> quod_ledger_store:last(Store); {exact, H, _} -> H end,
+    case quod_ledger_store:read_at(Store, Height) of
+        {ok, Entry} ->
+            {ok, Block} = entry_block(Entry),
+            Era = Block#block.era,
+            case Selection =:= tip orelse Selection =:= {exact, Height, Era} of
+                false -> {error, wrong_requested_era};
+                true ->
+                    Root = {Height, element(3, quod_ledger:block_ref(Block))},
+                    {RowsResult, KnownRoot} = case quod_dtx_phase_index:protocol_era(Index, KnownEra) of
+                        {ok, {KnownEra, _, Height, Hash}} when element(2, Root) =:= Hash ->
+                            {{ok, []}, Root};
+                        _ -> {authority_rows(Index, KnownEra, Era), none}
+                    end,
+                    case RowsResult of
+                        {ok, Rows} ->
+                            {ok, #transfer_sender{known_root = KnownRoot, selections =
+                                [{authority, H} || {_, _, H, _} <- Rows] ++ [{claim, Height}]}};
+                        {error, _} = Error -> Error
+                    end
+            end;
+        _ -> {error, not_ready}
+    end.
+
+authority_rows(_Index, _KnownEra, genesis) -> {ok, []};
+authority_rows(Index, KnownEra, Era) ->
+    quod_dtx_phase_index:authority_path(Index, KnownEra, Era).
 
 serve_transfer_pages(Store, Cursor, Owner, Token, Sequence, Deadline, Gate) ->
     case transfer_page(Store, Cursor) of
@@ -370,7 +433,35 @@ transfer_page(Store, State = #transfer_sender{pending = Pending}, Acc, Count, Si
             end
     end.
 
-next_transfer_part(_Store, #transfer_sender{current = none, next = Next, last = Last})
+next_transfer_part(_Store, #transfer_sender{current = none, selections = []}) -> done;
+next_transfer_part(Store, S = #transfer_sender{current = none, selections = [{Kind, Height} | Rest]}) ->
+    {ok, Entry} = quod_ledger_store:read_at(Store, Height),
+    {ok, Block} = entry_block(Entry),
+    {ok, {evidence, Kind, Height}, S#transfer_sender{
+        current = {evidence_entry, Entry, quod_ledger:block_ref(Block)}, selections = Rest}};
+next_transfer_part(Store, S = #transfer_sender{current = {evidence_entry, Entry, Ref}}) ->
+    Height = quod_ledger:entry_index(Entry),
+    {ok, Bytes} = quod_ledger:encode_entry(Entry),
+    Next = case Height =:= 1 orelse S#transfer_sender.known_root =:= {Height, element(3, Ref)} of
+        true -> evidence_end;
+        false -> {ok, Cursor} = quod_ledger_store:proof_cursor(Store, Height),
+                 {evidence_proof, Cursor, Ref}
+    end,
+    {ok, {entry, Bytes}, S#transfer_sender{current = Next}};
+next_transfer_part(Store, S = #transfer_sender{current = {evidence_proof, Cursor, Ref}}) ->
+    case quod_ledger_store:proof_next(Store, Cursor) of
+        {ok, Bytes, NextCursor} ->
+            {ok, Block} = quod_ledger:decode_block(Bytes, wrapped),
+            Next = case quod_ledger:block_ref(Block) of
+                Ref -> evidence_end;
+                _ -> {evidence_proof, NextCursor, Ref}
+            end,
+            {ok, {proof, Bytes}, S#transfer_sender{current = Next}};
+        done -> error(incomplete_selected_witness)
+    end;
+next_transfer_part(_Store, S = #transfer_sender{current = evidence_end}) ->
+    {ok, end_group, S#transfer_sender{current = none}};
+next_transfer_part(_Store, #transfer_sender{current = none, selections = range, next = Next, last = Last})
   when Next > Last -> done;
 next_transfer_part(Store, S = #transfer_sender{current = none, next = First}) ->
     {ok, Last, Cursor} = quod_ledger_store:transfer_cursor(Store, First),
@@ -393,7 +484,8 @@ transfer_begin(Binding, Last, Projection, Index, Mode, Stage)
     end,
     case Last >= First of
         true -> {ok, #transfer{binding = Binding, last = Last, next = First,
-                               projection = Projection, index = Index, mode = Mode, stage = Stage}};
+                               projection = Projection, index = Index, mode = Mode, stage = Stage,
+                               delta = quod_dtx_phase_index:new_delta()}};
         false -> {error, stale_window}
     end;
 transfer_begin(_, _, _, _, _, _) -> {error, malformed_transfer}.
@@ -431,6 +523,8 @@ valid_transfer_parts(_, _, _) -> false.
 valid_transfer_part({Kind, Bytes}) when Kind =:= entry; Kind =:= proof -> is_binary(Bytes);
 valid_transfer_part({group, First, Last}) ->
     is_integer(First) andalso First > 0 andalso is_integer(Last) andalso Last >= First;
+valid_transfer_part({evidence, Kind, Height}) ->
+    (Kind =:= authority orelse Kind =:= claim) andalso is_integer(Height) andalso Height > 0;
 valid_transfer_part(end_group) -> true;
 valid_transfer_part(_) -> false.
 
@@ -469,9 +563,10 @@ begin_transfer_finality(T = #transfer{binding = Binding, entries = Entries, proj
     end.
 
 finish_transfer(#transfer{binding = Binding, entries = Rev, projection = P,
-                           index = Index, finality = {done, Summary}, stage = Stage}) ->
+                           index = Index, finality = {done, Summary}, stage = Stage,
+                           delta = PriorDelta}) ->
     Entries = lists:reverse(Rev),
-    case preview_group(Binding, Entries, P, Index, quod_dtx_phase_index:new_delta()) of
+    case preview_group(Binding, Entries, P, Index, PriorDelta) of
         {ok, Projection, Delta} ->
             {done, #{entries => Entries, proof => quod_ledger_store:staged_proof_source(Stage),
                      projection => Projection, delta => Delta, finality => Summary}};
@@ -484,20 +579,28 @@ finish_transfer(_) -> {error, incomplete_transfer}.
                   quod_ledger_store:proof_stage(), term(), map(), term()) -> range_receiver().
 range_begin(Binding, To, Mode, Stage, Context, Projection, Index) ->
     #range_receiver{binding = Binding, to = To, mode = Mode, stage = Stage,
-                     context = Context, projection = Projection, index = Index}.
+                     context = Context, projection = Projection, index = Index,
+                     delta = quod_dtx_phase_index:new_delta()}.
 
 -spec range_context(range_receiver()) -> term().
 range_context(#range_receiver{context = Context}) -> Context.
 
+-doc "Return the existing preview delta not yet installed by the range sink.".
+-spec range_delta(range_receiver()) -> quod_dtx_phase_index:delta().
+range_delta(#range_receiver{delta = Delta}) -> Delta.
+
 -doc """
 Consume a bounded, decoded transport page. Install receives one fully verified
-group and the worker's context, and returns its new committed projection/index
-view. No owner is mutated by verification. The same staged file is reclaimed
-after each acknowledged group, not retained for the whole historical range.
+group and the worker's context. A four-element success acknowledges a committed
+projection/index view. A five-element success retains the pending preview delta
+after copying the group's bytes into an unpublished archive batch. Later groups
+read that same delta until the sink installs it after synchronization. No owner
+is mutated by verification. Staged proof bytes are reclaimed after each copy.
 """.
 -spec range_accept(range_receiver(), [term()], non_neg_integer(),
                    done | {binary(), pos_integer()},
                    fun((map(), term()) -> {ok, term(), map(), term()} |
+                                           {ok, term(), map(), term(), quod_dtx_phase_index:delta()} |
                                            {error, term()} | {error, term(), term()})) ->
           {ok, range_receiver()} | {error, term(), range_receiver()}.
 range_accept(R = #range_receiver{height = Height, projection = P}, Parts, RemoteHeight, Continuation, Install)
@@ -528,22 +631,29 @@ range_accept(R, _, _, _, _) -> {error, changed_transfer_height, R}.
 consume_range_parts([], R, _Install, Decoded) -> {ok, R, Decoded};
 consume_range_parts([{group, First, Last} | Rest],
   R = #range_receiver{transfer = none, binding = Binding, projection = P,
-                       index = Index, mode = Mode, stage = Stage, to = To, height = H}, Install, Decoded)
+                       index = Index, mode = Mode, stage = Stage, to = To, height = H,
+                       delta = Delta}, Install, Decoded)
   when First =< To, Last =< H ->
     Expected = case maps:get(history_head, P, none) of none -> 1; {I, _} -> I + 1 end,
     case First =:= Expected andalso transfer_begin(Binding, Last, P, Index, Mode, Stage) of
-        {ok, Transfer} -> consume_range_parts(Rest, R#range_receiver{transfer = Transfer}, Install, Decoded);
+        {ok, Transfer} -> consume_range_parts(Rest,
+            R#range_receiver{transfer = Transfer#transfer{delta = Delta}}, Install, Decoded);
         _ -> {error, noncontiguous_transfer, R}
     end;
 consume_range_parts([end_group | Rest],
   R = #range_receiver{transfer = T, context = Context}, Install, Decoded) when T =/= none ->
     case finish_transfer(T) of
         {done, Group} ->
-            case Install(Group, Context) of
-                {ok, NextContext, P, Index} ->
+            Installed = case Install(Group, Context) of
+                {ok, C, P1, I} -> {ok, C, P1, I, quod_dtx_phase_index:new_delta()};
+                Other -> Other
+            end,
+            case Installed of
+                {ok, NextContext, P, Index, Delta} ->
                     Stage = quod_ledger_store:reset_proof_stage(T#transfer.stage),
                     consume_range_parts(Rest, R#range_receiver{transfer = none,
-                        context = NextContext, projection = P, index = Index, stage = Stage}, Install, Decoded);
+                        context = NextContext, projection = P, index = Index, stage = Stage,
+                        delta = Delta}, Install, Decoded);
                 {error, Why, FailedContext} -> {error, Why, R#range_receiver{context = FailedContext}};
                 {error, Why} -> {error, Why, R}
             end;
@@ -564,7 +674,8 @@ consume_range_parts(_, R, _, _) -> {error, unexpected_transfer_part, R}.
                           child_empty = false,
                           material_above = false, head,
                           head_timestamp = undefined, material_tip = none,
-                          highest_claim}).
+                          highest_claim, objective = root, root_height,
+                          expected_height = unknown}).
 -opaque finality_cursor() :: #finality_cursor{}.
 
 -doc "Verify streamed ancestry once, distinguishing an exact claim from complete material custody.".
@@ -637,6 +748,7 @@ finality_begin({Ns, <<_:256>> = Anchor}, [Entry | Rest], Projection) when is_bin
                         true -> {more, #finality_cursor{index = I, root = Root, targets = Targets,
                                           expected = {Era, Head, Hash}, head = {Era, Head, Hash},
                                           highest_claim = hd(Targets),
+                                          root_height = Height,
                                           root_timestamp = maps:get(timestamp, Projection)}};
                         false -> {error, {bad_cert, I}}
                     end;
@@ -657,7 +769,7 @@ finality_targets([Entry | Rest], Index, Era, Previous, Head, Cert, Acc) ->
     end;
 finality_targets(_, _, _, _, _, _, _) -> error.
 
--doc "Authenticate one exact parent link; completion requires reaching the certified prefix.".
+-doc "Authenticate one exact parent link up to the requested claim or complete-prefix boundary.".
 -spec finality_block(finality_cursor(), binary()) ->
           {done, map()} | {more, finality_cursor()} | {error, term()}.
 finality_block(Cursor, Bytes) ->
@@ -679,8 +791,8 @@ finality_link(C = #finality_cursor{index = I, root = Root, targets = Targets,
                                   expected = Expected, root_timestamp = RootTs,
                                   ceiling = Ceiling, found = Found,
                                   child_empty = ChildEmpty,
-                                  material_above = Above},
-              #block{parent = Parent, timestamp = Ts, payload = Payload}) ->
+                                  material_above = Above, expected_height = ExpectedHeight},
+              #block{parent = Parent, timestamp = Ts, payload = Payload, height = Height}) ->
     Material = Payload =/= empty,
     Membership = case quod_ledger:classify(Payload) of
         {content, Transactions} ->
@@ -692,6 +804,7 @@ finality_link(C = #finality_cursor{index = I, root = Root, targets = Targets,
     %% certificate. Between supplied material heights only empty carriers are
     %% legal: a correctly signed proof must not conceal a missing ledger entry.
     case (Ceiling =:= infinity orelse Ts =< Ceiling) andalso Ts >= RootTs
+         andalso (ExpectedHeight =:= unknown orelse Height =:= ExpectedHeight)
          andalso (not ChildEmpty orelse Ts =:= Ceiling)
          andalso not (Membership andalso Above)
          andalso not (Found andalso Material andalso not Matches) of
@@ -706,21 +819,186 @@ finality_link(C = #finality_cursor{index = I, root = Root, targets = Targets,
             end,
             C1 = C#finality_cursor{expected = Parent, ceiling = Ts, targets = Remaining,
                                    child_empty = not Material,
+                                   expected_height = Height - case Material of true -> 1; false -> 0 end,
                                    found = Found1, material_above = Above orelse Material,
                                    head_timestamp = HeadTs, material_tip = MaterialTip},
             MinView = case Remaining of [] -> element(2, Root); [{_, V, _} | _] -> V end,
-            case Parent of
-                Root when Remaining =:= [], Material orelse Ts =:= RootTs ->
+            case {C#finality_cursor.objective, Remaining, Parent} of
+                {claim, [], _} ->
                     {done, #{head => C1#finality_cursor.head, head_timestamp => HeadTs,
                              material_tip => MaterialTip,
                              complete_group => MaterialTip =:= C1#finality_cursor.highest_claim}};
-                {_, ParentView, _} when ParentView > element(2, Root), ParentView >= MinView ->
+                {root, [], Root} when (Material orelse Ts =:= RootTs),
+                                     C1#finality_cursor.expected_height =:= C#finality_cursor.root_height ->
+                    {done, #{head => C1#finality_cursor.head, head_timestamp => HeadTs,
+                             material_tip => MaterialTip,
+                             complete_group => MaterialTip =:= C1#finality_cursor.highest_claim}};
+                {_, _, {_, ParentView, _}} when ParentView > element(2, Root), ParentView >= MinView ->
                     {more, C1};
                 _ -> {error, {wrong_finality_root, I}}
             end
     end.
 
 entry_block(E) -> quod_ledger:block_from_entry(E).
+
+-doc "Start an exact claim or tip proof from retained committee authority, without material replay.".
+-spec evidence_begin({binary(), <<_:256>>}, none | map(), tip | {exact, pos_integer(), term()}) -> term().
+evidence_begin(Identity, Authority, Selection) ->
+    #evidence_receiver{identity = Identity, authority = Authority, selection = Selection}.
+
+-doc "Consume bounded authority/claim pages through the shared finality ancestry verifier.".
+-spec evidence_accept(term(), [term()], non_neg_integer(), term()) -> {ok, term()} | {error, term()}.
+evidence_accept(R = #evidence_receiver{height = OldHeight, complete = false}, Parts, Height, Continuation)
+  when is_integer(Height), Height >= 0, (OldHeight =:= none orelse OldHeight =:= Height) ->
+    case valid_transfer_parts(Parts, 0, 0) andalso valid_transfer_continuation(Continuation) of
+        true ->
+            case consume_evidence(Parts, R#evidence_receiver{height = Height}, quod_transaction:decode_context()) of
+                {ok, Next = #evidence_receiver{active = none, entry = Entry}, _}
+                  when Continuation =:= done, Entry =/= none -> {ok, Next#evidence_receiver{complete = true}};
+                {ok, _, _} when Continuation =:= done -> {error, incomplete_evidence};
+                {ok, Next, _} -> {ok, Next};
+                {error, _} = Error -> Error
+            end;
+        false -> {error, malformed_transfer_page}
+    end;
+evidence_accept(_, _, _, _) -> {error, changed_transfer_height}.
+
+-doc "Return the selected entry and its post-entry authority after the whole sparse proof is verified.".
+-spec evidence_result(term()) -> {ok, map()} | {error, incomplete_evidence}.
+evidence_result(#evidence_receiver{complete = true, authority = Authority,
+    entry = Entry, authorities = Authorities}) ->
+    {ok, #{authority => Authority, entry => Entry, authorities => Authorities}};
+evidence_result(_) -> {error, incomplete_evidence}.
+
+consume_evidence([], R, Decoded) -> {ok, R, Decoded};
+consume_evidence([{evidence, Kind, Height} | Rest],
+    R = #evidence_receiver{active = none, entry = none}, Decoded) ->
+    consume_evidence(Rest, R#evidence_receiver{active = {Kind, Height}}, Decoded);
+consume_evidence([{entry, Bytes} | Rest],
+    R = #evidence_receiver{active = {Kind, Height}, entry = none,
+                           identity = Identity, authority = Authority}, Decoded) ->
+    case quod_ledger:decode_entry(Bytes, wrapped, Decoded) of
+        {ok, Entry, Decoded1} ->
+            case quod_ledger:entry_index(Entry) =:= Height andalso
+                 evidence_selection_matches(Kind, Entry, R) of
+                false -> {error, wrong_selected_entry};
+                true ->
+                    case exact_finality_begin(Identity, Entry, Authority) of
+                        {ok, Finality} -> consume_evidence(Rest,
+                            R#evidence_receiver{entry = Entry, finality = Finality}, Decoded1);
+                        {error, _} = Error -> Error
+                    end
+            end;
+        {error, _} -> {error, malformed_entry}
+    end;
+consume_evidence([{proof, Bytes} | Rest], R = #evidence_receiver{finality = {more, Cursor}}, Decoded) ->
+    case finality_block(Cursor, Bytes, Decoded) of
+        {{error, _} = Error, _} -> Error;
+        {Next, Decoded1} -> consume_evidence(Rest, R#evidence_receiver{finality = Next}, Decoded1)
+    end;
+consume_evidence([end_group | Rest], R = #evidence_receiver{active = {Kind, _},
+    entry = Entry, finality = {done, _}, identity = Identity, authority = Authority}, Decoded) ->
+    case advance_evidence_authority(Identity, Entry, Authority) of
+        {ok, NextAuthority} ->
+            case Kind =:= claim orelse NextAuthority =/= Authority of
+                false -> {error, nonterminal_authority_entry};
+                true ->
+                    Era = element(1, maps:get(protocol_root, NextAuthority)),
+                    Learned = (R#evidence_receiver.authorities)#{Era => NextAuthority},
+                    Next = R#evidence_receiver{authority = NextAuthority, authorities = Learned,
+                                                active = none, finality = none},
+                    case Kind of
+                        authority -> consume_evidence(Rest, Next#evidence_receiver{
+                            entry = none}, Decoded);
+                        claim -> consume_evidence(Rest, Next, Decoded)
+                    end
+            end;
+        {error, _} = Error -> Error
+    end;
+consume_evidence(_, _, _) -> {error, unexpected_transfer_part}.
+
+evidence_selection_matches(authority, Entry, #evidence_receiver{authority = none}) ->
+    quod_ledger:entry_index(Entry) =:= 1;
+evidence_selection_matches(authority, Entry, #evidence_receiver{authority = #{height := Height}}) ->
+    quod_ledger:entry_index(Entry) > Height;
+evidence_selection_matches(claim, Entry, #evidence_receiver{selection = tip, height = Height}) ->
+    quod_ledger:entry_index(Entry) =:= Height;
+evidence_selection_matches(claim, Entry, #evidence_receiver{selection = {exact, Height, Era}}) ->
+    {ok, Block} = entry_block(Entry),
+    quod_ledger:entry_index(Entry) =:= Height andalso Block#block.era =:= Era.
+
+advance_evidence_authority(Identity, Entry, Authority) ->
+    case retained_authority_root(Identity, Entry, Authority) of
+        true -> {ok, Authority};
+        false -> advance_new_evidence_authority(Identity, Entry, Authority)
+    end.
+
+advance_new_evidence_authority(Identity, Entry, Authority) ->
+    {ok, Block} = entry_block(Entry),
+    case {Block#block.era, quod_simplex:committee_delta(Block#block.payload)} of
+        {genesis, _} -> advance_certified_authority(Identity, Entry, none);
+        {_, {[], []}} when is_map(Authority) -> {ok, Authority};
+        {_, {[], []}} -> {error, missing_committee_authority};
+        _ -> advance_certified_authority(Identity, Entry, Authority)
+    end.
+
+advance_certified_authority(Identity, Entry, Authority) ->
+    case quod_simplex:history_authority_advance(Identity, Entry, Authority) of
+        {ok, _} = Ok -> Ok;
+        error -> {error, invalid_committee_transition}
+    end.
+
+%% A protocol-era root was already authenticated as an exact terminal entry.
+%% Re-reading those same signed bytes needs no old committee or repeated era
+%% transition. The transport hint alone never grants this authority.
+retained_authority_root(Identity, Entry,
+    #{identity := Identity, height := Height, protocol_root := {_, 0, Hash}}) ->
+    {ok, Block} = entry_block(Entry),
+    quod_ledger:entry_index(Entry) =:= Height andalso Block#block.height =:= Height
+        andalso element(3, quod_ledger:block_ref(Block)) =:= Hash;
+retained_authority_root(_, _, _) -> false.
+
+exact_finality_begin(Identity, Entry, Authority) ->
+    case retained_authority_root(Identity, Entry, Authority) of
+        true -> {ok, {done, retained_root}};
+        false -> new_exact_finality_begin(Identity, Entry, Authority)
+    end.
+
+new_exact_finality_begin(Identity, Entry, Authority) ->
+    case quod_ledger:entry_index(Entry) of
+        1 -> exact_genesis_finality(Identity, Entry);
+        _ -> exact_material_finality(Identity, Entry, Authority)
+    end.
+
+exact_genesis_finality({_, Anchor}, Entry) ->
+    case {quod_ledger:entry_view(Entry), entry_block(Entry)} of
+        {#entry{index = 1, cert = none}, {ok, #block{era = genesis, slot = 0} = Block}} ->
+            case quod_ledger:block_ref(Block) of
+                {genesis, 0, Anchor} -> {ok, {done, genesis}};
+                _ -> {error, wrong_genesis}
+            end;
+        _ -> {error, missing_committee_authority}
+    end.
+
+exact_material_finality({Ns, Anchor} = Identity, Entry,
+    #{identity := Identity, protocol_root := {Era, _, _} = Root, height := RootHeight,
+      timestamp := Timestamp, committee := Committee}) ->
+    #entry{index = Height, cert = Cert} = quod_ledger:entry_view(Entry),
+    {ok, Block} = entry_block(Entry),
+    Ref = quod_ledger:block_ref(Block),
+    case {Block, Cert} of
+        {#block{era = Era, slot = View, height = Height},
+         #cert{kind = commit, era = Era, slot = Head, block_hash = Hash}}
+          when Height > RootHeight, View > 0, Head >= View ->
+            case quod_simplex:verify_cert(quod_simplex:consensus_domain(Ns, Anchor), Cert, Committee) of
+                true -> {ok, {more, #finality_cursor{index = Height, root = Root, targets = [Ref],
+                    expected = {Era, Head, Hash}, head = {Era, Head, Hash}, highest_claim = Ref,
+                    root_timestamp = Timestamp, root_height = RootHeight, objective = claim}}};
+                false -> {error, {bad_cert, Height}}
+            end;
+        _ -> {error, {cert_mismatch, Height}}
+    end;
+exact_material_finality(_, _, _) -> {error, wrong_committee_authority}.
 
 -doc """
 Drive trustless catch-up from one same-turn owner capture, including height zero.
@@ -896,7 +1174,13 @@ handle_cast(_Msg, S) -> {noreply, S}.
 handle_info({catchup_request, Link, Op, {range, From, To}, StartedMs}, S)
   when is_pid(Link), is_reference(Op), is_integer(From), From > 0,
        is_integer(To), To >= From, is_integer(StartedMs) ->
-    {noreply, start_reader(Link, Op, From, To, StartedMs, S)};
+    {noreply, start_reader(Link, Op, {range, From, To}, StartedMs, S)};
+handle_info({catchup_request, Link, Op, {evidence, _, _} = Query, StartedMs}, S)
+  when is_pid(Link), is_reference(Op), is_integer(StartedMs) ->
+    case valid_transfer_query(Query) of
+        true -> {noreply, start_reader(Link, Op, Query, StartedMs, S)};
+        false -> {noreply, S}
+    end;
 handle_info({catchup_request, Link, Op, {continue, Token, Sequence}, _StartedMs}, S) ->
     {noreply, continue_reader(Link, Op, Token, Sequence, S)};
 handle_info({reader_result, Token, Worker, Result}, S0) ->
@@ -991,7 +1275,7 @@ terminate(_Reason, S) ->
     end, S#s.pending),
     ok.
 
-start_reader(Link, Op, From, To, Started, S = #s{ns = Ns}) ->
+start_reader(Link, Op, Query, Started, S = #s{ns = Ns}) ->
     %% A granted page opens one retained range reader, not another executor.
     %% Its original timer/source/link ownership spans all continuation pages.
     case maps:is_key(Op, S#s.page_operations) orelse not is_process_alive(Link) of
@@ -1005,7 +1289,7 @@ start_reader(Link, Op, From, To, Started, S = #s{ns = Ns}) ->
             S1 = S#s{page_operations = (S#s.page_operations)#{Op => Token}},
             case Deadline =< quod_time:mono_ms() of
                 true -> send_reader_result(Token, Row#reader{result = {error, not_ready}}, S1);
-                false -> spawn_reader(Ns, Token, From, To, Deadline, Row, S1)
+                false -> spawn_reader(Ns, Token, Query, Deadline, Row, S1)
             end
     end.
 
@@ -1028,12 +1312,12 @@ continue_reader(Link, Op, Token, Sequence, S) ->
             S
     end.
 
-spawn_reader(Ns, Token, From, To, Deadline, Row, S) ->
+spawn_reader(Ns, Token, Query, Deadline, Row, S) ->
     Owner = self(),
     Gate = take_reader_gate(),
     {Worker, MRef} = spawn_opt(fun() ->
         reader_gate(before_read, Gate, Token),
-        Result = try serve_hosted_range(Ns, From, To, Deadline, Owner, Token, Gate)
+        Result = try serve_hosted_history(Ns, Query, Deadline, Owner, Token, Gate)
                  catch _:_ -> {error, server_error}
                  end,
         case Result of

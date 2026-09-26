@@ -17,8 +17,8 @@
 era_reference_names_material_height_and_a_compact_preferred_head_test() ->
     F = #{identity := Identity, era := Era, transaction := Tx} = quod_ct:protocol_fixture(<<"ref:era">>),
     Root = maps:get(protocol_root, maps:get(projection, F)),
-    {ok, B} = quod_ledger:new_block({Era, 19}, Root, {batch, [Tx]}, 1),
-    {ok, K} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(B), empty, 1),
+    {ok, B} = quod_ledger:new_block({Era, 19}, Root, 2, {batch, [Tx]}, 1),
+    {ok, K} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(B), 2, empty, 1),
     Cert = quod_ct:protocol_certificate(K, F), Entry = quod_ledger:entry(2, B, Cert),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Tx),
     ?assertMatch({quod_dtx_ref, 3, _, _, 2, _, _, _}, Ref),
@@ -32,8 +32,8 @@ era_reference_names_material_height_and_a_compact_preferred_head_test() ->
 era_verified_selected_entry_discharges_an_unavailable_preferred_witness_test() ->
     F = #{identity := Identity, era := Era, transaction := Tx} = quod_ct:protocol_fixture(<<"ref:selected">>),
     Projection = maps:get(projection, F), Root = maps:get(protocol_root, Projection),
-    {ok, B} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
-    {ok, K} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B), empty, 1),
+    {ok, B} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
+    {ok, K} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B), 2, empty, 1),
     Selected = quod_ledger:entry(2, B, quod_ct:protocol_certificate(B, F)),
     Preferred = quod_ledger:entry(2, B, quod_ct:protocol_certificate(K, F)),
     %% The selected evidence independently verifies. K need not remain in this
@@ -1267,7 +1267,7 @@ certified_entry_ref_binds_exact_entry_test() ->
     Payload = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, Slot}, {Era, Slot - 1, key(251)}, Payload, Timestamp),
+                    {Era, Slot}, {Era, Slot - 1, key(251)}, Slot, Payload, Timestamp),
     BlockHash = quod_simplex:block_hash(Block),
     Cert = #cert{kind = commit, era = Era, slot = Slot,
                  block_hash = BlockHash, sigs = [{key(250), <<0:512>>}]},
@@ -1310,7 +1310,7 @@ certified_entry_ref_accepts_another_valid_quorum_subset_test() ->
     Payload = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, Slot}, {Era, Slot - 1, key(251)}, Payload, Timestamp),
+                    {Era, Slot}, {Era, Slot - 1, key(251)}, Slot, Payload, Timestamp),
     BlockHash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Identities = [begin
@@ -1367,7 +1367,7 @@ certified_entry_ref_binds_pinned_genesis_test() ->
                  diff = [], read_check = #{}, author = <<71:256>>,
                  sig = none},
     {ok, Block} = quod_ledger:new_block(
-                    {genesis, 0}, none, {batch, [Genesis]}, 0),
+                    {genesis, 0}, none, 1, {batch, [Genesis]}, 0),
     Entry = quod_ledger:entry(1, Block, none),
     Anchor = quod_simplex:block_hash(Block),
     Target = {Ns, Anchor},
@@ -1386,9 +1386,9 @@ certified_entry_ref_binds_pinned_genesis_test() ->
     ?assertEqual({error, bad_entry},
                  quod_ledger:from_entry_view(
                    (quod_ledger:entry_view(Entry))#entry{timestamp = 1})),
-    ?assertEqual({error, bad_block}, quod_ledger:new_block({genesis, 0}, none, {batch, [Genesis]}, 1)),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({genesis, 0}, none, 1, {batch, [Genesis]}, 1)),
     OtherGenesis = Genesis#transaction{diff = [{assert, {{another, fact}, true}}]},
-    {ok, OtherBlock} = quod_ledger:new_block({genesis, 0}, none, {batch, [OtherGenesis]}, 0),
+    {ok, OtherBlock} = quod_ledger:new_block({genesis, 0}, none, 1, {batch, [OtherGenesis]}, 0),
     ?assertEqual({error, invalid_certified_entry},
                  quod_dtx:certified_entry_ref(
                    Target, quod_ledger:entry(1, OtherBlock, none), OtherGenesis)).

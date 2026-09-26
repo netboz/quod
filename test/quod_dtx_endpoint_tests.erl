@@ -344,7 +344,7 @@ entry_sidecar_keeps_foreign_symbols_wrapped_test() ->
     {ok, TxBytes} = quod_transaction:encode_ledger_transaction(Transaction),
     Era = <<9:256>>,
     BlockBytes = term_to_binary(
-                   {quod_block, 2, Era, 6, {Era, 5, <<0:256>>},
+                   {quod_block, 3, Era, 6, {Era, 5, <<0:256>>}, 7,
                     {batch, [{transaction, TxBytes}]}, 0}, [deterministic]),
     Finality = {quod_finality, 1, Era, 6, crypto:hash(sha256, BlockBytes),
                 [{<<1:256>>, <<0:512>>}]},

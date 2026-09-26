@@ -71,8 +71,9 @@ progress notice; installation obtains its complete proof through shared catch-up
 ## Material history and membership
 
 Genesis occupies material height 1 with protocol position `{genesis, 0}`, no
-parent and timestamp zero. Later canonical blocks bind their era, view and exact
-parent `{Era, View, Hash}`. Empty protocol carriers inherit the parent timestamp
+parent and timestamp zero. Later canonical blocks bind their era, view, material
+height and exact parent `{Era, View, Hash}`. Material children advance the height
+by one; empty protocol carriers inherit the parent's height and timestamp
 and produce no material entry, Prolog application, reaction or outcome. A real
 transaction with an empty diff remains material.
 
@@ -95,14 +96,15 @@ reconstruction. Portable snapshots and compaction remain deferred.
 
 The coherent finality cut uses one format throughout:
 
-- canonical block and material entry terms are version 2;
+- canonical block terms are version 3; material entry terms remain version 2,
+  and their claimed position must equal the nested block's signed height;
 - consensus frames use `sx3`; retained ingress uses `sx_relay2`;
-- ledger archive frames use V8 magic `0x915106B1`, storing streamed proof parts
+- ledger archive frames use V9 magic `0x915106B2`, storing streamed proof parts
   and their material entries as complete durable groups;
 - consensus signature domains and shares are version 3;
-- signing journals use QSJ6 and bind decisions to era/view;
+- signing journals use QSJ7 and bind decisions to era/view;
 - exact material references use `refs3`; retained foreign checkpoints use
-  version 6;
+  version 7;
 - signed transaction envelopes remain version 15, committee-view identities
   remain version 2 and signed directory generations remain version 1.
 

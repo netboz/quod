@@ -22,7 +22,7 @@ served_page_authenticates_at_consumption_not_on_both_ends_test() ->
         {ok, Block} = quod_ledger:block_from_entry(Entry),
         #entry{data = {batch, [Tx | _]}} = quod_ledger:entry_view(Entry),
         {Era, _, _} = quod_ledger:block_ref(Block),
-        {ok, ThirdBlock} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Block), {batch, [Tx]}, 3),
+        {ok, ThirdBlock} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Block), 3, {batch, [Tx]}, 3),
         Third = quod_ledger:entry(3, ThirdBlock, quod_ct:protocol_certificate(
             ThirdBlock, #{identity => Identity, signer => Signer})),
         {ok, _Advanced} = append_group(Store, Third, [ThirdBlock]),
@@ -112,7 +112,7 @@ rewrite_frame(Ns, Dir, Original, Replacement) ->
     [Before, After] = binary:split(Archive, Original),
     ok = file:write_file(Path, <<Before/binary, Replacement/binary, After/binary>>).
 
-frame(Bytes) -> <<16#915106B1:32, (byte_size(Bytes)):32, (erlang:crc32(Bytes)):32, Bytes/binary>>.
+frame(Bytes) -> <<16#915106B2:32, (byte_size(Bytes)):32, (erlang:crc32(Bytes)):32, Bytes/binary>>.
 
 %% Real signed two-target claims and applications, not a claim of consensus
 %% admission. Each item has its own proof/request; the one-member QC is real.
@@ -205,11 +205,13 @@ ambiguous_missing_and_wrong_slot_selections_fail_closed_test() ->
     {quod_entry, 2, I, Block, Cert} = binary_to_term(Bytes, [safe]),
     ?assertEqual({error, bad_entry}, quod_ledger:select_entry(
                    canonical({quod_entry, 2, 0, Block, Cert}), Select, wrapped)),
-    {ok, WrongHeight} = quod_ledger:select_entry(
-        canonical({quod_entry, 2, I + 1, Block, Cert}), Select, wrapped),
+    ?assertEqual({error, bad_entry}, quod_ledger:select_entry(
+        canonical({quod_entry, 2, I + 1, Block, Cert}), Select, wrapped)),
+    ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(
+        canonical({quod_entry, 2, I + 1, Block, Cert}), wrapped)),
     {ok, Good} = quod_ledger:select_entry(Bytes, Select, wrapped),
     {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Good, Tx),
-    ?assertNot(quod_dtx:certified_entry_claim_matches(Identity, WrongHeight, Tx, Ref)).
+    ?assert(quod_dtx:certified_entry_claim_matches(Identity, Good, Tx, Ref)).
 
 request_and_native_material_bindings_survive_reuse_test() ->
     {_, _, _, Bytes} = fixture(),
@@ -265,23 +267,23 @@ fixture() ->
                                           A0#transaction{author = Key, author_seq = I}, Signer), App
     end || I <- lists:seq(1, 8)],
     Era = maps:get(era, F0),
-    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, Txs}, 2),
-    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Block), empty, 2),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2, {batch, Txs}, 2),
+    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Block), 2, empty, 2),
     Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Carrier, F0)),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
     {Target, Signer, Entry, Bytes}.
 
 unpack(Bytes) ->
     {quod_entry, 2, I, Block, Cert} = binary_to_term(Bytes, [safe]),
-    {quod_block, 2, Era, View, Parent, {batch, Items}, Time} = binary_to_term(Block, [safe]),
+    {quod_block, 3, Era, View, Parent, I, {batch, Items}, Time} = binary_to_term(Block, [safe]),
     {I, {Era, View, Parent}, Items, Time, Cert}.
 pack(I, {Era, View, Parent}, Items, Time, Cert) ->
-    canonical({quod_entry, 2, I, canonical({quod_block, 2, Era, View, Parent, {batch, Items}, Time}), Cert}).
+    canonical({quod_entry, 2, I, canonical({quod_block, 3, Era, View, Parent, I, {batch, Items}, Time}), Cert}).
 
 proof_blocks(Entry) ->
     {ok, Block} = quod_ledger:block_from_entry(Entry),
     {Era, View, _} = Parent = quod_ledger:block_ref(Block),
-    {ok, Carrier} = quod_ledger:new_block({Era, View + 1}, Parent, empty, Block#block.timestamp),
+    {ok, Carrier} = quod_ledger:new_block({Era, View + 1}, Parent, Block#block.height, empty, Block#block.timestamp),
     [Carrier, Block].
 verify_fixture({Ns, _} = Identity, Entry) ->
     F = quod_ct:protocol_fixture(Ns),

@@ -40,7 +40,7 @@ new_empty_stores_use_only_current_ledger_and_journal_formats_test() ->
         {ok, Journal} = quod_signing_journal:initialize(Ns, <<1:256>>, Dir),
         ok = quod_signing_journal:close(Journal),
         {ok, Bytes} = file:read_file(filename:join(quod_ledger_store:ns_dir(Dir, Ns), "signing.0001")),
-        ?assertMatch(<<16#51534A36:32, _/binary>>, Bytes),
+        ?assertMatch(<<16#51534A37:32, _/binary>>, Bytes),
         {ok, Recovered} = quod_signing_journal:recover(Ns, <<1:256>>, Dir),
         ok = quod_signing_journal:close(Recovered)
     after _ = file:del_dir_r(Dir)

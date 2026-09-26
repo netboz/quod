@@ -46,14 +46,15 @@ accepts only the compact result of an already-validated history fold.
 -define(QSJ3_MAGIC, 16#51534A33). %% transaction V13 envelopes
 -define(QSJ4_MAGIC, 16#51534A34). %% Begin/Prepare/Decision/Finalize envelopes
 -define(QSJ5_MAGIC, 16#51534A35). %% slot-bound atomic Vote/Resolve/Complete
--define(MAGIC,      16#51534A36). %% "QSJ6": era/view decisions and body custody
--define(FORMAT_VERSION, 6).
+-define(QSJ6_MAGIC, 16#51534A36). %% era/view bodies without signed material height
+-define(MAGIC,      16#51534A37). %% "QSJ7": signed material height
+-define(FORMAT_VERSION, 7).
 -define(HDR_BYTES, 12).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(COMPACT_BYTES, (1024 * 1024)).
 
 %% Exact deterministic-ETF overhead of
-%% {quod_signing_pending_dtx,6,Admission,Author,MaxU64,Group,Body,Envelope}
+%% {quod_signing_pending_dtx,7,Admission,Author,MaxU64,Group,Body,Envelope}
 %% outside the two variable blobs.  The boundary therefore follows the shared
 %% DTX limits automatically instead of duplicating their current values.
 -define(PENDING_WRAPPER_BYTES, 163).
@@ -729,6 +730,7 @@ legacy_version(<<?QSJ2_MAGIC:32, _/binary>>) -> {signing, 2};
 legacy_version(<<?QSJ3_MAGIC:32, _/binary>>) -> {signing, 3};
 legacy_version(<<?QSJ4_MAGIC:32, _/binary>>) -> {signing, 4};
 legacy_version(<<?QSJ5_MAGIC:32, _/binary>>) -> {signing, 5};
+legacy_version(<<?QSJ6_MAGIC:32, _/binary>>) -> {signing, 6};
 legacy_version(_) -> none.
 
 torn_tail(_Fd, Offset, strict) ->

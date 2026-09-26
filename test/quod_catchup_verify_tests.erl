@@ -46,7 +46,7 @@ genesis(Pubs) ->
             external_predicate_modules => []},
           ?NS, Self, ?GENESIS_NONCE),
     {ok, Block} = quod_ledger:new_block(
-                    {genesis, 0}, none, {batch, [Transaction]}, 0),
+                    {genesis, 0}, none, 1, {batch, [Transaction]}, 0),
     quod_ledger:entry(1, Block, none).
 
 %% Build an over-cap record without teaching the canonical founding helper how
@@ -68,7 +68,7 @@ entry_with_data(Entry, Data) ->
 entry_bytes_with_data(Entry, Data) ->
     {ok, #block{era = Era, slot = View, parent = Parent, timestamp = Ts}} =
         quod_ledger:block_from_entry(Entry),
-    {ok, Block} = quod_ledger:new_block({Era, View}, Parent, Data, Ts),
+    {ok, Block} = quod_ledger:new_block({Era, View}, Parent, quod_ledger:entry_index(Entry), Data, Ts),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
     Wire = binary_to_term(Bytes, [safe]),
     term_to_binary(setelement(4, Wire, quod_ledger:block_bytes(Block)), [deterministic]).
@@ -106,7 +106,7 @@ committed_in(Domain, I, Tx, Projection, C, K) ->
 committed_batch(Domain, I, Transactions, Projection, Ts, C, K) ->
     Parent = {Era, View, _} = maps:get(protocol_root, Projection),
     Position = {Era, View + 1},
-    {ok, Block} = quod_ledger:new_block(Position, Parent, {batch, Transactions}, Ts),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, I, {batch, Transactions}, Ts),
     Hash = quod_simplex:block_hash(Block),
     Shares = [quod_simplex:make_share(Domain, commit, Position, Hash, signer(M))
               || M <- lists:sublist(C, K)],
@@ -500,7 +500,7 @@ direct_abort_entry(Slot, F = #{anchor := Anchor, signer := Signer, admission := 
                                          Signer),
     {ok, ParentBlock} = quod_ledger:block_from_entry(lists:last(maps:get(chain, F))),
     Parent = {Era, View, _} = quod_ledger:block_ref(ParentBlock),
-    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [{dtx, Control}]}, 0),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, Slot, {batch, [{dtx, Control}]}, 0),
     Cert = quod_ct:protocol_certificate(Block, F#{identity => Target}),
     quod_ledger:entry(Slot, Block, Cert).
 
@@ -572,7 +572,7 @@ catch_up_real_writer_current_era_view_preserves_verifier_history_test() ->
             State0 = quod_simplex:test_state(
                        #{ns => ?NS, genesis_hash => GH,
                          consensus_domain => domain(C4), store => Store, phase_index => Index,
-                         eng => quod_simplex:eng_new(domain(C4), [], {Root, 0}),
+                         eng => quod_simplex:eng_new(domain(C4), [], {Root, 1, 0}),
                          archive_tip => {Root, 0},
                          sync => {pulling, self()}}),
             put(StateKey, State0),
@@ -761,7 +761,7 @@ with_phase_writer_owned(Fun) ->
     put(StateKey, quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
         consensus_domain => Domain, archive_tip => {ProtocolRoot, 0},
         store => Store, phase_index => Index,
-        eng => quod_simplex:eng_new(Domain, [], {ProtocolRoot, 0}),
+        eng => quod_simplex:eng_new(Domain, [], {ProtocolRoot, 1, 0}),
         sync => {pulling, self()}})),
     Sink = fun(Group) ->
         From = {self(), make_ref()},
@@ -826,7 +826,7 @@ recovery_owner_death_cancels_worker_blocked_in_real_pull_test() ->
                 State0 = quod_simplex:test_state(
                            #{ns => Ns, genesis_hash => Anchor, store => Store, phase_index => Index,
                              eng => quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [],
-                                      {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0}),
+                                      {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 1, 0}),
                              sync => unconfirmed}),
                 %% The production tick arms the real monitored recovery worker.
                 {keep_state, State1, _Actions} =

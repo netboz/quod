@@ -513,12 +513,12 @@ state({Ns, Anchor}, Projection, Signer = #{pubkey := Pub}, Journal, Index) ->
         self => Pub, id => Signer, sync => ready, prolog_ready => true,
         signing_journal => Journal, phase_index => Index,
         archive_tip => Tip,
-        eng => quod_simplex:eng_new(Domain, maps:get(committee, Projection), Tip),
+        eng => quod_simplex:eng_new(Domain, maps:get(committee, Projection), {Root, element(1, maps:get(history_head, Projection)), maps:get(timestamp, Projection)}),
         consensus_domain => Domain})).
 
 certified_entries({Ns, Anchor}, Height, Parent = {Era, View, _}, Controls, Identities, Committee) ->
     Position = {Era, View + 1},
-    {ok, Block} = quod_ledger:new_block(Position, Parent, payload(Controls), Height),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, Height, payload(Controls), Height),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = maps:map(fun(_, Signer) ->

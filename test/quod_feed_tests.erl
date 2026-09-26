@@ -44,7 +44,7 @@ feed_entry(1) ->
 feed_entry(Height) ->
     F = quod_ct:protocol_fixture(<<"feed:codec">>),
     {ok, B} = quod_ledger:new_block({maps:get(era, F), Height},
-      maps:get(protocol_root, maps:get(projection, F)), {batch, [maps:get(transaction, F)]}, 1),
+      maps:get(protocol_root, maps:get(projection, F)), Height, {batch, [maps:get(transaction, F)]}, 1),
     quod_ledger:entry(Height, B, quod_ct:protocol_certificate(B, F)).
 
 %%%===================================================================
@@ -452,7 +452,7 @@ fold_snapshot_test() ->
           transaction := Tx} = quod_ct:protocol_fixture(<<"feed:fold">>),
     Pub = maps:get(pubkey, Signer), Added = <<25:256>>,
     Root = maps:get(protocol_root, P),
-    {ok, B} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
+    {ok, B} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
     EmptyDiff = quod_ledger:entry(2, B, quod_ct:protocol_certificate(B, F)),
     {2, Ordinary, false} = quod_feed:fold_snapshot(Ns, EmptyDiff, {1, P, false}),
     ?assertEqual([Pub], quod_simplex:history_committee(Ordinary)),
@@ -460,13 +460,13 @@ fold_snapshot_test() ->
       diff = [{assert, {{peer_admitted, Added, <<"host">>, 1, Added}, true}}],
       sig = none, signed_bytes = none, authentication = none}),
     {ok, Admit} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, Signer),
-    {ok, M} = quod_ledger:new_block({Era, 1}, Root, {batch, [Admit]}, 1),
+    {ok, M} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Admit]}, 1),
     Membership = quod_ledger:entry(2, M, quod_ct:protocol_certificate(M, F)),
     {2, Admitted, false} = quod_feed:fold_snapshot(Ns, Membership, {1, P, false}),
     ?assertEqual(lists:sort([Pub, Added]), quod_simplex:history_committee(Admitted)),
     ?assertEqual(none, quod_feed:fold_snapshot(Ns, EmptyDiff, {0, P, false})),
     ?assertEqual(none, quod_feed:fold_snapshot(Ns, EmptyDiff, {2, Ordinary, false})),
-    {ok, Control} = quod_ledger:new_block({Era, 1}, Root, quod_ct:atomic_resolve_payload(), 1),
+    {ok, Control} = quod_ledger:new_block({Era, 1}, Root, 2, quod_ct:atomic_resolve_payload(), 1),
     Dtx = quod_ledger:entry(2, Control, quod_ct:protocol_certificate(Control, F)),
     ?assertEqual(none, quod_feed:fold_snapshot(Ns, Dtx, {1, P, false})),
     ?assertEqual(none, quod_feed:fold_snapshot(Ns, EmptyDiff, none)).

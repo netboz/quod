@@ -65,10 +65,13 @@ no_owner_one_routed_job_test_() ->
             assert_resolver_admission(F, maps:get(hint, F), Calls),
             ?assertMatch({ok, _}, Result),
             ?assertEqual(1, length(calls(quod_foreign_log, spawn_verification_worker, Calls))),
-            %% Positive controls: this same trace really sees historical replay
-            %% and a full store open on the cold routed path.
-            ?assert(length(calls(quod_catchup, range_accept, Calls)) > 0),
-            ?assert(length(full_opens(Calls)) > 0),
+            %% The cold routed claim uses the real sparse verifier. Source
+            %% fixture stores may open, but this receiver acquires no archive.
+            ?assert(length(calls(quod_catchup, evidence_accept, Calls)) > 0),
+            ?assertEqual([], calls(quod_catchup, range_accept, Calls)),
+            CacheNs = quod_foreign_log:cache_namespace(maps:get(target, F)),
+            ?assertEqual([], [Args || [OpenedNs | _] = Args <- full_opens(Calls),
+                                      OpenedNs =:= CacheNs]),
             ?assertEqual(1, length(calls(quod_foreign_log, verify_reference_deadline, Calls)))
         end)
     end}} || Mode <- [wave, accepted, observed]].
@@ -708,6 +711,7 @@ traced(Owners, Fun, Drive) ->
             {quod_foreign_log, spawn_verification_worker, 3},
             {quod_simplex, history_view_at, 3},
             {quod_catchup, range_accept, 5},
+            {quod_catchup, evidence_accept, 4},
             {quod_ledger_store, open, 2}, {quod_ledger_store, open, 3},
             {quod_ledger_store, open_ro, 2}, {quod_ledger_store, open_ro, 3},
             {quod_ledger_store, open_ro_snapshot, 1},

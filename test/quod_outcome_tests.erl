@@ -985,7 +985,7 @@ certified_phase(Target = {Ns, Anchor}, Control, Slot, Signers) ->
     %% Reducer fixture, not a complete source history. The quorum signatures
     %% below authenticate the same exact block under independent signer sets.
     {ok, Block} = quod_ledger:new_block(Position, {Era, Slot - 2, <<0:256>>},
-                                      {batch, [{dtx, Control}]}, Slot),
+                                      Slot, {batch, [{dtx, Control}]}, Slot),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Hash = quod_simplex:block_hash(Block),
     Committee = lists:sort([maps:get(pubkey, S) || S <- Signers]),

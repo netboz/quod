@@ -1,9 +1,9 @@
 -module(quod_ledger_store).
 -moduledoc """
 One append-only archive for material ontology history and its selected consensus
-proofs. V8 groups contain a fixed-size header, streamed proof-block frames,
+proofs. V9 groups contain a fixed-size header, streamed proof-block frames,
 contiguous material entry frames and a completion footer. One datasync commits
-a whole group before the owner publishes its new material height or releases
+one or more complete groups before the owner publishes its new material height or releases
 signing-journal custody. Empty protocol carriers occupy proof space only.
 
 A selected proof span may be reused or extended by later entries through
@@ -32,13 +32,14 @@ portable snapshots and compaction remain deferred.
          snapshot/1, resume/1,
          open_ro_snapshot/1, close/1,
          namespace/1,
-         append/2, proof_cursor/2, proof_next/2,
+         append/2, batch_begin/1, batch_append/2, batch_sync/1, proof_cursor/2, proof_next/2,
          transfer_cursor/2, transfer_next/2,
          staging_path/1, with_proof_stage/2, stage_proof/2, staged_proof_source/1, reset_proof_stage/1,
-         read_at/2, read_at/3, read_range/4, fold/5, fold_groups/3, last/1]).
+         read_at/2, read_at/3, read_range/4, fold/5, fold_groups/3, last/1,
+         committed_boundary/2]).
 -export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
--export_type([handle/0, session/0, proof_source/0, proof_cursor/0, transfer_cursor/0,
+-export_type([handle/0, session/0, append_batch/0, proof_source/0, proof_cursor/0, transfer_cursor/0,
               proof_stage/0]).
 
 %% Every superseded frame magic stays named here so an old segment is rejected
@@ -50,7 +51,8 @@ portable snapshots and compaction remain deferred.
 -define(V5_MAGIC,  16#915106AE). %% byte-canonical envelopes carrying transaction V13
 -define(V6_MAGIC,  16#915106AF). %% transaction V14, five-phase atomic controls
 -define(V7_MAGIC,  16#915106B0). %% transaction V15, Vote/Resolve/Complete
--define(MAGIC,     16#915106B1). %% V8: complete proof/material groups
+-define(V8_MAGIC,  16#915106B1). %% complete groups without signed material height
+-define(MAGIC,     16#915106B2). %% V9: signed material height
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
@@ -65,6 +67,12 @@ portable snapshots and compaction remain deferred.
                 base_offset = 0 :: non_neg_integer(), %% next append offset (== log file size)
                 symbol_mode = materialized :: materialized | wrapped}).
 -opaque handle() :: #store{}.
+
+%% A pending append cannot be captured or read as a committed store. Complete
+%% group bytes are copied before proof staging is reused; one sync returns the
+%% publishable handle. The same existing writer owns both lifetimes.
+-record(append_batch, {store :: handle(), base_offset :: non_neg_integer()}).
+-opaque append_batch() :: #append_batch{}.
 
 %% A read snapshot copies the writer's already-verified sparse index without
 %% sharing its raw file handle. A catch-up worker opens its own read-only handle
@@ -98,6 +106,19 @@ portable snapshots and compaction remain deferred.
 -doc "Return the ontology whose ledger this handle reads.".
 -spec namespace(handle()) -> binary().
 namespace(#store{ns = Ns}) -> Ns.
+
+-doc "Locate a complete group's physical boundary through the retained sparse index.".
+-spec committed_boundary(handle(), non_neg_integer()) ->
+          {ok, non_neg_integer()} | {error, not_group_boundary}.
+committed_boundary(#store{}, 0) -> {ok, 0};
+committed_boundary(Store = #store{last_index = Last}, Height)
+  when is_integer(Height), Height > 0, Height =< Last ->
+    {_At, Group} = locate(Store, Height),
+    case Group#group.first + Group#group.count - 1 of
+        Height -> {ok, Group#group.finish};
+        _ -> {error, not_group_boundary}
+    end;
+committed_boundary(#store{}, _) -> {error, not_group_boundary}.
 
 %%%===================================================================
 %%% open / close
@@ -280,8 +301,39 @@ not consensus authority. One successful datasync publishes the entire group.
 """.
 -spec append(handle(), {proof_source(), [quod_ledger:entry_artifact()]}) -> {ok, handle()}.
 append(S, {none, []}) -> {ok, S};
-append(S = #store{ns = Ns, log_fd = Fd, base_offset = Off, cps = Cps,
-                  last_index = Last}, {Source, [_ | _] = Entries}) ->
+append(S, Group) -> append_group(S, Group, fun sync_store/1).
+
+-doc "Start an unpublished batch in the existing archive writer.".
+-spec batch_begin(handle()) -> append_batch().
+batch_begin(S = #store{base_offset = Offset}) ->
+    #append_batch{store = S, base_offset = Offset}.
+
+-doc """
+Copy one complete verified group before its proof source is released. This
+does not synchronize or publish a store handle. On failure, the writer must
+close its original handle and recover through the existing explicit open.
+""".
+-spec batch_append(append_batch(), {proof_source(), [quod_ledger:entry_artifact()]}) ->
+          {ok, append_batch()}.
+batch_append(Batch, {none, []}) -> {ok, Batch};
+batch_append(Batch = #append_batch{store = Store}, Group) ->
+    {ok, Next} = append_group(Store, Group, fun(S) -> {ok, S} end),
+    {ok, Batch#append_batch{store = Next}}.
+
+-doc "Synchronize all copied groups once, returning the first publishable handle.".
+-spec batch_sync(append_batch()) -> {ok, handle()}.
+batch_sync(#append_batch{store = #store{base_offset = Offset} = Store,
+                         base_offset = Offset}) -> {ok, Store};
+batch_sync(#append_batch{store = Store}) -> sync_store(Store).
+
+sync_store(S = #store{ns = Ns, log_fd = Fd}) ->
+    ok = quod_trace:with_span(
+           quod_trace:context(), <<"quod.ledger.datasync">>, internal,
+           #{'quod.namespace' => Ns}, fun(_) -> file:datasync(Fd) end),
+    {ok, S}.
+
+append_group(S = #store{ns = Ns, log_fd = Fd, base_offset = Off, cps = Cps,
+                        last_index = Last}, {Source, [_ | _] = Entries}, FinishGroup) ->
     ok = assert_contiguous(Last, Entries),
     quod_trace:with_span(
       quod_trace:context(), <<"quod.ledger.append_batch">>, internal,
@@ -311,11 +363,8 @@ append(S = #store{ns = Ns, log_fd = Fd, base_offset = Off, cps = Cps,
                   'quod.ledger.proof_bytes' => NewProofBytes,
                   'quod.ledger.encode_us' => native_us(EncodeNative),
                   'quod.ledger.write_us' => native_us(erlang:monotonic_time() - WriteStarted)}),
-          ok = quod_trace:with_span(
-                 quod_trace:context(), <<"quod.ledger.datasync">>, internal,
-                 #{'quod.namespace' => Ns}, fun(_) -> file:datasync(Fd) end),
-          {ok, S#store{base_offset = Finish, cps = Cps1,
-                       last_index = Last + length(Entries)}}
+          FinishGroup(S#store{base_offset = Finish, cps = Cps1,
+                              last_index = Last + length(Entries)})
       end).
 
 -doc "Physical bytes added by one group, including its framing and newly owned proof span.".
@@ -771,6 +820,8 @@ next_frame(Fd, {Off, Buf0}) ->
             {stop, {unsupported_format, 6}, Off};
         {short, <<?V7_MAGIC:32, _/binary>>} ->
             {stop, {unsupported_format, 7}, Off};
+        {short, <<?V8_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 8}, Off};
         {short, _}    -> {stop, short, Off};
         {io_error, R} -> {stop, {io_error, R}, Off};
         {ok, Buf1} ->
@@ -789,11 +840,15 @@ next_frame(Fd, {Off, Buf0}) ->
                     {stop, {unsupported_format, 6}, Off};
                 <<?V7_MAGIC:32, _/binary>> ->
                     {stop, {unsupported_format, 7}, Off};
+                <<?V8_MAGIC:32, _/binary>> ->
+                    {stop, {unsupported_format, 8}, Off};
                 <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
                     {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
                     case fill(Fd, Off, Buf1, ?HDR_BYTES + Len) of
-                        {short, _}    -> {stop, short, Off};
+                        {short, <<?V8_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 8}, Off};
+        {short, _}    -> {stop, short, Off};
                         {io_error, R} -> {stop, {io_error, R}, Off};
                         {ok, Buf2} ->
                             <<_:?HDR_BYTES/binary, Payload:Len/binary, Tail/binary>> = Buf2,
@@ -968,7 +1023,7 @@ tail_has_completed_group(Fd, Pos, Size) ->
         {ok, Bytes} when byte_size(Bytes) =:= Len ->
             Found = lists:any(fun({Delta, _}) ->
                 tail_marker(Fd, Pos + Delta)
-            end, binary:matches(Bytes, [<<?MAGIC:32>>, <<?V7_MAGIC:32>>,
+            end, binary:matches(Bytes, [<<?MAGIC:32>>, <<?V8_MAGIC:32>>, <<?V7_MAGIC:32>>,
                    <<?V6_MAGIC:32>>, <<?V5_MAGIC:32>>, <<?V4_MAGIC:32>>,
                    <<?V3_MAGIC:32>>, <<?V2_MAGIC:32>>, <<?V1_MAGIC:32>>])),
             case Found orelse Pos + Len >= Size of
@@ -980,7 +1035,7 @@ tail_has_completed_group(Fd, Pos, Size) ->
 
 tail_marker(Fd, Off) ->
     case file:pread(Fd, Off, 4) of
-        {ok, <<Magic:32>>} when Magic >= ?V1_MAGIC, Magic =< ?V7_MAGIC ->
+        {ok, <<Magic:32>>} when Magic >= ?V1_MAGIC, Magic =< ?V8_MAGIC ->
             error({unsupported_ledger_format, Magic - ?V1_MAGIC + 1, Off});
         {ok, <<?MAGIC:32>>} -> footer_at(Fd, Off);
         Other -> error({log_io_error, Off, Other})

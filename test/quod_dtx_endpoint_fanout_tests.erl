@@ -191,7 +191,7 @@ init({Observer, Ns}) ->
     Anchor = <<0:256>>,
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     {ok, running, quod_simplex:test_state(#{ns => Ns,
-        consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [], {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})})}.
+        consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [], {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 1, 0})})}.
 callback_mode() -> handle_event_function.
 handle_event({call, From}, counts, running, S) ->
     {keep_state, S, [{reply, From, quod_simplex:test_dtx_endpoint_counts(S)}]};

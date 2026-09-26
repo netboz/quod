@@ -103,6 +103,9 @@
 %% `peer_admitted`). `parent` is the exact era/view/hash of its notarized
 %% ancestor (or the era's virtual root). It may be newer than the durable
 %% material head while consensus is pipelined.
+%% `height` is the signed material position: genesis is 1, a material child
+%% advances its parent's height by one, and an empty carrier preserves it.
+%% This binds an exact foreign claim without reconstructing unrelated history.
 %% `timestamp` is the leader's propose wall-clock (ms since Unix epoch) — the canonical block time (cf.
 %% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is inside the exact producer-owned
 %% `block_bytes`, so a committed block's timestamp is covered by its cert. The
@@ -113,6 +116,7 @@
 -record(block, {slot      :: slot(),
                 era       :: consensus_era(),
                 parent    :: none | protocol_ref(),
+                height    :: pos_integer(),
                 payload   :: block_payload(),
                 timestamp = 0 :: non_neg_integer(),
                 block_bytes = none :: binary() | none}). %% producer-owned canonical identity; other fields are its decoded view

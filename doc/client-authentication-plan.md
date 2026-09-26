@@ -244,6 +244,26 @@ rows; pending or unavailable outcomes retain them. Nothing is evicted to make
 room. Without durable browser storage, login and reads continue to work but
 durable submission is disabled before any write request is sent.
 
+For a distributed attempt, the journal also retains the exact group reference
+returned by Execute. Outcome lookup may supply it as `outcome_ref` alongside
+the original signed request. The server verifies the archived source Vote and
+checks that its group, anchored source identity, operation id and request digest
+match before reading the existing group outcome. A refused Vote does not claim
+the operation id; this selector permits observing that particular attempt
+without creating a claim or submitting another write. Terminal group outcomes
+carry no invented operation-claim height.
+
+A known local prepared operation claim takes precedence, including when its
+winning outcome is still pending. Otherwise a terminal `group_outcome` settles
+only the selected Execute attempt: it neither proves operation-wide absence
+nor authorizes automatic resubmission. Retiring that attempt's browser journal
+row does not declare that every possible concurrent admission was refused.
+
+If the entire Execute response was lost before the browser learned the group
+reference, and the source never prepared a permanent operation claim, the
+original operation alone cannot identify the server-generated attempt. Its
+observation remains pending; the client must not resubmit it automatically.
+
 Client code may construct a goal from any interaction or received event, or a
 person may enter one directly. Every case uses this same ingress.
 The full contract, cross-ontology propagation, idempotency rules, and staged

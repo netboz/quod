@@ -70,9 +70,9 @@ era_eight_voter_split_recovers_without_changing_parent_votes_test() ->
     Committee = committee(8), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
     Dir = filename:join("/tmp", "quod_era_split_" ++
                          integer_to_list(erlang:unique_integer([positive]))),
-    {ok, Parent} = quod_ledger:new_block({Era, 1}, Root,
+    {ok, Parent} = quod_ledger:new_block({Era, 1}, Root, 2,
                                          {batch, [tx([{assert, {{kept, value}, true}}])]}, 1),
-    {ok, Child} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Parent), empty, 1),
+    {ok, Child} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Parent), (Parent)#block.height, empty, 1),
     try
         Journals = [begin
             Path = filename:join(Dir, integer_to_list(I)),
@@ -81,7 +81,7 @@ era_eight_voter_split_recovers_without_changing_parent_votes_test() ->
         end || {I, Member} <- lists:zip(lists:seq(1, 8), Committee)],
         {Supported, SupportShares} = era_journal_support(Parent, Journals),
         {E1, _} = quod_simplex:eng_offer({block, Parent},
-                    quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+                    quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0})),
         {E2, _} = feed_shares(SupportShares, E1),
         Choices = lists:duplicate(3, commit) ++ lists:duplicate(5, complaint),
         {Voted, FinalShares} = era_journal_finals(Parent, Choices, Supported),
@@ -111,10 +111,10 @@ era_eight_voter_split_recovers_without_changing_parent_votes_test() ->
 
 era_stacked_splits_allow_a_third_view_with_a_silent_voter_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    {ok, First} = quod_ledger:new_block({Era, 1}, Root, {batch, [tx([])]}, 1),
-    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), empty, 1),
-    {ok, Third} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), empty, 1),
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    {ok, First} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [tx([])]}, 1),
+    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), (First)#block.height, empty, 1),
+    {ok, Third} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), (Second)#block.height, empty, 1),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0}),
     Split = fun(Block, E) ->
         {Added, _} = quod_simplex:eng_offer({block, Block}, E),
         {Notarized, _} = feed_shares(era_shares(support, Block, Committee), Added),
@@ -131,13 +131,13 @@ era_stacked_splits_allow_a_third_view_with_a_silent_voter_test() ->
 
 era_complaint_certificate_advances_without_a_ledger_result_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    {ok, Failed} = quod_ledger:new_block({Era, 1}, Root, empty, 1),
+    {ok, Failed} = quod_ledger:new_block({Era, 1}, Root, 1, empty, 1),
     {E1, Events} = feed_shares(era_shares(complaint, Failed, Committee),
-                               quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+                               quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0})),
     ?assert(lists:member({view_advanced, 1, complaint}, Events)),
     ?assertEqual([], [B || {committed, _, B} <- Events]),
     ?assertEqual([], [V || {skipped, V} <- Events]),
-    {ok, Next} = quod_ledger:new_block({Era, 2}, Root, {batch, [tx([])]}, 1),
+    {ok, Next} = quod_ledger:new_block({Era, 2}, Root, 2, {batch, [tx([])]}, 1),
     {E2, _} = quod_simplex:eng_offer({block, Next}, E1),
     {E3, _} = feed_shares(era_shares(support, Next, Committee), E2),
     {_E4, Committed} = feed_shares(era_shares(commit, Next, Committee), E3),
@@ -145,12 +145,12 @@ era_complaint_certificate_advances_without_a_ledger_result_test() ->
 
 era_terminal_membership_refuses_material_descendants_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    {ok, Membership} = quod_ledger:new_block({Era, 1}, Root,
+    {ok, Membership} = quod_ledger:new_block({Era, 1}, Root, 2,
                                             {batch, [tx([pa(<<9:256>>)])]}, 1),
     {E1, _} = quod_simplex:eng_offer({block, Membership},
-                                  quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+                                  quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0})),
     {E2, _} = feed_shares(era_shares(support, Membership, Committee), E1),
-    {ok, Illegal} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Membership),
+    {ok, Illegal} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Membership), (Membership)#block.height + 1,
                                          {batch, [tx([])]}, 1),
     {E3, _} = quod_simplex:eng_offer({block, Illegal}, E2),
     {E4, Events} = feed_shares(era_shares(support, Illegal, Committee), E3),
@@ -161,11 +161,38 @@ era_terminal_membership_refuses_material_descendants_test() ->
     {_E5, FinalEvents} = feed_shares(era_shares(commit, Illegal, Committee), E4),
     ?assertEqual([], [B || {committed, _, B} <- FinalEvents]).
 
+signed_material_height_is_checked_before_support_and_tree_installation_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Committee = [{Self, Signer} | _] = committee(4),
+    Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 900, 0}),
+    Links = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
+    Owner = st(#{self => Self, id => Signer, validators => pubs(Committee),
+                 eng => E0, sync => ready, slot => 900, history_head => {900, element(3, Root)},
+                 conns => Links}),
+    lists:foreach(fun({Payload, Heights}) ->
+        lists:foreach(fun(Height) ->
+            {ok, Wrong} = quod_ledger:new_block({Era, 1}, Root, Height, Payload, 0),
+            Refused = quod_simplex:dispatch(quod_simplex:leader(1, pubs(Committee)),
+                                           {propose, Wrong, []}, Owner),
+            ?assertEqual({none, false, false}, quod_simplex:test_round(1, Refused)),
+            {Added, _} = quod_simplex:eng_offer({block, Wrong}, E0),
+            {Rejected, Events} = feed_shares(era_shares(support, Wrong, Committee), Added),
+            ?assertEqual(#{}, quod_simplex:eng_tree(Rejected)),
+            ?assertEqual([], [B || {notarized, B} <- Events])
+        end, Heights)
+    end, [{empty, [899, 901]}, {{batch, [tx([])]}, [900, 902]}]),
+    {ok, Correct} = quod_ledger:new_block({Era, 1}, Root, 900, empty, 0),
+    Accepted = quod_simplex:dispatch(quod_simplex:leader(1, pubs(Committee)),
+                                    {propose, Correct, []}, Owner),
+    ?assertMatch({<<_:256>>, false, false}, quod_simplex:test_round(1, Accepted)),
+    flush_consensus_fixture_frames().
+
 era_delayed_parent_wakes_its_certified_child_once_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    {ok, Parent} = quod_ledger:new_block({Era, 1}, Root, empty, 0),
-    {ok, Child} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Parent), empty, 0),
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    {ok, Parent} = quod_ledger:new_block({Era, 1}, Root, 1, empty, 0),
+    {ok, Child} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Parent), (Parent)#block.height, empty, 0),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0}),
     {E1, _} = quod_simplex:eng_offer({block, Child}, E0),
     {E2, _} = feed_shares(era_shares(support, Child, Committee), E1),
     {E3, Waiting} = feed_shares(era_shares(commit, Child, Committee), E2),
@@ -180,12 +207,12 @@ era_delayed_parent_wakes_its_certified_child_once_test() ->
 era_gapped_parent_waits_for_every_complaint_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
     {Past, E1, _} = lists:foldl(fun(V, {Bs, Eng, Ref}) ->
-        {ok, B} = quod_ledger:new_block({Era, V}, Ref, empty, 0),
+        {ok, B} = quod_ledger:new_block({Era, V}, Ref, 1, empty, 0),
         {Added, _} = quod_simplex:eng_offer({block, B}, Eng),
         {Notarized, _} = feed_shares(era_shares(support, B, Committee), Added),
         {[B | Bs], Notarized, quod_ledger:block_ref(B)}
-    end, {[], quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}), Root}, lists:seq(1, 32)),
-    {ok, Skipping} = quod_ledger:new_block({Era, 33}, Root, empty, 0),
+    end, {[], quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0}), Root}, lists:seq(1, 32)),
+    {ok, Skipping} = quod_ledger:new_block({Era, 33}, Root, 1, empty, 0),
     {E2, _} = quod_simplex:eng_offer({block, Skipping}, E1),
     {E3, Waiting} = feed_shares(era_shares(support, Skipping, Committee), E2),
     ?assertEqual([], [B || {notarized, B} <- Waiting]),
@@ -212,12 +239,12 @@ era_settlement_work_does_not_rescan_the_unfinished_prefix_test_() ->
 era_settlement_work(Count) ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
     {Rev, _} = lists:foldl(fun(V, {Acc, Ref}) ->
-        {ok, B} = quod_ledger:new_block({Era, V}, Ref, empty, 0),
+        {ok, B} = quod_ledger:new_block({Era, V}, Ref, 1, empty, 0),
         {ok, Cert} = quod_simplex:form_cert(?DOMAIN, support, {Era, V},
           element(3, quod_ledger:block_ref(B)), era_shares(support, B, Committee), pubs(Committee)),
         {[{B, Cert} | Acc], quod_ledger:block_ref(B)}
     end, {[], Root}, lists:seq(1, Count)),
-    Inputs = lists:reverse(Rev), E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    Inputs = lists:reverse(Rev), E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0}),
     erlang:garbage_collect(),
     {reductions, Before} = process_info(self(), reductions),
     _ = lists:foldl(fun({B, Cert}, Eng) ->
@@ -255,9 +282,9 @@ era_cold_recovery_case(Mode) ->
             Signed
     end,
     Root = {Era, 0, Anchor},
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
     {Proof, _} = lists:foldl(fun(V, {Bs, Parent}) ->
-        {ok, B} = quod_ledger:new_block({Era, V}, Parent, empty, 1),
+        {ok, B} = quod_ledger:new_block({Era, V}, Parent, 2, empty, 1),
         {[B | Bs], quod_ledger:block_ref(B)}
     end, {[Material], quod_ledger:block_ref(Material)}, lists:seq(2, 19)),
     RecoveryProof = case Mode of
@@ -266,7 +293,7 @@ era_cold_recovery_case(Mode) ->
                 Tx0#transaction{author_seq = 2, proof_id = <<22:256>>, sig = none,
                                 signed_bytes = none, authentication = none}),
             {ok, NextTx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, UnsignedNext, Signer),
-            {ok, Unarchived} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(hd(Proof)),
+            {ok, Unarchived} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(hd(Proof)), (hd(Proof))#block.height + 1,
                                                     {batch, [NextTx]}, 2),
             [Unarchived | Proof];
         _ -> Proof
@@ -294,7 +321,7 @@ era_cold_recovery_case(Mode) ->
                 Unsigned2 = quod_transaction:bind_id(Binding,
                     Tx0#transaction{author_seq = 2, sig = none, signed_bytes = none, authentication = none}),
                 {ok, Tx2} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned2, Signer),
-                {ok, B20} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(Head), {batch, [Tx2]}, 2),
+                {ok, B20} = quod_ledger:new_block({Era, 20}, quod_ledger:block_ref(Head), (Head)#block.height + 1, {batch, [Tx2]}, 2),
                 BadCert = (quod_ct:protocol_certificate(B20, F))#cert{sigs = [{Pub, <<0:512>>}]},
                 Bytes20 = quod_ledger:block_bytes(B20),
                 NewSource = {13 + byte_size(Bytes20), fun([]) -> done; ([B | R]) -> {B, R} end, [Bytes20]},
@@ -337,7 +364,7 @@ era_cold_recovery_case(Mode) ->
         ?assertEqual(Tip, maps:get(archive_tip, Again)),
         ?assertEqual(Cert, maps:get(archive_certificate, Again)),
         ?assertEqual(Rounds, maps:get(rounds, Again)),
-        E0 = quod_simplex:eng_new(Domain, [Pub], Tip),
+        E0 = quod_simplex:eng_new(Domain, [Pub], {element(1, Tip), 2, element(2, Tip)}),
         {Same, OldEvents} = quod_simplex:eng_offer({block, Head}, E0),
         ?assertEqual(E0, Same), ?assertEqual([], OldEvents)
         end
@@ -345,14 +372,14 @@ era_cold_recovery_case(Mode) ->
 
 era_carriers_inherit_time_in_live_and_pruned_engines_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, {batch, [tx([])]}, 7),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [tx([])]}, 7),
     {E1, _} = quod_simplex:eng_offer({block, Material},
-                              quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+                              quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0})),
     {E2, _} = feed_shares(era_shares(support, Material, Committee), E1),
     Pruned = quod_simplex:eng_prune(quod_ledger:block_ref(Material), E2),
     lists:foreach(fun(Engine) ->
         lists:foreach(fun(Time) ->
-            {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), empty, Time),
+            {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), (Material)#block.height, empty, Time),
             {Added, _} = quod_simplex:eng_offer({block, Carrier}, Engine),
             {_, Events} = feed_shares(era_shares(support, Carrier, Committee), Added),
             ?assertEqual(case Time of 7 -> [Carrier]; _ -> [] end,
@@ -362,12 +389,12 @@ era_carriers_inherit_time_in_live_and_pruned_engines_test() ->
 
 era_material_parent_is_cached_across_carriers_and_pruning_test() ->
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, {batch, [tx([])]}, 7),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0}),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [tx([])]}, 7),
     {E1, _} = quod_simplex:eng_offer({block, Material}, E0),
     {E2, _} = feed_shares(era_shares(support, Material, Committee), E1),
     {Engine, Head} = lists:foldl(fun(View, {Previous, Parent}) ->
-        {ok, Carrier} = quod_ledger:new_block({Era, View}, quod_ledger:block_ref(Parent), empty, 7),
+        {ok, Carrier} = quod_ledger:new_block({Era, View}, quod_ledger:block_ref(Parent), (Parent)#block.height, empty, 7),
         {Added, _} = quod_simplex:eng_offer({block, Carrier}, Previous),
         {Notarized, _} = feed_shares(era_shares(support, Carrier, Committee), Added),
         {Notarized, Carrier}
@@ -384,7 +411,7 @@ era_material_parent_is_cached_across_carriers_and_pruning_test() ->
                                   author_seqs => #{Author => Seq}}),
     ?assertEqual(Expected, quod_simplex:protocol_parent_material(S1)),
     ?assertEqual({ok, #{Author => Seq}}, quod_simplex:approved_author_seqs(S1)),
-    {ok, Next} = quod_ledger:new_block({Era, 129}, quod_ledger:block_ref(Head),
+    {ok, Next} = quod_ledger:new_block({Era, 129}, quod_ledger:block_ref(Head), (Head)#block.height + 1,
                                      {batch, [tx([])]}, 8),
     {E3, _} = quod_simplex:eng_offer({block, Next}, Pruned),
     {E4, _} = feed_shares(era_shares(support, Next, Committee), E3),
@@ -400,12 +427,12 @@ era_delayed_dtx_verdict_can_install_history_without_voting_in_an_old_view_test()
     Era = <<7:256>>, Root = {Era, 63, Anchor}, Token = {900, Anchor},
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Control = maps:get(source_control, F), Payload = {batch, [{dtx, Control}]},
-    {ok, Block} = quod_ledger:new_block({Era, 64}, Root, Payload, 1),
+    {ok, Block} = quod_ledger:new_block({Era, 64}, Root, 901, Payload, 1),
     Hash = element(3, quod_ledger:block_ref(Block)),
     Links = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
     Owner = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
         self => Self, id => Signer, validators => pubs(Committee), consensus_domain => Domain,
-        eng => quod_simplex:eng_new(Domain, pubs(Committee), {Root, 0}),
+        eng => quod_simplex:eng_new(Domain, pubs(Committee), {Root, 900, 0}),
         sync => ready, slot => 900, history_head => Token, conns => Links}),
     {_Monitor, Pending} = quod_simplex:test_latch_dtx_validation(64, Hash, Token, self(), Block, Owner),
     Shares = [quod_simplex:make_share(Domain, complaint, {Era, 64}, none, Id)
@@ -425,7 +452,7 @@ era_complaint_replaces_placement_without_resolving_or_resigning_request_test() -
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
     Links = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
     Owner = st(#{self => Self, id => Signer, validators => pubs(Committee),
-        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 900, 0}),
         sync => ready, slot => 900, history_head => {900, element(3, Root)},
         conns => Links, relay_conns => Links}),
     From = {self(), make_ref()},
@@ -450,33 +477,39 @@ era_complaint_replaces_placement_without_resolving_or_resigning_request_test() -
     assert_no_reply(From),
     flush_consensus_fixture_frames().
 
-era_view_edge_proposes_one_carrier_for_unfinished_material_test() ->
+healthy_notarization_waits_for_direct_finality_without_carrier_test() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Committee = committee(4), Self = quod_simplex:leader(2, pubs(Committee)),
+    Committee = committee(4), Self = quod_simplex:leader(3, pubs(Committee)),
     Signer = proplists:get_value(Self, Committee),
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 900, 0}),
     Links = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
-    Before = quod_simplex:test_state(#{self => Self, id => Signer, validators => pubs(Committee),
+    Before = st(#{self => Self, id => Signer, validators => pubs(Committee),
         eng => E0, sync => ready, slot => 900, history_head => {900, element(3, Root)}, conns => Links}),
-    ?assertEqual(Before, quod_simplex:drive_empty_proposal(
-        quod_simplex:test_state_set(sync, unconfirmed, Before), Before)),
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, {batch, [tx([])]}, 7),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 901, {batch, [tx([])]}, 7),
     Entered = quod_simplex:engine_step([{block, Material} |
         [{share, Sh} || Sh <- era_shares(support, Material, Committee)]], Before),
-    Proposed = quod_simplex:drive_empty_proposal(Before, Entered),
-    {Hash, false, false} = quod_simplex:test_round(2, Proposed),
-    ?assert(is_binary(Hash)),
-    {ok, Expected} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), empty, 7),
+    ?assertEqual(Entered, quod_simplex:drive_empty_proposal(Before, Entered)),
+    Watching = quod_simplex:reconcile_head_progress(Entered),
+    ?assertEqual({Era, 2, awaiting_proposal}, quod_simplex:test_progress(Watching)),
+    %% The unchanged ordinary watchdog complains in view 2. A quorum of that
+    %% complaint opens fresh view 3; it never commits in the timed-out view.
+    TimedOut = quod_simplex:on_progress_timeout({Era, 2}, Watching),
+    ?assertEqual({none, false, true}, quod_simplex:test_round(2, TimedOut)),
+    Complaints = [quod_simplex:make_share(?DOMAIN, complaint, {Era, 2}, none, Id)
+                  || {Pub, Id} <- Committee, Pub =/= Self],
+    Advanced = quod_simplex:engine_step([{share, Sh} || Sh <- Complaints], TimedOut),
+    Proposed = quod_simplex:drive_empty_proposal(TimedOut, Advanced),
+    {Hash, false, false} = quod_simplex:test_round(3, Proposed),
+    {ok, Expected} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Material), 901, empty, 7),
     ?assertEqual(element(3, quod_ledger:block_ref(Expected)), Hash),
-    ?assertEqual(Proposed, quod_simplex:drive_empty_proposal(Before, Proposed)),
+    ?assertEqual(Proposed, quod_simplex:drive_empty_proposal(TimedOut, Proposed)),
     ?assertEqual(Proposed, quod_simplex:drive_empty_proposal(Proposed, Proposed)),
     ?assertEqual(900, element(1, quod_simplex:test_committed_store(Proposed))),
-    %% Finality arriving before selection cancels the need. It does not turn
-    %% an idle namespace into a recurring stream of empty ledger proposals.
+    %% Direct finality arriving before recovery selection removes the need.
     {E1, _} = quod_simplex:eng_offer({block, Material}, E0),
     {E2, _} = feed_shares(era_shares(support, Material, Committee), E1),
-    Final = quod_simplex:test_state(#{self => Self, id => Signer, validators => pubs(Committee),
+    Final = st(#{self => Self, id => Signer, validators => pubs(Committee),
         eng => quod_simplex:eng_prune(quod_ledger:block_ref(Material), E2), sync => ready,
         slot => 901, history_head => {901, element(3, quod_ledger:block_ref(Material))}, conns => Links}),
     ?assertEqual(Final, quod_simplex:drive_empty_proposal(Before, Final)),
@@ -486,10 +519,10 @@ era_owner_admits_carriers_without_consuming_material_window_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = committee(4), [{Self, Signer} | _] = Committee,
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 900, 0}),
     {Engine, Head} = lists:foldl(fun(View, {Previous, Parent}) ->
         Payload = case View =< 2 of true -> {batch, [tx([])]}; false -> empty end,
-        {ok, B} = quod_ledger:new_block({Era, View}, Parent, Payload, 0),
+        {ok, B} = quod_ledger:new_block({Era, View}, Parent, 900 + min(View, 2), Payload, 0),
         {Added, _} = quod_simplex:eng_offer({block, B}, Previous),
         {Notarized, _} = feed_shares(era_shares(support, B, Committee), Added),
         {Notarized, quod_ledger:block_ref(B)}
@@ -499,13 +532,13 @@ era_owner_admits_carriers_without_consuming_material_window_test() ->
         eng => Engine, sync => ready, slot => 900, history_head => {900, element(3, Root)}, conns => Links}),
     ?assertEqual(blocked, quod_simplex:proposal_slot(Owner)),
     Leader = quod_simplex:leader(65, pubs(Committee)),
-    {ok, Good} = quod_ledger:new_block({Era, 65}, Head, empty, 0),
+    {ok, Good} = quod_ledger:new_block({Era, 65}, Head, 902, empty, 0),
     Accepted = quod_simplex:dispatch(Leader, {propose, Good, []}, Owner),
     ?assertEqual({element(3, quod_ledger:block_ref(Good)), false, false},
                  quod_simplex:test_round(65, Accepted)),
     ?assertEqual(900, element(1, quod_simplex:test_committed_store(Accepted))),
     lists:foreach(fun({Position, Parent, Time}) ->
-        {ok, Bad} = quod_ledger:new_block(Position, Parent, empty, Time),
+        {ok, Bad} = quod_ledger:new_block(Position, Parent, 902, empty, Time),
         Rejected = quod_simplex:dispatch(Leader, {propose, Bad, []}, Owner),
         ?assertEqual({none, false, false}, quod_simplex:test_round(65, Rejected))
     end, [{{Era, 65}, {Era, 64, <<99:256>>}, 0},
@@ -516,40 +549,104 @@ era_owner_admits_carriers_without_consuming_material_window_test() ->
 
 %% Empty finality closes proposer work without inventing a material entry.
 %% Keeping its local proposal alive makes an idle ontology complain forever.
-finalized_empty_proposal_does_not_keep_watchdog_alive_test() ->
+finalized_empty_proposal_retires_watchdog_and_periodic_shares_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = [{Self, Signer} | _] = committee(4),
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    {ok, Empty} = quod_ledger:new_block({Era, 1}, Root, empty, 0),
-    {E1, _} = quod_simplex:eng_offer({block, Empty},
-        quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
-    {E2, _} = feed_shares(era_shares(support, Empty, Committee), E1),
-    {E3, _} = feed_shares(era_shares(commit, Empty, Committee), E2),
-    Hash = element(3, quod_ledger:block_ref(Empty)),
-    Cert = quod_simplex:persisted_cert(commit, 1, Hash, E3),
+    {ok, Empty} = quod_ledger:new_block({Era, 1}, Root, 500, empty, 0),
+    Links = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
     Owner = st(#{self => Self, id => Signer, validators => pubs(Committee),
-        eng => E3, sync => ready, slot => 500, history_head => {500, element(3, Root)},
-        protocol_root => Root, local_proposal => {1, Hash}}),
-    Settled = quod_simplex:commit_finality(Cert, Owner),
-    ?assertEqual(idle, quod_simplex:test_progress(
-        quod_simplex:reconcile_head_progress(Settled))),
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}),
+        sync => ready, slot => 500, history_head => {500, element(3, Root)},
+        protocol_root => Root, conns => Links}),
+    Proposed = quod_simplex:dispatch(quod_simplex:leader(1, pubs(Committee)),
+                                    {propose, Empty, []}, Owner),
+    Notarized = quod_simplex:engine_step(
+        [{share, Sh} || Sh <- era_shares(support, Empty, Committee)], Proposed),
+    Hash = element(3, quod_ledger:block_ref(Empty)),
+    ?assertEqual({Hash, true, false}, quod_simplex:test_round(1, Notarized)),
+    flush_consensus_fixture_frames(),
+    _ = quod_simplex:redrive_inflight(Notarized),
+    ?assertMatch([_ | _], captured_consensus_messages()),
+    Settled = quod_simplex:engine_step(
+        [{share, Sh} || Sh <- era_shares(commit, Empty, Committee)], Notarized),
+    ?assertEqual(idle, quod_simplex:test_progress(quod_simplex:reconcile_head_progress(Settled))),
     ?assertEqual(500, element(1, quod_simplex:test_committed_store(Settled))),
-    %% Exact proof bodies and certificates remain available; closing volatile
-    %% proposer work is not permission to prune unarchived signing evidence.
-    ?assertEqual(quod_simplex:test_engine_pool_sizes(Owner),
-                 quod_simplex:test_engine_pool_sizes(Settled)),
-    ?assertEqual(quod_simplex:test_protocol_position(Owner),
-                 quod_simplex:test_protocol_position(Settled)),
-    ?assertEqual(quod_simplex:test_signing_journal(Owner),
-                 quod_simplex:test_signing_journal(Settled)),
+    ?assertEqual({Hash, true, false}, quod_simplex:test_round(1, Settled)),
+    Pool = quod_simplex:test_engine_pool_sizes(Settled),
+    Journal = quod_simplex:test_signing_journal(Settled),
+    flush_consensus_fixture_frames(),
+    lists:foreach(fun(_) ->
+        Same = quod_simplex:redrive_inflight(Settled),
+        ?assertEqual(Pool, quod_simplex:test_engine_pool_sizes(Same)),
+        ?assertEqual(Journal, quod_simplex:test_signing_journal(Same)),
+        ?assertEqual([], captured_consensus_messages())
+    end, lists:seq(1, 3)),
     Later = quod_simplex:reconcile_head_progress(quod_simplex:watch_requested(2, Settled)),
     ?assertEqual({Era, 2, awaiting_proposal}, quod_simplex:test_progress(Later)).
+
+same_height_reconnect_recovers_empty_finality_without_periodic_shares_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Committee = [{Self, SelfId}, {Peer, PeerId} | _] = lists:sort(committee(4)),
+    Era = <<7:256>>, Root = {Era, 0, <<1:256>>}, Height = 500,
+    {ok, Empty} = quod_ledger:new_block({Era, 1}, Root, Height, empty, 0),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, Height, 0}),
+    {E1, _} = quod_simplex:eng_offer({block, Empty}, E0),
+    {E2, _} = feed_shares(era_shares(support, Empty, Committee), E1),
+    {E3, _} = feed_shares(era_shares(commit, Empty, Committee), E2),
+    Base = #{sync => ready, slot => Height, history_head => {Height, element(3, Root)},
+             protocol_root => Root, validators => pubs(Committee)},
+    Settled = st(Base#{self => Self, id => SelfId, eng => E3,
+        inbound_conns => #{Peer => {self(), make_ref()}}}),
+    Learner = st(Base#{self => Peer, id => PeerId, eng => E0,
+        conns => #{Self => {self(), make_ref()}},
+        inbound_conns => #{Self => {self(), make_ref()}}}),
+    %% No material-height gap exists. The authenticated replacement stream's
+    %% current protocol position alone requests the missing certificates.
+    Notice = {readiness, Height, {Era, 1, 0}, true},
+    Informed = quod_simplex:dispatch(Peer, Notice, Settled),
+    ?assertEqual([], captured_consensus_messages()),
+    Reconnected = running_state(quod_simplex:running(
+        info, {link_up, Peer, term_to_binary({log, <<"t">>}, [deterministic]), self()}, Informed)),
+    Certificates = [C || {cert, C} <- captured_consensus_messages()],
+    ?assertEqual([commit, support], lists:sort([C#cert.kind || C <- Certificates])),
+    Waiting = lists:foldl(fun(C, S) -> quod_simplex:dispatch(Self, {cert, C}, S) end,
+                         Learner, Certificates),
+    flush_consensus_fixture_frames(),
+    Requested = quod_simplex:reconcile_block_requests(Waiting),
+    [Request] = [M || M = {block_request, _, _} <- captured_consensus_messages()],
+    _ = quod_simplex:dispatch(Peer, Request, Reconnected),
+    [Reply] = [M || M = {certified_block, _, _} <- captured_consensus_messages()],
+    Recovered = quod_simplex:dispatch(Self, Reply, Requested),
+    ?assertEqual(2, maps:get(view, quod_simplex:test_protocol_position(Recovered))),
+    ?assertEqual(Height, element(1, quod_simplex:test_committed_store(Recovered))),
+    flush_consensus_fixture_frames(),
+    _ = quod_simplex:redrive_inflight(Recovered),
+    ?assertEqual([], captured_consensus_messages()),
+    %% Duplicate positions and stale current-stream notices cannot restart the
+    %% acquisition. A newly installed position is the only next wakeup.
+    Advanced = quod_simplex:dispatch(Peer, {readiness, Height, {Era, 2, 1}, true}, Reconnected),
+    ?assertEqual([], captured_consensus_messages()),
+    _ = quod_simplex:dispatch(Peer, Notice, Advanced),
+    _ = quod_simplex:dispatch(Peer, {readiness, Height, {Era, 2, 1}, true}, Advanced),
+    ?assertEqual([], captured_consensus_messages()).
+
+captured_consensus_messages() ->
+    receive
+        {send, Frame} ->
+            {consensus, Message} = quod_relay:decode_consensus_frame(Frame, <<"t">>),
+            [Message | captured_consensus_messages()];
+        {send_ordered, Frame} ->
+            {consensus, Message} = quod_relay:decode_consensus_frame(Frame, <<"t">>),
+            [Message | captured_consensus_messages()]
+    after 0 -> []
+    end.
 
 era_watchdog_tracks_view_without_quorum_grace_or_deadline_renewal_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = committee(4), [{Self, Signer} | _] = Committee,
     Era = <<7:256>>, Root = {Era, 63, <<1:256>>},
-    Engine = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 7}),
+    Engine = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 900, 7}),
     Links = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
     Idle = quod_simplex:test_state(#{self => Self, id => Signer, validators => pubs(Committee),
         eng => Engine, sync => ready, slot => 900, history_head => {900, element(3, Root)}, conns => Links}),
@@ -584,17 +681,17 @@ era_parent_validation_uses_material_height_after_carriers_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = committee(4), Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
     Ns = <<"validation-after-carriers">>,
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, {batch, [tx([])]}, 7),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [tx([])]}, 7),
     {E1, _} = quod_simplex:eng_offer({block, Material},
-                              quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+                              quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 1, 0})),
     {E2, _} = feed_shares(era_shares(support, Material, Committee), E1),
     {Engine, Head} = lists:foldl(fun(View, {Previous, Parent}) ->
-        {ok, B} = quod_ledger:new_block({Era, View}, quod_ledger:block_ref(Parent), empty, 7),
+        {ok, B} = quod_ledger:new_block({Era, View}, quod_ledger:block_ref(Parent), (Parent)#block.height, empty, 7),
         {Added, _} = quod_simplex:eng_offer({block, B}, Previous),
         {Notarized, _} = feed_shares(era_shares(support, B, Committee), Added),
         {Notarized, B}
     end, {E2, Material}, lists:seq(2, 64)),
-    {ok, Content} = quod_ledger:new_block({Era, 65}, quod_ledger:block_ref(Head), {batch, [tx([])]}, 8),
+    {ok, Content} = quod_ledger:new_block({Era, 65}, quod_ledger:block_ref(Head), (Head)#block.height + 1, {batch, [tx([])]}, 8),
     {WithContent, _} = quod_simplex:eng_offer({block, Content}, Engine),
     Hash = element(3, quod_ledger:block_ref(Content)),
     Owner = quod_simplex:test_state(#{ns => Ns, eng => WithContent, slot => 1,
@@ -608,7 +705,7 @@ era_parent_validation_uses_material_height_after_carriers_test() ->
         after 1000 -> error(missing_content_request) end,
         Payload = quod_ct:atomic_resolve_payload(),
         {batch, [{dtx, Control}]} = Payload,
-        {ok, Dtx} = quod_ledger:new_block({Era, 65}, quod_ledger:block_ref(Head), Payload, 8),
+        {ok, Dtx} = quod_ledger:new_block({Era, 65}, quod_ledger:block_ref(Head), (Head)#block.height + 1, Payload, 8),
         DtxHash = element(3, quod_ledger:block_ref(Dtx)),
         ?assertEqual(Owner, quod_simplex:request_dtx_validation([Control], Dtx, 65, DtxHash, Owner)),
         receive {'$gen_cast', {dtx_verdict_req, _, _, _, _, _, _}} -> error(uncommitted_dtx_parent)
@@ -673,11 +770,11 @@ era_observer_proof_group_preserves_live_and_replay_apply_origins_test() ->
     F = #{identity := {Ns, Anchor} = Identity, era := Era, transaction := Tx,
           signer := Signer, projection := P0} = quod_ct:protocol_fixture(<<"feed:group-origins">>),
     Root = maps:get(protocol_root, P0),
-    {ok, B1} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
+    {ok, B1} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
     Unsigned = quod_transaction:bind_id(Identity, Tx#transaction{author_seq = 2,
       proof_id = <<24:256>>, sig = none, signed_bytes = none, authentication = none}),
     {ok, Tx2} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, Signer),
-    {ok, B2} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B1), {batch, [Tx2]}, 2),
+    {ok, B2} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B1), (B1)#block.height + 1, {batch, [Tx2]}, 2),
     Cert = quod_ct:protocol_certificate(B2, F),
     Entries = [quod_ledger:entry(2, B1, Cert), quod_ledger:entry(3, B2, Cert)],
     Bytes = [quod_ledger:block_bytes(B2), quod_ledger:block_bytes(B1)],
@@ -697,7 +794,7 @@ era_observer_proof_group_preserves_live_and_replay_apply_origins_test() ->
         {ok, P1, Delta, Summary} = quod_catchup:verify_forward_group(Identity, Entries, P, Index,
           {fun([]) -> done; ([B | Rest]) -> {ok, B, Rest} end, Bytes}),
         Domain = quod_simplex:consensus_domain(Ns, Anchor),
-        Engine = quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)], {Root, 0}),
+        Engine = quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)],{Root, 1, 0}),
         State = quod_simplex:test_install_projection(P,
           quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, self => <<92:256>>,
             consensus_domain => Domain, eng => Engine, store => Store, phase_index => Index,
@@ -738,10 +835,10 @@ era_live_archive_case(Mode, Origin) ->
         Share = quod_simplex:make_share(Domain, support, {Block#block.era, View}, Hash, Signer),
         element(1, quod_simplex:eng_offer({share, Share}, Added))
     end,
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
-    E1 = Support(Material, quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)], {Root, 0})),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
+    E1 = Support(Material, quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)],{Root, 1, 0})),
     {E2, Head} = lists:foldl(fun(View, {Engine, Parent}) ->
-        {ok, B} = quod_ledger:new_block({Era, View}, quod_ledger:block_ref(Parent), empty, 1),
+        {ok, B} = quod_ledger:new_block({Era, View}, quod_ledger:block_ref(Parent), (Parent)#block.height, empty, 1),
         {Support(B, Engine), B}
     end, {E1, Material}, lists:seq(2, 64)),
     Cert = quod_ct:protocol_certificate(Head, F),
@@ -821,7 +918,7 @@ era_live_archive_case(Mode, Origin) ->
             ?assertEqual({consensus, {cert, Cert}}, quod_relay:decode_consensus_frame(Frame, Ns))
         after 1000 -> error(missing_archived_finality_handoff) end,
         {LaggingEngine, _} = quod_simplex:eng_offer({cert, Cert},
-            quod_simplex:eng_new(Domain, [Peer], {Root, 0})),
+            quod_simplex:eng_new(Domain, [Peer],{Root, 1, 0})),
         ?assert(quod_simplex:should_sync(quod_simplex:test_state_set(sync, ready,
             quod_simplex:test_state_set(eng, LaggingEngine, Owner0)))),
 
@@ -845,15 +942,15 @@ era_live_archive_case(Mode, Origin) ->
             membership ->
                 NewRoot = maps:get(protocol_root, P), NewEra = element(1, NewRoot),
                 ?assertEqual({NewEra, 0, element(3, quod_ledger:block_ref(Material))}, NewRoot),
-                {NewEra, 1, NewRoot, quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)], {NewRoot, 1})}
+                {NewEra, 1, NewRoot, quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)],{NewRoot, 2, 1})}
         end,
-        ?assertEqual(#{era => NextEra, view => NextView, root => NextParent, parent => NextParent},
+        ?assertEqual(#{era => NextEra, view => NextView, root => NextParent, parent => NextParent, material_height => 2},
                      quod_simplex:test_protocol_position(Owner1)),
         Unsigned = quod_transaction:bind_id(Binding,
           Tx0#transaction{author_seq = 2, proof_id = <<23:256>>, sig = none,
                          signed_bytes = none, authentication = none}),
         {ok, Tx2} = quod_transaction:sign({Ns, Anchor, maps:get(maps:get(pubkey, Signer), maps:get(admissions, P))}, Unsigned, Signer),
-        {ok, Next} = quod_ledger:new_block({NextEra, NextView}, NextParent, {batch, [Tx2]}, 2),
+        {ok, Next} = quod_ledger:new_block({NextEra, NextView}, NextParent, 3, {batch, [Tx2]}, 2),
         E4 = Support(Next, Pruned), Cert2 = quod_ct:protocol_certificate(Next, F),
         {E5, _} = quod_simplex:eng_offer({cert, Cert2}, E4),
         {Source2, [Entry2], Summary2} =
@@ -883,12 +980,12 @@ era_owner_commits_only_on_its_notarization_view_edge_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = committee(4), [{Self, Signer} | _] = Committee,
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
-    Eng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    Eng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}),
     Conns = maps:from_list([{Pub, {self(), make_ref()}} || {Pub, _} <- Committee, Pub =/= Self]),
     Owner = quod_simplex:test_state(#{self => Self, id => Signer, validators => pubs(Committee),
         eng => Eng, sync => ready, slot => 500, history_head => {500, element(3, Root)},
         conns => Conns}),
-    {ok, B1} = quod_ledger:new_block({Era, 1}, Root, empty, 0),
+    {ok, B1} = quod_ledger:new_block({Era, 1}, Root, 500, empty, 0),
     Complaints = era_shares(complaint, B1, Committee),
     Moved = quod_simplex:engine_step([{share, Sh} || Sh <- Complaints], Owner),
     ?assertEqual(2, maps:get(view, quod_simplex:test_protocol_position(Moved))),
@@ -898,7 +995,7 @@ era_owner_commits_only_on_its_notarization_view_edge_test() ->
     ?assertEqual({none, false, false}, quod_simplex:test_round(1, Moved)),
     Late = quod_simplex:engine_step([{block, B1} | [{share, Sh} || Sh <- era_shares(support, B1, Committee)]], Moved),
     ?assertEqual({none, false, false}, quod_simplex:test_round(1, Late)),
-    {ok, B2} = quod_ledger:new_block({Era, 2}, Root, empty, 0),
+    {ok, B2} = quod_ledger:new_block({Era, 2}, Root, 500, empty, 0),
     Advanced = quod_simplex:engine_step([{block, B2} | [{share, Sh} || Sh <- era_shares(support, B2, Committee)]], Late),
     ?assertEqual(3, maps:get(view, quod_simplex:test_protocol_position(Advanced))),
     ?assertEqual({none, true, false}, quod_simplex:test_round(2, Advanced)),
@@ -907,7 +1004,7 @@ era_owner_commits_only_on_its_notarization_view_edge_test() ->
 
 era_relay_material_result_is_only_a_hint_for_the_original_placement_test() ->
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>}, Peer = <<2:256>>,
-    Engine = quod_simplex:eng_new(?DOMAIN, [Peer], {Root, 0}),
+    Engine = quod_simplex:eng_new(?DOMAIN, [Peer],{Root, 2, 0}),
     Owner = quod_simplex:test_state(#{eng => Engine, slot => 2}),
     {ok, Pending} = quod_simplex:test_put_pending_relay(Peer, 64, Owner),
     [{Attempt, Peer, 64, Deadline, false}] = quod_simplex:test_relay_pending_detail(Pending),
@@ -958,17 +1055,17 @@ id() ->
     {Pub, Seed} = quod_identity:generate(),
     {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}.
 
-block(Slot, Parent, Payload) -> block(Slot, Parent, Payload, 0).
+block(Slot, Parent, Height, Payload) -> block(Slot, Parent, Height, Payload, 0).
 
-block(Slot, Parent, Payload, Timestamp) ->
+block(Slot, Parent, Height, Payload, Timestamp) ->
     {ok, Block} = quod_ledger:new_block(
-                    Slot, Parent, Payload, Timestamp),
+                    Slot, Parent, Height, Payload, Timestamp),
     Block.
 
 %% Projection/endpoint fixtures carry canonical material artifacts. Their
 %% certificates are shape-only; verified-history tests use real signatures.
 material_entry(Height, Position, Parent, Payload, Timestamp) ->
-    {ok, Block} = quod_ledger:new_block(Position, Parent, Payload, Timestamp),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, Height, Payload, Timestamp),
     Cert = case Position of
         {genesis, 0} -> none;
         {Era, View} -> #cert{kind = commit, era = Era, slot = View,
@@ -981,12 +1078,15 @@ stored_entry_view(Store, Slot) ->
     {ok, Entry} = quod_ledger_store:read_at(Store, Slot),
     quod_ledger:entry_view(Entry).
 
-blk(View) ->
-    Parent = case View of
-        1 -> {?FIXTURE_ERA, 0, <<1:256>>};
-        _ -> quod_ledger:block_ref(blk(View - 1))
+blk(View) -> blk(View, max(2, View)).
+
+blk(View, Height) ->
+    Parent = case {View, Height} of
+        {1, _} -> {?FIXTURE_ERA, 0, <<1:256>>};
+        {_, 2} -> {?FIXTURE_ERA, View - 1, <<1:256>>};
+        _ -> quod_ledger:block_ref(blk(View - 1, Height - 1))
     end,
-    {ok, Block} = quod_ledger:new_block({?FIXTURE_ERA, View}, Parent,
+    {ok, Block} = quod_ledger:new_block({?FIXTURE_ERA, View}, Parent, Height,
         {batch, [tx([{assert, {{fact, View}, true}}])]}, 0),
     Block.
 
@@ -1050,7 +1150,7 @@ block_bytes_and_hash_match_across_fresh_vms_test() ->
 
 canonical_block_fixture(Salt) ->
     Block = block(
-              {?FIXTURE_ERA, 8}, {?FIXTURE_ERA, 7, <<1:256>>},
+              {?FIXTURE_ERA, 8}, {?FIXTURE_ERA, 7, <<1:256>>}, 47,
               {batch,
                [tx(<<"canonical:vm">>,
                    [{assert,
@@ -1069,7 +1169,7 @@ block_producer_rejects_map_inside_map_key_test() ->
                  read_check = #{}, author = <<2:256>>, sig = none},
     ?assertEqual(
        {error, bad_block},
-       quod_ledger:new_block({genesis, 0}, none, {batch, [Genesis]}, 0)).
+       quod_ledger:new_block({genesis, 0}, none, 1, {batch, [Genesis]}, 0)).
 
 %% The committee view is the membership set plus its adopting material block.
 %% Content entries retain that view; empty carriers never enter the projection.
@@ -1280,8 +1380,7 @@ canonical_ledger_payload_test() ->
 ahead_cert_ceiling_test() ->
     Committee = [{_, Signer}] = committee(1),
     C = fun(Base, Kinds) ->
-        Engine = quod_simplex:eng_new(?DOMAIN, pubs(Committee),
-                                     {{?FIXTURE_ERA, Base, <<1:256>>}, 0}),
+        Engine = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {{?FIXTURE_ERA, Base, <<1:256>>}, max(1, Base), 0}),
         Folded = lists:foldl(fun({Kind, View}, E) ->
             Hash = case Kind of complaint -> none; _ -> <<2:256>> end,
             Position = {?FIXTURE_ERA, View},
@@ -1330,8 +1429,7 @@ proof_gate_requires_exact_ready_ack_test() ->
                         slot => 0, last_applied => 0,
                         sync => ready, prolog_ready => false,
                         eng => quod_simplex:eng_new(
-                            quod_simplex:consensus_domain(Ns, Anchor), [],
-                            {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})}),
+                            quod_simplex:consensus_domain(Ns, Anchor), [ ], {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 1, 0})}),
               ?assertMatch(
                  {error, {ontology_rebuilding, Ns}},
                  quod_simplex:check_proof_access(Access)),
@@ -1418,8 +1516,7 @@ resolve_applied_opens_only_the_exact_pending_fence_test() ->
                     dtx_projection => Pending,
                     prolog_ready => true, sync => ready,
                     eng => quod_simplex:eng_new(
-                            quod_simplex:consensus_domain(Ns, Anchor), [],
-                            {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})}),
+                            quod_simplex:consensus_domain(Ns, Anchor), [ ], {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 1, 0})}),
           ?assertEqual(
              {error, {transaction_pending, GroupId}},
              quod_simplex:check_proof_access(Access)),
@@ -1482,9 +1579,9 @@ dtx_certificate_cannot_bypass_parent_validation_test() ->
           Target, Material, Admission, 1, 1, AuthorId),
     Era = quod_ledger:initial_era(Target),
     Root = {Era, 0, Anchor},
-    Block = block({Era, 1}, Root, {batch, [{dtx, Control}]}, 0),
+    Block = block({Era, 1}, Root, 2, {batch, [{dtx, Control}]}, 0),
     BH = quod_simplex:block_hash(Block),
-    Eng0 = quod_simplex:eng_new(Domain, [Author], {Root, 0}),
+    Eng0 = quod_simplex:eng_new(Domain, [Author], {Root, 1, 0}),
     S0 = st(#{ns => Ns, self => Author, id => AuthorId,
               consensus_domain => Domain, validators => [Author],
               slot => 1, sync => ready, eng => Eng0,
@@ -2474,7 +2571,7 @@ dtx_relay_waits_for_elected_ontology_readiness_test() ->
         NotReady =
             quod_simplex:test_state_set(
               peer_readiness,
-              #{Peer => {InLink, 1, false, quod_time:mono_ms()}},
+              #{Peer => {InLink, 1, {?FIXTURE_ERA, 1, 0}, false, quod_time:mono_ms()}},
               Parked),
         {keep_state, StillParked, _} =
             quod_simplex:test_keep_progress_transition(
@@ -2516,7 +2613,12 @@ dtx_relay_waits_for_elected_ontology_readiness_test() ->
 
 receive_ordered_relay(Parent, Tag) ->
     receive
-        {send_ordered, Frame} -> Parent ! {Tag, Frame};
+        {send_ordered, Frame} ->
+            {sx3, Ns, _} = binary_to_term(Frame),
+            case quod_relay:decode_consensus_frame(Frame, Ns) of
+                {consensus, {dtx_submit, _, _}} -> Parent ! {Tag, Frame};
+                _ -> receive_ordered_relay(Parent, Tag)
+            end;
         _OtherLinkTraffic -> receive_ordered_relay(Parent, Tag)
     end.
 
@@ -2686,7 +2788,7 @@ dtx_catchup_retires_retained_submission_and_replies_exact_ref_test() ->
     {ok, Envelope} = quod_atomic:encode_control(Committed),
     ?assertNotEqual(OriginalEnvelope, Envelope),
     Root = {Era, 0, Anchor},
-    Block = block({Era, 1}, Root, {batch, [{dtx, Committed}]}, 2),
+    Block = block({Era, 1}, Root, 2, {batch, [{dtx, Committed}]}, 2),
     BlockHash = quod_simplex:block_hash(Block),
     Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Block, F)),
     Genesis = quod_ledger:entry(1, maps:get(genesis, F), none),
@@ -2739,7 +2841,7 @@ unsigned_vote_history_replay_does_not_require_root_identity_test() ->
     Data = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Origin),
     Root = {Era, 0, Anchor},
-    Block = block({Era, 1}, Root, Data, 0),
+    Block = block({Era, 1}, Root, 2, Data, 0),
     Cert = quod_ct:protocol_certificate(Block, #{identity => Origin, signer => Signer}),
     Entry = quod_ledger:entry(2, Block, Cert),
     Projection0 =
@@ -2807,7 +2909,7 @@ signed_vote_history_replay_waits_for_root_identity_test() ->
     Data = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Target),
     Root = {Era, 0, Anchor},
-    Block = block({Era, 1}, Root, Data, 1),
+    Block = block({Era, 1}, Root, 2, Data, 1),
     Cert = quod_ct:protocol_certificate(Block, #{identity => Target, signer => Identity}),
     Entry = quod_ledger:entry(2, Block, Cert),
     Projection0 =
@@ -2850,7 +2952,7 @@ dtx_retained_selection_skips_an_older_ineligible_group_test() ->
     {ok, M} = quod_atomic:admission_material(Resolve),
     {ok, C} = quod_atomic:sign_control(Origin, M, maps:get(admission, Active), 2, 0,
                                       maps:get(signer, Active)),
-    S0 = st(#{ns => Ns, genesis_hash => Anchor, dtx_projection => Locked}),
+    S0 = st(#{ns => Ns, genesis_hash => Anchor, slot => 1, history_head => {1, Anchor}, dtx_projection => Locked}),
     WithOlder = quod_simplex:test_seed_dtx_submission_at(maps:get(source_control, Older), [], 10, S0),
     ?assertMatch(#{retained := 1, ready := 0, blocked := 1},
                  quod_simplex:test_retained_dtx_state(WithOlder)),
@@ -2872,7 +2974,7 @@ dtx_retained_wave_selects_one_reference_variant_per_group_test() ->
         {ok, C} = quod_atomic:sign_control(Origin, M, maps:get(admission, F), N, 0, maps:get(signer, F)), C
     end || {R, N} <- [{R1, 2}, {R2, 3}]],
     S = lists:foldl(fun(C, Acc) -> quod_simplex:test_seed_dtx_submission(C, [], Acc) end,
-                    st(#{ns => Ns, genesis_hash => Anchor, dtx_projection => P}), Controls),
+                    st(#{ns => Ns, genesis_hash => Anchor, slot => 1, history_head => {1, Anchor}, dtx_projection => P}), Controls),
     ?assertNotEqual(quod_atomic:record_digest(R1), quod_atomic:record_digest(R2)),
     ?assertEqual([{quod_atomic:record_digest(R1), R1}], quod_simplex:test_eligible_dtx_wave(S)).
 
@@ -3672,7 +3774,7 @@ dtx_verdict_cleanup_discards_only_the_exact_stale_request_test() ->
         S0 = st(#{ns => Ns, slot => 1,
                   history_head => CurrentToken,
                   dtx_projection => quod_atomic:initial_projection(Target, 0),
-                  eng => quod_simplex:eng_new(?DOMAIN, [], {Root, 0})}),
+                  eng => quod_simplex:eng_new(?DOMAIN, [],{Root, 1, 0})}),
         {Monitor, Latched} =
             quod_simplex:test_latch_dtx_validation(
               Slot, CurrentBH, CurrentToken, CurrentOwner, Candidate, S0),
@@ -3906,7 +4008,7 @@ sync_arm_pacing_test() ->
     ?assertEqual({0, 0}, quod_simplex:reset_pace()).
 
 root_engine(View) ->
-    quod_simplex:eng_new(?DOMAIN, [], {{?FIXTURE_ERA, View, <<1:256>>}, 0}).
+    quod_simplex:eng_new(?DOMAIN, [ ], {{?FIXTURE_ERA, View, <<1:256>>}, max(1, View), 0}).
 
 notarized_prefix(Committee, RootView, LastView) ->
     Root = quod_ledger:block_ref(blk(RootView)),
@@ -3915,15 +4017,14 @@ notarized_prefix(Committee, RootView, LastView) ->
         {Offered, _} = quod_simplex:eng_offer({block, Block}, Engine),
         {Notarized, _} = feed_shares(supports(Block, Committee, length(Committee)), Offered),
         Notarized
-    end, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    end, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, RootView, 0}),
     lists:seq(RootView + 1, LastView)).
 
 %% Recovery gates ingest a genuine certificate without its block. Certificate
 %% presence cannot be simulated by planting keys in a different engine field.
 engine_with_commit(RootView, CommitView) ->
     [{Pub, Signer}] = committee(1),
-    Engine = quod_simplex:eng_new(?DOMAIN, [Pub],
-                                {{?FIXTURE_ERA, RootView, <<1:256>>}, 0}),
+    Engine = quod_simplex:eng_new(?DOMAIN, [Pub ], {{?FIXTURE_ERA, RootView, <<1:256>>}, max(1, RootView), 0}),
     Position = {?FIXTURE_ERA, CommitView}, Hash = <<2:256>>,
     Share = quod_simplex:make_share(?DOMAIN, commit, Position, Hash, Signer),
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN, commit, Position, Hash, [Share], [Pub]),
@@ -3960,13 +4061,13 @@ st(Overrides) ->
             Root = {quod_ledger:initial_era({Ns, Anchor}), 0, Anchor},
             WithCommitteeId#{eng => quod_simplex:eng_new(
                 maps:get(consensus_domain, WithCommitteeId),
-                maps:get(validators, WithCommitteeId, []), {Root, 0})}
+                maps:get(validators, WithCommitteeId, []), {Root, max(1, maps:get(slot, WithCommitteeId, 1)), 0})}
     end,
     quod_simplex:test_state(WithEngine).
 
 voting_readiness(Peers, LinkPid, Height) ->
     Now = quod_time:mono_ms(),
-    maps:from_list([{Peer, {LinkPid, Height, true, Now}} || Peer <- Peers]).
+    maps:from_list([{Peer, {LinkPid, Height, {?FIXTURE_ERA, 1, 0}, true, Now}} || Peer <- Peers]).
 
 %%%===================================================================
 %%% block-timestamp acceptance (the valid_proposal monotonic + future + type gate)
@@ -3993,16 +4094,16 @@ ts_acceptable_test() ->
 %% through real notarization; neither a view number nor a carrier is a row.
 pipeline_frontier_test() ->
     Committee = [{Self, _} | _] = committee(4),
-    Root = quod_ledger:block_ref(blk(5)),
-    Eng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
+    Eng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}),
     Base = #{self => Self, validators => pubs(Committee), slot => 500,
              history_head => {500, element(3, Root)}, sync => ready},
     ?assertEqual({ok, 6}, quod_simplex:proposal_slot(st(Base#{eng => Eng}))),
-    B6 = blk(6),
+    B6 = blk(6, 495 + 6),
     {E1, _} = quod_simplex:eng_offer({block, B6}, Eng),
     {E2, _} = feed_shares(supports(B6, Committee, 3), E1),
     ?assertEqual({ok, 7}, quod_simplex:proposal_slot(st(Base#{eng => E2}))),
-    B7 = blk(7),
+    B7 = blk(7, 495 + 7),
     {E3, _} = quod_simplex:eng_offer({block, B7}, E2),
     {E4, _} = feed_shares(supports(B7, Committee, 3), E3),
     ?assertEqual(blocked, quod_simplex:proposal_slot(st(Base#{eng => E4}))).
@@ -4011,9 +4112,9 @@ pipeline_frontier_test() ->
 %% resetting the unchanged view's deadline or requiring another caller.
 pipelined_demand_survives_parent_finality_test() ->
     Committee = [{Self, _} | _] = committee(4),
-    Root = quod_ledger:block_ref(blk(5)), B6 = blk(6),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)), B6 = blk(6, 495 + 6),
     {E1, _} = quod_simplex:eng_offer({block, B6},
-        quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+        quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0})),
     {E2, _} = feed_shares(supports(B6, Committee, 3), E1),
     Base = #{self => Self, validators => pubs(Committee), slot => 500,
              history_head => {500, element(3, Root)}, sync => ready},
@@ -4046,8 +4147,7 @@ single_peer_complaint_wakes_existing_watchdog_test() ->
     [{A, IdA}, {B, _} = PeerB | _] = Committee = committee(4),
     Links = maps:from_list([{P, {self(), make_ref()}} || P <- pubs(Committee), P =/= A]),
     Idle = st(#{self => A, id => IdA, validators => pubs(Committee), slot => 500,
-        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee),
-                                    {{?FIXTURE_ERA, 5, <<1:256>>}, 0}),
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {{?FIXTURE_ERA, 5, <<1:256>>}, 500, 0}),
         sync => ready, conns => Links}),
     try
         Share = complaint_share(6, PeerB),
@@ -4073,8 +4173,7 @@ unaccepted_complaints_do_not_wake_watchdog_test() ->
     [{A, IdA} = Self, {B, _} = PeerB, {C, _}, {D, _}] = Committee = committee(4),
     {Outsider, _} = Other = id(),
     Base = #{self => A, id => IdA, validators => pubs(Committee), slot => 500,
-        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee),
-                                    {{?FIXTURE_ERA, 5, <<1:256>>}, 0}), sync => ready},
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {{?FIXTURE_ERA, 5, <<1:256>>}, 500, 0}), sync => ready},
     Valid = complaint_share(6, PeerB),
     WrongDomain = quod_simplex:make_share(crypto:hash(sha256, <<"another-chain">>),
         complaint, {?FIXTURE_ERA, 6}, none, element(2, PeerB)),
@@ -4099,8 +4198,7 @@ unaccepted_complaints_do_not_wake_watchdog_test() ->
 passive_and_future_complaints_track_the_current_view_test() ->
     [{A, IdA}, {B, _} = PeerB | _] = Committee = committee(4),
     Base = #{self => A, id => IdA, validators => pubs(Committee), slot => 500,
-        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee),
-                                    {{?FIXTURE_ERA, 5, <<1:256>>}, 0}), sync => ready},
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {{?FIXTURE_ERA, 5, <<1:256>>}, 500, 0}), sync => ready},
     {HeadEvidence, []} = quod_simplex:eng_offer(
         {share, complaint_share(6, PeerB)}, maps:get(eng, Base)),
     Passive = quod_simplex:reconcile_head_progress(
@@ -4137,8 +4235,8 @@ relay_readiness_requires_current_inbound_generation_test() ->
             ?assertEqual(blocked, quod_simplex:test_dtx_slot_route(
                 View, st(Base#{peer_readiness => Readiness})))
         end, [#{}, voting_readiness([Peer], self(), 499),
-              #{Peer => {self(), 500, true, Now - 3001}},
-              #{Peer => {self(), 500, false, Now}},
+              #{Peer => {self(), 500, {?FIXTURE_ERA, 1, 0}, true, Now - 3001}},
+              #{Peer => {self(), 500, {?FIXTURE_ERA, 1, 0}, false, Now}},
               voting_readiness([Peer], OtherLink, 500)]),
         ?assertEqual({relay, Peer}, quod_simplex:test_dtx_slot_route(
             View, st(Base#{peer_readiness => voting_readiness([Peer], self(), 500)})))
@@ -4186,7 +4284,7 @@ committee_prune_retirement_is_nonblocking_and_monotonic_test() ->
                  inbound_conns => #{Peer => {OldPid, OldRef}},
                  peer_readiness =>
                      #{Peer =>
-                           {OldPid, Slot, true,
+                           {OldPid, Slot, {?FIXTURE_ERA, 1, 0}, true,
                             quod_time:mono_ms()}}}),
         {PruneUs, Pruned} =
             timer:tc(
@@ -4213,7 +4311,7 @@ committee_prune_retirement_is_nonblocking_and_monotonic_test() ->
             term_to_binary({log, <<"t">>}, [deterministic]),
         ReadyPayload =
             quod_simplex:encode(
-              <<"t">>, {readiness, Slot, true}),
+              <<"t">>, {readiness, Slot, {?FIXTURE_ERA, 1, 0}, true}),
         AfterStale =
             running_state(
               quod_simplex:running(
@@ -4247,15 +4345,15 @@ committee_prune_retirement_is_nonblocking_and_monotonic_test() ->
 %% Timeout still chooses its ordinary complaint immediately, with no grace.
 ready_proposal_redrive_supports_without_timeout_grace_test() ->
     Committee = [{Self, Signer} | _] = committee(4),
-    Root = quod_ledger:block_ref(blk(5)),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
     Tx = signed_tx(<<"t">>, <<"passive-recovery">>,
                    [{assert, {{recovered, proposal}, true}}], {Self, Signer}),
-    Block = block({?FIXTURE_ERA, 6}, Root, {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, Root, 501, {batch, [Tx]}),
     Hash = quod_simplex:block_hash(Block),
     Links = maps:from_list([{P, {self(), make_ref()}} || P <- pubs(Committee), P =/= Self]),
     Recovering = st(#{self => Self, id => Signer, validators => pubs(Committee),
         slot => 500, history_head => {500, element(3, Root)}, sync => unconfirmed,
-        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}), conns => Links}),
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}), conns => Links}),
     Leader = quod_simplex:leader(6, pubs(Committee)),
     try
         Retained = quod_simplex:dispatch(Leader, {propose, Block, []}, Recovering),
@@ -4276,12 +4374,12 @@ redrive_queues_proposal_for_disconnected_validators_test() ->
     Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
     Tx = signed_tx(<<"t">>, <<"redrive-disconnected">>,
                    [{assert, {{recovered, redrive}, true}}], {A, IdA}),
-    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {Eng, []} = quod_simplex:eng_offer(
-                  {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                  {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
-             slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => Eng, sync => ready}),
+             slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => Eng, sync => ready}),
     Redriven = quod_simplex:test_redrive_head(6, BH, S),
     ?assertEqual({[], [], lists:sort([B, C, D]), lists:sort([B, C, D])},
                  quod_simplex:test_link_peers(Redriven)).
@@ -4292,11 +4390,11 @@ certified_block_request_targets_one_holder_test() ->
     Committee = [{A, IdA} | _] = committee(4),
     Tx = signed_tx(<<"t">>, <<"missing-block">>,
                    [{assert, {{recovered, block}, true}}], {A, IdA}),
-    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}),
     {Eng, _} = feed_shares(supports(Block, Committee, 3),
-                           quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                           quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     Missing = st(#{self => A, id => IdA, validators => pubs(Committee),
-                   slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => Eng, sync => ready}),
+                   slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => Eng, sync => ready}),
 
     Requested = quod_simplex:reconcile_block_requests(Missing),
     {[], [], OutboxPeers, DialPeers} = quod_simplex:test_link_peers(Requested),
@@ -4310,12 +4408,12 @@ certified_block_request_targets_one_holder_test() ->
 finalized_empty_body_recovery_at_unchanged_material_height_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = [{A, IdA}, {B, _} | _] = committee(4),
-    Root = quod_ledger:block_ref(blk(5)),
-    Block = block({?FIXTURE_ERA, 6}, Root, empty, 0),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
+    Block = block({?FIXTURE_ERA, 6}, Root, 500, empty, 0),
     Hash = quod_simplex:block_hash(Block),
     {Eng, _} = feed_shares(supports(Block, Committee, 3) ++
                             commits(Block, Committee, 3),
-                          quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0})),
+                          quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0})),
     Missing = st(#{self => A, id => IdA, validators => pubs(Committee),
                    slot => 500, history_head => {500, element(3, Root)},
                    protocol_root => Root, eng => Eng, sync => ready}),
@@ -4333,12 +4431,12 @@ certified_block_request_is_committee_scoped_test() ->
     Committee = [{A, IdA}, {B, _} | _] = committee(4),
     Tx = signed_tx(<<"t">>, <<"serve-certified-block">>,
                    [{assert, {{recovered, served}, true}}], {A, IdA}),
-    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {Eng1, _} = quod_simplex:eng_offer(
-                  {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                  {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     {Eng2, _} = feed_shares(supports(Block, Committee, 3), Eng1),
-    Holder = st(#{self => B, validators => pubs(Committee), slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))},
+    Holder = st(#{self => B, validators => pubs(Committee), slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))},
                   eng => Eng2, sync => ready}),
 
     Answered = quod_simplex:dispatch(A, {block_request, 6, BH}, Holder),
@@ -4353,12 +4451,12 @@ certified_block_from_non_leader_restores_finality_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
     Tx = signed_tx(<<"t">>, <<"non-leader-recovery">>,
                    [{assert, {{recovered, any_holder}, true}}], {A, IdA}),
-    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     SupportShares = supports(Block, Committee, 3),
-    {CertOnly, _} = feed_shares(SupportShares, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+    {CertOnly, _} = feed_shares(SupportShares, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     Requester = st(#{self => A, id => IdA, validators => pubs(Committee),
-                     slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => CertOnly, sync => ready,
+                     slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => CertOnly, sync => ready,
                      block_requests => #{{6, BH} => {1, 0}}}),
     Leader = quod_simplex:leader(6, pubs(Committee)),
     Sender = hd([Peer || {Peer, _} <- Peers, Peer =/= Leader]),
@@ -4377,11 +4475,11 @@ certified_dtx_block_uses_phase_aware_recovery_test() ->
     #{pubkey := Self} = Identity = maps:get(node_identity, Fixture),
     Admission = maps:get(admission, Fixture),
     Era = quod_ledger:initial_era({Ns, Anchor}), Root = {Era, 0, Anchor},
-    Block = block({Era, 1}, Root, {batch, [{dtx, Control}]}, 0),
+    Block = block({Era, 1}, Root, 2, {batch, [{dtx, Control}]}, 0),
     BH = quod_simplex:block_hash(Block),
     {CertOnly, _} = feed_shares(
                       supports(Block, [{Self, Identity}], 1),
-                      quod_simplex:eng_new(?DOMAIN, [Self], {Root, 0})),
+                      quod_simplex:eng_new(?DOMAIN, [Self],{Root, 1, 0})),
     S = st(#{ns => Ns, genesis_hash => Anchor,
              self => Self, id => Identity, validators => [Self],
              author_admissions => #{Self => Admission},
@@ -4400,13 +4498,13 @@ certified_block_response_requires_outstanding_request_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
     Tx = signed_tx(<<"t">>, <<"unsolicited-certified-block">>,
                    [{assert, {{recovered, requested_only}, true}}], {A, IdA}),
-    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     SupportShares = supports(Block, Committee, 3),
     {CertOnly, _} = feed_shares(SupportShares,
-                                quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                                quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
-             slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => CertOnly, sync => ready}),
+             slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => CertOnly, sync => ready}),
     Sender = element(1, hd(Peers)),
 
     Ignored = quod_simplex:dispatch(Sender, {certified_block, Block, BH}, S),
@@ -4425,13 +4523,13 @@ certified_block_recovery_accepts_losing_local_support_test() ->
     [{Self, SelfId} | _] = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Leader],
     OtherValidators = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Self],
     Losing = block(
-               {?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)),
+               {?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501,
                {batch,
                 [signed_tx(<<"t">>, <<"losing-support">>,
                            [{assert, {{proposal, losing}, true}}],
                            {Leader, LeaderId})]}),
     Winning = block(
-                {?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)),
+                {?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501,
                 {batch,
                  [signed_tx(<<"t">>, <<"winning-support">>,
                             [{assert, {{proposal, winning}, true}}],
@@ -4441,7 +4539,7 @@ certified_block_recovery_accepts_losing_local_support_test() ->
                           support, {?FIXTURE_ERA, 6}, WinningHash,
                           supports(Winning, OtherValidators, 3), Validators),
     Initial = st(#{self => Self, id => SelfId, validators => Validators,
-                   slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 0}), sync => ready}),
+                   slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5, 500)), 500, 0}), sync => ready}),
     SupportedLosing = quod_simplex:dispatch(
                         Leader, {propose, Losing, []}, Initial),
     LosingHash = quod_simplex:block_hash(Losing),
@@ -4460,15 +4558,15 @@ certified_block_hash_mismatch_is_rejected_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
     Tx = signed_tx(<<"t">>, <<"certified-good">>,
                    [{assert, {{recovered, correct}, true}}], {A, IdA}),
-    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}),
+    Block = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}),
     BH = quod_simplex:block_hash(Block),
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN,
                    support, {?FIXTURE_ERA, 6}, BH, supports(Block, Committee, 3), pubs(Committee)),
-    Different = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5)), {batch, [Tx]}, 1),
+    Different = block({?FIXTURE_ERA, 6}, quod_ledger:block_ref(blk(5, 495 + 5)), 501, {batch, [Tx]}, 1),
     {WithCert, _} = quod_simplex:eng_offer(
-                     {cert, Cert}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                     {cert, Cert}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
-             slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => WithCert, sync => ready,
+             slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => WithCert, sync => ready,
              block_requests => #{{6, BH} => {1, 0}}}),
     Rejected = quod_simplex:dispatch(element(1, hd(Peers)),
                                      {certified_block, Different, BH}, S),
@@ -4479,14 +4577,14 @@ certified_block_hash_mismatch_is_rejected_test() ->
 %% were not received, and expose the exact "certificate present, block absent" condition.
 recovery_stats_include_certificate_evidence_test() ->
     Committee = [{A, _} | _] = committee(4),
-    Block = blk(6),
+    Block = blk(6, 495 + 6),
     BH = quod_simplex:block_hash(Block),
     {ok, Cert} = quod_simplex:form_cert(?DOMAIN,
                    support, {?FIXTURE_ERA, 6}, BH, supports(Block, Committee, 3), pubs(Committee)),
     {CertOnly, _} = quod_simplex:eng_offer(
-                      {cert, Cert}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                      {cert, Cert}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
     Stats = quod_simplex:stats_map(
-              st(#{self => A, validators => pubs(Committee), slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))},
+              st(#{self => A, validators => pubs(Committee), slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))},
                    eng => CertOnly, sync => ready})),
     ?assertEqual(3, maps:get(head_support_votes, Stats)),
     ?assertEqual(0, maps:get(head_commit_votes, Stats)),
@@ -4503,13 +4601,13 @@ resume_observed_notarization_after_readiness_test_() ->
 resume_observed_notarization(Kind, ComplaintCount) ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = [{Self, Signer} | Peers] = committee(10),
-    Root = quod_ledger:block_ref(blk(5)),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
     Payload = case Kind of
         content -> {batch, [tx([])]};
         membership -> {Added, _} = id(), {batch, [tx([pa(Added)])]}
     end,
-    Block = block({?FIXTURE_ERA, 6}, Root, Payload),
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+    Block = block({?FIXTURE_ERA, 6}, Root, 501, Payload),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}),
     Base = st(#{self => Self, id => Signer, validators => pubs(Committee),
                 slot => 500, history_head => {500, element(3, Root)},
                 eng => E0, sync => unconfirmed}),
@@ -4535,13 +4633,13 @@ resume_observed_notarization(Kind, ComplaintCount) ->
 resume_multiple_observed_notarization_edges_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Committee = [{Self, Signer} | Peers] = committee(4),
-    Root = quod_ledger:block_ref(blk(5)),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
     Base = st(#{self => Self, id => Signer, validators => pubs(Committee),
                 slot => 500, history_head => {500, element(3, Root)},
-                eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+                eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}),
                 sync => unconfirmed}),
     Paused = lists:foldl(fun(View, Owner) ->
-        B = blk(View),
+        B = blk(View, 495 + View),
         quod_simplex:engine_step([{block, B} | [{share, Sh} || Sh <- supports(B, Peers, 3)]], Owner)
     end, Base, [6, 7]),
     Resumed = quod_simplex:settle_readiness(Paused, quod_simplex:test_state_set(sync, ready, Paused)),
@@ -4564,9 +4662,9 @@ restart_preserves_complaint_latch_test() ->
         Inbound = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
                     D => {Sink, make_ref()}},
         Readiness = voting_readiness([B, C, D], Sink, 5),
-        EmptyEng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0}),
+        EmptyEng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0}),
         BeforeCrash = st(#{self => A, id => IdA, validators => pubs(Committee),
-                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => EmptyEng, sync => ready,
+                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => EmptyEng, sync => ready,
                            signing_journal => Journal0,
                            inbound_conns => Inbound, peer_readiness => Readiness,
                            head_progress => {?FIXTURE_ERA, 6, awaiting_proposal}}),
@@ -4575,15 +4673,15 @@ restart_preserves_complaint_latch_test() ->
         ok = quod_signing_journal:close(
                quod_simplex:test_signing_journal(Complained)),
 
-        Block = blk(6),
+        Block = blk(6, 495 + 6),
         {E1, _} = quod_simplex:eng_offer(
-                    {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0})),
+                    {block, Block}, quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0})),
         {Notarized, _} = feed_shares(supports(Block, Committee, 3), E1),
         {ok, Journal1} = quod_signing_journal:recover(
                            <<"t">>, ?DOMAIN, Dir),
         Restarted = quod_simplex:restore_signing_state(
                       st(#{self => A, id => IdA, validators => pubs(Committee),
-                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => Notarized, sync => ready,
+                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => Notarized, sync => ready,
                            signing_journal => Journal1})),
         ?assertEqual({none, false, true}, quod_simplex:test_round(6, Restarted)),
         AfterRestart = quod_simplex:resume_ready_rounds(Restarted),
@@ -4601,7 +4699,7 @@ restart_preserves_complaint_latch_test() ->
 %% keeps a restarted leader from proposing a different body for that slot.
 restart_restores_supported_block_and_prevents_competing_proposal_test() ->
     Committee = [{A, IdA} | _] = committee(4),
-    Block = blk(6),
+    Block = blk(6, 495 + 6),
     BH = quod_simplex:block_hash(Block),
     Dir = filename:join(
             "/tmp", "quod_simplex_support_restart_" ++
@@ -4615,11 +4713,11 @@ restart_restores_supported_block_and_prevents_competing_proposal_test() ->
         ok = quod_signing_journal:close(Journal1),
         {ok, Journal2} = quod_signing_journal:recover(
                            <<"t">>, ?DOMAIN, Dir),
-        EmptyEng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0}),
+        EmptyEng = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0}),
         Loaded = quod_simplex:restore_signing_state(
                    st(#{self => A, id => IdA,
                         consensus_domain => ?DOMAIN,
-                        validators => pubs(Committee), slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))},
+                        validators => pubs(Committee), slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))},
                         eng => EmptyEng,
                         sync => unconfirmed,
                         signing_journal => Journal2})),
@@ -4643,8 +4741,8 @@ restart_restores_supported_block_and_prevents_competing_proposal_test() ->
 %% Later complaints cannot replace its same-view durable final decision.
 restart_preserves_commit_latch_test() ->
     Committee = [{A, IdA} | Peers] = committee(4),
-    Block = blk(6),
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5)), 0}),
+    Block = blk(6, 495 + 6),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(Committee), {quod_ledger:block_ref(blk(5, 500)), 500, 0}),
     {E1, _} = quod_simplex:eng_offer({block, Block}, E0),
     SupportShares = supports(Block, Peers, 3),
     {Notarized, _} = feed_shares(SupportShares, E1),
@@ -4654,7 +4752,7 @@ restart_preserves_commit_latch_test() ->
         {ok, Journal0} = quod_signing_journal:initialize(
                            <<"t">>, ?DOMAIN, Dir),
         BeforeCrash = st(#{self => A, id => IdA, validators => pubs(Committee),
-                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => E0, sync => ready,
+                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => E0, sync => ready,
                            signing_journal => Journal0}),
         Committed = quod_simplex:engine_step(
             [{block, Block} | [{share, Sh} || Sh <- SupportShares]], BeforeCrash),
@@ -4669,7 +4767,7 @@ restart_preserves_commit_latch_test() ->
                            <<"t">>, ?DOMAIN, Dir),
         Restarted = quod_simplex:restore_signing_state(
                       st(#{self => A, id => IdA, validators => pubs(Committee),
-                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5)))}, eng => WithComplaints, sync => ready,
+                           slot => 500, history_head => {500, element(3, quod_ledger:block_ref(blk(5, 495 + 5)))}, eng => WithComplaints, sync => ready,
                            signing_journal => Journal1})),
         ?assertEqual({none, true, false}, quod_simplex:test_round(6, Restarted)),
         StillCommitted = quod_simplex:resume_ready_rounds(Restarted),
@@ -5221,7 +5319,7 @@ catchup_commit_retires_effect_signing_custody_test() ->
     Root = maps:get(protocol_root, P0),
     {Signed, Submission} = effect_submission_fixture(Ns, Anchor, Admission, 1, Author, Signer),
     TxId = Signed#transaction.tx_id,
-    Block = block({Era, 1}, Root, {batch, [Signed]}, 1),
+    Block = block({Era, 1}, Root, 2, {batch, [Signed]}, 1),
     Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Block, F)),
     Genesis = quod_ledger:entry(1, maps:get(genesis, F), none),
     Dir = relay_store_dir("effect_catchup_retirement"),
@@ -5240,7 +5338,7 @@ catchup_commit_retires_effect_signing_custody_test() ->
                 st(#{ns => Ns, genesis_hash => Anchor, consensus_domain => Domain,
                      self => Author, id => Signer, validators => [Author],
                      signing_journal => Journal1, store => Store1, phase_index => Index,
-                     eng => quod_simplex:eng_new(Domain, [Author], {Root, 0}),
+                     eng => quod_simplex:eng_new(Domain, [Author], {Root, 1, 0}),
                      archive_tip => {Root, 0}, slot => 1, last_applied => 1,
                      sync => {pulling, self()}}))),
         ?assertMatch(#{TxId := #{}}, quod_signing_journal:pending_transactions(
@@ -5339,8 +5437,8 @@ effect_submission_fixture(Ns, Anchor, Admission, Sequence,
 %% singleton at the committed frontier, making it a pipeline barrier by construction.
 batch_consensus_barrier_test() ->
     Committee = [{A, IdA}, {B, _IdB}] = committee(2),
-    Root = quod_ledger:block_ref(blk(5)),
-    Eng = quod_simplex:eng_new(?DOMAIN, [A, B], {Root, 0}),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
+    Eng = quod_simplex:eng_new(?DOMAIN, [A, B],{Root, 500, 0}),
     S0 = st(#{self => A, validators => [A, B], slot => 500, history_head => {500, element(3, Root)},
               eng => Eng, sync => ready}),
     C1 = signed_tx(<<"t">>, <<"one">>, [{assert, {{fact, one}, true}}], {A, IdA}),
@@ -5353,7 +5451,7 @@ batch_consensus_barrier_test() ->
     ?assert(quod_simplex:acceptable_payload({batch, [Membership]}, S0)),
     ?assertNot(quod_simplex:acceptable_payload(
                  {batch, [C1, Membership]}, S0)),
-    Proposed = block({?FIXTURE_ERA, 6}, Root, {batch, [C1]}),
+    Proposed = block({?FIXTURE_ERA, 6}, Root, 501, {batch, [C1]}),
     {E1, _} = quod_simplex:eng_offer({block, Proposed}, Eng),
     {E2, _} = feed_shares(supports(Proposed, Committee, 2), E1),
     S1 = quod_simplex:test_state_set(eng, E2, S0),
@@ -5363,8 +5461,7 @@ transaction_signature_acceptance_test() ->
     [{Author, AuthorId}, {Outsider, OutsiderId}] = committee(2),
     State = st(#{self => Author, validators => [Author], slot => 500,
                  history_head => {500, <<1:256>>},
-                 eng => quod_simplex:eng_new(?DOMAIN, [Author],
-                     {{?FIXTURE_ERA, 5, <<1:256>>}, 0}),
+                 eng => quod_simplex:eng_new(?DOMAIN, [Author ], {{?FIXTURE_ERA, 5, <<1:256>>}, 500, 0}),
                  sync => ready}),
     Good = signed_tx(<<"t">>, <<"good">>,
                      [{assert, {{fact, signed}, true}}], {Author, AuthorId}),
@@ -5396,8 +5493,7 @@ committed_author_sequence_replay_test() ->
     [{Author, AuthorId}] = committee(1),
     State = st(#{self => Author, validators => [Author], slot => 500,
                  history_head => {500, <<1:256>>},
-                 eng => quod_simplex:eng_new(?DOMAIN, [Author],
-                     {{?FIXTURE_ERA, 5, <<1:256>>}, 0}),
+                 eng => quod_simplex:eng_new(?DOMAIN, [Author ], {{?FIXTURE_ERA, 5, <<1:256>>}, 500, 0}),
                  author_seqs => #{Author => 5}, sync => ready}),
     Fresh = signed_tx_seq(<<"t">>, <<"fresh">>, 6,
                           [{assert, {{fact, fresh}, true}}],
@@ -5493,12 +5589,12 @@ namespace_and_genesis_bound_consensus_replay_rejected_test() ->
     ?assertNot(quod_simplex:verify_cert(
                  GenesisDomain, Cert, Validators)),
     NamespaceEngine =
-        quod_simplex:eng_new(NamespaceDomain, Validators, {{?FIXTURE_ERA, 5, <<1:256>>}, 0}),
+        quod_simplex:eng_new(NamespaceDomain, Validators, {{?FIXTURE_ERA, 5, <<1:256>>}, 1, 0}),
     {NamespaceRejected, []} =
         quod_simplex:eng_offer({cert, Cert}, NamespaceEngine),
     ?assertEqual(NamespaceEngine, NamespaceRejected),
     GenesisEngine =
-        quod_simplex:eng_new(GenesisDomain, Validators, {{?FIXTURE_ERA, 5, <<1:256>>}, 0}),
+        quod_simplex:eng_new(GenesisDomain, Validators, {{?FIXTURE_ERA, 5, <<1:256>>}, 1, 0}),
     {GenesisRejected, []} =
         quod_simplex:eng_offer({cert, Cert}, GenesisEngine),
     ?assertEqual(GenesisEngine, GenesisRejected).
@@ -5573,11 +5669,11 @@ protocol_progress_nacks_raw_collection_test_() ->
 
 protocol_progress_nacks_raw_collection(Kind) ->
     Committee = [{Self, Signer} | _] = committee(4),
-    Ref = make_ref(), From = {self(), Ref}, Block = blk(5),
-    Root = quod_ledger:block_ref(blk(4)),
+    Ref = make_ref(), From = {self(), Ref}, Block = blk(5, 496 + 5),
+    Root = quod_ledger:block_ref(blk(4, 496 + 4)),
     S = st(#{self => Self, id => Signer, validators => pubs(Committee),
         slot => 500, sync => unconfirmed, history_head => {500, element(3, Root)},
-        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 0}),
+        eng => quod_simplex:eng_new(?DOMAIN, pubs(Committee), {Root, 500, 0}),
         collecting => {5, [From]}}),
     Inputs = case Kind of
         complaint -> [{share, complaint_share(5, M)} || M <- take(3, Committee)];
@@ -5896,7 +5992,7 @@ far_finalizer_invalidates_cached_ingress_view_test() ->
     Validators = pubs(Committee),
     Me = quod_simplex:leader(6, Validators),
     {Me, MyId} = lists:keyfind(Me, 1, Committee),
-    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 5, 0}),
     S0 =
         st(#{self => Me, id => MyId, validators => Validators,
              sync => ready, slot => 5, history_head => {5, <<1:256>>}, eng => E0}),
@@ -6000,7 +6096,7 @@ queued_membership_stops_the_drain_test() ->
                          [{assert, {{ordinary, ready}, true}}], {AuthorB, IdB}),
     Approved = blk(4),
     {E1, _} = quod_simplex:eng_offer(
-                {block, Approved}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+                {block, Approved}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
     {Eng, _} = feed_shares(supports(Approved, Committee, 3), E1),
     Now = quod_time:mono_ms(),
     Queued = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
@@ -6304,7 +6400,7 @@ origin_collects_at_the_notarized_frontier_test() ->
     Validators = pubs(Committee),
     {Me, MyId} = lists:keyfind(quod_simplex:leader(5, Validators), 1, Committee),
     B4 = blk(4),
-    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
     {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
     From = {self(), make_ref()},
     S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
@@ -6321,11 +6417,11 @@ origin_collects_at_the_notarized_frontier_test() ->
 parked_ingress_implies_armed_watchdog_test() ->
     {Me, Id} = id(), Committee = [{Me, Id}],
     Root = quod_ledger:block_ref(blk(3)),
-    Empty = quod_simplex:eng_new(?DOMAIN, [Me], {Root, 0}),
+    Empty = quod_simplex:eng_new(?DOMAIN, [Me],{Root, 3, 0}),
     Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
              history_head => {3, element(3, Root)}, eng => Empty},
     MTx = signed_tx(<<"t">>, <<"barrier">>, [pa(Me)], {Me, Id}),
-    MBlock = block({?FIXTURE_ERA, 4}, Root, {batch, [MTx]}),
+    MBlock = block({?FIXTURE_ERA, 4}, Root, 4, {batch, [MTx]}),
     {Offered, _} = quod_simplex:eng_offer({block, MBlock}, Empty),
     {Barrier, _} = feed_shares(supports(MBlock, Committee, 1), Offered),
     lists:foreach(fun(Override) ->
@@ -6406,7 +6502,7 @@ closed_target_slot_is_rejected_test() ->
     Tx = signed_tx(<<"t">>, <<"closed">>, [{assert, {{closed, fact}, true}}],
                    {Author, AuthorId}),
     B4 = blk(4),
-    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
     {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
     Closed = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                   slot => 3, history_head => {3, <<1:256>>}, eng => E2}),
@@ -6464,9 +6560,9 @@ route_decision_cells_test() ->
     %% post-adoption schedule is unknowable until the committee block commits
     {MPub, MId} = id(),
     MTx = signed_tx(<<"t">>, <<"mb">>, [pa(MPub)], {MPub, MId}),
-    MBlock = block({?FIXTURE_ERA, 4}, quod_ledger:block_ref(blk(3)), {batch, [MTx]}),
+    MBlock = block({?FIXTURE_ERA, 4}, quod_ledger:block_ref(blk(3)), (blk(3))#block.height + 1, {batch, [MTx]}),
     {EngB0, _} = quod_simplex:eng_offer({block, MBlock},
-                                        quod_simplex:eng_new(?DOMAIN, [MPub], {quod_ledger:block_ref(blk(3)), 0})),
+                                        quod_simplex:eng_new(?DOMAIN, [MPub],{quod_ledger:block_ref(blk(3)), 3, 0})),
     {BarrierEng, _} = feed_shares(
                         [quod_simplex:make_share(?DOMAIN,
                            support, {?FIXTURE_ERA, 4}, quod_simplex:block_hash(MBlock), MId)],
@@ -6499,8 +6595,7 @@ round_probe_lifecycle_test() ->
     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
     Base = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                 slot => 500, history_head => {500, <<1:256>>},
-                eng => quod_simplex:eng_new(?DOMAIN, Validators,
-                    {{?FIXTURE_ERA, 3, <<1:256>>}, 0})}),
+                eng => quod_simplex:eng_new(?DOMAIN, Validators, {{?FIXTURE_ERA, 3, <<1:256>>}, 500, 0})}),
     ?assertEqual(#{}, quod_simplex:test_round_probe(Base)),
     F1 = {self(), make_ref()}, F2 = {self(), make_ref()},
     Pending = quod_simplex:test_state_set(ingress,
@@ -6541,7 +6636,7 @@ relay_lane_creation_rejects_divergent_target_test() ->
     NewEra = crypto:hash(sha256, <<"new-relay-lane-view">>),
     NewView =
         quod_simplex:test_state_set(eng,
-            quod_simplex:eng_new(?DOMAIN, [], {{NewEra, 0, <<1:256>>}, 0}), S2),
+            quod_simplex:eng_new(?DOMAIN, [ ], {{NewEra, 0, <<1:256>>}, 3, 0}), S2),
     ?assertEqual(
        {error, {relay_lane_conflict,
                 {Target4, 4, Era},
@@ -6731,7 +6826,7 @@ retained_custody_demotion_remains_ambiguous_until_deadline_test() ->
     ?assertNotEqual(OldCommitteeId, NewCommitteeId),
     Demoted =
         quod_simplex:test_state_set(
-          eng, quod_simplex:eng_new(?DOMAIN, Remaining, {{NewCommitteeId, 0, <<1:256>>}, 0}),
+          eng, quod_simplex:eng_new(?DOMAIN, Remaining,{{NewCommitteeId, 0, <<1:256>>}, 3, 0}),
           quod_simplex:test_state_set(
             validators, Remaining, Sent)),
     {keep_state, Parked, Actions} =
@@ -6772,8 +6867,7 @@ ready_custody_fixture(TxSuffix) ->
     S = st(#{self => Leader4, id => Leader4Id,
              validators => Validators, sync => ready,
              slot => 3, history_head => {3, <<1:256>>},
-             eng => quod_simplex:eng_new(?DOMAIN, Validators,
-                  {{?FIXTURE_ERA, 3, <<1:256>>}, 0})}),
+             eng => quod_simplex:eng_new(?DOMAIN, Validators, {{?FIXTURE_ERA, 3, <<1:256>>}, 3, 0})}),
     {Collected, _BatchActions} =
         quod_simplex:test_append(From, lt(TxSuffix, Leader4), S),
     [{SubmissionId, 1, Submission, {local, 4}, Deadline, 1}] =
@@ -6839,7 +6933,7 @@ committee_view_lane_conflict_parks_without_bad_change_test() ->
         quod_simplex:test_custody(Collected),
     NewView =
         quod_simplex:test_state_set(
-          eng, quod_simplex:eng_new(?DOMAIN, Validators, {{NewCommitteeId, 0, <<1:256>>}, 0}), Collected),
+          eng, quod_simplex:eng_new(?DOMAIN, Validators, {{NewCommitteeId, 0, <<1:256>>}, 3, 0}), Collected),
     Next = lt($w, Me),
     ?assertEqual(
        {park, awaiting_turn},
@@ -6882,7 +6976,7 @@ stable_relay_lane_preserves_author_order_test() ->
         quod_simplex:test_custody(Sent1),
     %% Locally, slot 4 closes and a fresh route would now choose leader(5).
     B4 = blk(4),
-    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
     {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
     Advanced = quod_simplex:test_state_set(eng, E2, Sent1),
     ?assert(quod_simplex:proposal_visible(4, Advanced)),
@@ -7010,7 +7104,7 @@ same_lane_partial_completion_and_view_change_retargets_cohort_test() ->
     %% must remain behind it instead of independently choosing slot 5.
     B4 = blk(4),
     {E1, _} = quod_simplex:eng_offer(
-                {block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+                {block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
     {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
     {keep_state, OneExpired, _TickActions} =
         quod_simplex:running({timeout, tick}, tick, Sent4),
@@ -7171,8 +7265,7 @@ membership_view_change_preserves_signed_custody_test() ->
                 proof_id = <<0:256>>, plan_digest = <<0:256>>,
                 goal = durable_goal({membership, Kind}), result = durable_result(),
                 author = Me, sig = none, read_check = #{}, diff = Diff}),
-            Engine = quod_simplex:eng_new(?DOMAIN, Validators,
-                {{?FIXTURE_ERA, View - 1, <<1:256>>}, 0}),
+            Engine = quod_simplex:eng_new(?DOMAIN, Validators, {{?FIXTURE_ERA, View - 1, <<1:256>>}, 3, 0}),
             S = st(#{self => Me, id => MyId, validators => Validators,
                 relay_conns => #{Target => {self(), make_ref()},
                                  NextTarget => {self(), make_ref()}},
@@ -7245,7 +7338,7 @@ future_target_drains_at_declared_slot_test() ->
     {1, _, _, _} = quod_simplex:test_ingress(Held),
     B4 = blk(4),
     {E1, _} = quod_simplex:eng_offer(
-                {block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+                {block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
     {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
     AtTurn = quod_simplex:test_state_set(eng, E2, Held),
     {Drained, _} = quod_simplex:test_drain(AtTurn),
@@ -7363,7 +7456,7 @@ inflight_attempt_is_answerable_after_view_change_test() ->
     NewCommitteeId = crypto:hash(sha256, <<"later-view">>),
     Advanced =
         quod_simplex:test_state_set(
-          eng, quod_simplex:eng_new(?DOMAIN, Validators, {{NewCommitteeId, 0, <<1:256>>}, 0}), Accepted),
+          eng, quod_simplex:eng_new(?DOMAIN, Validators, {{NewCommitteeId, 0, <<1:256>>}, 3, 0}), Accepted),
     {Duplicate, []} =
         quod_simplex:test_dispatch_relay(Author, Submit, Advanced),
     ?assertEqual(
@@ -7397,8 +7490,7 @@ cached_result_is_served_after_view_change_test() ->
 
     Advanced =
         quod_simplex:test_state_set(
-          eng, quod_simplex:eng_new(?DOMAIN, Validators,
-            {{crypto:hash(sha256, <<"post-cache-view">>), 0, <<1:256>>}, 0}),
+          eng, quod_simplex:eng_new(?DOMAIN, Validators, {{crypto:hash(sha256, <<"post-cache-view">>), 0, <<1:256>>}, 3, 0}),
           Completed),
     {Replayed, []} =
         quod_simplex:test_dispatch_relay(Author, Submit, Advanced),
@@ -7421,7 +7513,7 @@ destination_restart_refuses_closed_placement(Height, Observer) ->
     Root = {Era, View, <<92:256>>},
     Members = case Observer of true -> Validators -- [Target]; false -> Validators end,
     Restarted = quod_simplex:test_state_set(validators, Members,
-        quod_simplex:test_state_set(eng, quod_simplex:eng_new(?DOMAIN, Members, {Root, 0}),
+        quod_simplex:test_state_set(eng, quod_simplex:eng_new(?DOMAIN, Members,{Root, Height, 0}),
             quod_simplex:test_state_set(archive_tip, {Root, 0},
                 quod_simplex:test_state_set(history_head, {Height, <<93:256>>},
                     quod_simplex:test_state_set(slot, Height, Initial))))),
@@ -7484,7 +7576,7 @@ invalid_signature_precedes_cache_and_durable_recovery_test() ->
      Slot, InvalidSubmission, Carrier},
     Root = {CommitteeId, Slot, <<92:256>>},
     Durable = quod_simplex:test_state_set(archive_tip, {Root, 0},
-    quod_simplex:test_state_set(eng, quod_simplex:eng_new(?DOMAIN, Validators, {Root, 0}),
+    quod_simplex:test_state_set(eng, quod_simplex:eng_new(?DOMAIN, Validators, {Root, 900, 0}),
         quod_simplex:test_state_set(slot, 900, Initial))),
     SeedSubmissionId = <<16#A5:128>>,
     SeedAttemptId = <<16#5A:128>>,
@@ -7549,7 +7641,7 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
     GenesisTx = quod_simplex:test_genesis_tx(
         #{committee => [{Pub, "localhost", 9001} || Pub <- Validators],
           external_predicate_modules => []}, Ns, Self, <<1:256>>),
-    GenesisBlock = block({genesis, 0}, none, {batch, [GenesisTx]}, 0),
+    GenesisBlock = block({genesis, 0}, none, 1, {batch, [GenesisTx]}, 0),
     Genesis = quod_ledger:entry(1, GenesisBlock, none),
     Anchor = quod_simplex:block_hash(GenesisBlock), Identity = {Ns, Anchor},
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
@@ -7572,7 +7664,7 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
         Initial = quod_simplex:test_install_projection(P,
             st(#{ns => Ns, self => Self, id => Signer, validators => Validators,
                  genesis_hash => Anchor, consensus_domain => Domain,
-                 eng => quod_simplex:eng_new(Domain, Validators, {Root, 0}),
+                 eng => quod_simplex:eng_new(Domain, Validators, {Root, 1, 0}),
                  archive_tip => {Root, 0}, store => Store1, phase_index => Index,
                  slot => 1, sync => ready, batch_window_ms => 0,
                  relay_conns => #{Author => {self(), make_ref()}}})),
@@ -7596,7 +7688,7 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
             quod_simplex:test_custody(WithSource),
         SourceBinding = {Ns, Anchor, maps:get(Self, maps:get(admissions, P))},
         {ok, SourceTx} = quod_transaction:decode_verified_submission(SourceBinding, SourceSubmission),
-        B2 = block({Era, 2}, quod_ledger:block_ref(B1), {batch, [SourceTx]}, B1#block.timestamp),
+        B2 = block({Era, 2}, quod_ledger:block_ref(B1), (B1)#block.height + 1, {batch, [SourceTx]}, B1#block.timestamp),
         H2 = quod_simplex:block_hash(B2),
         Commit = [quod_simplex:make_share(Domain, commit, {Era, 2}, H2, Id)
                   || {_, Id} <- Committee],
@@ -7639,7 +7731,7 @@ relay_channel_cutover_is_strict_test() ->
     RelayPayload = quod_relay:encode(Ns, Submit),
     ConsensusPayload =
         quod_simplex:encode(
-          Ns, {readiness, Slot - 1, true}),
+          Ns, {readiness, Slot - 1, {?FIXTURE_ERA, 1, 0}, true}),
 
     RelayOnLog =
         running_state(
@@ -7873,7 +7965,7 @@ relay_transport_failure_isolated_from_consensus_test() ->
                             erlang:monitor(process, ConsensusIn)}},
                  peer_readiness =>
                      #{Peer =>
-                           {ConsensusIn, 3, true,
+                           {ConsensusIn, 3, {?FIXTURE_ERA, 1, 0}, true,
                             quod_time:mono_ms()}},
                  outbox => #{Peer => [<<"consensus-evidence">>]},
                  dialing => #{Peer => 101},
@@ -8039,7 +8131,7 @@ reseat_invalidates_only_relay_affected_inbound_generation_test() ->
         #{Author => {AffectedPid, make_ref()}},
     Readiness =
         #{Author =>
-              {AuthorConsensusPid, Slot - 1, true,
+              {AuthorConsensusPid, Slot - 1, {?FIXTURE_ERA, 1, 0}, true,
                quod_time:mono_ms()},
           KeepPeer1 =>
               {KeepPid1, Slot - 1, true, quod_time:mono_ms()},
@@ -8158,7 +8250,7 @@ queued_old_inbound_frame_cannot_reverse_link_replacement_test() ->
             quod_simplex:test_state_set(
               peer_readiness,
               #{Author =>
-                    {ConsensusPid, Slot - 1, true,
+                    {ConsensusPid, Slot - 1, {?FIXTURE_ERA, 1, 0}, true,
                      quod_time:mono_ms()}},
               quod_simplex:test_state_set(
                 relay_inbound_conns,
@@ -8286,12 +8378,12 @@ stale_live_consensus_generation_cannot_block_or_reverse_test() ->
                      #{Peer => {OldPid, OldRef}},
                  peer_readiness =>
                      #{Peer =>
-                           {OldPid, Slot, true,
+                           {OldPid, Slot, {?FIXTURE_ERA, 1, 0}, true,
                             quod_time:mono_ms()}}}),
         LogChan = term_to_binary({log, <<"t">>}, [deterministic]),
         ReadyPayload =
             quod_simplex:encode(
-              <<"t">>, {readiness, Slot, true}),
+              <<"t">>, {readiness, Slot, {?FIXTURE_ERA, 1, 0}, true}),
         {ReplaceUs, ReplaceResult} =
             timer:tc(
               fun() ->
@@ -8318,7 +8410,7 @@ stale_live_consensus_generation_cannot_block_or_reverse_test() ->
         %% readiness would bind to it and remove the current placement readiness.
         StalePayload =
             quod_simplex:encode(
-              <<"t">>, {readiness, Slot, false}),
+              <<"t">>, {readiness, Slot, {?FIXTURE_ERA, 1, 0}, false}),
         AfterStale =
             running_state(
               quod_simplex:running(
@@ -8477,8 +8569,7 @@ source_ignores_foreign_metadata_and_waits_for_local_finality_test() ->
         crypto:hash(sha256, <<"source-new-view">>),
     Advanced =
         quod_simplex:test_state_set(
-          eng, quod_simplex:eng_new(?DOMAIN, Validators,
-              {{NewCommitteeId, 0, <<1:256>>}, 0}), Sent),
+          eng, quod_simplex:eng_new(?DOMAIN, Validators, {{NewCommitteeId, 0, <<1:256>>}, 3, 0}), Sent),
     BadAccepted =
         [{Other,
           {relay_accepted, SubmissionId, AttemptId,
@@ -8732,7 +8823,7 @@ latched_leader_still_redrives_proposal_test() ->
         {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
         B4 = blk(4),
         BH = quod_simplex:block_hash(B4),
-        {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 0})),
+        {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(3)), 3, 0})),
         %% latch the complaint exactly as the pre-proposal timeout path does
         Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
         {TraceCtx, TraceSpan} = quod_trace:start_span(
@@ -8778,7 +8869,7 @@ metrics_matcher_lockstep_test() ->
     Stats = quod_simplex:stats_map(
               st(#{self => Me, id => Id, validators => [Me], sync => ready,
                    slot => 900, history_head => {900, element(3, Root)},
-                   eng => quod_simplex:eng_new(?DOMAIN, [Me], {Root, 0})})),
+                   eng => quod_simplex:eng_new(?DOMAIN, [Me],{Root, 900, 0})})),
     ?assertEqual(64, maps:get(protocol_view, Stats)),
     ?assertEqual(900, maps:get(committed, Stats)),
     ?assertEqual(0, maps:get(pipeline_gap, Stats)),
@@ -8833,14 +8924,14 @@ complaint_quorum_subsets_have_one_protocol_position_test() ->
     {ok, CertB} = quod_simplex:form_cert(?DOMAIN, complaint, Position, none,
         [complaint_share(2, M) || M <- [M1, M2, M4]], Validators),
     ?assertNotEqual(CertA, CertB),
-    Engine = quod_simplex:eng_new(?DOMAIN, Validators, {Root, 0}),
+    Engine = quod_simplex:eng_new(?DOMAIN, Validators, {Root, 500, 0}),
     {EA, EventsA} = quod_simplex:eng_offer({cert, CertA}, Engine),
     {EB, EventsB} = quod_simplex:eng_offer({cert, CertB}, Engine),
     ?assertEqual([{broadcast, CertA}, {view_advanced, 2, complaint}], EventsA),
     ?assertEqual([{broadcast, CertB}, {view_advanced, 2, complaint}], EventsB),
     Base = #{slot => 500, history_head => {500, element(3, Root)}},
     SA = st(Base#{eng => EA}), SB = st(Base#{eng => EB}),
-    ?assertEqual(#{era => ?FIXTURE_ERA, view => 3, root => Root, parent => Root},
+    ?assertEqual(#{era => ?FIXTURE_ERA, view => 3, root => Root, parent => Root, material_height => 500},
                  quod_simplex:test_protocol_position(SA)),
     ?assertEqual(quod_simplex:test_protocol_position(SA),
                  quod_simplex:test_protocol_position(SB)),
@@ -8923,7 +9014,7 @@ eng_live_window_follows_protocol_view_test() ->
     H2Block = blk(7),
     H3Block = blk(8),
     H2Hash = quod_simplex:block_hash(H2Block),
-    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 5, 0}),
     {E1, []} = quod_simplex:eng_offer({block, H2Block}, E0),
     ?assertEqual(H2Block, quod_simplex:eng_retained_block(7, E1)),
     ?assertEqual(
@@ -8979,7 +9070,7 @@ eng_far_finalizer_is_bounded_recovery_hint_test() ->
         quod_simplex:form_cert(
           ?DOMAIN, commit, {?FIXTURE_ERA, 8}, FarHash,
           commits(FarBlock, Committee, 3), Validators),
-    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 5, 0}),
     {Hinted, [{ahead, FarCert}]} = quod_simplex:eng_offer({cert, FarCert}, E0),
     ?assertEqual(8, quod_simplex:ahead_cert_ceiling(Hinted)),
     ?assertEqual(
@@ -9010,12 +9101,12 @@ eng_far_finalizer_is_bounded_recovery_hint_test() ->
     NewCommittee = committee(4),
     NewValidators = pubs(NewCommittee),
     NewEra = <<8:256>>,
-    Changed = quod_simplex:eng_new(?DOMAIN, NewValidators, {{NewEra, 0, <<3:256>>}, 0}),
+    Changed = quod_simplex:eng_new(?DOMAIN, NewValidators, {{NewEra, 0, <<3:256>>}, 1, 0}),
     ?assertEqual(0, quod_simplex:ahead_cert_ceiling(Changed)),
     {OldSetRejected, []} =
         quod_simplex:eng_offer({cert, FarCert}, Changed),
     ?assertEqual(Changed, OldSetRejected),
-    {ok, NewFar} = quod_ledger:new_block({NewEra, 8}, {NewEra, 7, <<4:256>>}, empty, 0),
+    {ok, NewFar} = quod_ledger:new_block({NewEra, 8}, {NewEra, 7, <<4:256>>}, 1, empty, 0),
     {ok, NewSetCert} = quod_simplex:form_cert(?DOMAIN, commit, {NewEra, 8},
         quod_simplex:block_hash(NewFar), commits(NewFar, NewCommittee, 3), NewValidators),
     {Rehinted, [{ahead, NewSetCert}]} =
@@ -9042,7 +9133,7 @@ eng_conflicting_share_spam_is_bounded_test() ->
               fun(Share) ->
                       quod_simplex:verify_share(?DOMAIN, Share)
               end, Shares)),
-    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 5, 0}),
     Bounded =
         lists:foldl(
           fun(Share, Eng) ->
@@ -9060,18 +9151,18 @@ eng_conflicting_share_spam_is_bounded_test() ->
 ordinary_block_equivocation_is_bounded_and_does_not_crash_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
-    Root = quod_ledger:block_ref(blk(5)),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
     Leader = quod_simplex:leader(6, Validators),
     {Leader, LeaderId} = lists:keyfind(Leader, 1, Committee),
     First = block(
-              {?FIXTURE_ERA, 6}, Root,
+              {?FIXTURE_ERA, 6}, Root, 501,
               {batch,
                [signed_tx(
                   <<"t">>, <<"equivocation-first">>,
                   [{assert, {{equivocation, first}, true}}],
                   {Leader, LeaderId})]}),
     Second = block(
-               {?FIXTURE_ERA, 6}, Root,
+               {?FIXTURE_ERA, 6}, Root, 501,
                {batch,
                 [signed_tx(
                    <<"t">>, <<"equivocation-second">>,
@@ -9080,7 +9171,7 @@ ordinary_block_equivocation_is_bounded_and_does_not_crash_test() ->
     Initial =
         st(#{self => Leader, id => LeaderId, validators => Validators,
              slot => 500, last_applied => 500, history_head => {500, element(3, Root)},
-             eng => quod_simplex:eng_new(?DOMAIN, Validators, {Root, 0}),
+             eng => quod_simplex:eng_new(?DOMAIN, Validators, {Root, 500, 0}),
              sync => ready}),
     Supported =
         quod_simplex:dispatch(Leader, {propose, First, []}, Initial),
@@ -9121,7 +9212,7 @@ ordinary_block_equivocation_is_bounded_and_does_not_crash_test() ->
 malformed_leader_payload_is_rejected_without_crash_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
-    Root = quod_ledger:block_ref(blk(5)),
+    Root = quod_ledger:block_ref(blk(5, 495 + 5)),
     Leader = quod_simplex:leader(6, Validators),
     {Leader, LeaderId} = lists:keyfind(Leader, 1, Committee),
     Malformed = #block{era = ?FIXTURE_ERA, slot = 6, parent = Root,
@@ -9129,7 +9220,7 @@ malformed_leader_payload_is_rejected_without_crash_test() ->
     Initial =
         st(#{self => Leader, id => LeaderId, validators => Validators,
              slot => 500, last_applied => 500, history_head => {500, element(3, Root)},
-             eng => quod_simplex:eng_new(?DOMAIN, Validators, {Root, 0}),
+             eng => quod_simplex:eng_new(?DOMAIN, Validators, {Root, 500, 0}),
              sync => ready}),
     ?assertEqual(
        Initial,
@@ -9143,13 +9234,13 @@ eng_certified_alternate_replaces_only_unnotarized_block_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
     Losing = blk(6),
-    Winning = block({?FIXTURE_ERA, 6}, Losing#block.parent, Losing#block.payload, 1),
+    Winning = block({?FIXTURE_ERA, 6}, Losing#block.parent, Losing#block.height, Losing#block.payload, 1),
     WinningHash = quod_simplex:block_hash(Winning),
     {ok, WinningCert} =
         quod_simplex:form_cert(
           ?DOMAIN, support, {?FIXTURE_ERA, 6}, WinningHash,
           supports(Winning, Committee, 3), Validators),
-    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 0}),
+    E0 = quod_simplex:eng_new(?DOMAIN, Validators, {quod_ledger:block_ref(blk(5)), 5, 0}),
     {LosingHeld, []} = quod_simplex:eng_offer({block, Losing}, E0),
     {Certified, _} =
         quod_simplex:eng_offer({cert, WinningCert}, LosingHeld),
@@ -9186,8 +9277,8 @@ eng_certified_alternate_replaces_only_unnotarized_block_test() ->
 %% N=4 (quorum 3): a block notarizes at the 3rd support share, commits at the 3rd commit share.
 eng_notarize_then_commit_test() ->
     C = committee(4),
-    B = blk(1),
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0}),
+    B = blk(1, 1 + 1),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0}),
     {E1, _} = quod_simplex:eng_offer({block, B}, E0),
     {E2, Ev2} = feed_shares(supports(B, C, 2), E1),        %% 2 < quorum 3
     ?assertNot(lists:member({notarized, B}, Ev2)),
@@ -9205,9 +9296,9 @@ old_era_certificate_survives_new_committee_quorum_test() ->
     C5 = committee(5), C4 = take(4, C5),
     [{Added, _}] = C5 -- C4,
     OldRoot = {?FIXTURE_ERA, 0, <<1:256>>},
-    Membership = block({?FIXTURE_ERA, 1}, OldRoot, {batch, [tx([pa(Added)])]}),
+    Membership = block({?FIXTURE_ERA, 1}, OldRoot, 2, {batch, [tx([pa(Added)])]}),
     {E1, _} = quod_simplex:eng_offer({block, Membership},
-        quod_simplex:eng_new(?DOMAIN, pubs(C4), {OldRoot, 0})),
+        quod_simplex:eng_new(?DOMAIN, pubs(C4),{OldRoot, 1, 0})),
     {E2, _} = feed_shares(supports(Membership, C4, 3), E1),
     {Old, _} = feed_shares(commits(Membership, C4, 3), E2),
     Hash = quod_simplex:block_hash(Membership),
@@ -9215,8 +9306,8 @@ old_era_certificate_survives_new_committee_quorum_test() ->
     ?assertMatch(#cert{}, OldCert),
     Era = quod_ledger:next_era({<<"t">>, <<0:256>>}, ?FIXTURE_ERA, Hash),
     Root = {Era, 0, Hash},
-    NewBlock = block({Era, 1}, Root, {batch, [tx([])]}),
-    Fresh = quod_simplex:eng_new(?DOMAIN, pubs(C5), {Root, 0}),
+    NewBlock = block({Era, 1}, Root, 3, {batch, [tx([])]}),
+    Fresh = quod_simplex:eng_new(?DOMAIN, pubs(C5), {Root, 2, 0}),
     ?assertEqual({Fresh, []}, quod_simplex:eng_offer({cert, OldCert}, Fresh)),
     {N1, _} = quod_simplex:eng_offer({block, NewBlock}, Fresh),
     {N2, TooFew} = feed_shares(supports(NewBlock, C5, 3), N1),
@@ -9231,11 +9322,11 @@ old_era_certificate_survives_new_committee_quorum_test() ->
 old_era_and_removed_signer_shares_do_not_count_in_new_era_test() ->
     C4 = committee(4), [Member, Removed | Rest] = C4,
     Current = [Member | Rest], Era = <<8:256>>, Root = {Era, 0, <<2:256>>},
-    NewBlock = block({Era, 1}, Root, {batch, [tx([])]}),
+    NewBlock = block({Era, 1}, Root, 3, {batch, [tx([])]}),
     [OldMemberShare] = supports(blk(1), [Member], 1),
     [RemovedShare] = supports(NewBlock, [Removed], 1),
     {E1, _} = quod_simplex:eng_offer({block, NewBlock},
-        quod_simplex:eng_new(?DOMAIN, pubs(Current), {Root, 0})),
+        quod_simplex:eng_new(?DOMAIN, pubs(Current), {Root, 2, 0})),
     ?assertEqual({E1, []}, quod_simplex:eng_offer({share, OldMemberShare}, E1)),
     ?assertEqual({E1, []}, quod_simplex:eng_offer({share, RemovedShare}, E1)),
     {E2, TooFew} = feed_shares(supports(NewBlock, Current, 2), E1),
@@ -9246,8 +9337,8 @@ old_era_and_removed_signer_shares_do_not_count_in_new_era_test() ->
 %% N=1 (quorum 1): the sole validator's own shares notarize + commit instantly (the degenerate case).
 eng_sole_validator_test() ->
     C = committee(1),
-    B = blk(1),
-    {E1, _}   = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0})),
+    B = blk(1, 1 + 1),
+    {E1, _}   = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0})),
     {E2, Ev2} = feed_shares(supports(B, C, 1), E1),
     ?assert(lists:member({notarized, B}, Ev2)),
     {_E3, Ev3} = feed_shares(commits(B, C, 1), E2),
@@ -9256,8 +9347,8 @@ eng_sole_validator_test() ->
 %% A block whose parent is not yet notarized WAITS, then rides in on the parent's settle (fixpoint).
 eng_parent_ordering_test() ->
     C = committee(4),
-    B1 = blk(1), B2 = blk(2),                              %% B2's parent is slot 1
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0}),
+    B1 = blk(1, 1 + 1), B2 = blk(2, 2 + 1),                              %% B2's parent is slot 1
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0}),
     {E1, _}   = quod_simplex:eng_offer({block, B2}, E0),
     {E2, Ev2} = feed_shares(supports(B2, C, 3), E1),       %% B2 fully supported BEFORE B1
     ?assertNot(lists:member({notarized, B2}, Ev2)),
@@ -9273,8 +9364,8 @@ eng_parent_ordering_test() ->
 %% certificate yet. The driver buffers finalization and applies slots in order.
 eng_child_finalizes_before_parent_test() ->
     C = committee(4),
-    B1 = blk(1), B2 = blk(2),
-    E0 = quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0}),
+    B1 = blk(1, 1 + 1), B2 = blk(2, 2 + 1),
+    E0 = quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0}),
     {E1, _} = quod_simplex:eng_offer({block, B1}, E0),
     {E2, _} = quod_simplex:eng_offer({block, B2}, E1),
     {E3, _} = feed_shares(supports(B1, C, 3), E2),
@@ -9292,8 +9383,8 @@ eng_child_finalizes_before_parent_test() ->
 eng_rejects_outsider_test() ->
     C = committee(4),
     {_, Outsider} = id(),
-    B = blk(1),
-    {E1, _}    = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0})),
+    B = blk(1, 1 + 1),
+    {E1, _}    = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0})),
     Bad = quod_simplex:make_share(?DOMAIN, support, {?FIXTURE_ERA, 1}, quod_simplex:block_hash(B), Outsider),
     {E2, Ev2}  = feed_shares(supports(B, C, 2) ++ [Bad], E1),   %% 2 valid + 1 outsider
     ?assertNot(lists:member({notarized, B}, Ev2)),
@@ -9302,9 +9393,9 @@ eng_rejects_outsider_test() ->
 %% A cert learned from a peer is added + re-disseminated ONCE (never twice), and notarizes the block.
 eng_relays_cert_once_test() ->
     C = committee(4),
-    B = blk(1),
+    B = blk(1, 1 + 1),
     {ok, SC} = quod_simplex:form_cert(?DOMAIN, support, {?FIXTURE_ERA, 1}, quod_simplex:block_hash(B), supports(B, C, 3), pubs(C)),
-    {E1, _}   = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0})),
+    {E1, _}   = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0})),
     {E2, Ev2} = quod_simplex:eng_offer({cert, SC}, E1),
     ?assert(lists:member({broadcast, SC}, Ev2)),
     ?assert(lists:member({notarized, B}, Ev2)),
@@ -9328,7 +9419,7 @@ eng_complaint_advances_once_without_material_test() ->
     C = committee(4), Position = {?FIXTURE_ERA, 1},
     Shares = [quod_simplex:make_share(?DOMAIN, complaint, Position, none, Id)
               || {_, Id} <- take(3, C)],
-    Engine = quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0}),
+    Engine = quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0}),
     {Advanced, Events} = feed_shares(Shares, Engine),
     ?assertEqual([1], [View || {view_advanced, View, complaint} <- Events]),
     ?assertMatch([#cert{kind = complaint}], [Cert || {broadcast, Cert} <- Events]),
@@ -9445,7 +9536,7 @@ content_only_catchup_repopulates_verified_validator_routes_test() ->
                      diff = [{assert, {{ordinary_fact, recovered}, true}}], read_check = #{},
                      author = Self, author_seq = 1, submitted_at = 1}),
     {ok, Tx} = quod_transaction:sign({Ns, Anchor, SelfAdmission}, Unsigned, Signer),
-    Block = block({Era, 1}, Root, {batch, [Tx]}, 1),
+    Block = block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
     Hash = quod_simplex:block_hash(Block),
     Shares = [quod_simplex:make_share(Domain, commit, {Era, 1}, Hash, Id) || {_, Id} <- Committee],
     {ok, Cert} = quod_simplex:form_cert(Domain, commit, {Era, 1}, Hash, Shares, pubs(Committee)),
@@ -9572,8 +9663,8 @@ committee_grows_test() ->
 %% stale share/cert/block for an already-final slot (`=< base`) is then ignored.
 eng_prune_test() ->
     C = committee(4),
-    B1 = blk(1), B2 = blk(2),
-    {E1, _} = quod_simplex:eng_offer({block, B1}, quod_simplex:eng_new(?DOMAIN, pubs(C), {{?FIXTURE_ERA, 0, <<1:256>>}, 0})),
+    B1 = blk(1, 1 + 1), B2 = blk(2, 2 + 1),
+    {E1, _} = quod_simplex:eng_offer({block, B1}, quod_simplex:eng_new(?DOMAIN, pubs(C),{{?FIXTURE_ERA, 0, <<1:256>>}, 1, 0})),
     {E2, _} = quod_simplex:eng_offer({block, B2}, E1),
     {E3, _} = feed_shares(supports(B1, C, 3) ++ supports(B2, C, 3), E2),
     {E4, _} = feed_shares(commits(B1, C, 3) ++ commits(B2, C, 3), E3),
@@ -9622,8 +9713,7 @@ relay_receiver_fixture(TxId) ->
              relay_conns => #{Author => {self(), make_ref()}},
              sync => ready, slot => 3, history_head => {3, <<1:256>>},
              archive_tip => {{Era, 3, <<1:256>>}, 0},
-             eng => quod_simplex:eng_new(?DOMAIN, Validators,
-                                          {{Era, 3, <<1:256>>}, 0})}),
+             eng => quod_simplex:eng_new(?DOMAIN, Validators, {{Era, 3, <<1:256>>}, 3, 0})}),
     {Ns, Era, Slot, Author, AuthorId, Target, Validators,
      SubmissionId, AttemptId, Submit, S}.
 
@@ -9661,8 +9751,7 @@ outbound_committee_fixture(TxId) ->
                               NextTarget => {self(), make_ref()}},
              sync => ready, slot => 3, history_head => {3, <<1:256>>},
              archive_tip => {{Era, 3, <<1:256>>}, 0},
-             eng => quod_simplex:eng_new(?DOMAIN, Validators,
-                                          {{Era, 3, <<1:256>>}, 0})}),
+             eng => quod_simplex:eng_new(?DOMAIN, Validators, {{Era, 3, <<1:256>>}, 3, 0})}),
     {Sent, []} = quod_simplex:test_append(From, Change, S),
     Frame = receive_ordered_frame(),
     {relay,

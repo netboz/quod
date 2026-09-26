@@ -15,7 +15,7 @@ where the proof ran.
 
 -export([normalize/2, normalize_error/1, encode/1, decode/1,
          observe_outcome_unknown/3, report_outcome_unknown/3,
-         http_normalized/2, http_error/1, binding_json/1]).
+         http_normalized/2, http_error/1, binding_json/1, outcome_ref_json/1]).
 -export_type([result/0]).
 
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).

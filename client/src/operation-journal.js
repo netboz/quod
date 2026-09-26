@@ -1,4 +1,5 @@
 import { SIGNED_GOAL_LIMITS, utf8ByteLength } from './protocol-limits.js'
+import { b64url } from './key-provider.js'
 
 const DATABASE = 'quod.signed-operations.v2'
 const STORE = 'operations'
@@ -6,7 +7,7 @@ const DATABASE_VERSION = 1
 
 let browserJournal
 
-// The browser owns only unresolved exact request bytes. The ledger remains the
+// The browser retains unresolved request bytes and any returned group selector. The ledger remains the
 // authority for their outcome; IndexedDB merely prevents a reload from turning
 // uncertainty into a newly signed operation.
 export function signedOperationJournal() {
@@ -104,7 +105,15 @@ function validRow(row) {
     typeof row.request === 'string' &&
     row.request.length <= SIGNED_GOAL_LIMITS.requestBase64urlChars &&
     typeof row.signature === 'string' && row.signature.length === 86 &&
-    Number.isSafeInteger(row.created_at_ms) && row.created_at_ms > 0
+    Number.isSafeInteger(row.created_at_ms) && row.created_at_ms > 0 &&
+    (row.outcome_ref === undefined || validGroupReference(row.outcome_ref, row.agent))
+}
+
+function validGroupReference(ref, agent) {
+  const fields = ['anchor', 'coordinator', 'coordinator_admission', 'group_id']
+  return ref && Object.keys(ref).length === 5 && ref.ns === agent.namespace &&
+    fields.every(key => typeof ref[key] === 'string' && /^[0-9a-f]{64}$/.test(ref[key])) &&
+    b64url(Uint8Array.from(ref.anchor.match(/../g), hex => Number.parseInt(hex, 16))) === agent.anchor
 }
 
 function validAgent(agent) {

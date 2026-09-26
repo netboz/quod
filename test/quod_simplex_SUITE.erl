@@ -208,9 +208,9 @@ t_unsigned_history_rejected(Cfg) ->
     #block{era = Era, slot = View, parent = Parent} = StoredBlock,
     Position = {Era, View},
     ?assertEqual({error, bad_block}, quod_ledger:new_block(
-                                      Position, Parent, {batch, [Unsigned]}, T2)),
+                                      Position, Parent, StoredBlock#block.height, {batch, [Unsigned]}, T2)),
     #entry{data = {batch, [GenesisTx]}} = quod_ledger:entry_view(Genesis),
-    {ok, UnsignedBlock} = quod_ledger:new_block(Position, Parent, {batch, [GenesisTx]}, T2),
+    {ok, UnsignedBlock} = quod_ledger:new_block(Position, Parent, StoredBlock#block.height, {batch, [GenesisTx]}, T2),
     {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
     GenesisHash = quod_simplex:block_hash(GenesisBlock),
     Domain = quod_simplex:consensus_domain(Ns, GenesisHash),

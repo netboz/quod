@@ -29,6 +29,7 @@ reviewed_sites() ->
     [%% Every history page, feed or archive frame reaches the shared decoder.
      %% Point selections remain untrusted hints and cannot be appended.
      {{quod_catchup, transfer_parts, 3}, {call, quod_ledger, decode_entry, 3}},
+     {{quod_catchup, consume_evidence, 3}, {call, quod_ledger, decode_entry, 3}},
      {{quod_feed, decode_inner, 1}, {call, quod_ledger, decode_entry, 1}},
      {{quod_ledger_store, materialize_entry, 2}, {call, quod_ledger, decode_entry, 2}},
      {{quod_ledger_store, scan_decode, 4}, {call, quod_ledger, decode_entry, 2}},
@@ -71,7 +72,7 @@ reviewed_sites() ->
      {{quod_simplex, append_genesis, 2}, {call, quod_ledger_store, append, 2}},
      {{quod_simplex, commit_finality, 2}, {call, quod_ledger_store, append, 2}},
      {{quod_simplex, apply_catchup_window, 3}, {call, quod_ledger_store, append, 2}},
-     {{quod_foreign_log, persist_verified_group, 6}, {call, quod_ledger_store, append, 2}},
+     {{quod_foreign_log, persist_verified_group, 6}, {call, quod_ledger_store, batch_append, 2}},
      {{quod_predicates, dispatch, 3}, dynamic_dispatch}].
 
 source_root() ->
@@ -163,7 +164,7 @@ remote_sites(Mod, {atom, _, Fun}, _Arity, _Kind, M, I)
   when Fun =:= entry; Fun =:= new_entry; Fun =:= noop_entry;
        Fun =:= decode_entry; Fun =:= decode_entries; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
        Fun =:= encode_entry_view;
-       Fun =:= append ->
+       Fun =:= append; Fun =:= batch_append ->
     [{dynamic_boundary, Fun} | walk(Mod, M, I)];
 remote_sites(Mod, {atom, _, _Other}, _Arity, _Kind, M, I) -> walk(Mod, M, I);
 remote_sites(Mod, Fun, _Arity, _Kind, M, I) ->
@@ -174,8 +175,9 @@ boundary(quod_ledger, Fun, Arity, Kind)
        Fun =:= decode_entry; Fun =:= decode_entries; Fun =:= materialize_hint; Fun =:= from_entry_view; Fun =:= mint_artifact;
        Fun =:= encode_entry_view ->
     [{Kind, quod_ledger, Fun, Arity}];
-boundary(quod_ledger_store, append, Arity, Kind) ->
-    [{Kind, quod_ledger_store, append, Arity}];
+boundary(quod_ledger_store, Fun, Arity, Kind)
+  when Fun =:= append; Fun =:= batch_append ->
+    [{Kind, quod_ledger_store, Fun, Arity}];
 boundary(_, _, _, _) -> [].
 
 apply_sites(Mod, Fun, Args, M, I) ->
@@ -232,6 +234,8 @@ checked_ingress_syntax_inventory_test() ->
              form("selected(F,A) -> quod_ledger:F(A)."),
              form("applied(V) -> apply(quod_ledger,from_entry_view,[V])."),
              form("remote_apply(S,A) -> erlang:apply(quod_ledger_store,append,[S,A])."),
+             form("batch(S,A) -> quod_ledger_store:batch_append(S,A)."),
+             form("batch_alias(M,S,A) -> M:batch_append(S,A)."),
              form("dynamic_apply(M,F,A) -> apply(M,F,A)."),
              form("mfa() -> {quod_ledger,decode_entry,2}."),
              form("forged(B,V,K) -> {canonical_entry,B,V,K}."),
@@ -249,6 +253,8 @@ checked_ingress_syntax_inventory_test() ->
       {{probe,selected,2},{dynamic_owner_dispatch,quod_ledger}},
       {{probe,applied,1},{apply,quod_ledger,from_entry_view,1}},
       {{probe,remote_apply,2},{apply,quod_ledger_store,append,2}},
+      {{probe,batch,2},{call,quod_ledger_store,batch_append,2}},
+      {{probe,batch_alias,3},{dynamic_boundary,batch_append}},
       {{probe,dynamic_apply,3},dynamic_dispatch},
       {{probe,mfa,0},escaped_codec_module},
       {{probe,forged,3},escaped_artifact_tag},

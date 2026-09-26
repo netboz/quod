@@ -17,7 +17,7 @@ candidate_preview_rejection_keeps_owned_vote_for_reselection_test() ->
     Payload = {batch, [{dtx, C}]},
     {_, Anchor} = Target = maps:get(origin, F),
     Era = quod_ledger:initial_era(Target),
-    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, Payload, 0),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2, Payload, 0),
     Hash = quod_simplex:block_hash(Block), Parent = {1, <<17:256>>},
     S = quod_simplex:test_state_set(history_head, Parent,
         quod_simplex:test_state_set(validators, [], state(F))),
@@ -192,7 +192,7 @@ queued_blocked_intent() ->
         %% The full installed callback includes both the FIFO and retained owner.
         Era = quod_ledger:initial_era(Target),
         {ok, Parent} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor},
-                                           {batch, [{dtx, Control}]}, 2),
+                                           2, {batch, [{dtx, Control}]}, 2),
         Blocked = quod_simplex:test_blocked_dtx_owner(Parent, Queued),
         {keep_state, Installed, _} = quod_simplex:running({timeout, batch}, {flush_batch, 0}, Blocked),
         {{keep_state, Next, _}, Counts} = counted(fun() ->
@@ -233,7 +233,7 @@ blocked(N) ->
         {_, Anchor} = Target = maps:get(origin, F),
         Era = quod_ledger:initial_era(Target),
         {ok, Parent} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor},
-            {batch, [{dtx, maps:get(vote_control, F)}]}, 2),
+            2, {batch, [{dtx, maps:get(vote_control, F)}]}, 2),
         S = quod_simplex:test_blocked_dtx_owner(Parent, Retained),
         {S, Counts} = counted(fun() -> quod_simplex:test_drive_retained_dtx(S) end),
         assert_no_auth(Counts),
@@ -282,6 +282,7 @@ relay_work_case(N) ->
     Peer = crypto:hash(sha256, <<"retained relay work peer">>),
     Vs = lists:sort([Self, Peer]),
     Slot = hd([H || H <- [2, 3], quod_simplex:leader(H, Vs) =:= Peer]),
+    Era = quod_ledger:initial_era(maps:get(origin, F)),
     Link = spawn(fun() -> relay_frames([]) end),
     Replacement = spawn(fun() -> relay_frames([]) end),
     try
@@ -290,7 +291,8 @@ relay_work_case(N) ->
               {eng, engine(F, Vs, Slot - 1)},
               {conns, #{Peer => {Link, make_ref()}}},
               {inbound_conns, #{Peer => {Link, make_ref()}}},
-              {peer_readiness, #{Peer => {Link, Slot - 1, true, quod_time:mono_ms()}}}]),
+              {peer_readiness, #{Peer => {Link, Slot - 1,
+                  {Era, Slot, Slot - 1}, true, quod_time:mono_ms()}}}]),
         S = lists:foldl(fun(X, Acc) -> quod_simplex:test_seed_dtx_submission(
             maps:get(vote_control, X), [], Acc) end, S0, lists:sublist(Fs,N)),
         {{Placed, [Frame]}, FirstCounts} = counted(fun() ->
@@ -410,7 +412,7 @@ fixtures() ->
 engine(F, Validators, View) ->
     Identity = {Ns, Anchor} = maps:get(origin, F),
     quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), Validators,
-        {{quod_ledger:initial_era(Identity), View, Anchor}, 0}).
+        {{quod_ledger:initial_era(Identity), View, Anchor}, View + 1, 0}).
 
 state(F) ->
     {Ns, Anchor} = maps:get(origin, F), #{pubkey := Pub} = maps:get(node_identity, F),
@@ -438,7 +440,7 @@ counted(Fun) ->
     {{Result, Owner}, {call_time, Rows}} = tprof:profile(fun() -> {Fun(), self()} end,
         #{type => call_time, report => return, set_on_spawn => false,
         pattern => [{quod_identity, verify, 3}, {quod_dtx, decode, 1},
-                    {quod_atomic, transition, 6}, {quod_ledger, new_block, 4}]}),
+                    {quod_atomic, transition, 6}, {quod_ledger, new_block, 5}]}),
     %% call_count is VM-global; call_time retains per-process call counts.
     %% Ignore elapsed time and other processes, including fixture cleanup.
     {Result, [{{M, F}, lists:sum([N || {Pid, N, _} <- Ps, Pid =:= Owner])}

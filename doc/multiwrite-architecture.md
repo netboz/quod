@@ -1503,3 +1503,25 @@ definitive outcome of an earlier request.
 `doc/fipa-pending-continuation-plan.md` specifies the current policy and its
 limitations. It must not be implicitly applied to arbitrary goals or irreversible
 external actions lacking the existing effect guarantees.
+
+
+### Demand-specific foreign evidence (2026-09-26 amendment to R2)
+
+R2's non-hosted branch retains one foreign-history owner per node and one
+identity-scoped verification lifecycle, but no longer requires every exact
+claim to acquire a complete material prefix. The owner retains immutable
+certified era authority and certified positive claims. Only projection demand
+acquires the contiguous material archive. Hosted identity precedence, pinned
+captures, original deadlines and owner-incarnation rules are unchanged.
+
+The signed material-height, old-committee succession, shared finality-verifier,
+current-tip confirmation and no-sparse-absence contracts are specified in
+`finality-round-recovery-plan.md` §0, “Point evidence and bounded durability”.
+Complete projection history continues to use the existing ordered verifier and
+materializer. This is not an additional knowledge base or a snapshot contract.
+
+AM2's checkpoint matching applies at the saved complete-group boundary.
+Explicit startup recovery may verify and retain later complete archive groups;
+a valid saved prefix with a complete suffix does not itself denote corruption.
+A mismatched boundary, projection or certificate remains a loud integrity
+failure. No request performs this startup fold or repairs its own cache.

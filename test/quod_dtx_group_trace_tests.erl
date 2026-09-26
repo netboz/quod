@@ -248,7 +248,7 @@ history_only_group_recovery_has_no_ambient_parent_test() ->
             %% This real signed/QC entry is a local protocol fixture, not an
             %% admitted node, foreign-history verifier or replay integration.
             Era = quod_ledger:initial_era(Origin),
-            {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, [{dtx, Control}]}, 1),
+            {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2, {batch, [{dtx, Control}]}, 1),
             Hash = quod_simplex:block_hash(Block),
             Signer = maps:get(node_identity, F),
             #share{sig = Sig} = quod_simplex:make_share(
@@ -398,7 +398,7 @@ with_fixture(Fun) ->
           validators => [Author], author_admissions => #{Author => Admission},
           sync => ready, slot => 1, history_head => {1, Anchor}, archive_tip => {Root, 0}, last_applied => 0,
           prolog_ready => false, signing_journal => Journal,
-          eng => quod_simplex:eng_new(Domain, [Author], {Root, 0})}),
+          eng => quod_simplex:eng_new(Domain, [Author], {Root, 1, 0})}),
         Fun(F, S, {Journal, Dir})
     after
         catch quod_signing_journal:close(Journal),

@@ -59,7 +59,7 @@ canonical_block_and_sidecar_wire_test() ->
     F = quod_ct:protocol_fixture(Ns),
     {_Ns, Anchor} = maps:get(identity, F), Era = maps:get(era, F),
     Tx = maps:get(transaction, F),
-    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, {batch, [Tx]}, 7),
+    {ok, Block} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2, {batch, [Tx]}, 7),
     Entry = quod_ledger:entry(2, Block, quod_ct:protocol_certificate(Block, F)),
     {ok, Ref} = quod_dtx:certified_entry_ref(maps:get(identity, F), Entry, Tx),
     Hints = [{Ref, Entry}],
@@ -88,7 +88,7 @@ canonical_block_and_sidecar_wire_test() ->
 decoded_block_wire_shapes_are_hard_rejected_test() ->
     Ns = <<"relay:old-record-wire">>,
     Payload = quod_ct:atomic_resolve_payload(),
-    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, Payload, 7),
+    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, 2, Payload, 7),
     OldMessages =
         [{propose, Block, []},
          {certified_block, Block, none},
@@ -103,7 +103,7 @@ decoded_block_wire_shapes_are_hard_rejected_test() ->
 
 certified_reply_carries_hash_not_a_second_certificate_test() ->
     Ns = <<"relay:certified-by-requester">>,
-    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, empty, 7),
+    {ok, Block} = quod_ledger:new_block({<<9:256>>, 2}, {<<9:256>>, 1, <<1:256>>}, 1, empty, 7),
     Hash = quod_simplex:block_hash(Block),
     Frame = quod_relay:encode_consensus_frame(Ns, {certified_block, Block, Hash}),
     ?assertEqual({consensus, {certified_block, Block, Hash}},

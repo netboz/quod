@@ -76,7 +76,7 @@ Remaining work and hardware acceptance are tracked in `doc/deferred.md` and
 
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/4 signs slots as unsigned 64-bit integers
 -define(MATERIAL_PIPELINE_DEPTH, 1).      %% existing material overlap; never bounds empty protocol rounds
-%% Signature version3 binds the era/view and canonical block2 format.
+%% Signature version3 binds the era/view and the canonical block hash.
 -define(SHARE_DOMAIN_VERSION, 3).
 -define(SHARE_DOMAIN_TAG, <<"quod/simplex/domain">>).
 -define(SHARE_MESSAGE_TAG, <<"quod/simplex/share">>).
@@ -94,7 +94,7 @@ Remaining work and hardware acceptance are tracked in `doc/deferred.md` and
          valid_genesis_transaction/2, genesis_predicate_manifest/1,
          valid_history_entry/4, valid_history_entry/5,
          history_projection/0, history_projection/1, history_projection/5,
-         history_committee/1, history_committee_view/2,
+         history_committee/1, history_committee_view/2, history_authority_advance/3,
          history_certifying_committee_view/2,
          history_validator_routes/1,
          history_advance/3, history_validate_advance/3,
@@ -173,7 +173,7 @@ Remaining work and hardware acceptance are tracked in `doc/deferred.md` and
          test_invalidate_relay_generation/1,
          test_close_relay_transport/1,
          test_relay_transport_counts/1,
-         test_redrive_head/3, test_block_requests/1, test_signing_journal/1,
+         test_redrive_head/3, redrive_inflight/1, test_block_requests/1, test_signing_journal/1,
          test_append/3, test_relayed_append/3, test_relayed_append/4,
          test_relay_origin/4,
          test_ingress/1, test_ingress_view_source/1, protocol_parent_material/1, approved_author_seqs/1, vote_timestamp/1, eng_archive_group/4,
@@ -470,10 +470,10 @@ distinct_valid(Sigs, Msg, Validators) ->
 %% Events: `{broadcast, Cert}` (a cert we just formed or first learned — re-disseminate),
 %% `{notarized, Block}` (a block joined the tree), `{committed, Slot, Block}` (a block is final → apply).
 
-%% Derived once when an exact block joins the complete tree. Counts are
-%% relative to this engine's initial root; pruning preserves that coordinate,
-%% so material admission never walks an accumulated empty-carrier chain.
--record(ancestry, {terminal = false, material_count = 0, material_ref}).
+%% Derived once when an exact block joins the complete tree. Signed material
+%% height is checked against its parent; admission never walks an accumulated
+%% empty-carrier chain to recover the height.
+-record(ancestry, {terminal = false, material_height, material_ref}).
 
 -record(eng, {domain       :: <<_:256>>,
               era          :: <<_:256>>,
@@ -515,12 +515,14 @@ current committee), with `Base` = the durable committed floor. Blocks `=< Base`
 are treated as committed history so a new proposal's parent resolves without
 the engine holding the whole chain.
 """.
--spec eng_new(<<_:256>>, [node_id()], {protocol_ref(), non_neg_integer()}) -> #eng{}.
+-spec eng_new(<<_:256>>, [node_id()], {protocol_ref(), pos_integer(), non_neg_integer()}) -> #eng{}.
 eng_new(<<_:256>> = Domain, Validators,
-        {{<<_:256>> = Era, View, <<_:256>>} = Root, Timestamp})
-  when is_integer(View), View >= 0, is_integer(Timestamp), Timestamp >= 0 ->
+        {{<<_:256>> = Era, View, <<_:256>>} = Root, Height, Timestamp})
+  when is_integer(View), View >= 0, is_integer(Height), Height >= 1,
+       is_integer(Timestamp), Timestamp >= 0 ->
     #eng{domain = Domain, validators = Validators, era = Era, base = View,
-         root = Root, root_timestamp = Timestamp, root_ancestry = #ancestry{material_ref = Root},
+         root = Root, root_timestamp = Timestamp,
+         root_ancestry = #ancestry{material_height = Height, material_ref = Root},
          view = View + 1, last_parent = Root}.
 
 %% Pool insertion already verified and canonicalized this era's certificate.
@@ -812,14 +814,16 @@ proposal_parent_ready(#block{era = Era, slot = View,
         andalso valid_parent_transition(Block, ParentView, Eng);
 proposal_parent_ready(_Block, _Eng) -> false.
 
-valid_parent_transition(#block{timestamp = Ts, payload = Payload}, ParentView, Eng) ->
+valid_parent_transition(#block{height = Height, timestamp = Ts, payload = Payload}, ParentView, Eng) ->
     ParentTs = case ParentView =:= Eng#eng.base of
         true -> Eng#eng.root_timestamp;
         false -> (maps:get(ParentView, Eng#eng.tree))#block.timestamp
     end,
+    ParentHeight = (parent_ancestry(ParentView, Eng))#ancestry.material_height,
     case Payload of
-        empty -> Ts =:= ParentTs;
-        _ -> Ts >= ParentTs andalso not parent_terminal(ParentView, Eng)
+        empty -> Height =:= ParentHeight andalso Ts =:= ParentTs;
+        _ -> Height =:= ParentHeight + 1 andalso Ts >= ParentTs
+                 andalso not parent_terminal(ParentView, Eng)
     end.
 
 first_missing_complaint(View, View, _Certs) -> none;
@@ -903,7 +907,7 @@ block_ancestry(#block{parent = {_, ParentView, _}, payload = Payload} = Block, E
                 _ -> false
             end,
             Parent#ancestry{terminal = Parent#ancestry.terminal orelse Membership,
-                           material_count = Parent#ancestry.material_count + 1,
+                           material_height = Block#block.height,
                            material_ref = quod_ledger:block_ref(Block)}
     end.
 
@@ -1230,10 +1234,10 @@ eng_retained_block(Slot, Eng = #eng{block_slots = Slots}) ->
                                                      %% current era/view timeout demand
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             inbound_conns = #{} :: #{node_id() => {pid(), reference()}}, %% authenticated inbound consensus links
-            peer_readiness = #{} :: #{node_id() => {pid(), slot(), boolean(), integer()}},
+            peer_readiness = #{} :: #{node_id() => {pid(), slot(), {binary(), slot(), slot()}, boolean(), integer()}},
                                                      %% readiness reported on the exact inbound link generation
-            readiness_advertised = {0, false, 0}
-              :: {slot(), boolean(), integer()},      %% last local {height,ready,monotonic-ms} advertisement
+            readiness_advertised = {none, 0}
+              :: {none | tuple(), integer()},        %% last local readiness and monotonic advertisement time
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             relay_conns = #{} :: #{node_id() => {pid(), reference()}},
@@ -1341,20 +1345,23 @@ eng_retained_block(Slot, Eng = #eng{block_slots = Slots}) ->
             progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
             validation_ttl_ms = ?QUOD_VALIDATION_TTL_MS :: non_neg_integer()}).
 
-%% The engine owns the protocol parent. The owner supplies only its material
-%% base height; an empty suffix inherits its material parent without consuming
-%% an admission position or inventing a ledger height.
+%% The archive supplies the engine's authenticated material base. An empty
+%% suffix inherits its parent's signed height without consuming an admission
+%% position or inventing a ledger height.
+engine_root(#s{archive_tip = {Root, Timestamp}, slot = Height}) ->
+    {Root, max(1, Height), Timestamp}.
+
 protocol_parent_material(S = #s{eng = #eng{last_parent = Parent}}) ->
     protocol_parent_material(Parent, S).
 
-protocol_parent_material(Ref, #s{eng = Eng, slot = Height, history_head = Installed}) ->
+protocol_parent_material(Ref, #s{eng = Eng, history_head = Installed}) ->
     Parent = parent_ancestry(Ref, Eng),
     Base = Eng#eng.root_ancestry,
-    case Parent#ancestry.material_count - Base#ancestry.material_count of
+    case Parent#ancestry.material_height - Base#ancestry.material_height of
         0 -> Installed;
         Ahead when Ahead > 0 ->
             {_, _, Hash} = Parent#ancestry.material_ref,
-            {Height + Ahead, Hash}
+            {Parent#ancestry.material_height, Hash}
     end.
 
 %% A configured anchor permits recovery, but is not an installed genesis.
@@ -1564,8 +1571,9 @@ test_progress(#s{head_progress = idle}) -> idle;
 test_progress(#s{head_progress = #head_progress{era = Era, slot = Slot, phase = Phase}}) ->
     {Era, Slot, Phase}.
 test_engine_pool_sizes(#s{eng = Eng}) -> eng_pool_sizes(Eng).
-test_protocol_position(#s{eng = #eng{era = Era, view = View, root = Root, last_parent = Parent}}) ->
-    #{era => Era, view => View, root => Root, parent => Parent}.
+test_protocol_position(#s{eng = #eng{era = Era, view = View, root = Root, last_parent = Parent} = Eng}) ->
+    #{era => Era, view => View, root => Root, parent => Parent,
+      material_height => (parent_ancestry(Parent, Eng))#ancestry.material_height}.
 test_round(Slot, S) ->
     R = round_state(Slot, S),
     {R#round.supporting, is_tuple(R#round.final), R#round.final =:= complaint}.
@@ -1795,7 +1803,8 @@ test_dtx_drive_scheduled(#s{dtx_drive_scheduled = Scheduled}) -> Scheduled.
 test_propose_dtx_wave(Slot, Envelopes, Hints, S) ->
     #eng{era = Era, last_parent = Parent} = S#s.eng,
     {ok, Payload} = decode_dtx_wave(Envelopes),
-    {ok, Block} = quod_ledger:new_block({Era, Slot}, Parent, Payload,
+    {ParentHeight, _} = protocol_parent_material(Parent, S),
+    {ok, Block} = quod_ledger:new_block({Era, Slot}, Parent, ParentHeight + 1, Payload,
                       max(quod_time:now_ms(), parent_timestamp(Parent, S))),
     propose_dtx_wave(Block, Hints, S).
 test_resolve_committed_dtx(Entry, Payload, S) ->
@@ -3212,7 +3221,7 @@ init_store(Ns, Cfg, Id) ->
                      GenesisTable,
                      [{anchor, GenesisHash},
                       proof_gate_tuple(false, S1)]),
-            Eng = eng_new(Domain, active_validators(S1), S1#s.archive_tip),
+            Eng = eng_new(Domain, active_validators(S1), engine_root(S1)),
             S2 = restore_signing_state(
                    S1#s{signing_journal = Journal,
                         genesis_hash = GenesisHash,
@@ -3552,7 +3561,8 @@ recover_archived_storage(S0 = #s{store = Store, phase_index = PhaseIndex}, Last,
               end,
               ok = require_complete_archive_group(Summary, hd(Entries)),
               {Tip1, Floors1} = advance_archive_custody(Summary, Projected, Tip, Floors),
-              P = retain_owner_projection(Projected, Delta, S0),
+              P = retain_owner_projection(Projected, Delta,
+                    S0#s{protocol_root = maps:get(protocol_root, Acc)}),
               Pending = lists:foldl(fun(E, Pending0) ->
                   #entry{data = Data} = quod_ledger:entry_view(E),
                   remove_committed_effect_ids(Data, Pending0)
@@ -3692,7 +3702,7 @@ prepare_genesis(Cfg, Ns, <<_:256>> = Self)
     try
         Incarnation = crypto:strong_rand_bytes(32),
         {ok, Block} = quod_ledger:new_block(
-                        {genesis, 0}, none,
+                        {genesis, 0}, none, 1,
                         {batch, [genesis_tx(Cfg, Ns, Self, Incarnation)]},
                         0),
         Entry = quod_ledger:entry(1, Block, none),
@@ -9196,8 +9206,9 @@ flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
 propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs,
               S = #s{eng = #eng{era = Era}}) ->
     Waiters = [From || {From, _Change} <- Items],
+    {ParentHeight, _} = protocol_parent_material(Parent, S),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, Slot}, Parent, {batch, Transactions},
+                    {Era, Slot}, Parent, ParentHeight + 1, {batch, Transactions},
                     max(quod_time:now_ms(), parent_timestamp(Parent, S))),
     BH = block_hash(Block),
     lists:foreach(
@@ -9228,22 +9239,25 @@ publish_local_proposal(Local = #local_proposal{hash = Hash,
         Attributes#{'quod.consensus.parent' => element(2, Parent)}, S1),
     on_propose(Hash, Block, Sidecar, true, broadcast({propose, Block, Sidecar}, S1)).
 
-%% Called after the existing material queues have drained on an entering-view
-%% or restored-readiness edge. A collected material batch always wins. A
-%% finalized/idle ontology has no material ancestor to recover and emits none.
+%% The ordinary watchdog's complaint certificate opens a fresh recovery view.
+%% Notarization alone leaves direct finality a chance to complete without an
+%% empty proposal. Material work still wins, and no extra timer is introduced.
 drive_empty_proposal(Before, S = #s{eng = #eng{era = Era, view = View,
-                                              last_parent = Parent}, self = Self}) ->
+                                              last_parent = Parent, certs = Certs}, self = Self}) ->
     Changed = protocol_wakeup(Before) =/= protocol_wakeup(S),
     Free = S#s.collecting =:= none
            andalso not maps:is_key(View, S#s.local_proposals)
            andalso not proposal_visible(View, S)
            andalso (round_state(View, S))#round.candidate =:= none,
     case Changed andalso Free andalso may_vote(S)
+         andalso maps:is_key({complaint, View - 1, none}, Certs)
          andalso leader(View, active_validators(S)) =:= Self
          andalso protocol_parent_material(S) =/= S#s.history_head of
         false -> S;
         true ->
-            {ok, Block} = quod_ledger:new_block({Era, View}, Parent, empty, parent_timestamp(Parent, S)),
+            {ParentHeight, _} = protocol_parent_material(Parent, S),
+            {ok, Block} = quod_ledger:new_block({Era, View}, Parent, ParentHeight,
+                                               empty, parent_timestamp(Parent, S)),
             publish_local_proposal(#local_proposal{hash = block_hash(Block), block = Block},
               #{'quod.proposal.kind' => <<"empty">>, 'quod.batch.transactions' => 0}, S)
     end.
@@ -9368,7 +9382,8 @@ dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = R
     end,
     case Preview of
         {ok, NextProjection} ->
-            {ok, Block} = quod_ledger:new_block({Era, View}, Parent, Payload, Timestamp),
+            {ParentHeight, _} = protocol_parent_material(Parent, S),
+            {ok, Block} = quod_ledger:new_block({Era, View}, Parent, ParentHeight + 1, Payload, Timestamp),
             Required = [Hint || Hint = {{applied, _, _}, _} <- dtx_wave_validation_sidecar(Wave)],
             byte_size(encode(Ns, {propose, Block, Required})) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES
                 andalso {ok, NextProjection, Block};
@@ -9935,7 +9950,7 @@ project_dtx_batch_items(Items, LaneSequences, Entry, Projection0) ->
 %% Retire only the protocol prefix owned by the completed archive group.
 %% Membership closes the old era completely; the new virtual root is derived
 %% from its last material block, never from the selected empty witness head.
-finalize_protocol({Era, View, _} = Head, S0 = #s{eng = Eng, archive_tip = {Root, _} = Tip}) ->
+finalize_protocol({Era, View, _} = Head, S0 = #s{eng = Eng, archive_tip = {Root, _}}) ->
     NewEra = element(1, Root) =/= Era,
     Cutoff = case NewEra of true -> infinity; false -> View end,
     S2 = retire_proposal_work(Cutoff, S0),
@@ -9943,7 +9958,7 @@ finalize_protocol({Era, View, _} = Head, S0 = #s{eng = Eng, archive_tip = {Root,
         case V =< Cutoff of true -> release_validation_monitor(Round); false -> ok end
     end, S2#s.rounds),
     Engine = case NewEra of
-        true -> eng_new(S2#s.consensus_domain, active_validators(S2), Tip);
+        true -> eng_new(S2#s.consensus_domain, active_validators(S2), engine_root(S2));
         false -> eng_prune(Head, Eng)
     end,
     Rounds = case NewEra of
@@ -10556,9 +10571,11 @@ dispatch(Peer, {block_request, Slot, BH}, S)
     serve_certified_block(Peer, Slot, BH, S);
 dispatch(Peer, {certified_block, #block{} = Block, Hash}, S) ->
     ingest_certified_block(Peer, Block, Hash, S);
-dispatch(Peer, {readiness, Height, Ready}, S)
-  when is_integer(Height), Height >= 0, is_boolean(Ready) ->
-    record_peer_readiness(Peer, Height, Ready, S);
+dispatch(Peer, {readiness, Height, {Era, View, Finalized} = Position, Ready}, S)
+  when is_integer(Height), Height >= 0, is_binary(Era), byte_size(Era) =:= 32,
+       is_integer(View), View >= 1, is_integer(Finalized), Finalized >= 0,
+       Finalized < View, is_boolean(Ready) ->
+    record_peer_readiness(Peer, Height, Position, Ready, S);
 dispatch(Peer, {dtx_submit, Envelopes, ValidationSidecar}, S) ->
     handle_dtx_submit(Peer, Envelopes, ValidationSidecar, S);
 dispatch(_Peer, _Other, S)                 -> S.
@@ -11365,15 +11382,29 @@ retain_owner_projection(P, Delta, S) -> retain_owner_projection_indexed(P, Delta
 retain_owner_projection(P, Delta, S) -> retain_owner_projection_indexed(P, Delta, S).
 -endif.
 
-retain_owner_projection_indexed(P = #{committee_views := Views}, Delta0, #s{phase_index = Index}) ->
-    Delta = case Views of
+retain_owner_projection_indexed(P = #{committee_views := Views}, Delta0,
+                               #s{phase_index = Index, protocol_root = PreviousRoot}) ->
+    Delta1 = case Views of
         [Current | _] -> quod_dtx_phase_index:preview_committee(Delta0, Current);
         [] -> Delta0
     end,
+    Delta = preview_protocol_era(PreviousRoot, P, Delta1),
     %% The ledger is already durable. Failure here is engine death, never a
     %% return to a pre-append state or publication with an outdated index.
     ok = quod_dtx_phase_index:commit_delta(Index, Delta),
     P#{committee_views := lists:sublist(Views, 1)}.
+
+%% The era index names the exact certified terminal material entry, including
+%% same-set membership reassertions which intentionally retain committee_id.
+preview_protocol_era(PreviousRoot,
+                     #{protocol_root := {Era, 0, Hash}, history_head := {Height, Hash}}, Delta) ->
+    case PreviousRoot of
+        {Era, _, _} -> Delta;
+        none -> quod_dtx_phase_index:preview_protocol_era(Delta, {Era, genesis, Height, Hash});
+        {PreviousEra, _, _} ->
+            quod_dtx_phase_index:preview_protocol_era(Delta, {Era, PreviousEra, Height, Hash})
+    end;
+preview_protocol_era(_PreviousRoot, _Projection, Delta) -> Delta.
 
 verify_local_dtx_reference_result(
   {ok, #{transaction := _Transaction} = Evidence}) ->
@@ -11722,19 +11753,30 @@ head_has_evidence(V, #s{eng = #eng{blocks = Blocks, shares = Shares}, self = Sel
 %% readiness merely because it uses the same long-lived node key.
 peer_ready_at(Peer, Height, Inbound, Readiness) ->
     case {maps:get(Peer, Inbound, undefined), maps:get(Peer, Readiness, undefined)} of
-        {{Pid, _Ref}, {Pid, PeerHeight, true, SeenAt}} when PeerHeight >= Height ->
+        {{Pid, _Ref}, {Pid, PeerHeight, _Position, true, SeenAt}} when PeerHeight >= Height ->
             is_process_alive(Pid)
                 andalso quod_time:mono_ms() - SeenAt =< ?READINESS_FRESH_MS;
         _ ->
             false
     end.
 
-record_peer_readiness(Peer, Height, Ready,
+record_peer_readiness(Peer, Height, Position = {Era, View, Finalized}, Ready,
                       S = #s{inbound_conns = Inbound, peer_readiness = Readiness}) ->
     case {lists:member(Peer, active_validators(S)), maps:get(Peer, Inbound, undefined)} of
         {true, {Pid, _Ref}} when is_pid(Pid) ->
-            SeenAt = quod_time:mono_ms(),
-            S#s{peer_readiness = Readiness#{Peer => {Pid, Height, Ready, SeenAt}}};
+            Previous = maps:get(Peer, Readiness, none),
+            case Previous of
+                {Pid, OldHeight, {Era, OldView, OldFinalized}, _, _}
+                  when Height < OldHeight; View < OldView; Finalized < OldFinalized -> S;
+                _ ->
+                    SeenAt = quod_time:mono_ms(),
+                    Updated = S#s{peer_readiness =
+                        Readiness#{Peer => {Pid, Height, Position, Ready, SeenAt}}},
+                    case Previous of
+                        {Pid, Height, Position, _, _} -> Updated;
+                        _ -> send_protocol_evidence(Peer, Position, Updated)
+                    end
+            end;
         _ ->
             S
     end.
@@ -11837,27 +11879,51 @@ keep_progress(S0, S1, Actions, TimerMode, ReadyBoundary) ->
      lists:reverse(ActionsRev2, TimerActions)}.
 
 %% Readiness is consensus state, so advertise it on the authenticated consensus channel rather than infer
-%% it from socket existence or a separate dissemination process. Capability/height changes go immediately;
+%% it from socket existence or a separate dissemination process. Installed-position changes go immediately;
 %% an unchanged state refreshes once per second so a failed dial is retried and a half-open link cannot
-%% leave an immortal claim. Readiness frames are intentionally not queued: `handle_link_up/3` sends the
-%% current value, so retaining older values would only bloat the protocol outbox during a long outage.
+%% leave an immortal claim. Existing live-link flow control retains each notice. Disconnected notices
+%% have no separate outbox: `handle_link_up/3` sends the current value after adopting the new stream.
 refresh_readiness(S1) ->
-    {Height, Ready} = local_readiness(S1),
-    {LastHeight, LastReady, LastAt} = S1#s.readiness_advertised,
+    Readiness = local_readiness(S1),
+    {Previous, LastAt} = S1#s.readiness_advertised,
     Now = quod_time:mono_ms(),
-    case {Height, Ready} =/= {LastHeight, LastReady}
+    case Readiness =/= Previous
              orelse Now - LastAt >= ?READINESS_MS of
-        true  -> advertise_readiness(Height, Ready, Now, S1);
+        true  -> advertise_readiness(Readiness, Now, S1);
         false -> S1
     end.
 
-local_readiness(S) -> {S#s.slot, may_vote(S)}.
+local_readiness(S = #s{eng = #eng{era = Era, view = View} = Eng}) ->
+    {readiness, S#s.slot, {Era, View, finalized_protocol_view(Eng)}, may_vote(S)}.
 
-advertise_readiness(Height, Ready, Now, S = #s{self = Self}) ->
-    Frame = encode(S#s.ns, {readiness, Height, Ready}),
+advertise_readiness(Readiness, Now, S = #s{self = Self}) ->
+    Frame = encode(S#s.ns, Readiness),
     S1 = lists:foldl(fun(Peer, Acc) -> send_readiness(Peer, Frame, Acc) end,
                      S, active_validators(S) -- [Self]),
-    S1#s{readiness_advertised = {Height, Ready, Now}}.
+    S1#s{readiness_advertised = {Readiness, Now}}.
+
+%% Finality ends active voting work; only durable archive custody permits
+%% pruning its proof and signing latches. Skipped views below this prefix also
+%% cease proactive share traffic.
+finalized_protocol_view(#eng{base = Base, committed = Committed}) ->
+    maps:fold(fun(View, _Block, Highest) -> max(View, Highest) end, Base, Committed).
+
+%% An authenticated peer position is a discovery hint, never vote authority.
+%% Reply only within the engine's accepted lookahead. Its next installed view
+%% advertises another position; bodies use the existing certified request path.
+%% Ordered transport retains this finite reply across local flow control.
+send_protocol_evidence(Peer, {Era, View, Finalized},
+                       S = #s{eng = #eng{era = Era, certs = Certs}, conns = Conns}) ->
+    case maps:get(Peer, Conns, undefined) of
+        {Link, _Ref} ->
+            Missing = lists:sort([{V, Kind, Cert} || {{Kind, V, _}, Cert} <- maps:to_list(Certs),
+                                  V > Finalized, V =< View + 1]),
+            [_ = quod_link:send_ordered(Link, encode(S#s.ns, {cert, Cert}))
+             || {_V, _Kind, Cert} <- Missing],
+            S;
+        undefined -> S
+    end;
+send_protocol_evidence(_Peer, _Position, S) -> S.
 
 %% One capability edge owns recovery reconciliation. This catches explicit sync completion, periodic
 %% readiness, and live certified finality without each caller remembering a special hook.
@@ -11932,9 +11998,10 @@ redrive_head(Slot, S) -> emit_slot_evidence(Slot, full, S).
 redrive_inflight(S) ->
     case may_vote(S) of
         false -> S;
-        true  -> lists:foldl(
+        true  -> Finalized = finalized_protocol_view(S#s.eng),
+                 lists:foldl(
                    fun(Slot, Acc) -> emit_slot_evidence(Slot, votes, Acc) end,
-                   S, lists:sort([Slot || Slot <- maps:keys(S#s.rounds), Slot > (S#s.eng)#eng.base]))
+                   S, lists:sort([Slot || Slot <- maps:keys(S#s.rounds), Slot > Finalized]))
     end.
 
 emit_slot_evidence(_Slot, _Scope, S) when S#s.sync =/= ready -> S;
@@ -12390,8 +12457,8 @@ approved_author_seqs(Parent, #s{author_seqs = Seqs, eng = Eng}) ->
 
 %% Skip empty suffixes through the engine's installed ancestry summary. Fold
 %% only uncommitted material blocks, oldest first; never scan the ledger.
-material_author_seqs(#ancestry{material_count = Count},
-                     #eng{root_ancestry = #ancestry{material_count = Count}}, Seqs) -> Seqs;
+material_author_seqs(#ancestry{material_height = Height},
+                     #eng{root_ancestry = #ancestry{material_height = Height}}, Seqs) -> Seqs;
 material_author_seqs(#ancestry{material_ref = {_, View, _}}, Eng, Seqs) ->
     #block{parent = {_, ParentView, _}, payload = Payload} = maps:get(View, Eng#eng.tree),
     advance_author_seqs(Payload,
@@ -12957,7 +13024,7 @@ send_relay_control(
 send_readiness(Peer, Frame, S = #s{chan = Chan, conns = Conns, dialing = Dialing}) ->
     case maps:get(Peer, Conns, undefined) of
         {LinkPid, _Ref} ->
-            _ = quod_link:send(LinkPid, Frame),
+            _ = quod_link:send_ordered(LinkPid, Frame),
             S;
         undefined ->
             case maps:is_key(Peer, Dialing) of
@@ -13333,10 +13400,11 @@ adopt_consensus_link(Peer, LinkPid, Outbox, S) ->
          || F <- lists:reverse(maps:get(Peer, Outbox, []))],
     S2 = S1#s{conns = (S1#s.conns)#{Peer => {LinkPid, Ref}},
               outbox = maps:remove(Peer, Outbox)},
-    {Height, Ready} = local_readiness(S2),
-    _ = quod_link:send(
-          LinkPid, encode(S2#s.ns, {readiness, Height, Ready})),
-    S2.
+    _ = quod_link:send_ordered(LinkPid, encode(S2#s.ns, local_readiness(S2))),
+    case maps:get(Peer, S2#s.peer_readiness, none) of
+        {_Pid, _Height, Position, _Ready, _SeenAt} -> send_protocol_evidence(Peer, Position, S2);
+        none -> S2
+    end.
 
 %% Relay traffic has its own `{ingress,Ns}` QUIC stream. A link is useful only
 %% while this origin retains a placement toward the peer. Link-up reconstructs
@@ -14335,7 +14403,7 @@ reseat_engine(S, Included) ->
     maps:foreach(fun(_, Round) -> release_validation_monitor(Round) end, S1#s.rounds),
     restore_signing_engine(
       S1#s{eng             = eng_new(S1#s.consensus_domain,
-                                      active_validators(S1), S1#s.archive_tip),
+                                      active_validators(S1), engine_root(S1)),
             block_requests  = #{},
             requested_slot  = none,
             head_progress   = idle,
@@ -14615,6 +14683,46 @@ retire_changed_admissions(OldAdmissions, Admissions,
 -doc "Read the canonical validator set from a history projection.".
 -spec history_committee(history_projection()) -> [node_id()].
 history_committee(#{committee := Committee}) -> Committee.
+
+%% Committee authority is reduced only from an anchored genesis or a terminal
+%% membership entry already finalized by the previous era. This shares the
+%% ordinary membership reducer without manufacturing a full state projection.
+history_authority_advance({Ns, Anchor} = Identity, Entry, Previous) ->
+    #entry{index = Height, data = Data, timestamp = Timestamp} = quod_ledger:entry_view(Entry),
+    {ok, Block} = block_from_entry(Entry),
+    Hash = block_hash(Block),
+    Context = case {Block#block.era, Previous} of
+        {genesis, none} when Height =:= 1, Hash =:= Anchor ->
+            {ok, quod_ledger:initial_era(Identity), [], none, #{}, 0};
+        {Era, #{identity := Identity, protocol_root := {Era, 0, _}, height := PriorHeight,
+                committee := Members, committee_id := CommitteeId,
+                validator_routes := Routes, timestamp := PriorTime}}
+          when Height > PriorHeight ->
+            case committee_delta(Data) of
+                {[], []} -> error;
+                _ -> {ok, quod_ledger:next_era(Identity, Era, Hash),
+                      Members, CommitteeId, Routes, PriorTime}
+            end;
+        _ -> error
+    end,
+    case Context of
+        {ok, NextEra, Before, BeforeId, BeforeRoutes, BeforeTime} ->
+            Committee = apply_committee_delta(Data, Before),
+            case Committee =/= [] andalso Block#block.height =:= Height of
+                true ->
+                    Id = case Committee =:= Before of
+                        true -> BeforeId;
+                        false -> committee_view_id(Ns, Height, Hash, Committee)
+                    end,
+                    {ok, #{identity => Identity, protocol_root => {NextEra, 0, Hash},
+                           height => Height, timestamp => max(Timestamp, BeforeTime),
+                           committee => Committee, committee_id => Id,
+                           validator_routes => maps:with(Committee,
+                               advance_validator_routes(Data, BeforeRoutes))}};
+                false -> error
+            end;
+        error -> error
+    end.
 
 -doc "Return the certified post-slot committee view for one exact history slot.".
 -spec history_committee_view(slot(), history_projection()) ->
@@ -15002,12 +15110,17 @@ project_dtx_transition(
           {error, term()}.
 history_preview_verified(Binding, Entry, Projection, PhaseIndex, Delta) ->
     #entry{index = I, data = Data} = quod_ledger:entry_view(Entry),
-    case quod_ledger:classify(Data) of
+    Result = case quod_ledger:classify(Data) of
         {content, _} -> preview_content(Binding, Entry, Projection, Delta);
         {controls, Classified} ->
             preview_dtx_batch(Binding, Entry, [Control || {_Kind, Control} <- Classified],
                               Projection, PhaseIndex, Delta);
         invalid -> {error, {invalid_transaction, I}}
+    end,
+    case Result of
+        {ok, After, Effects, NextDelta} ->
+            {ok, After, Effects, preview_protocol_era(maps:get(protocol_root, Projection), After, NextDelta)};
+        {error, _} -> Result
     end.
 
 preview_content(Binding, Entry, Projection, Delta) ->

@@ -10,22 +10,24 @@
 -define(V5_MAGIC, 16#915106AE).
 -define(V6_MAGIC, 16#915106AF).
 -define(V7_MAGIC, 16#915106B0).
--define(MAGIC, 16#915106B1).
+-define(V8_MAGIC, 16#915106B1).
+-define(MAGIC, 16#915106B2).
 -define(READ_CHUNK, 262144).
 
 %% Every superseded frame magic must be rejected as an identifiable format, at
 %% its exact offset, without mutating the file. Each legacy case below runs for
 %% all of them.
 legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}, {3, ?V3_MAGIC},
-                     {4, ?V4_MAGIC}, {5, ?V5_MAGIC}, {6, ?V6_MAGIC}, {7, ?V7_MAGIC}].
+                     {4, ?V4_MAGIC}, {5, ?V5_MAGIC}, {6, ?V6_MAGIC}, {7, ?V7_MAGIC},
+                     {8, ?V8_MAGIC}].
 
-%% V8 framing tests exercise the real file and captured-session seams. Fixture
+%% V9 framing tests exercise the real file and captured-session seams. Fixture
 %% QCs here are shape-only; consensus authority is tested at the verifier.
 era_archive_keeps_proofs_out_of_material_history_test() ->
     with_era_store(fun(Dir, Ns, Genesis, Tx, Era, Anchor) ->
         {Blocks, Entries} = era_materials(2, Tx, Era, Anchor),
         [First, Second] = Blocks,
-        {ok, Carrier} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), empty, 1),
+        {ok, Carrier} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), 3, empty, 1),
         Cert = archive_cert(Carrier),
         Final = [quod_ledger:entry(I, B, Cert) || {I, B} <- lists:zip([2, 3], Blocks)],
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
@@ -33,6 +35,11 @@ era_archive_keeps_proofs_out_of_material_history_test() ->
         Snapshot = quod_ledger_store:snapshot(S1),
         {ok, S2} = quod_ledger_store:append(S1, {proof_source([Carrier, Second]), Final}),
         ?assertEqual(3, quod_ledger_store:last(S2)),
+        ?assertEqual({ok, 0}, quod_ledger_store:committed_boundary(S2, 0)),
+        ?assertMatch({ok, _}, quod_ledger_store:committed_boundary(S2, 1)),
+        ?assertEqual({error, not_group_boundary}, quod_ledger_store:committed_boundary(S2, 2)),
+        ?assertMatch({ok, _}, quod_ledger_store:committed_boundary(S2, 3)),
+        ?assertEqual({error, not_group_boundary}, quod_ledger_store:committed_boundary(S2, 4)),
         ?assertEqual({ok, [Genesis | Final]}, quod_ledger_store:read_range(S2, 1, 3, all)),
         ?assertEqual([Carrier#block.block_bytes, Second#block.block_bytes], proof_bytes(S2, 2)),
         ?assertEqual(proof_bytes(S2, 2), proof_bytes(S2, 3)),
@@ -47,6 +54,58 @@ era_archive_keeps_proofs_out_of_material_history_test() ->
         ?assertEqual({ok, First}, quod_ledger:block_from_entry(hd(Final))),
         ?assertEqual(2, length(Entries)),
         ok = quod_ledger_store:close(Restored)
+    end).
+
+archive_batch_synchronizes_once_test_() ->
+    [{integer_to_list(Count), {timeout, 30, fun() ->
+        {Dir, Ns} = Fixture = setup(),
+        try
+            {{ok, Count}, {call_count, Calls}} = tprof:profile(fun() ->
+                {ok, Store} = quod_ledger_store:open(Ns, Dir),
+                Snapshot = quod_ledger_store:snapshot(Store),
+                Batch = lists:foldl(fun(I, Pending) ->
+                    {ok, Next} = quod_ledger_store:batch_append(Pending, {none, [ent(I)]}),
+                    Next
+                end, quod_ledger_store:batch_begin(Store), lists:seq(1, Count)),
+                ?assertError(function_clause, quod_ledger_store:snapshot(Batch)),
+                {ok, Old} = quod_ledger_store:open_ro_snapshot(Snapshot),
+                ?assertEqual(0, quod_ledger_store:last(Old)),
+                ok = quod_ledger_store:close(Old),
+                {ok, Durable} = quod_ledger_store:batch_sync(Batch),
+                DurableHeight = quod_ledger_store:last(Durable),
+                ok = quod_ledger_store:close(Durable),
+                {ok, DurableHeight}
+            end, #{type => call_count, report => return, pattern => [{file, datasync, 1}]}),
+            ?assertEqual(1, lists:sum([N || {file, datasync, 1, Ps} <- Calls, {_, N, _} <- Ps])),
+            {ok, Reopened} = quod_ledger_store:open(Ns, Dir),
+            ?assertEqual({ok, [ent(I) || I <- lists:seq(1, Count)]},
+                         quod_ledger_store:read_range(Reopened, 1, Count, all)),
+            ok = quod_ledger_store:close(Reopened)
+        after cleanup(Fixture) end
+    end}} || Count <- [2, 64, 257]].
+
+archive_interrupted_batch_retains_complete_groups_test() ->
+    with_era_store(fun(Dir, Ns, Genesis, Tx, Era, Anchor) ->
+        {[First, Second], _} = era_materials(2, Tx, Era, Anchor),
+        E2 = quod_ledger:entry(2, First, archive_cert(First)),
+        E3 = quod_ledger:entry(3, Second, archive_cert(Second)),
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        {ok, GenesisBatch} = quod_ledger_store:batch_append(
+            quod_ledger_store:batch_begin(Store), {none, [Genesis]}),
+        {ok, Prefix} = quod_ledger_store:batch_append(GenesisBatch, {proof_source([First]), [E2]}),
+        {Size, _, _} = proof_source([Second]),
+        Crash = fun(first) -> {quod_ledger:block_bytes(Second), failed};
+                   (failed) -> error(interrupted_batch) end,
+        ?assertError(interrupted_batch,
+            quod_ledger_store:batch_append(Prefix, {{Size, Crash, first}, [E3]})),
+        ok = quod_ledger_store:close(Store),
+        %% No batch sync or checkpoint occurred. Complete groups are still
+        %% recoverable material; only the unfinished final group is trimmed.
+        {ok, Reopened} = quod_ledger_store:open(Ns, Dir),
+        ?assertEqual({ok, [Genesis, E2]}, quod_ledger_store:read_range(Reopened, 1, 2, all)),
+        ?assertEqual(2, quod_ledger_store:last(Reopened)),
+        ?assertEqual([quod_ledger:block_bytes(First)], proof_bytes(Reopened, 2)),
+        ok = quod_ledger_store:close(Reopened)
     end).
 
 era_archive_reuses_the_selected_durable_span_test() ->
@@ -69,8 +128,8 @@ era_archive_reuses_the_selected_durable_span_test() ->
 era_archive_extends_an_archived_parent_without_copying_it_test() ->
     with_era_store(fun(Dir, Ns, Genesis, Tx, Era, Anchor) ->
         {[First], _} = era_materials(1, Tx, Era, Anchor),
-        {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), empty, 1),
-        {ok, Next} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Carrier), {batch, [Tx]}, 1),
+        {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), 2, empty, 1),
+        {ok, Next} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Carrier), 3, {batch, [Tx]}, 1),
         E2 = quod_ledger:entry(2, First, archive_cert(Carrier)),
         E3 = quod_ledger:entry(3, Next, archive_cert(Next)),
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
@@ -148,7 +207,7 @@ era_archive_streams_long_proof_and_seeks_across_material_checkpoints_test_() ->
         {Blocks, Entries} = era_materials(600, Tx, Era, Anchor),
         Last = lists:last(Blocks),
         {CarriersRev, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-            {ok, B} = quod_ledger:new_block({Era, V}, Parent, empty, 1),
+            {ok, B} = quod_ledger:new_block({Era, V}, Parent, 601, empty, 1),
             {[B | Acc], quod_ledger:block_ref(B)}
         end, {[], quod_ledger:block_ref(Last)}, lists:seq(601, 6600)),
         Head = hd(CarriersRev), Cert = archive_cert(Head),
@@ -277,7 +336,7 @@ with_era_store(Fun) ->
 
 era_materials(Count, Tx, Era, Anchor) ->
     {Rev, _} = lists:foldl(fun(View, {Acc, Parent}) ->
-        {ok, B} = quod_ledger:new_block({Era, View}, Parent, {batch, [Tx]}, 1),
+        {ok, B} = quod_ledger:new_block({Era, View}, Parent, View + 1, {batch, [Tx]}, 1),
         {[B | Acc], quod_ledger:block_ref(B)}
     end, {[], {Era, 0, Anchor}}, lists:seq(1, Count)),
     Blocks = lists:reverse(Rev),
@@ -292,7 +351,7 @@ archive_cert(B) ->
 era_transfer_finishes_the_group_and_stops_at_the_receivers_material_root_test() ->
     with_era_store(fun(Dir, Ns, Genesis, Tx, Era, Anchor) ->
         {[First, Second], _} = era_materials(2, Tx, Era, Anchor),
-        {ok, Carrier} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), empty, 1),
+        {ok, Carrier} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), 3, empty, 1),
         Cert = archive_cert(Carrier),
         E2 = quod_ledger:entry(2, First, Cert), E3 = quod_ledger:entry(3, Second, Cert),
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
@@ -310,7 +369,7 @@ era_transfer_finishes_the_group_and_stops_at_the_receivers_material_root_test() 
         %% Do not resend First or expose local archive offsets as a claim.
         ?assertEqual([{entry, encoded_entry(E3)}, {proof, Carrier#block.block_bytes},
                       {proof, Second#block.block_bytes}], transfer_parts(S2, 3, 3)),
-        {ok, Next} = quod_ledger:new_block({Era, 4}, quod_ledger:block_ref(Carrier), {batch, [Tx]}, 1),
+        {ok, Next} = quod_ledger:new_block({Era, 4}, quod_ledger:block_ref(Carrier), 4, {batch, [Tx]}, 1),
         E4 = quod_ledger:entry(4, Next, archive_cert(Next)),
         {ok, S3} = quod_ledger_store:append(S2, {{extend, proof_source([Next]), 2}, [E4]}),
         ?assertEqual([{entry, encoded_entry(E4)}, {proof, Next#block.block_bytes},
@@ -323,7 +382,7 @@ era_transfer_keeps_its_cursor_across_a_proof_larger_than_a_network_page_test_() 
       with_era_store(fun(Dir, Ns, Genesis, Tx, Era, Anchor) ->
         {[First], _} = era_materials(1, Tx, Era, Anchor),
         {Carriers, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-            {ok, B} = quod_ledger:new_block({Era, V}, Parent, empty, 1),
+            {ok, B} = quod_ledger:new_block({Era, V}, Parent, 2, empty, 1),
             {[B | Acc], quod_ledger:block_ref(B)}
         end, {[], quod_ledger:block_ref(First)}, lists:seq(2, 8001)),
         Entry = quod_ledger:entry(2, First, archive_cert(hd(Carriers))),
@@ -470,7 +529,7 @@ store_entry(I, Payload) ->
         1 -> {{genesis, 0}, none};
         _ -> {{<<1:256>>, I - 1}, {<<1:256>>, I - 2, <<0:256>>}}
     end,
-    {ok, Block} = quod_ledger:new_block(Position, Parent, Payload, 0),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, I, Payload, 0),
     Cert = case I of 1 -> none; _ -> archive_cert(Block) end,
     quod_ledger:entry(I, Block, Cert).
 
@@ -549,7 +608,7 @@ t_wrapped_foreign_store_never_materializes_symbols({Dir, Ns}) ->
         {ok, TransactionBytes} =
             quod_transaction:encode_ledger_transaction(Transaction),
         {ok, BlockBytes} = quod_safe_term:encode_canonical(
-                             {quod_block, 2, genesis, 0, none,
+                             {quod_block, 3, genesis, 0, none, 1,
                               {batch, [{transaction, TransactionBytes}]}, 0},
                              1024 * 1024),
         {ok, Entry} = quod_ledger:from_entry_view(

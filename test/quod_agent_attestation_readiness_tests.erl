@@ -296,7 +296,7 @@ with_fixture(Fun) ->
                 validators => [Pub], committee_id => <<52:256>>, prolog_ready => true,
                 sync => ready, dtx_projection => P0, eng => quod_simplex:eng_new(
                     quod_simplex:consensus_domain(Ns, Anchor), [Pub],
-                    {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})}),
+                    {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 1, 0})}),
             Fun(#{ns => Ns, tab => Tab, router => Router, engine => Engine,
                   evidence => maps:get(evidence, F), fixture => F, fact => Fact, state => S0,
                   key => {proof_gate, {Ns, self()}}})

@@ -11,7 +11,7 @@ owner_turns_cover_real_statem_calls_casts_and_info_test() ->
         Domain = quod_simplex:consensus_domain(Ns, <<0:256>>),
         Root = {quod_ledger:initial_era({Ns, <<0:256>>}), 0, <<0:256>>},
         State = quod_simplex:test_state(#{ns => Ns, trace_owner_turns => true,
-                    eng => quod_simplex:eng_new(Domain, [], {Root, 0})}),
+                    eng => quod_simplex:eng_new(Domain, [], {Root, 1, 0})}),
         %% Enter the production callback module, not a synthetic tracing callback.
         %% The three events below have ordinary inert/read-only production arms.
         Owner = proc_lib:spawn(fun() ->
@@ -67,7 +67,7 @@ owner_turn_covers_keep_progress_steps_and_timeout_actions_test() ->
         State = quod_simplex:test_state(#{ns => Ns, consensus_domain => Domain,
                     history_head => {0, <<0:256>>}, slot => 0,
                     eng => quod_simplex:eng_new(Domain, [],
-                      {{quod_ledger:initial_era({Ns, <<0:256>>}), 0, <<0:256>>}, 0})}),
+                      {{quod_ledger:initial_era({Ns, <<0:256>>}), 0, <<0:256>>}, 1, 0})}),
         %% A stale batch event still takes the real keep_progress path. Compare
         %% complete results/actions with diagnostics disabled, not a shape oracle.
         Expected = quod_simplex:running({timeout, batch}, {flush_batch, 1}, State),
@@ -320,9 +320,9 @@ foreign_validation_queued_success_respects_original_deadline_test_() ->
             %% result in the real store. No verifier answer is supplied.
             Projection = quod_simplex:test_state_projection(State0),
             {Era, 1, _} = Root = maps:get(protocol_root, Projection),
-            {ok, Block} = quod_ledger:new_block({Era, 2}, Root, {batch, [Receipt]}, 2),
+            {ok, Block} = quod_ledger:new_block({Era, 2}, Root, 3, {batch, [Receipt]}, 2),
             Hash = quod_simplex:block_hash(Block),
-            Eng0 = quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [], {Root, 2}),
+            Eng0 = quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [], {Root, 2, 2}),
             {Eng, _} = quod_simplex:eng_offer({block, Block}, Eng0),
             State = quod_simplex:test_state_set(eng, Eng, State0),
             true = quod_reg:reg({quod_prolog, Ns}),
@@ -407,7 +407,7 @@ with_certified_history(Fun) ->
                      last_applied => 2, sync => ready, prolog_ready => true,
                      validators => [Pub], consensus_domain => Domain,
                      phase_index => Index,
-                     eng => quod_simplex:eng_new(Domain, [Pub], {Root, 2})}),
+                     eng => quod_simplex:eng_new(Domain, [Pub], {Root, 2, 2})}),
             State = quod_simplex:test_install_projection(Projection, Base),
             Fun(State, Transaction, Ref, maps:get(completion, F))
         after

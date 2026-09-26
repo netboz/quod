@@ -108,6 +108,6 @@ async function rememberAccount(identity, reference, options) {
 }
 
 function committed(reply) {
-  return reply.result === 'ok' || (reply.result === 'operation_outcome' &&
+  return reply.result === 'ok' || (['operation_outcome', 'group_outcome'].includes(reply.result) &&
     reply.status === 'committed' && reply.terminal === true)
 }

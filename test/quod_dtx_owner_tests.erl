@@ -209,7 +209,7 @@ with_owner(Fun) ->
               id => maps:get(signer, F), validators => [Pub],
               author_admissions => #{Pub => Admission}, sync => ready, prolog_ready => true,
               consensus_domain => Domain, slot => 1, history_head => {1, Anchor},
-              archive_tip => {Root, 0}, eng => quod_simplex:eng_new(Domain, [Pub], {Root, 0}),
+              archive_tip => {Root, 0}, eng => quod_simplex:eng_new(Domain, [Pub], {Root, 1, 0}),
               phase_index => Index, signing_journal => Journal}),
         Fun(F, S, Dir, Domain, {Admission, Pub})
     after

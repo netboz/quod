@@ -1221,7 +1221,9 @@ foreign_history_stage(request_exact) -> {ok, <<"request_exact">>};
 foreign_history_stage(request_current) -> {ok, <<"request_current">>};
 foreign_history_stage(request_follow) -> {ok, <<"request_follow">>};
 foreign_history_stage(current_total) -> {ok, <<"current_total">>};
+foreign_history_stage(current_setup) -> {ok, <<"current_setup">>};
 foreign_history_stage(owner_mailbox) -> {ok, <<"owner_mailbox">>};
+foreign_history_stage(owner_admission) -> {ok, <<"owner_admission">>};
 foreign_history_stage(resident_current_hit) ->
     {ok, <<"resident_current_hit">>};
 foreign_history_stage(resident_current_miss) ->
@@ -1240,10 +1242,10 @@ foreign_history_stage(phase_suspend) -> {ok, <<"phase_suspend">>};
 foreign_history_stage(page_fetch) -> {ok, <<"page_fetch">>};
 foreign_history_stage(page_verify) -> {ok, <<"page_verify">>};
 foreign_history_stage(ledger_append) -> {ok, <<"ledger_append">>};
+foreign_history_stage(ledger_sync) -> {ok, <<"ledger_sync">>};
 foreign_history_stage(phase_commit) -> {ok, <<"phase_commit">>};
 foreign_history_stage(checkpoint_write) -> {ok, <<"checkpoint_write">>};
 foreign_history_stage(cache_accounting) -> {ok, <<"cache_accounting">>};
-foreign_history_stage(tip_confirm) -> {ok, <<"tip_confirm">>};
 foreign_history_stage(result_install) -> {ok, <<"result_install">>};
 foreign_history_stage(caller_wake) -> {ok, <<"caller_wake">>};
 foreign_history_stage(serve_read_total) -> {ok, <<"serve_read_total">>};

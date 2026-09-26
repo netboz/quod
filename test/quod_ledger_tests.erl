@@ -12,13 +12,13 @@ era_genesis_is_fixed_before_its_derived_domain_test() ->
     ?assertEqual(1, quod_ledger:entry_index(Entry)),
     ?assertEqual(Era, quod_ledger:initial_era(Identity)),
     ?assertNotEqual(Era, quod_ledger:initial_era({<<"other">>, element(2, Identity)})),
-    ?assertEqual({error, bad_block}, quod_ledger:new_block({genesis, 0}, none, empty, 0)),
-    ?assertEqual({error, bad_block}, quod_ledger:new_block({Era, 0}, none, empty, 0)).
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({genesis, 0}, none, 1, empty, 0)),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({Era, 0}, none, 1, empty, 0)).
 
 gapped_protocol_view_keeps_material_height_and_exact_bytes_test() ->
     {Identity, _Genesis, Era, Tx} = era_fixture(),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, 19}, {Era, 0, element(2, Identity)}, {batch, [Tx]}, 40),
+                    {Era, 19}, {Era, 0, element(2, Identity)}, 2, {batch, [Tx]}, 40),
     Entry = quod_ledger:entry(2, Block, era_codec_cert(Block)),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
     {ok, Decoded} = quod_ledger:decode_entry(Bytes, wrapped),
@@ -32,11 +32,35 @@ gapped_protocol_view_keeps_material_height_and_exact_bytes_test() ->
     {ok, Reimported} = quod_ledger:from_entry_view(quod_ledger:entry_view(Entry)),
     ?assertEqual({ok, Bytes}, quod_ledger:encode_entry(Reimported)).
 
+material_height_is_authenticated_instead_of_supplied_by_the_entry_test() ->
+    {Identity, _Genesis, Era, Tx} = era_fixture(),
+    Parent = {Era, 0, element(2, Identity)},
+    {ok, Block} = quod_ledger:new_block({Era, 19}, Parent, 2, {batch, [Tx]}, 40),
+    Cert = era_codec_cert(Block),
+    Entry = quod_ledger:entry(2, Block, Cert),
+    {ok, Bytes} = quod_ledger:encode_entry(Entry),
+    {quod_entry, 2, 2, BlockBytes, CertWire} = binary_to_term(Bytes, [safe]),
+    ChangedEnvelope = term_to_binary({quod_entry, 2, 1112, BlockBytes, CertWire}, [deterministic]),
+    ?assertEqual({error, bad_entry}, quod_ledger:decode_entry(ChangedEnvelope, wrapped)),
+    ?assertEqual({error, bad_entry}, quod_ledger:select_entry(
+        ChangedEnvelope, {application, Tx#transaction.tx_id}, wrapped)),
+    {ok, ChangedBlock} = quod_ledger:new_block({Era, 19}, Parent, 1112, {batch, [Tx]}, 40),
+    ?assertNotEqual(quod_ledger:block_ref(Block), quod_ledger:block_ref(ChangedBlock)),
+    ?assertException(error, {badmatch, false}, quod_ledger:entry(1112, ChangedBlock, Cert)),
+    ?assertNot(quod_ledger:valid_block_view(Block#block{height = 1112})),
+    lists:foreach(fun(Height) ->
+        ?assertEqual({error, bad_block},
+            quod_ledger:new_block({Era, 19}, Parent, Height, {batch, [Tx]}, 40))
+    end, [0, 1, -1, 1 bsl 64]),
+    {quod_block, 3, Era, 19, Parent, 2, Payload, 40} = binary_to_term(BlockBytes, [safe]),
+    ?assertEqual({error, bad_block}, quod_ledger:decode_block(
+        term_to_binary({quod_block, 2, Era, 19, Parent, Payload, 40}, [deterministic]))).
+
 empty_carrier_cannot_become_a_material_entry_test() ->
     {Identity, _Genesis, Era, Tx} = era_fixture(),
     Parent = {Era, 0, element(2, Identity)},
-    {ok, Material} = quod_ledger:new_block({Era, 1}, Parent, {batch, [Tx]}, 1),
-    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), empty, 1),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, Parent, 2, {batch, [Tx]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), 2, empty, 1),
     ?assertEqual(empty, quod_ledger:classify(empty)),
     ?assertEqual(invalid, quod_ledger:classify(noop)),
     ?assertException(error, {badmatch, false},
@@ -49,8 +73,8 @@ empty_carrier_cannot_become_a_material_entry_test() ->
 ancestor_head_has_one_compact_descriptor_test() ->
     {Identity, _Genesis, Era, Tx} = era_fixture(),
     {ok, Material} = quod_ledger:new_block(
-                      {Era, 2}, {Era, 0, element(2, Identity)}, {batch, [Tx]}, 1),
-    {ok, Carrier} = quod_ledger:new_block({Era, 9}, quod_ledger:block_ref(Material), empty, 1),
+                      {Era, 2}, {Era, 0, element(2, Identity)}, 2, {batch, [Tx]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 9}, quod_ledger:block_ref(Material), 2, empty, 1),
     Head = era_codec_cert(Carrier),
     Entry = quod_ledger:entry(2, Material, Head),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
@@ -63,13 +87,13 @@ ancestor_head_has_one_compact_descriptor_test() ->
 era_roots_do_not_depend_on_finality_witnesses_test() ->
     {Identity, Genesis, Era, Tx} = era_fixture(),
     {ok, Material} = quod_ledger:new_block(
-                      {Era, 3}, {Era, 0, element(2, Identity)}, {batch, [Tx]}, 1),
+                      {Era, 3}, {Era, 0, element(2, Identity)}, 2, {batch, [Tx]}, 1),
     {Era, 3, Hash} = quod_ledger:block_ref(Material),
     Next = quod_ledger:next_era(Identity, Era, Hash),
     ?assertNotEqual(Era, Next),
     ?assertNotEqual(Next, quod_ledger:next_era(Identity, <<99:256>>, Hash)),
     ?assertNotEqual(Next, quod_ledger:next_era(Identity, Era, element(2, Identity))),
-    {ok, Child} = quod_ledger:new_block({Next, 1}, {Next, 0, Hash}, {batch, [Tx]}, 2),
+    {ok, Child} = quod_ledger:new_block({Next, 1}, {Next, 0, Hash}, 3, {batch, [Tx]}, 2),
     ?assertEqual({Next, 0, Hash}, Child#block.parent),
     ?assertEqual({Era, 3, Hash}, quod_ledger:block_ref(Material)),
     ?assertEqual(genesis, Genesis#block.era).
@@ -78,7 +102,7 @@ legacy_and_malformed_protocol_positions_are_rejected_test() ->
     {Identity, _Genesis, Era, _Tx} = era_fixture(),
     Hash = element(2, Identity),
     lists:foreach(fun({Position, Parent}) ->
-        ?assertEqual({error, bad_block}, quod_ledger:new_block(Position, Parent, empty, 1))
+        ?assertEqual({error, bad_block}, quod_ledger:new_block(Position, Parent, 1, empty, 1))
     end, [{1, 0}, {{Era, 1}, 0}, {{Era, 1}, {Era, 1, Hash}},
           {{Era, 1}, {<<99:256>>, 0, Hash}}, {{Era, -1}, {Era, 0, Hash}},
           {{Era, 1 bsl 64}, {Era, 0, Hash}}]),
@@ -172,11 +196,11 @@ native_control_roundtrip_preserves_wire_bytes_and_checks_ingress_test() ->
     F = quod_ct:signed_atomic_fixture(#{}), C = maps:get(vote_control, F),
     {ok, Blob} = quod_atomic:encode_control(C),
     Bytes = wire_block({batch, [{dtx, Blob}]}),
-    {ok, Block} = quod_ledger:new_block({key(70), 2}, {key(70), 1, key(71)}, {batch, [{dtx, C}]}, 2),
+    {ok, Block} = quod_ledger:new_block({key(70), 2}, {key(70), 1, key(71)}, 2, {batch, [{dtx, C}]}, 2),
     ?assertEqual(Bytes, quod_ledger:block_bytes(Block)),
     ?assertEqual({ok, Block}, quod_ledger:decode_block(Bytes)),
     ?assertEqual(invalid, quod_ledger:classify({batch, [{dtx, Blob}]})),
-    ?assertEqual({error, bad_block}, quod_ledger:new_block({key(70), 2}, {key(70), 1, key(71)}, {batch, [{dtx, Blob}]}, 2)),
+    ?assertEqual({error, bad_block}, quod_ledger:new_block({key(70), 2}, {key(70), 1, key(71)}, 2, {batch, [{dtx, Blob}]}, 2)),
     %% An attacker can supply perfectly canonical bytes but cannot inject
     %% trusted native metadata or skip the own-plan signature check.
     Wire = binary_to_term(Blob, [safe]),
@@ -282,7 +306,7 @@ direct_vote(Target, ProofId, Sequence, Signer) ->
     Control.
 
 wire_block(Payload) ->
-    term_to_binary({quod_block, 2, key(70), 2, {key(70), 1, key(71)}, Payload, 2}, [deterministic]).
+    term_to_binary({quod_block, 3, key(70), 2, {key(70), 1, key(71)}, 2, Payload, 2}, [deterministic]).
 
 signer() ->
     {Pubkey, Seed} = quod_identity:generate(),

@@ -611,12 +611,11 @@ production_dependencies() ->
 local_current_view(
   #{identity := Identity, applied := Applied,
     projection := #{committee := Committee, committee_id := CommitteeId,
-                    validator_routes := Routes, dtx := Dtx}} = Source,
+                    validator_routes := Routes}} = Source,
   Identity) when Applied > 0, Committee =/= [] ->
     case quod_simplex:history_view_live(Source) of
         true ->
             {ok, #{identity => Identity, slot => Applied,
-                   generation => maps:get(generation, Dtx),
                    committee => Committee, committee_id => CommitteeId,
                    route_candidates => lists:keysort(
                      1, [{Peer, [Endpoint]}
@@ -1052,12 +1051,11 @@ valid_historical_routes(Routes, Committee) ->
 
 valid_identity_current_view(
   Target,
-  #{identity := Target, slot := Slot, generation := Generation,
+  #{identity := Target, slot := Slot,
     committee := Committee, committee_id := <<_:256>> = CommitteeId,
     route_candidates := Routes} = View)
-  when map_size(View) =:= 6,
+  when map_size(View) =:= 5,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
-       is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64,
        is_list(Committee), Committee =/= [],
        length(Committee) =< ?MAX_VALIDATORS,
        is_list(Routes), length(Routes) =< ?MAX_VALIDATORS ->

@@ -144,6 +144,20 @@ signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
        {409, #{error => operation_conflict}},
        quod_client_http:signed_goal_result({error, operation_conflict})).
 
+refused_group_resolution_does_not_invent_an_operation_claim_test() ->
+    Evidence = #{request_digest => <<1:256>>, request => #{operation_id => <<2:256>>}},
+    Ref = {group, <<"source">>, <<3:256>>, <<4:256>>, <<5:256>>, <<6:256>>},
+    {202, Pending} = quod_client_http:signed_goal_result(
+        {ok, Evidence, {group_outcome, Ref, #{status => pending}}}),
+    ?assertMatch(#{result := group_outcome, terminal := false}, Pending),
+    {200, Terminal} = quod_client_http:signed_goal_result(
+        {ok, Evidence, {group_outcome, Ref,
+            #{status => aborted, height => 7, reasons => [vote_deadline]}}}),
+    ?assertMatch(#{result := group_outcome, status := aborted, terminal := true}, Terminal),
+    ?assertEqual(binary:encode_hex(<<6:256>>, lowercase), maps:get(group_id, Terminal)),
+    ?assertNot(maps:is_key(claim_height, Terminal)),
+    ?assert(is_binary(iolist_to_binary(json:encode(Terminal)))).
+
 recovered_group_result_preserves_exact_named_bindings_test() ->
     Evidence = #{request_digest => <<1:256>>,
                  request => #{operation_id => <<2:256>>}},
@@ -232,6 +246,8 @@ client_http_test_() ->
            fun() -> method_is_enforced(Port) end},
           {"security headers are present",
            fun() -> security_headers_present(Port) end},
+          {"group selectors are bounded and retain signed session admission",
+           fun() -> group_selector_http_boundary(Port) end},
           {"sampled HTTP parent reaches the signed request span",
            fun() -> signed_http_parent_is_carried(Port) end}]
      end}.
@@ -243,6 +259,26 @@ health_is_reusable(Port) ->
     ?assertMatch({200, _, <<"ok\n">>}, quod_ct:https_request(Connection, get, "/health", <<>>)),
     ?assertMatch({200, _, <<"ok\n">>}, quod_ct:https_request(Connection, get, "/health", <<>>)),
     close(Connection).
+
+group_selector_http_boundary(Port) ->
+    {ok, Connection} = connect(Port),
+    Ref = #{ns => <<"source">>, anchor => binary:encode_hex(<<1:256>>, lowercase),
+            coordinator => binary:encode_hex(<<2:256>>, lowercase),
+            coordinator_admission => binary:encode_hex(<<3:256>>, lowercase),
+            group_id => binary:encode_hex(<<4:256>>, lowercase)},
+    Body = #{session_id => b64url(<<0:256>>), request => b64url(<<>>),
+             signature => b64url(<<0:512>>)},
+    try
+        lists:foreach(fun(Invalid) ->
+            Encoded = iolist_to_binary(json:encode(Body#{outcome_ref => Invalid})),
+            ?assertMatch({400, _, _},
+                quod_ct:https_request(Connection, post, "/api/goals/outcomes", Encoded))
+        end, [#{}, Ref#{group_id := <<"invalid">>}, Ref#{extra => true}]),
+        Encoded = iolist_to_binary(json:encode(Body#{outcome_ref => Ref})),
+        ?assertMatch({401, _, _},
+            quod_ct:https_request(Connection, post, "/api/goals/outcomes", Encoded))
+    after close(Connection)
+    end.
 
 api_reply_is_clean(Port) ->
     {ok, Connection} = connect(Port),

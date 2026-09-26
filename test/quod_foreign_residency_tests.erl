@@ -18,16 +18,18 @@ checkpoint_once_per_verified_range(Height) ->
     Owner = quod_foreign_log_tests:start_owner(
         Dir, quod_foreign_log_tests:chain_fetch(Ns, Chain)),
     MFA = {quod_foreign_log, write_checkpoint, 5},
+    SyncMFA = {quod_ledger_store, batch_sync, 1},
     Session = trace:session_create(?MODULE, self(), []),
     try
         1 = trace:function(Session, MFA, true, [local]),
+        1 = trace:function(Session, SyncMFA, true, [local]),
         1 = trace:process(Session, Owner, true, [call, arity, set_on_spawn]),
-        ?assertMatch({ok, #{slot := Height}}, quod_foreign_log:current(
-            [{Peer, [{"127.0.0.1", 19000}]}], Identity, 3000)),
+        ?assertMatch({ok, #{slot := Height}}, quod_foreign_log_tests:prime_projection(
+            [{Peer, [{"127.0.0.1", 19000}]}], Identity, Height, 3000)),
         Delivery = trace:delivered(Session, all),
         Ranges = (Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
                  div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
-        ?assertEqual(Ranges, checkpoint_calls(Delivery, 0)),
+        ?assertEqual({Ranges, Ranges}, checkpoint_calls(Delivery, {0, 0})),
         assert_retained_entries(Owner, Identity, Chain)
     after
         trace:session_destroy(Session),
@@ -35,11 +37,63 @@ checkpoint_once_per_verified_range(Height) ->
         _ = file:del_dir_r(Dir)
     end.
 
-checkpoint_calls(Delivery, Count) ->
+
+startup_retains_complete_groups_after_checkpoint_test_() ->
+    [{atom_to_list(Checkpoint), {timeout, 15,
+      fun() -> startup_complete_suffix(Checkpoint) end}}
+     || Checkpoint <- [older, missing]].
+
+startup_complete_suffix(Checkpoint) ->
+    Fixture = quod_foreign_log_tests:long_identity_fixture(
+        quod_foreign_log_tests:unique_ns(), 4),
+    Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
+    [Genesis | Suffix] = Chain = maps:get(chain, Fixture),
+    Peer = maps:get(pub, Fixture), Dir = quod_foreign_log_tests:temp_dir("checkpoint-suffix"),
+    CacheNs = quod_foreign_log:cache_namespace(Identity),
+    Path = filename:join(quod_ledger_store:ns_dir(Dir, CacheNs), "checkpoint.term"),
+    Owner = quod_foreign_log_tests:start_owner(
+        Dir, quod_foreign_log_tests:chain_fetch(Ns, [Genesis])),
+    try
+        ?assertMatch({ok, #{slot := 1}}, quod_foreign_log_tests:prime_projection(
+            [{Peer, [{"127.0.0.1", 19000}]}], Identity, 1, 3000)),
+        quod_foreign_log_tests:stop_owner(Owner),
+        {ok, PriorCheckpoint} = file:read_file(Path),
+        %% Simulate the real durability/publication gap: complete, synced
+        %% archive groups exist while the published checkpoint is still old.
+        {ok, Store0} = quod_ledger_store:open(CacheNs, Dir, wrapped),
+        {ok, Store} = quod_ct:append_direct_history(Store0, Suffix),
+        {ok, ExpectedBytes} = quod_ledger_store:committed_boundary(Store, 4),
+        ok = quod_ledger_store:close(Store),
+        case Checkpoint of older -> ok; missing -> ok = file:delete(Path) end,
+        Parent = self(),
+        Restarted = quod_foreign_log_tests:start_owner(Dir,
+            fun(_, _, _, Query, _, _) ->
+                Parent ! {unexpected_startup_fetch, Query},
+                error({unexpected_startup_fetch, Query})
+            end),
+        try
+            ok = quod_foreign_log_tests:await_history_ready(Identity, 4),
+            assert_retained_entries(Restarted, Identity, Chain),
+            {ok, NewCheckpoint} = file:read_file(Path),
+            ?assertNotEqual(PriorCheckpoint, NewCheckpoint),
+            ?assertMatch({quod_foreign_log_checkpoint, _, Ns, _, 4, ExpectedBytes, _},
+                         binary_to_term(NewCheckpoint, [safe])),
+            receive {unexpected_startup_fetch, Query} ->
+                error({startup_should_use_complete_archive, Query})
+            after 0 -> ok end
+        after quod_foreign_log_tests:stop_owner(Restarted) end
+    after
+        quod_foreign_log_tests:stop_owner(Owner),
+        _ = file:del_dir_r(Dir)
+    end.
+
+checkpoint_calls(Delivery, {Count, Syncs}) ->
     receive
         {trace, _, call, {quod_foreign_log, write_checkpoint, 5}} ->
-            checkpoint_calls(Delivery, Count + 1);
-        {trace_delivered, all, Delivery} -> Count
+            checkpoint_calls(Delivery, {Count + 1, Syncs});
+        {trace, _, call, {quod_ledger_store, batch_sync, 1}} ->
+            checkpoint_calls(Delivery, {Count, Syncs + 1});
+        {trace_delivered, all, Delivery} -> {Count, Syncs}
     after 3000 -> error(checkpoint_trace_delivery_missing)
     end.
 
@@ -54,26 +108,26 @@ warm_exact_routes_preserve_verified_cursor_test_() ->
 definitive_request_failure_does_not_discard_a_healthy_cursor_test_() ->
     {timeout, 15, fun() -> warm_exact_routes(definitive_fallback, 2) end}.
 
-partially_advanced_prefix_survives_candidate_failure_test_() ->
+interrupted_sparse_proof_preserves_retained_material_prefix_test_() ->
     {timeout, 15, fun() -> warm_exact_routes(partial_fallback, 1) end}.
 
 post_mutation_failure_never_tries_a_source_with_the_old_cursor_test_() ->
     [{atom_to_list(Stage), {timeout, 15, fun() -> persistence_failure(Stage) end}}
-     || Stage <- [ledger_append, phase_commit, checkpoint_write, cache_accounting,
+     || Stage <- [ledger_append, ledger_sync, phase_commit, checkpoint_write, cache_accounting,
                   reserve_page]].
 
 persistence_failure(Stage) ->
     Fixture = quod_foreign_log_tests:foreign_fixture(quod_foreign_log_tests:unique_ns()),
     Ns = maps:get(ns, Fixture), Identity = {Ns, maps:get(anchor, Fixture)},
     Peer = maps:get(pub, Fixture), Chain = maps:get(chain, Fixture),
-    FirstPeer = crypto:strong_rand_bytes(32),
+    FirstPeer = <<0:256>>,
     First = {"127.0.0.1", 29999}, Second = {"127.0.0.1", 19000},
     Base = quod_foreign_log_tests:chain_fetch(Ns, Chain),
     Parent = self(), Tag = make_ref(),
     Fetch = fun(P, Endpoint, N, Query, Deadline, Consume) ->
         Parent ! {persistence_source, Tag, Endpoint, Query, Deadline},
-        case {Endpoint, get({?MODULE, armed})} of
-            {First, undefined} ->
+        case {Endpoint, Query, get({?MODULE, armed})} of
+            {_, {range, _, _}, undefined} ->
                 put({?MODULE, armed}, true),
                 ok = quod_foreign_log:test_fail_persist_after(Stage);
             _ -> ok
@@ -86,28 +140,27 @@ persistence_failure(Stage) ->
         %% Discovery deduplicates by peer, not endpoint. An untrusted byte
         %% source followed by the genuine committee member exercises the
         %% actual two-source walk, and preserves the authority separation.
-        Result = quod_foreign_log:current(
-            [{FirstPeer, [First]}, {Peer, [Second]}], Identity, 500),
-        Sources = persistence_sources(Tag, []),
-        ?assert(lists:any(fun({E, _, _}) -> E =:= First end, Sources)),
+        Result = quod_foreign_log_tests:prime_projection(
+            [{FirstPeer, [First]}, {Peer, [Second]}], Identity, 2, 500),
+        Sources = [Source || Source = {_, {range, _, _}, _} <- persistence_sources(Tag, [])],
+        ?assert(Sources =/= []),
         case Stage of
             reserve_page ->
                 %% Refusal before append leaves the old empty verified prefix
                 %% intact, so the ordinary second-source walk is still safe.
                 ?assertMatch({ok, #{identity := Identity, slot := 2}}, Result),
-                ?assert(lists:any(fun({E, _, _}) -> E =:= Second end, Sources)),
+                ?assertEqual(2, length(lists:usort([E || {E, _, _} <- Sources]))),
                 assert_retained_entries(Owner, Identity, Chain);
             _ ->
-                ?assertEqual([], [S || S = {E, _, _} <- Sources, E =:= Second]),
-                ?assertEqual({error, retry}, Result),
-                ?assertEqual(0, maps:get(resident_verified, quod_foreign_log:stats())),
+                ?assertEqual(1, length(Sources)),
+                ?assertMatch({error, _}, Result),
                 %% Group-local failures retain one group; checkpointing runs
                 %% after the complete bounded acquisition. Cold recovery owns
                 %% either physical prefix; it is not served
                 %% using the pre-append cursor or silently deleted to retry.
                 Retained = case Stage of
-                    checkpoint_write -> Chain;
-                    _ -> [hd(Chain)]
+                    ledger_append -> [hd(Chain)];
+                    _ -> Chain
                 end,
                 assert_physical_entries(Dir, Identity, Retained)
         end
@@ -132,21 +185,25 @@ failed_tip_confirmation() ->
     Endpoint = {"127.0.0.1", 19000}, Routes = [{Peer, [Endpoint]}],
     PrefixFetch = quod_foreign_log_tests:chain_fetch(Ns, [Genesis]),
     FullFetch = quod_foreign_log_tests:chain_fetch(Ns, Chain),
-    Mode = atomics:new(1, []), Parent = self(),
+    Mode = atomics:new(2, []), Parent = self(),
     Fetch = fun(P, E, N, Query, Deadline, Consume) ->
         Parent ! {freshness_fetch, Query},
         case {atomics:get(Mode, 1), Query} of
             {0, _} -> PrefixFetch(P, E, N, Query, Deadline, Consume);
-            {1, {range, From, _}} when From > 2 -> {error, retry};
-            {1, _} -> FullFetch(P, E, N, Query, Deadline, Consume);
-            {2, _} -> FullFetch(P, E, N, Query, Deadline, Consume);
-            {3, _} -> error({confirmed_unchanged_head_fetched, Query})
+            {1, _} ->
+                case atomics:add_get(Mode, 2, 1) of
+                    1 -> FullFetch(P, E, N, Query, Deadline, Consume);
+                    _ -> {error, retry}
+                end;
+            {2, _} -> FullFetch(P, E, N, Query, Deadline, Consume)
         end
     end,
     Dir = quod_foreign_log_tests:temp_dir("failed-tip-residency"),
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
     Link = spawn(fun() -> feed_link(Parent) end),
     try
+        ?assertMatch({ok, #{slot := 1}}, quod_foreign_log_tests:prime_projection(
+            Routes, Identity, 1, 3000)),
         ?assertMatch({ok, #{slot := 1}}, quod_foreign_log:current(Routes, Identity, 3000)),
         PhaseFiles = phase_files(Dir, Identity),
         1 = erlang:trace(Owner, true, ['receive', {tracer, self()}]),
@@ -161,7 +218,7 @@ failed_tip_confirmation() ->
         %% sys:get_state is FIFO behind the observed completion turn, not a
         %% sleep hoping that its metadata has already been installed.
         H = state_history(Identity, sys:get_state(Owner)),
-        ?assertEqual(2, record_field(history, height, H)),
+        ?assertEqual(1, record_field(history, height, H)),
         ?assertEqual(true, record_field(history, resident_verified, H)),
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
         receive {CallRef, Result} -> ?assertEqual({error, retry}, Result)
@@ -185,12 +242,11 @@ failed_tip_confirmation() ->
         ?assertMatch({ok, #{identity := Identity, slot := 2}},
                      quod_foreign_log:current(Routes, Identity, 3000)),
         ?assertEqual([], freshness_fetches([])),
-        ok = atomics:put(Mode, 1, 3),
         ?assertMatch({ok, #{identity := Identity, slot := 2}},
                      quod_foreign_log:current(Routes, Identity, 3000)),
         ?assertEqual([], freshness_fetches([])),
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
-        assert_retained_entries(Owner, Identity, Chain)
+        assert_retained_entries(Owner, Identity, [Genesis])
     after
         _ = catch erlang:trace(Owner, false, [all]),
         Link ! close,
@@ -228,11 +284,12 @@ follow_borrow_refusal() ->
         end
     end,
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
-    {Source, SourceMRef, _View} = quod_foreign_log_tests:start_local_borrow_source(
-                                    SourceDir, Fixture),
     try
-        ?assertMatch({ok, #{slot := 2}}, quod_foreign_log:current(
-            [{Peer, [Endpoint]}], Identity, 3000)),
+        ?assertMatch({ok, #{slot := 2}}, quod_foreign_log_tests:prime_projection(
+            [{Peer, [Endpoint]}], Identity, 2, 3000)),
+        {Source, SourceMRef, _View} = quod_foreign_log_tests:start_local_borrow_source(
+                                        SourceDir, Fixture),
+        try
         PhaseFiles = phase_files(Dir, Identity),
         ?assertEqual(1, length(PhaseFiles)),
         Source ! {hold_capture, self()},
@@ -272,11 +329,13 @@ follow_borrow_refusal() ->
         ?assertEqual(PhaseFiles, phase_files(Dir, Identity)),
         assert_retained_entries(Owner, Identity, Prefix),
         ok = quod_foreign_log:unfollow(FollowRef)
+        after
+            exit(Source, kill),
+            _ = erlang:demonitor(SourceMRef, [flush])
+        end
     after
         _ = catch sys:resume(Owner),
         _ = catch erlang:trace(Owner, false, [all]),
-        exit(Source, kill),
-        _ = erlang:demonitor(SourceMRef, [flush]),
         quod_foreign_log_tests:stop_owner(Owner),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(Dir)
@@ -435,7 +494,6 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
     ContactEndpoint = {"127.0.0.1", 29999},
     PrefixFetch = quod_foreign_log_tests:chain_fetch(Ns, Prefix),
     FullFetch = quod_foreign_log_tests:chain_fetch(Ns, Chain),
-    PartialFetch = quod_foreign_log_tests:chain_fetch(Ns, lists:sublist(Chain, 2)),
     Phase = atomics:new(1, []),
     Parent = self(),
     Fetch = fun(P, Endpoint, RequestedNs, Query, Deadline, Consume) ->
@@ -444,12 +502,16 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
             {0, Good, _, _} ->
                 PrefixFetch(P, Endpoint, RequestedNs, Query, Deadline, Consume);
             {1, ContactEndpoint, transient_fallback, _} -> {error, retry};
-            {1, ContactEndpoint, partial_fallback, {range, 2, _}} ->
-                Continuation = {residency_partial, 1},
-                {ok, Consumed, 2, done} = PartialFetch(P, Endpoint, RequestedNs, Query,
-                    Deadline, fun(Parts, 2, done) -> Consume(Parts, RequestedSlot, Continuation) end),
+            {1, ContactEndpoint, partial_fallback, {evidence, _, _}} ->
+                Continuation = {<<70:128>>, 1},
+                {ok, Consumed, RequestedSlot, done} = FullFetch(P, Endpoint, RequestedNs, Query,
+                    Deadline, fun(Parts, RemoteHeight, done) ->
+                        ?assertEqual(RequestedSlot, RemoteHeight),
+                        {GenesisParts, [_ | _]} = lists:split(3, Parts),
+                        Consume(GenesisParts, RequestedSlot, Continuation)
+                    end),
                 {ok, Consumed, RequestedSlot, Continuation};
-            {1, ContactEndpoint, partial_fallback, {continue, residency_partial, 1}} ->
+            {1, ContactEndpoint, partial_fallback, {continue, <<70:128>>, 1}} ->
                 {error, retry};
             {1, _, _, _} ->
                 FullFetch(P, Endpoint, RequestedNs, Query, Deadline, Consume)
@@ -457,19 +519,20 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
     end,
     Dir = quod_foreign_log_tests:temp_dir("verified-cursor"),
     Owner = quod_foreign_log_tests:start_owner(Dir, Fetch),
-    MFAs = [{quod_ledger_store, open, 3}, {quod_foreign_log, replay_cache, 6}],
+    MFAs = [{quod_ledger_store, open, 3}, {quod_foreign_log, replay_cache, 7}],
     try
         {module, quod_ledger_store} = code:ensure_loaded(quod_ledger_store),
         [1 = erlang:trace_pattern(MFA, true, [local]) || MFA <- MFAs],
         1 = erlang:trace(Owner, true, [call, set_on_spawn, {tracer, self()}]),
         {ok, #{identity := Identity, slot := PrefixHeight}} =
-            quod_foreign_log:current([{Peer, [Good]}], Identity, 5000),
+            quod_foreign_log_tests:prime_projection([{Peer, [Good]}], Identity, PrefixHeight, 5000),
         ?assertMatch(#{resident_verified := 1}, quod_foreign_log:stats()),
-        WarmCalls = drain_calls(),
+        CacheNs = quod_foreign_log:cache_namespace(Identity),
+        WarmCalls = cache_calls(CacheNs, drain_calls()),
         %% Positive control: this exact trace observes the real initial full
         %% open. A disabled hook cannot satisfy the subsequent zero-work test.
         ?assertEqual(1, call_count({quod_ledger_store, open, 3}, WarmCalls)),
-        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 6}, WarmCalls)),
+        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 7}, WarmCalls)),
         FilesBefore = phase_files(Dir, Identity),
         ?assertEqual(1, length(FilesBefore)),
         _ = drain_fetches(),
@@ -484,37 +547,35 @@ warm_exact_routes_traced(Mode, PrefixHeight) ->
                              Ref, ExpectedPhase, Contact, 5000) end),
         case Mode of
             definitive_fallback ->
-                ?assertEqual({error, invalid_foreign_reference}, Result);
+                ?assertEqual({error, phase_mismatch}, Result);
             _ ->
                 ?assertMatch({ok, #{identity := Identity, phase := resolve}}, Result)
         end,
-        Calls = drain_calls(),
+        Calls = cache_calls(CacheNs, drain_calls()),
         Fetches = drain_fetches(),
         RootSpan = quod_trace_tests:take_span(RootName),
         Worker = quod_trace_tests:take_span(
                    <<"quod.foreign.verification_worker">>, RootSpan#span.trace_id),
         Attributes = otel_attributes:map(Worker#span.attributes),
         ?assertEqual(0, call_count({quod_ledger_store, open, 3}, Calls)),
-        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 6}, Calls)),
+        ?assertEqual(0, call_count({quod_foreign_log, replay_cache, 7}, Calls)),
         ?assertEqual(FilesBefore, phase_files(Dir, Identity)),
         ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', Attributes)),
         ?assertEqual(0, maps:get('quod.foreign.cold_opens', Attributes)),
         case Mode of
-            healthy -> ?assertMatch([{1, Good, {range, RequestedSlot, _}}], Fetches);
+            healthy -> ?assertMatch([{1, Good, {evidence, _, {exact, RequestedSlot, _}}}], Fetches);
             transient_fallback ->
-                ?assertMatch([{1, ContactEndpoint, {range, RequestedSlot, _}},
-                              {1, Good, {range, RequestedSlot, _}}], Fetches);
+                ?assertMatch([{1, ContactEndpoint, {evidence, _, {exact, RequestedSlot, _}}},
+                              {1, Good, {evidence, _, {exact, RequestedSlot, _}}}], Fetches);
             partial_fallback ->
-                ?assertMatch([{1, ContactEndpoint, {range, 2, 3}},
-                              {1, ContactEndpoint, {continue, residency_partial, 1}},
-                              {1, Good, {range, 3, 3}}], Fetches);
+                ?assertMatch([{1, ContactEndpoint, {evidence, _, {exact, RequestedSlot, _}}},
+                              {1, ContactEndpoint, {continue, <<70:128>>, 1}},
+                              {1, Good, {evidence, _, {exact, RequestedSlot, _}}}], Fetches);
             definitive_fallback ->
-                %% The first source supplied the exact suffix. The second
-                %% definitive arm must inspect that cursor, not re-fetch it.
-                ?assertMatch([{1, ContactEndpoint, {range, RequestedSlot, _}}], Fetches)
+                ?assertMatch([{1, ContactEndpoint, {evidence, _, {exact, RequestedSlot, _}}}], Fetches)
         end,
         ?assertMatch(#{resident_verified := 1}, quod_foreign_log:stats()),
-        assert_retained_entries(Owner, Identity, Chain)
+        assert_retained_entries(Owner, Identity, Prefix)
     after
         _ = catch erlang:trace(Owner, false, [all]),
         [erlang:trace_pattern(MFA, false, [local]) || MFA <- MFAs],
@@ -606,6 +667,13 @@ drain_calls() ->
 drain_calls(Acc) ->
     receive {trace, Pid, call, MFA} -> drain_calls([{Pid, MFA} | Acc])
     after 0 -> lists:reverse(Acc) end.
+
+cache_calls(CacheNs, Calls) ->
+    [Call || Call = {_, MFA} <- Calls,
+        case MFA of
+            {quod_ledger_store, open, [Ns, _, _]} -> Ns =:= CacheNs;
+            _ -> true
+        end].
 
 call_count({M, F, A}, Calls) ->
     length([ok || {_Pid, {CM, CF, Args}} <- Calls,

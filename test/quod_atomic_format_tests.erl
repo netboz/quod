@@ -84,7 +84,7 @@ real_v4_checkpoint_cannot_be_relabelled_corrupt_and_deleted_test() ->
         {ok, Store} = quod_ledger_store:open(CacheNs, Dir, wrapped),
         ok = quod_ledger_store:close(Store),
         CacheDir = quod_ledger_store:ns_dir(Dir, CacheNs),
-        Manifest = term_to_binary({quod_foreign_log_cache, 6, namespace(), anchor(), CacheNs},
+        Manifest = term_to_binary({quod_foreign_log_cache, 7, namespace(), anchor(), CacheNs},
                                   [deterministic]),
         put_file(filename:join(CacheDir, "identity.term"), Manifest),
         Bytes = fixture("checkpoint-v4"), Path = filename:join(CacheDir, "checkpoint.term"),

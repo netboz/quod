@@ -214,7 +214,7 @@ with_custody(Kind, Fun) ->
             committee_id => <<215:256>>, sync => ready, prolog_ready => true,
             slot => 1, history_head => {1, Anchor},
             eng => quod_simplex:eng_new(Domain, [Author],
-                {{quod_ledger:initial_era(Target), 0, Anchor}, 0}),
+                {{quod_ledger:initial_era(Target), 0, Anchor}, 1, 0}),
             store => memory, signing_journal => Journal}),
         Fun(Change, Admission, S0)
     after

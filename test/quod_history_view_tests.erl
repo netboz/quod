@@ -346,7 +346,7 @@ with_owner(Fun) ->
     Era = maps:get(era, F), Root = maps:get(protocol_root, maps:get(projection, F)),
     {BlocksRev, _} = lists:foldl(fun(I, {Blocks, Prev}) ->
         Tx = case I of Height -> Claim; _ -> signed_at(maps:get(transaction, F), I, F) end,
-        {ok, Block} = quod_ledger:new_block({Era, I - 1}, Prev, {batch, [Tx]}, I),
+        {ok, Block} = quod_ledger:new_block({Era, I - 1}, Prev, I, {batch, [Tx]}, I),
         {[Block | Blocks], quod_ledger:block_ref(Block)}
     end, {[], Root}, lists:seq(2, Height)),
     FinalBlock = hd(BlocksRev), Finality = quod_ct:protocol_certificate(FinalBlock, F),
@@ -416,7 +416,7 @@ owner_loop(State, Store, Fixture, Observer) ->
             Projection = quod_simplex:test_state_projection(State),
             Root = maps:get(protocol_root, Projection), Era = maps:get(era, Fixture),
             Tx = signed_at(maps:get(transaction, Fixture), Next, Fixture),
-            {ok, Block} = quod_ledger:new_block({Era, Next - 1}, Root, {batch, [Tx]}, Next),
+            {ok, Block} = quod_ledger:new_block({Era, Next - 1}, Root, Next, {batch, [Tx]}, Next),
             Entry = quod_ledger:entry(Next, Block, quod_ct:protocol_certificate(Block, Fixture)),
             {ok, Store1} = quod_ledger_store:append(Store, {proof_source([Block]), [Entry]}),
             P1 = quod_simplex:history_advance(quod_ledger_store:namespace(Store), Entry, Projection),

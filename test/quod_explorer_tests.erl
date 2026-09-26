@@ -144,7 +144,7 @@ display_entry(Height, Payload, Timestamp) when Height > 1 ->
     F = quod_ct:protocol_fixture(<<"ont:test">>),
     Era = maps:get(era, F),
     Parent = maps:get(protocol_root, maps:get(projection, F)),
-    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, Parent, Payload, Timestamp),
+    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, Parent, Height, Payload, Timestamp),
     quod_ledger:entry(Height, Block, quod_ct:protocol_certificate(Block, F)).
 
 genesis_entry(Ns) ->

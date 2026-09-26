@@ -1200,7 +1200,7 @@ t_batch_apply({Ns, _}) ->
         Partial = change(Ns, diff_for({must_not_apply, x}), #{}),
         ?assertEqual({error, bad_block},
                      quod_ledger:new_block({<<1:256>>, 1}, {<<1:256>>, 0, <<0:256>>},
-                                           {batch, [Partial | bad_tail]}, 0)),
+                                           2, {batch, [Partial | bad_tail]}, 0)),
         ?assertMatch({fail, [_ | _]},
                      quod_prolog:prove(Ns, {must_not_apply, x})),
         Stats2 = quod_prolog:stats(Ns),

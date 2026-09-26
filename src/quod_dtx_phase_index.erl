@@ -29,6 +29,7 @@ cleanup removes only abandoned files of this exact session-file family.
 -export([open/2, suspend/1, resume/1, close/1, cleanup/2, cleanup/3, stats/1,
          retain_empty/1, release/1, same_session/2,
          capture/2, is_capture/2, history/2, committee/2, preview_committee/2, preview_histories/2,
+         preview_protocol_era/2, protocol_era/2, authority_path/3,
          new_delta/0, preview_batch/4, commit_delta/2,
          apply_batch/3]).
 -export_type([index/0, delta/0]).
@@ -66,7 +67,8 @@ cleanup removes only abandoned files of this exact session-file family.
           rows = #{} :: #{binary() => {quod_atomic:group_history(),
                                        non_neg_integer()}},
           bytes = 0 :: non_neg_integer(),
-          eras = #{} :: #{pos_integer() => tuple()}
+          eras = #{} :: #{pos_integer() => tuple()},
+          protocol_eras = #{} :: #{binary() => tuple()}
          }).
 
 -opaque index() :: #index{}.
@@ -258,6 +260,73 @@ is_capture(_, _) -> false.
 preview_committee(Delta = #delta{eras = Eras}, {Start, Committee, <<_:256>>, Routes} = Era)
   when is_integer(Start), Start > 0, is_list(Committee), is_map(Routes) ->
     Delta#delta{eras = Eras#{Start => Era}}.
+
+-doc "Stage an immutable lookup position for a certified protocol-era transition.".
+-spec preview_protocol_era(delta(), tuple()) -> delta().
+preview_protocol_era(Delta = #delta{protocol_eras = Rows},
+                     {<<_:256>> = Era, _Previous, _Height, _Hash} = Row) ->
+    true = valid_protocol_era(Row),
+    case maps:find(Era, Rows) of
+        error -> Delta#delta{protocol_eras = Rows#{Era => Row}};
+        {ok, Row} -> Delta;
+        {ok, _} -> error(conflicting_protocol_era)
+    end.
+
+-doc "Read an era's terminal-entry position from a pinned index; the row is not a certificate.".
+-spec protocol_era(index(), <<_:256>>) -> {ok, tuple()} | not_found | {error, index_error()}.
+protocol_era(#index{table = Table, owner = Owner, state = {view, Height, _}}, <<_:256>> = Era) ->
+    case is_process_alive(Owner) of
+        true ->
+            case load_protocol_era(Table, Era) of
+                {ok, {Era, _, Terminal, _} = Row} when Terminal =< Height -> {ok, Row};
+                {ok, _Later} -> not_found;
+                Other -> Other
+            end;
+        false -> {error, bad_phase_index_argument}
+    end;
+protocol_era(_, _) -> {error, bad_phase_index_argument}.
+
+-doc "Find only indexed membership transitions after KnownEra, in material order.".
+-spec authority_path(index(), genesis | <<_:256>>, <<_:256>>) ->
+    {ok, [tuple()]} | {error, index_error() | unknown_era}.
+authority_path(Index, KnownEra, <<_:256>> = TargetEra)
+  when KnownEra =:= genesis; is_binary(KnownEra), byte_size(KnownEra) =:= 32 ->
+    authority_path(Index, KnownEra, TargetEra, infinity, []);
+authority_path(_, _, _) -> {error, bad_phase_index_argument}.
+
+authority_path(Index, Known, Era, Ceiling, Rows) ->
+    case protocol_era(Index, Era) of
+        {ok, {Era, _Previous, Height, _Hash}}
+          when Era =:= Known, (Ceiling =:= infinity orelse Height < Ceiling) ->
+            {ok, Rows};
+        {ok, {Era, Previous, Height, _Hash} = Row}
+          when Ceiling =:= infinity; Height < Ceiling ->
+            case Previous of
+                genesis when Known =:= genesis -> {ok, [Row | Rows]};
+                genesis -> {error, unknown_era};
+                _ -> authority_path(Index, Known, Previous, Height, [Row | Rows])
+            end;
+        {ok, _} -> {error, phase_index_corrupt};
+        not_found -> {error, unknown_era};
+        {error, _} = Error -> Error
+    end.
+
+valid_protocol_era({<<_:256>>, genesis, 1, <<_:256>>}) -> true;
+valid_protocol_era({<<_:256>>, <<_:256>>, Height, <<_:256>>}) ->
+    is_integer(Height) andalso Height > 1 andalso Height =< 16#FFFFFFFFFFFFFFFF;
+valid_protocol_era(_) -> false.
+
+load_protocol_era(Table, Era) ->
+    case dets_lookup(Table, {protocol_era, Era}) of
+        {ok, []} -> not_found;
+        {ok, [{{protocol_era, Era}, {Era, _, _, _} = Row}]} ->
+            case valid_protocol_era(Row) of
+                true -> {ok, Row};
+                false -> {error, phase_index_corrupt}
+            end;
+        {ok, _} -> {error, phase_index_corrupt};
+        {error, Reason} -> {error, {phase_index_io, Reason}}
+    end.
 
 -doc "Stage the exact histories returned by the shared live-finality reducer.".
 -spec preview_histories(delta(), #{binary() => quod_atomic:group_history()}) ->
@@ -488,7 +557,20 @@ commit_delta(#index{table = Table, owner = Owner, state = open}, #delta{} = Delt
 commit_delta(_Index, _Delta) ->
     {error, bad_phase_index_delta}.
 
-index_delta_rows(Table, #delta{eras = Eras} = Delta) ->
+index_delta_rows(Table, #delta{protocol_eras = ProtocolEras} = Delta) ->
+    case committee_delta_rows(Table, Delta) of
+        {ok, Rows} when map_size(ProtocolEras) =:= 0 -> {ok, Rows};
+        {ok, Rows} ->
+            case protocol_tip(Table) of
+                {ok, Tip} ->
+                    append_protocol_rows(Table,
+                        lists:keysort(3, maps:values(ProtocolEras)), Tip, Rows);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+committee_delta_rows(Table, #delta{eras = Eras} = Delta) ->
     case encode_delta(Delta) of
         {ok, Rows} when map_size(Eras) =:= 0 -> {ok, Rows};
         {ok, Rows} ->
@@ -496,6 +578,37 @@ index_delta_rows(Table, #delta{eras = Eras} = Delta) ->
                 {ok, Count, Last} ->
                     append_era_rows(lists:sort(maps:to_list(Eras)), Count, Last, Rows);
                 {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+protocol_tip(Table) ->
+    case dets_lookup(Table, protocol_tip) of
+        {ok, []} -> {ok, none};
+        {ok, [{protocol_tip, <<_:256>> = Era, Height}]} when is_integer(Height), Height > 0 ->
+            {ok, {Era, Height}};
+        {ok, _} -> {error, phase_index_corrupt};
+        {error, Reason} -> {error, {phase_index_io, Reason}}
+    end.
+
+append_protocol_rows(_Table, [], {Era, Height}, Rows) ->
+    {ok, [{protocol_tip, Era, Height} | Rows]};
+append_protocol_rows(_Table, [], none, _Rows) ->
+    {error, phase_index_corrupt};
+append_protocol_rows(Table, [{Era, Previous, Height, _Hash} = Row | Rest], Tip, Rows) ->
+    case load_protocol_era(Table, Era) of
+        {ok, Row} -> append_protocol_rows(Table, Rest, Tip, Rows);
+        {ok, _Conflicting} -> {error, bad_phase_index_delta};
+        not_found ->
+            Follows = case Tip of
+                none -> Previous =:= genesis andalso Height =:= 1;
+                {Previous, PreviousHeight} -> Height > PreviousHeight;
+                _ -> false
+            end,
+            case valid_protocol_era(Row) andalso Follows of
+                true -> append_protocol_rows(Table, Rest, {Era, Height},
+                            [{{protocol_era, Era}, Row} | Rows]);
+                false -> {error, bad_phase_index_delta}
             end;
         {error, _} = Error -> Error
     end.

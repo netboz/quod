@@ -47,7 +47,7 @@ protocol_fixture(Ns) ->
     Signer = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
     GenesisTx = quod_simplex:test_genesis_tx(
       #{external_predicate_modules => [], node_addr => {<<"localhost">>, 1}}, Ns, Pub, <<6:256>>),
-    {ok, Genesis} = quod_ledger:new_block({genesis, 0}, none, {batch, [GenesisTx]}, 0),
+    {ok, Genesis} = quod_ledger:new_block({genesis, 0}, none, 1, {batch, [GenesisTx]}, 0),
     {genesis, 0, Anchor} = quod_ledger:block_ref(Genesis),
     Identity = {Ns, Anchor},
     Projection = quod_simplex:history_advance(Ns, quod_ledger:entry(1, Genesis, none),
@@ -1034,12 +1034,12 @@ committed_entry(Ns, Index, Data) ->
     %% Their descriptor is shape-only, never evidence for a history verifier.
     case Index of
         1 ->
-            {ok, Block} = quod_ledger:new_block({genesis, 0}, none, Payload, 0),
+            {ok, Block} = quod_ledger:new_block({genesis, 0}, none, 1, Payload, 0),
             quod_ledger:entry(1, Block, none);
         _ ->
             Era = quod_ledger:initial_era({Ns, <<0:256>>}),
             {ok, Block} = quod_ledger:new_block({Era, Index - 1},
-                {Era, Index - 2, <<0:256>>}, Payload, 0),
+                {Era, Index - 2, <<0:256>>}, Index, Payload, 0),
             Cert = #cert{kind = commit, era = Era, slot = Index - 1,
                          block_hash = quod_simplex:block_hash(Block),
                          sigs = [{<<1:256>>, <<0:512>>}]},

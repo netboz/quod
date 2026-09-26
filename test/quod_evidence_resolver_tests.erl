@@ -102,11 +102,11 @@ nonhosted_identity_routes_once(Mode) ->
         ?assertEqual(1, calls(T, quod_simplex, history_view_at, 3)),
         ?assertEqual(0, calls(T, quod_foreign_log, verify_resident_snapshot, 6)),
         assert_one_routed(T, C, Ref, resolve, Hint, D),
-        %% Cold routed work positively controls full-open and forward-fold
-        %% tracing. Persisted-cache replay has its own restart control below.
-        ?assert(calls(T, quod_foreign_log, open_cache, 5) > 0),
-        ?assert(calls(T, quod_catchup, range_accept, 5) > 0),
-        ?assert(calls(T, quod_ledger_store, open, 3) > 0),
+        %% Point evidence uses the shared proof reader without opening a
+        %% material cache. Projection replay has its own restart control below.
+        ?assertEqual(0, calls(T, quod_foreign_log, open_cache, 5)),
+        ?assertEqual(0, calls(T, quod_catchup, range_accept, 5)),
+        ?assert(calls(T, quod_catchup, evidence_accept, 4) > 0),
         receive {resolver_fetch, _, _} -> ok
         after 0 -> error(routed_positive_control_did_not_fetch)
         end,
@@ -172,6 +172,9 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
     with_case(F, none, fun(C) ->
         Ref = maps:get(ref, F),
         ?assertMatch({ok, _}, resolve(C, Ref, resolve, deadline(3000))),
+        {Peer, Endpoint} = maps:get(contact, C),
+        {ok, _} = quod_foreign_log_tests:prime_projection(
+            [{Peer, [Endpoint]}], identity(F), length(maps:get(chain, F)), 3000),
         _ = traces(),
         flush_fetches(),
         quod_foreign_log_tests:stop_owner(maps:get(foreign, C)),
@@ -192,13 +195,13 @@ persisted_cache_replays_at_startup_not_on_later_requests_test() ->
         try
             quod_foreign_log_tests:await_history_ready(identity(F), length(maps:get(chain, F))),
             Startup = traces(),
-            ?assert(calls(Startup, quod_foreign_log, replay_cache, 6) > 0),
+            ?assert(calls(Startup, quod_foreign_log, replay_cache, 7) > 0),
             ?assert(calls(Startup, quod_ledger_store, open, 3) > 0),
             ?assertEqual(1, calls(Startup, quod_foreign_log, spawn_verification_worker, 3)),
             assert_no_fetch(),
             ?assertMatch({ok, _}, resolve(C#{foreign := New}, Ref, resolve, deadline(3000))),
             T = traces(),
-            ?assertEqual(0, calls(T, quod_foreign_log, replay_cache, 6)),
+            ?assertEqual(0, calls(T, quod_foreign_log, replay_cache, 7)),
             ?assertEqual(0, calls(T, quod_ledger_store, open, 3)),
             %% The published prefix serves an exact read in its caller. It
             %% neither reacquires mutable custody nor starts a history job.
@@ -779,8 +782,9 @@ trace_patterns() ->
      {quod_foreign_log, start_distinct_worker, 7},
      {quod_foreign_log, spawn_verification_worker, 3},
      {quod_foreign_log, open_cache, 5},
-     {quod_foreign_log, replay_cache, 6},
+     {quod_foreign_log, replay_cache, 7},
      {quod_catchup, range_accept, 5},
+     {quod_catchup, evidence_accept, 4},
      {quod_catchup, verify_forward_group, 5},
      {quod_ledger_store, open, 3},
      {quod_ledger_store, open_ro, 3},
@@ -818,7 +822,7 @@ assert_no_foreign_work(T) ->
                   [{quod_foreign_log, start_distinct_worker, 7},
                    {quod_foreign_log, spawn_verification_worker, 3},
                    {quod_foreign_log, open_cache, 5},
-                   {quod_foreign_log, replay_cache, 6},
+                   {quod_foreign_log, replay_cache, 7},
                    {quod_catchup, range_accept, 5},
                    {quod_catchup, verify_forward_group, 5},
                    {quod_ledger_store, open, 3},
@@ -845,7 +849,7 @@ committee_fixture(RemoveMember) ->
     Keys = [K || {K, _} <- Members],
     GenesisTx = quod_simplex:test_genesis_tx(#{committee => tl(Keys), node_addr => {"127.0.0.1", 19000}},
                                               Ns, Author, digest(genesis_incarnation)),
-    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, {batch, [GenesisTx]}, 0),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, 1, {batch, [GenesisTx]}, 0),
     Genesis = quod_ledger:entry(1, Block, none),
     Anchor = quod_simplex:block_hash(Block),
     Identity = {Ns, Anchor},
@@ -886,7 +890,7 @@ signed_transaction(Identity, Binding, Author, Signer, Seq, Diff) ->
 
 committee_entry({Ns, Anchor}, Members, Height, {Era, View, _} = Parent, Tx) ->
     Position = {Era, View + 1},
-    {ok, Block} = quod_ledger:new_block(Position, Parent, {batch, [Tx]}, 0),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, Height, {batch, [Tx]}, 0),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Sigs = [{Pub, (quod_simplex:make_share(Domain, commit, Position, Hash, Signer))#share.sig}

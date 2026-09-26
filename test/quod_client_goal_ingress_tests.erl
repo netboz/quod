@@ -7,6 +7,160 @@
 -define(ANCHOR, <<16#72:256>>).
 -define(PEER, {127, 0, 0, 1}).
 
+refused_group_selector_authenticates_its_exact_source_request_test() ->
+    F = quod_ct:signed_atomic_fixture(#{vote => {refused, [vote_deadline]}}),
+    Control = maps:get(vote_control, F), Evidence = maps:get(evidence, F),
+    {ok, Ref} = quod_atomic:source_group_ref(quod_atomic:control_material(Control)),
+    ?assert(quod_client_goal_ingress:group_request_matches(Ref, Evidence, Control)),
+    %% Same operation key with different signed content is not this attempt;
+    %% nor can another agent or a different group borrow its outcome.
+    Changed = quod_ct:signed_goal_fixture(#{target => maps:get(target, F),
+        key_pair => maps:get(key_pair, F), operation_id => maps:get(operation_id, F),
+        goal_text => <<"assertz(saved(other)).">>}),
+    Other = quod_ct:signed_goal_fixture(#{target => maps:get(target, F)}),
+    [?assertNot(quod_client_goal_ingress:group_request_matches(Ref, E, Control))
+      || E <- [maps:get(evidence, Changed), maps:get(evidence, Other)]],
+    [?assertNot(quod_client_goal_ingress:group_request_matches(Bad, Evidence, Control))
+      || Bad <- [setelement(3, Ref, <<98:256>>), setelement(4, Ref, <<98:256>>),
+                 setelement(5, Ref, <<98:256>>), setelement(6, Ref, <<98:256>>)]],
+    [Target] = maps:get(participant_targets, F) -- [maps:get(origin, F)],
+    {ok, ParticipantVote} = quod_atomic:new_vote(maps:get(group, F), Target,
+        lists:keyfind(Target, 1, maps:get(bundles, F)), prepared),
+    {ok, Material} = quod_atomic:admission_material(ParticipantVote),
+    {ok, ParticipantControl} = quod_atomic:sign_control(Target, Material,
+        maps:get(admission, F), 1, 1, maps:get(node_identity, F)),
+    ?assertNot(quod_client_goal_ingress:group_request_matches(Ref, Evidence, ParticipantControl)).
+
+refused_group_reconciles_through_archived_phase_and_prolog_outcome_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    quod_ct:with_network_identity(?NETWORK, fun refused_group_reconciliation/0).
+
+refused_group_reconciliation() ->
+    Ns = unique_symbol(<<"refused-outcome:">>),
+    Protocol = #{identity := Identity = {Ns, Anchor}, genesis := Genesis,
+                 signer := Signer, admission := Admission} = quod_ct:protocol_fixture(Ns),
+    OtherProtocol = #{identity := Other, genesis := OtherGenesis} =
+        quod_ct:protocol_fixture(<<Ns/binary, ":other">>),
+    F = quod_ct:signed_plan_fixture(#{network => ?NETWORK, target => Identity,
+        atomic => true, deadline => 1, node_identity => Signer, admission => Admission}, [Identity, Other]),
+    {ok, Group} = quod_atomic:new_group(maps:get(manifest, F), maps:get(auth, F),
+                                        maps:get(Identity, maps:get(attestations, F))),
+    {ok, Vote} = quod_atomic:new_vote(Group, Identity, none, {refused, [vote_deadline]}),
+    {VoteEntry, VoteRef, VoteControl} = refused_phase(Vote, 2, Genesis, Protocol),
+    {ok, Resolve} = quod_atomic:new_resolve(Group, VoteRef, Identity,
+        {abort, [vote_deadline]}, {refused, VoteRef}, VoteRef, 0),
+    {ok, VoteBlock} = quod_ledger:block_from_entry(VoteEntry),
+    {ResolveEntry, ResolveRef, _} = refused_phase(Resolve, 3, VoteBlock, Protocol),
+    {ok, OtherResolve} = quod_atomic:new_resolve(Group, VoteRef, Other,
+        {abort, [vote_deadline]}, {refused, VoteRef}, none, 0),
+    {_, OtherRef, _} = refused_phase(OtherResolve, 2, OtherGenesis, OtherProtocol),
+    CommitteeId = maps:get(committee_id, maps:get(projection, OtherProtocol)),
+    GroupId = quod_atomic:group_id(Group),
+    {ok, AppliedVote} = quod_applied_certificate:sign_applied_vote(
+        ?NETWORK, Other, CommitteeId, GroupId, OtherRef, 0, abort, Signer),
+    {ok, Applied} = quod_applied_certificate:applied_certificate(
+        {?NETWORK, Other, CommitteeId, GroupId, OtherRef, 0, abort}, [AppliedVote]),
+    {ok, Complete} = quod_atomic:new_complete(Group, abort,
+        lists:sort([{Identity, ResolveRef, 0}, {Other, OtherRef, 0}]), [{Other, Applied}]),
+    {ok, ResolveBlock} = quod_ledger:block_from_entry(ResolveEntry),
+    {CompleteEntry, _, _} = refused_phase(Complete, 4, ResolveBlock, Protocol),
+    Chain = [quod_ledger:entry(1, Genesis, none), VoteEntry, ResolveEntry, CompleteEntry],
+    Dir = filename:join("/tmp", binary_to_list(unique_symbol(<<"quod-refused-outcome-">>))),
+    {Source, SourceMonitor} = start_refused_source(Dir, Protocol, Chain, VoteRef),
+    {ok, Engine} = quod_prolog:start_link(Ns, #{outcome_backend => memory}),
+    {ok, Auth} = quod_client_auth:start_link(
+        #{network_id => ?NETWORK, node_key => <<16#73:256>>, session_ttl_ms => 60000}),
+    try
+        [ok = quod_prolog:apply_entry(Ns, Entry, replay) || Entry <- Chain],
+        ok = quod_prolog:mark_ready(Ns),
+        Session = open_session(maps:get(key_pair, F)),
+        Bytes = maps:get(request_bytes, F), Signature = maps:get(signature, F),
+        {ok, GroupRef} = quod_atomic:source_group_ref(quod_atomic:control_material(VoteControl)),
+        %% Refusal never creates an operation's prepared winning claim.
+        ?assertMatch({error, _}, quod_prolog:outcome(maps:get(operation_ref, F))),
+        ?assertMatch({ok, _, {operation_pending, _}},
+            quod_client_goal_ingress:resolve_operation(
+                maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+        Reply = quod_client_goal_ingress:resolve_operation(
+            maps:get(session_id, Session), Bytes, Signature, ?PEER, GroupRef),
+        ?assertMatch({ok, _, {group_outcome, GroupRef,
+            #{status := aborted, reasons := [vote_deadline]}}}, Reply),
+        ?assertMatch({200, #{result := group_outcome, status := aborted, terminal := true}},
+                     quod_client_http:signed_goal_result(Reply)),
+        Changed = quod_ct:signed_goal_fixture(#{network => ?NETWORK, target => Identity,
+            key_pair => maps:get(key_pair, F), operation_id => maps:get(operation_id, F),
+            deadline => 1, goal_text => <<"assertz(other_action).">>}),
+        ?assertEqual({error, invalid_outcome_ref}, quod_client_goal_ingress:resolve_operation(
+            maps:get(session_id, Session), maps:get(request_bytes, Changed),
+            maps:get(signature, Changed), ?PEER, GroupRef)),
+        ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+        ?assertMatch({error, _}, quod_prolog:outcome(maps:get(operation_ref, F)))
+    after
+        stop_process(Auth), stop_process(Engine),
+        Source ! stop,
+        receive {'DOWN', SourceMonitor, process, Source, normal} -> ok
+        after 2000 -> exit(Source, kill), error(refused_source_stop_timeout)
+        end,
+        _ = file:del_dir_r(Dir)
+    end.
+
+refused_phase(Record, Height, Parent,
+              Protocol = #{identity := Identity, signer := Signer, admission := Admission, era := Era}) ->
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(Identity, Material, Admission, Height - 1, Height, Signer),
+    ParentRef = case Height of
+        2 -> {Era, 0, element(3, quod_ledger:block_ref(Parent))};
+        _ -> quod_ledger:block_ref(Parent)
+    end,
+    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, ParentRef, Height,
+                                       {batch, [{dtx, Control}]}, Height),
+    Entry = quod_ledger:entry(Height, Block, quod_ct:protocol_certificate(Block, Protocol)),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Control),
+    {Entry, Ref, Control}.
+
+%% This fixture supplies only the committed owner capture and discovery reply.
+%% The public ingress still reads and authenticates the actual archived Vote;
+%% the ordinary Prolog materializer produces the final outcome from all phases.
+start_refused_source(Dir, #{identity := Identity = {Ns, Anchor}}, Chain, VoteRef) ->
+    Parent = self(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_simplex, Ns}),
+        Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+        Table = ets:new(Table, [named_table, protected, set]),
+        ets:insert(Table, {anchor, Anchor}),
+        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        {ok, Store} = quod_ct:append_direct_history(Store0, Chain),
+        {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+        Projection = lists:foldl(fun(Entry, P) ->
+            {ok, Next, _} = quod_ct:history_advance(Identity, Entry, P, Index), Next
+        end, quod_simplex:history_projection(Identity), Chain),
+        {ok, Captured} = quod_dtx_phase_index:capture(Index, 4),
+        View = #{owner => self(), identity => Identity, slot => 4, applied => 4,
+            snapshot => quod_ledger_store:snapshot(Store),
+            projection => Projection#{history_index => Captured}},
+        Parent ! {refused_source_ready, self()},
+        refused_source_loop(View, VoteRef),
+        quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store)
+    end),
+    receive
+        {refused_source_ready, Pid} -> {Pid, Monitor};
+        {'DOWN', Monitor, process, Pid, Reason} -> error({refused_source_failed, Reason})
+    after 2000 -> exit(Pid, kill), error(refused_source_start_timeout)
+    end.
+
+refused_source_loop(View = #{identity := Identity}, VoteRef) ->
+    receive
+        {'$gen_call', From, {history_view, Identity, {committed, 2}, Deadline}} ->
+            true = Deadline > quod_time:mono_ms(),
+            gen_statem:reply(From, {ok, View}), refused_source_loop(View, VoteRef);
+        {'$gen_call', From, {dtx_endpoint_local, {phase, Id, _, vote}, [], Timeout, _}} ->
+            true = Timeout > 0,
+            gen_statem:reply(From, {ok, {phase, Id, 0, {committed, VoteRef}}, []}),
+            refused_source_loop(View, VoteRef);
+        {'$gen_cast', _AppliedNotification} -> refused_source_loop(View, VoteRef);
+        stop -> ok
+    end.
+
 signed_local_read_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
@@ -409,6 +563,18 @@ operation_resolution_follows_the_existing_claim(
        quod_client_goal_ingress:resolve_operation(
          maps:get(session_id, Session), maps:get(request_bytes, Fixture),
          maps:get(signature, Fixture), ?PEER)),
+    %% A concurrently refused submission may have its own returned selector.
+    %% That attempt must not replace this exact request's prepared winner.
+    Duplicate = quod_ct:signed_atomic_fixture(#{network => ?NETWORK,
+        target => {Ns, ?ANCHOR}, key_pair => KeyPair, deadline => Deadline,
+        operation_id => maps:get(operation_id, Fixture), vote => {refused, [duplicate_operation]}}),
+    ?assertEqual(maps:get(request_bytes, Fixture), maps:get(request_bytes, Duplicate)),
+    {ok, DuplicateRef} = quod_atomic:source_group_ref(
+        quod_atomic:control_material(maps:get(vote_control, Duplicate))),
+    ?assertMatch({ok, _, {operation_outcome, #{status := claimed},
+                         #{status := committed, height := 2}}},
+        quod_client_goal_ingress:resolve_operation(maps:get(session_id, Session),
+            maps:get(request_bytes, Duplicate), maps:get(signature, Duplicate), ?PEER, DuplicateRef)),
     Previous = application:get_env(quod, node_pubkey),
     application:set_env(quod, node_pubkey, <<16#73:256>>),
     try
@@ -427,7 +593,17 @@ operation_resolution_follows_the_existing_claim(
        {error, operation_conflict},
        quod_client_goal_ingress:resolve_operation(
          maps:get(session_id, Session), maps:get(request_bytes, Other),
-         maps:get(signature, Other), ?PEER)).
+         maps:get(signature, Other), ?PEER)),
+    Waiting = quod_ct:remote_operation_fixture(#{network => ?NETWORK,
+        target => {Ns, ?ANCHOR}, key_pair => KeyPair, deadline => Deadline,
+        operation_id => <<16#ff:256>>}),
+    ok = quod_prolog:apply_entry(Ns,
+        quod_ct:committed_entry(Ns, 3, {batch, [maps:get(claim, Waiting)]}), live),
+    ?assertMatch({ok, #{status := claimed}},
+                 quod_prolog:outcome(maps:get(operation_ref, Waiting))),
+    ?assertMatch({ok, _, {operation_pending, _}},
+        quod_client_goal_ingress:resolve_operation(maps:get(session_id, Session),
+            maps:get(request_bytes, Waiting), maps:get(signature, Waiting), ?PEER, DuplicateRef)).
 
 %% ===================================================================
 %% fixture

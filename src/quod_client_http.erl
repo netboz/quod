@@ -19,8 +19,11 @@ signature validation.
 -include("quod_client_goal_limits.hrl").
 
 -define(MAX_AUTH_BODY, 4096).
+%% Encoded request plus optional GroupRef: JSON can escape each namespace
+%% byte as six characters; its remaining fields are four fixed hex digests.
 -define(MAX_SIGNED_GOAL_BODY,
-        ((((?QUOD_CLIENT_GOAL_REQUEST_BYTES + 2) div 3) * 4) + 1024)).
+        ((((?QUOD_CLIENT_GOAL_REQUEST_BYTES + 2) div 3) * 4) + 1024 +
+         6 * ?DIRECTORY_MAX_NAMESPACE_BYTES + 512)).
 
 init(Req0, State)
   when State =:= signed_goal_read; State =:= signed_goal_execute;
@@ -216,10 +219,33 @@ signed_goal_outcome(Body, Req) ->
     with_signed_request(
       Body,
       fun(SessionId, RequestBytes, Signature) ->
-          signed_goal_result(
-            quod_client_goal_ingress:resolve_operation(
-              SessionId, RequestBytes, Signature, peer_ip(Req)))
+          case decode_outcome_selector(maps:get(<<"outcome_ref">>, Body, none)) of
+              {ok, Selector} ->
+                  signed_goal_result(quod_client_goal_ingress:resolve_operation(
+                    SessionId, RequestBytes, Signature, peer_ip(Req), Selector));
+              error -> {400, #{error => invalid_outcome_ref}}
+          end
       end).
+
+decode_outcome_selector(none) -> {ok, none};
+decode_outcome_selector(#{<<"ns">> := Ns, <<"anchor">> := Anchor,
+                          <<"coordinator">> := Coordinator,
+                          <<"coordinator_admission">> := Admission,
+                          <<"group_id">> := Id} = Ref)
+  when map_size(Ref) =:= 5, is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES ->
+    case [decode_digest_hex(B) || B <- [Anchor, Coordinator, Admission, Id]] of
+        [{ok, A}, {ok, C}, {ok, D}, {ok, G}] -> {ok, {group, Ns, A, C, D, G}};
+        _ -> error
+    end;
+decode_outcome_selector(_) -> error.
+
+decode_digest_hex(Hex) when is_binary(Hex), byte_size(Hex) =:= 64 ->
+    try binary:decode_hex(Hex) of
+        <<_:256>> = Digest -> {ok, Digest}
+    catch error:_ -> error
+    end;
+decode_digest_hex(_) -> error.
 
 
 with_signed_request(#{<<"session_id">> := SessionId64} = Body, Fun)
@@ -301,6 +327,9 @@ signed_goal_result(
 signed_goal_result(
   {ok, Evidence, {operation_outcome, Claim, Outcome}}) ->
     signed_operation_outcome(Evidence, Claim, Outcome);
+signed_goal_result({ok, Evidence, {group_outcome, Group, Outcome}}) ->
+    signed_outcome(Evidence,
+      (quod_client_result:outcome_ref_json(Group))#{result => group_outcome}, Outcome);
 signed_goal_result({ok, Evidence, Result}) ->
     signed_proof_result(Evidence, Result);
 signed_goal_result({error, invalid_session}) ->
@@ -331,6 +360,8 @@ signed_goal_result({error, client_cursor_unavailable}) ->
     {503, #{error => client_cursor_unavailable}};
 signed_goal_result({error, operation_conflict}) ->
     {409, #{error => operation_conflict}};
+signed_goal_result({error, invalid_outcome_ref}) ->
+    {400, #{error => invalid_outcome_ref}};
 signed_goal_result({error, {anchor_conflict, Ns}}) when is_binary(Ns) ->
     {409, #{error => anchor_conflict, namespace => Ns}};
 signed_goal_result({error, expired}) ->
@@ -359,8 +390,14 @@ signed_operation_outcome(
     {200, Result#{result := operation_outcome, status => completed,
                   terminal => true, claim_height => ClaimHeight}};
 signed_operation_outcome(
-  Evidence, #{height := ClaimHeight}, #{status := Status} = Outcome)
+  Evidence, #{height := ClaimHeight}, Outcome)
   when is_integer(ClaimHeight), ClaimHeight > 0 ->
+    signed_outcome(Evidence,
+      #{result => operation_outcome, claim_height => ClaimHeight}, Outcome);
+signed_operation_outcome(_Evidence, _Claim, _Outcome) ->
+    {503, #{error => outcome_index_corrupt}}.
+
+signed_outcome(Evidence, Header, #{status := Status} = Outcome) ->
     Terminal = Status =:= committed orelse Status =:= rejected orelse
                    Status =:= aborted,
     Code = case Terminal of true -> 200; false -> 202 end,
@@ -379,9 +416,8 @@ signed_operation_outcome(
               end,
     {Code, evidence_json(
              Evidence,
-             Details#{result => operation_outcome, status => Status,
-                      terminal => Terminal, claim_height => ClaimHeight})};
-signed_operation_outcome(_Evidence, _Claim, _Outcome) ->
+             maps:merge(Header, Details#{status => Status, terminal => Terminal}))};
+signed_outcome(_Evidence, _Header, _Outcome) ->
     {503, #{error => outcome_index_corrupt}}.
 
 signed_proof_result(Evidence, {normalized, Result}) ->

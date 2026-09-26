@@ -1267,15 +1267,15 @@ phase_evidence_structure_fails_loudly_test() ->
           {Control, Entry, Ref} = certified_control(Target, Vote, 2, F),
           Pub = maps:get(pubkey, maps:get(signer, F)),
           Evidence =
-              #{identity => Target, phase => vote, generation => 0,
+              #{identity => Target, phase => vote,
                 control => Control, ref => Ref,
                 entry => Entry,
                 committee => [Pub], committee_id => digest(211),
                 routes => #{}},
           ?assertMatch(
-             {ok, Control, 0,
+             {ok, Control,
               #{identity := Target, phase := vote, control := Control,
-                ref := Ref, generation := 0, entry := Entry,
+                ref := Ref, entry := Entry,
                 committee := [Pub], committee_id := _, routes := #{}},
               Entry},
              quod_dtx_coordinator:test_valid_phase_evidence(
@@ -1327,13 +1327,13 @@ phase_evidence_accepts_an_equivalent_quorum_subset_test() ->
           {ok, Ref} = quod_dtx:certified_entry_ref(
                         Target, SuppliedEntry, Control),
           Evidence =
-              #{identity => Target, phase => vote, generation => 0,
+              #{identity => Target, phase => vote,
                 control => Control, ref => Ref, entry => Entry,
                 committee => Committee, committee_id => digest(212),
                 routes => #{}},
           ?assertNotEqual(RetainedCert, SuppliedCert),
           ?assertMatch(
-             {ok, Control, 0, #{ref := Ref, entry := Entry}, Entry},
+             {ok, Control, #{ref := Ref, entry := Entry}, Entry},
              quod_dtx_coordinator:test_valid_phase_evidence(
                Target, quod_atomic:group_id(Vote), vote, Ref, Evidence))
       end).
@@ -2028,7 +2028,7 @@ certified_control(Target, Record, Slot,
     Payload = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Target),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, Slot - 1}, {Era, 0, element(2, Target)}, Payload, 0),
+                    {Era, Slot - 1}, {Era, 0, element(2, Target)}, Slot, Payload, 0),
     Entry = quod_ledger:entry(Slot, Block,
         quod_ct:protocol_certificate(Block, #{identity => Target, signer => Signer})),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),

@@ -532,7 +532,7 @@ retracted_founding_reaction_is_loud_test() ->
 %% entries; a shape-valid control batch is still not founding content.
 non_content_founding_payload_is_rejected_test() ->
     [?assertEqual({error, bad_block},
-                  quod_ledger:new_block({genesis, 0}, none, Payload, 0))
+                  quod_ledger:new_block({genesis, 0}, none, 1, Payload, 0))
         || Payload <- [empty, {batch, []}]],
     assert_bad_founding(quod_ct:atomic_resolve_payload()).
 

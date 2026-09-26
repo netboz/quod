@@ -6,8 +6,8 @@
 
 era_direct_and_ancestor_finality_use_the_same_verifier_test() ->
     F = finality_fixture(), Root = maps:get(root, F), Era = maps:get(era, F),
-    {ok, B} = quod_ledger:new_block({Era, 1}, Root, {batch, [maps:get(transaction, F)]}, 1),
-    {ok, Head} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B), empty, 1),
+    {ok, B} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [maps:get(transaction, F)]}, 1),
+    {ok, Head} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B), 2, empty, 1),
     Direct = quod_ledger:entry(2, B, finality_cert(B, F)),
     Ancestor = quod_ledger:entry(2, B, finality_cert(Head, F)),
     ?assertEqual(ok, quod_ct:verify_finality(maps:get(identity, F), Direct, maps:get(projection, F))),
@@ -21,30 +21,30 @@ era_direct_and_ancestor_finality_use_the_same_verifier_test() ->
 
 era_witness_must_restore_empty_protocol_parents_between_material_entries_test() ->
     F0 = finality_fixture(), Era = maps:get(era, F0), Tx = maps:get(transaction, F0),
-    {ok, Previous} = quod_ledger:new_block({Era, 1}, maps:get(root, F0), {batch, [Tx]}, 1),
+    {ok, Previous} = quod_ledger:new_block({Era, 1}, maps:get(root, F0), 2, {batch, [Tx]}, 1),
     PrevRef = quod_ledger:block_ref(Previous),
     P = (maps:get(projection, F0))#{protocol_root := PrevRef,
                                     history_head := {2, element(3, PrevRef)}, timestamp := 1},
     F = F0#{projection := P},
-    {ok, Carrier} = quod_ledger:new_block({Era, 2}, PrevRef, empty, 1),
-    {ok, B} = quod_ledger:new_block({Era, 4}, quod_ledger:block_ref(Carrier), {batch, [Tx]}, 3),
+    {ok, Carrier} = quod_ledger:new_block({Era, 2}, PrevRef, 2, empty, 1),
+    {ok, B} = quod_ledger:new_block({Era, 4}, quod_ledger:block_ref(Carrier), 3, {batch, [Tx]}, 3),
     Entry = quod_ledger:entry(3, B, finality_cert(B, F)),
     ?assertEqual(ok, verify_witness(F, Entry, [B, Carrier])),
     ?assertEqual({error, {incomplete_finality, 3}}, verify_witness(F, Entry, [B])),
-    {ok, Omitted} = quod_ledger:new_block({Era, 2}, PrevRef, {batch, [Tx]}, 2),
-    {ok, Skipping} = quod_ledger:new_block({Era, 4}, quod_ledger:block_ref(Omitted), {batch, [Tx]}, 3),
+    {ok, Omitted} = quod_ledger:new_block({Era, 2}, PrevRef, 3, {batch, [Tx]}, 2),
+    {ok, Skipping} = quod_ledger:new_block({Era, 4}, quod_ledger:block_ref(Omitted), 3, {batch, [Tx]}, 3),
     Bad = quod_ledger:entry(3, Skipping, finality_cert(Skipping, F)),
     ?assertEqual({error, {invalid_finality_path, 3}}, verify_witness(F, Bad, [Skipping, Omitted])).
 
 era_finality_rejects_wrong_links_roots_and_backwards_time_test() ->
     F = finality_fixture(), Era = maps:get(era, F), Root = maps:get(root, F),
-    {ok, B} = quod_ledger:new_block({Era, 2}, Root, {batch, [maps:get(transaction, F)]}, 10),
-    {ok, Head} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(B), empty, 10),
+    {ok, B} = quod_ledger:new_block({Era, 2}, Root, 2, {batch, [maps:get(transaction, F)]}, 10),
+    {ok, Head} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(B), 2, empty, 10),
     Entry = quod_ledger:entry(2, B, finality_cert(Head, F)),
     ?assertEqual({error, {wrong_finality_link, 2}}, verify_witness(F, Entry, [B, Head])),
-    {ok, Wrong} = quod_ledger:new_block({Era, 2}, Root, {batch, [maps:get(transaction, F)]}, 9),
+    {ok, Wrong} = quod_ledger:new_block({Era, 2}, Root, 2, {batch, [maps:get(transaction, F)]}, 9),
     ?assertEqual({error, {wrong_finality_link, 2}}, verify_witness(F, Entry, [Head, Wrong])),
-    {ok, Backwards} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(B), empty, 9),
+    {ok, Backwards} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(B), 2, empty, 9),
     ?assertEqual({error, {invalid_finality_path, 2}},
       verify_witness(F, quod_ledger:entry(2, B, finality_cert(Backwards, F)), [Backwards, B])),
     Projection = (maps:get(projection, F))#{protocol_root := {Era, 0, <<99:256>>}},
@@ -53,10 +53,10 @@ era_finality_rejects_wrong_links_roots_and_backwards_time_test() ->
 
 era_finality_carriers_cannot_choose_a_clock_test() ->
     F = finality_fixture(), Era = maps:get(era, F),
-    {ok, Material} = quod_ledger:new_block({Era, 1}, maps:get(root, F),
+    {ok, Material} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2,
                                          {batch, [maps:get(transaction, F)]}, 7),
     lists:foreach(fun(Time) ->
-        {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), empty, Time),
+        {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), 2, empty, Time),
         Entry = quod_ledger:entry(2, Material, finality_cert(Carrier, F)),
         ?assertEqual(case Time of 7 -> ok; _ -> {error, {invalid_finality_path, 2}} end,
                      verify_witness(F, Entry, [Carrier, Material]))
@@ -66,8 +66,8 @@ era_finality_carriers_cannot_choose_a_clock_test() ->
     PrevRef = quod_ledger:block_ref(Material),
     P = (maps:get(projection, F))#{protocol_root := PrevRef,
             history_head := {2, element(3, PrevRef)}, timestamp := 7},
-    {ok, Wrong} = quod_ledger:new_block({Era, 2}, PrevRef, empty, 8),
-    {ok, Next} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Wrong),
+    {ok, Wrong} = quod_ledger:new_block({Era, 2}, PrevRef, 2, empty, 8),
+    {ok, Next} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Wrong), 3,
                                      {batch, [maps:get(transaction, F)]}, 9),
     ?assertEqual({error, {wrong_finality_root, 3}},
       verify_witness(F#{projection := P}, quod_ledger:entry(3, Next, finality_cert(Next, F)), [Next, Wrong])).
@@ -79,19 +79,19 @@ era_terminal_membership_only_allows_empty_witness_descendants_test() ->
       Tx#transaction{diff = Diff, sig = none, signed_bytes = none, authentication = none}),
     {Ns, Anchor} = maps:get(identity, F),
     {ok, Membership} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, maps:get(signer, F)),
-    {ok, M} = quod_ledger:new_block({Era, 1}, maps:get(root, F), {batch, [Membership]}, 1),
-    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(M), empty, 1),
+    {ok, M} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2, {batch, [Membership]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(M), 2, empty, 1),
     ?assertEqual(ok, verify_witness(F, quod_ledger:entry(2, M, finality_cert(Carrier, F)), [Carrier, M])),
-    {ok, Illegal} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(M), {batch, [Tx]}, 1),
+    {ok, Illegal} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(M), 3, {batch, [Tx]}, 1),
     ?assertEqual({error, {invalid_finality_path, 2}},
       verify_witness(F, quod_ledger:entry(2, M, finality_cert(Illegal, F)), [Illegal, M])).
 
 era_finality_stream_continues_from_the_archived_cursor_test_() ->
     {timeout, 30, fun() ->
         F = finality_fixture(), Era = maps:get(era, F), {Ns, _} = maps:get(identity, F),
-        {ok, B} = quod_ledger:new_block({Era, 1}, maps:get(root, F), {batch, [maps:get(transaction, F)]}, 1),
+        {ok, B} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2, {batch, [maps:get(transaction, F)]}, 1),
         {Proof, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-            {ok, Carrier} = quod_ledger:new_block({Era, V}, Parent, empty, 1),
+            {ok, Carrier} = quod_ledger:new_block({Era, V}, Parent, 2, empty, 1),
             {[Carrier | Acc], quod_ledger:block_ref(Carrier)}
         end, {[B], quod_ledger:block_ref(B)}, lists:seq(2, 6500)),
         Entry = quod_ledger:entry(2, B, finality_cert(hd(Proof), F)),
@@ -111,6 +111,18 @@ era_finality_stream_continues_from_the_archived_cursor_test_() ->
             {ok, Cursor} = quod_ledger_store:proof_cursor(Reader, 2),
             ?assertEqual(ok, quod_ct:verify_finality(maps:get(identity, F), Entry, maps:get(projection, F),
                 {fun(C) -> quod_ledger_store:proof_next(Reader, C) end, Cursor})),
+            {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+            try
+                {ok, _, _} = quod_ct:history_advance(maps:get(identity, F), Genesis,
+                    quod_simplex:history_projection(maps:get(identity, F)), Index),
+                {ok, View} = quod_dtx_phase_index:capture(Index, 2),
+                {ok, Sender} = quod_catchup:evidence_open(Reader, View, genesis, tip),
+                {Evidence, Sent} = consume_evidence_sender(Reader, Sender,
+                    quod_catchup:evidence_begin(maps:get(identity, F), none, tip), []),
+                ?assertEqual([1, 2], [H || {evidence, _, H} <- Sent]),
+                ?assertEqual(length(Proof), length([ok || {proof, _} <- Sent])),
+                ?assertEqual(2, quod_ledger:entry_index(maps:get(entry, Evidence)))
+            after quod_dtx_phase_index:close(Index) end,
             ok = quod_ledger_store:close(Reader)
         after file:del_dir_r(Dir) end
     end}.
@@ -126,7 +138,7 @@ era_finality_genesis_is_pinned_before_any_committee_exists_test() ->
 era_shared_finality_verifies_a_material_group_in_one_pass_test() ->
     F = finality_fixture(), Era = maps:get(era, F), Tx = maps:get(transaction, F),
     {Reverse, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-        {ok, B} = quod_ledger:new_block({Era, V}, Parent, {batch, [Tx]}, 1),
+        {ok, B} = quod_ledger:new_block({Era, V}, Parent, V + 1, {batch, [Tx]}, 1),
         {[B | Acc], quod_ledger:block_ref(B)}
     end, {[], maps:get(root, F)}, lists:seq(1, 256)),
     Cert = finality_cert(hd(Reverse), F),
@@ -134,11 +146,11 @@ era_shared_finality_verifies_a_material_group_in_one_pass_test() ->
                  || {I, B} <- lists:zip(lists:seq(2, 257), lists:reverse(Reverse))],
     ?assertEqual(ok, verify_witness(F, Entries, Reverse)),
     %% A missing material entry cannot be hidden inside otherwise genuine
-    %% ancestry. Renumbering the later entries does not make that path valid.
+    %% ancestry. Signed heights prevent renumbering the later entries; the
+    %% shared verifier still refuses a noncontiguous material group.
     [First, _Omitted | Others] = lists:reverse(Reverse),
-    Missing = [quod_ledger:entry(I, B, Cert)
-                 || {I, B} <- lists:zip(lists:seq(2, 256), [First | Others])],
-    ?assertEqual({error, {invalid_finality_path, 2}}, verify_witness(F, Missing, Reverse)).
+    Missing = [quod_ledger:entry(B#block.height, B, Cert) || B <- [First | Others]],
+    ?assertEqual({error, {invalid_finality_group, 2}}, verify_witness(F, Missing, Reverse)).
 
 era_projection_rotates_only_at_the_material_membership_boundary_test() ->
     F = finality_fixture(), {Ns, Anchor} = Binding = maps:get(identity, F),
@@ -150,8 +162,8 @@ era_projection_rotates_only_at_the_material_membership_boundary_test() ->
     Unsigned = quod_transaction:bind_id(Binding,
       Tx#transaction{diff = Diff, sig = none, signed_bytes = none, authentication = none}),
     {ok, Membership} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, maps:get(signer, F)),
-    {ok, M} = quod_ledger:new_block({Era, 9}, maps:get(root, F), {batch, [Membership]}, 1),
-    {ok, Carrier} = quod_ledger:new_block({Era, 10}, quod_ledger:block_ref(M), empty, 1),
+    {ok, M} = quod_ledger:new_block({Era, 9}, maps:get(root, F), 2, {batch, [Membership]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 10}, quod_ledger:block_ref(M), 2, empty, 1),
     Direct = quod_ledger:entry(2, M, finality_cert(M, F)),
     ViaCarrier = quod_ledger:entry(2, M, finality_cert(Carrier, F)),
     P1 = quod_simplex:history_advance(Ns, Direct, P0),
@@ -160,7 +172,7 @@ era_projection_rotates_only_at_the_material_membership_boundary_test() ->
     NextEra = quod_ledger:next_era(Binding, Era, Hash),
     ?assertEqual({NextEra, 0, Hash}, maps:get(protocol_root, P1)),
     ?assertEqual({2, Hash}, maps:get(history_head, P1)),
-    {ok, B} = quod_ledger:new_block({NextEra, 1}, {NextEra, 0, Hash}, {batch, [Tx]}, 2),
+    {ok, B} = quod_ledger:new_block({NextEra, 1}, {NextEra, 0, Hash}, 3, {batch, [Tx]}, 2),
     Entry = quod_ledger:entry(3, B, finality_cert(B, F)),
     P2 = quod_simplex:history_advance(Ns, Entry, P1),
     ?assertEqual(quod_ledger:block_ref(B), maps:get(protocol_root, P2)),
@@ -168,8 +180,8 @@ era_projection_rotates_only_at_the_material_membership_boundary_test() ->
 
 era_exact_claim_proof_does_not_grant_complete_group_custody_test() ->
     F = finality_fixture(), Era = maps:get(era, F), Tx = maps:get(transaction, F),
-    {ok, First} = quod_ledger:new_block({Era, 1}, maps:get(root, F), {batch, [Tx]}, 1),
-    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), {batch, [Tx]}, 2),
+    {ok, First} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2, {batch, [Tx]}, 1),
+    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), 3, {batch, [Tx]}, 2),
     Cert = finality_cert(Second, F), E2 = quod_ledger:entry(2, First, Cert),
     E3 = quod_ledger:entry(3, Second, Cert),
     Begin = fun(Entries) -> quod_catchup:finality_begin(maps:get(identity, F), Entries, maps:get(projection, F)) end,
@@ -196,9 +208,9 @@ era_forward_group_checks_semantics_and_reuses_foreign_recovery_test() ->
         Tx#transaction{author_seq = 2, proof_id = <<22:256>>, sig = none,
                        signed_bytes = none, authentication = none}),
     {ok, Tx2} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned2, Signer),
-    {ok, First} = quod_ledger:new_block({Era, 1}, maps:get(root, F), {batch, [Tx]}, 1),
-    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), {batch, [Tx2]}, 1),
-    {ok, Carrier} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), empty, 1),
+    {ok, First} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2, {batch, [Tx]}, 1),
+    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), 3, {batch, [Tx2]}, 1),
+    {ok, Carrier} = quod_ledger:new_block({Era, 3}, quod_ledger:block_ref(Second), 3, empty, 1),
     Cert = finality_cert(Carrier, F), Entries = [quod_ledger:entry(2, First, Cert), quod_ledger:entry(3, Second, Cert)],
     Bodies = [quod_ledger:block_bytes(B) || B <- [Carrier, Second, First]],
     ReadSource = {fun([]) -> done; ([B | R]) -> {ok, B, R} end, Bodies},
@@ -240,7 +252,7 @@ era_forward_group_checks_semantics_and_reuses_foreign_recovery_test() ->
             end),
             %% Genuine finality alone is insufficient: a reused author sequence
             %% fails semantic replay and leaves the borrowed index untouched.
-            {ok, Repeated} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), {batch, [Tx]}, 1),
+            {ok, Repeated} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), 3, {batch, [Tx]}, 1),
             BadCert = finality_cert(Repeated, F),
             BadEntries = [quod_ledger:entry(2, First, BadCert), quod_ledger:entry(3, Repeated, BadCert)],
             BadSource = {fun([]) -> done; ([B | R]) -> {ok, quod_ledger:block_bytes(B), R} end,
@@ -267,14 +279,185 @@ finality_fixture() ->
         quod_ct:protocol_fixture(<<"quod:finality-cursor">>),
     F#{root => {Era, 0, Anchor}}.
 
+range_batch_preserves_phase_delta_across_pages_test() ->
+    Fixture = quod_foreign_log_tests:prepared_then_committed_fixture(<<"range:pending-phases">>),
+    quod_ct:with_network_identity(maps:get(network, Fixture), fun() ->
+        Binding = {Ns, _} = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+        Dir = quod_foreign_log_tests:temp_dir("range-pending-phases"),
+        {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        try
+            Before = quod_dtx_phase_index:stats(Index),
+            Parts = quod_foreign_log_tests:fixture_page_parts(Fixture, 1, 3),
+            {FirstPage, SecondPage} = lists:splitwith(fun(P) -> P =/= {group, 3, 3} end, Parts),
+            ?assertMatch([_ | _], SecondPage),
+            quod_ledger_store:with_proof_stage(filename:join(Dir, "proof-stage"), fun(Stage) ->
+                Range = quod_catchup:range_begin(Binding, 3, wrapped, Stage,
+                    quod_ledger_store:batch_begin(Store), quod_simplex:history_projection(Binding), Index),
+                Install = fun(#{proof := Proof, entries := Entries,
+                                projection := P, delta := Delta}, Batch) ->
+                    {ok, Next} = quod_ledger_store:batch_append(Batch, {Proof, Entries}),
+                    ?assertEqual(Before, quod_dtx_phase_index:stats(Index)),
+                    {ok, Next, P, Index, Delta}
+                end,
+                {ok, Partial} = quod_catchup:range_accept(Range, FirstPage, 3, {<<"next">>, 1}, Install),
+                {ok, Complete} = quod_catchup:range_accept(Partial, SecondPage, 3, done, Install),
+                ?assertEqual(Before, quod_dtx_phase_index:stats(Index)),
+                {ok, Durable} = quod_ledger_store:batch_sync(quod_catchup:range_context(Complete)),
+                ok = quod_dtx_phase_index:commit_delta(Index, quod_catchup:range_delta(Complete)),
+                {ok, History} = quod_dtx_phase_index:history(Index, maps:get(group_id, Fixture)),
+                ?assertEqual({ok, maps:get(resolve_ref, Fixture)}, quod_atomic:history_phase(resolve, History)),
+                ?assertEqual(3, quod_ledger_store:last(Durable)),
+                %% Each group's proof survived reset/reuse of the one stage.
+                ?assertMatch({ok, _}, quod_ledger_store:proof_cursor(Durable, 2)),
+                ?assertMatch({ok, _}, quod_ledger_store:proof_cursor(Durable, 3))
+            end)
+        after
+            quod_ledger_store:close(Store), quod_dtx_phase_index:close(Index), file:del_dir_r(Dir)
+        end
+    end).
+
+sparse_evidence_reads_genesis_and_exact_claim_only_test_() ->
+    [{integer_to_list(Height), {timeout, 30, fun() ->
+        F = quod_foreign_log_tests:long_identity_fixture(<<"evidence:exact">>, Height),
+        with_evidence_archive(F, fun(Store, Index, Identity, _P) ->
+            Entry = lists:last(maps:get(chain, F)), {ok, Block} = quod_ledger:block_from_entry(Entry),
+            Selection = {exact, Height, Block#block.era},
+            {ok, Sender} = quod_catchup:evidence_open(Store, Index, genesis, Selection),
+            {Result, Parts} = consume_evidence_sender(Store, Sender,
+                quod_catchup:evidence_begin(Identity, none, Selection), []),
+            ?assertEqual([1, Height], [H || {evidence, _, H} <- Parts]),
+            ?assertEqual(1, length([ok || {proof, _} <- Parts])),
+            ?assertEqual(element(2, quod_ledger:encode_entry(Entry)),
+                         element(2, quod_ledger:encode_entry(maps:get(entry, Result)))),
+            Authority = maps:get(authority, Result),
+            {ok, WarmSender} = quod_catchup:evidence_open(Store, Index, Block#block.era, Selection),
+            {_WarmResult, WarmParts} = consume_evidence_sender(Store, WarmSender,
+                quod_catchup:evidence_begin(Identity, Authority, Selection), []),
+            ?assertEqual([Height], [H || {evidence, _, H} <- WarmParts])
+        end)
+    end}} || Height <- [2, 64, 257]].
+
+sparse_evidence_requires_membership_chain_and_checks_wrong_era_test() ->
+    F0 = quod_ct:protocol_fixture(<<"evidence:membership">>),
+    Identity = {Ns, Anchor} = maps:get(identity, F0), Era = maps:get(era, F0),
+    Pub = maps:get(pubkey, maps:get(signer, F0)),
+    {ok, First} = quod_ledger:new_block({Era, 1}, {Era, 0, Anchor}, 2,
+                                      {batch, [maps:get(transaction, F0)]}, 1),
+    Membership = evidence_transaction(F0, 2,
+        [{assert, {{peer_admitted, Pub, <<"localhost">>, 1, Pub}, true}}]),
+    {ok, M} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), 3, {batch, [Membership]}, 2),
+    MHash = element(3, quod_ledger:block_ref(M)), NextEra = quod_ledger:next_era(Identity, Era, MHash),
+    NextTx = evidence_transaction(F0, 3, []),
+    {ok, Last} = quod_ledger:new_block({NextEra, 1}, {NextEra, 0, MHash}, 4, {batch, [NextTx]}, 3),
+    Genesis = quod_ledger:entry(1, maps:get(genesis, F0), none),
+    Chain = [Genesis | [quod_ledger:entry(B#block.height, B, finality_cert(B, F0)) || B <- [First, M, Last]]],
+    F = F0#{ns => Ns, anchor => Anchor, chain => Chain},
+    with_evidence_archive(F, fun(Store, Index, _, _) ->
+        {ok, Sender} = quod_catchup:evidence_open(Store, Index, genesis, tip),
+        {Result, Parts} = consume_evidence_sender(Store, Sender,
+            quod_catchup:evidence_begin(Identity, none, tip), []),
+        ?assertEqual([1, 3, 4], [H || {evidence, _, H} <- Parts]),
+        ?assertMatch(#{authority := #{protocol_root := {NextEra, 0, MHash}},
+                       authorities := #{Era := _, NextEra := _}}, Result),
+        {ok, OldAuthority} = quod_simplex:history_authority_advance(Identity, Genesis, none),
+        ClaimParts = lists:dropwhile(fun(P) -> P =/= {evidence, claim, 4} end, Parts),
+        ?assertEqual({error, {cert_mismatch, 4}}, quod_catchup:evidence_accept(
+            quod_catchup:evidence_begin(Identity, OldAuthority, tip), ClaimParts, 4, done)),
+        ?assertEqual({error, wrong_requested_era}, quod_catchup:evidence_open(Store, Index, genesis, {exact, 4, Era})),
+        {ok, GenesisSender} = quod_catchup:evidence_open(Store, Index, NextEra, {exact, 1, genesis}),
+        {_GenesisResult, GenesisParts} = consume_evidence_sender(Store, GenesisSender,
+            quod_catchup:evidence_begin(Identity, maps:get(authority, Result), {exact, 1, genesis}), []),
+        ?assertEqual([1], [H || {evidence, _, H} <- GenesisParts])
+    end),
+    with_evidence_archive(F#{chain := lists:sublist(Chain, 3)}, fun(Store, Index, _, _) ->
+        {ok, ColdSender} = quod_catchup:evidence_open(Store, Index, genesis, tip),
+        {Cold, _} = consume_evidence_sender(Store, ColdSender,
+            quod_catchup:evidence_begin(Identity, none, tip), []),
+        Authority = maps:get(authority, Cold),
+        lists:foreach(fun(Selection) ->
+            {ok, RootSender} = quod_catchup:evidence_open(Store, Index, NextEra, Selection),
+            {Warm, RootParts} = consume_evidence_sender(Store, RootSender,
+                quod_catchup:evidence_begin(Identity, Authority, Selection), []),
+            ?assertEqual(Authority, maps:get(authority, Warm)),
+            ?assertEqual(MHash, quod_simplex:entry_history_hash(maps:get(entry, Warm))),
+            ?assertMatch([{evidence, claim, 3}, {entry, _}, end_group], RootParts),
+            %% The sender's era hint is only a selection optimization. The
+            %% receiver must already own this exact identity/height/hash.
+            lists:foreach(fun(Untrusted) ->
+                ?assertMatch({error, _}, quod_catchup:evidence_accept(
+                    quod_catchup:evidence_begin(Identity, Untrusted, Selection), RootParts, 3, done))
+            end, [none, Authority#{identity := {<<"other">>, Anchor}},
+                  Authority#{height := 2}, Authority#{protocol_root := {NextEra, 0, <<0:256>>}}])
+        end, [tip, {exact, 3, Era}])
+    end).
+
+sparse_claim_checks_finality_and_signed_parent_heights_test() ->
+    F = finality_fixture(), Identity = maps:get(identity, F), Era = maps:get(era, F),
+    Genesis = quod_ledger:entry(1, maps:get(genesis, F), none),
+    {ok, Authority} = quod_simplex:history_authority_advance(Identity, Genesis, none),
+    {ok, Block} = quod_ledger:new_block({Era, 80}, {Era, 79, <<79:256>>}, 50,
+        {batch, [maps:get(transaction, F)]}, 1),
+    Entry = quod_ledger:entry(50, Block, finality_cert(Block, F)),
+    Accept = fun(E, Proofs) ->
+        Parts = [{evidence, claim, 50}, {entry, element(2, quod_ledger:encode_entry(E))}]
+            ++ [{proof, quod_ledger:block_bytes(B)} || B <- Proofs] ++ [end_group],
+        quod_catchup:evidence_accept(
+            quod_catchup:evidence_begin(Identity, Authority, {exact, 50, Era}), Parts, 50, done)
+    end,
+    %% An authentic exact claim requires no earlier material entries.
+    ?assertMatch({ok, _}, Accept(Entry, [Block])),
+    BadCert = (finality_cert(Block, F))#cert{sigs = [{maps:get(pubkey, maps:get(signer, F)), <<0:512>>}]},
+    ?assertEqual({error, {bad_cert, 50}}, Accept(quod_ledger:entry(50, Block, BadCert), [Block])),
+    {ok, WrongHeight} = quod_ledger:new_block({Era, 81}, quod_ledger:block_ref(Block), 51, empty, 1),
+    ?assertEqual({error, {invalid_finality_path, 50}},
+        Accept(quod_ledger:entry(50, Block, finality_cert(WrongHeight, F)), [WrongHeight, Block])).
+
+evidence_transaction(F = #{identity := Identity = {Ns, Anchor}}, Sequence, Diff) ->
+    Base = maps:get(transaction, F),
+    Unsigned = quod_transaction:bind_id(Identity, Base#transaction{author_seq = Sequence,
+        proof_id = <<Sequence:256>>, submitted_at = Sequence, diff = Diff,
+        sig = none, signed_bytes = none, authentication = none}),
+    {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, maps:get(signer, F)),
+    Tx.
+
+with_evidence_archive(F, Fun) ->
+    Binding = {Ns, _} = {maps:get(ns, F), maps:get(anchor, F)},
+    Dir = quod_foreign_log_tests:temp_dir("sparse-evidence"),
+    {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+    {ok, Store} = quod_ledger_store:open(Ns, Dir),
+    try
+        {Batch, Projection} = lists:foldl(fun(Entry, {Pending, P}) ->
+            {ok, P1, _} = quod_ct:history_advance(Binding, Entry, P, Index),
+            {ok, Next} = quod_ledger_store:batch_append(Pending, {quod_ct:direct_proof(Entry), [Entry]}),
+            {Next, P1}
+        end, {quod_ledger_store:batch_begin(Store), quod_simplex:history_projection(Binding)}, maps:get(chain, F)),
+        {ok, Durable} = quod_ledger_store:batch_sync(Batch),
+        {ok, View} = quod_dtx_phase_index:capture(Index, quod_ledger_store:last(Durable)),
+        Fun(Durable, View, Binding, Projection)
+    after
+        quod_ledger_store:close(Store), quod_dtx_phase_index:close(Index), file:del_dir_r(Dir)
+    end.
+
+consume_evidence_sender(Store, Sender, Receiver, Acc) ->
+    {ok, Parts, Next} = quod_catchup:transfer_page(Store, Sender),
+    Continuation = case Next of done -> done; _ -> {<<1:128>>, 1} end,
+    {ok, Received} = quod_catchup:evidence_accept(Receiver, Parts,
+                                                quod_ledger_store:last(Store), Continuation),
+    case Next of
+        done -> {ok, Result} = quod_catchup:evidence_result(Received),
+                {Result, lists:append(lists:reverse([Parts | Acc]))};
+        _ -> consume_evidence_sender(Store, Next, Received, [Parts | Acc])
+    end.
+
 era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_() ->
     {timeout, 30, fun() ->
         F = finality_fixture(), {Ns, _} = Binding = maps:get(identity, F),
         Era = maps:get(era, F),
-        {ok, B} = quod_ledger:new_block({Era, 1}, maps:get(root, F),
+        {ok, B} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2,
                                        {batch, [maps:get(transaction, F)]}, 1),
         {Proof, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-            {ok, Carrier} = quod_ledger:new_block({Era, V}, Parent, empty, 1),
+            {ok, Carrier} = quod_ledger:new_block({Era, V}, Parent, 2, empty, 1),
             {[Carrier | Acc], quod_ledger:block_ref(Carrier)}
         end, {[B], quod_ledger:block_ref(B)}, lists:seq(2, 8001)),
         Entry = quod_ledger:entry(2, B, finality_cert(hd(Proof), F)),
@@ -347,8 +530,8 @@ transfer_all_pages(Store, Send, Receive, Count) ->
 
 era_transfer_batches_groups_in_one_page_instead_of_one_round_trip_per_entry_test() ->
     F = finality_fixture(), {Ns, _} = maps:get(identity, F), Era = maps:get(era, F),
-    {ok, First} = quod_ledger:new_block({Era, 1}, maps:get(root, F), {batch, [maps:get(transaction, F)]}, 1),
-    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First),
+    {ok, First} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2, {batch, [maps:get(transaction, F)]}, 1),
+    {ok, Second} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(First), 3,
                                        {batch, [maps:get(transaction, F)]}, 1),
     Genesis = quod_ledger:entry(1, maps:get(genesis, F), none),
     Dir = filename:join("/tmp", "quod_transfer_batch_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
@@ -451,7 +634,7 @@ setup() ->
             signed_bytes = none, authentication = none}),
         {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)},
                                          Unsigned, maps:get(signer, F)),
-        {ok, Block} = quod_ledger:new_block({Era, I - 1}, Parent, {batch, [Tx]}, I),
+        {ok, Block} = quod_ledger:new_block({Era, I - 1}, Parent, I, {batch, [Tx]}, I),
         C = quod_ct:protocol_certificate(Block, F),
         Bytes = quod_ledger:block_bytes(Block),
         Proof = {quod_ledger_store:proof_frame_size(Bytes),
@@ -474,7 +657,7 @@ entry(Index, Data, Timestamp, Cert) ->
         1 -> {{genesis, 0}, none};
         _ -> {{<<7:256>>, Index - 1}, {<<7:256>>, Index - 2, <<0:256>>}}
     end,
-    {ok, Block} = quod_ledger:new_block(Position, Parent, Data, Timestamp),
+    {ok, Block} = quod_ledger:new_block(Position, Parent, Index, Data, Timestamp),
     Head = case {Index, Cert} of
         {1, none} -> none;
         {_, none} -> #cert{kind = commit, era = <<7:256>>, slot = Index - 1,
@@ -486,7 +669,7 @@ entry(Index, Data, Timestamp, Cert) ->
 transfer_shares_authentication_only_within_one_page_test() ->
     F = finality_fixture(), Era = maps:get(era, F), Tx = maps:get(transaction, F),
     {Blocks, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-        {ok, B} = quod_ledger:new_block({Era, V}, Parent, {batch, [Tx]}, 1),
+        {ok, B} = quod_ledger:new_block({Era, V}, Parent, V + 1, {batch, [Tx]}, 1),
         {[B | Acc], quod_ledger:block_ref(B)}
     end, {[], maps:get(root, F)}, lists:seq(1, 4)),
     Cert = finality_cert(hd(Blocks), F),
@@ -662,7 +845,7 @@ foreign_response_keeps_unknown_vocabulary_opaque_test() ->
       author = <<13:256>>, sig = none, signed_bytes = none},
     {ok, TransactionBytes} = quod_transaction:encode_ledger_transaction(Transaction),
     {ok, BlockBytes} = quod_safe_term:encode_canonical(
-      {quod_block, 2, genesis, 0, none, {batch, [{transaction, TransactionBytes}]}, 0}, 1024 * 1024),
+      {quod_block, 3, genesis, 0, none, 1, {batch, [{transaction, TransactionBytes}]}, 0}, 1024 * 1024),
     {ok, Entry} = quod_ledger:from_entry_view(
                    #entry{index = 1, data = {batch, [Transaction]}, timestamp = 0,
                           block_bytes = BlockBytes, cert = none}),
@@ -878,12 +1061,12 @@ era_observer_worker_installs_shared_group_before_credit_ack_test() ->
     {Ns, Anchor} = Identity = maps:get(identity, F),
     Era = maps:get(era, F), Signer = maps:get(signer, F),
     Root = maps:get(root, F), Tx = maps:get(transaction, F),
-    {ok, B1} = quod_ledger:new_block({Era, 1}, Root, {batch, [Tx]}, 1),
+    {ok, B1} = quod_ledger:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 1),
     Unsigned = quod_transaction:bind_id(Identity, Tx#transaction{
         author_seq = 2, proof_id = <<31:256>>, submitted_at = 2,
         sig = none, signed_bytes = none, authentication = none}),
     {ok, Tx2} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Unsigned, Signer),
-    {ok, B2} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B1), {batch, [Tx2]}, 2),
+    {ok, B2} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(B1), 3, {batch, [Tx2]}, 2),
     Cert = finality_cert(B2, F),
     [Live, Historical] = Entries = [quod_ledger:entry(2, B1, Cert), quod_ledger:entry(3, B2, Cert)],
     Parts = [{group, 2, 3}] ++
@@ -1071,7 +1254,7 @@ transfer_target_owner(F, Dir, Parent, Run) ->
             [Genesis], quod_simplex:history_projection(Binding), I, {fun(_) -> done end, none}),
         ok = quod_dtx_phase_index:commit_delta(I, Delta),
         Domain = quod_simplex:consensus_domain(Ns, Anchor), Root = maps:get(root, F),
-        Engine = quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)], {Root, 0}),
+        Engine = quod_simplex:eng_new(Domain, [maps:get(pubkey, Signer)], {Root, 1, 0}),
         State = quod_simplex:test_install_projection(Projection,
             quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor, consensus_domain => Domain,
               self => case maps:get(observer, F, false) of true -> <<92:256>>;
@@ -1408,9 +1591,9 @@ with_endpoint(Fun) ->
 
 with_transfer_endpoint(Fun) ->
     F = finality_fixture(), {Ns, Anchor} = maps:get(identity, F), Era = maps:get(era, F),
-    {ok, B} = quod_ledger:new_block({Era, 1}, maps:get(root, F), {batch, [maps:get(transaction, F)]}, 1),
+    {ok, B} = quod_ledger:new_block({Era, 1}, maps:get(root, F), 2, {batch, [maps:get(transaction, F)]}, 1),
     {Proof, _} = lists:foldl(fun(V, {Acc, Parent}) ->
-        {ok, C} = quod_ledger:new_block({Era, V}, Parent, empty, 1),
+        {ok, C} = quod_ledger:new_block({Era, V}, Parent, 2, empty, 1),
         {[C | Acc], quod_ledger:block_ref(C)}
     end, {[B], quod_ledger:block_ref(B)}, lists:seq(2, 301)),
     Entry = quod_ledger:entry(2, B, finality_cert(hd(Proof), F)),
@@ -1433,14 +1616,22 @@ with_endpoint_source(Dir, Ns, Anchor, Height, Fun) ->
     Parent = self(),
     Source = spawn(fun() ->
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
         try
+            Binding = {Ns, Anchor},
+            Projection = quod_ledger_store:fold_groups(Store, fun(Entries, Proof, P) ->
+                Reader = {fun(C) -> quod_ledger_store:proof_next(Store, C) end, Proof},
+                {ok, Next, Delta, _} = quod_catchup:verify_forward_group(Binding, Entries, P, Index, Reader),
+                ok = quod_dtx_phase_index:commit_delta(Index, Delta),
+                Next
+            end, quod_simplex:history_projection(Binding)),
             true = quod_reg:reg({quod_simplex, Ns}),
-            State = quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
+            State = quod_simplex:test_install_projection(Projection, quod_simplex:test_state(#{ns => Ns, genesis_hash => Anchor,
               store => Store, slot => Height, last_applied => 0, sync => ready,
-              prolog_ready => false}),
+              phase_index => Index, prolog_ready => false})),
             Parent ! {source_ready, self()},
             source_loop(State)
-        after quod_ledger_store:close(Store)
+        after quod_ledger_store:close(Store), quod_dtx_phase_index:close(Index)
         end
     end),
     try

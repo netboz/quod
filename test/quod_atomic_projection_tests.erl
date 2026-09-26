@@ -345,8 +345,8 @@ submission_correlation_does_not_substitute_for_the_certified_vote_test() ->
                              Request, {submit_result, Digest, {ok, Ref, []}}, S)),
     ?assert(quod_dtx:certified_entry_claim_matches(T, Entry, Negative, Ref)),
     Evidence = #{identity => T, phase => vote, ref => Ref, control => Negative, entry => Entry,
-                  generation => 0, committee => Committee, committee_id => <<9:256>>, routes => #{}},
-    ?assertMatch({ok, Negative, _, _, _},
+                  committee => Committee, committee_id => <<9:256>>, routes => #{}},
+    ?assertMatch({ok, Negative, _, _},
         quod_dtx_coordinator:test_valid_phase_evidence(T, Id, vote, Ref, Evidence)),
     %% Correlation alone cannot admit another group or a substituted entry.
     ?assertEqual(error, quod_dtx_coordinator:test_valid_phase_evidence(T, <<99:256>>, vote, Ref, Evidence)),
@@ -361,7 +361,7 @@ certified_control(#{control := Control} = Row, Signers, Slot) ->
     {Ns, Anchor} = Target = quod_atomic:control_target(Control),
     Era = quod_ledger:initial_era(Target), Position = {Era, Slot - 1},
     {ok, Block} = quod_ledger:new_block(Position, {Era, Slot - 2, Anchor},
-                                      {batch, [{dtx, Control}]}, 1),
+                                      Slot, {batch, [{dtx, Control}]}, 1),
     Hash = quod_simplex:block_hash(Block), Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = lists:sort([begin
         #share{sig = Sig} = quod_simplex:make_share(Domain, commit, Position, Hash, S),
@@ -1463,15 +1463,15 @@ source_owner_parent_selection(Scenario) ->
         ?assertMatch([_], quod_simplex:test_eligible_dtx_wave(Reused)),
         Era = quod_ledger:initial_era(O), Root = {Era, 1, <<8:256>>},
         LateCandidate = quod_simplex:test_state_set(eng,
-            quod_simplex:eng_new(<<0:256>>, [Member], {Root, Deadline + 1}), Reused),
+            quod_simplex:eng_new(<<0:256>>, [Member], {Root, element(1, maps:get(history_head, quod_simplex:test_state_projection(Reused))), Deadline + 1}), Reused),
         ?assertEqual([], quod_simplex:test_eligible_dtx_wave(LateCandidate)),
         %% The approved parent can also be ahead of the committed floor. Both
         %% selection and consumption must use that same prospective time, not
         %% disagree because one still reads the committed parent's timestamp.
         {ok, AheadParent} = quod_ledger:new_block({Era, 2}, Root,
-                                                {batch, [{dtx, SignedControl}]}, Deadline + 1),
+                                                element(1, maps:get(history_head, quod_simplex:test_state_projection(Reused))) + 1, {batch, [{dtx, SignedControl}]}, Deadline + 1),
         AheadOwner = quod_simplex:test_blocked_dtx_owner(AheadParent,
-            quod_simplex:test_state_set(eng, quod_simplex:eng_new(<<0:256>>, [Member], {Root, 0}), Reused)),
+            quod_simplex:test_state_set(eng, quod_simplex:eng_new(<<0:256>>, [Member], {Root, element(1, maps:get(history_head, quod_simplex:test_state_projection(Reused))), 0}), Reused)),
         ?assertEqual([], quod_simplex:test_eligible_dtx_wave(AheadOwner)),
         Expired = quod_simplex:test_refresh_retained_readiness(AheadOwner),
         {ok, Negative} = quod_atomic:select_vote(M, {refused, [vote_deadline]}),
@@ -1529,7 +1529,7 @@ source_owner_relay_selection(Scenario, F, Peer, Engine, OwnControl, Signed, Awai
         quod_simplex:test_state_set(inbound_conns, #{PeerKey => {self(), make_ref()}},
         quod_simplex:test_state_set(eng, quod_simplex:eng_new(
             quod_simplex:consensus_domain(Ns, element(2, Target)),
-            lists:sort([Member, PeerKey]), {{quod_ledger:initial_era(Target), 1, <<8:256>>}, 0}),
+            lists:sort([Member, PeerKey]), {{quod_ledger:initial_era(Target), 1, <<8:256>>}, element(1, maps:get(history_head, quod_simplex:test_state_projection(AwaitingApply))), 0}),
         quod_simplex:test_seed_running_dtx_coordinator(Id, self(), AwaitingApply)))),
     Journal = quod_simplex:test_signing_journal(Signed),
     OwnFloor = quod_signing_journal:dtx_floor(Journal, {Admission, Member}),
@@ -1664,7 +1664,7 @@ snapshot_absence_never_becomes_gateway_exclusion_test() ->
     lists:foreach(fun(Keys) ->
         Routes = [{K, [{"127.0.0.1", 14000 + I}]} ||
                   {K, I} <- lists:zip(Keys, lists:seq(1, 4))],
-        View = #{identity => O, slot => 8, generation => 9, committee => Keys,
+        View = #{identity => O, slot => 8, committee => Keys,
                  committee_id => <<88:256>>, route_candidates => Routes},
         ProbesTable = ets:new(outcome_probes, [set, public]),
         Reply = fun(_, _, Key, _, Request, _) ->
@@ -1873,7 +1873,7 @@ state(Overrides) ->
     Root = {quod_ledger:initial_era({Ns, Anchor}), max(0, Height - 1), Hash},
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Eng = quod_simplex:eng_new(Domain, maps:get(validators, Overrides, []),
-                              {Root, maps:get(last_ts, Overrides, 0)}),
+                              {Root, max(1, Height), maps:get(last_ts, Overrides, 0)}),
     quod_simplex:test_state(maps:merge(#{eng => Eng, consensus_domain => Domain}, Overrides)).
 
 fixture() -> fixture(#{}).

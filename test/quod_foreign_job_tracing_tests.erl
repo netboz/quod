@@ -18,9 +18,7 @@ retained_page_failure_preserves_its_observed_reason_test() ->
     assert_stage_result(page_fetch, {error, retry, {ok, retained}}, error, <<"retry">>),
     assert_stage_result(page_fetch, {ok, {error, invalid_history, retained}, 2, done},
                         error, <<"invalid_history">>),
-    assert_stage_result(page_consume, {error, invalid_history, retained}, error, <<"invalid_history">>),
-    assert_stage_result(page_consume, {nomination, 2}, ok, <<"ok">>),
-    assert_stage_result(exact_validate, {nomination, 2}, error, <<"unclassified">>).
+    assert_stage_result(page_consume, {error, invalid_history, retained}, error, <<"invalid_history">>).
 
 probe_collection_normal_result_is_successful_observation_test() ->
     assert_stage_result(probe_collection, [], ok, <<"ok">>),
@@ -61,18 +59,14 @@ stage_error_vocabulary_is_unchanged_test() ->
 probe_collection_success_does_not_claim_successful_votes_test() ->
     with_stage_trace(fun(TraceId) ->
         Results = quod_foreign_log:test_parallel_probes(
-                    [first, second], fun(_) -> {error, retry} end, 1000, all),
-        ?assertEqual([{first, {error, retry}}, {second, {error, retry}}], lists:sort(Results)),
+                    [{first, []}, {second, []}], fun(_) -> {error, retry} end,
+                    1000, {evidence, 2, #{}}),
+        ?assertEqual([{{first, []}, {error, retry}}, {{second, []}, {error, retry}}],
+                     lists:sort(Results)),
         Collection = quod_trace_tests:take_span(<<"quod.foreign.probe_collection">>, TraceId),
         assert_span_result(Collection, ok, <<"ok">>),
         Probes = [quod_trace_tests:take_span(<<"quod.foreign.probe_worker">>, TraceId) || _ <- [1, 2]],
-        lists:foreach(fun(Probe) -> assert_span_result(Probe, error, <<"retry">>) end, Probes),
-        ?assertEqual(false, quod_foreign_log:test_parallel_probes(
-                              [{peer, []}], fun(_) -> false end, 1000, {threshold, 1})),
-        Rejected = quod_trace_tests:take_span(<<"quod.foreign.probe_collection">>, TraceId),
-        assert_span_result(Rejected, error, <<"rejected">>),
-        assert_span_result(quod_trace_tests:take_span(<<"quod.foreign.probe_worker">>, TraceId),
-                           error, <<"rejected">>)
+        lists:foreach(fun(Probe) -> assert_span_result(Probe, error, <<"retry">>) end, Probes)
     end).
 
 stage_result_selection_is_trace_correlated_test() ->
@@ -146,6 +140,7 @@ exact_startup_replay_and_warm_requests_are_separate_test() ->
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
           ?assertMatch({ok, #{phase := resolve}}, explicit(Fixture)),
+          {ok, _} = prime_projection(Fixture),
           quod_foreign_log_tests:stop_owner(Owner),
           {Restarted, Startup} = traced_work(fun() ->
               Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
@@ -205,10 +200,11 @@ routed_exact_reuses_the_verified_page_without_disk_lookup_test() ->
                        maps:get(ref, Fixture), resolve, contact(Fixture), none, 5000)
             end),
           ?assertMatch({ok, #{phase := resolve}}, Result),
-          ?assertEqual(2, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
+          ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
           assert_stages(Worker, Spans,
-            [exact_route, cache_open, page_fetch, page_consume,
-             exact_validate, phase_suspend, ledger_suspend, worker_handoff]),
+            [exact_route, page_fetch, page_consume, exact_validate, worker_handoff]),
+          lists:foreach(fun(Stage) -> assert_no_stage(Stage, Spans) end,
+                        [cache_open, phase_suspend, ledger_suspend]),
           assert_no_stage(exact_lookup, Spans)
       end).
 
@@ -217,6 +213,7 @@ changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
           ?assertMatch({ok, #{phase := resolve}}, explicit(Fixture)),
+          {ok, _} = prime_projection(Fixture),
           quod_foreign_log_tests:stop_owner(Owner),
           Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
           CacheNs = quod_foreign_log:cache_namespace(Identity),
@@ -246,13 +243,13 @@ changed_checkpoint_is_rejected_by_startup_before_request_recovery_test() ->
                 <<"test.foreign.checkpoint.after-rejection">>, fun() -> explicit(Fixture) end),
               ?assertMatch({ok, #{phase := resolve}}, Result),
               ?assertEqual(0, maps:get('quod.foreign.resident_start_height', attrs(Worker))),
-              ?assertEqual(1, maps:get('quod.foreign.cold_opens', attrs(Worker))),
+              ?assertEqual(0, maps:get('quod.foreign.cold_opens', attrs(Worker))),
               ?assertEqual(0, maps:get('quod.foreign.disk_replayed_entries', attrs(Worker))),
-              ?assertEqual(2, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
+              ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', attrs(Worker))),
               assert_no_stage(cache_reconstruction, Spans),
               assert_no_stage(cache_replay, Spans),
               assert_stages(Worker, Spans,
-                [cache_prepare, cache_open, page_consume, exact_validate, worker_handoff])
+                [page_fetch, page_consume, exact_validate, worker_handoff])
           after quod_foreign_log_tests:stop_owner(Restarted)
           end
       end).
@@ -317,9 +314,9 @@ queued_callers_share_one_parented_worker_without_ambient_context_test() ->
           Spans = exported_spans(otel_span:trace_id(FirstSpan)),
           ?assertEqual([], named(<<"quod.foreign.verification_worker">>, Spans)),
           ?assertEqual(nomatch, binary:match(term_to_binary([Worker | Spans]), Sentinel)),
-          ?assertEqual([{{range, 1, 1}, undefined}, {{range, 2, 2}, undefined}], shared_fetches(Token)),
-          assert_stages(Worker, Spans, [cache_open, exact_route, page_fetch,
-                                       exact_validate, worker_handoff])
+          ?assertMatch([{{evidence, genesis, {exact, 1, genesis}}, undefined},
+                        {{evidence, _, {exact, 2, _}}, undefined}], shared_fetches(Token)),
+          assert_stages(Worker, Spans, [exact_route, page_fetch, exact_validate, worker_handoff])
       end).
 
 current_after_startup_does_not_replay_prefix_test() ->
@@ -327,6 +324,7 @@ current_after_startup_does_not_replay_prefix_test() ->
       fun(_Fixture, Base) -> Base end,
       fun(Fixture, Dir, Owner, Fetch) ->
           ?assertMatch({ok, #{phase := resolve}}, explicit(Fixture)),
+          {ok, _} = prime_projection(Fixture),
           quod_foreign_log_tests:stop_owner(Owner),
           {Restarted, Startup} = traced_work(fun() ->
               Pid = quod_foreign_log_tests:start_owner(Dir, Fetch),
@@ -350,13 +348,12 @@ current_after_startup_does_not_replay_prefix_test() ->
               ?assertEqual(0, maps:get('quod.foreign.network_advance_verified_entries', Attributes)),
               ?assert(maps:get('quod.foreign.probe_children_started', Attributes) > 0),
               assert_stages(Worker, Spans,
-                [cache_open, ledger_resume, phase_resume, tip_confirm, phase_suspend,
-                 ledger_suspend, worker_handoff]),
+                [page_fetch, page_consume, probe_collection, worker_handoff]),
               assert_no_stage(cache_reconstruction, Spans),
               assert_no_stage(cache_replay, Spans),
               Probes = named(<<"quod.foreign.probe_worker">>, Spans),
               assert_successful_stage(probe_collection, Spans),
-              assert_successful_stage(ledger_suspend, Spans),
+              assert_no_stage(ledger_suspend, Spans),
               ?assertEqual(maps:get('quod.foreign.probe_children_started', Attributes),
                            length(Probes)),
               lists:foreach(fun(Probe) ->
@@ -429,7 +426,7 @@ unsampled_context_does_not_manufacture_worker_root_test() ->
           end,
           %% Exact worker DOWN is the export barrier. Other tests/seed calls
           %% may leave unrelated recording spans in this EUnit mailbox.
-          ?assertEqual(1, maps:get(resident_verified, quod_foreign_log:stats())),
+          ?assertEqual(0, maps:get(resident_verified, quod_foreign_log:stats())),
           ?assertEqual([], [Span || Span <- named(
                               <<"quod.foreign.verification_worker">>, exported_spans(any)),
                             maps:get('quod.namespace', attrs(Span), none) =:= Ns])
@@ -475,7 +472,7 @@ worker_exception_preserves_reason_without_exporting_payload_test() ->
           Page = one(<<"quod.foreign.page_fetch">>, Spans),
           ?assertEqual(<<"error">>, maps:get('quod.foreign.exception_class', attrs(Page))),
           ?assertEqual(<<"unclassified_exception">>, maps:get('quod.foreign.reason', attrs(Page))),
-          assert_stages(WorkerSpan, Spans, [cache_prepare, cache_open, page_fetch])
+          assert_stages(WorkerSpan, Spans, [exact_route, page_fetch])
       end).
 
 page_success_has_one_owner_terminal_despite_stale_messages_test() ->
@@ -662,6 +659,11 @@ explicit(Fixture) ->
     {Peer, Endpoint} = contact(Fixture),
     quod_foreign_log:verify(Peer, Endpoint, maps:get(ref, Fixture), resolve, 5000).
 
+prime_projection(Fixture) ->
+    {Peer, Endpoint} = contact(Fixture),
+    quod_foreign_log_tests:prime_projection([{Peer, [Endpoint]}],
+        {maps:get(ns, Fixture), maps:get(anchor, Fixture)}, length(maps:get(chain, Fixture)), 3000).
+
 owner_request(Owner, Context, Request) ->
     gen_server:send_request(Owner,
       {verification, quod_time:mono_ms() + 5000, Context,
@@ -680,7 +682,7 @@ traced_work(Fun) ->
     traced_work(Fun, []).
 
 traced_work(Fun, Existing) ->
-    MFAs = [{quod_foreign_log, replay_cache, 6},
+    MFAs = [{quod_foreign_log, replay_cache, 7},
             {quod_foreign_log, open_cache_raw, 5},
             {quod_foreign_log, open_replayed_cache_raw, '_'},
             {quod_foreign_log, verification_worker, '_'},
@@ -728,7 +730,7 @@ traced_work(Fun, Existing) ->
 
 collect_work(Counts, Pids) ->
     receive
-        {trace, P, call, {quod_foreign_log, replay_cache, [_, _, _, Height, _, _]}} ->
+        {trace, P, call, {quod_foreign_log, replay_cache, [_, _, _, Height, _, _, _]}} ->
             collect_work(add_count(replayed_entries, Height, add_count(replays, 1, Counts)), [P | Pids]);
         {trace, P, call, {quod_foreign_log, open_cache_raw, [_, _, _, _, Mode]}} ->
             Kind = case Mode of {initialize, _} -> initialize_opens;

@@ -82,7 +82,8 @@ export async function signedCursorCommand(identity, cursor, command) {
     try {
       await journal.put(tracked.operation)
       const reply = await postJson(url, body)
-      if (reply.result !== 'pending') await journal.delete(tracked.operation.id)
+      if (reply.result === 'pending') await retainPendingReference(journal, tracked.operation, reply)
+      else await journal.delete(tracked.operation.id)
       cursorOperations.delete(cursor)
       return reply
     } catch (error) {
@@ -111,6 +112,7 @@ export async function resolveSignedOperations(identity, options = {}) {
         session_id: identity.session.session_id,
         request: row.request,
         signature: row.signature,
+        ...(row.outcome_ref ? { outcome_ref: row.outcome_ref } : {}),
       })
       if (reply.terminal === true) await settleOperation(journal, row, reply, options)
       results.push({ id: row.id, operation: row, reply })
@@ -158,8 +160,22 @@ async function submitDurable(journal, operation, url, body, post, options) {
   // Saving a returned reference or handing off to the next operation is part
   // of consuming the result. A local callback failure must retain recovery
   // evidence, not masquerade as a rejected server write.
-  if (reply.result !== 'pending') await settleOperation(journal, operation, reply, options)
+  if (reply.result === 'pending') await retainPendingReference(journal, operation, reply)
+  else await settleOperation(journal, operation, reply, options)
   return reply
+}
+
+async function retainPendingReference(journal, operation, reply) {
+  if (reply.group_id === undefined) return
+  const { ns, anchor, coordinator, coordinator_admission, group_id } = reply
+  try {
+    await journal.put({ ...operation,
+      outcome_ref: { ns, anchor, coordinator, coordinator_admission, group_id } })
+  } catch (cause) {
+    const error = new Error('could not retain the submitted group reference; its outcome remains unknown', { cause })
+    error.outcomeUnknown = true
+    throw error
+  }
 }
 
 async function settleOperation(journal, operation, reply, options) {

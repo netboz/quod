@@ -92,7 +92,7 @@ operation_genesis(Ns, #{pubkey := Key}, GenesisDiff) ->
     Tx = quod_simplex:test_genesis_tx(#{node_id => Key, mode => create, committee => [],
       genesis_diff => GenesisDiff, node_addr => {"127.0.0.1", 34249}},
       Ns, Key, crypto:hash(sha256, <<243:64>>)),
-    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, {batch, [Tx]}, 0),
+    {ok, Block} = quod_ledger:new_block({genesis, 0}, none, 1, {batch, [Tx]}, 0),
     Genesis = quod_ledger:entry(1, Block, none),
     Anchor = operation_entry_hash(Genesis),
     Projection = quod_simplex:history_advance(
@@ -101,7 +101,7 @@ operation_genesis(Ns, #{pubkey := Key}, GenesisDiff) ->
 
 entry({Ns, Anchor} = Identity, Signer, Height, {Era, View, _} = Parent, Tx) ->
     Era = quod_ledger:initial_era(Identity),
-    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [Tx]}, Height),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, Height, {batch, [Tx]}, Height),
     Certificate = quod_ct:protocol_certificate(Block, #{identity => {Ns, Anchor}, signer => Signer}),
     quod_ledger:entry(Height, Block, Certificate).
 

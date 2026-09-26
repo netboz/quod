@@ -215,7 +215,7 @@ byzantine_on_grown_committee(Config) ->
     %% refused by the encoder before the invalid membership test can run.
     #{era := Era, view := V, parent := ParentRef} =
         quod_ct:peer_protocol_position(LeaderPeer, ?NS),
-    {ok, Block} = quod_ledger:new_block({Era, V}, ParentRef, {batch, [Evil]}, Ts),
+    {ok, Block} = quod_ledger:new_block({Era, V}, ParentRef, maps:get(material_height, quod_ct:peer_protocol_position(LeaderPeer, ?NS)) + 1, {batch, [Evil]}, Ts),
     Chan   = term_to_binary({log, ?NS}, [deterministic]),
     Frame  = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fp, Chan, Frame]) || Fp <- Pubs, Fp =/= LeaderPub],

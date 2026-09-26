@@ -220,6 +220,44 @@ test('exact persisted requests are resolved, never resubmitted', async () => {
   }
 })
 
+test('a returned group reference survives reload and resolves only that submitted attempt', async () => {
+  const journal = memoryOperationJournal()
+  const identity = signedIdentity()
+  const ref = { ns: 'quod:agent-test', anchor: Buffer.from(u256(0x10)).toString('hex'),
+    coordinator: '12'.repeat(32), coordinator_admission: '34'.repeat(32), group_id: '56'.repeat(32) }
+  await signedGoal(identity, signedWrite(), { journal,
+    post: async url => {
+      assert.equal(url, '/api/goals/execute')
+      return { result: 'pending', ...ref }
+    } })
+  const [stored] = await journal.list()
+  assert.deepEqual(stored.outcome_ref, ref)
+  const reloaded = memoryOperationJournal()
+  await reloaded.put(stored)
+  const [result] = await resolveSignedOperations(identity, { journal: reloaded,
+    post: async (url, body) => {
+      assert.equal(url, '/api/goals/outcomes')
+      assert.equal(body.request, stored.request)
+      assert.equal(body.signature, stored.signature)
+      assert.deepEqual(body.outcome_ref, ref)
+      return { result: 'group_outcome', ...ref, status: 'aborted', terminal: true,
+        reasons: ['vote_deadline'] }
+    } })
+  assert.equal(result.reply.status, 'aborted')
+  assert.equal((await reloaded.list()).length, 0)
+})
+
+test('a pending reference for another ontology never replaces the recoverable signed request', async () => {
+  const journal = memoryOperationJournal()
+  await assert.rejects(signedGoal(signedIdentity(), signedWrite(), { journal,
+    post: async () => ({ result: 'pending', ns: 'another-agent', anchor: '10'.repeat(32),
+      coordinator: '12'.repeat(32), coordinator_admission: '34'.repeat(32), group_id: '56'.repeat(32) }),
+  }), error => error.outcomeUnknown === true)
+  const [stored] = await journal.list()
+  assert.equal(stored.outcome_ref, undefined)
+  assert.equal(typeof stored.request, 'string')
+})
+
 test('a definite execute reply removes the durable browser row', async () => {
   const previousFetch = globalThis.fetch
   const journal = memoryOperationJournal()

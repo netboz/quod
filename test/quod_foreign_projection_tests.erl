@@ -140,7 +140,7 @@ material_block(#{identity := {Ns, Anchor} = Identity, signer := Signer,
                                signed_bytes = none, authentication = none},
     {ok, Tx} = quod_transaction:sign({Ns, Anchor, Admission},
                                     quod_transaction:bind_id(Identity, Tx0), Signer),
-    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, Parent, {batch, [Tx]}, Height),
+    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, Parent, Height, {batch, [Tx]}, Height),
     Block.
 
 proof_source(Blocks) ->

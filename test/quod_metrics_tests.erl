@@ -256,13 +256,13 @@ dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
                cache_replay, uncertain, OneSecond),
         ForeignStages =
             [queue_wait, request_exact, request_current, request_follow,
-             current_total, resident_current_hit, resident_current_miss,
-             owner_mailbox,
+             current_total, current_setup, resident_current_hit, resident_current_miss,
+             owner_mailbox, owner_admission,
              cache_open, cache_replay, ledger_resume, ledger_open,
              ledger_suspend, checkpoint_read, projection_validate,
              phase_resume, phase_open, phase_suspend, page_fetch,
-             page_verify, ledger_append, phase_commit, checkpoint_write,
-             cache_accounting, tip_confirm, result_install, caller_wake,
+             page_verify, ledger_append, ledger_sync, phase_commit, checkpoint_write,
+             cache_accounting, result_install, caller_wake,
              serve_read_total, serve_snapshot_lookup, serve_snapshot_resume,
              serve_range_read],
         StageSumsBefore =
@@ -482,10 +482,10 @@ dtx_commits_are_counted_by_phase_test() ->
               erlang:unique_integer([positive])))/binary>>,
     %% Empty protocol carriers never become material entries or metrics.
     Era = quod_ledger:initial_era({Ns, <<0:256>>}),
-    {ok, Carrier} = quod_ledger:new_block({Era, 1}, {Era, 0, <<0:256>>}, empty, 0),
+    {ok, Carrier} = quod_ledger:new_block({Era, 1}, {Era, 0, <<0:256>>}, 1, empty, 0),
     ?assertException(error, _, quod_ledger:entry(2, Carrier, none)),
     ?assertEqual({error, bad_block},
-                 quod_ledger:new_block({Era, 1}, {Era, 0, <<0:256>>}, {batch, []}, 0)),
+                 quod_ledger:new_block({Era, 1}, {Era, 0, <<0:256>>}, 2, {batch, []}, 0)),
     ?assertEqual(
        undefined,
        prometheus_counter:value(

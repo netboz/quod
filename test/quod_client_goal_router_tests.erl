@@ -330,43 +330,64 @@ owner_stats_keep_peaks_after_cursor_cleanup_test() ->
     with_router(
       fun(Router, Link, Fixture) ->
           CursorId = <<16#48:256>>,
-          Caller = submit_async(Router, Fixture, CursorId, 1000),
-          {OpenRequest, _} = sent_request(Link),
-          assert_owner_stats(
-            Router,
-            #{outbound => 1, inbound => 0, cursor_routes => 1},
-            #{outbound => 1, inbound => 0, cursor_routes => 1}),
+          Trace = trace:session_create(?MODULE, self(), []),
+          1 = trace:process(Trace, Router, true, [procs, 'receive']),
+          try
+              Caller = submit_async(Router, Fixture, CursorId, 1000),
+              {OpenRequest, _} = sent_request(Link),
+              OpenWorker = receive_router_worker(Router),
+              assert_owner_stats(
+                Router,
+                #{outbound => 1, inbound => 0, cursor_routes => 1},
+                #{outbound => 1, inbound => 0, cursor_routes => 1}),
 
-          OpenId = quod_client_goal_endpoint:request_id(OpenRequest),
-          {ok, BindingBlob} = quod_durable_term:encode_result(#{}),
-          {ok, SolutionBlob} = quod_client_result:encode(
-                                 {solution, CursorId, 7, BindingBlob}),
-          respond(Router, Link,
-                  {cursor_result, OpenId, CursorId, SolutionBlob}),
-          receive
-              {Caller, {ok, _,
-                        {normalized, {solution, CursorId, 7, _}}}} -> ok
-          after 1000 -> error(cursor_owner_open_result_missing)
-          end,
-          assert_owner_stats(
-            Router,
-            #{outbound => 0, inbound => 0, cursor_routes => 1},
-            #{outbound => 1, inbound => 0, cursor_routes => 1}),
+              OpenId = quod_client_goal_endpoint:request_id(OpenRequest),
+              {ok, BindingBlob} = quod_durable_term:encode_result(#{}),
+              {ok, SolutionBlob} = quod_client_result:encode(
+                                     {solution, CursorId, 7, BindingBlob}),
+              respond(Router, Link,
+                      {cursor_result, OpenId, CursorId, SolutionBlob}),
+              receive
+                  {Caller, {ok, _,
+                            {normalized, {solution, CursorId, 7, _}}}} -> ok
+              after 1000 -> error(cursor_owner_open_result_missing)
+              end,
+              await_router_worker_cleanup(Router, OpenWorker),
+              assert_owner_stats(
+                Router,
+                #{outbound => 0, inbound => 0, cursor_routes => 1},
+                #{outbound => 1, inbound => 0, cursor_routes => 1}),
 
-          StopCaller = cursor_async(Router, CursorId, stop, 1000),
-          {{cursor, StopId, CursorId, stop}, _} = sent_request(Link),
-          {ok, StoppedBlob} = quod_client_result:encode(stopped),
-          respond(Router, Link,
-                  {cursor_result, StopId, CursorId, StoppedBlob}),
-          receive
-              {StopCaller, {ok, _, {normalized, stopped}}} -> ok
-          after 1000 -> error(cursor_owner_stop_result_missing)
-          end,
-          assert_owner_stats(
-            Router,
-            #{outbound => 0, inbound => 0, cursor_routes => 0},
-            #{outbound => 1, inbound => 0, cursor_routes => 1})
+              StopCaller = cursor_async(Router, CursorId, stop, 1000),
+              {{cursor, StopId, CursorId, stop}, _} = sent_request(Link),
+              StopWorker = receive_router_worker(Router),
+              {ok, StoppedBlob} = quod_client_result:encode(stopped),
+              respond(Router, Link,
+                      {cursor_result, StopId, CursorId, StoppedBlob}),
+              receive
+                  {StopCaller, {ok, _, {normalized, stopped}}} -> ok
+              after 1000 -> error(cursor_owner_stop_result_missing)
+              end,
+              await_router_worker_cleanup(Router, StopWorker),
+              assert_owner_stats(
+                Router,
+                #{outbound => 0, inbound => 0, cursor_routes => 0},
+                #{outbound => 1, inbound => 0, cursor_routes => 1})
+          after trace:session_destroy(Trace) end
       end).
+
+receive_router_worker(Router) ->
+    receive {trace, Router, spawn, Worker, _} -> Worker
+    after 1000 -> error(router_worker_not_spawned)
+    end.
+
+await_router_worker_cleanup(Router, Worker) ->
+    %% A caller reply precedes worker exit, but does not order delivery of its
+    %% DOWN to the router. Observe that reception; the following stats call
+    %% can only run after the router has installed its cleanup result.
+    receive {trace, Router, 'receive', {'DOWN', _, process, Worker, normal}} -> ok
+    after 1000 -> error(router_worker_cleanup_not_received)
+    end.
 
 router_death_after_send_preserves_request_uncertainty_test() ->
     Parent = self(),

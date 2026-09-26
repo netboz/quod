@@ -720,7 +720,7 @@ assert_membership_proposal_skipped(Config, Evil) ->
     %% reach validator rejection rather than fail locally before transmission.
     #{era := Era, view := V, parent := ParentRef} =
         quod_ct:peer_protocol_position(LeaderPeer, ?NS),
-    {ok, Block} = quod_ledger:new_block({Era, V}, ParentRef, {batch, [SignedEvil]}, Ts),
+    {ok, Block} = quod_ledger:new_block({Era, V}, ParentRef, maps:get(material_height, quod_ct:peer_protocol_position(LeaderPeer, ?NS)) + 1, {batch, [SignedEvil]}, Ts),
     Chan  = term_to_binary({log, ?NS}, [deterministic]),
     Frame = quod_simplex:encode(?NS, {propose, Block, []}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fpub, Chan, Frame])

@@ -35,7 +35,7 @@ import; artifacts themselves never cross a wire or persistence boundary.
 
 -export([payload/1, classify/1,
          encoded_payload_size/1,
-         new_block/4, decode_block/1, decode_block/2, decode_block/3,
+         new_block/5, decode_block/1, decode_block/2, decode_block/3,
          block_ref/1, block_parent/1, initial_era/1, next_era/3,
          encode_finality_head/1, decode_finality_head/1,
          block_bytes/1, valid_block_view/1,
@@ -124,21 +124,21 @@ transaction_list(_) -> false.
 
 %% The block's byte form is the consensus identity. `#block{}` is only the
 %% materialized local view used by the engine and reducers.
--spec new_block({consensus_era(), slot()}, none | protocol_ref(),
+-spec new_block({consensus_era(), slot()}, none | protocol_ref(), pos_integer(),
                 block_payload(), non_neg_integer()) ->
           {ok, #block{}} | {error, bad_block}.
-new_block({Era, View}, Parent, Payload, Timestamp) ->
+new_block({Era, View}, Parent, Height, Payload, Timestamp) ->
     case valid_position(Era, View, Parent, Timestamp) andalso
-         not (Era =:= genesis andalso Payload =:= empty) of
+         valid_height(Era, Height, Payload) of
         true ->
             case encode_payload(Payload) of
                 {ok, PayloadWire} ->
                     case {quod_safe_term:encode_canonical(PayloadWire, ?MAX_BLOCK_BYTES),
                           quod_safe_term:encode_canonical(
-                            {quod_block, 2, Era, View, Parent, PayloadWire, Timestamp},
+                            {quod_block, 3, Era, View, Parent, Height, PayloadWire, Timestamp},
                             ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
                         {{ok, _}, {ok, Bytes}} ->
-                            {ok, #block{era = Era, slot = View, parent = Parent,
+                            {ok, #block{era = Era, slot = View, parent = Parent, height = Height,
                                         payload = Payload, timestamp = Timestamp,
                                         block_bytes = Bytes}};
                         _ -> {error, bad_block}
@@ -147,7 +147,13 @@ new_block({Era, View}, Parent, Payload, Timestamp) ->
             end;
         false -> {error, bad_block}
     end;
-new_block(_, _, _, _) -> {error, bad_block}.
+new_block(_, _, _, _, _) -> {error, bad_block}.
+
+valid_height(genesis, 1, {batch, [_ | _]}) -> true;
+valid_height(<<_:256>>, Height, Payload)
+  when is_integer(Height), Height > 0, Height =< 16#FFFFFFFFFFFFFFFF ->
+    Payload =:= empty orelse Height > 1;
+valid_height(_, _, _) -> false.
 
 valid_position(genesis, 0, none, 0) -> true;
 valid_position(<<_:256>> = Era, View, {Era, ParentView, <<_:256>>}, Timestamp)
@@ -203,10 +209,10 @@ decode_block(Bytes, SymbolMode) ->
 decode_block(Bytes, SymbolMode, Context)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
     case block_envelope(Bytes) of
-        {ok, {quod_block, 2, Era, Slot, Parent, PayloadWire, Timestamp}} ->
+        {ok, {quod_block, 3, Era, Slot, Parent, Height, PayloadWire, Timestamp}} ->
             case decode_payload(PayloadWire, SymbolMode, Context) of
                 {ok, Payload, Next} ->
-                    {ok, #block{era = Era, slot = Slot, parent = Parent,
+                    {ok, #block{era = Era, slot = Slot, parent = Parent, height = Height,
                                 payload = Payload, timestamp = Timestamp,
                                 block_bytes = Bytes}, Next};
                 error -> {error, bad_block}
@@ -219,9 +225,9 @@ block_envelope(Bytes)
   when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
     case {quod_safe_term:validate_canonical(Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
           quod_safe_term:decode(Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
-        {ok, {ok, {quod_block, 2, Era, View, Parent, Payload, Timestamp} = Wire}} ->
+        {ok, {ok, {quod_block, 3, Era, View, Parent, Height, Payload, Timestamp} = Wire}} ->
             case valid_position(Era, View, Parent, Timestamp) andalso
-                 not (Era =:= genesis andalso Payload =:= empty) of
+                 valid_height(Era, Height, Payload) of
                 true -> {ok, Wire};
                 false -> error
             end;
@@ -233,7 +239,7 @@ block_envelope(_) -> error.
 -spec block_parent(binary()) -> {ok, none | protocol_ref()} | {error, bad_block}.
 block_parent(Bytes) ->
     case block_envelope(Bytes) of
-        {ok, {quod_block, 2, _Era, _View, Parent, _Payload, _Timestamp}} -> {ok, Parent};
+        {ok, {quod_block, 3, _Era, _View, Parent, _Height, _Payload, _Timestamp}} -> {ok, Parent};
         error -> {error, bad_block}
     end.
 
@@ -243,9 +249,9 @@ block_bytes(#block{}) -> error.
 
 -doc "Check canonical byte binding and both byte limits through the block constructor.".
 -spec valid_block_view(term()) -> boolean().
-valid_block_view(#block{era = Era, slot = Slot, parent = Parent, payload = Payload,
+valid_block_view(#block{era = Era, slot = Slot, parent = Parent, height = Height, payload = Payload,
                          timestamp = Timestamp, block_bytes = Bytes}) when is_binary(Bytes) ->
-    case new_block({Era, Slot}, Parent, Payload, Timestamp) of
+    case new_block({Era, Slot}, Parent, Height, Payload, Timestamp) of
         {ok, #block{block_bytes = Bytes}} -> true;
         _ -> false
     end;
@@ -318,9 +324,9 @@ entry_view_from_block(Index,
     #entry{index = Index, data = Payload, timestamp = Timestamp,
            block_bytes = Bytes, cert = Cert}.
 
-valid_entry_binding(1, #block{era = genesis, slot = 0, parent = none,
+valid_entry_binding(1, #block{era = genesis, slot = 0, parent = none, height = 1,
                                payload = {batch, [_ | _]}, timestamp = 0}, none) -> true;
-valid_entry_binding(Index, #block{era = Era, slot = View, payload = {batch, [_ | _]}} = Block,
+valid_entry_binding(Index, #block{era = Era, slot = View, height = Index, payload = {batch, [_ | _]}} = Block,
                     #cert{era = Era, kind = commit, slot = HeadView, block_hash = Hash})
   when is_integer(Index), Index > 1, is_binary(Era), byte_size(Era) =:= 32,
        is_integer(HeadView), HeadView > 0, HeadView =< 16#FFFFFFFFFFFFFFFF ->
@@ -480,8 +486,8 @@ select_entry(Bytes, Selection, Mode) when Mode =:= materialized; Mode =:= wrappe
     case entry_envelope(Bytes, Mode, quod_transaction:decode_context()) of
         {ok, {I, BlockBytes, Cert}, Context} ->
             case block_envelope(BlockBytes) of
-                {ok, {quod_block, 2, Era, View, Parent, Wire, Timestamp}} ->
-                    Block = #block{era = Era, slot = View, parent = Parent,
+                {ok, {quod_block, 3, Era, View, Parent, Height, Wire, Timestamp}} ->
+                    Block = #block{era = Era, slot = View, parent = Parent, height = Height,
                                    payload = Wire, timestamp = Timestamp,
                                    block_bytes = BlockBytes},
                     case valid_entry_binding(I, Block, Cert) andalso

@@ -33,6 +33,8 @@ public_exact_deadline_includes_owner_mailbox_test() ->
         Contact = contact(Fixture),
         ?assertMatch({ok, #{slot := 2}},
                      quod_foreign_log:verify_reference(Ref, resolve, Contact, 2000)),
+        {ok, _} = quod_foreign_log_tests:prime_projection(
+            [{maps:get(pub, Fixture), [element(2, Contact)]}], identity(Fixture), 2, 2000),
         %% Positive control: the same public call has valid evidence and fits
         %% this budget when its owner is not held before admission.
         1 = erlang:trace_pattern({quod_dtx_phase_index, capture, 2}, true, []),
@@ -234,22 +236,33 @@ callerless_acquisition_keeps_fifo_while_covered_readers_proceed_test() ->
     Token = make_ref(),
     Gate = atomics:new(1, []),
     BaseFetch = fixture_fetch(Fixture),
+    Genesis = hd(maps:get(chain, Fixture)),
+    PrefixFetch = quod_foreign_log_tests:chain_fetch(maps:get(ns, Fixture), [Genesis]),
+    atomics:put(Gate, 1, -1),
     Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
         case {Query, atomics:get(Gate, 1)} of
             {_, 0} ->
                 atomics:put(Gate, 1, 1),
                 Parent ! {fifo_active, Token, self()},
                 receive {release_fifo_active, Token} -> ok end;
-            {{range, 3, _}, 1} ->
+            {{evidence, _, tip}, 1} ->
                 atomics:put(Gate, 1, 2),
                 Parent ! {fifo_callerless, Token, self()},
                 receive {release_fifo_callerless, Token} -> ok end;
             _ -> ok
         end,
-        BaseFetch(P, E, Ns, Query, Deadline, Consume)
+        case atomics:get(Gate, 1) of
+            -1 -> PrefixFetch(P, E, Ns, Query, Deadline, Consume);
+            _ -> BaseFetch(P, E, Ns, Query, Deadline, Consume)
+        end
     end,
     with_owner(Fetch, fun(Owner) ->
         Identity = identity(Fixture),
+        {ok, _} = quod_foreign_log_tests:prime_projection(
+            [{maps:get(pub, Fixture), [element(2, contact(Fixture))]}], Identity, 1, 2000),
+        {batch, [GenesisTx]} = element(3, quod_ledger:entry_view(Genesis)),
+        {ok, GenesisRef} = quod_dtx:certified_entry_ref(Identity, Genesis, GenesisTx),
+        atomics:put(Gate, 1, 0),
         Active = send_request(Owner, exact_request(Fixture, 5000), undefined),
         Worker = receive {fifo_active, Token, W} -> W
                  after 1000 -> error(fifo_active_not_started) end,
@@ -258,13 +271,12 @@ callerless_acquisition_keeps_fifo_while_covered_readers_proceed_test() ->
             Second = send_request(Owner, current_request(Fixture, 100), trace_context(unsampled)),
             #{waiting := [#{ref := QueuedRef, callers := [_, _]}]} = lifecycle(Owner, Identity),
             Later = send_request(Owner,
-                {verify_reference, maps:get(ref, Fixture), entry, contact(Fixture), none, 5000},
+                {verify_reference, GenesisRef, transaction, contact(Fixture), none, 5000},
                 trace_context(sampled)),
-            #{waiting := [#{ref := QueuedRef}, #{ref := LaterRef}]} = lifecycle(Owner, Identity),
+            #{waiting := [#{ref := QueuedRef}]} = lifecycle(Owner, Identity),
             ?assertEqual({reply, {error, retry}}, gen_server:wait_response(First, 2000)),
             ?assertEqual({reply, {error, retry}}, gen_server:wait_response(Second, 2000)),
-            #{waiting := [#{ref := QueuedRef, callers := []},
-                          #{ref := LaterRef, callers := [_]}]} = lifecycle(Owner, Identity),
+            #{waiting := [#{ref := QueuedRef, callers := []}]} = lifecycle(Owner, Identity),
             Worker ! {release_fifo_active, Token},
             ?assertMatch({reply, {ok, _}}, gen_server:wait_response(Active, 2000)),
             NextWorker = receive {fifo_callerless, Token, Next} -> Next
@@ -272,9 +284,9 @@ callerless_acquisition_keeps_fifo_while_covered_readers_proceed_test() ->
             try
                 #{active := #{ref := QueuedRef, callers := []},
                   waiting := []} = lifecycle(Owner, Identity),
-                %% The existing prefix satisfies Later even while the
-                %% callerless acquisition waits for a newer range.
-                ?assertMatch({reply, {ok, #{slot := 2}}},
+                %% The retained genesis satisfies Later while the callerless
+                %% job waits for a current-tip confirmation.
+                ?assertMatch({reply, {ok, #{slot := 1}}},
                     quod_foreign_log_tests:consume_verification_reply(
                         Owner, gen_server:wait_response(Later, 2000))),
                 Late = send_request(Owner, current_request(Fixture, 2000), trace_context(sampled)),
@@ -656,12 +668,13 @@ exact_phase_entry_hint_and_contact_remain_nonshareable_test() ->
     Parent = self(),
     Token = make_ref(),
     BaseFetch = fixture_fetch(Fixture),
+    Gate = atomics:new(1, []),
     Fetch = fun(P, E, Ns, Query, Deadline, Consume) ->
-        case put(Token, held) of
-            undefined ->
+        case atomics:add_get(Gate, 1, 1) of
+            1 ->
                 Parent ! {binding_fetch_held, Token, self()},
                 receive {release_binding_fetch, Token} -> ok end;
-            held -> ok
+            _ -> ok
         end,
         BaseFetch(P, E, Ns, Query, Deadline, Consume)
     end,

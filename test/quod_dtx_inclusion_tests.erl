@@ -252,7 +252,7 @@ with_recovery_target(Role, Height, Fun) ->
             consensus_domain => quod_simplex:consensus_domain(Ns, Anchor),
             store => Store, phase_index => Index, sync => {pulling, self()},
             eng => quod_simplex:eng_new(quod_simplex:consensus_domain(Ns, Anchor), [],
-                {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 0})}),
+                {{quod_ledger:initial_era({Ns, Anchor}), 0, Anchor}, 1, 0})}),
         Prefix = lists:sublist(maps:get(chain, F), Height),
         {S, View} = lists:foldl(fun(Entry, {Previous, _}) ->
             Capture = quod_simplex:test_state_projection(Previous),
@@ -324,7 +324,7 @@ neutral_entry(Height, F) ->
         submitted_at = 0}),
     {ok, Tx} = quod_transaction:sign({Ns, Anchor, maps:get(admission, F)}, Tx0, maps:get(signer, F)),
     Parent = {Era, View, _} = protocol_ref(lists:last(maps:get(chain, F))),
-    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [Tx]}, 0),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, Height, {batch, [Tx]}, 0),
     quod_ledger:entry(Height, Block, quod_ct:protocol_certificate(Block,
         #{identity => Target, signer => maps:get(signer, F)})).
 
@@ -382,7 +382,7 @@ target(Kind, Fun) ->
                 phase_index => Index, signing_journal => Reconciled, store => Written,
                 archive_tip => {maps:get(protocol_root, P), maps:get(timestamp, P)},
                 consensus_domain => Domain, eng => quod_simplex:eng_new(Domain, [Pub],
-                    {maps:get(protocol_root, P), maps:get(timestamp, P)})})),
+                    {maps:get(protocol_root, P), Height, maps:get(timestamp, P)})})),
         quod_ct:with_network_identity(maps:get(network, F), fun() -> Fun(F, S) end)
     after
         _ = catch quod_signing_journal:close(Journal),
@@ -413,7 +413,7 @@ phase_entry(Target, Record, Height, {Era, View, _} = Parent, F) ->
     {ok, Material} = quod_atomic:admission_material(Record),
     {ok, Control} = quod_atomic:sign_control(Target, Material, maps:get(admission, F),
                                          Height - 1, Height - 1, Signer),
-    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [{dtx, Control}]}, 0),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, Height, {batch, [{dtx, Control}]}, 0),
     Entry = quod_ledger:entry(Height, Block,
         quod_ct:protocol_certificate(Block, #{identity => Target, signer => Signer})),
     {ok, Ref} = quod_dtx:certified_entry_ref(Target, Entry, Control),

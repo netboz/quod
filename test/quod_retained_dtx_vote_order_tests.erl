@@ -75,7 +75,7 @@ scenario(Mode) ->
                  consensus_domain => Domain, store => Store, signing_journal => J2,
                  phase_index => Index, slot => 1, last_applied => 1, sync => ready,
                  prolog_ready => true, archive_tip => {Root, 0},
-                 eng => quod_simplex:eng_new(Domain, Committee, {Root, 0})})),
+                 eng => quod_simplex:eng_new(Domain, Committee, {Root, 1, 0})})),
         S1 = quod_simplex:test_seed_dtx_submission(C2, [{dtx_endpoint, self()}], S0),
         Both = quod_simplex:test_seed_dtx_submission(C1, [], S1),
         ?assertEqual(lists:sort([G1, G2]), lists:sort(maps:keys(
@@ -210,7 +210,7 @@ genesis(Ns, Committee) ->
 certified_entry({Ns, Anchor} = Identity, Control, Identities, Committee) ->
     Era = quod_ledger:initial_era(Identity),
     {ok, Block} = quod_ledger:new_block(
-                    {Era, 1}, {Era, 0, Anchor}, {batch, [{dtx, Control}]}, quod_time:now_ms()),
+                    {Era, 1}, {Era, 0, Anchor}, 2, {batch, [{dtx, Control}]}, quod_time:now_ms()),
     Hash = quod_simplex:block_hash(Block),
     Domain = quod_simplex:consensus_domain(Ns, Anchor),
     Shares = [quod_simplex:make_share(

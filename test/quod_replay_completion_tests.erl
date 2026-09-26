@@ -404,7 +404,7 @@ material_block(F = #{identity := Id = #{pubkey := Pub}}, H, Kind, P,
     Tx = Tx0#transaction{author = Pub, author_seq = H},
     {ok, Binding} = quod_simplex:history_binding(target(F), Pub, P),
     {ok, Signed} = quod_transaction:sign(Binding, Tx, Id),
-    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, {batch, [Signed]}, 0),
+    {ok, Block} = quod_ledger:new_block({Era, View + 1}, Parent, H, {batch, [Signed]}, 0),
     Block.
 
 wait_live(F, H) ->

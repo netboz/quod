@@ -3,7 +3,7 @@
 **Current implementation entry point: §0.** The round-9 review below is the
 historical architecture approval, not a current inventory of prerequisites.
 Yan authorized continuation of the consensus correction on 2026-09-25. The
-snapshot scope in §0 was then accepted: retain full history for this correction
+snapshot scope in §0 was then accepted: retain archival history for this correction
 and defer portable snapshots/compaction. Implementation/release verification
 boundaries remain in force.
 
@@ -89,8 +89,8 @@ or recover an unresolved operation by declaring it aborted. No snapshot root or 
    Use era/view for votes, candidates, leader placement and protocol evidence;
    material height for Prolog revisions, OCC, outcomes, history reads and DTX
    references. Pin genesis and terminal-M virtual-root vectors. Journal and
-   store versions available for this cut are QSJ6 and V8, not the already-used
-   QSJ4/V6 labels in the historical review.
+   store versions for this amendment are QSJ7 and V9; the earlier QSJ6/V8
+   implementation and the older historical review labels are superseded.
 2. **Replace the existing consensus/finality path and its consumers together.**
    Advance on notarization or complaint certificate; a complaint appends no
    entry. Permit an empty carrier through application barriers, and finalize
@@ -138,13 +138,80 @@ Only a completed material archive group may advance archive custody and retire
 those durable latches. A finished empty proposal is not demand for another
 view, and must not keep an otherwise idle ontology's watchdog running.
 
-Foreign-history acquisition verifies and durably appends each complete archive
-group, but checkpoints once per existing bounded acquisition range. Its cursor
-and selected result remain private until that checkpoint is durable. A partial
-transport failure checkpoints the verified prefix before returning it to the
-existing owner or source walk; a persistence failure invalidates the cursor.
-The recovery checkpoint is not a second per-group commit record. Neither the
-archive's group durability nor the original acquisition deadline is relaxed.
+Foreign material acquisition uses the range durability boundary specified below.
+Its verified cursor remains private until archive sync, index installation and
+checkpoint succeed; the original acquisition deadline is unchanged.
+
+### Point evidence and bounded durability (2026-09-26 amendment)
+
+Exact foreign references and progress-only subscriptions no longer acquire a
+complete material history. The existing foreign-history owner keeps immutable
+verified era authority and a certified tip separately from any contiguous
+material prefix. A projection consumer is the only ordinary request that needs
+that prefix. This supersedes the forward-prefix requirement in §7.1 for point
+claims; it does not authorize absence claims from a sparse cache.
+
+This amendment uses canonical block version 3, archive V9, signing journal
+QSJ7 and foreign-cache version 7. Earlier versions are rejected explicitly;
+there is no live conversion or backward-compatibility branch. Activation
+requires the coordinated clean deployment already described in §0.
+
+A canonical protocol block signs its material height as well as era, view,
+parent, payload and timestamp. Genesis is height 1; a material child advances
+height by one and an empty child preserves it. The material entry's claimed
+position must equal that signed height. The existing finality ancestry walker
+checks these relations for both complete groups and point claims.
+
+First contact reads the caller-pinned genesis, indexed terminal membership
+entries establishing the selected era, and the selected entry with its finality
+ancestry. Every membership transition is certified by the previously established
+committee; a new committee never authorizes itself. Retained era records avoid
+repeating established transitions. Ordinary intervening material transactions
+are not requested. The amount of ancestry still depends on the selected proof;
+there is no claim that all proofs have constant size. Indexed source selection
+is only a transport optimization and conveys no authority.
+
+When a selected terminal membership entry is itself the retained era root, the
+receiver may reuse that established proof only after matching its identity,
+signed height and block hash. It does not apply the membership transition twice.
+
+Positive exact claims rely on the same honest-committer premise as an existing
+finality certificate: honest validators have checked semantic admission,
+authorization, sequences and phase transitions before voting. A full material
+projection continues to verify those transitions by ordered folding. Missing
+sparse entries cannot prove nonexistence, consumption, or an absent decision.
+Current committee discovery additionally requires the existing current-committee
+quorum confirmation under the original deadline. A higher verified tip changes
+the question to confirm; a failed probe cannot renew the deadline.
+
+The same credited history reader streams both kinds of demand. There is no
+second worker pool, materializer, mutable authority database or transport.
+Installed evidence wakes only the existing identity-scoped subscribers.
+Projection acquisition uses this same current-tip verifier, then advances its
+material cursor through a bounded range. A certified tip alone cannot satisfy
+facts demand or suppress acquisition of the remaining material ranges.
+
+Complete groups for a bounded material range are copied into the existing
+archive as they are verified. The batch owns the unpublished cursor and pending
+index delta; proof staging may be reset only after the group has been copied.
+One archive sync, one accumulated index installation and one recovery checkpoint
+precede publication. Transport failure may publish only its complete, synced,
+checkpointed prefix. A persistence failure invalidates the mutable cursor.
+At explicit startup recovery a checkpoint must identify an actual complete-group
+boundary with the matching verified projection. Later CRC-valid complete groups
+are verified and retained by that same startup fold; a lagging checkpoint alone
+is not corruption and does not authorize deleting the suffix.
+
+Healthy notarization does not itself demand an empty carrier. A pending parent
+keeps the existing watchdog active; its complaint certificate advances to a
+view in which a leader can propose a needed carrier. This amends §4.2's entering-
+view trigger without introducing a timer or another consensus protocol.
+Protocol-finalized views leave the periodic share-redrive set, while journal
+latches and unarchived proof bodies remain retained. Existing ordered readiness
+messages include era, current view and finalized view; a reconnect at unchanged
+material height can therefore request missing QCs/bodies. Duplicate and stale
+notices grant nothing. Tests cover the stalled final write and missing empty QC,
+not just the absence of idle traffic.
 
 ### Existing-path integration and deletion obligations
 

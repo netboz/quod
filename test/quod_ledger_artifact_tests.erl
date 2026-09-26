@@ -4,9 +4,9 @@
 -include("quod_ingress_limits.hrl").
 
 -define(NS, <<"quod:artifact-golden">>).
--define(FRAME_MAGIC, 16#915106B1).
+-define(FRAME_MAGIC, 16#915106B2).
 
-artifact_matches_independent_v2_envelopes_and_v8_framing_test() ->
+artifact_matches_independent_v2_envelopes_and_v9_framing_test() ->
     F = fixture(quod_ledger),
     lists:foreach(fun({_, Entry}) ->
         #entry{index = Height, block_bytes = BlockBytes, cert = Cert} = quod_ledger:entry_view(Entry),
@@ -54,9 +54,9 @@ block_binding_owns_the_payload_limit_test() ->
         ?assertEqual(?MAX_BLOCK_BYTES + Extra, Size),
         Era = maps:get(era, F), Max = (1 bsl 64) - 1,
         Root = {Era, Max - 1, maps:get(anchor, F)},
-        Bytes = canonical({quod_block, 2, Era, Max, Root, Wire, Max}),
+        Bytes = canonical({quod_block, 3, Era, Max, Root, Max, Wire, Max}),
         ?assert(byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
-        Block = #block{era = Era, slot = Max, parent = Root, payload = {batch, [Tx]}, timestamp = Max, block_bytes = Bytes},
+        Block = #block{era = Era, slot = Max, parent = Root, height = Max, payload = {batch, [Tx]}, timestamp = Max, block_bytes = Bytes},
         ?assertEqual(Extra =:= 0, quod_ledger:valid_block_view(Block)),
         ?assertEqual(Extra =:= 0, quod_simplex:well_formed_block(Block))
     end, [0, 1]).
@@ -92,7 +92,7 @@ block_constructor_rejects_unsigned_or_changed_transaction_views_test() ->
            Tx#transaction{diff = []}, Tx#transaction{signed_bytes = <<>>}],
     lists:foreach(fun(Changed) ->
         ?assertEqual({error, bad_block},
-                     quod_ledger:new_block({maps:get(era, F), 1}, maps:get(root, F), {batch, [Changed]}, 101))
+                     quod_ledger:new_block({maps:get(era, F), 1}, maps:get(root, F), 2, {batch, [Changed]}, 101))
     end, Bad).
 
 compact_head_shape_is_not_a_finality_verdict_test() ->
@@ -131,8 +131,8 @@ wrapped_construction_import_and_decode_allocate_no_vocabulary_test() ->
                             maps:get(signer, F), 4, Symbol),
     {ok, TxBytes} = quod_transaction:encode_ledger_transaction(Tx),
     Era = maps:get(era, F), Parent = quod_ledger:block_ref(maps:get(child, F)),
-    Bytes = canonical({quod_block, 2, Era, 6, Parent, {batch, [{transaction, TxBytes}]}, 104}),
-    Block = #block{era = Era, slot = 6, parent = Parent, timestamp = 104,
+    Bytes = canonical({quod_block, 3, Era, 6, Parent, 5, {batch, [{transaction, TxBytes}]}, 104}),
+    Block = #block{era = Era, slot = 6, parent = Parent, height = 5, timestamp = 104,
                     payload = {batch, [Tx]}, block_bytes = Bytes},
     Cert = certificate(commit, Block, maps:get(binding, F), maps:get(signer, F)),
     ?assertException(error, badarg, binary_to_existing_atom(Name, utf8)),
@@ -155,11 +155,11 @@ actual_byte_ingress_rejects_bad_signature_and_non_envelopes_test() ->
     Entry = proplists:get_value(content, maps:get(entries, F)),
     Bytes = entry_bytes(quod_ledger, Entry),
     {quod_entry, 2, Index, BlockBytes, CertWire} = binary_to_term(Bytes, [safe]),
-    {quod_block, 2, Era, Slot, Parent, {batch, [{transaction, TxBytes}]}, Timestamp} =
+    {quod_block, 3, Era, Slot, Parent, Index, {batch, [{transaction, TxBytes}]}, Timestamp} =
         binary_to_term(BlockBytes, [safe]),
     {submit, Author, <<First, Rest/binary>>, Signed} = binary_to_term(TxBytes, [safe]),
     BadTx = canonical({submit, Author, <<(First bxor 1), Rest/binary>>, Signed}),
-    BadBlock = canonical({quod_block, 2, Era, Slot, Parent, {batch, [{transaction, BadTx}]}, Timestamp}),
+    BadBlock = canonical({quod_block, 3, Era, Slot, Parent, Index, {batch, [{transaction, BadTx}]}, Timestamp}),
     BadSignature = canonical({quod_entry, 2, Index, BadBlock, CertWire}),
     <<131, Body/binary>> = Bytes,
     Compressed = <<131, 80, (byte_size(Body)):32, (zlib:compress(Body))/binary>>,
@@ -368,20 +368,20 @@ fixture(Codec) ->
                   #{node_id => Pub, mode => create, committee => [],
                     node_addr => {"127.0.0.1", 19000}, genesis_diff => []},
                   ?NS, Pub, digest(<<"quod-artifact-fixed-incarnation">>)),
-    {ok, GenesisBlock} = Codec:new_block({genesis, 0}, none, {batch, [GenesisTx]}, 0),
+    {ok, GenesisBlock} = Codec:new_block({genesis, 0}, none, 1, {batch, [GenesisTx]}, 0),
     Genesis = Codec:entry(1, GenesisBlock, none),
     Anchor = digest(GenesisBlock#block.block_bytes),
     Admission = digest(term_to_binary({quod_validator_admission, 1, ?NS, 1, Anchor, Pub},
                                      [deterministic])),
     Binding = {?NS, Anchor}, Era = Codec:initial_era(Binding), Root = {Era, 0, Anchor},
     Tx = signed_transaction(Binding, Admission, Signer, 1, artifact_fact),
-    {ok, ContentBlock} = Codec:new_block({Era, 1}, Root, {batch, [Tx]}, 101),
+    {ok, ContentBlock} = Codec:new_block({Era, 1}, Root, 2, {batch, [Tx]}, 101),
     Content = Codec:entry(2, ContentBlock, certificate(commit, ContentBlock, Binding, Signer)),
     ParentTx = signed_transaction(Binding, Admission, Signer, 2, parent_fact),
     ChildTx = signed_transaction(Binding, Admission, Signer, 3, child_fact),
-    {ok, Carrier} = Codec:new_block({Era, 3}, Codec:block_ref(ContentBlock), empty, 101),
-    {ok, Parent} = Codec:new_block({Era, 4}, Codec:block_ref(Carrier), {batch, [ParentTx]}, 102),
-    {ok, Child} = Codec:new_block({Era, 5}, Codec:block_ref(Parent), {batch, [ChildTx]}, 103),
+    {ok, Carrier} = Codec:new_block({Era, 3}, Codec:block_ref(ContentBlock), 2, empty, 101),
+    {ok, Parent} = Codec:new_block({Era, 4}, Codec:block_ref(Carrier), 3, {batch, [ParentTx]}, 102),
+    {ok, Child} = Codec:new_block({Era, 5}, Codec:block_ref(Parent), 4, {batch, [ChildTx]}, 103),
     Finality = certificate(commit, Child, Binding, Signer),
     #{anchor => Anchor, binding => Binding, era => Era, root => Root,
       admission => Admission, signer => Signer, parent => Parent, child => Child,

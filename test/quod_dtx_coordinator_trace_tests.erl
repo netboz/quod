@@ -496,7 +496,7 @@ sign(Target, Record, Seq, F) ->
 entry({Ns, Anchor} = Target, Control, Slot, F) ->
     Payload = {batch, [{dtx, Control}]},
     Era = quod_ledger:initial_era(Target),
-    {ok, Block} = quod_ledger:new_block({Era, Slot - 1}, {Era, 0, Anchor}, Payload, 0),
+    {ok, Block} = quod_ledger:new_block({Era, Slot - 1}, {Era, 0, Anchor}, Slot, Payload, 0),
     Hash = quod_simplex:block_hash(Block),
     Signer = maps:get(node_identity, F),
     #share{sig = Sig} = quod_simplex:make_share(

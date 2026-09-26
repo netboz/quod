@@ -22,7 +22,7 @@ Quod is intended to support:
 - persistent multi-user worlds presented through immersive WebXR or ordinary
   desktop clients;
 - shared semantic scene graphs, composable models, spatial interfaces, and
-  ontology-selected presentations;
+  ontology-selected eidolons;
 - server-authoritative real-time simulation with bodies, joints, collision,
   materials, energy, anatomy, ecology, devices, and environmental processes;
 - editable procedural and voxel worlds whose meaningful edits survive restart
@@ -134,8 +134,8 @@ current domain system ontologies also include:
 | `quod:names` | name pools, recognition, and deterministic proof-bound drawing |
 | `quod:licence` | licence families, compatibility, obligations, and release reach |
 | `quod:measure` | quantities, units, dimensions, and conversion |
-| `quod:lens` | reusable selections and presentation encodings |
-| `quod:present` | bounded renderer-neutral presentation marks |
+| `quod:lens` | reusable selections and rendering encodings |
+| `quod:present` | bounded renderer-neutral rendering marks |
 
 The naming and licence sources and tests live at
 [`priv/ontologies/quod_names.pl`](priv/ontologies/quod_names.pl),
@@ -260,7 +260,7 @@ redeploy. The persistence and signature-domain rules are documented in
 - [`test/`](test/) — EUnit and Common Test coverage
 - [`doc/ontology-actor-architecture.md`](doc/ontology-actor-architecture.md) — actor identity, bootstrap, hosting, and recovery authority
 - [`doc/hosted-agent-runtime.md`](doc/hosted-agent-runtime.md) — current hosted-process and event contract
-- [`doc/client-world-direction.md`](doc/client-world-direction.md) — VR clients, semantic scenes, presentation, physics, and editable worlds
+- [`doc/client-world-direction.md`](doc/client-world-direction.md) — VR clients, semantic scenes, rendering, physics, and editable worlds
 - [`doc/world-consequence-direction.md`](doc/world-consequence-direction.md) — simulation meaning, materials, ecology, combat, and durable consequences
 - [`doc/inter-ontology.md`](doc/inter-ontology.md) — proved scopes and cross-ontology behavior
 - [`doc/write-lanes-plan.md`](doc/write-lanes-plan.md) — read, independent-write, and atomic-write lanes
@@ -269,7 +269,7 @@ redeploy. The persistence and signature-domain rules are documented in
 
 The distributed ontology, signed-goal, reaction, and generic hosting substrate
 is deployed through release 0.7.236. FIPA conversations and the VR/world
-runtime are the next product layers. Presentation experiments already exist,
+runtime are the next product layers. Rendering experiments already exist,
 but the complete scene projection, client synchronization, physics authority,
 and editable-world milestones remain to be implemented and validated.
 Performance investigations remain deferred unless they reveal a concrete

@@ -2,12 +2,12 @@
 
 **Status:** the browser key, login, signed local and multi-ontology goals,
 cursor, unresolved-operation journal, retired user-home generation, and
-Explorer-console foundation are implemented and deployed. The world, agent, presentation,
+Explorer-console foundation are implemented and deployed. The world, agent, rendering,
 and simulation sections remain direction except for the initial lobby/toolkit
 contracts recorded in section 11.8; remaining proposals must be revalidated
 before implementation.
 
-Section 4.1.2 records the material/presentation/toolkit separation requested by
+Section 4.1.2 records the material/rendering/toolkit separation requested by
 Yan on 2026-09-26. It is the next implementation design, not a claim that the
 deployed `quod:present` prototype has already been replaced.
 
@@ -24,7 +24,7 @@ simulation, and editable voxel worlds. It is deliberately separate from
 `doc/agent-fipa-plan.md`: none of this should expand or delay the immediate
 agent/runtime substrate work.
 
-The presentation-ontology, asynchronous-GUI, contextual-action-menu, client
+The rendering vocabulary, asynchronous-GUI, contextual-action-menu, client
 profile, and semantic-theme directions below were revalidated with Yan on
 2026-08-10. Predicate, module, and wire names remain illustrative until their
 implementation slices are reviewed.
@@ -52,7 +52,7 @@ The useful predecessor ideas are:
 - Onia's shared scene graph with per-agent perception filters;
 - Onia's separate modality (3D/sensory) and view (structured GUI/data) bearers;
 - Onia's snapshot-on-connect plus atomic incremental-delta client model;
-- BBSvx's pure-data effect descriptors with inherited presentation defaults;
+- BBSvx's pure-data effect descriptors with inherited eidolon defaults;
 - BBSvx's owner/ghost physics authority;
 - BBSvx's deterministic voxel generation from a compact seed.
 
@@ -84,9 +84,9 @@ description. Both enter the same ontology proof and ACL path described in
    authority state.
 6. **Voxel edits are shared truth.** The procedural base is immutable; digging,
    building, and terrain-changing explosions are ordered durable overlays.
-7. **Clients execute declared presentation data only.** Descriptor schemas,
+7. **Clients execute declared rendering data only.** Descriptor schemas,
    assets, payloads, and resource costs are validated and bounded.
-8. **Presentation meaning is renderer-neutral.** Ontologies describe geometry,
+8. **Descriptions are renderer-neutral.** Ontologies describe geometry,
   composition, GUI, and interaction semantics; a Babylon.js 9.18.1/WebXR adapter renders
    that vocabulary for the first client.
 9. **Composition is the default.** Complex models reuse governed components;
@@ -110,7 +110,7 @@ Durable D facts describe:
 - standard model/UI declarations, entity identity, model/material references,
   baseline transform, collision shape, component attachment, and simulation
   parameters;
-- presentation policies, class associations, reusable lens definitions, and
+- eidolon policies, class associations, reusable lens definitions, and
   authored shared appearance;
 - current logical simulation authority and monotonically increasing epoch;
 - structured GUI component trees, durable pending interactions, private menu
@@ -121,8 +121,8 @@ Rebuildable P contains:
 
 - shared scene and spatial indexes;
 - filtered per-agent client view sessions;
-- derived presentation descriptors and client model/GUI indexes;
-- projected contextual menus, selected presentation purposes, session device
+- derived rendering descriptors and client model/GUI indexes;
+- projected contextual menus, selected view purposes, session device
   capabilities, and unsubmitted GUI/VR editing drafts;
 - simulation processes, bodies, ghosts, and colliders;
 - generated voxel chunks, overlays, meshes, and caches.
@@ -213,7 +213,7 @@ Simulation frames are latest-wins datagrams. They may be dropped or coalesced
 without blocking consensus, Prolog apply, reliable client state, GUI traffic, or
 ACL.
 
-Client cues are one-shot presentation events such as explosions, particles,
+Client cues are one-shot visual or audio events such as explosions, particles,
 sounds, highlights, camera shake, and toasts. `Origin` is either a committed
 transaction identity or `{WorldId, AuthorityEpoch, Tick}`. Cues expire and are
 not part of reconnect snapshots.
@@ -252,9 +252,9 @@ transform does not replace authoritative domain placement or physical attachment
 Asset references are content-addressed and policy checked. Ontology content
 cannot cause clients to fetch arbitrary executable code or untrusted URLs.
 
-### 4.1 Presentation ontologies
+### 4.1 Rendering vocabulary and eidolon libraries
 
-Quod should provide a small governed family of reusable presentation
+Quod should provide a small governed family of reusable eidolon
 ontologies. They define renderer-neutral model classes and bounded descriptor
 schemas; they do not reproduce Babylon's JavaScript API in Prolog. The initial
 family should cover:
@@ -279,12 +279,12 @@ data. An ontology carries their identity, type, integrity hash, metadata, and
 policy—not their unbounded bytes. Fetch, decoding, and resource limits are
 validated outside consensus before a client resource becomes usable.
 
-Presentation knowledge is also ontology content: classes and entities may
-reference several reusable presentations for different purposes, and one
-presentation may serve several classes. References identify the exact anchored
-ontology. They are presentation associations, distinct from physical
+Rendering knowledge is also ontology content: classes and entities may
+reference several reusable eidolons for different purposes, and one
+eidolon may serve several classes. References identify the exact anchored
+ontology. They are eidolon associations, distinct from physical
 `attached/4` relationships. Neither association requires a new namespace per
-class, presentation, or visual primitive.
+class, eidolon, or visual primitive.
 
 A lens selects subjects, properties, relations, grouping, measures, and detail
 for a purpose. Its visual encoding selects eidolon recipes, scales, layout, and
@@ -330,7 +330,7 @@ for subsequent consumers rather than creating a second advanced-model path.
 An authoring predicate computes model data. It does not create a Babylon object,
 assert each generated shape into the ontology, or issue rendering side effects
 during proof/backtracking. Authored recipes and their accepted parameters are
-ontology content; evaluated descriptions are derived presentation state.
+ontology content; evaluated descriptions are derived rendering state.
 Shared recipes and assets may be reused, while each placed occurrence has its
 own stable identity and transform. A graphical editor manipulates a local
 parameter draft, previews through the same descriptor schema, then submits
@@ -377,7 +377,7 @@ and the [glTF specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.
 
 ### 4.1.2 Ontology ownership, materials and reusable representations
 
-The target name is **`quod_presentation`**, exactly with an underscore, replacing
+The client description contract is **`quod_rendering`**, replacing
 `quod:present`. Its role is the shared description contract: what a visual
 occurrence, surface, recipe reference and GUI-surface binding mean, and how to
 validate them. For example, it defines the meaning of a box's dimensions and
@@ -390,20 +390,20 @@ Existing GUI, measurement, lobby and lens ontologies retain their own purposes.
 
 | Ontology / source | Owns | Does not own |
 | --- | --- | --- |
-| `quod_presentation` / `quod_presentation.pl` | Common description types, descriptor validation, geometry/surface/asset conventions and capability names | Model-building helpers, material catalogue, world selection policy, particular appearances |
+| `quod_rendering` / `quod_rendering.pl` | Common description types, descriptor validation, geometry/surface/asset conventions and capability names | Model-building helpers, material catalogue, world selection policy, particular appearances |
 | `quod_modelling` / `quod_modelling.pl` | Pure construction, composition, face/anchor alignment, spacing, repetition, surface and texture-binding helpers | Physical properties, named wood/stone appearances, Babylon calls |
 | `quod_material` / `quod_material.pl` | Material classes, property definitions, contextual physical-property knowledge and queries | Textures, shaders, client objects or an autonomous physics engine |
-| `quod_material_presentations` / `quod_material_presentations.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
-| Existing `quod:gui` / `quod_gui.pl` | Semantic components, form/input/result/action roles and their reusable presentation declarations | A second proof executor or material catalogue |
-| Existing `quod:lobby` / `quod_lobby.pl` | Lobby/device classes, device eidolons, arrangement and default presentation policy | Copies of shared materials, toolkit functions or private user state |
+| `quod_material_eidolons` / `quod_material_eidolons.pl` | Material-to-recipe associations and reusable surface/inspection recipes, initially wood, stone and metal | The authoritative density, composition or condition of an actual object |
+| Existing `quod:gui` / `quod_gui.pl` | Semantic components, form/input/result/action roles and their reusable eidolon declarations | A second proof executor or material catalogue |
+| Existing `quod:lobby` / `quod_lobby.pl` | Lobby/device classes, device eidolons, arrangement and default eidolon policy | Copies of shared materials, toolkit functions or private user state |
 | Each personal lobby or world | Instances, their physical material assignments, accepted appearance choices and world policy | Copies of the standard class/recipe libraries |
 | Existing `quod:measure` / `quod_measure.pl` | Units, dimensions and exact conversions | A second material or surface catalogue |
 
 The dependency direction is deliberate. Physical material queries use
 `quod:measure` and must work without a rendering library. The modelling toolkit
-uses the presentation contract. Material representations read the material
+uses the rendering contract. Material representations read the material
 ontology and use that toolkit. Object recipes, such as the console, compose
-those results. `quod_presentation` validates the resulting descriptions without
+those results. `quod_rendering` validates the resulting descriptions without
 calling back into the lobby or choosing which wood a world must use. Recipe
 libraries are explicit anchored dependencies of their consumers, not entries
 in a new global mutable registry.
@@ -471,15 +471,15 @@ predicates. Mass derived from density uses authoritative physical volume, never
 the dimensions of a stylised or exaggerated rendering. Adding this catalogue
 does not silently connect the current lobby to a new physics simulation.
 
-#### Material representations and class-selected eidolons
+#### Material eidolons and class selection
 
-An eidolon remains a reusable representation recipe. A surface recipe describes
+An eidolon is a reusable recipe. A surface recipe describes
 how material appears on a model; an inspection recipe may expose its physical
 properties using the existing GUI vocabulary. Both refer to the same material.
 A wood class can therefore have natural-grain, stylised and property-inspection
 representations without duplicating its physical knowledge.
 
-The presentation contract declares `eidolon` with `model_eidolon`,
+The rendering contract declares `eidolon` with `model_eidolon`,
 `surface_eidolon` and `gui_eidolon` subclasses. A named recipe is an instance of
 the appropriate class, for example a natural-oak recipe is a `surface_eidolon`.
 Its generic attributes expose parameters and required capabilities for tooling.
@@ -501,9 +501,9 @@ eidolon(RecipeId, Inputs, Output).
 ```
 
 Object associations normally live beside the object's class. Shared material
-associations live in `quod_material_presentations`, against material classes
+associations live in `quod_material_eidolons`, against material classes
 qualified by the collection's exact material-vocabulary dependency. This lets
-the physical catalogue remain usable without a presentation dependency.
+the physical catalogue remain usable without a rendering dependency.
 An application selects the recipe collections it trusts; libraries do not
 install declarations into other ontologies. The inputs carry the authorized
 subject, its relevant state, selected purpose/style and supported capabilities.
@@ -521,7 +521,7 @@ Selection and invocation remain ordinary Prolog in the existing view proof:
    ontology identity through the existing
    `Namespace::(current_ontology_identity(Namespace, Anchor), Goal)` form.
 4. Compose parts, surfaces and semantic GUI bindings with `quod_modelling`,
-   then validate the complete description with `quod_presentation`.
+   then validate the complete description with `quod_rendering`.
 5. Return the description through the existing signed projection; the adapter
    constructs or updates client resources for the stable occurrence identities.
 
@@ -530,7 +530,7 @@ call. The standard recipe entry point is the invocation contract. Neither a
 recipe association nor a capability claim grants access to hidden properties,
 assets or actions. Material and class identity checks use the same exact scoped
 read pattern. No hardcoded console dispatch, Erlang inheritance service or
-second presentation execution process is needed.
+second rendering execution process is needed.
 
 The toolkit's reusable subrecipe placement gives occurrences a structural
 identity from the instance occurrence, named part and repetition key. Reusing
@@ -589,7 +589,7 @@ and texture coordinates. Import, curves/extrusion, bones, animation, particles,
 lights and camera descriptions extend these same types as their consumers are
 implemented; they do not create parallel advanced-renderer paths. Particle
 recipes describe emitters, not committed facts for individual particles.
-The world's lighting/environment choices belong in its presentation recipe;
+The world's lighting/environment choices belong in its eidolon recipe;
 tracked head motion and input devices remain client session concerns.
 
 Keep the existing scene reconciler as the resource owner. Shared immutable
@@ -617,7 +617,7 @@ only changes a local draft. Apply invokes the existing authorized action and
 multi-ontology transaction path. An accepted appearance edit changes appearance
 facts; replacing a physical substance invokes the owning domain action.
 
-Action and sound presentation remains in representation recipes as in section
+Visual and sound behaviour remains in eidolon recipes as in section
 4.5. Action/event patterns bind subjects and parameters by Prolog unification.
 The existing reaction framework handles relevant accepted transitions; progress
 descriptions show actual partial motion, interruption and failure as well as
@@ -627,7 +627,7 @@ identity without placing all audio behaviour inside the material catalogue.
 
 Use the lobby as the first complete consumer: a stone floor, wood and metal
 device parts, coherent surface mapping and lighting, plus genuine playing and
-edition recipes. The exact palette and arrangement are authored presentation
+edition recipes. The exact palette and arrangement are authored rendering
 choices. Each user still owns an instance, not a copied catalogue of every
 material, texture and GUI class.
 
@@ -635,12 +635,12 @@ material, texture and GUI class.
 
 Complete this in three connected changes, each replacing the path it supersedes:
 
-1. **Separate responsibilities.** Rename the contract to `quod_presentation`,
+1. **Separate responsibilities.** Rename the contract to `quod_rendering`,
    move the existing pure builders into `quod_modelling`, introduce the physical
    material and material-recipe ontologies, and route class-selected eidolons
    through the existing lobby projection. Reuse current geometry and alignment
    tests at their new owners. Add real cross-ontology tests for physical queries
-   without any presentation dependency, ambiguous class matches and exact refs.
+   without any rendering dependency, ambiguous class matches and exact refs.
 2. **Make the lobby demonstrate the design.** Add the portable texture/asset
    contract, named recipe composition and GUI surface bindings; author the
    improved lobby and distinct edition recipe in Prolog. Exercise actual browser
@@ -657,7 +657,7 @@ Complete this in three connected changes, each replacing the path it supersedes:
    complete dependency set and client assets before switching consumers, and
    verify a pre-existing user's lobby as well as new signup and restart.
 
-The catalogue's presentation name and source filename both change; hiding an
+The catalogue's rendering name and source filename both change; hiding an
 old label is insufficient. Inventory all live consumers before retiring the old
 host declarations/catalogue entry. Current mutable references can change by
 transaction, but historical signed references remain historical identities.
@@ -681,10 +681,10 @@ Capability references:
 
 ### 4.2 Composition and attachment
 
-Presentation is compositional. A character may use body, arm, equipment, and
+Rendering is compositional. A character may use body, arm, equipment, and
 animation ontologies; a table may use a top and four legs; a world may combine
 terrain and independently governed objects. The parent owns the semantic
-relationship and the child owns its reusable presentation. A private component
+relationship and the child owns its reusable eidolon. A private component
 ontology need not be advertised by the network directory: authorized parents
 may address it through their known route.
 
@@ -715,7 +715,7 @@ wielded agent's sight/view policy:
 - modality streams target 3D and sensory rendering;
 - view streams target GUI, table, log, and editor rendering;
 - no connected client means no envelope construction;
-- reconnect starts from current state, not presentation-event replay.
+- reconnect starts from current state, not visual-event replay.
 
 Keep two responsibilities distinct: a scene graph composes parts through
 parent/local transforms; a spatial index finds nearby or potentially visible
@@ -733,9 +733,9 @@ applying projected state, not a one-shot reaction. Stable entity references
 identify domain subjects; stable visual occurrence and GUI component IDs drive
 client create, update, and remove.
 
-### 4.3 Presentation selection and visual identity
+### 4.3 Eidolon selection and visual identity
 
-An **eidolon** is a reusable representation recipe defined in ontology rules.
+An **eidolon** is a reusable recipe defined in ontology rules.
 A class may offer playing, edition, inspection or other eidolons. Applying a
 selected recipe to a concrete instance produces its visual description in a
 view. The recipe and the rendered occurrence are distinct: the term eidolon
@@ -746,8 +746,10 @@ box body, a screen plane and textures, and an edition eidolon exposing its
 structure and adjustable properties. Illustrative class associations are:
 
 ```prolog
-class_eidolon(prolog_console, playing, console_playing).
-class_eidolon(prolog_console, edition, console_edition).
+class_eidolon(prolog_console, playing, natural,
+              recipe(RecipeNamespace, RecipeAnchor, console_playing)).
+class_eidolon(prolog_console, edition, natural,
+              recipe(RecipeNamespace, RecipeAnchor, console_edition)).
 ```
 
 Recipes use renderer-neutral primitive predicates/descriptors: box, sphere,
@@ -758,32 +760,33 @@ The client reads the resulting bounded descriptions and realizes the supported
 primitives. It does not execute arbitrary ontology code or a Babylon API encoded
 as Prolog. Exact primitive signatures and recipe evaluation remain to be defined.
 
-A lens selects the subjects and relevant data for a purpose; an eidolon supplies
-the representation recipe. A simple object presentation need not invent a
-separate data-analysis lens just to render one instance. Both reuse the same
+A lens selects the subjects and relevant data for a purpose; an eidolon defines
+how to render them. Rendering one object need not introduce a separate
+data-analysis lens. Both reuse the same
 projection and authorization path.
 
 The current `mark/7` prototype in `quod:present` describes output occurrences,
 not recipes. Section 4.1.2 replaces that ontology with the narrowly scoped
-`quod_presentation` contract and a separate modelling toolkit. Output occurrences
+`quod_rendering` contract and a separate modelling toolkit. Output occurrences
 must not simply be renamed to `eidolon/7`; eidolons are their reusable recipes.
-Presentation also covers sound; its relation to action progress is deferred in
-section 4.5.
+Eidolons may also define sound; their relation to action progress is described
+in section 4.5. The rendering contract itself describes visual output.
 
-The world/application ontology owns presentation selection policy. Class
+The world/application ontology owns eidolon selection policy. Class
 ontologies supply reusable defaults; entities supply particular appearance and
-equipment; a view session supplies its purpose, requested presentation, and
+equipment; a view session supplies its purpose, requested eidolon, and
 device capabilities. Policy determines which combinations and overrides are
 permitted. Class specificity alone is insufficient when several inherited
-presentations match: precedence must be explicit, with unresolved ambiguity
+eidolons match: precedence must be explicit, with unresolved ambiguity
 reported rather than resolved by incidental enumeration order. Capability
 alternatives remain subject to the same policy and authorization checks.
 
 Illustrative relationships, whose exact predicates remain subject to review:
 
 ```prolog
-presentation_policy(enchanted_forest, fantasy_realistic).
-class_presentation(elf, fantasy_realistic, elven_character).
+eidolon_policy(enchanted_forest, fantasy_realistic).
+class_eidolon(elf, playing, fantasy_realistic,
+              recipe(RecipeNamespace, RecipeAnchor, elven_character)).
 entity_appearance(aria, appearance_aria).
 view_purpose(ViewId, first_person).
 view_subject(ViewId, aria).
@@ -796,10 +799,10 @@ world, whose policy selects its representation. A FIPA agent platform (AP)
 coordinates agents through the existing hosting and lifecycle machinery;
 hosting alone does not select appearance. An AP may carry an explicit
 application/world policy, but moving an agent between hosts must not implicitly
-change its presentation. An ontology hosting classes
-may recommend presentations without imposing them on every consuming world.
+change its eidolon. An ontology hosting classes
+may recommend eidolons without imposing them on every consuming world.
 
-First-person, third-person, tactical-map, inspection, and editing presentations
+First-person, third-person, tactical-map, inspection, and editing eidolons
 can coexist for one entity. In an FPS-style world, the controlling user's view
 may render specialized hands and weapon geometry while other users see the
 whole avatar. Both refer to the same character and equipment. Camera offsets,
@@ -814,7 +817,7 @@ does not require the domain graph to be a tree. Switching eidolons preserves
 domain identity and reconciles output through ordinary create/update/remove
 projection. Selection resolves through the entity reference, not a mesh name.
 
-Presentation policies, reusable definitions, and authored shared appearance are
+Eidolon policies, reusable definitions, and authored shared appearance are
 D-state. Derived descriptors are rebuildable P-state; selected purpose, camera,
 and temporary editing controls are session state, with persistent preferences
 stored only when explicitly requested. Views reuse the shared scene index and
@@ -822,13 +825,13 @@ MVCC/verified projection machinery, not private KBs or full per-view world
 copies. Dependency changes use existing scoped installed-state notifications,
 with snapshot ordering, cancellation, and original deadlines preserved.
 Reproducible derived descriptors require exact source snapshot references,
-presentation versions, parameters, and layout algorithm version; one ledger
+eidolon versions, parameters, and layout algorithm version; one ledger
 height alone does not identify a multi-ontology view or its camera image.
 
-### 4.4 Editing presentations and authorization
+### 4.4 Edition views and authorization
 
 An `edition` purpose may apply to one selected component while the rest of the
-world keeps its normal presentation. For example, selecting an avatar's arm in
+world keeps its normal eidolon. For example, selecting an avatar's arm in
 VR can expose a skeleton, joint handles, dimensions, attachment points, and
 material controls. Other users continue to see the normal avatar. Shared draft
 visibility requires an explicit collaboration policy; entering an editor does
@@ -836,12 +839,12 @@ not publish intermediate changes or mutate the arm.
 
 The interaction reuses the GUI draft and signed-goal flow in section 6.1:
 
-1. Request the editing presentation for the selected entity/component.
+1. Request the editing eidolon for the selected entity/component.
 2. Authorize that view and project its permitted properties and controls.
 3. Manipulate a local draft with immediate visual preview.
 4. Apply by constructing and signing a bounded domain goal through normal
    ingress, with the relevant base revision/preconditions checked for conflict.
-5. Render the accepted state through the chosen presentation. Returning to
+5. Render the accepted state through the chosen eidolon. Returning to
    normal view alone never commits a draft; discard is explicit. Rejected or
    uncertain submissions are not displayed as accepted changes, and uncertain
    operations use the existing operation-resolution flow without resubmission.
@@ -849,12 +852,12 @@ The interaction reuses the GUI draft and signed-goal flow in section 6.1:
 Each control declares its semantic target and operation: changing a display
 material updates appearance, changing anatomical length invokes the domain
 action responsible for geometry and its consequences, and moving an editor
-handle alone changes only the draft. Presentations do not establish gameplay
+handle alone changes only the draft. Eidolons do not establish gameplay
 consequences or bypass the authoritative simulation update boundary.
 
 Existing ontology ACL/proof authorization remains the sole authority. The
-presentation contract distinguishes three checks: availability of a requested
-presentation, permission to read every exposed property/asset, and permission
+rendering contract distinguishes three checks: availability of a requested
+eidolon, permission to read every exposed property/asset, and permission
 to perform the submitted domain edit. Availability does not imply readable
 private anatomy or writable attributes. Selection and filtering occur
 server-side before protected content is sent; hiding controls is not an access
@@ -867,7 +870,7 @@ previously delivered content cannot erase what its recipient already learned.
 Exact view-access predicates and descriptor schemas must be defined at the
 implementation boundary without introducing a parallel ACL system.
 
-### 4.5 Presenting actions in progress
+### 4.5 Action appearance, motion and sound
 
 **Deferred elaboration:** retain the agreed direction below, but settle the
 eidolon recipes, GUI and menu model first. Action/activity and sound predicate
@@ -891,7 +894,7 @@ The implementation must reuse existing projection, reaction and effect owners;
 a separately authored completion event and reaction for every animation is not
 required by this model.
 
-Presentation follows an action's actual progress and outcome, including partial
+Rendering follows an action's actual progress and outcome, including partial
 movement, interruption and failure to reach its intended result. For example,
 authorized closing starts a door moving; an obstruction stops it halfway. The
 rendered door shows the actual angle, movement sound stops, and an impact sound
@@ -912,7 +915,7 @@ Continuous movement and ongoing sounds follow current simulation/activity state;
 one-shot visual and audio cues describe occurrences. Both modalities share the
 same entity, activity and timing references. Sounds may be spatially associated
 with an entity without a visible rendered occurrence. Reconnect restores current
-presentation and any still-active sound without replaying past impacts or completed activity.
+rendering and any still-active sound without replaying past impacts or completed activity.
 Local previews remain distinguishable from accepted simulation state.
 
 ## 5. Cue descriptors
@@ -958,7 +961,7 @@ map the same semantic roles to spatial panels, a flat desktop UI, speech, or
 native accessibility facilities.
 
 GUI classes have their own eidolon recipes: the same form may be a spatial
-panel in the lobby or a flat panel on desktop. A pie menu is a presentation of
+panel in the lobby or a flat panel on desktop. A pie menu is a visual form of
 an action menu. Device classes own their offered Prolog operations; GUI classes
 supply reusable parameter entry, labels, selection and result display. The GUI
 ontology therefore belongs in the first lobby design, alongside the primitive
@@ -1116,7 +1119,7 @@ input adapters, not separate VR and desktop domain logic.
 
 ### 6.5 Icons and semantic themes
 
-Action-menu presentation metadata belongs primarily to the requested
+Action-menu rendering metadata belongs primarily to the requested
 goal/desired state, because several transitions may reach that state and the actual transition is
 chosen only during proof. Illustrative metadata includes a label, description,
 group, priority, and icon. Icon resolution is:
@@ -1126,7 +1129,7 @@ group, priority, and icon. Icon resolution is:
 3. inherited goal/class metadata;
 4. the built-in abstract action icon.
 
-Built-in icons and user/domain icons are bounded presentation descriptors or
+Built-in icons and user/domain icons are bounded rendering descriptors or
 content-addressed assets. They cannot contain executable URLs or code. Colour
 is never the only signifier: icon shape, text, contrast, and accessibility
 semantics must carry the same meaning.
@@ -1145,7 +1148,7 @@ Visconti-Sforza and the gilded/lithographic Pierre Jacquot/Raymond Abellio Tarot
 portfolio inform material and graphic finish without copying their artwork. A
 capable VR renderer may use restrained metallic or shimmering gold, while flat
 and accessibility profiles use a stable high-contrast fallback. Here `effect`
-is a presentation role, not a new D/P/E class or a change to `action/3`
+is a rendering role, not a new D/P/E class or a change to `action/3`
 semantics.
 
 ## 7. Editable voxel worlds
@@ -1230,7 +1233,7 @@ chunks. Reconnect, entering an unloaded region, eviction, and sequence gaps use
 the same snapshot path.
 
 The editing client may predict locally, tagged by `EditId`. Prediction is
-presentation state only: it is not forwarded and does not alter authoritative
+rendering state only: it is not forwarded and does not alter authoritative
 collision. Commit confirms it; rejection/conflict restores authoritative chunk
 state.
 
@@ -1343,11 +1346,11 @@ full C1 checklist remains broader than that initial application.
   and prove that a user-pinned entry grants no extra authority.
 - Render the same semantic menu through one immersive capability profile and
   one desktop profile, including icon fallback and non-colour labels.
-- Resolve class defaults and world policy for two presentations of one entity;
+- Resolve class defaults and world policy for two eidolons of one entity;
   preserve entity identity across view switches and diagnose ambiguous matches.
 - Edit one avatar component in VR through a local draft and one authorized
-  domain submission while another client retains its normal presentation.
-- Verify separate presentation/read/edit permissions, stale revisions, policy
+  domain submission while another client retains its normal eidolon.
+- Verify separate rendering/read/edit permissions, stale revisions, policy
   revocation, and direct-goal authorization; denied properties never enter a
   descriptor, and switching views neither commits a draft nor changes collision.
 - Test disconnect, sequence gaps, owner failover, and slow clients.
@@ -1386,7 +1389,7 @@ a final predicate schema.
 ### 11.1 Purpose and arrival
 
 The lobby is a persistent place to inspect and operate Quod through meaningful
-objects. Its room, devices, placement, presentation choices and saved links are
+objects. Its room, devices, placement, eidolon choices and saved links are
 ontology data. The client applies their class-selected eidolon recipes and
 renders the resulting authorized projections and interactions; it does not
 hard-code a different screen for every device.
@@ -1575,13 +1578,13 @@ with the lobby service's privileges. Ontology browsing and source editing are
 later workstation capabilities using the same authorization and draft/apply
 model, not requirements to complete before the first usable goal console.
 
-The console's playing eidolon describes its normal operating presentation,
+The console's playing eidolon describes its normal operating view,
 including access to that focused workspace. Its edition eidolon serves authoring
 of the console itself: dimensions, parts, screen placement, materials and exposed
 configuration, where permitted. Editing another ontology through the working
 console is still normal use of the tool, not selection of the console's edition
 eidolon. A class need not provide an edition recipe until it has actual editable
-properties. Presentation choice is per view, not a global playing/editing mode.
+properties. Eidolon choice is per view, not a global playing/editing mode.
 
 The visual direction is futuristic, with a simple first realization built from
 reusable geometry and GUI components. A recipe can describe a console body as a
@@ -1702,7 +1705,7 @@ They do not require choosing a different action, identity or transaction model.
 
 ### 11.8 Initial lobby and toolkit implementation contract
 
-The first implementation covers the presentation recipe, one private console
+The first implementation covers the eidolon recipe, one private console
 and its desktop and spatial workspaces. It is a foundation for the acceptance in section
 11.7, not completion of that broader milestone. The shipped Prolog sources are
 founding inputs; adding a source file does not create or upgrade a system
@@ -1720,20 +1723,20 @@ owner. Founding supplies these facts, using exact real anchors:
 lobby_owner(agent_instance_ref(UserNamespace, UserAnchor, UserInstance)).
 instance_of(prolog_console, console).
 lobby_vocabulary(LobbyClassNamespace, LobbyClassAnchor).
-presentation_vocabulary(PresentationNamespace, PresentationAnchor).
+% Exact rendering-library dependency: see the current founding source.
 gui_vocabulary(GuiNamespace, GuiAnchor).
 % Selected user's ontology (lobby_reference/1 is derived):
 lobby_provisioning(me, linked(ontology_ref(PersonalLobbyNamespace, PersonalLobbyAnchor))).
 ```
 
-The shared lobby vocabulary also has an anchored `presentation_vocabulary/2`
-reference. These ontologies are founded with `quod_agent_predicates` so their
-ordinary scoped reads can prove `current_ontology_identity/2`. Device subjects
+The shared lobby vocabulary also pins its rendering-library dependency by
+namespace and anchor; the exact current fact is in `quod_lobby.pl`. These
+ontologies are founded with `quod_agent_predicates` so their ordinary scoped reads can prove `current_ontology_identity/2`. Device subjects
 use `depicts(Namespace, Anchor, Entity)`; an unanchored subject from an older
 lens remains display-only. Neither a namespace string nor a mesh name grants
 authority. All console requests use the user's selected signing identity.
 
-The existing presentation vocabulary supplies pure authoring helpers:
+The existing rendering vocabulary supplies pure authoring helpers:
 
 ```prolog
 model(Parts, Marks).
@@ -1780,7 +1783,7 @@ and live cursor within that session. Changing identity, actor or target retires
 the old console. This is not durable restoration of an interactive cursor after
 a browser restart; admitted operation outcomes remain in the existing journal.
 
-The edition recipe currently exposes a distinct structure presentation, not a
+The edition recipe currently exposes a distinct structure view, not a
 model editor. Desktop controls remain usable without WebGL. The WebXR adapter
 renders the same proof form on a spatial panel, with a Prolog virtual keyboard,
 scrollable bindings and Run/Next/Accept/Stop controls. Opening it keeps the XR
@@ -1824,7 +1827,7 @@ do not grant names outside this scope.
 prepared lobby reference and receiver creation effect form one atomic transition.
 The same transaction records the lobby's node hosting declaration and consumes
 the signup receipt. `quod_lobby.pl` supplies reviewed
-instance source and exact presentation/GUI references as Prolog founding data.
+instance source and exact rendering/GUI references as Prolog founding data.
 Root proves the full options through the delegated creation policy. No imported
 source path is evaluated on whichever node receives a public signup request.
 

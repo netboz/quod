@@ -131,8 +131,8 @@ The system family includes:
 | `quod:names` | display names for agents: name pools, generation and recognition from one set of tables, and the proof-bound `draw` every node answers locally once it has joined |
 | `quod:licence` | licence families, compatibility, obligations, and release reach |
 | `quod:measure` | quantities, units, dimensions, and conversion |
-| `quod:lens` | reusable selections and presentation encodings |
-| `quod:present` | bounded renderer-neutral presentation marks |
+| `quod:lens` | reusable selections and rendering encodings |
+| `quod:present` | bounded renderer-neutral rendering marks |
 
 The table describes bundled system roles. A non-root ontology has system status
 only when root contains its exact `system_ontology/2` row. In the deployed
@@ -141,7 +141,7 @@ only when root contains its exact `system_ontology/2` row. In the deployed
 filenames do not confer that status.
 
 The replacement design in `client-world-direction.md` section 4.1.2 separates
-the presentation contract (`quod_presentation`), pure modelling toolkit,
+the rendering contract (`quod_rendering`), pure modelling toolkit,
 physical materials and material representations. The `quod:present` row above
 describes the deployed prototype, not the target name or ownership boundary.
 System status for its replacements still requires exact root catalogue rows.

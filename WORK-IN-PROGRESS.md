@@ -3060,7 +3060,7 @@ consensus protocol, public fleet or resource-policy change. The normal Vite prox
 now routes the system catalogue to the client listener. Initial harness failures
 and their resolutions remain in `_build/client-workspace-20260926/FAILURES.md`.
 
-### Material and presentation ownership design (2026-09-26)
+### Material, modelling and rendering design (2026-09-26)
 
 The client workspace commit `f1350df` was subsequently pushed and deployed as
 `client-f1350df-v1` on all eight candidate nodes. Deployed signup, lobby,
@@ -3069,11 +3069,11 @@ ontology identities/data were preserved. Deployment evidence is in
 `_build/client-workspace-20260926/deployment/`. Physical headset acceptance is
 still outstanding.
 
-Yan requested orderly ontology boundaries and the exact replacement name
-`quod_presentation`. The implementation design now lives in the existing
+Yan requested orderly ontology boundaries. His subsequent terminology
+correction selects `quod_rendering` for the shared description contract. The implementation design now lives in the existing
 `doc/client-world-direction.md` section 4.1.2: a small description contract,
 `quod_modelling` for pure builders, `quod_material` for physical knowledge,
-and `quod_material_presentations` for reusable material recipes. Existing GUI,
+and `quod_material_eidolons` for reusable material recipes. Existing GUI,
 lobby, measurement and lens responsibilities remain separate. The design
 includes class-selected eidolons, contextual quantities, textures/assets,
 distinct playing/edition recipes and migration of existing lobby references.
@@ -3085,3 +3085,15 @@ lacks density/thermal units and class declarations do not implement automatic
 inheritance; implementation must reuse and extend their actual Prolog paths.
 No Claude consultation, runtime change, test-suite rerun or deployment occurred
 in this design turn. User-owned untracked Forgejo deployment files were preserved.
+
+
+### Eidolon terminology correction (2026-09-26)
+
+Use the precise terms rendering contract, modelling toolkit, physical material,
+and eidolon recipe. The target ontology names are `quod_rendering`,
+`quod_modelling`, `quod_material` and `quod_material_eidolons`. The architecture,
+README and browser selector now use that terminology; the selector says Eidolon.
+Client TypeScript and production build passed. No backend change or rollout:
+old persisted vocabulary identifiers are removed with the planned governed
+ontology replacement, not renamed only in source while live references use them.
+Historical evidence is retained. Untracked user-owned Forgejo files are untouched.

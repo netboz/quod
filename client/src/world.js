@@ -20,7 +20,7 @@ export function anchoredGoal(reference, goal) {
 }
 
 export async function readPersonalLobby(identity, agent, mode = 'playing', options = {}) {
-  if (!['playing', 'edition'].includes(mode)) throw new Error('unknown presentation')
+  if (!['playing', 'edition'].includes(mode)) throw new Error('unknown eidolon')
   const reply = await signedGoal(identity, {
     mode: 'read', agent, goal: 'lobby_reference(Lobby).',
   }, options)

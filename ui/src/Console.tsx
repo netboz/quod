@@ -121,7 +121,7 @@ function ScopedConsole({ ns, anchor, view = DEFAULT_VIEW, surface }: ConsoleProp
   const result = replyText(reply, solutionNumber)
   const scene = surface?.scene
   useEffect(() => () => { scene?.setWorkspace(null) }, [scene])
-  // Only the presentation changes on XR entry/exit; this component remains the
+  // Only the view changes on XR entry/exit; this component remains the
   // single owner of the draft, cursor, and signed commands.
   useEffect(() => {
     scene?.setWorkspace(surface?.visible ? {

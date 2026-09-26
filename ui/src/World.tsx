@@ -189,7 +189,7 @@ export default function World() {
             Licence lens{licenceUnavailable !== null ? ' — unavailable' : ''}
           </option>
         </select></label>
-        {view === 'lobby' && <label>Presentation <select aria-label="Presentation" value={mode} onChange={event => setMode(event.target.value)}>
+        {view === 'lobby' && <label>Eidolon <select aria-label="Eidolon" value={mode} onChange={event => setMode(event.target.value)}>
           <option value="playing">Playing</option><option value="edition">Structure</option>
         </select></label>}
         <button onClick={() => setRevision(n => n + 1)} disabled={!identity || !agent}>Refresh view</button>
